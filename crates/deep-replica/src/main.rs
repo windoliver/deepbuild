@@ -188,6 +188,7 @@ mod replica {
         // The record before the reads folds once the first frame is drawn, as at the app's next read (#2026).
         if first || view == deep_replica::RULES_PAGE {
             let _ = deep_app::record::poll(std::time::Duration::from_millis(1));
+            cx.update(deep_app::record::sync);
         }
         let snapshot = cx
             .update_window(handle, |_, window, cx| {

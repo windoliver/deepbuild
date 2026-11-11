@@ -529,17 +529,27 @@ pub const TICK: Duration = Duration::from_millis(250);
 /// they draw; this entity holds where those stand, so a change the reader applied, or a bound value set, notifies
 /// every view that observes it, and marks its window dirty with no input.
 pub struct Shown {
-    at: (String, u64, u64),
+    at: (String, u64, u64, bool),
 }
 
 struct Live(gpui_kit::Entity<Shown>);
 
 impl gpui_kit::Global for Live {}
 
-/// The app's start ID, `log_pos` and bound values' revision, as the reader holds them now.
-fn standing() -> (String, u64, u64) {
+/// The app's start ID, `log_pos` and bound values' revision, as the reader holds them now, and whether it has folded
+/// the record before its reads (#2026), which moves no `log_pos`.
+fn standing() -> (String, u64, u64, bool) {
     let (start, log_pos) = with_view(|view| (view.start.clone(), view.log_pos)).unwrap_or_default();
-    (start, log_pos, crate::bound::revision())
+    (start, log_pos, crate::bound::revision(), folded())
+}
+
+/// Whether the one reader has folded the record before its newest read (#2026): until then the views draw the rows
+/// the read gave, and the fold moves no `log_pos`, so what is drawn from the record is read again once it lands.
+pub fn folded() -> bool {
+    READER.with(|cell| match cell.borrow().as_ref() {
+        Some(Source::Hub(reader)) => !reader.owed,
+        _ => true,
+    })
 }
 
 fn live(cx: &mut gpui_kit::App) -> gpui_kit::Entity<Shown> {
