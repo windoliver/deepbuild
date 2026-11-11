@@ -396,6 +396,8 @@ pub struct Table {
     listed: bool,
     /// Each session's project, from the first event that names one (#1462): the list's heading it goes under.
     projects: HashMap<String, String>,
+    /// Each agent the Agents page lists, as its newest agent.reach says it (#2019), in the order the record first names them.
+    agents: Vec<(String, Value)>,
 }
 
 /// What a start says of the session it became (#1348): the approval ask of the work run it's part of, and the real
@@ -445,6 +447,13 @@ struct Session {
     took: HashMap<String, Vec<u64>>,
     /// Its newest run's failure when that run failed (#1348): what it gave, its trace included, else its assertion.
     failure: Option<String>,
+    /// How many events its own hooks have sent, and when the newest came (#2021): the working mark moves once for
+    /// each, and holds still while none comes.
+    hooks: (u64, Option<u64>),
+    /// The cause of its newest stop of its own turn when that turn ended failed (#2029).
+    stopped: Option<String>,
+    /// Each claim's newest verdict's reasons the core gave of its own (#2029): each code with its sentence.
+    why: HashMap<String, Vec<(String, String)>>,
 }
 
 impl Table {
@@ -510,6 +519,15 @@ impl Table {
                     self.rows.insert(id.to_owned(), (order, data.clone()));
                 } else {
                     self.rows.remove(id);
+                }
+            }
+        }
+        if kind == "agent.reach" {
+            let data = &event["data"];
+            if let Some(agent) = data["agent"].as_str() {
+                match self.agents.iter_mut().find(|(id, _)| id == agent) {
+                    Some(newest) => newest.1 = data.clone(),
+                    None => self.agents.push((agent.to_owned(), data.clone())),
                 }
             }
         }
@@ -586,6 +604,11 @@ impl Table {
         self.rows.get(id).map(|(order, _)| order.clone())
     }
 
+    /// Each agent the Agents page lists, with whether its sessions reach DeepBuild (#2019).
+    pub fn agents(&self) -> &[(String, Value)] {
+        &self.agents
+    }
+
     /// The list's row with this ID.
     pub fn row_of(&self, id: &str) -> Option<&Value> {
         self.rows.get(id).map(|(_, row)| row)
@@ -623,6 +646,11 @@ impl Table {
             .flatten()
             .unwrap_or_else(|| untitled(session));
         crate::question::visible(&title)
+    }
+
+    /// How many events a session's own hooks have sent the record, and when the newest came (#2021).
+    pub fn hooks(&self, session: &str) -> (u64, Option<u64>) {
+        self.sessions.get(session).map_or((0, None), |s| s.hooks)
     }
 
     /// A session's state.
@@ -772,6 +800,28 @@ impl Table {
         self.sessions.get(session)?.failure.as_deref()
     }
 
+    /// The cause of a session's newest stop when its turn ended failed (#2029), with the core's text for it: its list
+    /// row's why, as the hub words it.
+    pub fn stopped(&self, session: &str) -> Option<(String, String)> {
+        let cause = self.sessions.get(session)?.stopped.clone()?;
+        let row = self.row_of(&format!("session:{session}"));
+        let core = row
+            .and_then(|row| row["why"].as_str())
+            .unwrap_or("its turn ended failed");
+        Some((cause, core.to_owned()))
+    }
+
+    /// The reasons the core gave of its own (#2029) to the verdict on a session's newest claim: each code with its sentence.
+    pub fn why(&self, session: &str) -> &[(String, String)] {
+        let Some(own) = self.sessions.get(session) else {
+            return &[];
+        };
+        own.claim
+            .as_ref()
+            .and_then(|(claim, _)| own.why.get(claim))
+            .map_or(&[], Vec::as_slice)
+    }
+
     /// The real names a session's page shows of a session a work run started (#1348): the session, and its start's
     /// issue, branch and repo. None for a session no start names.
     pub fn names(&self, session: &str) -> Vec<String> {
@@ -827,6 +877,9 @@ impl Session {
         let data = &event["data"];
         let text = |value: &Value| value.as_str().map(str::to_owned);
         let pos = event["log_pos"].as_u64().unwrap_or(0);
+        if event["writer"] == "hook" {
+            self.hooks = (self.hooks.0 + 1, event["ts"].as_u64().or(self.hooks.1));
+        }
         // A reading is shown beside the session and moves nothing about it (#990): no state, no sign of life.
         if kind == "session.reading" {
             if let Some(reading) = text(&data["reading"]) {
@@ -876,10 +929,23 @@ impl Session {
                 if let Some(claim) = text(&data["claim"]) {
                     let outcome = data["outcome"].as_str().unwrap_or_default().to_owned();
                     let verdict = data["verdict"].as_str().unwrap_or_default().to_owned();
+                    let why = data["why"].as_array().into_iter().flatten();
+                    let why = why.map(|w| {
+                        (
+                            text(&w["reason"]).unwrap_or_default(),
+                            text(&w["text"]).unwrap_or_default(),
+                        )
+                    });
+                    self.why.insert(claim.clone(), why.collect());
                     self.verdicts.insert(claim, (outcome, verdict));
                 }
             }
             "verdict.stale" => self.stale.extend(text(&data["verdict"])),
+            // A child's stop ends no turn of the session's own; a turn that ended well names no cause to show.
+            "agent.stop" if data["child"].is_null() => {
+                self.stopped =
+                    (data["outcome"] == "failed").then(|| text(&data["cause"]).unwrap_or_default());
+            }
             "claim.sent_back" => {
                 if let Some(claim) = text(&data["claim"]) {
                     self.rounds.insert(claim, data["round"].as_u64());

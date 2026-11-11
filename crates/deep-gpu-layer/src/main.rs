@@ -46,6 +46,7 @@ mod marks2d;
 mod opframe;
 mod paintfx;
 mod parity;
+mod physics;
 mod plugin;
 mod print2d;
 mod records;

@@ -1,0 +1,702 @@
+# Base f38d2b3983496ca502cb4743fda249bbc2e5b162, npx vitest run --root tests/acceptance/1331: exit 1, 8 failed, 0 passed.
+# Each fails at its own assertion: the base has no deep land and no deep work command.
+
+ RUN  v5.0.5 <repo>/tests/acceptance/1331
+
+ ❯ carry.test.ts (1 test | 1 failed) 8151ms
+   ❯ AC2 #1331.13b15250 after another change lands, a change touching other files re-runs only the checks whose keys changed (1)
+     × re-runs c, carries own2; a lander that re-runs everything fails, naming a carried check 7685ms
+ ❯ closing.test.ts (1 test | 1 failed) 8152ms
+   ❯ AC4 #1331.df47d8f0 an issue stays open until its change lands (1)
+     × keeps the issue open through opening and a hold, and closes it when the change lands; a closer on the PR's opening fails, naming the issue 7686ms
+ ❯ conflict.test.ts (1 test | 1 failed) 8263ms
+   ❯ AC3 #1331.6af520ad a change that now conflicts goes back to its own attempt within 60 s with the files named, and raises no ask (1)
+     × sends #2 back with src/x1.ts named, in under 60 s, with no ask 7789ms
+ ❯ join.test.ts (1 test | 1 failed) 8634ms
+   ❯ AC6 #1331.1f3c4595 a PR from before the run joins as its issue's attempt, and no run starts a second attempt beside it (1)
+     × joins the earlier PR as the one attempt; lists a PR idle past 7 days and never closes one; a run that starts a second attempt fails, naming the issue 8391ms
+ ❯ readback.test.ts (1 test | 1 failed) 8951ms
+   ❯ AC7 #1331.2bc8d32a a planted forge reports a landing as merged but drops a file; the read-back names the file within 60 s and landings stop (1)
+     × stops landings naming the dropped file; a lander that trusts the forge's merged state fails, naming the commit 8624ms
+ ❯ budget.test.ts (1 test | 1 failed) 9632ms
+   ❯ AC5 #1331.493ec9f5 a change whose only open requirement is a budget lands and its issue stays open naming it; an open FAIL, INCONCLUSIVE or BLOCKED on anything else doesn't land (1)
+     × lands the budget-only change, naming the requirement on its open issue; holds FAIL, INCONCLUSIVE and BLOCKED 9358ms
+ ❯ landing.test.ts (2 tests | 2 failed) 12333ms
+   ❯ AC1 #1331.4fa5b9e9 three changes with a PASS land one at a time, each on a head its verdict covers (1)
+     × lands three changes in turn; a landing of a commit the gate did not judge fails, naming the commit 9358ms
+   ❯ AC8 #1331.ae56ff0d a landing whose tree equals its verdict's tree starts no check run and raises no ask (1)
+     × lands one change with no run and no ask after the landing 2551ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 8 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  budget.test.ts > AC5 #1331.493ec9f5 a change whose only open requirement is a budget lands and its issue stays open naming it; an open FAIL, INCONCLUSIVE or BLOCKED on anything else doesn't land > lands the budget-only change, naming the requirement on its open issue; holds FAIL, INCONCLUSIVE and BLOCKED
+AssertionError: deep land exited 2: Unsupported command "land". Run deep --help for available commands.
+: expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ budget.test.ts:24:89
+     22|     await w.judge();
+     23|     const round = await w.land();
+     24|     expect(round.code, `deep land exited ${round.code}: ${round.stderr…
+       |                                                                                         ^
+     25|
+     26|     const merged = w.forge.merges.map((m) => m.pr);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/8]⎯
+
+ FAIL  carry.test.ts > AC2 #1331.13b15250 after another change lands, a change touching other files re-runs only the checks whose keys changed > re-runs c, carries own2; a lander that re-runs everything fails, naming a carried check
+AssertionError: deep land exited 2: Unsupported command "land". Run deep --help for available commands.
+: expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ scenario carry.test.ts:21:87
+     19|   await w.judge();
+     20|   const round = await w.land();
+     21|   expect(round.code, `deep land exited ${round.code}: ${round.stderr.s…
+       |                                                                                       ^
+     22|   return w;
+     23| }
+ ❯ carry.test.ts:35:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/8]⎯
+
+ FAIL  closing.test.ts > AC4 #1331.df47d8f0 an issue stays open until its change lands > keeps the issue open through opening and a hold, and closes it when the change lands; a closer on the PR's opening fails, naming the issue
+Error: the fine change (PR #2, issue #101) did not land, so there is nothing to close
+ ❯ must helpers.ts:257:81
+    255| }
+    256| /** `ok` or throw: the thrown message is what a failing criterion says…
+    257| export function must(ok: boolean, message: string): asserts ok { if (!…
+       |                                                                                 ^
+    258|
+ ❯ judge closing.test.ts:25:3
+ ❯ closing.test.ts:33:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/8]⎯
+
+ FAIL  conflict.test.ts > AC3 #1331.6af520ad a change that now conflicts goes back to its own attempt within 60 s with the files named, and raises no ask > sends #2 back with src/x1.ts named, in under 60 s, with no ask
+AssertionError: deep land exited 2: Unsupported command "land". Run deep --help for available commands.
+: expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ conflict.test.ts:15:89
+     13|     const asks = (await w.asks()).length;
+     14|     const round = await w.land();
+     15|     expect(round.code, `deep land exited ${round.code}: ${round.stderr…
+       |                                                                                         ^
+     16|     expect((await w.landings()).length, 'only the first change lands; …
+     17|     expect(round.ms, `the conflicting change went back after ${round.m…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/8]⎯
+
+ FAIL  join.test.ts > AC6 #1331.1f3c4595 a PR from before the run joins as its issue's attempt, and no run starts a second attempt beside it > joins the earlier PR as the one attempt; lists a PR idle past 7 days and never closes one; a run that starts a second attempt fails, naming the issue
+Error: the run must list issue #100; `deep work` exited 2 and printed null Unsupported command "work". Run deep --help for available commands.
+
+ ❯ must helpers.ts:257:81
+    255| }
+    256| /** `ok` or throw: the thrown message is what a failing criterion says…
+    257| export function must(ok: boolean, message: string): asserts ok { if (!…
+       |                                                                                 ^
+    258|
+ ❯ judge join.test.ts:20:3
+ ❯ join.test.ts:29:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/8]⎯
+
+ FAIL  landing.test.ts > AC1 #1331.4fa5b9e9 three changes with a PASS land one at a time, each on a head its verdict covers > lands three changes in turn; a landing of a commit the gate did not judge fails, naming the commit
+AssertionError: deep land exited 2: Unsupported command "land". Run deep --help for available commands.
+: expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ landing.test.ts:43:104
+     41|   it('lands three changes in turn; a landing of a commit the gate did …
+     42|     const good = await threeChanges();
+     43|     expect(good.round.code, `deep land exited ${good.round.code}: ${go…
+       |                                                                                                        ^
+     44|     await judgeThree(good.w, good.prs);
+     45|     expect(good.ms, 'the round took too long').toBeLessThan(10 * MIN);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/8]⎯
+
+ FAIL  landing.test.ts > AC8 #1331.ae56ff0d a landing whose tree equals its verdict's tree starts no check run and raises no ask > lands one change with no run and no ask after the landing
+AssertionError: `deep land judge` must judge the change on its merge with the head: it started no check run: expected 0 to be greater than 0
+ ❯ landing.test.ts:63:113
+     61|     const runs = (await w.runs()).length;
+     62|     const asks = (await w.asks()).length;
+     63|     expect(runs, '`deep land judge` must judge the change on its merge…
+       |                                                                                                                 ^
+     64|     const round = await w.land();
+     65|     expect(round.code, `deep land exited ${round.code}: ${round.stderr…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/8]⎯
+
+ FAIL  readback.test.ts > AC7 #1331.2bc8d32a a planted forge reports a landing as merged but drops a file; the read-back names the file within 60 s and landings stop > stops landings naming the dropped file; a lander that trusts the forge's merged state fails, naming the commit
+Error: the second change must land (the planted forge drops its file from that landing); main holds fewer than two landings
+ ❯ must helpers.ts:257:81
+    255| }
+    256| /** `ok` or throw: the thrown message is what a failing criterion says…
+    257| export function must(ok: boolean, message: string): asserts ok { if (!…
+       |                                                                                 ^
+    258|
+ ❯ judge readback.test.ts:26:3
+ ❯ readback.test.ts:40:11
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/8]⎯
+
+
+ Test Files  7 failed (7)
+      Tests  8 failed (8)
+   Start at  10:57:53
+   Duration  12.70s (tests 97%, transform 2%, import 1%)
+
+
+# Redraft note: two helper defects (see README, Redraft: two helper defects). Requirements now say source_line ask#L1 (authored by you, so a handed
+# definition locks with no ask); the flaky check reads the size of <world>/flip (stat is allowed in its sandbox) and writes only a marker in its own temp
+# folder, a world watcher adds a byte per run, so its runs alternate pass, fail. The base still has no deep land and no deep work, so every test fails at its
+# own assertion. Redraft run on base f38d2b3983496ca502cb4743fda249bbc2e5b162 (deep-hook built here first), npx vitest run --root tests/acceptance/1331:
+
+
+ RUN  v5.0.5 <repo>/tests/acceptance/1331
+
+ ❯ closing.test.ts (1 test | 1 failed) 14726ms
+   ❯ AC4 #1331.df47d8f0 an issue stays open until its change lands (1)
+     × keeps the issue open through opening and a hold, and closes it when the change lands; a closer on the PR's opening fails, naming the issue 13797ms
+ ❯ carry.test.ts (1 test | 1 failed) 14861ms
+   ❯ AC2 #1331.13b15250 after another change lands, a change touching other files re-runs only the checks whose keys changed (1)
+     × re-runs c, carries own2; a lander that re-runs everything fails, naming a carried check 14010ms
+ ❯ conflict.test.ts (1 test | 1 failed) 15174ms
+   ❯ AC3 #1331.6af520ad a change that now conflicts goes back to its own attempt within 60 s with the files named, and raises no ask (1)
+     × sends #2 back with src/x1.ts named, in under 60 s, with no ask 14358ms
+ ❯ join.test.ts (1 test | 1 failed) 17088ms
+   ❯ AC6 #1331.1f3c4595 a PR from before the run joins as its issue's attempt, and no run starts a second attempt beside it (1)
+     × joins the earlier PR as the one attempt; lists a PR idle past 7 days and never closes one; a run that starts a second attempt fails, naming the issue 16228ms
+ ❯ readback.test.ts (1 test | 1 failed) 17927ms
+   ❯ AC7 #1331.2bc8d32a a planted forge reports a landing as merged but drops a file; the read-back names the file within 60 s and landings stop (1)
+     × stops landings naming the dropped file; a lander that trusts the forge's merged state fails, naming the commit 17433ms
+ ❯ budget.test.ts (1 test | 1 failed) 18659ms
+   ❯ AC5 #1331.493ec9f5 a change whose only open requirement is a budget lands and its issue stays open naming it; an open FAIL, INCONCLUSIVE or BLOCKED on anything else doesn't land (1)
+     × lands the budget-only change, naming the requirement on its open issue; holds FAIL, INCONCLUSIVE and BLOCKED 18222ms
+ ❯ landing.test.ts (2 tests | 2 failed) 23032ms
+   ❯ AC1 #1331.4fa5b9e9 three changes with a PASS land one at a time, each on a head its verdict covers (1)
+     × lands three changes in turn; a landing of a commit the gate did not judge fails, naming the commit 18605ms
+   ❯ AC8 #1331.ae56ff0d a landing whose tree equals its verdict's tree starts no check run and raises no ask (1)
+     × lands one change with no run and no ask after the landing 3683ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 8 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  budget.test.ts > AC5 #1331.493ec9f5 a change whose only open requirement is a budget lands and its issue stays open naming it; an open FAIL, INCONCLUSIVE or BLOCKED on anything else doesn't land > lands the budget-only change, naming the requirement on its open issue; holds FAIL, INCONCLUSIVE and BLOCKED
+AssertionError: deep land exited 2: Unsupported command "land". Run deep --help for available commands.
+: expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ budget.test.ts:24:89
+     22|     await w.judge();
+     23|     const round = await w.land();
+     24|     expect(round.code, `deep land exited ${round.code}: ${round.stderr…
+       |                                                                                         ^
+     25|
+     26|     const merged = w.forge.merges.map((m) => m.pr);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/8]⎯
+
+ FAIL  carry.test.ts > AC2 #1331.13b15250 after another change lands, a change touching other files re-runs only the checks whose keys changed > re-runs c, carries own2; a lander that re-runs everything fails, naming a carried check
+AssertionError: deep land exited 2: Unsupported command "land". Run deep --help for available commands.
+: expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ scenario carry.test.ts:21:87
+     19|   await w.judge();
+     20|   const round = await w.land();
+     21|   expect(round.code, `deep land exited ${round.code}: ${round.stderr.s…
+       |                                                                                       ^
+     22|   return w;
+     23| }
+ ❯ carry.test.ts:35:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/8]⎯
+
+ FAIL  closing.test.ts > AC4 #1331.df47d8f0 an issue stays open until its change lands > keeps the issue open through opening and a hold, and closes it when the change lands; a closer on the PR's opening fails, naming the issue
+Error: the fine change (PR #2, issue #101) did not land, so there is nothing to close
+ ❯ must helpers.ts:281:81
+    279| }
+    280| /** `ok` or throw: the thrown message is what a failing criterion says…
+    281| export function must(ok: boolean, message: string): asserts ok { if (!…
+       |                                                                                 ^
+    282|
+ ❯ judge closing.test.ts:25:3
+ ❯ closing.test.ts:33:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/8]⎯
+
+ FAIL  conflict.test.ts > AC3 #1331.6af520ad a change that now conflicts goes back to its own attempt within 60 s with the files named, and raises no ask > sends #2 back with src/x1.ts named, in under 60 s, with no ask
+AssertionError: deep land exited 2: Unsupported command "land". Run deep --help for available commands.
+: expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ conflict.test.ts:15:89
+     13|     const asks = (await w.asks()).length;
+     14|     const round = await w.land();
+     15|     expect(round.code, `deep land exited ${round.code}: ${round.stderr…
+       |                                                                                         ^
+     16|     expect((await w.landings()).length, 'only the first change lands; …
+     17|     expect(round.ms, `the conflicting change went back after ${round.m…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/8]⎯
+
+ FAIL  join.test.ts > AC6 #1331.1f3c4595 a PR from before the run joins as its issue's attempt, and no run starts a second attempt beside it > joins the earlier PR as the one attempt; lists a PR idle past 7 days and never closes one; a run that starts a second attempt fails, naming the issue
+Error: the run must list issue #100; `deep work` exited 2 and printed null Unsupported command "work". Run deep --help for available commands.
+
+ ❯ must helpers.ts:281:81
+    279| }
+    280| /** `ok` or throw: the thrown message is what a failing criterion says…
+    281| export function must(ok: boolean, message: string): asserts ok { if (!…
+       |                                                                                 ^
+    282|
+ ❯ judge join.test.ts:20:3
+ ❯ join.test.ts:29:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/8]⎯
+
+ FAIL  landing.test.ts > AC1 #1331.4fa5b9e9 three changes with a PASS land one at a time, each on a head its verdict covers > lands three changes in turn; a landing of a commit the gate did not judge fails, naming the commit
+AssertionError: deep land exited 2: Unsupported command "land". Run deep --help for available commands.
+: expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ landing.test.ts:43:104
+     41|   it('lands three changes in turn; a landing of a commit the gate did …
+     42|     const good = await threeChanges();
+     43|     expect(good.round.code, `deep land exited ${good.round.code}: ${go…
+       |                                                                                                        ^
+     44|     await judgeThree(good.w, good.prs);
+     45|     expect(good.ms, 'the round took too long').toBeLessThan(10 * MIN);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/8]⎯
+
+ FAIL  landing.test.ts > AC8 #1331.ae56ff0d a landing whose tree equals its verdict's tree starts no check run and raises no ask > lands one change with no run and no ask after the landing
+AssertionError: `deep land judge` must judge the change on its merge with the head: it started no check run: expected 0 to be greater than 0
+ ❯ landing.test.ts:63:113
+     61|     const runs = (await w.runs()).length;
+     62|     const asks = (await w.asks()).length;
+     63|     expect(runs, '`deep land judge` must judge the change on its merge…
+       |                                                                                                                 ^
+     64|     const round = await w.land();
+     65|     expect(round.code, `deep land exited ${round.code}: ${round.stderr…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/8]⎯
+
+ FAIL  readback.test.ts > AC7 #1331.2bc8d32a a planted forge reports a landing as merged but drops a file; the read-back names the file within 60 s and landings stop > stops landings naming the dropped file; a lander that trusts the forge's merged state fails, naming the commit
+Error: the second change must land (the planted forge drops its file from that landing); main holds fewer than two landings
+ ❯ must helpers.ts:281:81
+    279| }
+    280| /** `ok` or throw: the thrown message is what a failing criterion says…
+    281| export function must(ok: boolean, message: string): asserts ok { if (!…
+       |                                                                                 ^
+    282|
+ ❯ judge readback.test.ts:26:3
+ ❯ readback.test.ts:40:11
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/8]⎯
+
+
+ Test Files  7 failed (7)
+      Tests  8 failed (8)
+   Start at  16:29:09
+   Duration  24.73s (tests 92%, transform 5%, import 2%)
+
+
+
+=== Redraft 2: the planted drop (forge.ts) ===
+The planted forge nth merge now drops drop.path from its commit (update-index runs with an empty temporary GIT_WORK_TREE;
+a failing git step throws). Base run after the fix, npx vitest run --root tests/acceptance/1331 at f38d2b39: all 8 fail at
+their own assertions for the missing deep land / deep work; AC7 fails at "the second change must land ... main holds
+fewer than two landings", not at a helper. Output (also /tmp/deepbuild-1331-proof/redraft2-base.log):
+
+
+ RUN  v5.0.5 <repo>/tests/acceptance/1331
+
+ ❯ closing.test.ts (1 test | 1 failed) 6004ms
+   ❯ AC4 #1331.df47d8f0 an issue stays open until its change lands (1)
+     × keeps the issue open through opening and a hold, and closes it when the change lands; a closer on the PR's opening fails, naming the issue 5661ms
+ ❯ carry.test.ts (1 test | 1 failed) 6161ms
+   ❯ AC2 #1331.13b15250 after another change lands, a change touching other files re-runs only the checks whose keys changed (1)
+     × re-runs c, carries own2; a lander that re-runs everything fails, naming a carried check 5771ms
+ ❯ conflict.test.ts (1 test | 1 failed) 6268ms
+   ❯ AC3 #1331.6af520ad a change that now conflicts goes back to its own attempt within 60 s with the files named, and raises no ask (1)
+     × sends #2 back with src/x1.ts named, in under 60 s, with no ask 5856ms
+ ❯ join.test.ts (1 test | 1 failed) 6778ms
+   ❯ AC6 #1331.1f3c4595 a PR from before the run joins as its issue's attempt, and no run starts a second attempt beside it (1)
+     × joins the earlier PR as the one attempt; lists a PR idle past 7 days and never closes one; a run that starts a second attempt fails, naming the issue 6478ms
+ ❯ readback.test.ts (1 test | 1 failed) 7110ms
+   ❯ AC7 #1331.2bc8d32a a planted forge reports a landing as merged but drops a file; the read-back names the file within 60 s and landings stop (1)
+     × stops landings naming the dropped file; a lander that trusts the forge's merged state fails, naming the commit 6882ms
+ ❯ budget.test.ts (1 test | 1 failed) 7394ms
+   ❯ AC5 #1331.493ec9f5 a change whose only open requirement is a budget lands and its issue stays open naming it; an open FAIL, INCONCLUSIVE or BLOCKED on anything else doesn't land (1)
+     × lands the budget-only change, naming the requirement on its open issue; holds FAIL, INCONCLUSIVE and BLOCKED 7179ms
+ ❯ landing.test.ts (2 tests | 2 failed) 9655ms
+   ❯ AC1 #1331.4fa5b9e9 three changes with a PASS land one at a time, each on a head its verdict covers (1)
+     × lands three changes in turn; a landing of a commit the gate did not judge fails, naming the commit 7418ms
+   ❯ AC8 #1331.ae56ff0d a landing whose tree equals its verdict's tree starts no check run and raises no ask (1)
+     × lands one change with no run and no ask after the landing 1819ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 8 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  budget.test.ts > AC5 #1331.493ec9f5 a change whose only open requirement is a budget lands and its issue stays open naming it; an open FAIL, INCONCLUSIVE or BLOCKED on anything else doesn't land > lands the budget-only change, naming the requirement on its open issue; holds FAIL, INCONCLUSIVE and BLOCKED
+AssertionError: deep land exited 2: Unsupported command "land". Run deep --help for available commands.
+: expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ budget.test.ts:24:89
+     22|     await w.judge();
+     23|     const round = await w.land();
+     24|     expect(round.code, `deep land exited ${round.code}: ${round.stderr…
+       |                                                                                         ^
+     25|
+     26|     const merged = w.forge.merges.map((m) => m.pr);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/8]⎯
+
+ FAIL  carry.test.ts > AC2 #1331.13b15250 after another change lands, a change touching other files re-runs only the checks whose keys changed > re-runs c, carries own2; a lander that re-runs everything fails, naming a carried check
+AssertionError: deep land exited 2: Unsupported command "land". Run deep --help for available commands.
+: expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ scenario carry.test.ts:21:87
+     19|   await w.judge();
+     20|   const round = await w.land();
+     21|   expect(round.code, `deep land exited ${round.code}: ${round.stderr.s…
+       |                                                                                       ^
+     22|   return w;
+     23| }
+ ❯ carry.test.ts:35:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/8]⎯
+
+ FAIL  closing.test.ts > AC4 #1331.df47d8f0 an issue stays open until its change lands > keeps the issue open through opening and a hold, and closes it when the change lands; a closer on the PR's opening fails, naming the issue
+Error: the fine change (PR #2, issue #101) did not land, so there is nothing to close
+ ❯ must helpers.ts:281:81
+    279| }
+    280| /** `ok` or throw: the thrown message is what a failing criterion says…
+    281| export function must(ok: boolean, message: string): asserts ok { if (!…
+       |                                                                                 ^
+    282|
+ ❯ judge closing.test.ts:25:3
+ ❯ closing.test.ts:33:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/8]⎯
+
+ FAIL  conflict.test.ts > AC3 #1331.6af520ad a change that now conflicts goes back to its own attempt within 60 s with the files named, and raises no ask > sends #2 back with src/x1.ts named, in under 60 s, with no ask
+AssertionError: deep land exited 2: Unsupported command "land". Run deep --help for available commands.
+: expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ conflict.test.ts:15:89
+     13|     const asks = (await w.asks()).length;
+     14|     const round = await w.land();
+     15|     expect(round.code, `deep land exited ${round.code}: ${round.stderr…
+       |                                                                                         ^
+     16|     expect((await w.landings()).length, 'only the first change lands; …
+     17|     expect(round.ms, `the conflicting change went back after ${round.m…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/8]⎯
+
+ FAIL  join.test.ts > AC6 #1331.1f3c4595 a PR from before the run joins as its issue's attempt, and no run starts a second attempt beside it > joins the earlier PR as the one attempt; lists a PR idle past 7 days and never closes one; a run that starts a second attempt fails, naming the issue
+Error: the run must list issue #100; `deep work` exited 2 and printed null Unsupported command "work". Run deep --help for available commands.
+
+ ❯ must helpers.ts:281:81
+    279| }
+    280| /** `ok` or throw: the thrown message is what a failing criterion says…
+    281| export function must(ok: boolean, message: string): asserts ok { if (!…
+       |                                                                                 ^
+    282|
+ ❯ judge join.test.ts:20:3
+ ❯ join.test.ts:29:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/8]⎯
+
+ FAIL  landing.test.ts > AC1 #1331.4fa5b9e9 three changes with a PASS land one at a time, each on a head its verdict covers > lands three changes in turn; a landing of a commit the gate did not judge fails, naming the commit
+AssertionError: deep land exited 2: Unsupported command "land". Run deep --help for available commands.
+: expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ landing.test.ts:43:104
+     41|   it('lands three changes in turn; a landing of a commit the gate did …
+     42|     const good = await threeChanges();
+     43|     expect(good.round.code, `deep land exited ${good.round.code}: ${go…
+       |                                                                                                        ^
+     44|     await judgeThree(good.w, good.prs);
+     45|     expect(good.ms, 'the round took too long').toBeLessThan(10 * MIN);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/8]⎯
+
+ FAIL  landing.test.ts > AC8 #1331.ae56ff0d a landing whose tree equals its verdict's tree starts no check run and raises no ask > lands one change with no run and no ask after the landing
+AssertionError: `deep land judge` must judge the change on its merge with the head: it started no check run: expected 0 to be greater than 0
+ ❯ landing.test.ts:63:113
+     61|     const runs = (await w.runs()).length;
+     62|     const asks = (await w.asks()).length;
+     63|     expect(runs, '`deep land judge` must judge the change on its merge…
+       |                                                                                                                 ^
+     64|     const round = await w.land();
+     65|     expect(round.code, `deep land exited ${round.code}: ${round.stderr…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/8]⎯
+
+ FAIL  readback.test.ts > AC7 #1331.2bc8d32a a planted forge reports a landing as merged but drops a file; the read-back names the file within 60 s and landings stop > stops landings naming the dropped file; a lander that trusts the forge's merged state fails, naming the commit
+Error: the second change must land (the planted forge drops its file from that landing); main holds fewer than two landings
+ ❯ must helpers.ts:281:81
+    279| }
+    280| /** `ok` or throw: the thrown message is what a failing criterion says…
+    281| export function must(ok: boolean, message: string): asserts ok { if (!…
+       |                                                                                 ^
+    282|
+ ❯ judge readback.test.ts:26:3
+ ❯ readback.test.ts:40:11
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/8]⎯
+
+
+ Test Files  7 failed (7)
+      Tests  8 failed (8)
+   Start at  20:07:03
+   Duration  10.00s (tests 96%, transform 2%, import 2%)
+
+
+=== Redraft 3: must is an assertion (helpers.ts) ===
+# must() now throws node:assert AssertionError with the same message, so a failed judgement reads as an assertion failure (code ERR_ASSERTION).
+# Nothing else changed. Run on base f38d2b3983496ca502cb4743fda249bbc2e5b162 (deep-hook built here first), npx vitest run --root tests/acceptance/1331: exit 1, 8 failed.
+
+
+ RUN  v5.0.5 <repo>/tests/acceptance/1331
+
+ ❯ carry.test.ts (1 test | 1 failed) 14231ms
+   ❯ AC2 #1331.13b15250 after another change lands, a change touching other files re-runs only the checks whose keys changed (1)
+     × re-runs c, carries own2; a lander that re-runs everything fails, naming a carried check 13154ms
+ ❯ closing.test.ts (1 test | 1 failed) 15148ms
+   ❯ AC4 #1331.df47d8f0 an issue stays open until its change lands (1)
+     × keeps the issue open through opening and a hold, and closes it when the change lands; a closer on the PR's opening fails, naming the issue 13926ms
+ ❯ conflict.test.ts (1 test | 1 failed) 15404ms
+   ❯ AC3 #1331.6af520ad a change that now conflicts goes back to its own attempt within 60 s with the files named, and raises no ask (1)
+     × sends #2 back with src/x1.ts named, in under 60 s, with no ask 14067ms
+ ❯ join.test.ts (1 test | 1 failed) 16391ms
+   ❯ AC6 #1331.1f3c4595 a PR from before the run joins as its issue's attempt, and no run starts a second attempt beside it (1)
+     × joins the earlier PR as the one attempt; lists a PR idle past 7 days and never closes one; a run that starts a second attempt fails, naming the issue 15730ms
+ ❯ readback.test.ts (1 test | 1 failed) 17807ms
+   ❯ AC7 #1331.2bc8d32a a planted forge reports a landing as merged but drops a file; the read-back names the file within 60 s and landings stop (1)
+     × stops landings naming the dropped file; a lander that trusts the forge's merged state fails, naming the commit 17032ms
+ ❯ budget.test.ts (1 test | 1 failed) 18317ms
+   ❯ AC5 #1331.493ec9f5 a change whose only open requirement is a budget lands and its issue stays open naming it; an open FAIL, INCONCLUSIVE or BLOCKED on anything else doesn't land (1)
+     × lands the budget-only change, naming the requirement on its open issue; holds FAIL, INCONCLUSIVE and BLOCKED 17823ms
+ ❯ landing.test.ts (2 tests | 2 failed) 23950ms
+   ❯ AC1 #1331.4fa5b9e9 three changes with a PASS land one at a time, each on a head its verdict covers (1)
+     × lands three changes in turn; a landing of a commit the gate did not judge fails, naming the commit 18270ms
+   ❯ AC8 #1331.ae56ff0d a landing whose tree equals its verdict's tree starts no check run and raises no ask (1)
+     × lands one change with no run and no ask after the landing 4038ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 8 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  budget.test.ts > AC5 #1331.493ec9f5 a change whose only open requirement is a budget lands and its issue stays open naming it; an open FAIL, INCONCLUSIVE or BLOCKED on anything else doesn't land > lands the budget-only change, naming the requirement on its open issue; holds FAIL, INCONCLUSIVE and BLOCKED
+AssertionError: deep land exited 2: Unsupported command "land". Run deep --help for available commands.
+: expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ budget.test.ts:24:89
+     22|     await w.judge();
+     23|     const round = await w.land();
+     24|     expect(round.code, `deep land exited ${round.code}: ${round.stderr…
+       |                                                                                         ^
+     25|
+     26|     const merged = w.forge.merges.map((m) => m.pr);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/8]⎯
+
+ FAIL  carry.test.ts > AC2 #1331.13b15250 after another change lands, a change touching other files re-runs only the checks whose keys changed > re-runs c, carries own2; a lander that re-runs everything fails, naming a carried check
+AssertionError: deep land exited 2: Unsupported command "land". Run deep --help for available commands.
+: expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ scenario carry.test.ts:21:87
+     19|   await w.judge();
+     20|   const round = await w.land();
+     21|   expect(round.code, `deep land exited ${round.code}: ${round.stderr.s…
+       |                                                                                       ^
+     22|   return w;
+     23| }
+ ❯ carry.test.ts:35:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/8]⎯
+
+ FAIL  closing.test.ts > AC4 #1331.df47d8f0 an issue stays open until its change lands > keeps the issue open through opening and a hold, and closes it when the change lands; a closer on the PR's opening fails, naming the issue
+AssertionError: the fine change (PR #2, issue #101) did not land, so there is nothing to close
+
+simple
+
+ ❯ must helpers.ts:282:81
+    280| }
+    281| /** `ok` or throw: the thrown message is what a failing criterion says…
+    282| export function must(ok: boolean, message: string): asserts ok { if (!…
+       |                                                                                 ^
+    283|
+ ❯ judge closing.test.ts:25:3
+ ❯ closing.test.ts:33:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/8]⎯
+
+ FAIL  conflict.test.ts > AC3 #1331.6af520ad a change that now conflicts goes back to its own attempt within 60 s with the files named, and raises no ask > sends #2 back with src/x1.ts named, in under 60 s, with no ask
+AssertionError: deep land exited 2: Unsupported command "land". Run deep --help for available commands.
+: expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ conflict.test.ts:15:89
+     13|     const asks = (await w.asks()).length;
+     14|     const round = await w.land();
+     15|     expect(round.code, `deep land exited ${round.code}: ${round.stderr…
+       |                                                                                         ^
+     16|     expect((await w.landings()).length, 'only the first change lands; …
+     17|     expect(round.ms, `the conflicting change went back after ${round.m…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/8]⎯
+
+ FAIL  join.test.ts > AC6 #1331.1f3c4595 a PR from before the run joins as its issue's attempt, and no run starts a second attempt beside it > joins the earlier PR as the one attempt; lists a PR idle past 7 days and never closes one; a run that starts a second attempt fails, naming the issue
+AssertionError: the run must list issue #100; `deep work` exited 2 and printed null Unsupported command "work". Run deep --help for available commands.
+
+
+simple
+
+ ❯ must helpers.ts:282:81
+    280| }
+    281| /** `ok` or throw: the thrown message is what a failing criterion says…
+    282| export function must(ok: boolean, message: string): asserts ok { if (!…
+       |                                                                                 ^
+    283|
+ ❯ judge join.test.ts:20:3
+ ❯ join.test.ts:29:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/8]⎯
+
+ FAIL  landing.test.ts > AC1 #1331.4fa5b9e9 three changes with a PASS land one at a time, each on a head its verdict covers > lands three changes in turn; a landing of a commit the gate did not judge fails, naming the commit
+AssertionError: deep land exited 2: Unsupported command "land". Run deep --help for available commands.
+: expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ landing.test.ts:43:104
+     41|   it('lands three changes in turn; a landing of a commit the gate did …
+     42|     const good = await threeChanges();
+     43|     expect(good.round.code, `deep land exited ${good.round.code}: ${go…
+       |                                                                                                        ^
+     44|     await judgeThree(good.w, good.prs);
+     45|     expect(good.ms, 'the round took too long').toBeLessThan(10 * MIN);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/8]⎯
+
+ FAIL  landing.test.ts > AC8 #1331.ae56ff0d a landing whose tree equals its verdict's tree starts no check run and raises no ask > lands one change with no run and no ask after the landing
+AssertionError: `deep land judge` must judge the change on its merge with the head: it started no check run: expected 0 to be greater than 0
+ ❯ landing.test.ts:63:113
+     61|     const runs = (await w.runs()).length;
+     62|     const asks = (await w.asks()).length;
+     63|     expect(runs, '`deep land judge` must judge the change on its merge…
+       |                                                                                                                 ^
+     64|     const round = await w.land();
+     65|     expect(round.code, `deep land exited ${round.code}: ${round.stderr…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/8]⎯
+
+ FAIL  readback.test.ts > AC7 #1331.2bc8d32a a planted forge reports a landing as merged but drops a file; the read-back names the file within 60 s and landings stop > stops landings naming the dropped file; a lander that trusts the forge's merged state fails, naming the commit
+AssertionError: the second change must land (the planted forge drops its file from that landing); main holds fewer than two landings
+
+simple
+
+ ❯ must helpers.ts:282:81
+    280| }
+    281| /** `ok` or throw: the thrown message is what a failing criterion says…
+    282| export function must(ok: boolean, message: string): asserts ok { if (!…
+       |                                                                                 ^
+    283|
+ ❯ judge readback.test.ts:26:3
+ ❯ readback.test.ts:40:11
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/8]⎯
+
+
+ Test Files  7 failed (7)
+      Tests  8 failed (8)
+   Start at  08:41:07
+   Duration  25.57s (tests 93%, transform 5%, import 2%)
+

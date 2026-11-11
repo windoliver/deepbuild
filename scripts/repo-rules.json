@@ -622,6 +622,22 @@
         }
       }
     },
+    "packages/routing-replay/package.json": {
+      "dependencies": {
+        "@deepbuild/asks": {
+          "spec": "0.0.0",
+          "why": "Issue #1980: the asks core the router raises one ask per cause through, and whose deadline takes each ask's default."
+        },
+        "@deepbuild/evidence": {
+          "spec": "0.0.0",
+          "why": "Issue #1980: the evidence store the replay keeps its snapshot in, by the snapshot's hash."
+        },
+        "@deepbuild/record": {
+          "spec": "0.0.0",
+          "why": "Issue #1980: the record the replay's asks, withdrawals and fix tasks are appended to, and read back for its report."
+        }
+      }
+    },
     "packages/proof/package.json": {
       "dependencies": {
         "@deepbuild/conformance": {

@@ -1,0 +1,26 @@
+# #1874 blind suite: tests/acceptance/1874/window.test.mjs
+
+## On the base f28d8777 (no implementation), in a detached checkout
+
+✖ #1874.31be6d55 a commit naming an issue whose unticked budget criterion no task names leaves that issue open, and its record names the criterion as unmeasured (46111.162333ms)
+✖ #1874.5b585ee4 a commit naming an issue whose only unticked criterion says "in the local preflight", and which no task names, leaves the issue open (3.705292ms)
+✖ #1874.e31e7828 a commit naming an issue with no `### Acceptance criteria` section closes nothing (2.435041ms)
+✔ #1874.cbb20ab2 a commit whose issue's budget criteria are each named by a task that passed, with every other criterion ticked, closes the issue (1.22075ms)
+ℹ tests 4
+ℹ pass 1
+ℹ fail 3
+✖ failing tests:
+  AssertionError [ERR_ASSERTION]: the window closed an issue whose budget criterion no task names
+  'CLOSED' !== 'OPEN'
+  AssertionError [ERR_ASSERTION]: the window closed an issue on a criterion no task names
+  AssertionError [ERR_ASSERTION]: the window closed an issue with no `### Acceptance criteria` section
+
+## On this branch (e6115e717), once
+
+✔ #1874.31be6d55 a commit naming an issue whose unticked budget criterion no task names leaves that issue open, and its record names the criterion as unmeasured (47545.617959ms)
+✔ #1874.5b585ee4 a commit naming an issue whose only unticked criterion says "in the local preflight", and which no task names, leaves the issue open (2.692167ms)
+✔ #1874.e31e7828 a commit naming an issue with no `### Acceptance criteria` section closes nothing (1.459ms)
+✔ #1874.cbb20ab2 a commit whose issue's budget criteria are each named by a task that passed, with every other criterion ticked, closes the issue (1.108125ms)
+ℹ tests 4
+ℹ pass 4
+ℹ fail 0

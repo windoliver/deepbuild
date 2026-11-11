@@ -36,6 +36,11 @@ export interface LineState {
   cause?: { smallest: string | null; points_to: string | null };
   /** The address of the claim's page, which `deep open` takes (#1460); no receipt part without one. */
   receipt?: string;
+  /**
+   * Its session's holds only watch (#2019), and why in a few words; its row carries the fix. `unsent` is a FAIL no
+   * send-back reached, since no stop was held: the line reads FAIL with its count, and the next step is yours.
+   */
+  watch?: { why: string; unsent: boolean };
 }
 /** Who takes the next step: the agent (a send-back), you (a PASS or something only you can clear) or DeepBuild (checks still to run). */
 type Owner = 'agent' | 'you' | 'DeepBuild';
@@ -54,8 +59,9 @@ function about(seconds: number): string {
 }
 
 /** The parts of the line, in order, before any shortening. */
-interface Parts { unverified: string; outcome: string; cause: string; points: string; tests: string; running: string[]; owner: string; receipt: string }
+interface Parts { watch: string; unverified: string; outcome: string; cause: string; points: string; tests: string; running: string[]; owner: string; receipt: string }
 function parts(s: LineState): Parts {
+  const watch = s.watch ? `watch-only: ${s.watch.why}` : '';
   const unverified = s.requirements.filter((r) => UNVERIFIED.has(r.outcome)).map((r) => name(r.req));
   const passed = s.requirements.filter((r) => r.outcome === 'PASS').length;
   const total = s.requirements.length;
@@ -69,7 +75,7 @@ function parts(s: LineState): Parts {
       const longest = Math.max(...s.running.map((r) => r.about_s ?? -1));
       if (longest >= 0) running.push(about(longest));
     }
-  } else if (s.outcome === 'FAIL') outcome = `sent back ${Math.max(1, s.round ?? 1)}/${ROUNDS}`;
+  } else if (s.outcome === 'FAIL' && !s.watch?.unsent) outcome = `sent back ${Math.max(1, s.round ?? 1)}/${ROUNDS}`;
   else outcome = `${s.outcome} ${count}`;
   if (s.held?.length) running.push(`${s.held.length} check${s.held.length === 1 ? ' waits' : 's wait'} for the loop`, [...new Set(s.held.map((h) => h.reason))].join(', '));
   let cause = '';
@@ -80,7 +86,7 @@ function parts(s: LineState): Parts {
     points = failing?.points_to ?? '';
   }
   const tests = s.tests ? `${s.tests} test${s.tests === 1 ? '' : 's'}` : '';
-  return { unverified: unverified.length ? `not verified: ${unverified.join(', ')}` : '', outcome, cause, points, tests, running, owner: `next: ${ownerOf(s.outcome)}`, receipt: s.receipt ?? '' };
+  return { watch, unverified: unverified.length ? `not verified: ${unverified.join(', ')}` : '', outcome, cause, points, tests, running, owner: `next: ${s.watch?.unsent && s.outcome === 'FAIL' ? 'you' : ownerOf(s.outcome)}`, receipt: s.receipt ?? '' };
 }
 
 /**
@@ -91,7 +97,7 @@ function parts(s: LineState): Parts {
 export function verdictLine(s: LineState, width = LINE_WIDTH): string {
   const p = parts(s);
   const join = (cause: string, keep: { points: boolean; owner: boolean; receipt: boolean }): string =>
-    [p.unverified, `${p.outcome}${cause ? `${CAUSE_SEP}${cause}` : ''}`, keep.points ? p.points : '', ...p.running, p.tests, keep.owner ? p.owner : '', keep.receipt ? p.receipt : ''].filter(Boolean).join(DOT);
+    [p.watch, p.unverified, `${p.outcome}${cause ? `${CAUSE_SEP}${cause}` : ''}`, keep.points ? p.points : '', ...p.running, p.tests, keep.owner ? p.owner : '', keep.receipt ? p.receipt : ''].filter(Boolean).join(DOT);
   const all = { points: true, owner: true, receipt: true };
   let line = join(p.cause, all);
   if (columns(line) <= width) return line;
