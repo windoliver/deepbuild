@@ -5818,6 +5818,7 @@ export class Core {
       case 'ask.card': return this.askCard(params);
       case 'decision.overrule': return this.overrule(params, context);
       case 'ask.undo': return this.undo(params, context);
+      case 'ask.take_over': return this.takeOver(params, context);
       case 'offer.save': return this.saveOffered(params, context);
       case 'staged.undo': return this.staging.undo(params);
       case 'agents.propose': await this.ready; return this.agents.propose(params);
@@ -6222,7 +6223,9 @@ export class Core {
     const question = row.question ?? '';
     const opens = card.kind === 'unblock' ? opensOf(question, signInCommands()) : undefined;
     const url = this.options.plant === 'link-from-agent-url' ? /https?:\/\/\S+/.exec(question)?.[0] : undefined;
-    return { ...card, question, ...(opens ? { opens } : {}), ...(url ? { link: url } : {}) };
+    // The card's revision, which an answer from this copy names (#1580).
+    const revision = (await this.cards(handle)).get(handle)?.revision ?? 1;
+    return { ...card, question, revision, ...(opens ? { opens } : {}), ...(url ? { link: url } : {}) };
   }
 
   /**
@@ -6230,8 +6233,8 @@ export class Core {
    * and the core saves it as a decision for the ask's repo, or its session; an ask with neither, and a block's task
    * (#85), saves none.
    */
-  private async answer(params: Obj, context: CallContext, channel?: { channel: string; proof: 'device' | 'account_link' }): Promise<Obj> {
-    const { ask: handle, device: _device, signature: _signature, ...input } = params;
+  private async answer(params: Obj, context: CallContext, channel?: { channel: string; proof: 'device' | 'account_link'; plan_hash: string | null }): Promise<Obj> {
+    const { ask: handle, device: _device, signature: _signature, revision, ...input } = params;
     if (typeof handle !== 'string' || !/^ask:[0-9A-Za-z]+$/.test(handle)) throw new Refused(refusal('handle_syntax', '/params/ask', 'Name the ask by its handle, ask:<id>, as deep inbox lists it.', handle));
     const [row] = (await this.record.raw(`SELECT e.session_id AS session, e.project_id AS project, e.data AS data, a.status AS status FROM events e JOIN asks a ON a.id = e.id WHERE e.id = ? AND e.kind = 'ask.created'`, [handle.slice(4)])) as { session: string | null; project: string | null; data: string; status: string }[];
     if (!row) throw new Refused(refusal('not_found', '/params/ask', `No ask ${handle}; answer an ask deep inbox lists.`, handle));
@@ -6256,11 +6259,15 @@ export class Core {
       throw new Refused(refusal('enum', '/params/option', `${handle} has no option ${String(input.option)}; its options are ${ask.options.map((o) => o.id).join(', ')}.`, input.option));
     }
     // A channel's answer was checked by the channels (#65): a paired device's signature over the card it showed, or an account link.
-    if (!channel) await this.trusted('ask.answer', params, context, `answer “${ask.question.slice(0, 120)}” with ${chosen ? `“${chosen.label.slice(0, 80)}”` : 'your words'}`, handle, await this.revisionOf(handle, ask));
-    // A paired phone's yes binds the plan its card stood for, and its own token, as the app's click does.
+    if (!channel) {
+      await this.trusted('ask.answer', params, context, `answer “${ask.question.slice(0, 120)}” with ${chosen ? `“${chosen.label.slice(0, 80)}”` : 'your words'}`, handle, await this.revisionOf(handle, ask));
+      await this.onRevision(handle, revision, params.signature);
+    }
+    // A paired phone's yes binds the plan its signature names, which the channels checked against the ask's (#1580),
+    // never one the hub fills in, and its own token, as the app's click does.
     if (channel?.proof === 'device' && chosen?.decision === 'allow') {
       input.token = `${channel.channel}:${ulid(this.now())}`;
-      input.plan_hash = (await this.asks.card(handle)).plan?.hash ?? null;
+      input.plan_hash = channel.plan_hash;
     }
     // From the CLI, the OS prompt that just confirmed you is the click an approval binds (#321): its token is minted here,
     // for an approval only, so any other answer is handed on as its twin from the app is (#34).
@@ -6435,13 +6442,72 @@ export class Core {
   private async channelAsks(): Promise<ChannelAsk[]> {
     const rows = (await this.record.raw('SELECT id, question, options, answer FROM asks')) as { id: string; question: string | null; options: string | null; answer: string | null }[];
     const texts = new Map(rows.map((r) => [`ask:${r.id}`, r]));
+    const cards = await this.cards();
     return (await this.asks.inbox()).map((row) => {
       const t = texts.get(row.ask);
       const options = t?.options ? (JSON.parse(t.options) as { id: string; label: string }[]).map((o) => ({ id: String(o.id), label: String(o.label) })) : [];
       let answer: string | null = null;
       try { answer = t?.answer ? String(JSON.parse(t.answer)) : null; } catch { answer = t?.answer ?? null; }
-      return { handle: row.ask, kind: row.kind, question: t?.question ?? '', options, status: row.status, outcome: row.outcome, answer };
+      const card = cards.get(row.ask);
+      return { handle: row.ask, kind: row.kind, question: t?.question ?? '', options, status: row.status, outcome: row.outcome, answer, plan: card?.plan ?? null, revision: card?.revision ?? 1 };
     });
+  }
+  /**
+   * Each ask's card as the record holds it (#1580): the newest plan the core proposed, as a card draws it; its revision,
+   * 1 and one more for each change of plan and each Take over; and the device it was taken over to last. `handle`
+   * narrows it to one ask.
+   */
+  private async cards(handle?: string): Promise<Map<string, { plan: ChannelAsk['plan']; revision: number; holder: string | null }>> {
+    const one = handle ? ` AND (subject = ? OR json_extract(data, '$.ask') = ?)` : '';
+    const rows = (await this.record.raw(`SELECT kind, subject, json_extract(data, '$.ask') AS ask, json_extract(data, '$.hash') AS hash, json_extract(data, '$.steps') AS steps, json_extract(data, '$.device') AS device FROM events WHERE ((kind = 'plan.proposed' AND writer = 'core') OR kind = 'ask.taken_over')${one} ORDER BY log_pos`, handle ? [handle, handle] : [])) as { kind: string; subject: string | null; ask: string | null; hash: string | null; steps: string | null; device: string | null }[];
+    const held = new Map<string, { hash?: string; steps?: string; revision: number; holder: string | null }>();
+    for (const r of rows) {
+      const key = String(r.kind === 'ask.taken_over' ? r.subject : r.ask);
+      const card = held.get(key) ?? { revision: 1, holder: null };
+      held.set(key, card);
+      if (r.kind === 'ask.taken_over') Object.assign(card, { revision: card.revision + 1, holder: r.device });
+      else if (r.hash !== card.hash) Object.assign(card, { revision: card.revision + (card.hash === undefined ? 0 : 1), hash: String(r.hash), steps: r.steps ?? '[]' });
+    }
+    return new Map([...held].map(([key, c]) => [key, {
+      revision: c.revision, holder: c.holder,
+      plan: c.hash === undefined ? null : {
+        hash: c.hash,
+        steps: (JSON.parse(c.steps!) as Obj[]).map((s) => ({ does: String(s.does), changes: (Array.isArray(s.changes) ? s.changes : []).map(String), undo: String(s.undo), public: s.public === true, cost: Number(s.cost) })),
+      },
+    }]));
+  }
+  /**
+   * An answer from a copy of an ask's card at an earlier revision is refused, naming the revision; so is a signed one
+   * naming none from another device once the card was taken over (#1580). An answer from the CLI, which the OS
+   * confirmed, keeps no copy of its own and is held only to a revision it names.
+   */
+  private async onRevision(handle: string, revision: unknown, signature: unknown): Promise<void> {
+    const card = (await this.cards(handle)).get(handle) ?? { revision: 1, holder: null };
+    if (revision !== undefined && revision !== card.revision) {
+      throw new Refused(refusal('credential', '/params/revision', `${handle} stays open: this answer is from its card at revision ${JSON.stringify(revision)}, and the card is at revision ${card.revision} now${card.holder ? `, taken over to ${card.holder}` : ''}. Answer from the card as it is now.`, revision));
+    }
+    const device = (signature as { signed?: { device?: unknown } } | undefined)?.signed?.device;
+    if (revision === undefined && device !== undefined && card.holder !== null && device !== card.holder) {
+      throw new Refused(refusal('credential', '/params/revision', `${handle} stays open: its card moved to ${card.holder} by Take over, at revision ${card.revision}, and this answer from ${String(device)} names no revision. Answer it there, or take it over here.`, handle));
+    }
+  }
+  /**
+   * Take over (#1580; design: Channel): a device you paired moves an open ask's card to itself on the trusted path,
+   * signing the call with its own key. The card's revision rises, so an answer from a copy at the earlier one is
+   * refused, naming the revision, and every channel's card goes out again at the new one.
+   */
+  private async takeOver(params: Obj, context: CallContext): Promise<Obj> {
+    const handle = params.ask;
+    if (typeof handle !== 'string' || !/^ask:[0-9A-Za-z]+$/.test(handle)) throw new Refused(refusal('handle_syntax', '/params/ask', 'Name the ask by its handle, ask:<id>, as deep inbox lists it.', handle));
+    const [row] = (await this.record.raw(`SELECT status FROM asks WHERE id = ?`, [handle.slice(4)])) as { status: string }[];
+    if (!row) throw new Refused(refusal('not_found', '/params/ask', `No ask ${handle}; take over an ask deep inbox lists.`, handle));
+    if (row.status !== 'open' && row.status !== 'later') throw new Refused(refusal('not_found', '/params/ask', `${handle} is closed, so its card has nowhere to move.`, handle));
+    if (params.signature === undefined) throw new Refused(refusal('unconfirmed', '/params/signature', `Take over moves ${handle}'s card to a device you paired, which signs the call with its own key.`, handle));
+    await this.trusted('ask.take_over', params, context, `take over ${handle}`, handle, 'take over');
+    const device = String((params.signature as { signed: { device: string } }).signed.device);
+    const revision = ((await this.cards(handle)).get(handle)?.revision ?? 1) + 1;
+    await this.appendCore('ask.taken_over', { device, revision }, { subject: handle });
+    return { ask: handle, device, revision };
   }
   /** Unpairs a device you paired, on the trusted path (#65): its signatures count for nothing, and it is told so. */
   private async unpair(params: Obj, context: CallContext): Promise<Obj> {
