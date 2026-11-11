@@ -10,7 +10,8 @@ import { packageDigest } from './digest.js';
 type Texts = Record<string, string>;
 export interface JobFixture { name: string; params: Record<string, JsonValue>; inputs: Texts; expect: Texts }
 export interface JobKind {
-  schema: { params: Schema; inputs: Record<string, { media?: string }> };
+  /** Each input by name; one declared `many` (#154) takes zero or more files, in order, all of them in the key. */
+  schema: { params: Schema; inputs: Record<string, { media?: string; many?: boolean }> };
   outputs: Record<string, { media?: string }>;
   key: string[];
   output_checks: string[];
@@ -37,6 +38,19 @@ export interface HeldJobs { kinds: Record<string, JobKind>; tools: { kind: strin
  * appends to, `{key, provider}` before its request leaves and `{key, provider, task}` when the provider answers.
  */
 export interface JobCall { provider: string; key: string; journal: string }
+/** A job's input files by name: one file each, or a list for an input declared `many` (#154). */
+export type JobBytes = Record<string, Uint8Array | Uint8Array[]>;
+/** A qualification fixture's inputs as bytes: each text in UTF-8, and an empty list for a `many` input it leaves out. */
+export function fixtureInputs(inputs: JobKind['schema']['inputs'], texts: Texts): JobBytes {
+  const bytes: JobBytes = Object.fromEntries(Object.entries(texts).map(([n, t]) => [n, Buffer.from(t, 'utf8')]));
+  for (const [n, d] of Object.entries(inputs)) if (d.many && !bytes[n]) bytes[n] = [];
+  return bytes;
+}
+/** The inputs as a tool reads them on stdin: each file's bytes in base64, a list as a list. */
+export function encodedInputs(inputs: JobBytes): Record<string, string | string[]> {
+  const b64 = (b: Uint8Array): string => Buffer.from(b).toString('base64');
+  return Object.fromEntries(Object.entries(inputs).map(([n, b]) => [n, Array.isArray(b) ? b.map(b64) : b64(b)]));
+}
 /** The URL a tool off the machine is called at, or undefined for one that runs as its own files. */
 export const urlOf = (t: JobTool): string | undefined => ('url' in t.run ? t.run.url : undefined);
 /** The planted hosts of #1922 AC6 and AC7, each a build that isn't the digest of the tool's files as installed. */
@@ -98,6 +112,7 @@ export function kindOf(kind: string, raw: unknown): JobKind {
   const fixtures = isPlain(k.qualification) && Array.isArray(k.qualification.fixtures) ? k.qualification.fixtures : [];
   // A kind whose params hold everything it reads, such as typeset (#220), declares no inputs.
   if (!isPlain(k.schema) || !isPlain(k.schema.params) || !isPlain(k.schema.inputs)) throw Error(`the job kind ${kind} declares no params schema and inputs`);
+  if (!Object.values(k.schema.inputs).every((i) => isPlain(i) && (i.many === undefined || typeof i.many === 'boolean'))) throw Error(`the job kind ${kind}'s inputs are {name: {media, many}}, many true or false`);
   if (!isPlain(k.outputs) || !Object.keys(k.outputs).length) throw Error(`the job kind ${kind} declares no outputs`);
   if (!Array.isArray(k.key) || KEY_PARTS.some((p) => !k.key!.includes(p)) || k.key.some((p) => !KEY_PARTS.includes(p))) throw Error(`the job kind ${kind}'s key is hash(tool@version, params, input hashes): its key lists tool, params and inputs`);
   if (!Array.isArray(k.output_checks) || !k.output_checks.every((c) => typeof c === 'string' && c)) throw Error(`the job kind ${kind} lists its output checks by check kind`);
