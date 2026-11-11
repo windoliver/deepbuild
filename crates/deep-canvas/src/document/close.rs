@@ -84,7 +84,7 @@ pub fn undeclared(declared: &Map<String, Value>, kinds: Option<&[String]>, field
 
 /// The close names for a kind text no registry in this build holds: every kind at its build
 /// major, by spelling.
-pub(super) fn kind_names(text: &str, kinds: &Registry, fault: Option<Fault>) -> Vec<Value> {
+pub fn kind_names(text: &str, kinds: &Registry, fault: Option<Fault>) -> Vec<Value> {
     if fault == Some(Fault::NoCloseNames) {
         return Vec::new();
     }
@@ -102,7 +102,7 @@ pub(super) fn kind_names(text: &str, kinds: &Registry, fault: Option<Fault>) -> 
 
 /// Every other kind whose build major defines a field of exactly `name`, as `family.name@major`,
 /// by name (#1970).
-pub(super) fn owners(
+pub fn owners(
     name: &str,
     entry: &Entry,
     kinds: &Registry,
@@ -125,7 +125,7 @@ pub(super) fn owners(
 /// The close names for a field `name` the kind's `version` doesn't define: the name a rename
 /// record up to that version gives it, then each kind in `owners` that defines it, then its
 /// params by spelling.
-pub(super) fn field_names(
+pub fn field_names(
     name: &str,
     entry: &Entry,
     version: &Version,

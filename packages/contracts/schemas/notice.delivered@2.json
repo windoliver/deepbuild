@@ -1,0 +1,187 @@
+{
+  "title": "notice.delivered@2",
+  "description": "The core handed a session a notice about its siblings (#352): who else is in the repo and on what at its start, a file another session changed beside its own, or a sibling's merged pull request that touched its files. Built from facts only (paths, line ranges, issue and pull request numbers, session names), never from another agent's text, and named by the kind of change it reports. Only the core appends it, once per notice, when the reply that carries it is written. @2 adds the notice a session hears once when its last three calls in one turn failed alike (`repeat`), carried by that failed call's own reply (#2019).",
+  "x-since": "R1",
+  "x-stability": "stable",
+  "x-feeds": [],
+  "type": "object",
+  "properties": {
+    "v": {
+      "const": 2,
+      "description": "The kind's schema version."
+    },
+    "id": {
+      "type": "string",
+      "format": "ulid",
+      "description": "The event's ULID, its identity."
+    },
+    "kind": {
+      "const": "notice.delivered"
+    },
+    "subject": {
+      "type": "string",
+      "pattern": "^session:[0-9A-Za-z]+$",
+      "description": "The session the notice was handed to."
+    },
+    "writer": {
+      "const": "core",
+      "description": "Only the core appends this kind."
+    },
+    "actor": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The person behind it, from the credential."
+    },
+    "scope": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Who may see it."
+    },
+    "ts": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "Milliseconds since the Unix epoch."
+    },
+    "seq": {
+      "type": "string",
+      "format": "seq",
+      "description": "Order within the session: ns since the epoch when the hook started."
+    },
+    "log_pos": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991,
+      "description": "Its position in the event log, assigned by the hub at append."
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "notice": {
+          "type": "string",
+          "pattern": "^notice:[0-9A-Za-z]+$",
+          "description": "A notice: handle.",
+          "maxLength": 8192
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "interface",
+            "dependency",
+            "behavior",
+            "test",
+            "configuration",
+            "repeat"
+          ],
+          "description": "The kind of change it reports.",
+          "x-closure": {
+            "closed": "each value is a kind of change a notice reports, and the agent reads which",
+            "reopens": "a new major of this schema",
+            "mark": "exhaustive"
+          }
+        },
+        "source": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^session:[0-9A-Za-z]+$",
+          "description": "The sibling session it reports on; null when no session made the change.",
+          "maxLength": 8192
+        },
+        "target": {
+          "type": "string",
+          "pattern": "^session:[0-9A-Za-z]+$",
+          "description": "The session it was handed to.",
+          "maxLength": 8192
+        },
+        "files": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8192
+          },
+          "description": "The files it is about, from the repo root."
+        },
+        "pr": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "The merged pull request it reports, or null."
+        },
+        "key": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "Its subject: the same file and sibling, the same merged pull request; a newer notice on one replaces an older one still waiting."
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "The state of its subject it reports: one delivered is never delivered again."
+        },
+        "via": {
+          "type": "string",
+          "enum": [
+            "SessionStart",
+            "UserPromptSubmit",
+            "PreToolUse",
+            "PostToolUse",
+            "waiter",
+            "PostToolUseFailure"
+          ],
+          "description": "The hook whose reply carried it, or the waiter that woke the idle session with it.",
+          "x-closure": {
+            "closed": "each value is a hook a reply carries context on",
+            "reopens": "a new major of this schema",
+            "mark": "exhaustive"
+          }
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "The notice as the agent was handed it."
+        }
+      },
+      "required": [
+        "notice",
+        "type",
+        "source",
+        "target",
+        "files",
+        "pr",
+        "key",
+        "version",
+        "via",
+        "text"
+      ],
+      "additionalProperties": false
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$",
+        "description": "A SHA-256, in lower-case hex."
+      }
+    }
+  },
+  "required": [
+    "v",
+    "id",
+    "kind",
+    "subject",
+    "writer",
+    "actor",
+    "scope",
+    "ts",
+    "data"
+  ],
+  "additionalProperties": false
+}

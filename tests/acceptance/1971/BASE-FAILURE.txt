@@ -1,0 +1,306 @@
+Base run of the #1971 acceptance tests at 4004257cd (origin/main), November 10, 2026, on the shared Mac (Mac17,10,
+not a reference Mac; 1-minute load about 380 on 18 cores).
+
+Built first, under the machine's throttle (scripts/throttle.mjs build), in the checkout's own target/:
+  cargo build --locked --bin deep-show            (default features: full)
+  cargo build --locked -p deep-hook --bin deep-hook
+  npm ci && npm run build --workspaces
+(cargo from the rustup toolchain 1.99.1, CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0; the files' own builds were
+then no-ops.)
+
+Command:
+  CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 node node_modules/vitest/vitest.mjs run --root tests/acceptance/1971 --no-file-parallelism --testTimeout=600000
+
+Result: 4 files, 8 tests, 8 failed, each at an assertion (none at load). The full build's dump lists 504 fields
+across 52 kinds, all in kind@1.
+
+Summary, per criterion:
+- AC1, one-field.test.ts: FAILS. The dump is written and read, but deep_kinds refuses op "field" for every one of the
+  504 paths with enum at /op ("Give op as one of list, word, search, read, gallery, sheet or step_ceilings."): no
+  line, so nothing to measure or compare. Each failure names the path (kind and field).
+  The two plant tests FAIL: `deep-show run --planted field_listing_without_corner` and `--planted
+  field_line_600_bytes` answer {"ok":false,"code":"bad_input"} and exit 2, since the base has no such plants.
+- AC2, object-path.test.ts: FAILS. The object path of each of the 52 kinds is refused the same way (enum at /op).
+  The plant test FAILS: `--planted field_object_by_name` is bad_input, exit 2.
+- AC3, budget.test.ts: FAILS in its structural check, before any timing: every one of the 504 one-field calls is a
+  refusal (enum at /op), not a reply holding one line. (Here the timing would have skipped as INCONCLUSIVE anyway:
+  not a reference Mac, and loaded past its core count.)
+- AC4, refusal.test.ts: FAILS on both routes. Through deep-show run, test.slab@3.widht and test.slab@3.w are refused
+  with enum at /op, not unknown_field, and the remediation names no field of test.slab@3 (so not width, not first,
+  and not test.slab@2). Through the deep_kinds tool of deep mcp (a real hub in a temporary home), the hub's schema
+  refuses path itself: unlisted_field at /params/arguments/path, "Leave out path: the schema lists only op, …", naming
+  no close name. Both errors are in the shared shape (code, retryable, remediation, path, actual, evidence), so only
+  the code and the names fail.
+
+The output below is the run's, with the absolute checkout path written <repo>. The three long lists (AC1's and
+AC3's 504 lines, AC2's 52), each printed twice by vitest (message and diff), are cut to their first six lines; every
+line cut is of the same form, "<path>: refused: enum at /op: Give op as one of list, word, search, read, gallery,
+sheet or step_ceilings.", and a marker says how many were cut.
+
+================ The run ================
+
+ RUN  v5.0.5 <repo>/tests/acceptance/1971
+
+ ❯ refusal.test.ts (2 tests | 2 failed) 17947ms
+   ❯ AC4 a miss on op: field is one unknown_field error in the shared shape, naming the close names, renames first (2)
+     × AC4 deep-show run: test.slab@3.widht is refused with unknown_field naming width first, and test.slab@3.w names width with renamed_in test.slab@2, each one error in the shared shape 4901ms
+     × AC4 the deep_kinds tool over deep mcp: test.slab@3.widht is refused with unknown_field naming width first, and test.slab@3.w names width with renamed_in test.slab@2, each one tool error in the shared shape 7876ms
+ ❯ budget.test.ts (1 test | 1 failed) 12454ms
+   ❯ AC3 a one-field reply is under 1 KB and answers within #412's budget (1)
+     × AC3 a one-field reply is under 1 KB and answers in under 100 ms at p95 on the reference Mac 6690ms
+ ❯ one-field.test.ts (3 tests | 3 failed) 10779ms
+   ❯ AC1 op: field answers each dumped field in one line under 512 bytes, its values the dump's (3)
+     × AC1 for every field in the full build's dump, op: field with its path returns exactly one line under 512 bytes, its type, unit, range and default equal to the dump's 6093ms
+     × AC1 a planted listing that leaves test.slab@3's corner out fails, naming the kind and the field 251ms
+     × AC1 a planted 600-byte line for test.slab@3.width fails, naming it 108ms
+ ❯ object-path.test.ts (2 tests | 2 failed) 10750ms
+   ❯ AC2 an object path answers every field of its kind, one line each, in the dump's order (2)
+     × AC2 an object path returns as many lines as the dump lists params for that kind, in the dump's order 5807ms
+     × AC2 a planted answer in another order fails, naming the first line out of place 27ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 8 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  budget.test.ts > AC3 a one-field reply is under 1 KB and answers within #412's budget > AC3 a one-field reply is under 1 KB and answers in under 100 ms at p95 on the reference Mac
+AssertionError: the one-field replies to the 504 fields of the dump:
+  test.slab@3.width: refused: enum at /op: Give op as one of list, word, search, read, gallery, sheet or step_ceilings.
+  test.slab@3.height: refused: enum at /op: Give op as one of list, word, search, read, gallery, sheet or step_ceilings.
+  test.slab@3.label: refused: enum at /op: Give op as one of list, word, search, read, gallery, sheet or step_ceilings.
+  test.slab@3.corner: refused: enum at /op: Give op as one of list, word, search, read, gallery, sheet or step_ceilings.
+  camera@1.projection: refused: enum at /op: Give op as one of list, word, search, read, gallery, sheet or step_ceilings.
+  camera@1.target: refused: enum at /op: Give op as one of list, word, search, read, gallery, sheet or step_ceilings.
+  [… 498 more lines of the same form, one per field or kind, elided …]
+
+- Expected
++ Received
+
+- []
++ [
++   "test.slab@3.width: refused: enum at /op: Give op as one of list, word, search, read, gallery, sheet or step_ceilings.",
++   "test.slab@3.height: refused: enum at /op: Give op as one of list, word, search, read, gallery, sheet or step_ceilings.",
++   "test.slab@3.label: refused: enum at /op: Give op as one of list, word, search, read, gallery, sheet or step_ceilings.",
++   "test.slab@3.corner: refused: enum at /op: Give op as one of list, word, search, read, gallery, sheet or step_ceilings.",
++   "camera@1.projection: refused: enum at /op: Give op as one of list, word, search, read, gallery, sheet or step_ceilings.",
++   "camera@1.target: refused: enum at /op: Give op as one of list, word, search, read, gallery, sheet or step_ceilings.",
+  [… 498 more lines of the same form, one per field or kind, elided …]
++ ]
+
+ ❯ none helpers.ts:50:60
+     48| /** No failures; the message lists them. */
+     49| export function none(failures: readonly string[], what: string): void {
+     50|   expect(failures, `${what}:\n  ${failures.join('\n  ')}`).toEqual([]);
+       |                                                            ^
+     51| }
+     52| /** At least one failure, and one that names every one of `names` toge…
+ ❯ budget.test.ts:54:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/8]⎯
+
+ FAIL  object-path.test.ts > AC2 an object path answers every field of its kind, one line each, in the dump's order > AC2 an object path returns as many lines as the dump lists params for that kind, in the dump's order
+AssertionError: the object paths of the 52 kinds the dump lists with params:
+  test.slab@3: refused: enum at /op: Give op as one of list, word, search, read, gallery, sheet or step_ceilings.
+  camera@1: refused: enum at /op: Give op as one of list, word, search, read, gallery, sheet or step_ceilings.
+  circle@1: refused: enum at /op: Give op as one of list, word, search, read, gallery, sheet or step_ceilings.
+  series@1: refused: enum at /op: Give op as one of list, word, search, read, gallery, sheet or step_ceilings.
+  test.rect@1: refused: enum at /op: Give op as one of list, word, search, read, gallery, sheet or step_ceilings.
+  test.dot@1: refused: enum at /op: Give op as one of list, word, search, read, gallery, sheet or step_ceilings.
+  [… 46 more lines of the same form, one per field or kind, elided …]
+
+- Expected
++ Received
+
+- []
++ [
++   "test.slab@3: refused: enum at /op: Give op as one of list, word, search, read, gallery, sheet or step_ceilings.",
++   "camera@1: refused: enum at /op: Give op as one of list, word, search, read, gallery, sheet or step_ceilings.",
++   "circle@1: refused: enum at /op: Give op as one of list, word, search, read, gallery, sheet or step_ceilings.",
++   "series@1: refused: enum at /op: Give op as one of list, word, search, read, gallery, sheet or step_ceilings.",
++   "test.rect@1: refused: enum at /op: Give op as one of list, word, search, read, gallery, sheet or step_ceilings.",
++   "test.dot@1: refused: enum at /op: Give op as one of list, word, search, read, gallery, sheet or step_ceilings.",
+  [… 46 more lines of the same form, one per field or kind, elided …]
++ ]
+
+ ❯ none helpers.ts:50:60
+     48| /** No failures; the message lists them. */
+     49| export function none(failures: readonly string[], what: string): void {
+     50|   expect(failures, `${what}:\n  ${failures.join('\n  ')}`).toEqual([]);
+       |                                                            ^
+     51| }
+     52| /** At least one failure, and one that names every one of `names` toge…
+ ❯ object-path.test.ts:30:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/8]⎯
+
+ FAIL  object-path.test.ts > AC2 an object path answers every field of its kind, one line each, in the dump's order > AC2 a planted answer in another order fails, naming the first line out of place
+AssertionError: deep-show run --planted field_object_by_name starts and exits 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ run helpers.ts:130:169
+    128|   const s = start(bin, args, [{ evidence: tempDir('ev'), calls }]);
+    129|   expect(s.timedOut, `deep-show ${args.join(' ')} finished within its …
+    130|   expect(s.status, `deep-show ${args.join(' ')} starts and exits 0 (${…
+       |                                                                                                                                                                         ^
+    131|   expect(s.lines.length, `deep-show ${args.join(' ')}: one output line…
+    132|   const out = s.lines[0];
+ ❯ walk object-path.test.ts:22:32
+ ❯ object-path.test.ts:34:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/8]⎯
+
+ FAIL  one-field.test.ts > AC1 op: field answers each dumped field in one line under 512 bytes, its values the dump's > AC1 for every field in the full build's dump, op: field with its path returns exactly one line under 512 bytes, its type, unit, range and default equal to the dump's
+AssertionError: op: field over the 504 fields of the dump:
+  test.slab@3.width (kind test.slab@3, field width): refused: enum at /op: Give op as one of list, word, search, read, gallery, sheet or step_ceilings.
+  test.slab@3.height (kind test.slab@3, field height): refused: enum at /op: Give op as one of list, word, search, read, gallery, sheet or step_ceilings.
+  test.slab@3.label (kind test.slab@3, field label): refused: enum at /op: Give op as one of list, word, search, read, gallery, sheet or step_ceilings.
+  test.slab@3.corner (kind test.slab@3, field corner): refused: enum at /op: Give op as one of list, word, search, read, gallery, sheet or step_ceilings.
+  camera@1.projection (kind camera@1, field projection): refused: enum at /op: Give op as one of list, word, search, read, gallery, sheet or step_ceilings.
+  camera@1.target (kind camera@1, field target): refused: enum at /op: Give op as one of list, word, search, read, gallery, sheet or step_ceilings.
+  [… 498 more lines of the same form, one per field or kind, elided …]
+
+- Expected
++ Received
+
+- []
++ [
++   "test.slab@3.width (kind test.slab@3, field width): refused: enum at /op: Give op as one of list, word, search, read, gallery, sheet or step_ceilings.",
++   "test.slab@3.height (kind test.slab@3, field height): refused: enum at /op: Give op as one of list, word, search, read, gallery, sheet or step_ceilings.",
++   "test.slab@3.label (kind test.slab@3, field label): refused: enum at /op: Give op as one of list, word, search, read, gallery, sheet or step_ceilings.",
++   "test.slab@3.corner (kind test.slab@3, field corner): refused: enum at /op: Give op as one of list, word, search, read, gallery, sheet or step_ceilings.",
++   "camera@1.projection (kind camera@1, field projection): refused: enum at /op: Give op as one of list, word, search, read, gallery, sheet or step_ceilings.",
++   "camera@1.target (kind camera@1, field target): refused: enum at /op: Give op as one of list, word, search, read, gallery, sheet or step_ceilings.",
+  [… 498 more lines of the same form, one per field or kind, elided …]
++ ]
+
+ ❯ none helpers.ts:50:60
+     48| /** No failures; the message lists them. */
+     49| export function none(failures: readonly string[], what: string): void {
+     50|   expect(failures, `${what}:\n  ${failures.join('\n  ')}`).toEqual([]);
+       |                                                            ^
+     51| }
+     52| /** At least one failure, and one that names every one of `names` toge…
+ ❯ one-field.test.ts:35:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/8]⎯
+
+ FAIL  one-field.test.ts > AC1 op: field answers each dumped field in one line under 512 bytes, its values the dump's > AC1 a planted listing that leaves test.slab@3's corner out fails, naming the kind and the field
+AssertionError: deep-show run --planted field_listing_without_corner starts and exits 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ run helpers.ts:130:169
+    128|   const s = start(bin, args, [{ evidence: tempDir('ev'), calls }]);
+    129|   expect(s.timedOut, `deep-show ${args.join(' ')} finished within its …
+    130|   expect(s.status, `deep-show ${args.join(' ')} starts and exits 0 (${…
+       |                                                                                                                                                                         ^
+    131|   expect(s.lines.length, `deep-show ${args.join(' ')}: one output line…
+    132|   const out = s.lines[0];
+ ❯ walk one-field.test.ts:25:19
+ ❯ one-field.test.ts:39:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/8]⎯
+
+ FAIL  one-field.test.ts > AC1 op: field answers each dumped field in one line under 512 bytes, its values the dump's > AC1 a planted 600-byte line for test.slab@3.width fails, naming it
+AssertionError: deep-show run --planted field_line_600_bytes starts and exits 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ run helpers.ts:130:169
+    128|   const s = start(bin, args, [{ evidence: tempDir('ev'), calls }]);
+    129|   expect(s.timedOut, `deep-show ${args.join(' ')} finished within its …
+    130|   expect(s.status, `deep-show ${args.join(' ')} starts and exits 0 (${…
+       |                                                                                                                                                                         ^
+    131|   expect(s.lines.length, `deep-show ${args.join(' ')}: one output line…
+    132|   const out = s.lines[0];
+ ❯ walk one-field.test.ts:25:19
+ ❯ one-field.test.ts:45:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/8]⎯
+
+ FAIL  refusal.test.ts > AC4 a miss on op: field is one unknown_field error in the shared shape, naming the close names, renames first > AC4 deep-show run: test.slab@3.widht is refused with unknown_field naming width first, and test.slab@3.w names width with renamed_in test.slab@2, each one error in the shared shape
+AssertionError: the two misses through deep-show run:
+  test.slab@3.widht: refused with "enum", not unknown_field: {"code":"enum","retryable":false,"remediation":"Give op as one of list, word, search, read, gallery, sheet or step_ceilings.","path":"/op","actual":"field","evidence":[]}
+  test.slab@3.widht: the remediation doesn't name width as the close name (it names width ×0, height ×0, label ×0, corner ×0): "Give op as one of list, word, search, read, gallery, sheet or step_ceilings."
+  test.slab@3.widht: the remediation names no close name first, not width: "Give op as one of list, word, search, read, gallery, sheet or step_ceilings."
+  test.slab@3.w: refused with "enum", not unknown_field: {"code":"enum","retryable":false,"remediation":"Give op as one of list, word, search, read, gallery, sheet or step_ceilings.","path":"/op","actual":"field","evidence":[]}
+  test.slab@3.w: the remediation doesn't name width as the close name (it names width ×0, height ×0, label ×0, corner ×0): "Give op as one of list, word, search, read, gallery, sheet or step_ceilings."
+  test.slab@3.w: the remediation names width without renamed_in test.slab@2: "Give op as one of list, word, search, read, gallery, sheet or step_ceilings.": expected [ …(6) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "test.slab@3.widht: refused with \"enum\", not unknown_field: {\"code\":\"enum\",\"retryable\":false,\"remediation\":\"Give op as one of list, word, search, read, gallery, sheet or step_ceilings.\",\"path\":\"/op\",\"actual\":\"field\",\"evidence\":[]}",
++   "test.slab@3.widht: the remediation doesn't name width as the close name (it names width ×0, height ×0, label ×0, corner ×0): \"Give op as one of list, word, search, read, gallery, sheet or step_ceilings.\"",
++   "test.slab@3.widht: the remediation names no close name first, not width: \"Give op as one of list, word, search, read, gallery, sheet or step_ceilings.\"",
++   "test.slab@3.w: refused with \"enum\", not unknown_field: {\"code\":\"enum\",\"retryable\":false,\"remediation\":\"Give op as one of list, word, search, read, gallery, sheet or step_ceilings.\",\"path\":\"/op\",\"actual\":\"field\",\"evidence\":[]}",
++   "test.slab@3.w: the remediation doesn't name width as the close name (it names width ×0, height ×0, label ×0, corner ×0): \"Give op as one of list, word, search, read, gallery, sheet or step_ceilings.\"",
++   "test.slab@3.w: the remediation names width without renamed_in test.slab@2: \"Give op as one of list, word, search, read, gallery, sheet or step_ceilings.\"",
++ ]
+
+ ❯ none helpers.ts:50:60
+     48| /** No failures; the message lists them. */
+     49| export function none(failures: readonly string[], what: string): void {
+     50|   expect(failures, `${what}:\n  ${failures.join('\n  ')}`).toEqual([]);
+       |                                                            ^
+     51| }
+     52| /** At least one failure, and one that names every one of `names` toge…
+ ❯ refusal.test.ts:45:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/8]⎯
+
+ FAIL  refusal.test.ts > AC4 a miss on op: field is one unknown_field error in the shared shape, naming the close names, renames first > AC4 the deep_kinds tool over deep mcp: test.slab@3.widht is refused with unknown_field naming width first, and test.slab@3.w names width with renamed_in test.slab@2, each one tool error in the shared shape
+AssertionError: the two misses through the deep_kinds tool:
+  test.slab@3.widht: refused with "unlisted_field", not unknown_field: {"code":"unlisted_field","retryable":false,"remediation":"Leave out path: the schema lists only op, registry, cursor, word, query, kind, size_m, license, limit, library, id, pack, asset, example, guide, offset.","path":"/params/arguments/path","actual":"path","evidence":[]}
+  test.slab@3.widht: the remediation doesn't name width as the close name (it names width ×0, height ×0, label ×0, corner ×0): "Leave out path: the schema lists only op, registry, cursor, word, query, kind, size_m, license, limit, library, id, pack, asset, example, guide, offset."
+  test.slab@3.widht: the remediation names no close name first, not width: "Leave out path: the schema lists only op, registry, cursor, word, query, kind, size_m, license, limit, library, id, pack, asset, example, guide, offset."
+  test.slab@3.w: refused with "unlisted_field", not unknown_field: {"code":"unlisted_field","retryable":false,"remediation":"Leave out path: the schema lists only op, registry, cursor, word, query, kind, size_m, license, limit, library, id, pack, asset, example, guide, offset.","path":"/params/arguments/path","actual":"path","evidence":[]}
+  test.slab@3.w: the remediation doesn't name width as the close name (it names width ×0, height ×0, label ×0, corner ×0): "Leave out path: the schema lists only op, registry, cursor, word, query, kind, size_m, license, limit, library, id, pack, asset, example, guide, offset."
+  test.slab@3.w: the remediation names width without renamed_in test.slab@2: "Leave out path: the schema lists only op, registry, cursor, word, query, kind, size_m, license, limit, library, id, pack, asset, example, guide, offset.": expected [ …(6) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "test.slab@3.widht: refused with \"unlisted_field\", not unknown_field: {\"code\":\"unlisted_field\",\"retryable\":false,\"remediation\":\"Leave out path: the schema lists only op, registry, cursor, word, query, kind, size_m, license, limit, library, id, pack, asset, example, guide, offset.\",\"path\":\"/params/arguments/path\",\"actual\":\"path\",\"evidence\":[]}",
++   "test.slab@3.widht: the remediation doesn't name width as the close name (it names width ×0, height ×0, label ×0, corner ×0): \"Leave out path: the schema lists only op, registry, cursor, word, query, kind, size_m, license, limit, library, id, pack, asset, example, guide, offset.\"",
++   "test.slab@3.widht: the remediation names no close name first, not width: \"Leave out path: the schema lists only op, registry, cursor, word, query, kind, size_m, license, limit, library, id, pack, asset, example, guide, offset.\"",
++   "test.slab@3.w: refused with \"unlisted_field\", not unknown_field: {\"code\":\"unlisted_field\",\"retryable\":false,\"remediation\":\"Leave out path: the schema lists only op, registry, cursor, word, query, kind, size_m, license, limit, library, id, pack, asset, example, guide, offset.\",\"path\":\"/params/arguments/path\",\"actual\":\"path\",\"evidence\":[]}",
++   "test.slab@3.w: the remediation doesn't name width as the close name (it names width ×0, height ×0, label ×0, corner ×0): \"Leave out path: the schema lists only op, registry, cursor, word, query, kind, size_m, license, limit, library, id, pack, asset, example, guide, offset.\"",
++   "test.slab@3.w: the remediation names width without renamed_in test.slab@2: \"Leave out path: the schema lists only op, registry, cursor, word, query, kind, size_m, license, limit, library, id, pack, asset, example, guide, offset.\"",
++ ]
+
+ ❯ none helpers.ts:50:60
+     48| /** No failures; the message lists them. */
+     49| export function none(failures: readonly string[], what: string): void {
+     50|   expect(failures, `${what}:\n  ${failures.join('\n  ')}`).toEqual([]);
+       |                                                            ^
+     51| }
+     52| /** At least one failure, and one that names every one of `names` toge…
+ ❯ refusal.test.ts:62:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/8]⎯
+
+
+ Test Files  4 failed (4)
+      Tests  8 failed (8)
+   Start at  21:37:24
+   Duration  56.18s (tests 98%, transform 1%, worker 1%)
+
+exit 1

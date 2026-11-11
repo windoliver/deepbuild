@@ -1,0 +1,78 @@
+The #2293 suite run at base commit 331b68be1f25104d39a3d9800eed4e2983da9af5 ("Merge pull request #2273 …"; no
+implementation of #2293), on macOS 27.2 arm64 (Mac17,10, rustc 1.99.1, Node 24.22.2, vitest 5.0.5), outside the
+sandbox so Metal opens, with:
+
+  PATH=/opt/homebrew/opt/rustup/bin:$PATH NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 \
+    npx vitest run --root tests/acceptance/2293 --testTimeout=1800000 --no-file-parallelism
+
+The checkout's path is redacted to <checkout>. deep-show was built just before with the same cargo command and
+environment (16 min 31 s cold), so each file's own build in beforeAll was a no-op.
+
+Result: 2 of 2 tests fail, each at its criterion's assertion and for the issue's reason: the ball is drawn at its
+authored place, the origin, while eval puts it at about (3.000, 0.379, 0) m. Nothing failed in the harness, and
+nothing was INCONCLUSIVE: the GPU opened, and every frame and mode reply was presented.
+
+- ac1-frame-box.test.ts, #2293.8649cfa0: fails at the last assertion, the box comparison. The rally's frame at 0.5 s
+  draws ball at [96.419, 205.388, 20.145, 18.994] px, exactly the box of the same scene with the ball at the origin.
+  With the ball's `at` authored at the pose eval reads at 0.5 s (pos [3.000, 0.379, 0.000] m), the scene draws it at
+  [312.042, 179.196, 15.917, 18.748] px. The largest gap is 215.6 px against a tolerance of 0.5 px. Both sanity
+  assertions before it pass: eval's ball is more than 1 m from the origin, and the comparison box is 215 px from the
+  origin box.
+- ac2-bounds-mode.test.ts, #2293.9d1c0f9e: fails at the last assertion, the centre comparison. The bounds mode at
+  0.5 s draws the ball's bounds from [-0.110, -0.110, -0.110] to [0.110, 0.110, 0.110] m, centred at the origin. eval
+  reads items/ball/at/pos at [3.000, 0.379, 0.000] m: a gap of 3.000 m against 1 mm.
+
+How the run went: the first full run failed ac1 in the harness. It read eval's bare `items/ball/at`, which the base
+answers as null (query.rs reads `items/<id>/at/<field>` from the evaluated transform; a bare `at` falls back to the
+authored document, where the ball has no `at`). ac1 was changed to read the pose at items/ball/at field by field
+(`pos`, `rot`, `scale`; README: Readings where the issue leaves a choice), and that file alone was run again. ac2 is
+from the first run; ac1 is from the second. Both outputs follow, with vitest's source excerpts, its expected/received
+diff and its start times left out.
+
+--- First run (both files; ac1's harness failure, superseded below) ---
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/2293
+
+ ❯ ac1-frame-box.test.ts (1 test | 1 failed) 8224ms
+   ❯ #2293.8649cfa0 the rally's 3D frame at 0.5 s draws the ball where eval puts it (1)
+     × #2293.8649cfa0 deep_show with include: ['pixels'] at 0.5 s answers a visible row for ball whose box is the one the scene draws with the ball's at authored at eval's pose for items/ball/at 5368ms
+ ❯ ac2-bounds-mode.test.ts (1 test | 1 failed) 9953ms
+   ❯ #2293.9d1c0f9e the rally's bounds mode at 0.5 s reads the ball where eval puts it (1)
+     × #2293.9d1c0f9e the bounds mode at 0.5 s answers the ball's bounds centred on eval's items/ball/at/pos at 0.5 s 4847ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac1-frame-box.test.ts > #2293.8649cfa0 the rally's 3D frame at 0.5 s draws the ball where eval puts it > #2293.8649cfa0 deep_show with include: ['pixels'] at 0.5 s answers a visible row for ball whose box is the one the scene draws with the ball's at authored at eval's pose for items/ball/at
+AssertionError: eval's items/ball/at at 0.5 s is an object, got null: expected false to be true // Object.is equality
+
+ FAIL  ac2-bounds-mode.test.ts > #2293.9d1c0f9e the rally's bounds mode at 0.5 s reads the ball where eval puts it > #2293.9d1c0f9e the bounds mode at 0.5 s answers the ball's bounds centred on eval's items/ball/at/pos at 0.5 s
+AssertionError: the bounds mode at 0.5 s draws the ball's bounds from [-0.110, -0.110, -0.110] to [0.110, 0.110, 0.110] m, centred at [0.000, 0.000, 0.000]; eval reads items/ball/at/pos at [3.000, 0.379, 0.000] m: expected 3.000006914138794 to be less than or equal to 0.001
+ ❯ ac2-bounds-mode.test.ts:40:171
+
+ Test Files  2 failed (2)
+      Tests  2 failed (2)
+   Duration  19.06s (tests 98%, transform 1%)
+
+--- Second run (ac1 only, as committed here) ---
+
+  PATH=/opt/homebrew/opt/rustup/bin:$PATH NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 \
+    npx vitest run --root tests/acceptance/2293 --testTimeout=1800000 --no-file-parallelism ac1-frame-box.test.ts
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/2293
+
+ ❯ ac1-frame-box.test.ts (1 test | 1 failed) 12246ms
+   ❯ #2293.8649cfa0 the rally's 3D frame at 0.5 s draws the ball where eval puts it (1)
+     × #2293.8649cfa0 deep_show with include: ['pixels'] at 0.5 s answers a visible row for ball whose box is the one the scene draws with the ball's at authored at eval's pose for items/ball/at 8877ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac1-frame-box.test.ts > #2293.8649cfa0 the rally's 3D frame at 0.5 s draws the ball where eval puts it > #2293.8649cfa0 deep_show with include: ['pixels'] at 0.5 s answers a visible row for ball whose box is the one the scene draws with the ball's at authored at eval's pose for items/ball/at
+AssertionError: the rally's frame at 0.5 s draws ball at [96.419, 205.388, 20.145, 18.994] (centre [106.491, 214.885] px); authored at eval's pose (pos [3.000, 0.379, 0.000] m) the same scene draws it at [312.042, 179.196, 15.917, 18.748] (centre [320.001, 188.569] px); authored at the origin, at [96.419, 205.388, 20.145, 18.994] (centre [106.491, 214.885] px): expected 215.62359727506265 to be less than or equal to 0.5
+ ❯ ac1-frame-box.test.ts:54:284
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Duration  12.61s (tests 99%)
+
+The type-check, npx tsc -p tests/acceptance/2293/tsconfig.json, exits 0 (run after ac1's change).
+tests/acceptance/2293/node_modules/.vite was removed after the runs.

@@ -1,0 +1,15 @@
+{
+  "v": 1,
+  "id": "01K9QZ6V2T8M4R1N5P7W3X9Z05",
+  "kind": "holds.watch",
+  "subject": "session:8d3c2f1e0b4a4c6e9f2d1a2b3c4d5e6f",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013445000,
+  "data": {
+    "cause": "version",
+    "on": true,
+    "version": "2.1.400"
+  }
+}

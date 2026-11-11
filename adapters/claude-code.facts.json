@@ -1,5 +1,5 @@
 {
-  "schema": "adapter.facts@5",
+  "schema": "adapter.facts@6",
   "versions": ["2.1.299", "2.1.304", "2.1.308"],
   "agent": "claude",
   "hookTimeouts": {
@@ -966,6 +966,27 @@
       "kind": "session.attention",
       "data": { "state": "=working" }
     }
+  },
+  "retries": {
+    "readBy": "a row reads retrying from these records alone (#2019): each entry the match names is the agent retrying a model call the provider refused, one model.call event by its own uuid and timestamp, with its attempt, its most and the cause its error names; the next assistant entry is the model's reply, which ends them",
+    "conformance": "claude/retries/records",
+    "match": { "type": "system", "subtype": "api_error" },
+    "attempt": "retryAttempt",
+    "max": "maxRetries",
+    "at": "timestamp",
+    "id": "uuid",
+    "cause": {
+      "fields": ["error.status", "error.error.error.type", "error.error.type", "error.connection.code"],
+      "values": {
+        "529": "overloaded", "overloaded_error": "overloaded",
+        "429": "rate_limited", "rate_limit_error": "rate_limited",
+        "500": "server_error", "502": "server_error", "503": "server_error", "504": "server_error", "api_error": "server_error",
+        "ECONNRESET": "connection", "ECONNREFUSED": "connection", "ENOTFOUND": "connection", "ETIMEDOUT": "connection", "EPIPE": "connection", "StreamNoResponse": "connection"
+      },
+      "otherwise": "unknown"
+    },
+    "reply": { "type": "assistant" },
+    "source": "Claude Code's session transcripts on 2.1.317 and 2.1.321 (recorded Nov 11 2026: type system, subtype api_error, source request_retry, with retryAttempt, maxRetries, retryInMs and timestamp, for connection errors); the overload and rate-limit values follow the API's own error shape, not yet recorded in a transcript"
   },
   "stop": {
     "readBy": "each agent.stop names its cause from the stop's closed set and carries its turn's usage (#603); the turn is the transcript's entries from the user entry whose promptId is the payload's prompt_id to the next prompt's; a subagent's stop (its payload carries agent_id) ran in the subagent's own transcript, agent_transcript_path, so no entry of the session's transcript is its turn: its cause comes from the payload alone and its usage is not captured",
