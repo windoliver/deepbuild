@@ -135,9 +135,11 @@ export function voice(out, src, e, rate, draws, take) {
   }
   const preset = src.synth.preset;
   const f0 = hz(e.pitch);
-  // A pad is two saws, detuned apart by 6 to 12 cents by the note's draw, through a one-pole low-pass at 2.4 kHz.
+  // A pad is two saws, detuned apart by 6 to 12 cents by the note's draw, the second at half the first's level so
+  // their beating never cancels the note, through a one-pole low-pass at 2.4 kHz.
   const cents = preset === 'pad' ? 6 + 6 * (Number(draws.detune % 1000n) / 1000) : 0;
   const ratios = preset === 'pad' ? [exp2(-cents / 2400), exp2(cents / 2400)] : [1];
+  const weights = preset === 'pad' ? [2 / 3, 1 / 3] : [1];
   const phases = ratios.map(() => 0);
   const k = 1 - exp2((-TAU * 2400) / rate / 0.6931471805599453);
   let lp = 0;
@@ -147,13 +149,14 @@ export function voice(out, src, e, rate, draws, take) {
     for (let v = 0; v < ratios.length; v++) {
       const inc = (f0 * bend * ratios[v]) / rate;
       const ph = phases[v];
-      if (preset === 'sine') s += sin(TAU * ph);
-      else if (preset === 'triangle') s += 1 - 4 * Math.abs(ph - 0.5);
-      else if (preset === 'square') s += (ph < 0.5 ? 1 : -1) + blep(ph, inc) - blep((ph + 0.5) % 1, inc);
-      else s += 2 * ph - 1 - blep(ph, inc);
+      let x;
+      if (preset === 'sine') x = sin(TAU * ph);
+      else if (preset === 'triangle') x = 1 - 4 * Math.abs(ph - 0.5);
+      else if (preset === 'square') x = (ph < 0.5 ? 1 : -1) + blep(ph, inc) - blep((ph + 0.5) % 1, inc);
+      else x = 2 * ph - 1 - blep(ph, inc);
+      s += weights[v] * x;
       phases[v] = (ph + inc) % 1;
     }
-    s /= ratios.length;
     if (preset === 'pad') { lp += k * (s - lp); s = lp; }
     out[n] = s * env(n);
   }

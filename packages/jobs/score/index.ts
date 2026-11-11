@@ -29,7 +29,7 @@ const FIXTURE_PARAMS = {
   instruments: { p: { source: { pluck: { preset: 'nylon' } } }, s: { source: { synth: { preset: 'sine' } } } },
   events: [{ id: 'n1', inst: 'p', at: 0, dur: 4800, pitch: 64 }, { id: 'n2', inst: 's', at: 2400, dur: 4800, pitch: 69.5 }],
 };
-const FIXTURE_META = '{"stem":"q","sample_rate":48000,"length":9600,"loop":null,"note_on":[{"event":"n1","sample":0,"pitch":64,"take":null,"attack":0},{"event":"n2","sample":2400,"pitch":69.5,"take":null,"attack":0.005}],"credits":[],"made_by":{"tool":"score-render","version":"1.0.0","synthetic":true,"made_from":[]},"stem_sha256":"e9000ff985d1621f085a553068fd5b1a5540e5a274de3a9b53ee74f41bd7c098"}';
+const FIXTURE_META = '{"stem":"q","sample_rate":48000,"length":9600,"loop":null,"note_on":[{"event":"n1","sample":0,"pitch":64,"take":null,"attack":0,"length":8640},{"event":"n2","sample":2400,"pitch":69.5,"take":null,"attack":0.005,"length":7200}],"credits":[],"made_by":{"tool":"score-render","version":"1.0.0","synthetic":true,"made_from":[]},"stem_sha256":"e9000ff985d1621f085a553068fd5b1a5540e5a274de3a9b53ee74f41bd7c098"}';
 
 interface Spec { outputs?: Record<string, string> }
 

@@ -86,6 +86,10 @@ export function render(params, samples, progress = () => undefined) {
   notes.forEach((n, i) => {
     const mono = new Float64Array(n.e.durN + n.e.releaseN);
     voice(mono, n.src, n.e, rate, n.draws, n.played);
+    // How long the note sounds, to its last sample that isn't silent: score.pitch measures only a note that fills its window.
+    let last = mono.length;
+    while (last > 0 && mono[last - 1] === 0) last--;
+    n.length = last;
     if (loop && n.e.at < loop.start) {
       const cut = loop.start - n.e.at;
       for (let k = Math.max(0, cut - FADE); k < mono.length; k++) mono[k] *= k >= cut ? 0 : (cut - k) / FADE;
@@ -123,7 +127,7 @@ export function render(params, samples, progress = () => undefined) {
     sample_rate: rate,
     length: end,
     loop,
-    note_on: notes.map((n) => ({ event: n.e.id, sample: n.e.at, pitch: n.e.pitch, take: n.take, attack: n.e.attackN / rate, ...(Array.isArray(n.e.bend) && n.e.bend.length ? { bend: n.e.bend } : {}), ...(n.e.vib ? { vib: n.e.vib } : {}) })),
+    note_on: notes.map((n) => ({ event: n.e.id, sample: n.e.at, pitch: n.e.pitch, take: n.take, attack: n.e.attackN / rate, length: n.length, ...(Array.isArray(n.e.bend) && n.e.bend.length ? { bend: n.e.bend } : {}), ...(n.e.vib ? { vib: n.e.vib } : {}) })),
     credits: params.credits ?? [],
     made_by: { tool: TOOL, version: VERSION, synthetic: true, made_from: samples.map((b) => ({ name: 'samples', sha256: sha(b) })) },
   };

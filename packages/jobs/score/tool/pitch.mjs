@@ -2,7 +2,8 @@
 // rendered stem, never read from its event. Over the 4,096 samples from its onset plus its attack (at least 20 ms),
 // mixed to mono under a Hann window, it finds the strongest frequency within ±100 cents of the declared pitch in
 // 5-cent steps and refines it by a parabola through the peak and its neighbours. A note further than the tolerance
-// fails, naming its event; a note whose bend or vibrato moves it inside the window, or a silent window, isn't measured.
+// fails, naming its event; a note whose bend or vibrato moves it inside the window, one that stops sounding before the
+// window ends, or a silent window, isn't measured.
 import { decode } from './flac.mjs';
 import { TAU, cos, exp2, hz, sin } from './math.mjs';
 
@@ -44,6 +45,8 @@ export function measure(stemBytes, meta) {
     const startsMoving = (t) => t !== undefined && t < attack + span;
     const bendFrom = Array.isArray(note.bend) && note.bend.length ? (note.bend[0][0] > 0 ? 0 : note.bend[0][0]) : undefined;
     if (startsMoving(bendFrom) || (note.vib && startsMoving(note.vib.from ?? 0))) return { event: note.event, pitch: note.pitch, cents: null };
+    // A note that stops sounding inside its window would be measured against the notes after it.
+    if (Number.isInteger(note.length) && note.length < from - note.sample + WINDOW) return { event: note.event, pitch: note.pitch, cents: null };
     const x = new Float64Array(WINDOW);
     let energy = 0;
     for (let k = 0; k < WINDOW; k++) {
