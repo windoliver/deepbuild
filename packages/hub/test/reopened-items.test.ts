@@ -204,6 +204,24 @@ describe('#1633 review rounds: a reopened review note and its ask', () => {
     expect(revised.map((e) => (e.data as { resolved_by?: string }).resolved_by), `the fifth stop records that ${YOU_GH} resolved ${T.id} again: ${listed(revised)}`).toEqual([YOU_GH]);
   }, 900_000);
 
+  it('a note reopened while the session\'s own account held its thread resolved, unresolved while its ask is still open, gets no new ask once that ask passes its deadline', async () => {
+    let defaulted = 0;
+    const { hub, stops } = await play([null, REVIEWER, YOU_GH, null, null], async (n, events, _w, hub) => {
+      // The first stop's accept ask is still open when the fourth sees the thread unresolved, and defaults after it.
+      if (n !== 3) return;
+      const [ask] = asksForT(events);
+      expect(ask, `the first stop raised an accept ask for ${T.id}`).toBeDefined();
+      expect(events.some((e) => e.subject === `ask:${ask!.id}` && /^ask\.(answered|defaulted|cancelled|moot|superseded|escalated)$/.test(e.kind)), 'it is still open at the fourth stop').toBe(false);
+      const all = await settle(hub, (e) => e.some((x) => x.kind === 'ask.defaulted' && x.subject === `ask:${ask!.id}`), 150_000);
+      expect(all.some((x) => x.kind === 'ask.defaulted' && x.subject === `ask:${ask!.id}`), 'the ask defaults at its deadline').toBe(true);
+      defaulted = await lastPos(hub);
+    }, '2m');
+    expect(asksForT(stops[3]!.events, stops[3]!.since), 'its ask is still open when the thread is unresolved, so none is raised').toEqual([]);
+    // An ask is raised apart from the claim: give one the time it would take to land.
+    const last = await settle(hub, () => false, 5000);
+    expect(asksForT(last, defaulted), 'that was decided when the thread was unresolved, as for a note never held, so the same question never reaches you twice').toEqual([]);
+  }, 900_000);
+
   it('a note whose ask you answered "keep it open" opens again when its thread is unresolved after a reviewer resolved it, with no new ask', async () => {
     let kept = 0;
     const { ref, stops } = await play([null, REVIEWER, null], async (n, events, w, hub) => {
