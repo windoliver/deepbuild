@@ -1,0 +1,17 @@
+# Base run of tests/acceptance/65/redraft-1580 at de304b9f (main, built in this worktree), 2026-11-11T00:07Z
+# NO_COLOR=1 npx vitest run tests/acceptance/65/redraft-1580/answers.test.ts --testTimeout=600000 --no-file-parallelism
+# Expected on the base, and seen: PASS. The base's paseo card carries no plan (packages/hub/src/channels.ts, render),
+# so the phone signs {ask, revision, card_hash, answer} with no plan_hash, and the base fills plan_hash in from
+# ask.card at answer time (core.ts). This case is no failing test on the base: it redrafts a case that passes there,
+# so it keeps passing once #1580 makes the card carry the plan and the phone sign its hash.
+# Machine: 1-minute load 267.17 on 18 cores (shared Mac); nothing in this case is timed.
+# Run once, before a type-only fix to fixtures/phone.ts (planHashOn's parameter typed as Item, no runtime change),
+# after which tsc passed; the test wasn't run again.
+
+ RUN  v5.0.5 <worktree>
+
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  16:07:03
+   Duration  9.08s (tests 64%, transform 33%, import 3%)

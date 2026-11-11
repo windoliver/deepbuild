@@ -56,7 +56,7 @@ pub fn allocate(device: &Device, path: Path, size: [u32; 2]) -> Result<Box<dyn H
 }
 
 /// Rows of a read-back buffer are padded to wgpu's copy alignment.
-fn padded_row(width: u32) -> u32 {
+pub(crate) fn padded_row(width: u32) -> u32 {
     let row = width * 4;
     row.div_ceil(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT) * wgpu::COPY_BYTES_PER_ROW_ALIGNMENT
 }

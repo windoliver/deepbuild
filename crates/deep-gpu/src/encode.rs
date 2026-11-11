@@ -33,7 +33,7 @@ pub struct Encode {
 struct Task {
     index: usize,
     job: Job,
-    device: wgpu::Device,
+    device: crate::counted::Wgpu,
     done: mpsc::Sender<(usize, wgpu::CommandBuffer)>,
 }
 
@@ -96,7 +96,7 @@ impl Pool {
     }
 
     /// Encodes every job and submits the buffers; returns what happened to each, by layer.
-    pub fn run(&self, device: &wgpu::Device, queue: &wgpu::Queue, jobs: Vec<Job>) -> Vec<Encode> {
+    pub fn run(&self, device: &crate::counted::Wgpu, queue: &crate::counted::Queue, jobs: Vec<Job>) -> Vec<Encode> {
         let n = jobs.len();
         let (done, arrived) = mpsc::channel();
         let tasks = self.tasks.as_ref().expect("pool is open");

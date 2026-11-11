@@ -1193,7 +1193,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
     };
     let mut placement_planted = placement::Planted::default();
     // #420's wrong programs live in scene3d's and the building module's operators, #453's in the
-    // loop module's geometry.shading.
+    // loop module's geometry.shading, #535's in the data module's mapping and deep-show.
     let module_planted = input
         .get("planted")
         .and_then(Value::as_str)
@@ -1205,6 +1205,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 || deep_canvas_motion::arrange::PLANTED.contains(p)
                 || *p == deep_canvas_motion::module::UNDECLARED_KIND_ACCEPTED
                 || deep_canvas_motion::module::PLANTED.contains(p)
+                || deep_canvas_marks::arrays::PLANTED.contains(p)
         })
         .map(str::to_string);
     // #433's wrong programs are twins of the familiar@1 pack.
@@ -1224,6 +1225,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 None
             }
             None if export_planted(p).is_some() => export_planted(p),
+            None if geometry_audit::planted(p).is_some() => geometry_audit::planted(p),
             None => Some(match p {
                 "presents_unnamed_removal" => Planted::PresentsUnnamedRemoval,
                 "diffs_items_only" => Planted::DiffsItemsOnly,
@@ -1290,8 +1292,9 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "checks_skip_unknown_kind" => Planted::ChecksSkipUnknownKind,
                 "missing_kind_inconclusive" => Planted::MissingKindInconclusive,
                 "layout_text_by_kind" => Planted::LayoutTextByKind,
-                "sweep_audits_samples_only" => Planted::SweepAuditsSamplesOnly,
                 "seeds_by_expansion_order" => Planted::SeedsByExpansionOrder,
+                "each_seeds_by_element_count" => Planted::EachSeedsByElementCount,
+                "each_face_per_triangle" => Planted::EachFacePerTriangle,
                 "reexpansion_overwrites_broken_out" => Planted::ReexpansionOverwritesBrokenOut,
                 "pack_check_skips_requires_modules" => Planted::PackCheckSkipsRequiresModules,
                 "packs_keyed_by_name" => Planted::PacksKeyedByName,
@@ -1935,8 +1938,8 @@ fn modules(set: BuildSet) -> Vec<Module> {
         } else {
             deep_canvas_media::module::module()
         });
-        // Issue #308: controls and the input track's handling, with control@1.
-        out.push(deep_canvas_input::module::module());
+        // Issue #308: controls and the input track's handling, with control@1; #535: logic's arrays.
+        out.extend([deep_canvas_input::module::module(), deep_logic::module()]);
     }
     // Issue #238: the sandbox module, on core alone; `test-sandbox-alt` seals the test
     // implementation `sandbox.alt` in its place, and `test-sandbox-needs-logic` plants a manifest
@@ -2060,7 +2063,6 @@ fn modules(set: BuildSet) -> Vec<Module> {
     #[cfg(feature = "test-sim-c")]
     out.push(deep_canvas_test_modules::sim::c());
     out.extend(kit::modules::built());
-    // #403: `full` holds no logic module yet; once one lands, this build leaves it out.
     #[cfg(feature = "test-leave-out-logic")]
     out.retain(|m| m.manifest.name != "logic");
     // #443: a build without the vector module, whose scene3d@1 and marks2d@1 digests equal the

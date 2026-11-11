@@ -11,11 +11,23 @@ use serde_json::{json, Value};
 
 use super::{member, Issue};
 
-/// Sets `value` at `path` (`items/<id>/params/…`) in `doc`, making the objects on the way.
+/// Sets `value` at `path` (`items/<id>/params/…`) in `doc`, making the objects on the way; a
+/// part that indexes an array (`at/pos/1`) sets that element.
 pub fn set_path(doc: &mut Value, path: &str, value: Value) {
     let mut at = doc;
     let parts: Vec<&str> = path.split('/').filter(|p| !p.is_empty()).collect();
     for (k, p) in parts.iter().enumerate() {
+        if let (true, Ok(i)) = (at.is_array(), p.parse::<usize>()) {
+            let Some(slot) = at.as_array_mut().and_then(|a| a.get_mut(i)) else {
+                return;
+            };
+            if k + 1 == parts.len() {
+                *slot = value;
+                return;
+            }
+            at = slot;
+            continue;
+        }
         if !at.is_object() {
             *at = json!({});
         }

@@ -310,6 +310,7 @@ impl Hub<'_> {
         let _ = self.inline_tables(&mut doc);
         let _ = self.inline_vectors(&mut doc);
         let _ = self.inline_occurrences(&mut doc, &[]);
+        let _ = self.column_view(&mut doc, 0);
         Ok(doc)
     }
 

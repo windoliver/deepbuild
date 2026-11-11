@@ -121,6 +121,27 @@ pub struct Solid {
     pub batch: u32,
     /// Its row in its instancer, with a batch: where a compact step's kept rows name it (#484).
     pub row: u32,
+    /// Where its mesh's GPU sway is in time (#2016), with one.
+    pub sway: Option<Swaying>,
+}
+
+/// A swaying mesh's shape for the solid `id` (#2016): each swaying solid draws its own copy,
+/// which the GPU moves by its place, the same shape at every t.
+fn swaying_shape(mesh: u64, id: &str) -> u64 {
+    let mut h = deep_canvas::schedule::Hasher::new("scene3d.sway");
+    h.text(&format!("{mesh}#{id}"));
+    let key = h.finish().0;
+    u64::from_le_bytes([
+        key[0], key[1], key[2], key[3], key[4], key[5], key[6], key[7],
+    ])
+}
+
+/// A swaying solid's time and noise (#2016): the document's seconds and its seed, which with its
+/// mesh's [`crate::stack::Sway`] and its place give each vertex's move on the GPU.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Swaying {
+    pub t: f64,
+    pub seed: u64,
 }
 
 /// An item's adjust as a 3D item takes it in shading (Object: adjust; Item and kind: adjust):
@@ -2127,6 +2148,7 @@ fn asset_scene(
                 adjust: None,
                 batch: 0,
                 row: 0,
+                sway: None,
             });
         }
     }
@@ -2380,6 +2402,7 @@ pub(crate) fn evaluate_compiled(
                         adjust: None,
                         batch: 0,
                         row: 0,
+                        sway: None,
                     });
                 }
                 "mark.line@1" if params.get("edges").is_some_and(|e| !e.is_null()) => {
@@ -2480,6 +2503,7 @@ pub(crate) fn evaluate_compiled(
                             adjust: None,
                             batch: 0,
                             row: 0,
+                            sway: None,
                         });
                     }
                 }
@@ -2518,12 +2542,20 @@ pub(crate) fn evaluate_compiled(
                         Some(name) => h.text(name),
                         None => h.bytes(&deep_canvas::schedule::Canonical::canonical_bytes(&mesh)),
                     };
+                    // A swaying mesh moves per instance on the GPU (#2016).
+                    let sway = mesh.sway.as_ref().map(|_| Swaying {
+                        t: seconds,
+                        seed: map.get("seed").and_then(Value::as_u64).unwrap_or(0),
+                    });
                     let key = h.finish().0;
                     let material = light::material(item, |m| items.get(m), look, id)?;
                     let maps = light::maps(item, |m| items.get(m))?;
-                    let hash = u64::from_le_bytes([
+                    let mut hash = u64::from_le_bytes([
                         key[0], key[1], key[2], key[3], key[4], key[5], key[6], key[7],
                     ]);
+                    if sway.is_some() {
+                        hash = swaying_shape(hash, id);
+                    }
                     let surface = surface(&items, look, id, item)?;
                     if surface.alpha <= 0.0 {
                         continue;
@@ -2561,6 +2593,7 @@ pub(crate) fn evaluate_compiled(
                         adjust: None,
                         batch: 0,
                         row: 0,
+                        sway,
                     });
                 }
                 // A curve draws nothing; what follows it (particles along it, #420) reads it
@@ -2805,6 +2838,16 @@ pub(crate) fn evaluate_compiled(
             let place = matmul(&matmul(&at, &e.at), &from[e.proto]);
             for (k, s) in solids.iter().enumerate() {
                 let mut s = s.clone();
+                let own = if solids.len() == 1 {
+                    format!("{id}#{}", e.id)
+                } else {
+                    format!("{id}#{}#{k}", e.id)
+                };
+                // A swaying element moves by its own place on the GPU (#2016): it draws its own
+                // copy.
+                if let (Some(_), Shape::Built(h)) = (s.sway, s.shape) {
+                    s.shape = Shape::Built(swaying_shape(h, &own));
+                }
                 if gpu {
                     s.row = e.row;
                     let key = (id.as_str(), s.shape, s.material);
@@ -2814,11 +2857,7 @@ pub(crate) fn evaluate_compiled(
                         batches.len() - 1
                     }) as u32;
                 }
-                s.id = if solids.len() == 1 {
-                    format!("{id}#{}", e.id)
-                } else {
-                    format!("{id}#{}#{k}", e.id)
-                };
+                s.id = own;
                 s.model = matmul(&place, &s.model);
                 s.op = None;
                 bounds.extend(s.points());

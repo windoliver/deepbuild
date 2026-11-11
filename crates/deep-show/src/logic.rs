@@ -1,7 +1,8 @@
 //! #544: a document's logic items, baked on an input track over the transport's span, and each
 //! one's occurrence list written into the form its readers read, as `occurrences` holds a baked
 //! list (`<logic ID>.occurrences`): Spawn, `start_on`, mark-set rows and drivers read a logic
-//! item's rows as they read any list, from the bake, so a seek reads what playing does.
+//! item's rows as they read any list, from the bake, so a seek reads what playing does. #535: the
+//! bake's arrays go into the form's `arrays`, which the core's column view reads.
 
 use std::rc::Rc;
 
@@ -52,6 +53,14 @@ pub(crate) fn from_first_frame(form: &mut Value, first: i64) {
 }
 
 impl Hub<'_> {
+    /// Mark set columns that read a column source, resolved and narrowed by the core's column
+    /// view at `t` (#397), and those that read a logic array, baked for every frame (#535).
+    pub(crate) fn column_view(&self, form: &mut Value, t: i64) -> Vec<Issue> {
+        let sealed = &self.startup.sealed;
+        let entries = sealed.registry(deep_canvas::columns::REGISTRY);
+        deep_canvas::columns::view(form, entries.map_or(&[][..], |r| r.entries.as_slice()), t)
+    }
+
     /// Each logic item of `form` stepped on `track` over the transport's span, its program read
     /// from the evidence store, and its rows written to `occurrences.<logic ID>.occurrences`:
     /// `{t, step, kind, a, b}` and its declared fields by name, as Spawn and motion read a row.
@@ -102,6 +111,23 @@ impl Hub<'_> {
                 .collect();
             lists[format!("{id}.occurrences")] = Value::Array(flat);
         }
+        // #535: the same bake's arrays, each step's changes with the ranges the logic module hands
+        // the core's column view, as the drawn form's `arrays`.
+        let mut arrays = rec.arrays(&piece);
+        if self.scenario.module_planted.as_deref() == Some("hand_over_drops_last_range") {
+            // The planted hand-over: each step's last changed range never reaches the view.
+            for steps in arrays
+                .values_mut()
+                .filter_map(|a| a["steps"].as_array_mut())
+            {
+                for s in steps {
+                    if let Some(c) = s["changed"].as_array_mut() {
+                        c.pop();
+                    }
+                }
+            }
+        }
+        doc.insert("arrays".into(), Value::Object(arrays));
         Ok(())
     }
 }

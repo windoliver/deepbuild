@@ -457,7 +457,6 @@ pub fn call(app: &mut App, out: &str, call: &Value) -> Value {
     app.worker.call(move |state| {
         let device = state.gpu.device();
         let d = &device.device;
-        use wgpu::util::DeviceExt as _;
         let mut core = BTreeMap::new();
         let mut color_px: Option<Vec<u8>> = None;
         for (name, bytes) in &data {

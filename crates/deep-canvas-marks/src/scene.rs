@@ -615,39 +615,8 @@ pub enum ImageSampling {
     Cubic,
 }
 
-/// #1653: the atlas cell an image draws in place of its whole asset (Mark set: atlas tiles): cell
-/// `index` in row-major order of `cell`-px cells laid from `margin`, `separation` apart, turned by
-/// `flip`'s bits (h 1, v 2, transpose 4; transpose first). Whoever decodes the atlas resolves it
-/// against its width, so a sample never leaves the cell.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct AtlasCell {
-    pub index: u64,
-    pub cell: [f64; 2],
-    pub margin: [f64; 2],
-    pub separation: [f64; 2],
-    pub flip: u8,
-}
-
-impl AtlasCell {
-    /// The cell's `[x, y, w, h]` in an atlas of `[width, height]` px, or `None` for a cell the
-    /// atlas doesn't hold.
-    pub fn rect(&self, [width, height]: [u32; 2]) -> Option<[f64; 4]> {
-        let [cw, ch] = self.cell;
-        if cw < 1.0 || ch < 1.0 {
-            return None;
-        }
-        let step = [cw + self.separation[0], ch + self.separation[1]];
-        let columns = ((f64::from(width) - self.margin[0] + self.separation[0]) / step[0]).floor();
-        if columns < 1.0 {
-            return None;
-        }
-        let columns = columns as u64;
-        let (col, row) = (self.index % columns, self.index / columns);
-        let x = self.margin[0] + col as f64 * step[0];
-        let y = self.margin[1] + row as f64 * step[1];
-        (y + ch <= f64::from(height)).then_some([x, y, cw, ch])
-    }
-}
+/// #1653: the atlas cell an image draws, laid out where atlas sets are.
+pub use crate::atlas::AtlasCell;
 
 /// A styled span of a text's one shaped run (`runs: [{from, to, role}]`): graphemes `[from, to)`
 /// painted in `role`. It changes no glyph, so the run is shaped once and kerns across it.
@@ -671,13 +640,60 @@ pub fn run_paint<'a>(
         .map_or((role, color), |r| (Some(r.role.as_str()), r.color))
 }
 
-/// A text's runs. This build's runs set only `role`; a run's other fields (font, weight, size,
-/// style, tracking, shift, lines) are R6's, refused `module_missing`.
+/// A text's runs that paint in a role of their own; a run that sets no role keeps the item's
+/// paint. [`text_spans`] has already held every run's fields.
 fn text_runs(
     palette: &Palette,
     params: &Map<String, Value>,
     path: &str,
 ) -> Result<Vec<TextRun>, Refused> {
+    let Some(Value::Array(list)) = params.get("runs") else {
+        return Ok(Vec::new());
+    };
+    let mut out = Vec::new();
+    for (i, run) in list.iter().enumerate() {
+        let index = |k: &str| run.get(k).and_then(Value::as_u64).map(|n| n as usize);
+        let (Some(from), Some(to), Some(Value::String(name))) =
+            (index("from"), index("to"), run.get("role"))
+        else {
+            continue;
+        };
+        let at = format!("{path}/params/runs/{i}/role");
+        out.push(TextRun {
+            from,
+            to,
+            color: role(palette, run.get("role"), &at)?,
+            role: name.clone(),
+        });
+    }
+    Ok(out)
+}
+
+/// #1964: a text's `runs` as styled spans of its one shaped run (`[{from, to, role, font, weight,
+/// style, size, tracking, shift, underline, strike}] ≤ 1,024`), each field held at the run's
+/// path: a run's font names a font of the look, and a run's weight sets its font (the item's
+/// `family` when it names none) as the item's weight does, on its variable twin where no static
+/// face has it. A run's role is resolved where it paints ([`text_runs`]); one naming a status role
+/// is the document check's `status_color_unbound`, as any paint's is.
+pub fn text_spans(
+    params: &Map<String, Value>,
+    path: &str,
+    ty: &Type,
+    (item_family, weight): (Option<&'static str>, u16),
+) -> Result<Vec<deep_text::Span>, Refused> {
+    const FIELDS: [&str; 11] = [
+        "from",
+        "to",
+        "role",
+        "font",
+        "weight",
+        "style",
+        "size",
+        "tracking",
+        "shift",
+        "underline",
+        "strike",
+    ];
     let Some(list) = params.get("runs") else {
         return Ok(Vec::new());
     };
@@ -690,12 +706,10 @@ fn text_runs(
         let Some(fields) = run.as_object() else {
             return refuse("bad_doc", at);
         };
-        if let Some(field) = fields
-            .keys()
-            .find(|k| !["from", "to", "role"].contains(&k.as_str()))
-        {
-            return refuse("module_missing", format!("{at}/{field}"));
+        if let Some(field) = fields.keys().find(|k| !FIELDS.contains(&k.as_str())) {
+            return refuse("bad_doc", format!("{at}/{field}"));
         }
+        let bad = |field: &str| refuse("bad_doc", format!("{at}/{field}"));
         let index = |k: &str| fields.get(k).and_then(Value::as_u64).map(|n| n as usize);
         let (Some(from), Some(to)) = (index("from"), index("to")) else {
             return refuse("bad_doc", at);
@@ -703,14 +717,76 @@ fn text_runs(
         if from >= to {
             return refuse("out_of_range", format!("{at}/to"));
         }
-        let Some(Value::String(name)) = fields.get("role") else {
-            return refuse("bad_doc", format!("{at}/role"));
+        if fields.get("role").is_some_and(|r| !r.is_string()) {
+            return bad("role");
+        }
+        let number = |k: &str| match fields.get(k) {
+            None => Ok(None),
+            Some(v) => num(Some(v)).map(Some).ok_or(()),
         };
-        out.push(TextRun {
+        let flag = |k: &str| match fields.get(k) {
+            None => Ok(false),
+            Some(Value::Bool(b)) => Ok(*b),
+            Some(_) => Err(()),
+        };
+        let Ok(run_weight) = number("weight") else {
+            return bad("weight");
+        };
+        let run_weight = match run_weight.map(f64::round) {
+            None => None,
+            Some(w) if (1.0..=1000.0).contains(&w) => Some(w as u16),
+            Some(_) => return refuse("out_of_range", format!("{at}/weight")),
+        };
+        let family = match fields.get("font") {
+            None => item_family.filter(|_| run_weight.is_some()),
+            Some(Value::String(font)) => match ty.family(font) {
+                Some(f) => Some(f),
+                None => return refuse("ref_unresolved", format!("{at}/font: {font}")),
+            },
+            Some(_) => return bad("font"),
+        }
+        .map(|f| deep_text::fonts::family_at(f, run_weight.unwrap_or(weight)));
+        let italic = match fields.get("style").map(Value::as_str) {
+            None => None,
+            Some(Some("normal")) => Some(false),
+            Some(Some("italic")) => Some(true),
+            Some(_) => return bad("style"),
+        };
+        let Ok(size) = number("size") else {
+            return bad("size");
+        };
+        let Ok(tracking) = number("tracking") else {
+            return bad("tracking");
+        };
+        if size.is_some_and(|s| s <= 0.0) {
+            return refuse("out_of_range", format!("{at}/size"));
+        }
+        let shift = match fields.get("shift") {
+            None => None,
+            Some(Value::String(s)) if s == "sub" => Some(deep_text::Shift::Sub),
+            Some(Value::String(s)) if s == "super" => Some(deep_text::Shift::Super),
+            Some(v) => match num(Some(v)) {
+                Some(u) => Some(deep_text::Shift::By(u as f32)),
+                None => return bad("shift"),
+            },
+        };
+        let Ok(underline) = flag("underline") else {
+            return bad("underline");
+        };
+        let Ok(strike) = flag("strike") else {
+            return bad("strike");
+        };
+        out.push(deep_text::Span {
             from,
             to,
-            color: role(palette, fields.get("role"), &format!("{at}/role"))?,
-            role: name.clone(),
+            family,
+            weight: run_weight,
+            italic,
+            size: size.map(|s| s as f32),
+            tracking: tracking.map(|t| t as f32),
+            shift,
+            underline,
+            strike,
         });
     }
     Ok(out)
@@ -738,6 +814,8 @@ pub struct TextSpec {
     pub align: Align,
     /// A bound value: tabular figures, never cut short.
     pub bound: bool,
+    /// #1964: `runs`' styled spans of the one shaped run.
+    pub spans: Vec<deep_text::Span>,
 }
 
 impl TextSpec {
@@ -769,6 +847,9 @@ impl TextSpec {
         };
         k.text(if self.mask { "mask" } else { "ellipsis" });
         k.int(self.align as i64);
+        if !self.spans.is_empty() {
+            k.text(&format!("{:?}", self.spans));
+        }
         k.finish()
     }
 }
@@ -828,6 +909,7 @@ pub fn text_spec_in(
         .filter(|w| (1.0..=1000.0).contains(w))
         .map_or(400, |w| w as u16);
     Ok(TextSpec {
+        spans: text_spans(params, &path, ty, (ty.family(&font), weight))?,
         text,
         family: ty
             .family(&font)
@@ -882,6 +964,7 @@ impl TextSpec {
             bound: self.bound,
             tabular: self.bound,
             mask: self.mask,
+            spans: &self.spans,
         })
     }
 }
@@ -943,6 +1026,8 @@ pub enum Mark {
         adjust: Adjust,
         /// #1653: the atlas cell it draws, for a row of an atlas set.
         tile: Option<AtlasCell>,
+        /// #535: degrees it turns about the centre of `bounds`, x toward y.
+        turn: f64,
     },
 }
 
@@ -975,7 +1060,8 @@ impl Drawn {
     pub fn extent(&self) -> [f64; 4] {
         let grown = |b: [f64; 4], m: f64| [b[0] - m, b[1] - m, b[2] + 2.0 * m, b[3] + 2.0 * m];
         let b = match &self.mark {
-            Mark::Rect { bounds, .. } | Mark::Image { bounds, .. } => *bounds,
+            Mark::Rect { bounds, .. } => *bounds,
+            Mark::Image { bounds, turn, .. } => crate::turn::turned_box(*bounds, *turn),
             Mark::Circle { center, r, .. } => [center[0] - r, center[1] - r, 2.0 * r, 2.0 * r],
             Mark::Path {
                 geometry, offset, ..
@@ -1226,6 +1312,7 @@ impl Mark {
                 opacity,
                 adjust,
                 tile,
+                turn,
                 ..
             } => {
                 // An asset enters by its sha256, as every asset does.
@@ -1250,6 +1337,10 @@ impl Mark {
                         .for_each(|v| {
                             k.number(*v);
                         });
+                }
+                // Unturned is the default, so an image without a turn keeps its key.
+                if *turn != 0.0 {
+                    k.text("turn").number(*turn);
                 }
                 k.number(*opacity);
                 if !adjust.is_identity() {
@@ -2643,7 +2734,8 @@ fn boxes_of(frame: &Frame, items: &Map<String, Value>) -> BTreeMap<String, [f64;
     let mut own: BTreeMap<String, [f64; 4]> = BTreeMap::new();
     for drawn in frame.layers.iter().flat_map(|l| &l.marks) {
         let b = match &drawn.mark {
-            Mark::Rect { bounds, .. } | Mark::Image { bounds, .. } => *bounds,
+            Mark::Rect { bounds, .. } => *bounds,
+            Mark::Image { bounds, turn, .. } => crate::turn::turned_box(*bounds, *turn),
             Mark::Circle { center, r, .. } => [center[0] - r, center[1] - r, 2.0 * r, 2.0 * r],
             Mark::Path {
                 geometry, offset, ..
@@ -4974,16 +5066,20 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
                 Some(Value::String(s)) if s == "cubic" => ImageSampling::Cubic,
                 Some(_) => return refuse("bad_doc", format!("{path}/params/sampling")),
             };
+            // #535: `at.rot`'s z (degrees) turns the image about its origin.
+            let turn = num(item.pointer("/at/rot/2")).unwrap_or(0.0);
+            let origin = place.at([0.0, 0.0]);
             vec![Mark::Image {
                 item: id.clone(),
                 asset: asset.to_ascii_lowercase(),
-                bounds: place.rect(bounds),
+                bounds: crate::turn::about(place.rect(bounds), origin, turn),
                 fit,
                 sampling,
                 crop: four(params.get("crop")),
                 opacity: num(params.get("opacity")).unwrap_or(1.0).clamp(0.0, 1.0),
                 adjust: Adjust::default(),
                 tile: None,
+                turn,
             }]
         }
         _ => vec![match kind {

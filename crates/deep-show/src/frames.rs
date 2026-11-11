@@ -309,6 +309,15 @@ impl<'a> Hub<'a> {
             "steps": report.steps.iter().map(|s| json!({"module": s.module, "t": s.t, "count": s.count, "read": s.read})).collect::<Vec<_>>(),
             "issues": report.issues.iter().map(issue_json).collect::<Vec<_>>(),
         });
+        // #535: a logic column's row whose value goes out of range raises column.out_of_range at
+        // the frame of the step its excursion begins.
+        if let (Some(doc), Some(list)) = (evaluated.document(), reply["issues"].as_array_mut()) {
+            list.extend(
+                deep_canvas::columns::raised_at(doc, t)
+                    .iter()
+                    .map(|i| i.to_json()),
+            );
+        }
         if !e.arrays.is_empty() {
             // #497: each named array as this frame read it.
             let read: Map<String, Value> = e
@@ -590,6 +599,7 @@ impl<'a> Hub<'a> {
             // #504: which operators ran this frame, by key, so a check sees that no plug-in's or
             // logic's code ran per frame for a figure (Films and figures: data, not code).
             frame["ran_by_operator"] = json!(self.sessions[&f.doc].ran_by_operator(&self.sched));
+            frame["remaps"] = remaps(&self.sched, &self.sessions[&f.doc]);
             revised_now = false;
             let mut capture = 0;
             if f.pixels {
@@ -967,6 +977,7 @@ fn cell_grids(
                     mask: false,
                     align: scene::Align::Start,
                     bound: false,
+                    spans: Vec::new(),
                 },
                 origin: [g.origin[0], y],
                 role: None,
@@ -1217,6 +1228,39 @@ fn debug_digest(values: &[Val]) -> Value {
 /// How many solves of each arrangement the session's last frame ran (#1732): the document's
 /// check-phase solve when the frame took a new revision, and a frame-phase solve that wrote a
 /// result.
+/// #535: for each mark set that reads a logic array, the rows its data module mapped again for
+/// each step the frame applied, `[{set, step, rows}]`: a set's rows remapped for a step are its
+/// columns' most.
+fn remaps(
+    sched: &deep_canvas::schedule::Scheduler<'_>,
+    session: &deep_canvas::schedule::Session,
+) -> Value {
+    type Mapped = BTreeMap<String, deep_canvas::columns::Mapped>;
+    let mut out = Vec::new();
+    for n in session.nodes(sched) {
+        let (Some(set), true) = (
+            &n.item,
+            n.operator == "data.columns" && n.run == deep_canvas::schedule::Run::Ran,
+        ) else {
+            continue;
+        };
+        let Some(columns) = n.values.iter().find_map(|v| v.as_typed::<Mapped>()) else {
+            continue;
+        };
+        let mut steps: BTreeMap<i64, usize> = BTreeMap::new();
+        for (step, rows) in columns.values().flat_map(|m| &m.remaps) {
+            let e = steps.entry(*step).or_default();
+            *e = (*e).max(*rows);
+        }
+        out.extend(
+            steps
+                .into_iter()
+                .map(|(step, rows)| json!({"set": set, "step": step, "rows": rows})),
+        );
+    }
+    Value::Array(out)
+}
+
 fn solves(
     sched: &deep_canvas::schedule::Scheduler<'_>,
     session: &deep_canvas::schedule::Session,
