@@ -271,6 +271,8 @@ pub struct Shipped {
     )>,
     /// What you typed in the list, and when the last key came: typing moves to the first row it starts (#1462).
     typed: (String, u64),
+    /// The first of the list's items drawn: the drawn rows follow the keyboard, so the row it's on is in view (#2021).
+    list_first: usize,
     /// The session whose name is being typed in its page's title (#2018), and the field.
     renaming: Option<Renaming>,
 }
@@ -368,6 +370,7 @@ impl Shipped {
             pressed: None,
             built: None,
             typed: (String::new(), 0),
+            list_first: 0,
             renaming: None,
         }
     }
@@ -925,6 +928,21 @@ fn keyboard_rows(items: &[crate::list::Item]) -> Vec<ListRow> {
     rows
 }
 
+/// Where the list's keyboard row `on` is among `items`: a row by its id, a project's heading by `project:<project>`.
+fn item_at(items: &[crate::list::Item], on: &str) -> Option<usize> {
+    items
+        .iter()
+        .position(|item| match (item, on.strip_prefix("project:")) {
+            (crate::list::Item::Heading { id, .. }, Some(project)) => {
+                id.strip_prefix("heading:").is_some_and(|name| {
+                    crate::list::project_id((name != "none").then_some(name)) == project
+                })
+            }
+            (item, None) => item.id() == on,
+            _ => false,
+        })
+}
+
 /// A project's heading (#1461) and, inside it, the row the keyboard reaches it by, `project:<project>`, which opens
 /// the project's page (#1462).
 fn project_heading(
@@ -1365,6 +1383,11 @@ fn read(view: &crate::record::View, kind: Kind, opened: Option<&str>) -> Record 
                     .flat_map(str::lines)
                     .map(str::to_owned),
             );
+            // Why its turn ended failed and the reasons the core gave its verdict, in words (#2029).
+            let stopped = table.stopped(session);
+            details.extend(stopped.map(|(cause, core)| crate::codes::stopped(&cause, &core)));
+            let why = table.why(session).iter();
+            details.extend(why.map(|(code, text)| crate::codes::reason(code, text)));
             if crate::plain::planted("session-page-line-pr") {
                 details.push(crate::plain::PLANTED_PR_LINE.to_owned());
             }
@@ -1586,19 +1609,44 @@ fn row_slot(row: &str, slot: &str, name: String) -> ObservedElement<Stateful<Div
         .aria_label(name)
 }
 
+/// Where a working mark's core sits in its slot at each step, in steps of the look's smallest space: it moves one step
+/// for each event its session's hooks send, and holds still while none comes (#2021).
+const MARK_STEPS: [usize; 4] = [0, 1, 2, 1];
+
 /// One row of the list (#1461): one line, 32 tall, with fixed slots: the mark in 16 and 8 after it, the title, then
 /// the state word and a time at least 32 wide at the right edge. An unread or asking row's title is medium; a settled
-/// row's is regular in the secondary ink. Its name holds what's drawn and what's cut.
+/// row's is regular in the secondary ink. Its name holds what's drawn and what's cut, and a working session's what its
+/// turn is doing now (#2021). Under reduce motion, `still`, a working mark holds still and its time says when its
+/// session's last event came.
 fn list_row(
     row: &crate::list::Row,
     selected: bool,
     focused: bool,
+    still: bool,
     now: u64,
     chrome: &chrome::Chrome,
 ) -> ObservedElement<Stateful<Div>> {
     let s = sizes();
     let ask = row.id.starts_with("ask:");
-    let time = row.time.map(|t| time_of(t, now)).unwrap_or_default();
+    let working = row.entry == "running" && row.id.starts_with("session:");
+    let time = match row.hooks.1 {
+        Some(heard) if still && working => {
+            format!("{} ago", time_of(crate::list::Time::Since(heard), now))
+        }
+        _ => row.time.map(|t| time_of(t, now)).unwrap_or_default(),
+    };
+    // The working mark's step: one per event, or, in #2021's planted app, one each 300 ms whatever comes.
+    let step = if !working {
+        0
+    } else if crate::plain::planted("mark-on-timer") {
+        states::changes_after(300 - now % 300);
+        MARK_STEPS[(now / 300 % 4) as usize]
+    } else if still {
+        0
+    } else {
+        MARK_STEPS[(row.hooks.0 % 4) as usize]
+    };
+    let line = row.doing.as_ref().map(|doing| doing.line(now));
     let reach = crate::notify::reach();
     // An ask's row reads as its question, its handle nowhere drawn (#1172) and its id (#1459). The planted rows show
     // the handle, or are keyed by their place.
@@ -1625,6 +1673,12 @@ fn list_row(
             states::glyph(row.entry),
             row.word,
             row.why
+        )
+    } else if let Some(line) = &line {
+        format!(
+            "{} {title} · {} · {line}",
+            states::glyph(row.entry),
+            row.word
         )
     } else {
         format!("{} {title} · {}", states::glyph(row.entry), row.word)
@@ -1676,9 +1730,13 @@ fn list_row(
     } else {
         row_slot(&id, "time", time.clone()).child(time)
     };
-    // #1461's planted row is 24 tall.
+    // #1461's planted row is 24 tall; #2021's selected row takes a second line, its session's line.
+    let second = (selected && crate::plain::planted("selected-second-line") && !ask)
+        .then(|| line.clone().unwrap_or_default());
     let tall = if crate::plain::planted("row-24") {
         s.space(4)
+    } else if second.is_some() {
+        s.space(5) * 2.
     } else {
         s.space(5)
     };
@@ -1718,7 +1776,12 @@ fn list_row(
                 .mr(s.space(1))
                 .flex()
                 .items_center()
-                .child(div().size(s.space(1)).bg(rgb(states::color(row.entry)))),
+                .child(
+                    div()
+                        .size(s.space(1))
+                        .ml(s.space(0) * step as f32)
+                        .bg(rgb(states::color(row.entry))),
+                ),
         )
         .child(
             // Each slot the row's full height, so the slots read in the row's order, left to right.
@@ -1766,6 +1829,14 @@ fn list_row(
                 .justify_end()
                 .text_color(chrome.ink_secondary),
         )
+        .children(second.map(|line| {
+            div()
+                .absolute()
+                .bottom_0()
+                .left(s.space(4))
+                .text_color(chrome.ink_secondary)
+                .child(line)
+        }))
 }
 
 /// A heading of the list (#1461): 32 tall with 8 above it, its title in the body role at medium weight, its value the
@@ -2098,6 +2169,8 @@ impl Render for Shipped {
                         loud: false,
                         left: false,
                         why: String::new(),
+                        doing: None,
+                        hooks: (0, None),
                     }));
                 }
                 let popped = crate::open::popped(cx) == Some(Kind::NeedsYou);
@@ -2117,23 +2190,48 @@ impl Render for Shipped {
                 };
                 items.retain(|item| !skip(item) && !hidden(item));
                 // The rows the keyboard walks, in the list's order (#1462): each ask, then each project's heading and
-                // its rows. Only what fits in the window is drawn: the list doesn't scroll yet (#1808), and a frame
-                // over 700 rows costs what it shows.
+                // its rows, every one of them. #2021's planted list lets the keyboard onto the headings alone.
+                let rows: Vec<ListRow> = keyboard_rows(&items)
+                    .into_iter()
+                    .filter(|row| {
+                        !crate::plain::planted("rows-take-no-focus")
+                            || row.id.starts_with("project:")
+                    })
+                    .collect();
+                // Only what fits in the window is drawn, so a frame over 700 rows costs what it shows, and what's
+                // drawn follows the keyboard: the row it's on is in view with the rows either side of it, so the next
+                // row an arrow goes to is in view too (#2021). The wheel's scrolling is #1808's.
                 let room = window.viewport_size().height;
-                let mut top = s.space(1);
-                let mut fits = 0;
-                for item in &items {
-                    top += match item {
-                        crate::list::Item::Heading { .. } => s.space(5) + s.space(1),
-                        crate::list::Item::Row(_) => s.space(5),
-                    };
-                    if top > room {
-                        break;
+                let fits = |first: usize| {
+                    let mut top = s.space(1);
+                    items[first..]
+                        .iter()
+                        .take_while(|item| {
+                            top += match item {
+                                crate::list::Item::Heading { .. } => s.space(5) + s.space(1),
+                                crate::list::Item::Row(_) => s.space(5),
+                            };
+                            top <= room
+                        })
+                        .count()
+                };
+                let mut first = self.list_first.min(items.len());
+                if let Some(on) = self
+                    .rows
+                    .focused
+                    .as_deref()
+                    .and_then(|on| item_at(&items, on))
+                {
+                    let shown = (on + 1).min(items.len() - 1);
+                    first = first.min(on.saturating_sub(1));
+                    while shown >= first + fits(first).max(1) && first < on {
+                        first += 1;
                     }
-                    fits += 1;
                 }
-                items.truncate(fits);
-                let rows = keyboard_rows(&items);
+                self.list_first = first;
+                let drawn_to = first + fits(first);
+                items.truncate(drawn_to);
+                items.drain(..first);
                 if let Some((selected, focused)) = self.start.take() {
                     let id = |at: Option<usize>| {
                         at.and_then(|i| {
@@ -2260,7 +2358,7 @@ impl Render for Shipped {
                             let address = row.address.clone();
                             let actions = id.starts_with("session:") || id.starts_with("ask:");
                             drawn.push(
-                                list_row(row, selected, ring, now, chrome)
+                                list_row(row, selected, ring, cx.reduce_motion(), now, chrome)
                                     // #1462's planted row draws a control only while the pointer is over it.
                                     .when(
                                         cfg!(feature = "plant-hover-only-control")
@@ -2533,6 +2631,7 @@ impl Render for Shipped {
                                     row,
                                     current.as_ref() == Some(&row.address),
                                     false,
+                                    cx.reduce_motion(),
                                     now,
                                     chrome,
                                 )
@@ -2640,19 +2739,27 @@ impl Render for Shipped {
                 // Why it reads as it does, in plain words, under its title (#1348, #1461).
                 // Where the hub built the session's row, its word, entry and why are that row's (#2018): the one
                 // reading, on its page as in the list.
-                let (problem, readings, listed): (Vec<String>, Vec<String>, Option<[String; 3]>) =
-                    crate::record::with_view(|view| {
-                        let table = view.table();
-                        let problem = crate::plain::problem(&table, &session)
-                            .map(|(happened, next)| vec![happened, next])
-                            .unwrap_or_default();
-                        let listed = table.row_of(&format!("session:{session}")).map(|row| {
-                            ["word", "entry", "why"]
-                                .map(|key| row[key].as_str().unwrap_or_default().to_owned())
-                        });
-                        (problem, table.readings(&session).to_vec(), listed)
-                    })
-                    .unwrap_or_default();
+                // What its turn is doing now, at the top of its page (#2021): the row's line, read the one way.
+                type Read = (
+                    Vec<String>,
+                    Vec<String>,
+                    Option<[String; 3]>,
+                    Option<crate::list::Doing>,
+                );
+                let (problem, readings, listed, doing): Read = crate::record::with_view(|view| {
+                    let table = view.table();
+                    let problem = crate::plain::problem(&table, &session)
+                        .map(|(happened, next)| vec![happened, next])
+                        .unwrap_or_default();
+                    let row = table.row_of(&format!("session:{session}"));
+                    let listed = row.map(|row| {
+                        ["word", "entry", "why"]
+                            .map(|key| row[key].as_str().unwrap_or_default().to_owned())
+                    });
+                    let doing = row.and_then(|row| crate::list::doing_of(view, row, &session, now));
+                    (problem, table.readings(&session).to_vec(), listed, doing)
+                })
+                .unwrap_or_default();
                 let reads = |id: &'static str, name: &str| match &listed {
                     Some([word, entry, _]) => {
                         marked(id, states::entry_of(entry), format!("{name} · {word}"))
@@ -2685,6 +2792,7 @@ impl Render for Shipped {
                             .aria_label(named)
                             .when(fourth, |title| title.text_size(px(17.))), // size-literal-exception: #1458's planted wrong program, in an env-plants build only; review 2027-04-30
                     }))
+                    .children(doing.map(|doing| label("session-doing", doing.line(now)).h_auto()))
                     .children(why.map(|line| {
                         label("session-why", crate::question::visible(&line))
                             .h_auto()

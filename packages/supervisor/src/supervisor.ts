@@ -25,6 +25,12 @@ const DAY = 86_400_000;
 const SCAN_MS = 100;
 const GRACE_MS = 2000;
 const WARM_MS = 60_000;
+/** The system log's sandbox reports that carry a run's tag, by their sender: `log` tests every message the machine writes. */
+const REPORTS = 'sender == "Sandbox" AND eventMessage CONTAINS "dev.deepbuild.run:"';
+/** The same reports by the subsystem they carry too, which the log filters by before it sends the stream a message. */
+const REPORTS_BY_SUBSYSTEM = `subsystem == "com.apple.sandbox.reporting" AND ${REPORTS}`;
+/** The planted world of the fallback's test: a macOS whose reports carry another subsystem than the filter names. */
+const REPORTS_ELSEWHERE = `subsystem == "com.apple.sandbox.elsewhere" AND ${REPORTS}`;
 /** How long a run's output may stay open after its process exits: a background process holding it is a leftover, reaped by cleanup. */
 const DRAIN_MS = 1000;
 /** How often a key out of its pool has its cleanup check run again. */
@@ -112,6 +118,8 @@ class LocalSupervisor implements Supervisor {
   private scanning: Promise<void> = Promise.resolve();
   private pumping: Promise<void> = Promise.resolve();
   private timer: NodeJS.Timeout | undefined;
+  /** When the timed scan's beat began: the supervisor's opening. */
+  private beatFrom = 0;
   /** The timer's scan while it is queued or runs. */
   private timed: Promise<void> | undefined;
   private log: ChildProcess | undefined;
@@ -312,23 +320,51 @@ class LocalSupervisor implements Supervisor {
       r.state = 'exited';
       await this.cleanup(r.run);
     }
-    if (process.platform === 'darwin' && this.options.plant !== 'sandbox-left-to-caller') this.watchDenials();
+    if (process.platform === 'darwin' && this.options.plant !== 'sandbox-left-to-caller') this.watchDenials(this.options.plant === 'reports-other-subsystem' ? REPORTS_ELSEWHERE : REPORTS_BY_SUBSYSTEM);
+    this.beatFrom = Date.now();
+    this.scanSoon();
+  }
+
+  /** The runs a scan reads: each in the supervisor's sandbox that is live, or that its cleanup left running. */
+  private scanned(): Run[] {
+    return [...this.runs.values()].filter((r) => r.sandboxed && (this.lingering.has(r) || (r.state !== 'cleaned' && r.state !== 'BLOCKED' && r.state !== 'held')));
+  }
+  /**
+   * The timed scan, running while a run has a sandbox to scan: with none, the timer stops, so a hub with no run
+   * wakes for nothing; a run's start and a cleanup that leaves a process running start it again, on the beat it
+   * has kept since the supervisor opened, so a run's first scan comes as soon as it did while the timer never stopped.
+   */
+  private scanSoon(): void {
+    if (this.timer || this.closed) return;
     // One timed scan at a time: on a loaded machine a scan outlasts the interval, and queued ones would pile up
     // without end in front of a cleanup's own scan.
-    this.timer = setInterval(() => {
+    const beat = (): void => {
+      if (!this.scanned().length) {
+        clearInterval(this.timer);
+        this.timer = undefined;
+        return;
+      }
       this.timed ??= this.scanOnce().catch(() => undefined).finally(() => { this.timed = undefined; });
-    }, SCAN_MS);
+    };
+    this.timer = setTimeout(() => {
+      this.timer = setInterval(beat, SCAN_MS);
+      this.timer.unref();
+      beat();
+    }, SCAN_MS - ((Date.now() - this.beatFrom) % SCAN_MS));
     this.timer.unref();
   }
 
   /**
-   * The system log's sandbox reports that carry a run's tag: each a sandbox.denied for that run. The stream
-   * announces its filter before it is attached, and after a while idle macOS drops the first reports of a program
-   * that isn't Apple's, so it counts as ready only once it has seen a denial of its own: the helper, refused a
-   * write in a canary's sandbox, until its report comes through.
+   * The system log's sandbox reports that carry a run's tag: each a sandbox.denied for that run. The filter names
+   * the reports' subsystem, so the log sends the stream those alone: filtered by sender only, `log` reads every
+   * message the machine writes for the hub's whole life. The stream announces its filter before it is attached,
+   * and after a while idle macOS drops the first reports of a program that isn't Apple's, so it counts as ready
+   * only once it has seen a denial of its own: the helper, refused a write in a canary's sandbox, until its report
+   * comes through. A macOS whose reports carry another subsystem shows the canary's through that filter never:
+   * the stream then starts again on the sender alone.
    */
-  private watchDenials(): void {
-    const log = spawn('/usr/bin/log', ['stream', '--style', 'ndjson', '--predicate', 'sender == "Sandbox" AND eventMessage CONTAINS "dev.deepbuild.run:"'], { stdio: ['ignore', 'pipe', 'ignore'] });
+  private watchDenials(filter: string): void {
+    const log = spawn('/usr/bin/log', ['stream', '--style', 'ndjson', '--predicate', filter], { stdio: ['ignore', 'pipe', 'ignore'] });
     this.log = log;
     log.unref();
     (log.stdout as unknown as { unref?: () => void }).unref?.();
@@ -352,7 +388,11 @@ class LocalSupervisor implements Supervisor {
       }
     });
     this.warming = this.warm(10_000).then((live) => {
-      if (!live) process.stderr.write('deep supervisor: the system log never showed a sandbox report, so denials go unrecorded\n');
+      if (live || this.closed) return undefined;
+      if (filter === REPORTS) return void process.stderr.write('deep supervisor: the system log never showed a sandbox report, so denials go unrecorded\n');
+      if (log.pid) try { process.kill(log.pid, 'SIGTERM'); } catch { /* gone */ }
+      this.watchDenials(REPORTS);
+      return this.warming;
     });
   }
 
@@ -601,6 +641,7 @@ class LocalSupervisor implements Supervisor {
     if (sandboxed && this.log && Date.now() - this.warmAt > WARM_MS) await this.warm(2000);
     const r: Run = { ...blank(spec.run, cwd, 'running'), sandboxed, token: sha256(token), leases, ...(spec.holder ? { holder: spec.holder } : {}), ...(egress ? { egress } : {}), ...(spec.limits ? { limits: spec.limits } : {}) };
     this.runs.set(spec.run, r);
+    this.scanSoon();
     // The run first, so a replay finds its leases on it.
     await this.append('process.starting', { run: spec.run, cwd }, spec.run);
     // How each credential reached it, by name: the value itself, or a stand-in for its hosts.
@@ -684,7 +725,7 @@ class LocalSupervisor implements Supervisor {
   private scanOnce(): Promise<void> {
     if (this.options.plant === 'records-only-started' || this.closed) return this.scanning;
     const next = this.scanning.then(async () => {
-      const live = [...this.runs.values()].filter((r) => r.sandboxed && (this.lingering.has(r) || (r.state !== 'cleaned' && r.state !== 'BLOCKED' && r.state !== 'held')));
+      const live = this.scanned();
       if (!live.length) return;
       const bytes = new Map<number, number>();
       const found = await scan(live.map((r) => markerOf(r.run)), bytes);
@@ -900,7 +941,10 @@ class LocalSupervisor implements Supervisor {
     }
     await this.scanOnce().catch(() => undefined);
     const left = (await this.leftovers(r, this.rescan)).map((pid) => `pid:${pid}`);
-    if (left.length) this.lingering.add(r);
+    if (left.length) {
+      this.lingering.add(r);
+      this.scanSoon();
+    }
     // The leases end only once every process recorded for the run is gone; a key its check finds bound is left,
     // and so is every key while a process is, each one held for the unblock ask.
     if (left.length) {

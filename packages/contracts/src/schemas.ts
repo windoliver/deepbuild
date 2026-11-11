@@ -14,12 +14,14 @@ const readJson = (url: URL): JsonValue => JSON.parse(readFileSync(url, 'utf8')) 
  */
 const names: readonly string[] = readdirSync(SCHEMAS).filter((file) => file.endsWith('.json') && !MACHINE_FILE.test(file)).sort().map((file) => file.slice(0, -'.json'.length));
 const published = new Set(names);
-// Each file's text, read the first time a caller needs it: a process that validates a few kinds reads only those.
-// Callers get their own copies; parsing the JSON text is cheaper than a structured clone.
+const read = (name: string): string => readFileSync(new URL(`${name}.json`, SCHEMAS), 'utf8');
+// Each file's text, read the first time getSchema needs it: a process that validates a few kinds reads only those.
+// Callers get their own copies; parsing the JSON text is cheaper than a structured clone. An entry keeps its own
+// parsed schema and no text: the record reads every schema once at its open, and their texts would stay for good.
 const texts = new Map<string, string>();
 const textOf = (name: string): string => {
   let text = texts.get(name);
-  if (text === undefined) texts.set(name, (text = readFileSync(new URL(`${name}.json`, SCHEMAS), 'utf8')));
+  if (text === undefined) texts.set(name, (text = read(name)));
   return text;
 };
 
@@ -30,7 +32,7 @@ const lazyEntry = (name: string): SchemaEntry => {
   const entry: SchemaEntry = {
     get name() { return name; },
     set name(next: string) { untouched.delete(entry); name = next; },
-    get schema() { untouched.delete(entry); return (schema ??= JSON.parse(textOf(name)) as Schema); },
+    get schema() { untouched.delete(entry); return (schema ??= JSON.parse(read(name)) as Schema); },
     set schema(next: Schema) { untouched.delete(entry); schema = next; },
   };
   untouched.add(entry);

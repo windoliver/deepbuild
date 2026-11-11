@@ -85,6 +85,7 @@ import { blockedCause, blockedReading, clockTime, dueReading, ownerOf, promisesI
 import { Answers, answerText, type Answer } from './answers.js';
 import { RUN_AS_YOU, Runs } from './runs.js';
 import { Kinds, type ReviewOf } from './kinds.js';
+import { ReviewRounds } from './review-rounds.js';
 import { canvasClaim, docCheckIn, docCheckOf, docCommand, docResult, docSpec, revisionLine, shownResult, worst, type DocCheck, type DocSpec, type Revision } from './doc-checks.js';
 import type { CheckResult, CheckSpec } from '@deepbuild/conformance';
 import { retain } from './retention.js';
@@ -152,6 +153,8 @@ const GITHUB_PASS_MS = 15_000;
 const HOOK_CHECK_MS = 10 * 60_000;
 /** A call that ended this recently still counts as running when our settings entries change. */
 const CALL_GRACE = 2_000;
+/** How long a call with no end yet keeps its session at work through quiet hooks (#2021): Claude Code's Bash tool's own limit. */
+const CALL_RUNS_MS = 10 * 60_000;
 /** A shell command that makes commits of its own: git commit, merge, cherry-pick, am, revert or rebase (#29). */
 const COMMITS = /(?:^|[\s;&|(])git(?:\s+-[Cc]\s+\S+|\s+--?[\w-]+(?:=\S+)?)*\s+(?:commit|merge|cherry-pick|am|revert|rebase)\b/;
 /** How long a handed answer has to show in a turn before its delivery reads stalled and goes by the next route. */
@@ -288,7 +291,7 @@ interface Live {
   agent: string; cwd: string; state?: string; last: number; quiet?: NodeJS.Timeout | undefined; quietDue?: number; heard?: number;
   /** Its newest call, and the call whose permission prompt it waits on (#992): a PermissionRequest follows its call's PreToolUse. */
   lastCall?: string; asking?: string | undefined;
-  calls: Map<string, { what: string; ended?: number }>; head?: string | undefined; unborn?: boolean; reading?: Promise<void>;
+  calls: Map<string, { what: string; at?: number; ended?: number }>; head?: string | undefined; unborn?: boolean; reading?: Promise<void>;
   from?: string; wakeups: number[]; crons: Map<string, { due: number | null; recurring: boolean }>; background: Map<string, { what: string; group?: number; watch?: { expires: number | null } }>; looping: boolean;
   /** The IDs of every watch it armed, running or ended: an event naming one is its monitor's, never another's report (#997). */
   armed?: Set<string>;
@@ -598,6 +601,7 @@ export class Core {
   /** The supervisor's runs (runs.ts). */
   private readonly runs: Runs;
   private readonly checkKinds: Kinds;
+  private readonly reviewRounds: ReviewRounds;
   /** Each claim's checks of a kind other than command, by check (#1537): its spec, and the claim's session for a review. */
   private readonly kindChecks = new Map<string, Map<string, { spec: CheckSpec; of: ReviewOf }>>();
   /** The document revisions each claim's document checks read (#1723), as its verdict's key names them. */
@@ -928,18 +932,26 @@ export class Core {
       appendCore: (kind, data, extra) => this.appendCore(kind, data, extra), stored: (put, what) => this.stored(put, what),
       invalid: (claim, commit, reason, outcome) => this.invalid(claim, commit, reason, outcome), recorded: (run, record) => this.gate.recorded(run, record), keyed: (key, run, record) => this.gate.keyed(key, run, record),
       stopping: () => this.stopping, stacks: this.stacks, store: () => this.store, host: () => this.host, supervisor: () => this.supervisor, leases: () => this.leases, extensions: () => this.extensions,
-      kind: (run, checkout, deadline) => {
-        const of = this.kindChecks.get(run.claim)?.get(run.check)?.of ?? { claim: run.claim, task: '', agent: 'claude-code', transcript: undefined };
+      kind: async (run, checkout, deadline) => {
+        const of: ReviewOf = this.kindChecks.get(run.claim)?.get(run.check)?.of ?? { claim: run.claim, task: '', agent: 'claude-code', transcript: undefined };
         const spec = run.spec as unknown as CheckSpec;
         // A document check runs through the canvas core's verdict on the document's revision (#1723).
         if ((spec as DocSpec).runner === 'canvas') return this.documentCheck(run, spec as DocSpec);
         // A review reads the diff from the merge base to the claim's snapshot, both in the hub's object store, which
         // reads the repo's objects as alternates; the checkout is the snapshot's tree alone.
-        if (spec.kind === 'review') return this.checkKinds.run({ ...spec, head: this.gate.snapshotOf(run.claim) ?? run.commit } as CheckSpec, { checkout: join(this.root.dir, 'objects'), deadline, now: this.now }, of);
+        // On a pull request it reads from the commit the last round read, and its own run on the snapshot is the next round (#1862).
+        if (spec.kind === 'review') {
+          const head = this.gate.snapshotOf(run.claim) ?? run.commit;
+          const since = of.pr ? await this.reviewRounds.since(of.pr, run.claim) : null;
+          const { round, ...result } = await this.checkKinds.run({ ...spec, head, since } as CheckSpec, { checkout: join(this.root.dir, 'objects'), deadline, now: this.now }, of);
+          if (round && of.pr && run.commit === head) await this.reviewRounds.read(of.pr, run.claim, head, round);
+          return result;
+        }
         return this.checkKinds.run(spec, { checkout, deadline, now: this.now }, of);
       },
     });
     // The check kinds the hub holds (#1537): command, review, numbers and the work kinds, each with its routes.
+    this.reviewRounds = new ReviewRounds({ raw: (query, params) => this.record.raw(query, params), appendCore: (kind, data, extra) => this.appendCore(kind, data, extra), objects: join(this.root.dir, 'objects') });
     this.checkKinds = new Kinds({ host: () => this.host, submit: (spec) => this.runner.submit(spec), wait: (job) => this.runner.wait(job), cancel: (job) => this.runner.cancel(job), plant: options.plant });
     this.replicas = new Replicas({ folder: join(this.root.dir, 'replicas'), now: this.now, leases: () => this.leases, plant: options.plant });
     this.numbers = new Numbers({
@@ -2702,7 +2714,7 @@ export class Core {
         // A late call event never reopens a turn that stopped.
         if (state !== 'finished' && state !== 'failed') state = 'working';
         if (call && draft.kind === 'tool.before') live.lastCall = call;
-        if (call && draft.kind === 'tool.before') live.calls.set(call, { what: `${String(draft.data.kind)} call ${call}${typeof draft.data.command === 'string' ? ` (\`${draft.data.command}\`)` : ''}` });
+        if (call && draft.kind === 'tool.before') live.calls.set(call, { what: `${String(draft.data.kind)} call ${call}${typeof draft.data.command === 'string' ? ` (\`${draft.data.command}\`)` : ''}`, at: now });
         else if (call) { const open = live.calls.get(call); if (open) open.ended = now; }
       } else if (draft.kind === 'agent.stop' && !draft.data.child) {
         // A turn that ended on a block only you or a service can clear (a sign-in, a rate limit) leaves the session stuck.
@@ -2779,7 +2791,9 @@ export class Core {
     const read = session?.read;
     if (session) await this.readTranscript(session);
     const due = live.quietDue ?? this.now();
-    const going = live.state === 'working' ? session !== undefined && session.read !== read
+    // A call under way writes nothing until it ends: the session waits on it, at work, for as long as such a call runs (#2021).
+    const running = [...live.calls.values()].some((c) => c.ended === undefined && c.at !== undefined && due - c.at < CALL_RUNS_MS);
+    const going = live.state === 'working' ? running || (session !== undefined && session.read !== read)
       : !(live.asking && session?.results?.includes(live.asking)) && due - (live.heard ?? due) < WAITING_QUIET_MS;
     if (going) {
       this.quietIn(id, live, since, due + QUIET_MS);
@@ -2898,7 +2912,7 @@ export class Core {
     const ts = this.now();
     const session = row.session;
     const connection = this.connection('core', { ...(this.projects.get(session) ? { project: this.projects.get(session)! } : {}), ...(this.sessionPeople.get(session) ? { actor: this.sessionPeople.get(session)! } : {}) });
-    await this.append(connection, { v: 1, id: ulid(ts), kind: 'row.set', ts, data: { listed: true, order: placed.order, ...row } as unknown as JsonValue });
+    await this.append(connection, { v: row.doing ? 3 : 1, id: ulid(ts), kind: 'row.set', ts, data: { listed: true, order: placed.order, ...row } as unknown as JsonValue });
     this.rows.set(id, { order: placed.order, row });
     return { seen: true };
   }
@@ -2943,7 +2957,8 @@ export class Core {
         }),
         ...changed.map(async (p) => {
           const ts = this.now();
-          await this.append(rowOf(p.row.session), { v: 1, id: ulid(ts), kind: 'row.set', ts, data: { listed: true, order: p.order, ...p.row } as unknown as JsonValue });
+          // A row that says what its session's turn is doing now takes the version with the field (#2021).
+          await this.append(rowOf(p.row.session), { v: p.row.doing ? 3 : 1, id: ulid(ts), kind: 'row.set', ts, data: { listed: true, order: p.order, ...p.row } as unknown as JsonValue });
           this.rows.set(p.row.id, p);
         }),
         ...left.map(async (id) => {
@@ -7826,14 +7841,14 @@ export class Core {
     if (claimed === 'agent' && session) return { role: 'agent', session };
     return fromCredential;
   }
-  /** The core's INVALID verdict on a claim the floor refused (#29): before any check counts, naming why. */
-  private async invalid(claim: string, commit: string, reason: string, outcome: 'INVALID' | 'INCONCLUSIVE' = 'INVALID'): Promise<void> {
+  /** The core's INVALID verdict on a claim the floor refused (#29): before any check counts, naming why, by its code when it has one (#2029). */
+  private async invalid(claim: string, commit: string, reason: string, outcome: 'INVALID' | 'INCONCLUSIVE' = 'INVALID', code?: string): Promise<void> {
     const ts = this.now();
     const id = ulid(ts);
     await this.append(this.connection('core'), {
-      v: 1, id, kind: 'verdict.made', ts, subject: claim,
+      v: code ? 2 : 1, id, kind: 'verdict.made', ts, subject: claim,
       data: {
-        outcome, verdict: `verdict:${id}`, claim, reasons: [reason.slice(0, 8192)], requirements: [], smallest: null, points_to: null, commit,
+        outcome, verdict: `verdict:${id}`, claim, reasons: [reason.slice(0, 8192)], ...(code ? { why: [{ reason: code, text: reason.slice(0, 8192) }] } : {}), requirements: [], smallest: null, points_to: null, commit,
         key: { commit, doc_revisions: [], check_digests: [], state_digests: [], environment: `${process.platform}-${process.arch}`, tools: [] },
       },
     });
@@ -7958,7 +7973,7 @@ export class Core {
       // The checks of the other kinds the hub holds (#1537), each run through its kind: a drafted check whose bytes name
       // a work kind; the review on every claim that opens or updates a PR, its second model through the runner under
       // your reserve (#87); and the numbers check on every claim whose words state a number with the query behind it.
-      const of: ReviewOf = { claim: r.claim, task: r.task, agent: this.live.get(r.session)?.agent ?? 'claude-code', transcript: this.sessions.get(r.session)?.transcript };
+      const of: ReviewOf = { claim: r.claim, task: r.task, agent: this.live.get(r.session)?.agent ?? 'claude-code', transcript: this.sessions.get(r.session)?.transcript, pr: await this.prOf(r.session) };
       const kinded = new Map<string, { spec: CheckSpec; of: ReviewOf }>();
       // A document check, the spec's or a drafted check's (#1723), runs through the canvas core on the revision the
       // document has as the claim is made, which its command names, so its key changes with the revision.
@@ -8002,7 +8017,7 @@ export class Core {
     lane.catch((error: unknown) => {
       const why = error instanceof Error ? error.message : String(error);
       process.stderr.write(`deep hub: ${r.claim}'s checks did not start: ${why}\n`);
-      void this.invalid(r.claim, r.commit, `its checks did not start: ${why}`, 'INCONCLUSIVE').catch((failed: unknown) => process.stderr.write(`deep hub: ${r.claim}'s verdict wasn't recorded: ${failed instanceof Error ? failed.message : String(failed)}\n`));
+      void this.invalid(r.claim, r.commit, `its checks did not start: ${why}`, 'INCONCLUSIVE', 'checks_not_started').catch((failed: unknown) => process.stderr.write(`deep hub: ${r.claim}'s verdict wasn't recorded: ${failed instanceof Error ? failed.message : String(failed)}\n`));
     });
   }
   /**
@@ -8177,20 +8192,23 @@ export class Core {
     if (!v || v.outcome === 'pending') return;
     // The planted engine reads a run cut short, or one missing what lies outside the code, as a failure.
     if (this.options.plant === 'failures-as-fail' && (v.outcome === 'BLOCKED' || v.outcome === 'INCONCLUSIVE')) v = { ...v, outcome: 'FAIL' };
-    // An untrusted repo's spec commands never ran, so its claim is watch-only: it never passes (#322).
-    if (v.outcome === 'PASS' && this.watchOnlyClaims.has(claim)) v = { ...v, outcome: 'BLOCKED', reasons: [...v.reasons, 'project trust: the repo\'s spec checks never run until you trust the project, so this claim is watch-only'] };
+    // An untrusted repo's spec commands never ran, so its claim is watch-only: it never passes (#322). Each reason the
+    // core gives of its own goes with its code (verdict.reason@1), so a view says it in words (#2029).
+    const coded = (reason: string, texts: string[]): { reason: string; text: string }[] => texts.map((text) => ({ reason, text }));
+    const untrusted = 'project trust: the repo\'s spec checks never run until you trust the project, so this claim is watch-only';
+    if (v.outcome === 'PASS' && this.watchOnlyClaims.has(claim)) v = { ...v, outcome: 'BLOCKED', reasons: [...v.reasons, untrusted], why: [...(v.why ?? []), ...coded('untrusted_project', [untrusted])] };
     // A target that no longer resolves makes the claim INVALID, naming it, whatever its checks show; a FAIL still goes first (#323).
     const unresolved = this.unresolvedTargets.get(claim);
     if (unresolved && v.outcome !== 'FAIL') {
       const reqs = new Set(unresolved.map((u) => u.req));
-      v = { ...v, outcome: 'INVALID', reasons: [...unresolved.map((u) => u.reason), ...v.reasons], requirements: v.requirements.map((q) => (reqs.has(q.req) ? { ...q, outcome: 'INVALID' as const, smallest: unresolved.find((u) => u.req === q.req)!.reason } : q)) };
+      v = { ...v, outcome: 'INVALID', reasons: [...unresolved.map((u) => u.reason), ...v.reasons], why: [...coded('target_unresolved', unresolved.map((u) => u.reason)), ...(v.why ?? [])], requirements: v.requirements.map((q) => (reqs.has(q.req) ? { ...q, outcome: 'INVALID' as const, smallest: unresolved.find((u) => u.req === q.req)!.reason } : q)) };
     }
     // A threshold without a unit makes its requirement's check BLOCKED (#323; design: Solved or not): no run can decide it.
     const bare = [...(this.claimRequirements.get(claim) ?? [])].flatMap(([req, q]) => unitless(q.text).map((t) => ({ req, why: `${q.id}'s threshold “${t.text}” has no unit, so no run can decide it: name its unit, such as ${t.value} ms` })));
     if (bare.length) {
       const held = (o: Result): boolean => o !== 'FAIL' && o !== 'INVALID';
       v = {
-        ...v, outcome: held(v.outcome) ? 'BLOCKED' : v.outcome, reasons: [...bare.map((b) => b.why), ...v.reasons],
+        ...v, outcome: held(v.outcome) ? 'BLOCKED' : v.outcome, reasons: [...bare.map((b) => b.why), ...v.reasons], why: [...coded('threshold_without_unit', bare.map((b) => b.why)), ...(v.why ?? [])],
         requirements: v.requirements.map((q) => { const b = bare.find((x) => x.req === q.req); return b && held(q.outcome) ? { ...q, outcome: 'BLOCKED' as const, smallest: b.why } : q; }),
       };
     }
@@ -8200,17 +8218,19 @@ export class Core {
     // Nor while what its task left open stays open (#323): an item closes on evidence, your answer or a rule, never the agent's word.
     if (v.outcome === 'PASS') {
       const open = (await this.record.raw(`SELECT text FROM open_items WHERE closed IS NULL AND task_ref = (SELECT subject_ref FROM claims WHERE id = ?)`, [claim.slice(6)])) as { text: string }[];
-      if (open.length) v = { ...v, outcome: 'BLOCKED', reasons: [...v.reasons, `open items: ${open.length} still open, each closed only by evidence, your answer or a rule: ${open.slice(0, 3).map((o) => `“${o.text.slice(0, 200)}”`).join('; ')}${open.length > 3 ? '; …' : ''}`] };
+      const left = `open items: ${open.length} still open, each closed only by evidence, your answer or a rule: ${open.slice(0, 3).map((o) => `“${o.text.slice(0, 200)}”`).join('; ')}${open.length > 3 ? '; …' : ''}`;
+      if (open.length) v = { ...v, outcome: 'BLOCKED', reasons: [...v.reasons, left], why: [...(v.why ?? []), ...coded('open_items', [left])] };
     }
     // You chose another option after the agent went on with one (#84): the claim can't pass until a check of yours runs.
     if (v.outcome === 'PASS') {
       const why = await this.onSwitchedTree(claim).catch(() => undefined);
-      if (why) v = { ...v, outcome: 'BLOCKED', reasons: [...v.reasons, why] };
+      if (why) v = { ...v, outcome: 'BLOCKED', reasons: [...v.reasons, why], why: [...(v.why ?? []), ...coded('option_switched', [why])] };
     }
     // A call DeepBuild denied ran anyway in the claim's session (#1033): its own checks can't pass it.
     if (v.outcome === 'PASS') {
       const ran = await this.overridesFor(claim);
-      if (ran.length) v = { ...v, outcome: 'INCONCLUSIVE', reasons: [...v.reasons, `a call DeepBuild denied ran anyway in this session: ${ran.map((o) => `${o.label} (${o.call})`).join('; ')}; its own checks can't pass it`.slice(0, 8000)] };
+      const overridden = `a call DeepBuild denied ran anyway in this session: ${ran.map((o) => `${o.label} (${o.call})`).join('; ')}; its own checks can't pass it`.slice(0, 8000);
+      if (ran.length) v = { ...v, outcome: 'INCONCLUSIVE', reasons: [...v.reasons, overridden], why: [...(v.why ?? []), ...coded('denied_call_ran', [overridden])] };
     }
     // Its key names each document revision its document checks read (#1723), so a new revision makes it stale.
     const docs = this.docRevisions.get(claim);
@@ -8221,6 +8241,9 @@ export class Core {
     try {
       await recordVerdict(this.record, v, this.now());
       this.verdictsMade.set(claim, hash);
+      // A claim on a pull request settles when it passes: how each item its review rounds sent back ended is recorded (#1862).
+      const pr = v.outcome === 'PASS' ? await this.prOf(owner?.session_id ?? null) : undefined;
+      if (pr) await this.reviewRounds.settled(pr, claim).catch((error: unknown) => process.stderr.write(`deep hub: how ${claim}'s sent-back review items ended was not recorded: ${error instanceof Error ? error.message : String(error)}\n`));
     } catch (error) {
       process.stderr.write(`deep hub: ${claim}'s verdict was not recorded: ${error instanceof Error ? error.message : String(error)}\n`);
     }

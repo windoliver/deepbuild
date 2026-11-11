@@ -1,0 +1,36 @@
+{
+  "ask.outcome": {
+    "answered": "Answered",
+    "decided_for_you": "Decided for you",
+    "escalated": "Sent on to its next owner",
+    "defaulted": "Took its default",
+    "unanswerable": "Couldn't be answered",
+    "cancelled": "Called off",
+    "superseded": "Replaced by a newer ask",
+    "moot": "No longer needed",
+    "unanswered": "Closed unanswered"
+  },
+  "stop.cause": {
+    "sign_in_required": "its agent needs you to sign in",
+    "token_refresh_failed": "its sign-in couldn't be refreshed",
+    "plan_window_spent": "its plan's usage window is spent",
+    "rate_limited": "rate limited or overloaded",
+    "refusal": "the model refused",
+    "max_turns": "it hit its most turns",
+    "context_overflow": "its context ran out",
+    "tool_schema_rejected": "a tool's schema was rejected",
+    "agent_crashed": "its agent crashed",
+    "timed_out": "it timed out",
+    "unknown": "for a reason its agent didn't give"
+  },
+  "verdict.reason": {
+    "untrusted_project": "the project isn't trusted yet, so its spec checks never ran",
+    "target_unresolved": "a target it names no longer resolves",
+    "threshold_without_unit": "a threshold has no unit, so no run can decide it",
+    "open_items": "items its task left open are still open",
+    "option_switched": "you chose another option after the agent went on with one",
+    "denied_call_ran": "a call DeepBuild denied ran anyway",
+    "checks_not_started": "its checks didn't start",
+    "unknown": "for a reason this version can't name"
+  }
+}
