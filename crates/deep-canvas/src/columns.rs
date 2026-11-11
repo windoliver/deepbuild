@@ -75,6 +75,70 @@ fn resolve<'e>(
     })
 }
 
+/// #1918: the entry that fills `form` when the form names a world `worlds` lists (`<world
+/// ID>.occurrences`, or a reading `<world ID>.<ID>.<read>`), the longest world ID that prefixes
+/// it winning; `None` when it names no listed world, `Some(None)` when it does and no entry in the
+/// build fills it.
+pub fn world_source<'e>(
+    worlds: &Value,
+    form: &str,
+    entries: &'e [SealedEntry],
+) -> Option<Option<&'e SealedEntry>> {
+    let rest = worlds
+        .as_object()?
+        .keys()
+        .filter_map(|w| Some((w.len(), form.strip_prefix(w.as_str())?.strip_prefix('.')?)))
+        .max()?
+        .1;
+    Some(entries.iter().find(|e| {
+        match e.value["form"]
+            .as_str()
+            .and_then(|p| p.strip_prefix("<world ID>."))
+        {
+            Some("<ID>.<read>") => rest
+                .rsplit_once('.')
+                .is_some_and(|(id, r)| !id.is_empty() && !r.is_empty()),
+            Some(tail) => !tail.contains('<') && rest == tail,
+            None => false,
+        }
+    }))
+}
+
+/// `module_missing` for a form naming a world whose source no module in the build fills.
+fn physics_missing(id: &str, path: String, form: &str) -> Issue {
+    Issue::error(
+        "module_missing",
+        id,
+        path,
+        json!({"module": "physics", "source": form}),
+        "this reads a world's list or reading, which the physics module fills and this build lacks",
+    )
+}
+
+/// #1918: each world's baked occurrence list, `baked` keyed by its form, written into `doc`'s
+/// `occurrences` only once the form resolves through `entries` (the build's `column.source@1`),
+/// so a driver, a spawn or a logic item reads a world's rows through the view; a form no entry
+/// fills is `module_missing`, naming physics, and its rows reach no reader.
+pub fn lists(doc: &mut Value, entries: &[SealedEntry], baked: Map<String, Value>) -> Vec<Issue> {
+    let worlds = doc.get("worlds").cloned().unwrap_or(Value::Null);
+    let mut issues = Vec::new();
+    for (form, rows) in baked {
+        match world_source(&worlds, &form, entries) {
+            Some(Some(_)) => {
+                if let Some(o) = doc.as_object_mut() {
+                    let lists = o.entry("occurrences").or_insert_with(|| json!({}));
+                    lists[form.as_str()] = rows;
+                }
+            }
+            _ => {
+                let world = form.split_once('.').map_or(form.as_str(), |(w, _)| w);
+                issues.push(physics_missing(world, format!("worlds/{world}"), &form));
+            }
+        }
+    }
+    issues
+}
+
 /// Numbers an element of a source type takes: one for a scalar, two to four for a vector.
 fn width(ty: &str) -> Option<usize> {
     Some(match ty {
@@ -414,12 +478,13 @@ pub fn view(doc: &mut Value, entries: &[SealedEntry], t: i64) -> Vec<Issue> {
     // A source column's step is a 60 fps frame: 11,760,000 flicks.
     let step = t.max(0) as u64 / 11_760_000;
     let arrays = doc.get("arrays").cloned().unwrap_or(Value::Null);
+    let worlds = doc.get("worlds").cloned().unwrap_or(Value::Null);
     let Some(Value::Object(items)) = doc.get_mut("items") else {
         return issues;
     };
     for (id, item) in items.iter_mut() {
         if let Some(Value::Object(params)) = item.get_mut("params") {
-            issues.extend(arrays_of(id, params, entries, &arrays, t));
+            issues.extend(arrays_of(id, params, entries, (&arrays, &worlds), t));
         }
         let Some(Value::Object(columns)) = item.pointer_mut("/params/columns") else {
             continue;
@@ -539,12 +604,13 @@ fn out_of_range(id: &str, column: &str, path: &str, row: usize, value: f64, step
 }
 
 /// A set's columns, and its `alive`, that read an array: each checked, baked from `arrays` (the
-/// document's, which the host fills) and mapped at `t`, and the set's `n` the arrays' count.
+/// document's, which the host fills) and mapped at `t`, and the set's `n` the arrays' count. A
+/// world's reading (#1918) resolves through the physics entries before a logic array's form.
 fn arrays_of(
     id: &str,
     params: &mut Map<String, Value>,
     entries: &[SealedEntry],
-    arrays: &Value,
+    (arrays, worlds): (&Value, &Value),
     t: i64,
 ) -> Vec<Issue> {
     let mut issues = Vec::new();
@@ -571,7 +637,12 @@ fn arrays_of(
     let mut counts: Vec<(String, String, u64)> = Vec::new();
     for (name, path, column) in readers {
         let form = column["array"].as_str().unwrap_or_default().to_string();
-        if resolve(&form, entries, true).is_none() {
+        let world = world_source(worlds, &form, entries);
+        if world == Some(None) {
+            issues.push(physics_missing(id, format!("{path}/array"), &form));
+            continue;
+        }
+        if world.is_none() && resolve(&form, entries, true).is_none() {
             issues.push(Issue::error(
                 "module_missing",
                 id,
@@ -587,7 +658,7 @@ fn arrays_of(
                 id,
                 format!("{path}/array"),
                 json!(form),
-                "no logic item in the document writes this array",
+                "no logic item or world in the document writes this array",
             ));
             continue;
         };

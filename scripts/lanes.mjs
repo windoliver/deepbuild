@@ -398,6 +398,9 @@ alone.push('tests/acceptance/504-redraft-ac1/', 'tests/acceptance/504-redraft-ac
 alone.push('tests/acceptance/2026/', 'tests/acceptance/2026-redraft-ac3/');
 timed.push('tests/acceptance/2026/load.test.ts', 'tests/acceptance/2026/outage.test.ts', 'tests/acceptance/2026-redraft-ac3/replay.test.ts');
 byHand.push('tests/acceptance/2026/replay.test.ts');
+// #2028's files build deep-drive plain and with env-plants, start real hubs and run three replicas each over three hours
+// of the virtual clock, a frame each second while you're away.
+alone.push('tests/acceptance/2028/');
 // #1056's files build deep-gpu and draw #464's pixel fixtures; records.test.ts runs #464's two-GPU tests.
 alone.push('tests/acceptance/1056/');
 // #404's parts: #1897's files each build deep-show in their own feature set and hold the GPU for the pixel hash;
@@ -405,6 +408,9 @@ alone.push('tests/acceptance/1056/');
 // build deep-gpu for release and draw on this Mac's Metal GPU, so no two device runs share it.
 alone.push('tests/acceptance/1897/', 'tests/acceptance/1899/', 'tests/acceptance/1903/');
 alone.push('tests/acceptance/2189/', 'tests/acceptance/2189-redraft-ac1/');
+// #547's files build deep-logic and bake 108,000 and 72,000 steps; AC4 judges 20 seeks of a recorded match against 2 s.
+alone.push('tests/acceptance/547/');
+timed.push('tests/acceptance/547/ac4-keyframes.test.ts');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },

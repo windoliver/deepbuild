@@ -2602,6 +2602,7 @@ version = "0.0.0"
 dependencies = [
  "base64 0.22.1",
  "bincode",
+ "deep-canvas-motion",
  "deep-canvas-physics",
  "rapier3d",
  "serde_json",
@@ -2674,6 +2675,7 @@ dependencies = [
  "deep-canvas-marks",
  "deep-canvas-media",
  "deep-canvas-motion",
+ "deep-canvas-physics",
  "deep-canvas-record",
  "deep-canvas-sandbox",
  "deep-canvas-scene3d",
@@ -2687,6 +2689,7 @@ dependencies = [
  "deep-images",
  "deep-logic",
  "deep-marks-vello",
+ "deep-physics-rapier",
  "deep-relay",
  "deep-replica",
  "deep-sandbox-wasmtime",
