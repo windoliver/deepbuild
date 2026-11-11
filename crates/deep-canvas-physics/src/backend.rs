@@ -1,15 +1,15 @@
 //! The backend interface (World and backend): what the physics module asks of a backend, in this
 //! crate's own types only, so no engine type crosses it. `occurrences` reports what a step wrote
-//! (#2011's sensor entries and exits, #1918's other kinds), which the module sorts; `query`,
-//! `move_character` and `drive_vehicle` join it with the issues that run them (#1919, #182,
-//! #251); the hash reads `canonical` (golden.rs).
+//! (#2011's sensor entries and exits, #1918's other kinds), which the module sorts; `query` and
+//! `move_character` (#1919) keep every spatial query and character move behind it, and
+//! `drive_vehicle` joins it with #251; the hash reads `canonical` (golden.rs).
 
 use std::collections::BTreeMap;
 
 use serde_json::Value;
 
 use crate::caps::Caps;
-use crate::doc::{Refusal, World};
+use crate::doc::{Pose, Refusal, Shape, World};
 use crate::occurrence::Raw;
 
 /// What a step reads of its scene at its own time, evaluated before the solve: each kinematic
@@ -99,6 +99,35 @@ pub struct Checkpoint {
     pub state: Vec<u8>,
 }
 
+/// A spatial query against the state the last step left (World and backend: `query()`): a ray
+/// from a point along a direction (normalized here) up to `max` m; a shape swept from one pose
+/// to another; or a shape at a pose. `groups` is a mask over the world's `collision_groups`: a
+/// shape use answers only when it is a member of one of them.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Query {
+    Ray {
+        from: [f64; 3],
+        dir: [f64; 3],
+        max: f64,
+    },
+    Sweep {
+        shape: Shape,
+        from: Pose,
+        to: Pose,
+    },
+    Overlap {
+        shape: Shape,
+        at: Pose,
+    },
+}
+
+/// One shape use a query met, `distance` m along the ray or the sweep (0 for an overlap).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Hit {
+    pub shape: ShapeRef,
+    pub distance: f64,
+}
+
 pub trait Backend {
     /// Its name and version, as `name@version`.
     fn id(&self) -> String;
@@ -117,6 +146,17 @@ pub trait Backend {
     /// Loads `checkpoint`, or refuses one another backend or version wrote, naming both, and
     /// loads nothing.
     fn restore(&mut self, checkpoint: &Checkpoint) -> Result<(), Box<Refusal>>;
+    /// Every shape use `q` meets among those in `groups`, sorted by distance, then shape use: the
+    /// one way physics.query, physics.cast@1 and nav.reach reach the engine's spatial queries.
+    fn query(&self, q: &Query, groups: u32) -> Vec<Hit>;
+    /// Moves character body `body` by `translation` m through the backend's character
+    /// controller, which sets its kinematic target for the next step, sliding along what it
+    /// meets; the translation it took, or the refusal naming a body that can't move so.
+    fn move_character(
+        &mut self,
+        body: &str,
+        translation: [f64; 3],
+    ) -> Result<[f64; 3], Box<Refusal>>;
     /// #2014: how far along the unit `dir` the ray from `from` first meets a shape of the world
     /// as built or last stepped, within `max` m; none when it meets nothing.
     fn ray(&self, from: [f64; 3], dir: [f64; 3], max: f64) -> Option<f64>;

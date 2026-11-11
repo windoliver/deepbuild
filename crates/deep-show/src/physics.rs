@@ -20,12 +20,15 @@ use serde_json::{json, Map, Value};
 use crate::hub::Hub;
 
 /// The physics module the full set seals; `test-physics-hands-no-changes` seals #1918's planted
-/// one, whose readings entry hands the column view no changed ranges.
-pub(crate) fn module() -> Module {
-    if cfg!(feature = "test-physics-hands-no-changes") {
-        deep_canvas_physics::module::hands_no_changes()
+/// one, whose readings entry hands the column view no changed ranges; #1919's
+/// `test-leave-out-physics` seals none.
+pub(crate) fn module() -> Option<Module> {
+    if cfg!(feature = "test-leave-out-physics") {
+        None
+    } else if cfg!(feature = "test-physics-hands-no-changes") {
+        Some(deep_canvas_physics::module::hands_no_changes())
     } else {
-        deep_canvas_physics::module::module()
+        Some(deep_canvas_physics::module::module())
     }
 }
 
@@ -248,6 +251,44 @@ fn readings(
         }
         let baked = json!({"type": "vec3", "count": 1, "every": step_flicks(w), "linear": false, "steps": steps});
         out.insert(name, baked);
+    }
+    Ok(out)
+}
+
+/// A world a scene lists, its reading and each body's pose at a time.
+pub(crate) type Posed = (String, World, Vec<(String, ([f64; 3], [f64; 4]))>);
+
+/// #1919: each world `form` lists, baked in its scene up to `t` flicks, with each body's pose at
+/// `t` by Physics output's rule, so the physics shapes mode draws the frame the physics module
+/// evaluates; or what refuses a world, naming it.
+pub(crate) fn poses_at(form: &Value, t: i64) -> Result<Vec<Posed>, Value> {
+    let run = Run::new(None).expect("the unplanted runner");
+    let mut out = Vec::new();
+    for (id, doc) in form
+        .get("worlds")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten()
+    {
+        let refuse = |what: Value| json!({"code": "physics_refused", "world": id, "what": what});
+        let w = check(doc, &RAPIER3D, &deep_canvas_physics::roles::TABLE)
+            .map_err(|e| refuse(json!(e.iter().map(|r| &r.what).collect::<Vec<_>>())))?;
+        let step = step_flicks(&w);
+        let call =
+            json!({"call": "bake", "scene": form, "world": id, "steps": t.max(0) / step + 1});
+        let reply = run.answer(&call).unwrap_or(Value::Null);
+        if reply["ok"] != json!(true) {
+            return Err(refuse(reply));
+        }
+        let poses = w
+            .bodies
+            .keys()
+            .filter_map(|b| {
+                let states = reply["bodies"][b].as_array()?;
+                Some((b.clone(), pose_at(states, t.max(0), step, false)?))
+            })
+            .collect();
+        out.push((id.clone(), w, poses));
     }
     Ok(out)
 }
