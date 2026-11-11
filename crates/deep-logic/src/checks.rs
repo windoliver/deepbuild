@@ -3,13 +3,16 @@
 //! hash and array matches, the full-state hashes match at each checkpoint, and each continuation
 //! probe agrees: from both states, a seeded entry for one control the item reads, then 60 steps,
 //! gives the same arrays and full-state hashes, one probe per control. Equal step hashes alone
-//! never pass.
+//! never pass. The bake is played back too (#547): each step's arrays rebuilt from its ranges and
+//! whole arrays must be the ones a run from step 0 wrote, or the first step, array and element
+//! that differ are named.
 
 use std::collections::BTreeMap;
 use std::rc::Rc;
 
 use serde_json::{json, Map, Value};
 
+use crate::bake::{self, Player};
 use crate::piece::{h64, Piece, Read};
 use crate::world::{track_of, Entry, Record, StepRow, World};
 use crate::Planted;
@@ -137,7 +140,7 @@ fn failure(
     };
     Some(
         json!({"item": id, "run": run, "from": from, "at": at, "checkpoint": deep, "step": step, "field": field,
-        "array": array.map(|x| x.1), "control": control}),
+        "array": array.map(|x| x.1), "element": null, "control": control}),
     )
 }
 
@@ -192,19 +195,43 @@ pub fn determinism(
         return Err(e);
     }
     for t in &a.traps {
-        failures.push(json!({"item": t.get("item"), "run": "twice", "from": null, "at": null, "checkpoint": null, "step": t.get("step"), "field": "trap", "array": null, "control": null}));
+        failures.push(json!({"item": t.get("item"), "run": "twice", "from": null, "at": null, "checkpoint": null, "step": t.get("step"), "field": "trap", "array": null, "element": null, "control": null}));
     }
-    // The second run from step 0.
+    // The second run from step 0, a bake as the first is, so its ring doubles its spacing where
+    // the first one's did and takes the same checkpoints; and the straight run's bake played back
+    // against it: before each step k, each item's arrays rebuilt from the bake as step k − 1 left
+    // them.
     let mut b = Record::default();
+    let mut players: Vec<Option<Player>> = piece
+        .items
+        .iter()
+        .map(|i| (!hashes_only).then(|| Player::new(&a, i)))
+        .collect();
+    let mut played: Vec<Value> = Vec::new();
     World::new(
         piece.clone(),
         track_of(entries),
-        false,
+        true,
         planted,
         &mut b,
         None,
     )?
-    .run(steps, &mut b, &mut |_, _| {});
+    .run(steps, &mut b, &mut |w, k| {
+        for (i, item) in piece.items.iter().enumerate() {
+            let differs = match players[i].as_mut().filter(|_| k > 0) {
+                Some(p) => p
+                    .at(k - 1)
+                    .and_then(|rebuilt| bake::first_difference(item, rebuilt, w.write_region(i))),
+                None => continue,
+            };
+            if let Some((array, element)) = differs {
+                played.push(json!({"item": item.id, "run": "playback", "from": null, "at": null, "checkpoint": null,
+                    "step": k - 1, "field": "array", "array": array, "element": element, "control": null}));
+                players[i] = None;
+            }
+        }
+    });
+    failures.extend(played);
     for item in &piece.items {
         let (deep, rows) = seen(
             hashes_only,
