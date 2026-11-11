@@ -395,6 +395,10 @@ impl<'a> Hub<'a> {
                 }
             }
         }
+        // #504: an eval's own track lasts the call: the session goes back to the hub's.
+        if e.track.is_some() {
+            self.replay(&e.doc, t);
+        }
         reply
     }
 
@@ -596,9 +600,6 @@ impl<'a> Hub<'a> {
                                    "json_values": json_values});
             // #1732: the solves of each arrangement this frame ran, from the scheduler's nodes.
             frame["solves"] = solves(&self.sched, &self.sessions[&f.doc], revised_now);
-            // #504: which operators ran this frame, by key, so a check sees that no plug-in's or
-            // logic's code ran per frame for a figure (Films and figures: data, not code).
-            frame["ran_by_operator"] = json!(self.sessions[&f.doc].ran_by_operator(&self.sched));
             frame["remaps"] = remaps(&self.sched, &self.sessions[&f.doc]);
             revised_now = false;
             let mut capture = 0;

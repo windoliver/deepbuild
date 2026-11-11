@@ -413,6 +413,7 @@ impl<'a> Hub<'a> {
                     play: crate::time::PlayPath::Warm,
                     at_times: at_times.clone(),
                     compare: crate::determinism::Compare::SameMachine,
+                    session: false,
                 };
                 let compared = self.determinism(&d);
                 if compared["code"] == "gpu_unavailable" {

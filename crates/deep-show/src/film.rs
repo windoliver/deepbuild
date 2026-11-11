@@ -308,8 +308,12 @@ fn parts_of(id: &str, item: &Value) -> Vec<morph::Part> {
 /// writes its camera's pose), for the 3D frame; `None` when no timeline shot writes it.
 pub(crate) fn posed(doc: &Value, t: i64) -> Option<Value> {
     let shots = doc.get("shots")?.as_object()?;
-    // #504: a stage's shot, chosen on the played form's input track, poses the camera too.
-    if !shots.values().any(|s| s.get("start").is_some()) && doc.get("track").is_none() {
+    // #504: a stage's shot poses the camera too: the default stage's from the start, and the one
+    // an entry on the played form's track chooses from its entry.
+    let staged = doc.get("controls").and_then(Value::as_object).is_some_and(|c| {
+        c.values().any(|c| c.get("stages").and_then(Value::as_object).is_some_and(|s| s.values().any(|s| s.get("shot").is_some())))
+    });
+    if !shots.values().any(|s| s.get("start").is_some()) && !staged {
         return None;
     }
     let program = Program::compile(doc.as_object()?).ok()?;

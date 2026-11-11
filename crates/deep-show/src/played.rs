@@ -28,6 +28,17 @@ pub(crate) fn class_of(control: &Value) -> &str {
     }
 }
 
+/// Whether `form` reads `entry`: an entry on a control it no longer has, or naming an option it no
+/// longer offers, stays on the track and is left out of the form, so a revision that renames a
+/// stage never refuses the document for what you picked before it.
+pub(crate) fn reads(form: &Value, entry: &Value) -> bool {
+    let Some(c) = form.get("controls").and_then(|c| c.get(entry["control"].as_str().unwrap_or_default())) else {
+        return false;
+    };
+    let options = variants::option_names(form, c);
+    !entry["value"].is_string() || options.is_empty() || options.iter().any(|o| Some(o.as_str()) == entry["value"].as_str())
+}
+
 /// `form` with `entries` inlined as its `track`; `form` itself when there are none.
 pub(crate) fn with_track(form: &Value, entries: &[Value]) -> Value {
     let mut out = form.clone();
@@ -95,7 +106,8 @@ impl Hub<'_> {
     /// `form` played: its track inlined, and each view-class control's value from the
     /// document's session state written as that control's default.
     pub(crate) fn played(&self, doc: &str, form: &Value) -> Value {
-        let mut out = with_track(form, &self.track_json(doc));
+        let entries: Vec<Value> = self.track_json(doc).into_iter().filter(|e| reads(form, e)).collect();
+        let mut out = with_track(form, &entries);
         let view = self.session_state.get(doc).and_then(|s| s.get("view")).and_then(Value::as_object);
         if let (Some(view), Some(controls)) = (view, out.get_mut("controls").and_then(Value::as_object_mut)) {
             for (id, c) in controls.iter_mut() {
@@ -231,6 +243,23 @@ mod tests {
         assert_eq!(fill(2 * S), "g");
         assert_eq!(fill(4 * S), "b");
         assert_eq!(fill(6 * S), "r");
+    }
+
+    #[test]
+    fn a_stage_a_revision_renamed_leaves_the_form_and_the_program_compiles() {
+        let form = json!({
+            "items": {"cam": {"id": "cam", "kind": "camera@1", "params": {"projection": "orthographic", "target": [0, 0, 0], "view_width": 100}}},
+            "camera": "cam",
+            "shots": {"peak-shot": {"camera": "cam", "move": "hold", "target": [1, 0, 0]}},
+            "controls": {"stage": {"kind": "stages", "role": "group", "default": "peak", "stages": {"peak": {"label": "Peak", "shot": "peak-shot"}}}}
+        });
+        // `top` was the stage's name in the revision you picked it in.
+        let entries = vec![json!({"t": 0, "seq": 0, "control": "stage", "value": "top"}), json!({"t": 1, "seq": 0, "control": "gone", "value": 1})];
+        let compiles = |f: &Value| deep_canvas_motion::program::Program::compile(f.as_object().expect("an object")).is_ok();
+        assert!(!compiles(&with_track(&form, &entries)), "the fixture: motion refuses an entry naming no stage");
+        let kept: Vec<Value> = entries.into_iter().filter(|e| reads(&form, e)).collect();
+        assert!(kept.is_empty());
+        assert!(compiles(&with_track(&form, &kept)));
     }
 
     #[test]
