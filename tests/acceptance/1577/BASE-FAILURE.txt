@@ -1,0 +1,191 @@
+Base-commit failure of the #1577 blind acceptance suite
+
+Base commit: 35df4523f (origin/main, "Merge pull request #2280 from windoliver/audit/gpu-hillclimb-1110")
+Machine: shared Mac, 1-minute load about 340 during the run.
+Command:
+  NO_COLOR=1 node scripts/throttle.mjs test --wait 60 -- node node_modules/vitest/vitest.mjs run tests/acceptance/1577 --no-file-parallelism --testTimeout=600000
+
+Summary: 9 tests, 8 failed (one per criterion), 1 passed (AC1's control: a second answer with no request ID is
+refused and recorded answer.refused, which is the base's and the design's behavior). Every failure is at an
+expect() in the criterion's own test file, not at load or in a helper's setup.
+
+- AC1 #1577.7967d9e6 (ac1-retry.test.ts:31): the retry of the cut answer is refused. On the base the signature's
+  `once` was spent by the first send, so the hub refuses the retry at /params/signature/signed/once instead of
+  returning the first result; the assertion message names the refusal. (With no signature the base would refuse the
+  closed ask and record answer.refused, which the control test shows.)
+- AC2 #1577.7ab8071a (ac2-other-params.test.ts:15): the base takes no request ID on ask.answer ("an answer has no
+  field request", /params/request), so the first answer with an ID never counts.
+- AC3 #1577.f0851143 (ac3-second-device.test.ts:16): the same: the app's first answer with its request ID is
+  refused at /params/request.
+- AC4 #1577.1cb11a67 (ac4-note-crash.test.ts:30): the note the hub said it had, then a SIGKILL and a restart: no
+  prompt, waiter or wake after the restart carries its words and no event names them. The base kept the note in
+  memory only and lost it; the message names the lost note.
+- AC5 #1577.75136933 (ac5-note-once.test.ts:35): the note, delivered by the waiter, then retried with its request
+  ID, reaches the agent a second time at the next prompt. The base forgets a note once delivered; the message names
+  the second delivery (by waiter, then UserPromptSubmit).
+- AC6 #1577.0e40df84 (ac6-log-position.test.ts:38): the first write, ask.answer with a request ID, is refused at
+  /params/request; on the base no write reply carries log_pos either.
+- AC7 #1577.a6b9b799 (ac7-crash-before-commit.test.ts:20): the answer with its request ID is refused at
+  /params/request before the hub reaches its cut point before ask.answered, so the hub never dies there.
+- AC8 #1577.0d3ede71 (ac8-stale-undo.test.ts:26): the phone's answer with its request ID is refused at
+  /params/request. (ask.undo with `view` and `request` was taken by the base: the base ignores fields it doesn't
+  read on an undo.)
+
+AC8's file was edited after this run, in its test title and comments only: the option's name "files" became "green",
+the taste ask's real option. Its assertions and setup are as they ran. The output below therefore shows the old
+title. A re-run of that file alone is NOT RUN: target/ was removed from the worktree after this run, and rebuilding
+deep-hook got no build grant from scripts/throttle.mjs within 60 minutes ("INCONCLUSIVE no grant"). The edit
+changes no expectation, so the AC8 line above stands from this run.
+
+---- Output of the run (vitest, the failed tests' section) ----
+ RUN  v5.0.5 <repo>
+ ❯ tests/acceptance/1577/ac6-log-position.test.ts (1 test | 1 failed) 7544ms
+   ❯ AC6 #1577.0e40df84 Each write returns a log position, and a read at that position shows the write (1)
+     × AC6 #1577.0e40df84 ask.answer, ask.undo, offer.save, decision.overrule, run.start, staged.undo and session.note each return log_pos, and a read at it shows the write 4481ms
+ ❯ tests/acceptance/1577/ac1-retry.test.ts (2 tests | 1 failed) 15254ms
+   ❯ AC1 #1577.7967d9e6 An answer whose reply is cut, sent again with its ID, returns the first result (1)
+     × AC1 #1577.7967d9e6 the retry of a cut answer gets the first result, writes nothing, and the record holds one ask.answered and no answer.refused 7185ms
+ ❯ tests/acceptance/1577/ac8-stale-undo.test.ts (1 test | 1 failed) 13795ms
+   ❯ AC8 #1577.0d3ede71 An undo from a view at P, for a default another device answered after P, is refused naming that answer (1)
+     × AC8 #1577.0d3ede71 the app's undo from the view at P is refused naming the phone's answer files, made after P, and files stands 8442ms
+ ❯ tests/acceptance/1577/ac7-crash-before-commit.test.ts (1 test | 1 failed) 74389ms
+   ❯ AC7 #1577.a6b9b799 The hub killed before an answer's commit: the same ID sent again after the restart applies once (1)
+     × AC7 #1577.a6b9b799 an answer with its request ID, the hub killed before ask.answered commits, the same line after the restart: it applies, once 71465ms
+ ❯ tests/acceptance/1577/ac3-second-device.test.ts (1 test | 1 failed) 16126ms
+   ❯ AC3 #1577.f0851143 A second device's answer is refused naming the first, with or without an ID (1)
+     × AC3 #1577.f0851143 the app answers sqlite; the phone's files, with no ID, its own ID, or the app's ID, is refused naming sqlite, and sqlite stands 14393ms
+ ❯ tests/acceptance/1577/ac5-note-once.test.ts (1 test | 1 failed) 28651ms
+   ❯ AC5 #1577.75136933 A note retried after delivery reaches the agent once (1)
+     × AC5 #1577.75136933 a note delivered by the waiter's wake, then sent again with its request ID, reaches the agent once 22107ms
+ ❯ tests/acceptance/1577/ac4-note-crash.test.ts (1 test | 1 failed) 26208ms
+   ❯ AC4 #1577.1cb11a67 The hub killed after a note's reply and before delivery loses nothing (1)
+     × AC4 #1577.1cb11a67 a note the hub said it has, then a SIGKILL before delivery and a restart: the agent is still given its words 22067ms
+ ❯ tests/acceptance/1577/ac2-other-params.test.ts (1 test | 1 failed) 3787ms
+   ❯ AC2 #1577.7ab8071a The same ID with another option is refused, naming the ID (1)
+     × AC2 #1577.7ab8071a an answer under a request ID already used for sqlite, choosing files, is refused naming the ID, and sqlite stands 2637ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 8 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  tests/acceptance/1577/ac1-retry.test.ts > AC1 #1577.7967d9e6 An answer whose reply is cut, sent again with its ID, returns the first result > AC1 #1577.7967d9e6 the retry of a cut answer gets the first result, writes nothing, and the record holds one ask.answered and no answer.refused
+AssertionError: AC1 #1577.7967d9e6 the answer sent again with its request ID req-mEQDl3sVYDM13jDv must return the first result, not a refusal; it was refused: {"code":"credential","retryable":false,"remediation":"ask:01M75YD6TVYZ2PJPWE62A4414X stays open: the signature's once doesn't hold (its once-only ID QKktCKcX3skXpk7V2NCaowjM was spent already, so it counts once). Sign it again with a device you paired, for ask.answer on this hub, over exactly the params it sends.","path":"/params/signature/signed/once","actual":"QKktCKcX3skXpk7V2NCaowjM","evidence":[]} (the first reply, cut: {"v":1,"id":"answer-1577-a","error":{"code":"type","retryable":false,"remediation":"an answer has no field request","path":"/params/request","actual":"","evidence":[]}}): expected { code: 'credential', …(5) } to be undefined
+- Expected:
+undefined
++ Received:
+{
+  "actual": "QKktCKcX3skXpk7V2NCaowjM",
+  "code": "credential",
+  "evidence": [],
+  "path": "/params/signature/signed/once",
+  "remediation": "ask:01M75YD6TVYZ2PJPWE62A4414X stays open: the signature's once doesn't hold (its once-only ID QKktCKcX3skXpk7V2NCaowjM was spent already, so it counts once). Sign it again with a device you paired, for ask.answer on this hub, over exactly the params it sends.",
+  "retryable": false,
+}
+ ❯ tests/acceptance/1577/ac1-retry.test.ts:31:213
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/8]⎯
+ FAIL  tests/acceptance/1577/ac2-other-params.test.ts > AC2 #1577.7ab8071a The same ID with another option is refused, naming the ID > AC2 #1577.7ab8071a an answer under a request ID already used for sqlite, choosing files, is refused naming the ID, and sqlite stands
+AssertionError: AC2 #1577.7ab8071a the first answer with request ID req-N5enYV8o7aZkzy9P must count: {"v":1,"id":"ask.answer#3","error":{"code":"type","retryable":false,"remediation":"an answer has no field request","path":"/params/request","actual":"","evidence":[]}}: expected { Object (code, retryable, ...) } to be undefined
+- Expected:
+undefined
++ Received:
+{
+  "actual": "",
+  "code": "type",
+  "evidence": [],
+  "path": "/params/request",
+  "remediation": "an answer has no field request",
+  "retryable": false,
+}
+ ❯ tests/acceptance/1577/ac2-other-params.test.ts:15:109
+     13|     const request = newRequest();
+     14|     const first = await signedCall(w, w.device, 'ask.answer', { ask: a…
+     15|     expect(first.error, `${AC[2]} the first answer with request ID ${r…
+       |                                                                                                             ^
+     16|     const other = await signedCall(w, w.device, 'ask.answer', { ask: a…
+     17|     expect(other.error, `${AC[2]} the same request ID ${request} with …
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/8]⎯
+ FAIL  tests/acceptance/1577/ac3-second-device.test.ts > AC3 #1577.f0851143 A second device's answer is refused naming the first, with or without an ID > AC3 #1577.f0851143 the app answers sqlite; the phone's files, with no ID, its own ID, or the app's ID, is refused naming sqlite, and sqlite stands
+AssertionError: AC3 #1577.f0851143 the app's first answer, request req-1Ia_2Owd3ZjcZudH, must count: {"v":1,"id":"ask.answer#3","error":{"code":"type","retryable":false,"remediation":"an answer has no field request","path":"/params/request","actual":"","evidence":[]}}: expected { Object (code, retryable, ...) } to be undefined
+- Expected:
+undefined
++ Received:
+{
+  "actual": "",
+  "code": "type",
+  "evidence": [],
+  "path": "/params/request",
+  "remediation": "an answer has no field request",
+  "retryable": false,
+}
+ ❯ tests/acceptance/1577/ac3-second-device.test.ts:16:112
+     14|     const appRequest = newRequest();
+     15|     const first = await signedCall(w, w.device, 'ask.answer', { ask: a…
+     16|     expect(first.error, `${AC[3]} the app's first answer, request ${ap…
+       |                                                                                                                ^
+     17|
+     18|     const tries: [string, Line][] = [
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/8]⎯
+ FAIL  tests/acceptance/1577/ac4-note-crash.test.ts > AC4 #1577.1cb11a67 The hub killed after a note's reply and before delivery loses nothing > AC4 #1577.1cb11a67 a note the hub said it has, then a SIGKILL before delivery and a restart: the agent is still given its words
+AssertionError: AC4 #1577.1cb11a67 the note "Also add a dark mode toggle, named theme XmbraY." (request req--X87FaxtfKXmbraY), which the hub said it had before it was killed, was lost: after the restart no prompt's reply, waiter or wake gave the agent its words (events naming the words: []): expected 0 to be greater than or equal to 1
+ ❯ tests/acceptance/1577/ac4-note-crash.test.ts:30:285
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/8]⎯
+ FAIL  tests/acceptance/1577/ac5-note-once.test.ts > AC5 #1577.75136933 A note retried after delivery reaches the agent once > AC5 #1577.75136933 a note delivered by the waiter's wake, then sent again with its request ID, reaches the agent once
+AssertionError: AC5 #1577.75136933 the note "Also add a dark mode toggle, named theme Q5SFcp." (request req-zOjRyR-fPdQ5SFcp), retried after it was delivered, must reach the agent once; it was delivered twice or more, by waiter, UserPromptSubmit: expected 2 to be 1 // Object.is equality
+- Expected
++ Received
+- 1
++ 2
+ ❯ tests/acceptance/1577/ac5-note-once.test.ts:35:202
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/8]⎯
+ FAIL  tests/acceptance/1577/ac6-log-position.test.ts > AC6 #1577.0e40df84 Each write returns a log position, and a read at that position shows the write > AC6 #1577.0e40df84 ask.answer, ask.undo, offer.save, decision.overrule, run.start, staged.undo and session.note each return log_pos, and a read at it shows the write
+AssertionError: AC6 #1577.0e40df84 ask.answer must be taken: {"v":1,"id":"ask.answer#3","error":{"code":"type","retryable":false,"remediation":"an answer has no field request","path":"/params/request","actual":"","evidence":[]}}: expected { Object (code, retryable, ...) } to be undefined
+- Expected:
+undefined
++ Received:
+{
+  "actual": "",
+  "code": "type",
+  "evidence": [],
+  "path": "/params/request",
+  "remediation": "an answer has no field request",
+  "retryable": false,
+}
+ ❯ landed tests/acceptance/1577/ac6-log-position.test.ts:18:74
+     16| /** The reply's log position, and the write's event in a read at it: w…
+     17| async function landed(w: World, what: string, before: number, reply: L…
+     18|   expect(reply.error, `${AC[6]} ${what} must be taken: ${shown(reply)}…
+       |                                                                          ^
+     19|   const at = reply.result?.log_pos;
+     20|   expect(Number.isSafeInteger(at) && at > 0, `${AC[6]} ${what}'s reply…
+ ❯ tests/acceptance/1577/ac6-log-position.test.ts:38:11
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/8]⎯
+ FAIL  tests/acceptance/1577/ac7-crash-before-commit.test.ts > AC7 #1577.a6b9b799 The hub killed before an answer's commit: the same ID sent again after the restart applies once > AC7 #1577.a6b9b799 an answer with its request ID, the hub killed before ask.answered commits, the same line after the restart: it applies, once
+AssertionError: AC7 #1577.a6b9b799 the answer with request ID req-bVwSWzuLl-_Q32pO must be read and on its way to its commit when the hub dies at its cut point before ask.answered; the hub stayed up and replied {"v":1,"id":"answer-1577-crash","error":{"code":"type","retryable":false,"remediation":"an answer has no field request","path":"/params/request","actual":"","evidence":[]}}: expected false to be true // Object.is equality
+- Expected
++ Received
+- true
++ false
+ ❯ tests/acceptance/1577/ac7-crash-before-commit.test.ts:20:235
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/8]⎯
+ FAIL  tests/acceptance/1577/ac8-stale-undo.test.ts > AC8 #1577.0d3ede71 An undo from a view at P, for a default another device answered after P, is refused naming that answer > AC8 #1577.0d3ede71 the app's undo from the view at P is refused naming the phone's answer files, made after P, and files stands
+AssertionError: AC8 #1577.0d3ede71 the phone's answer green, with its request ID, must count: {"v":1,"id":"ask.answer#5","error":{"code":"type","retryable":false,"remediation":"an answer has no field request","path":"/params/request","actual":"","evidence":[]}}: expected { Object (code, retryable, ...) } to be undefined
+- Expected:
+undefined
++ Received:
+{
+  "actual": "",
+  "code": "type",
+  "evidence": [],
+  "path": "/params/request",
+  "remediation": "an answer has no field request",
+  "retryable": false,
+}
+ ❯ tests/acceptance/1577/ac8-stale-undo.test.ts:26:118
+     24|     expect(undone.error, `${AC[8]} the phone's undo of ${ask.handle}, …
+     25|     const answered = await signedCall(w, w.phone, 'ask.answer', { ask:…
+     26|     expect(answered.error, `${AC[8]} the phone's answer green, with it…
+       |                                                                                                                      ^
+     27|     const opened = (await eventsOf(w, 'default.undone', ask.handle)).l…
+     28|
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/8]⎯
+ Test Files  8 failed (8)
+      Tests  8 failed | 1 passed (9)
+   Start at  10:37:20
+   Duration  195.65s (tests 98%, import 1%)
+exit 1
