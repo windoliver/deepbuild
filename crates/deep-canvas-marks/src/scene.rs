@@ -933,7 +933,9 @@ pub fn text_spec_in(
             Some(Value::String(o)) if o == "mask" => true,
             Some(_) => return refuse("bad_doc", format!("{path}/params/overflow")),
         },
-        bound: shown.is_some() || params.get("numerals").and_then(Value::as_str) == Some("tabular"),
+        // #407: localized copy shows as text does, never as a bound number.
+        bound: shown.is_some_and(|s| s.bound != COPY)
+            || params.get("numerals").and_then(Value::as_str) == Some("tabular"),
         align: match params.get("align").and_then(Value::as_str) {
             None | Some("start") => Align::Start,
             Some("center") => Align::Center,
@@ -3226,7 +3228,7 @@ fn bound_ids(doc: &Map<String, Value>, items: &Map<String, Value>) -> Result<Vec
         }
     }
     for (id, item) in items {
-        if counter_of(item).is_some() || template_of(item).is_some() {
+        if counter_of(item).is_some() || template_of(item).is_some() || copy_key(item).is_some() {
             ids.push(id.clone());
         }
     }
@@ -3271,6 +3273,17 @@ pub fn bound_text(
     text_at(doc, items, id, item, record, locale)
 }
 
+/// What a [`Shown`] from localized copy is bound to.
+const COPY: &str = "copy";
+
+/// #407: a text@1's copy key (`copy: key`, into `data.copy[locale]`), when it shows localized
+/// copy in place of its own text.
+pub fn copy_key(item: &Value) -> Option<&str> {
+    let p = item.get("params")?;
+    p.get("text").is_none().then_some(())?;
+    p.get("copy")?.as_str()
+}
+
 /// [`bound_text`] among a frame's evaluated `items`, which anchors and drivers read.
 pub fn text_at(
     doc: &Map<String, Value>,
@@ -3280,6 +3293,26 @@ pub fn text_at(
     record: &Record,
     locale: &str,
 ) -> Result<Option<Shown>, Refused> {
+    // #407: localized copy: the key's string in the locale's table, else the document's own
+    // locale's, else nothing.
+    if let Some(key) = copy_key(item) {
+        let in_locale = |l: &str| doc.get("data")?.get("copy")?.get(l)?.get(key)?.as_str();
+        let text = in_locale(locale)
+            .or_else(|| {
+                doc.get("locale")
+                    .and_then(Value::as_str)
+                    .and_then(in_locale)
+            })
+            .unwrap_or_default()
+            .to_string();
+        return Ok(Some(Shown {
+            bound: COPY.into(),
+            text,
+            stale: false,
+            age: None,
+            changes_at: None,
+        }));
+    }
     if let Some(template) = template_of(item) {
         // A template shows each slot's value at its own precision (Text `text@1`, `template`).
         // A keyed data value shows as the frame evaluated it (`params/data/<name>`, motion@1).
