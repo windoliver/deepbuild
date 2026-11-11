@@ -2075,7 +2075,7 @@ impl<'a> Hub<'a> {
         // The items the check skipped as `unknown_kind`: kept as written, never drawn (#389).
         let mut skipped: Vec<String> = Vec::new();
         // The revision's expansions and its check's time (#306): the document's once it is current.
-        let mut fresh: Option<(Vec<Expansion>, (f64, Option<f64>))> = None;
+        let mut fresh: Option<(Vec<Expansion>, CheckTimes)> = None;
         let (stamped, mut issues, diff) = match stamped {
             Err(issues) => (None, issues, None),
             Ok(mut doc) => {
@@ -2712,6 +2712,9 @@ impl BandRow {
         })
     }
 }
+
+/// A revision's check time and its `kind_rules` check's own time, when asked for (#202), in ms.
+type CheckTimes = (f64, Option<f64>);
 
 /// #202's planted expander: an instance's inputs walked through a std hash map, whose order a
 /// fresh random state picks, so two expansions of one example differ in their bytes. It redraws
