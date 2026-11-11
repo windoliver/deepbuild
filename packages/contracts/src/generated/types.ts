@@ -5418,6 +5418,33 @@ export interface HookTemplate {
   } };
 }
 
+/** host.changed@1 */
+export interface HostChanged {
+  v: 1;
+  id: string;
+  kind: "host.changed";
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    host: string;
+    change: string;
+    changes: Array<string>;
+    undo: string | null;
+    grant: "you" | "root";
+    fingerprint: Array<{
+      target: string;
+      sha256: string | null;
+    }>;
+    ask: string | null;
+    run: string | null;
+  };
+  evidence?: Array<string>;
+}
+
 /** hub.stopped@1 */
 export interface HubStopped {
   v: 1;
@@ -6951,6 +6978,48 @@ export interface RunFinishedV2 {
   evidence?: Array<string>;
 }
 
+/** run.finished@3 */
+export interface RunFinishedV3 {
+  v: 3;
+  id: string;
+  kind: "run.finished";
+  subject?: string;
+  writer: string;
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    run: string;
+    outcome: "passed" | "failed" | "ran_nothing" | "missing" | "overran" | "stopped" | "uncounted";
+    tests_run: number;
+    passed: number;
+    runs: number;
+    evidence: Array<string>;
+    check: string;
+    assertion: string | null;
+    expected: string | null;
+    actual: string | null;
+    step: string | null;
+    points_to: string | null;
+    findings: Array<string>;
+    environment: string;
+    key?: {
+      id: string;
+      stem: string;
+      paths: Array<string>;
+      claim: string;
+      session: string;
+      base: boolean;
+      withheld: boolean;
+      plain: boolean;
+    };
+    exit?: number | null;
+  };
+  evidence?: Array<string>;
+}
+
 /** run.kept@1 */
 export interface RunKept {
   v: 1;
@@ -7084,6 +7153,53 @@ export interface RunStartedV3 {
     command?: string;
     stand_ins?: Array<string>;
     withheld: Array<string>;
+  };
+  evidence?: Array<string>;
+}
+
+/** run.started@4 */
+export interface RunStartedV4 {
+  v: 4;
+  id: string;
+  kind: "run.started";
+  subject?: string;
+  writer: string;
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    run: string;
+    check: string;
+    claim?: string;
+    commit?: string;
+    host: string;
+    needs: {
+      cores: number;
+      memory_mb: number;
+      stack_slot: number;
+      gpus: number;
+      expected_ms: number | null;
+    };
+    lane: "fast" | "slow";
+    argv: Array<string>;
+    cwd: string;
+    env: { [key: string]: string };
+    grant: {
+      read?: Array<string>;
+      write?: Array<string>;
+      hosts?: Array<string>;
+      sockets?: Array<string>;
+      listen?: Array<string>;
+      run_as_you?: boolean;
+    };
+    deadline_ms: number | null;
+    environment?: boolean;
+    command?: string;
+    stand_ins?: Array<string>;
+    withheld: Array<string>;
+    ask?: string;
   };
   evidence?: Array<string>;
 }

@@ -796,6 +796,12 @@ impl Replica {
     /// One frame of the replica's clock: timers due run, the window draws, notifications come due and, while
     /// recording, a frame is taken at each 30th of a second.
     fn tick(&mut self) {
+        self.tick_by(None);
+    }
+
+    /// One frame, as `tick`, standing for `step` flicks of the virtual clock in place of a 60th of a second
+    /// (`wait_for`'s `step_ms`, #2028).
+    fn tick_by(&mut self, step: Option<u64>) {
         let step = match &mut self.clock.real {
             Some(wall) => {
                 let took = (wall.elapsed().as_nanos() as u64 * 441 / 625).max(1);
@@ -803,7 +809,7 @@ impl Replica {
                 took
             }
             None if self.motion.is_some() => motion::STEP,
-            None => FRAME,
+            None => step.unwrap_or(FRAME),
         };
         let before = nanos(self.clock.t);
         self.clock.t += step;
@@ -1284,6 +1290,16 @@ impl Replica {
         let timeout_ms = Self::timeout(call);
         let deadline = self.clock.t + timeout_ms * FLICKS / 1000;
         if let Some(t) = wait["t"].as_u64() {
+            // With step_ms the virtual clock runs a frame each step_ms, the last shorter, so hours take thousands of
+            // frames, not a frame each 60th (#2028).
+            let step = match &wait["step_ms"] {
+                Value::Null => None,
+                ms => match ms.as_u64() {
+                    Some(ms) if ms > 0 && self.clock.real.is_none() && self.motion.is_none() => Some(ms * FLICKS / 1000),
+                    Some(ms) if ms > 0 => return Err(fail("refused", "step_ms runs the virtual clock, and this replica's clock is real or recording motion")),
+                    _ => return Err(fail("refused", format!("step_ms is a whole number of ms above 0, not {ms}"))),
+                },
+            };
             while self.clock.t < t {
                 if self.clock.t >= deadline {
                     return Err(fail(
@@ -1292,9 +1308,13 @@ impl Replica {
                     )
                     .with("timeout_ms", json!(timeout_ms)));
                 }
-                self.tick();
+                self.tick_by(step.map(|step| step.min(t - self.clock.t)));
             }
-            return Ok(json!({}));
+            return Ok(if step.is_some() {
+                json!({"step_ms": wait["step_ms"]})
+            } else {
+                json!({})
+            });
         }
         let state = wait["state"].as_str().map(str::to_owned);
         let event = wait["event"].as_str().map(str::to_owned);

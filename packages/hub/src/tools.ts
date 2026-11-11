@@ -172,6 +172,20 @@ const SCHEMAS: Readonly<Record<string, Schema>> = {
     inputs: maybe({ type: 'array', items: object({ name: str('The input, as the kind names it.'), sha256: maybe(str('The file whose bytes it is, by its SHA-256 in the evidence store; a tool that runs off the machine takes files only this way.', '^[0-9a-f]{64}$')), path: maybe(str('The file whose bytes it is, by absolute path, for a tool that runs on this machine; null when sha256 names it.')) }), description: 'run: each input the kind takes, once.' }),
   }),
   deep_env: object({ action:{ type: 'string', enum: ['up', 'down'], description: 'up brings your worktree\'s stack up and answers its leased ports; down takes it down.' } }),
+  deep_root_plan: object({
+    host: str('A host the person\'s SSH config names.'),
+    script: str('The script\'s absolute path on that host, where you wrote it; the plan locks its SHA-256 as it is now, so change nothing there after.'),
+    steps: {
+      type: 'array',
+      items: object({
+        does: str('What the step does, in a sentence.'),
+        changes: { type: 'array', items: str(), description: 'What it changes: packages, files by absolute path, services, firewall rules.' },
+        undo: maybe(str('How to undo it; null when it can\'t be undone.')),
+        package: maybe(str('For a step that installs a package file, its absolute path on the host; null otherwise.')),
+      }),
+      description: 'What the script does, step by step.',
+    },
+  }),
   deep_propose: object({
     target: str('What the change is to, such as a wiki claim, wiki:<page>#<claim>, a rule, a check or a spec.'),
     change: str('The change, in your own words.'),
