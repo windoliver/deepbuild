@@ -21,6 +21,7 @@ mod check;
 mod close;
 mod merge;
 mod order;
+pub mod pack_kinds;
 pub mod packs;
 mod requires;
 mod rows;

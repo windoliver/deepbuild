@@ -5,6 +5,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde_json::{json, Map, Value};
 
+use super::pack_kinds::kind_rules;
 use super::packs::{self, Expansion, Packs, Resolved};
 use super::{
     kind_text, member, sort_issues, sort_notices, Issue, Notice, ADJUST_FIELDS, AT_RELATIONS,
@@ -49,6 +50,8 @@ pub struct CheckResult {
     /// Each recipe instance's expansion (Recipe): its key and its derived items, which
     /// `lowered` holds after the instance.
     pub expansions: Vec<Expansion>,
+    /// Each pack rule the `kind_rules` check ran, with the pack it came from (#202).
+    pub rules_ran: BTreeSet<(String, String)>,
 }
 
 impl CheckResult {
@@ -129,6 +132,7 @@ fn check_by(
     let required = required_minors(doc, sealed, &mut issues);
     let resolved = packs::resolve(doc, packs, Some(sealed), &mut issues);
     let mut expansions = Vec::new();
+    let mut rules_ran = BTreeSet::new();
     // The canvas modules the document declares, which every module kind it uses must be among.
     let declared: BTreeSet<String> = member(doc, "requires")
         .and_then(|r| member(r, "modules"))
@@ -166,6 +170,10 @@ fn check_by(
             // checks and the budget as any item does.
             issues.extend(packs::driven_counts(doc, items, &resolved));
             expansions = packs::expand(items, &resolved, packs.planted, &mut issues);
+            // The core's `kind_rules` check: each instance's rules once, after its expansion (#202).
+            let rules = kind_rules(doc, items, &expansions, &resolved, packs.planted);
+            issues.extend(rules.issues);
+            rules_ran = rules.ran;
             let derived: BTreeSet<&str> = expansions
                 .iter()
                 .flat_map(|e| e.derived.keys().map(String::as_str))
@@ -308,6 +316,7 @@ fn check_by(
         core: core_name(),
         set_digest: sealed.set_digest.clone(),
         expansions,
+        rules_ran,
     }
 }
 

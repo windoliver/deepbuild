@@ -361,6 +361,10 @@ byHand.push('tests/acceptance/405/budgets.test.ts');
 alone.push('tests/acceptance/1936/');
 // #544's files build deep-logic and deep-show, draw on the GPU, export a film, and build deep-logic for Linux x86_64 in Docker.
 alone.push('tests/acceptance/544/');
+// #202's files each build deep-show (and the budgets the merge base too); its budgets time the check, kind_rules and
+// the kind kit.
+alone.push('tests/acceptance/202/');
+timed.push('tests/acceptance/202/budgets.test.ts');
 // #2015's file builds deep-show in the full set and runs it on a plate and a recipe pack.
 alone.push('tests/acceptance/2015/');
 // #220's files start hubs, build deep-show in the full set and time the typeset tool's own process.
