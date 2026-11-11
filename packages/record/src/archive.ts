@@ -17,6 +17,19 @@ export interface FoundMessage extends Message { session: string }
  */
 export const foldText = (text: string): string => [...text].map((ch) => ch.toLowerCase().replace(/ς/g, 'σ')).join('');
 
+/** #884's word rule: the words a query asks for are runs of letters and digits in any script, lowercased. */
+export const queryWords = (text: string): string[] => text.normalize('NFC').toLowerCase().split(/[^\p{L}\p{M}\p{N}]+/u).filter(Boolean);
+/** A word in a script written without spaces has no boundaries to split on, so a text holds it anywhere. */
+export const spaceless = (word: string): boolean => /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Thai}]/u.test(word);
+/** Whether `text` holds every one of `wanted` as a word (#884). */
+export const holdsWords = (text: string, wanted: readonly string[]): boolean => {
+  const have = new Set(queryWords(text));
+  const lower = text.normalize('NFC').toLowerCase();
+  return wanted.every((w) => (spaceless(w) ? lower.includes(w) : have.has(w)));
+};
+/** Each word as the index folds text, composed or not, so every message holding it is among what the index gives. */
+export const indexTerms = (wanted: readonly string[]): string[][] => wanted.map((w) => [...new Set([foldText(w), foldText(w.normalize('NFD'))])]);
+
 const DDL = `
 CREATE VIRTUAL TABLE IF NOT EXISTS archive_text USING fts5(folded, content = '', contentless_delete = 1, tokenize = 'trigram case_sensitive 1');
 CREATE TABLE IF NOT EXISTS archive_messages (id INTEGER PRIMARY KEY, session TEXT NOT NULL, n INTEGER NOT NULL) STRICT;

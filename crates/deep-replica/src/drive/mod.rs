@@ -475,6 +475,11 @@ impl Replica {
         // Every call the app makes of its hub reaches the replica's copy of it.
         let kept_pointer = Rc::new(Cell::new(point(px(-1.), px(-1.))));
         let hub_copy = hubcopy::HubCopy::new(&events);
+        // ⌘K reads the record and the archive as they stood at launch, from a copy of its own (#2024).
+        if from == "record_copy" {
+            hub_copy.copy_lookups(&deep_app::hub::root(), &out.join("lookups"));
+        }
+        hub_copy.set_slow(hub_state == "slow");
         let taker = hub_copy.clone();
         deep_app::hub::set_local(Some(Arc::new(move |method, params| {
             taker.take(method, params)
@@ -1630,6 +1635,7 @@ impl Replica {
             ));
         }
         self.hub_state = state.to_owned();
+        self.hub_copy.set_slow(state == "slow");
         deep_app::record::set_local_hub(match state {
             "stopped" => deep_app::record::LocalHub::Stops,
             "slow" => deep_app::record::LocalHub::Slow,

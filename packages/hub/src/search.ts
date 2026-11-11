@@ -10,7 +10,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { isAbsolute, join, relative } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { CAP } from '@deepbuild/reading';
-import { foldText, parseClaimLine, type FoundMessage } from '@deepbuild/record';
+import { holdsWords as holds, indexTerms, parseClaimLine, queryWords as words, spaceless, type FoundMessage } from '@deepbuild/record';
 
 interface Hit {
   source: string; quote: string; outside?: boolean; known?: string; proof?: number; sources?: unknown[]; as_of?: number; reading?: unknown; status?: 'current' | 'STALE';
@@ -80,15 +80,6 @@ const QUOTE = 400;
 /** Pages the wiki generates from other pages' claims, such as its standing questions: no index holds them twice. */
 const VIEWS = 'questions/';
 
-/** The words a query asks for, runs of letters and digits in any script: every hit holds each of them as a word. */
-const words = (text: string): string[] => text.normalize('NFC').toLowerCase().split(/[^\p{L}\p{M}\p{N}]+/u).filter(Boolean);
-/** A word in a script written without spaces has no boundaries to split on, so a hit holds it anywhere in its text. */
-const spaceless = (word: string): boolean => /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Thai}]/u.test(word);
-const holds = (text: string, wanted: readonly string[]): boolean => {
-  const have = new Set(words(text));
-  const lower = text.normalize('NFC').toLowerCase();
-  return wanted.every((w) => (spaceless(w) ? lower.includes(w) : have.has(w)));
-};
 /** What a query with no word left says, so an empty reply is never mistaken for nothing found. */
 const NO_WORDS = 'The query had no words to search for: a word is a run of letters or digits.';
 /**
@@ -217,9 +208,7 @@ function around(text: string, wanted: readonly string[]): string {
 /** The past sessions' messages holding every word, newest session first, each marked as history. */
 async function pastHits(past: NonNullable<SearchIn['past']>, wanted: readonly string[]): Promise<(Hit & { session: string })[]> {
   if (!past.sessions.length) return [];
-  // Each word as the index folds text, composed or not, so a match the words find is among what the index gives.
-  const terms = wanted.map((w) => [...new Set([foldText(w), foldText(w.normalize('NFD'))])]);
-  const found = (await past.messages(terms, past.sessions)).filter((m) => holds(m.text, wanted));
+  const found = (await past.messages(indexTerms(wanted), past.sessions)).filter((m) => holds(m.text, wanted));
   const order = new Map(past.sessions.map((id, i) => [id, i]));
   return found.map((m, i) => ({ m, i })).sort((x, y) => order.get(x.m.session)! - order.get(y.m.session)! || x.i - y.i)
     .map(({ m }) => ({ session: m.session, source: `session:${m.session.replace(/[^0-9A-Za-z]/g, '')}#${m.id}`, quote: around(m.text, wanted), history: true, from: whose(m) }));

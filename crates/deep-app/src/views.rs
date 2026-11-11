@@ -709,12 +709,19 @@ pub(crate) fn page_region(page: Option<crate::open::Page>, drawn: impl IntoEleme
         )
         .px(sizes().space(1))
     });
+    // The message ⌘K found, named by its handle, on its session's page (#2024).
+    let message = page.message.map(|(handle, line)| {
+        label(ElementId::Name(handle.into()), line)
+            .h_auto()
+            .px(sizes().space(1))
+    });
     let inner = div()
         .size_full()
         .flex()
         .flex_col()
         .children(notice)
         .children(claim)
+        .children(message)
         .child(div().flex_1().min_h_0().w_full().child(drawn));
     match page.address {
         Some(address) => observed(ElementId::Name(address.into()))

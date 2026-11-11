@@ -35,6 +35,8 @@ pub struct Selection {
     opens: bool,
     /// When the address shown was opened, by the views' clock.
     opened_at: u64,
+    /// The line ⌘K showed of each message hit opened, by the message's handle (#2024).
+    found: std::collections::HashMap<String, String>,
 }
 
 impl Global for Selection {}
@@ -156,19 +158,49 @@ pub struct Page {
     pub notice: Option<String>,
     /// The claim a session's page is at.
     pub claim: Option<String>,
+    /// The message a session's page is at (#2024): its handle, and the line ⌘K found it by.
+    pub message: Option<(String, String)>,
+}
+
+/// Keeps the line ⌘K showed of a message hit, which its session's page shows at that message (#2024).
+pub fn found(handle: &str, context: &str, cx: &mut App) {
+    selection(cx)
+        .found
+        .insert(handle.to_owned(), context.to_owned());
 }
 
 /// What `region` draws as the page region; none while another region is.
 pub fn page_of(region: Region, cx: &App) -> Option<Page> {
-    let shown = &cx.try_global::<Selection>()?.shown;
+    let selection = cx.try_global::<Selection>()?;
+    let shown = &selection.shown;
+    // A session's page is at a claim, by its ULID, or at a message of its transcript, by the message's ID.
+    let (claim, message) = match shown
+        .address
+        .as_ref()
+        .filter(|address| address.place == Place::Session)
+        .and_then(|address| Some((address, address.parameter.clone()?)))
+    {
+        Some((_, at)) if crate::address::ulid(&at) => (Some(at), None),
+        Some((address, at)) => {
+            let letters: String = address
+                .id
+                .chars()
+                .filter(char::is_ascii_alphanumeric)
+                .collect();
+            let handle = format!("session:{letters}#{at}");
+            let line = selection.found.get(&handle).cloned();
+            (
+                None,
+                Some((handle, line.unwrap_or_else(|| format!("Message {at}")))),
+            )
+        }
+        None => (None, None),
+    };
     (shown.region == Some(region)).then(|| Page {
         address: shown.address.as_ref().map(Address::to_string),
         notice: shown.notice.clone(),
-        claim: shown
-            .address
-            .as_ref()
-            .filter(|address| address.place == Place::Session)
-            .and_then(|address| address.parameter.clone()),
+        claim,
+        message,
     })
 }
 

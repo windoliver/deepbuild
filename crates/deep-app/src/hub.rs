@@ -50,6 +50,7 @@ pub const NEEDS: &[&str] = &[
     "row.read",
     "canvas.drawn",
     "canvas.user",
+    "find.read",
 ];
 const HUB_FIX: &str =
     "Update DeepBuild so the hub matches this app, then restart it with `deep setup`.";

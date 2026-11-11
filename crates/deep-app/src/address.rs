@@ -61,8 +61,8 @@ impl Address {
     }
 }
 
-/// An ask's ID: a ULID, as the contracts have it.
-fn ulid(text: &str) -> bool {
+/// An ask's or a claim's ID: a ULID, as the contracts have it.
+pub(crate) fn ulid(text: &str) -> bool {
     text.len() == 26
         && text.starts_with(|c: char| ('0'..='7').contains(&c))
         && text
@@ -70,12 +70,12 @@ fn ulid(text: &str) -> bool {
             .all(|c| c.is_ascii_digit() || (c.is_ascii_uppercase() && !"ILOU".contains(c)))
 }
 
-/// Any other part: a record ID or a registered name.
+/// Any other part: a record ID, a registered name, or a transcript message's ID as the contracts allow one (#2024).
 fn part(text: &str) -> bool {
     text.starts_with(|c: char| c.is_ascii_alphanumeric())
         && text
             .chars()
-            .all(|c| c.is_ascii_alphanumeric() || "._:-".contains(c))
+            .all(|c| c.is_ascii_alphanumeric() || "._:-".contains(c) || c == '_')
 }
 
 impl FromStr for Address {

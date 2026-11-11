@@ -141,6 +141,51 @@ pub enum Entry {
     Action {
         name: String,
     },
+    /// What the hub's lookup found for the query (#2024): a pasted reference's session or ask, or words.
+    Hit(Hit),
+}
+
+/// One hit of ⌘K's lookup (#2024), by the handle of what it found, with the address it opens.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Hit {
+    pub handle: String,
+    pub address: Option<Address>,
+    /// A pasted reference names it; otherwise it holds the words.
+    pub reference: bool,
+    /// Its session's name, agent, repo and state word, then one line of context.
+    pub name: String,
+    pub context: String,
+}
+
+/// The hits of a `find.read` answer, in its order; the planted ⌘K that searches only references keeps those alone.
+pub fn hits_of(found: &Value) -> Vec<Hit> {
+    let only_references = crate::plain::planted("commandk-references-only");
+    found["hits"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|hit| !only_references || hit["by"] == "reference")
+        .map(|hit| {
+            let text = |key: &str| hit[key].as_str().unwrap_or_default().to_owned();
+            let about: Vec<String> = ["title", "agent", "repo", "word"]
+                .into_iter()
+                .map(text)
+                .filter(|part| !part.is_empty())
+                .collect();
+            let context = text("context");
+            Hit {
+                handle: text("handle"),
+                address: hit["address"].as_str().and_then(|a| a.parse().ok()),
+                reference: hit["by"] == "reference",
+                name: if about.is_empty() {
+                    context.clone()
+                } else {
+                    format!("{} — {context}", about.join(" · "))
+                },
+                context,
+            }
+        })
+        .collect()
 }
 
 impl Entry {
@@ -152,6 +197,7 @@ impl Entry {
             | Entry::Open { name, .. }
             | Entry::Preference { name, .. }
             | Entry::Action { name } => name,
+            Entry::Hit(hit) => &hit.name,
         }
     }
 
@@ -164,7 +210,8 @@ impl Entry {
             Entry::Command { .. }
             | Entry::Open { .. }
             | Entry::Preference { .. }
-            | Entry::Action { .. } => None,
+            | Entry::Action { .. }
+            | Entry::Hit(_) => None,
         }
     }
 }
@@ -272,7 +319,16 @@ pub struct Palette {
     /// Where focus goes back to once it hides: what had it before ⌘K.
     back: Option<FocusHandle>,
     open: Open,
+    /// The hub's lookup of the query (#2024): which query was asked last, and its hits once answered.
+    asked: u64,
+    found: Option<Found>,
     _changed: Subscription,
+}
+
+/// The answer to the query asked last: its hits, and what the hub says when nothing names it.
+struct Found {
+    hits: Vec<Hit>,
+    none: Option<String>,
 }
 
 impl Palette {
@@ -288,6 +344,7 @@ impl Palette {
         let changed = cx.subscribe(&query, |this: &mut Self, _, event: &InputEvent, cx| {
             if matches!(event, InputEvent::Change) {
                 this.selected = 0;
+                this.find(cx);
                 cx.notify();
             }
         });
@@ -301,6 +358,8 @@ impl Palette {
             selected: 0,
             back: None,
             open,
+            asked: 0,
+            found: None,
             _changed: changed,
         };
         palette.mount(cx);
@@ -392,7 +451,38 @@ impl Palette {
             .collect()
     }
 
-    /// The hits for the query now, in ⌘K's order.
+    /// Asks the hub what the query names and the words it finds (#2024), off the main thread. Only the query asked
+    /// last is shown: what an earlier one answers, whenever it arrives, is dropped.
+    fn find(&mut self, cx: &mut Context<Self>) {
+        self.asked += 1;
+        self.found = None;
+        let query = self.query.read(cx).value().trim().to_owned();
+        if query.is_empty() {
+            return;
+        }
+        let asked = self.asked;
+        cx.spawn(async move |palette, cx| {
+            let found = cx
+                .background_spawn(async move {
+                    crate::hub::call_app("find.read", json!({"query": query}))
+                })
+                .await;
+            let _ = palette.update(cx, |palette, cx| {
+                if asked != palette.asked {
+                    return;
+                }
+                palette.found = found.ok().map(|found| Found {
+                    hits: hits_of(&found),
+                    none: found["none"].as_str().map(str::to_owned),
+                });
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    /// The hits for the query now, in ⌘K's order: what a pasted reference names, the entries by name, then the words
+    /// the lookup found.
     fn ranked(&self, cx: &App) -> Vec<Entry> {
         let query = self.query.read(cx).value().to_string();
         let listed = self.listed();
@@ -402,9 +492,13 @@ impl Palette {
                 .filter(|entry| matches!(entry, Entry::Preference { .. }))
                 .collect();
         }
-        rank(&query, &listed, &self.recent)
+        let hits = self.found.iter().flat_map(|found| found.hits.iter());
+        let (named, words): (Vec<&Hit>, Vec<&Hit>) = hits.partition(|hit| hit.reference);
+        named
             .into_iter()
-            .cloned()
+            .map(|hit| Entry::Hit(hit.clone()))
+            .chain(rank(&query, &listed, &self.recent).into_iter().cloned())
+            .chain(words.into_iter().map(|hit| Entry::Hit(hit.clone())))
             .collect()
     }
 
@@ -453,6 +547,14 @@ impl Palette {
                     .map_or_else(|| address.clone(), |(handle, _)| Address::ask(handle))
             }
             Entry::Open { address, .. } => address.clone(),
+            // A hit opens what it found, a message on its session's page (#2024); one with no page only closes ⌘K.
+            Entry::Hit(hit) => {
+                let Some(address) = hit.address.clone() else {
+                    return;
+                };
+                crate::open::found(&hit.handle, &hit.context, cx);
+                address
+            }
             Entry::Page { page, value, .. } => Address {
                 place: Place::Page,
                 id: page.clone(),
@@ -497,7 +599,14 @@ impl Render for Palette {
         let query = self.query.read(cx).value().to_string();
         let ranked = self.ranked(cx);
         let selected = self.selected.min(ranked.len().saturating_sub(1));
-        let none = ranked.is_empty() && !query.trim().is_empty();
+        // Nothing ranks once the lookup answered: what the hub says names nothing, else "No match".
+        let none =
+            (ranked.is_empty() && !query.trim().is_empty() && self.found.is_some()).then(|| {
+                self.found
+                    .as_ref()
+                    .and_then(|found| found.none.clone())
+                    .unwrap_or_else(|| "No match".to_owned())
+            });
         div()
             .id("commands")
             .key_context("Commands")
@@ -548,13 +657,13 @@ impl Render for Palette {
                             .h(sizes().title.line + sizes().space(2))
                             .child(Input::new(&self.query)),
                     )
-                    .children(none.then(|| {
+                    .children(none.map(|none| {
                         crate::views::observed("command-none")
                             .role(Role::Label)
-                            .aria_label("No match")
+                            .aria_label(none.clone())
                             .px(sizes().space(1))
                             .text_color(chrome.ink_secondary)
-                            .child("No match")
+                            .child(none)
                     }))
                     .child(
                         crate::views::observed("command-list")
@@ -569,7 +678,14 @@ impl Render for Palette {
                             .children(ranked.into_iter().enumerate().map(|(at, entry)| {
                                 let name = entry.name().to_owned();
                                 let key = shown_key(&entry);
-                                crate::views::observed(("command", at))
+                                // A hit is named by what it found, never by its place (#2024).
+                                let id = match &entry {
+                                    Entry::Hit(hit) => {
+                                        ElementId::Name(format!("hit:{}", hit.handle).into())
+                                    }
+                                    _ => ("command", at).into(),
+                                };
+                                crate::views::observed(id)
                                     .role(Role::ListBoxOption)
                                     .aria_label(name.clone())
                                     .when_some(key.clone(), |hit, key| hit.aria_value(key))
