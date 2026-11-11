@@ -10,11 +10,15 @@
 
 #[cfg(target_os = "macos")]
 mod apple;
+mod audio;
+mod chunks;
 pub mod color;
 mod export;
 pub mod maps;
+mod mkv;
 pub mod mov;
 pub mod mp4;
+mod ogg;
 pub mod table;
 mod wav;
 
@@ -110,16 +114,21 @@ enum Format<'a> {
     Png(u32, u32, bool),
     Playlist(&'a str),
     Movie(mp4::Movie),
+    /// #503: an audio file in another container (audio.rs).
+    Audio(audio::Track),
 }
 
 fn format(data: &[u8]) -> Result<Format<'_>, Value> {
     if data.starts_with(b"RIFF") && data.get(8..12) == Some(b"WAVE") {
-        return wav::parse(data).map(Format::Wav).ok_or_else(|| {
-            refused(
-                "unreadable",
-                json!({"why": "a WAVE file without fmt and data"}),
-            )
-        });
+        return wav::parse(data)
+            .map(Format::Wav)
+            .ok_or_else(|| match wav::tag(data) {
+                Some(t) if t != 1 && t != 3 => audio::unsupported(&wav::tag_name(t)),
+                _ => refused(
+                    "unreadable",
+                    json!({"why": "a WAVE file without fmt and data"}),
+                ),
+            });
     }
     if data.starts_with(b"\x89PNG\r\n\x1a\n") && data.len() >= 24 {
         let srgb = data.windows(4).take(4096).any(|w| w == b"sRGB");
@@ -133,6 +142,9 @@ fn format(data: &[u8]) -> Result<Format<'_>, Value> {
         if text.trim_start().starts_with("#EXTM3U") {
             return Ok(Format::Playlist(text));
         }
+    }
+    if let Some(read) = audio::read(data) {
+        return read.map(Format::Audio);
     }
     mp4::parse(data).map(Format::Movie).ok_or_else(|| {
         refused(
@@ -225,6 +237,14 @@ fn over_caps(f: &Format, caps: &Caps) -> Option<Value> {
                 .unwrap_or(0),
         ),
         Format::Playlist(_) => (false, 0),
+        Format::Audio(t) => (
+            seconds_over(
+                t.frames.unwrap_or(0) as i64,
+                t.rate.max(1),
+                caps.max_duration,
+            ),
+            0,
+        ),
     };
     if duration_over {
         return Some(refused(
@@ -319,9 +339,21 @@ fn probe(f: &Format, data: &[u8], sha: &str, planted: &Planted) -> Value {
                     let mut s = json!({"index": i, "codec": codec(&t.entry.fourcc),
                         "time_base": [1, t.timescale], "duration": [t.span(m.timescale), t.timescale]});
                     if t.kind == mp4::Kind::Audio {
+                        // #503: the codec as ffprobe names it, an AAC stream's rate and channels
+                        // as its decoder gives them, and a codec the list doesn't hold refused.
+                        let (c, config) = audio::mp4_codec(&t.entry.fourcc, t.entry.config.as_ref());
+                        let mut shape = (t.entry.sample_rate, u32::from(t.entry.channels));
+                        if let Ok(audio::Codec::Aac) = c {
+                            let first = packets(t, data, 8);
+                            shape = audio::aac_shape(&config, &first).map_or(shape, |a| (a.0, a.1));
+                        }
                         s["type"] = json!("audio");
-                        s["sample_rate"] = json!(t.entry.sample_rate);
-                        s["channels"] = json!(t.entry.channels);
+                        s["codec"] = json!(c.as_ref().map_or_else(String::clone, audio::Codec::name));
+                        s["sample_rate"] = json!(shape.0);
+                        s["channels"] = json!(shape.1);
+                        if let Err(name) = c {
+                            s["refused"] = audio::unsupported(&name)["refused"].take();
+                        }
                         return s;
                     }
                     let shown = t.presented(m.timescale, edits);
@@ -347,16 +379,21 @@ fn probe(f: &Format, data: &[u8], sha: &str, planted: &Planted) -> Value {
                     "drop_frame": t.drop_frame, "rate": t.rate}),
                 );
             }
-            let kind = if m.tracks.iter().any(|t| t.kind == mp4::Kind::Video) {
-                "video"
+            if m.tracks.iter().any(|t| t.kind == mp4::Kind::Video) {
+                ("video", streams, platform_decoder())
             } else {
-                "audio"
-            };
-            (kind, streams, platform_decoder())
+                ("audio", streams, our_audio())
+            }
         }
         Format::Playlist(_) => ("video", vec![], platform_decoder()),
+        Format::Audio(t) => ("audio", vec![audio::probe(t)], our_audio()),
     };
     json!({"asset": {"sha256": sha, "kind": kind, "probe": {"streams": streams}, "decoder": decoder}})
+}
+
+/// #503: our own audio decoders, which read every listed audio format.
+fn our_audio() -> Value {
+    json!({"name": "deep-codecs audio", "version": env!("CARGO_PKG_VERSION")})
 }
 
 fn platform_decoder() -> Value {
@@ -510,6 +547,16 @@ fn decode(
                         );
                     }
                     mp4::Kind::Audio => {
+                        // #503: a stream in a codec the list doesn't hold is refused, naming it.
+                        if let (Err(name), _) =
+                            audio::mp4_codec(&t.entry.fourcc, t.entry.config.as_ref())
+                        {
+                            let mut s = audio::unsupported(&name);
+                            s["index"] = json!(i);
+                            s["type"] = json!("audio");
+                            streams.push(s);
+                            continue;
+                        }
                         let (samples, first, rate, channels) =
                             audio(t, m.timescale, data, planted)?;
                         let name = format!("{i}.f32");
@@ -523,8 +570,27 @@ fn decode(
             }
         }
         Format::Playlist(_) => {}
+        Format::Audio(t) => {
+            let (samples, rate, channels) = audio::decode_trimmed(t)?;
+            write("0.f32", &f32_bytes(&samples))?;
+            streams.push(
+                json!({"index": 0, "type": "audio", "sample_rate": rate, "channels": channels,
+                "first": [0, rate], "samples": samples.len() / channels.max(1) as usize, "file": "0.f32"}),
+            );
+        }
     }
     Ok(json!({"streams": streams}))
+}
+
+/// A track's samples' bytes, the first `n` of them.
+fn packets(t: &mp4::Track, data: &[u8], n: usize) -> Vec<Vec<u8>> {
+    (t.samples.iter().take(n))
+        .map(|s| {
+            data.get(s.offset as usize..s.offset.saturating_add(s.size as u64) as usize)
+                .unwrap_or_default()
+                .to_vec()
+        })
+        .collect()
 }
 
 fn f32_bytes(samples: &[f32]) -> Vec<u8> {
@@ -573,34 +639,28 @@ struct Picture {
     planes: Vec<u8>,
 }
 
-/// A track's audio, decoded and trimmed by its edit list: the samples, the first kept sample's
-/// presentation time, the rate and the channel count. The encoder's priming lies before the
-/// edit's media time, so trimming to the edit removes it, as FATE's references do.
+/// A track's audio, decoded by our own decoders (#503) and trimmed by its edit list: the
+/// samples, the first kept sample's presentation time, the rate and the channel count. The
+/// encoder's priming lies before the edit's media time, so trimming to the edit removes it, as
+/// FATE's references do.
 fn audio(
     t: &mp4::Track,
     timescale: u32,
     data: &[u8],
     planted: &Planted,
 ) -> Result<(Vec<f32>, Value, u32, u32), String> {
-    let (rate, channels) = (t.entry.sample_rate.max(1), t.entry.channels.max(1) as u32);
-    let packets: Vec<Vec<u8>> = (t.samples.iter())
-        .map(|s| {
-            data.get(s.offset as usize..s.offset.saturating_add(s.size as u64) as usize)
-                .unwrap_or_default()
-                .to_vec()
-        })
-        .collect();
-    let mut samples = match &t.entry.config {
-        // #502: float PCM as an export writes it (`fpcm`, or QuickTime's `lpcm`): 32-bit
-        // little-endian samples, kept as they are.
-        _ if matches!(&t.entry.fourcc, b"fpcm" | b"lpcm") => packets
-            .iter()
-            .flat_map(|p| p.as_chunks::<4>().0.iter().map(|b| f32::from_le_bytes(*b)))
-            .collect(),
-        #[cfg(target_os = "macos")]
-        Some((k, esds)) if k == b"esds" => apple::decode_aac(esds, rate, channels, &packets)?,
-        _ => return Err(format!("no decoder for {}", codec(&t.entry.fourcc))),
-    };
+    let (found, config) = audio::mp4_codec(&t.entry.fourcc, t.entry.config.as_ref());
+    let found = found.map_err(|name| format!("no decoder for {name}"))?;
+    let mut track = audio::Track::new(
+        found,
+        t.entry.sample_rate,
+        u32::from(t.entry.channels),
+        config,
+    );
+    track.packets = packets(t, data, usize::MAX);
+    let decoded = audio::decode(&track)?;
+    let (rate, channels) = (decoded.rate.max(1), decoded.channels);
+    let mut samples = decoded.samples;
     let first_cts = t.samples.first().map_or(0, |s| s.cts);
     let (media, at) = t.first_edit(timescale);
     // Ticks of the track's timescale in samples at the stream's rate.
@@ -946,6 +1006,15 @@ pub fn run(job: &Map<String, Value>, caps: &Caps, planted: &Planted) -> (Value, 
     if !planted.is("skips_caps") {
         if let Some(r) = over_caps(&f, caps) {
             return (r, sha);
+        }
+    }
+    // #503: a movie whose only sound is in a codec the list doesn't hold is refused, naming it.
+    if let Format::Movie(m) = &f {
+        let sound = m.tracks.iter().find(|t| t.kind == mp4::Kind::Audio);
+        if let (false, Some(t)) = (m.tracks.iter().any(|t| t.kind == mp4::Kind::Video), sound) {
+            if let (Err(name), _) = audio::mp4_codec(&t.entry.fourcc, t.entry.config.as_ref()) {
+                return (audio::unsupported(&name), sha);
+            }
         }
     }
     let probed = probe(&f, &opened.data, &opened.sha, planted);

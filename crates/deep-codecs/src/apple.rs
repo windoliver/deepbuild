@@ -1,5 +1,5 @@
 //! The codecs seam's macOS backend: the platform's own decoders and encoder through VideoToolbox,
-//! CoreMedia and AudioToolbox. Video decodes to 8-bit 4:2:0 planes (I420), AAC to f32, and the
+//! CoreMedia and AudioToolbox. Video decodes to 8-bit 4:2:0 planes (I420), and the
 //! encode tool's H.264 frames come out of the platform's encoder, which reports whether it ran on
 //! the hardware.
 
@@ -247,12 +247,6 @@ extern "C" {
 #[link(name = "AudioToolbox", kind = "framework")]
 extern "C" {
     fn AudioConverterNew(from: *const ASBD, to: *const ASBD, out: *mut *mut c_void) -> OSStatus;
-    fn AudioConverterSetProperty(
-        c: *mut c_void,
-        id: u32,
-        size: u32,
-        data: *const c_void,
-    ) -> OSStatus;
     fn AudioConverterFillComplexBuffer(
         c: *mut c_void,
         input: extern "C" fn(
@@ -609,119 +603,6 @@ impl LiveDecoder {
 impl Drop for LiveDecoder {
     fn drop(&mut self) {
         unsafe { VTDecompressionSessionInvalidate(self.session.0) };
-    }
-}
-
-struct Feed<'a> {
-    packets: &'a [Vec<u8>],
-    next: usize,
-    desc: PacketDescription,
-}
-
-extern "C" fn feed(
-    _c: *mut c_void,
-    n: *mut u32,
-    list: *mut BufferList,
-    descs: *mut *mut PacketDescription,
-    user: *mut c_void,
-) -> OSStatus {
-    let f = unsafe { &mut *(user as *mut Feed) };
-    unsafe {
-        let Some(p) = f.packets.get(f.next) else {
-            *n = 0;
-            return 0;
-        };
-        f.next += 1;
-        (*list).buffers[0].data = p.as_ptr() as *mut c_void;
-        (*list).buffers[0].size = p.len() as u32;
-        f.desc = PacketDescription {
-            start: 0,
-            variable_frames: 0,
-            size: p.len() as u32,
-        };
-        if !descs.is_null() {
-            *descs = &mut f.desc;
-        }
-        *n = 1;
-    }
-    0
-}
-
-/// Decodes AAC `packets` (the stream's `esds` body as its cookie) to interleaved f32, every
-/// output sample kept: trimming priming is the caller's, by the edit list.
-pub fn decode_aac(
-    esds: &[u8],
-    rate: u32,
-    channels: u32,
-    packets: &[Vec<u8>],
-) -> Result<Vec<f32>, String> {
-    let from = ASBD {
-        sample_rate: rate as f64,
-        format: fourcc(b"aac "),
-        frames_per_packet: 1024,
-        channels,
-        ..ASBD::default()
-    };
-    let to = ASBD {
-        sample_rate: rate as f64,
-        format: fourcc(b"lpcm"),
-        flags: 1 | 8,
-        bytes_per_packet: 4 * channels,
-        frames_per_packet: 1,
-        bytes_per_frame: 4 * channels,
-        channels,
-        bits: 32,
-        reserved: 0,
-    };
-    unsafe {
-        let mut conv: *mut c_void = null_mut();
-        let st = AudioConverterNew(&from, &to, &mut conv);
-        if st != 0 {
-            return Err(format!("AudioConverterNew: {st}"));
-        }
-        let cookie = esds.get(4..).unwrap_or_default();
-        AudioConverterSetProperty(
-            conv,
-            fourcc(b"dmgc"),
-            cookie.len() as u32,
-            cookie.as_ptr() as *const c_void,
-        );
-        let mut f = Feed {
-            packets,
-            next: 0,
-            desc: PacketDescription {
-                start: 0,
-                variable_frames: 0,
-                size: 0,
-            },
-        };
-        let mut out = Vec::new();
-        let mut chunk = vec![0f32; 4096 * channels as usize];
-        loop {
-            let mut frames = 4096u32;
-            let mut list = BufferList {
-                count: 1,
-                buffers: [Buffer {
-                    channels,
-                    size: (chunk.len() * 4) as u32,
-                    data: chunk.as_mut_ptr() as *mut c_void,
-                }],
-            };
-            let st = AudioConverterFillComplexBuffer(
-                conv,
-                feed,
-                &mut f as *mut Feed as *mut c_void,
-                &mut frames,
-                &mut list,
-                null_mut(),
-            );
-            out.extend_from_slice(&chunk[..frames as usize * channels as usize]);
-            if st != 0 || frames == 0 {
-                break;
-            }
-        }
-        AudioConverterDispose(conv);
-        Ok(out)
     }
 }
 
