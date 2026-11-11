@@ -105,6 +105,13 @@ pub(crate) fn planted3(p: Option<Planted>) -> Planted3 {
             Planted::OcclusionScalesDirect,
             Planted::BumpIgnoresHandedness,
             Planted::CoatNormalBendsBase,
+            // #485's.
+            Planted::LightDropsFresnel,
+            Planted::AmbientAddsNz,
+            Planted::LoopShadowOne,
+            Planted::LoopCallsCutLights,
+            Planted::LoopWorldNormal,
+            Planted::LoopViewAway,
         ]
         .iter()
         .position(|q| p == Some(*q))
@@ -590,6 +597,12 @@ pub fn draw_on(
                     s.view.wait_free();
                 };
                 s.view.wait_done(drawn.slot);
+            }
+            // #485: the light responses that returned a negative or non-finite value.
+            if !noop {
+                if let Some(r) = lock(&s.shared).renderer.as_mut() {
+                    r.check_responses(&device);
+                }
             }
             // The frame's GPU time, as its passes' timestamp queries measured it.
             let timing = profiler2.as_ref().map(|p| {

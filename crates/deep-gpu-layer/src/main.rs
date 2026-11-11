@@ -335,6 +335,15 @@ pub enum Planted {
     BumpIgnoresHandedness,
     CoatNormalBendsBase,
     MissingLobeTurnedOn,
+    // #485: core.light@1 without its Fresnel term; core.ambient@1 adding 0.01 × n.z; the light
+    // loop handing `light` a shadow of 1, calling it for the lights the policy cut too, handing
+    // `ambient` the world-space normal, and handing both `v` away from the eye.
+    LightDropsFresnel,
+    AmbientAddsNz,
+    LoopShadowOne,
+    LoopCallsCutLights,
+    LoopWorldNormal,
+    LoopViewAway,
     // #483: the structural steps' wrong programs.
     IterateFeedsFirst,
     SortTiesDecreasing,
@@ -568,6 +577,12 @@ impl Planted {
             "bump_ignores_handedness" => Planted::BumpIgnoresHandedness,
             "coat_normal_bends_base" => Planted::CoatNormalBendsBase,
             "missing_lobe_turned_on" => Planted::MissingLobeTurnedOn,
+            "light_drops_fresnel" => Planted::LightDropsFresnel,
+            "ambient_adds_nz" => Planted::AmbientAddsNz,
+            "loop_shadow_one" => Planted::LoopShadowOne,
+            "loop_calls_cut_lights" => Planted::LoopCallsCutLights,
+            "loop_world_normal" => Planted::LoopWorldNormal,
+            "loop_view_away" => Planted::LoopViewAway,
             "iterate_feeds_first" => Planted::IterateFeedsFirst,
             "sort_ties_decreasing" => Planted::SortTiesDecreasing,
             "compact_by_atomic" => Planted::CompactByAtomic,
