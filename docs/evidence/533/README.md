@@ -28,9 +28,9 @@ Two players each press at step 3 with the same seq. The piece's `first` item wri
 
 | Build | Result |
 |---|---|
-| `full` (`seal-shipped.out.json`) | logic@1, digest `660e0b33…`, implementation logic 1.0.0, bit, canonical, wasmtime `=49.0.2` (sandbox@1's pin). Kit PASS on every part. |
-| `full,test-logic-patch` (`seal-patch.out.json`) | Implementation 1.0.1 seals with the same digest `660e0b33…`. Kit PASS, including the `bit` part. |
-| `full --planted digest_covers_version` (`seal-shipped-planted.out.json`) | The reference alone seals; its digest changes to `74797235…`. |
+| `full` (`seal-shipped.out.json`) | logic@1, digest `ca35f4cd…`, implementation logic 1.0.0, bit, canonical, wasmtime `=49.0.2` (sandbox@1's pin). Kit PASS on every part. |
+| `full,test-logic-patch` (`seal-patch.out.json`) | Implementation 1.0.1 seals with the same digest `ca35f4cd…`. Kit PASS, including the `bit` part. |
+| `full --planted digest_covers_version` (`seal-shipped-planted.out.json`) | The reference alone seals; its digest changes to `1f097c48…`. |
 | `full,test-logic-patch --planted digest_covers_version` (`seal-patch-planted.out.json`) | Exits 2: `seal_refused`, `interface_digest`, naming logic@1 ("version differs from the reference"). |
 
 ## Criterion 4 (`#533.6d69e833`): logic before physics, and builds without physics
@@ -43,9 +43,14 @@ Two players each press at step 3 with the same seq. The piece's `first` item wri
   - A logic item reading `lab.occurrences` is refused with `module_missing` at `items/watcher/params/reads/0`.
   - One firing `lab`'s input is refused at `items/launcher/params/fires/lab`.
   - Both texts name the physics module.
+  - #544's occurrence bake refuses each of them as well (`logic_refused` on the item's params), before the `module_missing` issue.
 - **Eval:** `eval` arrays give `flock.cx` 4.5349…, 5.1016… and 5.9648…, and `quiz.question` 3, 1 and 4, at 0.5 s, 2.5 s and 4.5 s. The acceptance suite checks these steps against deep-logic's bake and its own mirror.
 
 `full,test-leave-out-physics,test-logic-needs-physics` with `seal.in.json` gives `needs-physics.out.json`. It exits 2 with `seal_refused`, `missing_dependency`, naming logic and physics.
+
+## Documents that don't name the logic module
+
+`requires-exemption-before.txt` is that run. A `logic@1` item needs no `requires.modules` entry (Document envelope: `requires`), so #544's documents, which name no module, check. Before the exemption, #544's acceptance suite failed 7 tests on #533's merge with `out_of_range`: "kind `logic@1` is the `logic` module's, and `requires.modules` does not name it". #533's own suite names `logic` and passes either way.
 
 ## The scheduler fix's failing output
 

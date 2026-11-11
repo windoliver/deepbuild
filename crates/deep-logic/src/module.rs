@@ -36,11 +36,12 @@ pub const STATE: &str = "logic.state";
 const STEP: i64 = 11_760_000;
 /// The params a logic item takes here; `wasm` is the program's bytes, which whoever holds the
 /// evidence store inlines by the program's hash before a frame, as a vector's outline is.
-const PARAMS: [&str; 9] = [
+const PARAMS: [&str; 10] = [
     "program",
     "step_rate",
     "reads",
     "writes",
+    "emits",
     "fires",
     "budget",
     "checkpoint",
@@ -269,7 +270,9 @@ fn piece_of(doc: &Value) -> Result<Rc<Piece>, OpError> {
         items.insert(id.clone(), json!({"kind": INTERFACE, "params": params}));
     }
     let seed = doc.get("seed").and_then(Value::as_i64).unwrap_or(0);
-    let piece = json!({"seed": seed, "items": items, "assets": assets});
+    // The document's controls, so an item that reads one reads its input entries (#544's Fire).
+    let controls = doc.get("controls").cloned().unwrap_or(json!({}));
+    let piece = json!({"seed": seed, "controls": controls, "items": items, "assets": assets});
     let key = sha256_hex(&canonical(&piece));
     if let Some(p) = PIECES.with(|c| c.borrow().get(&key).cloned()) {
         return Ok(p);
