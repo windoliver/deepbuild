@@ -9,7 +9,7 @@ import type { JsonValue } from '@deepbuild/contracts';
 import type { Random } from '../generator.js';
 import { fail } from '../slot-types.js';
 import type { Fixture, PlantedFill, SlotCase, SlotFill, SlotKitImpl, SlotRule } from '../slot-types.js';
-import { list, object, word } from './shared.js';
+import { after, list, object, word } from './shared.js';
 
 const CHANNEL = 'channel@1';
 
@@ -55,9 +55,6 @@ function provider(input: Input): { ctx: ChannelCtx; acks: Map<string, string> } 
   };
   return { ctx, acks };
 }
-
-/** `then` on a provider's reply: at once when it answered at once, as the kit's provider does, else once it settles. */
-const after = <R>(reply: Promise<ChannelReply> | ChannelReply, then: (reply: ChannelReply) => R): R | Promise<R> => (reply instanceof Promise ? reply.then(then) : then(reply));
 
 type Fault = 'none' | 'no-ack' | 'signs' | 'shape';
 function reference(fault: Fault = 'none'): ChannelFill {
