@@ -80,6 +80,8 @@ pub struct Query {
     /// The why's path and time.
     pub path: Option<String>,
     pub t: i64,
+    /// #504: the document's input track the reads replay.
+    pub track: Vec<Value>,
 }
 
 /// One revision as a query reads it: the document as written, the form that draws, and the
@@ -96,7 +98,7 @@ fn refused(code: &str) -> Value {
 }
 
 /// `items/<id>/<field…>` split at the item.
-fn item_path(path: &str) -> Option<(&str, &str)> {
+pub(crate) fn item_path(path: &str) -> Option<(&str, &str)> {
     path.strip_prefix("items/")?.split_once('/')
 }
 
@@ -107,6 +109,62 @@ fn at_field<'v>(value: &'v Value, field: &str) -> Option<&'v Value> {
         Value::Object(map) => map.get(part),
         _ => None,
     })
+}
+
+/// Item `id`'s evaluated `field` in `s`: its transform's `at/…`, or one of its fields, with the
+/// keys of what made it (`deep_query`'s read, and #1918's `eval` `paths`).
+pub(crate) fn item_value(
+    sched: &deep_canvas::schedule::Scheduler<'_>,
+    s: &DocSession,
+    id: &str,
+    field: &str,
+) -> Option<(Value, Vec<Key>)> {
+    let (array, rest) = match field.strip_prefix("at/") {
+        Some(rest) => ("core.transform", rest),
+        None => ("core.fields", field),
+    };
+    let (val, keys) = s.read(sched, array, Some(id))?;
+    let value = match array {
+        "core.transform" => {
+            let t = val.as_typed::<Transform>()?;
+            let at = json!({"pos": t.pos, "rot": t.rot, "scale": t.scale});
+            at_field(&at, rest)?.clone()
+        }
+        _ => at_field(&val.as_typed::<Fields>()?.to_json(), rest)?.clone(),
+    };
+    Some((value, keys))
+}
+
+/// #1918: each item path's value in `s` (`eval`'s `paths`), read as `deep_query` reads one, null
+/// for a path it can't read.
+pub(crate) fn values(
+    sched: &deep_canvas::schedule::Scheduler<'_>,
+    s: &DocSession,
+    paths: &[String],
+) -> Value {
+    let read = |p: &String| {
+        let (id, field) = item_path(p)?;
+        // #1921: a field the core's lowered form doesn't hold, such as a 3D kind's params, reads
+        // as the frame's document holds it, an instancer's columns a world writes included.
+        let drawn = || at_field(s.document()?.get("items")?.get(id)?, field).cloned();
+        item_value(sched, s, id, field)
+            .map(|(v, _)| v)
+            .or_else(drawn)
+    };
+    Value::Object(
+        paths
+            .iter()
+            .map(|p| (p.clone(), read(p).unwrap_or(Value::Null)))
+            .collect(),
+    )
+}
+
+/// A list of names (`eval`'s `arrays` and `paths`).
+pub(crate) fn names(v: &Value) -> Option<Vec<String>> {
+    v.as_array()?
+        .iter()
+        .map(|n| Some(n.as_str()?.to_string()))
+        .collect()
 }
 
 /// One key for a value several nodes made: the node's own key when one made it.
@@ -182,21 +240,26 @@ impl Hub<'_> {
             };
             (row.rev, row.doc.clone())
         };
-        let result = check_packed(&document, &self.startup.sealed, &self.packs);
-        let skipped = crate::verdict::unknown_items(&result.notices);
-        let mut drawn = crate::verdict::without(
-            &crate::packs::drawn(&document, &result.expansions),
-            &skipped,
-        );
-        self.keep_instances(&document, &result.expansions, &mut drawn);
-        let _ = self.inline_tables(&mut drawn);
-        let _ = self.inline_vectors(&mut drawn);
+        let (drawn, expansions) = self.drawn_of(&document);
         Some(Revision {
             rev,
             doc: document,
             drawn,
-            expansions: result.expansions,
+            expansions,
         })
+    }
+
+    /// What a document draws: its recipe instances expanded and kept, items of a kind this build
+    /// doesn't know left out, and its tables and vectors inlined; with its expansions.
+    pub(crate) fn drawn_of(&self, document: &Value) -> (Value, Vec<Expansion>) {
+        let result = check_packed(document, &self.startup.sealed, &self.packs);
+        let skipped = crate::verdict::unknown_items(&result.notices);
+        let mut drawn =
+            crate::verdict::without(&crate::packs::drawn(document, &result.expansions), &skipped);
+        self.keep_instances(document, &result.expansions, &mut drawn);
+        let _ = self.inline_tables(&mut drawn);
+        let _ = self.inline_vectors(&mut drawn);
+        (drawn, result.expansions)
     }
 
     /// Puts each recipe instance back beside its derived items, its params filled with its
@@ -321,12 +384,14 @@ impl Hub<'_> {
         let mut values = Map::new();
         let mut keys = Map::new();
         let mut sessions: Vec<DocSession> = Vec::new();
+        // #504: the reads replay the input track the query names.
+        let drawn = crate::played::with_track(&revision.drawn, &q.track);
         if !q.paths.is_empty() {
             if self.scenario.planted == Some(Planted::RelationFromPreviousBox) {
-                sessions = self.solved_from_previous_boxes(&revision.drawn, &times);
+                sessions = self.solved_from_previous_boxes(&drawn, &times);
             } else {
                 for t in &times {
-                    let s = self.evaluated(&revision.drawn, *t);
+                    let s = self.evaluated(&drawn, *t);
                     sessions.push(s);
                 }
             }
@@ -335,10 +400,10 @@ impl Hub<'_> {
             let hidden_by = item_path(path).and_then(|(id, _)| hidden.get(id));
             let mut vs = Vec::new();
             let mut ks = Vec::new();
-            for s in &sessions {
+            for (s, t) in sessions.iter().zip(&times) {
                 let read = match hidden_by {
                     Some(_) => None,
-                    None => self.read_path(s, &revision.doc, path),
+                    None => self.text_at(s, &drawn, path, *t).or_else(|| self.read_path(s, &revision.doc, path)),
                 };
                 match read {
                     Some((v, k)) => {
@@ -499,6 +564,25 @@ impl Hub<'_> {
         out
     }
 
+    /// #504: `items/<id>/params/text` of a text with a `template`: what it shows at `t`, each
+    /// slot filled with the values that move the parts as the frame evaluates them (the same
+    /// [`deep_canvas_motion::eval::shown_doc`] the 3D card and `see` fill from).
+    fn text_at(&self, s: &DocSession, drawn: &Value, path: &str, t: i64) -> Option<(Value, Key)> {
+        let id = path.strip_prefix("items/")?.strip_suffix("/params/text")?;
+        let template = drawn.pointer(&format!("/items/{id}/params/template"))?.as_str()?;
+        let shown = match crate::film::program_of(&self.sched, s) {
+            Some(program) if self.scenario.planted != Some(Planted::ReadoutReadsDefaults) => {
+                let mut state = program.state();
+                program.evaluate(t, deep_canvas_motion::eval::Validity::Full, &mut state);
+                deep_canvas_motion::eval::shown_doc(drawn.as_object()?, &program, &state)
+            }
+            _ => drawn.clone(),
+        };
+        let text = deep_canvas::template::expand(&shown, template).ok()?;
+        let key = Hasher::of(self.sched.hash(), "deep_query.text").text(path).text(&text).finish();
+        Some((json!(text), key))
+    }
+
     /// The evaluated value at `path` in an evaluated session, with the content key of what made
     /// it; `None` for a path the revision doesn't hold.
     fn read_path(&self, s: &DocSession, doc: &Value, path: &str) -> Option<(Value, Key)> {
@@ -530,19 +614,7 @@ impl Hub<'_> {
         if let Some(read) = self.status_value(doc, path) {
             return read;
         }
-        let (array, rest) = match field.strip_prefix("at/") {
-            Some(rest) => ("core.transform", rest),
-            None => ("core.fields", field),
-        };
-        let (val, keys) = s.read(&self.sched, array, Some(id))?;
-        let value = match array {
-            "core.transform" => {
-                let t = val.as_typed::<Transform>()?;
-                let at = json!({"pos": t.pos, "rot": t.rot, "scale": t.scale});
-                at_field(&at, rest)?.clone()
-            }
-            _ => at_field(&val.as_typed::<Fields>()?.to_json(), rest)?.clone(),
-        };
+        let (value, keys) = item_value(&self.sched, s, id, field)?;
         Some((value, one_key(&keys, s.hash())))
     }
 

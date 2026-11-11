@@ -614,6 +614,30 @@
         }
       }
     },
+    "packages/checks-host/package.json": {
+      "dependencies": {
+        "@deepbuild/conformance": {
+          "spec": "0.0.0",
+          "why": "Issue #1943: the check.kind@1 slot's fill, context and result types, the probe runner that ends a run at its deadline, and the kit types and Finding each host kind's own kit is judged with by the one kit runner."
+        }
+      }
+    },
+    "packages/routing-replay/package.json": {
+      "dependencies": {
+        "@deepbuild/asks": {
+          "spec": "0.0.0",
+          "why": "Issue #1980: the asks core the router raises one ask per cause through, and whose deadline takes each ask's default."
+        },
+        "@deepbuild/evidence": {
+          "spec": "0.0.0",
+          "why": "Issue #1980: the evidence store the replay keeps its snapshot in, by the snapshot's hash."
+        },
+        "@deepbuild/record": {
+          "spec": "0.0.0",
+          "why": "Issue #1980: the record the replay's asks, withdrawals and fix tasks are appended to, and read back for its report."
+        }
+      }
+    },
     "packages/proof/package.json": {
       "dependencies": {
         "@deepbuild/conformance": {
@@ -1206,11 +1230,11 @@
         },
         "deep-canvas-physics": {
           "spec": "* path=../deep-canvas-physics",
-          "why": "Issue #1920: the physics module's manifest and register call, physics@1, in the full build set."
+          "why": "Issue #1918: the physics module, physics@1, whose column.source@1 entries the full set seals."
         },
         "deep-physics-rapier": {
           "spec": "* path=../deep-physics-rapier",
-          "why": "Issue #1920: the Rapier backend the full build links, whose resolved pins the physics module's manifest and the seal's runtime digest name."
+          "why": "Issue #1918: the Rapier backend each world a scene lists bakes on, so its occurrence lists and outputs reach the column view."
         }
       },
       "target.'cfg(target_os = \"macos\")'.dependencies": {
@@ -1971,6 +1995,10 @@
         "deep-canvas-physics": {
           "spec": "* path=../deep-canvas-physics",
           "why": "Issue #2009: the world reader, the caps and the backend interface this backend implements, with no copy of its own."
+        },
+        "deep-canvas-motion": {
+          "spec": "* path=../deep-canvas-motion",
+          "why": "Issue #1918: a world inside a scene reads the paths the scene's channels and drivers write, evaluated by the motion module at each step's time."
         },
         "rapier3d": {
           "spec": "=0.36.1",

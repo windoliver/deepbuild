@@ -28,6 +28,7 @@ pub mod chrome;
 pub mod chrome_fixture;
 pub mod chrome_fx;
 pub mod chrome_gallery;
+pub mod codes;
 pub mod commands;
 pub mod confirm;
 pub mod device;
@@ -130,13 +131,26 @@ pub fn stocks() -> Vec<Stock> {
 }
 
 /// What the menu bar shows: while setup hasn't finished, that it didn't, never a number (#1002); then what the app
-/// can't reach (#994); before the hub has answered, that (no count is known, so none is drawn); else the one count
-/// sentence (#1455).
+/// can't reach (#994), the hub with since when, as the list says it (#2026); before the hub has answered, that (no
+/// count is known, so none is drawn); else the one count sentence (#1455).
 pub fn menu_bar_line() -> String {
-    match setup::count().or_else(|| notify::reach().short()) {
+    let reach = notify::reach();
+    // #2026's planted menu bar keeps the last count it read while the hub isn't answering, as if live.
+    if reach.hub_down && setup::count().is_none() && !plain::planted("hub-down-keeps-count") {
+        return empties::Empty::Unreachable { since: reach.since }.words("", views::now());
+    }
+    match setup::count().or_else(|| reach.short().filter(|_| !reach.hub_down)) {
         Some(line) => line.to_owned(),
         None if record::older().is_some() => "Hub is older".to_owned(),
-        None if !record::connected() => "No hub".to_owned(),
+        None if !record::connected() && !reach.hub_down => "No hub".to_owned(),
+        // #2026's planted menu bar counts sessions, not asks.
+        None if plain::planted("menu-bar-counts-sessions") => views::asks_need_you(
+            record::with_view(|view| view.table().every_session().len()).unwrap_or(0),
+        ),
+        // #2028's planted menu bar adds the list's unread rows to the asks.
+        None if plain::planted("menu-bar-adds-unread") => {
+            views::asks_need_you(views::count() + list::unread_rows())
+        }
         None => views::asks_need_you(views::count()),
     }
 }
@@ -265,8 +279,8 @@ pub(crate) fn held() -> Option<String> {
 }
 
 /// The sessions as the sidebar lists them, in its order, for a view replacing its rows (`session.row@1`): each one's
-/// ID, which keys its row as `session:<id>`, its title, and its state's words and status-map entry, from the one record
-/// reader (#1459).
+/// ID, which keys its row as `session:<id>`, its title, its state's words and status-map entry, and `asks`, the hub's
+/// count of its open asks (#2018), from the one record reader (#1459).
 fn sidebar_sessions() -> Result<HostValue, HostError> {
     record::with_view(|view| {
         let table = view.table();
@@ -276,7 +290,9 @@ fn sidebar_sessions() -> Result<HostValue, HostError> {
                 .into_iter()
                 .map(|(id, title, _)| {
                     let (words, entry) = table.row(&id, views::now());
+                    let asks = table.asks_of(&id);
                     HostValue::Object(vec![
+                        ("asks".into(), HostValue::Number(asks as f64)),
                         ("id".into(), HostValue::Str(id)),
                         ("title".into(), HostValue::Str(title)),
                         ("words".into(), HostValue::Str(words)),

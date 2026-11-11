@@ -14,6 +14,8 @@ use crate::frames::session_view;
 use crate::hub::EvalTime;
 use crate::hub::Hub;
 
+pub(crate) mod shape;
+
 /// `geometry`: which items, at what time, which stage, and whether to count only.
 #[derive(Debug)]
 pub struct Geometry {
@@ -289,6 +291,40 @@ impl Hub<'_> {
                     .map(|[a, b]| [place(a), place(b)])
                     .collect();
                 out.push(json!({"id": id, "kind": "mark.line@1", "segments": segments}));
+                continue;
+            }
+            // #2013: an instancer's row is its elements as its scatter (or its written columns)
+            // feeds them, each point in world metres.
+            if items
+                .get(id)
+                .is_some_and(|i| i.get("kind").and_then(Value::as_str) == Some("instance@1"))
+            {
+                let rows = match deep_canvas_scene3d::scene::elements_at(
+                    &doc,
+                    t,
+                    id,
+                    planted.as_deref(),
+                ) {
+                    Ok(rows) => rows.unwrap_or_default(),
+                    Err(r) => return json!({"code": r.code, "path": r.path}),
+                };
+                let world = worlds.get(id.as_str());
+                let elements: Vec<Value> = rows
+                    .iter()
+                    .map(|r| {
+                        let mut e = r.to_json();
+                        if let Some(w) = world {
+                            e["pos"] = json!([0, 1, 2].map(|i| w[i][0] * r.pos[0]
+                                + w[i][1] * r.pos[1]
+                                + w[i][2] * r.pos[2]
+                                + w[i][3]));
+                        }
+                        e
+                    })
+                    .collect();
+                out.push(
+                    json!({"id": id, "kind": "instance@1", "elements": elements, "world": world}),
+                );
                 continue;
             }
             let Some(node) = nodes.iter().find(|n| {

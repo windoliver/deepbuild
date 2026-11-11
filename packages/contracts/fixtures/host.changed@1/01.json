@@ -1,0 +1,26 @@
+{
+  "v": 1,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6W",
+  "kind": "host.changed",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "data": {
+    "host": "build-01",
+    "change": "loginctl enable-linger you",
+    "changes": [
+      "/var/lib/systemd/linger/you"
+    ],
+    "undo": "loginctl disable-linger you",
+    "grant": "you",
+    "fingerprint": [
+      {
+        "target": "/var/lib/systemd/linger/you",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    ],
+    "ask": null,
+    "run": null
+  }
+}

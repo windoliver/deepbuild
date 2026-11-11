@@ -22,8 +22,8 @@ use std::rc::Rc;
 use std::time::Instant;
 
 use deep_canvas::document::{
-    apply_ops, canonical_in, check_packed, recheck_with, rollback, store_migrations, touched_in,
-    Issue, Packs, Patched, Referrers, Writing, ID_MAPS,
+    apply_ops, canonical_in, check_packed, pack_kinds, recheck_with, rollback, store_migrations,
+    touched_in, Issue, Packs, Patched, Referrers, Writing, ID_MAPS,
 };
 use deep_canvas::grammar::{Path as FieldPath, Section};
 use deep_canvas::kinds::{lookup, registry, Lookup};
@@ -228,6 +228,8 @@ struct Applied {
     current_at: Option<i64>,
     /// The issues the last good revision had too, returned marked carried.
     carried: Vec<Issue>,
+    /// The notices of its check, when it checked the whole document (#1961).
+    notices: Vec<Value>,
 }
 
 /// A writer as a layer's `writer` holds it: `kind:id`.
@@ -289,7 +291,8 @@ pub fn draws(doc: &Value) -> Vec<String> {
                 match items[at].get("parent").and_then(Value::as_str) {
                     None => return true,
                     Some(p) if items.contains_key(p) => at = p,
-                    Some(_) => return false,
+                    // #504: an item joins an assembly by naming it as its parent.
+                    Some(p) => return doc.get("assemblies").and_then(|a| a.get(p)).is_some(),
                 }
             }
             false
@@ -572,12 +575,17 @@ impl Hub<'_> {
     /// Opens every shared document: from the state folder's record when it has one (a restart),
     /// else at revision 0, the stored document.
     pub fn open_shared(&mut self) {
-        for (id, seed) in &self.scenario.seeds {
+        let scenario = self.scenario;
+        for (id, seed) in &scenario.seeds {
             let mut doc = seed.clone();
             if let Some(fields) = doc.as_object_mut() {
                 fields.insert("id".into(), json!(id.to_ascii_lowercase()));
             }
-            let issues = check_packed(&doc, &self.startup.sealed, &self.packs).issues;
+            let mut issues = check_packed(&doc, &self.startup.sealed, &self.packs).issues;
+            // #407: a film a claim's definition audits holds the film audit's issues too.
+            if let Some(found) = self.admission_issues(id, &doc) {
+                issues.extend(found);
+            }
             let mut shared = Shared {
                 id: id.clone(),
                 doc,
@@ -659,8 +667,12 @@ impl Hub<'_> {
                     ids,
                     current_at,
                     carried,
+                    notices,
                 } = *a;
                 reply.insert("cost_delta".into(), cost);
+                if !notices.is_empty() {
+                    reply.insert("notices".into(), Value::Array(notices));
+                }
                 ("applied", rev, achieved, undo, carried, ids, current_at)
             }
             Outcome::Refused(issues) => (
@@ -883,8 +895,19 @@ impl Hub<'_> {
         };
         let applied = match undoing {
             Some(target) => {
+                // The pack versions it named in place of others, named back (#1961).
+                let pins = shared.revs[target]
+                    .envelope_before
+                    .as_ref()
+                    .map(|(fields, _)| fields.get("packs").cloned().unwrap_or(Value::Null))
+                    .filter(|was| *was != shared.at(target).0["packs"]);
                 let t = &shared.revs[target];
-                put_back(&mut shared.doc, &t.before, &t.paths, &layer)
+                put_back(&mut shared.doc, &t.before, &t.paths, &layer).map(|mut p| {
+                    if let Some(was) = pins {
+                        p.packs_before = Some(std::mem::replace(&mut shared.doc["packs"], was));
+                    }
+                    p
+                })
             }
             None => {
                 // The build knows the kinds its canvas modules register, too.
@@ -923,6 +946,7 @@ impl Hub<'_> {
         // Re-checked incrementally where the patch reached only items; else in full, which
         // expands the recipe instances again (#306): the one check, never per frame.
         let mut expansions = None;
+        let mut notices = Vec::new();
         let issues = if added.is_some() {
             None
         } else {
@@ -941,8 +965,26 @@ impl Hub<'_> {
         .unwrap_or_else(|| {
             let result = check_packed(&shared.doc, &self.startup.sealed, &self.packs);
             expansions = Some(result.expansions);
+            notices = result.notices;
             result.issues
         });
+        // #407: a film a claim's definition audits gets the film audit's issues at show time,
+        // read afresh on the patched document; those its last good revision had come back
+        // carried.
+        let now = shared.doc.clone();
+        let audited = self.admission_issues(&call.doc, &now);
+        let shared = self.shared.get_mut(&call.doc).expect("open");
+        let issues = match audited {
+            Some(found) => {
+                let mut kept: Vec<Issue> = issues
+                    .into_iter()
+                    .filter(|i| !crate::film_audit::audit_code(i.code))
+                    .collect();
+                kept.extend(found);
+                kept
+            }
+            None => issues,
+        };
         // An undo may put back an issue the revision it undoes was made on already held.
         let mut allowed = (*last).clone();
         if let Some(t) = undoing.filter(|t| *t > 0) {
@@ -954,6 +996,18 @@ impl Hub<'_> {
             take_back(shared, &patched);
             return Outcome::Refused(refusals);
         }
+        // #935: a strip or spawn template naming a generated sound's asset before its audio.gen
+        // passes; only a document that declares `sounds` is read again.
+        if shared.doc.get("sounds").is_some() {
+            let now = shared.doc.clone();
+            let unpassed = self.unpassed_sounds(&now);
+            let shared = self.shared.get_mut(&call.doc).expect("open");
+            if !unpassed.is_empty() {
+                take_back(shared, &patched);
+                return Outcome::Refused(unpassed);
+            }
+        }
+        let shared = self.shared.get_mut(&call.doc).expect("open");
         let kept = carried(&issues, &allowed, planted);
         // The marks module checks what the patch wrote, and counts what it costs.
         let cost = match marks_check(
@@ -1003,12 +1057,17 @@ impl Hub<'_> {
                 ids,
                 current_at: None,
                 carried: kept,
+                notices: self.notices_reply(&call.doc, &notices),
             }));
         }
         if shared.older.contains(&layer) {
             for (id, was) in store_migrations(&mut shared.doc, &layer) {
                 patched.before.entry(id).or_insert(Some(was));
             }
+        }
+        // A pack kind's items at an earlier major of their pinned pack's kind, too (#1956).
+        for (id, was) in pack_kinds::store_migrations(&mut shared.doc, &layer, &self.packs) {
+            patched.before.entry(id).or_insert(Some(was));
         }
         let patch_id = patch["patch"].as_str().unwrap_or_default().to_string();
         let current_at = self.scenario.clock.map(|c| c.latch_from(checked));
@@ -1021,13 +1080,24 @@ impl Hub<'_> {
             changed,
             paths: paths_of(&patched.before, &shared.doc),
             before: patched.before.clone(),
-            envelope_before: added.clone(),
+            // A layer added, or another pack version named (#1961): the envelope before.
+            envelope_before: added.clone().or_else(|| {
+                patched.packs_before.as_ref().map(|packs| {
+                    let (mut fields, owners) = shared.envelope();
+                    fields.insert("packs".into(), packs.clone());
+                    (fields, owners)
+                })
+            }),
             issues: Rc::new(issues),
             hash: OnceCell::new(),
             current_at,
         };
         if self.commit(&call.doc, next, session, &recorded_by(&call.via), &achieved) {
             if let Some(expansions) = expansions {
+                let doc = &self.shared[&call.doc].doc;
+                let planted = self.scenario.planted;
+                let cache = &mut self.expansion_cache;
+                let expansions = crate::packs::planted_cache(planted, cache, doc, expansions);
                 self.expansions.insert(call.doc.clone(), expansions);
             }
             // The writer's layer holds no older major now: this patch migrated it.
@@ -1063,6 +1133,7 @@ impl Hub<'_> {
             ids,
             current_at,
             carried: kept,
+            notices: self.notices_reply(&call.doc, &notices),
         }))
     }
 
@@ -1390,12 +1461,19 @@ impl Hub<'_> {
             }
         }
         reply.insert("rev".into(), json!(cur));
-        let notices = self.notices_reply(&result.notices);
+        let notices = self.notices_reply(&show.doc, &result.notices);
         if !notices.is_empty() {
             reply.insert("notices".into(), Value::Array(notices));
         }
         let timing = show.include.iter().any(|i| matches!(i, Include::Timing));
-        crate::packs::reply(&result.expansions, Some(check_ms), timing, &mut reply);
+        let rules_ms = timing
+            .then(|| crate::packs::kind_rules_ms(&doc, &result, &self.startup.sealed, &self.packs));
+        crate::packs::reply(
+            &result.expansions,
+            Some((check_ms, rules_ms)),
+            timing,
+            &mut reply,
+        );
         // #403: in a claim that names the document, an item of a kind this build doesn't know
         // blocks its checks, naming the kind, as on a sole writer's revision.
         let blocked = self.blocked_in_claim(show, &result.notices);
@@ -1505,8 +1583,12 @@ impl Hub<'_> {
                 }
                 None => {
                     let checked = check_packed(&shown, &self.startup.sealed, &self.packs);
+                    let planted = self.scenario.planted;
+                    let cache = &mut self.expansion_cache;
+                    let expansions =
+                        crate::packs::planted_cache(planted, cache, &shown, checked.expansions);
                     reply.insert("draws".into(), json!(draws(&checked.lowered)));
-                    crate::packs::reply(&checked.expansions, None, false, &mut reply);
+                    crate::packs::reply(&expansions, None, false, &mut reply);
                 }
             }
         } else {

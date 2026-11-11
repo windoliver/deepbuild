@@ -34,7 +34,8 @@ const world = (): { live: Live; refs: NonNullable<typeof refs> } => {
 };
 
 describe('AC1 through a running hub and deep mcp, with a session bound by its hooks, deep_kinds answers each op as deep-show run does', () => {
-  for (const op of OPS) {
+  // sheet, list, search and word are replaced by tests/acceptance/1718-redraft-1720/ (#1720 installs the shipped packs).
+  for (const op of OPS.filter((op) => op === 'gallery' || op === 'read')) {
     it(`AC1 deep_kinds ${op} answers without isError, its reply equal to deep-show run's apart from core and set_digest`, async () => {
       const { live, refs } = world();
       const got = await kindsOverMcp(live.agent, argsOf(op, refs.firstHash));

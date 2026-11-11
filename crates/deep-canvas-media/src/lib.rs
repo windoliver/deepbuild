@@ -3,9 +3,12 @@
 //! the same build and CPU architecture.
 
 pub mod analysis;
+pub mod captions;
 pub mod clock;
 pub mod delay;
+pub mod delivery;
 pub mod doc;
+pub mod duck;
 pub mod dynamics;
 pub mod emitter;
 pub mod fixtures;
@@ -15,6 +18,7 @@ pub mod module;
 pub mod mix;
 pub mod reverb;
 pub mod ring;
+pub mod script;
 pub mod spawn;
 pub mod viewer;
 
@@ -32,8 +36,11 @@ pub const FLICKS: i64 = 705_600_000;
 /// #544's, a spawn that reads a field its logic item doesn't declare as 0; and #1819's, which
 /// deep-show's model bakes read: a tracker that answers 120 BPM whatever its record holds, an
 /// activity bake that thresholds level instead of the model's probabilities, and a visemes bake
-/// with no lead.
-pub const PLANTED: [&str; 18] = [
+/// with no lead; and #502's, which deep-show's export and script read: a normalizer that rides
+/// gain to −23 LUFS, a words bake read 200 ms late, and a sidecar writer that times cues at 24 fps;
+/// and #935's, which deep-show's check reads: a refusal of a generated sound's asset only when
+/// its audio.gen FAILs, so a BLOCKED one plays.
+pub const PLANTED: [&str; 22] = [
     "av_link_compares_start_only",
     "av_link_start_only",
     "sample_peak_meter",
@@ -52,6 +59,10 @@ pub const PLANTED: [&str; 18] = [
     "beats_fixed_120",
     "activity_level_threshold",
     "visemes_no_lead",
+    "normalizer_rides_gain",
+    "words_bake_200ms_late",
+    "sidecar_times_at_24fps",
+    "unpassed_on_fail_only",
 ];
 
 static PLANTED_NOW: std::sync::Mutex<Option<&'static str>> = std::sync::Mutex::new(None);

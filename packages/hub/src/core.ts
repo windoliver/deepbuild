@@ -3,7 +3,7 @@
 // retention, and answers the socket's methods. It runs in a worker thread of its own, so a disk sync, a run's
 // output or a backfill never holds up the event loop that acknowledges hooks.
 import { execFile } from 'node:child_process';
-import { appendFileSync, constants, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, watch, writeFileSync, type FSWatcher } from 'node:fs';
+import { appendFileSync, constants, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, symlinkSync, watch, writeFileSync, type FSWatcher } from 'node:fs';
 import { access, chmod, copyFile, mkdir, open, readFile, realpath, stat, type FileHandle } from 'node:fs/promises';
 import { writtenOf as wikiWritten } from '@deepbuild/wiki';
 import { UsageTail } from '@deepbuild/readings';
@@ -21,10 +21,11 @@ import { citedEvidence, openExtensionHost, openTrust, type ExtensionHost, type P
 import { openRecord, RecordError, type Connection, type EventInput, type Message, type RecordStore } from '@deepbuild/record';
 import { evidence, judge, resolverDecisions } from '@deepbuild/resolver-decisions';
 import { answers as stackHealthy, composeKind, downStack, environmentOf, keysOf, leaseKinds, newRun, portKind, SESSION_KINDS, upStack, WarmStack } from '@deepbuild/env-local';
-import { endsEmpty, freshCount, judgeStop, leftOpen, openCheckouts, priceDefinition, toldToRun, unitless, validityGate, type Checkouts, type PaidKind, type SessionLog, type StallCount, type StallRule, type TaskListFacts } from '@deepbuild/gate';
+import { endsEmpty, freshCount, gitEnv, judgeStop, leftOpen, openCheckouts, priceDefinition, toldToRun, unitless, validityGate, type Checkouts, type PaidKind, type SessionLog, type StallCount, type StallRule, type TaskListFacts } from '@deepbuild/gate';
 import { piAcceptsReplaced } from './plant.js';
 import { openLeases, SLOW_SLOT, type LeaseTable } from '@deepbuild/leases';
 import { Acceptance } from './acceptance.js';
+import { Landing, type Outcome } from './landing.js';
 import { openRunner, type JobRecord, type JobSpec, type Runner, type WindowReport } from '@deepbuild/runner';
 import { alive as running, openSupervisor, openUnder, type Grant, type Host, type Supervisor } from '@deepbuild/supervisor';
 import { predictionContradictions, recordVerdict, verdict as claimVerdict, verdictHash, verdictLine, type Prediction, type Result, type RunOutcome } from '@deepbuild/verdicts';
@@ -35,7 +36,7 @@ import { keychain, ownHome } from './keychain.js';
 import { recordedHome, codexRelations, holdsFor, modified, readTrust, saveTrust, sessionHomes, stopTimeoutS, trustProblems } from './codex-settings.js';
 import { codexReadings, heartbeatsGone, loopsCovered, standingReadings, stands, uncoveredLoops } from './codex-loops.js';
 import { sessionStates, statusRows, WAITING_QUIET_MS, type StatusRow } from './status.js';
-import { buildRows, jobRow, listRows, orderOf, settle, type Placed, type Row, type RunningJob } from './rows.js';
+import { buildRows, distinctTitles, jobRow, listRows, orderOf, settle, whyOf, type Placed, type Row, type RunningJob } from './rows.js';
 import { addGuards, blocksCall, provenGuards, writeStanding } from './guards.js';
 import { captureRejected, decisionKey, dropKept, guardOf, keepLesson, lessonsOf, rejectedDirections, repoFolders, revives, syncRejected, tasteBlock, tastesFor, type Lesson } from './memory.js';
 import { AskTasks, type WorkItem } from './ask-tasks.js';
@@ -122,6 +123,8 @@ const DAY = 24 * HOUR;
 const sql = (text: string): string => text.replace(/'/g, "''");
 /** A session ID as a handle holds it: letters and digits only. */
 const letters = (session: string): string => session.replace(/[^0-9A-Za-z]/g, '');
+/** How long a landing's judgement waits for its verdict (#1331). */
+const VERDICT_WAIT_MS = 30 * 60_000;
 /** How long before its default a later ask comes back (#1462): an hour, drafted. */
 const LATER_BEFORE_MS = 60 * 60 * 1000;
 /** A rules block as pieces, one per line under its head: a rule you typed must reach the model inline (#1296). */
@@ -181,6 +184,8 @@ const machineLoad = (): { load: number; cores: number } => {
 const ENDED_KEPT = 64;
 /** The agents whose hooks run Claude Code's entries but who aren't Claude Code: never a session's asks or claims. */
 const FOREIGN = new Set(['cursor', 'grok']);
+/** The agents whose permission prompts the hub asks about (server.ts: prompted). */
+const PROMPTED = new Set(['claude-code', 'claude', 'codex', 'paseo']);
 /** The agents whose adapter has no route to hold a prompt at its submit: pi's package and paseo's plugin take none (#40, #55). */
 const HOLDS_NO_PROMPT = new Set(['pi', 'paseo']);
 /** An agent whose idle session no answer can wake (caps.wakeIdle): what it is to read reaches it in a held stop or a call's reply. */
@@ -530,6 +535,8 @@ export class Core {
   private runner!: Runner;
   /** The blind acceptance job (#1328): the runner's one kind that writes, before an issue's first attempt. */
   private acceptance!: Acceptance;
+  /** Landing in turn (#1331): each repo's changes onto its default branch, one at a time. */
+  private landing!: Landing;
   /** Sessions started without your Send, under a run you approved (#1330). */
   private sessionStarts!: Starts;
   /** Setup's wiki build (#356). */
@@ -622,6 +629,8 @@ export class Core {
   private replaying: Promise<unknown> | undefined;
   /** Only the drops-post-tool-use and replay-appends-twice plants read them. */
   private dropped = false;
+  /** The newest hook ID #2026's planted asker read; only that plant reads it. */
+  private askedThrough = '';
   /** Whether appends came back during a replay, so the files it kept are taken again after it. */
   private retake = false;
   /** Every session the hooks named, checked or not, by ID. */
@@ -728,6 +737,8 @@ export class Core {
   private touched: Set<string> | 'all' = 'all';
   /** The list's rows as last appended (#1463), by ID; empty until the record's are read at start, which makes the first pass a backfill. */
   private rows = new Map<string, Placed>();
+  /** Each session row's name before any short ID tells it from a twin (#2018), by row ID. */
+  private readonly names = new Map<string, string>();
   private rowsFirst = true;
   /** Each running job's row (#1925): when it was last appended, and the newer count held until a second has passed. */
   private readonly jobRows = new Map<string, { at: number; held?: ReturnType<typeof setTimeout> }>();
@@ -904,7 +915,12 @@ export class Core {
       },
       learn: async () => { await this.wikiBuild.build(); await syncRejected(this.raw, this.root.dir); },
     });
-    this.hosts = new Hosts({ root: this.root.dir, now: this.now, plant: options.plant, raise: async (ask, plan) => { await this.ready; return this.asks.raise(this.connection('core'), 'host.change', ask, plan); } });
+    this.hosts = new Hosts({
+      root: this.root.dir, now: this.now, plant: options.plant, raise: async (source, ask, plan) => { await this.ready; return this.asks.raise(this.connection('core'), source, ask, plan); },
+      append: (kind, data, extra) => this.appendCore(kind, data, extra), raw: (query, params) => this.record.raw(query, params),
+      // Bytes as the host gave them, so their hash is the hash of what was read there (#1945).
+      put: async (bytes, kind, source) => (await this.stored(await this.store.connect({ role: 'deepbuild', via: 'job' }).put({ bytes, kind, source, redaction: 'complete', license: { name: 'local', allows: [] } }), kind)).sha256,
+    });
     this.runs = new Runs({
       hosts: () => this.hosts,
       journalFile: this.root.runs, point: () => this.durable.point('journal_rewrite'), checkouts: join(this.root.dir, 'checkouts'), now: this.now, plant: options.plant, held: options.held,
@@ -1178,6 +1194,16 @@ export class Core {
         return (await readIssue(fetch, owner, name, n, undefined))?.[0];
       },
     });
+    // Landing in turn (#1331): the forge's reads and merges with your login, the verdict's status with the gate's identity.
+    this.landing = new Landing({
+      root: this.root.dir, api: this.options.forge ?? 'https://api.github.com', plant: this.options.plant,
+      token: async () => process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN ?? await ghToken(),
+      gateToken: (repo) => this.gateToken(repo), gateApp: () => this.forgeApp('gate'),
+      landingToken: (repo) => (this.landingTokens ??= gateTokens(this.options.forge ?? 'https://api.github.com', () => this.forgeApp('gate'), true))(repo),
+      judge: (r) => this.judgeLanding(r),
+      sendBack: (r) => this.landingSendBack(r),
+      appendCore: (kind, data, extra) => this.appendCore(kind, data, extra),
+    });
     // #1922's planted hosts build a tool's digest wrongly: the host's plants, selected with the hub's variable.
     const plant = this.options.plant?.startsWith('job-build-') ? { plant: this.options.plant as 'job-build-entry-only' } : {};
     const extensions = this.extensions = await openExtensionHost({ record: this.record, supervisor: this.supervisor, trust, home: this.root.dir, release: [], now: this.now, leases, runner: this.runner, evidence: this.store, point: () => this.durable.point('terminals_rewrite'), ...plant });
@@ -1322,6 +1348,8 @@ export class Core {
     return { app_id: app.app_id as number, key: () => keychain(service) };
   }
   private gateTokens?: (repo: string) => Promise<string | undefined>;
+  /** The gate's landing tokens (#1331), minted in this process and kept only in its memory, as its status tokens are. */
+  private landingTokens?: (repo: string) => Promise<string | undefined>;
   /** The gate's token for a repo: minted in this process, kept only in its memory. */
   private gateToken(repo: string): Promise<string | undefined> {
     return (this.gateTokens ??= gateTokens(this.options.forge ?? 'https://api.github.com', () => this.forgeApp('gate')))(repo);
@@ -1614,7 +1642,8 @@ export class Core {
     if (replayed && /^[0-9A-HJKMNP-TV-Z]{26}$/.test(meta.id)) {
       // Its live copy may be acknowledged and still on its way to the record.
       await Promise.allSettled([...this.inflight]);
-      const known = await this.record.raw(`SELECT json_extract(data, '$.late') AS late FROM events WHERE id = ? LIMIT 1`, [meta.id]);
+      // #2026's planted replay keeps its place by the newest ID: a line with any ID at or after it recorded counts as recorded.
+      const known = await this.record.raw(`SELECT json_extract(data, '$.late') AS late FROM events WHERE id ${this.options.plant === 'replay-keeps-place-by-id' ? '>=' : '='} ? LIMIT 1`, [meta.id]);
       if (known.length) {
         // Unless deep-hook gave up on an acknowledgement the hub sent just too late: the live copy is in the record
         // unmarked while deep-hook acted on its own, so the session says so rather than the fail-open going unseen.
@@ -1851,6 +1880,16 @@ export class Core {
       if (drafts.some((d) => d.kind === 'agent.stop')) void this.asks.tick().catch(() => undefined);
     });
     settled.catch(() => undefined);
+    // A permission prompt deep-hook spooled with the hub away still becomes an ask you see, once its request is in the
+    // record (#2026; design: the hook protocol). One the hub answered too late was its terminal prompt's to ask (#18).
+    // #2026's planted asker keeps its place by the newest hook ID it read, not by log_pos: an older one counts as read.
+    const readBefore = this.options.plant === 'asks-keep-place-by-id' && meta.id <= this.askedThrough;
+    if (this.options.plant === 'asks-keep-place-by-id' && !readBefore) this.askedThrough = meta.id;
+    if (replayed && !readBefore && !meta.late && meta.event === 'PermissionRequest' && meta.call && meta.session && !meta.watchOnly && PROMPTED.has(meta.agent)) {
+      const call = meta.call;
+      void settled.then(async () => { this.prompts.add((await this.holds.asked(meta, aboutPermission(call.tool, call.input))).ask); })
+        .catch((error: unknown) => process.stderr.write(`deep hub: the replayed permission request ${meta.id} raised no ask: ${error instanceof Error ? error.message : String(error)}\n`));
+    }
     // The session map reads the hook before its reply is asked for (#352), once its appends are watched.
     if (verified && meta.session && !FOREIGN.has(meta.agent)) await this.siblings.hook(drafts, meta).catch(() => undefined);
     // A stop that leaves the agent's question open is recorded as waiting on you once the stop is in the record (#27).
@@ -2680,6 +2719,8 @@ export class Core {
     else if (meta.event === 'PostCompact' || meta.event === 'SessionEnd') this.compacting.delete(meta.session);
     // Kept under the hook's own ID, so the copy deep-hook spooled when the hub was late is known at its replay.
     if (verified && meta.reading && !again) void this.appendReading(meta.session, meta.agent, meta.reading, meta.id).catch(() => undefined);
+    // The agent's own title for the session (#2018), when its hook says a new one; a subagent's hook names no session.
+    if (verified && meta.fields?.session_title && !meta.fields.agent_id) void this.agentTitled(meta.session, meta.agent, meta.fields.session_title).catch(() => undefined);
     // The record reads these states from the hook events themselves; only unknown, below, is the core's to append.
     // A person's status question changes none: answered from the record it runs no model, and let through (an
     // answer waiting, or DeepBuild off) it shows its state at its next hook, as the record's row does.
@@ -2875,7 +2916,18 @@ export class Core {
       const query = (q: string) => this.record.raw(q);
       const readings = await sessionStates(query, this.now(), only === 'all' ? undefined : only);
       // The list's rows (#1463): each that changed, and each ask's that left the list, in the same batch.
-      const built = await buildRows(query, readings);
+      // The open asks are the asks core's inbox projection, by its one close rule (#2026).
+      const inbox = (await this.asks.inbox()).filter((a) => a.status !== 'closed').map((a) => a.ask);
+      const named = await buildRows(query, readings, inbox);
+      // Each session's one name (#2018), with its short ID only where another session's row would read the same: a
+      // row whose twin came or went is set again with it, though nothing else of it changed.
+      for (const r of named) if (r.id.startsWith('session:')) this.names.set(r.id, r.title);
+      const titles = distinctTitles(this.names);
+      const fresh = new Set(named.map((r) => r.id));
+      const built = [
+        ...named.map((r) => (titles.has(r.id) ? { ...r, title: titles.get(r.id)! } : r)),
+        ...[...titles].flatMap(([id, title]) => { const was = this.rows.get(id)?.row; return was && !fresh.has(id) && was.title !== title ? [{ ...was, title }] : []; }),
+      ];
       const changed = settle(this.rows, built, this.rowsFirst);
       const open = new Set(built.filter((r) => r.id.startsWith('ask:')).map((r) => r.id));
       const left = [...this.rows.keys()].filter((id) => id.startsWith('ask:') && !open.has(id));
@@ -2886,7 +2938,7 @@ export class Core {
           const state = `${r.state}/${r.cause}`;
           if (this.states.get(r.id) === state) return;
           const ts = this.now();
-          await this.append(this.connection('core', { session: r.id, ...(r.agent ? { agent: r.agent } : {}) }), { v: 1, id: ulid(ts), kind: 'session.state', ts, subject: `session:${letters(r.id)}`, data: { state: r.state, cause: r.cause } });
+          await this.append(this.connection('core', { session: r.id, ...(r.agent ? { agent: r.agent } : {}) }), { v: 2, id: ulid(ts), kind: 'session.state', ts, subject: `session:${letters(r.id)}`, data: { state: r.state, cause: r.cause } });
           this.states.set(r.id, state);
         }),
         ...changed.map(async (p) => {
@@ -5852,6 +5904,11 @@ export class Core {
       // The app's action table (#1462): Later on an ask, and Pause on a session's row.
       case 'ask.later': return this.putOff(params);
       case 'session.pause': return this.pauseSession(params);
+      case 'session.rename': return this.renameSession(params);
+      // Why a session reads as it does (#2018), behind the state pass under way, as rows.read is.
+      case 'row.why':
+        this.replayLate();
+        return (this.replaying ?? Promise.resolve()).then(() => this.queue(async () => undefined)).then(() => this.statesSettled()).then(() => this.log.reflecting(() => this.whySeen(context.role, params)));
       // A hook that ended before this read is in the row: one deep-hook spooled is replayed first, and one acknowledged has its turn on the core's queue.
       case 'status.read':
         this.replayLate();
@@ -5872,6 +5929,10 @@ export class Core {
       case 'run.output': return this.runs.output(params);
       case 'host.list': return { hosts: this.hosts.names().map((name) => ({ name })) };
       case 'host.facts': return this.hosts.facts(params.host, params.refresh === true);
+      // A root plan you said yes to, for `deep host run`, and what its run left on the host (#1945).
+      case 'host.plan': return this.hosts.plan(params.ask);
+      case 'host.ran': return this.hosts.ran(params.ask, params.run);
+      case 'host.changes': return this.hosts.changes(params.host);
       case 'start.approve': return this.sessionStarts.approve(params, context);
       case 'start.session':
         if (this.draining) throw refuse('unavailable', '/method', 'A promotion is draining the hub: no session starts until it restarts on the new build. Start it again then.', method, true);
@@ -5911,6 +5972,10 @@ export class Core {
       case 'acceptance.status': return this.acceptance.status(params);
       case 'acceptance.dispute': return this.acceptance.dispute(params);
       case 'acceptance.ended': return this.acceptance.ended(params).then(() => ({ ended: true }));
+      // Landing in turn (#1331): `deep land judge`, `deep land` and `deep work --once`, from your own terminal.
+      case 'land.judge': return this.workspaceCall(() => this.landing.judgeAll(String(params.repo ?? '')));
+      case 'land.round': return this.workspaceCall(() => this.landing.land(String(params.repo ?? '')));
+      case 'work.once': return this.workspaceCall(() => this.landing.workOnce(String(params.repo ?? ''), Array.isArray(params.issues) ? params.issues.map(Number).filter((n) => Number.isSafeInteger(n) && n > 0) : []));
       case 'job.submit': return this.runner.submit(params.spec as JobSpec);
       case 'job.status': return this.runner.status(String(params.job));
       case 'job.list': return { jobs: await this.runner.list() };
@@ -6008,7 +6073,7 @@ export class Core {
     // reads a watch-only session's unverified events too, or its own SessionEnd would leave it open here for good.
     const sessions = ((await this.record.raw(`SELECT s.id, COALESCE((SELECT e.kind <> 'session.start' FROM events e WHERE e.session_id = s.id AND e.kind IN ('session.start', 'session.end', 'session.archived') ORDER BY e.log_pos DESC LIMIT 1), 0) AS closed
       FROM sessions s WHERE s.last_seen IS NOT NULL ORDER BY s.last_seen DESC LIMIT 100`)) as { id: string; closed: number }[]).map((s) => ({ id: s.id, closed: s.closed === 1 }));
-    return { gates: { watch_only: this.blocked !== undefined, reason: this.blocked ?? null }, notifications: this.notifications, secrets: await this.secretStore(), network, claude, codex, sessions, jobs: Object.fromEntries([...this.jobs].map(([name, failing]) => [name, { failing }])) };
+    return { gates: { watch_only: this.blocked !== undefined, reason: this.blocked ?? null }, notifications: this.notifications, secrets: await this.secretStore(), network, claude, codex, sessions, jobs: Object.fromEntries([...this.jobs].map(([name, failing]) => [name, { failing }])), packs: await this.libraries?.packs.shipped() ?? [] };
   }
   /** Whether this process can reach the OS secret store, read at most every ten seconds. */
   private secretStore(): Promise<string> {
@@ -6122,7 +6187,10 @@ export class Core {
       for (const item of (await this.record.raw(`SELECT text FROM open_items WHERE task_ref = ? AND closed IS NULL ORDER BY opened`, [state.task])) as { text: string }[]) {
         open_items.push(this.options.plant === 'open-item-no-sentence' ? { text: item.text } : { text: item.text, sentence: await say(openItemSentence(item.text)) });
       }
-      return { change: { claim, sentence, runs, verdicts, open_items, line, second, checks: state.checks, asks, produced: { pr: url ?? null, files, pages: [] }, next_issue } };
+      // #504: the figures and films the agent drew on the claim explain the change and never prove it: listed after the
+      // state is judged, and read by nothing that judges.
+      const explains = await this.explainsOf(`claim:${id}`);
+      return { change: { claim, sentence, runs, verdicts, open_items, line, second, checks: state.checks, asks, produced: { pr: url ?? null, files, pages: [] }, next_issue, explains } };
     });
   }
   /** The planted wrong program `sentence-from-model`: a headless agent call writes the sentence from the template's. */
@@ -6232,7 +6300,62 @@ export class Core {
     const url = this.options.plant === 'link-from-agent-url' ? /https?:\/\/\S+/.exec(question)?.[0] : undefined;
     // The card's revision, which an answer from this copy names (#1580).
     const revision = (await this.cards(handle)).get(handle)?.revision ?? 1;
-    return { ...card, question, revision, ...(opens ? { opens } : {}), ...(url ? { link: url } : {}) };
+    // #504: what the agent drew on the ask shows beside it when you open it, as an explanation; never an ask itself.
+    // `explains` is the first blind draft's name for the same list (tests/acceptance/504/ac2-explains.test.ts).
+    const beside = await this.explainsOf(handle);
+    return { ...card, question, revision, ...(opens ? { opens } : {}), ...(url ? { link: url } : {}), beside, explains: beside };
+  }
+
+  /** The documents the hub minted for a claim or an ask (`handle`), as the world file names them (`on`, or `for`). */
+  private mintedOn(handle: string): string[] {
+    const docs = this.worldFile.read().docs;
+    return Object.entries(isObj(docs) ? docs : {}).filter(([, d]) => isObj(d) && (d.on === handle || d.for === handle)).map(([id]) => id);
+  }
+
+  /**
+   * #504's planted hubs: one that puts an agent's figure or film in Needs you, raising an ask for you that names it,
+   * and one that takes it as proof, recording a verdict on the claim it was shown on.
+   */
+  private async plantedFigure(doc: string, rev: number, hash: string): Promise<void> {
+    const plant = this.options.plant;
+    if (plant !== 'figure-in-needs-you' && plant !== 'figure-feeds-verdict') return;
+    const docs = this.worldFile.read().docs;
+    const spec = isObj(docs) ? docs[doc] : undefined;
+    const on = isObj(spec) ? String(spec.on ?? spec.for ?? '') : '';
+    if (!on) return;
+    const ts = this.now();
+    if (plant === 'figure-in-needs-you') {
+      const [asked] = (await this.record.raw(`SELECT v, data FROM events WHERE kind = 'ask.created' ORDER BY log_pos DESC LIMIT 1`)) as { v: number; data: string }[];
+      if (!asked) return;
+      const data = { ...(JSON.parse(asked.data) as Obj), question: `Look at doc:${doc} before it goes on` };
+      await this.append(this.connection('core'), { v: Number(asked.v), id: ulid(ts), kind: 'ask.created', ts, data: data as JsonValue });
+    } else if (on.startsWith('claim:')) {
+      const id = ulid(ts);
+      const commit = '0'.repeat(40);
+      await this.append(this.connection('core'), {
+        v: 1, id, kind: 'verdict.made', ts, subject: on,
+        data: { outcome: 'PASS', verdict: `verdict:${id}`, claim: on, reasons: [], requirements: [], smallest: null, points_to: null, commit,
+          key: { commit, doc_revisions: [`doc:${doc}@${rev}:${hash}`], check_digests: [], state_digests: [], environment: 'test', tools: [] } } as JsonValue,
+      });
+    }
+  }
+
+  /**
+   * The documents an agent drew through deep_show on those the hub minted for a claim or an ask (`handle`), each at
+   * its latest revision (#504): a figure or a film explains and never proves, so this list sits in a receipt's
+   * explains-never-proves section and beside an opened ask, and never in Needs you or a verdict.
+   */
+  private async explainsOf(handle: string): Promise<{ doc: string; rev: number; hash: string }[]> {
+    const minted = new Set(this.mintedOn(handle).map((id) => `doc:${id}`));
+    if (!minted.size) return [];
+    const rows = (await this.record.raw(`SELECT data FROM events WHERE kind = 'doc.patched' ORDER BY log_pos`)) as { data: string | Obj }[];
+    const latest = new Map<string, { doc: string; rev: number; hash: string }>();
+    for (const { data } of rows) {
+      const d = (typeof data === 'string' ? JSON.parse(data) : data) as { doc?: string; rev?: number; hash?: string; writer?: string };
+      if (d.writer !== 'agent' || typeof d.doc !== 'string' || !minted.has(d.doc)) continue;
+      latest.set(d.doc, { doc: d.doc.slice(4), rev: Number(d.rev), hash: String(d.hash) });
+    }
+    return [...latest.values()];
   }
 
   /**
@@ -6720,6 +6843,55 @@ export class Core {
     return { session, paused: true };
   }
 
+  /**
+   * Rename from the Session menu (#2018): the name you gave a session, which every surface shows first. Recorded as
+   * the core, as Pause is; it is no sign of the session, so its row's time in its state stays.
+   */
+  private async renameSession(params: Obj): Promise<Obj> {
+    const { session } = params;
+    if (typeof session !== 'string' || !letters(session)) throw refuse('type', '/params/session', 'Name the session by its ID.', session);
+    const name = typeof params.name === 'string' ? params.name.split(/\r?\n/)[0]!.trim() : '';
+    if (!name || name.length > 512) throw refuse('type', '/params/name', 'Give the session a name of 1 to 512 characters, on one line.', params.name);
+    await this.named(session, name, 'you');
+    return { session, name };
+  }
+  /** The agent's own title for a session, from its hook (#2018): recorded once each time it changes. */
+  private async agentTitled(session: string, agent: string, title: string): Promise<void> {
+    if (!this.agentTitles.has(session)) {
+      const [last] = (await this.record.raw("SELECT json_extract(data, '$.name') AS name FROM events WHERE kind = 'session.named' AND session_id = ? AND json_extract(data, '$.by') = 'agent' ORDER BY log_pos DESC LIMIT 1", [session])) as { name: string }[];
+      this.agentTitles.set(session, last?.name ?? '');
+    }
+    if (this.agentTitles.get(session) === title) return;
+    this.agentTitles.set(session, title);
+    await this.named(session, title, 'agent', agent);
+  }
+  private readonly agentTitles = new Map<string, string>();
+  private async named(session: string, name: string, by: 'you' | 'agent', agent?: string): Promise<void> {
+    const ts = this.now();
+    await this.append(this.connection('core', { session, ...(agent ? { agent } : {}) }), { v: 1, id: ulid(ts), kind: 'session.named', ts, subject: `session:${letters(session)}`, data: { name, by } });
+  }
+
+  /**
+   * Why a session reads as it does (#2018): its row, the row of the state table that matched, each record fact that
+   * row read and, for each row above it, the fact it lacked, from the same call that picks every session's state.
+   */
+  private async whySeen(role: string, params: Obj): Promise<Obj> {
+    const query = (q: string) => this.record.raw(q);
+    const rows = () => [...this.rows.values()].map((p) => p.row);
+    let found = await whyOf(query, this.now(), String(params.session ?? ''), rows());
+    // A row the clock alone moved since its last pass, as one gone quiet, is set first: the row and its why agree.
+    const listed = (id: string) => this.rows.get(id)?.row;
+    if (!('refused' in found) && (found.word !== listed(found.id)?.word || found.why !== listed(found.id)?.why)) {
+      if (this.touched !== 'all') this.touched.add(found.id.slice('session:'.length));
+      await this.recordStates().catch(() => undefined);
+      found = await whyOf(query, this.now(), found.id, rows());
+    }
+    if ('refused' in found) throw refuse('not_found', '/params/session', found.refused, params.session);
+    const seen = role.startsWith('person:') ? this.seenBy(role) : '';
+    if (seen && !(await this.record.raw(`SELECT 1 FROM events WHERE session_id = ?${seen} LIMIT 1`, [found.id.slice('session:'.length)])).length) throw refuse('not_found', '/params/session', 'No session of yours has that ID.', params.session);
+    return found as unknown as Obj;
+  }
+
   private async runCommand(params: Obj): Promise<Obj> {
     const { action } = params;
     const view = this.extensions?.installedViews().find((v) => v.commands.some((c) => c.action === action));
@@ -6836,6 +7008,7 @@ export class Core {
         case 'deep_show': return await this.show(session ? { session } : { session: null }, showCall(args));
         case 'deep_kinds': return await this.kinds(args);
         case 'deep_job': return await this.job(args, context.call);
+        case 'deep_root_plan': return await this.hosts.proposeRoot(args);
         case 'deep_status': return await this.status(session);
         case 'deep_search': return await this.find(String(args.query), session, context, typeof args.file === 'string' ? args.file : undefined, typeof args.cursor === 'string' ? args.cursor : undefined);
         case 'deep_ask': return await this.askFor(session!, args);
@@ -6903,7 +7076,7 @@ export class Core {
 
   /** The world the canvas core reads: the hub's live sessions, the record's asks and readings, and the world file. */
   private async canvasWorld(): Promise<CanvasWorld> {
-    const file = { ...this.worldFile.read(), packs: this.libraries?.packs.all() ?? [] };
+    const file = { ...this.worldFile.read(), packs: await this.libraries?.packs.installed(this.canvas()) ?? [] };
     const sessions = [...this.sessions.values()].filter((s) => !s.ended).map((s) => ({ id: s.id, thread: s.thread, name: nameOf(file, s.id, s.agent) }));
     const record: Obj = {};
     const asks = (await this.record.raw('SELECT id, session_id, status FROM asks')) as { id: string; session_id: string | null; status: string }[];
@@ -7129,12 +7302,13 @@ export class Core {
       } as JsonValue,
     });
     this.presented.push({ doc: p.doc, rev: p.rev, rect: p.rect, layers: p.layers, session });
+    if (writer.kind === 'agent') await this.plantedFigure(String(p.doc), Number(p.rev), hash);
     await this.staleOnRevision(String(p.doc), { rev: Number(p.rev), hash });
   }
   /** The same first-use gate for a shown document and its exports, for every asset-reading kind. */
   private async preparePackAssets(document: Obj): Promise<Obj | undefined> {
     if (!this.libraries) return { status: 'BLOCKED', outcome: 'refused', cause: 'The asset host is not ready.', snapshots: [] };
-    for (const pack of Array.isArray(document.packs) ? document.packs : []) if (typeof pack !== 'string' || !this.libraries.packs.get(pack)) {
+    for (const pack of Array.isArray(document.packs) ? document.packs : []) if (typeof pack !== 'string' || !(await this.libraries.packs.has(pack, this.canvas()))) {
       return { status: 'BLOCKED', outcome: 'refused', cause: `pack_missing: ${String(pack)}`, snapshots: [] };
     }
     for (const { pack, asset } of this.libraries.packs.used(document)) {
@@ -7652,14 +7826,14 @@ export class Core {
     if (claimed === 'agent' && session) return { role: 'agent', session };
     return fromCredential;
   }
-  /** The core's INVALID verdict on a claim the floor refused (#29): before any check counts, naming why. */
-  private async invalid(claim: string, commit: string, reason: string, outcome: 'INVALID' | 'INCONCLUSIVE' = 'INVALID'): Promise<void> {
+  /** The core's INVALID verdict on a claim the floor refused (#29): before any check counts, naming why, by its code when it has one (#2029). */
+  private async invalid(claim: string, commit: string, reason: string, outcome: 'INVALID' | 'INCONCLUSIVE' = 'INVALID', code?: string): Promise<void> {
     const ts = this.now();
     const id = ulid(ts);
     await this.append(this.connection('core'), {
-      v: 1, id, kind: 'verdict.made', ts, subject: claim,
+      v: code ? 2 : 1, id, kind: 'verdict.made', ts, subject: claim,
       data: {
-        outcome, verdict: `verdict:${id}`, claim, reasons: [reason.slice(0, 8192)], requirements: [], smallest: null, points_to: null, commit,
+        outcome, verdict: `verdict:${id}`, claim, reasons: [reason.slice(0, 8192)], ...(code ? { why: [{ reason: code, text: reason.slice(0, 8192) }] } : {}), requirements: [], smallest: null, points_to: null, commit,
         key: { commit, doc_revisions: [], check_digests: [], state_digests: [], environment: `${process.platform}-${process.arch}`, tools: [] },
       },
     });
@@ -7828,7 +8002,7 @@ export class Core {
     lane.catch((error: unknown) => {
       const why = error instanceof Error ? error.message : String(error);
       process.stderr.write(`deep hub: ${r.claim}'s checks did not start: ${why}\n`);
-      void this.invalid(r.claim, r.commit, `its checks did not start: ${why}`, 'INCONCLUSIVE').catch((failed: unknown) => process.stderr.write(`deep hub: ${r.claim}'s verdict wasn't recorded: ${failed instanceof Error ? failed.message : String(failed)}\n`));
+      void this.invalid(r.claim, r.commit, `its checks did not start: ${why}`, 'INCONCLUSIVE', 'checks_not_started').catch((failed: unknown) => process.stderr.write(`deep hub: ${r.claim}'s verdict wasn't recorded: ${failed instanceof Error ? failed.message : String(failed)}\n`));
     });
   }
   /**
@@ -7916,6 +8090,59 @@ export class Core {
     return row?.outcome ?? 'stopped';
   }
   /**
+   * A change judged on its merge with the default branch's head (#1331): the issue's task, opened once from its
+   * reading, claims the merge commit in a worktree of its own, as `session` did a stop; its slow checks start, and its
+   * verdict is read once made. Each check whose key the merge didn't change carries from the run that made it (#1018).
+   */
+  private async judgeLanding(r: { repo: string; checkout: string; issue: number; pr: number; commit: string; session: string }): Promise<{ claim: string; outcome: Outcome; requirements: { req: string; text: string; settled_by: string | null; outcome: string }[] } | undefined> {
+    const [owner, name] = r.repo.split('/') as [string, string];
+    const fetch = this.options.github ? recordedFetch(this.options.github) : liveFetch(this.options.forge ?? 'https://api.github.com', process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN ?? await ghToken());
+    // A reading with no revision time is revised by its text: the definition still names the issue it locked from.
+    const readings = (await readIssue(fetch, owner, name, r.issue, this.options.plant).catch(() => undefined))?.map((x) => (x.updated ? x : { ...x, updated: sha256Hex(new TextEncoder().encode(x.body)) }));
+    if (!readings?.[0]) throw Error(`issue #${r.issue} of ${r.repo} couldn't be read, so its change can't be judged`);
+    const item = { ...readings[0], readings };
+    // A worktree of the checkout's repo at the merge commit: the claim's folder, removed once its verdict is read.
+    const tree = join(this.root.dir, 'landing', 'trees', letters(r.session));
+    mkdirSync(dirname(tree), { recursive: true });
+    await new Promise<void>((done, fail) => execFile('git', ['-C', r.checkout, 'worktree', 'add', '--quiet', '--detach', '--force', tree, r.commit], { env: gitEnv() }, (error) => (error ? fail(error) : done())));
+    // The checkout's installs serve the claim's checks: a link, which the gate's checkouts clone from where it points.
+    for (const dep of ['node_modules', '.venv']) if (existsSync(join(r.checkout, dep)) && !existsSync(join(tree, dep))) symlinkSync(join(r.checkout, dep), join(tree, dep));
+    try {
+      this.live.set(r.session, { agent: 'claude-code', cwd: tree, last: this.now(), calls: new Map(), wakeups: [], crons: new Map(), background: new Map(), looping: false, turn: 0, judged: false });
+      const made = await this.tasks.landing({ session: r.session, cwd: tree, item, at: this.now() });
+      if (!made) return undefined;
+      await this.lanes.get(made.claim)?.catch(() => undefined);
+      // Nothing sends this claim on: its slow checks start now, as a turn's end starts them.
+      await this.gate.turnEnded(made.claim, [], this.now(), { session: r.session, origin: 'person', due: null, starter: 'claim' }).catch(() => undefined);
+      // The verdict the core recorded, once the gate's is no longer pending: what the poster posts and the record keeps.
+      const until = Date.now() + VERDICT_WAIT_MS;
+      for (;;) {
+        await this.verdictWrites.get(made.claim)?.catch(() => undefined);
+        const v = this.gate.verdictOf(made.claim);
+        const [row] = v && v.outcome !== 'pending' ? (await this.record.raw(`SELECT outcome, requirements FROM verdicts WHERE claim_id = ? ORDER BY created DESC LIMIT 1`, [made.claim.slice(6)])) as { outcome: Outcome; requirements: string | null }[] : [];
+        if (row) {
+          const settled = new Map((await this.tasks.lockedRequirements(made.task)).map((q) => [q.req, q]));
+          const reqs = (JSON.parse(row.requirements ?? '[]') as { req: string; outcome: string }[]).map((q) => ({ req: q.req, text: settled.get(q.req)?.text ?? q.req, settled_by: settled.get(q.req)?.settled_by ?? null, outcome: q.outcome }));
+          return { claim: made.claim, outcome: row.outcome, requirements: reqs };
+        }
+        if (Date.now() > until) return undefined;
+        await new Promise((done) => setTimeout(done, 200));
+      }
+    } finally {
+      this.live.delete(r.session);
+      await new Promise<void>((done) => execFile('git', ['-C', r.checkout, 'worktree', 'remove', '--force', tree], { env: gitEnv() }, () => done()));
+    }
+  }
+  /** A change that no longer merges goes back to its own attempt (#1331): each session that worked its issue hears it, and no person is asked. */
+  private async landingSendBack(r: { checkout: string; issue: number; pr: number; files: string[]; text: string }): Promise<void> {
+    const rows = (await this.record.raw(`SELECT DISTINCT json_extract(data, '$.session') AS session FROM events WHERE kind = 'start.session' AND json_extract(data, '$.run') IN
+      (SELECT subject FROM events WHERE kind = 'start.started' AND json_extract(data, '$.issue') = ? AND json_extract(data, '$.repo') = ?)`, [r.issue, realpathSync(r.checkout)])) as { session: string | null }[];
+    for (const { session } of rows) {
+      const live = session ? this.live.get(session) : undefined;
+      if (session && live) { this.later(session, live.cwd, r.text); this.offer(session); }
+    }
+  }
+  /**
    * A promotion's health check (#1334): one fixture claim, a requirement its one check covers and a passing run of
    * it, judged by this build's verdict engine and returned as judged() records a claim's. A good build reads it PASS.
    */
@@ -7950,20 +8177,23 @@ export class Core {
     if (!v || v.outcome === 'pending') return;
     // The planted engine reads a run cut short, or one missing what lies outside the code, as a failure.
     if (this.options.plant === 'failures-as-fail' && (v.outcome === 'BLOCKED' || v.outcome === 'INCONCLUSIVE')) v = { ...v, outcome: 'FAIL' };
-    // An untrusted repo's spec commands never ran, so its claim is watch-only: it never passes (#322).
-    if (v.outcome === 'PASS' && this.watchOnlyClaims.has(claim)) v = { ...v, outcome: 'BLOCKED', reasons: [...v.reasons, 'project trust: the repo\'s spec checks never run until you trust the project, so this claim is watch-only'] };
+    // An untrusted repo's spec commands never ran, so its claim is watch-only: it never passes (#322). Each reason the
+    // core gives of its own goes with its code (verdict.reason@1), so a view says it in words (#2029).
+    const coded = (reason: string, texts: string[]): { reason: string; text: string }[] => texts.map((text) => ({ reason, text }));
+    const untrusted = 'project trust: the repo\'s spec checks never run until you trust the project, so this claim is watch-only';
+    if (v.outcome === 'PASS' && this.watchOnlyClaims.has(claim)) v = { ...v, outcome: 'BLOCKED', reasons: [...v.reasons, untrusted], why: [...(v.why ?? []), ...coded('untrusted_project', [untrusted])] };
     // A target that no longer resolves makes the claim INVALID, naming it, whatever its checks show; a FAIL still goes first (#323).
     const unresolved = this.unresolvedTargets.get(claim);
     if (unresolved && v.outcome !== 'FAIL') {
       const reqs = new Set(unresolved.map((u) => u.req));
-      v = { ...v, outcome: 'INVALID', reasons: [...unresolved.map((u) => u.reason), ...v.reasons], requirements: v.requirements.map((q) => (reqs.has(q.req) ? { ...q, outcome: 'INVALID' as const, smallest: unresolved.find((u) => u.req === q.req)!.reason } : q)) };
+      v = { ...v, outcome: 'INVALID', reasons: [...unresolved.map((u) => u.reason), ...v.reasons], why: [...coded('target_unresolved', unresolved.map((u) => u.reason)), ...(v.why ?? [])], requirements: v.requirements.map((q) => (reqs.has(q.req) ? { ...q, outcome: 'INVALID' as const, smallest: unresolved.find((u) => u.req === q.req)!.reason } : q)) };
     }
     // A threshold without a unit makes its requirement's check BLOCKED (#323; design: Solved or not): no run can decide it.
     const bare = [...(this.claimRequirements.get(claim) ?? [])].flatMap(([req, q]) => unitless(q.text).map((t) => ({ req, why: `${q.id}'s threshold “${t.text}” has no unit, so no run can decide it: name its unit, such as ${t.value} ms` })));
     if (bare.length) {
       const held = (o: Result): boolean => o !== 'FAIL' && o !== 'INVALID';
       v = {
-        ...v, outcome: held(v.outcome) ? 'BLOCKED' : v.outcome, reasons: [...bare.map((b) => b.why), ...v.reasons],
+        ...v, outcome: held(v.outcome) ? 'BLOCKED' : v.outcome, reasons: [...bare.map((b) => b.why), ...v.reasons], why: [...coded('threshold_without_unit', bare.map((b) => b.why)), ...(v.why ?? [])],
         requirements: v.requirements.map((q) => { const b = bare.find((x) => x.req === q.req); return b && held(q.outcome) ? { ...q, outcome: 'BLOCKED' as const, smallest: b.why } : q; }),
       };
     }
@@ -7973,17 +8203,19 @@ export class Core {
     // Nor while what its task left open stays open (#323): an item closes on evidence, your answer or a rule, never the agent's word.
     if (v.outcome === 'PASS') {
       const open = (await this.record.raw(`SELECT text FROM open_items WHERE closed IS NULL AND task_ref = (SELECT subject_ref FROM claims WHERE id = ?)`, [claim.slice(6)])) as { text: string }[];
-      if (open.length) v = { ...v, outcome: 'BLOCKED', reasons: [...v.reasons, `open items: ${open.length} still open, each closed only by evidence, your answer or a rule: ${open.slice(0, 3).map((o) => `“${o.text.slice(0, 200)}”`).join('; ')}${open.length > 3 ? '; …' : ''}`] };
+      const left = `open items: ${open.length} still open, each closed only by evidence, your answer or a rule: ${open.slice(0, 3).map((o) => `“${o.text.slice(0, 200)}”`).join('; ')}${open.length > 3 ? '; …' : ''}`;
+      if (open.length) v = { ...v, outcome: 'BLOCKED', reasons: [...v.reasons, left], why: [...(v.why ?? []), ...coded('open_items', [left])] };
     }
     // You chose another option after the agent went on with one (#84): the claim can't pass until a check of yours runs.
     if (v.outcome === 'PASS') {
       const why = await this.onSwitchedTree(claim).catch(() => undefined);
-      if (why) v = { ...v, outcome: 'BLOCKED', reasons: [...v.reasons, why] };
+      if (why) v = { ...v, outcome: 'BLOCKED', reasons: [...v.reasons, why], why: [...(v.why ?? []), ...coded('option_switched', [why])] };
     }
     // A call DeepBuild denied ran anyway in the claim's session (#1033): its own checks can't pass it.
     if (v.outcome === 'PASS') {
       const ran = await this.overridesFor(claim);
-      if (ran.length) v = { ...v, outcome: 'INCONCLUSIVE', reasons: [...v.reasons, `a call DeepBuild denied ran anyway in this session: ${ran.map((o) => `${o.label} (${o.call})`).join('; ')}; its own checks can't pass it`.slice(0, 8000)] };
+      const overridden = `a call DeepBuild denied ran anyway in this session: ${ran.map((o) => `${o.label} (${o.call})`).join('; ')}; its own checks can't pass it`.slice(0, 8000);
+      if (ran.length) v = { ...v, outcome: 'INCONCLUSIVE', reasons: [...v.reasons, overridden], why: [...(v.why ?? []), ...coded('denied_call_ran', [overridden])] };
     }
     // Its key names each document revision its document checks read (#1723), so a new revision makes it stale.
     const docs = this.docRevisions.get(claim);

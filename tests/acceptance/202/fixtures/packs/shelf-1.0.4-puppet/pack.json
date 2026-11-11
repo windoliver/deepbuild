@@ -1,0 +1,47 @@
+{
+  "name": "shelf",
+  "version": "1.0.4",
+  "license": "MIT",
+  "description": "A planted pack of the #202 acceptance suite: a kind named puppet.rig@1, the puppet pack's name.",
+  "requires": {
+    "core": ">=0.0.0",
+    "modules": {
+      "marks2d": ">=0.0.0"
+    }
+  },
+  "recipes": {
+    "shelf.bookcase@1": "shelf.bookcase@1.json"
+  },
+  "kinds": {
+    "puppet.rig@1": {
+      "minor": 0,
+      "recipe": "shelf.bookcase@1",
+      "children": [],
+      "capabilities": {
+        "pickable": true,
+        "snap": false
+      },
+      "rules": [],
+      "migrate": {},
+      "examples": [
+        "7a776940e1f36284ee62d353e24eee2b43fb7fe27cde28b71661f176e2c33aee"
+      ],
+      "cost": {
+        "class": "figure",
+        "at_defaults": {
+          "cpu_ms": 0.5,
+          "gpu_ms": 0.2,
+          "items": 7
+        }
+      }
+    }
+  },
+  "assets": [
+    {
+      "path": "examples/defaults.json",
+      "sha256": "7a776940e1f36284ee62d353e24eee2b43fb7fe27cde28b71661f176e2c33aee",
+      "size": 424,
+      "license": "MIT"
+    }
+  ]
+}

@@ -1,0 +1,54 @@
+#536 acceptance suite at the base, f28d8777e (Merge pull request #2229), before any implementation.
+
+The whole suite was run once there, with `deep-canvas-render` built by the suite (`cargo build --locked --bin
+deep-canvas-render`, toolchain 1.99.1):
+
+  PATH=/opt/homebrew/opt/rustup/bin:$PATH CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 NO_COLOR=1 \
+    scripts/lease npx vitest run --root tests/acceptance/536 --testTimeout=600000 --no-file-parallelism
+
+(scripts/lease ran it unleased: no `deep` on PATH and no built CLI.) Test Files 3 failed (3); Tests 7 failed | 3
+passed (10). Every failure is on an assertion its file names, because the behaviour is missing, not because of the
+test: no crash, no timeout, no missing fixture or tool. `npx tsc --noEmit -p tests/acceptance/536` exits 0.
+
+Before that run the base binary was probed once (not committed): `check` answers an unknown `planted` with
+{"ok":false,"code":"bad_input"}; it takes `logic@1` as a notice `unknown_kind` (the item is skipped) and refuses a set
+whose `tile` column reads a logic array `out_of_range` at `items/<set>/params/n`; it refuses a recipe whose `cells`
+isn't a list `bad_doc` at `items/<id>/params/cells`.
+
+ac1-centres.test.ts (1 failed of 2)
+- centres: PASSES at the base. #1653 already lays hex centres out (Grid::centre in deep-canvas-marks atlas.rs) and
+  `geometry` already reports them; a guard here, which must keep passing.
+- planted layout: fails at ac1-centres.test.ts:30 (`centresOf`, ../1653/helpers.ts:266; the test at line 54): "geometry of the pointy odd
+  fixture with hex_shifts_other_parity was answered, not refused: {"ok":false,"code":"bad_input"}: expected false to be
+  true". The planted value doesn't exist at the base.
+
+ac2-terrain.test.ts (5 failed of 7)
+- labels: fails at ac2-terrain.test.ts:55 (`none`): "each cell's tile has the labels the design wants: cell (1, 1): tile
+  5's labels [grass, sand, sand, sand, sand, sand], wanted [sand, sand, sand, sand, grass, grass]" and 10 more, every
+  one a sand cell. The base's expansion wants each neighbour's own terrain (no precedence), so a sand cell beside water
+  wants water edges, finds no tile, and falls back to any sand tile by its hash. Water cells (last in the precedence)
+  and grass cells (whose fallback is a plain grass tile) happen to match.
+- planted square sides: fails at ac2-terrain.test.ts:37 (`passing`): "the terrain fixture with
+  terrain_reads_square_sides passes the check: none {"ok":false,"code":"bad_input"}: expected false to be true".
+- corners_and_sides: fails at ac2-terrain.test.ts:42 (`refused`): "corners_and_sides on the hex fixture is refused at
+  check: [the expansion …]: expected true to be false". The base reads six hex neighbours whatever the rule.
+- one needed tile removed: fails at ac2-terrain.test.ts:42 (`refused`): "the fixture without tile 3 is refused at check:
+  [the expansion …]: expected true to be false". The base falls back to another sand tile instead of refusing.
+- adding (6, 0): PASSES at the base. Its pick is already hash(seed, cx, cy) and (6, 0) changes no label; a guard.
+- a tile column reading a logic array: fails at ac2-terrain.test.ts:105: "the set whose tile column reads board.tiles
+  passes the document check: out_of_range [units] items/units/params/n; out_of_range [units] items/units/params/n:
+  expected false to be true".
+- a terrain recipe whose cells name a logic array: PASSES at the base. It is refused `bad_doc` at
+  `items/floor/params/cells`, since the base takes only a list there; a guard.
+
+ac3-taste.test.ts (1 failed of 1)
+- fails at ac3-taste.test.ts:45 (`inconclusive`): "INCONCLUSIVE: no taste call is recorded: attach these to the PR,
+  show them to the owner … this is not a pass". The base draws both pictures (with the base's wrong sand tiles); this
+  run wrote them to docs/evidence/536/ and they were deleted after it, since the base's pictures are no one's call:
+    hex-terrain.png    e7bd32d8d12ece21857ae780853cfe71c0b5b68e7c08aa4d3abbc2ebc27828a0
+    terrain-tiles.png  866084bbb4f5ee8352aed9f13b707d72a3b2f1682d846e9b79f3945d8ffdd3b9
+
+Not shown at the base, since the planted values don't exist there: that each planted twin, once it exists, fails its
+check naming `cell (1, 1)` (AC1) and `cell (1, 0)` (AC2). The comparison code those failures come from is the same
+that judges the honest program (ac1-centres.test.ts `layoutProblems`, helpers.ts `labelProblems`), and the honest AC2
+run above shows `labelProblems` naming the first differing cell in written order.

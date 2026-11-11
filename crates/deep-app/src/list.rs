@@ -41,6 +41,8 @@ pub struct Session {
     /// Since when it's been in its state, in ms.
     pub since: Option<u64>,
     pub unread: bool,
+    /// Why it reads as it does, as the hub's row says it (#2018): whom it waits for and what it needs.
+    pub why: String,
 }
 
 /// What a row's time slot shows.
@@ -68,6 +70,8 @@ pub struct Row {
     pub loud: bool,
     /// It left its state and keeps its slot for now.
     pub left: bool,
+    /// A session's why, as the hub's row says it (#2018); empty for any other row.
+    pub why: String,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -165,6 +169,7 @@ pub fn build(asks: &[Ask], sessions: &[Session]) -> Vec<Item> {
                 && ask.status != "later"
                 && ask.status != "held",
             left: false,
+            why: String::new(),
         }));
     }
     let mut projects: Vec<Option<&str>> = Vec::new();
@@ -195,6 +200,7 @@ pub fn build(asks: &[Ask], sessions: &[Session]) -> Vec<Item> {
                 time: s.since.map(Time::Since),
                 loud: s.unread || s.entry == "needs_you",
                 left: false,
+                why: s.why.clone(),
             }));
         }
         if !quiet.is_empty() {
@@ -212,6 +218,7 @@ pub fn build(asks: &[Ask], sessions: &[Session]) -> Vec<Item> {
                 time: last.map(Time::Since),
                 loud: quiet.iter().any(|s| s.unread),
                 left: false,
+                why: String::new(),
             }));
         }
     }
@@ -230,17 +237,19 @@ pub fn opens_on(asks: &[Ask], sessions: &[Session]) -> Option<Address> {
 }
 
 thread_local! {
-    /// The last reading of the record, by its `log_pos` and the second it was read at: a frame reads it once.
+    /// The last reading of the record, by its `log_pos`, the second it was read at and whether the record before the
+    /// reads was folded (#2026): a frame reads it once.
     #[allow(clippy::type_complexity)]
-    static READ: std::cell::RefCell<Option<((u64, u64), std::rc::Rc<(Vec<Ask>, Vec<Session>)>)>> =
+    static READ: std::cell::RefCell<Option<((u64, u64, bool), std::rc::Rc<(Vec<Ask>, Vec<Session>)>)>> =
         const { std::cell::RefCell::new(None) };
 }
 
 /// The asks and sessions the list reads from the one record reader at `now` (#1461), read once per change of the
 /// record and second, so a frame over 700 rows costs what it draws. Empty with no record.
 pub fn read_now(now: u64) -> std::rc::Rc<(Vec<Ask>, Vec<Session>)> {
+    let folded = crate::record::folded();
     crate::record::with_view(|view| {
-        let key = (view.log_pos, now / 1000);
+        let key = (view.log_pos, now / 1000, folded);
         READ.with(|cell| {
             let mut cell = cell.borrow_mut();
             match cell.as_ref() {
@@ -254,6 +263,18 @@ pub fn read_now(now: u64) -> std::rc::Rc<(Vec<Ask>, Vec<Session>)> {
         })
     })
     .unwrap_or_default()
+}
+
+/// How many of the list's rows are unread: what #2028's planted counts add to the asks.
+pub fn unread_rows() -> usize {
+    crate::record::with_view(|view| {
+        view.table()
+            .list()
+            .into_iter()
+            .filter(|row| row["unread"].as_bool() == Some(true))
+            .count()
+    })
+    .unwrap_or(0)
 }
 
 /// The asks and sessions the list reads from `view` at `now`: the hub's rows (#1463) where the record holds them, else
@@ -312,6 +333,11 @@ pub fn read(view: &crate::record::View, now: u64) -> (Vec<Ask>, Vec<Session>) {
             .filter(|row| text(row, "id").starts_with("session:"))
             .map(|row| {
                 let session = text(row, "session");
+                // #2028's planted app marks every row whose state changed in the last day, read or not.
+                let whole_day = crate::plain::planted("marks-whole-day")
+                    && row["since"]
+                        .as_u64()
+                        .is_some_and(|since| now.saturating_sub(since) < 86_400_000);
                 // #1461's planted app marks a session unread when its agent says anything.
                 let spoke = crate::plain::planted("unread-on-message")
                     && view.events.iter().any(|e| {
@@ -337,7 +363,8 @@ pub fn read(view: &crate::record::View, now: u64) -> (Vec<Ask>, Vec<Session>) {
                     word,
                     entry,
                     since: row["since"].as_u64(),
-                    unread: row["unread"].as_bool().unwrap_or(false) || spoke,
+                    unread: row["unread"].as_bool().unwrap_or(false) || spoke || whole_day,
+                    why: crate::question::visible(&text(row, "why")),
                 }
             })
             .collect();
@@ -363,6 +390,7 @@ pub fn read(view: &crate::record::View, now: u64) -> (Vec<Ask>, Vec<Session>) {
                 entry,
                 since: None,
                 unread: false,
+                why: String::new(),
             }
         })
         .collect();
@@ -558,6 +586,7 @@ mod tests {
             entry: if word == "quiet" { "idle" } else { "running" },
             since: Some(10),
             unread: false,
+            why: String::new(),
         }
     }
 

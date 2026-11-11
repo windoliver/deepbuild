@@ -973,6 +973,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
     if !broken.is_empty() {
         return Err(json!({"code": "refused", "issues": broken}));
     }
+    crate::physics::bake(&mut args.doc)?;
     let packed = args.doc["packs"].as_array().is_some_and(|p| !p.is_empty());
     let mut lowered_doc = if packed {
         Some(lowered(&args.doc, &packs)?)
@@ -1200,6 +1201,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             if !args.hidden.is_empty() {
                 composed = without_layers(&composed, &args.hidden);
             }
+            deep_canvas_physics::written::write(&mut composed, t);
             let outlines = &pack_sealed()?.outlines;
             let mut scene =
                 evaluate_sourced(&composed, t, &args.look, &mut labels, &read, outlines)
@@ -1940,6 +1942,15 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                     .expect("a list")
                     .push(json!({"code": "fragments_capped", "fragments": drawn.counts.fragments}));
             }
+            // A light response's negative or non-finite return, once per operator and time (#485).
+            for (op, t) in &drawn.counts.light_response_range {
+                frame
+                    .entry("notices")
+                    .or_insert_with(|| json!([]))
+                    .as_array_mut()
+                    .expect("a list")
+                    .push(json!({"code": "light_response.range", "op": op, "t": t}));
+            }
             // Lights the budget left out, and shadows it dropped, reported once per change.
             let c = &drawn.counts;
             if c.lights_left_out != left_out || c.shadows_dropped != dropped {
@@ -1964,6 +1975,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 frame.insert("encoded".into(), json!(encoded));
                 frame.insert("replayed".into(), json!(c.replayed));
                 frame.insert("instances_written".into(), json!(c.instances_written));
+                frame.insert("element_uploads".into(), json!(c.element_uploads));
                 frame.insert("cpu_culled".into(), json!(c.cpu_culled));
                 frame.insert("counts_read_back".into(), json!(c.counts_read_back));
                 let draws: Vec<Value> = c

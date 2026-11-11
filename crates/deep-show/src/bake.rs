@@ -16,7 +16,7 @@ fn hex(d: impl AsRef<[u8]>) -> String {
 }
 
 /// A reading in the reply: a finite number, or null for −∞ (a silent window).
-fn reading(x: f64) -> Value {
+pub(crate) fn reading(x: f64) -> Value {
     if x.is_finite() {
         json!(x)
     } else {
@@ -26,7 +26,7 @@ fn reading(x: f64) -> Value {
 
 /// Each channel's BS.1770 weight: from `channels` (`{azimuth, elevation}` or `"lfe"`), or, with
 /// none given, by count (5: L R C Ls Rs; 6: L R C LFE Ls Rs; otherwise 1 each).
-fn weights(b: &Value, channels: usize) -> Result<Vec<f64>, String> {
+pub(crate) fn weights(b: &Value, channels: usize) -> Result<Vec<f64>, String> {
     let Some(list) = b.get("channels") else {
         return Ok(match channels {
             5 => vec![1.0, 1.0, 1.0, 1.41, 1.41],

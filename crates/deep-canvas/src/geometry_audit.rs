@@ -4,6 +4,7 @@
 //! part is held, and every wire and tube end lands within `land`. All math is f64 on the CPU.
 
 use std::collections::BTreeSet;
+use std::sync::Arc;
 
 use crate::ops::sqrt;
 
@@ -17,6 +18,8 @@ pub enum Shape {
     Ball { c: V3, r: f64 },
     /// A segment swept by a ball: a wire, a tube or a rod.
     Capsule { a: V3, b: V3, r: f64 },
+    /// #2014: a terrain plate's surface, solid under it.
+    Heights(Arc<crate::heights::Heights>),
 }
 
 /// Where a scene's item sits (Geometry audit: scenes): its geometry's hash, the corners of its own
@@ -154,6 +157,7 @@ impl Shape {
                 let hi = [a[0].max(b[0]) + r, a[1].max(b[1]) + r, a[2].max(b[2]) + r];
                 [lo, hi]
             }
+            Shape::Heights(h) => h.aabb(),
         }
     }
 }
@@ -251,6 +255,7 @@ pub fn depth(x: &Shape, y: &Shape) -> f64 {
             r - seg_box(*a, *b, *c, axes, *half)
         }
         (Obb { c: ca, axes: aa, half: ha }, Obb { c: cb, axes: ab, half: hb }) => boxes(*ca, aa, *ha, *cb, ab, *hb).0,
+        (Heights(h), o) | (o, Heights(h)) => h.depth(o),
     }
 }
 
@@ -297,6 +302,7 @@ fn lowered(s: &Shape, t: f64) -> Shape {
         Shape::Obb { c, axes, half } => Shape::Obb { c: down(c), axes: *axes, half: *half },
         Shape::Ball { c, r } => Shape::Ball { c: down(c), r: *r },
         Shape::Capsule { a, b, r } => Shape::Capsule { a: down(a), b: down(b), r: *r },
+        Shape::Heights(h) => Shape::Heights(Arc::new(h.moved([0.0, -t, 0.0]))),
     }
 }
 
@@ -507,7 +513,7 @@ pub fn audit(solids: &[Solid], cfg: &Config) -> Vec<Fault> {
     for &i in &stack {
         held[i] = true;
     }
-    for (i, a) in solids.iter().enumerate() {
+    for (i, a) in solids.iter().enumerate().filter(|_| !cfg.relations.is_empty()) {
         for (j, b) in solids.iter().enumerate().skip(i + 1) {
             if cfg.related(&a.id, &b.id) && !contact[i].contains(&j) {
                 contact[i].push(j);

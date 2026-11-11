@@ -271,6 +271,15 @@ pub struct Shipped {
     )>,
     /// What you typed in the list, and when the last key came: typing moves to the first row it starts (#1462).
     typed: (String, u64),
+    /// The session whose name is being typed in its page's title (#2018), and the field.
+    renaming: Option<Renaming>,
+}
+
+/// A session's page's title while you rename it (#2018): the field holds the name, and Return saves it.
+struct Renaming {
+    session: String,
+    input: Entity<gpui_kit::base::input::InputState>,
+    _entered: Subscription,
 }
 
 /// The sidebar's open session, drawn in the selected fill with a bar at its leading edge, and the one keyboard focus
@@ -338,6 +347,9 @@ impl Shipped {
         });
         // The record and the bound values reach the view through the entity it observes (#1546).
         crate::record::observe(cx);
+        if kind == Kind::Session {
+            SESSION_VIEW.with(|view| *view.borrow_mut() = Some(cx.entity().downgrade()));
+        }
         Self {
             kind,
             focus_handle: cx.focus_handle(),
@@ -356,7 +368,51 @@ impl Shipped {
             pressed: None,
             built: None,
             typed: (String::new(), 0),
+            renaming: None,
         }
+    }
+
+    /// Puts the caret in `session`'s page's title, in a field holding its name (#2018): Return saves what it holds as
+    /// the name you gave it, through the hub, and the field going out of focus leaves the name as it was.
+    fn start_rename(&mut self, session: String, window: &mut Window, cx: &mut Context<Self>) {
+        use gpui_kit::base::input::{InputEvent, InputState};
+        let name = crate::record::with_view(|view| view.table().title(&session)).unwrap_or_default();
+        let input = cx.new(|cx| InputState::new(window, cx).default_value(name));
+        let entered = cx.subscribe_in(
+            &input,
+            window,
+            |this: &mut Self, input, event: &InputEvent, _, cx| match event {
+                InputEvent::PressEnter { .. } => {
+                    let name = input.read(cx).value().trim().to_owned();
+                    if let Some(renaming) = this.renaming.take() {
+                        if !name.is_empty() {
+                            crate::actions::hub_write(
+                                "session.rename",
+                                json!({ "session": renaming.session, "name": name }),
+                                "Rename".into(),
+                                cx,
+                            );
+                        }
+                    }
+                    TITLE_KEYS.with(|keys| keys.borrow_mut().take());
+                    cx.notify();
+                }
+                InputEvent::Blur => {
+                    this.renaming = None;
+                    TITLE_KEYS.with(|keys| keys.borrow_mut().take());
+                    cx.notify();
+                }
+                _ => {}
+            },
+        );
+        input.update(cx, |input, cx| input.focus(window, cx));
+        TITLE_KEYS.with(|keys| *keys.borrow_mut() = Some(input.read(cx).focus_handle(cx)));
+        self.renaming = Some(Renaming {
+            session,
+            input,
+            _entered: entered,
+        });
+        cx.notify();
     }
 
     /// A key while the list holds the keyboard (#1462): the arrows move along it, Return opens the row, and a letter
@@ -519,9 +575,11 @@ pub fn count_line() -> String {
     reach.count(asks_need_you(count()))
 }
 
-/// The one count sentence, which Home, the list and the menu bar say (#1455).
+/// The one count sentence, which Home, the list and the menu bar say (#1455), in words that agree with the number
+/// (#2026).
 pub fn asks_need_you(count: usize) -> String {
     match count {
+        0 => "Nothing needs you".to_owned(),
         1 => "1 ask needs you".to_owned(),
         count => format!("{count} asks need you"),
     }
@@ -722,6 +780,19 @@ thread_local! {
     static TERMINAL_KEYS: RefCell<Option<FocusHandle>> = const { RefCell::new(None) };
     /// Whether the page that is the box alone gives the box the keys when it next draws (#1461).
     static FOCUS_BOX: Cell<bool> = const { Cell::new(false) };
+    /// The session's page's view, and the keys of its title's field while you rename the session (#2018).
+    static SESSION_VIEW: RefCell<Option<WeakEntity<Shipped>>> = const { RefCell::new(None) };
+    static TITLE_KEYS: RefCell<Option<FocusHandle>> = const { RefCell::new(None) };
+}
+
+/// Rename, from the Session menu (#2018): the caret goes in `session`'s page's title, and Return saves the name.
+pub fn rename(session: &str, window: &mut Window, cx: &mut App) {
+    let Some(page) = SESSION_VIEW.with(|view| view.borrow().as_ref().and_then(WeakEntity::upgrade))
+    else {
+        return;
+    };
+    let session = session.to_owned();
+    page.update(cx, |page, cx| page.start_rename(session, window, cx));
 }
 
 /// The page that is the box alone gives the box the keys when it next draws (#1461).
@@ -741,6 +812,13 @@ pub fn focus_id(window: &Window) -> Option<String> {
             .is_some_and(|keys| keys.is_focused(window))
     }) {
         return Some("terminal".to_owned());
+    }
+    if TITLE_KEYS.with(|keys| {
+        keys.borrow()
+            .as_ref()
+            .is_some_and(|keys| keys.is_focused(window))
+    }) {
+        return Some("session-title".to_owned());
     }
     if crate::words::focused(window) {
         return Some("box-draft".to_owned());
@@ -1287,6 +1365,11 @@ fn read(view: &crate::record::View, kind: Kind, opened: Option<&str>) -> Record 
                     .flat_map(str::lines)
                     .map(str::to_owned),
             );
+            // Why its turn ended failed and the reasons the core gave its verdict, in words (#2029).
+            let stopped = table.stopped(session);
+            details.extend(stopped.map(|(cause, core)| crate::codes::stopped(&cause, &core)));
+            let why = table.why(session).iter();
+            details.extend(why.map(|(code, text)| crate::codes::reason(code, text)));
             if crate::plain::planted("session-page-line-pr") {
                 details.push(crate::plain::PLANTED_PR_LINE.to_owned());
             }
@@ -1537,6 +1620,17 @@ fn list_row(
         }
     } else if cfg!(feature = "plant-row-title-only") {
         title.clone()
+    } else if ["BLOCKED", "INVALID", "INCONCLUSIVE"].contains(&row.word.as_str())
+        && !row.why.is_empty()
+    {
+        // A verdict that isn't PASS or FAIL never reads as the bare word (#2018): the row is one line, so its name
+        // holds whom it waits for and the evidence it leaves open.
+        format!(
+            "{} {title} · {} · {}",
+            states::glyph(row.entry),
+            row.word,
+            row.why
+        )
     } else {
         format!("{} {title} · {}", states::glyph(row.entry), row.word)
     };
@@ -1546,6 +1640,15 @@ fn list_row(
         row.id.clone()
     };
     let whole: SharedString = name.clone().into();
+    // A session's name with the short ID the hub added to tell it from a twin (#2018), apart.
+    let twin = row
+        .id
+        .strip_prefix("session:")
+        .map(|session| format!(" · {}", &session[..session.len().min(8)]))
+        .and_then(|short| {
+            let name = title.strip_suffix(short.as_str())?.to_owned();
+            Some((name, short))
+        });
     let ring = if focused {
         chrome.focus
     } else {
@@ -1630,7 +1733,6 @@ fn list_row(
                 .h_full()
                 .flex()
                 .items_center()
-                .truncate()
                 .text_color(ink)
                 // Unread or asking stands out by weight alone: the chrome's face has no medium of its own, so it
                 // takes the next weight it has (#1461).
@@ -1639,7 +1741,14 @@ fn list_row(
                 } else {
                     FontWeight::NORMAL
                 })
-                .child(title),
+                .map(|slot| match twin {
+                    // The short ID that tells a session from its twin stays in view (#2018): a name too long for
+                    // the row is cut, its ID never.
+                    Some((name, short)) => slot
+                        .child(div().min_w_0().truncate().child(name))
+                        .child(div().flex_none().child(short)),
+                    None => slot.truncate().child(title),
+                }),
         )
         .child(
             row_slot(&id, "word", row.word.clone())
@@ -1695,8 +1804,24 @@ fn needs_you_count(
     now: u64,
 ) -> (String, Option<String>, String) {
     use crate::empties::Empty;
+    // #2026's planted count leaves out a decision's close: each ask a decision closed counts as open.
+    let count = if crate::plain::planted("home-skips-decision-close") {
+        count + crate::record::with_view(|view| view.table().decided()).unwrap_or(0)
+    } else {
+        count
+    };
+    // #2028's planted count adds the list's unread rows to the asks.
+    let count = if crate::plain::planted("list-adds-unread") {
+        count + crate::list::unread_rows()
+    } else {
+        count
+    };
     match empty {
-        Empty::Nothing if count == 0 => ("Nothing needs you".to_owned(), None, "0".to_owned()),
+        // Nothing needs you only once setup finished (#2026): until then, what setup says, and no number.
+        Empty::Nothing if count == 0 => match crate::setup::count() {
+            Some(setup) => (setup.to_owned(), None, String::new()),
+            None => ("Nothing needs you".to_owned(), None, "0".to_owned()),
+        },
         // The planted count says "1 asks need you".
         Empty::Nothing if crate::plain::planted("count-one-asks") => (
             format!("{count} asks need you"),
@@ -1713,7 +1838,11 @@ fn needs_you_count(
             Some(crate::empties::READING.to_owned()),
             String::new(),
         ),
-        Empty::Unreachable { .. } => (empty.words("", now), None, String::new()),
+        // Every count says the hub isn't answering and since when, in place of a number (#2026).
+        Empty::Unreachable { .. } => {
+            let words = empty.words("", now);
+            (words.clone(), Some(words), String::new())
+        }
     }
 }
 
@@ -1973,6 +2102,7 @@ impl Render for Shipped {
                         time: None,
                         loud: false,
                         left: false,
+                        why: String::new(),
                     }));
                 }
                 let popped = crate::open::popped(cx) == Some(Kind::NeedsYou);
@@ -2051,14 +2181,28 @@ impl Render for Shipped {
                     .flatten();
                 RING.with(|ring| *ring.borrow_mut() = focused.clone());
                 let current = crate::open::current(cx);
+                let planted_nothing = crate::plain::planted("hub-down-nothing-needs-you")
+                    && matches!(empty, crate::empties::Empty::Unreachable { .. });
                 let mut drawn: Vec<AnyElement> = Vec::new();
                 for item in &items {
                     match item {
                         crate::list::Item::Heading { id, title, count } => {
                             if id == crate::list::HEADING {
+                                // #2018's planted list counts the asks that went moot with the open ones.
+                                let moot = if crate::plain::planted("group-count-moot") {
+                                    crate::record::with_view(|view| {
+                                        view.events
+                                            .iter()
+                                            .filter(|event| event["kind"] == "ask.moot")
+                                            .count()
+                                    })
+                                    .unwrap_or(0)
+                                } else {
+                                    0
+                                };
                                 drawn.push(
                                     needs_you_heading(
-                                        count.unwrap_or(0),
+                                        count.unwrap_or(0) + moot,
                                         empty,
                                         now,
                                         false,
@@ -2067,8 +2211,14 @@ impl Render for Shipped {
                                     .into_any_element(),
                                 );
                                 if matches!(empty, crate::empties::Empty::Unreachable { .. }) {
+                                    // #2026's planted section says nothing needs you while the hub is down.
+                                    let (nothing, empty) = if planted_nothing {
+                                        ("Nothing needs you", crate::empties::Empty::Nothing)
+                                    } else {
+                                        ("", empty)
+                                    };
                                     drawn.push(
-                                        empty_line("list-empty", "", empty, now, chrome)
+                                        empty_line("list-empty", nothing, empty, now, chrome)
                                             .into_any_element(),
                                     );
                                 }
@@ -2103,6 +2253,9 @@ impl Render for Shipped {
                                 );
                             }
                         }
+                        // #2026's planted section draws no ask rows while the hub is down.
+                        crate::list::Item::Row(row)
+                            if planted_nothing && row.id.starts_with("ask:") => {}
                         crate::list::Item::Row(row) => {
                             let selected = current.as_ref() == Some(&row.address)
                                 || (current.is_none()
@@ -2319,8 +2472,14 @@ impl Render for Shipped {
                     crate::empties::Empty::Nothing if !asks.is_empty() => {
                         label("home-needs-you", asks_need_you(asks.len())).into_any_element()
                     }
-                    _ => empty_line("empty", "Nothing needs you", empty, now, chrome)
-                        .into_any_element(),
+                    _ => empty_line(
+                        "empty",
+                        crate::setup::count().unwrap_or("Nothing needs you"),
+                        empty,
+                        now,
+                        chrome,
+                    )
+                    .into_any_element(),
                 };
                 let heading = project.clone().unwrap_or_else(|| {
                     if read {
@@ -2484,25 +2643,58 @@ impl Render for Shipped {
                 // #1458's planted page draws its title at a fourth size.
                 let fourth = crate::plain::planted("fourth-text-size");
                 // Why it reads as it does, in plain words, under its title (#1348, #1461).
-                let (problem, readings): (Vec<String>, Vec<String>) =
+                // Where the hub built the session's row, its word, entry and why are that row's (#2018): the one
+                // reading, on its page as in the list.
+                let (problem, readings, listed): (Vec<String>, Vec<String>, Option<[String; 3]>) =
                     crate::record::with_view(|view| {
                         let table = view.table();
                         let problem = crate::plain::problem(&table, &session)
                             .map(|(happened, next)| vec![happened, next])
                             .unwrap_or_default();
-                        (problem, table.readings(&session).to_vec())
+                        let listed = table.row_of(&format!("session:{session}")).map(|row| {
+                            ["word", "entry", "why"]
+                                .map(|key| row[key].as_str().unwrap_or_default().to_owned())
+                        });
+                        (problem, table.readings(&session).to_vec(), listed)
                     })
                     .unwrap_or_default();
+                let reads = |id: &'static str, name: &str| match &listed {
+                    Some([word, entry, _]) => {
+                        marked(id, states::entry_of(entry), format!("{name} · {word}"))
+                    }
+                    None => status(id, &state, format!("{name} · {}", state.text(now))),
+                };
+                let why = listed
+                    .as_ref()
+                    .filter(|[_, _, why]| !why.is_empty())
+                    .map(|[word, _, why]| format!("{word}: {why}"));
                 let content = div()
                     .flex()
                     .flex_col()
                     .when(session.is_empty(), |content| content.invisible());
+                // While you rename it (#2018), the title is a field holding the name, with the caret in it.
+                let field = self
+                    .renaming
+                    .as_ref()
+                    .filter(|renaming| renaming.session == session)
+                    .map(|renaming| renaming.input.clone());
                 let content = content
-                    .child(page_title(
-                        title("session-title", shown.clone())
+                    .child(page_title(match field {
+                        Some(input) => observed("session-title")
+                            .role(Role::TextInput)
+                            .aria_label(named)
+                            .aria_value(input.read(cx).value())
+                            .h(sizes().title.line + sizes().space(2))
+                            .child(gpui_kit::base::input::Input::new(&input)),
+                        None => title("session-title", shown.clone())
                             .aria_label(named)
                             .when(fourth, |title| title.text_size(px(17.))), // size-literal-exception: #1458's planted wrong program, in an env-plants build only; review 2027-04-30
-                    ))
+                    }))
+                    .children(why.map(|line| {
+                        label("session-why", crate::question::visible(&line))
+                            .h_auto()
+                            .text_color(chrome.ink_secondary)
+                    }))
                     .children(problem.into_iter().enumerate().map(|(n, line)| {
                         label(("session-problem", n), line)
                             .h_auto()
@@ -2517,11 +2709,7 @@ impl Render for Shipped {
                     }))
                     .children(details)
                     // The session's line, on its page (#1461): from its task to where it stands now, and what you placed there.
-                    .child(status(
-                        "line-status",
-                        &state,
-                        format!("{task} · {}", state.text(now)),
-                    ))
+                    .child(reads("line-status", &task))
                     .children(placed("line"))
                     // The return card: what came back from the session's last stop, with the
                     // values bound to its runs' assertions (#629).
@@ -2529,11 +2717,7 @@ impl Render for Shipped {
                         div()
                             .flex()
                             .flex_col()
-                            .child(status(
-                                "return-card",
-                                &state,
-                                format!("{shown} · {}", state.text(now)),
-                            ))
+                            .child(reads("return-card", &shown))
                             .children(bound_values(bound::Surface::Card, chrome, false)),
                     )
                     .children(tab)
