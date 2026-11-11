@@ -1,0 +1,36 @@
+At base 7c5e1cc8d ("Merge pull request #2184 …"), on 2026-11-10, the suite was not run. The one-minute load was 133 on 18 cores, so deep-show was not built. What each test would meet first was read from the base's code, not observed.
+
+The commands the implementing session runs, at the base and after (from <worktree>):
+
+  npm ci
+  NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 npx vitest run --root tests/acceptance/1936 --no-file-parallelism
+  npx tsc -p tests/acceptance/1936/tsconfig.json
+
+Every test builds `full`, which exists, and every scenario's first run parses at the base: stored documents in `docs`, #403's `claims`, the `verdict` call, no `planted`. A verdict on a stored document is judged by `judge_audit` (crates/deep-show/src/verdict.rs) from `geometry_audit_runs`, which reads the stored revision through `query_revision`.
+
+- coincident.test.ts, "#1936.ce1f055b the wall added twice fails as coincident …". The base's audit (crates/deep-canvas/src/geometry_audit.rs, `audit`) has no coincident pass. The two boxes in one place are 0.2 m deep in each other, past `sunk` 0.002, so the row is FAIL with one `geometry.overlap` naming wall and wall-again, whose `fix` is a sentence. The test fails at its first assertion, "the wall added twice fails as coincident, naming both IDs, and the overlap pass doesn't report the pair":
+    the scene audit of the wall added twice reports no geometry.coincident [wall, wall-again]; it reports: geometry.overlap [wall, wall-again]
+    the scene audit of the wall added twice reports geometry.overlap [wall, wall-again], which the fixture doesn't hold: {the issue}
+  Nothing after it runs. (The pair 1 mm apart would hold there: the base never says coincident.)
+
+- kit.test.ts, "#1936.188aa3d2 a kit piece 0.05 m off the grid fails …". The base's audit never reads the check's `grid` (crates/deep-show/src/geometry_audit.rs: `config`, `exceptions_of` and `run` read `tolerance`, `support.floating`, `relations`, `states`, `sweeps`, `combine`, `displays`, `at` and `at_times`). The room has no overlap, and every wall touches the floor, which the check declares floating, so every item is held and the row is PASS with no issue. The test fails at its first assertion, "the kit piece 0.05 m off the grid fails, naming the item":
+    the scene audit of the kit piece 0.05 m off the grid is PASS, not FAIL: {the row}
+    the scene audit of the kit piece 0.05 m off the grid reports no geometry.off_grid [wall-right]; it reports: nothing
+
+- kit.test.ts, "#1936.188aa3d2 a kit room with one wall moved 2 mm fails seams …". The base's audit never reads `seams`. The moved wall is 0.002 m clear of the back wall and rests on the floor, so the row is PASS with no issue. The test fails at its first assertion, "the wall moved 2 mm fails seams, naming a 0.002 m gap and both items":
+    the scene audit of the kit room with one wall moved 2 mm is PASS, not FAIL: {the row}
+    the scene audit of the kit room with one wall moved 2 mm reports no geometry.seam [wall-back, wall-right]; it reports: nothing
+  Its planted run is never reached. If it were, the base has no planted name `audit_checks_overlaps_only` (crates/deep-show/src/main.rs's planted match ends `_ => return None`), so the scenario would be refused as bad input.
+
+If the base can't build a `plate@1` for the audit, a kit row is BLOCKED `not_run` instead of PASS, and each kit test fails at the same assertion with "is BLOCKED, not FAIL".
+
+Read, not run, and what the implementation meets after these assertions: each fix goes back as a patch of a stored document through `deep_show` (crates/deep-show/src/shared.rs, `check_patch`). A `delete` and a `set` at `at` of an item in the writer's own layer apply there (crates/deep-canvas/src/document/apply.rs). `marks_check` then draws what the patch wrote through the 2D marks module, which refuses a 3D kind with `module_missing`: a deleted item compares (drawn, refused) and a moved one (refused, refused the same way), and both pass; a created 3D item compares (refused, drawn) and is refused. So no test creates an item by patch.
+
+Run: `npx tsc -p tests/acceptance/1936/tsconfig.json` passes (TypeScript 5.9.3, vitest 5.0.5, @types/node 24.19.2, the repo's pins, after `npm ci --ignore-scripts`). `spans` from scripts/proof-change.mjs reads all three tests' names with their IDs.
+
+A scratch vitest file outside the repo (not kept) ran the generators and checked the fixtures:
+- Criterion 1: with `apart` 0 every corner of wall-again is 0 m from wall's and the two are 0.2 m deep in each other; with `apart` 0.001 every corner is 0.001 m from its twin's and the depth is still 0.2 m. Each wall is 0 m deep in the floor.
+- Criterion 2, wall-right at x = 2, 2.002 and 2.05: every origin but the moved one is on whole metres, and the yaws are 0, 90 and −90. No two items pass into each other: the depths are 0 m (floor and each wall; wall-back and wall-left), 0, −0.002 and −0.05 m (wall-back and wall-right), and −4 m or less (wall-left and wall-right). Each wall's lowest points are at y = 0, over the floor.
+  - At 2: seven pairs of boundary edges of wall-back and wall-right are within 0.01 m, each 0 m apart; the same holds for wall-back and wall-left.
+  - At 2.002: the same seven pairs are each 0.002 m apart (0.0019999999999997797 in f64); wall-back and wall-left still meet.
+  - At 2.05: no edge of wall-right is within 0.01 m of another wall's; its origin is 0.05 m off the sub-grid.

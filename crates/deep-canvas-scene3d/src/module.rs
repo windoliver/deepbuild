@@ -310,6 +310,10 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
         if crate::builders::KINDS.contains(&spec.kind) || spec.kind == "curve@1" {
             let name = &spec.kind[..spec.kind.len() - "@1".len()];
             r.kind(crate::spec::entry(&spec, "", name), &[], "");
+            // A recipe repeats over a builder's elements (Recipe: repeat over elements; #2015).
+            if spec.kind != "curve@1" {
+                r.elements(name, crate::measures::elements);
+            }
         }
         if spec.kind == "mesh.asset@1" {
             r.kind(crate::spec::entry(&spec, "mesh", "asset"), &[], "");

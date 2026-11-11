@@ -4,6 +4,7 @@ pub mod alloc;
 pub mod blake3;
 pub mod cache;
 pub mod compile;
+pub mod counted;
 pub mod device;
 pub mod encode;
 pub mod frame_budget;

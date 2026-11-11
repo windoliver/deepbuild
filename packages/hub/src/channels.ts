@@ -18,8 +18,10 @@ type Kind = 'device' | 'chat' | 'email' | 'text';
 // channel@1's shapes (packages/contracts/slots/channel@1.json; the kit in @deepbuild/conformance).
 interface Item {
   thread_key: string; summary: string; link: string; answerable: 'answer' | 'view' | 'cancel' | 'closed';
-  options: { id: string; label: string }[]; revision: number; hub: string; refused: string | null; unpaired?: { device: string; by: string };
+  options: { id: string; label: string }[]; plan?: CardPlan; revision: number; hub: string; refused: string | null; unpaired?: { device: string; by: string };
 }
+/** A plan as a card draws it (#1580): its hash as the asks core holds it, and each step's words, changes, undo and cost. */
+interface CardPlan { hash: string; steps: { does: string; changes: string[]; undo: string; public: boolean; cost: number }[] }
 interface ChannelRequest { method: 'GET' | 'POST'; path: string; body?: unknown }
 interface ChannelCtx { settings: Record<string, unknown>; fetch(request: ChannelRequest): Promise<{ status: number; body: unknown }> }
 type ChannelDelivered = { outcome: 'delivered'; ack: string } | { outcome: 'stalled' } | { outcome: 'timed_out' } | { outcome: 'conflict'; conflict: string };
@@ -27,8 +29,14 @@ interface ChannelAnswer { thread_key: string; answer: string; signature?: unknow
 interface ChannelReceived { answers: ChannelAnswer[]; seen: string[]; conflict: string | null }
 interface Route { kinds: string[]; to: string[]; urgent?: boolean; next?: string[]; unseen?: string }
 interface Settings { channels: Record<string, Obj>; routes: Route[]; quiet: { from: string; to: string } | null }
-/** An ask as the channels render it: its kind, words and options, and where it is in its life. */
-export interface ChannelAsk { handle: string; kind: string; question: string; options: { id: string; label: string }[]; status: string; outcome: string; answer: string | null }
+/**
+ * An ask as the channels render it: its kind, words and options, where it is in its life, the plan its yes approves,
+ * and its card's revision, which rises when the plan changes and on Take over (#1580).
+ */
+export interface ChannelAsk {
+  handle: string; kind: string; question: string; options: { id: string; label: string }[]; status: string; outcome: string; answer: string | null;
+  plan: CardPlan | null; revision: number;
+}
 /** What the hub gives the channels: its clock and root, the loaded channels, the asks, the record and the answer path. */
 interface ChannelDeps {
   root: string;
@@ -37,12 +45,16 @@ interface ChannelDeps {
   now(): number;
   plant?: string | undefined;
   devices: Devices;
-  loaded(): { name: string; kind: Kind }[];
+  /** The loaded channels, each with whether it draws a plan's steps (#1580). */
+  loaded(): { name: string; kind: Kind; steps: boolean }[];
   call(name: string, op: 'deliver' | 'receive', item: Item | null, ctx: ChannelCtx): Promise<unknown>;
   asks(): Promise<ChannelAsk[]>;
   append(kind: string, data: Obj, subject?: string): Promise<void>;
-  /** Counts a checked answer as the asks core's; throws, with the reason, when it refuses it. */
-  answer(handle: string, option: string, how: { channel: string; proof: 'device' | 'account_link' }): Promise<void>;
+  /**
+   * Counts a checked answer as the asks core's, with the plan hash a device signed (#1580); throws, with the reason,
+   * when it refuses it.
+   */
+  answer(handle: string, option: string, how: { channel: string; proof: 'device' | 'account_link'; plan_hash: string | null }): Promise<void>;
   /** The planted wrong program's close of an ask whose send failed. */
   cancel(handle: string): Promise<void>;
 }
@@ -61,7 +73,11 @@ const LIVE = new Set(['shown', 'held']);
  * landed), a send under way, and when a failed one goes again.
  */
 interface Thread { sent?: Item; key?: string; tried: boolean; inflight: boolean; retryAt: number; tries: number; refused: string | null }
-interface Channel { name: string; kind: Kind; threads: Map<string, Thread>; busy: boolean; receivedAt: number; conflict: string | null }
+interface Channel {
+  name: string; kind: Kind; steps: boolean; threads: Map<string, Thread>; busy: boolean; receivedAt: number; conflict: string | null;
+  /** Each thread's card as last drawn, and how many times its words or plan changed since the hub started (#1580). */
+  cards: Map<string, { drawn: string; changes: number }>;
+}
 
 const cardHash = (item: Pick<Item, 'summary' | 'options'>): string => createHash('sha256').update(canonicalize({ summary: item.summary, options: item.options } as unknown as JsonValue)).digest('hex');
 const keyOf = (item: Item): string => new TextDecoder().decode(canonicalize(item as unknown as JsonValue));
@@ -140,9 +156,9 @@ export class Channels {
       this.readAt = Date.now();
       this.reading = this.deps.asks().then((asks) => { this.asks = asks; }, () => undefined).finally(() => { this.reading = undefined; });
     }
-    for (const { name, kind } of loaded) {
+    for (const { name, kind, steps } of loaded) {
       let c = this.channels.get(name);
-      if (!c) this.channels.set(name, c = { name, kind, threads: new Map(), busy: false, receivedAt: 0, conflict: null });
+      if (!c) this.channels.set(name, c = { name, kind, steps, threads: new Map(), busy: false, receivedAt: 0, conflict: null, cards: new Map() });
       if (c.busy || (c.conflict && this.deps.plant !== 'takes-turns-at-token')) continue;
       c.busy = true;
       void this.pass(c).catch((e: unknown) => process.stderr.write(`deep hub: channel ${name}: ${e instanceof Error ? e.message : String(e)}\n`)).finally(() => { c.busy = false; });
@@ -236,9 +252,21 @@ export class Channels {
     const minute = at.getHours() * 60 + at.getMinutes();
     return from <= to ? minute >= from && minute < to : minute >= from || minute < to;
   }
-  /** The card for one ask on one channel, by the trusted-path rule. */
+  /**
+   * The card for one ask on one channel, at its revision: the ask's, and one more each time the words or the plan this
+   * thread shows change, so a signature over an earlier card is refused, naming the revision (#1580).
+   */
   private render(c: Channel, ask: ChannelAsk): Item {
-    const base = { thread_key: ask.handle, link: `deepbuild://ask/${ask.handle.slice(4)}`, revision: 1, hub: this.hub };
+    const item = this.draw(c, ask);
+    const drawn = new TextDecoder().decode(canonicalize({ summary: item.summary, options: item.options, answerable: item.answerable, plan: item.plan ?? null } as unknown as JsonValue));
+    const card = c.cards.get(ask.handle) ?? { drawn, changes: 0 };
+    if (card.drawn !== drawn) Object.assign(card, { drawn, changes: card.changes + 1 });
+    c.cards.set(ask.handle, card);
+    return { ...item, revision: ask.revision + card.changes };
+  }
+  /** What one ask's card shows on one channel, by the trusted-path rule. */
+  private draw(c: Channel, ask: ChannelAsk): Item {
+    const base = { thread_key: ask.handle, link: `deepbuild://ask/${ask.handle.slice(4)}`, revision: ask.revision, hub: this.hub };
     const text = c.kind === 'text';
     if (ask.status === 'closed') {
       const chosen = ask.options.find((o) => o.id === ask.answer)?.label ?? ask.answer;
@@ -248,11 +276,12 @@ export class Channels {
     const refused = text ? null : c.threads.get(ask.handle)?.refused ?? null;
     if (text) return { ...base, summary: '', answerable: 'view', options: [], refused: null };
     const question = summaryOf(ask.question);
-    const answerable = c.kind === 'device'
-      || (this.deps.plant === 'buttons-for-authority' && c.kind === 'chat')
-      || (!NEEDS_TRUSTED.has(ask.kind) && (this.linked[c.name] ?? []).length > 0);
+    // A card with a plan is answered only where its steps are drawn, and carries them with their hash (#1580).
+    const answerable = (this.deps.plant === 'buttons-for-authority' && c.kind === 'chat')
+      || ((c.kind === 'device' || (!NEEDS_TRUSTED.has(ask.kind) && (this.linked[c.name] ?? []).length > 0)) && (!ask.plan || c.steps));
     if (!answerable) return { ...base, summary: `${question} (${WHERE})`, answerable: 'view', options: [], refused };
-    return { ...base, summary: question, answerable: 'answer', options: ask.options.map((o) => ({ id: o.id, label: summaryOf(o.label) })), refused };
+    const plan = ask.plan && c.steps ? { plan: ask.plan } : {};
+    return { ...base, summary: question, answerable: 'answer', options: ask.options.map((o) => ({ id: o.id, label: summaryOf(o.label) })), ...plan, refused };
   }
 
   private async send(c: Channel, item: Item): Promise<void> {
@@ -296,10 +325,14 @@ export class Channels {
     if (ask?.status === 'closed') return;
     const refuse = (reason: string, field?: string): Promise<void> => this.refuse(c, thread, answer, reason, field);
     let proof: 'device' | 'account_link';
+    let plan: string | null = null;
     if (a.signature !== undefined) {
       const why = this.signedWrong(c, thread, answer, a.signature);
       if (why) return refuse(why.reason, why.field);
       proof = 'device';
+      // The plan its yes approves is the one it signed, never one the hub fills in (#1580).
+      const signed = carried(a.signature).plan_hash;
+      plan = typeof signed === 'string' ? signed : null;
     } else if (a.account_link_id !== undefined) {
       const account = String(a.account_link_id);
       const held = this.deps.plant === 'trusts-channel-proof' || (this.linked[c.name] ?? []).includes(account);
@@ -311,7 +344,7 @@ export class Channels {
     if (!ask) return refuse(`${thread} is no ask this hub holds`, 'ask');
     if (proof === 'account_link' && NEEDS_TRUSTED.has(ask.kind)) return refuse(`${thread} is ${ask.kind === 'authority' ? 'an authority ask' : `a ${ask.kind}`}, and ${TRUSTED}`);
     try {
-      await this.deps.answer(thread, answer, { channel: c.name, proof });
+      await this.deps.answer(thread, answer, { channel: c.name, proof, plan_hash: plan });
     } catch (e) {
       return refuse(e instanceof Error ? e.message : String(e));
     }
@@ -325,11 +358,15 @@ export class Channels {
    */
   private signedWrong(c: Channel, thread: string, answer: string, signature: unknown): { field: string; reason: string } | undefined {
     if (this.deps.plant === 'trusts-channel-proof') return undefined;
-    const carried = (typeof signature === 'object' && signature !== null ? (signature as { params?: unknown }).params : undefined);
-    const params = (typeof carried === 'object' && carried !== null ? carried : {}) as Obj;
+    const params = carried(signature);
     const sent = c.threads.get(thread)?.sent;
+    // The plan the ask holds now: a signature over a card showing an earlier one, or none, is refused at its hash (#1580).
+    const plan = this.asks.find((x) => x.handle === thread)?.plan?.hash ?? null;
     return this.deps.devices.verify(signature, { method: 'channel.answer', hub: this.hub, params, now: this.deps.now() }, { unpairedToo: this.deps.plant === 'keeps-unpaired-key', skipsTime: this.deps.plant === 'signature-skips-time' }, () => {
       if (params.ask !== thread) return { field: 'ask', reason: `it signs ${String(params.ask)}, not ${thread}` };
+      if ((params.plan_hash ?? null) !== plan) {
+        return { field: 'plan_hash', reason: plan === null ? `it signs the plan ${String(params.plan_hash)}, and ${thread} has none` : `it signs ${params.plan_hash === undefined ? 'no plan' : `the plan ${String(params.plan_hash)}`}, and ${thread}'s plan is ${plan} now` };
+      }
       if (params.revision !== (sent?.revision ?? 1)) return { field: 'revision', reason: `it signs revision ${String(params.revision)} of ${thread}'s card, not ${sent?.revision ?? 1}` };
       if (!sent || params.card_hash !== cardHash(sent)) return { field: 'card_hash', reason: `it signs a card that isn't the one this hub sent ${c.name} on ${thread}` };
       if (params.answer !== answer) return { field: 'answer', reason: `it signs the answer ${String(params.answer)}, not ${answer}` };
@@ -342,6 +379,12 @@ export class Channels {
     const t = c.threads.get(thread);
     if (t) t.refused = reason.slice(0, 8192);
   }
+}
+
+/** The params a channel answer's signature carries beside `signed`, or {}. */
+function carried(signature: unknown): Obj {
+  const params = typeof signature === 'object' && signature !== null ? (signature as { params?: unknown }).params : undefined;
+  return (typeof params === 'object' && params !== null ? params : {}) as Obj;
 }
 
 function readSettings(file: string): Settings {

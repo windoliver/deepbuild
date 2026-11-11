@@ -2,7 +2,7 @@
   "uri": "deep://schedule/core@0.0.0",
   "core": "core@0.0.0",
   "build_set": "r2",
-  "set_digest": "5173c53965c446ed8052be606d8e2a6ecac3950ab21b5941c8eb3539431cad39",
+  "set_digest": "133e0037562582eb5225898090c359335b9ffedc1e8af9629566e37e1c33c1fe",
   "interfaces": {
     "cells@1": {
       "digest": "5135370a4e353acec15fa8b5b3964084440a827188dea0bca29c796669a50bad",
@@ -34,7 +34,7 @@
       }
     },
     "data@1": {
-      "digest": "a743bfa040d3d697e65bb0de3eb2c4a6065d7ee983c1eb51dcd25cee5161cf49",
+      "digest": "b2095ca927d1a61295a9c0ceccafba49b656370fa1ddf538afb199b7a212a959",
       "reference": "data",
       "kit": [
         "fixtures",
@@ -237,7 +237,7 @@
       }
     },
     "scene3d@1": {
-      "digest": "84cff6febd11433d9982b3f9eb8e59879fdc552b5def16199b417425536106c0",
+      "digest": "37d4cb1807acc482d198f9e539a3dde7ed34e55c1c32d2de1f003e4a942a598e",
       "reference": "scene3d",
       "kit": [
         "fixtures",
@@ -468,6 +468,20 @@
         ],
         "writes": [
           "core.transform"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "data.columns",
+        "module": "data",
+        "version": "1.0.0",
+        "reads": [
+          "self",
+          "t"
+        ],
+        "writes": [
+          "data.columns",
+          "data.mapped"
         ],
         "per": "item"
       },
@@ -893,6 +907,7 @@
   },
   "contributions": {
     "core.fields": [
+      "data.columns",
       "motion.fields"
     ],
     "core.glyphs": [

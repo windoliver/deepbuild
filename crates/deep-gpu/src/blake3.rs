@@ -2,7 +2,6 @@
 //! unpadded, hashed by compute passes, the 32-byte digest read back one frame late. The WGSL is
 //! `blake3.wgsl`.
 
-use wgpu::util::DeviceExt as _;
 
 const SOURCE: &str = include_str!("blake3.wgsl");
 /// Invocations a workgroup covers.
@@ -32,8 +31,8 @@ struct Pass {
 
 /// The hashes of one size of frame, in push order.
 pub struct Frames {
-    device: wgpu::Device,
-    queue: wgpu::Queue,
+    device: crate::counted::Wgpu,
+    queue: crate::counted::Queue,
     input: wgpu::Buffer,
     /// The chunk pass, then a parent pass per tree level.
     passes: Vec<Pass>,
@@ -47,7 +46,7 @@ pub struct Frames {
 }
 
 impl Blake3 {
-    pub fn new(device: &wgpu::Device, planted: Planted) -> Blake3 {
+    pub fn new(device: &crate::counted::Wgpu, planted: Planted) -> Blake3 {
         let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("blake3"),
             source: wgpu::ShaderSource::Wgsl(SOURCE.into()),
@@ -72,7 +71,7 @@ impl Blake3 {
     }
 
     /// The hashes of frames of `size` pixels (at least one), with buffers made once for it.
-    pub fn frames(&self, device: &wgpu::Device, queue: &wgpu::Queue, size: [u32; 2]) -> Frames {
+    pub fn frames(&self, device: &crate::counted::Wgpu, queue: &crate::counted::Queue, size: [u32; 2]) -> Frames {
         let words = size[0] * size[1];
         let chunks = words.div_ceil(CHUNK_WORDS);
         let buffer = |label: &str, bytes: u64, usage: wgpu::BufferUsages| {

@@ -11,7 +11,7 @@ use std::hash::{Hash, Hasher};
 use std::sync::{Arc, LazyLock, Mutex, MutexGuard};
 
 use crate::fonts::FACES;
-use crate::shape::{Glyph, Shaped, Spec};
+use crate::shape::{Glyph, Shaped, Span, Spec};
 
 /// The bytes the cache may hold runs for.
 pub const BOUND: usize = 32 << 20;
@@ -31,13 +31,26 @@ pub struct Key {
     bound: bool,
     mask: bool,
     fitted: bool,
+    /// #1964: the hash of its styled spans, 0 with none.
+    spans: u64,
     /// Nonzero only under the planted cache per document.
     scope: u64,
+}
+
+/// The hash of a run's styled spans (#1964).
+fn spans_hash(spans: &[Span]) -> u64 {
+    if spans.is_empty() {
+        return 0;
+    }
+    let mut h = DefaultHasher::new();
+    spans.hash(&mut h);
+    h.finish()
 }
 
 impl Key {
     pub(crate) fn of(spec: &Spec<'_>, text: &str, fitted: bool) -> Key {
         Key {
+            spans: spans_hash(spec.spans),
             text: text.into(),
             font: font_hash(spec.family, spec.fallback, spec.lang),
             size: spec.size.to_bits(),
@@ -94,6 +107,7 @@ fn bytes_of(key: &Key, run: &Shaped) -> usize {
         + key.text.len()
         + run.shown.len()
         + run.glyphs.len() * std::mem::size_of::<Glyph>()
+        + run.decorations.len() * std::mem::size_of::<crate::shape::Decoration>()
 }
 
 /// The acceptance suite's wrong programs (#856), each set only by its `--planted` argument.

@@ -275,9 +275,10 @@ export class Hosts {
 
 /** `deep run follow <run>`: the run's stdout from its start, then as it comes, until it has ended. */
 export async function followCommand(run: string): Promise<number> {
-  const token = readFileSync(rootOf(installedRoot()).token, 'utf8').trim();
+  let token: string | undefined;
+  const output = async (from: number) => call(hubAddress().path, token ??= readFileSync(rootOf(installedRoot()).token, 'utf8').trim(), 'run.output', { run, from });
   for (let from = 0; ;) {
-    const reply = await call(hubAddress().path, token, 'run.output', { run, from }).catch((error: Error) => ({ error: { remediation: `BLOCKED: ${error.message}` } }));
+    const reply = await output(from).catch((error: Error) => ({ error: { remediation: `BLOCKED: ${error.message}` } }));
     if ('error' in reply) {
       process.stderr.write(`${reply.error.remediation}\n`);
       return 1;

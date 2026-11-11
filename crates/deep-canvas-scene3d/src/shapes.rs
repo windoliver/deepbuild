@@ -57,7 +57,7 @@ fn v3(v: &Value) -> Option<V3> {
 /// A part's true shape from its builder's pieces (`true_shape`, in its own space) placed by `m`:
 /// a sphere, a box, capsules along its path (whose first and last points are its ends), or the
 /// box around its mesh where nothing simpler is exact.
-fn built(
+pub fn built(
     doc: &Value,
     item: &Value,
     mesh: &crate::geom::Mesh,
