@@ -339,6 +339,13 @@ timed.push('tests/acceptance/405-redraft-ac4/budgets.test.ts');
 byHand.push('tests/acceptance/405/budgets.test.ts');
 // #544's files build deep-logic and deep-show, draw on the GPU, export a film, and build deep-logic for Linux x86_64 in Docker.
 alone.push('tests/acceptance/544/');
+// #2026's files build the replica and deep-live plain and planted and run a hub over 30 days of history; three judge
+// wall-clock limits (Needs you's load, a replayed ask within 1 s, the hub-down line within 2 s).
+// The first draft's AC3 file is kept by hand: its wrong program, the app's reader keeping its place by event ID, can't
+// fail under the design, since the hub raises the replayed request's ask as a new event; its blind redraft runs in its place.
+alone.push('tests/acceptance/2026/', 'tests/acceptance/2026-redraft-ac3/');
+timed.push('tests/acceptance/2026/load.test.ts', 'tests/acceptance/2026/outage.test.ts', 'tests/acceptance/2026-redraft-ac3/replay.test.ts');
+byHand.push('tests/acceptance/2026/replay.test.ts');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
