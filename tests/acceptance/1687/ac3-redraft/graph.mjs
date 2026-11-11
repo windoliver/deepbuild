@@ -1,5 +1,6 @@
 // Independent AC3 oracle. Reads source, never executes product modules or inspects other acceptance drafts.
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { posix } from 'node:path';
 import ts from 'typescript';
@@ -35,13 +36,26 @@ export function snapshot(root, revision) {
   return { paths, texts };
 }
 
+// Token/AST identity is independent of line numbers, comments and formatting. It is not
+// an approval: reviewed-loaders.json records the input provenance and its trust boundary.
+export function syntaxDigest(node) {
+  const shape = (part) => [part.kind, part.text ?? null, part.getChildren().map(shape)];
+  return createHash('sha256').update(JSON.stringify(shape(node))).digest('hex');
+}
+
 export function imports(file, text) {
   const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true);
   if (source.parseDiagnostics.length) throw Error(`BLOCKED source syntax: ${file}`);
   const edges = [], unknown = [];
   const add = (node, literal, runtime) => {
     const line = source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1;
-    if (!literal || !ts.isStringLiteralLike(literal)) unknown.push({ from: file, line });
+    if (!literal || !ts.isStringLiteralLike(literal)) {
+      let scope = node;
+      // The containing top-level declaration includes the loader's guards and input transformations.
+      while (scope.parent && !ts.isSourceFile(scope.parent)) scope = scope.parent;
+      unknown.push({ from: file, line, expression: node.getText(source), expressionDigest: syntaxDigest(node),
+        scope: scope.name?.getText(source) ?? ts.SyntaxKind[scope.kind], scopeDigest: syntaxDigest(scope) });
+    }
     else edges.push({ spec: literal.text, runtime: runtime && !source.isDeclarationFile, line });
   };
   const visit = (node) => {
@@ -57,7 +71,7 @@ export function imports(file, text) {
   return { edges, unknown };
 }
 
-export function graph({ paths, texts }) {
+export function graph({ paths, texts }, reviewedEdges = []) {
   const packages = new Map([...texts].filter(([file]) => manifest(file)).map(([file, text]) => {
     const value = JSON.parse(text); return [value.name, { ...value, dir: posix.dirname(file) }];
   }));
@@ -89,7 +103,7 @@ export function graph({ paths, texts }) {
   const edges = [], unresolved = [], unknown = [], outside = [];
   for (const file of [...nodes].sort()) {
     const parsed = imports(file, texts.get(file)); unknown.push(...parsed.unknown);
-    for (const edge of parsed.edges) {
+    for (const edge of [...parsed.edges, ...reviewedEdges.filter((edge) => edge.from === file)]) {
       const to = resolve(file, edge.spec, edge.runtime);
       const row = { from: file, ...edge, to };
       if (!to) unresolved.push(row);

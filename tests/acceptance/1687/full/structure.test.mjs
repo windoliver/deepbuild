@@ -4,6 +4,7 @@ import { readFileSync, realpathSync } from 'node:fs';
 import { relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
+import { retained } from '../ownership-redraft/source-oracles.mjs';
 
 const root = fileURLToPath(new URL('../../../../', import.meta.url));
 const CORE = 'packages/hub/src/core.ts';
@@ -48,47 +49,15 @@ test('AC2 structural oracle rejects oversized constructors/fields, inheritance, 
   assert.deepEqual(coreProblems(parse('fixture.ts', 'class Core { constructor() { this.part = new Part({ read: () => this.record.read() }); } }')), []);
 });
 
-// Baseline method names identify responsibilities, not prescribed names for the new seams. Thin public
-// forwarding methods may remain. Absence alone is not proof of an options seam: see the required README review.
-function retainedLogic(source, names) {
-  const found = [];
-  const imported = new Set(source.statements.filter(ts.isImportDeclaration).flatMap((n) => {
-    const b = n.importClause?.namedBindings;
-    return [...(n.importClause?.name ? [n.importClause.name.text] : []), ...(b && ts.isNamedImports(b) ? b.elements.map((e) => e.name.text) : b ? [b.name.text] : [])];
-  }));
-  walk(source, (n) => {
-    if (!ts.isMethodDeclaration(n) && !ts.isFunctionDeclaration(n) && !ts.isVariableDeclaration(n)) return;
-    const body = n.body ?? n.initializer;
-    if (!n.name || !names.includes(n.name.getText(source)) || !body) return;
-    let expression = ts.isBlock(body) && body.statements.length === 1 ? body.statements[0] : body;
-    if (ts.isReturnStatement(expression) || ts.isExpressionStatement(expression)) expression = expression.expression;
-    if (expression && ts.isAwaitExpression(expression)) expression = expression.expression;
-    const target = expression && ts.isCallExpression(expression) && expression.expression;
-    const receiver = target && ts.isPropertyAccessExpression(target) && target.expression;
-    const delegate = target && ((ts.isIdentifier(target) && imported.has(target.text)) ||
-      (receiver && ts.isPropertyAccessExpression(receiver) && receiver.expression.kind === ts.SyntaxKind.ThisKeyword) ||
-      (receiver && ts.isIdentifier(receiver) && imported.has(receiver.text)));
-    if (!delegate) found.push(n.name.getText(source));
+// Approved #1687 disposition: the frozen blind redraft identifies actual base algorithms, not
+// coincidentally named locals such as `judged` or `runs`. Destination names remain unconstrained.
+// Reuse its unchanged oracle and inventory; its oracle.test.mjs qualifies rename/no-op/nested faults.
+const ownership = JSON.parse(readFileSync(new URL('../ownership-redraft/base-surfaces.json', import.meta.url), 'utf8'));
+for (const { file, surfaces } of ownership.files) {
+  test(`AC1/AC2 selected ownership: ${file} retains no base responsibility body`, () => {
+    assert.deepEqual(retained(parse(file), surfaces), [], `${file}: selected base algorithms still owned here`);
   });
-  return [...new Set(found)];
 }
-test('retained-policy oracle distinguishes a wiring callback from a retained policy method', () => {
-  assert.deepEqual(retainedLogic(parse('fixture.ts', 'class Core { init() { new Seam({ judged: (x) => this.part.judged(x) }); } judged(x) { return this.part.judged(x); } }'), ['judged']), []);
-  assert.deepEqual(retainedLogic(parse('fixture.ts', 'class Core { judged(x) { if (x) return true; return false; } }'), ['judged']), ['judged']);
-});
-for (const [label, file, names] of [
-  ['transcript/backfill', CORE, ['readTranscript', 'backfill']],
-  ['delivery', CORE, ['deliver', 'deliveryHeld', 'unwoken', 'resent']],
-  ['stop hold/judging', CORE, ['stopHold', 'judging', 'judgeEnded', 'judged']],
-  ['MCP', CORE, ['mcpCall', 'bind']],
-  ['Host sources', entries[1], ['readSource', 'readPolled', 'readStream', 'shownTick']],
-  ['Host schedules', entries[1], ['schedules', 'runs', 'dispatchRun']],
-  ['Host sends', entries[1], ['setSendRule']],
-  ['Host jobs', entries[1], ['runJob', 'reach', 'answerOf']],
-  ['asks gate/show/keys', entries[2], ['uncovered', 'showNow', 'show', 'subjectKey', 'foldKey', 'requestKey', 'blockKey']],
-]) test(`AC1/AC2 ${label}: old owner retains no policy body at the named source surface`, () => {
-  assert.deepEqual(retainedLogic(parse(file), names), [], `${file}: move these bodies behind seams (forwarders allowed)`);
-});
 
 // Runtime dependencies only: type-only syntax is erased, not an execution cycle. Resolve workspace entries,
 // relative paths, re-exports, literal dynamic imports and require, recursively (not just core.ts's imports).

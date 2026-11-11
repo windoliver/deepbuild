@@ -2,10 +2,12 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { BASE, boundary, cyclicEdges, graph, imports, newCycles, snapshot } from './graph.mjs';
+import { changedSnapshot, completeReview, review, reviewedGraph } from './reviewed-loaders.mjs';
 
 const root = fileURLToPath(new URL('../../../../', import.meta.url));
-const base = graph(snapshot(root, BASE));
-const current = graph(snapshot(root));
+const base = reviewedGraph(snapshot(root, BASE), review.base);
+const currentSnapshot = snapshot(root);
+const current = reviewedGraph(currentSnapshot);
 const empty = (values, message) => assert.deepEqual(values, [], message);
 const complete = (value) => empty(value.unresolved, 'BLOCKED: unresolved literal module dependencies');
 const noCycles = (before, after, runtimeOnly) => empty(newCycles(before, after, runtimeOnly), 'AC3: new cyclic module edges');
@@ -123,7 +125,30 @@ test('AC3: the core never imports an extension, with no baseline waiver', (t) =>
   t.diagnostic(`base forbidden edges=${boundary(base).violations.length}; current forbidden edges=${boundary(current).violations.length}`);
   noExtensions(current);
 });
-test('AC3 completeness: computed imports need review, never silently certify an incomplete graph', (t) => {
-  t.diagnostic(`literal external dependency edges (not traversed): ${current.outside.length}`);
-  empty(current.unknown, 'BLOCKED: computed module targets require independent resolution before an unqualified AC3 PASS');
+test('AC3 completeness: every computed loader matches its independently reviewed input and boundary', (t) => {
+  t.diagnostic(`external dependency edges (not traversed): ${current.outside.length}; reviewed computed loaders: ${current.unknown.length}`);
+  completeReview(current);
+});
+
+test('oracle: reviewed loaders reject unreviewed, mutated, escaping and core-hidden paths', () => {
+  completeReview(current); // A refusal of every snapshot would not qualify this oracle.
+  const core = modulePath('core');
+  const host = 'packages/extension-host/src/host.ts';
+  const hostSource = currentSnapshot.texts.get(host);
+  const escaping = hostSource.replace("join(ext.folder, 'tests')", "join(ext.folder, '..')");
+  assert.notEqual(escaping, hostSource, 'path-escape mutant was actually planted');
+  for (const [file, text] of [
+    [modulePath('unreviewed'), 'export const load = (name) => import(name);'],
+    [host, hostSource.replace('import(url)', 'import(url + "/unreviewed.js")')],
+    [host, escaping],
+    [core, `${currentSnapshot.texts.get(core)}\nimport './hub-runtime.js';`],
+    [core, `${currentSnapshot.texts.get(core)}\nconst hidden = (module) => import(module);`],
+    [core, currentSnapshot.texts.get(core).replace('this.options.index)', "'../../resolver-decisions/src/index.js')")],
+  ]) {
+    const mutant = reviewedGraph(changedSnapshot(currentSnapshot, file, text));
+    assert.throws(() => completeReview(mutant), /BLOCKED: computed loader review/, file);
+  }
+  assert.throws(() => completeReview(base), /BLOCKED: computed loader review/, 'base arbitrary core loaders are not grandfathered');
+  assert.ok(current.edges.some((e) => e.from === modulePath('mcp') && e.to === modulePath('mcp')), 'whole-hub plant contributes its self-cycle');
+  assert.ok(current.outside.some((e) => e.from === 'packages/pi/src/index.ts' && e.spec === '@earendil-works/pi-coding-agent'), 'cast constant contributes a literal edge');
 });
