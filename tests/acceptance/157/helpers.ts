@@ -17,7 +17,7 @@ import { join, relative } from 'node:path';
 import { afterAll, expect } from 'vitest';
 import { floatWav } from '../502/helpers.ts';
 import {
-  DOC, FLICKS, REPO as REPO_ROOT, frameLength, isObject, present, presented, putEvidence, runShow, scenario, sha256, show, type JsonObject, type JsonValue, type Rate,
+  DOC, FLICKS, REPO as REPO_ROOT, TIMEOUT, frameLength, isObject, present, presented, putEvidence, runShow, scenario, sha256, show, type JsonObject, type JsonValue, type Rate,
 } from '../501/helpers.ts';
 
 export {
@@ -91,7 +91,7 @@ export function filmRun(bin: string, evidence: string, document: JsonObject, cal
 /** Folders that last for the file (a run several legs read), removed after it. */
 export function useFileTemp(tag: string): () => string {
   const made: string[] = [];
-  afterAll(() => { for (const d of made.splice(0)) rmSync(d, { recursive: true, force: true }); });
+  afterAll(() => { for (const d of made.splice(0)) rmSync(d, { recursive: true, force: true }); }, TIMEOUT);
   return () => { const d = mkdtempSync(join(tmpdir(), `deep-157-${tag}-`)); made.push(d); return d; };
 }
 
@@ -566,7 +566,7 @@ afterAll(() => {
     spawnSync('hdiutil', ['detach', v.mount, '-force'], { encoding: 'utf8' });
     rmSync(v.image, { recursive: true, force: true });
   }
-});
+}, TIMEOUT);
 const statfs = (dir: string): { free: number; used: number } => { const s = statfsSync(dir); return { free: s.bavail * s.bsize, used: (s.blocks - s.bfree) * s.bsize }; };
 /**
  * A fresh volume: `small` is a 64 MB HFS+ image, which `fillTo` fills with one file until the free space it reports
