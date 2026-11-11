@@ -428,6 +428,8 @@ timed.push('tests/acceptance/2011/ac2-step-budget.test.ts');
 // #547's files build deep-logic and bake 108,000 and 72,000 steps; AC4 judges 20 seeks of a recorded match against 2 s.
 alone.push('tests/acceptance/547/');
 timed.push('tests/acceptance/547/ac4-keyframes.test.ts');
+// #1967's files build deep-show, and determinism renders each side's canonical picture on the GPU.
+alone.push('tests/acceptance/1967/');
 // #407's files each build deep-show (carried.test.ts also with test-hold-min-2s); 407-oracle builds it too.
 alone.push('tests/acceptance/407/', 'tests/acceptance/407-oracle/');
 // #1956's files each build deep-show (r1) and install the shelf pack's versions in order.

@@ -963,6 +963,24 @@ pub fn run(job: &Map<String, Value>, caps: &Caps, planted: &Planted) -> (Value, 
             sha,
         );
     }
+    // #1967: a terminal recording, converted here by the cells module's pinned emulator into a
+    // keyframe every second and row patches in flicks. A probe answers the asset; a decode the
+    // conversion too.
+    if let Some(rec) = deep_canvas_cells::recording::Recording::parse(&opened.data) {
+        let rec = match planted.is("cells_patch_times_whole_seconds") {
+            true => rec.whole_seconds(),
+            false => rec,
+        };
+        let converted = deep_canvas_cells::recording::convert(&rec);
+        let asset = json!({"sha256": opened.sha, "kind": "terminal",
+            "probe": converted["probe"], "decoder": converted["decoder"]});
+        let reply = match op {
+            "probe" => json!({"asset": asset}),
+            "decode" => json!({"asset": asset, "decoded": converted}),
+            _ => json!({"error": format!("no job {op} for a terminal recording")}),
+        };
+        return (reply, sha);
+    }
     let f = match format(&opened.data) {
         Ok(f) => f,
         Err(r) => return (r, sha),
