@@ -416,6 +416,8 @@ alone.push('tests/acceptance/547/');
 timed.push('tests/acceptance/547/ac4-keyframes.test.ts');
 // #1967's files build deep-show, and determinism renders each side's canonical picture on the GPU.
 alone.push('tests/acceptance/1967/');
+// #407's files each build deep-show (carried.test.ts also with test-hold-min-2s); 407-oracle builds it too.
+alone.push('tests/acceptance/407/', 'tests/acceptance/407-oracle/');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
