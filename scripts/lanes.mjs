@@ -326,6 +326,9 @@ timed.push('tests/acceptance/1942/budgets.test.ts', 'tests/acceptance/1942/stall
 // #1945's files each start a hub on this Mac's Lima VMs and make a throwaway user there, cut every SSH connection of
 // that user for a minute, and run root plans with its sudo password: one file at a time.
 alone.push('tests/acceptance/1945/');
+// #1943's files restart user services on this Mac's Lima VMs and judge check runs against deadlines there: one file at
+// a time.
+alone.push('tests/acceptance/1943/');
 // #1983's files run the x86_64 lane, which builds deep-logic in linux/amd64 and linux/arm64 containers under emulation,
 // and read the container runtime's image list, which another file's container run could change.
 alone.push('tests/acceptance/1983/');
