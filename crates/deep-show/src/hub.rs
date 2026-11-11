@@ -2168,9 +2168,7 @@ impl<'a> Hub<'a> {
             if !deep_canvas_media::planted("undeclared_field_reads_zero") {
                 issues.extend(crate::spawn::undeclared_issues(form));
             }
-            if let Err(i) = self.inline_occurrences(form, &[]) {
-                issues.push(i);
-            }
+            issues.extend(self.inline_baked(form));
         }
         // Mark set columns that read a column source, resolved and narrowed by the core's
         // column view at the frame's step (#397).

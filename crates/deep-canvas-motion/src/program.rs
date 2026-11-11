@@ -2272,15 +2272,14 @@ impl Program {
                 doc::DriverInput::Array(array) => {
                     // #497: a stepping module's array has no steps after t yet, as the input
                     // track has no entries after t, so a lag or smooth that looks ahead through it
-                    // is refused; motion's evaluation reads no module's array at any time.
+                    // is refused; #503: of the arrays, a driver reads only a spectrum's bands.
                     if lagged.iter().any(|l| l.var == *name && l.dt < 0) {
                         return Err(refused("look_ahead_on_array", format!("lag({name}) looks ahead through the array `{array}`, which a stepping module writes step by step")));
                     }
-                    return Err(Refused {
-                        code: "ref_unresolved",
-                        path: format!("{path}/vars/{name}"),
-                        detail: Some(Box::new(json!({"driver": driver.id, "array": array, "why": "motion's drivers read no canvas module's array"}))),
-                    });
+                    let why = "motion's drivers read no canvas module's array but a spectrum's bands";
+                    let detail = Some(Box::new(json!({"driver": driver.id, "array": array, "why": why})));
+                    let read = crate::occurrence::band(doc, array, self.motion.transport.start);
+                    CoreInput::Occurrence(Arc::new(read.ok_or(Refused { code: "ref_unresolved", path: format!("{path}/vars/{name}"), detail })?))
                 }
                 doc::DriverInput::Time => CoreInput::Time,
                 doc::DriverInput::Rate(id) => {

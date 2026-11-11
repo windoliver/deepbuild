@@ -37,8 +37,10 @@ pub const FLICKS: i64 = 705_600_000;
 /// deep-show's model bakes read: a tracker that answers 120 BPM whatever its record holds, an
 /// activity bake that thresholds level instead of the model's probabilities, and a visemes bake
 /// with no lead; and #502's, which deep-show's export and script read: a normalizer that rides
-/// gain to −23 LUFS, a words bake read 200 ms late, and a sidecar writer that times cues at 24 fps.
-pub const PLANTED: [&str; 21] = [
+/// gain to −23 LUFS, a words bake read 200 ms late, and a sidecar writer that times cues at 24 fps;
+/// and #503's, which deep-show's spectrum bake reads: bands spaced evenly in hertz, and a bake that
+/// leaves out the window's normalization.
+pub const PLANTED: [&str; 23] = [
     "av_link_compares_start_only",
     "av_link_start_only",
     "sample_peak_meter",
@@ -60,6 +62,8 @@ pub const PLANTED: [&str; 21] = [
     "normalizer_rides_gain",
     "words_bake_200ms_late",
     "sidecar_times_at_24fps",
+    "spectrum_bands_even_hz",
+    "spectrum_skips_window_norm",
 ];
 
 static PLANTED_NOW: std::sync::Mutex<Option<&'static str>> = std::sync::Mutex::new(None);

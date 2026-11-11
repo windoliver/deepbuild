@@ -175,6 +175,8 @@ const DEVICE_BUFFER: usize = 512;
 pub struct Gate {
     owners: BTreeMap<String, Owner>,
     pub sources: BTreeMap<String, Arc<deep_canvas_media::mix::Source>>,
+    /// #503: each declared spectrum's bands as the array its readers read, by asset and fields.
+    pub spectra: BTreeMap<String, Arc<serde_json::Value>>,
     /// The test audio backend as the run's device changes left it.
     pub backend: Option<crate::audio::Backend>,
 }

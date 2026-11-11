@@ -96,8 +96,7 @@ pub const ENVELOPE_KEYS: &[&str] = &[
     "worlds",
     "brief",
     "checks",
-    // The media module's strips and the positional voices placed on items (#427; Strip and
-    // track, Emitter), read by the media module.
+    // #427: the media module's strips and the positional voices on items (Strip and track, Emitter).
     "strips",
     "emitters",
     // #499: the media module's buses and processors (Bus, Processor).
@@ -105,8 +104,9 @@ pub const ENVELOPE_KEYS: &[&str] = &[
     "processors",
     // #544: the media module's spawns (Spawn), which may read a logic item's occurrences.
     "spawns",
-    // #502: the media module's ducking entries (Ducking), each a bus's gain under speech spans.
+    // #502, #503: the media module's ducking entries (Ducking) and its bakes (Analysis bake).
     "ducking",
+    "bakes",
 ];
 
 /// An item's keys (Item and kind), in this slice.
@@ -277,8 +277,8 @@ impl Issue {
         if self.code == "bad_unit" {
             out.insert("forms".into(), json!(self.forms));
         }
-        // The column view's issue names its reader, column, row, value and step (#397).
-        if self.code == "column.out_of_range" {
+        // The column view's issue names its reader, column, row, value and step (#397); a bake's empty bands, theirs (#503).
+        if matches!(self.code, "column.out_of_range" | "spectrum_band_empty") {
             if let Value::Object(fields) = &self.actual {
                 for (k, v) in fields {
                     out.entry(k.clone()).or_insert_with(|| v.clone());

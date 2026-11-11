@@ -312,7 +312,10 @@ impl<'a> Hub<'a> {
                     let v = evaluated.array(&self.sched, name);
                     let n = v.as_ref().and_then(|v| v.as_typed::<i64>()).map(|n| json!(*n));
                     let x = v.as_ref().and_then(|v| v.as_typed::<f64>()).map(|x| json!(*x));
-                    (name.clone(), n.or(x).unwrap_or(Value::Null))
+                    // #503: a spectrum's bands, the array the document's bake fills, as this frame reads them.
+                    let doc = evaluated.document();
+                    let bands = || doc.and_then(|d| deep_canvas::columns::map(d.get("arrays")?.get(name)?, t, None, false)).map(|m| json!(m.values));
+                    (name.clone(), n.or(x).or_else(bands).unwrap_or(Value::Null))
                 })
                 .collect();
             reply["arrays"] = Value::Object(read);
