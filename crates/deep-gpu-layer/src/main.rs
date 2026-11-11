@@ -10,6 +10,8 @@
 //! and no app, so no window. #385 adds the 2D calls (`layers`, `window2d`, `vello_gpu`,
 //! `spike2d`; tests/acceptance/385/README.md) and, in test-spike builds, `--spike-record <file>`.
 //! #417 adds `film2d`: a 2D film in the window under a look, with its look switches timed.
+//! #1056 adds `index_record` and `cross_index`: a pixel look's per-frame index records, compared
+//! across GPU families (records.rs).
 
 #[cfg(feature = "test-meter")]
 mod allocations;
@@ -46,6 +48,7 @@ mod paintfx;
 mod parity;
 mod plugin;
 mod print2d;
+mod records;
 mod reference;
 mod scene;
 mod seam;
@@ -855,6 +858,8 @@ impl App {
             Some("columns") => columns::call(self, call),
             Some("exact") => effects::exact(self, out),
             Some("cross_gpu") => effects::cross_gpu(self, call),
+            Some("index_record") => records::index_record(self, out, call),
+            Some("cross_index") => records::cross_index(call),
             Some("op_table") => steps_ref::op_table(),
             Some("steps_reference") => steps_ref::steps_reference(self, out),
             Some("interp_suite") => interp_suite::call(self, call),

@@ -239,6 +239,27 @@ pub enum Planted {
     MatchFramerIgnoresMatch,
     /// #493: a kick drawing a fresh random offset each frame.
     KickFreshPerFrame,
+    /// #504: a stage's glide that eases the camera's target alone, its eye on the framed position
+    /// from the entry's frame.
+    StageGlideMovesTargetOnly,
+    /// #504: a take-apart that moves every target at once, its stagger dropped.
+    TakeApartAllAtOnce,
+    /// #504: framing that bounds an assembly's parts where they start, without the take-apart.
+    FramerIgnoresApart,
+    /// #504: readouts filled from the values as the document writes them, not as the frame
+    /// evaluates them (read by the hosts that fill readouts through `eval::shown_doc`).
+    ReadoutReadsDocument,
+    /// #504: an assembly's value stepping toward its writer's from the value the previous
+    /// evaluated frame left: frame history.
+    AssemblyValueFromPreviousFrame,
+    /// #504: stages whose `set` sets nothing.
+    StageSetIgnored,
+    /// #504: a replayed control bounded by its whole range, never by its entries.
+    ReplayBoundsWholeRange,
+    /// #504: a slider's entries dropped, so it reads its default whatever you set.
+    SliderEntriesIgnored,
+    /// #504: a stage's shot that cuts to its pose at its entry, never gliding.
+    StageShotCuts,
 }
 
 impl Planted {
@@ -356,6 +377,21 @@ pub struct Program {
     pub shots: Option<Arc<crate::shots::Plan>>,
     /// #494: the match morphs between two items in one shot.
     pub betweens: Vec<crate::morph::Between>,
+    /// #504: the document's assemblies in ID order, each with its two slots (value, then share).
+    pub assemblies: Vec<crate::assembly::Assembly>,
+    /// #504: each item whose parent names an assembly, with that assembly, both as indices.
+    pub(crate) members: Vec<(usize, usize)>,
+    /// #504: each take-apart target's share slot and its follow, in stagger then list order.
+    pub(crate) staggered: Vec<Staggered>,
+}
+
+/// #504: one take-apart target: its stagger (in [`Motion::staggers`]), its assembly's share slot
+/// and the follow its share takes, its source's changes delayed by its rank.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct Staggered {
+    pub(crate) stagger: usize,
+    pub(crate) slot: usize,
+    pub(crate) follow: crate::follow::Follow,
 }
 
 /// What one evaluation fills, sized by [`Program::state`] and reused frame after frame.
@@ -378,6 +414,8 @@ pub struct State {
     pub reports: Vec<(u64, f64)>,
     /// The planted follow stepper's last frame: its time and state, per channel.
     pub(crate) last: Vec<Option<(i64, crate::follow::Out)>>,
+    /// #504's planted stepper: each assembly's value as the previous frame left it.
+    pub(crate) previous: Vec<Option<f64>>,
     /// Each constraint but `limit`: whether its aim had no direction this frame.
     pub degenerate: Vec<bool>,
     /// An earlier chain a lag reads (#495), which leaves the lagging drivers out.
@@ -431,6 +469,24 @@ fn resolve_of(doc: &Map<String, Value>, motion: &mut doc::Motion, options: &Opti
     Ok(())
 }
 
+/// #504: refuses a write or a read of `assemblies/<id>/value` naming no assembly, naming the field.
+fn refuse_unknown_assemblies(motion: &Motion, assemblies: &[crate::assembly::Assembly]) -> Result<(), Refused> {
+    let named = motion
+        .channels
+        .iter()
+        .map(|c| (format!("channels/{}/target", c.id), &c.target))
+        .chain(motion.follows.iter().map(|f| (f.entry(), &f.target)))
+        .chain(motion.drivers.iter().map(|d| (format!("drivers/{}/target", d.id), &d.target)))
+        .chain(motion.drivers.iter().flat_map(|d| d.vars.iter().map(move |(n, v)| (format!("drivers/{}/vars/{n}", d.id), v))));
+    for (path, target) in named {
+        let unknown = target.owner.strip_prefix("assemblies/").is_some_and(|id| !assemblies.iter().any(|a| a.id == id));
+        if unknown {
+            return Err(Refused { code: "ref_unresolved", path, detail: None });
+        }
+    }
+    Ok(())
+}
+
 /// The authored value at `path` inside `item`, `width` components wide.
 fn authored(item: &Value, path: &[impl AsRef<str>], width: usize, out: &mut [f64]) {
     let mut at = Some(item);
@@ -465,7 +521,22 @@ impl Program {
     /// [`Program::compile`] with the input track, the view and a planted program.
     pub fn compile_with(doc: &Map<String, Value>, options: Options) -> Result<Program, Refused> {
         crate::held::check(doc)?;
+        // #504: a played form carries its input track inline; it is the track every read takes.
+        let mut options = options;
+        if let Some(track) = doc::track(doc)? {
+            options.input = track;
+        }
         let mut motion = doc::read_with(doc, options.planted == Planted::BeatGridF32, options.planted.arc())?;
+        if options.planted == Planted::StageSetIgnored {
+            motion.follows.retain(|f| !f.id.starts_with("controls/"));
+        }
+        if options.planted == Planted::StageShotCuts {
+            motion.shots.iter_mut().for_each(|s| s.glide = 0);
+        }
+        if options.planted == Planted::SliderEntriesIgnored {
+            let slider = |c: &str| doc.get("controls").and_then(|m| m.get(c)).and_then(|c| c.get("kind")) == Some(&json!("slider"));
+            options.input.retain(|e| !slider(&e.control));
+        }
         if options.planted == Planted::SpringDropsVelocity {
             for c in &mut motion.channels {
                 c.curve.keys.iter_mut().for_each(|k| k.velocity.clear());
@@ -503,6 +574,26 @@ impl Program {
                 }
             }
         }
+        // #504: each assembly's value and take-apart share, two slots after the transforms.
+        let mut assemblies = crate::assembly::read(doc)?;
+        for a in &mut assemblies {
+            a.slot = base.len();
+            base.extend([a.value, 0.0]);
+        }
+        refuse_unknown_assemblies(&motion, &assemblies)?;
+        // An item's parent names an assembly where it names no item (`doc::parents_of`).
+        let members = items_json
+            .values()
+            .enumerate()
+            .filter_map(|(i, item)| {
+                let parent = item.get("parent")?.as_str().filter(|p| !items_json.contains_key(*p))?;
+                Some((i, assemblies.iter().position(|a| a.id == parent)?))
+            })
+            .collect();
+        // The toggles' and stages' entries move #417's follows and stage shots.
+        let Some(inputs) = Inputs::new(&motion, Feel::default(), &options.input) else {
+            return Err(Refused { code: "ref_unresolved", path: "track".into(), detail: Some(Box::new(json!({"why": "an entry's value is none of its control's options"}))) });
+        };
         let mut program = Program {
             items,
             fields: Vec::new(),
@@ -511,7 +602,7 @@ impl Program {
             values: Vec::new(),
             values_len: 0,
             follows: Vec::new(),
-            inputs: Inputs::new(&motion, Feel::default(), &[]).unwrap_or_default(),
+            inputs,
             placements: Vec::new(),
             mixes: Vec::new(),
             quantize: None,
@@ -529,6 +620,9 @@ impl Program {
             motion: motion.clone(),
             shots: None,
             betweens: Vec::new(),
+            assemblies,
+            members,
+            staggered: Vec::new(),
         };
         // Only a document with frames is laid out; it is refused here only when a key glides
         // its layout, since the layout is otherwise not motion's to check. A glide needs a frame
@@ -752,6 +846,7 @@ impl Program {
             .iter()
             .filter_map(|(child, parent)| Some((index(child)?, index(parent)?)))
             .collect();
+        program.staggered = program.build_staggers();
         program.refuse_second_writers(doc)?;
         program.refuse_look_ahead()?;
         program.schedule(program.options.planted == Planted::SchedulesWholeItems)?;
@@ -928,7 +1023,10 @@ impl Program {
             }
         }
         for (f, &slot) in self.follows.iter().enumerate() {
-            claim(slot, format!("channels/{}", self.motion.follows[f].id))?;
+            claim(slot, self.motion.follows[f].entry())?;
+        }
+        for s in &self.staggered {
+            claim(s.slot, format!("channels/{}", self.motion.staggers[s.stagger].id))?;
         }
         for (p, writes) in self.placements.iter().enumerate() {
             for w in writes {
@@ -1001,7 +1099,7 @@ impl Program {
             });
             keyed.or_else(|| {
                 let f = motion.follows.iter().find(|f| targets(&f.target.owner))?;
-                Some(format!("channels/{} (controls/{})", f.id, motion.controls[f.control].id))
+                Some(format!("{} (controls/{})", f.entry(), motion.controls[f.control].id))
             })
         };
         let own = || {
@@ -1190,23 +1288,14 @@ impl Program {
     /// Each follow channel's segments, over its source's changes: a keyed source's keys, or
     /// a control's default and then its entries on the input track, in time and seq order.
     fn build_follows(&self) -> Vec<Option<crate::follow::Follow>> {
-        use crate::follow::{Follow, Model, Source};
+        use crate::follow::{Follow, Model};
         let reduced = self.options.reduced_motion && self.motion.transport.reduce_holds;
         self.motion
             .channels
             .iter()
             .map(|c| {
                 let spec = c.follow.as_ref()?;
-                let (initial, changes): (f64, Vec<(i64, f64)>) = match &spec.source {
-                    Source::Keys(keys) => (keys[0].1, keys[1..].to_vec()),
-                    Source::Control(id) => {
-                        let default = self.motion.control_defaults.iter().find(|(c, _)| c == id).map_or(0.0, |c| c.1);
-                        let mut entries: Vec<&Entry> = self.options.input.iter().filter(|e| e.control == *id).collect();
-                        entries.sort_by_key(|e| e.key());
-                        let value = |e: &Entry| e.value.as_f64().or_else(|| e.value.as_bool().map(|b| f64::from(u8::from(b))));
-                        (default, entries.iter().filter_map(|e| Some((e.t, value(e)?))).collect())
-                    }
-                };
+                let (initial, changes) = self.source_changes(&spec.source);
                 let mut model = spec.model;
                 // Under reduced motion's hold, a transition on a position, scale or rotation
                 // lands on its target at the change's flick; opacity and color play as written.
@@ -1220,11 +1309,65 @@ impl Program {
             .collect()
     }
 
-    /// The program under a look's time feel and an input track (#417), or `None` for a track
-    /// entry naming a control it doesn't read or a value outside the control's options.
+    /// A follow's source before any change and each change in time order: a keyed source's
+    /// keys, or a control's default and then its entries on the input track, in time and seq
+    /// order.
+    fn source_changes(&self, source: &crate::follow::Source) -> (f64, Vec<(i64, f64)>) {
+        match source {
+            crate::follow::Source::Keys(keys) => (keys[0].1, keys[1..].to_vec()),
+            crate::follow::Source::Control(id) => {
+                let default = self.motion.control_defaults.iter().find(|(c, _)| c == id).map_or(0.0, |c| c.1);
+                let mut entries: Vec<&Entry> = self.options.input.iter().filter(|e| e.control == *id).collect();
+                entries.sort_by_key(|e| e.key());
+                let value = |e: &Entry| e.value.as_f64().or_else(|| e.value.as_bool().map(|b| f64::from(u8::from(b))));
+                (default, entries.iter().filter_map(|e| Some((e.t, value(e)?))).collect())
+            }
+        }
+    }
+
+    /// #504: each take-apart target's share: the stagger's follow of its source, each change
+    /// reaching the target rank × lag later, or a closing one (the source falling) (n − 1 − rank)
+    /// × lag later under `reverse_on_close`. A change a later one reaches first never starts, so
+    /// the target turns back from where its share is.
+    fn build_staggers(&self) -> Vec<Staggered> {
+        use crate::follow::{Follow, Model};
+        let reduced = self.options.reduced_motion && self.motion.transport.reduce_holds;
+        let mut out = Vec::new();
+        for (k, st) in self.motion.staggers.iter().enumerate() {
+            let (initial, changes) = self.source_changes(&st.spec.source);
+            let mut model = st.spec.model;
+            // Under reduced motion's hold a share lands at its change, as a follow on a position does.
+            if let (true, Model::Transition { along, .. }) = (reduced, model) {
+                model = Model::Transition { span: 0, along };
+            }
+            let n = st.targets.len();
+            for (id, rank) in &st.targets {
+                let Some(a) = self.assemblies.iter().find(|a| a.id == *id) else { continue };
+                let mut delayed: Vec<(i64, f64)> = Vec::new();
+                let mut held = initial;
+                for &(t, v) in &changes {
+                    let r = if st.reverse_on_close && v < held { n - 1 - rank } else { *rank };
+                    let at = if self.options.planted == Planted::TakeApartAllAtOnce { t } else { t + r as i64 * st.lag };
+                    delayed.retain(|(d, _)| *d <= at);
+                    delayed.push((at, v));
+                    held = v;
+                }
+                let restart = self.options.planted == Planted::TransitionRestarts;
+                out.push(Staggered { stagger: k, slot: a.slot + 1, follow: Follow::with(model, initial, &delayed, restart) });
+            }
+        }
+        out
+    }
+
+    /// The program under a look's time feel and an input track (#417), or `None` for a value
+    /// outside its control's options; entries on controls these moves don't read move nothing.
     pub fn with_inputs(mut self, feel: Feel, track: &[Entry]) -> Option<Program> {
         self.inputs = Inputs::new(&self.motion, feel, track)?;
         self.quantize = feel.quantize;
+        // #504: the shots plan glides each camera between its stage shots' framed poses.
+        if let Some(plan) = self.shots.as_mut() {
+            Arc::make_mut(plan).staged = self.inputs.staged.clone();
+        }
         Some(self)
     }
 
@@ -1265,6 +1408,10 @@ impl Program {
         target: &Target,
         width: usize,
     ) -> usize {
+        // #504: an assembly's value takes its own slot.
+        if let Some(a) = owner.strip_prefix("assemblies/").and_then(|id| self.assemblies.iter().find(|a| a.id == id)) {
+            return a.slot;
+        }
         let item = self.items.iter().position(|i| i == owner);
         // A vec3 on a whole `at` vector writes the transform's own three slots, so a frame draws
         // it as it draws a component's.
@@ -1328,6 +1475,7 @@ impl Program {
             follow: vec![Default::default(); self.motion.channels.len()],
             reports: vec![(0, f64::NAN); self.limits.len() + self.constraints.len()],
             last: vec![None; self.motion.channels.len()],
+            previous: vec![None; self.assemblies.len()],
             degenerate: vec![false; self.constraints.len()],
             nested: false,
         }
@@ -1336,9 +1484,108 @@ impl Program {
     /// Evaluates the document at `t` into `state`, allocating nothing.
     pub fn evaluate(&self, t: i64, validity: Validity, state: &mut State) {
         self.evaluate_local(t, validity, state);
+        if self.options.planted == Planted::AssemblyValueFromPreviousFrame {
+            for (a, x) in self.assemblies.iter().enumerate() {
+                let from = state.previous[a].unwrap_or(self.base[x.slot]);
+                state.slots[x.slot] = from + 0.5 * (state.slots[x.slot] - from);
+                state.previous[a] = Some(state.slots[x.slot]);
+            }
+        }
+        // #504: an assembly's parts ride it before their own children ride them.
+        for &(i, a) in &self.members {
+            let world = self.assembly_world(&state.slots, a);
+            crate::assembly::placed(&world, &mut state.slots[i * TRANSFORM..(i + 1) * TRANSFORM]);
+        }
         for &(child, parent) in &self.parents {
             parent_to(&mut state.slots, child, parent);
         }
+    }
+
+    /// #504: [`Program::evaluate`] with each assembly's parts left in its own space: what an
+    /// assembly's reach widens (Camera `camera@1`: framing).
+    pub(crate) fn evaluate_unassembled(&self, t: i64, state: &mut State) {
+        self.evaluate_local(t, Validity::Full, state);
+        for &(child, parent) in &self.parents {
+            parent_to(&mut state.slots, child, parent);
+        }
+    }
+
+    /// #504: assembly `a`'s world transform from the slots: its own, T(apart · share) · at ·
+    /// M(value), under each parent's.
+    pub fn assembly_world(&self, slots: &[f64], a: usize) -> crate::assembly::Affine3 {
+        let mut m = crate::assembly::IDENTITY;
+        let mut at = Some(a);
+        while let Some(i) = at {
+            let x = &self.assemblies[i];
+            m = crate::assembly::matmul(&x.local(slots[x.slot], slots[x.slot + 1]), &m);
+            at = x.parent;
+        }
+        m
+    }
+
+    /// #504: the assembly the item's own parent names, if it names one.
+    pub(crate) fn assembly_of(&self, item: &str) -> Option<usize> {
+        let i = self.items.iter().position(|x| x == item)?;
+        self.members.iter().find(|(m, _)| *m == i).map(|&(_, a)| a)
+    }
+
+    /// #504: the assembly an item rides: the one its parent names, or its item parents' root's.
+    pub fn member(&self, item: &str) -> Option<usize> {
+        let mut i = self.items.iter().position(|x| x == item)?;
+        for _ in 0..=self.items.len() {
+            if let Some(&(_, a)) = self.members.iter().find(|(m, _)| *m == i) {
+                return Some(a);
+            }
+            i = self.parents.iter().find(|(c, _)| *c == i)?.1;
+        }
+        None
+    }
+
+    /// #504: what assembly `a`'s value and take-apart share can reach: the value over its range
+    /// (or its writer's bound, or its own where nothing writes it), and the share over its
+    /// source's reachable values, a control's declared range and a toggle's both among them,
+    /// held to [0, 1] (all of it where the follow may overshoot). `None` where nothing bounds the
+    /// value.
+    pub(crate) fn assembly_reach(&self, doc: &Map<String, Value>, a: usize) -> Option<(Iv, Iv)> {
+        use crate::follow::{Along, Model, Source};
+        let x = &self.assemblies[a];
+        let value = match x.joint.and_then(|j| j.range) {
+            _ if x.joint.is_none() => Iv::point(self.base[x.slot]),
+            Some((lo, hi)) => Iv::new(lo, hi),
+            None if !self.writes(x.slot..x.slot + 1) => Iv::point(self.base[x.slot]),
+            None => {
+                let span = self.motion.transport.span.map_or(f64::INFINITY, |s| s as f64 / deep_canvas::grammar::FLICKS_PER_SECOND as f64);
+                let by: Vec<&doc::Channel> = self.channels.iter().zip(&self.motion.channels).filter(|((s, _), _)| *s == x.slot).map(|(_, c)| c).collect();
+                match (by.as_slice(), self.slot_bound_over(x.slot, Iv::new(0.0, span))) {
+                    (_, Some(b)) if b.is_bounded() => b,
+                    ([c], _) => channel_bound(c).map(|(lo, hi)| Iv::new(lo, hi))?,
+                    _ => return None,
+                }
+            }
+        };
+        let mut share = Iv::point(0.0);
+        for s in self.staggered.iter().filter(|s| s.slot == x.slot + 1) {
+            let spec = &self.motion.staggers[s.stagger].spec;
+            let (initial, changes) = self.source_changes(&spec.source);
+            let mut reach = changes.iter().fold(Iv::point(initial), |r, (_, v)| r.hull(Iv::point(*v)));
+            if let Source::Control(id) = &spec.source {
+                let c = doc.get("controls").and_then(|c| c.get(id));
+                if let Some([lo, hi]) = c.and_then(|c| c.get("range")).and_then(Value::as_array).map(Vec::as_slice) {
+                    reach = reach.hull(Iv::new(lo.as_f64().unwrap_or(0.0), hi.as_f64().unwrap_or(1.0)));
+                }
+                if c.and_then(|c| c.get("kind")).and_then(Value::as_str) == Some("toggle") {
+                    reach = reach.hull(Iv::new(0.0, 1.0));
+                }
+            }
+            let overshoots = match spec.model {
+                Model::Spring(_) => true,
+                Model::Transition { along: Along::Ease(e), .. } => !e.bounded(),
+                Model::Transition { along: Along::Bezier(z), .. } => !(0.0..=1.0).contains(&z.y1) || !(0.0..=1.0).contains(&z.y2),
+                _ => false,
+            };
+            share = share.hull(if overshoots { Iv::new(0.0, 1.0) } else { reach.meet(Iv::new(0.0, 1.0)) });
+        }
+        Some((value, share))
     }
 
     /// [`Program::evaluate`] without child-of parenting: each item's own transform, as the
@@ -1372,6 +1619,10 @@ impl Program {
             state.values[self.values_len + f] = value;
             state.slots[slot] = value;
             note(&Event::Follow(f), &[], &state.slots);
+        }
+        // #504: each take-apart share, on the clock's t as the input track is, held to [0, 1].
+        for s in &self.staggered {
+            state.slots[s.slot] = s.follow.at(t).value.clamp(0.0, 1.0);
         }
         for (c, moves) in self.inputs.cameras.iter().enumerate() {
             state.cameras[c] = moves.at(t);
@@ -1560,10 +1811,9 @@ impl Program {
             Some(rate) => timeline.map(|n| n.max(crate::eval::next_grid(doc_t, rate) + t - doc_t)),
             None => timeline,
         };
-        match (timeline, self.inputs.next_change(t)) {
-            (Some(a), Some(b)) => Some(a.min(b)),
-            (a, b) => a.or(b),
-        }
+        // #504: a take-apart changes until its last target's move ends.
+        let staggered = self.staggered.iter().filter_map(|s| s.follow.next_change(t)).min();
+        [timeline, self.inputs.next_change(t), staggered].into_iter().flatten().min()
     }
 
     /// #1487: the `valid_until` of the frame `state` holds, counting only items a view shows
@@ -2040,6 +2290,9 @@ impl Program {
     fn item_of(&self, slot: usize) -> String {
         if slot < self.items.len() * TRANSFORM {
             return self.items[slot / TRANSFORM].clone();
+        }
+        if let Some(a) = self.assemblies.iter().find(|a| (a.slot..a.slot + 2).contains(&slot)) {
+            return format!("assemblies/{}", a.id);
         }
         self.fields
             .iter()
@@ -2663,6 +2916,7 @@ impl Program {
     /// placement, limit or constraint), so at one time it holds one value whatever a control is.
     pub fn time_only(&self, s: usize) -> bool {
         !(self.follows.contains(&s)
+            || self.staggered.iter().any(|x| x.slot == s)
             || self.placements.iter().flatten().any(|w| (w.slot..w.slot + w.width).contains(&s))
             || self.drivers.iter().any(|(slot, _)| *slot == s)
             || self.limits.iter().any(|(first, _)| (*first..first + 3).contains(&s))
@@ -2673,6 +2927,10 @@ impl Program {
     /// driver's bound over that time, a lone channel's window, or the base where nothing writes
     /// it; `None` where no form bounds it.
     pub fn slot_window(&self, s: usize, a: i64, b: i64, at_a: f64, at_b: f64) -> Option<Iv> {
+        // #504: a take-apart share, the hull of its ends inside one move of its follow.
+        if let Some(x) = self.staggered.iter().find(|x| x.slot == s) {
+            return x.follow.window(a, b, at_a, at_b).map(|iv| iv.meet(Iv::new(0.0, 1.0)));
+        }
         let lone: Vec<usize> = (0..self.channels.len())
             .filter(|&c| (self.channels[c].0..self.channels[c].0 + self.channels[c].1).contains(&s))
             .collect();
@@ -2704,19 +2962,23 @@ impl Program {
         let span = self.motion.transport.span.map_or(f64::INFINITY, |s| {
             s as f64 / deep_canvas::grammar::FLICKS_PER_SECOND as f64
         });
+        let f = deep_canvas::grammar::FLICKS_PER_SECOND as f64;
         let vars: Vec<Iv> = core
             .inputs
             .iter()
             .map(|input| match input {
                 CoreInput::Time => time,
-                CoreInput::Control { range, .. } => Iv::new(range.0, range.1),
+                CoreInput::Control { entries, default, range } => self.control_in(entries, *default, *range, time, span),
                 CoreInput::Slot(s) => self.slot_bound(*s),
                 CoreInput::World(..) | CoreInput::Rate(_) => Iv::ENTIRE,
                 CoreInput::Remap(..) => Iv::new(0.0, 1.0),
                 CoreInput::Occurrence(read) => read.bound(span),
-                CoreInput::Lag(inner, _) => match &**inner {
+                CoreInput::Lag(inner, dt) => match &**inner {
                     CoreInput::Slot(s) => self.slot_bound(*s),
-                    CoreInput::Control { range, .. } => Iv::new(range.0, range.1),
+                    CoreInput::Control { entries, default, range } => {
+                        let back = *dt as f64 / f;
+                        self.control_in(entries, *default, *range, Iv::new(time.lo - back, time.hi - back), span)
+                    }
                     _ => Iv::new(0.0, span),
                 },
             })
@@ -2726,6 +2988,27 @@ impl Program {
             Some(f) => Iv::new(b.lo.min(f), b.hi.max(f)),
             None => b,
         }
+    }
+
+    /// #504: a control's value over the document times `time` (seconds; `span` the document's):
+    /// inside a window, with entries on the track, the hull of its value as the window opens and
+    /// each entry inside it, so a replayed sweep is bounded between its entries; over the whole
+    /// document (the hard-range check's) or with no entries, its declared range. The window is
+    /// widened by a flick each way, past the rounding of its seconds.
+    fn control_in(&self, entries: &[(i64, i64, f64)], default: f64, range: (f64, f64), time: Iv, span: f64) -> Iv {
+        let whole = time.lo <= 0.0 && time.hi >= span;
+        if entries.is_empty() || whole || self.options.planted == Planted::ReplayBoundsWholeRange {
+            return Iv::new(range.0, range.1);
+        }
+        let f = deep_canvas::grammar::FLICKS_PER_SECOND as f64;
+        let start = self.motion.transport.start as f64;
+        // A window reaching the document's ends reaches what the clock reads past them.
+        let lo = if time.lo <= 0.0 { f64::NEG_INFINITY } else { (start + time.lo * f).floor() - 1.0 };
+        let hi = if time.hi >= span { f64::INFINITY } else { (start + time.hi * f).ceil() + 1.0 };
+        let i = entries.partition_point(|e| (e.0 as f64) < lo);
+        let open = i.checked_sub(1).map_or(default, |i| entries[i].2);
+        let held = |v: f64| Iv::point(v.clamp(range.0, range.1));
+        entries[i..].iter().take_while(|e| e.0 as f64 <= hi).fold(held(open), |b, e| b.hull(held(e.2)))
     }
 
     /// The bound of what slot `s` holds: its base value when nothing writes it, a channel's
@@ -2740,6 +3023,7 @@ impl Program {
         // Any write but the channels' (a placement's clip, a follow, a driver, a constraint)
         // leaves the slot unbounded here.
         let others = self.follows.contains(&s)
+            || self.staggered.iter().any(|x| x.slot == s)
             || self.placements.iter().flatten().any(|w| (w.slot..w.slot + w.width).contains(&s))
             || self.drivers.iter().any(|(slot, _)| *slot == s)
             || self.limits.iter().any(|(first, _)| (*first..first + 3).contains(&s))
@@ -2851,6 +3135,7 @@ impl Program {
         let hits = |at: usize, width: usize| at < slots.end && slots.start < at + width;
         self.channels.iter().any(|&(at, width)| hits(at, width))
             || self.follows.iter().any(|&at| hits(at, 1))
+            || self.staggered.iter().any(|x| hits(x.slot, 1))
             || self
                 .placements
                 .iter()
@@ -2925,7 +3210,7 @@ impl Program {
                     }
                 }
                 Event::Follow(f) if self.follows[*f] == slot => Traced {
-                    entry: format!("channels/{}", self.motion.follows[*f].id),
+                    entry: self.motion.follows[*f].entry(),
                     operator: "channels",
                     value: slots[slot],
                     limit: false,

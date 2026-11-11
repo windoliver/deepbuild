@@ -286,6 +286,20 @@ fn reach(doc: &Value, t: i64, program: &Program, solids: &[Solid], spread: &dyn 
                     .fold(0.0, f64::max);
                 reach += dpos + (far + reach) * dturn;
             }
+            // #504: the assemblies the part rides, each a slide by its value and a share of its
+            // apart vector; a turn that moves isn't bounded here, so the stretch is an estimate.
+            let mut at = program.member(owner);
+            while let Some(a) = at {
+                let x = &program.assemblies[a];
+                let value = spread(x.slot)?;
+                match x.joint.as_ref().map(|j| &j.kind) {
+                    Some(deep_canvas_motion::assembly::Kind::Turn) if value > 0.0 => return None,
+                    Some(deep_canvas_motion::assembly::Kind::Slide) => reach += value,
+                    _ => {}
+                }
+                reach += spread(x.slot + 1)? * norm(x.apart);
+                at = x.parent;
+            }
             Some(reach)
         })
         .collect()
@@ -475,6 +489,8 @@ pub(crate) struct Audit<'a> {
     pub samples_only: bool,
     /// #1936's planted audit: the overlap pass alone.
     pub overlaps_only: bool,
+    /// #504's planted sweep: the control stepped, every assembly posed at its rest value.
+    pub assemblies_at_rest: bool,
 }
 
 impl Audit<'_> {
@@ -623,7 +639,16 @@ impl Audit<'_> {
                         // A value the parts can't be evaluated at is never audited as empty.
                         let mut failed: Option<String> = None;
                         let mut state_at = |v: f64| {
-                            solids_at(&with_control(doc, &id, v), t0, &moved).unwrap_or_else(|why| {
+                            let mut swept = with_control(doc, &id, v);
+                            if self.assemblies_at_rest {
+                                // Planted: nothing that writes an assembly's value runs.
+                                for section in ["drivers", "channels"] {
+                                    if let Some(m) = swept.get_mut(section).and_then(Value::as_object_mut) {
+                                        m.retain(|_, w| !w["target"].as_str().is_some_and(|t| t.starts_with("assemblies/")));
+                                    }
+                                }
+                            }
+                            solids_at(&swept, t0, &moved).unwrap_or_else(|why| {
                                 failed.get_or_insert(format!("{state}:{id} at {v}: {why}"));
                                 Vec::new()
                             })
@@ -758,7 +783,8 @@ impl crate::hub::Hub<'_> {
                 if drawn.get("size").is_none() {
                     drawn["size"] = json!([640, 480]);
                 }
-                let run = audit_document(&Audit { doc: drawn, input: &r.check, approved: &approved, samples_only, overlaps_only });
+                let assemblies_at_rest = self.planted(crate::hub::Planted::SweepPosesAssembliesAtRest);
+                let run = audit_document(&Audit { doc: drawn, input: &r.check, approved: &approved, samples_only, overlaps_only, assemblies_at_rest });
                 j.ms += run.ms;
                 for mut i in run.issues {
                     i["doc"] = json!(doc);
@@ -843,7 +869,7 @@ mod tests {
         });
         let mut input = json!({"kind": GEOMETRY_AUDIT, "scope": "scene", "support": {"floating": ["floor"]}});
         input.as_object_mut().expect("an object").extend(check.as_object().expect("an object").clone());
-        audit_document(&Audit { doc, input: &input, approved: &BTreeSet::new(), samples_only: false, overlaps_only: false })
+        audit_document(&Audit { doc, input: &input, approved: &BTreeSet::new(), samples_only: false, overlaps_only: false, assemblies_at_rest: false })
     }
 
     #[test]

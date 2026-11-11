@@ -73,6 +73,21 @@ pub fn story_numbers<'t>(doc: &Value, template: &'t str) -> Vec<(&'t str, String
 /// The value at `path` in `doc`: a data constant `data/<name>`, a number or a string, bare or as
 /// `{value, source}` (Document envelope). `None` when the path names nothing this build shows.
 pub fn value(doc: &Value, path: &str) -> Option<Shown> {
+    // #504: a figure's readout also reads what moves its parts: an assembly's value (0 when
+    // unwritten) and a control's (its value at t where the caller wrote one, else its default),
+    // so every number on the card comes from the model that moves the parts.
+    let moved = |section: &str, field: &str| -> Option<Option<f64>> {
+        let id = path.strip_prefix(section)?.strip_suffix("/value")?;
+        let entry = doc.get(section.trim_end_matches('/'))?.get(id)?;
+        let first = entry.get("range").and_then(|r| r.get(0));
+        Some(entry.get(field).or_else(|| entry.get("default")).or(first).and_then(Value::as_f64))
+    };
+    if let Some(v) = moved("assemblies/", "value") {
+        return Some(Shown { text: number(v.unwrap_or(0.0)), source: None, number: true });
+    }
+    if let Some(v) = moved("controls/", "value") {
+        return Some(Shown { text: number(v?), source: None, number: true });
+    }
     let name = path.strip_prefix("data/")?;
     let constant = doc.get("data")?.get(name)?;
     let (value, source) = match constant {
@@ -115,6 +130,22 @@ pub fn reads_anchor(doc: &Value, path: &str) -> bool {
         "head" => transform("reveal"),
         _ => false,
     }
+}
+
+/// The fields of a figure's card (Overlay: `card {fig, title, hint, readout, legend, caption}`)
+/// that show text, in the order the card stacks them.
+pub const CARD_LINES: [&str; 5] = ["fig", "title", "hint", "readout", "caption"];
+
+/// A figure's card as lines: each text field the document's `card` writes, by name, with its
+/// template, in [`CARD_LINES`] order (#504). Empty without a card.
+pub fn card_lines(doc: &Value) -> Vec<(&'static str, &str)> {
+    let Some(card) = doc.get("card") else {
+        return Vec::new();
+    };
+    CARD_LINES
+        .into_iter()
+        .filter_map(|f| Some((f, card.get(f)?.as_str()?)))
+        .collect()
 }
 
 /// The template with each slot replaced by what it shows; `Err` holds the first slot that

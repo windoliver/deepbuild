@@ -927,6 +927,11 @@ fn world(items: &Items<'_>, id: &str) -> Affine3 {
             break;
         }
         let Some((parent, local)) = items.placed(p) else {
+            // #504: a chain that ends on an assembly rides its composed transform (Assembly: its
+            // transform composes before its members').
+            if let Some(a) = items.assemblies.get(p) {
+                m = matmul(a, &m);
+            }
             break;
         };
         m = matmul(&local, &m);
@@ -949,13 +954,15 @@ struct Items<'a> {
     /// #2013: each item a `rest_on` rested on true shapes, with its own position and rotation
     /// as solved.
     rested: BTreeMap<String, (Vec3, Vec3)>,
+    /// #504: each assembly's world transform at this state, by ID.
+    assemblies: HashMap<String, Affine3>,
 }
 
 impl<'a> Items<'a> {
     /// `doc`'s items, with `written` from [`eval::written`] of its program at `state`. The
     /// program's items are the document's in its order, so item `i`'s transform is its
     /// `TRANSFORM` slots from `i * TRANSFORM`.
-    fn new(doc: &'a Map<String, Value>, written: &'a Map<String, Value>, state: &'a State) -> Self {
+    fn new(doc: &'a Map<String, Value>, written: &'a Map<String, Value>, state: &'a State, program: &Program) -> Self {
         let mut entries = HashMap::with_capacity(doc.len());
         let mut copies = written.iter().peekable();
         for (i, (id, item)) in doc.iter().enumerate() {
@@ -965,12 +972,19 @@ impl<'a> Items<'a> {
             };
             entries.insert(id.as_str(), entry);
         }
+        let assemblies = program
+            .assemblies
+            .iter()
+            .enumerate()
+            .map(|(i, a)| (a.id.clone(), program.assembly_world(&state.slots, i)))
+            .collect();
         Items {
             doc,
             written,
             entries,
             slots: &state.slots,
             rested: BTreeMap::new(),
+            assemblies,
         }
     }
 
@@ -1235,7 +1249,7 @@ fn rest(
             .get(owner)
             .and_then(|i| i.get("parent"))
             .and_then(Value::as_str)
-            .map(|p| world(items, p));
+            .map(|p| items.assemblies.get(p).copied().unwrap_or_else(|| world(items, p)));
         let origin = match &parent {
             Some(p) => apply(p, pos),
             None => pos,
@@ -1324,7 +1338,7 @@ pub fn rested_with(
         .and_then(Value::as_object)
         .unwrap_or(&empty);
     let written = eval::written(map, program, &state);
-    let mut items = Items::new(doc_items, &written, &state);
+    let mut items = Items::new(doc_items, &written, &state, program);
     let mut problems = Vec::new();
     let seconds = t as f64 / deep_canvas::camera::FLICKS_PER_SECOND as f64;
     let out = rest(map, program, &mut items, seconds, which, &mut problems);
@@ -2386,7 +2400,7 @@ pub fn elements_at(
         .and_then(Value::as_object)
         .unwrap_or(&empty);
     let written = eval::written(map, &program, &state);
-    let mut items = Items::new(doc_items, &written, &state);
+    let mut items = Items::new(doc_items, &written, &state, &program);
     let seconds = t as f64 / deep_canvas::camera::FLICKS_PER_SECOND as f64;
     rest(
         map,
@@ -2449,7 +2463,7 @@ pub fn placed_at(doc: &Value, t: i64) -> Result<Vec<(String, Value, Affine3)>, R
         .and_then(Value::as_object)
         .unwrap_or(&empty);
     let written = eval::written(map, &program, &state);
-    let mut items = Items::new(doc_items, &written, &state);
+    let mut items = Items::new(doc_items, &written, &state, &program);
     let seconds = t as f64 / deep_canvas::camera::FLICKS_PER_SECOND as f64;
     rest(
         map,
@@ -2801,7 +2815,7 @@ pub(crate) fn evaluate_compiled(
         .and_then(Value::as_object)
         .unwrap_or(&empty);
     let written = eval::written(map, program, &state);
-    let mut items = Items::new(doc_items, &written, &state);
+    let mut items = Items::new(doc_items, &written, &state, program);
     // #2013: a frame draws each rested item where its rest puts it; the check reports a rest
     // that finds no support.
     rest(
@@ -3519,10 +3533,24 @@ pub(crate) fn evaluate_compiled(
         &cam_path,
     )?;
 
-    // A readout sits in the view's top-left corner, its text the template's (#419).
+    // A readout sits in the view's top-left corner, its text the template's (#419), filled from
+    // the values that move the parts at t; a figure's card stacks its lines below (#504).
+    let shown = (!readout_items.is_empty() || map.contains_key("card")).then(|| eval::shown_doc(map, program, &state));
+    let card: Vec<(String, Value)> = shown
+        .as_ref()
+        .map(|s| {
+            deep_canvas::template::card_lines(s)
+                .into_iter()
+                .map(|(f, t)| (format!("card/{f}"), serde_json::json!({"template": t})))
+                .collect()
+        })
+        .unwrap_or_default();
     let mut readouts = Vec::new();
-    for (id, params) in &readout_items {
-        let text = params.get("template").and_then(Value::as_str).unwrap_or("");
+    let mut top = 12.0;
+    for (id, params) in readout_items.iter().chain(card.iter()) {
+        let template = params.get("template").and_then(Value::as_str).unwrap_or("");
+        let filled = shown.as_ref().and_then(|s| deep_canvas::template::expand(s, template).ok());
+        let text = filled.as_deref().unwrap_or(template);
         let size = num(params.get("size")).unwrap_or(13.0);
         let (run_box, glyphs) = labels.run(text, Role::Body, size as f32);
         let shaped_at = glyphs.first().map_or(size as f32, |g| g.size);
@@ -3541,7 +3569,7 @@ pub(crate) fn evaluate_compiled(
             role: Role::Body,
             glyphs,
             bounds: run_box,
-            pos: camera.unproject(12.0 + quad[0] / 2.0, 12.0 + quad[1] / 2.0, depth),
+            pos: camera.unproject(12.0 + quad[0] / 2.0, top + quad[1] / 2.0, depth),
             em: size,
             quad,
             world: false,
@@ -3552,6 +3580,7 @@ pub(crate) fn evaluate_compiled(
                 .or(look.role("ink"))
                 .unwrap_or([255, 255, 255]),
         });
+        top += quad[1] + 4.0;
     }
     // Each label's glyphs from the atlas at its size on screen; a frame that found the atlas full
     // starts it over and places them all again.
@@ -3734,7 +3763,7 @@ fn origin_at(map: &Map<String, Value>, program: &Program, id: &str, t: i64) -> V
         .and_then(Value::as_object)
         .unwrap_or(&empty);
     let written = eval::written(map, program, &state);
-    let mut items = Items::new(doc_items, &written, &state);
+    let mut items = Items::new(doc_items, &written, &state, program);
     let seconds = t as f64 / deep_canvas::camera::FLICKS_PER_SECOND as f64;
     rest(
         map,
@@ -4201,6 +4230,14 @@ mod tests {
         lost["constraints"]["rest"]["on"] = serde_json::json!("ground");
         lost["constraints"]["rest"]["offset"] = serde_json::json!(0.25);
         assert_eq!(rested_at(&lost, 0, Rests::All).unwrap().0["vase"].0, [4.0, 0.25, 4.0]);
+        // In an assembly turned a quarter about +Z (#504), down is the owner's own −x: a box
+        // written at the world's (0.2, 2, 0.1) rests on the table's top, 0.1 m under its centre.
+        let mut turned = doc.clone();
+        turned["assemblies"] = serde_json::json!({"tray": {"at": {"rot": [0, 0, 90]}}});
+        turned["items"]["vase"] = serde_json::json!({"id": "vase", "kind": "mark.box@1", "name": "Vase", "order": "a3",
+            "parent": "tray", "params": {"size": [0.2, 0.3, 0.2]}, "at": {"pos": [2.0, -0.2, 0.1]}});
+        let at = rested_at(&turned, 0, Rests::All).unwrap().0["vase"].0;
+        assert!((at[0] - 0.85).abs() < 1e-6 && (at[1] + 0.2).abs() < 1e-6 && (at[2] - 0.1).abs() < 1e-6, "{at:?}");
         // A channel on the owner's position is refused as a second writer, naming both.
         lost["channels"] = serde_json::json!({"lift": {"target": "items/vase/at/pos/1", "type": "f32",
             "keys": {"k0": {"t": "0s", "value": 2, "interp": "linear"}, "k1": {"t": "1s", "value": 3, "interp": "linear"}}}});

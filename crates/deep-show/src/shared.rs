@@ -289,7 +289,8 @@ pub fn draws(doc: &Value) -> Vec<String> {
                 match items[at].get("parent").and_then(Value::as_str) {
                     None => return true,
                     Some(p) if items.contains_key(p) => at = p,
-                    Some(_) => return false,
+                    // #504: an item joins an assembly by naming it as its parent.
+                    Some(p) => return doc.get("assemblies").and_then(|a| a.get(p)).is_some(),
                 }
             }
             false
@@ -1395,7 +1396,14 @@ impl Hub<'_> {
             reply.insert("notices".into(), Value::Array(notices));
         }
         let timing = show.include.iter().any(|i| matches!(i, Include::Timing));
-        crate::packs::reply(&result.expansions, Some(check_ms), timing, &mut reply);
+        let rules_ms = timing
+            .then(|| crate::packs::kind_rules_ms(&doc, &result, &self.startup.sealed, &self.packs));
+        crate::packs::reply(
+            &result.expansions,
+            Some((check_ms, rules_ms)),
+            timing,
+            &mut reply,
+        );
         // #403: in a claim that names the document, an item of a kind this build doesn't know
         // blocks its checks, naming the kind, as on a sole writer's revision.
         let blocked = self.blocked_in_claim(show, &result.notices);

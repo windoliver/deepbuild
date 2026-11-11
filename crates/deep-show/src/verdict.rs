@@ -37,6 +37,8 @@ const HONEST: &str = "honest_numbers";
 
 /// The core's determinism check kind (Check input).
 const DETERMINISM: &str = "document.determinism";
+/// The core's check of pack kinds' rules (#202).
+const KIND_RULES: &str = "kind_rules";
 
 /// The verdicts a claim can get, worst first: the claim's is the worst of its requirements'.
 const WORST_FIRST: [&str; 5] = ["INVALID", "BLOCKED", "FAIL", "INCONCLUSIVE", "PASS"];
@@ -198,6 +200,16 @@ impl<'a> Hub<'a> {
         let scenario = self.scenario;
         let Some(c) = scenario.claims.get(claim) else {
             return json!({"result": "INVALID", "key": {"revisions": []}, "stale": false, "requirements": []});
+        };
+        // Planted (#504): the documents the agent showed on the claim judged beside its deliverables.
+        let fed;
+        let c = if self.planted(Planted::FigureFeedsVerdict) {
+            let mut x = c.clone();
+            x.deliverables.extend(scenario.docs_for.iter().filter(|(_, f)| *f == claim).map(|(d, _)| d.clone()));
+            fed = x;
+            &fed
+        } else {
+            c
         };
         let read = self.evaluated_reads(c);
         let determinism = self.determinism_runs(c);
@@ -403,6 +415,7 @@ impl<'a> Hub<'a> {
                     play: crate::time::PlayPath::Warm,
                     at_times: at_times.clone(),
                     compare: crate::determinism::Compare::SameMachine,
+                    session: false,
                 };
                 let compared = self.determinism(&d);
                 if compared["code"] == "gpu_unavailable" {
@@ -555,7 +568,8 @@ impl<'a> Hub<'a> {
             return done(row, result, Vec::new());
         }
         let honest = kind == HONEST;
-        if core && kind != CHECK && !honest {
+        let rules = kind == KIND_RULES;
+        if core && kind != CHECK && !honest && !rules {
             // The core's other kinds land with R6 (Check input: Lands); unrun, they never pass.
             let b = json!({"code": "not_run", "kind": kind, "ids": []});
             return done(row, "BLOCKED", vec![b]);
@@ -564,6 +578,10 @@ impl<'a> Hub<'a> {
         let mut blocked: Vec<Value> = Vec::new();
         let mut by_kind = BTreeMap::new();
         let mut own: Vec<(String, String)> = Vec::new();
+        // #202: each pack rule kind_rules ran, with its pack, and whether one failed.
+        let mut ran: std::collections::BTreeSet<(String, String)> = Default::default();
+        let mut broken = false;
+        let mut unbounded: Vec<Value> = Vec::new();
         // Honest numbers (canvas primitives: Honest numbers, the check): every number each
         // deliverable shows, with what it traces to.
         let mut numbers: Vec<Value> = Vec::new();
@@ -592,6 +610,19 @@ impl<'a> Hub<'a> {
             // document's own validation among them whatever kind runs; each names its document,
             // since item IDs are one document's.
             let mut raised: Vec<Value> = checked.issues.iter().map(Issue::to_json).collect();
+            if rules {
+                ran.extend(checked.rules_ran.iter().cloned());
+                for i in &checked.issues {
+                    match i.code {
+                        deep_canvas::document::packs::KIND_RULE => broken = true,
+                        // A rule the check can't read or bound is never passed.
+                        "sweep_unbounded" | "not_run" if i.actual.get("rule").is_some() => {
+                            unbounded.push(json!({"code": i.code, "doc": doc, "ids": i.ids, "rule": i.actual["rule"]}))
+                        }
+                        _ => {}
+                    }
+                }
+            }
             if let Some((m, check)) = registered {
                 let mut input = r.check.clone();
                 if let (Some(map), Some(values)) = (input.as_object_mut(), read.get(doc)) {
@@ -668,12 +699,39 @@ impl<'a> Hub<'a> {
             }
             issues.extend(raised);
         }
-        let errors = issues.iter().any(|i| i["severity"] == "error");
+        let errors = issues.iter().any(|i| i["severity"] == "error") || broken;
         blocked.extend(blocked_rows(by_kind));
+        // #202: a rule from a pack the claim's author wrote binds only its own claims, so when
+        // every rule that ran is the author's, none covers this requirement.
+        let own_rules: Vec<&(String, String)> = ran
+            .iter()
+            .filter(|(_, pack)| self.pack_authors.get(pack).is_some_and(|s| s == author))
+            .collect();
+        let only_own = rules
+            && !own_rules.is_empty()
+            && own_rules.len() == ran.len()
+            && !self.planted(Planted::OwnRuleCountsAsCover);
+        if !unbounded.is_empty() && blocked.is_empty() && !errors {
+            row.insert("issues".into(), Value::Array(issues));
+            return done(row, "INVALID", unbounded);
+        }
         let result = if !blocked.is_empty() {
             "BLOCKED"
         } else if errors {
             "FAIL"
+        } else if only_own {
+            let asks: Vec<Value> = own_rules
+                .iter()
+                .map(|(rule, pack)| json!({
+                    "kind": "approval", "requirement": r.id, "rule": rule, "pack": pack,
+                    "why": format!("`{rule}` is a rule of `{pack}`, which the working agent wrote: it binds only its own claims, and no requirement passes on it alone"),
+                }))
+                .collect();
+            row.insert("asks".into(), Value::Array(asks));
+            "INCONCLUSIVE"
+        } else if rules && ran.is_empty() {
+            // No rule ran: nothing covers the requirement.
+            "INCONCLUSIVE"
         } else if !own.is_empty() {
             // Its only cover is the working agent's own entry: INCONCLUSIVE, with your approval
             // asked for, never PASS.
