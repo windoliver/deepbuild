@@ -47,15 +47,12 @@ impl Hub<'_> {
     }
 
     /// Where an admitted pack, `owner/name@version`, came from: `agent` when the working agent
-    /// installed it through its session, `first_party` when the hub's release ships it, else `pack`.
+    /// installed it through its session, `first_party` when its owner is DeepBuild's own (the
+    /// release's packs; the hub installs no other pack under that owner, #1720), else `pack`.
     pub fn pack_origin(&self, pack: &str) -> &'static str {
-        let shipped = self
-            .pack_rows
-            .iter()
-            .any(|r| r.first_party && format!("{}@{}", r.pack, r.version) == pack);
         if self.pack_authors.contains_key(pack) {
             "agent"
-        } else if shipped {
+        } else if pack.starts_with("deepbuild/") {
             "first_party"
         } else {
             "pack"

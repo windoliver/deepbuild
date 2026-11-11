@@ -19,12 +19,14 @@ export interface PackAsset {
 }
 export interface PackVersion {
   id: string; version: string; ref: string; digest: string; manifest: Obj; assets: PackAsset[];
-  /** A pack the hub's release ships (#1720), and how many times the canvas core's pack check ran on this version. */
-  origin?: 'first_party'; checks?: number;
+  /** How many times the canvas core's pack check ran on this version, for a pack the release ships (#1720). */
+  checks?: number;
 }
 const safe = (path: string) => path.length > 0 && !isAbsolute(path) && !path.includes('\\') && path.split('/').every((p) => p !== '..' && p !== '.' && p !== '');
 const urlOf = (text: string) => { const u = new URL(text); if (u.protocol !== 'https:' || u.username || u.password || u.hash) throw Error(`asset URL ${text} must be https without credentials or a fragment`); return u; };
 
+/** The owner of the packs a release ships (#1720): a document names one `deepbuild/<name>@<version>`. */
+const FIRST_PARTY = 'deepbuild';
 /** Reads only files inside the pack, resolving links first. Terms may name a bundled file or an https license. */
 function local(from: string, path: string): Buffer {
   if (!safe(path)) throw Error(`pack path ${path} is not relative to the pack`);
@@ -33,11 +35,15 @@ function local(from: string, path: string): Buffer {
   if (!safe(rel)) throw Error(`pack path ${path} leaves its folder`);
   return readFileSync(file);
 }
-/** Reads a pack folder; `owner` names a pack whose pack.json gives only its `name`, as the release's own do (#1720). */
-export function readPack(from: string, owner?: string): PackVersion {
+/**
+ * Reads a pack folder. The release's own packs name only their `name` and are read as `deepbuild/<name>` (#1720); no
+ * other pack is installed under that owner, since the canvas core lists a `deepbuild/` pack as first-party.
+ */
+export function readPack(from: string, shipped = false): PackVersion {
   const m: unknown = JSON.parse(readFileSync(join(from, 'pack.json'), 'utf8'));
-  if (owner && object(m) && m.id === undefined && typeof m.name === 'string') m.id = `${owner}/${m.name}`;
+  if (shipped && object(m) && m.id === undefined && typeof m.name === 'string') m.id = `${FIRST_PARTY}/${m.name}`;
   if (!object(m) || typeof m.id !== 'string' || !ID.test(m.id) || typeof m.version !== 'string' || !VERSION.test(m.version)) throw Error('pack.json must name owner/name and an exact version');
+  if (!shipped && m.id.startsWith(`${FIRST_PARTY}/`)) throw Error(`${m.id}: the ${FIRST_PARTY} owner is the release's own; publish this pack under an owner of yours`);
   const assets: PackAsset[] = [];
   const paths = new Set<string>();
   if (m.assets !== undefined && !Array.isArray(m.assets)) throw Error(`${m.id}: assets must be a list`);
@@ -56,8 +62,6 @@ export function readPack(from: string, owner?: string): PackVersion {
   return { id: m.id, version: m.version, ref: `${m.id}@${m.version}`, digest: hash(canonicalize(m as JsonValue)), manifest: m, assets };
 }
 
-/** The owner of the packs a release ships (#1720): a document names one `deepbuild/<name>@<version>`. */
-const FIRST_PARTY = 'deepbuild';
 /** The release's packs/ folder, beside the hub's code as in the checkout. */
 const SHIPPED = fileURLToPath(new URL('../../../packs/', import.meta.url));
 
@@ -65,7 +69,7 @@ const SHIPPED = fileURLToPath(new URL('../../../packs/', import.meta.url));
 export function releasePacks(): { folder: string; pack?: PackVersion; error?: string }[] {
   if (!existsSync(SHIPPED)) return [];
   return readdirSync(SHIPPED).sort().filter((name) => existsSync(join(SHIPPED, name, 'pack.json'))).map((folder) => {
-    try { return { folder, pack: readPack(join(SHIPPED, folder), FIRST_PARTY) }; } catch (error) { return { folder, error: error instanceof Error ? error.message : String(error) }; }
+    try { return { folder, pack: readPack(join(SHIPPED, folder), true) }; } catch (error) { return { folder, error: error instanceof Error ? error.message : String(error) }; }
   });
 }
 
@@ -98,7 +102,7 @@ export class Packs {
     renameSync(`${file}.tmp`, file);
   }
   /** The store's packs once the release's are checked and installed: what the canvas core holds. */
-  async installed(): Promise<{ id: string; dir: string; origin?: string }[]> { await this.shipped(true); return this.all(); }
+  async installed(): Promise<{ id: string; dir: string }[]> { await this.shipped(true); return this.all(); }
   async has(ref: string): Promise<boolean> { await this.shipped(true); return this.held.has(ref); }
   /**
    * Each pack the release ships, as the store holds it: installed, refused with its issues, or not checked yet. With
@@ -137,7 +141,7 @@ export class Packs {
       const issues = Array.isArray(got?.issues) ? got.issues : ['the canvas core gave this version no row'];
       // The store's own count: the runs the canvas core counted, added to an earlier refusal's.
       const checks = (this.refusal(pack.ref)?.checks ?? 0) + (typeof got?.checks === 'number' ? got.checks : 0);
-      if (state === 'installed') this.admit({ ...pack, origin: 'first_party', checks });
+      if (state === 'installed') this.admit({ ...pack, checks });
       else {
         this.refuse({ ref: pack.ref, digest: pack.digest, issues, checks });
         process.stderr.write(`deep hub: the release's pack ${pack.ref} failed its check and isn't installed: ${JSON.stringify(issues).slice(0, 600)}\n`);
@@ -148,7 +152,7 @@ export class Packs {
   }
   get(ref: string): PackVersion | undefined { return this.held.get(ref); }
   named(id: string): boolean { return [...this.held.values()].some((p) => p.id === id); }
-  all(): { id: string; dir: string; origin?: string }[] { return [...this.held.values()].map((p) => ({ id: p.id, dir: this.directory(p), ...(p.origin ? { origin: p.origin } : {}) })); }
+  all(): { id: string; dir: string }[] { return [...this.held.values()].map((p) => ({ id: p.id, dir: this.directory(p) })); }
   asset(ref: string, path: string): PackAsset | undefined { return this.held.get(ref)?.assets.find((a) => a.path === path); }
   byHash(refs: unknown, sha: string): { pack: string; asset: PackAsset } | undefined {
     for (const ref of Array.isArray(refs) ? refs : []) if (typeof ref === 'string') {

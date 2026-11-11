@@ -131,7 +131,7 @@ export function checkPacks(packs: { id: string; dir: string }[]): Promise<Obj[]>
 }
 
 /** Still rendering is shared; only the hub supplies installed packs and checked asset bytes. */
-export async function renderStill(document: unknown, still: string, evidence: string, packs: { id: string; dir: string; origin?: string }[] = []): Promise<Obj> {
+export async function renderStill(document: unknown, still: string, evidence: string, packs: { id: string; dir: string }[] = []): Promise<Obj> {
   const canvas = new Canvas(evidence);
   try {
     const world: CanvasWorld = {

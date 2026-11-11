@@ -42,7 +42,7 @@
   "crates/deep-scene3d-render/src/scene3d.wgsl": 3163,
   "crates/deep-show/src/hub.rs": 2697,
   "crates/deep-show/src/kit/modules.rs": 1523,
-  "crates/deep-show/src/main.rs": 3092,
+  "crates/deep-show/src/main.rs": 3104,
   "crates/deep-show/src/shared.rs": 2169,
   "packages/asks/src/index.ts": 2554,
   "packages/extension-host/src/host.ts": 4298,

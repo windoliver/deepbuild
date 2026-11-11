@@ -951,8 +951,8 @@ pub struct Scenario {
     pub decode_caps: deep_codecs::Caps,
     /// #499: the test audio backend, which replaces the platform's output at its boundary.
     pub audio: Option<crate::audio::Backend>,
-    /// The packs installed in the store before the first call (#306), each `crate::packs::Stored`.
-    pub packs: Vec<crate::packs::Stored>,
+    /// The packs installed in the store before the first call (#306), each `(owner/name, dir)`.
+    pub packs: Vec<(String, PathBuf)>,
     /// #200: the hub's installed slot fills, each `{slot, fill, kit}` with the kit result the hub
     /// recorded at install.
     pub installed: Vec<Value>,
@@ -1230,8 +1230,8 @@ impl<'a> Hub<'a> {
         };
         deep_text::cache::record();
         // The store's packs, each checked once here and never on a document's open.
-        for stored in &scenario.packs {
-            hub.install_stored(stored);
+        for (id, dir) in &scenario.packs {
+            hub.install_pack(id, dir, None);
         }
         hub
     }
