@@ -328,9 +328,15 @@ pub fn read(doc: &Value, id: &str) -> Result<(Score, Vec<Problem>), Vec<Problem>
                         .and_then(|x| Ok((tm.at_position(x)?, Some(x)))),
                 }
             }
+            // A number is a time as the document stores one: whole flicks.
             Some(Value::Number(n)) => n
-                .as_f64()
-                .map(|s| ((s * FLICKS_PER_SECOND as f64).round() as i64, None))
+                .as_i64()
+                .or_else(|| {
+                    n.as_f64()
+                        .filter(|f| f.is_finite())
+                        .map(|f| f.round() as i64)
+                })
+                .map(|t| (t, None))
                 .ok_or_else(|| "its onset isn't a time".into()),
             Some(v @ Value::String(_)) => {
                 match doc::time_of(Some(v), &ctx, &format!("{path}/at")) {
