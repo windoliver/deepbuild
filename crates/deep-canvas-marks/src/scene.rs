@@ -4253,6 +4253,9 @@ pub enum Planted {
     /// drawn in row order rather than by centre.
     AtlasSquareLayout,
     AtlasRowOrder,
+    /// #536's twins: a hex grid shifting the other parity; terrain reading a square grid's sides.
+    HexOtherParity,
+    TerrainSquareSides,
 }
 
 /// The draw list for evaluated `items` of `doc`, in `palette`, at `zoom` (which picks each path's
