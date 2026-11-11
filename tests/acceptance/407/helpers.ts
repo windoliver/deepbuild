@@ -626,14 +626,16 @@ export const GRAY = { low: 124, high: 160, sky: 245 } as const;
 
 /**
  * A look@1 on a drawing basis whose roles `ground`, `muted`, `accent` and `raised` are the given grays, with
- * `finish` (README: The looks). Built here, so every value is known; its bytes go into the evidence store.
+ * `finish` (README: Fixtures). Built here, so every value is known; its bytes go into the evidence store. It has one
+ * set of roles, so its dark theme is its light one: every role at an alpha is the ink's color at that alpha, as the
+ * look guard asks of each theme (a dark theme with another ink would need its own alphas of that ink).
  */
 export function lookOf(id: string, grays: { ground: number; muted: number; accent: number; raised: number }, finish: JsonObject[] = []): { id: string; sha: string; bytes: Buffer } {
   const def = {
     id, format: 1, basis: 'drawing', license: 'Apache-2.0', description: `The #407 acceptance look ${id}: flat grays whose relative luminance the tests know.`,
     palette: {
       ground: hex(grays.ground), muted: hex(grays.muted), accent: hex(grays.accent), raised: hex(grays.raised),
-      graphite: '#1b1d22', snow: '#f2f3f5', night: '#0b0c0e', fog: '#e3e4e6',
+      graphite: '#1b1d22', fog: '#e3e4e6',
       graphite_secondary: '#1b1d22d6', graphite_tertiary: '#1b1d2285', graphite_disabled: '#1b1d2233', graphite_hover: '#1b1d220f', graphite_selected: '#1b1d221a',
       orchid: '#b0207f', indigo: '#2c3e7b', cream: '#f4ecd8',
     },
@@ -642,7 +644,7 @@ export function lookOf(id: string, grays: { ground: number; muted: number; accen
       ink_primary: 'graphite', ink_secondary: 'graphite_secondary', ink_tertiary: 'graphite_tertiary', ink_disabled: 'graphite_disabled',
       hover: 'graphite_hover', selected: 'graphite_selected', session_readout: 'orchid', session_line: 'indigo', paper: 'cream',
     },
-    themes: { light: {}, dark: { roles: { ground: 'night', ink: 'snow' } } },
+    themes: { light: {} },
     status: { pass: '#007429', fail: '#bf232b', invalid: '#8645b0', blocked: '#a44700', inconclusive: '#666600', running: '#0063b8', needs_you: '#8a5900', stale: '#326c6f', idle: '#636464' },
     status_treatment: { core_min_px: 4, glyph: { pass: '✓', fail: '✗', invalid: '⊘', blocked: '■', inconclusive: '?', running: '↻', needs_you: '!', stale: '◇', idle: '○' } },
     min_distance: 0.1, attention_treatment: { line: 'dashed', role: 'ink', glyph: '⚠' }, legend: 'auto',

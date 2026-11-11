@@ -176,8 +176,9 @@ with `safe: 24` at 60 frames a second, one layer of yours; flicker films 640 × 
 `[from, to)` by hold keys on its `adjust.opacity` (0, 1, 0), every key on a 0.05 s grid, so holds are whole frames. Text
 films hold the kettle, a rect, beside the text, so no text is its shot's only subject; a title card is a text that is
 its one shot's only subject (`frame.keep: [title]`, the shot's pose set to the whole page). Flicker films use looks
-built here (`lookOf`: a drawing basis whose `ground`, `muted`, `accent` and `raised` roles are given sRGB grays, put in
-the evidence store and named by `look: {asset}` and `assets`), so every pixel's relative luminance is known: rects in
+built here (`lookOf`: a drawing basis whose `ground`, `muted`, `accent` and `raised` roles are given sRGB grays, with
+one set of roles for both themes so the base's look guard accepts it, put in the evidence store and named by
+`look: {asset}` and `assets`), so every pixel's relative luminance is known: rects in
 those roles, the upper one shown and hidden by hold keys. The brief's source is one paragraph of six sentences; the
 script's six `caption` lines quote them, line n at 1 + 3(n − 1) s.
 
