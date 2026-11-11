@@ -1,0 +1,14 @@
+{
+  "v": 1,
+  "id": "01KB2018NA0000000000000002",
+  "kind": "session.named",
+  "subject": "session:7c4d5e602018422283334444555518",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1800000000000,
+  "data": {
+    "name": "Fix flaky checkout test",
+    "by": "agent"
+  }
+}

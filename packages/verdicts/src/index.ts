@@ -6,4 +6,4 @@ export { moreRuns, runsNeeded } from './runs.js';
 export { conductRun } from './conduct.js';
 export { runContract } from './contract.js';
 export { markStale, recordVerdict } from './record.js';
-export { LINE_WIDTH, verdictLine, type LineRequirement, type LineState } from './line.js';
+export { LINE_WIDTH, ROUNDS, verdictLine, type LineRequirement, type LineState } from './line.js';
