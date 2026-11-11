@@ -56,7 +56,7 @@ export function render(params, samples, progress = () => undefined) {
     const src = inst.source;
     const kind = src.sampled ? 'sampled' : src.pluck ? 'pluck' : src.synth?.preset;
     const d = DEFAULTS[kind] ?? DEFAULTS.sine;
-    const draws = { take: draw(params.seed, e.id, 'take'), noise: draw(params.seed, e.id, 'noise'), detune: draw(params.seed, e.id, 'detune') };
+    const draws = { take: draw(params.seed, e.id, 'take'), noise: draw(params.seed, e.id, 'noise') };
     let take = null;
     let played;
     if (src.sampled) {
