@@ -9,9 +9,8 @@
 // first-parent head when it closed. Its tests are the files of that commit tagged with one of the issue's criterion IDs
 // or under tests/acceptance/<issue>/, run there in a temporary checkout (a clone sharing this repo's objects, never a
 // worktree, with origin/main at this repo's) with this checkout's node_modules copied in and the workspaces and
-// deep-hook built; a criterion's tests are those whose full
-// name carries its ID or its `AC<i>`. Each test reads as the repo's tests say: passed, failed, BLOCKED or INCONCLUSIVE
-// (a failure or skip whose message starts so), and a live suite, which spends plan usage and runs by hand, is not run
+// deep-hook built; a criterion's tests are those whose full name carries its ID or its `AC<i>`. Each test reads as the
+// repo's tests say: passed, failed, BLOCKED or INCONCLUSIVE (a failure or skip whose message starts so), and a live suite, which spends plan usage and runs by hand, is not run
 // here: its criteria read INCONCLUSIVE. A criterion is the highest of its tests by the verdict table's precedence, and
 // INVALID with none; so is the task of its criteria. Reading the criteria and reopening use your `gh` sign-in.
 import { spawnSync } from 'node:child_process';
@@ -60,14 +59,15 @@ function landed(commit, issue) {
 /**
  * A temporary checkout of `commit` that git reads as it reads this repo at that commit: a clone sharing its objects
  * (never writing there, never a worktree of it), HEAD detached at the commit and origin/main where this repo's is, so a
- * test's `git merge-base HEAD origin/main` answers as it would here. Returns its directory, or why it couldn't be made.
+ * test's `git merge-base HEAD origin/main` answers as it would here; making it runs none of your git hooks. Returns its
+ * directory, or why it couldn't be made.
  */
 function checkout(commit, prefix) {
   const dir = temporary(prefix);
   const main = run(ROOT, 'git', ['rev-parse', '--verify', '-q', 'refs/remotes/origin/main']).stdout.trim();
   if (!main) return { why: 'this repo has no origin/main to set in the checkout' };
   for (const [cwd, args] of [[ROOT, ['clone', '-q', '--shared', '--no-checkout', '--template=', ROOT, dir]], [dir, ['update-ref', 'refs/remotes/origin/main', main]], [dir, ['checkout', '-q', '--detach', commit]]]) {
-    const r = run(cwd, 'git', args);
+    const r = run(cwd, 'git', ['-c', 'core.hooksPath=/dev/null', ...args]);
     if (r.status !== 0) return { why: `git ${args[0]} for the checkout of ${commit.slice(0, 12)} failed: ${tail(r)}` };
   }
   return { dir };
