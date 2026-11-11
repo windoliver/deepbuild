@@ -43,7 +43,7 @@ export async function openExtensionHost(options: ExtensionHostOptions): Promise<
     return result;
   };
   const runCheck = host.runCheck.bind(host);
-  host.runCheck = (...args) => calls.run({}, async () => {
+  host.runCheck = (...args) => calls.run({}, async (): Promise<CheckResult> => {
     const result = await runCheck(...args);
     const call = calls.getStore();
     const returned = call?.returned as CheckResult | undefined;
