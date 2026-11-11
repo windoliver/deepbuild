@@ -12,7 +12,7 @@ import { createInterface } from 'node:readline';
 import { CODES, codePage } from './codes.js';
 import { toolTimeoutS } from './codex-settings.js';
 import { hubAddress } from './paths.js';
-import { actionToolList, toolList } from './tools.js';
+import { actionToolList, nearest, toolList } from './tools.js';
 import { activePlant, line, refusal, startOf, type Refusal } from './wire.js';
 
 type Obj = Record<string, unknown>;
@@ -162,7 +162,8 @@ export async function runMcp(server: 'deep' | 'deep-actions' = 'deep'): Promise<
         const name = String(params.name);
         // deep_start isn't listed, and the hub refuses it: no MCP call starts a session (#1330).
         if (!tools.some((t) => t.name === name) && name !== 'deep_start') {
-          send({ id, error: { code: -32602, message: `No tool ${name}; the tools are ${tools.map((t) => t.name).join(', ')}.` } });
+          const near = nearest(name, tools.map((t) => t.name));
+          send({ id, error: { code: -32602, message: near ? `No tool ${name}; call ${near} in place of it.` : `No tool ${name}; the tools are ${tools.map((t) => t.name).join(', ')}.` } });
           break;
         }
         // A call that waits, such as deep_wait, holds up no other call.

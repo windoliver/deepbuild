@@ -17,7 +17,7 @@ pub use atlas::{
 };
 pub use fonts::{face_of, Face, Role, FACES};
 pub use parley::FontData;
-pub use shape::{Align, Fit, Glyph, Shaped, Shaper, Spec};
+pub use shape::{Align, Decoration, Fit, Glyph, Shaped, Shaper, Shift, Span, Spec};
 pub use unicode::{Bidi, Dir};
 
 /// The fonts seam's backend (issue #140; canvas primitives: Seam and backend): bundled fonts only,

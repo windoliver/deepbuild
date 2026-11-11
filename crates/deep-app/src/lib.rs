@@ -36,6 +36,8 @@ pub mod empties;
 pub mod events;
 pub mod gpu_view;
 pub mod hub;
+/// #1486: chrome thumbnails through the one image service.
+pub mod images;
 pub mod installed;
 pub mod kinds;
 pub mod list;

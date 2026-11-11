@@ -156,10 +156,14 @@ pub enum Planted {
     /// #408: film.layout takes its texts by the kinds text@1, vector@1, mark.text and counter,
     /// not from the core's glyph-box array.
     LayoutTextByKind,
-    /// #405: a control sweep audits its samples alone and bounds nothing between them.
-    SweepAuditsSamplesOnly,
+    /// #405's and #1936's: the geometry audit's wrong programs, which its own module names.
+    Audit(crate::geometry_audit::Planted),
     /// #306: a derived item's seed comes from a counter over expansion order.
     SeedsByExpansionOrder,
+    /// #2015: a repeat over elements seeds each derived item with the part's element count too.
+    EachSeedsByElementCount,
+    /// #2015: a repeat over faces walks the part's triangles, not its polygon view's faces.
+    EachFacePerTriangle,
     /// #306: a change of inputs re-expands the broken-out item too, over the writer's own.
     ReexpansionOverwritesBrokenOut,
     /// #306: the pack check never reads `requires.modules`.
@@ -1158,6 +1162,8 @@ impl<'a> Hub<'a> {
             overwrite_broken_out: scenario.planted == Some(Planted::ReexpansionOverwritesBrokenOut),
             skip_requires_modules: scenario.planted == Some(Planted::PackCheckSkipsRequiresModules),
             key_by_name: scenario.planted == Some(Planted::PacksKeyedByName),
+            each_by_count: scenario.planted == Some(Planted::EachSeedsByElementCount),
+            each_per_triangle: scenario.planted == Some(Planted::EachFacePerTriangle),
         };
         let mut hub = Hub {
             scenario,
@@ -1172,7 +1178,9 @@ impl<'a> Hub<'a> {
             display_only: BTreeSet::new(),
             mode_ids: BTreeMap::new(),
             session_state: BTreeMap::new(),
-            renderer: Renderer::new(),
+            renderer: Renderer::new().turning_about_corner(
+                scenario.module_planted.as_deref() == Some("turns_about_corner"),
+            ),
             sched,
             sessions: BTreeMap::new(),
             background: Vec::new(),
@@ -2165,14 +2173,7 @@ impl<'a> Hub<'a> {
         // Mark set columns that read a column source, resolved and narrowed by the core's
         // column view at the frame's step (#397).
         if let Some(form) = drawn_form.as_mut() {
-            let entries = self
-                .startup
-                .sealed
-                .registry(deep_canvas::columns::REGISTRY)
-                .map_or(&[][..], |r| r.entries.as_slice());
-            // A step is a 60 fps frame: 11,760,000 flicks.
-            let step = show.t.max(0) as u64 / 11_760_000;
-            issues.extend(deep_canvas::columns::view(form, entries, step));
+            issues.extend(self.column_view(form, show.t));
         }
         if let Some(doc) = stamped
             .as_ref()

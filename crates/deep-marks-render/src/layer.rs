@@ -134,7 +134,8 @@ pub fn gpui_lacks<'a>(marks: impl IntoIterator<Item = &'a Drawn>) -> Option<Stri
                 fill: Fill::Ramp(_),
                 ..
             } => true,
-            Mark::Image { adjust, .. } => !adjust.is_identity(),
+            // #535: GPUI draws no turned picture.
+            Mark::Image { adjust, turn, .. } => !adjust.is_identity() || *turn != 0.0,
             _ => false,
         };
         if lacks {

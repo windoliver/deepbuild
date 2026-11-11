@@ -1,0 +1,45 @@
+Base commit: f38d2b398 ("Merge pull request #2155 from windoliver/worktree-github-issue-1653-c36ef6")
+Machine: macOS (Darwin 27.2.0), Apple silicon, Metal. cargo was not on this shell's PATH; rustup's proxies were put
+first: PATH=/opt/homebrew/opt/rustup/bin:$PATH (toolchain 1.99.1 from rust-toolchain.toml).
+
+Commands, each run once:
+  npm ci                                                        (node_modules was missing)
+  CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 cargo build --locked --bin deep-gpu --features test-meter
+                                                                (exit 0, cold, 4m03s; the suite's own build is then a no-op)
+  CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 npx vitest run --root tests/acceptance/1937 --no-file-parallelism --testTimeout=600000
+                                                                (exit 1: Test Files 2 failed (2), Tests 4 failed (4), 9.43 s)
+  npx tsc -p tests/acceptance/1937/tsconfig.json               (exit 0)
+
+Result at the base: all 4 tests fail, each at a named assertion, before any criterion value is read. The build
+passes (the `test-meter` feature exists, #379), so no test fails at "the binary builds".
+
+- 3 tests start `deep-gpu run` (Metal) with one `budget_fix` call. The base accepts the scenario, but `App::call` has
+  no `budget_fix` arm, so the call is answered by its fallback, and helpers.ts's `answered` (through `fixOf`) fails:
+      AssertionError: budget_fix is answered, not refused: {"code":"bad_input","reason":"unknown call"}:
+      expected 'bad_input' to be undefined
+    fix.test.ts       #1937.078417c3 a showpiece at 14 ms against its 10 ms class gets a fix whose patch, applied,
+                      measures under 10 ms and changes under 2% of the subject's pixels, every candidate listed with its
+                      delta and share                                  (❯ fixProblems fix.test.ts:33)
+    estimate.test.ts  #1937.ef5ff5e8 fill-b's shadows predicted at 3.5 ms and measured at 2.5 ms (40% off) are marked
+                      estimate, fill-a's … and the key's … are not; the chosen set is measured again together at 9 ms …
+                                                                       (❯ fixFor estimate.test.ts:29)
+    estimate.test.ts  #1937.ef5ff5e8 twin: with every prediction exact, no candidate is marked estimate and the chosen
+                      set is still measured together                   (❯ fixFor estimate.test.ts:29)
+
+- 1 test starts `deep-gpu run --planted picks_largest_gain`. The name isn't in the base's `Planted::parse`, so the
+  binary prints {"ok":false,"code":"bad_input"} and exits 2, and helpers.ts's `run` fails:
+      AssertionError: deep-gpu run --planted picks_largest_gain exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+    fix.test.ts       #1937.078417c3 the planted picks_largest_gain chooser turns off the key light's shadows,
+                      changing about 30% of the subject, and fails, naming the subject share
+                                                                       (❯ fixProblems fix.test.ts:32)
+
+The test-side half of the AC1 check, which the base never reaches, was exercised once against the base's existing
+calls in a scratch test outside this folder (not part of the suite): helpers.ts's `applyOps` on the two fills'
+shadow ops, `view3d` of the session document as it is, with the key's shadows off and with the fills' off (as
+`patches`), `subjectShare` on them, and `frame_budget` on the patched payload parsed by `resultOf`. It read the key's
+shadows off as 32.08% of the subject's 12,824 pixels and the fills' as 0.08%, and `fixOf` parsed a synthetic reply
+of the README's shape. At the base `frame_budget` ignores `terms`, so that run read 3 ms a frame; no criterion was
+judged there.
+
+No test reads this machine's model, power, thermal state, load or device timing; off macOS every test fails as
+INCONCLUSIVE.

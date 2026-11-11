@@ -30,6 +30,8 @@ test-fonts-next = ["deep-text/test-fonts-next"]
 deep-canvas-seams = { path = "../deep-canvas-seams" }
 deep-canvas = { path = "../deep-canvas" }
 deep-canvas-marks = { path = "../deep-canvas-marks" }
+# Issue #1486: the one image service: levels, a visible-first queue and a byte budget.
+deep-images = { path = "../deep-images" }
 deep-canvas-motion = { path = "../deep-canvas-motion" }
 deep-canvas-vector = { path = "../deep-canvas-vector" }
 # Issue #399: graph@1 laid out and routed, and label@1 placed, where this crate draws.

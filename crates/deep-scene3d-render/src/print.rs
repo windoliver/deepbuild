@@ -7,7 +7,6 @@ use std::collections::HashMap;
 
 use bytemuck::{Pod, Zeroable};
 use deep_canvas_marks::print::{Anchor, Frame, Mask, Print, Spot, MAX_SEPARATIONS};
-use wgpu::util::DeviceExt;
 
 /// The pass's name in a frame's pass list.
 pub const PRINT_PASS: &str = "look.print";
@@ -232,7 +231,7 @@ pub struct Printer {
 }
 
 impl Printer {
-    pub fn new(device: &wgpu::Device) -> Self {
+    pub fn new(device: &deep_gpu::counted::Wgpu) -> Self {
         let tex = |binding, sample_type| wgpu::BindGroupLayoutEntry {
             binding,
             visibility: wgpu::ShaderStages::FRAGMENT,
@@ -314,7 +313,7 @@ impl Printer {
 
     fn pipeline(
         &mut self,
-        device: &wgpu::Device,
+        device: &deep_gpu::counted::Wgpu,
         format: wgpu::TextureFormat,
         linear: bool,
     ) -> wgpu::RenderPipeline {
@@ -356,7 +355,7 @@ impl Printer {
     #[allow(clippy::too_many_arguments)]
     pub fn record(
         &mut self,
-        device: &wgpu::Device,
+        device: &deep_gpu::counted::Wgpu,
         encoder: &mut wgpu::CommandEncoder,
         params: &Params,
         source: &wgpu::TextureView,

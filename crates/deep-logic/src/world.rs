@@ -172,7 +172,12 @@ impl Record {
             let name = format!("{}.occurrences", item.id);
             let mut list = Vec::new();
             for (k, (_, arrays)) in &self.steps {
-                for row in arrays.get(&name).and_then(Value::as_array).into_iter().flatten() {
+                for row in arrays
+                    .get(&name)
+                    .and_then(Value::as_array)
+                    .into_iter()
+                    .flatten()
+                {
                     let mut r = json!({"step": k, "t": k * item.step});
                     if let (Some(o), Some(fields)) = (r.as_object_mut(), row.as_object()) {
                         o.extend(fields.clone());
@@ -191,7 +196,55 @@ impl Record {
         for r in again {
             steps.extend(r.steps.iter().map(|(k, v)| (*k, v.clone())));
         }
-        Record { steps, ..Record::default() }.occurrences(piece)
+        Record {
+            steps,
+            ..Record::default()
+        }
+        .occurrences(piece)
+    }
+    /// Each array as the core's column view reads it (Mark set: logic columns), by
+    /// `<item>.<write>`: its type, count, step length and interpolation, and each step that
+    /// changed it, ascending, with the index ranges the logic module hands the view (at most
+    /// [`HANDED`], [`handed`]) and the runs it wrote, `[start, [values]]`. Before step 0 every
+    /// element is zero.
+    pub fn arrays(&self, piece: &Piece) -> Map<String, Value> {
+        let mut out = Map::new();
+        for item in &piece.items {
+            let mut steps: BTreeMap<(&str, i64), Runs> = BTreeMap::new();
+            for r in self
+                .ranges
+                .get(&item.id)
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+            {
+                let (Some(array), Some(k), Some(s), Some(e)) = (
+                    r["array"].as_str(),
+                    r["step"].as_i64(),
+                    r["start"].as_u64(),
+                    r["end"].as_u64(),
+                ) else {
+                    continue;
+                };
+                let step = steps.entry((array, k)).or_default();
+                step.0.push([s, e]);
+                step.1.push(json!([s, r["values"]]));
+            }
+            for w in &item.writes {
+                let list: Vec<Value> = steps
+                    .range((w.name.as_str(), i64::MIN)..=(w.name.as_str(), i64::MAX))
+                    .map(|((_, k), (runs, values))| {
+                        json!({"step": k, "changed": handed(runs), "values": values})
+                    })
+                    .collect();
+                out.insert(
+                    format!("{}.{}", item.id, w.name),
+                    json!({"type": w.ty.name(), "count": w.count, "every": item.step,
+                           "linear": w.linear, "steps": list}),
+                );
+            }
+        }
+        out
     }
     fn checkpoint(&mut self, id: &str, step: i64, deep: u64) {
         let list = self
@@ -488,6 +541,21 @@ impl World {
         Some(hex(m.get(at..at.checked_add(len)?)?))
     }
 
+    /// Each array, by `<item>.<write>`, as its item's last step left it, as its write region lays
+    /// it out.
+    pub fn arrays(&self) -> Vec<(String, Vec<u8>)> {
+        arrays_of(&self.piece, self.lives.iter().map(|l| &l.arrays[..]))
+    }
+
+    /// What a frame draws from, per item: its last step that ran, its write region before that
+    /// step (empty without a linear write) and after it.
+    pub fn shown(&self) -> Vec<Shown> {
+        self.lives
+            .iter()
+            .map(|l| (l.last, l.prev.clone(), l.arrays.clone()))
+            .collect()
+    }
+
     /// Each item's deep hash now.
     pub fn deep_hashes(&mut self) -> Map<String, Value> {
         let ids: Vec<String> = self.piece.items.iter().map(|i| i.id.clone()).collect();
@@ -677,35 +745,13 @@ impl World {
     }
 
     /// Each item's arrays as a frame at `t` (flicks) draws them, by `<item>.<write>` (Logic:
-    /// interpolated writes): a held write as its last step stored it; a linear write from the
-    /// value before that step toward it by α = (t − that step's time) ÷ the step length, so it
-    /// reads one step late. Nothing else reads this: steps, hashes and checks read the stored.
+    /// interpolated writes): `drawn` over this state.
     pub fn drawn(&self, t: i64) -> Map<String, Value> {
-        let mut out = Map::new();
-        for (item, l) in self.piece.items.iter().zip(&self.lives) {
-            let since = if self.planted.linear_blends_forward {
-                t.rem_euclid(item.step)
-            } else {
-                (t - l.last * item.step).clamp(0, item.step)
-            };
-            for w in &item.writes {
-                let e = item.write(&w.name).expect("a write entry");
-                let size = w.ty.size() as usize;
-                let at = e.offset as usize;
-                let values: Vec<Value> = (0..w.count as usize)
-                    .map(|n| {
-                        let to = &l.arrays[at + n * size..][..size];
-                        if !w.linear || l.prev.is_empty() || l.last < 0 || since >= item.step {
-                            return w.ty.value(to);
-                        }
-                        let from = &l.prev[at + n * size..][..size];
-                        w.ty.blend(from, to, since as f64 / item.step as f64)
-                    })
-                    .collect();
-                out.insert(format!("{}.{}", item.id, w.name), Value::Array(values));
-            }
-        }
-        out
+        let shown = self
+            .lives
+            .iter()
+            .map(|l| (l.last, &l.prev[..], &l.arrays[..]));
+        drawn(&self.piece, shown, t, self.planted.linear_blends_forward)
     }
 
     fn step(&mut self, i: usize, snapshot: &[Vec<u8>], rec: &mut Record) {
@@ -1105,6 +1151,23 @@ fn changed(item: &Item, arrays: &mut [u8]) {
     }
 }
 
+/// A step's changed runs of one array: their `[start, end)` and their `[start, [values]]`.
+type Runs = (Vec<[u64; 2]>, Vec<Value>);
+
+/// The most index ranges a step hands the column view per array.
+pub const HANDED: usize = 64;
+
+/// A step's changed runs `[start, end)`, ascending, as the column view takes them: the first
+/// [`HANDED`] − 1 as they are and any more merged into their span, so at most [`HANDED`].
+pub fn handed(runs: &[[u64; 2]]) -> Vec<[u64; 2]> {
+    if runs.len() <= HANDED {
+        return runs.to_vec();
+    }
+    let mut out = runs[..HANDED - 1].to_vec();
+    out.push([runs[HANDED - 1][0], runs[runs.len() - 1][1]]);
+    out
+}
+
 /// The element ranges of each write that step k changed, from `old` to `new` (both the write
 /// region): each run of changed elements `[start, end)` with its new values.
 fn ranges(item: &Item, k: i64, old: &[u8], new: &[u8]) -> Vec<Value> {
@@ -1149,10 +1212,26 @@ fn emitted(item: &Item, memory: &[u8], planted: &Planted) -> Result<Rows, (Strin
         let mut kind: Vec<Vec<u8>> = (0..count.min(e.max) as usize)
             .map(|r| memory[at + 4 + r * size..][..size].to_vec())
             .collect();
-        let pair = |r: &Vec<u8>| (u32::from_le_bytes(r[..4].try_into().expect("4 bytes")), u32::from_le_bytes(r[4..8].try_into().expect("4 bytes")));
+        let pair = |r: &Vec<u8>| {
+            (
+                u32::from_le_bytes(r[..4].try_into().expect("4 bytes")),
+                u32::from_le_bytes(r[4..8].try_into().expect("4 bytes")),
+            )
+        };
         if planted.occurrences_sort_ties_by_payload {
-            let payload = |r: &Vec<u8>| e.value(r)["fields"].as_object().map(|o| o.values().filter_map(Value::as_f64).collect::<Vec<_>>()).unwrap_or_default();
-            kind.sort_by(|x, y| pair(x).cmp(&pair(y)).then(payload(x).partial_cmp(&payload(y)).unwrap_or(std::cmp::Ordering::Equal)));
+            let payload = |r: &Vec<u8>| {
+                e.value(r)["fields"]
+                    .as_object()
+                    .map(|o| o.values().filter_map(Value::as_f64).collect::<Vec<_>>())
+                    .unwrap_or_default()
+            };
+            kind.sort_by(|x, y| {
+                pair(x).cmp(&pair(y)).then(
+                    payload(x)
+                        .partial_cmp(&payload(y))
+                        .unwrap_or(std::cmp::Ordering::Equal),
+                )
+            });
         } else {
             kind.sort_by_key(pair);
         }
@@ -1218,4 +1297,81 @@ fn bodies(bytes: &[u8]) -> Vec<u32> {
             _ => None,
         })
         .collect()
+}
+
+/// What a frame draws from, per item: its last step that ran, its write region before that step
+/// (empty without a linear write) and after it.
+pub type Shown = (i64, Vec<u8>, Vec<u8>);
+
+/// Each array, by `<item>.<write>`, as each item's write region lays it out.
+pub fn arrays_of<'a>(
+    piece: &Piece,
+    regions: impl Iterator<Item = &'a [u8]>,
+) -> Vec<(String, Vec<u8>)> {
+    let mut out = Vec::new();
+    for (item, region) in piece.items.iter().zip(regions) {
+        for w in &item.writes {
+            let e = item.write(&w.name).expect("a write entry");
+            out.push((
+                format!("{}.{}", item.id, w.name),
+                region[e.offset as usize..(e.offset + e.size) as usize].to_vec(),
+            ));
+        }
+    }
+    out
+}
+
+/// Each item's arrays as a frame at `t` (flicks) draws them from what it `shown`, by
+/// `<item>.<write>` (Logic: interpolated writes): a held write as its last step stored it; a
+/// linear write from the value before that step toward it by α = (t − that step's time) ÷ the
+/// step length, so it reads one step late. Nothing else reads this: steps, hashes and checks read
+/// the stored. The planted blend draws toward the next step, as a physics output blends.
+pub fn drawn<'a>(
+    piece: &Piece,
+    shown: impl Iterator<Item = (i64, &'a [u8], &'a [u8])>,
+    t: i64,
+    forward: bool,
+) -> Map<String, Value> {
+    let mut out = Map::new();
+    for (item, (last, prev, arrays)) in piece.items.iter().zip(shown) {
+        let since = if forward {
+            t.rem_euclid(item.step)
+        } else {
+            (t - last * item.step).clamp(0, item.step)
+        };
+        for w in &item.writes {
+            let e = item.write(&w.name).expect("a write entry");
+            let size = w.ty.size() as usize;
+            let at = e.offset as usize;
+            let values: Vec<Value> = (0..w.count as usize)
+                .map(|n| {
+                    let to = &arrays[at + n * size..][..size];
+                    if !w.linear || prev.is_empty() || last < 0 || since >= item.step {
+                        return w.ty.value(to);
+                    }
+                    let from = &prev[at + n * size..][..size];
+                    w.ty.blend(from, to, since as f64 / item.step as f64)
+                })
+                .collect();
+            out.insert(format!("{}.{}", item.id, w.name), Value::Array(values));
+        }
+    }
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// #535: a step's 100 changed runs reach the column view as 64 ranges, the last the span of
+    /// the 37 past the 63rd; 64 or fewer reach it as they are.
+    #[test]
+    fn a_step_hands_over_at_most_64_ranges() {
+        let runs: Vec<[u64; 2]> = (0..100).map(|i| [3 * i, 3 * i + 1]).collect();
+        let out = handed(&runs);
+        assert_eq!(out.len(), HANDED);
+        assert_eq!(out[..63], runs[..63]);
+        assert_eq!(out[63], [189, 298]);
+        assert_eq!(handed(&runs[..64]), runs[..64].to_vec());
+    }
 }
