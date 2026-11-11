@@ -4,6 +4,7 @@ import { pathToFileURL } from 'node:url';
 import { shipped } from '@deepbuild/adapters';
 import { cwdOf, openArchive } from '@deepbuild/archive';
 import { runCommandCheck } from '@deepbuild/checks-command';
+import { itemOutcomes } from '@deepbuild/checks-review';
 import { answers, composeKind, downStack, environmentOf, keysOf, leaseKinds, newRun, portKind, SESSION_KINDS, upStack, WarmStack } from '@deepbuild/env-local';
 import { gateTokens, openGitHub, repoOf, revoke, sessionToken } from '@deepbuild/github';
 import { evidence, judge, resolverDecisions } from '@deepbuild/resolver-decisions';
@@ -26,7 +27,7 @@ export function createCore(
   scrubbing?: (values: string[]) => void,
 ): Core {
   const providers: CoreProviders = {
-    checks: { command: runCommandCheck, kinds: (o) => new Kinds(o) },
+    checks: { command: runCommandCheck, kinds: (o) => new Kinds(o), reviewOutcomes: itemOutcomes },
     environment: {
       resources: (folder, free) => {
         const compose = composeKind(folder);

@@ -62,6 +62,7 @@ import { claimState, newestClaim, type ClaimState } from './verdict-chat.js';
 
 import { RUN_AS_YOU, Runs } from './runs.js';
 import type { CheckKinds, ReviewOf } from './checks-port.js';
+import type { ReviewRounds } from './review-rounds.js';
 import type { CheckSpec } from '@deepbuild/conformance';
 
 import { Stacks, type StackWant } from './stacks.js';
@@ -99,6 +100,7 @@ export interface StopJudgingOptions {
     readonly questions: Questions;
     readonly runner: Runner;
     readonly checkKinds: CheckKinds;
+    readonly reviewRounds: Pick<ReviewRounds, "settled">;
     readonly store: EvidenceStore;
     readonly trust: ProjectTrust;
     readonly heavy: HeavyQueue;
@@ -1107,7 +1109,7 @@ export class StopJudging {
       // The checks of the other kinds the hub holds (#1537), each run through its kind: a drafted check whose bytes name
       // a work kind; the review on every claim that opens or updates a PR, its second model through the runner under
       // your reserve (#87); and the numbers check on every claim whose words state a number with the query behind it.
-      const of: ReviewOf = { claim: r.claim, task: r.task, agent: this.options.state().live.get(r.session)?.agent ?? 'claude-code', transcript: this.options.state().sessions.get(r.session)?.transcript };
+      const of: ReviewOf = { claim: r.claim, task: r.task, agent: this.options.state().live.get(r.session)?.agent ?? 'claude-code', transcript: this.options.state().sessions.get(r.session)?.transcript, pr: await this.prOf(r.session) };
       const kinded = new Map<string, { spec: CheckSpec; of: ReviewOf }>();
       const docs = this.options.services.canvasSide.docChecksOf(r.cwd);
       for (const c of checks) {
@@ -1300,6 +1302,9 @@ export class StopJudging {
     try {
       await recordVerdict(this.options.services.record, v, this.options.services.now());
       this.verdictsMade.set(claim, hash);
+      // A claim on a pull request settles when it passes: how each item its review rounds sent back ended is recorded (#1862).
+      const pr = v.outcome === 'PASS' ? await this.prOf(owner?.session_id ?? null) : undefined;
+      if (pr) await this.options.services.reviewRounds.settled(pr, claim).catch((error: unknown) => process.stderr.write(`deep hub: how ${claim}'s sent-back review items ended was not recorded: ${error instanceof Error ? error.message : String(error)}\n`));
     } catch (error) {
       process.stderr.write(`deep hub: ${claim}'s verdict was not recorded: ${error instanceof Error ? error.message : String(error)}\n`);
     }

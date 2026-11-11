@@ -12,8 +12,8 @@ import { workFill } from '@deepbuild/checks-work';
 import type { CheckContext, CheckResult, CheckRunnerFill, CheckSpec } from '@deepbuild/conformance';
 import { admitKind } from '@deepbuild/gate';
 import type { JobRecord } from '@deepbuild/runner';
-import type { KindsOptions, ReviewOf } from './checks-port.js';
-export type { ReviewOf } from './checks-port.js';
+import type { KindsOptions, ReviewOf, ReviewRound } from './checks-port.js';
+export type { ReviewOf, ReviewRound } from './checks-port.js';
 
 /** Each route a gate run names a kind by. */
 const ROUTES = {
@@ -105,7 +105,7 @@ export class Kinds {
   }
 
   /** One run of a held kind on `spec` in `ctx`; a review asks its second model through the runner, for `of`'s claim. */
-  async run(spec: CheckSpec, ctx: CheckContext, of: ReviewOf): Promise<CheckResult> {
+  async run(spec: CheckSpec, ctx: CheckContext, of: ReviewOf): Promise<CheckResult & { round?: ReviewRound }> {
     const held = this.held.get(spec.kind);
     if (!held) return result('missing', `${spec.kind}: run`, '', `BLOCKED: the hub holds no ${spec.kind} check kind`);
     if (spec.kind !== 'review') return held.fill.run(spec, ctx);
@@ -132,7 +132,7 @@ export class Kinds {
     const counted = independence(job.model ?? 'unknown', change);
     if (!counted.counted) return { ...result('uncounted', 'review: second model', '', `the review is uncounted: ${counted.reason!}`, counted.reason), read: ran.read };
     const note = counted.note ? [`${counted.note} (${counted.answered})`] : [];
-    return { outcome: ran.outcome, testsRun: ran.testsRun, failures: ran.failures, evidence: [...ran.evidence, ...note], read: ran.read, mask: null };
+    return { outcome: ran.outcome, testsRun: ran.testsRun, failures: ran.failures, evidence: [...ran.evidence, ...note], read: ran.read, mask: null, ...(ran.testsRun ? { round: { sent: ran.sendBack?.items ?? [], open: ran.open } } : {}) };
   }
 }
 const readTranscript = (path: string): string => { try { return readFileSync(path, 'utf8'); } catch { return ''; } };

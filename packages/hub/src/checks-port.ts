@@ -32,7 +32,10 @@ export interface CommandRun extends CheckResult {
   timing: { repeat: number; flushed: boolean }[] | null;
   clock: number;
 }
-export interface ReviewOf { claim: string; task: string; agent: string; transcript: string | undefined }
+export interface ReviewOf { claim: string; task: string; agent: string; transcript: string | undefined; pr?: string | undefined }
+export interface ReviewItem { rule: string; sites: { file: string; line: number; quote: string }[] }
+/** A counted round keeps its sent items separate from earlier ones still open. */
+export interface ReviewRound { sent: ReviewItem[]; open: ReviewItem[] }
 export interface KindsOptions {
   host(): Host;
   submit(spec: JobSpec): Promise<JobRecord>;
@@ -48,9 +51,10 @@ export interface CheckKinds {
   numbersSpec(words: string): (CheckSpec & { numbers: { stated: string; query: { sql: string; database: string } }[] }) | undefined;
   uncited(words: string): string;
   reviewSpec(base: string, head: string, root: string): CheckSpec | undefined;
-  run(spec: CheckSpec, ctx: CheckContext, of: ReviewOf): Promise<CheckResult>;
+  run(spec: CheckSpec, ctx: CheckContext, of: ReviewOf): Promise<CheckResult & { round?: ReviewRound }>;
 }
 export interface ChecksProvider {
   command(options: CommandCheck): Promise<CommandRun>;
   kinds(options: KindsOptions): CheckKinds;
+  reviewOutcomes(checkout: string, sent: { commit: string; items: ReviewItem[] }[], settled: string): Promise<(ReviewItem & { ended: 'fixed' | 'left'; commit: string })[]>;
 }
