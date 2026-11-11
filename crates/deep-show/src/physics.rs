@@ -321,6 +321,19 @@ impl Hub<'_> {
         }
         Ok(())
     }
+
+    /// #2293: `document` with the channels of the form `doc`'s session loads, which hold each
+    /// output its worlds write to an item path ([`Hub::inline_worlds`] is the only thing that adds
+    /// any): what a 3D frame or a 3D mode draws, so each item stands where the session's frame at
+    /// the same time puts it, as `eval` reads it.
+    pub(crate) fn with_outputs(&self, doc: &str, document: &Value) -> Value {
+        let mut out = document.clone();
+        let channels = self.forms.get(doc).and_then(|f| f.get("channels"));
+        if let (Some(channels), Some(map)) = (channels, out.as_object_mut()) {
+            map.insert("channels".into(), channels.clone());
+        }
+        out
+    }
 }
 
 #[cfg(test)]

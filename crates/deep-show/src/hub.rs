@@ -2388,7 +2388,7 @@ impl<'a> Hub<'a> {
             None
         };
         if three {
-            let shown = self.shown_at(&show.doc, &doc, show.t);
+            let shown = self.shown_at(&show.doc, &self.with_outputs(&show.doc, &doc), show.t);
             let placed = self.arranged(&show.doc, &shown);
             self.pending3d = Some(self.draw3d(&placed, show.t, show.size));
         }
