@@ -210,6 +210,12 @@ impl Hub<'_> {
             .and_then(|s| s.iter().find(|s| s["type"] == "audio"))
             .cloned();
         let result = (|| {
+            // #503: the worker's refusal of the file or of its sound, naming it (its codec).
+            if let Some(r) = reply.get("refused").or_else(|| stream.as_ref()?.get("refused")) {
+                let mut r = r.clone();
+                r["asset"] = json!(sha);
+                return Err(r);
+            }
             let s = stream.ok_or_else(|| json!({"code": "not_audio", "asset": sha}))?;
             let bytes = std::fs::read(out.join(s["file"].as_str().unwrap_or_default()))
                 .map_err(|_| refused("unreadable"))?;
