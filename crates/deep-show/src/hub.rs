@@ -167,6 +167,8 @@ pub enum Planted {
     CitesEmptyPasses,
     /// #405's and #1936's: the geometry audit's wrong programs, which its own module names.
     Audit(crate::geometry_audit::Planted),
+    /// #1921's: a world's outputs' wrong programs, which the physics host names.
+    Physics(crate::physics::Planted),
     /// #202: a kind_rules requirement counts the working agent's own pack rule as its cover.
     OwnRuleCountsAsCover,
     /// #202: the kind_rules check evaluates a pack kind's recipe rules a second time.
@@ -667,6 +669,8 @@ pub enum Call {
     KindSchemas,
     /// #421: the spatial index's bounds and the answers to its queries.
     Spatial(Box<crate::spatial::Spatial>),
+    /// #2014: rays met by a terrain plate's drawn triangles, its physics shape and a pick.
+    TerrainRays(Box<crate::terrain::TerrainRays>),
     /// #306: the pack store's rows.
     Packs,
     /// #306: one pack version installed mid-run; #200: through a session, which wrote it.
@@ -1753,6 +1757,7 @@ impl<'a> Hub<'a> {
             Call::Geometry(g) => self.geometry(g),
             Call::KindSchemas => self.kind_schemas_reply(),
             Call::Spatial(s) => self.spatial(s),
+            Call::TerrainRays(r) => self.terrain_rays(r),
             Call::SceneQuery(q) => self.scene_query(q),
             Call::Packs => crate::packs::rows_reply(&self.pack_rows, &self.packs),
             Call::InstallPack { id, dir, session } => {

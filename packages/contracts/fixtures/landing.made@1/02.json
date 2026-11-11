@@ -1,0 +1,26 @@
+{
+  "v": 1,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T7B",
+  "kind": "landing.made",
+  "subject": "claim:01K74FKZVK8Q2X5R7M3N9P4T6W",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "data": {
+    "step": "stopped",
+    "repo": "acme/shop",
+    "pr": 3,
+    "issue": 100,
+    "head": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "main": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "commit": "cccccccccccccccccccccccccccccccccccccccc",
+    "tree": "dddddddddddddddddddddddddddddddddddddddd",
+    "claim": null,
+    "outcome": "none",
+    "files": [
+      "docs/added-by-first.txt"
+    ],
+    "open": []
+  }
+}

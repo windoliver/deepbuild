@@ -434,6 +434,8 @@ timed.push('tests/acceptance/547/ac4-keyframes.test.ts');
 alone.push('tests/acceptance/1967/');
 // #407's files each build deep-show (carried.test.ts also with test-hold-min-2s); 407-oracle builds it too.
 alone.push('tests/acceptance/407/', 'tests/acceptance/407-oracle/');
+// #2014's files and its oracle each build deep-show; criterion 2 builds and rests on a 24 km plate of 801 × 801 samples.
+alone.push('tests/acceptance/2014/', 'tests/acceptance/2014-oracle/');
 // #1956's files each build deep-show (r1) and install the shelf pack's versions in order.
 alone.push('tests/acceptance/1956/');
 // #154's files each start hubs that render stems through the supervisor, and build deep-show once; AC9 times a 60 s

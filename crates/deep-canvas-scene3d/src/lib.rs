@@ -43,12 +43,13 @@ pub mod spatial;
 pub mod spec;
 pub mod stack;
 pub mod sweep;
+pub mod terrain;
 pub mod uv;
 pub mod water;
 
 /// The wrong programs #420's, #441's and #440's criteria plant in scene3d's and the building
 /// module's operators, each reachable only through a proof surface's `planted`.
-pub const PLANTED: [&str; 21] = [
+pub const PLANTED: [&str; 23] = [
     "torus_genus_0",
     "vertex_count_off_by_one",
     "cap_left_open",
@@ -73,4 +74,8 @@ pub const PLANTED: [&str; 21] = [
     "extrude_own_advance",
     // #2013: a scatter whose sampler stops after 10 points.
     distribute::STOPS_AFTER_10,
+    // #2014: a terrain builder that splits each cell along its other diagonal, and a size cap read
+    // in metres.
+    terrain::OTHER_DIAGONAL,
+    terrain::CAP_IN_METRES,
 ];

@@ -67,6 +67,7 @@ pub fn moved(shape: &Shape, d: V3) -> Shape {
             b: add(*b, d),
             r: *r,
         },
+        Shape::Heights(h) => Shape::Heights(Arc::new(h.moved(d))),
     }
 }
 
@@ -94,6 +95,8 @@ pub fn turned(shape: &Shape, m: &[V3; 3], pivot: V3) -> Shape {
             b: turned_point(m, pivot, *b),
             r: *r,
         },
+        // #2014: a terrain is ground; nothing tilts it.
+        Shape::Heights(_) => shape.clone(),
     }
 }
 
@@ -155,6 +158,10 @@ fn reach(shape: &Shape, axis: V3) -> f64 {
         }
         Shape::Ball { c, r } => dot(*c, axis) + r,
         Shape::Capsule { a, b, r } => dot(*a, axis).max(dot(*b, axis)) + r,
+        Shape::Heights(h) => (0..h.rows)
+            .flat_map(|r| (0..h.cols).map(move |c| (c, r)))
+            .map(|(c, r)| dot(h.at(c, r), axis))
+            .fold(f64::NEG_INFINITY, f64::max),
     }
 }
 
