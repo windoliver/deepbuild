@@ -1,7 +1,7 @@
 # Base f38d2b3983496ca502cb4743fda249bbc2e5b162, npx vitest run --root tests/acceptance/1331: exit 1, 8 failed, 0 passed.
 # Each fails at its own assertion: the base has no deep land and no deep work command.
 
- RUN  v5.0.5 /Users/taofeng/doneright-1331-blind/tests/acceptance/1331
+ RUN  v5.0.5 <repo>/tests/acceptance/1331
 
  ❯ carry.test.ts (1 test | 1 failed) 8151ms
    ❯ AC2 #1331.13b15250 after another change lands, a change touching other files re-runs only the checks whose keys changed (1)
@@ -175,7 +175,7 @@ Error: the second change must land (the planted forge drops its file from that l
 # own assertion. Redraft run on base f38d2b3983496ca502cb4743fda249bbc2e5b162 (deep-hook built here first), npx vitest run --root tests/acceptance/1331:
 
 
- RUN  v5.0.5 /Users/taofeng/doneright-1331-blind/tests/acceptance/1331
+ RUN  v5.0.5 <repo>/tests/acceptance/1331
 
  ❯ closing.test.ts (1 test | 1 failed) 14726ms
    ❯ AC4 #1331.df47d8f0 an issue stays open until its change lands (1)
@@ -351,7 +351,7 @@ their own assertions for the missing deep land / deep work; AC7 fails at "the se
 fewer than two landings", not at a helper. Output (also /tmp/deepbuild-1331-proof/redraft2-base.log):
 
 
- RUN  v5.0.5 /Users/taofeng/doneright-1331-blind/tests/acceptance/1331
+ RUN  v5.0.5 <repo>/tests/acceptance/1331
 
  ❯ closing.test.ts (1 test | 1 failed) 6004ms
    ❯ AC4 #1331.df47d8f0 an issue stays open until its change lands (1)
