@@ -7078,6 +7078,27 @@ export interface RunStartedV3 {
   evidence?: Array<string>;
 }
 
+/** run.stopped_at_limit@1 */
+export interface RunStoppedAtLimit {
+  v: 1;
+  id: string;
+  kind: "run.stopped_at_limit";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    run: string;
+    limit: "memory_mb" | "file_mb";
+    max: number;
+    reading?: number;
+  };
+  evidence?: Array<string>;
+}
+
 /** run.under_load@1 */
 export interface RunUnderLoad {
   v: 1;

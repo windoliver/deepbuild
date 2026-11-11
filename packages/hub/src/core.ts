@@ -88,7 +88,7 @@ import type { CheckSpec } from '@deepbuild/conformance';
 import { retain } from './retention.js';
 import { Stacks, type StackWant } from './stacks.js';
 import { Starts } from './starts.js';
-import { checkArguments } from './tools.js';
+import { checkArguments, nearest } from './tools.js';
 import { Canvas, nameOf, renderStill, showCall, waitForApp, WorldFile, type CanvasWorld } from './canvas.js';
 import { panelKit } from './panels.js';
 import { Replicas, REPLICA_LEASE } from './drive.js';
@@ -6211,7 +6211,7 @@ export class Core {
   private async handbacks(): Promise<Obj> {
     const rows = (await this.record.raw(`SELECT session_id, json_extract(data, '$.reading') AS reading FROM events WHERE kind = 'session.reading' AND json_extract(data, '$.reading') LIKE 'Hand-back %' ORDER BY log_pos`)) as { session_id: string; reading: string }[];
     const detail = rows.map((r) => ({ session: r.session_id, sent_back: r.reading.startsWith('Hand-back sent back'), reading: r.reading }));
-    return { id: 'handbacks_sent_back', label: 'Hand-backs sent back with the tool to use', value: detail.filter((d) => d.sent_back).length, of: detail.length, detail };
+    return { id: 'handbacks_sent_back', label: 'Hand-backs sent back with the tool to use', value: detail.filter((d) => d.sent_back).length, unit: 'count', source: 'record', age_ms: 0, basis: 'observed', of: detail.length, detail };
   }
   /** The question card's document (#84): the asks core's card, with the ask's text and where a task sends you. A URL in the text stays plain text. */
   private async askCard(params: Obj): Promise<Obj> {
@@ -7322,7 +7322,8 @@ export class Core {
   }
   private unknownCheck(worktree: string, check: unknown): Refused {
     const names = [...this.checksOf(worktree).keys()];
-    return refuse('enum', '/params/arguments/check', `Name a check this repo's .deepbuild/done.yaml names: ${names.join(', ') || 'it names none'}.`, check);
+    const near = typeof check === 'string' ? nearest(check, names) : undefined;
+    return refuse('enum', '/params/arguments/check', near ? `Name ${near} in place of ${String(check)}.` : `Name a check this repo's .deepbuild/done.yaml names: ${names.join(', ') || 'it names none'}.`, check);
   }
 
   /** deep_ask: raises the ask under the session, then waits for its answer as deep_wait does. */
