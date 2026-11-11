@@ -54,6 +54,10 @@ interface ClaimRead {
 
 /** One thing found open, with what it says beside its words. */
 interface Found extends Omit<LeftOpen, 'from'> { from: LeftOpen['from'] | 'review_thread'; resolved_by?: string }
+/**
+ * An item as the record has it. `reopened`: the log position of its newest opening when that opening came after a
+ * closing; `held`: its newest opening says the session's own account resolved its thread, which raised no ask then.
+ */
 interface Standing { item: string; text: string; from: string; open: boolean; by: string | null; resolved_by: string | null; closing: string | null; reopened: number | null; held: boolean }
 
 const run = (cmd: string, args: string[], cwd: string): Promise<string> => new Promise((resolve) => {
@@ -84,7 +88,9 @@ export class OpenItems {
       const d = JSON.parse(row.data) as Obj;
       const item = String(d.item);
       const was = out.get(item);
-      if (row.kind === 'open_item.opened') out.set(item, { item, text: String(d.text), from: String(d.from), open: true, by: null, resolved_by: typeof d.resolved_by === 'string' ? d.resolved_by : was?.resolved_by ?? null, closing: null, reopened: was && !was.open ? row.log_pos : was?.reopened ?? null, held: typeof d.resolved_by === 'string' });
+      // Opened again after a closing, it starts afresh: who resolved its thread before then no longer stands.
+      const again = was !== undefined && !was.open;
+      if (row.kind === 'open_item.opened') out.set(item, { item, text: String(d.text), from: String(d.from), open: true, by: null, resolved_by: typeof d.resolved_by === 'string' ? d.resolved_by : again ? null : was?.resolved_by ?? null, closing: null, reopened: again ? row.log_pos : null, held: typeof d.resolved_by === 'string' });
       else if (was) out.set(item, { ...was, open: false, by: String(d.by), closing: row.id });
     }
     return out;

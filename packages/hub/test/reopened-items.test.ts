@@ -180,6 +180,30 @@ describe('#1633 review rounds: a reopened review note and its ask', () => {
     expect(asksForT(last, defaulted), 'it opened again while its thread was unresolved, as a note never resolved by the session does, so the same question never reaches you twice').toEqual([]);
   }, 900_000);
 
+  it('a reopened note whose ask passed its deadline after the reopening gets no new ask when the session\'s own account resolves its thread and it is unresolved again', async () => {
+    let defaulted = 0;
+    const { hub } = await play([null, REVIEWER, null, YOU_GH, null], async (n, events, _w, hub) => {
+      // The first stop's accept ask is still open when the third reopens the note, and defaults after it.
+      if (n !== 2) return;
+      const [ask] = asksForT(events);
+      expect(ask, `the first stop raised an accept ask for ${T.id}`).toBeDefined();
+      expect(events.some((e) => e.subject === `ask:${ask!.id}` && /^ask\.(answered|defaulted|cancelled|moot|superseded|escalated)$/.test(e.kind)), 'it is still open at the third stop').toBe(false);
+      const all = await settle(hub, (e) => e.some((x) => x.kind === 'ask.defaulted' && x.subject === `ask:${ask!.id}`), 150_000);
+      expect(all.some((x) => x.kind === 'ask.defaulted' && x.subject === `ask:${ask!.id}`), 'the ask defaults at its deadline').toBe(true);
+      defaulted = await lastPos(hub);
+    }, '1m');
+    // An ask is raised apart from the claim: give one the time it would take to land.
+    const last = await settle(hub, () => false, 5000);
+    expect(asksForT(last, defaulted), 'it had its ask, and the session resolving its thread since changes nothing you could answer, so the same question never reaches you twice').toEqual([]);
+  }, 900_000);
+
+  it('a reopened note names the session\'s own account when it resolves the thread again, whoever resolved it before the reviewer closed it', async () => {
+    const { stops } = await play([YOU_GH, null, REVIEWER, null, YOU_GH]);
+    const fifth = stops[4]!;
+    const revised = fifth.events.filter((e) => e.kind === 'open_item.opened' && e.log_pos > fifth.since && namesT(e));
+    expect(revised.map((e) => (e.data as { resolved_by?: string }).resolved_by), `the fifth stop records that ${YOU_GH} resolved ${T.id} again: ${listed(revised)}`).toEqual([YOU_GH]);
+  }, 900_000);
+
   it('a note whose ask you answered "keep it open" opens again when its thread is unresolved after a reviewer resolved it, with no new ask', async () => {
     let kept = 0;
     const { ref, stops } = await play([null, REVIEWER, null], async (n, events, w, hub) => {
