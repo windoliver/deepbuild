@@ -109,6 +109,8 @@ pub const ENVELOPE_KEYS: &[&str] = &[
     "spawns",
     // #502: the media module's ducking entries (Ducking), each a bus's gain under speech spans.
     "ducking",
+    // #935: the media module's generated sounds, each held to audio.gen before an item names it.
+    "sounds",
 ];
 
 /// An item's keys (Item and kind), in this slice.

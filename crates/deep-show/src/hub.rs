@@ -2098,6 +2098,8 @@ impl<'a> Hub<'a> {
         let mut probe_issues = Vec::new();
         let stamped = stamped.map(|mut doc| {
             probe_issues = self.probe_assets(&mut doc);
+            // #935: a strip or spawn naming a generated sound's asset before its audio.gen passes.
+            probe_issues.extend(self.unpassed_sounds(&doc));
             doc
         });
         // The document's look (Document envelope: `look: {asset: look@major}`), read from the
