@@ -382,6 +382,10 @@ alone.push('tests/acceptance/1723/');
 alone.push('tests/acceptance/2026/', 'tests/acceptance/2026-redraft-ac3/');
 timed.push('tests/acceptance/2026/load.test.ts', 'tests/acceptance/2026/outage.test.ts', 'tests/acceptance/2026-redraft-ac3/replay.test.ts');
 byHand.push('tests/acceptance/2026/replay.test.ts');
+// #154's files each start hubs that render stems through the supervisor, and build deep-show once; AC9 times a 60 s
+// six-stem render against the reference Mac.
+alone.push('tests/acceptance/154/', 'tests/acceptance/154-oracle/');
+timed.push('tests/acceptance/154/budgets.test.ts');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
