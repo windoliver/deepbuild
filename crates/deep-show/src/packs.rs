@@ -116,6 +116,27 @@ thread_local! {
     static ADMITTED: RefCell<HashMap<(String, PathBuf), (Value, Pack)>> = RefCell::new(HashMap::new());
 }
 
+/// #154: an admitted pack's manifest by its reference, `owner/name@version` or `name@version`, as
+/// a score's sampled instrument names its library.
+pub fn manifest_of(reference: &str) -> Option<Value> {
+    let (id, version) = reference.rsplit_once('@')?;
+    ADMITTED.with(|a| {
+        let admitted = a.borrow();
+        let mut found: Vec<&Value> = admitted
+            .values()
+            .map(|(m, _)| m)
+            .filter(|m| m["version"].as_str() == Some(version))
+            .filter(|m| {
+                m["id"]
+                    .as_str()
+                    .is_some_and(|i| i == id || i.rsplit_once('/').is_some_and(|(_, n)| n == id))
+            })
+            .collect();
+        found.sort_by_key(|m| m["id"].as_str().map(str::to_string));
+        found.first().map(|m| (*m).clone())
+    })
+}
+
 /// Installs one pack version: the folder read, the pack check run once, the store's row kept.
 /// The reply is `install_pack`'s.
 pub fn install(

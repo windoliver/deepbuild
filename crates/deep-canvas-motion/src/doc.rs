@@ -1988,7 +1988,7 @@ fn extend_of(value: Option<&Value>, path: &str) -> Result<Extend, Refused> {
 
 /// The frame rate the time literals resolve against: `transport.frame_rate` as `p/q` text or a
 /// `[p, q]` pair, 60/1 when absent.
-fn frame_rate_of(transport: Option<&Map<String, Value>>) -> Result<(u32, u32), Refused> {
+pub(crate) fn frame_rate_of(transport: Option<&Map<String, Value>>) -> Result<(u32, u32), Refused> {
     let Some(t) = transport.filter(|t| t.contains_key("frame_rate")) else {
         return Ok((60, 1));
     };
@@ -2389,7 +2389,7 @@ pub(crate) const MARKER_KINDS: [&str; 8] = ["cue", "shot", "section", "beat", "w
 /// waits for it, so a relative time keeps its offset when its marker moves. One that never
 /// resolves, through a cycle or a missing marker, is refused, naming it. A `first` marker (#491)
 /// is solved later, from the channels, and comes back unsolved.
-fn markers_of(doc: &Map<String, Value>, ctx: &mut Ctx) -> Result<(Vec<Marker>, Vec<First>), Refused> {
+pub(crate) fn markers_of(doc: &Map<String, Value>, ctx: &mut Ctx) -> Result<(Vec<Marker>, Vec<First>), Refused> {
     let mut pending = Vec::new();
     let mut firsts = Vec::new();
     for (id, m) in section(doc, "markers")? {

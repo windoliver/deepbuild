@@ -58,6 +58,15 @@ export function readPack(from: string, shipped = false): PackVersion {
     else l.terms = local(from, l.terms).toString('utf8');
     assets.push(a as unknown as PackAsset);
   }
+  // A score's sample library (#154: a pack with `samples`) under CC BY-SA, NC or GPL, its own or an asset's, is
+  // refused here, at install, naming the license; any other pack's asset is refused when it is fetched.
+  if (m.samples !== undefined) {
+    const named = [typeof m.license === 'string' ? m.license : '', ...assets.map((a) => `${a.license.id}\n${/^https:\/\//.test(a.license.terms) ? '' : a.license.terms}`)];
+    for (const text of named) {
+      const denied = forbiddenLicense(text);
+      if (denied) throw Error(`${m.id}: a sample library under ${denied} (${text.split('\n')[0]}) isn't installed: a score bundles CC0 or CC BY only`);
+    }
+  }
   if (object(m.recipes)) for (const [key, value] of Object.entries(m.recipes)) if (typeof value === 'string') m.recipes[key] = JSON.parse(local(from, value).toString('utf8')) as unknown;
   return { id: m.id, version: m.version, ref: `${m.id}@${m.version}`, digest: hash(canonicalize(m as JsonValue)), manifest: m, assets };
 }

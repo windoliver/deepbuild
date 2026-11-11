@@ -2085,7 +2085,7 @@ impl<'a> Hub<'a> {
                 notices = self.notices_reply(&result.notices);
                 skipped = crate::verdict::unknown_items(&result.notices);
                 blocked = self.blocked_in_claim(show, &result.notices);
-                let mut issues = result.issues;
+                let mut issues = crate::mixdown::score_plan::library_issues(&doc, result.issues);
                 issues.append(&mut probe_issues);
                 blocked.extend(self.missing_in_claim(show, &mut issues, &mut skipped));
                 // #488's planted check takes every sample rate from 8 to 192 kHz and refuses

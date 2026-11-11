@@ -115,7 +115,7 @@
       ],
       "margin": 0.5,
       "limits": {},
-      "initialReason": "Issue #311 first measurement: a new task, with nothing to compare against: before this change there are no event kinds for it to validate. One process validates the first fixture of each of the 59 event kinds 1,000 times, so p50 includes Node's start and the per-event limit (20 \u00b5s at p95 on the reference Mac) stays in tests/acceptance/311/budgets.test.ts; p50 and peak memory get a 50% margin against the merge base once main has this task."
+      "initialReason": "Issue #311 first measurement: a new task, with nothing to compare against: before this change there are no event kinds for it to validate. One process validates the first fixture of each of the 59 event kinds 1,000 times, so p50 includes Node's start and the per-event limit (20 µs at p95 on the reference Mac) stays in tests/acceptance/311/budgets.test.ts; p50 and peak memory get a 50% margin against the merge base once main has this task."
     },
     {
       "id": "corpus-replay",
@@ -1351,6 +1351,16 @@
       "margin": 0.5,
       "limits": {},
       "initialReason": "Issue #1461 first measurement: at the merge base the replica's list has no row a press at a point opens. One process writes a record of 700 working sessions in 7 projects with the rows the hub builds, launches the replica on it with the real clock, and presses a row 21 times, the first a warm-up, failing unless each press opens its row's page; p50 includes the replica's launch. The issue's 100 ms at the 95th percentile stays in tests/acceptance/1461/budget.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "score-render",
+      "command": [
+        "node",
+        "benchmarks/score.mjs"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #154 first measurement: the merge base has no score renderer. Six 60 s stems of one score (two sampled, two plucked, two synth) render at once, each in its own score-render@1.0.0 process given its params on stdin as the hub gives them; p50 is the wall time from the first start to the last exit, Node's starts included. The issue's 60 s limit on the reference Mac and the cached stems that start no process stay in tests/acceptance/154/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
     }
   ]
 }
