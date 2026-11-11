@@ -1,7 +1,8 @@
 //! The backend interface (World and backend): what the physics module asks of a backend, in this
-//! crate's own types only, so no engine type crosses it. `occurrences`, `query`, `move_character`
-//! and `drive_vehicle` join it with the issues that run them (#1918, #1919, #182, #251); the hash
-//! reads `canonical` (golden.rs).
+//! crate's own types only, so no engine type crosses it. `occurrences` writes a sensor's entries and
+//! exits (#2011), and its other kinds join with #1918; `query`, `move_character` and
+//! `drive_vehicle` join it with the issues that run them (#1919, #182, #251); the hash reads
+//! `canonical` (golden.rs).
 
 use serde_json::Value;
 
@@ -37,6 +38,23 @@ pub struct BodyState {
 pub struct State {
     pub step: u64,
     pub bodies: Vec<BodyState>,
+}
+
+/// One shape use: its body's ID and its index among the body's shapes.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct ShapeRef {
+    pub body: String,
+    pub index: usize,
+}
+
+/// One entry of the world's occurrence list (Occurrence list): `a` is the lower shape use in
+/// canonical order.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Occurrence {
+    pub step: u64,
+    pub kind: &'static str,
+    pub a: ShapeRef,
+    pub b: ShapeRef,
 }
 
 /// The fields of a body's canonical state, in canonical order: pose, then velocity (Checkpoint
@@ -85,6 +103,8 @@ pub trait Backend {
     /// One step with the inputs stamped for it, or the refusal of an input it can't apply.
     fn step(&mut self, inputs: &[Input]) -> Result<(), Box<Refusal>>;
     fn read(&self) -> State;
+    /// The occurrences the last step wrote, sorted by (step, kind, a, b).
+    fn occurrences(&self) -> Vec<Occurrence>;
     /// Every body's canonical state, in canonical (ID) order.
     fn canonical(&self) -> Vec<Canonical>;
     fn checkpoint(&self) -> Checkpoint;

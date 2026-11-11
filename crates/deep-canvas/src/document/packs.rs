@@ -24,6 +24,8 @@ use crate::ops;
 use crate::registry::{self, Range, Sealed, Semver};
 use crate::schedule::{canonical, Hasher};
 
+pub mod module_fields;
+
 /// The most derived items one repeat makes (Recipe: cost).
 pub const MAX_REPEAT: u64 = 1024;
 
@@ -409,15 +411,8 @@ pub fn check_pack(manifest: &Value, sealed: &Sealed, planted: Planted) -> Result
         None => BTreeMap::new(),
         Some(a) => check_aliases(a, &mut issues),
     };
-    for key in fields.keys() {
-        if !PACK_KEYS.contains(&key.as_str()) {
-            issues.push(Issue::envelope(
-                "unknown_field",
-                key.clone(),
-                fields[key].clone(),
-                "not a field of a pack in this slice",
-            ));
-        }
+    for key in fields.keys().filter(|k| !PACK_KEYS.contains(&k.as_str())) {
+        issues.extend(module_fields::check(sealed, manifest, key));
     }
     if !issues.is_empty() {
         return Err(issues);
@@ -1331,6 +1326,11 @@ impl Packs {
             }
         };
         Ok(self.by_id.entry(pack.id.text()).or_insert(pack))
+    }
+
+    /// Admits a version this process's check admitted before, as it was, without checking again.
+    pub fn readmit(&mut self, pack: Pack) -> &Pack {
+        self.by_id.entry(pack.id.text()).or_insert(pack)
     }
 
     /// How often the pack check has run for `owner/name@version`.

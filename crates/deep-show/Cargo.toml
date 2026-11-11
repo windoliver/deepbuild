@@ -220,6 +220,10 @@ test-export-target-in-media = []
 test-leave-out-input = []
 test-control-kind = []
 test-steps-in-effects = []
+# Issue #485: a build without scene3d and the modules that need it, effects kept; and the planted
+# layout in which the effects module declares gpu.output@1 instead of the core.
+test-leave-out-scene3d = []
+test-gpu-output-in-effects = []
 
 [dependencies]
 deep-canvas = { path = "../deep-canvas" }

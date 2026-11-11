@@ -197,8 +197,14 @@ impl Hub<'_> {
             return Err(json!({"code": "unknown_asset", "asset": sha}));
         }
         let path = self.scenario.evidence.join(&sha[..2]).join(&sha[2..]);
-        let out = std::env::temp_dir().join(format!("deep-mix-{}-{}", std::process::id(), &sha[..16]));
-        let (reply, _) = self.media_job(DECODE_WORKER, json!({"op": "decode", "path": path, "out": out}));
+        self.pcm_at(&path, sha)
+    }
+
+    /// The sound of the file at `path`, decoded in the decode worker, as [`Hub::pcm`] gives an
+    /// asset's; `sha` names it in a refusal.
+    pub(crate) fn pcm_at(&mut self, path: &std::path::Path, sha: &str) -> Result<(i64, usize, Vec<f32>), Value> {
+        let out = std::env::temp_dir().join(format!("deep-mix-{}-{}", std::process::id(), &sha[..sha.len().min(16)]));
+        let (reply, _) = self.media_job(DECODE_WORKER, json!({"op": "decode", "path": path, "out": out, "video_frames": 0}));
         let stream = reply["decoded"]["streams"]
             .as_array()
             .and_then(|s| s.iter().find(|s| s["type"] == "audio"))
@@ -239,8 +245,16 @@ impl Hub<'_> {
         };
         let empty = Map::new();
         let obj = |k: &str| d.get(k).and_then(Value::as_object).unwrap_or(&empty);
+        // #502: a script's lines with recordings play on the bus `narration`.
+        let script = self.script_of(d);
+        if let Some(problem) = script.as_ref().and_then(|s| s.problem.clone()) {
+            return Err(problem);
+        }
         // Buses, the master last unless the document names it.
         let mut ids: Vec<String> = obj("buses").keys().cloned().collect();
+        if script.as_ref().is_some_and(|s| s.lines.iter().any(|l| l.take.is_some())) && !ids.iter().any(|i| i == "narration") {
+            ids.push("narration".into());
+        }
         if !ids.iter().any(|i| i == "master") {
             ids.push("master".into());
         }
@@ -284,7 +298,39 @@ impl Hub<'_> {
                 processors,
                 out,
                 sends,
+                duck: None,
             });
+        }
+        // #502: each ducking entry's law on its target bus, keyed by the narration's speech
+        // spans or by spans the document carries.
+        let mut ducked: BTreeMap<usize, &String> = BTreeMap::new();
+        for (did, e) in obj("ducking") {
+            let target = e.get("target").and_then(Value::as_str).unwrap_or_default();
+            let Some(b) = index(target) else {
+                return Err(json!({"code": "ducking.no_bus", "ducking": did, "target": target,
+                    "what": format!("ducking `{did}` targets `{target}`, which isn't a bus")}));
+            };
+            if let Some(first) = ducked.insert(b, did) {
+                return Err(json!({"code": "ducking.target_twice", "ducking": [first, did], "target": target,
+                    "what": format!("ducking `{first}` and `{did}` both target the bus `{target}`")}));
+            }
+            let spans: Vec<(i64, i64)> = match e.get("key") {
+                Some(Value::String(k)) if k == "narration" => script.as_ref().map(|s| s.spans()).unwrap_or_default(),
+                key => key
+                    .and_then(|k| k.get("spans"))
+                    .and_then(Value::as_array)
+                    .and_then(|a| a.iter().map(|s| Some((time(d, s.get("start")).ok()?, time(d, s.get("end")).ok()?))).collect())
+                    .ok_or_else(|| bad(format!("ducking {did}: key is `narration` or {{spans: [{{start, end}}]}}")))?,
+            };
+            let seconds = |k: &str, default: f64| (e.get(k).and_then(Value::as_f64).unwrap_or(default) * FLICKS as f64).round() as i64;
+            buses[b].duck = Some(deep_canvas_media::duck::Duck::new(
+                &spans,
+                e.get("depth").and_then(Value::as_f64).unwrap_or(-12.0),
+                seconds("attack", 0.2),
+                seconds("hold", 0.3),
+                seconds("release", 0.8),
+                seconds("merge_gap", 0.8),
+            ));
         }
         // Emitters, by the strip they play.
         let mut emits: BTreeMap<String, Emit> = BTreeMap::new();
@@ -385,6 +431,9 @@ impl Hub<'_> {
                 strip.start = at;
             }
             strips.push(strip);
+        }
+        if let Some(s) = &script {
+            strips.extend(self.narration_strips(s, index("narration").or(index("master")).unwrap_or(0))?);
         }
         let mut extra = Map::new();
         if d.get("cues").is_some() {
