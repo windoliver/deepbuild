@@ -20,6 +20,9 @@ use crate::budget::Class;
 use crate::interval::Iv;
 use crate::registry::Sealed;
 
+pub(super) mod migrate;
+pub use migrate::store_migrations;
+
 /// A pack kind as its pack declares it, with its kit's result once the pack check ran it.
 #[derive(Clone, Debug, PartialEq)]
 pub struct PackKind {
@@ -45,6 +48,10 @@ pub struct PackKind {
     /// The mesh assets its kit's expansions name, by sha256: `geometry.shading` is the loop
     /// module's, so the caller that links it reads them.
     pub meshes: BTreeSet<String>,
+    /// Its migration's steps by the major each starts from, and the corpus documents of its
+    /// earlier majors (#1956).
+    pub migrate: BTreeMap<u64, migrate::Step>,
+    pub corpus: Vec<migrate::Case>,
 }
 
 /// A pack kind's fields (Pack: kinds in any pack).
@@ -71,16 +78,21 @@ const CODE_ONLY: &[&str] = &[
 
 /// The pack's `kinds`, each checked: named `<pack>.<name>@<major>`, backed by one of its
 /// recipes, with only a recipe-backed kind's fields, its rules compiled, its examples and twins
-/// read from the pack's assets by hash, and its cost declared.
+/// read from the pack's assets by hash, its migration carrying the pack's `corpus` (#1956), and
+/// its cost declared.
 pub(super) fn check_kinds(
     id: &PackId,
-    kinds: &Value,
+    manifest: &Map<String, Value>,
     recipes: &BTreeMap<String, Recipe>,
     assets: &[Value],
-    sealed: &Sealed,
+    (sealed, planted): (&Sealed, Planted),
     issues: &mut Vec<Issue>,
 ) -> BTreeMap<String, PackKind> {
     let mut out = BTreeMap::new();
+    let corpus = migrate::corpus(manifest.get("corpus"), assets, issues);
+    let Some(kinds) = manifest.get("kinds") else {
+        return out;
+    };
     let Some(map) = kinds.as_object() else {
         issues.push(Issue::envelope(
             "out_of_range",
@@ -134,20 +146,6 @@ pub(super) fn check_kinds(
                 ok = false;
             }
         }
-        // An empty `migrate` is a kind at its first major's; migrations as data come later.
-        let migrates = fields.get("migrate").is_some_and(|m| match m {
-            Value::Object(o) => !o.is_empty(),
-            Value::Array(a) => !a.is_empty(),
-            _ => true,
-        });
-        if migrates || major > 1 {
-            issues.push(bad(
-                "migrate",
-                json!({"kind": name, "field": "migrate"}),
-                "migrations as data land with the pack versions task: a pack kind is at major 1",
-            ));
-            ok = false;
-        }
         let recipe_name = fields
             .get("recipe")
             .and_then(Value::as_str)
@@ -161,6 +159,16 @@ pub(super) fn check_kinds(
             ));
             continue;
         };
+        // Its migration, read and run over the corpus: every fault named, never only the first.
+        let mut faults = Vec::new();
+        let (spec, inputs) = (fields.get("migrate"), &recipe.inputs);
+        let steps = migrate::read(name, major, spec, inputs, sealed, &mut faults);
+        let cases = migrate::corpus_faults(name, major, &steps, inputs, &corpus, &mut faults);
+        if planted.migration_first_fault {
+            faults.truncate(1);
+        }
+        ok &= faults.is_empty();
+        issues.extend(faults);
         let rules = match fields.get("rules") {
             None => Vec::new(),
             Some(list) => super::packs::read_rule_list(
@@ -255,6 +263,8 @@ pub(super) fn check_kinds(
                 kit: Value::Null,
                 at_extremes: Value::Null,
                 meshes: BTreeSet::new(),
+                migrate: steps,
+                corpus: cases,
             },
         );
     }
@@ -276,9 +286,8 @@ fn list(value: Option<&Value>) -> Vec<Value> {
     value.and_then(Value::as_array).cloned().unwrap_or_default()
 }
 
-/// An example's params and text: the asset of `sha`, as the loader read it, is a document holding
-/// one item of the kind, whose `params` are the example's.
-fn example_params(assets: &[Value], sha: &str, kind: &str) -> Option<(Map<String, Value>, String)> {
+/// The document the asset of `sha` holds, as the loader read it, and its bytes.
+fn asset_doc(assets: &[Value], sha: &str) -> Option<(Value, Vec<u8>)> {
     let asset = assets
         .iter()
         .find(|a| a.get("sha256").and_then(Value::as_str) == Some(sha))?;
@@ -287,7 +296,13 @@ fn example_params(assets: &[Value], sha: &str, kind: &str) -> Option<(Map<String
         .step_by(2)
         .map(|i| u8::from_str_radix(hex.get(i..i + 2)?, 16).ok())
         .collect::<Option<_>>()?;
-    let doc: Value = serde_json::from_slice(&bytes).ok()?;
+    Some((serde_json::from_slice(&bytes).ok()?, bytes))
+}
+
+/// An example's params and text: the asset of `sha` is a document holding one item of the kind,
+/// whose `params` are the example's.
+fn example_params(assets: &[Value], sha: &str, kind: &str) -> Option<(Map<String, Value>, String)> {
+    let (doc, bytes) = asset_doc(assets, sha)?;
     let mut items = member(&doc, "items")?.as_object()?.values();
     let item = items.next().filter(|i| super::kind_text(i) == Some(kind))?;
     if items.next().is_some() {
@@ -455,10 +470,8 @@ fn kit_fail(
 
 /// The kind kit of each of `pack`'s kinds, run at the pack check: a failing part refuses the
 /// pack, naming the kind and the part; a passing kit is kept on the kind with its largest
-/// counts over the extremes.
-pub(super) fn kit(pack: &mut Pack, sealed: &Sealed, planted: Planted) -> Result<(), Vec<Issue>> {
-    let mut alone = Packs::new(planted);
-    alone.insert(pack.clone());
+/// counts over the extremes. `alone` holds the pack and the versions it requires (#1957).
+pub(super) fn kit(pack: &mut Pack, sealed: &Sealed, alone: Packs) -> Result<(), Vec<Issue>> {
     let mut issues = Vec::new();
     let mut results = BTreeMap::new();
     for (name, kind) in &pack.kinds {
@@ -757,13 +770,57 @@ fn kit_one(
         }
         twins.push(json!({"example": sha, "expect": expect, "raised": raised}));
     }
+    // migration: each corpus document of an earlier major, pinned to this version, migrates and
+    // expands clean, to the values its record holds (Pack: migrations as data).
+    let mut corpus = Vec::new();
+    for case in &kind.corpus {
+        let doc = migrate::opened(&case.doc, &pack.id);
+        let checked = super::check_packed(&doc, sealed, packs);
+        let errors: Vec<Value> = checked
+            .issues
+            .iter()
+            .filter(|i| i.severity == "error" && i.code != "over_budget")
+            .map(Issue::to_json)
+            .collect();
+        if !errors.is_empty() {
+            return Err(kit_fail(
+                name,
+                "migration",
+                "out_of_range",
+                json!({"corpus": case.sha, "issues": errors}),
+                &format!(
+                    "corpus document `{}`, saved at major {}, doesn't migrate and expand clean",
+                    case.sha, case.major
+                ),
+            ));
+        }
+        let derived: Map<String, Value> = checked
+            .expansions
+            .iter()
+            .flat_map(|e| e.derived.clone())
+            .collect();
+        if let Some((item, field)) = migrate::differs(&derived, &case.values) {
+            return Err(kit_fail(
+                name,
+                "migration",
+                "out_of_range",
+                json!({"corpus": case.sha, "item": item, "field": field}),
+                &format!("corpus document `{}`, saved at major {}, expands `{item}` other than recorded: {field}", case.sha, case.major),
+            ));
+        }
+        corpus.push(json!({"corpus": case.sha, "from": case.major}));
+    }
+    // A kind at major 1 has nothing to migrate from: the part has no case.
+    let migration = if kind.corpus.is_empty() {
+        json!({"rule": "migration", "verdict": "NONE", "why": "a kind at major 1 migrates from nothing"})
+    } else {
+        json!({"rule": "migration", "verdict": "PASS", "corpus": corpus})
+    };
     // The registries' one kit shape: each part a rule of the kit.
     let part = |p: &str| json!({"rule": p, "verdict": "PASS"});
     let kit = json!({
         "verdict": "PASS",
-        "rules": [part("defaults"), part("determinism"), part("cost"), part("rules"),
-                  // A kind at major 1 has nothing to migrate from: the part has no case.
-                  {"rule": "migration", "verdict": "NONE", "why": "a kind at major 1 migrates from nothing"}],
+        "rules": [part("defaults"), part("determinism"), part("cost"), part("rules"), migration],
         "examples": clean,
         "twins": twins,
     });
@@ -820,7 +877,7 @@ mod tests {
     }
 
     #[test]
-    fn a_kind_with_a_migration_or_past_major_1_is_refused_naming_the_field() {
+    fn a_malformed_migration_or_a_major_without_its_step_is_refused_naming_the_field() {
         let refused = admit(&pack(
             json!({"migrate": {"renames": [{"from": "w", "to": "width"}]}}),
             json!({}),

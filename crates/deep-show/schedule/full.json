@@ -2,7 +2,7 @@
   "uri": "deep://schedule/core@0.0.0",
   "core": "core@0.0.0",
   "build_set": "full",
-  "set_digest": "9a37d60e176f86cd7a33385c54eb55f7a874bf64f639009069435efbc52d57ff",
+  "set_digest": "25ec9e492bdc3c4778fbefd357774750d2d826c9b5d93d34dd80560a8a95a26f",
   "interfaces": {
     "building@1": {
       "digest": "0d13ed593138e9ee44e857752ef4b2a0392f03bc17c10b4f99b48746f6d580e1",
@@ -352,6 +352,35 @@
         "state": "canonical"
       }
     },
+    "physics@1": {
+      "digest": "8071ab44e877e00d90807062cf69c0c913d493ffcd131a1e27e50b78dd6c1242",
+      "reference": "physics",
+      "kit": [
+        "fixtures",
+        "clean_rebuild",
+        "patch_fuzz",
+        "read_set",
+        "order",
+        "schedule",
+        "repair_loop",
+        "carried_state",
+        "late_entry",
+        "time_order",
+        "contribution",
+        "catalog",
+        "migration",
+        "bit"
+      ],
+      "behavior": "none",
+      "module": "physics",
+      "implementation": {
+        "name": "physics",
+        "version": "1.0.0",
+        "pins": {},
+        "equivalence": "bit",
+        "state": "canonical"
+      }
+    },
     "record@1": {
       "digest": "65f77a1cb350e333bb96a1f36a254f4d489bbb36a3a919391654a723b30c1021",
       "reference": "record",
@@ -422,7 +451,7 @@
       }
     },
     "scene3d@1": {
-      "digest": "dcb536d5b1d8d7913726779b7c86ad7a487b3604b6cd9e6c90ffbf37548fd323",
+      "digest": "41a56d6d1facaa575d79ddba0558ae901c1c57f892126b6714869449edb20449",
       "reference": "scene3d",
       "kit": [
         "fixtures",
@@ -577,6 +606,33 @@
           "motion.program"
         ],
         "per": "document"
+      },
+      {
+        "operator": "scene3d.rest",
+        "module": "scene3d",
+        "version": "1.0.0",
+        "reads": [
+          "refs"
+        ],
+        "writes": [
+          "scene3d.rests"
+        ],
+        "per": "document"
+      }
+    ],
+    "build": [
+      {
+        "operator": "scene3d.scatter",
+        "module": "scene3d",
+        "version": "1.0.0",
+        "reads": [
+          "self",
+          "refs"
+        ],
+        "writes": [
+          "scene3d.scattered"
+        ],
+        "per": "item"
       }
     ],
     "items": [
@@ -788,19 +844,6 @@
         "per": "item"
       },
       {
-        "operator": "core.world",
-        "module": "core",
-        "version": "0.0.0",
-        "reads": [
-          "core.transform",
-          "parent"
-        ],
-        "writes": [
-          "core.world"
-        ],
-        "per": "item"
-      },
-      {
         "operator": "record.salience",
         "module": "record",
         "version": "1.0.0",
@@ -865,6 +908,46 @@
         ],
         "writes": [
           "scene3d.livebuilt"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "scene3d.restlive",
+        "module": "scene3d",
+        "version": "1.0.0",
+        "reads": [
+          "refs",
+          "t",
+          "motion.program"
+        ],
+        "writes": [
+          "scene3d.restslive"
+        ],
+        "per": "document"
+      },
+      {
+        "operator": "scene3d.rested",
+        "module": "scene3d",
+        "version": "1.0.0",
+        "reads": [
+          "scene3d.rests",
+          "scene3d.restslive"
+        ],
+        "writes": [
+          "scene3d.rested"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "core.world",
+        "module": "core",
+        "version": "0.0.0",
+        "reads": [
+          "core.transform",
+          "parent"
+        ],
+        "writes": [
+          "core.world"
         ],
         "per": "item"
       },
@@ -1076,7 +1159,8 @@
     ],
     "core.transform": [
       "motion.at",
-      "motion.placed"
+      "motion.placed",
+      "scene3d.rested"
     ]
   }
 }

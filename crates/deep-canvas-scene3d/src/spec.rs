@@ -1174,6 +1174,16 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
                     Value::Null,
                     Value::Null,
                 ),
+                // #2013: its rows from a scatter, in place of written columns.
+                p(
+                    "from",
+                    "{distribute}",
+                    "",
+                    Value::Null,
+                    G,
+                    Value::Null,
+                    Value::Null,
+                ),
             ],
             reads: None,
             fixture: json!({}),

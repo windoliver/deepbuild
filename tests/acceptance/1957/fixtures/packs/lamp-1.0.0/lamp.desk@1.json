@@ -1,0 +1,57 @@
+{
+  "id": "lamp.desk",
+  "version": "1.0",
+  "title": "Desk lamp",
+  "license": "MIT",
+  "author": "the #1957 acceptance suite",
+  "description": "A desk lamp from the front: a stem and a shade, each a 2D rect.",
+  "steps": {
+    "stem": {
+      "op": "mark",
+      "kind": "rect@1",
+      "params": {
+        "box": [
+          0,
+          0,
+          2,
+          40
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          9,
+          10,
+          0
+        ]
+      }
+    },
+    "shade": {
+      "op": "mark",
+      "kind": "rect@1",
+      "params": {
+        "box": [
+          0,
+          0,
+          20,
+          10
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      }
+    }
+  },
+  "outputs": {
+    "parts": [
+      "stem",
+      "shade"
+    ]
+  }
+}

@@ -1,7 +1,7 @@
 {
   "core": {
     "version": "0.0.0",
-    "digest": "9a37d60e176f86cd7a33385c54eb55f7a874bf64f639009069435efbc52d57ff",
+    "digest": "25ec9e492bdc3c4778fbefd357774750d2d826c9b5d93d34dd80560a8a95a26f",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
@@ -203,6 +203,16 @@
       "migration": "PASS"
     }
   },
+  "physics": {
+    "version": "1.0.0",
+    "digest": "8071ab44e877e00d90807062cf69c0c913d493ffcd131a1e27e50b78dd6c1242",
+    "verdict": "PASS",
+    "parts": {
+      "clean_rebuild": "PASS",
+      "patch_fuzz": "PASS",
+      "schedule": "PASS"
+    }
+  },
   "record": {
     "version": "1.0.0",
     "digest": "65f77a1cb350e333bb96a1f36a254f4d489bbb36a3a919391654a723b30c1021",
@@ -232,7 +242,7 @@
   },
   "scene3d": {
     "version": "1.0.0",
-    "digest": "dcb536d5b1d8d7913726779b7c86ad7a487b3604b6cd9e6c90ffbf37548fd323",
+    "digest": "41a56d6d1facaa575d79ddba0558ae901c1c57f892126b6714869449edb20449",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",

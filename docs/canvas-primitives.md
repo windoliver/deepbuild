@@ -3714,6 +3714,7 @@ For: the city's trees, lamps and benches; the castle's rocks and grass; the hous
 - `avoid: [part | span | collection]` (collections are new)
 - `project: {to: ID | collection, axis = (0, −1, 0), align: none | normal}`
 - `scale: [f32, f32] = [1, 1]`; `yaw: [deg, deg] = [0, 360]`; `tilt: deg = 0`; `max: u32 ≤ 100,000`
+- Written on an instancer as `from: {distribute: {on, mode, …}}`, in place of its columns; `seed` is the scatter's, and without one it is the instancer's ID. The `geometry` read answers an instancer's row as `elements: [{id, proto, pos, yaw, scale}]`
 
 **Semantics:** Points come from a seeded Poisson-disk or sample-elimination sampler over the part's area, thinned by the density field, pruned so no two prototype bounds overlap, and projected onto the named surfaces. Every per-element choice is a hash of the instancer's seed and the element's id, and elements are processed in id order, so the result is the same on every machine. It runs at check and feeds an instance item.
 
@@ -5544,6 +5545,7 @@ For: one-shot composition: furniture on floors, props on tables, trees and rocks
 **Fields**
 
 - `rest_on {on: ID | collection | ground, axis: vec3 = (0, −1, 0), align: none | normal = none, offset: m = 0, contact: bounds | true_shape = true_shape, max_drop: m = 10}`
+- Issue `no_support {constraint}` (nothing of `on` lies along the axis within `max_drop`; the item stays where it was). A channel, placement or driver on the owner's position is refused with `second_writer`, naming both
 
 **Semantics:** Moves the item along the axis until its true shape touches the first surface of on, and optionally tilts it to that surface's normal. A static item resolves at check, cached by both content keys, and re-solves per frame only when either side moves. The geometry audit then confirms the contact, so nothing floats or sinks.
 

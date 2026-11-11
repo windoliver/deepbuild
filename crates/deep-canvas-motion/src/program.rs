@@ -1051,6 +1051,18 @@ impl Program {
                 return Err(refused(&format!("drivers/{other}"), &format!("drivers/{id}"), *slot));
             }
         }
+        // #2013: a rest on true shapes never moves an item a channel, placement or driver drives
+        // (Constraint: rest_on): it writes the owner's position, and its rotation when it aligns.
+        for (k, c) in self.motion.constraints.iter().enumerate() {
+            let doc::Kind::RestOn { on: Some(rest), .. } = &c.kind else { continue };
+            let own = self.constraints[k].owner * TRANSFORM;
+            for slot in own..own + if rest.align { 6 } else { 3 } {
+                let driven = writers.get(&slot).cloned().or_else(|| drivers.get(&slot).map(|d| format!("drivers/{d}")));
+                if let Some(other) = driven {
+                    return Err(refused(&other, &format!("constraints/{}", c.id), slot));
+                }
+            }
+        }
         Ok(())
     }
 
@@ -2300,6 +2312,8 @@ impl Program {
             None => Vec::new(),
         };
         let (reads, writes) = match &self.motion.constraints[k].kind {
+            // #2013: solved at check outside the program, so no step of a frame reads or writes.
+            Kind::RestOn { on: Some(_), .. } => (vec![], vec![]),
             Kind::ChildOf { .. } => (groups(own, &[0, 1, 2]), groups(own, &[0, 1, 2])),
             Kind::LookAt { .. } => (groups(own, &[0, 1]), groups(own, &[1])),
             Kind::Copy { what, .. } => (vec![], groups(own, &[what.group()])),
@@ -2821,7 +2835,11 @@ impl Program {
                     .collect(),
             ));
         }
-        Ok(self.listed(filter, doc.get("controls").and_then(Value::as_object)))
+        // #1918: a world's rows come from its bake, through the column view.
+        let world = self
+            .world_of(&filter.list)
+            .map(|_| crate::occurrence::baked(doc, &filter.list));
+        Ok(world.or_else(|| self.listed(filter, doc.get("controls").and_then(Value::as_object))))
     }
 
     fn listed(&self, filter: &crate::occurrence::Filter, controls: Option<&Map<String, Value>>) -> Option<Vec<crate::occurrence::Occurrence>> {
@@ -2847,10 +2865,6 @@ impl Program {
                     })
                     .collect(),
             );
-        }
-        // A world's occurrences come from its bake, which no evaluation here has run.
-        if self.world_of(&filter.list).is_some() {
-            return Some(Vec::new());
         }
         let control = filter.list.strip_prefix("input.")?;
         if !controls.is_some_and(|c| c.contains_key(control)) {
@@ -3073,9 +3087,11 @@ impl Program {
             Kind::FollowTip { offset, rotate, .. } => {
                 cs::follow_tip(&own, [other.pos[0], other.pos[1]], other.rot[2], *offset, *rotate, &mut ops)
             }
-            Kind::RestOn { ground, bottom, offset, max_drop } => {
+            Kind::RestOn { ground, bottom, offset, max_drop, on: None } => {
                 cs::rest_on(&own, *bottom, *ground, *offset, *max_drop, &mut ops).unwrap_or(own)
             }
+            // #2013: a rest on true shapes is solved at check by the module that holds them.
+            Kind::RestOn { on: Some(_), .. } => own,
             Kind::SpringChain { .. } => own,
             Kind::Reach2 { bend, cartoon, .. } => {
                 let [lower, end] = c.chain.map(|i| pose(slots, i * TRANSFORM));

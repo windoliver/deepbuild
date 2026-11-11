@@ -323,6 +323,12 @@ alone.push('tests/acceptance/1923/');
 // connections; its facts refresh and output lag are read against the lane's timing rule.
 alone.push('tests/acceptance/1942/');
 timed.push('tests/acceptance/1942/budgets.test.ts', 'tests/acceptance/1942/stall.test.ts');
+// #1945's files each start a hub on this Mac's Lima VMs and make a throwaway user there, cut every SSH connection of
+// that user for a minute, and run root plans with its sudo password: one file at a time.
+alone.push('tests/acceptance/1945/');
+// #1943's files restart user services on this Mac's Lima VMs and judge check runs against deadlines there: one file at
+// a time.
+alone.push('tests/acceptance/1943/');
 // #1983's files run the x86_64 lane, which builds deep-logic in linux/amd64 and linux/arm64 containers under emulation,
 // and read the container runtime's image list, which another file's container run could change.
 alone.push('tests/acceptance/1983/');
@@ -372,6 +378,10 @@ alone.push('tests/acceptance/544/');
 // the kind kit.
 alone.push('tests/acceptance/202/');
 timed.push('tests/acceptance/202/budgets.test.ts');
+// #1957's file builds deep-show and offers it pack graphs.
+alone.push('tests/acceptance/1957/');
+// #1961's files build deep-show and patch an open document to another version of its pack.
+alone.push('tests/acceptance/1961/');
 // #2015's file builds deep-show in the full set and runs it on a plate and a recipe pack.
 alone.push('tests/acceptance/2015/');
 // #220's files start hubs, build deep-show in the full set and time the typeset tool's own process.
@@ -403,6 +413,9 @@ alone.push('tests/acceptance/504-redraft-ac1/', 'tests/acceptance/504-redraft-ac
 alone.push('tests/acceptance/2026/', 'tests/acceptance/2026-redraft-ac3/');
 timed.push('tests/acceptance/2026/load.test.ts', 'tests/acceptance/2026/outage.test.ts', 'tests/acceptance/2026-redraft-ac3/replay.test.ts');
 byHand.push('tests/acceptance/2026/replay.test.ts');
+// #2028's files build deep-drive plain and with env-plants, start real hubs and run three replicas each over three hours
+// of the virtual clock, a frame each second while you're away.
+alone.push('tests/acceptance/2028/');
 // #1056's files build deep-gpu and draw #464's pixel fixtures; records.test.ts runs #464's two-GPU tests.
 alone.push('tests/acceptance/1056/');
 // #404's parts: #1897's files each build deep-show in their own feature set and hold the GPU for the pixel hash;
@@ -410,9 +423,20 @@ alone.push('tests/acceptance/1056/');
 // build deep-gpu for release and draw on this Mac's Metal GPU, so no two device runs share it.
 alone.push('tests/acceptance/1897/', 'tests/acceptance/1899/', 'tests/acceptance/1903/');
 alone.push('tests/acceptance/2189/', 'tests/acceptance/2189-redraft-ac1/');
+// #520's parts, the physics module: every file builds deep-physics on Rapier (#2010's AC1 a second time from a planted
+// lockfile); #2010's and #2012's build and run it in linux/amd64 and linux/arm64 containers under emulation, and #2012's
+// run Rapier's own tests there; #2011's build Rapier for release natively and for wasm32 and time steps in headless
+// Chrome, so its budget file reads the machine's load.
+alone.push('tests/acceptance/2009/', 'tests/acceptance/2009-redraft-ac2/', 'tests/acceptance/2010/', 'tests/acceptance/2010-oracle/');
+alone.push('tests/acceptance/2011/', 'tests/acceptance/2012/', 'tests/acceptance/2012-oracle/');
+timed.push('tests/acceptance/2011/ac2-step-budget.test.ts');
 // #547's files build deep-logic and bake 108,000 and 72,000 steps; AC4 judges 20 seeks of a recorded match against 2 s.
 alone.push('tests/acceptance/547/');
 timed.push('tests/acceptance/547/ac4-keyframes.test.ts');
+// #407's files each build deep-show (carried.test.ts also with test-hold-min-2s); 407-oracle builds it too.
+alone.push('tests/acceptance/407/', 'tests/acceptance/407-oracle/');
+// #1956's files each build deep-show (r1) and install the shelf pack's versions in order.
+alone.push('tests/acceptance/1956/');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },

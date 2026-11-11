@@ -37,6 +37,49 @@ pub struct Occurrence {
     pub payload: Value,
 }
 
+/// #1918: a world's list as its host baked it into the document's `occurrences` under `list`, once
+/// the core's column view resolved its form: each row's tags, and every field beside `t`, `step`,
+/// `kind`, `a`, `b` and `tags` as its payload. A document no host baked reads it empty.
+pub fn baked(doc: &serde_json::Map<String, Value>, list: &str) -> Vec<Occurrence> {
+    let rows = doc
+        .get("occurrences")
+        .and_then(|o| o.get(list))
+        .and_then(Value::as_array);
+    let row = |r: &serde_json::Map<String, Value>| {
+        let id = |k: &str| r.get(k).and_then(Value::as_str).map(String::from);
+        let strings = |v: &Value| {
+            v.as_array().map(|a| {
+                a.iter()
+                    .filter_map(Value::as_str)
+                    .map(String::from)
+                    .collect()
+            })
+        };
+        let t = r.get("t")?.as_i64()?;
+        let own = ["t", "step", "kind", "a", "b", "tags"];
+        let payload = r
+            .iter()
+            .filter(|(k, _)| !own.contains(&k.as_str()))
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
+        let tags = r.get("tags").and_then(strings).unwrap_or_default();
+        Some(Occurrence {
+            t,
+            end: t,
+            a: id("a"),
+            b: id("b"),
+            kind: id("kind")?,
+            tags,
+            payload: Value::Object(payload),
+        })
+    };
+    rows.into_iter()
+        .flatten()
+        .filter_map(Value::as_object)
+        .filter_map(row)
+        .collect()
+}
+
 /// What a read takes from the matches at or before t.
 #[derive(Clone, Debug, PartialEq)]
 pub enum How {
