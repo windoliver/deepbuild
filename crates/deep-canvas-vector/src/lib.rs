@@ -203,7 +203,8 @@ fn alt_numbers(alt: &str) -> Vec<&str> {
 /// Every number a vector's `alt` shows, scanned as displayed text (Honest numbers: formulas),
 /// with what it traces to, and its issues: an integer is notation, listed and never counted; a
 /// number with a fractional part, or one `numbers` maps to a source path, traces to a data
-/// constant with a source, or is refused `number_unsourced`, naming the item and the number.
+/// constant with a source, or is refused `number_unsourced`, naming the item and the number. A
+/// quoted formula's unmapped numbers are quotation, listed with its quote and never counted.
 pub fn numbers(doc: &Map<String, Value>) -> (Vec<Value>, Vec<Issue>) {
     let (mut shown, mut issues) = (Vec::new(), Vec::new());
     let Some(Value::Object(items)) = doc.get("items") else {
@@ -217,6 +218,9 @@ pub fn numbers(doc: &Map<String, Value>) -> (Vec<Value>, Vec<Issue>) {
             continue;
         };
         let mapped = p.and_then(|p| p.get("numbers"));
+        // #1963: a formula that quotes the lines it was rendered from shows them as quotation,
+        // naming its source; one without a quote is the agent's own.
+        let quote = p.and_then(|p| p.get("quote"));
         for n in alt_numbers(alt) {
             let path = mapped.and_then(|m| m.get(n)).and_then(Value::as_str);
             let source = path
@@ -226,6 +230,9 @@ pub fn numbers(doc: &Map<String, Value>) -> (Vec<Value>, Vec<Issue>) {
                 (Some(path), Some(source)) => shown.push(
                     json!({"item": id, "text": n, "source": {"path": path, "from": source}}),
                 ),
+                (None, _) if quote.is_some() => {
+                    shown.push(json!({"item": id, "text": n, "source": {"quotation": quote}}))
+                }
                 (None, _) if !n.contains('.') => {
                     shown.push(json!({"item": id, "text": n, "source": {"notation": "alt"}}))
                 }
@@ -289,4 +296,30 @@ pub fn parts_json(
             .map(|(id, b, verbs)| json!({"id": id, "source": null, "box": b, "subpaths": subpaths(&verbs)}))
             .collect(),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// #1963: a formula quoting its LaTeX lines lists its numbers as quotation naming that source;
+    /// the same formula with no quote is the agent's own, its integers notation naming no source.
+    #[test]
+    fn a_quoted_formula_s_numbers_name_its_source_and_an_unquoted_one_s_none() {
+        let quote = json!({"source": format!("ev:{}", "a".repeat(64)), "path": "paper.tex", "lines": [3, 4]});
+        let doc = |params: Value| {
+            json!({"items": {"eq": {"kind": "vector@1", "params": params}}})
+                .as_object()
+                .cloned()
+                .unwrap()
+        };
+        let (shown, issues) = numbers(&doc(json!({"alt": "n_1 = 1.33\n", "quote": quote})));
+        assert!(issues.is_empty());
+        let sources: Vec<_> = shown.iter().map(|n| &n["source"]).collect();
+        assert_eq!(sources, [&json!({"quotation": quote}); 2]);
+        let (shown, _) = numbers(&doc(json!({"alt": "n_1 = n_2\n"})));
+        assert!(shown
+            .iter()
+            .all(|n| n["source"] == json!({"notation": "alt"})));
+    }
 }
