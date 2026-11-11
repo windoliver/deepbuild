@@ -1,0 +1,117 @@
+{
+  "pack": "craft@1",
+  "checks": [
+    {
+      "name": "shot_length",
+      "defaults": {"min": 2, "max": 6, "hard_max": 8, "montage": [], "signature": {"count": 1, "max": 20}},
+      "description": "Each shot's length, read from the timeline, is at least min and at most max seconds: under min fails, past max is a warning and past hard_max fails. Inside a montage span the brief declares (a marker's span), the minimum is that span's own, never under 0.25 s. A brief may declare a signature long take: the first count shots past hard_max, each up to signature.max, pass, and another long take fails, naming it.",
+      "threshold": "min 2 s, max 6 s, hard_max 8 s; montage min at least 0.25 s; signature: 1 long take up to 20 s, when the brief declares it",
+      "fix": "Cut a long shot in two or lengthen a short one into the range, or declare the montage span or the one long take in the brief."
+    },
+    {
+      "name": "camera_grammar",
+      "defaults": {"push_run_max": 2, "accents_max": 0.33, "neighbours": "differ", "cut_change": {"angle_min": 30, "size_min": 1.4}, "line": null},
+      "description": "Each shot's move is read from its camera's evaluated poses, never from its label: a change in distance or view width over 10% is a push or a pull, an aim turn over 5° a pan, an azimuth sweep over 10° about its kept items an orbit, and less a hold; a move whose camera covers 90% of its path within 0.5 s is an accent. No more than push_run_max pushes in a row, at most accents_max of the shots are accents, and neighbouring shots never share both framing and move. Across a cut between shots that keep a common item, the direction from the camera to that item turns at least angle_min or its framed height changes at least size_min times, or the cut fails as a jump cut naming both shots. With line, every shot's camera stays on the side of the vertical plane through the two items that the first shot takes, or the shot that crosses it fails.",
+      "threshold": "push_run_max 2; accents_max 0.33 of the shots; neighbours differ; cut_change angle_min 30°, size_min 1.4 times",
+      "fix": "Change the named shot's camera move; across a jump cut, turn the camera at least 30° about the shared item or change its framed height at least 1.4 times; keep every camera on the line's first side."
+    },
+    {
+      "name": "ends",
+      "defaults": {"first": "not text-led", "last": "not text-led"},
+      "description": "The first and the last shot aren't text-led: a shot is text-led when, in at least half its frames, a text of at least text_led's words (8) shows, or when a title card is its only subject.",
+      "threshold": "first and last shots not text-led",
+      "fix": "Open and close on picture: move the title or the closing words into a shot whose subject isn't text."
+    },
+    {
+      "name": "text_led",
+      "defaults": {"max": 0.3, "words": 8},
+      "description": "At most max of the film's shots are text-led: a shot in at least half of whose frames a text of at least words words shows, or whose only subject is a title card. Past max, each text-led shot is named.",
+      "threshold": "max 0.30 of the shots; a text of 8 words or more leads its shot",
+      "fix": "Show the idea in picture and say it in the narration, or cut the on-screen words under eight."
+    },
+    {
+      "name": "look_lock",
+      "defaults": {"looks": "one", "palette": "one"},
+      "description": "Every shot is finished in the film's one look, the shot's own look or else the film's, unless the brief names looks: sequence; the palette is the look's.",
+      "threshold": "looks: one, unless the brief names a sequence; palette: one",
+      "fix": "Finish the named shot in the film's look, or name the sequence of looks in the brief."
+    },
+    {
+      "name": "recipes",
+      "defaults": {"max": 2},
+      "description": "The film's items instantiate at most max distinct pack recipes (explain@1's and piece@1's film recipes once they land); a recipe past max is named with the first shot that frames its instance.",
+      "threshold": "max 2 recipes",
+      "fix": "Write the extra recipe's shots with one of the two recipes the film already uses."
+    },
+    {
+      "name": "numbers_in_script",
+      "defaults": {},
+      "description": "Every number a text shows on screen is also in the words of the script's lines; one that isn't is named with the shot and the frame it first shows in.",
+      "threshold": "every on-screen number said in the script",
+      "fix": "Say the number in the script's line over the shot that shows it, or take it off screen."
+    },
+    {
+      "name": "caption_band",
+      "defaults": {"height": 0.15},
+      "description": "Nothing but captions draws in the caption band, the bottom height of the frame: a text whose glyphs reach into it, or an item that starts in it, is named with the shot and the frame it first draws there.",
+      "threshold": "height 0.15 of the frame",
+      "fix": "Move the named item above the caption band."
+    },
+    {
+      "name": "motion_share",
+      "defaults": {"min": 0.035, "warn": 0.06, "blank_max": 0.3},
+      "description": "The share of frame pairs that move, from frame differences at 12 fps, 320 px wide in gray as an export carries it, with the caption band (0.15, or 0.18 on a vertical frame) masked, a pair counted when its mean difference is at least 9 levels: under min fails and under warn is a warning. Left out are the pairs a cut or a cross-fade covers, and a jump the camera doesn't make that reads as a cut (at least 8 levels and 3 times the median of the 12 pairs around it, plus 2). A run of blank frames (under 0.2% of pixels on an edge) of blank_max or longer, outside the first and last half second, fails.",
+      "threshold": "min 0.035, warn 0.06; blank_max 0.3 s; a pair moves at 9 levels",
+      "fix": "Add motion inside the shots, a camera move or an animated subject, rather than more transitions; fill a blank stretch with picture."
+    },
+    {
+      "name": "accents",
+      "defaults": {"within": 1},
+      "description": "Picture and sound land together: each picture accent (a moment tagged accent, or a camera accent) has a sound starting within within frames of it, and each hit (a sound of 0.5 s or less) lands within as many frames of a picture accent.",
+      "threshold": "within 1 frame",
+      "fix": "Move the sound onto the picture's accent, or the accent onto the sound."
+    },
+    {
+      "name": "not_example",
+      "defaults": {"min_differ": 4, "fixtures": []},
+      "description": "The film differs from its nearest example (an explain@1 example, or a fixture film the brief names in fixtures) on at least min_differ of six measures: its shot kinds by edit distance, its first shot's kind and look, its signature transition, its camera moves, its tempo map's section shape and its last shot. It compares structure only.",
+      "threshold": "min_differ 4 of 6 measures",
+      "fix": "Change what the film shares with the example: its opening, its moves, its transitions, its sections or its ending."
+    },
+    {
+      "name": "silences",
+      "defaults": {"count_min": 2, "length_min": 0.5, "max_dbfs": -60, "cues_inside": "refuse"},
+      "description": "The mix holds at least count_min silences, each at least length_min seconds of 10 ms sub-blocks at or under max_dbfs, and no cue marker sits inside one.",
+      "threshold": "count_min 2; length_min 0.5 s; max_dbfs −60 per 10 ms sub-block; a cue inside one is refused",
+      "fix": "Clear every bus for half a second at least twice, and move any cue out of the silence."
+    },
+    {
+      "name": "sound_coverage",
+      "defaults": {"within": 1, "beds": ["ambience", "foley", "music"]},
+      "description": "Every moment tagged action has a sound starting within within frames of it, and each section (the whole film when it has none) has an ambience, a foley and a music bed playing through at least half of it.",
+      "threshold": "actions within 1 frame; beds: ambience, foley and music in each section",
+      "fix": "Start the action's sound on its moment, and give the named section the missing bed."
+    },
+    {
+      "name": "sound_bridges",
+      "defaults": {"count_min": 2, "lead_or_tail": 0.25},
+      "description": "At least count_min cuts are bridged by a sound that plays across the cut, starting at least lead_or_tail seconds before it or ending at least lead_or_tail after it.",
+      "threshold": "count_min 2; lead_or_tail 0.25 s",
+      "fix": "Start the next shot's sound a quarter second before the cut, or let the last shot's sound tail past it."
+    },
+    {
+      "name": "mix.balance",
+      "defaults": {"bands": [20, 120, 500, 2000, 8000], "low_max": -3, "air_max": -15},
+      "description": "Over each shot, the music bus's power in its lowest band (20 to 120 Hz) is at most low_max dB and in its air band (8 kHz and up) at most air_max dB against its mids (500 to 2000 Hz), from the bus as the export mixes it.",
+      "threshold": "bands 20, 120, 500, 2000, 8000 Hz; low_max −3 dB; air_max −15 dB",
+      "fix": "Cut the music's lows or its air with the bus's EQ until both bands are under their limits."
+    },
+    {
+      "name": "sound_lock",
+      "defaults": {"instruments": null},
+      "description": "Every score instrument is one the brief's sound palette (instruments) lists, named with the shot of its first note; without a palette it is BLOCKED.",
+      "threshold": "instruments: the brief's sound palette",
+      "fix": "Use an instrument the palette names, or change the brief's palette."
+    }
+  ]
+}
