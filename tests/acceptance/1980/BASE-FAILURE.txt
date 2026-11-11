@@ -1,0 +1,45 @@
+Base commit: 568adc8f5 ("Merge pull request #2266 from windoliver/worktree-github-issue-1961-f91507")
+Run: node node_modules/vitest/vitest.mjs run tests/acceptance/1980 --testTimeout=600000
+     (from the checkout's root, with the repo's vitest.config.ts; Node 24.22.0, vitest 5.0.5; after npm ci and
+     npm run build --workspaces --if-present)
+Result: Test Files 3 failed (3); Tests no tests; exit 1. Duration 1.47 s.
+Type check: node node_modules/typescript/bin/tsc -p tests/acceptance/1980/tsconfig.json, exit 2, one error:
+  tests/acceptance/1980/helpers.ts(17,34): error TS2307: Cannot find module
+  '../../../packages/routing-replay/src/index.ts' or its corresponding type declarations.
+Date: 2026-11-11  darwin-arm64
+No local path appears in what is kept (<repo> is the checkout).
+
+Why each test fails at the base: the surface doesn't exist. packages/routing-replay (the package, its entry
+src/index.ts, SNAPSHOT, replay and the kept snapshot) isn't at the base, so helpers.ts can't import it and each file
+fails to load before any test runs:
+
+  FAIL  deadline.test.ts, routing.test.ts, snapshot.test.ts
+  Error: Cannot find module '../../../packages/routing-replay/src/index.ts' imported from
+         <repo>/tests/acceptance/1980/helpers.ts
+   ❯ tests/acceptance/1980/helpers.ts:17:1
+
+That is the expected failure: the issue names no module, so the tests enter through the package this suite invents
+(README: The surface under test), and at the base there is no replay, no snapshot and no report to read. The 8 tests
+that cannot load, covering every criterion and both planted programs:
+
+routing.test.ts
+  #1980.dbc0f471 the GCC 16 evaluation's 688 failures resolve to one cause, raising one ask to that merge's owner whose
+                 ask.created carries its key, owner, 14-day deadline, fallback and default
+  #1980.dbc0f471 inherited failures each make one fix task per cause
+  #1980.dbc0f471 a planted router that asks per job (router-asks-per-job) raises 688 and fails this test, naming the
+                 evaluation
+deadline.test.ts
+  #1980.e07015a3 an ask past its 14-day deadline on the virtual clock goes to its fallback, and rebuilding the asks table
+                 from the log sends it there again
+  #1980.e07015a3 the report gives asks per week across the 107 evaluations against what routing per job would send, and
+                 the owned failures that reached their fallback or default against the 18 that sat past 14 days, each a
+                 count over its named sample, never a pass or a fail
+snapshot.test.ts
+  #1980.e7991d8c the snapshot is kept as evidence by its hash
+  #1980.e7991d8c it names no person: every maintainer handle in the fetched history is a stable placeholder
+  #1980.e7991d8c a planted snapshot that keeps one handle (snapshot-keeps-handle) fails, naming the job it came with
+
+Everything else the tests import loads at the base: @deepbuild/record (openRecord, read, table, rebuild),
+@deepbuild/evidence (openEvidenceStore, get, read) and @deepbuild/asks (openAsks), and the type check finds no other
+error. Not run: no stand-in implementation, so no test has been seen to pass, and neither planted program has been
+seen to fail at its own assertion.
