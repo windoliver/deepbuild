@@ -55252,8 +55252,8 @@ pub struct RunStoppedAtLimitData {
 impl Contract for RunStoppedAtLimitData {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["run", "limit", "max", "reading"])?;
-        deep_contracts::check_member(members, at, "run", &RULE_141)?;
-        deep_contracts::check_member(members, at, "max", &RULE_200)?;
+        deep_contracts::check_member(members, at, "run", &RULE_144)?;
+        deep_contracts::check_member(members, at, "max", &RULE_203)?;
         deep_contracts::check_member(members, at, "reading", &RULE_4)?;
         Ok(Self {
             run: deep_contracts::required(members, at, "run")?,
