@@ -94,7 +94,7 @@ This is the field-level companion to the tech design's "The primitives, defined"
 | data view | charts, graphs, flat maps, terminals | 2 ms | 2 ms; layout and labels off the UI thread | 128 MB* | 1 | none | paused |
 | figure | figures and film previews in a panel | 2 ms | 4 ms | 256 MB per window | 1 | 30 fps (idle loop) | paused |
 | work product | scenes you or an agent edit, such as a house | 2 ms | 4 ms | 256 MB per window | 0.75* | 30 fps | paused |
-| showpiece | full-screen 3D, such as the castle | 10 ms full screen on the reference Mac's display, at the render scale while moving | 4 ms | 256 MB per window, with transient MSAA | 0.5 | 30 fps | paused when hidden or unfocused |
+| showpiece | full-screen 3D, such as the castle | 10 ms full screen on the reference Mac's display, at the render scale while moving | 4 ms | 512 MB per window, with transient MSAA | 0.5 | 30 fps | paused when hidden or unfocused |
 | export | headless renders | no frame cap; draft: at least 4x real time at 1080p60; delivery with every guard: at least 2x real time; each speed fixture on its own, on the reference Mac, from the command to the file | no cap | 300 MB per film | 1 | none | not shown |
 
 A document names its class and may only tighten it; only you raise a class's caps. Every class draws nothing while still. Numbers marked * are proposals rather than figures from a report, and the first measurement on the reference Mac may move each once, as the tech design's budget rule allows.
