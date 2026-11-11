@@ -641,7 +641,8 @@ pub fn open_first(window: &mut Window, cx: &mut App) {
         return;
     }
     // First launch is its own page until Set up finishes; before the record is read, the home page says so.
-    if crate::setup::needed() {
+    // #1100's planted app stays on the first-launch page after a Set up that works.
+    if crate::setup::needed() || crate::plain::planted("stays-on-first-launch") {
         return show_page(Kind::Welcome, "welcome", window, cx);
     }
     if !record::read_yet() {

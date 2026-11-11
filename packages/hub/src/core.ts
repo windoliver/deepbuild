@@ -64,6 +64,7 @@ import { deepHook, forgeOf, projectIdOf, repoOf, rootOf, type Root } from './pat
 import { inviteText, OWNER, People, scopeOf } from './people.js';
 import { identityAt } from './identity.js';
 import { MEMORY_TRANSCRIPTS, openWikiBuild, projectOf, type WikiBuilt } from './wiki-build.js';
+import { reported } from './setup-steps.js';
 import { Teardowns } from './teardowns.js';
 import { Agents, type Sync } from './agents.js';
 import { Box } from './box.js';
@@ -5918,6 +5919,8 @@ export class Core {
       case 'lease.exited': return this.heavy.exited(params).catch((e: Error) => { throw new Refused(refusal('type', '/params', e.message, method)); });
       case 'env.up': return this.envUp(params, context);
       case 'env.down': return this.envDown(params, context);
+      // The steps setup took (#1100), each a `setup.step` event, only as its one list names them.
+      case 'setup.report': { let steps; try { steps = reported(params); } catch (e) { throw new Refused(refusal('type', '/params/steps', (e as Error).message, method)); } for (const data of steps) await this.appendCore('setup.step', data); return {}; }
       case 'wiki.build': {
         const built = await this.wikiBuild.build();
         await syncRejected(this.raw, this.root.dir);

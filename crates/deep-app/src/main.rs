@@ -168,8 +168,13 @@ fn main() {
     if mode == Mode::SetUp {
         match deep_app::setup::set_up() {
             Ok(line) => println!("{line}"),
-            Err(error) => {
-                eprintln!("deep-app: {error}");
+            Err(stopped) => {
+                deep_app::setup::refresh();
+                let line = stopped
+                    .line
+                    .or_else(deep_app::setup::reason)
+                    .unwrap_or_default();
+                eprintln!("deep-app: {line}");
                 std::process::exit(1);
             }
         }
@@ -520,6 +525,7 @@ mod notifications {
             let mut watch = HubWatch::default();
             let (mut begun, mut active) = (false, false);
             let notifies = held.is_some();
+            let answered = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
             let mut shown = deep_app::menu_bar_line();
             // The status item's menu: a line per session with its state's word and mark (#1462).
             let mut listed: Vec<String> = Vec::new();
@@ -549,6 +555,25 @@ mod notifications {
                 }
                 let was_active = std::mem::replace(&mut active, super::menu_bar::app_active());
                 if notifies && active && !was_active {
+                    read_setting(&mut notifier);
+                }
+                // macOS asks whether DeepBuild may notify you at the Set up click (#1100), or, set up from a terminal,
+                // the first time the app comes forward; never when an ask comes due. Once you've answered, it's read.
+                let not_asked = notifier.reach(false).setting == NotificationSetting::NotAsked;
+                if notify::take_ask()
+                    || (notifies
+                        && active
+                        && !was_active
+                        && not_asked
+                        && !deep_app::setup::needed())
+                {
+                    eprintln!("deep-app: asked macOS to allow notifications");
+                    let answered = answered.clone();
+                    super::notification_center::request(move || {
+                        answered.store(true, std::sync::atomic::Ordering::SeqCst);
+                    });
+                }
+                if answered.swap(false, std::sync::atomic::Ordering::SeqCst) {
                     read_setting(&mut notifier);
                 }
                 let now = now();

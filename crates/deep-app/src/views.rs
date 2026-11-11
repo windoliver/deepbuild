@@ -10,10 +10,7 @@
 //! accessibility tree a screen reader sees and the observed elements a replica reads back are the same set of nodes,
 //! and a named id is its author ID in both (#1459).
 
-use std::{
-    cell::Cell, cell::RefCell, collections::HashMap, sync::mpsc::TryRecvError, sync::Arc,
-    time::Duration,
-};
+use std::{cell::Cell, cell::RefCell, collections::HashMap, sync::Arc, time::Duration};
 
 use gpui_kit::base::dock::{
     register_panel, DockArea, DockAreaState, DockPlacement, DockState, Panel, PanelEvent,
@@ -50,10 +47,6 @@ const CUT_TO: usize = 24;
 const SESSION_PAGE: &str = "session-page";
 /// How often an open terminal tab reads its grid again.
 const TERMINAL_TICK: Duration = Duration::from_millis(250);
-/// How often the window looks for what setup said, while it runs (#1556).
-const SET_UP_TICK: Duration = Duration::from_millis(50);
-/// What the window says in place of Set up while setup runs.
-pub const SETTING_UP: &str = "Setting up…";
 /// How often the Agents page reads the hub's model again.
 const AGENTS_TICK: Duration = Duration::from_secs(2);
 /// The diff lines the Agents page shows of each file, and the width a line is cut to, in points.
@@ -241,10 +234,8 @@ struct TerminalTab {
 pub struct Shipped {
     kind: Kind,
     focus_handle: FocusHandle,
-    /// What Home's Set up click said, once clicked.
-    set_up: Option<String>,
-    /// The wait for what setup says, while it runs off the UI thread (#1556).
-    setting_up: Option<Task<()>>,
+    /// The first-launch page's Set up (#1100).
+    pub(crate) welcome: crate::welcome::Welcome,
     /// The sidebar's open session and the one keyboard focus is on (#1003).
     rows: SidebarRows,
     /// The rows, by index, the replica opens the sidebar with: read at its first frame, when the sidebar also
@@ -341,8 +332,7 @@ impl Shipped {
         Self {
             kind,
             focus_handle: cx.focus_handle(),
-            set_up: None,
-            setting_up: None,
+            welcome: Default::default(),
             rows: SidebarRows::default(),
             start: (kind == Kind::Sidebar).then(|| SIDEBAR_ROWS.with(std::cell::Cell::get)),
             terminal: None,
@@ -441,28 +431,6 @@ impl Shipped {
             self.agents = page;
             cx.notify();
         }
-    }
-
-    /// The Set up click: setup runs on a thread of its own (#1556), the window says it's working, and a tick on the UI
-    /// thread picks up what it said.
-    fn start_set_up(&mut self, cx: &mut Context<Self>) {
-        let heard = crate::setup::start();
-        self.setting_up = Some(cx.spawn(async move |this, cx| loop {
-            cx.background_executor().timer(SET_UP_TICK).await;
-            let said = match heard.try_recv() {
-                Ok(said) => said.unwrap_or_else(|error| error),
-                Err(TryRecvError::Empty) => continue,
-                Err(TryRecvError::Disconnected) => "deep setup stopped without a word".to_owned(),
-            };
-            let _ = this.update(cx, |this, cx| {
-                crate::setup::refresh();
-                this.set_up = Some(said);
-                this.setting_up = None;
-                cx.notify();
-            });
-            return;
-        }));
-        cx.notify();
     }
 
     /// Opens the Terminal tab of `session`'s page on what the hub's canvas core holds for it.
@@ -1004,7 +972,7 @@ fn context_menu(window: &Window) -> Option<AnyElement> {
 }
 
 /// A line of text that is one accessibility node: a label named by its text, in the body role (#1458).
-fn label(
+pub(crate) fn label(
     id: impl Into<ElementId>,
     text: impl Into<SharedString>,
 ) -> ObservedElement<Stateful<Div>> {
@@ -2639,69 +2607,7 @@ impl Render for Shipped {
                     .children(bound_panel(chrome));
                 page.child(in_lane(content, true))
             }
-            Kind::Welcome => {
-                let said = self.set_up.as_deref();
-                let working = said.is_none() && self.setting_up.is_some();
-                let (ground, ink) = (chrome.ground, chrome.ink_primary);
-                let button = (said.is_none() && !working && crate::setup::needed()).then(|| {
-                    control("set-up", Control::Main, "Set up", chrome)
-                        .on_click(cx.listener(|this, _, _, cx| this.start_set_up(cx)))
-                });
-                page.child(
-                    observed("welcome")
-                        .size_full()
-                        .flex()
-                        .flex_col()
-                        .items_center()
-                        .justify_center()
-                        .gap(sizes().space(4))
-                        .bg(ground)
-                        .typed(sizes().body)
-                        .text_color(ink)
-                        .child(
-                            svg()
-                                .data(brand::WELCOME_LOCKUP)
-                                .w(px(brand::WELCOME_LOCKUP_WIDTH_PX)) // size-literal-exception: the kit's artwork at brand/surfaces.json's size (#79); review 2027-04-30
-                                .h(px(brand::WELCOME_LOCKUP_HEIGHT_PX)) // size-literal-exception: the kit's artwork at brand/surfaces.json's size (#79); review 2027-04-30
-                                .text_color(ink),
-                        )
-                        .children(button)
-                        // #1461's planted first-launch page draws the box beside Set up.
-                        .children(
-                            crate::plain::planted("box-on-first-launch")
-                                .then(words_box)
-                                .flatten(),
-                        )
-                        .children(working.then(|| {
-                            observed("set-up-working")
-                                .role(Role::Label)
-                                .aria_label(SETTING_UP)
-                                .child(SETTING_UP)
-                        }))
-                        .children(said.map(|line| {
-                            observed("set-up-said")
-                                .role(Role::Label)
-                                .aria_label(line.to_owned())
-                                .max_w(relative(0.8))
-                                .text_center()
-                                .child(line.to_owned())
-                        }))
-                        .children(
-                            (said.is_none() && !working)
-                                .then(crate::setup::reason)
-                                .flatten()
-                                .map(|line| {
-                                    observed("set-up-reason")
-                                        .role(Role::Label)
-                                        .aria_label(line.clone())
-                                        // A long path in the reason wraps inside the window, so its fix stays in view.
-                                        .max_w(relative(0.8))
-                                        .text_center()
-                                        .child(line)
-                                }),
-                        ),
-                )
-            }
+            Kind::Welcome => page.child(crate::welcome::page(self, chrome, cx)),
             Kind::Agents => {
                 let inner =
                     agents_page(div().id("agents-page").flex().flex_col(), self, chrome, cx);

@@ -236,6 +236,7 @@
   "session.start@4": "d1:5fd20498bb3ab9709ead48bb073e9e65803c62d64fed0d9abf6fee929fd7360b",
   "session.state@1": "d1:6cdb8faf079b3d4b205f42c5c37894a00e48484aeaae1f5b779c9bcb039b032d",
   "session_binding.machine@1": "d1:ce953d197806e48e6771fe1f770cba8f8d2b36ba0c98f9c185df7804d6acabd4",
+  "setup.step@1": "d1:c0981a7599f71ef738d12e16f2b24cf6eb4dd32f0b3390504a4885b8fd490446",
   "source.called@1": "d1:ddf3393742fb6502806bd1db99797eb48e1853196eee99c663b00b03f1df05d6",
   "source@1": "d1:ea5f6252ff3d4f86689faa64745cbc74aa95c81c2c8519252c9abe374858afa5",
   "spend.approved@1": "d1:aeb65ecd09b7520c1f58d5995baf23f22be430460697ea696e1b4f428ed96cce",
