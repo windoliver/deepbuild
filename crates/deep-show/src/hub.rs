@@ -1472,6 +1472,14 @@ impl<'a> Hub<'a> {
                 }
                 (h.clone(), Value::Object(v))
             })
+            // #1967: each terminal recording as the decode worker converted it, which a cell
+            // grid that plays it reads by its hash.
+            .chain(
+                self.media
+                    .recordings
+                    .iter()
+                    .map(|(sha, c)| (format!("terminal:{sha}"), c.clone())),
+            )
             .collect()
     }
 
@@ -2317,6 +2325,11 @@ impl<'a> Hub<'a> {
         if !self.sessions.contains_key(&show.doc) {
             let fresh = self.new_session();
             self.sessions.insert(show.doc.clone(), fresh);
+        }
+        // #1967: a recording this revision's cell grids play, converted at its probe.
+        let readings = self.readings();
+        if let Some(s) = self.sessions.get_mut(&show.doc) {
+            s.set_readings(readings);
         }
         // #504: the session loads the played form: the drawn form with the document's input track
         // and the session's picks, shown at `t`.

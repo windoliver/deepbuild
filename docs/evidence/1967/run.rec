@@ -1,0 +1,7 @@
+{"cols":104,"rows":12}
+{"at":1101399264,"text":"\r\nrunning 6 tests\r\ntest recording::tests::a_play_maps_film_time_to_source_time_as_a_strip_does ... "}
+{"at":1101569196,"text":"ok\r\ntest recording::tests::a_recording_file_is_its_size_then_timed_chunks ... ok\r\ntest recording::tests::a_recording_plays_by_its_source_time_and_equals_a_live_grid_fed_the_same_bytes ... "}
+{"at":1102445022,"text":"ok\r\ntest recording::tests::every_keyframe_is_the_grid_the_patches_before_it_make ... "}
+{"at":1102687778,"text":"ok\r\ntest recording::tests::the_digits_a_recording_shows_are_listed_once_with_the_time_they_appear ... "}
+{"at":1102837982,"text":"ok\r\ntest recording::tests::upstream_recordings_play_as_a_live_grid_fed_the_same_bytes_shows_them ... "}
+{"at":11105678921,"text":"ok\r\n\r\ntest result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 14 filtered out; finished in 14.18s\r\n\r\n"}

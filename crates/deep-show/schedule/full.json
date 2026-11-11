@@ -615,7 +615,9 @@
         "version": "1.0.0",
         "reads": [
           "self",
-          "look"
+          "look",
+          "t",
+          "reading"
         ],
         "writes": [
           "cells.grid"
