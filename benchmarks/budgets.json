@@ -44,10 +44,7 @@
         "p95Ms": 2000,
         "peakBytes": 128000000
       },
-      "initialReason": "Issue #246 first measurement: the merge base has no repo-rules check. Time the lint lane's rules on this repo in 20 rounds: one read of every file git lists, one cargo metadata call and the size diff against the merge base. Issue #246 caps p50 at 1 s, p95 at 2 s and peak memory at 128 MB; later merge bases hold p50 and peak memory to a 50% margin.",
-      "criteria": [
-        "#246.dbdbd69d"
-      ]
+      "initialReason": "Issue #246 first measurement: the merge base has no repo-rules check. Time the lint lane's rules on this repo in 20 rounds: one read of every file git lists, one cargo metadata call and the size diff against the merge base. Issue #246 caps p50 at 1 s, p95 at 2 s and peak memory at 128 MB; later merge bases hold p50 and peak memory to a 50% margin."
     },
     {
       "id": "evidence-put-5mb",
@@ -131,10 +128,7 @@
       "limits": {
         "p50Ms": 120000
       },
-      "initialReason": "Issue #47 first measurement: the merge base has no fixture corpus. One process replays every recorded payload under adapters/corpus through its adapter and compares it with its stored events, field by field. Issue #47 caps the full replay at 2 minutes on the reference Mac; later merge bases hold p50 and peak memory to a 50% margin.",
-      "criteria": [
-        "#47.3f704ae4"
-      ]
+      "initialReason": "Issue #47 first measurement: the merge base has no fixture corpus. One process replays every recorded payload under adapters/corpus through its adapter and compares it with its stored events, field by field. Issue #47 caps the full replay at 2 minutes on the reference Mac; later merge bases hold p50 and peak memory to a 50% margin."
     },
     {
       "id": "record-append-20k",
