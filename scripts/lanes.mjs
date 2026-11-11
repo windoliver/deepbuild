@@ -357,6 +357,9 @@ alone.push('tests/acceptance/1819/');
 // #502's files each build deep-show, export films through the GPU and the encode tool and speak their fixture with
 // `say`; onsets.test.ts also starts a hub and the model host on its fixed port 8719: one file at a time.
 alone.push('tests/acceptance/502/', 'tests/acceptance/502-oracle/');
+// #935's files each build deep-show and run audio.gen on 38.4 s beds and the EBU loudness set; tempo.test.ts also starts
+// a hub and the model host on its fixed port 8719: one file at a time.
+alone.push('tests/acceptance/935/', 'tests/acceptance/935-oracle/');
 byHand.push('tests/acceptance/408/machines.test.ts');
 // #405's files each build deep-show. Criterion 4 runs from its redraft, which also builds it in release on a machine
 // that can judge a timing now and times the geometry audit and determinism hashing against the lane's rule; the

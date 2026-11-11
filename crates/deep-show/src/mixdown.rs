@@ -44,6 +44,8 @@ pub enum MixCall {
     },
     /// #500: one analysis bake of one asset.
     Bake(Value),
+    /// #935: one entry of a document's `sounds` held to audio.gen.
+    Gen { doc: Value, sound: String },
     /// #154: a score's render plan, `{doc, item}`.
     Score(Value),
     /// #501: a media document played live on the default output for `seconds` of real time.
@@ -71,6 +73,10 @@ pub fn parse_call(name: &str, c: &Map<String, Value>) -> Option<MixCall> {
             track: c.get("track").map_or(Some(Vec::new()), |t| t.as_array().cloned())?,
         },
         "media_bake" => MixCall::Bake(c.get("bake").filter(|b| b.is_object())?.clone()),
+        "media_gen" => MixCall::Gen {
+            doc: c.get("doc").filter(|d| d.is_object())?.clone(),
+            sound: c.get("sound")?.as_str()?.to_string(),
+        },
         "score_plan" => MixCall::Score(Value::Object(c.clone())),
         "handed" => MixCall::Handed {
             panel: c.get("panel")?.as_str()?.to_string(),
@@ -528,6 +534,7 @@ impl Hub<'_> {
                 json!({"mix": reply})
             }
             MixCall::Bake(b) => self.bake_call(b),
+            MixCall::Gen { doc, sound } => self.gen_call(doc, sound),
             MixCall::Score(c) => self.score_plan(c),
             MixCall::Handed { panel, from, to } => {
                 let now = self.now;
