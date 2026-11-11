@@ -14,6 +14,7 @@ mod audio;
 mod chunks;
 pub mod color;
 mod export;
+mod flac;
 pub mod maps;
 mod mkv;
 pub mod mov;

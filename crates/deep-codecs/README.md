@@ -16,6 +16,8 @@ A binary that links the crate starts each helper as a copy of itself with the ar
   listed codec's decoder (PCM, MP3, AAC-LC and HE-AAC, ALAC, FLAC, Opus, Vorbis), the encoder's delay and padding
   trimmed as FFmpeg trims them, integer samples to f32 as sample ÷ 2^(depth − 1), and the `unsupported_codec`
   refusal naming any other codec as ffprobe names it. MP4 audio is read by `mp4.rs` and decoded here.
+- `src/flac.rs`: our own FLAC decoder, every FLAC file's: STREAMINFO and frames, samples in i64 so a 32-bit
+  stream's 33-bit side channel is exact.
 - `src/chunks.rs`: AIFF, AIFF-C and CAF by their chunks; ASF only to name its codec. `src/ogg.rs`: Ogg's pages, a
   chain's links and the granules Vorbis and Opus end by. `src/mkv.rs`: Matroska and WebM's first audio track and its
   DiscardPadding.
@@ -30,8 +32,8 @@ A binary that links the crate starts each helper as a copy of itself with the ar
 serde_json, sha2 and image; libc on macOS. Platform frameworks are linked by name and called through their C interfaces. It imports no canvas crate and no other DeepBuild crate: the canvas, the media module and the app reach it only through a helper process.
 
 The audio decoders (#503) are pure Rust, so the web player can build the same ones for wasm32: symphonia (only its
-MP3, Vorbis and ALAC decoders), rusty_flac (FLAC to 32 bits), rusty_aac (AAC-LC and HE-AAC v1 and v2) and ropus
-(Opus, the fixed-point port of libopus). The containers are read here. No platform decoder reads a listed audio
+MP3, Vorbis and ALAC decoders), rusty_aac (AAC-LC and HE-AAC v1 and v2) and ropus (Opus, the fixed-point port of
+libopus); FLAC is our own (`src/flac.rs`). The containers are read here. No platform decoder reads a listed audio
 format.
 
 ## Deviations

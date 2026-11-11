@@ -7,14 +7,9 @@
 //! as ffprobe's `codec_name` does.
 
 use serde_json::{json, Value};
-use symphonia::core::codecs::audio::well_known::{
-    CODEC_ID_ALAC, CODEC_ID_FLAC, CODEC_ID_MP3, CODEC_ID_VORBIS,
-};
+use symphonia::core::codecs::audio::well_known::{CODEC_ID_ALAC, CODEC_ID_MP3, CODEC_ID_VORBIS};
 use symphonia::core::codecs::audio::{AudioCodecParameters, AudioDecoderOptions};
-use symphonia::core::formats::{FormatOptions, FormatReader};
-use symphonia::core::io::MediaSourceStream;
 use symphonia::core::packet::Packet;
-use symphonia::default::formats::FlacReader;
 
 use crate::refused;
 
@@ -475,19 +470,13 @@ fn mp3(data: &[u8]) -> Option<Track> {
     Some(t)
 }
 
-/// A native FLAC file through symphonia's reader: STREAMINFO and its frames, one a packet.
+/// A native FLAC file: STREAMINFO, and every frame as one packet.
 fn flac(data: &[u8]) -> Option<Track> {
-    let mss = MediaSourceStream::new(Box::new(std::io::Cursor::new(data)), Default::default());
-    let mut r = FlacReader::try_new(mss, FormatOptions::default()).ok()?;
-    let track = r.tracks().first()?.clone();
-    let p = track.codec_params.as_ref()?.audio()?.clone();
-    let channels = p.channels.as_ref().map_or(0, |c| c.count() as u32);
-    let info = p.extra_data.as_deref().unwrap_or_default().to_vec();
-    let mut t = Track::new(Codec::Flac, p.sample_rate?, channels, info);
-    while let Ok(Some(pk)) = r.next_packet() {
-        t.packets.push(pk.data.to_vec());
-    }
-    t.frames = track.num_frames;
+    let (streaminfo, frames) = crate::flac::native(data)?;
+    let i = crate::flac::info(streaminfo)?;
+    let mut t = Track::new(Codec::Flac, i.rate, i.channels, streaminfo.to_vec());
+    t.packets = vec![frames.to_vec()];
+    t.frames = (i.frames > 0).then_some(i.frames);
     Some(t)
 }
 
@@ -570,10 +559,20 @@ pub fn decode(t: &Track) -> Result<Decoded, String> {
             }
             d.rate = 48_000;
         }
-        Codec::Mp3 | Codec::Flac | Codec::Alac | Codec::Vorbis => {
+        // A packet holds one FLAC frame, or a native file's every frame.
+        Codec::Flac => {
+            let info =
+                crate::flac::info(&t.config).ok_or("a FLAC stream without its STREAMINFO")?;
+            d.rate = info.rate;
+            for pk in &t.packets {
+                let ints = crate::flac::decode(&info, pk)?;
+                let f: Vec<f32> = ints.iter().map(|s| int_to_f32(*s, info.bits)).collect();
+                push(&mut d, &f, info.channels);
+            }
+        }
+        Codec::Mp3 | Codec::Alac | Codec::Vorbis => {
             let id = match codec {
                 Codec::Mp3 => CODEC_ID_MP3,
-                Codec::Flac => CODEC_ID_FLAC,
                 Codec::Alac => CODEC_ID_ALAC,
                 _ => CODEC_ID_VORBIS,
             };
@@ -590,7 +589,7 @@ pub fn decode(t: &Track) -> Result<Decoded, String> {
                     &AudioDecoderOptions::default().gapless(codec == Codec::Vorbis),
                 )
                 .map_err(|e| e.to_string())?;
-            let int = matches!(codec, Codec::Flac | Codec::Alac);
+            let int = codec == Codec::Alac;
             let (mut ints, mut floats) = (Vec::<i32>::new(), Vec::<f32>::new());
             for (i, pk) in t.packets.iter().enumerate() {
                 let p = Packet::new(0, 0i64.into(), 0u64.into(), pk.clone());
@@ -599,7 +598,7 @@ pub fn decode(t: &Track) -> Result<Decoded, String> {
                     .map_err(|e| format!("{} packet {i}: {e}", codec.name()))?;
                 d.rate = buf.spec().rate();
                 let ch = buf.spec().channels().count() as u32;
-                // FLAC and ALAC give their integers shifted to 32 bits.
+                // ALAC gives its integers shifted to 32 bits.
                 if int {
                     buf.copy_to_vec_interleaved(&mut ints);
                     floats.clear();
