@@ -41,6 +41,27 @@ file changed.
    `flip`. So runs on one commit go pass, fail, pass, ...; a check needing 2 clean runs gets one of each and reads
    INCONCLUSIVE. It is still a test that fails by `expect(n % 2).toBe(1)` for the turn it is, never for a helper.
 
+## Redraft 2: the planted drop
+
+Second dispute, on `forge.ts`, not `helpers.ts`; the first redraft stands. It made AC7 fail whatever the implementation
+did, because of a fact of git at the base. No criterion's reading, expected value, assertion, message, plant or test
+file changed.
+
+- **The defect.** `LandForge.merge()` made the planted forge's dropped commit in the bare repo with `git read-tree` into
+  a temporary index, `git update-index --force-remove -- <path>`, `git write-tree` and `commit-tree`. `update-index`
+  refuses to run in a bare repository with no work tree (exit 128, "this operation must be run in a work tree"), and
+  the helper ignored every exit code. The tree it wrote still held the file, so the "dropped" commit had the same tree
+  as the real merge, and `readback.test.ts` failed at its own precondition (`the planted forge did not drop
+  docs/added-by-first.txt`) before it judged any lander.
+- **The change.** The drop runs `update-index` with `GIT_WORK_TREE` set to an empty temporary directory (never written
+  to, removed afterwards, as is the temporary index), which `update-index` accepts. Every git step of the drop now
+  throws, naming the step, its exit code and its output, if it exits non-zero; the merge call then answers 500 instead
+  of a silent no-op.
+- **Checked on its own** at the base with a throwaway script: a `LandForge` with a branch adding
+  `docs/added-by-first.txt` and a second branch adding `b.txt`, `drop: { nth: 2, path: 'docs/added-by-first.txt' }`, two
+  merges. Both answered `merged: true`; the first merge's tree held `a.txt` and the file, the second's held only `a.txt`
+  and `b.txt`, and `main` pointed at it.
+
 ## Run
 
 ```sh

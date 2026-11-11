@@ -5,8 +5,11 @@
 // GitHub's closing keywords on a merge. It decides nothing about DeepBuild. With `drop` set it is the planted forge of
 // the seventh criterion: it answers a merge `merged: true` and then drops one file from the commit it made.
 import { execFile } from 'node:child_process';
+import { mkdtemp, rm } from 'node:fs/promises';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { GateForge } from '../1325/forge.ts';
 
 type Obj = Record<string, unknown>;
@@ -143,14 +146,24 @@ export class LandForge {
       const nth = ++this.mergeCount;
       if (this.drop && this.drop.nth === nth) {
         const bare = this.bare;
-        const parents = (await git(bare, ['rev-list', '--parents', '-n', '1', sha])).out.split(' ').slice(1);
+        const step = async (args: string[], env: Record<string, string> = {}): Promise<string> => {
+          const r = await git(bare, args, env);
+          if (r.code !== 0) throw new Error(`the planted forge's drop failed at \`git ${args[0]}\` (exit ${r.code}): ${r.out}`);
+          return r.out;
+        };
+        const parents = (await step(['rev-list', '--parents', '-n', '1', sha])).split(' ').slice(1);
         const idx = `${bare}/dh1331.index`;
-        const env = { GIT_INDEX_FILE: idx, GIT_AUTHOR_NAME: 'GitHub', GIT_AUTHOR_EMAIL: 'noreply@example.invalid', GIT_COMMITTER_NAME: 'GitHub', GIT_COMMITTER_EMAIL: 'noreply@example.invalid' };
-        await git(bare, ['read-tree', sha], env);
-        await git(bare, ['update-index', '--force-remove', '--', this.drop.path], env);
-        const tree = (await git(bare, ['write-tree'], env)).out;
-        const dropped = (await git(bare, ['commit-tree', tree, ...parents.flatMap((p) => ['-p', p]), '-m', `Merge pull request #${pr}`], env)).out;
-        await git(bare, ['update-ref', 'refs/heads/main', dropped, sha]);
+        // update-index refuses a bare repository; an empty work tree (never written to) lets it edit the temporary index.
+        const work = await mkdtemp(join(tmpdir(), 'dh1331-drop-'));
+        const env = { GIT_INDEX_FILE: idx, GIT_WORK_TREE: work, GIT_AUTHOR_NAME: 'GitHub', GIT_AUTHOR_EMAIL: 'noreply@example.invalid', GIT_COMMITTER_NAME: 'GitHub', GIT_COMMITTER_EMAIL: 'noreply@example.invalid' };
+        let dropped: string;
+        try {
+          await step(['read-tree', sha], env);
+          await step(['update-index', '--force-remove', '--', this.drop.path], env);
+          const tree = await step(['write-tree'], env);
+          dropped = await step(['commit-tree', tree, ...parents.flatMap((p) => ['-p', p]), '-m', `Merge pull request #${pr}`], env);
+          await step(['update-ref', 'refs/heads/main', dropped, sha]);
+        } finally { await rm(work, { recursive: true, force: true }); await rm(idx, { force: true }); }
         sha = dropped;
       }
       const meta = this.pulls.get(pr);
