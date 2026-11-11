@@ -156,6 +156,15 @@ pub enum Planted {
     /// #408: film.layout takes its texts by the kinds text@1, vector@1, mark.text and counter,
     /// not from the core's glyph-box array.
     LayoutTextByKind,
+    /// #407: a verdict that counts only the issues the patch brought, never those its last good
+    /// revision had too.
+    VerdictCountsNewIssues,
+    /// #407: the flicker check counts each single change of a region as a flash.
+    FlickerCountsSingleChanges,
+    /// #407: the flicker check reads one region, the whole view, by its mean luminance.
+    FlickerWholeViewMean,
+    /// #407: the claim check takes `cites: []` as cited.
+    CitesEmptyPasses,
     /// #405's and #1936's: the geometry audit's wrong programs, which its own module names.
     Audit(crate::geometry_audit::Planted),
     /// #202: a kind_rules requirement counts the working agent's own pack rule as its cover.
@@ -520,6 +529,9 @@ pub struct Claim {
     pub deliverables: Vec<String>,
     /// The locked definition's requirements, each one check input (#403).
     pub requirements: Vec<Requirement>,
+    /// #407: a film's brief, drafted with the definition: `{goal, moments, holds, cues,
+    /// sources}`, whose moments, holds and cues each become a check.
+    pub brief: Option<Value>,
 }
 
 /// One requirement of a claim's definition: its handle and its check input.
@@ -1491,7 +1503,7 @@ impl<'a> Hub<'a> {
     /// A new session for a document: its epochs from the scenario's start, the look's tokens
     /// and the record's readings.
     /// The look a document names by asset, resolved over the bundled faces (#1162).
-    fn look_of(&self, doc: &Value) -> Option<Look> {
+    pub(crate) fn look_of(&self, doc: &Value) -> Option<Look> {
         let def = self.look_def_of(doc)?;
         let bundled: Vec<&str> = deep_text::FACES.iter().map(|f| f.file).collect();
         // The status distance holds wherever status can show: a document with a status binding
@@ -1509,7 +1521,7 @@ impl<'a> Hub<'a> {
     }
 
     /// The look@1 a document names by asset, as the evidence store holds it.
-    fn look_def_of(&self, doc: &Value) -> Option<Value> {
+    pub(crate) fn look_def_of(&self, doc: &Value) -> Option<Value> {
         let name = doc.pointer("/look/asset")?.as_str()?;
         let id = name.split('@').next()?;
         let sha = doc.pointer(&format!("/assets/{id}/sha256"))?.as_str()?;

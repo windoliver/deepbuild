@@ -19,6 +19,7 @@ mod familiar;
 mod evidence;
 mod export;
 mod film;
+mod film_audit;
 mod film_layout;
 mod geometry_audit;
 mod film_viewer;
@@ -1125,6 +1126,10 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
             session,
             deliverables: strings(c.get("deliverables"))?,
             requirements,
+            brief: match c.get("brief") {
+                None => None,
+                Some(b) => Some(b.as_object().map(|_| b.clone())?),
+            },
         })
     })?;
     let size_field = |k: &str| match input.get(k) {
@@ -1292,6 +1297,10 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "checks_skip_unknown_kind" => Planted::ChecksSkipUnknownKind,
                 "missing_kind_inconclusive" => Planted::MissingKindInconclusive,
                 "layout_text_by_kind" => Planted::LayoutTextByKind,
+                "verdict_counts_new_issues" => Planted::VerdictCountsNewIssues,
+                "flicker_counts_single_changes" => Planted::FlickerCountsSingleChanges,
+                "flicker_whole_view_mean" => Planted::FlickerWholeViewMean,
+                "cites_empty_passes" => Planted::CitesEmptyPasses,
                 "seeds_by_expansion_order" => Planted::SeedsByExpansionOrder,
                 "each_seeds_by_element_count" => Planted::EachSeedsByElementCount,
                 "each_face_per_triangle" => Planted::EachFacePerTriangle,

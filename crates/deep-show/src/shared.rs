@@ -575,12 +575,17 @@ impl Hub<'_> {
     /// Opens every shared document: from the state folder's record when it has one (a restart),
     /// else at revision 0, the stored document.
     pub fn open_shared(&mut self) {
-        for (id, seed) in &self.scenario.seeds {
+        let scenario = self.scenario;
+        for (id, seed) in &scenario.seeds {
             let mut doc = seed.clone();
             if let Some(fields) = doc.as_object_mut() {
                 fields.insert("id".into(), json!(id.to_ascii_lowercase()));
             }
-            let issues = check_packed(&doc, &self.startup.sealed, &self.packs).issues;
+            let mut issues = check_packed(&doc, &self.startup.sealed, &self.packs).issues;
+            // #407: a film a claim's definition audits holds the film audit's issues too.
+            if let Some(found) = self.admission_issues(id, &doc) {
+                issues.extend(found);
+            }
             let mut shared = Shared {
                 id: id.clone(),
                 doc,
@@ -963,6 +968,23 @@ impl Hub<'_> {
             notices = result.notices;
             result.issues
         });
+        // #407: a film a claim's definition audits gets the film audit's issues at show time,
+        // read afresh on the patched document; those its last good revision had come back
+        // carried.
+        let now = shared.doc.clone();
+        let audited = self.admission_issues(&call.doc, &now);
+        let shared = self.shared.get_mut(&call.doc).expect("open");
+        let issues = match audited {
+            Some(found) => {
+                let mut kept: Vec<Issue> = issues
+                    .into_iter()
+                    .filter(|i| !crate::film_audit::audit_code(i.code))
+                    .collect();
+                kept.extend(found);
+                kept
+            }
+            None => issues,
+        };
         // An undo may put back an issue the revision it undoes was made on already held.
         let mut allowed = (*last).clone();
         if let Some(t) = undoing.filter(|t| *t > 0) {

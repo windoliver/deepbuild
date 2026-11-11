@@ -235,21 +235,26 @@ impl Hub<'_> {
             };
             (row.rev, row.doc.clone())
         };
-        let result = check_packed(&document, &self.startup.sealed, &self.packs);
-        let skipped = crate::verdict::unknown_items(&result.notices);
-        let mut drawn = crate::verdict::without(
-            &crate::packs::drawn(&document, &result.expansions),
-            &skipped,
-        );
-        self.keep_instances(&document, &result.expansions, &mut drawn);
-        let _ = self.inline_tables(&mut drawn);
-        let _ = self.inline_vectors(&mut drawn);
+        let (drawn, expansions) = self.drawn_of(&document);
         Some(Revision {
             rev,
             doc: document,
             drawn,
-            expansions: result.expansions,
+            expansions,
         })
+    }
+
+    /// What a document draws: its recipe instances expanded and kept, items of a kind this build
+    /// doesn't know left out, and its tables and vectors inlined; with its expansions.
+    pub(crate) fn drawn_of(&self, document: &Value) -> (Value, Vec<Expansion>) {
+        let result = check_packed(document, &self.startup.sealed, &self.packs);
+        let skipped = crate::verdict::unknown_items(&result.notices);
+        let mut drawn =
+            crate::verdict::without(&crate::packs::drawn(document, &result.expansions), &skipped);
+        self.keep_instances(document, &result.expansions, &mut drawn);
+        let _ = self.inline_tables(&mut drawn);
+        let _ = self.inline_vectors(&mut drawn);
+        (drawn, result.expansions)
     }
 
     /// Puts each recipe instance back beside its derived items, its params filled with its
