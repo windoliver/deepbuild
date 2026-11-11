@@ -24,6 +24,8 @@ export const secretCommand = async (args: string[]): Promise<number> => (await i
 export const followCommand = async (run: string): Promise<number> => (await import('./hosts.js')).followCommand(run);
 export const workspaceCommand = async (args: Args): Promise<number> => (await import('./workspace-command.js')).workspaceCommand(args);
 export const fixCommand = async (args: Args): Promise<number> => (await import('./fix-command.js')).fixCommand(args);
+export const landCommand = async (args: Args): Promise<number> => (await import('./land-command.js')).landCommand(args);
+export const workCommand = async (args: Args): Promise<number> => (await import('./land-command.js')).workCommand(args);
 export const installCommand = async (args: Args): Promise<number> => (await import('./install.js')).installCommand(args);
 export const memoryCommand = async (args: Args): Promise<number> => (await import('./memory.js')).memoryCommand(args);
 export const rulesCommand = async (args: Args): Promise<number> => (await import('./rules.js')).rulesCommand(args);

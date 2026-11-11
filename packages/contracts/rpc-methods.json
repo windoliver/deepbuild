@@ -282,6 +282,24 @@
     "tracking": "#1328"
   },
   {
+    "method": "land.judge",
+    "since": "R1",
+    "stability": "preview",
+    "tracking": "#1331"
+  },
+  {
+    "method": "land.round",
+    "since": "R1",
+    "stability": "preview",
+    "tracking": "#1331"
+  },
+  {
+    "method": "work.once",
+    "since": "R1",
+    "stability": "preview",
+    "tracking": "#1331"
+  },
+  {
     "method": "job.submit",
     "since": "R1",
     "stability": "preview",

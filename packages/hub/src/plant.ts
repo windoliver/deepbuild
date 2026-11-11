@@ -21,6 +21,10 @@ export type Plant =
   | 'posts-on-head' | 'unguarded-marks-every-push' | 'unguarded-marks-none'
   // #1537's: the hub holds the shipped message kind with no route into a gate run.
   | 'kind-without-route'
+  // #1331's: a lander that merges the head as it stands though an older one was judged, one that runs every check again on
+  // a moved head, one that closes the issue before its change lands, a run that starts a second attempt beside an
+  // earlier pull request, and a lander that takes the forge's word for what merged.
+  | 'lands-unjudged-commit' | 'lander-reruns-all' | 'closes-on-open' | 'second-attempt-beside-pr' | 'trusts-forge-merged'
   // #33's gate@1 corpus: a gate that counts a check whose own files the claim edited as approved, reads a command check's
   // result from its exit status alone, judges a retry's run alone, or counts only files under the test folders as a check's own.
   | 'edited-check-approved' | 'verdict-from-exit-status' | 'empty-commit-run-alone' | 'own-files-test-folders-only'
@@ -300,6 +304,7 @@ const PLANTS: readonly string[] = [
   'rule-reads-context-alone', 'agent-credential-merges', 'agent-credential-pushes-default-branch', 'agent-credential-pushes-approved-tags',
   'agent-credential-posts-statuses', 'passes-gate-credential',
   'kind-without-route',
+  'lands-unjudged-commit', 'lander-reruns-all', 'closes-on-open', 'second-attempt-beside-pr', 'trusts-forge-merged',
   'drafted-spec-only', 'bootstrap-commands-only', 'failures-as-fail',
   'edited-check-approved', 'verdict-from-exit-status', 'empty-commit-run-alone', 'own-files-test-folders-only',
   'actor-from-payload', 'reads-unfiltered', 'listen-without-members',

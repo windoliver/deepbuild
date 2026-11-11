@@ -187,6 +187,8 @@ const usage = [
   'deep hub stop [--root <folder>]',
   'deep hub use --root <folder>   this worktree\'s sessions to a dev hub, once the OS confirms you',
   'deep fix <id>   work from an item at a source you switched on, such as LIN-42',
+  'deep land [judge] --repo <checkout> [--json]   judge each open PR on its merge with main, or land the PASSes one at a time in the order they came',
+  'deep work --repo <checkout> --issues <n,...> --once [--json]   one pass of a run over a fixed set: an earlier PR joins as its issue\'s attempt',
   'deep workspace new <topic> [--folder <path>] | move <id> <folder> | revert <id> <commit> | diff <id> | drift <id>   a home for work outside a repo',
   'deep setup [--undo]  install DeepBuild for Claude Code beside your settings, or remove it all once the OS confirms you',
   'deep mcp [actions]   the MCP server an agent starts, on stdio; actions serves deep-actions, the plug-ins\' actions',
@@ -236,7 +238,7 @@ const help = asksHelp && !(args[0] === 'backup' && (await import('@deepbuild/hub
 // What a person runs first, then their work, then what developers run (#1455); a command no group names is a developer's.
 const groups: [string, string[]][] = [
   ['Start here', ['setup', 'status', 'inbox', 'doctor', 'off', 'install', 'memory', 'secret', 'update']],
-  ['Your work', ['open', 'fix', 'start', 'race', 'workspace', 'join', 'gate', 'rules', 'session', 'guard', 'undo', 'numbers', 'backup', 'restore', 'debug']],
+  ['Your work', ['open', 'fix', 'start', 'race', 'land', 'work', 'workspace', 'join', 'gate', 'rules', 'session', 'guard', 'undo', 'numbers', 'backup', 'restore', 'debug']],
   ['For developers', ['explain', 'run', 'hub', 'mcp', 'env', 'lease', 'show', 'export', 'kinds', 'mcp-exec', 'read', 'find']],
 ];
 const groupOf = (line: string): number => {
@@ -340,6 +342,12 @@ if (help) {
 } else if (args[0] === 'fix') {
   const { fixCommand } = await import('@deepbuild/hub');
   process.exitCode = await fixCommand(args.slice(1));
+} else if (args[0] === 'land') {
+  const { landCommand } = await import('@deepbuild/hub');
+  process.exitCode = await landCommand(args.slice(1));
+} else if (args[0] === 'work') {
+  const { workCommand } = await import('@deepbuild/hub');
+  process.exitCode = await workCommand(args.slice(1));
 } else if (args[0] === 'workspace') {
   const { workspaceCommand } = await import('@deepbuild/hub');
   process.exitCode = await workspaceCommand(args.slice(1));

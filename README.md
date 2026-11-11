@@ -129,6 +129,18 @@ deep gate rules --json | jq -c '.rulesets[]' | while read -r r; do echo "$r" | g
 
 A push you make yourself through the bypass is recorded as unguarded, and never reads PASS.
 
+## Land changes in turn
+
+From your checkout of a repo whose delivery rule is on, `deep land judge --repo <checkout> --json` judges each open pull request whose body says `Closes #n`, `Fixes #n` or `Part of #n`. It judges the change on its merge with the default branch's head, the commit that will land, by its issue's definition, and posts the verdict's status on that merge commit. It lands nothing. `deep land --repo <checkout> --json` then lands the PASSes one at a time, in the order they came:
+
+- If main or the branch moved since its verdict, the change is judged again first. Checks whose inputs didn't change carry, and only the rest run.
+- A change that no longer merges goes back to the session working its issue, naming the files that conflict. It reaches no person and nothing lands.
+- Any other result but PASS holds the change, with the word, so FAIL, INVALID, BLOCKED and INCONCLUSIVE never land. A requirement drafted `settled_by: "budget-window"` has no check and doesn't hold it: the change lands, and the issue stays open with a comment naming that requirement until the scheduled budget window settles it.
+- An issue closes when its change lands, never before.
+- After each landing the default branch is read back. A tree other than the one its verdict covered stops landings, names the files and marks main red in `scripts/main-watch.mjs`, whatever the forge said it merged.
+
+Landings go through the forge's pull request merge with your login, which the rules above let through. DeepBuild never closes a pull request. `deep work --repo <checkout> --issues <n,...> --once --json` makes one pass of a run over a set: an open pull request from before the run that links an issue in the set joins as its attempt, and no second one starts beside it. Others idle past 7 days are listed under `stale`.
+
 ## Approve an edit to a check
 
 An edit that could weaken a check, such as a skipped or loosened test, passes the local guard only with a person's signed tag under `deep/approved/` on its commit. Signers come from one list in the repo, `.deepbuild/approvers`, an SSH allowed-signers file. The guard reads it from the merge base, never from your working tree, your home folder or a variable, so every checkout gets the same verdict. Any one person on it approves a commit, whoever's agent wrote it.
