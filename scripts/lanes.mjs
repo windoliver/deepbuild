@@ -347,6 +347,10 @@ timed.push('tests/acceptance/405-redraft-ac4/budgets.test.ts');
 byHand.push('tests/acceptance/405/budgets.test.ts');
 // #544's files build deep-logic and deep-show, draw on the GPU, export a film, and build deep-logic for Linux x86_64 in Docker.
 alone.push('tests/acceptance/544/');
+// #202's files each build deep-show (and the budgets the merge base too); its budgets time the check, kind_rules and
+// the kind kit.
+alone.push('tests/acceptance/202/');
+timed.push('tests/acceptance/202/budgets.test.ts');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
