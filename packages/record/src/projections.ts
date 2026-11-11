@@ -212,8 +212,9 @@ export class Projector {
   apply(e: Projected, gated = true): Refusal[] {
     const d: Obj = isObj(e.data) ? e.data : {};
     // The core's reading of a session's state, and its finding the agent's process gone (#992), are no sign of the
-    // session: they move neither when it was last seen nor its turn. Nor is a name given to it (#2018).
-    if (e.session && e.kind !== 'session.state' && e.kind !== 'session.gone' && e.kind !== 'session.named') {
+    // session: they move neither when it was last seen nor its turn. Nor is a name given to it (#2018), nor the core's
+    // reading of its unpushed commits or of holds that only watch (#2019).
+    if (e.session && e.kind !== 'session.state' && e.kind !== 'session.gone' && e.kind !== 'session.named' && e.kind !== 'commits.unpushed' && e.kind !== 'holds.watch') {
       // The newest stamp seen: a late or spooled event never moves a session back. `seen_at` is that event's place in
       // the log, and `status_at` below the place of the event that set its status: the facts its state is read from (#2018).
       this.stmt('INSERT INTO sessions (id, last_seen, seen_at) VALUES (?, ?, ?) ON CONFLICT (id) DO UPDATE SET seen_at = CASE WHEN excluded.last_seen >= COALESCE(sessions.last_seen, excluded.last_seen) THEN excluded.seen_at ELSE sessions.seen_at END, last_seen = MAX(COALESCE(sessions.last_seen, excluded.last_seen), excluded.last_seen)').run(e.session, e.ts, e.log_pos);

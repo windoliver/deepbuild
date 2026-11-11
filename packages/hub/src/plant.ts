@@ -87,6 +87,9 @@ export type Plant =
   // #2018's: a `--why` built from a reading of its own, a BLOCKED row that names no one and no evidence, and a
   // reading that tries the stale row before needs you.
   | 'why-second-reading' | 'blocked-bare' | 'stale-before-ask'
+  // #2019's: a reading that never reads a model-call retry, a FAIL read as sent back with no hold delivered, and a repeat
+  // detector keyed on the command alone, one that notifies at every repeat, and one that raises an ask.
+  | 'retry-reads-working' | 'sent-back-without-hold' | 'repeat-by-command' | 'repeat-notifies-each' | 'repeat-raises-ask'
   // #1455's: a doctor that prints a fix under a healthy item.
   | 'doctor-healthy-fix'
   // #303's: a task for every first prompt or mid-turn message, hashes blind to text or check bytes, a role read from
@@ -266,6 +269,7 @@ const PLANTS: readonly string[] = [
   'status-omits-commit', 'doctor-misses-hooks', 'on-stays-off',
   'status-second-order', 'status-own-word', 'status-unread-flipped', 'deep-second-count', 'inbox-no-default', 'inbox-adds-unread', 'status-row-leak',
   'why-second-reading', 'blocked-bare', 'stale-before-ask',
+  'retry-reads-working', 'sent-back-without-hold', 'repeat-by-command', 'repeat-notifies-each', 'repeat-raises-ask',
   'doctor-healthy-fix',
   'first-prompt-always-task', 'midturn-always-task', 'hash-ids-only', 'hash-check-paths', 'role-from-text', 'claim-on-tool-calls',
   'runs-disk-bytes',

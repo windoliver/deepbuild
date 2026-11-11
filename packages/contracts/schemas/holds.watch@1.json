@@ -1,0 +1,112 @@
+{
+  "title": "holds.watch@1",
+  "description": "Holds that are watch-only, by their cause (#2019): `deep off` for every session (an event with no session), a repo whose checks you haven't approved, an agent version past its facts, or hooks that don't fire or can't run. While one is on, no stop is held and no verdict blocks there; on false says it no longer applies.",
+  "x-since": "R1",
+  "x-stability": "stable",
+  "x-feeds": [],
+  "type": "object",
+  "properties": {
+    "v": {
+      "const": 1,
+      "description": "The kind's schema version."
+    },
+    "id": {
+      "type": "string",
+      "format": "ulid",
+      "description": "The event's ULID, its identity."
+    },
+    "kind": {
+      "const": "holds.watch"
+    },
+    "subject": {
+      "type": "string",
+      "pattern": "^(task|ask|claim|verdict|run|req|decision|plan|lease|reading|notice|doc|ev|session):[0-9A-Za-z]+(#[A-Za-z0-9][A-Za-z0-9._-]*)?$",
+      "description": "The record object this event is about."
+    },
+    "writer": {
+      "const": "core",
+      "description": "Only the core appends this kind."
+    },
+    "actor": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The person behind it, from the credential."
+    },
+    "scope": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Who may see it."
+    },
+    "ts": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "Milliseconds since the Unix epoch."
+    },
+    "seq": {
+      "type": "string",
+      "format": "seq",
+      "description": "Order within the session: ns since the epoch when the hook started."
+    },
+    "log_pos": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991,
+      "description": "Its position in the event log, assigned by the hub at append."
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "cause": {
+          "type": "string",
+          "enum": [
+            "off",
+            "checks",
+            "version",
+            "hooks"
+          ],
+          "description": "Why its holds are watch-only.",
+          "x-closure": {
+            "closed": "the reasons the design gives holds that only watch",
+            "reopens": "a minor that adds a reason",
+            "mark": "exhaustive"
+          }
+        },
+        "on": {
+          "type": "boolean",
+          "description": "Whether the cause applies from now on."
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "For cause version: the agent's version its facts don't cover."
+        }
+      },
+      "required": [
+        "cause",
+        "on"
+      ],
+      "additionalProperties": false
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$",
+        "description": "A SHA-256, in lower-case hex."
+      }
+    }
+  },
+  "required": [
+    "v",
+    "id",
+    "kind",
+    "writer",
+    "actor",
+    "scope",
+    "ts",
+    "data"
+  ],
+  "additionalProperties": false
+}
