@@ -26,6 +26,8 @@ pub const CAP: u64 = 64 << 20;
 pub struct Made {
     pub decoder: Option<Helper>,
     pub ready: BTreeMap<String, (Arc<Texels>, String)>,
+    /// The videos' probes and their latest decoded frames (#503).
+    pub videos: crate::video::Cache,
 }
 
 /// The decode worker's planted program, from deep-gpu's.
@@ -79,6 +81,18 @@ fn usages(scene: &Scene) -> BTreeMap<String, BTreeSet<&'static str>> {
     out
 }
 
+/// The run's decode worker, started the first time a job needs it.
+pub fn decoder(app: &mut App) -> Result<&mut Helper, Value> {
+    if app.made.decoder.is_none() {
+        let exe = std::env::current_exe().unwrap_or_else(|_| PathBuf::from("deep-gpu"));
+        let planted = worker_planted(app.planted);
+        let h = Helper::start(&exe, DECODE_WORKER, &Caps::default(), planted)
+            .map_err(|e| refused("no_decoder", format!("the decode worker didn't start: {e}")))?;
+        app.made.decoder = Some(h);
+    }
+    Ok(app.made.decoder.as_mut().expect("started"))
+}
+
 /// The scene's maps made ready: its texels by hash and the receipt, or the cap's refusal.
 pub fn prepare(
     app: &mut App,
@@ -100,20 +114,7 @@ pub fn prepare(
             let out =
                 std::env::temp_dir().join(format!("deep-gpu-map-{}-{key}", std::process::id()));
             let job = json!({"op": "transcode", "path": path, "role": role, "bc": cfg!(target_os = "macos"), "out": out});
-            if app.made.decoder.is_none() {
-                let exe = std::env::current_exe().unwrap_or_else(|_| PathBuf::from("deep-gpu"));
-                let h = Helper::start(
-                    &exe,
-                    DECODE_WORKER,
-                    &Caps::default(),
-                    worker_planted(planted),
-                )
-                .map_err(|e| {
-                    refused("no_decoder", format!("the decode worker didn't start: {e}"))
-                })?;
-                app.made.decoder = Some(h);
-            }
-            let reply = app.made.decoder.as_mut().expect("started").ask(&job);
+            let reply = decoder(app)?.ask(&job);
             let (Some(format), Some(size), Some(mips)) = (
                 reply["format"].as_str(),
                 crate::view3d::pair(&reply["size"]),

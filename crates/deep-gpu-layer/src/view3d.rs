@@ -939,21 +939,6 @@ fn labels_json(scene: &Scene, out: &str) -> Result<(Value, Value), Value> {
     Ok((json!(labels), json!(pages)))
 }
 
-/// The frames a call draws, in order: `frames` of them from `from`, each seek jumping once.
-fn frame_order(from: u64, frames: u64, seeks: &[(u64, u64)]) -> Vec<u64> {
-    let mut left: Vec<(u64, u64)> = seeks.to_vec();
-    let mut n = from;
-    let mut order = Vec::with_capacity(frames as usize);
-    for _ in 0..frames {
-        order.push(n);
-        n = match left.iter().position(|(after, _)| *after == n) {
-            Some(k) => left.remove(k).1,
-            None => n + 1,
-        };
-    }
-    order
-}
-
 pub fn call(app: &mut App, out: &str, call: &Value) -> Value {
     match run(app, out, call) {
         Ok(v) | Err(v) => v,
@@ -1096,6 +1081,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
         &mut map_paths,
     )?;
     let mut receipt = Value::Null;
+    let mut videos = crate::video::Session::new(map_paths.clone(), args.fps, args.export);
     // Level of detail and the light cut, chosen from each frame's view (#425).
     let mut selection = crate::lod::Selection::new(app.planted);
     let drawn_scale = if args.surface.scale < 1.0 && !noop {
@@ -1134,7 +1120,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             Some(Planted::EdgesDashOtherSpace) => Some("edges_dash_other_space"),
             _ => None,
         };
-        for n in frame_order(args.from, args.frames, &args.seeks) {
+        for n in crate::video::frame_order(args.from, args.frames, &args.seeks) {
             let frame_started = std::time::Instant::now();
             // A seek applies every patch up to the frame it opens at.
             let mut patched = false;
@@ -1213,9 +1199,9 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 Some(values_at(&composed, t, &args.evaluate)?)
             };
             // Its maps, made ready in the decode worker once per run and held to the
-            // document's decoded-image cap (#423).
+            // document's decoded-image cap (#423), and its videos' frames at t there (#503).
             let (texels, made) = crate::textures::prepare(app, &scene, &map_paths)?;
-            scene.texels = texels;
+            scene.texels = videos.at(app, &composed, n, &scene, texels)?;
             // Over a window's flat page the view shows the page where nothing draws, so what it
             // lays over the page (a shadow catcher's alpha) composites in linear light (#424).
             if let Some(w) = &args.window {

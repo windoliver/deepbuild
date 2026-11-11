@@ -59,6 +59,7 @@ mod textures;
 mod timing;
 mod tone;
 mod validation;
+mod video;
 mod view3d;
 mod warm;
 mod window;
@@ -380,6 +381,11 @@ pub enum Planted {
     WaitClockAfterWarmup,
     /// #1937's wrong chooser (tests/acceptance/1937/README.md: Planted programs).
     PicksLargestGain,
+    /// #503's wrong programs: a point set's video frame chosen at a time that advances only on a
+    /// played step, so a session opened later or a seek keeps the frame decoded before it; the
+    /// video background's frame prefiltered into the environment, keyed per frame.
+    VideoFrameKeptOverSeek,
+    VideoPrefiltersEnvironment,
 }
 
 impl Planted {
@@ -612,6 +618,8 @@ impl Planted {
             "times_only_scene" => Planted::TimesOnlyScene,
             "wait_clock_after_warmup" => Planted::WaitClockAfterWarmup,
             "picks_largest_gain" => Planted::PicksLargestGain,
+            "video_frame_kept_over_seek" => Planted::VideoFrameKeptOverSeek,
+            "video_prefilters_environment" => Planted::VideoPrefiltersEnvironment,
             _ => return None,
         })
     }

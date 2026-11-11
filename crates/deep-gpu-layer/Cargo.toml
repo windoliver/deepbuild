@@ -57,6 +57,8 @@ deep-canvas-test-modules = { path = "../deep-canvas-test-modules", optional = tr
 deep-scene3d-render = { path = "../deep-scene3d-render" }
 # Issue #423: the run's decode worker, which makes a material's maps ready for the GPU.
 deep-codecs = { path = "../deep-codecs" }
+# Issue #503: the frame a video item shows at t, read by the one lookup deep_show's frames use.
+deep-canvas-media = { path = "../deep-canvas-media" }
 deep-canvas-effects = { path = "../deep-canvas-effects" }
 deep-effects-render = { path = "../deep-effects-render" }
 wgpu-profiler = "0.28"
