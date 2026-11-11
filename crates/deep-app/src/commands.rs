@@ -16,6 +16,9 @@ use serde_json::{json, Value};
 use crate::address::{Address, Place};
 use crate::chrome;
 
+/// How often ⌘K looks for its lookup's answer (#2024): well inside a frame.
+const LOOKUP_POLL: std::time::Duration = std::time::Duration::from_millis(4);
+
 // The keys that move ⌘K's selection: up and down.
 actions!(deepbuild, [SelectUp, SelectDown]);
 
@@ -319,8 +322,9 @@ pub struct Palette {
     /// Where focus goes back to once it hides: what had it before ⌘K.
     back: Option<FocusHandle>,
     open: Open,
-    /// The hub's lookup of the query (#2024): which query was asked last, and its hits once answered.
+    /// The hub's lookup of the query (#2024): which query was asked last, its words, and its hits once answered.
     asked: u64,
+    asking: String,
     found: Option<Found>,
     _changed: Subscription,
 }
@@ -359,6 +363,7 @@ impl Palette {
             back: None,
             open,
             asked: 0,
+            asking: String::new(),
             found: None,
             _changed: changed,
         };
@@ -451,22 +456,42 @@ impl Palette {
             .collect()
     }
 
-    /// Asks the hub what the query names and the words it finds (#2024), off the main thread. Only the query asked
-    /// last is shown: what an earlier one answers, whenever it arrives, is dropped.
+    /// Asks the hub what the query names and the words it finds (#2024), on a thread of its own, so a hub slow to
+    /// answer holds that thread alone. Only the query asked last is shown: what an earlier one answers, whenever it
+    /// arrives, is dropped.
     fn find(&mut self, cx: &mut Context<Self>) {
+        // The input says it changed more often than its words do: the same words are asked once.
+        let query = self.query.read(cx).value().trim().to_owned();
+        if query == self.asking {
+            return;
+        }
+        self.asking = query.clone();
         self.asked += 1;
         self.found = None;
-        let query = self.query.read(cx).value().trim().to_owned();
         if query.is_empty() {
             return;
         }
         let asked = self.asked;
+        let (sent, answer) = std::sync::mpsc::channel();
+        let asking = std::thread::Builder::new().name("⌘K lookup".into());
+        if asking
+            .spawn(move || {
+                let _ = sent.send(crate::hub::call_app("find.read", json!({"query": query})));
+            })
+            .is_err()
+        {
+            return;
+        }
         cx.spawn(async move |palette, cx| {
-            let found = cx
-                .background_spawn(async move {
-                    crate::hub::call_app("find.read", json!({"query": query}))
-                })
-                .await;
+            let found = loop {
+                match answer.try_recv() {
+                    Ok(found) => break found,
+                    Err(std::sync::mpsc::TryRecvError::Empty) => {
+                        cx.background_executor().timer(LOOKUP_POLL).await
+                    }
+                    Err(std::sync::mpsc::TryRecvError::Disconnected) => return,
+                }
+            };
             let _ = palette.update(cx, |palette, cx| {
                 if asked != palette.asked {
                     return;

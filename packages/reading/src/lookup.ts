@@ -65,10 +65,19 @@ function around(text: string, wanted: readonly string[]): string {
 }
 
 interface SessionRow { id: string; agent: string | null; project_id: string | null; last_seen: number | null; ended: number; row: string | null }
-/** The sessions `where` picks, newest first, with what a hit shows of each. */
+/**
+ * The sessions `where` picks, newest first, with what a hit shows of each. The archive files a transcript under the
+ * session's letters and digits (`transcript.archived` names `session:<letters>`), a row of its own beside the one the
+ * session's hooks made under its ID: each session is that one row, the hooks' when there is one.
+ */
 async function sessionsWhere(r: LookupRecord, where: string, params: readonly (string | number | null)[]): Promise<SessionRow[]> {
-  return (await r.raw(`SELECT s.id, s.agent, s.project_id, s.last_seen, EXISTS (SELECT 1 FROM events e WHERE e.session_id = s.id AND e.kind = 'session.end') AS ended,
-    (SELECT row FROM rows WHERE id = 'session:' || s.id) AS row FROM sessions s WHERE ${where} ORDER BY s.last_seen DESC, s.id`, params)) as SessionRow[];
+  const keys = [...new Set(((await r.raw(`SELECT s.id FROM sessions s WHERE ${where}`, params)) as { id: string }[]).map((s) => letters(s.id)))];
+  if (!keys.length) return [];
+  const rows = (await r.raw(`SELECT s.id, s.agent, s.project_id, s.last_seen, EXISTS (SELECT 1 FROM events e WHERE e.session_id = s.id AND e.kind = 'session.end') AS ended,
+    (SELECT row FROM rows WHERE id = 'session:' || s.id) AS row FROM sessions s WHERE replace(s.id, '-', '') IN (${marks(keys)}) ORDER BY s.agent IS NULL, s.id`, keys)) as SessionRow[];
+  const one = new Map<string, SessionRow>();
+  for (const row of rows) if (!one.has(letters(row.id))) one.set(letters(row.id), { ...row, last_seen: Math.max(...rows.filter((o) => letters(o.id) === letters(row.id)).map((o) => o.last_seen ?? 0)) });
+  return [...one.values()].sort((a, b) => (b.last_seen ?? 0) - (a.last_seen ?? 0) || (a.id < b.id ? -1 : 1));
 }
 function about(s: SessionRow): Pick<LookupHit, 'session' | 'title' | 'agent' | 'repo' | 'word' | 'ended'> {
   let row: { title?: string; word?: string } = {};
@@ -121,14 +130,19 @@ async function words(r: LookupRecord, query: string, messages: LookupRecord['fin
   const terms = indexTerms(wanted);
   const found: FoundMessage[] = [];
   if (terms.some((forms) => forms.every((f) => [...f].length >= 3))) {
-    const archived = ((await r.raw('SELECT id FROM sessions WHERE transcript IS NOT NULL ORDER BY last_seen DESC, id')) as { id: string }[]).map((s) => s.id);
+    // Newest first by the session's hooks' row, which the archive's row of it lacks.
+    const archived = ((await r.raw(`SELECT a.id FROM sessions a LEFT JOIN (SELECT replace(id, '-', '') AS k, max(last_seen) AS seen FROM sessions GROUP BY k) b
+      ON b.k = replace(a.id, '-', '') WHERE a.transcript IS NOT NULL ORDER BY b.seen DESC, a.id`)) as { id: string }[]).map((s) => s.id);
     for (let at = 0; at < archived.length && found.length < MOST; at += BATCH) {
       found.push(...(await messages(terms, archived.slice(at, at + BATCH))).filter((m) => m.tool === undefined && holdsWords(m.text, wanted)));
     }
   }
   const ids = [...new Set(found.map((m) => m.session))];
-  const byId = new Map((await sessionsWhere(r, `s.id IN (${marks(ids)})`, ids)).map((s) => [s.id, s]));
-  const hits: LookupHit[] = found.slice(0, MOST).map((m) => ({ handle: `session:${letters(m.session)}#${m.id}`, address: `session/${m.session}/${m.id}`, by: 'words', context: around(m.text, wanted), ...(byId.has(m.session) ? about(byId.get(m.session)!) : { session: m.session }) }));
+  const byId = new Map((await sessionsWhere(r, `s.id IN (${marks(ids)})`, ids)).map((s) => [letters(s.id), s]));
+  const hits: LookupHit[] = found.slice(0, MOST).map((m) => {
+    const s = byId.get(letters(m.session));
+    return { handle: `session:${letters(m.session)}#${m.id}`, address: `session/${s?.id ?? m.session}/${m.id}`, by: 'words', context: around(m.text, wanted), ...(s ? about(s) : { session: m.session }) };
+  });
   const path = mightHold('f.path', wanted);
   for (const f of (await r.raw(`SELECT f.session, f.path FROM session_files f WHERE ${path.sql} ORDER BY f.last DESC LIMIT ${MOST}`, path.params)) as { session: string; path: string }[]) {
     if (!holdsWords(f.path, wanted)) continue;

@@ -4,7 +4,7 @@
 // Evidence is kept by its hash and never changes, so the copy reads the hub's store as it is.
 import { readdirSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { openEvidenceStore } from '@deepbuild/evidence';
 import { foldText, openRecordReader, type FoundMessage } from '@deepbuild/record';
@@ -27,7 +27,8 @@ const agentFiles: LookupRecord['findMessages'] = async (terms, sessions = []) =>
   const all = [...files(join(homedir(), '.codex', 'sessions')), ...files(join(homedir(), '.claude', 'projects'))];
   const found: FoundMessage[] = [];
   for (const session of sessions) {
-    const file = all.find((f) => f.endsWith(`${session}.jsonl`));
+    // A rollout or transcript is named by the session's ID; the archive names the session by its letters and digits.
+    const file = all.find((f) => f.endsWith('.jsonl') && basename(f, '.jsonl').replace(/[^0-9A-Za-z]/g, '').endsWith(session.replace(/[^0-9A-Za-z]/g, '')));
     if (!file) continue;
     readFileSync(file, 'utf8').split('\n').forEach((line, n) => {
       let e: { uuid?: string; payload?: { content?: { text?: string }[] }; message?: { content?: string | { text?: string }[] } };
