@@ -56,15 +56,15 @@ export function readPack(from: string, owner?: string): PackVersion {
 }
 
 /** The owner of the packs a release ships (#1720): a document names one `deepbuild/<name>@<version>`. */
-export const FIRST_PARTY = 'deepbuild';
+const FIRST_PARTY = 'deepbuild';
 /** The release's packs/ folder, beside the hub's code as in the checkout. */
-const RELEASE_PACKS = fileURLToPath(new URL('../../../packs/', import.meta.url));
+const SHIPPED = fileURLToPath(new URL('../../../packs/', import.meta.url));
 
 /** The packs the release ships: each folder of its packs/ that holds a pack.json, or why it can't be read. */
-export function releasePacks(dir = RELEASE_PACKS): { folder: string; pack?: PackVersion; error?: string }[] {
-  if (!existsSync(dir)) return [];
-  return readdirSync(dir).sort().filter((name) => existsSync(join(dir, name, 'pack.json'))).map((folder) => {
-    try { return { folder, pack: readPack(join(dir, folder), FIRST_PARTY) }; } catch (error) { return { folder, error: error instanceof Error ? error.message : String(error) }; }
+export function releasePacks(): { folder: string; pack?: PackVersion; error?: string }[] {
+  if (!existsSync(SHIPPED)) return [];
+  return readdirSync(SHIPPED).sort().filter((name) => existsSync(join(SHIPPED, name, 'pack.json'))).map((folder) => {
+    try { return { folder, pack: readPack(join(SHIPPED, folder), FIRST_PARTY) }; } catch (error) { return { folder, error: error instanceof Error ? error.message : String(error) }; }
   });
 }
 
