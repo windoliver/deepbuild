@@ -345,6 +345,7 @@ pub(crate) fn admitted(args: &Args, labels: &mut Labels) -> Result<Admitted, Val
                 Some(args.size),
                 &args.look,
                 0,
+                Path::Copy,
                 labels,
                 None,
                 None,

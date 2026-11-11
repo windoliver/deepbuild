@@ -62,6 +62,10 @@ fn load(id: &str, dir: &Path) -> Result<Value, Vec<Issue>> {
     // the programs and data the sandbox module runs at the pack check.
     if let Some(Value::Array(assets)) = fields.get_mut("assets") {
         for (i, a) in assets.iter_mut().enumerate() {
+            // Network assets are fetched and admitted by the hub on first use, never at pack check.
+            if a.get("url").and_then(Value::as_str).is_some() {
+                continue;
+            }
             let path = a
                 .get("path")
                 .and_then(Value::as_str)
@@ -75,14 +79,16 @@ fn load(id: &str, dir: &Path) -> Result<Value, Vec<Issue>> {
                 Some(b) if sha.as_deref() == listed && size == Some(b.len() as u64) => {
                     a["hex"] = json!(b.iter().map(|x| format!("{x:02x}")).collect::<String>());
                 }
-                _ => return Err(vec![Issue::envelope(
-                    "ref_unresolved",
-                    format!("assets/{i}"),
-                    a.clone(),
-                    &format!(
+                _ => {
+                    return Err(vec![Issue::envelope(
+                        "ref_unresolved",
+                        format!("assets/{i}"),
+                        a.clone(),
+                        &format!(
                         "the asset `{path}` isn't there with the sha256 and size the pack lists"
                     ),
-                )]),
+                    )])
+                }
             }
         }
     }
@@ -238,7 +244,13 @@ pub fn instanced(expansions: &[Expansion]) -> BTreeMap<String, (String, String)>
 pub fn batches(drew: &[crate::snapshot::Batch]) -> Value {
     Value::Array(
         drew.iter()
-            .map(|b| json!({"batch": b.key, "items": b.items}))
+            .map(|b| {
+                let mut v = json!({"batch": b.key, "items": b.items});
+                if let Some(n) = b.instances {
+                    v["instances"] = json!(n);
+                }
+                v
+            })
             .collect(),
     )
 }

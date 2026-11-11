@@ -1,0 +1,67 @@
+Base commit: f38d2b39 ("Merge pull request #2155 from windoliver/worktree-github-issue-1653-c36ef6")
+Command: npx vitest run --root tests/acceptance/1903 --no-file-parallelism
+
+NOT RUN. This file is reasoned from the base's code, not from a run: the suite's calls plainly don't exist at the
+base, and a cold `cargo build --features test-meter` of deep-gpu is a long build on a shared, loaded Mac, so the job
+that wrote these tests was told not to build or run them there. What was run: `npx tsc -p
+tests/acceptance/1903/tsconfig.json`, which passes, and `npx vitest list --root tests/acceptance/1903`, which collects
+all 18 tests.
+
+Expected at the base: 17 of the 18 tests fail for the expected reason, at a named assertion; the 18th, the device test
+of #1903.561ba507, is skipped as INCONCLUSIVE off a reference Mac in its conditions, and fails like the others on one.
+
+- The build. Each file runs `cargo build --locked --bin deep-gpu --features test-meter`. The feature exists at the
+  base (crates/deep-gpu-layer/Cargo.toml, #379), so the build is expected to succeed and no test should fail at "the
+  binary builds"; if it did, that is the line each test would fail at instead.
+
+- 8 tests start `deep-gpu run --backend noop` and send `envelope` or `envelope_counts` calls (with, in two of them,
+  `decide` calls between). The base accepts the scenario (main.rs `serve`: `{"ok": true, "replies": […]}`, exit 0),
+  but `App::call` has no `envelope` or `envelope_counts` arm, so each such call is answered by its fallback
+  `refused("bad_input", "unknown call")`:
+      {"code":"bad_input","reason":"unknown call"}
+  before any field (`store`, `stub_meter`, `stub_display`, `inputs`, `patches`, …) is read. (`decide` with
+  `via: "agent"` is answered `not_your_decision` at the base, as it is meant to be, and with `via: "you"` and a
+  `limits` decision `bad_input`, "decide takes a store and a bless {fixture, png | state}"; no test reaches its
+  assertion on either, since the envelope's reply before it fails first.) helpers.ts's `envelopeOf` / `countsOf` then
+  fail at "<what> is answered, not refused: {"code":"bad_input","reason":"unknown call"}":
+    combined.test.ts        #1903.47941574 three test passes of 4 ms each pass alone and fail the envelope together …
+                            ("burn-a alone is answered, not refused")
+    baseline.test.ts        #1903.d472967b the first run records the baseline and asks once, BLOCKED until you answer …
+                            ("the first run is answered, not refused")
+    input.test.ts           #1903.a03bdb26 1,000 test inputs at seeded times over the 60 s envelope run …
+                            ("the envelope run is answered, not refused")
+    counts.test.ts          #1903.26bdf7d3 over the 60 s orbit of separate-items on the noop lane, frame 0 encodes …
+                            ("separate-items over 60 s is answered, not refused")
+                            #1903.6598323c over the orbit with no item changing each frame after the first uploads …
+                            ("separate-items over 60 s is answered, not refused": the shared unchanged orbit is kept
+                            only once it parses, so this test asks for it again and fails the same way)
+                            #1903.fbd78805 at check separate-items creates as many pipelines as its 40-item twin …
+                            ("separate-items over 1 s is answered, not refused")
+    separate-items.test.ts  #1903.561ba507 on the stubbed reference Mac separate-items holds 10 ms at p95 over five runs …
+                            ("the first run with separate-items is answered, not refused")
+    first-frame.test.ts     #1903.c2287dc1 with one pipeline's creation delayed 500 ms, the fresh process's wait …
+                            ("the envelope is answered, not refused")
+
+- 9 tests start `deep-gpu run --backend noop --planted <name>` with `times_each_pass_alone`,
+  `takes_first_measurement_as_limit`, `holds_input`, `held_input_meter_at_encode`, `bind_group_per_item`,
+  `uploads_every_transform`, `warms_per_item`, `times_only_scene` or `wait_clock_after_warmup`. None is in the base's
+  `Planted::parse`, so main.rs's `bad_input()` prints one line {"ok":false,"code":"bad_input"} and exits 2. helpers.ts's
+  `run` fails at "deep-gpu run --backend noop --planted <name> exited 0 (no signal)" (expected 0, got 2):
+    combined.test.ts        #1903.47941574 planted times_each_pass_alone passes all three and fails this criterion
+    baseline.test.ts        #1903.d472967b planted takes_first_measurement_as_limit passes the run that matches …
+    input.test.ts           #1903.a03bdb26 planted holds_input, one extra step and one extra swap slot, reads past 2 frames …
+                            #1903.a03bdb26 planted held_input_meter_at_encode, timed to the encode on the held path …
+    counts.test.ts          #1903.26bdf7d3 planted bind_group_per_item creates 4,000 bind groups in the second frame …
+                            #1903.6598323c planted uploads_every_transform uploads at least 256,000 bytes a frame …
+                            #1903.fbd78805 planted warms_per_item creates 100 times as many for 4,000 items as for 40 …
+    separate-items.test.ts  #1903.561ba507 planted times_only_scene reports no separate-items row and fails, naming the fixture
+    first-frame.test.ts     #1903.c2287dc1 planted wait_clock_after_warmup reads under 500 ms in the fresh process …
+
+- 1 test reads this machine's fingerprint with scripts/benchmark.mjs's `fingerprint()`:
+    separate-items.test.ts  #1903.561ba507 on this Mac's own GPU, a reference Mac in its conditions, separate-items holds …
+  Off a reference Mac (Mac15,7, Mac15,12 or Mac17,10) on mains power with Low Power Mode off and thermal state nominal,
+  it is skipped "INCONCLUSIVE (not measured: …)" before anything runs, at the base as after it. On one, it starts
+  `deep-gpu run` on this Mac's GPU and fails at "the envelope on this Mac's GPU is answered, not refused", as above.
+
+No other test reads this machine's model, power, thermal state or load, or a device's timing. `first-frame.test.ts`
+reads wall time against the shim's 500 ms; at the base it never gets that far.

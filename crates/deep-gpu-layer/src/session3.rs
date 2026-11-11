@@ -123,6 +123,9 @@ pub(crate) fn msaa_planted(p: Option<Planted>) -> Planted3 {
         ),
         resolve_accumulates: p == Some(Planted::ResolveAccumulatesFrames),
         missing_lobe_turned_on: p == Some(Planted::MissingLobeTurnedOn),
+        bind_group_per_item: p == Some(Planted::BindGroupPerItem),
+        uploads_every_transform: p == Some(Planted::UploadsEveryTransform),
+        warms_per_item: p == Some(Planted::WarmsPerItem),
         ..Default::default()
     }
 }
@@ -385,6 +388,37 @@ pub fn kept(app: &mut App) -> Vec<deep_scene3d_render::KeptRow> {
             .renderer
             .as_ref()
             .map_or(Vec::new(), |r| r.read_kept(&device))
+    })
+}
+
+/// What the GPU drew for each of `ids` in the frame just drawn (#2016): the gust its sway used,
+/// with one, and its mesh's vertices in world m; none for an item with no solid.
+pub fn sway(
+    app: &mut App,
+    scene: Arc<Scene>,
+    ids: Vec<String>,
+) -> Vec<(String, Option<f32>, Vec<[f64; 3]>)> {
+    app.worker.call(move |state| {
+        let Some(s) = state.scene3d.as_ref() else {
+            return Vec::new();
+        };
+        let device = s.view.device().clone();
+        let shared = lock(&s.shared);
+        let Some(r) = shared.renderer.as_ref() else {
+            return Vec::new();
+        };
+        let solids: Vec<&deep_canvas_scene3d::scene::Solid> =
+            scene.layers.iter().flat_map(|l| &l.solids).collect();
+        ids.into_iter()
+            .map(|id| {
+                let read = solids
+                    .iter()
+                    .find(|s| s.id == id)
+                    .and_then(|s| r.read_sway(&device, s));
+                let (gust, positions) = read.unwrap_or_default();
+                (id, gust, positions)
+            })
+            .collect()
     })
 }
 

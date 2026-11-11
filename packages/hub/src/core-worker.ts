@@ -5,7 +5,7 @@ import { Core, type CallContext } from './core.js';
 import type { Part } from './context-fit.js';
 import { ReadOnlyCore, unreadable } from './readonly-core.js';
 import { shedStartup } from './settle.js';
-import { Refused, refusal, type CoreOptions, type Draft, type Gated, type HookMeta } from './wire.js';
+import { Refused, refusal, type CoreOptions, type Draft, type Gated, type HookMeta, type Scope } from './wire.js';
 
 export type CoreRequest =
   | { op: 'call'; method: string; params: unknown; context: CallContext }
@@ -19,7 +19,7 @@ export type CoreRequest =
   | { op: 'permission'; meta: HookMeta; until?: number; inPaseo?: boolean }
   | { op: 'paseo-owner'; meta: HookMeta }
   | { op: 'paseo-app-answer'; meta: HookMeta }
-  | { op: 'subscribe'; sub: string; after: number }
+  | { op: 'subscribe'; sub: string; after: number; scope?: Scope }
   | { op: 'waits' }
   | { op: 'lock-lost'; path: string }
   | { op: 'stop'; reason: string };
@@ -56,7 +56,7 @@ export async function answer(core: Core | ReadOnlyCore, request: CoreRequest): P
     case 'permission': return core.permission(request.meta, request.until, request.inPaseo);
     case 'paseo-owner': return core.paseoOwner(request.meta);
     case 'paseo-app-answer': return core.paseoAppAnswer(request.meta);
-    case 'subscribe': return core.subscribe(request.sub, request.after);
+    case 'subscribe': return core.subscribe(request.sub, request.after, request.scope);
     case 'waits': return core.waitsState();
     case 'lock-lost': return core.lockLost(request.path);
     case 'stop': return core.stop(request.reason);
@@ -69,7 +69,7 @@ if (parentPort && workerData?.core) {
   // A record a newer version wrote is opened read-only, by a stand-in that appends nothing (#41).
   const options = workerData.core as CoreOptions;
   const why = unreadable(options);
-  const core = why ? new ReadOnlyCore(why) : new Core(options, (sub, event) => port.postMessage({ op: 'frame', sub, event }), (sessions, judged, resend, cantRun) => port.postMessage({ op: 'asking', sessions, judged, resend, cantRun }), (session) => port.postMessage({ op: 'acking', session }), (values) => port.postMessage({ op: 'scrub', values }));
+  const core = why ? new ReadOnlyCore(why) : new Core(options, (sub, event, caught) => port.postMessage({ op: 'frame', sub, event, ...(caught ? { caught } : {}) }), (sessions, judged, resend, cantRun) => port.postMessage({ op: 'asking', sessions, judged, resend, cantRun }), (session) => port.postMessage({ op: 'acking', session }), (values) => port.postMessage({ op: 'scrub', values }));
   core.started().then(
     () => { shedStartup(); port.postMessage({ op: 'started', hooks: core.hooks() }); },
     (error: unknown) => port.postMessage({ op: 'fatal', message: error instanceof Error ? error.stack ?? error.message : String(error) }),
