@@ -1,0 +1,37 @@
+Proof run, every file of tests/acceptance/449/ once, on 07e74d4d8 (the change merged with origin/main).
+
+PATH=/opt/homebrew/opt/rustup/bin:$PATH NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 scripts/lease npx vitest run --root tests/acceptance/449 --testTimeout=600000 --no-file-parallelism
+
+deep lease: DeepBuild isn't set up here (no hub token), so `npx vitest run --root tests/acceptance/449 --testTimeout=600000 --no-file-parallelism` runs unleased
+ RUN  v5.0.5 ~/dev/claude-worktrees/doneright/github-issue-449-e71c39/tests/acceptance/449
+stdout | taste.test.ts > AC17 #449.3f28ed99 the screenshots and recordings, and the one taste call on them > AC17 #449.3f28ed99 the run writes sparks on impact, the bead in the six-plane box and the landing, and recordings of the sparks and the landing, from the canvas's own frames, and the recorded call on exactly those says they look right
+AC17 #449.3f28ed99: written from this run's frames:
+  target/acceptance/449/sparks-on-impact.png  e5fbe8a37c8825798fa01b71d575345faa8ddf3315c7f6c3675bccb88e8d7b48
+  target/acceptance/449/six-plane-box.png  7eae8f32fb8881f3c64bc995068ad306f5e6735dc6a40b5972ccb40050d8a3b6
+  target/acceptance/449/landing.png  25ea9708ed03c41071d5a8eb80d64ee4c7082817137b13908c36ecc43809281b
+  target/acceptance/449/sparks.apng  2e86b0504d343c5aad4280f44027186ae0dc9119a2bfe59a13916814edb47980
+  target/acceptance/449/landing.apng  eae7c3d2794a4cc7129eaa7b96e8490eb1b7867519d1c99433c079a00a6d7d42
+ ❯ taste.test.ts (1 test | 1 failed) 5751ms
+   ❯ AC17 #449.3f28ed99 the screenshots and recordings, and the one taste call on them (1)
+     × AC17 #449.3f28ed99 the run writes sparks on impact, the bead in the six-plane box and the landing, and recordings of the sparks and the landing, from the canvas's own frames, and the recorded call on exactly those says they look right 3709ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  taste.test.ts > AC17 #449.3f28ed99 the screenshots and recordings, and the one taste call on them > AC17 #449.3f28ed99 the run writes sparks on impact, the bead in the six-plane box and the landing, and recordings of the sparks and the landing, from the canvas's own frames, and the recorded call on exactly those says they look right
+AssertionError: INCONCLUSIVE: no taste call is recorded: show the owner
+  target/acceptance/449/sparks-on-impact.png  e5fbe8a37c8825798fa01b71d575345faa8ddf3315c7f6c3675bccb88e8d7b48
+  target/acceptance/449/six-plane-box.png  7eae8f32fb8881f3c64bc995068ad306f5e6735dc6a40b5972ccb40050d8a3b6
+  target/acceptance/449/landing.png  25ea9708ed03c41071d5a8eb80d64ee4c7082817137b13908c36ecc43809281b
+  target/acceptance/449/sparks.apng  2e86b0504d343c5aad4280f44027186ae0dc9119a2bfe59a13916814edb47980
+  target/acceptance/449/landing.apng  eae7c3d2794a4cc7129eaa7b96e8490eb1b7867519d1c99433c079a00a6d7d42
+and record the answer in tests/acceptance/449/TASTE.json (README: The taste call); this is not a pass
+     88| /** A test that can't be judged here fails with this, never passes. */
+     89| export function inconclusive(reason: string): never {
+     90|   return expect.fail(`INCONCLUSIVE: ${reason}; this is not a pass`);
+       |                 ^
+     91| }
+     92| /** A host or tool this machine lacks: the test fails with this messag…
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+ Test Files  1 failed | 16 passed (17)
+      Tests  1 failed | 42 passed (43)
+   Start at  13:39:36
+   Duration  536.49s (tests 100%)
+exit 1
