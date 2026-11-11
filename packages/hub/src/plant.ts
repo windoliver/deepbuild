@@ -5,7 +5,6 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import { openSync } from 'node:fs';
-import { close as closeInspector } from 'node:inspector';
 import { createServer, type Server } from 'node:net';
 
 /** The planted wrong programs a test selects with DEEP_HUB_PLANT; only tests set it. */
@@ -360,7 +359,7 @@ export function plantedReload(plant: Plant | undefined): void {
 }
 /** What a planted hub takes away at its start: the inspector that forces a collection, or its resident memory. */
 export function plantedStart(plant: Plant | undefined): void {
-  if (plant === 'churn-no-full-collection') closeInspector();
+  if (plant === 'churn-no-full-collection') process.getBuiltinModule('node:inspector').close();
   if (plant === 'churn-no-resident-read') process.memoryUsage = (() => { throw Error('this platform reads no resident memory'); }) as unknown as typeof process.memoryUsage;
 }
 /** The hub stops: nothing a planted run left outlives it. */
