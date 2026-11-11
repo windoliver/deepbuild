@@ -4,6 +4,7 @@ pub mod bevel;
 pub mod build;
 pub mod builders;
 pub mod building;
+pub mod cloud;
 pub mod clusters;
 pub mod curve;
 pub mod cut;
