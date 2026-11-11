@@ -247,6 +247,10 @@ pub struct Counts {
     /// Each material operator this frame couldn't draw, `(operator, why)`: its solids draw with
     /// their material's own values, and a caller refuses the frame (#429).
     pub operators_refused: Vec<(String, String)>,
+    /// Each material operator whose light response returned a negative or non-finite value
+    /// this frame, with the time it drew at, once per operator and time (#485:
+    /// `light_response.range`).
+    pub light_response_range: Vec<(String, f64)>,
     /// The key sun's cascades drawn this frame, by index; a cached one isn't (#422).
     pub cascades_drawn: Vec<u32>,
     /// How many environment cubes the renderer has prefiltered (#422).
@@ -490,6 +494,10 @@ impl AdjustEntry {
 /// scene3d.wgsl's `P_SSS_ACROSS` (#481): the planted spread that takes every tap.
 const PLANT_SSS_ACROSS: u32 = 8192;
 
+/// scene3d.wgsl's `P_CALLS_CUT` (#485): the planted loop that calls a light response for the
+/// lights the policy cut too, as many times as it left out.
+const PLANT_CALLS_CUT: u32 = 4_194_304;
+
 /// The most distinct lobe sets a frame shades with (#428): its lobe table's entries.
 const LOBE_ENTRIES: usize = 512;
 
@@ -588,6 +596,9 @@ struct LightsUniform {
     grid: [f32; 4],
     locals: [LocalUniform; local::SLOTS],
     items: [[[f32; 4]; 6]; SHADED],
+    /// Each shaded light's weight near the cut and a hash of its ID (u32 bits), which a light
+    /// response takes (#485).
+    answers: [[f32; 4]; SHADED],
 }
 
 /// scene3d.wgsl's `Local` (#446).
@@ -1810,6 +1821,14 @@ pub struct Renderer {
     materials: BTreeMap<u64, Result<op::MatOp, String>>,
     /// Each material operator's group with one solid's maps, by (operator, maps) key.
     op_binds: BTreeMap<(u64, u32), wgpu::BindGroup>,
+    /// Each material operator with a light response that a solid drew through, by key: its ID
+    /// and the time it last drew at (#485).
+    answering: BTreeMap<u64, (String, f64)>,
+    /// The time each operator last raised `light_response.range` at, so it raises once a time.
+    raised: BTreeMap<String, u64>,
+    /// The material operators that change nothing their parts shade with, by key: their parts
+    /// draw as their materials' own (#485).
+    plain_ops: BTreeSet<u64>,
     /// The lights this frame's policy shades and the DFG table, for the solids' shading (#421).
     lights_buffer: wgpu::Buffer,
     lights_bind: wgpu::BindGroup,
@@ -3282,6 +3301,9 @@ impl Renderer {
             frame_layout: frame_layout.clone(),
             materials: BTreeMap::new(),
             op_binds: BTreeMap::new(),
+            answering: BTreeMap::new(),
+            raised: BTreeMap::new(),
+            plain_ops: BTreeSet::new(),
             lights_buffer,
             lights_bind,
             lights_layout,
@@ -4156,6 +4178,7 @@ impl Renderer {
             grid: [0.0; 4],
             locals: [LocalUniform::zeroed(); local::SLOTS],
             items: [[[0.0; 4]; 6]; SHADED],
+            answers: [[0.0; 4]; SHADED],
         };
         // Each light's local map (#446).
         let mut local_of = BTreeMap::new();
@@ -4210,6 +4233,12 @@ impl Renderer {
                     }
                 }
             }
+        }
+        for (k, &(i, weight)) in policy.shaded.iter().enumerate().take(SHADED) {
+            u.answers[k] = [weight as f32, f32::from_bits(op::light_hash(&scene.lights[i].id)), 0.0, 0.0];
+        }
+        if self.planted.lobes & PLANT_CALLS_CUT != 0 {
+            u.answers[0][2] = policy.left_out.len() as f32;
         }
         for (slot, &(i, weight)) in u.items.iter_mut().zip(&policy.shaded) {
             let l = &scene.lights[i];
@@ -4359,6 +4388,13 @@ impl Renderer {
             }
             key ^= 0x9e37_79b9_7f4a_7c15;
         }
+        if self.plain_ops.contains(&key) {
+            return 0;
+        }
+        if !self.materials.contains_key(&key) && op::changes_nothing(o) {
+            self.plain_ops.insert(key);
+            return 0;
+        }
         if !self.materials.contains_key(&key) {
             let layouts = [
                 &self.frame_layout,
@@ -4416,6 +4452,9 @@ impl Renderer {
                             (vec![s.id.clone()], created::feature_set(s), "view".into()),
                         );
                     }
+                }
+                if matches!(self.materials.get(&key), Some(Ok(m)) if m.range.is_some()) {
+                    self.answering.insert(key, (o.id.clone(), o.t));
                 }
                 return key;
             }
@@ -5367,6 +5406,12 @@ impl Renderer {
     /// The frame's uniforms, outlines and shadow, and its atlas pages.
     fn prepare_frame(&mut self, device: &Device, scene: &Scene, look: &Look3) {
         self.counts = Counts::default();
+        // Each light response's range flag starts the frame clear (#485).
+        for key in self.answering.keys() {
+            if let Some(Ok(m)) = self.materials.get(key) {
+                m.clear_range(&device.queue);
+            }
+        }
         // #464: the print finish this frame draws, and each solid's color its separations read.
         self.print =
             (!look.print.is_identity()).then(|| (look.print.clone(), scene.print, scene.ground));
@@ -6232,6 +6277,21 @@ impl Renderer {
             self.rebind_lights(device);
         }
         remade
+    }
+
+    /// After a frame (#485): each material operator whose light response returned a negative or
+    /// non-finite value, read back from its flag, into this frame's counts once per operator and
+    /// time.
+    pub fn check_responses(&mut self, device: &Device) {
+        for (key, (id, t)) in &self.answering {
+            let Some(Ok(m)) = self.materials.get(key) else {
+                continue;
+            };
+            if m.range_raised(device) && self.raised.get(id) != Some(&t.to_bits()) {
+                self.raised.insert(id.clone(), t.to_bits());
+                self.counts.light_response_range.push((id.clone(), *t));
+            }
+        }
     }
 
     /// The opaque sets holding a part whose subsurface spreads, for the share pass (#481).

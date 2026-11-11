@@ -276,6 +276,9 @@ pub enum From {
         domain: String,
         lanes: u8,
     },
+    /// A light response's input, which the core's light loop hands it (#485): `n`, `l`,
+    /// `radiance` and the rest.
+    Port,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -512,6 +515,10 @@ pub struct Operator {
     /// A pass's chain (`effects` or `finish`) and order key.
     pub chain: String,
     pub order: String,
+    /// A material's light responses (#485), by output (`light`, `ambient`): each a material
+    /// operator of its own over its ports and the operator's value inputs. A default named, or
+    /// none, leaves the core's own shading.
+    pub responses: BTreeMap<String, Operator>,
 }
 
 /// The fields an operator may carry; anything else is refused, and a field that carries code is
@@ -539,6 +546,9 @@ const FIELDS: &[&str] = &[
     "stepped",
     // Whether a pixel-wise pass may fuse with its neighbours (#432: pass fusion).
     "fuse",
+    // A material's light responses (#485).
+    "light",
+    "ambient",
 ];
 /// Fields that hold a program's text in other engines' formats.
 const CODE_FIELDS: &[&str] = &[
@@ -1388,10 +1398,12 @@ pub fn read(v: &Value) -> Result<Operator, Vec<Issue>> {
                 .collect()
         })
         .unwrap_or_default();
+    let responses = read_responses(o, kind, &inputs, &id, &mut issues);
     if !issues.is_empty() {
         return Err(issues);
     }
     Ok(Operator {
+        responses,
         id,
         kind,
         about,
@@ -1433,6 +1445,119 @@ pub type Functions = BTreeMap<String, Value>;
 
 /// How deep step functions may call each other.
 const USE_DEPTH: usize = 4;
+
+/// A WGSL type of scene3d's response ports as a step type.
+fn port_ty(t: &str) -> Ty {
+    match t {
+        "vec3<f32>" => Ty::V(Sc::F32, 3),
+        "u32" => Ty::U32,
+        _ => Ty::F32,
+    }
+}
+
+/// The values a port spans, for the values stage: unit vectors, light (linear, ≥ 0), and the
+/// part's own fields in [0, 1].
+fn port_range(name: &str) -> Option<[f64; 2]> {
+    match name {
+        "n" | "v" | "l" => Some([-1.0, 1.0]),
+        "radiance" | "irradiance" | "env" => Some([0.0, 1e6]),
+        "light_hash" => None,
+        _ => Some([0.0, 1.0]),
+    }
+}
+
+/// A material's light responses (#485; Operator output: light response): each of `light` and
+/// `ambient` absent, its default's name (the core's own shading), or a graph `{steps, outputs:
+/// {radiance: <step>}}` read as a material operator of its own whose inputs are its ports, then
+/// the operator's value inputs; its one output takes the response's name.
+fn read_responses(
+    o: &Map<String, Value>,
+    kind: Kind,
+    inputs: &BTreeMap<String, Input>,
+    id: &str,
+    issues: &mut Vec<Issue>,
+) -> BTreeMap<String, Operator> {
+    let mut out = BTreeMap::new();
+    for (name, ports, default) in deep_canvas_scene3d::gpu::RESPONSES {
+        let Some(v) = o.get(*name) else {
+            continue;
+        };
+        if kind != Kind::Material {
+            issues.push(Issue::at_path(
+                "operator_type",
+                name,
+                "only a material operator answers the light loop",
+            ));
+            continue;
+        }
+        if v.as_str() == Some(*default) {
+            continue;
+        }
+        let graph = v.as_object().filter(|g| {
+            g.keys().all(|k| k == "steps" || k == "outputs")
+                && g.get("outputs")
+                    .and_then(Value::as_object)
+                    .is_some_and(|r| r.len() == 1 && r["radiance"].is_string())
+        });
+        let Some(graph) = graph else {
+            issues.push(Issue::at_path(
+                "operator_type",
+                name,
+                format!("{name} is {default} or a graph {{steps, outputs: {{radiance: <step>}}}}"),
+            ));
+            continue;
+        };
+        let mut outputs = Map::new();
+        outputs.insert((*name).into(), graph["outputs"]["radiance"].clone());
+        let mut sub = json!({
+            "id": format!("{id}.{name}"),
+            "kind": "material",
+            "steps": graph.get("steps").cloned().unwrap_or_else(|| json!({})),
+            "outputs": outputs,
+        });
+        for k in ["about", "origin", "cost"] {
+            if let Some(x) = o.get(k) {
+                sub[k] = x.clone();
+            }
+        }
+        let mut r = match read(&sub) {
+            Ok(r) => r,
+            Err(e) => {
+                issues.extend(e.into_iter().map(|mut i| {
+                    i.path = Some(format!("{name}/{}", i.path.take().unwrap_or_default()));
+                    i
+                }));
+                continue;
+            }
+        };
+        let own = deep_canvas_scene3d::gpu::response_in(ports);
+        for (port, t) in &own {
+            r.inputs.insert(
+                (*port).into(),
+                Input {
+                    ty: port_ty(t),
+                    from: From::Port,
+                    range: port_range(port),
+                    default: None,
+                },
+            );
+        }
+        // The operator's value inputs, read from its uniform as its own steps read them.
+        for (n, i) in inputs {
+            if own.iter().any(|(p, _)| p == n) {
+                issues.push(Issue::at_path(
+                    "operator_type",
+                    &format!("inputs/{n}"),
+                    format!("{n} is an input of the light loop's {name}"),
+                ));
+            } else if !matches!(i.ty, Ty::Tex(_) | Ty::Tex3(_) | Ty::Storage(..) | Ty::Arr(..)) {
+                r.inputs.entry(n.clone()).or_insert_with(|| i.clone());
+            }
+        }
+        out.insert((*name).to_string(), r);
+    }
+    out
+}
 
 /// The step functions canvas modules ship (#486: scene3d's `core.bump@1`), which any operator
 /// calls by name as it calls a pack's.

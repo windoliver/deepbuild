@@ -39,7 +39,9 @@ fn manifest() -> Manifest {
             "scene3d".to_string(),
             Dependency {
                 range: Range::parse("^1").expect("a range"),
-                optional: false,
+                // Its operators reach scene3d's GPU registry entries through the core's
+                // registries, so a build without scene3d holds effects (#485).
+                optional: true,
             },
         )]
         .into_iter()
