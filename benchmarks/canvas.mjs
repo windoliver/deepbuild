@@ -930,6 +930,10 @@ const EFFICIENCY = {
   'canvas-patch-dirty': { cpu_growth: cpuGrowth, upload_bytes_per_item: uploadPerItem },
   'canvas-scene-read': { summary_ms: (r) => r.summary.ms, summary_tokens: (r) => r.summary.tokens, page_ms: (r) => r.page.ms, page_rows: (r) => r.page.rows },
   'canvas-idle': { frames: (r) => r.frames, wakeups: (r) => r.wakeups, cpu_fraction: (r) => r.cpu_fraction },
+  'canvas-look-frames': {
+    frame_gpu_p95_ms: (r) => Math.max(...Object.values(r.looks).map((look) => p95(look.frames.map((f) => f.gpu_ms)))),
+    frame_cpu_p95_ms: (r) => Math.max(...Object.values(r.looks).map((look) => p95(look.frames.map((f) => f.cpu_ms)))),
+  },
   'replica-cold-start': { first_settled_ms: (r) => r.ms },
   'canvas-flares-mirrors': { finish_gpu_ms: (r) => r.finish_gpu_ms, flare_gpu_ms: (r) => r.flare_gpu_ms, mirror_share: (r) => r.mirror_share, indexed_target_bytes: (r) => r.indexed_target_bytes },
   'canvas-water': { lake_gpu_ms: (r) => r.lake_gpu_ms, waves_vertex_ms: (r) => r.waves_vertex_ms },
@@ -1273,6 +1277,9 @@ workloads.occlusion = () => {
     console.log(JSON.stringify({ task: 'canvas-occlusion', fingerprint, runs: measured }));
   } finally {
     rmSync(dir, { recursive: true, force: true });
+  }
+};
+
 // #501: 32 looping voices, each a 2 s stereo tone at 0.02 at its own pitch, played live through the device gate on the
 // default output for 5 s of the real clock by `deep-show run`'s soak; fails unless it played, and prints its stats.
 workloads['media-soak'] = () => {

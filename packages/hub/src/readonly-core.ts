@@ -41,6 +41,7 @@ export function unreadable(options: CoreOptions): Unreadable | null {
   const db = new Database(root.ledger, { readonly: true, fileMustExist: true });
   let rows: { kind: string; v: number }[];
   try {
+    db.pragma('cache_size = -2000');
     const has = db.prepare("SELECT 1 FROM sqlite_schema WHERE type = 'table' AND name = 'events'").get();
     rows = has ? (db.prepare('SELECT kind, max(v) AS v FROM events GROUP BY kind').all() as { kind: string; v: number }[]) : [];
   } finally {

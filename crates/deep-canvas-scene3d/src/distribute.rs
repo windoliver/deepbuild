@@ -711,6 +711,7 @@ fn ray(shape: &Shape, o: V3, d: V3) -> Option<(f64, V3)> {
                 .flatten()
                 .min_by(|x, y| x.0.total_cmp(&y.0))
         }
+        Shape::Heights(h) => h.ray(o, d),
     }
 }
 

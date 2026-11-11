@@ -40,7 +40,7 @@ pub use check::{
     check, check_costed, check_in, check_packed, check_with, duration, frame_of, frame_rate_of,
     literal_forms, recheck, recheck_skipping_referrers, recheck_with, CheckResult, Referrers,
 };
-pub use close::undeclared;
+pub use close::{field_names, kind_names, owners, undeclared};
 pub use merge::{merge, Merged};
 pub use order::key_between;
 pub use packs::{Expansion, Pack, PackId, Packs, Planted as PackPlanted};
@@ -109,6 +109,8 @@ pub const ENVELOPE_KEYS: &[&str] = &[
     // #502: the media module's ducking entries (Ducking), each a bus's gain under speech spans.
     "ducking",
     "tempo_map",
+    // #935: the media module's generated sounds, each held to audio.gen before an item names it.
+    "sounds",
 ];
 
 /// An item's keys (Item and kind), in this slice.
