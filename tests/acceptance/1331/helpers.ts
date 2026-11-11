@@ -4,6 +4,7 @@
 // here stands in for DeepBuild: the hub, its record, the gate's runs and carrying, and Vitest are real. Only the forge
 // (GitHub) and the agents (a `claude` that records that it was started and does nothing) are played. No network beyond
 // 127.0.0.1, no model; processes are stopped by PID only.
+import { AssertionError } from 'node:assert';
 import { execFile, spawn } from 'node:child_process';
 import { appendFileSync, chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -278,4 +279,4 @@ export async function mustFail(what: string, judge: () => unknown | Promise<unkn
   for (const n of names) expect(message, `${what}: the failure must name ${n}`).toContain(n);
 }
 /** `ok` or throw: the thrown message is what a failing criterion says (and what a plant's failure must name). */
-export function must(ok: boolean, message: string): asserts ok { if (!ok) throw Error(message); }
+export function must(ok: boolean, message: string): asserts ok { if (!ok) throw new AssertionError({ message }); }

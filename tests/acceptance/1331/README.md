@@ -62,6 +62,19 @@ file changed.
   merges. Both answered `merged: true`; the first merge's tree held `a.txt` and the file, the second's held only `a.txt`
   and `b.txt`, and `main` pointed at it.
 
+## Redraft 3: must is an assertion
+
+Third dispute, on `helpers.ts`; the first two redrafts stand. The repo's proof lanes count a tagged test as proving its
+criterion only when it fails at an assertion (an `AssertionError`, code `ERR_ASSERTION`, or a vitest `expect` failure).
+`must()` threw a plain `Error`, so the AC4, AC6 and AC7 tests, whose base failures come through `must`, read "failed
+before its assertion" and could never be counted, whatever the implementation did. No criterion's reading, expected
+value, message, plant, test file or other helper changed.
+
+- **The change.** `must(ok, message)` now throws `new AssertionError({ message })` from `node:assert`. The message is
+  exactly the same string. `AssertionError` extends `Error`, so `mustFail` (which reads `error.message`) is unaffected.
+- **Why it weakens nothing.** `must` throws under the same condition (`!ok`) with the same text; only the error's
+  class changes, so a wrong program still fails each test and a right one still passes it.
+
 ## Run
 
 ```sh
