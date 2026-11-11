@@ -369,6 +369,11 @@ timed.push('tests/acceptance/1575/budgets.test.ts', 'tests/acceptance/1575-redra
 alone.push('tests/acceptance/1964/');
 // #1723's files each start a real hub whose gate runs a document check through the canvas core, under a 480 s wait.
 alone.push('tests/acceptance/1723/');
+// #404's parts: #1897's files each build deep-show in their own feature set and hold the GPU for the pixel hash;
+// #1899's and #1903's build deep-gpu with test-meter, as #377's and #379's do; #2189's and its criterion-1 redraft
+// build deep-gpu for release and draw on this Mac's Metal GPU, so no two device runs share it.
+alone.push('tests/acceptance/1897/', 'tests/acceptance/1899/', 'tests/acceptance/1903/');
+alone.push('tests/acceptance/2189/', 'tests/acceptance/2189-redraft-ac1/');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
