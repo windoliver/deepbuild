@@ -907,14 +907,14 @@ pub struct Eval {
     pub clean: bool,
     pub perturb: Option<String>,
     pub pixels: bool,
-    /// #493: the film block, each camera's pose, a reduced-motion cut's dissolve, each parallax
-    /// group's offset and each text's glyphs.
+    /// #493: the film block, camera poses, a reduced-motion cut's dissolve, parallax and glyphs.
     pub film: bool,
     pub size: Option<[u16; 2]>,
     /// #855: each node's Debug text digest beside its result, a diagnostic only.
     pub debug_text: bool,
-    /// #497: document arrays to answer as the frame read them.
+    /// #497: arrays to answer as the frame read them; #1918: item paths whose values it answers.
     pub arrays: Vec<String>,
+    pub paths: Vec<String>,
     /// #504: the document's input track for this evaluation, over the hub's.
     pub track: Option<Vec<Value>>,
 }

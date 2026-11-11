@@ -14,7 +14,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde_json::{json, Map, Value};
 
-use super::packs::{At, Expansion, KindRule, Pack, PackId, Packs, Planted, Recipe, Resolved};
+use super::packs::{At, Expansion, KindRule, Pack, PackId, Packs, Recipe, Resolved};
 use super::{member, Issue};
 use crate::budget::Class;
 use crate::interval::Iv;
@@ -455,10 +455,8 @@ fn kit_fail(
 
 /// The kind kit of each of `pack`'s kinds, run at the pack check: a failing part refuses the
 /// pack, naming the kind and the part; a passing kit is kept on the kind with its largest
-/// counts over the extremes.
-pub(super) fn kit(pack: &mut Pack, sealed: &Sealed, planted: Planted) -> Result<(), Vec<Issue>> {
-    let mut alone = Packs::new(planted);
-    alone.insert(pack.clone());
+/// counts over the extremes. `alone` holds the pack and the versions it requires (#1957).
+pub(super) fn kit(pack: &mut Pack, sealed: &Sealed, alone: Packs) -> Result<(), Vec<Issue>> {
     let mut issues = Vec::new();
     let mut results = BTreeMap::new();
     for (name, kind) in &pack.kinds {
