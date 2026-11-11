@@ -492,6 +492,13 @@ pub type Rule = fn(&Value, &str, &Value) -> Vec<Raised>;
 /// One item's CPU time per frame, in ms, for the budget estimate (`document.budget`).
 pub type Cost = fn(&Value) -> f64;
 
+/// The elements of a built item's named part in one domain, in index order, each an object of
+/// `i`, `center`, `normal`, `area`, `size` and the part's attributes, for a recipe's repeat over
+/// elements (Recipe: repeat over elements; #2015): `(document, item ID, item, part, domain,
+/// planted wrong program)`, or why there are none to count.
+pub type Elements =
+    fn(&Value, &str, &Value, &str, &str, Option<&str>) -> Result<Vec<Value>, String>;
+
 /// One code a canvas module's check can emit, in the check catalog: what it means, its fix, and
 /// whether that fix is given as patch ops.
 #[derive(Clone, Debug)]
@@ -731,6 +738,8 @@ pub struct Registrar {
     pub rules: Vec<(String, Rule)>,
     /// Its kinds' CPU cost per item, by kind (`family.name`).
     pub costs: Vec<(String, Cost)>,
+    /// Its builders' elements by part and domain, by kind (`family.name`; #2015).
+    pub elements: Vec<(String, Elements)>,
     /// Its carried state with checkpoints.
     pub steppers: Vec<Stepper>,
     /// The registries it declares (#200).
@@ -739,6 +748,8 @@ pub struct Registrar {
     pub entries: Vec<lists::EntryDef>,
     /// Its Rust for the entries it fills in the core's `outline.source@1`, by entry name (#443).
     pub outline_fills: Vec<(String, crate::outline::Fill)>,
+    /// The pack fields it reads, each with its check at the pack check (#1720).
+    pub pack_fields: Vec<(String, crate::document::packs::module_fields::PackField)>,
 }
 
 impl Registrar {
@@ -833,6 +844,12 @@ impl Registrar {
     /// The CPU cost of an item of the kind `family.name`.
     pub fn cost(&mut self, kind: &str, cost: Cost) -> &mut Self {
         self.costs.push((kind.into(), cost));
+        self
+    }
+
+    /// The elements of an item of the builder kind `family.name`, by part and domain (#2015).
+    pub fn elements(&mut self, kind: &str, elements: Elements) -> &mut Self {
+        self.elements.push((kind.into(), elements));
         self
     }
 
@@ -1029,19 +1046,6 @@ impl Registrar {
         self
     }
 
-    /// Fills an entry of the core's `outline.source@1` (#443): its value, which the registry's kit
-    /// holds to its item's 2D fill, and its own Rust, which `extrude` reads outlines through.
-    pub fn outline_source(
-        &mut self,
-        name: &str,
-        value: Value,
-        fill: crate::outline::Fill,
-    ) -> &mut Self {
-        self.entry(crate::outline::REGISTRY, name, value, "R6");
-        self.outline_fills.push((name.into(), fill));
-        self
-    }
-
     /// A GPU pass that fills the items of `kind` with its WGSL fragment shader.
     pub fn gpu_pass(
         &mut self,
@@ -1147,6 +1151,10 @@ pub enum Fault {
     /// Declares `export.target@1` in the media module instead of the core (#501): the core
     /// declares none, so a build without media refuses every other module's target.
     ExportTargetInMedia,
+    /// Declares `gpu.output@1` in the effects module instead of the core, which fills today's
+    /// outputs there too (#485): a build without effects leaves scene3d's outputs with no
+    /// registry.
+    GpuOutputInEffects,
 }
 
 /// The module that declares `ease@1` in the planted layout that moves it out of the core, which
@@ -1524,6 +1532,15 @@ impl Sealed {
             .filter(|(k, _)| k == full)
             .map(|(_, c)| *c)
             .collect()
+    }
+
+    /// The elements function of the kind `family.name`, from the first module that registers one.
+    pub fn elements_for(&self, full: &str) -> Option<Elements> {
+        self.modules
+            .iter()
+            .flat_map(|m| m.shapes.elements.iter())
+            .find(|(k, _)| k == full)
+            .map(|(_, e)| *e)
     }
 
     /// Whether any module registered a cost: the budget estimate then sums the whole document.
@@ -2919,6 +2936,10 @@ impl Registry {
         if self.fault == Some(Fault::ExportTargetInMedia) {
             core_registries.retain(|d| d.name != "export.target@1");
         }
+        let outputs_elsewhere = self.fault == Some(Fault::GpuOutputInEffects);
+        if outputs_elsewhere {
+            core_registries.retain(|d| d.name != "gpu.output@1");
+        }
         core_registries.extend(self.declared.iter().cloned());
         let mut core_entries: Vec<lists::EntryDef> =
             core_lists::entries(self.fault == Some(Fault::BaseStepsElsewhere))
@@ -2927,6 +2948,9 @@ impl Registry {
                 .collect();
         if eases {
             core_entries.extend(core_lists::ease_entries(self.fault == Some(Fault::EaseRenumbered)));
+        }
+        if outputs_elsewhere {
+            core_entries.retain(|e| e.registry != "gpu.output@1");
         }
         let (registries, parts) = lists::seal(
             core_registries,

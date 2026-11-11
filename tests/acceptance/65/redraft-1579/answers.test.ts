@@ -1,11 +1,10 @@
 // Blind redraft (README) of #65's answers through channels, signed in the current format: AC1 (an answer on one
-// channel closes the item everywhere and in Needs you within 10 s), AC3's stand-in-phone case (the phone's signed yes
-// reaches the waiting session as a decision) and AC10 (B on the phone, then C in the app: B stands, C is refused naming
-// B and its channel). Each is the earlier ../answers.test.ts case with the phone's and the app's signature in the
+// channel closes the item everywhere and in Needs you within 10 s) and AC10 (B on the phone, then C in the app: B
+// stands, C is refused naming B and its channel); AC3's stand-in-phone case moved to ../redraft-1580 (#1580). Each is the earlier ../answers.test.ts case with the phone's and the app's signature in the
 // design's shape; the world, the waits and the expected values are the earlier suite's.
 import { afterEach, describe, expect, it } from 'vitest';
 import {
-  AC, MINUTE, cleanup, closed, describeItem, inTime, inboxRow, live, ofKind, paseoAgent, permission, said, sleep, turnStarts, waitFor, world, type Line,
+  AC, MINUTE, cleanup, closed, describeItem, inTime, inboxRow, ofKind, said, sleep, waitFor, world,
 } from '../helpers.ts';
 import { appAnswer, phoneOf } from './helpers.ts';
 
@@ -31,24 +30,9 @@ describe(`${AC[1]} An ask answered on one channel is gone from every other chann
   });
 });
 
-describe(`${AC[3]} An answer given in paseo's phone app, signed with the phone's paired device key, reaches the waiting session and is saved as a decision; the same answer with no valid signature counts as nothing for an authority ask and points to the trusted path`, () => {
-  it(`${AC[3]} the phone's signed approve of a held permission request reaches the session as allow and is saved as a decision`, async () => {
-    const w = await world({ channels: ['paseo'], phone: true });
-    const phone = await phoneOf(w);
-    const a = paseoAgent(w.repo);
-    await turnStarts(w, a);
-    const { ask, held } = await permission(w, a, 'git push origin main');
-    const relay = w.providers.paseo!;
-    const card = await waitFor(() => relay.latest(ask), MINUTE, `${ask} on the phone`);
-    expect(live(card), `the phone can answer the authority ask: ${describeItem(card)}`).toBe(true);
-    phone.answer(relay, ask, 'approve');
-    const reply = await Promise.race([held.reply, sleep(MINUTE).then(() => undefined)]);
-    expect(reply, `the waiting session got an answer; the hub's refusals: ${said(await ofKind(w, 'channel.refused', ask))}`).toBeDefined();
-    expect((JSON.parse(String(reply!.stdout)) as Line).decision, `the session's reply: ${JSON.stringify(reply)}`).toBe('allow');
-    const decisions = (await ofKind(w, 'decision.created')).filter((e) => e.data.ask === ask);
-    expect(decisions.map((e) => e.data.answer), `the phone's answer saved as a decision: ${said(decisions)}`).toEqual(['approve']);
-  });
-});
+// AC3's signed case, "the phone's signed approve of a held permission request reaches the session as allow and is
+// saved as a decision", moved to ../redraft-1580/answers.test.ts, its blind redraft: since #1580 a card with a plan
+// carries the plan's hash and the phone signs it, so this case's phone, which signed none, is refused at plan_hash.
 
 describe(`${AC[10]} One choice ask answered B on the paired phone and C in the app 2 s later records B, the first appended, refuses C naming B and its channel, and delivers one answer; a last-writer-wins hub delivers C after B and fails this test, naming both channels`, () => {
   it(`${AC[10]} B on the phone, then C in the app 2 s later: B is the one answer, and C is refused naming B and the paseo channel`, async () => {

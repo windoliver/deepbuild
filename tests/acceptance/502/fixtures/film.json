@@ -1,0 +1,541 @@
+{
+  "issue": 502,
+  "about": "The 12 s fixture film of issue #502: its document (the script inside it), its cue list and its expected caption in- and out-times, worked out by hand from the caption layout rule of the Narration and captions row (docs/canvas-primitives.md at c072ff92d), never from a program. In `document`, each value made at test time is null: an asset's sha256, a voice asset's attached words record, and the music strip's src. `recordings` fixes, in samples at 48 kHz, where the tests put each word of each spoken line. Times under `expected` and `speech` are flicks (1/705,600,000 s); `*_frame` counts frames of the table's rate; `*_ms` is the sidecar time, the flicks rounded down to the millisecond.",
+  "sample_rate": 48000,
+  "document": {
+    "format": 1,
+    "id": "film",
+    "profile": "film",
+    "title": "Narration, captions and ducking",
+    "description": "The #502 fixture film: 12 s at 24 fps with three spoken lines, one caption-only line and music ducked under the voice.",
+    "size": [
+      480,
+      270
+    ],
+    "locale": "en",
+    "camera": "cam",
+    "transport": {
+      "span": "12s",
+      "frame_rate": [
+        24,
+        1
+      ],
+      "sample_rate": 48000
+    },
+    "items": {
+      "cam": {
+        "id": "cam",
+        "kind": "camera@1",
+        "name": "Camera cam",
+        "order": "a0cam",
+        "params": {
+          "projection": "orthographic",
+          "target": [
+            240,
+            135,
+            0
+          ],
+          "view_width": 480
+        }
+      },
+      "back": {
+        "id": "back",
+        "kind": "rect@1",
+        "name": "Rect back",
+        "order": "a1",
+        "params": {
+          "box": [
+            0,
+            0,
+            480,
+            270
+          ],
+          "paint": {
+            "fill": {
+              "role": "ground"
+            }
+          }
+        }
+      },
+      "mover": {
+        "id": "mover",
+        "kind": "rect@1",
+        "name": "Rect mover",
+        "order": "a2",
+        "params": {
+          "box": [
+            0,
+            70,
+            60,
+            60
+          ],
+          "paint": {
+            "fill": {
+              "role": "accent"
+            }
+          }
+        }
+      },
+      "bar": {
+        "id": "bar",
+        "kind": "rect@1",
+        "name": "Rect bar",
+        "order": "a3",
+        "params": {
+          "box": [
+            0,
+            24,
+            8,
+            12
+          ],
+          "paint": {
+            "fill": {
+              "role": "ink"
+            }
+          }
+        }
+      }
+    },
+    "channels": {
+      "slide": {
+        "target": "items/mover/params/box/0",
+        "type": "f32",
+        "keys": {
+          "k0": {
+            "t": "0s",
+            "value": 0,
+            "interp": "linear"
+          },
+          "k1": {
+            "t": "12s",
+            "value": 420,
+            "interp": "linear"
+          }
+        }
+      },
+      "grow": {
+        "target": "items/bar/params/box/2",
+        "type": "f32",
+        "keys": {
+          "k0": {
+            "t": "0s",
+            "value": 8,
+            "interp": "linear"
+          },
+          "k1": {
+            "t": "12s",
+            "value": 472,
+            "interp": "linear"
+          }
+        }
+      }
+    },
+    "assets": {
+      "music": {
+        "sha256": null,
+        "license": {
+          "id": "CC0-1.0",
+          "terms": "Public domain dedication.",
+          "shareable": true,
+          "credit": "Synthesized by the #502 acceptance tests."
+        }
+      },
+      "voice_intro": {
+        "sha256": null,
+        "license": {
+          "id": "LicenseRef-deepbuild-test-fixture",
+          "terms": "Spoken by macOS say at test time for the #502 acceptance tests and deleted after them; never shared.",
+          "shareable": true,
+          "credit": "Made by the #502 acceptance tests."
+        },
+        "attached": null
+      },
+      "voice_listen": {
+        "sha256": null,
+        "license": {
+          "id": "LicenseRef-deepbuild-test-fixture",
+          "terms": "Spoken by macOS say at test time for the #502 acceptance tests and deleted after them; never shared.",
+          "shareable": true,
+          "credit": "Made by the #502 acceptance tests."
+        },
+        "attached": null
+      },
+      "voice_dips": {
+        "sha256": null,
+        "license": {
+          "id": "LicenseRef-deepbuild-test-fixture",
+          "terms": "Spoken by macOS say at test time for the #502 acceptance tests and deleted after them; never shared.",
+          "shareable": true,
+          "credit": "Made by the #502 acceptance tests."
+        },
+        "attached": null
+      }
+    },
+    "strips": {
+      "music": {
+        "track": 1,
+        "src": null,
+        "start": "0s",
+        "in": 0,
+        "out": 8467200000,
+        "rate": 1,
+        "bus": "music"
+      }
+    },
+    "buses": {
+      "music": {}
+    },
+    "ducking": {
+      "duck": {
+        "target": "music",
+        "key": "narration",
+        "depth": -12,
+        "attack": 0.2,
+        "hold": 0.3,
+        "release": 0.8,
+        "merge_gap": 0.8
+      }
+    },
+    "script": {
+      "narrator": {
+        "name": "Fixture voice",
+        "license": {
+          "id": "LicenseRef-deepbuild-test-fixture",
+          "terms": "Spoken by macOS say at test time for the #502 acceptance tests and deleted after them; never shared.",
+          "shareable": true,
+          "credit": "Made by the #502 acceptance tests."
+        },
+        "synthetic": false
+      },
+      "lines": {
+        "intro": {
+          "t": "0.28s",
+          "text": "Bold music plays until a calm voice starts to speak",
+          "recording": {
+            "asset": "voice_intro"
+          }
+        },
+        "listen": {
+          "t": "5.905s",
+          "text": "Listen",
+          "recording": {
+            "asset": "voice_listen"
+          }
+        },
+        "dips": {
+          "t": "7.905s",
+          "text": "The tune dips under each word",
+          "recording": {
+            "asset": "voice_dips",
+            "in": 88200000,
+            "out": 2155608000
+          }
+        },
+        "note": {
+          "t": "10.77s",
+          "text": "Captions always on",
+          "kind": "caption"
+        }
+      },
+      "captions": {
+        "profile": "netflix-en-adult",
+        "font": "body",
+        "size": 14
+      }
+    }
+  },
+  "recordings": {
+    "voice_intro": {
+      "line": "intro",
+      "at": 13440,
+      "in": 0,
+      "out": 261120,
+      "samples": 261120,
+      "gain": 0.5,
+      "words": [
+        {
+          "text": "Bold",
+          "start": 12000,
+          "end": 30240
+        },
+        {
+          "text": "music",
+          "start": 30240,
+          "end": 57120
+        },
+        {
+          "text": "plays",
+          "start": 57120,
+          "end": 81120
+        },
+        {
+          "text": "until",
+          "start": 81120,
+          "end": 106080
+        },
+        {
+          "text": "a",
+          "start": 106080,
+          "end": 122400
+        },
+        {
+          "text": "calm",
+          "start": 122400,
+          "end": 144480
+        },
+        {
+          "text": "voice",
+          "start": 144480,
+          "end": 168480
+        },
+        {
+          "text": "starts",
+          "start": 168480,
+          "end": 202080
+        },
+        {
+          "text": "to",
+          "start": 202080,
+          "end": 220320
+        },
+        {
+          "text": "speak",
+          "start": 220320,
+          "end": 249120
+        }
+      ]
+    },
+    "voice_listen": {
+      "line": "listen",
+      "at": 283440,
+      "in": 0,
+      "out": 49920,
+      "samples": 49920,
+      "gain": 0.5,
+      "words": [
+        {
+          "text": "Listen",
+          "start": 12000,
+          "end": 37920
+        }
+      ]
+    },
+    "voice_dips": {
+      "line": "dips",
+      "at": 379440,
+      "in": 6000,
+      "out": 146640,
+      "samples": 152640,
+      "gain": 0.5,
+      "words": [
+        {
+          "text": "The",
+          "start": 12000,
+          "end": 31200
+        },
+        {
+          "text": "tune",
+          "start": 31200,
+          "end": 52320
+        },
+        {
+          "text": "dips",
+          "start": 52320,
+          "end": 77280
+        },
+        {
+          "text": "under",
+          "start": 77280,
+          "end": 98400
+        },
+        {
+          "text": "each",
+          "start": 98400,
+          "end": 121440
+        },
+        {
+          "text": "word",
+          "start": 121440,
+          "end": 140640
+        }
+      ]
+    }
+  },
+  "music": {
+    "asset": "music",
+    "seconds": 12,
+    "rms_dbfs": -30
+  },
+  "profile": {
+    "name": "netflix-en-adult",
+    "max_chars": 42,
+    "max_lines": 2,
+    "max_cps": 20,
+    "min_dur": [
+      5,
+      6
+    ],
+    "max_dur": 7,
+    "gap_frames": 2
+  },
+  "cues": [
+    {
+      "name": "intro.1",
+      "line": "intro",
+      "lines": [
+        "Bold music plays until a calm voice starts",
+        "to speak"
+      ]
+    },
+    {
+      "name": "listen.1",
+      "line": "listen",
+      "lines": [
+        "Listen"
+      ]
+    },
+    {
+      "name": "dips.1",
+      "line": "dips",
+      "lines": [
+        "The tune dips under each word"
+      ]
+    },
+    {
+      "name": "note.1",
+      "line": "note",
+      "lines": [
+        "Captions always on"
+      ]
+    }
+  ],
+  "expected": {
+    "24/1": {
+      "frame_rate": [
+        24,
+        1
+      ],
+      "frame": 29400000,
+      "captions": [
+        {
+          "name": "intro.1",
+          "in_frame": 12,
+          "out_frame": 132,
+          "in": 352800000,
+          "out": 3880800000,
+          "in_ms": 500,
+          "out_ms": 5500
+        },
+        {
+          "name": "listen.1",
+          "in_frame": 147,
+          "out_frame": 167,
+          "in": 4321800000,
+          "out": 4909800000,
+          "in_ms": 6125,
+          "out_ms": 6958
+        },
+        {
+          "name": "dips.1",
+          "in_frame": 192,
+          "out_frame": 256,
+          "in": 5644800000,
+          "out": 7526400000,
+          "in_ms": 8000,
+          "out_ms": 10666
+        },
+        {
+          "name": "note.1",
+          "in_frame": 258,
+          "out_frame": 281,
+          "in": 7585200000,
+          "out": 8261400000,
+          "in_ms": 10750,
+          "out_ms": 11708
+        }
+      ]
+    },
+    "24000/1001": {
+      "frame_rate": [
+        24000,
+        1001
+      ],
+      "frame": 29429400,
+      "captions": [
+        {
+          "name": "intro.1",
+          "in_frame": 12,
+          "out_frame": 132,
+          "in": 353152800,
+          "out": 3884680800,
+          "in_ms": 500,
+          "out_ms": 5505
+        },
+        {
+          "name": "listen.1",
+          "in_frame": 147,
+          "out_frame": 167,
+          "in": 4326121800,
+          "out": 4914709800,
+          "in_ms": 6131,
+          "out_ms": 6965
+        },
+        {
+          "name": "dips.1",
+          "in_frame": 192,
+          "out_frame": 256,
+          "in": 5650444800,
+          "out": 7533926400,
+          "in_ms": 8008,
+          "out_ms": 10677
+        },
+        {
+          "name": "note.1",
+          "in_frame": 258,
+          "out_frame": 280,
+          "in": 7592785200,
+          "out": 8240232000,
+          "in_ms": 10760,
+          "out_ms": 11678
+        }
+      ]
+    }
+  },
+  "speech": {
+    "spans": [
+      {
+        "line": "intro",
+        "start": 373968000,
+        "end": 3859632000
+      },
+      {
+        "line": "listen",
+        "start": 4342968000,
+        "end": 4723992000
+      },
+      {
+        "line": "dips",
+        "start": 5665968000,
+        "end": 7556976000
+      }
+    ],
+    "ducked": [
+      {
+        "start": 373968000,
+        "end": 4723992000
+      },
+      {
+        "start": 5665968000,
+        "end": 7556976000
+      }
+    ]
+  },
+  "range_mix": {
+    "about": "Criterion 7's mix: the film's music strip playing one tone at two levels 12 dB apart, 6 s each, in place of the music, with no script.",
+    "hz": 1000,
+    "low_dbfs": -26,
+    "high_dbfs": -14,
+    "seconds_each": 6,
+    "lra": 12
+  }
+}

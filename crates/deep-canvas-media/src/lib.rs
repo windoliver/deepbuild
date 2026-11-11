@@ -3,9 +3,12 @@
 //! the same build and CPU architecture.
 
 pub mod analysis;
+pub mod captions;
 pub mod clock;
 pub mod delay;
+pub mod delivery;
 pub mod doc;
+pub mod duck;
 pub mod dynamics;
 pub mod emitter;
 pub mod fixtures;
@@ -15,6 +18,7 @@ pub mod module;
 pub mod mix;
 pub mod reverb;
 pub mod ring;
+pub mod script;
 pub mod spawn;
 pub mod viewer;
 
@@ -29,8 +33,12 @@ pub const FLICKS: i64 = 705_600_000;
 /// and #1818's, which the mix and deep_query read: a limiter reading sample peaks only, a
 /// hard-knee compressor, a mix without latency compensation, a pitch ignoring its semitones, a
 /// send always tapped post, a delay emptied at a seek, and a missing loudness target read as 0;
-/// and #544's, a spawn that reads a field its logic item doesn't declare as 0.
-pub const PLANTED: [&str; 15] = [
+/// #544's, a spawn that reads a field its logic item doesn't declare as 0; and #1819's, which
+/// deep-show's model bakes read: a tracker that answers 120 BPM whatever its record holds, an
+/// activity bake that thresholds level instead of the model's probabilities, and a visemes bake
+/// with no lead; and #502's, which deep-show's export and script read: a normalizer that rides
+/// gain to −23 LUFS, a words bake read 200 ms late, and a sidecar writer that times cues at 24 fps.
+pub const PLANTED: [&str; 21] = [
     "av_link_compares_start_only",
     "av_link_start_only",
     "sample_peak_meter",
@@ -46,6 +54,12 @@ pub const PLANTED: [&str; 15] = [
     "delay_empties_line_at_seek",
     "loudness_target_defaults_to_zero",
     "undeclared_field_reads_zero",
+    "beats_fixed_120",
+    "activity_level_threshold",
+    "visemes_no_lead",
+    "normalizer_rides_gain",
+    "words_bake_200ms_late",
+    "sidecar_times_at_24fps",
 ];
 
 static PLANTED_NOW: std::sync::Mutex<Option<&'static str>> = std::sync::Mutex::new(None);

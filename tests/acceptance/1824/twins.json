@@ -1,0 +1,15 @@
+{
+  "#1824.512f9fb8": [
+    "refetches-cached"
+  ],
+  "#1824.a44b9f7f": [
+    "uses-flipped",
+    "refetches-not-allowed",
+    "passes-not-allowed"
+  ],
+  "#1824.f985f5df": [
+    "lint-any-ref",
+    "lint-fields-optional",
+    "fetches-unlisted"
+  ]
+}

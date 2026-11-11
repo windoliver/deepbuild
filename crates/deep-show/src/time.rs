@@ -59,6 +59,9 @@ pub struct Determinism {
     pub at_times: Option<Vec<i64>>,
     /// #1897: on this machine by the GPU pixel hash, or a cross-machine record.
     pub compare: Compare,
+    /// #504: the call's own run replays the session's input track and picks; a check's run
+    /// (the verdict's) reads the saved revision alone.
+    pub session: bool,
 }
 
 /// One of this issue's calls, parsed; `None` is `bad_input`.
@@ -155,6 +158,7 @@ pub fn parse_call(name: &str, c: &Map<String, Value>) -> Option<Call> {
                 play,
                 at_times,
                 compare,
+                session: true,
             }))
         }
         _ => None,
@@ -309,6 +313,7 @@ impl Hub<'_> {
         let _ = self.inline_vectors(&mut doc);
         let _ = self.inline_occurrences(&mut doc, &[]);
         self.inline_programs(&mut doc);
+        let _ = self.column_view(&mut doc, 0);
         Ok(doc)
     }
 
@@ -380,8 +385,27 @@ impl Hub<'_> {
         }
     }
 
-    /// `time`: a literal's flicks in a document.
-    pub fn time_reply(&self, doc: &str, text: &str) -> Value {
+    /// `time`: a literal's flicks in a document. A word anchor (#502), `@line.word:text#k`,
+    /// resolves to the word marker the line's words record places.
+    pub fn time_reply(&mut self, doc: &str, text: &str) -> Value {
+        if let Ok(Time::Word { line, text: word, k, offset }) = Time::parse(text) {
+            let Some(document) = self.current(doc).map(|r| r.doc.clone()) else {
+                return refused("no_revision");
+            };
+            let markers = self.script_of(&document).map(|s| s.markers.clone()).unwrap_or_default();
+            let prefix = format!("{}.word:{word}#", line.as_str());
+            let found: Vec<i64> = markers.iter().filter(|(name, _)| name.starts_with(&prefix)).map(|(_, t)| *t).collect();
+            let at = match k {
+                Some(k) => found.get(k as usize - 1).copied(),
+                None if found.len() == 1 => Some(found[0]),
+                None => None,
+            };
+            let offset = offset.map_or(Ok(0), |o| o.resolve(&context_of(&document)));
+            return match (at, offset) {
+                (Some(t), Ok(o)) => json!({"outcome": "resolved", "t": t + o}),
+                _ => refused("time_unresolved"),
+            };
+        }
         match self.resolve_time(doc, &EvalTime::Literal(text.to_string())) {
             Ok(t) => json!({"outcome": "resolved", "t": t}),
             Err(code) => refused(code),
@@ -451,7 +475,7 @@ impl Hub<'_> {
     /// operator steps, a change (Frame clock and scheduler: never unasked). With `presented`
     /// (#501), each vsync's display time, the time it evaluates and the hash of the frame shown.
     pub fn play(&mut self, doc: &str, display_hz: u32, to: i64, presented: bool) -> Value {
-        let document = match self.current_doc(doc) {
+        let document = match self.current_doc(doc).map(|d| self.played(doc, &d)) {
             Ok(doc) => doc,
             Err(reply) => return reply,
         };
@@ -520,7 +544,8 @@ impl Hub<'_> {
     /// reached by seeking to it, each on a fresh scheduler and session, as canonical renders
     /// and node results.
     pub fn determinism(&mut self, d: &Determinism) -> Value {
-        let document = match self.current_doc(&d.doc) {
+        let current = self.current_doc(&d.doc);
+        let document = match current.map(|doc| if d.session { self.played(&d.doc, &doc) } else { doc }) {
             Ok(doc) => doc,
             Err(reply) => return reply,
         };
@@ -599,6 +624,7 @@ impl Hub<'_> {
             let (block, pictures) = self.videos_at(doc, t, seek);
             video = block;
             self.renderer.videos = pictures;
+            self.caption_at(doc, t);
         }
         let drawing =
             crate::frames::drawing_of(&sched, &session).ok_or_else(|| "no_drawing".to_string())?;
@@ -622,6 +648,7 @@ impl Hub<'_> {
         times: &[i64],
         seek: bool,
     ) -> Result<Value, String> {
+        let started = std::time::Instant::now();
         let (drawing, nodes, video) = self.evaluate(doc, view, times, seek)?;
         let (rgba, size) = if deep_canvas_scene3d::scene::has_3d(doc) {
             // A 3D writer layer: its 3D frame at the last time, its 2D items drawn over it (#1162).
@@ -633,9 +660,13 @@ impl Hub<'_> {
                 .map_err(|u| u.code.to_string())?;
             (rgba, size)
         };
+        let rendered = started.elapsed();
         let pixel_hash = self.render_hash(&rgba, size)?;
+        let hashed = started.elapsed() - rendered;
         let sha = self.put_png(rgba, size).map_err(|u| u.code.to_string())?;
-        let mut side = json!({"pixels": sha, "nodes": nodes, "pixel_hash": pixel_hash});
+        // #405: what hashing adds to the render, each in ms.
+        let timing = json!({"render_ms": rendered.as_secs_f64() * 1e3, "hash_ms": hashed.as_secs_f64() * 1e3});
+        let mut side = json!({"pixels": sha, "nodes": nodes, "pixel_hash": pixel_hash, "timing": timing});
         if !video.is_empty() {
             side["video"] = Value::Object(video);
         }

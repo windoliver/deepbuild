@@ -28,9 +28,9 @@ Two players each press at step 3 with the same seq. The piece's `first` item wri
 
 | Build | Result |
 |---|---|
-| `full` (`seal-shipped.out.json`) | logic@1, digest `ca35f4cd…`, implementation logic 1.0.0, bit, canonical, wasmtime `=49.0.2` (sandbox@1's pin). Kit PASS on every part. |
-| `full,test-logic-patch` (`seal-patch.out.json`) | Implementation 1.0.1 seals with the same digest `ca35f4cd…`. Kit PASS, including the `bit` part. |
-| `full --planted digest_covers_version` (`seal-shipped-planted.out.json`) | The reference alone seals; its digest changes to `1f097c48…`. |
+| `full` (`seal-shipped.out.json`) | logic@1, digest `1ebdcefc…`, implementation logic 1.0.0, bit, canonical, wasmtime `=49.0.2` (sandbox@1's pin). Kit PASS on every part. |
+| `full,test-logic-patch` (`seal-patch.out.json`) | Implementation 1.0.1 seals with the same digest `1ebdcefc…`. Kit PASS, including the `bit` part. |
+| `full --planted digest_covers_version` (`seal-shipped-planted.out.json`) | The reference alone seals; its digest changes to `9ac613af…`. |
 | `full,test-logic-patch --planted digest_covers_version` (`seal-patch-planted.out.json`) | Exits 2: `seal_refused`, `interface_digest`, naming logic@1 ("version differs from the reference"). |
 
 ## Criterion 4 (`#533.6d69e833`): logic before physics, and builds without physics

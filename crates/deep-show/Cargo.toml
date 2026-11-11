@@ -187,6 +187,8 @@ test-scene3d-reads-vector = []
 # Issue #200: the test canvas modules of the #200 acceptance README, the build without effects,
 # and the planted layout in which the effects module fills the op table's base steps.
 test-mark = ["dep:deep-canvas-test-modules"]
+# Issue #202: the test canvas module test.weight, an item kind of 0.20 ms of CPU.
+test-weight = ["dep:deep-canvas-test-modules"]
 # Issue #397: `test.columns`, which fills the core's `column.source@1` with `test.column.big`.
 test-column-source = ["dep:deep-canvas-test-modules"]
 test-mark-dot-9 = ["dep:deep-canvas-test-modules"]
@@ -226,9 +228,15 @@ test-export-target-in-media = []
 test-leave-out-input = []
 test-control-kind = []
 test-steps-in-effects = []
+# Issue #485: a build without scene3d and the modules that need it, effects kept; and the planted
+# layout in which the effects module declares gpu.output@1 instead of the core.
+test-leave-out-scene3d = []
+test-gpu-output-in-effects = []
 
 [dependencies]
 deep-canvas = { path = "../deep-canvas" }
+# Issue #1486: the one image service: still pictures drawn at their levels.
+deep-images = { path = "../deep-images" }
 deep-canvas-test-modules = { path = "../deep-canvas-test-modules", optional = true }
 deep-canvas-marks = { path = "../deep-canvas-marks" }
 deep-canvas-graph = { path = "../deep-canvas-graph" }

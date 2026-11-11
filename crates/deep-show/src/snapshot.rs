@@ -23,7 +23,6 @@ use vello_cpu::{
     Image, ImageSource, Pixmap, RasterizerSettings, RenderContext, RenderSettings, Resources,
 };
 
-use crate::evidence;
 
 /// Why a revision can't be drawn: the issue code and the path it names.
 #[derive(Clone, Debug, PartialEq)]
@@ -46,8 +45,11 @@ pub struct Drawn {
     /// The core's boxes, in a build without marks2d: `(rect, color)` in the document's units.
     pub boxes: Vec<([f64; 4], Rgb)>,
     pub status: Arc<StatusDrawing>,
-    /// Each image mark's asset, decoded: an asset that isn't decoded yet can't settle a frame.
+    /// Each video image mark's frame by its asset: one that isn't decoded yet can't settle a frame.
     images: BTreeMap<String, Arc<Pixmap>>,
+    /// #1486: each still image mark's request of the image service, by item, and the store it
+    /// reads; the level is the one the drawing's scale takes.
+    pictures: Arc<Pictures>,
     /// Each text's run as the text module shaped it (#387), drawn as it is when its spec is the
     /// mark's.
     runs: BTreeMap<String, Arc<Run>>,
@@ -87,6 +89,7 @@ impl Drawn {
             boxes: if marks { self.boxes.clone() } else { Vec::new() },
             status: if status { self.status.clone() } else { Arc::new(StatusDrawing::default()) },
             images: self.images.clone(),
+            pictures: self.pictures.clone(),
             runs: self.runs.clone(),
             animated: self.animated.clone(),
             view,
@@ -133,6 +136,7 @@ impl Drawn {
             boxes: self.boxes.clone(),
             status: self.status.clone(),
             images: self.images.clone(),
+            pictures: self.pictures.clone(),
             runs: self.runs.clone(),
             animated: self.animated.clone(),
             view: self.view,
@@ -144,7 +148,10 @@ impl Drawn {
         let mut out: Vec<(String, [f64; 4])> = Vec::new();
         for drawn in self.frame.layers.iter().flat_map(|l| &l.marks) {
             let b = match &drawn.mark {
-                Mark::Rect { bounds, .. } | Mark::Image { bounds, .. } => *bounds,
+                Mark::Rect { bounds, .. } => *bounds,
+                Mark::Image { bounds, turn, .. } => {
+                    deep_canvas_marks::turn::turned_box(*bounds, *turn)
+                }
                 Mark::Circle { center, r, .. } => [center[0] - r, center[1] - r, 2.0 * r, 2.0 * r],
                 Mark::Text { spec, origin, .. } => [
                     origin[0],
@@ -241,11 +248,16 @@ pub struct Renderer {
     /// #499: each video asset's frame at the time being drawn, by asset, set before a frame is
     /// prepared; an image mark of one draws it in place of a decoded picture.
     pub videos: BTreeMap<String, Arc<Pixmap>>,
+    /// #502: the caption showing at the time being drawn, set before a frame is rastered: the
+    /// caption layer, drawn over the frame's items in the frame's own units.
+    pub caption: Option<Arc<Drawn>>,
     /// What Vello CPU draws with: the scalar level and the f32 pipeline, as deep-marks-vello pins
     /// them; only #1897's cross-machine record draws at another setting, which its record names.
     pub raster_2d: (RenderSettings, RasterizerSettings),
     /// #1485: each image asset the last frame drew, decoded, so the next frame decodes only what's new.
-    kept: BTreeMap<String, Arc<Pixmap>>,
+    kept: std::collections::HashMap<deep_images::Key, Arc<Pixmap>>,
+    /// #535 AC6's planted renderer: an atlas row turns about its quad's corner.
+    corner: bool,
 }
 
 fn color(c: Rgb) -> AlphaColor<Srgb> {
@@ -263,6 +275,21 @@ fn rect_path(b: [f64; 4], radius: f64) -> BezPath {
 pub struct Batch {
     pub key: String,
     pub items: Vec<String>,
+    /// #535: an atlas's run of rows, the rows it drew.
+    pub instances: Option<usize>,
+}
+
+/// #535: the atlas an atlas set's row draws from, outside any clip: rows next to each other in
+/// stacking order that share it draw as one instanced batch.
+fn atlas_of(d: &scene::Drawn) -> Option<&str> {
+    match &d.mark {
+        Mark::Image {
+            asset,
+            tile: Some(_),
+            ..
+        } if d.clip.is_none() => Some(asset),
+        _ => None,
+    }
 }
 
 /// The item a mark draws for: its ID, without a part after `#`.
@@ -336,43 +363,15 @@ fn offset_of(template: &[&scene::Drawn], group: &[&scene::Drawn]) -> Option<[f64
         .then_some(d)
 }
 
-/// A document's decoded-image cap, bytes (Image `image@1`: at most 64 MB decoded per document).
+/// The most the levels a frame draws may hold, bytes (Image `image@1`: at most 64 MB of drawn
+/// levels per document).
 const CAP: u64 = 64 << 20;
 
-/// An asset read from the evidence store by its sha256 and decoded, premultiplied. Its header is
-/// read first, and one whose pixels pass the `remaining` bytes is refused before it is decoded.
-fn decode(evidence: &Path, asset: &str, item: &str, remaining: u64) -> Result<Arc<Pixmap>, Unfit> {
-    let path = format!("items/{item}/params/asset");
-    let Some(bytes) = evidence::read(evidence, asset) else {
-        return unfit("ref_unresolved", path);
-    };
-    let reader = || image::ImageReader::new(std::io::Cursor::new(&bytes[..])).with_guessed_format();
-    let Ok((w, h)) = reader()
-        .map_err(image::ImageError::IoError)
-        .and_then(|r| r.into_dimensions())
-    else {
-        return unfit("out_of_range", path);
-    };
-    if u64::from(w) * u64::from(h) * 4 > remaining {
-        return unfit("over_budget", path);
-    }
-    let mut limits = image::Limits::default();
-    limits.max_alloc = Some(remaining);
-    let Ok(decoded) = reader()
-        .map_err(image::ImageError::IoError)
-        .and_then(|mut r| {
-            r.limits(limits);
-            r.decode()
-        })
-    else {
-        return unfit("out_of_range", path);
-    };
-    let rgba = decoded.into_rgba8();
-    let (w, h) = rgba.dimensions();
-    let (Ok(w), Ok(h)) = (u16::try_from(w), u16::try_from(h)) else {
-        return unfit("out_of_range", path);
-    };
-    Ok(pixmap_of(rgba.into_raw(), w, h))
+/// A drawing's still pictures: each image mark's request by item, and the store they are read from.
+#[derive(Default)]
+pub struct Pictures {
+    store: Option<Arc<deep_images::Store>>,
+    keys: BTreeMap<String, deep_images::Key>,
 }
 
 /// Whether the evidence store's file for `asset` is a movie (an MP4 or MOV box at its start).
@@ -393,50 +392,107 @@ pub fn pixmap_of(rgba: Vec<u8>, w: u16, h: u16) -> Arc<Pixmap> {
     Arc::new(Pixmap::from_parts(rgba, w, h, meta))
 }
 
-/// Every image `frame` draws, decoded once each: one `kept` from the last frame isn't decoded again,
-/// and `kept` then holds this frame's.
+/// Every image `frame` draws: a video's frame by its asset, and each still picture's request of
+/// the image service, its size read from its header (refused there when it couldn't be decoded
+/// within the caps) and its level at the document's own scale made, within the levels a frame may
+/// hold.
 fn decode_all(
     frame: &scene::Frame,
     evidence: &Path,
     videos: &BTreeMap<String, Arc<Pixmap>>,
-    kept: &mut BTreeMap<String, Arc<Pixmap>>,
-) -> Result<BTreeMap<String, Arc<Pixmap>>, Unfit> {
+) -> Result<(BTreeMap<String, Arc<Pixmap>>, Arc<Pictures>), Unfit> {
     let mut images = BTreeMap::new();
+    let store = Arc::new(deep_images::Store::split(evidence));
+    let mut keys = BTreeMap::new();
+    let mut drawn = std::collections::HashSet::new();
     let mut held = 0;
-    for drawn in frame.layers.iter().flat_map(|l| &l.marks) {
-        if let Mark::Image { item, asset, .. } = &drawn.mark {
-            if let Some(frame) = videos.get(asset) {
-                images.insert(asset.clone(), frame.clone());
-            } else if is_video_file(evidence, asset) {
-                // #499: a video's frame comes from the decode worker for the time drawn; a
-                // drawing made without one leaves the item empty rather than misread.
-                continue;
-            } else if !images.contains_key(asset) {
-                let pixmap = match kept.get(asset) {
-                    Some(p) => p.clone(),
-                    None => decode(evidence, asset, item, CAP.saturating_sub(held))?,
-                };
-                held += pixmap.data_as_u8_slice().len() as u64;
-                images.insert(asset.clone(), pixmap);
-            }
+    for d in frame.layers.iter().flat_map(|l| &l.marks) {
+        let Mark::Image { item, asset, bounds, fit, crop, tile, .. } = &d.mark else {
+            continue;
+        };
+        if let Some(frame) = videos.get(asset) {
+            images.insert(asset.clone(), frame.clone());
+            continue;
         }
+        if is_video_file(evidence, asset) {
+            // #499: a video's frame comes from the decode worker for the time drawn; a drawing
+            // made without one leaves the item empty rather than misread.
+            continue;
+        }
+        let path = || format!("items/{item}/params/asset");
+        let code = |r: deep_images::Refused| match r.code {
+            "asset_missing" | "asset_mismatch" => "ref_unresolved",
+            "over_budget" => "over_budget",
+            _ => "out_of_range",
+        };
+        let Some(hash) = deep_images::hash_of(asset) else {
+            return unfit("ref_unresolved", path());
+        };
+        let size = deep_images::shared().size(&store, &hash).or_else(|r| unfit(code(r), path()))?;
+        // #1653: an atlas row shows its cell, turned by its flip bits (#535).
+        let cell = tile.as_ref().map(|t| t.rect(size).map(|r| r.map(|v| v as u32)));
+        let Some(cut) = cell.unwrap_or_else(|| deep_images::crop_px(*crop, size)) else {
+            continue;
+        };
+        let flip = tile.as_ref().map_or(0, |t| t.flip);
+        let mut key = deep_images::Key { hash, crop: cut, flip, level: 0 };
+        let to = fit.fitted(*bounds, key.shown());
+        key.level = deep_images::level_for(key.shown(), [to[2], to[3]]);
+        if drawn.insert(key) {
+            let [w, h] = deep_images::level_size(key.shown(), key.level);
+            held += u64::from(w) * u64::from(h) * 4;
+            if held > CAP {
+                return unfit("over_budget", path());
+            }
+            deep_images::shared().wait(&store, key).or_else(|r| unfit(code(r), path()))?;
+        }
+        keys.insert(item.clone(), key);
     }
-    *kept = (images.iter())
-        .filter(|(asset, _)| !videos.contains_key(*asset))
-        .map(|(asset, p)| (asset.clone(), p.clone()))
-        .collect();
-    Ok(images)
+    Ok((images, Arc::new(Pictures { store: Some(store), keys })))
+}
+
+/// The scale `at` draws at, along x and along y.
+fn scales(at: Affine) -> (f64, f64) {
+    let [a, b, c, d, ..] = at.as_coeffs();
+    (a.hypot(b), c.hypot(d))
 }
 
 impl Renderer {
+    /// `key`'s level from the image service as a pixmap, made once and kept while drawings draw
+    /// it; `None` when the service can't make it.
+    fn level(&mut self, store: &Arc<deep_images::Store>, key: deep_images::Key) -> Option<Arc<Pixmap>> {
+        if let Some(p) = self.kept.get(&key) {
+            return Some(p.clone());
+        }
+        let level = deep_images::shared().wait(store, key).ok()?;
+        let [w, h] = level.size;
+        let pixmap = pixmap_of(level.rgba.clone(), u16::try_from(w).ok()?, u16::try_from(h).ok()?);
+        self.kept.insert(key, pixmap.clone());
+        Some(pixmap)
+    }
+
+    /// Lets go of every kept pixmap of a picture `pictures` doesn't draw.
+    fn keep(&mut self, pictures: &Pictures) {
+        let drawn: std::collections::HashSet<_> =
+            pictures.keys.values().map(|k| (k.hash, k.crop)).collect();
+        self.kept.retain(|k, _| drawn.contains(&(k.hash, k.crop)));
+    }
+
     pub fn new() -> Self {
         Renderer {
             shaper: Shaper::new(),
             resources: Resources::new(),
             videos: BTreeMap::new(),
+            caption: None,
             raster_2d: (deep_marks_vello::settings(), deep_marks_vello::rasterizer()),
-            kept: BTreeMap::new(),
+            kept: std::collections::HashMap::new(),
+            corner: false,
         }
+    }
+
+    /// #535: the planted renderer that turns an atlas row about its quad's corner, when `corner`.
+    pub fn turning_about_corner(self, corner: bool) -> Self {
+        Renderer { corner, ..self }
     }
 
     /// `doc` evaluated at `t` and its draw list, with every image decoded.
@@ -464,7 +520,8 @@ impl Renderer {
             frame.size[1],
             &mut self.shaper,
         ));
-        let images = decode_all(&frame, evidence, &self.videos, &mut self.kept)?;
+        let (images, pictures) = decode_all(&frame, evidence, &self.videos)?;
+        self.keep(&pictures);
         // Each text mark's font names a role the shaper bundles.
         for drawn in frame.layers.iter().flat_map(|l| &l.marks) {
             if let Mark::Text { item, spec, .. } = &drawn.mark {
@@ -478,6 +535,7 @@ impl Renderer {
             boxes: Vec::new(),
             status,
             images,
+            pictures,
             runs: BTreeMap::new(),
             animated: BTreeMap::new(),
             view: None,
@@ -502,16 +560,20 @@ impl Renderer {
                 boxes: painted.boxes.iter().map(|b| (b.rect, b.color)).collect(),
                 status,
                 images: BTreeMap::new(),
+                pictures: Arc::default(),
                 runs: BTreeMap::new(),
                 animated: BTreeMap::new(),
                 view: None,
             });
         };
+        let (images, pictures) = decode_all(&drawing.frame, evidence, &self.videos)?;
+        self.keep(&pictures);
         Ok(Drawn {
             frame: drawing.frame.clone(),
             boxes: Vec::new(),
             status,
-            images: decode_all(&drawing.frame, evidence, &self.videos, &mut self.kept)?,
+            images,
+            pictures,
             runs: drawing.runs.clone(),
             animated: drawing.animated.clone(),
             view: None,
@@ -558,6 +620,31 @@ impl Renderer {
         let mut i = 0;
         while i < marks.len() {
             let d = marks[i];
+            if let Some(atlas) = atlas_of(d).filter(|_| key_of(d).is_none()) {
+                let mut end = i + 1;
+                while end < marks.len()
+                    && atlas_of(marks[end]) == Some(atlas)
+                    && marks[end].scopes == d.scopes
+                {
+                    end += 1;
+                }
+                ctx.set_transform(at);
+                scopes.enter(&mut ctx, &mut self.resources, &d.scopes);
+                let mut items: Vec<String> = Vec::new();
+                for m in &marks[i..end] {
+                    self.mark(&mut ctx, &m.mark, drawn, at);
+                    items.push(item_of(&m.mark).to_string());
+                }
+                items.sort_unstable();
+                items.dedup();
+                batches.push(Batch {
+                    key: format!("atlas:{atlas}"),
+                    items,
+                    instances: Some(end - i),
+                });
+                i = end;
+                continue;
+            }
             let Some((key, _)) = key_of(d) else {
                 ctx.set_transform(at);
                 scopes.enter(&mut ctx, &mut self.resources, &d.scopes);
@@ -579,6 +666,7 @@ impl Renderer {
                 batches.push(Batch {
                     key: key.clone(),
                     items,
+                    instances: None,
                 });
             }
             i = end;
@@ -780,10 +868,12 @@ impl Renderer {
                     bound: spec.bound,
                     tabular: spec.bound,
                     mask: false,
+                    spans: &spec.spans,
                 });
                 self.glyphs(ctx, &shaped, *origin, (*c, runs), at, None);
             }
             Mark::Image {
+                item,
                 asset,
                 bounds,
                 fit,
@@ -792,37 +882,66 @@ impl Renderer {
                 adjust,
                 crop,
                 tile,
-                ..
+                turn,
             } => {
-                let Some(pixmap) = drawn.images.get(asset) else {
-                    return;
-                };
-                // #1653: an atlas row shows its cell (its flip bits aren't drawn here yet).
-                let crop = match tile {
-                    Some(t) => t.rect([u32::from(pixmap.width()), u32::from(pixmap.height())]),
-                    None => *crop,
+                // #1486: a still picture draws the level the drawing's scale takes, cut as its
+                // request is; a video's frame draws whole, cut by its crop.
+                let still = drawn.pictures.keys.get(item).zip(drawn.pictures.store.as_ref());
+                let (source, shown, cut) = match (drawn.images.get(asset), still) {
+                    (Some(frame), _) => {
+                        let size = [u32::from(frame.width()), u32::from(frame.height())];
+                        // #1653: an atlas row shows its cell (its flip bits aren't drawn here yet).
+                        let crop = match tile {
+                            Some(t) => t.rect(size),
+                            None => *crop,
+                        };
+                        let [cx, cy, cw, ch] =
+                            crop.unwrap_or([0.0, 0.0, f64::from(size[0]), f64::from(size[1])]);
+                        let shown = [cw.round().max(1.0) as u32, ch.round().max(1.0) as u32];
+                        (frame.clone(), shown, [cx, cy, cw, ch])
+                    }
+                    (None, Some((key, store))) => {
+                        let to = fit.fitted(*bounds, key.shown());
+                        let (sx, sy) = scales(at);
+                        let key = deep_images::Key {
+                            level: deep_images::level_for(key.shown(), [to[2] * sx, to[3] * sy]),
+                            ..*key
+                        };
+                        let Some(pixmap) = self.level(store, key) else {
+                            return;
+                        };
+                        let size = [f64::from(pixmap.width()), f64::from(pixmap.height())];
+                        (pixmap, key.shown(), [0.0, 0.0, size[0], size[1]])
+                    }
+                    (None, None) => return,
                 };
                 // An item's adjust (#373) reaches every pixel of its image.
                 let adjusted;
                 let pixmap = if adjust.is_identity() {
-                    pixmap
+                    &source
                 } else {
-                    let size = [pixmap.width(), pixmap.height()];
-                    let straight = (**pixmap)
+                    let size = [source.width(), source.height()];
+                    let straight = (*source)
                         .clone()
                         .take_rgba8(vello_cpu::peniko::ImageAlphaType::Alpha);
                     adjusted = Arc::new(image(straight, size, 1.0, adjust));
                     &adjusted
                 };
                 // #499: a crop (image px) is the part of the picture the box shows.
-                let [cx, cy, cw, ch] = crop.unwrap_or([
-                    0.0,
-                    0.0,
-                    f64::from(pixmap.width()),
-                    f64::from(pixmap.height()),
-                ]);
-                let size = [cw.round().max(1.0) as u32, ch.round().max(1.0) as u32];
-                let [x, y, w, h] = fit.fitted(*bounds, size);
+                let [cx, cy, cw, ch] = cut;
+                let [x, y, w, h] = fit.fitted(*bounds, shown);
+                // #535: a turned image draws turned about its box's centre; the planted renderer
+                // turns an atlas row about its quad's top-left corner.
+                if *turn != 0.0 {
+                    let corner = [bounds[0], bounds[1], 0.0, 0.0];
+                    let about = if self.corner && tile.is_some() {
+                        corner
+                    } else {
+                        *bounds
+                    };
+                    let turned = deep_canvas_marks::turn::turn_of(about, *turn);
+                    ctx.set_transform(at * Affine::new(turned));
+                }
                 ctx.set_paint(Image {
                     image: ImageSource::Pixmap(pixmap.clone()),
                     sampler: ImageSampler {
@@ -844,6 +963,7 @@ impl Renderer {
                 );
                 ctx.fill_rect(&shown);
                 ctx.reset_paint_transform();
+                ctx.set_transform(at);
             }
         }
     }
@@ -889,6 +1009,7 @@ impl Renderer {
                     .glyph_run(&mut self.resources, &g.font)
                     .font_size(g.size)
                     .hint(false)
+                    .glyph_transform(deep_text::atlas::slant(g.skew))
                     .fill_glyphs(one);
             }
             ctx.set_transform(at);
@@ -904,6 +1025,7 @@ impl Renderer {
                     g.font.data.id() == first.font.data.id()
                         && g.font.index == first.font.index
                         && g.size == first.size
+                        && g.skew == first.skew
                         && paint(g) == paint(first)
                 })
                 .count();
@@ -919,8 +1041,15 @@ impl Renderer {
                 .glyph_run(&mut self.resources, &first.font)
                 .font_size(first.size)
                 .hint(false)
+                .glyph_transform(deep_text::atlas::slant(first.skew))
                 .fill_glyphs(glyphs);
             start += run;
+        }
+        // #1964: underlines and strikes over the glyphs, in their span's color.
+        for d in &shaped.decorations {
+            ctx.set_paint(color(scene::run_paint(runs, d.grapheme, None, c).1));
+            let [x, y, w, h] = d.rect.map(f64::from);
+            ctx.fill_rect(&Rect::new(x, y, x + w, y + h));
         }
         ctx.set_transform(at);
     }
@@ -1148,11 +1277,13 @@ mod tests {
             vec![
                 Batch {
                     key: "k".into(),
-                    items: ids(&["c1", "c2"])
+                    items: ids(&["c1", "c2"]),
+                    instances: None,
                 },
                 Batch {
                     key: "k".into(),
-                    items: ids(&["c4"])
+                    items: ids(&["c4"]),
+                    instances: None,
                 },
             ],
             "c1 and c2 draw as one batch; c3's taller bars draw alone; c4, past `gap`, starts another; c5 and c6's ramps keep them out"

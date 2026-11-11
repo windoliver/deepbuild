@@ -7,7 +7,6 @@
 use bytemuck::{Pod, Zeroable};
 use deep_canvas_scene3d::scene::{Affine3, Camera, Depth, Motion, Scene, Shape};
 use deep_gpu::device::Device;
-use wgpu::util::DeviceExt as _;
 
 use crate::mesh::{Mesh, FLOATS};
 
@@ -187,7 +186,7 @@ fn rows(m: &Affine3) -> [[f32; 4]; 3] {
 }
 
 fn texture(
-    d: &wgpu::Device,
+    d: &deep_gpu::counted::Wgpu,
     label: &str,
     size: [u32; 2],
     format: wgpu::TextureFormat,
@@ -276,7 +275,7 @@ fn uniform_of(
 }
 
 impl MotionPass {
-    fn pipes(&mut self, d: &wgpu::Device) -> &Pipes {
+    fn pipes(&mut self, d: &deep_gpu::counted::Wgpu) -> &Pipes {
         if self.pipes.is_none() {
             let module = d.create_shader_module(wgpu::ShaderModuleDescriptor {
                 label: Some("scene3d.motion"),

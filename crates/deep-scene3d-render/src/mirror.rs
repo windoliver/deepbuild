@@ -10,7 +10,6 @@ use deep_canvas_scene3d::mirror::Mirror;
 use deep_canvas_scene3d::scene::Scene;
 use deep_gpu::device::Device;
 use deep_gpu::encode::Job;
-use wgpu::util::DeviceExt;
 
 use crate::{Planted, Renderer, LINEAR, MIRROR_PASS, OUTPUT_PASS};
 

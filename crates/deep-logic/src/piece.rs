@@ -7,6 +7,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
+use deep_canvas::budget::Class;
 use deep_canvas_sandbox::rewrite::{self, hash, Mode, Rewritten};
 use deep_sandbox_wasmtime::service::{refusals_json, Budget, Sandbox};
 use serde_json::{json, Map, Value};
@@ -24,8 +25,8 @@ pub const PER_STEP: usize = 16;
 pub const SLOT: u32 = 8 + PER_STEP as u32 * 16;
 
 /// One field of a logic item this task doesn't build yet: refused by name, never ignored.
-const LATER: [&str; 9] = [
-    "fires", "links", "clock", "due", "preview", "pages", "parallel", "services", "mirrors",
+const LATER: [&str; 7] = [
+    "fires", "links", "preview", "pages", "parallel", "services", "mirrors",
 ];
 /// A row's own columns: no declared field can take one of these names, so a reader can name each
 /// field beside them.
@@ -101,6 +102,37 @@ impl Ty {
             Ty::Vec3 => json!([f(0), f(1), f(2)]),
             Ty::Quat => json!([f(0), f(1), f(2), f(3)]),
         }
+    }
+    /// An element as a frame draws a linear write (Logic: interpolated writes): `from` blended
+    /// toward `to` by `a`, f64 and vectors by lerp, a quat by nlerp along the shorter arc.
+    pub fn blend(self, from: &[u8], to: &[u8], a: f64) -> Value {
+        let n = (self.size() / 8) as usize;
+        let f = |b: &[u8], i: usize| {
+            f64::from_le_bytes(b[8 * i..8 * i + 8].try_into().expect("8 bytes"))
+        };
+        let (p, mut q): (Vec<f64>, Vec<f64>) = (
+            (0..n).map(|i| f(from, i)).collect(),
+            (0..n).map(|i| f(to, i)).collect(),
+        );
+        if self == Ty::Quat && p.iter().zip(&q).map(|(x, y)| x * y).sum::<f64>() < 0.0 {
+            q.iter_mut().for_each(|y| *y = -*y);
+        }
+        let mut v: Vec<f64> = p.iter().zip(&q).map(|(x, y)| x + a * (y - x)).collect();
+        if self == Ty::Quat {
+            let len = v.iter().map(|x| x * x).sum::<f64>().sqrt();
+            if len > 0.0 {
+                v.iter_mut().for_each(|x| *x /= len);
+            }
+        }
+        if self == Ty::F64 {
+            json!(v[0])
+        } else {
+            json!(v)
+        }
+    }
+    /// Whether a write of this type may blend: f64, vec2, vec3 and quat, never a bool or an i32.
+    pub fn blends(self) -> bool {
+        !matches!(self, Ty::Bool | Ty::I32)
     }
 }
 
@@ -182,6 +214,8 @@ pub struct Write {
     pub name: String,
     pub ty: Ty,
     pub count: u32,
+    /// `interpolate: linear`: drawing reads it one step late, blended (Logic: interpolated writes).
+    pub linear: bool,
 }
 
 /// A kind of occurrence an item emits (Logic: occurrences): its numeric fields in declaration
@@ -227,6 +261,10 @@ pub struct Item {
     /// The bytes as given, whose code offsets the sidecar's DWARF stands for.
     pub given: Vec<u8>,
     pub step: i64,
+    /// `clock: on_input` (Logic: turn clock): a step runs only when something asks for it.
+    pub turn: bool,
+    /// With `on_input`, the offset in the write region of the i32 `due` names.
+    pub due: Option<u32>,
     pub reads: Vec<String>,
     pub writes: Vec<Write>,
     pub layout: Layout,
@@ -251,7 +289,8 @@ pub struct Item {
 
 impl Item {
     pub fn checked(&self) -> Value {
-        json!({"program": self.program, "hash": self.hash, "layout": self.layout.to_json(), "assets_at": self.assets_at})
+        json!({"program": self.program, "hash": self.hash, "layout": self.layout.to_json(), "assets_at": self.assets_at,
+            "pipelined": crate::budget::pipelined(self)})
     }
     /// The assets as memory holds them from `assets_at`: each after a u32 of its length.
     pub fn asset_bytes(&self) -> Vec<u8> {
@@ -279,6 +318,8 @@ impl Item {
 #[derive(Clone, Debug)]
 pub struct Piece {
     pub seed: i64,
+    /// Its budget class (Budget classes): `class`, figure when it names none.
+    pub class: Class,
     pub controls: BTreeSet<String>,
     /// The sources its items' readings come from, each `reading:<source>`.
     pub sources: BTreeMap<String, Read>,
@@ -390,6 +431,8 @@ struct Declared {
     program: String,
     debug: Option<String>,
     step: i64,
+    turn: bool,
+    due: Option<String>,
     reads: Vec<String>,
     writes: Vec<Write>,
     fuel: i64,
@@ -411,36 +454,71 @@ fn emits_of(v: Option<&Value>) -> Result<Vec<Emit>, Vec<Value>> {
     let kinds = match v {
         None => return Ok(Vec::new()),
         Some(Value::Object(k)) => k,
-        Some(_) => return Err(vec![what("", "emits maps each kind to its fields and max_per_step".into())]),
+        Some(_) => {
+            return Err(vec![what(
+                "",
+                "emits maps each kind to its fields and max_per_step".into(),
+            )])
+        }
     };
     let mut out = Vec::new();
     let mut refused = Vec::new();
     if kinds.len() > 64 {
-        refused.push(what("", format!("emits declares {} kinds, past 64", kinds.len())));
+        refused.push(what(
+            "",
+            format!("emits declares {} kinds, past 64", kinds.len()),
+        ));
     }
     for (kind, e) in kinds {
-        let other = e.as_object().and_then(|o| o.keys().find(|k| !["fields", "max_per_step"].contains(&k.as_str())));
+        let other = e.as_object().and_then(|o| {
+            o.keys()
+                .find(|k| !["fields", "max_per_step"].contains(&k.as_str()))
+        });
         if let Some(k) = other {
-            refused.push(what(kind, format!("{kind}: an emitted kind has no field {k}")));
+            refused.push(what(
+                kind,
+                format!("{kind}: an emitted kind has no field {k}"),
+            ));
             continue;
         }
-        let max = e.get("max_per_step").map_or(Some(16), Value::as_u64).filter(|n| *n <= 1024);
+        let max = e
+            .get("max_per_step")
+            .map_or(Some(16), Value::as_u64)
+            .filter(|n| *n <= 1024);
         let fields: Option<Vec<(String, Ty)>> = match e.get("fields") {
             None => Some(Vec::new()),
             Some(Value::Object(f)) => f
                 .iter()
-                .map(|(n, t)| Some((n.clone(), t.as_str().and_then(Ty::named).filter(|t| *t != Ty::Quat)?)))
+                .map(|(n, t)| {
+                    Some((
+                        n.clone(),
+                        t.as_str().and_then(Ty::named).filter(|t| *t != Ty::Quat)?,
+                    ))
+                })
                 .collect(),
             Some(_) => None,
         };
         match (fields, max) {
-            (Some(f), _) if f.len() > 8 => refused.push(what(kind, format!("{kind} declares {} fields, past 8", f.len()))),
-            (Some(f), _) if f.iter().any(|(n, _)| ROW_COLUMNS.contains(&n.as_str())) => refused.push(what(
+            (Some(f), _) if f.len() > 8 => refused.push(what(
                 kind,
-                format!("{kind}: a field can't be named step, t, kind, a or b, a row's own columns"),
+                format!("{kind} declares {} fields, past 8", f.len()),
             )),
-            (Some(fields), Some(max)) => out.push(Emit { kind: kind.clone(), fields, max: max as u32 }),
-            (None, _) => refused.push(what(kind, format!("{kind}: each field is bool, i32, f64, vec2 or vec3"))),
+            (Some(f), _) if f.iter().any(|(n, _)| ROW_COLUMNS.contains(&n.as_str())) => refused
+                .push(what(
+                    kind,
+                    format!(
+                        "{kind}: a field can't be named step, t, kind, a or b, a row's own columns"
+                    ),
+                )),
+            (Some(fields), Some(max)) => out.push(Emit {
+                kind: kind.clone(),
+                fields,
+                max: max as u32,
+            }),
+            (None, _) => refused.push(what(
+                kind,
+                format!("{kind}: each field is bool, i32, f64, vec2 or vec3"),
+            )),
             (_, None) => refused.push(what(kind, format!("{kind}: max_per_step is at most 1,024"))),
         }
     }
@@ -463,6 +541,8 @@ fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared, Refused> 
             "program",
             "debug",
             "step_rate",
+            "clock",
+            "due",
             "reads",
             "writes",
             "budget",
@@ -530,10 +610,16 @@ fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared, Refused> 
             .filter(|c| *c >= 1 && *c <= u32::MAX as u64);
         let interpolate = w.get("interpolate").map_or(Some("hold"), Value::as_str);
         match (ty, count, interpolate) {
-            (Some(ty), Some(count), Some("hold" | "linear")) => writes.push(Write {
+            (Some(ty), Some(_), Some("linear")) if !ty.blends() => refused.push(refusal(
+                "write",
+                format!("{name} is a {}, which never blends: interpolate: linear is only for f64, vec2, vec3 and quat arrays", ty.name()),
+                json!({"write": name}),
+            )),
+            (Some(ty), Some(count), Some(i @ ("hold" | "linear"))) => writes.push(Write {
                 name: name.clone(),
                 ty,
                 count: count as u32,
+                linear: i == "linear",
             }),
             _ => refused.push(refusal(
                 "write",
@@ -568,6 +654,27 @@ fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared, Refused> 
     if !refused.is_empty() {
         return Err(logic_refused(id, refused));
     }
+    let turn = match params.get("clock") {
+        None => false,
+        Some(c) => match c.as_str() {
+            Some("fixed") => false,
+            Some("on_input") => true,
+            _ => return Err(bad("clock", "clock is fixed or on_input".into())),
+        },
+    };
+    let due = match params.get("due") {
+        None => None,
+        Some(v) => {
+            let name = v.as_str().unwrap_or_default();
+            let own = writes
+                .iter()
+                .any(|w| w.name == name && w.ty == Ty::I32 && w.count == 1);
+            if !turn || !own {
+                return Err(bad("due", format!("due names one of the item's own i32 arrays of count 1, with clock: on_input; {v} isn't")));
+            }
+            Some(name.to_string())
+        }
+    };
     fn get<'a>(o: Option<&'a Value>, k: &str) -> Option<&'a Value> {
         o.and_then(|b| b.get(k))
     }
@@ -617,6 +724,8 @@ fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared, Refused> 
         program,
         debug,
         step,
+        turn,
+        due,
         reads,
         writes,
         fuel,
@@ -637,7 +746,9 @@ pub fn check(piece: &Value, planted: &Planted, history: &mut History) -> Result<
         .and_then(Value::as_object)
         .cloned()
         .unwrap_or_default();
-    check_in(piece, planted, history, &|sha| B64.decode(assets.get(sha)?.as_str()?).ok())
+    check_in(piece, planted, history, &|sha| {
+        B64.decode(assets.get(sha)?.as_str()?).ok()
+    })
 }
 
 /// [`check`], each asset's bytes read by `stored` (a document's from the evidence store, #544)
@@ -650,6 +761,10 @@ pub fn check_in(
 ) -> Result<Piece, Refused> {
     let bad = || Refused(json!({"ok": false, "code": "bad_input"}));
     let seed = piece.get("seed").and_then(Value::as_i64).ok_or_else(bad)?;
+    let class = match piece.get("class") {
+        None => Class::Figure,
+        Some(c) => c.as_str().and_then(Class::parse).ok_or_else(bad)?,
+    };
     let controls: BTreeSet<String> = piece
         .get("controls")
         .and_then(Value::as_object)
@@ -962,6 +1077,15 @@ pub fn check_in(
             hash,
             given,
             step: d.step,
+            turn: d.turn,
+            due: d.due.as_ref().map(|n| {
+                layout
+                    .entries
+                    .iter()
+                    .find(|e| e.region == "writes" && &e.name == n)
+                    .expect("due names a write")
+                    .offset
+            }),
             reads: d.reads.clone(),
             writes: d.writes.clone(),
             layout,
@@ -981,6 +1105,7 @@ pub fn check_in(
     }
     Ok(Piece {
         seed,
+        class,
         controls,
         sources,
         tour: piece.get("tour").cloned(),
@@ -1158,8 +1283,13 @@ mod tests {
     /// emits_at); past any of them, or with a type or field name it can't have, it is refused.
     #[test]
     fn emits_past_its_limits_are_refused() {
-        let named = |n: usize, v: Value| Value::Object((0..n).map(|i| (format!("x{i}"), v.clone())).collect());
-        let within = [named(64, json!({})), json!({"shot": {"fields": named(8, json!("vec3")), "max_per_step": 1024}})];
+        let named = |n: usize, v: Value| {
+            Value::Object((0..n).map(|i| (format!("x{i}"), v.clone())).collect())
+        };
+        let within = [
+            named(64, json!({})),
+            json!({"shot": {"fields": named(8, json!("vec3")), "max_per_step": 1024}}),
+        ];
         let past = [
             named(65, json!({})),
             json!({"shot": {"fields": named(9, json!("f64"))}}),
@@ -1169,10 +1299,17 @@ mod tests {
             json!({"shot": {"offset": true}}),
         ];
         for emits in within {
-            assert_eq!(refusals(json!({"e": {"emits": emits}})), json!(["e", "region"]));
+            assert_eq!(
+                refusals(json!({"e": {"emits": emits}})),
+                json!(["e", "region"])
+            );
         }
         for emits in past {
-            assert_eq!(refusals(json!({"e": {"emits": emits.clone()}})), json!(["e", "emits"]), "{emits}");
+            assert_eq!(
+                refusals(json!({"e": {"emits": emits.clone()}})),
+                json!(["e", "emits"]),
+                "{emits}"
+            );
         }
     }
 
@@ -1184,5 +1321,31 @@ mod tests {
             "a": {"writes": {"x": {"type": "f64", "count": 8_388_608}}},
         });
         assert_eq!(refusals(items), json!(["b", "read"]));
+    }
+
+    #[test]
+    fn due_names_its_own_i32_of_count_1_on_a_turn_clock() {
+        let turn = |due: &str, ty: &str, count: u64, clock: &str| {
+            refusals(
+                json!({"g": {"clock": clock, "due": due, "writes": {"due": {"type": ty, "count": count}}}}),
+            )
+        };
+        assert_eq!(turn("due", "i32", 1, "on_input"), json!([]));
+        for (due, ty, count, clock) in [
+            ("due", "f64", 1, "on_input"),
+            ("due", "i32", 2, "on_input"),
+            ("nothing", "i32", 1, "on_input"),
+            ("due", "i32", 1, "fixed"),
+        ] {
+            assert_eq!(
+                turn(due, ty, count, clock),
+                json!(["g", "field"]),
+                "due {due} on a {ty} x {count}, clock {clock}"
+            );
+        }
+        assert_eq!(
+            refusals(json!({"g": {"clock": "sometimes"}})),
+            json!(["g", "field"])
+        );
     }
 }

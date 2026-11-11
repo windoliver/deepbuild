@@ -74,6 +74,11 @@
         "required": ["program", "out"]
       }
     },
+    "kinds": {
+      "$comment": "#202: kinds backed by a recipe, by <pack>.<name>@<major>; the recipe's inputs are the kind's schema.",
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/kind" }
+    },
     "layouts": {
       "type": "object",
       "additionalProperties": {
@@ -91,6 +96,75 @@
   "required": ["id", "name", "version", "license", "description"],
   "additionalProperties": false,
   "$defs": {
+    "kind": {
+      "type": "object",
+      "properties": {
+        "minor": { "type": "integer", "minimum": 0 },
+        "recipe": { "type": "string" },
+        "children": { "type": "array", "items": { "type": "string" } },
+        "capabilities": {
+          "type": "object",
+          "properties": { "pickable": { "type": "boolean" }, "snap": { "type": "boolean" } },
+          "additionalProperties": false
+        },
+        "rules": {
+          "$comment": "#202: a pack kind's rules, read by the core's kind_rules check at rest, at each of a list of times (flicks, or seconds such as 1.5s) or bounded over a sweep.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "code": { "type": "string" },
+              "expr": { "type": "string" },
+              "at": {
+                "oneOf": [
+                  {
+                    "type": "string",
+                    "enum": ["rest", "sweep"],
+                    "x-closure": {
+                      "closed": "record",
+                      "reopens_if": "a kind rule that reads its instance some other way than at rest, at times or over a sweep",
+                      "mark": "exhaustive"
+                    }
+                  },
+                  { "type": "array", "minItems": 1, "items": { "type": ["integer", "string"] } }
+                ]
+              },
+              "fix": { "type": "string" }
+            },
+            "required": ["code", "expr", "at"]
+          }
+        },
+        "twins": {
+          "$comment": "#202: the kind kit's planted twin per rule: an example by hash that must fail the rule its expect names.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": { "example": { "type": "string" }, "expect": { "type": "string" } },
+            "required": ["example", "expect"]
+          }
+        },
+        "migrate": { "$comment": "Migrations as data land with the pack versions task; the pack check refuses this field." },
+        "examples": { "type": "array", "items": { "type": "string" } },
+        "cost": {
+          "type": "object",
+          "properties": {
+            "class": { "type": "string" },
+            "at_defaults": {
+              "type": "object",
+              "properties": {
+                "cpu_ms": { "type": "number", "minimum": 0 },
+                "gpu_ms": { "type": "number", "minimum": 0 },
+                "items": { "type": "number", "minimum": 0 }
+              },
+              "required": ["cpu_ms", "gpu_ms", "items"]
+            }
+          },
+          "required": ["class", "at_defaults"]
+        }
+      },
+      "required": ["recipe", "cost"],
+      "additionalProperties": false
+    },
     "recipe": {
       "type": "object",
       "properties": {

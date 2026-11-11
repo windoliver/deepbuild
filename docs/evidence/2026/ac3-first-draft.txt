@@ -1,0 +1,53 @@
+
+ RUN  v5.0.5 <repo>/tests/acceptance/2026
+
+ ❯ replay.test.ts (2 tests | 2 failed) 39918ms
+   ❯ #2026 AC3 #2026.8e76ad64 (2)
+     × a permission request spooled while the hub was down shows in Needs you within 1 s of its replay, after 20 newer events 39543ms
+     × an app that keeps its place by event ID (reader-keeps-place-by-id) never shows the ask, and fails naming it 1ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  replay.test.ts > #2026 AC3 #2026.8e76ad64 > a permission request spooled while the hub was down shows in Needs you within 1 s of its replay, after 20 newer events
+AssertionError: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the replayed permission request of session bc5ba022-0315-4d51-a870-47734f713b5e (npm publish --tag next) raised no ask: the record holds no ask.created for it, so Needs you has nothing to show",
++ ]
+
+ ❯ replay.test.ts:116:30
+    114|   it('a permission request spooled while the hub was down shows in Nee…
+    115|     const outcome = await cleanRun();
+    116|     expect(outcome.failures).toEqual([]);
+       |                              ^
+    117|     const reading = `${outcome.ask} drawn in Needs you ${outcome.delay…
+    118|     console.log(`#2026 AC3: ${reading}`);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  replay.test.ts > #2026 AC3 #2026.8e76ad64 > an app that keeps its place by event ID (reader-keeps-place-by-id) never shows the ask, and fails naming it
+AssertionError: the clean run already fails AC3, so the plant can't be told from it: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the replayed permission request of session bc5ba022-0315-4d51-a870-47734f713b5e (npm publish --tag next) raised no ask: the record holds no ask.created for it, so Needs you has nothing to show",
++ ]
+
+ ❯ replay.test.ts:126:113
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  17:45:36
+   Duration  43.62s (tests 93%, transform 6%, import 1%)
+

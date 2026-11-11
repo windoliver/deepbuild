@@ -3,7 +3,9 @@
 //! logic item's kind, a check that refuses what only the physics module fills, and one operator
 //! in simulate that steps a document's logic items at their rates, carrying each item's memory,
 //! globals and arrays from step to step as plain data, so a seek restores a checkpoint and steps
-//! on. Its kit runs every part of the canvas kit on its own fixture.
+//! on. Its kit runs every part of the canvas kit on its own fixture. Its arrays also fill the
+//! core's `column.source@1` as `<logic>.<name>` (Mark set: logic columns; #535), so a mark set
+//! reads a logic array through the core's column view and no reading module depends on this one.
 //!
 //! A step loads the carried state into a fresh instance of the item's rewritten program; the
 //! checked piece behind it is cached per thread by the document's logic content, which a step
@@ -25,7 +27,7 @@ use deep_canvas::schedule::{canonical, sha256_hex, Canonical, OpError, Val, View
 use serde_json::{json, Map, Value};
 
 use crate::piece::{self, Piece};
-use crate::world::{track_of, Entry, Record, World};
+use crate::world::{handed, track_of, Entry, Record, World};
 use crate::Planted;
 
 /// The interface this module implements, apart from the logic item kind of that name.
@@ -149,6 +151,18 @@ fn register(r: &mut Registrar) {
                "at_times": ["0s", "1s"], "inputs": [{"step": 20, "kind": "press", "value": 1}]}),
     )
     .fixture_assets(vec![bytes]);
+    // #535: each logic item's arrays, by `<logic>.<name>`. Its fixture's changed ranges are the
+    // ones the module hands over, so the kit's clean-rebuild rule runs [`handed`] itself.
+    let frames = json!([[0, 0, 0], [0, 5, 0], [0, 5, 7]]);
+    let changed = json!([handed(&[]), handed(&[[1, 2]]), handed(&[[2, 3]])]);
+    r.entry(
+        deep_canvas::columns::REGISTRY,
+        "logic.array@1",
+        json!({"form": "<logic>.<name>", "types": ["bool", "i32", "f64", "vec2", "vec3", "quat"],
+               "fixture": {"frames": frames, "changed": changed,
+                           "seeks": [{"from": 2, "to": 1, "rows": [0, 5, 0]}]}}),
+        "R6",
+    );
 }
 
 fn logic_items(doc: &Value) -> impl Iterator<Item = (&String, &Value)> {

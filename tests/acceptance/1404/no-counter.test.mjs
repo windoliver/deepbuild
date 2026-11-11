@@ -1,7 +1,7 @@
 // #1404 acceptance, fourth criterion: a host with no counter still reads INCONCLUSIVE, as it does today.
 // These hold on the base by the issue's own words, so each is shown to fail on a named mutant instead
-// (README: Tests that hold on the base). The first two are the reading and the judge on data; the third
-// is perf on a Node wrapper with a child, on a stand-in for a /usr/bin/time that reports no counter.
+// (README: Tests that hold on the base). The first is the reading on data, and the judge on data runs
+// from tests/acceptance/1404-redraft-1405/ under #1405's rule; the last is perf on a Node wrapper with a child, on a stand-in for a /usr/bin/time that reports no counter.
 import assert from 'node:assert/strict';
 import { before, test } from 'node:test';
 import { benchmark, buildSpin, fileScope, macOnly, perfLane, reading, readsInconclusive, scratch } from './helpers.mjs';
@@ -25,17 +25,6 @@ test('a report with no counter reads as a missing count: null, never 0, beside a
   assert.equal(parseInstructions(WITH_COUNTER, 'darwin'), 914_317_498);
   assert.equal(parseInstructions(WITHOUT_COUNTER, 'darwin'), null);
   assert.equal(parseInstructions(GNU_TIME, 'linux'), null);
-});
-
-test('judgeInstructions reads a missing count INCONCLUSIVE, never PASS, and complete pairs by their counts', async () => {
-  const { judgeInstructions } = await benchmark('judgeInstructions');
-  const whole = { current: 1_000_000, base: 1_000_000 };
-  for (const pairs of [[], [{ current: null, base: null }], [whole, { current: null, base: 1_000_000 }, whole], [whole, { current: 1_000_000, base: null }]]) {
-    const judged = judgeInstructions(pairs);
-    assert.equal(judged.status, 'INCONCLUSIVE', `${JSON.stringify(pairs)} reads ${judged.status}`);
-  }
-  assert.equal(judgeInstructions([whole, whole]).status, 'PASS');
-  assert.equal(judgeInstructions([{ current: 3_000_000, base: 1_000_000 }]).status, 'FAIL');
 });
 
 const scope = fileScope();

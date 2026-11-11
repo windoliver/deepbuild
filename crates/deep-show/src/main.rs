@@ -20,6 +20,7 @@ mod evidence;
 mod export;
 mod film;
 mod film_layout;
+mod geometry_audit;
 mod film_viewer;
 mod frames;
 mod function;
@@ -36,8 +37,10 @@ mod logic;
 mod media;
 mod mixdown;
 mod modes;
+mod narration;
 mod packs;
 mod placement;
+mod played;
 #[cfg(feature = "test-accent")]
 mod planted;
 mod query;
@@ -366,6 +369,7 @@ fn query_call(c: &Map<String, Value>) -> Option<query::Query> {
             None => None,
             Some(p) => Some(p.as_str()?.to_string()),
         },
+        track: optional(c.get("track"), |t| t.as_array().cloned())?.unwrap_or_default(),
         t: match c.get("t") {
             None => 0,
             Some(t) => flicks(t.as_str()?)?,
@@ -674,6 +678,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
                     a.as_array()?.iter().map(|n| Some(n.as_str()?.to_string())).collect()
                 })?
                 .unwrap_or_default(),
+                track: optional(c.get("track"), |t| t.as_array().cloned())?,
             })));
         }
         "frames" => {
@@ -770,6 +775,18 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         "catalog" => return Some(Call::Catalog),
         "verdict" => return Some(Call::Verdict(c.get("claim")?.as_str()?.to_string())),
         "verdicts" => return Some(Call::Verdicts(c.get("claim")?.as_str()?.to_string())),
+        "answer" => {
+            return Some(Call::Answer {
+                via: acting(c)?,
+                claim: c.get("claim")?.as_str()?.to_string(),
+                requirement: c.get("requirement")?.as_str()?.to_string(),
+                yes: match c.get("answer")?.as_str()? {
+                    "yes" => true,
+                    "no" => false,
+                    _ => return None,
+                },
+            })
+        }
         "golden" => {
             return Some(Call::Golden {
                 fixture: c.get("fixture")?.as_str()?.to_string(),
@@ -983,6 +1000,13 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
     let docs = entries(input, "docs", |d| {
         Some(d.get("panel")?.as_str()?.to_string())
     })?;
+    let docs_for = entries(input, "docs", |d| match d.get("for") {
+        None => Some(None),
+        Some(f) => Some(Some(f.as_str()?.to_string())),
+    })?
+    .into_iter()
+    .filter_map(|(d, f)| Some((d, f?)))
+    .collect();
     let seeds = entries(input, "docs", |d| Some(d.get("document").cloned()))?
         .into_iter()
         .filter_map(|(id, seed)| Some((id, seed?)))
@@ -1170,7 +1194,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
     };
     let mut placement_planted = placement::Planted::default();
     // #420's wrong programs live in scene3d's and the building module's operators, #453's in the
-    // loop module's geometry.shading.
+    // loop module's geometry.shading, #535's in the data module's mapping and deep-show.
     let module_planted = input
         .get("planted")
         .and_then(Value::as_str)
@@ -1181,6 +1205,8 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 // #1732's wrong programs live in the motion module's arrangement solve.
                 || deep_canvas_motion::arrange::PLANTED.contains(p)
                 || *p == deep_canvas_motion::module::UNDECLARED_KIND_ACCEPTED
+                || deep_canvas_motion::module::PLANTED.contains(p)
+                || deep_canvas_marks::arrays::PLANTED.contains(p)
         })
         .map(str::to_string);
     // #433's wrong programs are twins of the familiar@1 pack.
@@ -1200,6 +1226,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 None
             }
             None if export_planted(p).is_some() => export_planted(p),
+            None if geometry_audit::planted(p).is_some() => geometry_audit::planted(p),
             None => Some(match p {
                 "presents_unnamed_removal" => Planted::PresentsUnnamedRemoval,
                 "diffs_items_only" => Planted::DiffsItemsOnly,
@@ -1209,6 +1236,15 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "reply_without_digest" => Planted::ReplyWithoutDigest,
                 "reads_wasm_bytes" => Planted::ReadsWasmBytes,
                 "start_on_at_first_frame" => Planted::StartOnAtFirstFrame,
+                "board_runs_program_per_frame" => Planted::BoardRunsProgramPerFrame,
+                "figure_feeds_verdict" => Planted::FigureFeedsVerdict,
+                "reload_rebuilds_every_part" => Planted::ReloadRebuildsEveryPart,
+                "sweep_poses_assemblies_at_rest" => Planted::SweepPosesAssembliesAtRest,
+                "pick_selects_item" => Planted::PickSelectsItem,
+                "variant_pick_writes_revision" => Planted::VariantPickWritesRevision,
+                "variant_export_final_choice" => Planted::VariantExportFinalChoice,
+                "readout_reads_defaults" => Planted::ReadoutReadsDefaults,
+                "plugin_code_per_frame" => Planted::PluginCodePerFrame,
                 "rebase_counts_op_targets_only" => Planted::RebaseCountsOpTargetsOnly,
                 "diffs_whole_document" => Planted::DiffsWholeDocument,
                 "one_fifo_check_queue" => Planted::OneFifoCheckQueue,
@@ -1258,9 +1294,15 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "missing_kind_inconclusive" => Planted::MissingKindInconclusive,
                 "layout_text_by_kind" => Planted::LayoutTextByKind,
                 "seeds_by_expansion_order" => Planted::SeedsByExpansionOrder,
+                "each_seeds_by_element_count" => Planted::EachSeedsByElementCount,
+                "each_face_per_triangle" => Planted::EachFacePerTriangle,
                 "reexpansion_overwrites_broken_out" => Planted::ReexpansionOverwritesBrokenOut,
                 "pack_check_skips_requires_modules" => Planted::PackCheckSkipsRequiresModules,
                 "packs_keyed_by_name" => Planted::PacksKeyedByName,
+                "counts_agent_rule_as_cover" => Planted::OwnRuleCountsAsCover,
+                "recipe_rules_twice" => Planted::RulesEvaluatedTwice,
+                "kit_tests_defaults_only" => Planted::KitDefaultsOnly,
+                "expander_hash_map_order" => Planted::ExpandsInHashOrder,
                 "checkpoint_nearest_in_distance" => Planted::CheckpointNearestInDistance,
                 "merges_in_finish_order" => Planted::MergesInFinishOrder,
                 "runs_every_node" => Planted::RunsEveryNode,
@@ -1496,6 +1538,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
         processes,
         panels,
         docs,
+        docs_for,
         record,
         runs,
         claims,
@@ -1918,7 +1961,7 @@ fn modules(set: BuildSet) -> Vec<Module> {
             deep_canvas_sandbox::module::module()
         });
     }
-    // Issue #533: the logic module, on sandbox; `test-logic-patch` seals a patch release of the
+    // Issue #533: the logic module, on sandbox, its arrays column sources (#535); `test-logic-patch` seals a patch release of the
     // shipped implementation in its place, and `test-logic-needs-physics` plants a manifest that
     // requires physics.
     if set >= BuildSet::Full {
@@ -1939,6 +1982,36 @@ fn modules(set: BuildSet) -> Vec<Module> {
     out.push(deep_canvas_test_modules::sandbox::prog());
     #[cfg(feature = "test-leave-out-effects")]
     out.retain(|m| m.manifest.name != "effects");
+    // #485: a build without scene3d, and without each module that can't seal without it.
+    #[cfg(feature = "test-leave-out-scene3d")]
+    {
+        let mut gone = vec!["scene3d".to_string()];
+        loop {
+            let more: Vec<String> = out
+                .iter()
+                .filter(|m| !gone.contains(&m.manifest.name))
+                .filter(|m| {
+                    m.manifest
+                        .depends_on
+                        .iter()
+                        .any(|(n, d)| !d.optional && gone.contains(n))
+                })
+                .map(|m| m.manifest.name.clone())
+                .collect();
+            if more.is_empty() {
+                break;
+            }
+            gone.extend(more);
+        }
+        out.retain(|m| !gone.contains(&m.manifest.name));
+    }
+    // #485's planted layout: effects declares gpu.output@1, which the core then leaves to it.
+    #[cfg(feature = "test-gpu-output-in-effects")]
+    for m in &mut out {
+        if m.manifest.name == "effects" {
+            *m = test_registries::effects_declaring_outputs();
+        }
+    }
     // #501's planted layout: media declares export.target@1, which the core then leaves to it.
     #[cfg(feature = "test-export-target-in-media")]
     for m in &mut out {
@@ -2335,6 +2408,9 @@ fn seal(planted: Option<StartPlanted>, costs: Coefficients) -> Result<Startup, B
     }
     if cfg!(feature = "test-export-target-in-media") {
         registry = registry.plant(Fault::ExportTargetInMedia);
+    }
+    if cfg!(feature = "test-gpu-output-in-effects") {
+        registry = registry.plant(Fault::GpuOutputInEffects);
     }
     // #412: the fixture ring keeps the bare name the issue gives it (`ring@1`, `ring@2`).
     if cfg!(any(feature = "test-ring-a", feature = "test-ring-b")) {
