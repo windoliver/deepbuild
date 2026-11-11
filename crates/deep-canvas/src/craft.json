@@ -11,7 +11,7 @@
     {
       "name": "camera_grammar",
       "defaults": {"push_run_max": 2, "accents_max": 0.33, "neighbours": "differ", "cut_change": {"angle_min": 30, "size_min": 1.4}, "line": null},
-      "description": "Each shot's move is read from its camera's evaluated poses, never from its label: a change in distance or view width over 10% is a push or a pull, an aim turn over 5° a pan, an azimuth sweep over 10° about its kept items an orbit, and less a hold; a move whose camera covers 90% of its path within 0.5 s is an accent. No more than push_run_max pushes in a row, at most accents_max of the shots are accents, and neighbouring shots never share both framing and move. Across a cut between shots that keep a common item, the direction from the camera to that item turns at least angle_min or its framed height changes at least size_min times, or the cut fails as a jump cut naming both shots. With line, every shot's camera stays on the side of the vertical plane through the two items that the first shot takes, or the shot that crosses it fails.",
+      "description": "Each shot's move is read from its camera's evaluated poses, never from its label; a change in distance or view width over 10% is a push or a pull, an aim turn over 5° a pan, an azimuth sweep over 10° about its kept items an orbit, and less a hold; a move whose camera covers 90% of its path within 0.5 s is an accent. No more than push_run_max pushes in a row, at most accents_max of the shots are accents, and neighbouring shots never share both framing and move. Across a cut between shots that keep a common item, the direction from the camera to that item turns at least angle_min or its framed height changes at least size_min times, or the cut fails as a jump cut naming both shots. With line, every shot's camera stays on the side of the vertical plane through the two items that the first shot takes, or the shot that crosses it fails.",
       "threshold": "push_run_max 2; accents_max 0.33 of the shots; neighbours differ; cut_change angle_min 30°, size_min 1.4 times",
       "fix": "Change the named shot's camera move; across a jump cut, turn the camera at least 30° about the shared item or change its framed height at least 1.4 times; keep every camera on the line's first side."
     },
@@ -76,7 +76,7 @@
       "defaults": {"min_differ": 4, "fixtures": []},
       "description": "The film differs from its nearest example (an explain@1 example, or a fixture film the brief names in fixtures) on at least min_differ of six measures: its shot kinds by edit distance, its first shot's kind and look, its signature transition, its camera moves, its tempo map's section shape and its last shot. It compares structure only.",
       "threshold": "min_differ 4 of 6 measures",
-      "fix": "Change what the film shares with the example: its opening, its moves, its transitions, its sections or its ending."
+      "fix": "Change the opening, the moves, the transitions, the sections or the ending the film shares with the example."
     },
     {
       "name": "silences",
