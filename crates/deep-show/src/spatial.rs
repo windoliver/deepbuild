@@ -4,6 +4,8 @@
 //! its mark sets' rows as they draw at t, each `<set>#<key>` with its box, each set's bounds their
 //! union, so a row that doesn't draw is in neither.
 
+use deep_canvas_marks::atlas::AtlasCell;
+use deep_canvas_marks::scene::Mark;
 use deep_canvas_scene3d::spatial::{Index, Plants, Query};
 use serde_json::{json, Map, Value};
 
@@ -69,8 +71,13 @@ impl Hub<'_> {
 impl Hub<'_> {
     /// #535: each mark set row `doc` draws at `t`, `<set>#<key>` with its box in page u, in draw
     /// order, from a fresh session's frame. The planted set keeps its dead rows: its boxes come
-    /// from the document with every set's `alive` left out.
-    pub(crate) fn row_boxes(&mut self, doc: &Value, t: i64) -> Vec<(String, [f64; 4])> {
+    /// from the document with every set's `alive` left out. #536: a hex grid row also gives its
+    /// hexagon, `{points, owns}` in page u, its hit area.
+    pub(crate) fn row_boxes(
+        &mut self,
+        doc: &Value,
+        t: i64,
+    ) -> Vec<(String, [f64; 4], Option<Value>)> {
         let mut doc = doc.clone();
         if self.scenario.module_planted.as_deref() == Some("dead_rows_hidden_from_drawing_only") {
             for item in doc["items"]
@@ -105,7 +112,23 @@ impl Hub<'_> {
                     .split_once('#')
                     .is_some_and(|(set, _)| sets.iter().any(|s| s == set))
             })
-            .map(|d| (d.mark.item().to_string(), d.extent()))
+            .map(|d| {
+                let hull = match &d.mark {
+                    Mark::Image {
+                        bounds: [x, y, w, h],
+                        tile:
+                            Some(AtlasCell {
+                                hit: Some(area), ..
+                            }),
+                        ..
+                    } => Some(json!({
+                        "points": area.outline().map(|[u, v]| [x + u * w, y + v * h]),
+                        "owns": area.owns,
+                    })),
+                    _ => None,
+                };
+                (d.mark.item().to_string(), d.extent(), hull)
+            })
             .collect()
     }
 
@@ -114,7 +137,7 @@ impl Hub<'_> {
     fn spatial_2d(&mut self, doc: &Value, t: i64, queries: &[Query]) -> Value {
         let rows = self.row_boxes(doc, t);
         let mut items = Map::new();
-        for (row, [x, y, w, h]) in &rows {
+        for (row, [x, y, w, h], _) in &rows {
             let set = row.split('#').next().unwrap_or_default();
             let b = items
                 .entry(set.to_string())
@@ -141,10 +164,10 @@ impl Hub<'_> {
             .map(|q| match q {
                 Query::Box(a) => json!(rows
                     .iter()
-                    .filter(|(_, [x, y, w, h])| {
+                    .filter(|(_, [x, y, w, h], _)| {
                         *x <= a.max[0] && x + w >= a.min[0] && *y <= a.max[1] && y + h >= a.min[1]
                     })
-                    .map(|(row, _)| row)
+                    .map(|(row, ..)| row)
                     .collect::<Vec<_>>()),
                 _ => json!([]),
             })
