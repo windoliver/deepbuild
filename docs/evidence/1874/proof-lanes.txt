@@ -21,3 +21,18 @@ PASS before: no tagged test to run on the merge base
 PASS trace: Part of #1874; open: #1874.31be6d55, #1874.5b585ee4, #1874.e31e7828, #1874.cbb20ab2
 proof: wall time 4085.6 s
 exit 1
+
+## Run 3, on b131cc7e1 (the PR head), 876 s at a load of 70 to 150: node scripts/proof.mjs before trace
+
+PASS before: tests/acceptance/1874/window.test.mjs › #1874.31be6d55 a commit naming an issue whose unticked budget criterion no task names leaves that issue open, and its record names the criterion as unmeasured: failed on the merge base at its assertion
+PASS before: tests/acceptance/1874/window.test.mjs › #1874.5b585ee4 a commit naming an issue whose only unticked criterion says "in the local preflight", and which no task names, leaves the issue open: failed on the merge base at its assertion
+PASS before: tests/acceptance/1874/window.test.mjs › #1874.e31e7828 a commit naming an issue with no `### Acceptance criteria` section closes nothing: failed on the merge base at its assertion
+PASS before: tests/acceptance/1874/window.test.mjs › #1874.cbb20ab2 a commit whose issue's budget criteria are each named by a task that passed, with every other criterion ticked, closes the issue: failed on never-closes at its assertion
+PASS trace: Part of #1874: each of its 4 criteria has a tagged test that ran, passed and failed on a wrong program
+proof: wall time 876.0 s
+exit 0
+
+## The guard on b131cc7e1: node scripts/proof.mjs guard
+
+FAIL guard: scripts/benchmark.mjs: the proof lanes' own code changed (commit e6115e717b6f)
+FAIL guard: scripts/budget-window.mjs: the proof lanes' own code changed (commit e6115e717b6f)
