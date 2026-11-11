@@ -24,6 +24,7 @@ import { Forge, parsePrUrl } from './forge.js';
 
 
 import { LogReads } from './log-reads.js';
+import type { Libraries } from './libraries.js';
 
 import { copySynced, synced, type Durable } from './vfs.js';
 import { refuse, Refused, refusal, ulid, type CoreOptions } from './wire.js';
@@ -40,6 +41,7 @@ readonly claudeSettings: ClaudeSettings;
 readonly log: LogReads;
 readonly now: () => number;
 readonly durable: Durable;
+readonly libraries: Libraries | undefined;
  };
  events: Pick<HubEvents, "appendCore" | "append" | "connection">;
 kernel: Pick<HubRuntime, "blocked" | "jobs">;
@@ -112,7 +114,7 @@ export class HubReadings {
     // reads a watch-only session's unverified events too, or its own SessionEnd would leave it open here for good.
     const sessions = ((await this.options.services.record.raw(`SELECT s.id, COALESCE((SELECT e.kind <> 'session.start' FROM events e WHERE e.session_id = s.id AND e.kind IN ('session.start', 'session.end', 'session.archived') ORDER BY e.log_pos DESC LIMIT 1), 0) AS closed
       FROM sessions s WHERE s.last_seen IS NOT NULL ORDER BY s.last_seen DESC LIMIT 100`)) as { id: string; closed: number }[]).map((s) => ({ id: s.id, closed: s.closed === 1 }));
-    return { gates: { watch_only: this.options.kernel.blocked !== undefined, reason: this.options.kernel.blocked ?? null }, notifications: this.notifications, secrets: await this.secretStore(), network, claude, codex, sessions, jobs: Object.fromEntries([...this.options.kernel.jobs].map(([name, failing]) => [name, { failing }])) };
+    return { gates: { watch_only: this.options.kernel.blocked !== undefined, reason: this.options.kernel.blocked ?? null }, notifications: this.notifications, secrets: await this.secretStore(), network, claude, codex, sessions, jobs: Object.fromEntries([...this.options.kernel.jobs].map(([name, failing]) => [name, { failing }])), packs: await this.options.services.libraries?.packs.shipped() ?? [] };
   }
 
   /** Whether this process can reach the OS secret store, read at most every ten seconds. */

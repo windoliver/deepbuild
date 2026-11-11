@@ -108,6 +108,16 @@ export async function exportCommand(args: readonly string[]): Promise<number> {
     rmSync(evidence, { recursive: true, force: true });
   }
 }
+/**
+ * The pack check of each pack folder (#306), run by the hub's own canvas core in a world that holds only those packs:
+ * the store's row per version, `{pack, version, state, checks, issues}`, as its `packs` call answers.
+ */
+export async function checkPacks(canvas: Canvas, packs: { id: string; dir: string }[]): Promise<Obj[]> {
+  const { reply } = await canvas.call({ sessions: [], record: {}, file: { packs }, docs: [] }, { call: 'packs' });
+  if (!Array.isArray(reply.packs)) throw Error(`the canvas core gave no pack rows: ${JSON.stringify(reply).slice(0, 300)}`);
+  return reply.packs as Obj[];
+}
+
 /** Still rendering is shared; only the hub supplies installed packs and checked asset bytes. */
 export async function renderStill(document: unknown, still: string, evidence: string, packs: { id: string; dir: string }[] = []): Promise<Obj> {
   const canvas = new Canvas(evidence);

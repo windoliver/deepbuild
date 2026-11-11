@@ -182,6 +182,8 @@ impl Hub<'_> {
                 software: false,
                 readback: false,
                 track: Vec::new(),
+                captions: Default::default(),
+                loudness_profile: None,
             };
             let reply = self.export_run(&job);
             let _ = std::fs::remove_dir_all(&out);

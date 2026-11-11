@@ -18,6 +18,7 @@
 
 use serde_json::{json, Map, Value};
 
+use crate::area::{held, within, Area};
 use crate::camera::{Offsets, Pivot, Pose, Projector, Refused, Rig, Spec};
 use crate::document::member;
 use crate::kinds::with_defaults;
@@ -277,6 +278,8 @@ struct Target {
     parent: Option<String>,
     order: String,
     bounds: Bounds,
+    /// #536: a flat target's exact hit area inside its rect, which the host may hand in.
+    area: Area,
 }
 
 /// What a press landed on.
@@ -329,10 +332,6 @@ pub struct Scope {
 
 fn distance(a: [f64; 2], b: [f64; 2]) -> f64 {
     crate::ops::hypot(a[0] - b[0], a[1] - b[1])
-}
-
-fn within(r: [f64; 4], p: [f64; 2]) -> bool {
-    p[0] >= r[0] && p[1] >= r[1] && p[0] <= r[0] + r[2] && p[1] <= r[1] + r[3]
 }
 
 /// Three numbers of `value`, or `None`.
@@ -413,6 +412,7 @@ fn targets(doc: &Value, flat: bool) -> Vec<Target> {
                 parent: text("parent"),
                 order: text("order").unwrap_or_default(),
                 bounds,
+                area: crate::area::read(params.filter(|_| flat)),
             })
         })
         .collect();
@@ -856,7 +856,7 @@ impl Scope {
             return all
                 .into_iter()
                 .rev()
-                .find(|t| matches!(t.bounds, Bounds::Rect(r) if within(r, c)))
+                .find(|t| matches!(t.bounds, Bounds::Rect(r) if within(r, c) && held(&t.area, c)))
                 .map_or(Hit::Empty, |t| Hit::Item(t.id));
         }
         let r = self.rect();

@@ -2,7 +2,7 @@
 
 ## What it is for
 
-physics.world@1's backend (issue #2009): Rapier 0.36.1, pinned with enhanced-determinism and serde-serialize and without simd8 or parallel, behind `deep-canvas-physics`'s backend interface. A world is built in canonical order into one `PhysicsWorld` and stepped once a step, the world's substeps being Rapier's solver iterations. A deep checkpoint is that world's own bytes, stamped with the backend and version that wrote them, and restore refuses another version's, naming both. The `deep-physics` binary runs worlds over JSON lines for the acceptance tests. Issue #2010 adds what the build resolved (`build.rs`), keyed bakes kept in a store, playback, goldens and the floating-point control register's guard (`src/fp.rs`).
+physics.world@1's backend (issue #2009): Rapier 0.36.1, pinned with enhanced-determinism and serde-serialize and without simd8 or parallel, behind `deep-canvas-physics`'s backend interface. A world is built in canonical order into one `PhysicsWorld` and stepped once a step, the world's substeps being Rapier's solver iterations. A deep checkpoint is that world's own bytes, stamped with the backend and version that wrote them, and restore refuses another version's, naming both. The `deep-physics` binary runs worlds over JSON lines for the acceptance tests. Issue #2010 adds what the build resolved (`build.rs`), keyed bakes kept in a store, playback, goldens and the floating-point control register's guard (`src/fp.rs`). Issue #2011 adds convex, mesh and compound colliders, sensor entries and exits read from the narrow phase's intersection pairs, the narrow-phase tests each pair of shape uses ran in a step, and the runner's `pairs`, `time`, `time_build` and `time_end` calls, which `scripts/physics-budget.mjs` uses to hold `budget.step_p95` natively and in headless Chrome.
 
 ## Where new code goes
 
@@ -16,7 +16,7 @@ physics.world@1's backend (issue #2009): Rapier 0.36.1, pinned with enhanced-det
   `snapshot_roundtrip`) are this crate's `tests/`, upstream's files unchanged below a license header, so they build
   against this crate's pinned rapier3d (issue #2012). Their `#![cfg(feature = …)]` reads this crate's default
   `serde-serialize` and `enhanced-determinism` features, which forward to rapier3d's; never edit their bodies.
-- The acceptance tests are in `tests/acceptance/2009` and `tests/acceptance/2010`; `scripts/physics-build.mjs` refuses a build with a feature or flag that changes results.
+- The acceptance tests are in `tests/acceptance/2009`, `2010` and `2011`; `scripts/physics-build.mjs` refuses a build with a feature or flag that changes results; `scripts/physics-budget.mjs` times release builds of this crate on each host.
 
 ## What it may import
 

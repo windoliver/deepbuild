@@ -58,7 +58,7 @@ export class HubCanvas {
 
   /** The world the canvas core reads: the hub's live sessions, the record's asks and readings, and the world file. */
   private async canvasWorld(): Promise<CanvasWorld> {
-    const file = { ...this.worldFile.read(), packs: this.options.libraries()?.packs.all() ?? [] };
+    const file = { ...this.worldFile.read(), packs: await this.options.libraries()?.packs.installed(this.canvas()) ?? [] };
     const sessions = [...this.options.sessions().values()].filter((s) => !s.ended).map((s) => ({ id: s.id, thread: s.thread, name: nameOf(file, s.id, s.agent) }));
     const record: Obj = {};
     const asks = (await this.options.record().raw('SELECT id, session_id, status FROM asks')) as { id: string; session_id: string | null; status: string }[];
@@ -293,7 +293,7 @@ export class HubCanvas {
   private async preparePackAssets(document: Obj): Promise<Obj | undefined> {
     const libraries = this.options.libraries();
     if (!libraries) return { status: 'BLOCKED', outcome: 'refused', cause: 'The asset host is not ready.', snapshots: [] };
-    for (const pack of Array.isArray(document.packs) ? document.packs : []) if (typeof pack !== 'string' || !libraries.packs.get(pack)) {
+    for (const pack of Array.isArray(document.packs) ? document.packs : []) if (typeof pack !== 'string' || !(await libraries.packs.has(pack, this.canvas()))) {
       return { status: 'BLOCKED', outcome: 'refused', cause: `pack_missing: ${String(pack)}`, snapshots: [] };
     }
     for (const { pack, asset } of libraries.packs.used(document)) {
