@@ -445,6 +445,8 @@ timed.push('tests/acceptance/154/budgets.test.ts');
 alone.push('tests/acceptance/154-redraft/', 'tests/acceptance/154-oracle-redraft/');
 timed.push('tests/acceptance/154-redraft/budgets.test.ts');
 byHand.push('tests/acceptance/154/stems.test.ts');
+// #1862's suite starts a hub of its own with a fake reviewer, as #1537's does.
+alone.push('tests/acceptance/1862/');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
