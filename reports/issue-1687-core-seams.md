@@ -1,6 +1,10 @@
 # #1687 — one-PR extraction, proof and open gates
 
-**Part of #1687. Status: BLOCKED for closure.** The owner requested one PR for the
+> The person's final instruction is best-effort administrative tracker closure,
+> not acceptance PASS. See `issue-1687-best-effort-close.md`. The validation limits
+> and historical status below are retained unchanged; PR #2236 stays draft.
+
+**Implementation for #1687. Verification status: BLOCKED/INCONCLUSIVE.** The owner requested one PR for the
 whole issue, overriding the earlier seam-per-PR packaging. No acceptance criterion
 was waived. Original base: `c52f1c66d22886c336189d41237265e82843c34a`.
 
