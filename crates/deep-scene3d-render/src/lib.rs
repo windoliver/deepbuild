@@ -27,6 +27,7 @@ pub mod shadow;
 pub mod sss;
 pub mod status;
 pub mod surface;
+mod sway;
 pub mod targets;
 pub mod water;
 
@@ -1974,6 +1975,8 @@ pub struct Renderer {
     /// Whether a mask-alpha part casts this frame: its sets draw into shadow maps only then.
     mask_casts: bool,
     meshes: BTreeMap<Shape, Mesh>,
+    /// The swaying meshes' rest vertices, weights and params (#2016).
+    sways: sway::Sways,
     batches: BTreeMap<String, Batch>,
     atlas: AtlasTexture,
     picks: BTreeMap<String, u32>,
@@ -3424,6 +3427,7 @@ impl Renderer {
                 RESOLVE_PASS,
             ],
             meshes: BTreeMap::new(),
+            sways: sway::Sways::default(),
             motion: motion::MotionPass::default(),
             motion_frame: None,
             core: targets::Core::default(),
@@ -4359,10 +4363,20 @@ impl Renderer {
         }
     }
 
-    /// Uploads a builder's mesh the first time a batch draws one of its hash (#420).
+    /// Uploads a builder's mesh the first time a batch draws one of its hash (#420); a swaying
+    /// one's vertices the sway pass writes at every frame (#2016).
     fn built_mesh(&mut self, device: &Device, shape: Shape, m: &deep_canvas_scene3d::geom::Mesh) {
         if let std::collections::btree_map::Entry::Vacant(e) = self.meshes.entry(shape) {
-            e.insert(Mesh::of(device, m));
+            let mesh = match &m.sway {
+                Some(_) => {
+                    let v = mesh::vertices(m);
+                    let mesh = Mesh::swaying(device, &v, &m.indices);
+                    self.sways.add(device, shape, m, &v, &mesh.vertices);
+                    mesh
+                }
+                None => Mesh::of(device, m),
+            };
+            e.insert(mesh);
             self.counts.meshes_built += 1;
         }
     }
@@ -4613,6 +4627,7 @@ impl Renderer {
         for layer in &scene.layers {
             self.prepare_batch(device, layer, &scene.camera);
         }
+        self.sways.move_all(device, scene);
         if !self.adjusts.is_empty() {
             deep_gpu::alloc::outside(|| {
                 device.queue.write_buffer(
@@ -5105,6 +5120,7 @@ impl Renderer {
             for layer in &scene.layers {
                 self.prepare_batch(device, layer, &scene.camera);
             }
+            self.sways.move_all(device, scene);
             self.update_culls(device);
             return;
         }
@@ -5139,6 +5155,7 @@ impl Renderer {
         }
         self.counts.instances_written += written;
         self.counts.replayed += scene.layers.len() as u32;
+        self.sways.move_all(device, scene);
         self.update_culls(device);
     }
 
@@ -6116,7 +6133,7 @@ impl Renderer {
             // or the items' shape's (#1637).
             if set.count == 0 {
                 set.bounds = s.mesh.as_ref().map_or([[-0.5; 3], [0.5; 3]], |m| {
-                    let b = m.bounds();
+                    let b = m.reach();
                     [b[0].map(f64::from), b[1].map(f64::from)]
                 });
             }
@@ -6639,6 +6656,32 @@ impl Renderer {
             })
             .collect();
         self.ao.frame(&self.frame_bind, solids)
+    }
+
+    /// What the GPU drew for `solid` in the frame just drawn (#2016): the gust its sway used,
+    /// with one, and each vertex of the mesh it draws from, through its model, in world m.
+    pub fn read_sway(
+        &self,
+        device: &Device,
+        solid: &Solid,
+    ) -> Option<(Option<f32>, Vec<[f64; 3]>)> {
+        let mesh = self.meshes.get(&solid.shape)?;
+        let size = mesh.vertices.size();
+        let bytes = read_back(device, "scene3d drawn vertices", size, |e, staging| {
+            e.copy_buffer_to_buffer(&mesh.vertices, 0, staging, 0, size)
+        })?;
+        let m = &solid.model;
+        let positions = bytemuck::cast_slice::<u8, f32>(&bytes)
+            .chunks_exact(mesh::FLOATS)
+            .map(|v| {
+                let p = [v[0], v[1], v[2]].map(f64::from);
+                [0, 1, 2].map(|r| m[r][0] * p[0] + m[r][1] * p[1] + m[r][2] * p[2] + m[r][3])
+            })
+            .collect();
+        let gust = solid
+            .sway
+            .and_then(|_| self.sways.gust(device, solid.shape));
+        Some((gust, positions))
     }
 
     /// Every culled list as its cull last wrote it, read once the frame has drawn (#484). Nothing

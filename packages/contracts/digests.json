@@ -202,6 +202,7 @@
   "run.started@1": "d1:d3097ade23c41589185dca5b4565f1f081b7636922d9438577f118d794f06af6",
   "run.started@2": "d1:36ed1003b71671adecfdd452f7a0161ed2dc10f70027469651f611d501e08434",
   "run.started@3": "d1:47ba2ce805d6db5aaa56c92f85649eda28e1edac6bd1f9463e75c7e563aa64b5",
+  "run.stopped_at_limit@1": "d1:9ad09b6998d5f4407a0ebdd4eec753b9bd3c208c1f7a7c11a1aac2bed0d8ea52",
   "run.under_load@1": "d1:97f71798739af2d17c31f34f7c1f6ab5b355dc70a8ed0030393febcdc81dde2b",
   "runner.answered@1": "d1:8c197fe582fb97eb42400869fe8400b0a5133fa4f5566cb0ede00ecef0bf76c4",
   "sandbox.denied@1": "d1:8978d33ab675b5b30a00ea775c9352e4c7ca9fd6a58375f86895f2aefe004658",
