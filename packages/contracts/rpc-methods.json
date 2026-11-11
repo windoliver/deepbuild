@@ -231,7 +231,8 @@
     "method": "pack.rule",
     "since": "R6",
     "stability": "preview",
-    "tracking": "#1820"
+    "tracking": "#1820",
+    "called_by": "deep pack rule"
   },
   {
     "method": "canvas.export",
