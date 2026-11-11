@@ -441,7 +441,21 @@ pub enum Kind {
     FollowTip { item: String, offset: [f64; 2], rotate: bool },
     Distance { target: String, min: f64, max: f64 },
     SpringChain { bones: Vec<String>, hz: f64, damping_ratio: f64, max_swing: f64 },
-    RestOn { ground: f64, bottom: f64, offset: f64, max_drop: f64 },
+    /// With `on` (#2013: an item, a collection or `ground`) the owner rests on true shapes, which
+    /// the module that holds them solves at check; without it, on the plane `ground`, here.
+    RestOn { ground: f64, bottom: f64, offset: f64, max_drop: f64, on: Option<RestOn> },
+}
+
+/// What a `rest_on` that names `on` rests its owner on, and how (Constraint: rest_on).
+#[derive(Clone, Debug, PartialEq)]
+pub struct RestOn {
+    pub on: String,
+    /// The unit direction the owner moves along.
+    pub axis: [f64; 3],
+    /// `align: normal`: the owner tilts to the surface it meets.
+    pub align: bool,
+    /// `contact: bounds`: each side's bounds meet, in place of their true shapes.
+    pub bounds: bool,
 }
 
 /// One constraint on an owner item, applied by its influence after the owner's channels and
@@ -481,6 +495,7 @@ impl Kind {
                 chain.iter().chain([target]).map(String::as_str).collect()
             }
             Kind::SpringChain { bones, .. } => bones.iter().map(String::as_str).collect(),
+            Kind::RestOn { on: Some(r), .. } if r.on != "ground" => vec![r.on.as_str()],
             Kind::FollowPath { .. } | Kind::RestOn { .. } => Vec::new(),
         }
     }
@@ -1451,6 +1466,38 @@ fn pair(v: Option<&Value>, path: &str) -> Result<[f64; 2], Refused> {
     }
 }
 
+/// A `rest_on`'s `on`, `axis`, `align` and `contact` (#2013): the axis as a unit direction.
+fn rest_on_of(c: &Map<String, Value>, path: &str) -> Result<RestOn, Refused> {
+    let on = id_of(c, "on", path)?;
+    let axis = match c.get("axis") {
+        None => [0.0, -1.0, 0.0],
+        Some(Value::Array(a)) if a.len() == 3 => {
+            let mut v = [0.0; 3];
+            for (k, x) in a.iter().enumerate() {
+                v[k] = number(Some(x), &format!("{path}/axis/{k}"))?;
+            }
+            let len = deep_canvas::ops::sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
+            if len < 1e-9 {
+                return refuse("out_of_range", format!("{path}/axis"));
+            }
+            v.map(|x| x / len)
+        }
+        Some(_) => return refuse("bad_doc", format!("{path}/axis")),
+    };
+    let one_of = |k: &str, off: &str, on: &str| match c.get(k).map(Value::as_str) {
+        None => Ok(false),
+        Some(Some(v)) if v == off => Ok(false),
+        Some(Some(v)) if v == on => Ok(true),
+        Some(_) => refuse("bad_doc", format!("{path}/{k}")),
+    };
+    Ok(RestOn {
+        on,
+        axis,
+        align: one_of("align", "none", "normal")?,
+        bounds: one_of("contact", "true_shape", "bounds")?,
+    })
+}
+
 /// A constraint of any kind but `limit`. `follow_stream` is the data module's, which this build
 /// may lack; every other kind motion doesn't fill is refused as unknown.
 fn constraint_of(id: &str, c: &Map<String, Value>) -> Result<Constraint, Refused> {
@@ -1542,6 +1589,10 @@ fn constraint_of(id: &str, c: &Map<String, Value>) -> Result<Constraint, Refused
             bottom: num_or("bottom", 0.0)?,
             offset: num_or("offset", 0.0)?,
             max_drop: num_or("max_drop", 10.0)?,
+            on: match c.get("on") {
+                None => None,
+                Some(_) => Some(rest_on_of(c, &path)?),
+            },
         },
         Some("follow_stream") => return refuse("module_missing", at("kind")),
         _ => return refuse("unknown_kind", at("kind")),
@@ -2085,7 +2136,7 @@ fn extend_of(value: Option<&Value>, path: &str) -> Result<Extend, Refused> {
 
 /// The frame rate the time literals resolve against: `transport.frame_rate` as `p/q` text or a
 /// `[p, q]` pair, 60/1 when absent.
-fn frame_rate_of(transport: Option<&Map<String, Value>>) -> Result<(u32, u32), Refused> {
+pub(crate) fn frame_rate_of(transport: Option<&Map<String, Value>>) -> Result<(u32, u32), Refused> {
     let Some(t) = transport.filter(|t| t.contains_key("frame_rate")) else {
         return Ok((60, 1));
     };
@@ -2501,7 +2552,7 @@ pub(crate) const MARKER_KINDS: [&str; 9] = ["cue", "shot", "section", "stage", "
 /// waits for it, so a relative time keeps its offset when its marker moves. One that never
 /// resolves, through a cycle or a missing marker, is refused, naming it. A `first` marker (#491)
 /// is solved later, from the channels, and comes back unsolved.
-fn markers_of(doc: &Map<String, Value>, ctx: &mut Ctx) -> Result<(Vec<Marker>, Vec<First>), Refused> {
+pub(crate) fn markers_of(doc: &Map<String, Value>, ctx: &mut Ctx) -> Result<(Vec<Marker>, Vec<First>), Refused> {
     let mut pending = Vec::new();
     let mut firsts = Vec::new();
     for (id, m) in section(doc, "markers")? {
