@@ -1496,6 +1496,13 @@ impl<'a> Hub<'a> {
                 }
                 if let Some(params) = item.get_mut("params").and_then(Value::as_object_mut) {
                     params.insert("outline".into(), outline);
+                    // #220: a typeset formula with no alt takes the job's source as its name.
+                    if let (None, Some(source)) = (
+                        params.get("alt"),
+                        deep_canvas_vector::typeset_source(&found.svg),
+                    ) {
+                        params.insert("alt".into(), Value::String(source));
+                    }
                 }
             }
         }
