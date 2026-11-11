@@ -351,6 +351,10 @@ byHand.push('tests/acceptance/405/budgets.test.ts');
 alone.push('tests/acceptance/544/');
 // #2015's file builds deep-show in the full set and runs it on a plate and a recipe pack.
 alone.push('tests/acceptance/2015/');
+// #1405's spin and QoS files read a two-thread bench's count at load above the cores, and its proof runs a real budget
+// 42 times: one file at a time. #724's redraft runs perf's lane as #724's own files do, under the timed grant.
+alone.push('tests/acceptance/1405/', 'tests/acceptance/724-redraft-1405/');
+timed.push('tests/acceptance/724-redraft-1405/');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
