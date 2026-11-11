@@ -156,26 +156,28 @@ pub(crate) fn page(
                 .text_color(chrome.ink_primary),
         )
         .when(offered, |page| {
+            // One column: the agents' names line up on the left and their step marks on the right.
             page.child(
                 div()
                     .flex()
                     .flex_col()
-                    .items_center()
                     .gap(s.space(1))
                     .children(screen.agents.iter().map(|(agent, name, steps)| {
                         let done = steps.iter().all(|(_, done)| *done);
-                        // A mark per step, filled once it's done.
+                        // A ring per step, filled once it's done.
                         let marks = steps.iter().map(|(step, done)| {
                             observed(ElementId::Name(format!("setup-step:{step}").into()))
                                 .role(Role::Image)
                                 .aria_value(if *done { "done" } else { "not yet" })
                                 .size(s.space(1))
                                 .rounded(s.radius)
-                                .bg(if *done {
+                                .border(s.hairline)
+                                .border_color(if *done {
                                     chrome.ink_primary
                                 } else {
-                                    chrome.divider
+                                    chrome.ink_secondary
                                 })
+                                .when(*done, |mark| mark.bg(chrome.ink_primary))
                         });
                         observed(ElementId::Name(format!("setup-agent:{agent}").into()))
                             .role(Role::Label)
@@ -183,9 +185,10 @@ pub(crate) fn page(
                             .when(done, |row| row.aria_value("done"))
                             .flex()
                             .items_center()
-                            .gap(s.space(1))
-                            .children(marks)
+                            .justify_between()
+                            .gap(s.space(4))
                             .child(name.clone())
+                            .child(div().flex().gap(s.space(1)).children(marks))
                     })),
             )
             .child(
@@ -260,7 +263,16 @@ pub(crate) fn page(
                                 .max_w(s.lane)
                                 .px(s.space(4))
                                 .text_color(chrome.ink_secondary)
-                                .child(line("set-up-output", output))
+                                // Setup's own output, as it printed it: left-aligned, in the code face.
+                                .child(
+                                    observed("set-up-output")
+                                        .role(Role::Label)
+                                        .aria_label(output.clone())
+                                        .w_full()
+                                        .typed(s.small)
+                                        .font_family(s.code.clone())
+                                        .child(output),
+                                )
                         }))
                 }),
         )
