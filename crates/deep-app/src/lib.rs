@@ -147,6 +147,10 @@ pub fn menu_bar_line() -> String {
         None if plain::planted("menu-bar-counts-sessions") => views::asks_need_you(
             record::with_view(|view| view.table().every_session().len()).unwrap_or(0),
         ),
+        // #2028's planted menu bar adds the list's unread rows to the asks.
+        None if plain::planted("menu-bar-adds-unread") => {
+            views::asks_need_you(views::count() + list::unread_rows())
+        }
         None => views::asks_need_you(views::count()),
     }
 }

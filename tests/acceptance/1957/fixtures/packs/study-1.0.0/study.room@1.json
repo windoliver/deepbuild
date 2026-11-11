@@ -1,0 +1,20 @@
+{
+  "id": "study.room",
+  "version": "1.0",
+  "title": "Reading room",
+  "license": "MIT",
+  "author": "the #1957 acceptance suite",
+  "description": "A reading room: one bookcase from the shelf pack.",
+  "steps": {
+    "shelves": {
+      "op": "recipe",
+      "kind": "shelf.bookcase@2",
+      "params": {}
+    }
+  },
+  "outputs": {
+    "parts": [
+      "shelves"
+    ]
+  }
+}

@@ -1708,6 +1708,12 @@ fn needs_you_count(
     } else {
         count
     };
+    // #2028's planted count adds the list's unread rows to the asks.
+    let count = if crate::plain::planted("list-adds-unread") {
+        count + crate::list::unread_rows()
+    } else {
+        count
+    };
     match empty {
         // Nothing needs you only once setup finished (#2026): until then, what setup says, and no number.
         Empty::Nothing if count == 0 => match crate::setup::count() {
