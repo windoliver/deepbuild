@@ -332,7 +332,12 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
         // through because the hub was late is marked late.
         if (request.late === true) Object.assign(data, { late: true, matched: request.matched });
         else if (request.matched.length) data.matched = request.matched;
-        v = 3;
+        // A fetch names the host its URL names, never its path or query, for the line that says what a turn does (#2021).
+        const url = callKind === 'fetch' ? str(at(payload, 'tool_input.url')) : '';
+        const host = url && URL.canParse(url) ? scrub(new URL(url).hostname) : '';
+        if (host) data.host = host.slice(0, 253);
+        // Only a fetch that names its host needs the version that has the field.
+        v = host ? 4 : 3;
       } else {
         Object.assign(data, failure(mapped.outcome === 'failed', payload, callKind, meta.cwd));
         v = 2;
