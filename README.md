@@ -131,7 +131,7 @@ A push you make yourself through the bypass is recorded as unguarded, and never 
 
 ## Land changes in turn
 
-From your checkout of a repo whose delivery rule is on, `deep land judge --repo <checkout> --json` judges each open pull request whose body says `Closes #n`, `Fixes #n` or `Part of #n`. It judges the change on its merge with the default branch's head, the commit that will land, by its issue's definition, and posts the verdict's status on that merge commit. It lands nothing. `deep land --repo <checkout> --json` then lands the PASSes one at a time, in the order they came:
+From your checkout of the repo, `deep land judge --repo <checkout> --json` judges each open pull request whose body says `Closes #n`, `Fixes #n` or `Part of #n`. It judges the change on its merge with the default branch's head, the commit that will land, by its issue's definition, and posts the verdict's status on that merge commit. It lands nothing. `deep land --repo <checkout> --json` then lands the PASSes one at a time, in the order they came:
 
 - If main or the branch moved since its verdict, the change is judged again first. Checks whose inputs didn't change carry, and only the rest run.
 - A change that no longer merges goes back to the session working its issue, naming the files that conflict. It reaches no person and nothing lands.
