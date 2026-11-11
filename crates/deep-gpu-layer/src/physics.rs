@@ -6,7 +6,7 @@
 
 use deep_canvas_physics::caps::RAPIER3D;
 use deep_canvas_physics::check::check;
-use deep_canvas_physics::occurrence::step_flicks;
+use deep_canvas_physics::occurrence::{step_flicks, timed};
 use deep_canvas_physics::roles::TABLE;
 use deep_canvas_physics::written;
 use deep_physics_rapier::runner::Run;
@@ -30,6 +30,8 @@ pub(crate) fn bake(doc: &mut Value) -> Result<(), Value> {
         .unwrap_or(json!([60, 1]));
     let run = Run::new(None).expect("the unplanted runner");
     let mut arrays = Map::new();
+    // #449: each world's occurrence list, as the column view reads it, for particles' bursts.
+    let mut lists = Map::new();
     for (id, world) in &worlds {
         let w = deep_physics_rapier::bound::expand(Some(doc), world)
             .and_then(|d| check(&d, &RAPIER3D, &TABLE))
@@ -54,14 +56,14 @@ pub(crate) fn bake(doc: &mut Value) -> Result<(), Value> {
             );
         }
         arrays.extend(written::arrays(id, &w, doc, &reply["bodies"]));
+        let rows = reply["occurrences"].as_array().cloned().unwrap_or_default();
+        lists.insert(format!("{id}.occurrences"), json!(timed(&rows, &w)));
     }
     if let Some(doc) = doc.as_object_mut() {
-        if let Some(all) = doc
-            .entry("arrays")
-            .or_insert_with(|| json!({}))
-            .as_object_mut()
-        {
-            all.extend(arrays);
+        for (key, add) in [("arrays", arrays), ("occurrences", lists)] {
+            if let Some(all) = doc.entry(key).or_insert_with(|| json!({})).as_object_mut() {
+                all.extend(add);
+            }
         }
     }
     Ok(())

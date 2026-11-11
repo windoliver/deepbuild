@@ -1380,6 +1380,7 @@ mod graphs;
 pub mod layer;
 #[cfg(target_os = "macos")]
 mod macos;
+mod neon;
 mod place;
 mod raster;
 mod status;
