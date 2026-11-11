@@ -88,10 +88,26 @@ pub(crate) fn at(form: &Value, t: i64) -> Cow<'_, Value> {
 /// recompiles the items it changes once, on the frame it starts (Variant: an incremental
 /// recompile of the affected items on a switch), and a frame with the same picks loads nothing.
 pub(crate) fn load_at(sched: &mut Scheduler<'_>, session: &mut DocSession, form: &Value, t: i64) {
-    if form.get("variants").is_none() {
+    load_columns(sched, session, form, t, t);
+}
+
+/// [`load_at`], with each instancer column a world's outputs write set to its value at
+/// `columns` (#1921), which is `t` but for a planted output.
+fn load_columns(
+    sched: &mut Scheduler<'_>,
+    session: &mut DocSession,
+    form: &Value,
+    t: i64,
+    columns: i64,
+) {
+    let writes = deep_canvas_physics::written::writes(form);
+    if form.get("variants").is_none() && !writes {
         return;
     }
-    let shown = at(form, t);
+    let mut shown = at(form, t);
+    if writes {
+        deep_canvas_physics::written::write(shown.to_mut(), columns);
+    }
     if session.document() != Some(shown.as_ref()) {
         session.load(sched, shown.as_ref());
     }
@@ -134,8 +150,12 @@ impl Hub<'_> {
         let Some(form) = self.played_form(doc) else {
             return;
         };
+        let previous = self.planted(crate::hub::Planted::Physics(
+            crate::physics::Planted::PreviousColumns,
+        ));
         if let Some(session) = self.sessions.get_mut(doc) {
-            load_at(&mut self.sched, session, &form, t);
+            let columns = if previous { session.t() } else { t };
+            load_columns(&mut self.sched, session, &form, t, columns);
         }
     }
 
@@ -144,11 +164,15 @@ impl Hub<'_> {
         let Some(form) = self.played_form(doc).map(|f| with_track(&f, track)) else {
             return;
         };
+        let previous = self.planted(crate::hub::Planted::Physics(
+            crate::physics::Planted::PreviousColumns,
+        ));
         if let Some(session) = self.sessions.get_mut(doc) {
             if session.document() != Some(&form) {
                 session.load(&mut self.sched, &form);
             }
-            load_at(&mut self.sched, session, &form, t);
+            let columns = if previous { session.t() } else { t };
+            load_columns(&mut self.sched, session, &form, t, columns);
         }
     }
 

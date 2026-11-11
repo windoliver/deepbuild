@@ -1,0 +1,68 @@
+# Wrong programs for tests/acceptance/1874/window.test.mjs
+
+Each ran once, in a scratch copy of this branch (e6115e717) whose scripts/budget-window.mjs is the wrong program;
+nothing in the repository was changed. Load on the 18-core Mac17,10 was 110 to 390 throughout.
+
+## The blind twins (tests/acceptance/1874/twins/<name>/scripts/budget-window.mjs, mapped in twins.json)
+
+### silent-record
+✖ #1874.31be6d55 a commit naming an issue whose unticked budget criterion no task names leaves that issue open, and its record names the criterion as unmeasured
+✖ #1874.5b585ee4 a commit naming an issue whose only unticked criterion says "in the local preflight", and which no task names, leaves the issue open
+✔ #1874.e31e7828 a commit naming an issue with no `### Acceptance criteria` section closes nothing
+✔ #1874.cbb20ab2 a commit whose issue's budget criteria are each named by a task that passed, with every other criterion ticked, closes the issue
+ℹ pass 2
+ℹ fail 2
+✖ #1874.31be6d55 a commit naming an issue whose unticked budget criterion no task names leaves that issue open, and its record names the criterion as unmeasured
+✖ #1874.5b585ee4 a commit naming an issue whose only unticked criterion says "in the local preflight", and which no task names, leaves the issue open
+
+### never-closes
+✔ #1874.31be6d55 a commit naming an issue whose unticked budget criterion no task names leaves that issue open, and its record names the criterion as unmeasured
+✔ #1874.5b585ee4 a commit naming an issue whose only unticked criterion says "in the local preflight", and which no task names, leaves the issue open
+✔ #1874.e31e7828 a commit naming an issue with no `### Acceptance criteria` section closes nothing
+✖ #1874.cbb20ab2 a commit whose issue's budget criteria are each named by a task that passed, with every other criterion ticked, closes the issue
+ℹ pass 3
+ℹ fail 1
+✖ #1874.cbb20ab2 a commit whose issue's budget criteria are each named by a task that passed, with every other criterion ticked, closes the issue
+
+never-closes fails AC4 (#1874.cbb20ab2) at its assertion, "the window left open an issue whose budget criteria are
+each named by a task that passed", and passes the rest. silent-record, which keeps the issue open but writes no
+`unmeasured`, failed AC1 and AC2 in this run at the suite's first assertion, "fixture-bench was to pass on #9401's
+commit": at that load the window read its first commit INCONCLUSIVE (instructions retired changed) and its second
+BLOCKED (spawnSync tar EPIPE), so the run never reached the record line it plants. Its fault is the same line as
+mutant m2 below, which the suite catches at that line.
+
+## Hand-made mutants of this branch's window, one line each
+
+| Mutant | Planted fault | Fails |
+|---|---|---|
+| m1 | `unticked` reads a body with no `### Acceptance criteria` section as no unticked lines, and `close` drops its "at least one unticked" guard | AC3 `#1874.e31e7828`, at "the window closed an issue with no `### Acceptance criteria` section" |
+| m2 | the record is written without `unmeasured` | AC1 `#1874.31be6d55`, at "the record doesn't name the criterion as unmeasured" |
+| m3 | `close` accepts any unticked list, named by a task or not | AC1 `#1874.31be6d55`, at "the window closed an issue whose budget criterion no task names" (its AC2 line failed earlier, on an INCONCLUSIVE record at that load) |
+
+### m1
+✔ #1874.31be6d55 a commit naming an issue whose unticked budget criterion no task names leaves that issue open, and its record names the criterion as unmeasured
+✔ #1874.5b585ee4 a commit naming an issue whose only unticked criterion says "in the local preflight", and which no task names, leaves the issue open
+✖ #1874.e31e7828 a commit naming an issue with no `### Acceptance criteria` section closes nothing
+✔ #1874.cbb20ab2 a commit whose issue's budget criteria are each named by a task that passed, with every other criterion ticked, closes the issue
+ℹ pass 3
+ℹ fail 1
+✖ #1874.e31e7828 a commit naming an issue with no `### Acceptance criteria` section closes nothing
+
+### m2
+✖ #1874.31be6d55 a commit naming an issue whose unticked budget criterion no task names leaves that issue open, and its record names the criterion as unmeasured
+✔ #1874.5b585ee4 a commit naming an issue whose only unticked criterion says "in the local preflight", and which no task names, leaves the issue open
+✔ #1874.e31e7828 a commit naming an issue with no `### Acceptance criteria` section closes nothing
+✔ #1874.cbb20ab2 a commit whose issue's budget criteria are each named by a task that passed, with every other criterion ticked, closes the issue
+ℹ pass 3
+ℹ fail 1
+✖ #1874.31be6d55 a commit naming an issue whose unticked budget criterion no task names leaves that issue open, and its record names the criterion as unmeasured
+
+### m3
+✖ #1874.31be6d55 a commit naming an issue whose unticked budget criterion no task names leaves that issue open, and its record names the criterion as unmeasured
+✖ #1874.5b585ee4 a commit naming an issue whose only unticked criterion says "in the local preflight", and which no task names, leaves the issue open
+✔ #1874.e31e7828 a commit naming an issue with no `### Acceptance criteria` section closes nothing
+✔ #1874.cbb20ab2 a commit whose issue's budget criteria are each named by a task that passed, with every other criterion ticked, closes the issue
+ℹ pass 2
+ℹ fail 2
+✖ #1874.31be6d55 a commit naming an issue whose unticked budget criterion no task names leaves that issue open, and its record names the criterion as unmeasured
+✖ #1874.5b585ee4 a commit naming an issue whose only unticked criterion says "in the local preflight", and which no task names, leaves the issue open

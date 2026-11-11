@@ -24,6 +24,9 @@ use crate::hub::{Hub, Planted};
 use crate::refused;
 use crate::spawn;
 
+#[path = "score_plan.rs"]
+pub(crate) mod score_plan;
+
 /// An open span's end: far past any play, with room for sums of flicks.
 const OPEN: i64 = i64::MAX / 8;
 
@@ -41,6 +44,10 @@ pub enum MixCall {
     },
     /// #500: one analysis bake of one asset.
     Bake(Value),
+    /// #935: one entry of a document's `sounds` held to audio.gen.
+    Gen { doc: Value, sound: String },
+    /// #154: a score's render plan, `{doc, item}`.
+    Score(Value),
     /// #501: a media document played live on the default output for `seconds` of real time.
     Soak {
         media: Value,
@@ -66,6 +73,11 @@ pub fn parse_call(name: &str, c: &Map<String, Value>) -> Option<MixCall> {
             track: c.get("track").map_or(Some(Vec::new()), |t| t.as_array().cloned())?,
         },
         "media_bake" => MixCall::Bake(c.get("bake").filter(|b| b.is_object())?.clone()),
+        "media_gen" => MixCall::Gen {
+            doc: c.get("doc").filter(|d| d.is_object())?.clone(),
+            sound: c.get("sound")?.as_str()?.to_string(),
+        },
+        "score_plan" => MixCall::Score(Value::Object(c.clone())),
         "handed" => MixCall::Handed {
             panel: c.get("panel")?.as_str()?.to_string(),
             from: t("from")?,
@@ -179,12 +191,14 @@ impl Hub<'_> {
         if let Some(s) = self.gate.sources.get(sha) {
             return Ok(s.clone());
         }
-        let (rate, channels, samples) = self.pcm(sha)?;
+        let (rate, channels, samples, looped) = self.decoded(sha)?;
+        // #154: a score stem's loop points, in samples in the file, as source flicks.
+        let at = |s: i64| (s as i128 * FLICKS as i128 / rate as i128) as i64;
         let s = Arc::new(Source {
             rate,
             channels: channels.clamp(1, 2),
             samples,
-            loop_region: None,
+            loop_region: looped.map(|(a, b)| (at(a), at(b))),
         });
         self.gate.sources.insert(sha.to_string(), s.clone());
         Ok(s)
@@ -193,16 +207,25 @@ impl Hub<'_> {
     /// An asset from the evidence store, decoded in the decode worker: its rate, its channel
     /// count and its interleaved f32 frames, every channel kept.
     pub(crate) fn pcm(&mut self, sha: &str) -> Result<(i64, usize, Vec<f32>), Value> {
+        self.decoded(sha).map(|(r, c, s, _)| (r, c, s))
+    }
+
+    /// [`Hub::pcm`] with the asset's loop points in samples, which a score stem carries (#154).
+    fn decoded(&mut self, sha: &str) -> Result<(i64, usize, Vec<f32>, Option<(i64, i64)>), Value> {
         if sha.len() < 3 || evidence::read(&self.scenario.evidence, sha).is_none() {
             return Err(json!({"code": "unknown_asset", "asset": sha}));
         }
         let path = self.scenario.evidence.join(&sha[..2]).join(&sha[2..]);
-        self.pcm_at(&path, sha)
+        self.decoded_at(&path, sha)
     }
 
     /// The sound of the file at `path`, decoded in the decode worker, as [`Hub::pcm`] gives an
     /// asset's; `sha` names it in a refusal.
     pub(crate) fn pcm_at(&mut self, path: &std::path::Path, sha: &str) -> Result<(i64, usize, Vec<f32>), Value> {
+        self.decoded_at(path, sha).map(|(r, c, s, _)| (r, c, s))
+    }
+
+    fn decoded_at(&mut self, path: &std::path::Path, sha: &str) -> Result<(i64, usize, Vec<f32>, Option<(i64, i64)>), Value> {
         let out = std::env::temp_dir().join(format!("deep-mix-{}-{}", std::process::id(), &sha[..sha.len().min(16)]));
         let (reply, _) = self.media_job(DECODE_WORKER, json!({"op": "decode", "path": path, "out": out, "video_frames": 0}));
         let stream = reply["decoded"]["streams"]
@@ -214,10 +237,12 @@ impl Hub<'_> {
             let bytes = std::fs::read(out.join(s["file"].as_str().unwrap_or_default()))
                 .map_err(|_| refused("unreadable"))?;
             let samples = bytes.as_chunks::<4>().0.iter().map(|b| f32::from_le_bytes(*b)).collect();
+            let looped = s["loop"].as_array().and_then(|l| Some((l.first()?.as_i64()?, l.get(1)?.as_i64()?)));
             Ok((
                 s["sample_rate"].as_i64().unwrap_or(48_000).max(1),
                 s["channels"].as_u64().unwrap_or(1).max(1) as usize,
                 samples,
+                looped,
             ))
         })();
         let _ = std::fs::remove_dir_all(&out);
@@ -509,6 +534,8 @@ impl Hub<'_> {
                 json!({"mix": reply})
             }
             MixCall::Bake(b) => self.bake_call(b),
+            MixCall::Gen { doc, sound } => self.gen_call(doc, sound),
+            MixCall::Score(c) => self.score_plan(c),
             MixCall::Handed { panel, from, to } => {
                 let now = self.now;
                 let Some(live) = self.gate.live_of(panel, now) else {

@@ -248,9 +248,15 @@ fn closed(events: &[serde_json::Value], handle: &str) -> Option<String> {
     let question = ask["data"]["question"].as_str().unwrap_or_default();
     let end = events.iter().find(|event| states::closes(event, handle))?;
     let kind = end["kind"].as_str().unwrap_or_default();
+    // The machine's word for how it closed is the core's text; the outcome it names has words of its own (#2029).
     let how = match kind {
         "decision.applied" => "decided",
         other => other.strip_prefix("ask.").unwrap_or(other),
+    };
+    let outcome = if kind == "decision.applied" {
+        "decided_for_you"
+    } else {
+        how
     };
     let answer = end["data"]["answer"].as_str().map(|id| {
         let options = ask["data"]["options"].as_array();
@@ -274,9 +280,13 @@ fn closed(events: &[serde_json::Value], handle: &str) -> Option<String> {
         Some(via) => format!(" through {via}"),
         None => String::new(),
     };
+    // What the approved step did once it ran, from its call's own records (#2029).
+    let receipt = crate::codes::receipt(events, handle)
+        .map(|receipt| format!(" {receipt}."))
+        .unwrap_or_default();
     Some(format!(
-        "{question} {how_capital}{answer}{at}{through}. Nothing is left to answer.",
-        how_capital = capital(how),
+        "{question} {how}{answer}{at}{through}.{receipt} Nothing is left to answer.",
+        how = crate::codes::outcome(outcome, &capital(how)),
         answer = answer.unwrap_or_default(),
     ))
 }

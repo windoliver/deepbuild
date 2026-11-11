@@ -215,6 +215,7 @@ impl<'a> Hub<'a> {
         let determinism = self.determinism_runs(c);
         let layout = self.film_layout_runs(c);
         let audits = self.geometry_audit_runs(claim, c);
+        let shapes = self.geometry_shape_runs(c);
         // #407: the film audit and the flicker check on every deliverable, the brief's own checks,
         // and the frame each honest-numbers subject first shows in.
         let films = self.film_audit_runs(c);
@@ -252,13 +253,21 @@ impl<'a> Hub<'a> {
                 let compared = timed.map(|(i, _)| i).or(laid.map(|(i, _)| i));
                 let mut row = match (audits.get(&r.id), films.get(&r.id), flickers.get(&r.id)) {
                     (Some(j), _, _) if !missing && !docs.is_empty() => self.judge_audit(r, j),
+                    _ if !missing && !docs.is_empty() && shapes.contains_key(&r.id) => {
+                        shapes[&r.id].clone()
+                    }
                     (_, Some(a), _) if !missing && !docs.is_empty() => {
                         film_row(r, &a.issues, &a.blocked, &a.not_run)
                     }
-                    (_, _, Some(f)) if !missing && !docs.is_empty() => match f {
-                        Ok(issues) => film_row(r, issues, &[], &[]),
-                        Err(b) => film_row(r, &[], std::slice::from_ref(b), &[]),
-                    },
+                    (_, _, Some((f, counters))) if !missing && !docs.is_empty() => {
+                        let mut row = match f {
+                            Ok(issues) => film_row(r, issues, &[], &[]),
+                            Err(b) => film_row(r, &[], std::slice::from_ref(b), &[]),
+                        };
+                        // #1399: the frames it judged beside those it analyzed.
+                        row["counters"] = json!(counters);
+                        row
+                    }
                     _ => self.judge(r, &docs, missing, &read, &c.session, compared),
                 };
                 // #407: an unsourced number in a film names the frame its item first shows in.
@@ -796,7 +805,25 @@ impl<'a> Hub<'a> {
             return Err(json!({"code": r.code, "kind": HONEST, "ids": [], "path": r.path}));
         }
         let empty = serde_json::Map::new();
-        Ok(deep_canvas_marks::check::numbers(doc.as_object().unwrap_or(&empty)))
+        let (mut numbers, issues) = deep_canvas_marks::check::numbers(doc.as_object().unwrap_or(&empty));
+        // #1967: a cell grid that plays a recording quotes it, so its digits are quotation.
+        for (id, item) in doc["items"].as_object().into_iter().flatten() {
+            let played = (item["kind"] == "cells@1")
+                .then(|| item.pointer("/params/play/asset")?.as_str())
+                .flatten();
+            let Some(sha) = played else { continue };
+            for d in self
+                .media
+                .recordings
+                .get(sha)
+                .map(deep_canvas_cells::recording::digits)
+                .unwrap_or_default()
+            {
+                numbers.push(json!({"item": id, "text": d["text"],
+                    "source": {"quotation": {"source": sha}, "at": d["at"], "row": d["row"], "x": d["x"]}}));
+            }
+        }
+        Ok((numbers, issues))
     }
 
     /// The bytes of every asset a lowered document's items name by hash that the evidence store

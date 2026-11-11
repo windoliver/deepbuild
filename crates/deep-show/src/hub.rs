@@ -163,10 +163,14 @@ pub enum Planted {
     FlickerCountsSingleChanges,
     /// #407: the flicker check reads one region, the whole view, by its mean luminance.
     FlickerWholeViewMean,
+    /// #1399: the flicker check analyzes each rendition's first frame and serves it to every frame.
+    FlickerAnalyzesOnce,
     /// #407: the claim check takes `cites: []` as cited.
     CitesEmptyPasses,
     /// #405's and #1936's: the geometry audit's wrong programs, which its own module names.
     Audit(crate::geometry_audit::Planted),
+    /// #1921's: a world's outputs' wrong programs, which the physics host names.
+    Physics(crate::physics::Planted),
     /// #202: a kind_rules requirement counts the working agent's own pack rule as its cover.
     OwnRuleCountsAsCover,
     /// #202: the kind_rules check evaluates a pack kind's recipe rules a second time.
@@ -620,11 +624,7 @@ pub enum Call {
     /// #379: the cost model's micro-benchmark.
     Costs,
     /// #140: the network seam's conformance suite.
-    NetworkSuite {
-        macos: bool,
-        messages: u64,
-        seed: u64,
-    },
+    NetworkSuite(Box<crate::seams::Suite>),
     /// #309: a test client on the network seam's macOS backend.
     RelayClient(Box<crate::seams::RelayClient>),
     /// #855: rekeys the process's content keys under a hash, once.
@@ -667,6 +667,8 @@ pub enum Call {
     KindSchemas,
     /// #421: the spatial index's bounds and the answers to its queries.
     Spatial(Box<crate::spatial::Spatial>),
+    /// #2014: rays met by a terrain plate's drawn triangles, its physics shape and a pick.
+    TerrainRays(Box<crate::terrain::TerrainRays>),
     /// #306: the pack store's rows.
     Packs,
     /// #306: one pack version installed mid-run; #200: through a session, which wrote it.
@@ -1500,6 +1502,14 @@ impl<'a> Hub<'a> {
                 }
                 (h.clone(), Value::Object(v))
             })
+            // #1967: each terminal recording as the decode worker converted it, which a cell
+            // grid that plays it reads by its hash.
+            .chain(
+                self.media
+                    .recordings
+                    .iter()
+                    .map(|(sha, c)| (format!("terminal:{sha}"), c.clone())),
+            )
             .collect()
     }
 
@@ -1745,6 +1755,7 @@ impl<'a> Hub<'a> {
             Call::Geometry(g) => self.geometry(g),
             Call::KindSchemas => self.kind_schemas_reply(),
             Call::Spatial(s) => self.spatial(s),
+            Call::TerrainRays(r) => self.terrain_rays(r),
             Call::SceneQuery(q) => self.scene_query(q),
             Call::Packs => crate::packs::rows_reply(&self.pack_rows, &self.packs),
             Call::InstallPack { id, dir, session } => {
@@ -1775,11 +1786,7 @@ impl<'a> Hub<'a> {
                 runs,
             } => self.lookup_reply(doc, registry, name, *runs),
             Call::Costs => crate::costs::measure(self.startup),
-            Call::NetworkSuite {
-                macos,
-                messages,
-                seed,
-            } => crate::seams::network(*messages, *seed, *macos, self.startup.network),
+            Call::NetworkSuite(s) => crate::seams::suite(s, self.startup.network),
             Call::RelayClient(c) => crate::seams::relay_client(c, self.startup.network),
             Call::Migrate(to) => self.migrate(*to),
             Call::Keys { doc, runs } => self.keys(doc, *runs),
@@ -2126,6 +2133,8 @@ impl<'a> Hub<'a> {
         let mut probe_issues = Vec::new();
         let stamped = stamped.map(|mut doc| {
             probe_issues = self.probe_assets(&mut doc);
+            // #935: a strip or spawn naming a generated sound's asset before its audio.gen passes.
+            probe_issues.extend(self.unpassed_sounds(&doc));
             doc
         });
         // The document's look (Document envelope: `look: {asset: look@major}`), read from the
@@ -2173,7 +2182,7 @@ impl<'a> Hub<'a> {
                 notices = self.notices_reply(&show.doc, &result.notices);
                 skipped = crate::verdict::unknown_items(&result.notices);
                 blocked = self.blocked_in_claim(show, &result.notices);
-                let mut issues = result.issues;
+                let mut issues = crate::mixdown::score_plan::library_issues(&doc, result.issues);
                 issues.append(&mut probe_issues);
                 blocked.extend(self.missing_in_claim(show, &mut issues, &mut skipped));
                 // #488's planted check takes every sample rate from 8 to 192 kHz and refuses
@@ -2345,6 +2354,11 @@ impl<'a> Hub<'a> {
         if !self.sessions.contains_key(&show.doc) {
             let fresh = self.new_session();
             self.sessions.insert(show.doc.clone(), fresh);
+        }
+        // #1967: a recording this revision's cell grids play, converted at its probe.
+        let readings = self.readings();
+        if let Some(s) = self.sessions.get_mut(&show.doc) {
+            s.set_readings(readings);
         }
         // #504: the session loads the played form: the drawn form with the document's input track
         // and the session's picks, shown at `t`.

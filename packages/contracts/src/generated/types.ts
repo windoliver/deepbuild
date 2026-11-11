@@ -4418,6 +4418,75 @@ export interface DefinitionLocked {
   evidence?: Array<string>;
 }
 
+/** definition.locked@10 */
+export interface DefinitionLockedV10 {
+  v: 10;
+  id: string;
+  kind: "definition.locked";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    definition: string;
+    task_ref: string;
+    requirements: Array<{
+      id: string;
+      text: string;
+      source_line: string;
+      refuted_by: string;
+      check: string | null;
+      check_sha256: string | null;
+      on_base: "fails" | "fails_sometimes" | "passes";
+      asserts: Array<string>;
+      depth: string;
+      oracle: "code" | "model" | "person";
+      near_misses: Array<string>;
+      author: {
+        handle: string;
+        role: "you" | "owner" | "collaborator" | "outside";
+        automated?: boolean;
+      };
+      expected_ms?: number;
+      deadline_ms?: number;
+      surface: {
+        kind: string;
+        routes?: Array<string>;
+        format?: string;
+        name?: string;
+        path?: string;
+        exports?: Array<string>;
+      } | null;
+      references?: Array<{
+        path: string;
+        sha256: string;
+      }>;
+      command?: string;
+      criterion?: string;
+      targets?: Array<string>;
+      paid?: "live call" | "hosted browser run" | "model job";
+      runs?: number;
+      held_out?: Array<{
+        files: { [key: string]: string };
+      }>;
+      timing?: boolean;
+      settled_by?: "budget-window";
+    }>;
+    deliverables: Array<string>;
+    hash: string;
+    issue_rev: string;
+    base_commit: string;
+    budget: {
+      runs: number;
+      cap_usd: number;
+    } | null;
+  };
+  evidence?: Array<string>;
+}
+
 /** definition.locked@2 */
 export interface DefinitionLockedV2 {
   v: 2;
@@ -5561,6 +5630,35 @@ export interface JobRecorded {
       ref: string;
       sha256?: string;
     }>;
+  };
+  evidence?: Array<string>;
+}
+
+/** landing.made@1 */
+export interface LandingMade {
+  v: 1;
+  id: string;
+  kind: "landing.made";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    step: "judged" | "sent_back" | "held" | "landed" | "stopped" | "joined";
+    repo: string;
+    pr: number;
+    issue: number;
+    head: string | null;
+    main: string | null;
+    commit: string | null;
+    tree: string | null;
+    claim: string | null;
+    outcome: "PASS" | "FAIL" | "INVALID" | "BLOCKED" | "INCONCLUSIVE" | "none";
+    files: Array<string>;
+    open: Array<string>;
   };
   evidence?: Array<string>;
 }
@@ -6802,6 +6900,72 @@ export interface ResourceCreated {
   evidence?: Array<string>;
 }
 
+/** review.read@1 */
+export interface ReviewRead {
+  v: 1;
+  id: string;
+  kind: "review.read";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    pr: string;
+    claim: string;
+    commit: string;
+    sent: Array<{
+      rule: string;
+      sites: Array<{
+        file: string;
+        line: number;
+        quote: string;
+      }>;
+    }>;
+    open: Array<{
+      rule: string;
+      sites: Array<{
+        file: string;
+        line: number;
+        quote: string;
+      }>;
+    }>;
+  };
+  evidence?: Array<string>;
+}
+
+/** review.settled@1 */
+export interface ReviewSettled {
+  v: 1;
+  id: string;
+  kind: "review.settled";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    pr: string;
+    claim: string;
+    commit: string;
+    outcomes: Array<{
+      rule: string;
+      sites: Array<{
+        file: string;
+        line: number;
+        quote: string;
+      }>;
+      ended: "fixed" | "left";
+      commit: string;
+    }>;
+  };
+  evidence?: Array<string>;
+}
+
 /** row.set@1 */
 export interface RowSet {
   v: 1;
@@ -6871,6 +7035,48 @@ export interface RowSetV2 {
     default?: string;
     default_at?: number;
     progress?: string;
+  };
+  evidence?: Array<string>;
+}
+
+/** row.set@3 */
+export interface RowSetV3 {
+  v: 3;
+  id: string;
+  kind: "row.set";
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    id: string;
+    listed: boolean;
+    order?: string;
+    address?: string;
+    title?: string;
+    project?: string | null;
+    session?: string;
+    agent?: string | null;
+    entry?: "idle" | "running" | "pass" | "fail" | "blocked" | "invalid" | "inconclusive" | "needs_you" | "stale";
+    word?: "queued" | "working" | "says done" | "PASS" | "sent back" | "BLOCKED" | "INVALID" | "INCONCLUSIVE" | "needs you" | "stale" | "quiet" | "stuck" | "flagged" | "finished" | "running";
+    why?: string;
+    waits_on?: string | null;
+    since?: number | null;
+    actions?: Array<{
+      answer: string;
+      label: string;
+    }>;
+    unread?: boolean;
+    default?: string;
+    default_at?: number;
+    progress?: string;
+    doing?: {
+      words: string;
+      at: number;
+      ago: boolean;
+    };
   };
   evidence?: Array<string>;
 }
@@ -7597,6 +7803,25 @@ export interface SessionGone {
   evidence?: Array<string>;
 }
 
+/** session.named@1 */
+export interface SessionNamed {
+  v: 1;
+  id: string;
+  kind: "session.named";
+  subject: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    name: string;
+    by: "you" | "agent";
+  };
+  evidence?: Array<string>;
+}
+
 /** session.never_started@1 */
 export interface SessionNeverStarted {
   v: 1;
@@ -7812,6 +8037,25 @@ export interface SessionState {
   data: {
     state: "needs you" | "stuck" | "flagged" | "working" | "finished" | "quiet";
     cause: "ask" | "gone" | "waiting" | "stuck" | "promised" | "failed" | "quiet" | "interrupted" | "finished" | "working";
+  };
+  evidence?: Array<string>;
+}
+
+/** session.state@2 */
+export interface SessionStateV2 {
+  v: 2;
+  id: string;
+  kind: "session.state";
+  subject: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    state: "needs you" | "stuck" | "flagged" | "sent back" | "BLOCKED" | "INVALID" | "INCONCLUSIVE" | "stale" | "says done" | "working" | "queued" | "PASS" | "finished" | "quiet";
+    cause: "ask" | "gone" | "waiting" | "words" | "stuck" | "promised" | "failed" | "sent_back" | "blocked" | "invalid" | "inconclusive" | "stale" | "says_done" | "working" | "queued" | "pass" | "interrupted" | "finished" | "quiet";
   };
   evidence?: Array<string>;
 }
@@ -8674,6 +8918,144 @@ export interface ToolAfterV3 {
   evidence?: Array<string>;
 }
 
+/** tool.after@4 */
+export interface ToolAfterV4 {
+  v: 4;
+  id: string;
+  kind: "tool.after";
+  subject?: string;
+  writer: "hook";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    kind: "shell";
+    paths: Array<string>;
+    command: string | null;
+    call?: string;
+    outcome: "ok" | "failed";
+    exit_code?: number | null;
+    signature?: string;
+    cause?: "command_failed" | "tool_error" | "interrupted" | "permission_denied" | "unknown";
+    owner?: "agent" | "you" | "service";
+    nested?: {
+      complete: boolean;
+      calls?: number;
+    };
+    error?: string;
+  } | {
+    kind: "read";
+    paths: Array<string>;
+    command: string | null;
+    call?: string;
+    outcome: "ok" | "failed";
+    exit_code?: number | null;
+    signature?: string;
+    cause?: "command_failed" | "tool_error" | "interrupted" | "permission_denied" | "unknown";
+    owner?: "agent" | "you" | "service";
+    nested?: {
+      complete: boolean;
+      calls?: number;
+    };
+    error?: string;
+  } | {
+    kind: "edit";
+    paths: Array<string>;
+    command: string | null;
+    call?: string;
+    outcome: "ok" | "failed";
+    exit_code?: number | null;
+    signature?: string;
+    cause?: "command_failed" | "tool_error" | "interrupted" | "permission_denied" | "unknown";
+    owner?: "agent" | "you" | "service";
+    nested?: {
+      complete: boolean;
+      calls?: number;
+    };
+    error?: string;
+  } | {
+    kind: "write";
+    paths: Array<string>;
+    command: string | null;
+    call?: string;
+    outcome: "ok" | "failed";
+    exit_code?: number | null;
+    signature?: string;
+    cause?: "command_failed" | "tool_error" | "interrupted" | "permission_denied" | "unknown";
+    owner?: "agent" | "you" | "service";
+    nested?: {
+      complete: boolean;
+      calls?: number;
+    };
+    error?: string;
+  } | {
+    kind: "search";
+    paths: Array<string>;
+    command: string | null;
+    call?: string;
+    outcome: "ok" | "failed";
+    exit_code?: number | null;
+    signature?: string;
+    cause?: "command_failed" | "tool_error" | "interrupted" | "permission_denied" | "unknown";
+    owner?: "agent" | "you" | "service";
+    nested?: {
+      complete: boolean;
+      calls?: number;
+    };
+    error?: string;
+  } | {
+    kind: "fetch";
+    paths: Array<string>;
+    command: string | null;
+    call?: string;
+    outcome: "ok" | "failed";
+    exit_code?: number | null;
+    signature?: string;
+    cause?: "command_failed" | "tool_error" | "interrupted" | "permission_denied" | "unknown";
+    owner?: "agent" | "you" | "service";
+    nested?: {
+      complete: boolean;
+      calls?: number;
+    };
+    error?: string;
+  } | {
+    kind: "mcp";
+    paths: Array<string>;
+    command: string | null;
+    server: string;
+    tool: string;
+    call?: string;
+    outcome: "ok" | "failed";
+    exit_code?: number | null;
+    signature?: string;
+    cause?: "command_failed" | "tool_error" | "interrupted" | "permission_denied" | "unknown";
+    owner?: "agent" | "you" | "service";
+    nested?: {
+      complete: boolean;
+      calls?: number;
+    };
+    error?: string;
+  } | {
+    kind: "unknown";
+    paths: Array<string>;
+    command: string | null;
+    call?: string;
+    outcome: "ok" | "failed";
+    exit_code?: number | null;
+    signature?: string;
+    cause?: "command_failed" | "tool_error" | "interrupted" | "permission_denied" | "unknown";
+    owner?: "agent" | "you" | "service";
+    nested?: {
+      complete: boolean;
+      calls?: number;
+    };
+    error?: string;
+  };
+  evidence?: Array<string>;
+}
+
 /** tool.before@1 */
 export interface ToolBefore {
   v: 1;
@@ -8841,6 +9223,83 @@ export interface ToolBeforeV3 {
     kind: "fetch";
     paths: Array<string>;
     command: string | null;
+    late?: boolean;
+    matched?: Array<string>;
+    call?: string;
+  } | {
+    kind: "mcp";
+    paths: Array<string>;
+    command: string | null;
+    server: string;
+    tool: string;
+    late?: boolean;
+    matched?: Array<string>;
+    call?: string;
+    counts: "read" | "change" | "send" | "destructive";
+    effect?: "push" | "merge" | "dispatch" | "send" | "delete";
+  } | {
+    kind: "unknown";
+    paths: Array<string>;
+    command: string | null;
+    late?: boolean;
+    matched?: Array<string>;
+    call?: string;
+  };
+  evidence?: Array<string>;
+}
+
+/** tool.before@4 */
+export interface ToolBeforeV4 {
+  v: 4;
+  id: string;
+  kind: "tool.before";
+  subject?: string;
+  writer: "hook";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    kind: "shell";
+    paths: Array<string>;
+    command: string | null;
+    late?: boolean;
+    matched?: Array<string>;
+    call?: string;
+  } | {
+    kind: "read";
+    paths: Array<string>;
+    command: string | null;
+    late?: boolean;
+    matched?: Array<string>;
+    call?: string;
+  } | {
+    kind: "edit";
+    paths: Array<string>;
+    command: string | null;
+    late?: boolean;
+    matched?: Array<string>;
+    call?: string;
+  } | {
+    kind: "write";
+    paths: Array<string>;
+    command: string | null;
+    late?: boolean;
+    matched?: Array<string>;
+    call?: string;
+  } | {
+    kind: "search";
+    paths: Array<string>;
+    command: string | null;
+    late?: boolean;
+    matched?: Array<string>;
+    call?: string;
+  } | {
+    kind: "fetch";
+    paths: Array<string>;
+    command: string | null;
+    host?: string;
     late?: boolean;
     matched?: Array<string>;
     call?: string;
@@ -9124,8 +9583,140 @@ export interface VerdictMade {
   evidence?: Array<string>;
 }
 
+export type VerdictMadeV2Requirements = Array<{
+  req: string;
+  outcome: "PASS" | "FAIL" | "INVALID" | "BLOCKED" | "INCONCLUSIVE" | "pending";
+  check: string;
+  depth: string;
+  oracle: "code" | "model" | "person";
+  runs: {
+    clean: number;
+    needed: number;
+    counted: Array<string>;
+  };
+  smallest: string | null;
+  points_to: string | null;
+  evidence: Array<string>;
+  proof: "statement" | "static_check" | "test_run" | "journey" | "decision";
+  ask?: string;
+}>;
+
+export type VerdictMadeV2Key = {
+  commit: string;
+  doc_revisions: Array<string>;
+  check_digests: Array<string>;
+  state_digests: Array<string>;
+  environment: string;
+  tools: Array<string>;
+};
+
+/** verdict.made@2 */
+export interface VerdictMadeV2 {
+  v: 2;
+  id: string;
+  kind: "verdict.made";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    outcome: "PASS";
+    verdict: string;
+    claim: string;
+    reasons: Array<string>;
+    requirements: Array<{
+      req: string;
+      outcome: "PASS";
+      check: string;
+      depth: string;
+      oracle: "code" | "model" | "person";
+      runs: {
+        clean: number;
+        needed: number;
+        counted: Array<string>;
+      };
+      smallest: string | null;
+      points_to: string | null;
+      evidence: Array<string>;
+      proof: "statement" | "static_check" | "test_run" | "journey" | "decision";
+      ask?: string;
+    }>;
+    smallest: string | null;
+    points_to: string | null;
+    commit: string;
+    key: VerdictMadeV2Key;
+    why?: Array<{
+      reason: "untrusted_project" | "target_unresolved" | "threshold_without_unit" | "open_items" | "option_switched" | "denied_call_ran" | "checks_not_started" | "unknown";
+      text: string;
+    }>;
+  } | {
+    outcome: "FAIL";
+    verdict: string;
+    claim: string;
+    reasons: Array<string>;
+    requirements: VerdictMadeV2Requirements;
+    smallest: string | null;
+    points_to: string | null;
+    commit: string;
+    key: VerdictMadeV2Key;
+    why?: Array<{
+      reason: "untrusted_project" | "target_unresolved" | "threshold_without_unit" | "open_items" | "option_switched" | "denied_call_ran" | "checks_not_started" | "unknown";
+      text: string;
+    }>;
+  } | {
+    outcome: "INVALID";
+    verdict: string;
+    claim: string;
+    reasons: Array<string>;
+    requirements: VerdictMadeV2Requirements;
+    smallest: string | null;
+    points_to: string | null;
+    commit: string;
+    key: VerdictMadeV2Key;
+    why?: Array<{
+      reason: "untrusted_project" | "target_unresolved" | "threshold_without_unit" | "open_items" | "option_switched" | "denied_call_ran" | "checks_not_started" | "unknown";
+      text: string;
+    }>;
+  } | {
+    outcome: "BLOCKED";
+    verdict: string;
+    claim: string;
+    reasons: Array<string>;
+    requirements: VerdictMadeV2Requirements;
+    smallest: string | null;
+    points_to: string | null;
+    commit: string;
+    key: VerdictMadeV2Key;
+    why?: Array<{
+      reason: "untrusted_project" | "target_unresolved" | "threshold_without_unit" | "open_items" | "option_switched" | "denied_call_ran" | "checks_not_started" | "unknown";
+      text: string;
+    }>;
+  } | {
+    outcome: "INCONCLUSIVE";
+    verdict: string;
+    claim: string;
+    reasons: Array<string>;
+    requirements: VerdictMadeV2Requirements;
+    smallest: string | null;
+    points_to: string | null;
+    commit: string;
+    key: VerdictMadeV2Key;
+    why?: Array<{
+      reason: "untrusted_project" | "target_unresolved" | "threshold_without_unit" | "open_items" | "option_switched" | "denied_call_ran" | "checks_not_started" | "unknown";
+      text: string;
+    }>;
+  };
+  evidence?: Array<string>;
+}
+
 /** verdict.outcome@1 */
 export type VerdictOutcome = "PASS" | "FAIL" | "INVALID" | "BLOCKED" | "INCONCLUSIVE";
+
+/** verdict.reason@1 */
+export type VerdictReason = "untrusted_project" | "target_unresolved" | "threshold_without_unit" | "open_items" | "option_switched" | "denied_call_ran" | "checks_not_started" | "unknown";
 
 /** verdict.stale@1 */
 export interface VerdictStale {

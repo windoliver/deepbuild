@@ -1194,18 +1194,17 @@ fn rest(
             break;
         };
         let (id, owner, r, offset, max_drop) = left.remove(k);
-        let on_ids = if r.on == "ground" {
-            None
-        } else {
-            match members(items, &r.on) {
-                Some(m) => Some(m),
-                None => {
-                    problems.push(Refused {
-                        code: "ref_unresolved",
-                        path: format!("constraints/{id}/on"),
-                    });
-                    continue;
-                }
+        // `on: ID | collection | ground`: an item or a collection by that name before the ground
+        // plane, so a plate whose ID is `ground` is rested on as itself (#2014).
+        let on_ids = match members(items, &r.on) {
+            Some(m) => Some(m),
+            None if r.on == "ground" => None,
+            None => {
+                problems.push(Refused {
+                    code: "ref_unresolved",
+                    path: format!("constraints/{id}/on"),
+                });
+                continue;
             }
         };
         let moved = moves(items, program, owner)

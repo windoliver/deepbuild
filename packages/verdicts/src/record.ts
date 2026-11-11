@@ -16,11 +16,13 @@ export async function recordVerdict(record: RecordStore, verdict: Verdict, at: n
   if (verdict.outcome === 'pending') throw new Error(`${verdict.claim}: a pending verdict isn't made yet and isn't recorded`);
   const id = ulid(at);
   const handle = `verdict:${id}`;
+  // A verdict with reasons the core gave of its own names their codes (#2029), which verdict.made@2 carries.
+  const why = verdict.why?.length ? { why: verdict.why.map((w) => ({ reason: w.reason, text: cut(w.text) })) } : {};
   const { log_pos } = await record.append(CORE, {
-    v: 1, id, kind: 'verdict.made', ts: at, subject: verdict.claim,
+    v: verdict.why?.length ? 2 : 1, id, kind: 'verdict.made', ts: at, subject: verdict.claim,
     data: {
       outcome: verdict.outcome, verdict: handle, claim: verdict.claim,
-      reasons: verdict.reasons.map(cut),
+      reasons: verdict.reasons.map(cut), ...why,
       requirements: verdict.requirements.map((r) => ({
         ...r, check: cut(r.check), smallest: r.smallest === null ? null : cut(r.smallest), points_to: r.points_to === null ? null : cut(r.points_to),
         runs: { ...r.runs, clean: Math.min(r.runs.clean, U16) },

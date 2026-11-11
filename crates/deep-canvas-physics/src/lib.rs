@@ -13,3 +13,4 @@ pub mod module;
 pub mod occurrence;
 pub mod pairs;
 pub mod roles;
+pub mod written;
