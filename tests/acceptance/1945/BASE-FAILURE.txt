@@ -1,0 +1,92 @@
+Base commit: 4004257c (Merge pull request #2246), the brief's base; no implementation of #1945 exists there.
+Built first (by the caller): npm ci; npm run build --workspaces; cargo build -p deep-hook (target/debug/deep-hook).
+Command: NO_COLOR=1 node node_modules/vitest/vitest.mjs run tests/acceptance/1945 --testTimeout=600000 --no-file-parallelism
+Date: 2026-11-10 (21:09 local)  Machine: Mac17,10 (Apple silicon), 18 cores, load average 275 (1-minute) at the start
+Node: v24.22.0  vitest 5.0.5. Hosts: the Lima VMs deep-ubuntu (Ubuntu 26.04.1, systemd 259, sudo-rs 0.2.13) and
+deep-fedora (Fedora 45, systemd 262, sudo 1.9.17p2), both reached over SSH by the harness. Paths: <repo> is the
+worktree, ~ the home; the VM user, key paths and passwords are redacted.
+Result: Test Files 3 failed (3); Tests 8 failed (8); about 151 s. Short on purpose: the surfaces don't exist.
+
+No test passed at the base. Every unplanted hub started (deep hub run, ready), every world reached its VM over the
+harness's own SSH link, the throwaway users were made (sudo with their password, lingering off; AC3's second with its
+polkit rule), the chat channel installed (deep install packages/channels/chat) and called its provider, the agents'
+sessions started (SessionStart through deep-hook), and the test package was built on deep-ubuntu; the failures come at
+the first missing surface:
+
+  root-plan.test.ts (AC1 #1945.5592231a, AC2 #1945.a62d8bc1), on deep-fedora
+    x AC1: "the agent's root plan for dh-fedora wasn't raised, so no sudo prompt came to type the password at:
+      deep_root_plan was refused: {"code":-32602,"message":"No tool deep_root_plan; the tools are deep_ask, deep_wait,
+      deep_open_item, deep_status, deep_search, deep_claim, deep_evidence, deep_run, deep_show, deep_drive, deep_kinds,
+      deep_job, deep_env, deep_propose."}" (deep mcp lists no such tool).
+    x AC2 judgeLocked: the same refusal of deep_root_plan.
+    x AC2 planted deep root-plan-runs-agent-path: the judge fails, but on the same refusal, not for running the changed
+      script, so the test's own check ("ran the changed script (variant D") fails.
+  linger.test.ts (AC3 #1945.fcdd3d22)
+    x judgeLinger on dh-ubuntu, four failures: the first remote run (run.start, #1942's, which works at the base)
+      "started with lingering no for your user there: lingering wasn't turned on before it started"; "the record holds
+      no host change on dh-ubuntu turning lingering on (host.changed ...)"; "`deep host changes dh-ubuntu` ... exit 2,
+      Unsupported command "host""; and "dh-ubuntu lost run:<id> when the last SSH session of your user there closed: in
+      60 s with no session its longest stretch without a beat was 54 s, its last beat 54 s before the end, your user
+      manager there is inactive and the run's unit holds 0 processes" (logind stopped the user manager, as it does
+      without lingering; this is what the planted setup must show).
+    x judgeRootLinger on dh-ubuntu with the polkit rule: "the first remote run on dh-ubuntu, whose policy needs root
+      for lingering, brought no root plan to turn it on (no ask whose plan names enable-linger), and the run started
+      there with linger=no".
+    x planted host-skips-lingering on dh-fedora: "BLOCKED: the hub didn't start (deep hub run with
+      DEEP_HUB_PLANT=host-skips-lingering): ... DEEP_HUB_PLANT=host-skips-lingering names no planted program".
+  package.test.ts (AC4 #1945.a75a14aa), on dh-ubuntu as Lima's user
+    x judgePackage: the package dh1945-<id> built and checked (its file list without the file its postinst writes),
+      then "the plan that installs dh1945-<id> on dh-ubuntu wasn't raised: deep_root_plan was refused: ... No tool
+      deep_root_plan ...".
+    x planted host-package-fully-undoable: "BLOCKED: the hub didn't start (deep hub run with
+      DEEP_HUB_PLANT=host-package-fully-undoable): ... names no planted program".
+
+Behind those, also missing at the base (from reading the code): `deep host` (run, changes), a host change in the record
+(host.changed), lingering before a remote run (hosts.ts starts `systemd-run --user` with whatever lingering is), any
+root plan (runs.ts refuses a sudo argv: "Root on X is never a run's: it comes only as a root plan you approve"), and the
+three plant names in src/plant.ts.
+
+Checked of the harness at the base, by hand, before this run:
+  - linger.test.ts alone (an earlier run, same judges): on deep-ubuntu the throwaway user was made, reached as the
+    world's host through the relay, the grant ask answered, the run started as a user unit, every connection cut, no
+    sshd session of the user left within seconds, and the run lost about 10 s later; the same failures as above.
+  - A throwaway test file (deleted after) on deep-fedora that stood in for `deep host run` with a plain `ssh -tt`
+    through the world's SSH config: the agent-written script changed by one byte (dd conv=notrunc) was refused naming
+    both hashes and nothing ran; put back, it ran as root from /var/lib/<plan folder>/script, its notes parsed as
+    judgeLocked reads them (uid 0, the copy's path, the folders 700 root, /var/lib, /var, /); the driver saw sudo's
+    prompt and typed the password there (the plan ran as uid 0; that transcript wasn't printed); searchHost found both
+    controls (the run's note in /var/lib/dh1945-<id>/ran, a line logged with logger) and the password in no file and
+    no journal line; the world's local files held no form of it; passwordForms' base64 and hex forms were found inside
+    longer encodings. On deep-ubuntu, by hand over ssh -t in BSD script, sudo-rs's prompt ("[sudo: authenticate]
+    Password:") showed only `*`s for the password typed there, then erased them.
+  - Four harness bugs were fixed before the runs: deep-fedora's useradd failed allocating subordinate IDs (Lima's user
+    holds the whole range), so users are made with -K SUB_UID_COUNT=0 -K SUB_GID_COUNT=0 and /etc/subuid stays as it
+    is; BSD script refused Node's socket stdin (tcgetattr), so bash execs it with stdin from cat; the hub runs the
+    agents' own CLI to read sign-in state, and one such child outlived its hub and wrote into the removed home, so a
+    hub's process tree is gathered while it stops and what still runs is stopped by PID and start time, and the
+    folders are removed twice; and redact replaced the VM user's name inside home paths before the home itself.
+  - This is the second full run; the first (8 of 8 failing the same way) ran before the redact and process-tree fixes
+    and before two changes no base test reaches (judgeLocked reads the run recorded after the second attempt;
+    judgeRootLinger doesn't wait on run.start before looking for the root plan).
+  - After each run no dh1945* user, home, /var/lib/dh1945-* folder, sudoers or polkit file, user journal, user manager
+    or /etc/subuid line is left on either VM, no ~/dh1945-* folder for Lima's user, and no /tmp/dh1945-* folder here.
+  - Typecheck: node node_modules/typescript/bin/tsc -p tests/acceptance/1945/tsconfig.json passes (exit 0).
+
+The run's test list follows (each test's time as the run printed it).
+----------------------------------------------------------------------------------------------------------------
+
+ ❯ tests/acceptance/1945/linger.test.ts (3 tests | 3 failed) 126743ms
+     × on a host where your lingering is off, the first remote run turns it on before it starts, as a host change recorded and shown with its undo, and runs on with every SSH session of yours there closed 78400ms
+     × on a host whose policy needs root for lingering, the change comes as a root plan 39963ms
+     × the planted setup that skips lingering loses the run when the last session closes and fails the judge, naming the host 752ms
+ ❯ tests/acceptance/1945/root-plan.test.ts (3 tests | 3 failed) 12567ms
+     × the sudo password you type at the prompt of `deep host run` reaches neither the record, a log, the agent nor the channel 301ms
+     × a root plan's script changed by one byte where the agent wrote it is refused before anything runs as root, naming both hashes; unchanged, it runs from a copy only root can write, its output and exit code the run's evidence 146ms
+     × the planted `deep` that runs the script from the agent's path runs the changed script and fails the judge 190ms
+ ❯ tests/acceptance/1945/package.test.ts (2 tests | 2 failed) 8849ms
+     × before your yes, the plan that installs a test package whose postinst writes a file its file list doesn't hold says what its install scripts did can't be undone 3773ms
+     × the planted hub that lists the package as fully undoable fails the judge, naming the package 1355ms
+
+ Test Files  3 failed (3)
+      Tests  8 failed (8)
+   Duration  151.05s (tests 99%)
