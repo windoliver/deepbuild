@@ -361,8 +361,15 @@ byHand.push('tests/acceptance/405/budgets.test.ts');
 alone.push('tests/acceptance/1936/');
 // #544's files build deep-logic and deep-show, draw on the GPU, export a film, and build deep-logic for Linux x86_64 in Docker.
 alone.push('tests/acceptance/544/');
+// #202's files each build deep-show (and the budgets the merge base too); its budgets time the check, kind_rules and
+// the kind kit.
+alone.push('tests/acceptance/202/');
+timed.push('tests/acceptance/202/budgets.test.ts');
 // #2015's file builds deep-show in the full set and runs it on a plate and a recipe pack.
 alone.push('tests/acceptance/2015/');
+// #220's files start hubs, build deep-show in the full set and time the typeset tool's own process.
+alone.push('tests/acceptance/220/');
+timed.push('tests/acceptance/220/budgets.test.ts');
 // #1976's file builds deep-gpu and clicks 200 seeded rays through seven views of a plane and a sphere.
 alone.push('tests/acceptance/1976/');
 // #1405's spin and QoS files read a two-thread bench's count at load above the cores, and its proof runs a real budget
@@ -379,6 +386,11 @@ alone.push('tests/acceptance/1964/');
 alone.push('tests/acceptance/1963/');
 // #1723's files each start a real hub whose gate runs a document check through the canvas core, under a 480 s wait.
 alone.push('tests/acceptance/1723/');
+// #504's files each build deep-show or deep-motion with cargo, and criterion 2's hub test starts a hub and agents.
+alone.push('tests/acceptance/504/');
+// #504's blind redrafts of criteria 1, 2 and 8 each build deep-show or deep-motion with cargo; criterion 2's starts a
+// hub and an agent stand-in.
+alone.push('tests/acceptance/504-redraft-ac1/', 'tests/acceptance/504-redraft-ac2/', 'tests/acceptance/504-redraft-ac8/');
 // #2026's files build the replica and deep-live plain and planted and run a hub over 30 days of history; three judge
 // wall-clock limits (Needs you's load, a replayed ask within 1 s, the hub-down line within 2 s).
 // The first draft's AC3 file is kept by hand: its wrong program, the app's reader keeping its place by event ID, can't

@@ -146,6 +146,23 @@ pub fn check(
             ));
             continue;
         }
+        // #220: a typeset output's source is its alt; an alt that says another formula fails.
+        if let (Some(source), Some(alt)) = (
+            typeset_source(&svg),
+            params.get("alt").and_then(Value::as_str),
+        ) {
+            if squash(alt) != squash(&source) {
+                issues.push(issue(
+                    "formula.alt_mismatch",
+                    "error",
+                    id,
+                    format!("items/{id}/params/alt"),
+                    json!({"item": id, "alt": alt, "source": source}),
+                    "The vector names a typeset job's output, and its alt isn't the job's source.",
+                    "Set alt to the job's source, or leave it out to take the source as the accessible name.",
+                ));
+            }
+        }
         imported.insert(id.clone(), Imported { svg, colors });
     }
     // A part target names a part its vector's import holds.
@@ -176,6 +193,21 @@ pub fn check(
         }
     }
     (issues, imported)
+}
+
+/// The source of a formula the typeset job wrote: its record's `made_by.input` (#220).
+pub fn typeset_source(svg: &Svg) -> Option<String> {
+    let record: Value = serde_json::from_str(svg.typeset.as_deref()?).ok()?;
+    record
+        .get("made_by")?
+        .get("input")?
+        .as_str()
+        .map(str::to_string)
+}
+
+/// A formula's text with its ASCII whitespace left out, as an alt and a source compare.
+fn squash(s: &str) -> String {
+    s.chars().filter(|c| !c.is_ascii_whitespace()).collect()
 }
 
 /// The numbers a formula's `alt` shows: each run of digits, with a point between two digits.
@@ -283,17 +315,25 @@ pub fn bounds(item: &Value, found: &Imported, part: Option<&str>) -> Option<[f64
 }
 
 /// The read-only per-part fields of an imported vector item, as `geometry` answers them: each
-/// part's id, its source (null: an SVG doesn't say), its box and its outline's sub-paths, in
-/// document u.
+/// part's id, its source (the typeset job's `data-source`, else null: an SVG doesn't say), its box
+/// and its outline's sub-paths, in document u.
 pub fn parts_json(
     item: &Value,
     found: &Imported,
     subpaths: impl Fn(&[deep_canvas_marks::path::Verb]) -> Vec<Value>,
 ) -> Value {
+    let source = |id: &str| {
+        found
+            .svg
+            .parts
+            .iter()
+            .find(|p| p.id == id)
+            .and_then(|p| p.source.clone())
+    };
     Value::Array(
         lower::parts(&found.svg, item)
             .into_iter()
-            .map(|(id, b, verbs)| json!({"id": id, "source": null, "box": b, "subpaths": subpaths(&verbs)}))
+            .map(|(id, b, verbs)| json!({"id": id, "source": source(&id), "box": b, "subpaths": subpaths(&verbs)}))
             .collect(),
     )
 }
@@ -321,5 +361,47 @@ mod tests {
         assert!(shown
             .iter()
             .all(|n| n["source"] == json!({"notation": "alt"})));
+    }
+}
+
+#[cfg(test)]
+mod typeset_tests {
+    use super::*;
+
+    const FORMULA: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 10"><metadata><deep:typeset xmlns:deep="urn:deepbuild:typeset">{"made_by":{"tool":"typst-mitex","version":"1.0.0","input":"a^2 + b^2 = c^2"}}</deep:typeset></metadata><g id="t-a_5e2" data-source="a^2"><path d="M0 0L4 0L4 4Z" fill="currentColor"/></g></svg>"#;
+
+    fn doc(alt: Option<&str>) -> Map<String, Value> {
+        let mut params = json!({"src": "f".repeat(64), "colors": {"currentColor": "ink"}});
+        if let Some(alt) = alt {
+            params["alt"] = json!(alt);
+        }
+        json!({"items": {"eq": {"kind": "vector@1", "params": params}}})
+            .as_object()
+            .unwrap()
+            .clone()
+    }
+
+    fn codes(alt: Option<&str>) -> Vec<&'static str> {
+        let (issues, _) = check(
+            &doc(alt),
+            |_| Some(FORMULA.as_bytes().to_vec()),
+            Twin::Honest,
+        );
+        issues.iter().map(|i| i.code).collect()
+    }
+
+    #[test]
+    fn an_alt_that_says_another_formula_fails() {
+        assert_eq!(codes(Some("a^2+b^2=c^3")), ["formula.alt_mismatch"]);
+        assert!(codes(Some("a^2+b^2=c^2")).is_empty());
+        assert!(codes(None).is_empty());
+    }
+
+    #[test]
+    fn a_part_keeps_its_source() {
+        let svg = svg::import(FORMULA.as_bytes(), &[], Twin::Honest).unwrap();
+        assert_eq!(svg.parts[0].source.as_deref(), Some("a^2"));
+        assert_eq!(typeset_source(&svg).as_deref(), Some("a^2 + b^2 = c^2"));
+        assert!(svg.unread.is_empty(), "{:?}", svg.unread);
     }
 }

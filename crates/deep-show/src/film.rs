@@ -24,7 +24,8 @@ pub(crate) fn program_of(sched: &Scheduler<'_>, session: &DocSession) -> Option<
 
 /// The plan of a 2D film with timeline shots, and the index of its document camera.
 pub(crate) fn plan_of<'a>(program: &'a Program, doc: &Value) -> Option<(&'a Plan, usize)> {
-    let plan = program.shots.as_deref().filter(|p| !p.shots.is_empty())?;
+    // #504: a stage's shots write the camera too.
+    let plan = program.shots.as_deref().filter(|p| !p.shots.is_empty() || p.stage.iter().any(Option::is_some))?;
     let cam = plan.camera(doc.get("camera")?.as_str()?)?;
     plan.cameras[cam].flat.then_some((plan, cam))
 }
@@ -231,7 +232,9 @@ pub(crate) fn block(program: &Program, doc: &Value, t: i64, reduced: bool, glyph
             continue;
         }
         let shown = plan.shown(c, t, &at);
-        let name = shown.shot.map(|s| plan.shots[s].id.as_str());
+        // #504: a stage's shot names itself as a timeline shot does.
+        let staged = shown.stage.and_then(|s| plan.stage[s].as_ref()).map(|s| s.id.as_str());
+        let name = shown.shot.map(|s| plan.shots[s].id.as_str()).or(staged);
         cameras.insert(camera.id.clone(), shown.pose.to_json(name));
         if Some(c) == doc_cam {
             if let Some((mix, from, to)) = shown.dissolve {
@@ -305,7 +308,12 @@ fn parts_of(id: &str, item: &Value) -> Vec<morph::Part> {
 /// writes its camera's pose), for the 3D frame; `None` when no timeline shot writes it.
 pub(crate) fn posed(doc: &Value, t: i64) -> Option<Value> {
     let shots = doc.get("shots")?.as_object()?;
-    if !shots.values().any(|s| s.get("start").is_some()) {
+    // #504: a stage's shot poses the camera too: the default stage's from the start, and the one
+    // an entry on the played form's track chooses from its entry.
+    let staged = doc.get("controls").and_then(Value::as_object).is_some_and(|c| {
+        c.values().any(|c| c.get("stages").and_then(Value::as_object).is_some_and(|s| s.values().any(|s| s.get("shot").is_some())))
+    });
+    if !shots.values().any(|s| s.get("start").is_some()) && !staged {
         return None;
     }
     let program = Program::compile(doc.as_object()?).ok()?;
