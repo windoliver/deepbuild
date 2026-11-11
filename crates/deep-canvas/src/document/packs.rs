@@ -25,6 +25,7 @@ use crate::ops;
 use crate::registry::{self, Range, Sealed, Semver};
 use crate::schedule::{canonical, Hasher};
 
+pub mod deps;
 pub mod module_fields;
 
 /// The most derived items one repeat makes (Recipe: cost).
@@ -235,6 +236,8 @@ pub const MAX_DEPTH: usize = 4;
 pub struct Pack {
     pub id: PackId,
     pub requires_modules: BTreeMap<String, String>,
+    /// `requires.packs`: each pack it builds on, at an exact version (#1957).
+    pub requires_packs: Vec<deps::Dep>,
     /// By `pack.name`.
     pub recipes: BTreeMap<String, Recipe>,
     /// `d1:` SHA-256 of the manifest's canonical form: a version's bytes, frozen.
@@ -310,7 +313,7 @@ pub fn check_pack(manifest: &Value, sealed: &Sealed, planted: Planted) -> Result
             "a canvas module's name or kind family; a pack names its own",
         ));
     }
-    let mut requires_modules = BTreeMap::new();
+    let (mut requires_modules, mut requires_packs) = (BTreeMap::new(), Vec::new());
     if let Some(requires) = fields.get("requires") {
         match requires.as_object() {
             None => issues.push(bad("requires", requires.clone(), "not an object")),
@@ -377,11 +380,7 @@ pub fn check_pack(manifest: &Value, sealed: &Sealed, planted: Planted) -> Result
                                 }
                             }
                         },
-                        "packs" => issues.push(bad(
-                            "requires/packs",
-                            value.clone(),
-                            "pack dependencies land with the pack versions task",
-                        )),
+                        "packs" => requires_packs = deps::read(value, &id, &mut issues),
                         other => issues.push(Issue::envelope(
                             "unknown_field",
                             format!("requires/{other}"),
@@ -416,6 +415,7 @@ pub fn check_pack(manifest: &Value, sealed: &Sealed, planted: Planted) -> Result
         }
         Some(other) => issues.push(bad("recipes", other.clone(), "not an object")),
     }
+    deps::undeclared(manifest, &id, &requires_packs, &mut issues);
     // Providers, layouts' validators and program entries are programs the sandbox module admits
     // and runs (#238): a build without it refuses them, whatever `requires.modules` says.
     for key in ["providers", "layouts"] {
@@ -458,6 +458,7 @@ pub fn check_pack(manifest: &Value, sealed: &Sealed, planted: Planted) -> Result
     Ok(Pack {
         id,
         requires_modules,
+        requires_packs,
         recipes,
         digest: digest(manifest),
         entries,
@@ -1420,10 +1421,13 @@ impl Packs {
         if let Some(key) = &key {
             *self.checks.entry(key.clone()).or_default() += 1;
         }
-        // The pack check, then each kind's kit (#202), which checks documents of the pack.
+        // The pack check, its place in the pack graph (#1957), then each kind's kit (#202), which
+        // checks documents of the pack beside the versions it requires.
         let checked = check_pack(manifest, sealed, self.planted).and_then(|mut pack| {
+            deps::cycle(self, &pack)?;
             if !pack.kinds.is_empty() {
-                super::pack_kinds::kit(&mut pack, sealed, self.planted)?;
+                let alone = deps::store(self, &pack);
+                super::pack_kinds::kit(&mut pack, sealed, alone)?;
             }
             Ok(pack)
         });
@@ -1544,7 +1548,7 @@ pub fn resolve<'a>(
         ));
         return out;
     };
-    let mut seen: BTreeMap<String, String> = BTreeMap::new();
+    let (mut seen, mut listed) = (BTreeMap::new(), BTreeMap::new());
     for (i, entry) in entries.iter().enumerate() {
         let path = format!("packs/{i}");
         let Some((text, id)) = entry
@@ -1599,46 +1603,16 @@ pub fn resolve<'a>(
                 &format!("pack `{}` at version {} is not in this build; the document is refused whole, and never drawn with another version", id.id, id.version),
             );
             // The instances that need it.
-            issue.ids = member(doc, "items")
-                .and_then(Value::as_object)
-                .map(|items| {
-                    items
-                        .iter()
-                        .filter(|(_, item)| {
-                            super::kind_text(item)
-                                .and_then(|k| k.split_once('.'))
-                                .is_some_and(|(family, _)| family == id.name)
-                        })
-                        .map(|(item_id, _)| item_id.clone())
-                        .collect()
-                })
-                .unwrap_or_default();
+            issue.ids = deps::instances(doc, &id.name);
             issues.push(issue);
             continue;
         };
-        for (module, range) in &pack.requires_modules {
-            let Some(sealed) = sealed else { break };
-            let Some(parsed) = Range::parse(range) else {
-                continue;
-            };
-            if sealed.module(module).is_none() {
-                issues.push(Issue::envelope(
-                    "module_missing",
-                    format!("{path}/requires/modules/{module}"),
-                    json!(range),
-                    &format!("pack `{text}` requires the {module} module, which this build lacks"),
-                ));
-            } else if !sealed.satisfies(module, &parsed) {
-                issues.push(Issue::envelope(
-                    "out_of_range",
-                    format!("{path}/requires/modules/{module}"),
-                    json!(range),
-                    &format!("pack `{text}` requires the {module} module at {range}; this build has another"),
-                ));
-            }
-        }
+        deps::modules(pack, text, &path, sealed, issues);
+        listed.insert(id.name.clone(), path);
         out.by_name.insert(id.name.clone(), pack);
     }
+    // What the listed packs require, as if the document listed it (#1957).
+    deps::close(&mut out, &listed, doc, packs, sealed, issues);
     out
 }
 
