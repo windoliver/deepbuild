@@ -178,6 +178,21 @@ describe('a verdict on a workspace', () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+  it('names each reason the core gave of its own by its code (#2029), as verdict.made@2', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'deep-verdicts-'));
+    try {
+      const record = await openRecord({ path: join(dir, 'record.db'), now: () => 1 });
+      const left = 'open items: 1 still open, each closed only by evidence, your answer or a rule: “add the retry test”';
+      const v = verdict(claim({ claim: 'claim:01K74G1Z3X5V7T9R1P3N5M7K9M', checks: [c], runs: [run(c, 'passed')], state }));
+      await recordVerdict(record, { ...v, outcome: 'BLOCKED', reasons: [...v.reasons, left], why: [{ reason: 'open_items', text: left }] }, 2);
+      const [made] = (await record.raw(`SELECT v, data FROM events WHERE kind = 'verdict.made'`, [])) as { v: number; data: string }[];
+      expect(made!.v).toBe(2);
+      expect(JSON.parse(made!.data).why).toEqual([{ reason: 'open_items', text: left }]);
+      await record.close();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe('evidence that isn\'t captured and complete', () => {
