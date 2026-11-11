@@ -9,7 +9,7 @@
 // files and takes the path a red main takes (#1333), whatever the forge says it merged. DeepBuild never closes a PR.
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { gitEnv } from '@deepbuild/gate';
@@ -46,7 +46,6 @@ export interface Round {
   held: { pr: number; issue: number; reason: string }[];
   sent_back: { pr: number; issue: number; files: string[] }[];
   stopped: Stop | null;
-  joined: { pr: number; issue: number }[];
 }
 
 export interface LandingOptions {
@@ -65,8 +64,6 @@ export interface LandingOptions {
   /** A change sent back to its own attempt: the session a run started on the issue in the checkout, if one is live, hears it. */
   sendBack(r: { checkout: string; issue: number; pr: number; files: string[]; text: string }): Promise<void>;
   appendCore(kind: string, data: Obj, extra?: { subject?: string }): Promise<void>;
-  /** The runs started on an issue in the checkout (#1330): a live attempt beside a pull request would be a second one. */
-  attemptsOn(checkout: string, issue: number): Promise<string[]>;
   plant: Plant | undefined;
 }
 
@@ -181,7 +178,7 @@ export class Landing {
   }
   private async judgeIn(checkout: string, repo: string): Promise<Round> {
     const s = this.load(repo);
-    const round: Round = { landed: [], held: [], sent_back: [], stopped: mainWatch(await topOf(checkout)), joined: [] };
+    const round: Round = { landed: [], held: [], sent_back: [], stopped: mainWatch(await topOf(checkout)) };
     const pulls = (await this.pulls(repo)).filter((p) => p.issue !== undefined);
     await this.fetch(checkout, pulls.map((p) => p.branch));
     const main = await must(checkout, ['rev-parse', 'refs/remotes/origin/main']);
@@ -254,7 +251,7 @@ export class Landing {
     const s = this.load(repo);
     const top = await topOf(checkout);
     // A red main pauses every landing (#1333), a read-back's among them, until main watch clears it.
-    const round: Round = { landed: [], held: [], sent_back: [], stopped: mainWatch(top), joined: [] };
+    const round: Round = { landed: [], held: [], sent_back: [], stopped: mainWatch(top) };
     if (round.stopped) return round;
     const pulls = new Map((await this.pulls(repo)).filter((p) => p.issue !== undefined).map((p) => [p.pr, p]));
     await this.fetch(checkout, [...pulls.values()].map((p) => p.branch));
@@ -318,29 +315,25 @@ export class Landing {
   /**
    * `deep work --once`: one pass over the set. An open pull request from before the run that links an issue in the set
    * joins as that issue's attempt, and no second attempt starts beside it; one past 7 days with no activity that joins
-   * nothing is listed. DeepBuild never closes one.
+   * nothing is listed. DeepBuild never closes one. A new attempt starts only as #1330's `deep start`, under a run you
+   * approved: this pass starts none.
    */
-  async workOnce(checkout: string, issues: number[]): Promise<{ tasks: { issue: number; attempts: { pr: number }[]; started: boolean }[]; stale: { pr: number }[] }> {
+  async workOnce(checkout: string, issues: number[]): Promise<{ tasks: { issue: number; attempts: { pr: number }[] }[]; stale: { pr: number }[] }> {
     const repo = await this.repoOf(checkout);
     const pulls = await this.pulls(repo);
     const tasks = [];
     for (const issue of issues) {
       const joined = pulls.filter((p) => p.issue === issue);
       for (const p of joined) await this.step('joined', repo, { pr: p.pr, issue }, { head: p.head });
-      // The planted wrong program starts an attempt of its own beside the earlier pull request.
-      const started = this.o.plant === 'second-attempt-beside-pr' || (!joined.length && !(await this.o.attemptsOn(checkout, issue)).length);
-      if (started) await this.startAttempt(checkout, issue);
-      tasks.push({ issue, attempts: joined.map((p) => ({ pr: p.pr })), started });
+      // The planted wrong program starts an attempt of its own beside the earlier pull request: a headless agent.
+      if (this.o.plant === 'second-attempt-beside-pr' && joined.length) {
+        await new Promise<void>((done) => execFile('claude', ['-p', `Work issue #${issue}.`], { cwd: checkout, timeout: 60_000 }, () => done()));
+      }
+      tasks.push({ issue, attempts: joined.map((p) => ({ pr: p.pr })) });
     }
     const now = Date.now();
     const stale = pulls.filter((p) => !issues.includes(p.issue ?? 0) && now - p.updated > STALE_MS).map((p) => ({ pr: p.pr }));
     return { tasks, stale };
-  }
-  /** A new attempt on an issue with none: a headless agent run in a worktree of its own, as main watch starts one (#1333). */
-  private async startAttempt(checkout: string, issue: number): Promise<void> {
-    const bin = ['claude', 'codex'].find((name) => (process.env.PATH ?? '').split(':').some((d) => d && existsSync(join(d, name))));
-    if (!bin) return;
-    await new Promise<void>((done) => execFile(bin, bin === 'claude' ? ['-p', `Work issue #${issue}.`] : ['exec', `Work issue #${issue}.`], { cwd: checkout, timeout: 60_000 }, () => done()));
   }
 
   private step(step: string, repo: string, c: Pick<Change, 'pr' | 'issue'>, d: { head?: string | null; main?: string | null; commit?: string | null; tree?: string | null; claim?: string | null; outcome?: string; files?: string[]; open?: string[] }): Promise<void> {

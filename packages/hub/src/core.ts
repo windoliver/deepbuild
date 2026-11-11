@@ -1200,7 +1200,6 @@ export class Core {
       judge: (r) => this.judgeLanding(r),
       sendBack: (r) => this.landingSendBack(r),
       appendCore: (kind, data, extra) => this.appendCore(kind, data, extra),
-      attemptsOn: async (checkout, issue) => ((await this.record.raw(`SELECT DISTINCT subject FROM events WHERE kind = 'start.started' AND json_extract(data, '$.issue') = ? AND json_extract(data, '$.repo') = ?`, [issue, realpathSync(checkout)])) as { subject: string }[]).map((r) => r.subject),
     });
     // #1922's planted hosts build a tool's digest wrongly: the host's plants, selected with the hub's variable.
     const plant = this.options.plant?.startsWith('job-build-') ? { plant: this.options.plant as 'job-build-entry-only' } : {};
