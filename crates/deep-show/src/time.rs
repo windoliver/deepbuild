@@ -301,10 +301,12 @@ fn default_times(doc: &Value, motion: Option<&Motion>) -> Vec<i64> {
 impl Hub<'_> {
     /// The document's current revision, or the `no_revision` refusal.
     fn current_doc(&self, doc: &str) -> Result<Value, Value> {
-        let mut doc = self
+        let revision = self
             .current(doc)
             .map(|r| r.doc.clone())
             .ok_or_else(|| refused("no_revision"))?;
+        // #504: played, so play and determinism replay the document's input track.
+        let mut doc = self.played(doc, &revision);
         let _ = self.inline_tables(&mut doc);
         let _ = self.inline_vectors(&mut doc);
         let _ = self.inline_occurrences(&mut doc, &[]);

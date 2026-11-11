@@ -364,6 +364,25 @@ pub enum Planted {
     FingerprintWithoutSources,
     /// #1901: `padded_key` keys the fixture by its memory, padding and all.
     KeyHashesRawBytes,
+    /// #504: every evaluated frame of a document with controls runs a program through the
+    /// sandbox module, as a per-frame plug-in callback would.
+    BoardRunsProgramPerFrame,
+    /// #504: a verdict judges, beside a claim's deliverables, the documents its agent showed on it.
+    FigureFeedsVerdict,
+    /// #504: a whole revision presented again rebuilds every part, changed or not.
+    ReloadRebuildsEveryPart,
+    /// #504: a control sweep steps the control but poses every assembly at its rest value.
+    SweepPosesAssembliesAtRest,
+    /// #504: a pick on a target also selects the item and opens its panel.
+    PickSelectsItem,
+    /// #504: a view-class pick applies the option's patch as a revision of the document.
+    VariantPickWritesRevision,
+    /// #504: an export applies only the last entry's option, over its whole span.
+    VariantExportFinalChoice,
+    /// #504: a template slot shows the value the document holds as written, never at t.
+    ReadoutReadsDefaults,
+    /// #504: each frame runs a plug-in's code the seal doesn't hold, listed among its nodes.
+    PluginCodePerFrame,
 }
 
 /// The build's sealed canvas-module set, registered and sealed once at startup (#305: Registry
@@ -476,6 +495,7 @@ pub struct RecordObject {
     pub as_of: Option<i64>,
 }
 
+#[derive(Clone)]
 pub struct Claim {
     /// The session that made the claim: its working agent.
     pub session: String,
@@ -485,6 +505,7 @@ pub struct Claim {
 }
 
 /// One requirement of a claim's definition: its handle and its check input.
+#[derive(Clone)]
 pub struct Requirement {
     pub id: String,
     pub check: Value,
@@ -882,6 +903,8 @@ pub struct Eval {
     pub debug_text: bool,
     /// #497: document arrays to answer as the frame read them.
     pub arrays: Vec<String>,
+    /// #504: the document's input track for this evaluation, over the hub's.
+    pub track: Option<Vec<Value>>,
 }
 
 pub struct Scenario {
@@ -890,6 +913,8 @@ pub struct Scenario {
     pub processes: Vec<Process>,
     pub panels: BTreeMap<String, Panel>,
     pub docs: BTreeMap<String, String>,
+    /// #504: the claim or ask each document was minted for (`docs.<id>.for`), where named.
+    pub docs_for: BTreeMap<String, String>,
     pub record: BTreeMap<String, RecordObject>,
     /// #629: a replay's run record entries, each as a `run` call's reply gave it (`record` as a
     /// list).
@@ -1011,6 +1036,10 @@ pub struct Hub<'a> {
     pub background: Vec<crate::jobs::Progress>,
     /// #501: each document's session state as `session` set it: its selection and view inputs.
     pub session_state: BTreeMap<String, Value>,
+    /// #504: each document's one input track (Input track), and the form its session loaded at
+    /// its last `deep_show`, before the track and the session's picks (crate::played).
+    pub tracks: BTreeMap<String, deep_canvas_input::track::Track>,
+    pub forms: BTreeMap<String, Value>,
     /// Each document's session.
     pub sessions: BTreeMap<String, DocSession>,
     /// Panels a `panel` call showed or hid.
@@ -1172,6 +1201,8 @@ impl<'a> Hub<'a> {
             display_only: BTreeSet::new(),
             mode_ids: BTreeMap::new(),
             session_state: BTreeMap::new(),
+            tracks: BTreeMap::new(),
+            forms: BTreeMap::new(),
             renderer: Renderer::new(),
             sched,
             sessions: BTreeMap::new(),
@@ -2255,9 +2286,17 @@ impl<'a> Hub<'a> {
             let fresh = self.new_session();
             self.sessions.insert(show.doc.clone(), fresh);
         }
-        if let Some(session) = self.sessions.get_mut(&show.doc) {
-            session.load(&mut self.sched, drawn_form.as_ref().unwrap_or(&doc));
+        // #504: the session loads the played form: the drawn form with the document's input track
+        // and the session's picks, shown at `t`.
+        let again = self.forms.insert(show.doc.clone(), drawn_form.clone().unwrap_or_else(|| doc.clone())).is_some();
+        if again && self.planted(Planted::ReloadRebuildsEveryPart) {
+            // Planted (#504): a revision presented again rebuilds every part, kept or cached.
+            let startup = self.startup;
+            self.sched = Scheduler::new(&startup.sealed, self.options());
+            let fresh = self.new_session();
+            self.sessions.insert(show.doc.clone(), fresh);
         }
+        self.replay(&show.doc, show.t);
         self.first_frames.remove(&show.doc);
         // #1732: render-back's geometry audit of the revision, on its frame at `t`.
         if show.include.iter().any(|i| matches!(i, Include::Audit)) {
@@ -2275,7 +2314,8 @@ impl<'a> Hub<'a> {
             None
         };
         if three {
-            let placed = self.arranged(&show.doc, &doc);
+            let shown = self.shown_at(&show.doc, &doc, show.t);
+            let placed = self.arranged(&show.doc, &shown);
             self.pending3d = Some(self.draw3d(&placed, show.t, show.size));
         }
         self.present(show, visible, drawn.as_ref(), reply)

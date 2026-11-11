@@ -289,7 +289,8 @@ pub fn draws(doc: &Value) -> Vec<String> {
                 match items[at].get("parent").and_then(Value::as_str) {
                     None => return true,
                     Some(p) if items.contains_key(p) => at = p,
-                    Some(_) => return false,
+                    // #504: an item joins an assembly by naming it as its parent.
+                    Some(p) => return doc.get("assemblies").and_then(|a| a.get(p)).is_some(),
                 }
             }
             false

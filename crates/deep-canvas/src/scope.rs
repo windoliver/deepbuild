@@ -50,6 +50,8 @@ pub struct Planted {
     pub full_screen_only_3d: bool,
     /// Esc leaves full screen and goes back to the top at once.
     pub esc_to_root: bool,
+    /// #504: a click on a control's target also selects the item and opens its panel.
+    pub pick_selects: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -205,6 +207,66 @@ pub fn region_about(c: [f64; 2], within: [f64; 4]) -> [f64; 4] {
 pub struct Done {
     pub picks: u32,
     pub commits: Vec<u64>,
+    /// #504: the option or stage a click, or Enter on a focused target, picked.
+    pub pick: Option<PickTarget>,
+}
+
+/// One item a control picks in the scene (Control: `targets`): the control, the option or stage
+/// it picks, the item, and the label a screen reader names its button by.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PickTarget {
+    pub control: String,
+    pub option: String,
+    pub item: String,
+    pub label: String,
+}
+
+/// Every control's targets on items that draw (an item with `visible: false` or that `hidden`
+/// names is never picked or announced), controls in document order and each control's targets
+/// in reading order: the item's `order`, then its ID (Control: targets join the Tab order after
+/// the control's own UI, in reading order).
+pub fn pick_targets(doc: &Value, hidden: &[String]) -> Vec<PickTarget> {
+    let items = member(doc, "items").and_then(Value::as_object);
+    let mut out = Vec::new();
+    for (control, c) in member(doc, "controls").and_then(Value::as_object).into_iter().flatten() {
+        let Some(targets) = member(c, "targets").and_then(Value::as_object) else {
+            continue;
+        };
+        let mut mine: Vec<(String, PickTarget)> = targets
+            .iter()
+            .filter_map(|(option, item)| {
+                let item = item.as_str()?;
+                let drawn = items?.get(item)?;
+                if member(drawn, "visible") == Some(&Value::Bool(false)) || hidden.iter().any(|h| h == item) {
+                    return None;
+                }
+                let order = member(drawn, "order").and_then(Value::as_str).unwrap_or("").to_string();
+                let label = label_of(doc, c, option);
+                let t = PickTarget { control: control.clone(), option: option.clone(), item: item.into(), label };
+                Some((format!("{order}\u{0}{item}"), t))
+            })
+            .collect();
+        mine.sort_by(|a, b| a.0.cmp(&b.0));
+        out.extend(mine.into_iter().map(|(_, t)| t));
+    }
+    out
+}
+
+/// The label a target's button is named by: its stage's, its variant option's or its option's
+/// `label`, else the option's ID.
+fn label_of(doc: &Value, control: &Value, option: &str) -> String {
+    fn named<'a>(list: Option<&'a Value>, option: &str) -> Option<&'a str> {
+        list?.as_array()?.iter().find(|o| member(o, "name").or_else(|| member(o, "id")).and_then(Value::as_str) == Some(option))
+            .and_then(|o| member(o, "label")?.as_str())
+    }
+    let set = member(control, "variant").and_then(Value::as_str);
+    member(control, "stages")
+        .and_then(|s| member(s, option))
+        .and_then(|s| member(s, "label")?.as_str())
+        .or_else(|| set.and_then(|set| named(member(doc, "variants")?.get(set)?.get("options"), option)))
+        .or_else(|| named(member(control, "options"), option))
+        .unwrap_or(option)
+        .to_string()
 }
 
 /// Where an item sits: a rect in page u (`[x, y, w, h]`), or a 3D box by its centre and half
@@ -325,6 +387,8 @@ pub struct Scope {
     last_click: Option<(i64, [f64; 2], Hit)>,
     view: View,
     planted: Planted,
+    /// #504: the Tab stop with focus: a control's own UI, or one of its targets by option.
+    focus: Option<(String, Option<String>)>,
 }
 
 fn distance(a: [f64; 2], b: [f64; 2]) -> f64 {
@@ -513,6 +577,7 @@ impl Scope {
             last_click: None,
             view: View::default(),
             planted,
+            focus: None,
         })
     }
 
@@ -843,6 +908,42 @@ impl Scope {
 
     /// The topmost item under `p`, or the button over it: in a flat view the last-stacked box
     /// that holds it, in 3D the box whose face under it is nearest.
+    /// The target a press hit, among the targets that draw.
+    fn target_hit(&self, doc: &Value, hit: &Hit) -> Option<PickTarget> {
+        let Hit::Item(id) = hit else {
+            return None;
+        };
+        pick_targets(doc, &self.hidden(doc)).into_iter().find(|t| &t.item == id)
+    }
+
+    /// The Tab stops in order: each control's own UI, then its targets that draw.
+    fn stops(&self, doc: &Value) -> Vec<(String, Option<String>)> {
+        let targets = pick_targets(doc, &self.hidden(doc));
+        let mut out = Vec::new();
+        for control in member(doc, "controls").and_then(Value::as_object).into_iter().flatten().map(|(k, _)| k) {
+            out.push((control.clone(), None));
+            out.extend(targets.iter().filter(|t| &t.control == control).map(|t| (control.clone(), Some(t.option.clone()))));
+        }
+        out
+    }
+
+    /// Tab moves focus to the next stop, from the first after the last.
+    fn tab(&mut self, doc: &Value) {
+        let stops = self.stops(doc);
+        let next = match self.focus.as_ref().and_then(|f| stops.iter().position(|s| s == f)) {
+            Some(i) => i + 1,
+            None => 0,
+        };
+        self.focus = stops.get(next).cloned();
+    }
+
+    /// The focused target, while it still draws.
+    fn focused_target(&self, doc: &Value) -> Option<PickTarget> {
+        let (control, option) = self.focus.as_ref()?;
+        let option = option.as_ref()?;
+        pick_targets(doc, &self.hidden(doc)).into_iter().find(|t| &t.control == control && &t.option == option)
+    }
+
     fn hit(&self, doc: &Value, p: [f64; 2]) -> Hit {
         if self.button().is_some_and(|b| within(b, p)) {
             return Hit::Button;
@@ -1077,6 +1178,15 @@ impl Scope {
                 if let Some(press) = self.press.take() {
                     if press.dragging {
                         self.last_click = None;
+                    } else if let Some(pick) = self.target_hit(doc, &press.hit) {
+                        // A click on a target picks its option or stage and never selects the
+                        // item or opens its panel (Control: targets).
+                        if self.planted.pick_selects {
+                            self.click(&press.hit, press.toggle);
+                        }
+                        self.focus = Some((pick.control.clone(), Some(pick.option.clone())));
+                        done.pick = Some(pick);
+                        self.last_click = None;
                     } else if press.double {
                         if let Hit::Item(id) = &press.hit {
                             self.fly(doc, id);
@@ -1113,6 +1223,10 @@ impl Scope {
             }
             Event::Key { key, cmd, .. } => {
                 match (key.as_str(), cmd) {
+                    ("Tab", false) => self.tab(doc),
+                    ("Enter" | "Return", false) if self.palette.is_none() => {
+                        done.pick = self.focused_target(doc);
+                    }
                     ("Escape", _) => self.back(),
                     ("k", true) => self.palette = Some(String::new()),
                     ("Return", _) => {
@@ -1206,6 +1320,14 @@ impl Scope {
                 .unwrap_or_default(),
             "selection": self.selection,
             "details": self.details,
+            // #504: the Tab stop with focus: a target as its item's ID, a control as its own.
+            "focus": self.focus.as_ref().map(|(control, option)| match option {
+                Some(o) => pick_targets(doc, &hidden)
+                    .into_iter()
+                    .find(|t| &t.control == control && &t.option == o)
+                    .map_or(Value::Null, |t| json!(t.item)),
+                None => json!(control),
+            }),
             "hover": self.hover,
             "level": self.levels.iter().map(|l| &l.id).collect::<Vec<_>>(),
             "palette": {
@@ -1275,6 +1397,31 @@ mod tests {
         assert_eq!(s.selection, ["far"]);
         click(&mut s, &doc, 4000 * MS, [700.0, 300.0]);
         assert!(s.selection.is_empty(), "nothing is under the pointer there");
+    }
+
+    #[test]
+    fn a_click_on_a_target_picks_its_stage_and_never_selects_and_tab_then_enter_picks_the_next() {
+        let mut doc = scene();
+        doc["controls"] = json!({"steps": {"kind": "stages", "role": "tablist",
+            "stages": {"a": {"label": "Near"}, "b": {"label": "Far"}},
+            "targets": {"a": "near", "b": "far"}}});
+        let mut s = scope(&doc);
+        s.input(&doc, 0, 1, &Event::Down { pos: [400.0, 300.0], toggle: false });
+        let done = s.input(&doc, 60 * MS, 2, &Event::Up([400.0, 300.0]));
+        assert_eq!(done.pick.map(|p| (p.option, p.label)), Some(("a".into(), "Near".into())));
+        assert!(s.selection.is_empty() && s.details.is_none(), "a pick never selects or opens a panel");
+        let key = |k: &str| Event::Key { key: k.into(), cmd: false, alt: false };
+        s.input(&doc, 120 * MS, 3, &key("Tab"));
+        let done = s.input(&doc, 180 * MS, 4, &key("Enter"));
+        assert_eq!(done.pick.map(|p| p.item), Some("far".into()));
+        // An item that doesn't draw is never a target.
+        doc["items"]["far"]["visible"] = json!(false);
+        assert_eq!(pick_targets(&doc, &[]).len(), 1);
+        // The planted wrong program selects the target too.
+        let mut planted = Scope::new(&doc, [0.0, 0.0, 800.0, 600.0], [1600.0, 900.0],
+            Planted { pick_selects: true, ..Planted::default() }).expect("reads");
+        click(&mut planted, &doc, 0, [400.0, 300.0]);
+        assert_eq!(planted.selection, ["near"]);
     }
 
     #[test]

@@ -10,7 +10,7 @@ use deep_canvas::geometry_audit::{Config, Fault, Shape, Solid, V3};
 use deep_canvas::interval::Iv;
 use deep_canvas_motion::program::{Program, TRANSFORM};
 use deep_canvas_scene3d::scene::{self, Affine3};
-use serde_json::{json, Value};
+use serde_json::{json, Map, Value};
 
 /// The check kind.
 pub const GEOMETRY_AUDIT: &str = "geometry.audit";
@@ -256,6 +256,20 @@ fn reach(doc: &Value, t: i64, program: &Program, solids: &[Solid], spread: &dyn 
                     .fold(0.0, f64::max);
                 reach += dpos + (far + reach) * dturn;
             }
+            // #504: the assemblies the part rides, each a slide by its value and a share of its
+            // apart vector; a turn that moves isn't bounded here, so the stretch is an estimate.
+            let mut at = program.member(owner);
+            while let Some(a) = at {
+                let x = &program.assemblies[a];
+                let value = spread(x.slot)?;
+                match x.joint.as_ref().map(|j| &j.kind) {
+                    Some(deep_canvas_motion::assembly::Kind::Turn) if value > 0.0 => return None,
+                    Some(deep_canvas_motion::assembly::Kind::Slide) => reach += value,
+                    _ => {}
+                }
+                reach += spread(x.slot + 1)? * norm(x.apart);
+                at = x.parent;
+            }
             Some(reach)
         })
         .collect()
@@ -398,6 +412,56 @@ fn estimated(swept: &deep_canvas::geometry_audit::Swept, state: &str, control: O
         "why": "no interval form bounds these parts between the samples, so the audit there is an estimate, which never decides a check"}));
 }
 
+/// #504: `doc` with every assembly taken apart and held there (Geometry audit: `apart`): each
+/// take-apart's follow replaced by one that holds every assembly's share at 1 from the start.
+pub(crate) fn at_apart(doc: &Value) -> Value {
+    let mut out = doc.clone();
+    let ids: Vec<Value> = doc.get("assemblies").and_then(Value::as_object).into_iter().flatten().map(|(k, _)| json!(k)).collect();
+    if let Some(channels) = out.get_mut("channels").and_then(Value::as_object_mut) {
+        channels.retain(|_, c| c.pointer("/follow/stagger").is_none());
+    }
+    out["channels"]["audit.apart"] = json!({"mode": "follow", "follow": {
+        "source": {"keys": {"k": {"t": 0, "value": 1}}}, "model": {"transition": {"span": 1}},
+        "stagger": {"targets": ids, "lag": 0}}});
+    out
+}
+
+/// #504: the controls a take-apart follows (Follow: `stagger` over assemblies), each with the
+/// flicks one take-apart takes: its last target's lag plus its transition.
+fn take_aparts(p: &Program) -> Vec<(String, i64)> {
+    use deep_canvas_motion::follow::{Model, Source};
+    p.motion
+        .staggers
+        .iter()
+        .filter_map(|s| {
+            let Source::Control(c) = &s.spec.source else {
+                return None;
+            };
+            let span = match s.spec.model {
+                Model::Transition { span, .. } => span,
+                _ => 2 * deep_canvas::grammar::FLICKS_PER_SECOND,
+            };
+            Some((c.clone(), s.lag * (s.targets.len() as i64 - 1).max(0) + span))
+        })
+        .collect()
+}
+
+/// #504: control `id` replayed through a take-apart and back with its reversals (Control sweep:
+/// `replay`): opened at `t0`, closed half way through, opened again before it settles, then
+/// closed and left to settle, as input-track entries on the played form; with the flicks it ends.
+fn replayed(doc: &Value, control: &Value, id: &str, t0: i64, d: i64) -> Option<(Value, i64)> {
+    let (lo, hi) = match control.get("kind").and_then(Value::as_str) {
+        Some("toggle") => (json!(false), json!(true)),
+        _ => {
+            let r = control.get("range").and_then(Value::as_array)?;
+            (r.first()?.clone(), r.get(1)?.clone())
+        }
+    };
+    let e = |t: i64, v: &Value| json!({"t": t, "control": id, "value": v});
+    let entries = [e(t0, &hi), e(t0 + d / 2, &lo), e(t0 + 3 * d / 4, &hi), e(t0 + 2 * d, &lo)];
+    Some((crate::played::with_track(doc, &entries), t0 + 3 * d))
+}
+
 /// What the audit reads for one requirement and one deliverable.
 pub(crate) struct Audit<'a> {
     pub doc: Value,
@@ -406,6 +470,8 @@ pub(crate) struct Audit<'a> {
     pub approved: &'a BTreeSet<String>,
     /// #405's planted sweep: its samples alone, nothing bounded between them.
     pub samples_only: bool,
+    /// #504's planted sweep: the control stepped, every assembly posed at its rest value.
+    pub assemblies_at_rest: bool,
 }
 
 impl Audit<'_> {
@@ -421,6 +487,65 @@ impl Audit<'_> {
             relations.extend(r);
         }
         Config { sunk: tol("sunk", d.sunk), touch: tol("touch", d.touch), land: tol("land", d.land), floating, relations }
+    }
+
+    /// #504: control `id` replayed through a take-apart of `d` flicks (see [`replayed`]),
+    /// audited at each frame of its rate and bounded between frames by the interval forms over
+    /// time: each fault with its time and the control's value there.
+    #[allow(clippy::too_many_arguments)]
+    fn replay_sweep(
+        &self,
+        doc: &Value,
+        controls: &Map<String, Value>,
+        id: &str,
+        d: i64,
+        t0: i64,
+        state: &str,
+        cfg: &Config,
+        out: &mut DocRun,
+    ) -> Vec<(Fault, i64, Value)> {
+        let Some((played, end)) = controls.get(id).and_then(|c| replayed(doc, c, id, t0, d)) else {
+            out.not_run.push(format!("{state}:{id} replay"));
+            return Vec::new();
+        };
+        let Some(p) = played.as_object().and_then(|m| Program::compile(m).ok()) else {
+            out.not_run.push(format!("{state}:{id} replay: the replayed document doesn't compile"));
+            return Vec::new();
+        };
+        let moved = moved_items(&played, Some(&p));
+        let (num, den) = p.motion.frame_rate;
+        let step = (deep_canvas::grammar::FLICKS_PER_SECOND * i64::from(den) / i64::from(num.max(1))).max(1);
+        let frames: Vec<f64> = (0..=(end - t0) / step).map(|k| (t0 + k * step) as f64).chain([end as f64]).collect();
+        let mut failed: Option<String> = None;
+        let mut state_at = |v: f64| {
+            solids_at(&played, v as i64, &moved).unwrap_or_else(|why| {
+                failed.get_or_insert(format!("{state}:{id} at {v}: {why}"));
+                Vec::new()
+            })
+        };
+        let mut bound = |a: f64, b: f64, solids: &[Solid]| {
+            if self.samples_only {
+                return vec![Some(0.0); solids.len()];
+            }
+            reach_over_time(&played, &p, a as i64, b as i64, solids)
+        };
+        let swept = deep_canvas::geometry_audit::sweep(&frames, cfg, &mut state_at, &mut bound);
+        out.not_run.extend(failed);
+        let entries = played["track"].as_array().cloned().unwrap_or_default();
+        let value_at = |t: i64| {
+            entries
+                .iter()
+                .filter(|e| e["t"].as_i64().is_some_and(|et| et <= t))
+                .next_back()
+                .map_or(Value::Null, |e| e["value"].clone())
+        };
+        estimated(&swept, state, Some(id), &frames, out);
+        swept
+            .failed
+            .iter()
+            .flat_map(|(v, faults)| faults.iter().map(move |f| (f.clone(), *v as i64)))
+            .map(|(f, t)| (f, t, value_at(t)))
+            .collect()
     }
 
     /// Runs every state the input names, or every state the document can reach, with the
@@ -464,9 +589,14 @@ impl Audit<'_> {
         if self.input.get("displays").is_some_and(|d| !d.is_null()) {
             out.not_run.push("displays".into());
         }
-        if self.input.get("at").and_then(Value::as_str) == Some("apart") && assemblies {
-            out.not_run.push("at: apart".into());
-        }
+        // #504: `at: apart` runs every state with the figure taken apart.
+        let apart_doc;
+        let doc = if self.input.get("at").and_then(Value::as_str) == Some("apart") && assemblies {
+            apart_doc = at_apart(doc);
+            &apart_doc
+        } else {
+            doc
+        };
         let mut issues: Vec<Value> = Vec::new();
         let mut seen: BTreeSet<(String, Vec<String>)> = BTreeSet::new();
         let mut push = |f: &Fault, state: &str, t: i64, sweep: Option<(&str, f64)>, issues: &mut Vec<Value>| {
@@ -485,6 +615,36 @@ impl Audit<'_> {
                             }
                         }
                         Err(why) => out.not_run.push(format!("{state}: {why}")),
+                    }
+                }
+                // #504: every assembly taken apart and held there.
+                "apart" => {
+                    let apart = at_apart(doc);
+                    let moved = moved_items(&apart, apart.as_object().and_then(|m| Program::compile(m).ok()).as_ref());
+                    match solids_at(&apart, t0, &moved) {
+                        Ok(s) => {
+                            for f in deep_canvas::geometry_audit::audit(&s, &cfg) {
+                                push(&f, state, t0, None, &mut issues);
+                            }
+                        }
+                        Err(why) => out.not_run.push(format!("{state}: {why}")),
+                    }
+                }
+                // #504: each take-apart replayed with its reversals, audited at every frame and
+                // bounded between them; a control's `replay` sweep is the same.
+                "take_apart" => {
+                    let parts = program.as_ref().map(take_aparts).unwrap_or_default();
+                    if parts.is_empty() {
+                        out.not_run.push("take_apart: no control takes the figure apart".into());
+                    }
+                    for (id, d) in parts {
+                        for (f, t, v) in self.replay_sweep(doc, &controls, &id, d, t0, state, &cfg, out) {
+                            let n = issues.len();
+                            push(&f, state, t, None, &mut issues);
+                            if let Some(i) = issues.get_mut(n) {
+                                i["sweep"] = json!({"control": id, "replay": true, "value": v});
+                            }
+                        }
                     }
                 }
                 "sweeps" | "tour" => {
@@ -508,6 +668,22 @@ impl Audit<'_> {
                             out.not_run.push(format!("{state}:{id}"));
                             continue;
                         };
+                        if state == "sweeps" && samples == "replay" {
+                            let d = program.as_ref().map(take_aparts).unwrap_or_default().into_iter().find(|(c, _)| *c == id).map(|(_, d)| d);
+                            match d {
+                                Some(d) => {
+                                    for (f, t, v) in self.replay_sweep(doc, &controls, &id, d, t0, state, &cfg, out) {
+                                        let n = issues.len();
+                                        push(&f, state, t, None, &mut issues);
+                                        if let Some(i) = issues.get_mut(n) {
+                                            i["sweep"] = json!({"control": id, "replay": true, "value": v});
+                                        }
+                                    }
+                                }
+                                None => out.not_run.push(format!("{state}:{id} replay: no take-apart follows it")),
+                            }
+                            continue;
+                        }
                         let values = if state == "tour" {
                             let mut vs: Vec<f64> = samples
                                 .as_array()
@@ -529,7 +705,16 @@ impl Audit<'_> {
                         // A value the parts can't be evaluated at is never audited as empty.
                         let mut failed: Option<String> = None;
                         let mut state_at = |v: f64| {
-                            solids_at(&with_control(doc, &id, v), t0, &moved).unwrap_or_else(|why| {
+                            let mut swept = with_control(doc, &id, v);
+                            if self.assemblies_at_rest {
+                                // Planted: nothing that writes an assembly's value runs.
+                                for section in ["drivers", "channels"] {
+                                    if let Some(m) = swept.get_mut(section).and_then(Value::as_object_mut) {
+                                        m.retain(|_, w| !w["target"].as_str().is_some_and(|t| t.starts_with("assemblies/")));
+                                    }
+                                }
+                            }
+                            solids_at(&swept, t0, &moved).unwrap_or_else(|why| {
                                 failed.get_or_insert(format!("{state}:{id} at {v}: {why}"));
                                 Vec::new()
                             })
@@ -663,7 +848,8 @@ impl crate::hub::Hub<'_> {
                 if drawn.get("size").is_none() {
                     drawn["size"] = json!([640, 480]);
                 }
-                let run = audit_document(&Audit { doc: drawn, input: &r.check, approved: &approved, samples_only });
+                let assemblies_at_rest = self.planted(crate::hub::Planted::SweepPosesAssembliesAtRest);
+                let run = audit_document(&Audit { doc: drawn, input: &r.check, approved: &approved, samples_only, assemblies_at_rest });
                 j.ms += run.ms;
                 for mut i in run.issues {
                     i["doc"] = json!(doc);

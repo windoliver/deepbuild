@@ -1607,12 +1607,34 @@ impl Session {
                         _ => None,
                     })
                 }
+                // Whether a node's array reads bind to the same writers, by operator and item, in
+                // both revisions (#504: a writer an operator's `applies` drops or adds).
+                fn who(l: &Loaded, w: usize) -> (usize, Option<&str>) {
+                    (l.nodes[w].op, l.nodes[w].item.map(|i| l.items[i].id.as_str()))
+                }
+                fn same_writers(a: &Loaded, an: &Node, b: &Loaded, bn: &Node) -> bool {
+                    an.reads.len() == bn.reads.len()
+                        && an.reads.iter().zip(&bn.reads).all(|(x, y)| match (x, y) {
+                            (
+                                Bound::Array { writers: wa, contributions: ca, .. },
+                                Bound::Array { writers: wb, contributions: cb, .. },
+                            ) => {
+                                wa.len() == wb.len()
+                                    && ca.len() == cb.len()
+                                    && wa.iter().zip(wb).all(|(&p, &q)| who(a, p) == who(b, q))
+                                    && ca.iter().zip(cb).all(|((m, p), (n, q))| m == n && who(a, *p) == who(b, *q))
+                            }
+                            _ => true,
+                        })
+                }
                 for k in 0..next.nodes.len() {
                     let id = next.nodes[k].item.map(|i| next.items[i].id.as_str());
                     if let Some(was) = carried.get(&(next.nodes[k].op, id)) {
                         // A node whose parent read now binds to another item, or to none, as
-                        // when its parent was deleted, runs again: nothing it reads changed.
-                        let rebound = parent_of(&o, was) != parent_of(&next, &next.nodes[k]);
+                        // when its parent was deleted, runs again: nothing it reads changed. So
+                        // does one whose array reads gained or lost a writer.
+                        let rebound = parent_of(&o, was) != parent_of(&next, &next.nodes[k])
+                            || !same_writers(&o, was, &next, &next.nodes[k]);
                         let n = &mut next.nodes[k];
                         if rebound {
                             continue;

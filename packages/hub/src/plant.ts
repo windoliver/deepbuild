@@ -219,7 +219,9 @@ export type Plant =
   // #1819's: a runner whose job is done, each output an empty record, when its tool's host doesn't answer.
   | 'job-host-down-done'
   // #1942's: a host link that drops every connection to a host when one stalls, and one that sends an unknown start again.
-  | 'host-link-drops-every-connection' | 'host-link-resends-on-reconnect';
+  | 'host-link-drops-every-connection' | 'host-link-resends-on-reconnect'
+  // #504's: a hub that puts an agent's figure or film in Needs you, and one that takes it as proof of the claim.
+  | 'figure-in-needs-you' | 'figure-feeds-verdict';
 const PLANTS: readonly string[] = [
   'statusline-user-settings-only', 'window-unknown-as-zero', 'window-carried-from-other-repo', 'sends-block-whole',
   'box-applies-at-once', 'box-ignores-revision',
@@ -309,6 +311,7 @@ const PLANTS: readonly string[] = [
   'job-host-asks-again', 'job-host-sends-early', 'job-weights-call-anyway', 'job-weights-not-keyed',
   'job-second-call', 'job-joiner-cancels-job', 'job-host-down-done',
   'host-link-drops-every-connection', 'host-link-resends-on-reconnect',
+  'figure-in-needs-you', 'figure-feeds-verdict',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {
   if (!value) return undefined;
