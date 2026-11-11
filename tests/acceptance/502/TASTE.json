@@ -1,0 +1,14 @@
+{
+  "issue": 502,
+  "criterion": "#502.550b7034",
+  "verdict": "looks_right",
+  "who": "Devin, on the owner's standing delegation of taste calls, as #499's, #501's and #1486's calls were made; the owner can overrule it on the PR",
+  "when": "2026-11-11T01:36:10Z",
+  "screenshots": {
+    "open-frame-60.png": "0b70697c9ce5d36512b2eaa9e96c50502767f8adcb37a435a15e8627fd03f1c7",
+    "open-frame-270.png": "e3428c300170bc9ce99c5bd133f3912e7d2af1558dfa15003ff6866ed3258156",
+    "closed-frame-60.png": "3e4e7ad421dfc033dab5ea7699334bcc169f132926e1126dd7b856986c9bec90",
+    "captions.apng": "748a7263ff9b808d4ecbbafef82a5aa60377d773991edd8cfa90f6ae41014b0c"
+  },
+  "note": "Frame 60 of the open export shows intro.1 on two centred lines in ink on the ground, on the bottom safe edge, clear of the block and the bar; frame 270 shows the caption-only line's caption, note.1, in the same place; frame 60 of the closed export is the same picture with no caption. In the recording each caption appears on its in-frame and is gone on its out-frame: 12 to 132, 147 to 167, 192 to 256 and 258 to 281. The fixture names no plate, so the text sits on the picture with none."
+}

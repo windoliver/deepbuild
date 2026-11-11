@@ -1,0 +1,12 @@
+{
+  "issue": 485,
+  "criterion": "#485.977f4f15",
+  "verdict": "looks_right",
+  "who": "Claude (claude-opus-5-5), on the owner's delegation in session on 2026-11-10 (\"validate scrernshot for me\")",
+  "when": "2026-11-11T03:16:31Z",
+  "screenshots": {
+    "cel-sphere.png": "e12a89531e913c22205c804738c8d34a2f15502cbb07acce6a73aef02df66232",
+    "room-32-lights.png": "552c8179e84125f1021c6620e6e992712da49f263bfb89999a8dd267fab7dca3"
+  },
+  "note": "Cel sphere: flat cel bands, lit toward the sun up and to the right; the post's shadow cuts the lit side with a hard edge and a thin lit sliver past it at the limb; the unlit side is black against the black sky, as an ambient of 0 makes it. The picture holds 7 colours: black and two band values, with 4 antialiased edge mixes on under 0.05% of pixels. Room: right but over-bright at the suite's EV 5 (median luma 242, 13% at 250 or above, p5 205), so the pools read faintly; the same render at EV 9 shows each shaded lamp's banded pool on the back wall and the lamp grid as banded ellipses on the ceiling, with no stray black, non-finite or coloured pixels."
+}

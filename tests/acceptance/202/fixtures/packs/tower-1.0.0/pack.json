@@ -1,0 +1,47 @@
+{
+  "name": "tower",
+  "version": "1.0.0",
+  "license": "MIT",
+  "description": "A planted pack of the #202 acceptance suite: tower.stack@1 makes levels squared items, in its class at its defaults and over it at levels 8.",
+  "requires": {
+    "core": ">=0.0.0",
+    "modules": {
+      "test.weight": ">=0.0.0"
+    }
+  },
+  "recipes": {
+    "tower.stack@1": "tower.stack@1.json"
+  },
+  "kinds": {
+    "tower.stack@1": {
+      "minor": 0,
+      "recipe": "tower.stack@1",
+      "children": [],
+      "capabilities": {
+        "pickable": true,
+        "snap": false
+      },
+      "rules": [],
+      "migrate": {},
+      "examples": [
+        "9fe916269f66bd12c8d7586b84eaa1ed10277a352f87aedfa6381037f06f7b37"
+      ],
+      "cost": {
+        "class": "figure",
+        "at_defaults": {
+          "cpu_ms": 0.9,
+          "gpu_ms": 0,
+          "items": 4
+        }
+      }
+    }
+  },
+  "assets": [
+    {
+      "path": "examples/defaults.json",
+      "sha256": "9fe916269f66bd12c8d7586b84eaa1ed10277a352f87aedfa6381037f06f7b37",
+      "size": 415,
+      "license": "MIT"
+    }
+  ]
+}

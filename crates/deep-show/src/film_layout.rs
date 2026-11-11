@@ -485,7 +485,7 @@ fn times_of(program: Option<&deep_canvas_motion::program::Program>, input: &Valu
 
 /// The document camera's view at t, from document units to the frame's, and its pose as
 /// `[target x, target y, view width, roll]`; the identity without a 2D film camera.
-fn camera(
+pub(crate) fn camera(
     p: &deep_canvas_motion::program::Program,
     drawn: &Value,
     t: i64,
@@ -579,7 +579,7 @@ fn circle(c: [f64; 2], r: f64) -> Vec<[f64; 2]> {
 }
 
 /// Each glyph's outline box in its own frame, by face, glyph and size: read once per check.
-type Outlines = BTreeMap<(u64, u32, u32, u32), Option<[f64; 4]>>;
+pub(crate) type Outlines = BTreeMap<(u64, u32, u32, u32), Option<[f64; 4]>>;
 
 /// A shaped run's glyph boxes at `origin`, from each glyph's outline: `[x0, y0, x1, y1]`.
 fn glyph_boxes(
@@ -587,6 +587,18 @@ fn glyph_boxes(
     origin: [f64; 2],
     outlines: &mut Outlines,
 ) -> Vec<[f64; 4]> {
+    each_glyph_box(shaped, origin, outlines)
+        .into_iter()
+        .flatten()
+        .collect()
+}
+
+/// #407: each glyph's outline box at `origin`, in the run's order; None for one with no outline.
+pub(crate) fn each_glyph_box(
+    shaped: &deep_text::Shaped,
+    origin: [f64; 2],
+    outlines: &mut Outlines,
+) -> Vec<Option<[f64; 4]>> {
     use deep_text::outlines::Cmd;
     let mut out = Vec::new();
     for g in &shaped.glyphs {
@@ -624,10 +636,8 @@ fn glyph_boxes(
             }
             b[0].is_finite().then_some(b)
         });
-        if let Some(b) = own {
-            let at = [origin[0] + f64::from(g.x), origin[1] + f64::from(g.y)];
-            out.push([b[0] + at[0], b[1] + at[1], b[2] + at[0], b[3] + at[1]]);
-        }
+        let at = [origin[0] + f64::from(g.x), origin[1] + f64::from(g.y)];
+        out.push(own.map(|b| [b[0] + at[0], b[1] + at[1], b[2] + at[0], b[3] + at[1]]));
     }
     out
 }

@@ -1,0 +1,42 @@
+At base a04378eb2, on 2026-11-10, the file was not run: the machine is shared and loaded, so deep-show was not built
+or run (instructed). What each test would meet first, read from the base's code, not observed:
+
+- Build: `cargo build --locked --bin deep-show --no-default-features --features full` exists at the base (the `full`
+  set other suites build), so beforeAll copies a binary and no test fails on the build.
+
+- The run of the right program (helpers.ts `runBoard`, shared by the four tests): the base parses the scenario, since
+  every call is one it knows (`deep_show`, `registry`, `sandbox`, `eval` with `t` and `film`, `deep_query` with
+  `session`, `paths` and `at` as read times; crates/deep-show/src/main.rs) and it ignores the new `track` field on
+  `eval` and `deep_query`. So `deep-show run` exits 0 with `ok: true` and 13 replies, and the first assertions pass.
+
+- Every test then fails at the same assertion, "the agent's deep_show of the projectile board is presented": the
+  reply's `outcome` is `"refused"`. The base's document check (crates/deep-canvas/src/document/check.rs, Tail::Document,
+  `rules::check`) runs `template_numbers` on the readout (crates/deep-canvas/src/document/rules.rs 269-305), and a
+  template slot resolves only through `template::value`, which reads `data/<name>` alone (crates/deep-canvas/src/
+  template.rs 75), or a mark set's anchor. The slots `controls/angle/value` and `controls/speed/value` are neither, so
+  each raises an error `ref_unresolved` at `items/readout/params/template` ("the slot's path names no data constant
+  this build shows"), and `show` (crates/deep-show/src/hub.rs) refuses a revision with an error issue. The run's error
+  is kept and thrown again in each test, so no planted program is run at the base.
+
+  Past that assertion nothing is reached at the base. Were the board presented, what each test would likely meet
+  next, read less closely and not relied on:
+
+  - the sliders test: a ball at 2.9 s and 3.9 s where 45° and 20 m/s put it, since the base's `eval` and
+    `deep_query` take no track and a driver's control var reads the control's default with no entries.
+  - the stages test: a camera at 0.5 s that isn't on the launch shot's pose or doesn't name it, since the base's
+    film block (crates/deep-show/src/film.rs `block`) holds only timeline shots, those with a `start`; and the ball
+    at 1.9 s at the launch point, since nothing at the base applies a stage's `set`.
+  - the readout test: no readout text at 0.5 s, since the base's deep_query reads `items/readout/params/text` from
+    the item's evaluated fields (crates/deep-show/src/query.rs `read_path`) and the item holds a `template`, no
+    `text`.
+  - the plug-in code test: its right-program check could hold at the base, every node there being a sealed operator;
+    the planted run then fails at "deep-show run refused the scenario (planted plugin_code_per_frame)", since the
+    base answers a scenario whose `planted` names a program it doesn't know with `bad_input`
+    (crates/deep-show/src/main.rs 1205-1363).
+
+Wrong programs: since the base can't present the board, it can't show any test failing on a wrong program; each test
+names its planted program(s) (README: Planted programs), selected by the scenario's `planted` field, and requires its
+own check to fail on each.
+
+Type-check: `npx tsc -p tests/acceptance/504-redraft-ac1/tsconfig.json` passes (after `npm ci --ignore-scripts`, the
+repo's pins).

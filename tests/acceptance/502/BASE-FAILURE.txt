@@ -1,0 +1,46 @@
+#502: why every test fails at the base c072ff92d ("design(#502): ..."). A note, not a run.
+
+The suite was not run at the base and `deep-show` was not built: the surfaces it reads plainly don't exist there, and
+each run would spend a full build on a shared machine to show it. What follows is read from the base's code
+(crates/deep-show/src/{main,export,time,frames,mixdown,bake,media}.rs, crates/deep-canvas/src/document/mod.rs,
+crates/deep-canvas-media/src/lib.rs), not from its output. The suite parses and type-checks (`vitest list --root
+tests/acceptance/502`: 14 tests in 6 files; `tsc -p tests/acceptance/502/tsconfig.json`: clean). What was run by hand,
+outside the product: the fixture file against `helpers.ts` `layout` at both rates, the sidecar readers and ffprobe on
+sidecars written by hand in the Export row's form, and the film's sound and the range mix through a throwaway meter
+(the film at r128 sits near −21.7 LUFS short-term at most and −9 dBFS peak; the range mix reads 12.000 LU).
+
+What the base has: #501's delivery `export` (it reads `doc`, `out`, `range`, `frame_rate`, `video`, `audio`,
+`timecode`, `shards` and ignores any other field; its receipt holds size, rate, duration, frame and PCM hashes and no
+loudness reading or `captions`); `media_mix`, which reads `transport`, `strips`, `buses`, `processors`, `emitters`,
+`cues` and `spawns` and ignores `ducking` and `script`; the envelope's keys (ENVELOPE_KEYS), which hold `script`,
+`strips`, `buses` and `assets` but not `ducking`, so a document with one has an `unknown_field` and is not presented;
+`time`, which refuses a word anchor ("resolves only with a speech bake"); the scenario's `planted`, which answers an
+unknown name `{"ok": false, "code": "bad_input"}`.
+
+Expected at the base, per test (each fails at its first missing surface):
+
+- AC1, AC4, AC5 (film.test.ts, 1 test each): the one run presents the fixture film, whose document holds `ducking`:
+  "the fixture film: the film is presented" fails on a refused `deep show`. All three read that run, so all three fail
+  the same way.
+- AC6 (film.test.ts, 1): the file is tracked and agrees with the layout rule (these parts pass); then the same run:
+  "the film is presented" fails.
+- AC2 (ducking.test.ts, 1): `media_mix` mixes the twin and ignores `ducking`, so the music's gain is 1 throughout:
+  "the music bus's gain: speech span intro (0.530 to 5.470 s): its first sample sample 25440 (0.53000 s) has gain
+  1.00000, not the depth 0.25119 (−12 dB)".
+- AC3 (loudness.test.ts, 1): "the fixture film at r128, first run: the film is presented" fails, as AC1.
+- AC7 (loudness.test.ts, 2): the range film has no script and no `ducking`, so it is presented and exported, the
+  export ignoring `loudness_profile`: "the range film's export: receipt.integrated (LUFS) is a finite number, got
+  undefined". The planted test: "deep-show run answers the scenario ok" fails on bad_input for
+  `normalizer_rides_gain`.
+- AC8 (loudness.test.ts, 1): BLOCKED where the EBU set isn't cached and can't be fetched; else the PCM export is
+  delivered and "receipt.integrated (LUFS) is a finite number, got undefined".
+- AC9 (onsets.test.ts, 2): BLOCKED where port 8719 is taken or the model host can't start; else the three words jobs
+  run (#1819 is in the base) and "the film with the aligner's words: the film is presented" fails. The planted test:
+  bad_input for `words_bake_200ms_late`.
+- AC10 (sidecars.test.ts, 2): "the fixture film at 24000/1001: the film is presented" fails; the planted test:
+  bad_input for `sidecar_times_at_24fps`.
+- AC11 (taste.test.ts, 1): INCONCLUSIVE: docs/evidence/502/ holds none of the four pictures.
+
+Expected at the base: 14 tests, 14 failed, each for its reason above (the missing surface, not a test mistake). If the
+base's check lets an unknown envelope key through after all, the film tests fail one step later: the export's receipt
+has no `captions` ("receipt.captions is an object, got undefined").

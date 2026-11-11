@@ -39,7 +39,9 @@ fn manifest() -> Manifest {
             "scene3d".to_string(),
             Dependency {
                 range: Range::parse("^1").expect("a range"),
-                optional: false,
+                // Its operators reach scene3d's GPU registry entries through the core's
+                // registries, so a build without scene3d holds effects (#485).
+                optional: true,
             },
         )]
         .into_iter()
@@ -547,10 +549,74 @@ fn group_rule(doc: &Value, id: &str, item: &Value) -> Vec<Raised> {
     out
 }
 
+/// The pack check of a pack's `operators` (#1720; Pack: fx@1 named operators): each, as a graph with
+/// its `grow` (fx@1) or as an entry around its graph (chrome-fx@1), passes the whole operator check
+/// with the pack's step functions inlined.
+fn pack_operators(manifest: &Value) -> Vec<(String, String)> {
+    let Some(operators) = manifest["operators"].as_object() else {
+        return vec![(
+            String::new(),
+            "operators names each operator's graph".into(),
+        )];
+    };
+    let functions = crate::chrome_fx::functions(manifest);
+    let text = |issues: Vec<graph::Issue>| {
+        issues
+            .iter()
+            .map(|i| i.to_json().to_string())
+            .collect::<Vec<_>>()
+            .join("; ")
+    };
+    operators
+        .iter()
+        .filter_map(|(name, entry)| {
+            let refused = if entry.get("graph").is_some() {
+                crate::chrome_fx::read_entry(name, entry, &functions)
+                    .err()
+                    .map(|r| r["detail"].as_str().unwrap_or_default().to_string())
+            } else {
+                let mut op = entry.clone();
+                if let Some(o) = op.as_object_mut() {
+                    o.remove("grow");
+                }
+                graph::inline_functions(&op, &functions, true)
+                    .and_then(|op| check::read_and_check(&op).map(|_| ()))
+                    .err()
+                    .map(text)
+            };
+            refused.map(|why| (name.clone(), why))
+        })
+        .collect()
+}
+
+/// A pack's `functions` (#1720): step functions, each with its ports and steps; the operator check
+/// reads a body as each operator that uses it inlines it.
+fn pack_functions(manifest: &Value) -> Vec<(String, String)> {
+    let Some(functions) = manifest["functions"].as_object() else {
+        return vec![(String::new(), "functions names each step function".into())];
+    };
+    functions
+        .iter()
+        .filter(|(_, f)| {
+            !(f["ports"]["in"].is_object()
+                && f["ports"]["out"].is_object()
+                && f["steps"].is_object())
+        })
+        .map(|(name, _)| {
+            (
+                name.clone(),
+                format!("{name} is a step function: ports in, ports out and steps"),
+            )
+        })
+        .collect()
+}
+
 fn register(r: &mut Registrar) {
     for (name, place) in PASSES {
         r.pass(name, place);
     }
+    r.pack_field("operators", pack_operators)
+        .pack_field("functions", pack_functions);
     // #483: the structural steps, entries of the core's gpu.step@1, each with its exactness
     // fixture and planted twin.
     for (name, value) in crate::table::structural_entries() {

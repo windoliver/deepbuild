@@ -1,0 +1,55 @@
+{
+  "name": "shelf",
+  "version": "1.0.2",
+  "license": "MIT",
+  "description": "A planted pack of the #202 acceptance suite: the kind shelf.grid@1 declares an array.",
+  "requires": {
+    "core": ">=0.0.0",
+    "modules": {
+      "marks2d": ">=0.0.0"
+    }
+  },
+  "recipes": {
+    "shelf.bookcase@1": "shelf.bookcase@1.json"
+  },
+  "kinds": {
+    "shelf.grid@1": {
+      "minor": 0,
+      "recipe": "shelf.bookcase@1",
+      "children": [],
+      "capabilities": {
+        "pickable": true,
+        "snap": false
+      },
+      "rules": [],
+      "migrate": {},
+      "examples": [
+        "af43e20a0dc5018fe1e22b624fc2369f2399d10056ca57c67040e165f239a3eb"
+      ],
+      "cost": {
+        "class": "figure",
+        "at_defaults": {
+          "cpu_ms": 0.5,
+          "gpu_ms": 0.2,
+          "items": 7
+        }
+      },
+      "arrays": {
+        "shelf.grid.load": {
+          "type": "f64",
+          "domain": "item",
+          "class": "geometry",
+          "phase": "build"
+        }
+      }
+    }
+  },
+  "assets": [
+    {
+      "path": "examples/defaults.json",
+      "sha256": "af43e20a0dc5018fe1e22b624fc2369f2399d10056ca57c67040e165f239a3eb",
+      "size": 424,
+      "license": "MIT"
+    }
+  ]
+}

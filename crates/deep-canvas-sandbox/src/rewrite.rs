@@ -56,6 +56,8 @@ pub struct Faults {
     pub grow_returns: bool,
     /// The page tracker leaves the pages a `memory.copy` writes unmarked (#531).
     pub skip_copy_pages: bool,
+    /// The page tracker leaves the pages a `memory.fill` writes unmarked (#547).
+    pub skip_fill_pages: bool,
 }
 
 /// The exported global names a logic item's program gains (#531): each mutable global of the
@@ -900,7 +902,12 @@ impl Body<'_> {
                     e.i(I::LocalGet(n));
                     e.op(re.instruction(op.clone()).map_err(err)?);
                     let copy = matches!(op, Operator::MemoryCopy { .. });
-                    if !(copy && faults.skip_copy_pages) {
+                    let skip = if copy {
+                        faults.skip_copy_pages
+                    } else {
+                        faults.skip_fill_pages
+                    };
+                    if !skip {
                         mark(&mut e, None);
                     }
                 }

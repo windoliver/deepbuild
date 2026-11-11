@@ -1,12 +1,28 @@
 //! The backend interface (World and backend): what the physics module asks of a backend, in this
-//! crate's own types only, so no engine type crosses it. `occurrences`, `query`, `move_character`
-//! and `drive_vehicle` join it with the issues that run them (#1918, #1919, #182, #251); the hash
-//! reads `canonical` (golden.rs).
+//! crate's own types only, so no engine type crosses it. `occurrences` reports what a step wrote
+//! (#2011's sensor entries and exits, #1918's other kinds), which the module sorts; `query`,
+//! `move_character` and `drive_vehicle` join it with the issues that run them (#1919, #182,
+//! #251); the hash reads `canonical` (golden.rs).
+
+use std::collections::BTreeMap;
 
 use serde_json::Value;
 
 use crate::caps::Caps;
 use crate::doc::{Refusal, World};
+use crate::occurrence::Raw;
+
+/// What a step reads of its scene at its own time, evaluated before the solve: each kinematic
+/// body's position from its `follow` path, each motor target a path sets, and each coordinate a
+/// kinematic solve drives (deg for a hinge, m for a slider, as written).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Targets {
+    /// body → position, m; its rotation stays its pose's.
+    pub poses: BTreeMap<String, [f64; 3]>,
+    pub motors: BTreeMap<String, f64>,
+    /// joint → coordinate, in the solve's order.
+    pub coords: Vec<(String, f64)>,
+}
 
 /// One entry of the world's input track (Input track entries).
 #[derive(Clone, Debug, PartialEq)]
@@ -37,6 +53,13 @@ pub struct BodyState {
 pub struct State {
     pub step: u64,
     pub bodies: Vec<BodyState>,
+}
+
+/// One shape use: its body's ID and its index among the body's shapes.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct ShapeRef {
+    pub body: String,
+    pub index: usize,
 }
 
 /// The fields of a body's canonical state, in canonical order: pose, then velocity (Checkpoint
@@ -82,8 +105,11 @@ pub trait Backend {
     fn caps(&self) -> &'static Caps;
     /// Creates everything in canonical order, or the refusals that stop it.
     fn build(&mut self, world: &World) -> Result<(), Vec<Refusal>>;
-    /// One step with the inputs stamped for it, or the refusal of an input it can't apply.
-    fn step(&mut self, inputs: &[Input]) -> Result<(), Box<Refusal>>;
+    /// One step with the inputs stamped for it and the targets its channels set at its time, or
+    /// the refusal of an input it can't apply.
+    fn step(&mut self, inputs: &[Input], targets: &Targets) -> Result<(), Box<Refusal>>;
+    /// What the last step wrote, in the engine's own order; the module sorts it (Occurrence list).
+    fn occurrences(&self) -> Vec<Raw>;
     fn read(&self) -> State;
     /// Every body's canonical state, in canonical (ID) order.
     fn canonical(&self) -> Vec<Canonical>;

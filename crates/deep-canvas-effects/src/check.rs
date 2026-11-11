@@ -65,6 +65,8 @@ pub struct Checked {
     /// Each `iterate@1` step's body, checked as a pass of its own (#483); the step itself is an
     /// input of `op`, the texture its last run writes.
     pub iterates: Vec<Iterated>,
+    /// A material's light responses (#485), each checked as a material operator of its own.
+    pub responses: BTreeMap<String, Checked>,
 }
 
 /// An iterate step as the check passed it: its body a pass whose inputs are those of the
@@ -1544,6 +1546,8 @@ fn input_class(from: &From) -> Class {
     match from {
         // A target the GPU rasterized is same machine, and so is time.
         From::Target { .. } | From::Time | From::Phase(_) => Class::SameMachine,
+        // What the light loop hands a response comes from the GPU's own shading (#485).
+        From::Port => Class::SameMachine,
         // Storage carries its writer's bits; an operator's class over them is its own.
         From::Param(_)
         | From::Channel(_)
@@ -1680,6 +1684,7 @@ fn check_iterating(op: &Operator, options: CheckOptions) -> Result<Checked, Vec<
             origin: Origin::Shipped,
             chain: op.chain.clone(),
             order: op.order.clone(),
+            responses: BTreeMap::new(),
         };
         let checked = check_with(&body, options)?;
         extra += it.count as f64 * checked.estimate;
@@ -1702,10 +1707,69 @@ fn check_iterating(op: &Operator, options: CheckOptions) -> Result<Checked, Vec<
 
 /// [`check`], under the planted wrong programs `options` turns on.
 pub fn check_with(op: &Operator, options: CheckOptions) -> Result<Checked, Vec<Issue>> {
+    if !op.responses.is_empty() {
+        return check_answering(op, options);
+    }
     if op.steps.values().any(|s| s.iterate.is_some()) {
         return check_iterating(op, options);
     }
     check_inner(op, options, 0.0, Class::Exact)
+}
+
+/// The type of the light loop's response `name`, its radiance: scene3d's entry of `gpu.output@1`.
+fn response_type(name: &str) -> Option<&'static str> {
+    deep_canvas_scene3d::gpu::RESPONSES
+        .iter()
+        .any(|r| r.0 == name)
+        .then_some("vec3<f32>")
+}
+
+/// A material with light responses (#485; Operator output: light response): each response runs
+/// the whole check as a material operator of its own, a refusal named under its field; the
+/// operator's estimate counts `light`'s once for each light a pixel's cluster may hold and
+/// `ambient`'s once, and its class is at best theirs.
+fn check_answering(op: &Operator, options: CheckOptions) -> Result<Checked, Vec<Issue>> {
+    let mut extra = 0.0;
+    let mut floor = Class::Exact;
+    let mut responses = BTreeMap::new();
+    let mut issues = Vec::new();
+    for (name, r) in &op.responses {
+        match check_with(r, options) {
+            Ok(c) => {
+                let calls = if name == "light" {
+                    deep_canvas_scene3d::light::SHADED as f64
+                } else {
+                    1.0
+                };
+                extra += c.estimate * calls;
+                floor = floor.max(c.class);
+                responses.insert(name.clone(), c);
+            }
+            Err(e) => issues.extend(e.into_iter().map(|mut i| {
+                i.path = Some(match i.path.take() {
+                    Some(p) => format!("{name}/{p}"),
+                    None => name.clone(),
+                });
+                i
+            })),
+        }
+    }
+    if !issues.is_empty() {
+        return Err(issues);
+    }
+    let mut outer = op.clone();
+    outer.responses.clear();
+    let mut c = if outer.steps.values().any(|s| s.iterate.is_some()) {
+        let mut c = check_iterating(&outer, options)?;
+        c.estimate += extra;
+        c.class = c.class.max(floor);
+        c
+    } else {
+        check_inner(&outer, options, extra, floor)?
+    };
+    c.op.responses = op.responses.clone();
+    c.responses = responses;
+    Ok(c)
 }
 
 /// The check over an operator with no iterate step left: `extra` ns its iterates' runs cost and
@@ -1776,6 +1840,7 @@ fn check_inner(
                 From::Target { output, .. } => {
                     format!("it reads the {output} target, which the GPU rasterized")
                 }
+                From::Port => format!("it reads {name}, which the light loop computes"),
                 _ => "it reads time".to_string(),
             })
         } else if matches!(input.ty, Ty::V(Sc::F32, _) | Ty::Mat(_)) {
@@ -1872,8 +1937,10 @@ fn check_inner(
         return Err(issues);
     }
     let mut scope = BTreeSet::new();
+    // A light response runs inside the light loop, where pixels diverge (#485).
+    let answers = op.inputs.values().any(|i| i.from == From::Port);
     let order = ctx
-        .graph(&op.steps, &mut scope, 0, 1, false)
+        .graph(&op.steps, &mut scope, 0, 1, answers)
         .map_err(|e| vec![e])?;
     let total: usize = order.len() + ctx.body_order.values().map(Vec::len).sum::<usize>();
     if total > 2048 {
@@ -1946,6 +2013,8 @@ fn check_inner(
         let scene3d = (op.kind == Kind::Material)
             .then(|| deep_canvas_scene3d::gpu::output_type(name))
             .flatten();
+        // A light response's one output, its radiance, takes the response's name (#485).
+        let scene3d = scene3d.or_else(|| answers.then(|| response_type(name)).flatten());
         let want = match deep_canvas::registry::core_lists::output_type(op.kind.name(), name)
             .or(scene3d)
         {
@@ -2079,6 +2148,7 @@ fn check_inner(
         textures,
         storage_inputs,
         iterates: Vec::new(),
+        responses: BTreeMap::new(),
     })
 }
 
@@ -2090,4 +2160,41 @@ pub fn read_and_check(v: &Value) -> Result<Checked, Vec<Issue>> {
 /// [`read_and_check`] under planted wrong programs.
 pub fn read_and_check_with(v: &Value, options: CheckOptions) -> Result<Checked, Vec<Issue>> {
     check_with(&graph::read(v)?, options)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    /// A material operator that writes nothing and answers the light loop with `light` (#485).
+    fn answering(light: Value) -> Value {
+        json!({"id": "cel", "kind": "material", "origin": "composed", "about": "A response.",
+            "steps": {}, "outputs": {}, "cost": {"ns_per_px": 50}, "light": light})
+    }
+
+    fn response(first: Value) -> Value {
+        json!({"steps": {"d": first, "c": {"op": "mul@1", "args": {"a": "radiance", "b": "d"}}},
+            "outputs": {"radiance": "c"}})
+    }
+
+    #[test]
+    fn a_light_response_counts_once_for_each_light_a_cluster_holds() {
+        let ndl = json!({"op": "dot@1", "args": {"a": "n", "b": "l"}});
+        let c = read_and_check(&answering(response(ndl))).expect("it checks");
+        let light = &c.responses["light"];
+        assert!(light.estimate > 0.0);
+        let lights = deep_canvas_scene3d::light::SHADED as f64;
+        assert_eq!(c.estimate, light.estimate * lights);
+        // What the loop hands it comes from the GPU's shading: same machine at best.
+        assert_eq!(c.class, Class::SameMachine);
+    }
+
+    #[test]
+    fn a_light_response_takes_no_derivative() {
+        let ddx = json!({"op": "ddx@1", "args": {"x": "shadow"}});
+        let issues = read_and_check(&answering(response(ddx))).unwrap_err();
+        assert_eq!(issues[0].reason, Some("derivative_in_divergent_flow"));
+        assert_eq!(issues[0].path.as_deref(), Some("light"));
+    }
 }
