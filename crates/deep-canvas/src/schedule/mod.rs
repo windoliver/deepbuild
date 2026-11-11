@@ -1416,6 +1416,11 @@ impl Session {
         &self.look
     }
 
+    /// The time the session's last frame evaluated at, in flicks.
+    pub fn t(&self) -> i64 {
+        self.t
+    }
+
     pub fn outside(&self) -> &Outside {
         &self.outside
     }

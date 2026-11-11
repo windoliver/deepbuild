@@ -959,11 +959,164 @@ fn cell_grids(
     out
 }
 
-/// Each vector writing on at t (#1162; Vector and formula `vector@1`: write_on), drawn as the
-/// write draws it: the whole outline marks2d draws for it gives way to each of its paths as the
-/// vector module's lowering writes them at the item's evaluated progress (outline first, then
-/// fill), from the SVG the evidence store's holder inlined, in the look's roles. `None` when no
-/// vector is mid-write.
+/// #220: each match morph between two vector items as a frame draws it: before its window only its
+/// from item, after it only its to item, and inside it each piece in place of both, a shape in the
+/// document's u filled in the role of the item it comes from at the piece's opacity.
+fn morphed_vectors(
+    sched: &deep_canvas::schedule::Scheduler<'_>,
+    session: &DocSession,
+    doc: &Value,
+    frame: &deep_canvas_marks::scene::Frame,
+) -> Option<deep_canvas_marks::scene::Frame> {
+    use deep_canvas::schedule::core_ops::Fields;
+    use deep_canvas_marks::path::Verb;
+    use deep_canvas_marks::scene::{Drawn, Fill, Mark};
+    use deep_canvas_motion::morph;
+    let program = crate::film::program_of(sched, session)?;
+    if program.betweens.is_empty() {
+        return None;
+    }
+    let t = session.t();
+    let fields = |id: &str| -> Option<Value> {
+        let item = doc.pointer(&format!("/items/{id}"))?;
+        (item["kind"].as_str() == Some("vector@1")).then_some(())?;
+        session
+            .read(sched, "core.fields", Some(id))
+            .and_then(|(v, _)| v.as_typed::<Fields>())
+            .map(|f| f.to_json())
+    };
+    let rgb = |role: &str| -> Option<[u8; 3]> {
+        let c = session.look().get(role)?.as_array()?;
+        let channel = |i: usize| c.get(i)?.as_u64().and_then(|v| u8::try_from(v).ok());
+        Some([channel(0)?, channel(1)?, channel(2)?])
+    };
+    // Where marks2d placed each vector's outline: its path mark's offset, as a write-on reads it.
+    let mut offsets: BTreeMap<&str, [f64; 2]> = BTreeMap::new();
+    for m in frame.layers.iter().flat_map(|l| l.marks.iter()) {
+        if let Mark::Path { item, offset, .. } = &m.mark {
+            offsets.entry(item.as_str()).or_insert(*offset);
+        }
+    }
+    let parts = |id: &str, item: &Value| -> Vec<morph::Part> {
+        let [dx, dy] = offsets.get(id).copied().unwrap_or([0.0, 0.0]);
+        morph::vector_parts(id, item)
+            .into_iter()
+            .map(|mut p| {
+                for s in &mut p.shape {
+                    for q in &mut s.points {
+                        *q = [q[0] + dx, q[1] + dy];
+                    }
+                }
+                p
+            })
+            .collect()
+    };
+    // Each item's marks dropped, and for the from item of an open window, the pieces drawn there.
+    let mut dropped: BTreeMap<String, Option<Vec<Arc<Drawn>>>> = BTreeMap::new();
+    let mut mix = [0u8; 8];
+    for b in &program.betweens {
+        let (Some(from), Some(to)) = (fields(&b.from), fields(&b.to)) else {
+            continue;
+        };
+        if t <= b.start {
+            dropped.insert(b.to.clone(), None);
+            continue;
+        }
+        if t >= b.end {
+            dropped.insert(b.from.clone(), None);
+            continue;
+        }
+        let p = b.progress(t);
+        let role = |item: &Value| {
+            item.pointer("/params/outline/role")
+                .and_then(Value::as_str)
+                .unwrap_or("ink")
+                .to_string()
+        };
+        let (role_a, role_z) = (role(&from), role(&to));
+        let pieces = morph::pieces(
+            &parts(&b.from, &from),
+            &parts(&b.to, &to),
+            &b.pairs,
+            b.unpaired,
+            p,
+        );
+        let marks = pieces
+            .iter()
+            .filter_map(|piece| {
+                let color = rgb(if piece.from.is_some() {
+                    &role_a
+                } else {
+                    &role_z
+                })?;
+                let mut verbs = Vec::new();
+                for s in &piece.shape {
+                    for (i, q) in s.points.iter().enumerate() {
+                        verbs.push(if i == 0 {
+                            Verb::Move(*q)
+                        } else {
+                            Verb::Line(*q)
+                        });
+                    }
+                    if s.closed {
+                        verbs.push(Verb::Close);
+                    }
+                }
+                Some(Arc::new(Drawn {
+                    mark: Mark::Shape {
+                        item: b.from.clone(),
+                        verbs,
+                        fill: Some((Fill::Solid(color), piece.opacity.clamp(0.0, 1.0))),
+                        stroke: None,
+                    },
+                    clip: None,
+                    scopes: Vec::new(),
+                }))
+            })
+            .collect();
+        dropped.insert(b.from.clone(), Some(marks));
+        dropped.insert(b.to.clone(), None);
+        for (m, x) in mix.iter_mut().zip(p.to_bits().to_le_bytes()) {
+            *m ^= x;
+        }
+    }
+    if dropped.is_empty() {
+        return None;
+    }
+    let owner = |m: &Drawn| match &m.mark {
+        Mark::Path { item, .. } | Mark::Shape { item, .. } => Some(item.clone()),
+        _ => None,
+    };
+    let mut frame = frame.clone();
+    for layer in &mut frame.layers {
+        if !layer
+            .marks
+            .iter()
+            .any(|m| owner(m).is_some_and(|i| dropped.contains_key(&i)))
+        {
+            continue;
+        }
+        let mut marks = Vec::with_capacity(layer.marks.len());
+        for m in &layer.marks {
+            match owner(m).and_then(|i| dropped.get_mut(&i)) {
+                None => marks.push(m.clone()),
+                // The pieces stand where the from item's first mark stood.
+                Some(pieces) => marks.extend(pieces.take().unwrap_or_default()),
+            }
+        }
+        layer.marks = marks.into_iter().collect();
+        for (k, x) in layer.key.0.iter_mut().zip(mix) {
+            *k ^= x;
+        }
+    }
+    Some(frame)
+}
+
+/// Each vector at t, drawn as its lowering draws it (#1162; Vector and formula `vector@1`): the whole
+/// outline marks2d draws for it gives way to each of its paths, so a glyph's counters stay open
+/// (#220), and while it writes on, to each path as the lowering writes it at the item's evaluated
+/// progress (outline first, then fill); from the SVG the evidence store's holder inlined, in the
+/// look's roles. `None` when the frame draws no vector.
 fn written_vectors(
     sched: &deep_canvas::schedule::Scheduler<'_>,
     session: &DocSession,
@@ -995,18 +1148,16 @@ fn written_vectors(
             continue;
         };
         let params = &fields["params"];
-        let Some(progress) = params.pointer("/write_on/progress").and_then(Value::as_f64) else {
-            continue;
-        };
+        let progress = params
+            .pointer("/write_on/progress")
+            .and_then(Value::as_f64)
+            .unwrap_or(1.0);
         let (Some(src), Some(map)) = (
             params.pointer("/outline/svg").and_then(Value::as_str),
             params.as_object(),
         ) else {
             continue;
         };
-        if progress >= 1.0 {
-            continue;
-        }
         let classes: Vec<String> = params["parts"]
             .as_array()
             .into_iter()
@@ -1144,6 +1295,16 @@ pub(crate) fn drawing_of(
         });
     }
     if let Some(d) = &mut drawing {
+        if let Some(frame) = morphed_vectors(sched, session, doc, &d.frame) {
+            *d = Arc::new(Drawing {
+                frame,
+                runs: d.runs.clone(),
+                animated: d.animated.clone(),
+                built: d.built,
+                damage: Vec::new(),
+                basis: None,
+            });
+        }
         if let Some(frame) = written_vectors(sched, session, doc, &d.frame) {
             *d = Arc::new(Drawing {
                 frame,
