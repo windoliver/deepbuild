@@ -410,6 +410,9 @@ alone.push('tests/acceptance/2189/', 'tests/acceptance/2189-redraft-ac1/');
 alone.push('tests/acceptance/2009/', 'tests/acceptance/2009-redraft-ac2/', 'tests/acceptance/2010/', 'tests/acceptance/2010-oracle/');
 alone.push('tests/acceptance/2011/', 'tests/acceptance/2012/', 'tests/acceptance/2012-oracle/');
 timed.push('tests/acceptance/2011/ac2-step-budget.test.ts');
+// #547's files build deep-logic and bake 108,000 and 72,000 steps; AC4 judges 20 seeks of a recorded match against 2 s.
+alone.push('tests/acceptance/547/');
+timed.push('tests/acceptance/547/ac4-keyframes.test.ts');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
