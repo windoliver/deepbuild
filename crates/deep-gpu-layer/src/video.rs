@@ -25,7 +25,7 @@ use crate::{refused, textures, App, Planted};
 
 /// The most points a set `from: video` draws: the compute elements of a showpiece or an export,
 /// the only classes that draw them (Operator budgets by class).
-pub const MAX_POINTS: u64 = 1_048_576;
+const MAX_POINTS: u64 = 1_048_576;
 /// Decoded frames kept, the newest last (Image `image@1`: video frames: a ring of 8).
 const RING: usize = 8;
 
@@ -231,7 +231,7 @@ pub fn read_points(
     let words = read_words(device, &out.buffer, u64::from(out.count) * 8);
     let inv = invert(m);
     let mut bytes = Vec::with_capacity(out.count as usize * 12);
-    for r in words.chunks_exact(8) {
+    for r in words.as_chunks::<8>().0 {
         let w = [0, 1, 2].map(|k| f64::from(f32::from_bits(r[k])) - m[k][3]);
         for row in &inv {
             let c = row[0] * w[0] + row[1] * w[1] + row[2] * w[2];

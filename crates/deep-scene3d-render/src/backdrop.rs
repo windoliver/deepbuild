@@ -338,7 +338,7 @@ pub(crate) fn equirect(frame: &Texels) -> Equirect {
         .collect();
     Equirect {
         size: frame.size,
-        rgb: (frame.data.chunks_exact(4))
+        rgb: (frame.data.as_chunks::<4>().0.iter())
             .map(|p| [0, 1, 2].map(|i| linear[usize::from(p[i])]))
             .collect(),
     }
