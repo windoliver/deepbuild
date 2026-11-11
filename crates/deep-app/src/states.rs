@@ -445,6 +445,9 @@ struct Session {
     took: HashMap<String, Vec<u64>>,
     /// Its newest run's failure when that run failed (#1348): what it gave, its trace included, else its assertion.
     failure: Option<String>,
+    /// How many events its own hooks have sent, and when the newest came (#2021): the working mark moves once for
+    /// each, and holds still while none comes.
+    hooks: (u64, Option<u64>),
     /// The cause of its newest stop of its own turn when that turn ended failed (#2029).
     stopped: Option<String>,
     /// Each claim's newest verdict's reasons the core gave of its own (#2029): each code with its sentence.
@@ -627,6 +630,11 @@ impl Table {
             .flatten()
             .unwrap_or_else(|| untitled(session));
         crate::question::visible(&title)
+    }
+
+    /// How many events a session's own hooks have sent the record, and when the newest came (#2021).
+    pub fn hooks(&self, session: &str) -> (u64, Option<u64>) {
+        self.sessions.get(session).map_or((0, None), |s| s.hooks)
     }
 
     /// A session's state.
@@ -853,6 +861,9 @@ impl Session {
         let data = &event["data"];
         let text = |value: &Value| value.as_str().map(str::to_owned);
         let pos = event["log_pos"].as_u64().unwrap_or(0);
+        if event["writer"] == "hook" {
+            self.hooks = (self.hooks.0 + 1, event["ts"].as_u64().or(self.hooks.1));
+        }
         // A reading is shown beside the session and moves nothing about it (#990): no state, no sign of life.
         if kind == "session.reading" {
             if let Some(reading) = text(&data["reading"]) {

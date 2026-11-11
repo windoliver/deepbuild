@@ -419,6 +419,9 @@ byHand.push('tests/acceptance/2026/replay.test.ts');
 // #2028's files build deep-drive plain and with env-plants, start real hubs and run three replicas each over three hours
 // of the virtual clock, a frame each second while you're away.
 alone.push('tests/acceptance/2028/');
+// #2021's files build deep-drive plain and with env-plants and drive replicas over real hubs on a stepped clock, with
+// agents' hooks and transcripts written as the run goes.
+alone.push('tests/acceptance/2021/');
 // #2029's files build the replica and deep-drive plain and planted, start real hubs and draw the answered asks' pages.
 alone.push('tests/acceptance/2029/');
 // #1056's files build deep-gpu and draw #464's pixel fixtures; records.test.ts runs #464's two-GPU tests.
@@ -459,6 +462,8 @@ byHand.push('tests/acceptance/154/stems.test.ts');
 // reading against the lane's rule.
 alone.push('tests/acceptance/1700/');
 timed.push('tests/acceptance/1700/budgets.test.ts');
+// #1862's suite starts a hub of its own with a fake reviewer, as #1537's does.
+alone.push('tests/acceptance/1862/');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
