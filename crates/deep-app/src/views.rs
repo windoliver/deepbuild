@@ -1365,6 +1365,11 @@ fn read(view: &crate::record::View, kind: Kind, opened: Option<&str>) -> Record 
                     .flat_map(str::lines)
                     .map(str::to_owned),
             );
+            // Why its turn ended failed and the reasons the core gave its verdict, in words (#2029).
+            let stopped = table.stopped(session);
+            details.extend(stopped.map(|(cause, core)| crate::codes::stopped(&cause, &core)));
+            let why = table.why(session).iter();
+            details.extend(why.map(|(code, text)| crate::codes::reason(code, text)));
             if crate::plain::planted("session-page-line-pr") {
                 details.push(crate::plain::PLANTED_PR_LINE.to_owned());
             }

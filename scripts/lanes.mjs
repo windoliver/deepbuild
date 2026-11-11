@@ -377,6 +377,9 @@ timed.push('tests/acceptance/202/budgets.test.ts');
 alone.push('tests/acceptance/1957/');
 // #1961's files build deep-show and patch an open document to another version of its pack.
 alone.push('tests/acceptance/1961/');
+// #1399's files build deep-show in the full set and deep-gpu, and run the kind kit, the seam suite, the flicker check
+// and the golden guard on them.
+alone.push('tests/acceptance/1399/');
 // #2015's file builds deep-show in the full set and runs it on a plate and a recipe pack.
 alone.push('tests/acceptance/2015/');
 // #220's files start hubs, build deep-show in the full set and time the typeset tool's own process.
@@ -413,6 +416,8 @@ byHand.push('tests/acceptance/2026/replay.test.ts');
 // #2028's files build deep-drive plain and with env-plants, start real hubs and run three replicas each over three hours
 // of the virtual clock, a frame each second while you're away.
 alone.push('tests/acceptance/2028/');
+// #2029's files build the replica and deep-drive plain and planted, start real hubs and draw the answered asks' pages.
+alone.push('tests/acceptance/2029/');
 // #1056's files build deep-gpu and draw #464's pixel fixtures; records.test.ts runs #464's two-GPU tests.
 alone.push('tests/acceptance/1056/');
 // #404's parts: #1897's files each build deep-show in their own feature set and hold the GPU for the pixel hash;
@@ -447,6 +452,10 @@ timed.push('tests/acceptance/154/budgets.test.ts');
 alone.push('tests/acceptance/154-redraft/', 'tests/acceptance/154-oracle-redraft/');
 timed.push('tests/acceptance/154-redraft/budgets.test.ts');
 byHand.push('tests/acceptance/154/stems.test.ts');
+// #1700's files each build deep-show; budgets.test.ts also builds it in release and times every geometry.shape
+// reading against the lane's rule.
+alone.push('tests/acceptance/1700/');
+timed.push('tests/acceptance/1700/budgets.test.ts');
 // #1862's suite starts a hub of its own with a fake reviewer, as #1537's does.
 alone.push('tests/acceptance/1862/');
 

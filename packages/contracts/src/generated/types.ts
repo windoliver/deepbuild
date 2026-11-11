@@ -8857,6 +8857,144 @@ export interface ToolAfterV3 {
   evidence?: Array<string>;
 }
 
+/** tool.after@4 */
+export interface ToolAfterV4 {
+  v: 4;
+  id: string;
+  kind: "tool.after";
+  subject?: string;
+  writer: "hook";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    kind: "shell";
+    paths: Array<string>;
+    command: string | null;
+    call?: string;
+    outcome: "ok" | "failed";
+    exit_code?: number | null;
+    signature?: string;
+    cause?: "command_failed" | "tool_error" | "interrupted" | "permission_denied" | "unknown";
+    owner?: "agent" | "you" | "service";
+    nested?: {
+      complete: boolean;
+      calls?: number;
+    };
+    error?: string;
+  } | {
+    kind: "read";
+    paths: Array<string>;
+    command: string | null;
+    call?: string;
+    outcome: "ok" | "failed";
+    exit_code?: number | null;
+    signature?: string;
+    cause?: "command_failed" | "tool_error" | "interrupted" | "permission_denied" | "unknown";
+    owner?: "agent" | "you" | "service";
+    nested?: {
+      complete: boolean;
+      calls?: number;
+    };
+    error?: string;
+  } | {
+    kind: "edit";
+    paths: Array<string>;
+    command: string | null;
+    call?: string;
+    outcome: "ok" | "failed";
+    exit_code?: number | null;
+    signature?: string;
+    cause?: "command_failed" | "tool_error" | "interrupted" | "permission_denied" | "unknown";
+    owner?: "agent" | "you" | "service";
+    nested?: {
+      complete: boolean;
+      calls?: number;
+    };
+    error?: string;
+  } | {
+    kind: "write";
+    paths: Array<string>;
+    command: string | null;
+    call?: string;
+    outcome: "ok" | "failed";
+    exit_code?: number | null;
+    signature?: string;
+    cause?: "command_failed" | "tool_error" | "interrupted" | "permission_denied" | "unknown";
+    owner?: "agent" | "you" | "service";
+    nested?: {
+      complete: boolean;
+      calls?: number;
+    };
+    error?: string;
+  } | {
+    kind: "search";
+    paths: Array<string>;
+    command: string | null;
+    call?: string;
+    outcome: "ok" | "failed";
+    exit_code?: number | null;
+    signature?: string;
+    cause?: "command_failed" | "tool_error" | "interrupted" | "permission_denied" | "unknown";
+    owner?: "agent" | "you" | "service";
+    nested?: {
+      complete: boolean;
+      calls?: number;
+    };
+    error?: string;
+  } | {
+    kind: "fetch";
+    paths: Array<string>;
+    command: string | null;
+    call?: string;
+    outcome: "ok" | "failed";
+    exit_code?: number | null;
+    signature?: string;
+    cause?: "command_failed" | "tool_error" | "interrupted" | "permission_denied" | "unknown";
+    owner?: "agent" | "you" | "service";
+    nested?: {
+      complete: boolean;
+      calls?: number;
+    };
+    error?: string;
+  } | {
+    kind: "mcp";
+    paths: Array<string>;
+    command: string | null;
+    server: string;
+    tool: string;
+    call?: string;
+    outcome: "ok" | "failed";
+    exit_code?: number | null;
+    signature?: string;
+    cause?: "command_failed" | "tool_error" | "interrupted" | "permission_denied" | "unknown";
+    owner?: "agent" | "you" | "service";
+    nested?: {
+      complete: boolean;
+      calls?: number;
+    };
+    error?: string;
+  } | {
+    kind: "unknown";
+    paths: Array<string>;
+    command: string | null;
+    call?: string;
+    outcome: "ok" | "failed";
+    exit_code?: number | null;
+    signature?: string;
+    cause?: "command_failed" | "tool_error" | "interrupted" | "permission_denied" | "unknown";
+    owner?: "agent" | "you" | "service";
+    nested?: {
+      complete: boolean;
+      calls?: number;
+    };
+    error?: string;
+  };
+  evidence?: Array<string>;
+}
+
 /** tool.before@1 */
 export interface ToolBefore {
   v: 1;
@@ -9307,8 +9445,140 @@ export interface VerdictMade {
   evidence?: Array<string>;
 }
 
+export type VerdictMadeV2Requirements = Array<{
+  req: string;
+  outcome: "PASS" | "FAIL" | "INVALID" | "BLOCKED" | "INCONCLUSIVE" | "pending";
+  check: string;
+  depth: string;
+  oracle: "code" | "model" | "person";
+  runs: {
+    clean: number;
+    needed: number;
+    counted: Array<string>;
+  };
+  smallest: string | null;
+  points_to: string | null;
+  evidence: Array<string>;
+  proof: "statement" | "static_check" | "test_run" | "journey" | "decision";
+  ask?: string;
+}>;
+
+export type VerdictMadeV2Key = {
+  commit: string;
+  doc_revisions: Array<string>;
+  check_digests: Array<string>;
+  state_digests: Array<string>;
+  environment: string;
+  tools: Array<string>;
+};
+
+/** verdict.made@2 */
+export interface VerdictMadeV2 {
+  v: 2;
+  id: string;
+  kind: "verdict.made";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    outcome: "PASS";
+    verdict: string;
+    claim: string;
+    reasons: Array<string>;
+    requirements: Array<{
+      req: string;
+      outcome: "PASS";
+      check: string;
+      depth: string;
+      oracle: "code" | "model" | "person";
+      runs: {
+        clean: number;
+        needed: number;
+        counted: Array<string>;
+      };
+      smallest: string | null;
+      points_to: string | null;
+      evidence: Array<string>;
+      proof: "statement" | "static_check" | "test_run" | "journey" | "decision";
+      ask?: string;
+    }>;
+    smallest: string | null;
+    points_to: string | null;
+    commit: string;
+    key: VerdictMadeV2Key;
+    why?: Array<{
+      reason: "untrusted_project" | "target_unresolved" | "threshold_without_unit" | "open_items" | "option_switched" | "denied_call_ran" | "checks_not_started" | "unknown";
+      text: string;
+    }>;
+  } | {
+    outcome: "FAIL";
+    verdict: string;
+    claim: string;
+    reasons: Array<string>;
+    requirements: VerdictMadeV2Requirements;
+    smallest: string | null;
+    points_to: string | null;
+    commit: string;
+    key: VerdictMadeV2Key;
+    why?: Array<{
+      reason: "untrusted_project" | "target_unresolved" | "threshold_without_unit" | "open_items" | "option_switched" | "denied_call_ran" | "checks_not_started" | "unknown";
+      text: string;
+    }>;
+  } | {
+    outcome: "INVALID";
+    verdict: string;
+    claim: string;
+    reasons: Array<string>;
+    requirements: VerdictMadeV2Requirements;
+    smallest: string | null;
+    points_to: string | null;
+    commit: string;
+    key: VerdictMadeV2Key;
+    why?: Array<{
+      reason: "untrusted_project" | "target_unresolved" | "threshold_without_unit" | "open_items" | "option_switched" | "denied_call_ran" | "checks_not_started" | "unknown";
+      text: string;
+    }>;
+  } | {
+    outcome: "BLOCKED";
+    verdict: string;
+    claim: string;
+    reasons: Array<string>;
+    requirements: VerdictMadeV2Requirements;
+    smallest: string | null;
+    points_to: string | null;
+    commit: string;
+    key: VerdictMadeV2Key;
+    why?: Array<{
+      reason: "untrusted_project" | "target_unresolved" | "threshold_without_unit" | "open_items" | "option_switched" | "denied_call_ran" | "checks_not_started" | "unknown";
+      text: string;
+    }>;
+  } | {
+    outcome: "INCONCLUSIVE";
+    verdict: string;
+    claim: string;
+    reasons: Array<string>;
+    requirements: VerdictMadeV2Requirements;
+    smallest: string | null;
+    points_to: string | null;
+    commit: string;
+    key: VerdictMadeV2Key;
+    why?: Array<{
+      reason: "untrusted_project" | "target_unresolved" | "threshold_without_unit" | "open_items" | "option_switched" | "denied_call_ran" | "checks_not_started" | "unknown";
+      text: string;
+    }>;
+  };
+  evidence?: Array<string>;
+}
+
 /** verdict.outcome@1 */
 export type VerdictOutcome = "PASS" | "FAIL" | "INVALID" | "BLOCKED" | "INCONCLUSIVE";
+
+/** verdict.reason@1 */
+export type VerdictReason = "untrusted_project" | "target_unresolved" | "threshold_without_unit" | "open_items" | "option_switched" | "denied_call_ran" | "checks_not_started" | "unknown";
 
 /** verdict.stale@1 */
 export interface VerdictStale {
