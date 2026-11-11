@@ -21,7 +21,7 @@
 // writes it. A key whose journal holds a call and whose outputs aren't kept made a call the hub can't know the fate
 // of: a retry makes no call and is BLOCKED with one unblock ask naming the provider and the key. While a job runs, a
 // second request with its key joins it, starting nothing, and a request that is cancelled leaves it; the job stops
-// only once no request waits on it.
+// only once no request waits on it. A request whose session closed leaves it too, but the job runs on (#1925).
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
@@ -30,6 +30,7 @@ import type { PlanInput } from '@deepbuild/asks';
 import { canonicalize, sha256Hex, type JsonValue } from '@deepbuild/contracts';
 import type { SendBoundary, SendRequest, Receipt } from '@deepbuild/evidence';
 import type { ExtensionHost } from '@deepbuild/extension-host';
+import type { RunningJob } from './rows.js';
 
 type Obj = Record<string, unknown>;
 type Host = Pick<ExtensionHost, 'jobs' | 'jobParams' | 'runJobTool' | 'jobHostReport' | 'runCheck'>;
@@ -55,10 +56,14 @@ export interface JobDeps {
   has(sha: string): Promise<boolean>;
   /** A file's bytes from the evidence store, by hash, checked against it. */
   read(sha: string): Promise<Uint8Array>;
+  /** Records in the evidence store, as an agent's, a file it holds with no record: its origin is unknown. */
+  adopt(bytes: Uint8Array): Promise<void>;
   /** The evidence store's send: files by hash only, each under its origin rule, its yes kept per file and destination. */
   send(request: SendRequest, boundary: SendBoundary): Promise<Receipt>;
   /** Raises an ask from one of the job API's sources: its handle. */
   raise(source: 'job.paid' | 'job.send' | 'job.unblock', ask: Obj, plan?: PlanInput): Promise<string>;
+  /** Shows a running job's row as it now reads (#1925), or takes it off the list once its tool's run has ended. */
+  row(job: RunningJob, running: boolean): void;
   plant?: string | undefined;
 }
 interface Cached { outputs: Record<string, string>; build: string | null }
@@ -125,13 +130,14 @@ export class Jobs {
   }
 
   /**
-   * A request's caller gone (#1923): it leaves the job it waits on. The job stops only once no request waits on it, so
-   * a joiner's cancel never stops the job for the request that started it.
+   * A request's caller gone (#1923): it leaves the job it waits on. A cancelled request's job stops only once no
+   * request waits on it, so a joiner's cancel never stops the job for the request that started it. A request whose
+   * connection `closed`, its session gone, stops nothing: the job runs on and its row keeps counting (#1925).
    */
-  gone(caller: string): void {
+  gone(caller: string, closed = false): void {
     this.leaving.get(caller)?.();
     for (const job of this.running.values()) {
-      if (!job.callers.delete(caller)) continue;
+      if (!job.callers.delete(caller) || closed) continue;
       if (job.callers.size === 0 || this.d.plant === 'job-joiner-cancels-job') job.stop.abort();
     }
   }
@@ -167,6 +173,9 @@ export class Jobs {
       if (typeof i.sha256 === 'string') {
         if (!HASH.test(i.sha256)) return refused(`the input ${name} names a file by its SHA-256, 64 hex digits`);
         try { bytes[name] = await this.d.read(i.sha256); } catch (e) { return refused(`the input ${name}: ${message(e)}`); }
+        // A file in the store's folder with no record of who put it there, such as the PCM a bake keeps (#1819), is of
+        // unknown origin, so the store takes it as an agent's: off the machine it goes only after your yes.
+        if (url && !(await this.d.has(i.sha256))) await this.d.adopt(bytes[name]);
         continue;
       }
       if (typeof i.path !== 'string' || !isAbsolute(i.path)) return refused(`the input ${name} is a file, by its SHA-256 in the evidence store or its absolute path`);
@@ -221,7 +230,19 @@ export class Jobs {
       try {
         report = await host.jobHostReport(tool, kind);
       } catch (e) {
-        return { status: 'failed', reason: `${tool}'s host ${where} gave no report of its weights and capabilities: ${message(e)}; nothing was sent` };
+        // A host that can't be reached can't start the job (#1819): BLOCKED, naming the tool, never a result. The
+        // planted runner calls it done, each output an empty record.
+        if (this.d.plant === 'job-host-down-done') {
+          const kept: Record<string, string> = {};
+          for (const n of Object.keys(held.descriptor.outputs)) kept[n] = await this.d.keep(new TextEncoder().encode('{}'), `job:${kind}/${tool}#${n}`);
+          return done(kept, pinned.build, 'miss');
+        }
+        return this.blocked(`report ${tool} ${where}`, {
+          cause: `${tool} can't start: its host ${where} gave no report of its weights and capabilities (${message(e)})`,
+          question: `${tool} can't start for ${kind}: its host ${where} doesn't answer. Start the host?`,
+          steps: [`Start ${tool}'s host on ${where}`, `Run the job on ${tool} again`],
+          where, why: `${tool} runs only on its host, after the host reports its weights`, proves: `${where} answering /report`,
+        });
       }
       const wrong = (weights ?? []).find((w) => !report.weights.some((r) => r.name === w.name && r.sha256 === w.sha256));
       if (wrong) {
@@ -278,11 +299,21 @@ export class Jobs {
   private async call(host: Host, held: ReturnType<Host['jobs']>[number], pinned: ReturnType<Host['jobs']>[number]['tools'][number], key: string, params: Record<string, JsonValue>, bytes: Record<string, Uint8Array>, receipt: (build: string | null, cache: 'hit' | 'miss') => Obj, done: (outputs: Record<string, string>, build: string | null, cache: 'hit' | 'miss') => Obj, stop: AbortSignal): Promise<Obj> {
     const { kind } = held;
     const { tool } = pinned;
+    // While its tool runs, the job has a row that counts from the tool's own counters (#1925). Nothing here waits on
+    // the caller, so the job runs on when the app or the session that asked for it closes.
+    const job: RunningJob = { key, kind, tool, started: this.d.now() };
+    this.d.row(job, true);
     let wrote: Record<string, Uint8Array>;
     try {
-      wrote = await host.runJobTool(tool, kind, params, bytes, pinned.provider ? { key, journal: this.journal(key) } : undefined, stop);
+      wrote = await host.runJobTool(tool, kind, params, bytes, pinned.provider ? { key, journal: this.journal(key) } : undefined, stop, (counter) => {
+        job.counter = counter;
+        job.at = this.d.now();
+        this.d.row(job, true);
+      });
     } catch (e) {
       return { status: 'failed', reason: `${tool} failed: ${message(e)}; nothing was kept`, receipt: receipt(pinned.build, 'miss') };
+    } finally {
+      this.d.row(job, false);
     }
     const outputs = Object.keys(held.descriptor.outputs);
     const absent = outputs.filter((n) => !wrote[n]);

@@ -39,10 +39,10 @@ pub enum State {
     },
 }
 
-/// The table's rows: the word on every surface, its status-map entry, and the words that never name it. The last
-/// three are the states the hub's one reading gives a session that no claim names (#992), which the list's rows carry
-/// (#1463).
-pub const TABLE: [(&str, &str, &[&str]); 14] = [
+/// The table's rows: the word on every surface, its status-map entry, and the words that never name it. Stuck,
+/// flagged and finished are the states the hub's one reading gives a session that no claim names (#992), which the
+/// list's rows carry (#1463); running is a running job's row (#1925).
+pub const TABLE: [(&str, &str, &[&str]); 15] = [
     ("queued", "idle", &[]),
     ("working", "running", &["in progress"]),
     ("says done", "running", &["done"]),
@@ -57,6 +57,7 @@ pub const TABLE: [(&str, &str, &[&str]); 14] = [
     ("stuck", "blocked", &[]),
     ("flagged", "fail", &[]),
     ("finished", "idle", &[]),
+    ("running", "running", &[]),
 ];
 
 impl State {
@@ -167,6 +168,20 @@ pub fn time_at_end(words: &str) -> (&str, Option<&str>) {
     }
 }
 
+/// A running job's row words after its kind (#1925): its count from its tool's own counter with its time left, as the
+/// hub wrote them; or, when its tool reports no counter, the word running and how long it has run, which a row draws
+/// at its right edge. Never a bar, and never a count its tool didn't report.
+pub fn job_words(row: &Value, now: u64) -> String {
+    let title = row["title"].as_str().unwrap_or_default();
+    match row["progress"].as_str() {
+        Some(progress) => format!("{title} · {progress}"),
+        None => {
+            let ran = now.saturating_sub(row["since"].as_u64().unwrap_or(now));
+            format!("{title} · running {}", span(ran))
+        }
+    }
+}
+
 /// A length of time as every surface writes it (#1458): "40 s", "12 min", "3 h" or "2 d", with a space and no "ago",
 /// since the slot it's in says it's since.
 pub fn span(ms: u64) -> String {
@@ -204,15 +219,31 @@ pub fn mark(state: &State, now: u64) -> String {
     format!("{} {}", glyph(state.entry()), state.text(now))
 }
 
-const CLOSING: [&str; 7] = [
-    "decision.applied",
-    "ask.answered",
-    "ask.defaulted",
-    "ask.escalated",
-    "ask.cancelled",
-    "ask.superseded",
-    "ask.moot",
-];
+/// The kinds that close an ask: each move of the contract's ask.machine@1 into a final state, so the app keeps no
+/// close list of its own (#2026).
+pub fn closing() -> &'static [String] {
+    static KINDS: OnceLock<Vec<String>> = OnceLock::new();
+    KINDS.get_or_init(|| {
+        let machine: Value = serde_json::from_str(include_str!(
+            "../../../packages/contracts/schemas/ask.machine@1.json"
+        ))
+        .expect("ask.machine@1 is JSON");
+        let mut kinds: Vec<String> = machine["moves"]
+            .as_array()
+            .expect("ask.machine@1 holds moves")
+            .iter()
+            .filter(|step| {
+                machine["final"]
+                    .as_array()
+                    .is_some_and(|end| end.contains(&step["to"]))
+            })
+            .filter_map(|step| step["event"].as_str().map(str::to_owned))
+            .collect();
+        kinds.sort();
+        kinds.dedup();
+        kinds
+    })
+}
 
 /// An ask's handle, `ask:<the id of its ask.created>`.
 pub fn handle(ask: &Value) -> String {
@@ -228,7 +259,7 @@ pub fn closes(event: &Value, handle: &str) -> bool {
     } else {
         &event["subject"]
     };
-    CLOSING.contains(&event["kind"].as_str().unwrap_or_default())
+    closing().iter().any(|kind| event["kind"] == kind.as_str())
         && ask == handle
         && writer != "hook"
         && !writer.starts_with("mcp:")
@@ -281,7 +312,10 @@ impl Reading {
     /// One event about this ask, in log order.
     fn read(&mut self, event: &Value, handle: &str) {
         if self.closed.is_none() && closes(event, handle) {
-            self.closed = CLOSING.into_iter().find(|kind| event["kind"] == *kind);
+            self.closed = closing()
+                .iter()
+                .find(|kind| event["kind"] == kind.as_str())
+                .map(String::as_str);
         } else if self.closed.is_none()
             && event["kind"] == "deadline.moved"
             && event["writer"] == "core"
@@ -498,6 +532,23 @@ impl Table {
             .apply(event, kind);
     }
 
+    /// The rows a read of the hub gives, in its order (#2026): what the views draw until the record before the read is
+    /// folded, so Needs you never waits on the history.
+    pub fn seeded(rows: &[Value]) -> Table {
+        let mut table = Table {
+            listed: true,
+            ..Table::default()
+        };
+        for (at, row) in rows.iter().enumerate() {
+            if let Some(id) = row["id"].as_str() {
+                table
+                    .rows
+                    .insert(id.to_owned(), (format!("{at:010}"), row.clone()));
+            }
+        }
+        table
+    }
+
     /// Whether the record holds the list's rows (#1463), so every view reads them and not its own reading.
     pub fn listed(&self) -> bool {
         self.listed
@@ -512,6 +563,11 @@ impl Table {
             .collect();
         rows.sort_by(|a, b| (a.0, a.1).cmp(&(b.0, b.1)));
         rows.into_iter().map(|(.., row)| row).collect()
+    }
+
+    /// The list's order key of the row with this ID.
+    pub fn order_of(&self, id: &str) -> Option<String> {
+        self.rows.get(id).map(|(order, _)| order.clone())
     }
 
     /// The list's row with this ID.
@@ -622,6 +678,14 @@ impl Table {
             .filter(|ask| session.is_none_or(|session| ask["session"] == session))
             .filter(|ask| self.is_open(&handle(ask)))
             .collect()
+    }
+
+    /// How many asks a decision applied for you closed: #2026's planted count adds them back.
+    pub fn decided(&self) -> usize {
+        self.readings
+            .values()
+            .filter(|reading| reading.closed == Some("decision.applied"))
+            .count()
     }
 
     /// Whether the ask `handle` is open: any ask no event closed is, whether or not the record holds its creation.
@@ -932,6 +996,24 @@ pub fn menu(table: &Table, now: u64) -> Vec<String> {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    /// #1925: a running job's row shows its tool's count as the hub wrote it; with no counter, the word running and
+    /// how long it has run, in the row's time slot, never a count it wasn't given.
+    #[test]
+    fn a_job_row_counts_only_from_its_tools_counter() {
+        let counted = json!({"title": "test.encode", "progress": "300 of 600 · 40 s left", "since": 0});
+        assert_eq!(
+            job_words(&counted, 45_000),
+            "test.encode · 300 of 600 · 40 s left"
+        );
+        let bare = json!({"title": "test.encode", "since": 1_000});
+        let words = job_words(&bare, 41_000);
+        assert_eq!(words, "test.encode · running 40 s");
+        assert_eq!(
+            time_at_end(&words),
+            ("test.encode · running", Some("40 s"))
+        );
+    }
 
     /// #1546: an age's next tick is the first ms its span reads differently, never later, never earlier.
     #[test]

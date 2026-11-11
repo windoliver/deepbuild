@@ -8,7 +8,6 @@ use std::collections::BTreeMap;
 
 use deep_canvas_marks::fx::{self, Part, Shape};
 use deep_gpu::device::Device;
-use wgpu::util::DeviceExt as _;
 
 const ENTRIES: [&str; 13] = [
     "cov", "shift", "blur", "dilate", "lin", "outside_moved", "mul", "glow", "distance", "height",
@@ -239,6 +238,12 @@ impl PaintFx {
                 let m = p.shift(a, [d.offset[0] as f32 * scale, d.offset[1] as f32 * scale]);
                 let b = p.blur(m, d.blur as f32 * scale);
                 p.one("lin", b, Step { f: [d.opacity as f32, 0.0, 0.0, 0.0], ..Step::default() })
+            }
+            Part::Halo(h) => {
+                let grown = p.dilate(a, h.width as f32 * scale);
+                let m = p.shift(grown, [h.offset[0] as f32 * scale, h.offset[1] as f32 * scale]);
+                let b = p.blur(m, h.blur as f32 * scale);
+                p.one("lin", b, Step { f: [h.opacity as f32, 0.0, 0.0, 0.0], ..Step::default() })
             }
             Part::Inner(s) => {
                 let l = fx::toward(s.light);

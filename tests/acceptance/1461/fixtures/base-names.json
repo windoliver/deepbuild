@@ -1,0 +1,17 @@
+{
+  "base": "d51be2c3",
+  "read": "The fixed names the merge base's shell draws in its window, read from its source at d51be2c3: each title, control label and accessible label of the shipped views, the box and ⌘K. Names a record supplies (titles, questions, counts) are not the shell's.",
+  "names": [
+    { "name": "Tasks", "where": "the list's heading", "source": "crates/deep-app/src/views.rs:1225" },
+    { "name": "Agents: MCP servers and skills", "where": "the list's Agents row", "source": "crates/deep-app/src/views.rs:1253" },
+    { "name": "Needs you", "where": "Needs you's heading", "source": "crates/deep-app/src/views.rs:1402" },
+    { "name": "Pop out Needs you", "where": "Needs you's pop-out control", "source": "crates/deep-app/src/views.rs:1487" },
+    { "name": "Home", "where": "Home's heading", "source": "crates/deep-app/src/views.rs:1390" },
+    { "name": "Set up", "where": "the first launch's control", "source": "crates/deep-app/src/views.rs:1668" },
+    { "name": "Terminal", "where": "a session's page", "source": "crates/deep-app/src/views.rs:1539" },
+    { "name": "Agents", "where": "the Agents page's heading", "source": "crates/deep-app/src/views.rs:2091" },
+    { "name": "Say a change in words", "where": "the box", "source": "crates/deep-app/src/words.rs:197" },
+    { "name": "Send", "where": "the box's send control", "source": "crates/deep-app/src/words.rs:233" },
+    { "name": "Commands and pages", "where": "⌘K's list", "source": "crates/deep-app/src/commands.rs:408" }
+  ]
+}

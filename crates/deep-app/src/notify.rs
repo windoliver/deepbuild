@@ -84,6 +84,8 @@ impl NotificationSetting {
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Reach {
     pub hub_down: bool,
+    /// Since when the hub it says isn't answering went down (#1461).
+    pub since: Option<u64>,
     pub setting: NotificationSetting,
     /// The asks Notification Center holds.
     pub delivered: Vec<String>,
@@ -201,6 +203,7 @@ impl Notifier {
     pub fn reach(&self, hub_down: bool) -> Reach {
         Reach {
             hub_down,
+            since: None,
             setting: self.setting,
             delivered: self
                 .delivered

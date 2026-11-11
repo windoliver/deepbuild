@@ -58,6 +58,9 @@ use deep_app::{commands::Palette, init, menu_bar_line, mount_panel, show::Canvas
 use gpui_kit::*;
 
 // The probes that stay (#1457): each a flag the suites run as `target/debug/deep-app --flag`, in a file of its own.
+#[cfg(all(feature = "canvas-fixture", target_os = "macos"))]
+#[path = "probes/canvas.rs"]
+mod canvas;
 #[cfg(target_os = "macos")]
 #[path = "probes/capture_bug.rs"]
 mod capture_bug;
@@ -103,6 +106,12 @@ fn main() {
     #[cfg(all(feature = "chrome-fixture", target_os = "macos"))]
     if std::env::args().nth(1).as_deref() == Some("--chrome") {
         chrome::run(std::env::args().skip(2).collect());
+        return;
+    }
+    // Issue #1485: `--canvas <scenario.json>`, in a canvas-fixture build.
+    #[cfg(all(feature = "canvas-fixture", target_os = "macos"))]
+    if std::env::args().nth(1).as_deref() == Some("--canvas") {
+        canvas::run(std::env::args().nth(2));
         return;
     }
     #[cfg(feature = "panel-check")]
@@ -557,7 +566,10 @@ mod notifications {
                     begun = true;
                     post(&mut notifier, now, cx);
                 }
-                let reach = notifier.reach(watch.down());
+                let reach = notify::Reach {
+                    since: watch.since(),
+                    ..notifier.reach(watch.down())
+                };
                 let reached = reach != notify::reach();
                 if reached {
                     notify::publish(reach);
@@ -580,7 +592,7 @@ mod notifications {
                         super::menu_bar::show_menu(&lines);
                         listed = lines;
                     }
-                    deep_app::card::tick(now, cx);
+                    deep_app::views::tick(now, cx);
                 });
             }
         })

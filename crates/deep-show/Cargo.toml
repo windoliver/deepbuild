@@ -42,6 +42,9 @@ test-deprecated = ["dep:deep-canvas-test-modules"]
 # Issue #403: a test canvas module that registers a document check kind, and a build with the
 # logic module left out of the full set's list.
 test-check-kind = ["dep:deep-canvas-test-modules"]
+# Issue #408: a test canvas module whose kind's items contribute glyph boxes to the core's
+# glyph-box array, and draw nothing else.
+test-glyph-label = ["dep:deep-canvas-test-modules"]
 test-leave-out-logic = []
 # Issue #489: the full set without the data module, so motion@1's digest is compared without it.
 test-leave-out-data = []
@@ -217,9 +220,15 @@ test-export-target-in-media = []
 test-leave-out-input = []
 test-control-kind = []
 test-steps-in-effects = []
+# Issue #485: a build without scene3d and the modules that need it, effects kept; and the planted
+# layout in which the effects module declares gpu.output@1 instead of the core.
+test-leave-out-scene3d = []
+test-gpu-output-in-effects = []
 
 [dependencies]
 deep-canvas = { path = "../deep-canvas" }
+# Issue #1486: the one image service: still pictures drawn at their levels.
+deep-images = { path = "../deep-images" }
 deep-canvas-test-modules = { path = "../deep-canvas-test-modules", optional = true }
 deep-canvas-marks = { path = "../deep-canvas-marks" }
 deep-canvas-graph = { path = "../deep-canvas-graph" }
@@ -259,9 +268,15 @@ libc = "0.2"
 image = { version = "0.25", default-features = false, features = ["png"] }
 serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
 sha2 = "0.10"
-vello_cpu = { version = "0.3", default-features = false, features = ["std", "text", "f32_pipeline"] }
+# Issue #1897: the u8 pipeline too, so a cross-machine record drawn through it is real and refused.
+vello_cpu ={ version = "0.3", default-features = false, features = ["std", "text", "f32_pipeline", "u8_pipeline"] }
 # Issue #138: the kit's headless backend (wgpu's noop) and its GPU backend.
 wgpu = { version = "30", default-features = false, features = ["std", "wgsl", "noop"] }
+
+# Issue #1901: the build script's digest of the sources this binary is built from; already in the
+# lockfile.
+[build-dependencies]
+sha2 = "0.10"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 wgpu = { version = "30", default-features = false, features = ["std", "wgsl", "noop", "metal"] }

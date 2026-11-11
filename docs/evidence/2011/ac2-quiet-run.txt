@@ -1,0 +1,9 @@
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/2011
+
+
+ Test Files  1 passed (1)
+      Tests  2 passed | 2 skipped (4)
+   Start at  18:56:59
+   Duration  26.53s (tests 100%)
+

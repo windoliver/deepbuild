@@ -515,48 +515,6 @@ fn scale(v: u64, from: u32, to: u32) -> i64 {
     (v as u128 * to as u128 / from as u128) as i64
 }
 
-/// The DecoderSpecificInfo inside an `esds` body (an AudioSpecificConfig for AAC).
-pub fn decoder_info(esds: &[u8]) -> Option<&[u8]> {
-    let mut b = Bytes(esds, 4);
-    let len = |b: &mut Bytes| -> Option<usize> {
-        let mut n = 0usize;
-        for _ in 0..4 {
-            let c = b.u8()?;
-            n = n << 7 | (c & 0x7f) as usize;
-            if c & 0x80 == 0 {
-                break;
-            }
-        }
-        Some(n)
-    };
-    if b.u8()? != 3 {
-        return None;
-    }
-    len(&mut b)?;
-    b.take(2)?;
-    let flags = b.u8()?;
-    if flags & 0x80 != 0 {
-        b.take(2)?;
-    }
-    if flags & 0x40 != 0 {
-        let n = b.u8()? as usize;
-        b.take(n)?;
-    }
-    if flags & 0x20 != 0 {
-        b.take(2)?;
-    }
-    if b.u8()? != 4 {
-        return None;
-    }
-    len(&mut b)?;
-    b.take(13)?;
-    if b.u8()? != 5 {
-        return None;
-    }
-    let n = len(&mut b)?;
-    b.take(n)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

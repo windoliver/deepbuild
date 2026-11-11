@@ -89,6 +89,10 @@ export function listText(rows: readonly Row[], o: { detail?: Record<string, Deta
   }
   const byRepo = [...new Set(quiet.map((r) => r.project ?? 'no repo'))].sort().map((p) => `${p} ${quiet.filter((r) => (r.project ?? 'no repo') === p).length}`);
   if (quiet.length) out.push(`${quiet.length} quiet, by repo: ${byRepo.join(', ')}`);
+  // Each running job (#1925): its count from its tool's own counter, or with none how long it has run, and why.
+  const jobs = rows.filter((r) => r.id.startsWith('job:'));
+  if (jobs.length) out.push('Running jobs:');
+  for (const r of jobs) out.push(`  ${r.word.padEnd(9)}  ${r.title}${r.progress ? ` · ${r.progress}` : age(r)}`, `      ${r.why}`);
   if (asks.length) out.push('Needs you');
   for (const r of asks) out.push(`  ${r.title}  ${r.word}  ${r.project ?? 'no repo'}${age(r)}`);
   if (!sessions.length) out.push('Start a Claude Code or Codex session in a repo and it shows here; deep doctor checks the setup.');
@@ -105,6 +109,18 @@ function hub(): { socket: string; token: string } {
   const socket = hubAddress().path;
   const token = [join(dirname(socket), 'control.token'), rootOf(installedRoot()).token].find((p) => existsSync(p));
   return { socket, token: token ? readFileSync(token, 'utf8').trim() : '' };
+}
+
+/** What a list read from the hub's database says first: the hub isn't answering, and since when. */
+export const hubDown = (down: number): string => `The hub isn't answering, since ${clock(down)}; this is the list its database holds.`;
+
+/**
+ * The list read with the hub at `socket` down (`deep`, `deep status`, `deep inbox`): its database read-only, the
+ * socket's folder's or the installed hub's; undefined with none.
+ */
+export async function databaseRead(socket: string, detail: boolean): Promise<Read | undefined> {
+  const ledger = [join(dirname(socket), 'ledger.db'), rootOf(installedRoot()).ledger].find((p) => existsSync(p));
+  return ledger ? fromDatabase(ledger, detail) : undefined;
 }
 
 /**
@@ -143,7 +159,7 @@ export async function listCommand(args: readonly string[], detail: boolean): Pro
   const print = (read: Read): void => {
     const rows = planted(read.rows);
     if (json) process.stdout.write(`${JSON.stringify({ log_pos: read.log_pos, rows })}\n`);
-    else process.stdout.write(listText(rows, { ...(read.detail ? { detail: read.detail } : {}), ...(read.down !== undefined ? { down: `The hub isn't answering, since ${clock(read.down)}; this is the list its database holds.` } : {}) }));
+    else process.stdout.write(listText(rows, { ...(read.detail ? { detail: read.detail } : {}), ...(read.down !== undefined ? { down: hubDown(read.down) } : {}) }));
   };
   // A clone of a project this machine joined reads that project's hub over the network (#1338), as its person.
   const { joinedFor, remoteCall } = await import('./remote.js');
@@ -185,11 +201,11 @@ export async function listCommand(args: readonly string[], detail: boolean): Pro
     why = error instanceof Error ? error.message : String(error);
   }
   // The hub's own folder holds its database: the socket's, or the installed root.
-  const ledger = [join(dirname(at.socket), 'ledger.db'), rootOf(installedRoot()).ledger].find((p) => existsSync(p));
-  if (!ledger) {
+  const read = await databaseRead(at.socket, detail);
+  if (!read) {
     process.stderr.write(`${name}: the hub isn't answering (${why}), and there is no database to read; start it with deep hub start.\n`);
     return unread;
   }
-  print(await fromDatabase(ledger, detail));
+  print(read);
   return unread;
 }

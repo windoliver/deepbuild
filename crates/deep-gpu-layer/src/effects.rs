@@ -814,7 +814,7 @@ fn run_once(device: &Device, c: &Compiled, reached: &mut Reached) -> Result<(), 
 }
 
 /// A linear render target of `size` that nothing reads back.
-fn output(d: &wgpu::Device, label: &str, [width, height]: [u32; 2]) -> wgpu::Texture {
+fn output(d: &deep_gpu::counted::Wgpu, label: &str, [width, height]: [u32; 2]) -> wgpu::Texture {
     d.create_texture(&wgpu::TextureDescriptor {
         label: Some(label),
         size: wgpu::Extent3d {

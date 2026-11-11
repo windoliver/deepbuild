@@ -46,6 +46,9 @@ const SETTLE_TIMEOUT: Duration = Duration::from_secs(2);
 /// The criteria's wrong programs, each reachable only through the scenario's `planted`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Planted {
+    /// #544: a start_on run on a logic item's occurrences starts at the first frame its session
+    /// evaluates at or after the occurrence.
+    StartOnAtFirstFrame,
     PresentsUnnamedRemoval,
     DiffsItemsOnly,
     InlinesEveryIssue,
@@ -150,8 +153,17 @@ pub enum Planted {
     ChecksSkipUnknownKind,
     /// #403: a check kind no module in the build registers is INCONCLUSIVE.
     MissingKindInconclusive,
+    /// #408: film.layout takes its texts by the kinds text@1, vector@1, mark.text and counter,
+    /// not from the core's glyph-box array.
+    LayoutTextByKind,
+    /// #405's and #1936's: the geometry audit's wrong programs, which its own module names.
+    Audit(crate::geometry_audit::Planted),
     /// #306: a derived item's seed comes from a counter over expansion order.
     SeedsByExpansionOrder,
+    /// #2015: a repeat over elements seeds each derived item with the part's element count too.
+    EachSeedsByElementCount,
+    /// #2015: a repeat over faces walks the part's triangles, not its polygon view's faces.
+    EachFacePerTriangle,
     /// #306: a change of inputs re-expands the broken-out item too, over the writer's own.
     ReexpansionOverwritesBrokenOut,
     /// #306: the pack check never reads `requires.modules`.
@@ -282,6 +294,9 @@ pub enum Planted {
     SpanRoundsStart,
     /// #501: the GPU BLAKE3 joins each parent's two children in the wrong order.
     ChunkTreeWrongOrder,
+    /// #1897: the GPU pixel hash and its CPU twin XOR each pixel's words with no term for where
+    /// it is, so no swap moves it.
+    HashXorsWithoutPosition,
     /// #501: a range's timecode starts at the job's start label, not at its first frame's.
     RangeRestartsTimecode,
     /// #501: the export skips its readiness gate, starts and stops at the missing asset's first
@@ -349,6 +364,10 @@ pub enum Planted {
     WakerIgnoresScheduleFrame,
     /// #1551: a restarted link sits out a full refresh before its first callback.
     LinkRestartsARefreshLate,
+    /// #1901: the fingerprint kept output is keyed by leaves out the source digest.
+    FingerprintWithoutSources,
+    /// #1901: `padded_key` keys the fixture by its memory, padding and all.
+    KeyHashesRawBytes,
 }
 
 /// The build's sealed canvas-module set, registered and sealed once at startup (#305: Registry
@@ -379,6 +398,8 @@ pub struct Startup {
     /// #415: a planted wrong first-party layout: pages@1 under a pack's cap, or nav.graph's
     /// validators trusting the header's link count.
     pub layouts: deep_canvas_sandbox::layouts::Planted,
+    /// #1901: the folder kept output lives in across processes (`--cache <dir>`).
+    pub cache: Option<std::path::PathBuf>,
 }
 
 /// How many times this process registered and sealed: counted where it happens, so the
@@ -564,6 +585,19 @@ pub enum Call {
         doc: String,
         runs: usize,
     },
+    /// #1901: the machine fingerprint kept output is keyed by.
+    Fingerprint,
+    /// #1901: a document's frame, capture or final at a time, through the kept-output cache.
+    Draw {
+        doc: String,
+        t: EvalTime,
+        output: &'static str,
+    },
+    /// #1901: the padded key input built twice, its padding from two seeds, and its keys.
+    PaddedKey {
+        fields: u64,
+        seeds: [u64; 2],
+    },
     Show(Box<Show>),
     Patch(Box<PatchCall>),
     Read {
@@ -637,6 +671,8 @@ pub enum Call {
     FrameHash { frames: Vec<([u32; 2], String)>, software: bool },
     /// #501: the cross-machine audio check on two float WAVs.
     CrossMachine([String; 2]),
+    /// #1897: the GPU pixel hash on frames from the evidence store, beside its CPU twin.
+    PixelHash(Vec<([u32; 2], deep_gpu::pixel_hash::Format, String)>),
     /// A document's session played on a virtual display to `to` (#488).
     Play {
         doc: String,
@@ -774,6 +810,8 @@ pub enum Call {
     Verdict(String),
     /// Every verdict made on a claim, `stale` as of now (#403).
     Verdicts(String),
+    /// #405: an answer to the approval asks a geometry audit opened on a claim's requirement.
+    Answer { via: Option<Via>, claim: String, requirement: String, yes: bool },
     /// A fixture's snapshot on a backend, judged against the golden store (#138).
     Golden {
         fixture: String,
@@ -984,6 +1022,8 @@ pub struct Hub<'a> {
     /// The GPU 3D revisions draw on (#378): unopened until the first, `None` inside where there
     /// is none.
     pub gpu3: Option<Option<crate::scene3d::Gpu3>>,
+    /// The GPU pixel hash's pipeline, built on the first canonical render it hashes (#405).
+    pub hash_pass: Option<deep_gpu::pixel_hash::PixelHash>,
     /// A 3D revision's snapshot drawn for the call being presented, with its size.
     pub pending3d: Option<Result<Raster, ()>>,
     /// Each panel's interaction scope (#383).
@@ -998,6 +1038,8 @@ pub struct Hub<'a> {
     pub asks: BTreeMap<String, Vec<crate::ask::Asked>>,
     /// The verdicts made on each claim, in the order made, each as recorded (#403).
     pub verdicts_made: BTreeMap<String, Vec<Value>>,
+    /// #405: the approval asks a geometry audit made, by ID, each with your answer once given.
+    pub audit_asks: BTreeMap<String, Option<bool>>,
     /// The pack store (#306): the versions admitted, and one row per offer.
     pub packs: Packs,
     pub pack_rows: Vec<crate::packs::Row>,
@@ -1005,6 +1047,8 @@ pub struct Hub<'a> {
     pub pack_authors: BTreeMap<String, String>,
     /// Each document's expansions at its last check, for the replies that carry them.
     pub expansions: BTreeMap<String, Vec<Expansion>>,
+    /// #544's planted start_on: each session's first evaluated time since its revision loaded.
+    pub first_frames: BTreeMap<String, i64>,
     /// The displays, the windows on them and the card's placement (#400).
     pub placement: Placement,
     /// Terminals, streams and session pages (#402).
@@ -1118,6 +1162,8 @@ impl<'a> Hub<'a> {
             overwrite_broken_out: scenario.planted == Some(Planted::ReexpansionOverwritesBrokenOut),
             skip_requires_modules: scenario.planted == Some(Planted::PackCheckSkipsRequiresModules),
             key_by_name: scenario.planted == Some(Planted::PacksKeyedByName),
+            each_by_count: scenario.planted == Some(Planted::EachSeedsByElementCount),
+            each_per_triangle: scenario.planted == Some(Planted::EachFacePerTriangle),
         };
         let mut hub = Hub {
             scenario,
@@ -1132,12 +1178,15 @@ impl<'a> Hub<'a> {
             display_only: BTreeSet::new(),
             mode_ids: BTreeMap::new(),
             session_state: BTreeMap::new(),
-            renderer: Renderer::new(),
+            renderer: Renderer::new().turning_about_corner(
+                scenario.module_planted.as_deref() == Some("turns_about_corner"),
+            ),
             sched,
             sessions: BTreeMap::new(),
             background: Vec::new(),
             panels_shown: BTreeMap::new(),
             gpu3: None,
+            hash_pass: None,
             pending3d: None,
             scopes: BTreeMap::new(),
             serial: 0,
@@ -1151,10 +1200,12 @@ impl<'a> Hub<'a> {
             shown_at: BTreeMap::new(),
             asks: BTreeMap::new(),
             verdicts_made: BTreeMap::new(),
+            audit_asks: BTreeMap::new(),
             packs: Packs::new(pack_planted),
             pack_rows: Vec::new(),
             pack_authors: BTreeMap::new(),
             expansions: BTreeMap::new(),
+            first_frames: BTreeMap::new(),
             placement: Placement::open(
                 scenario.displays.clone(),
                 scenario.window,
@@ -1577,6 +1628,8 @@ impl<'a> Hub<'a> {
 
     /// One call's reply.
     pub fn call(&mut self, call: &Call) -> Value {
+        // #502: a caption set for a frame of the last call draws in no frame of this one.
+        self.renderer.caption = None;
         // #856's planted cache per document: each document's runs are keyed apart.
         if self.startup.run_per_document {
             let doc = match call {
@@ -1647,6 +1700,9 @@ impl<'a> Hub<'a> {
             Call::RelayClient(c) => crate::seams::relay_client(c, self.startup.network),
             Call::Migrate(to) => self.migrate(*to),
             Call::Keys { doc, runs } => self.keys(doc, *runs),
+            Call::Fingerprint => self.fingerprint_reply(),
+            Call::Draw { doc, t, output } => self.draw_reply(doc, t, output),
+            Call::PaddedKey { fields, seeds } => self.padded_key_reply(*fields, *seeds),
             Call::Fixtures => self.fixtures_reply(),
             Call::Schedule => self.startup.sealed.schedule(),
             Call::Eval(e) => self.eval(e),
@@ -1657,6 +1713,7 @@ impl<'a> Hub<'a> {
             Call::Session { doc, set } => self.session_reply(doc, set.as_ref()),
             Call::FrameHash { frames, software } => self.frame_hash(frames, *software),
             Call::CrossMachine(wavs) => self.cross_machine(wavs),
+            Call::PixelHash(frames) => self.pixel_hash(frames),
             Call::Play {
                 doc,
                 display_hz,
@@ -1766,6 +1823,7 @@ impl<'a> Hub<'a> {
             Call::Catalog => self.catalog_reply(),
             Call::Verdict(claim) => self.verdict_call(claim),
             Call::Verdicts(claim) => self.verdicts_call(claim),
+            Call::Answer { via, claim, requirement, yes } => self.answer_call(via.as_ref(), claim, requirement, *yes),
             Call::Golden { fixture, backend } => self.golden_reply(fixture, backend),
             Call::Record {
                 via,
@@ -2105,18 +2163,19 @@ impl<'a> Hub<'a> {
                 issues.push(unfit_issue(r.code, r.path));
             }
             issues.extend(self.inline_vectors(form));
+            // #544: a spawn's reads of a logic item's occurrences, checked against its emits
+            // before any step runs; then the logic items baked into the lists their readers read.
+            if !deep_canvas_media::planted("undeclared_field_reads_zero") {
+                issues.extend(crate::spawn::undeclared_issues(form));
+            }
+            if let Err(i) = self.inline_occurrences(form, &[]) {
+                issues.push(i);
+            }
         }
         // Mark set columns that read a column source, resolved and narrowed by the core's
         // column view at the frame's step (#397).
         if let Some(form) = drawn_form.as_mut() {
-            let entries = self
-                .startup
-                .sealed
-                .registry(deep_canvas::columns::REGISTRY)
-                .map_or(&[][..], |r| r.entries.as_slice());
-            // A step is a 60 fps frame: 11,760,000 flicks.
-            let step = show.t.max(0) as u64 / 11_760_000;
-            issues.extend(deep_canvas::columns::view(form, entries, step));
+            issues.extend(self.column_view(form, show.t));
         }
         if let Some(doc) = stamped
             .as_ref()
@@ -2202,6 +2261,7 @@ impl<'a> Hub<'a> {
         if let Some(session) = self.sessions.get_mut(&show.doc) {
             session.load(&mut self.sched, drawn_form.as_ref().unwrap_or(&doc));
         }
+        self.first_frames.remove(&show.doc);
         // #1732: render-back's geometry audit of the revision, on its frame at `t`.
         if show.include.iter().any(|i| matches!(i, Include::Audit)) {
             let audit = self.audit_of(&show.doc, show.t);

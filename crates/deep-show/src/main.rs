@@ -13,11 +13,14 @@ mod bake;
 mod ask;
 mod capture;
 mod costs;
+mod determinism;
 mod efficiency;
 mod familiar;
 mod evidence;
 mod export;
 mod film;
+mod film_layout;
+mod geometry_audit;
 mod film_viewer;
 mod frames;
 mod function;
@@ -27,11 +30,14 @@ mod host;
 mod hub;
 mod input;
 mod jobs;
+mod kept;
 mod kinds;
 mod kit;
+mod logic;
 mod media;
 mod mixdown;
 mod modes;
+mod narration;
 mod packs;
 mod placement;
 #[cfg(feature = "test-accent")]
@@ -424,6 +430,16 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
                 },
             });
         }
+        "pixel_hash" => {
+            let frames = c.get("frames")?.as_array()?.iter().map(|f| {
+                let size = f.get("size")?.as_array().filter(|a| a.len() == 2)?;
+                let w = u32::try_from(size[0].as_u64()?).ok()?;
+                let h = u32::try_from(size[1].as_u64()?).ok()?;
+                let format = deep_gpu::pixel_hash::Format::named(f.get("format")?.as_str()?)?;
+                Some(([w, h], format, f.get("bytes")?.as_str()?.to_string()))
+            });
+            return Some(Call::PixelHash(frames.collect::<Option<_>>()?));
+        }
         "cross_machine" => {
             let a = c.get("audio")?.as_array().filter(|a| a.len() == 2)?;
             return Some(Call::CrossMachine([a[0].as_str()?.to_string(), a[1].as_str()?.to_string()]));
@@ -608,6 +624,23 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         }
         "costs" => return Some(Call::Costs),
         "migrate" => return Some(Call::Migrate(hash_named(c.get("to")?.as_str()?)?)),
+        // #1901: the fingerprint kept output is keyed by, a kept draw, and the padded key input.
+        "fingerprint" => return Some(Call::Fingerprint),
+        "draw" => {
+            let output = c.get("output")?.as_str()?;
+            return Some(Call::Draw {
+                doc: doc()?,
+                t: crate::time::eval_time(c.get("t"))?,
+                output: kept::OUTPUTS.into_iter().find(|o| *o == output)?,
+            });
+        }
+        "padded_key" => {
+            let seeds = c.get("seeds")?.as_array().filter(|s| s.len() == 2)?;
+            return Some(Call::PaddedKey {
+                fields: c.get("fields")?.as_u64()?,
+                seeds: [seeds[0].as_u64()?, seeds[1].as_u64()?],
+            });
+        }
         "keys" => {
             return Some(Call::Keys {
                 doc: doc()?,
@@ -739,6 +772,18 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         "catalog" => return Some(Call::Catalog),
         "verdict" => return Some(Call::Verdict(c.get("claim")?.as_str()?.to_string())),
         "verdicts" => return Some(Call::Verdicts(c.get("claim")?.as_str()?.to_string())),
+        "answer" => {
+            return Some(Call::Answer {
+                via: acting(c)?,
+                claim: c.get("claim")?.as_str()?.to_string(),
+                requirement: c.get("requirement")?.as_str()?.to_string(),
+                yes: match c.get("answer")?.as_str()? {
+                    "yes" => true,
+                    "no" => false,
+                    _ => return None,
+                },
+            })
+        }
         "golden" => {
             return Some(Call::Golden {
                 fixture: c.get("fixture")?.as_str()?.to_string(),
@@ -1139,7 +1184,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
     };
     let mut placement_planted = placement::Planted::default();
     // #420's wrong programs live in scene3d's and the building module's operators, #453's in the
-    // loop module's geometry.shading.
+    // loop module's geometry.shading, #535's in the data module's mapping and deep-show.
     let module_planted = input
         .get("planted")
         .and_then(Value::as_str)
@@ -1149,6 +1194,8 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 || deep_canvas_media::PLANTED.contains(p)
                 // #1732's wrong programs live in the motion module's arrangement solve.
                 || deep_canvas_motion::arrange::PLANTED.contains(p)
+                || *p == deep_canvas_motion::module::UNDECLARED_KIND_ACCEPTED
+                || deep_canvas_marks::arrays::PLANTED.contains(p)
         })
         .map(str::to_string);
     // #433's wrong programs are twins of the familiar@1 pack.
@@ -1168,6 +1215,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 None
             }
             None if export_planted(p).is_some() => export_planted(p),
+            None if geometry_audit::planted(p).is_some() => geometry_audit::planted(p),
             None => Some(match p {
                 "presents_unnamed_removal" => Planted::PresentsUnnamedRemoval,
                 "diffs_items_only" => Planted::DiffsItemsOnly,
@@ -1176,6 +1224,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "sorts_by_order_key_alone" => Planted::SortsByOrderKeyAlone,
                 "reply_without_digest" => Planted::ReplyWithoutDigest,
                 "reads_wasm_bytes" => Planted::ReadsWasmBytes,
+                "start_on_at_first_frame" => Planted::StartOnAtFirstFrame,
                 "rebase_counts_op_targets_only" => Planted::RebaseCountsOpTargetsOnly,
                 "diffs_whole_document" => Planted::DiffsWholeDocument,
                 "one_fifo_check_queue" => Planted::OneFifoCheckQueue,
@@ -1223,7 +1272,10 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "verdict_keyed_by_doc" => Planted::VerdictKeyedByDoc,
                 "checks_skip_unknown_kind" => Planted::ChecksSkipUnknownKind,
                 "missing_kind_inconclusive" => Planted::MissingKindInconclusive,
+                "layout_text_by_kind" => Planted::LayoutTextByKind,
                 "seeds_by_expansion_order" => Planted::SeedsByExpansionOrder,
+                "each_seeds_by_element_count" => Planted::EachSeedsByElementCount,
+                "each_face_per_triangle" => Planted::EachFacePerTriangle,
                 "reexpansion_overwrites_broken_out" => Planted::ReexpansionOverwritesBrokenOut,
                 "pack_check_skips_requires_modules" => Planted::PackCheckSkipsRequiresModules,
                 "packs_keyed_by_name" => Planted::PacksKeyedByName,
@@ -1776,6 +1828,7 @@ const TEST_BUILD: bool = cfg!(any(
     feature = "test-leave-out-look",
     feature = "test-leave-out-text",
     feature = "test-check-kind",
+    feature = "test-glyph-label",
     feature = "test-leave-out-logic",
     feature = "test-leave-out-data",
     feature = "test-leave-out-sandbox",
@@ -1865,8 +1918,8 @@ fn modules(set: BuildSet) -> Vec<Module> {
         } else {
             deep_canvas_media::module::module()
         });
-        // Issue #308: controls and the input track's handling, with control@1.
-        out.push(deep_canvas_input::module::module());
+        // Issue #308: controls and the input track's handling, with control@1; #535: logic's arrays.
+        out.extend([deep_canvas_input::module::module(), deep_logic::module()]);
     }
     // Issue #238: the sandbox module, on core alone; `test-sandbox-alt` seals the test
     // implementation `sandbox.alt` in its place, and `test-sandbox-needs-logic` plants a manifest
@@ -1888,6 +1941,36 @@ fn modules(set: BuildSet) -> Vec<Module> {
     out.push(deep_canvas_test_modules::sandbox::prog());
     #[cfg(feature = "test-leave-out-effects")]
     out.retain(|m| m.manifest.name != "effects");
+    // #485: a build without scene3d, and without each module that can't seal without it.
+    #[cfg(feature = "test-leave-out-scene3d")]
+    {
+        let mut gone = vec!["scene3d".to_string()];
+        loop {
+            let more: Vec<String> = out
+                .iter()
+                .filter(|m| !gone.contains(&m.manifest.name))
+                .filter(|m| {
+                    m.manifest
+                        .depends_on
+                        .iter()
+                        .any(|(n, d)| !d.optional && gone.contains(n))
+                })
+                .map(|m| m.manifest.name.clone())
+                .collect();
+            if more.is_empty() {
+                break;
+            }
+            gone.extend(more);
+        }
+        out.retain(|m| !gone.contains(&m.manifest.name));
+    }
+    // #485's planted layout: effects declares gpu.output@1, which the core then leaves to it.
+    #[cfg(feature = "test-gpu-output-in-effects")]
+    for m in &mut out {
+        if m.manifest.name == "effects" {
+            *m = test_registries::effects_declaring_outputs();
+        }
+    }
     // #501's planted layout: media declares export.target@1, which the core then leaves to it.
     #[cfg(feature = "test-export-target-in-media")]
     for m in &mut out {
@@ -1970,6 +2053,8 @@ fn modules(set: BuildSet) -> Vec<Module> {
     out.push(deep_canvas_test_modules::deprecated());
     #[cfg(feature = "test-check-kind")]
     out.push(deep_canvas_test_modules::checks());
+    #[cfg(feature = "test-glyph-label")]
+    out.push(deep_canvas_test_modules::label());
     // Issue #185: test.sim@1's implementations, and test module c.
     #[cfg(feature = "test-sim-a")]
     out.push(deep_canvas_test_modules::sim::a());
@@ -1988,7 +2073,6 @@ fn modules(set: BuildSet) -> Vec<Module> {
     #[cfg(feature = "test-sim-c")]
     out.push(deep_canvas_test_modules::sim::c());
     out.extend(kit::modules::built());
-    // #403: `full` holds no logic module yet; once one lands, this build leaves it out.
     #[cfg(feature = "test-leave-out-logic")]
     out.retain(|m| m.manifest.name != "logic");
     // #443: a build without the vector module, whose scene3d@1 and marks2d@1 digests equal the
@@ -2262,6 +2346,9 @@ fn seal(planted: Option<StartPlanted>, costs: Coefficients) -> Result<Startup, B
     if cfg!(feature = "test-export-target-in-media") {
         registry = registry.plant(Fault::ExportTargetInMedia);
     }
+    if cfg!(feature = "test-gpu-output-in-effects") {
+        registry = registry.plant(Fault::GpuOutputInEffects);
+    }
     // #412: the fixture ring keeps the bare name the issue gives it (`ring@1`, `ring@2`).
     if cfg!(any(feature = "test-ring-a", feature = "test-ring-b")) {
         registry = registry.allows_bare("test.ring", "ring");
@@ -2322,6 +2409,7 @@ fn seal(planted: Option<StartPlanted>, costs: Coefficients) -> Result<Startup, B
             Some(StartPlanted::Run(p)) => Some(p),
             _ => None,
         },
+        cache: None,
     })
 }
 
@@ -2386,6 +2474,7 @@ mod tests {
             listing: None,
             kinds: None,
             layouts: Default::default(),
+            cache: None,
             run_planted: None,
         }
     }
@@ -2600,7 +2689,10 @@ mod tests {
     #[test]
     fn run_takes_planted_and_costs_once_each_and_nothing_else() {
         let args = |a: &[&str]| a.iter().map(|s| s.to_string()).collect::<Vec<_>>();
-        assert!(matches!(start_args(&args(&["run"])), Ok((None, None))));
+        assert!(matches!(
+            start_args(&args(&["run"])),
+            Ok((None, None, None))
+        ));
         assert!(matches!(
             start_args(&args(&[
                 "run",
@@ -2609,6 +2701,7 @@ mod tests {
             ])),
             Ok((
                 Some(StartPlanted::Seal(Fault::EveryDependencyRequired)),
+                None,
                 None
             ))
         ));
@@ -2620,7 +2713,11 @@ mod tests {
                 "--planted",
                 "admits_frame_json"
             ])),
-            Ok((Some(StartPlanted::Seal(Fault::AdmitsFrameJson)), Some(_)))
+            Ok((
+                Some(StartPlanted::Seal(Fault::AdmitsFrameJson)),
+                Some(_),
+                None
+            ))
         ));
         let twin = "treats_every_dependency_required";
         for stray in [
@@ -2630,6 +2727,7 @@ mod tests {
             &["run", "--planted", twin, "extra"],
             &["run", "--planted", twin, "--planted", twin],
             &["run", "--costs", "a", "--costs", "b"],
+            &["run", "--cache", "a", "--cache", "b"],
         ] {
             assert!(start_args(&args(stray)).is_err(), "{stray:?}");
         }
@@ -2782,19 +2880,23 @@ mod tests {
 
 /// The arguments after the command: `--planted <name>` and `--costs <path>`, each at most once,
 /// in either order; an unknown name or a stray argument is bad input.
-fn start_args(args: &[String]) -> Result<(Option<StartPlanted>, Option<String>), ()> {
-    let (mut planted, mut costs) = (None, None);
+type StartArgs = (Option<StartPlanted>, Option<String>, Option<PathBuf>);
+
+fn start_args(args: &[String]) -> Result<StartArgs, ()> {
+    let (mut planted, mut costs, mut cache) = (None, None, None);
     let mut rest = args.get(1..).unwrap_or_default();
     while let [flag, value, more @ ..] = rest {
         match flag.as_str() {
             "--planted" if planted.is_none() => planted = Some(planted_named(value)?),
             "--costs" if costs.is_none() => costs = Some(value.clone()),
+            // #1901: the folder kept output lives in across processes.
+            "--cache" if cache.is_none() => cache = Some(PathBuf::from(value)),
             _ => return Err(()),
         }
         rest = more;
     }
     if rest.is_empty() {
-        Ok((planted, costs))
+        Ok((planted, costs, cache))
     } else {
         Err(())
     }
@@ -2858,15 +2960,18 @@ fn planted_named(twin: &str) -> Result<StartPlanted, ()> {
             )))
         }
         _ if export_planted(twin).is_some() => export_planted(twin).map(StartPlanted::Run).ok_or(()),
+        "fingerprint_without_sources" => Ok(StartPlanted::Run(Planted::FingerprintWithoutSources)),
+        "key_hashes_raw_bytes" => Ok(StartPlanted::Run(Planted::KeyHashesRawBytes)),
         _ => seams::NetFault::named(twin)
             .map(StartPlanted::Network)
             .ok_or(()),
     }
 }
 
-/// #501's wrong programs, by the names its acceptance suite gives them.
+/// #501's wrong programs, and #1897's, by the names their acceptance suites give them.
 fn export_planted(name: &str) -> Option<Planted> {
     Some(match name {
+        "hash_xors_without_position" => Planted::HashXorsWithoutPosition,
         "span_rounds_each_frame" => Planted::SpanRoundsEachFrame,
         "span_rounds_start" => Planted::SpanRoundsStart,
         "chunk_tree_wrong_order" => Planted::ChunkTreeWrongOrder,
@@ -2943,7 +3048,7 @@ fn main() {
         let _ = out.flush();
         std::process::exit(code);
     }
-    let Ok((fault, costs)) = start_args(&args) else {
+    let Ok((fault, costs, cache)) = start_args(&args) else {
         let _ = writeln!(out, "{}", bad_input());
         std::process::exit(2);
     };
@@ -2960,7 +3065,7 @@ fn main() {
     };
     // The seal runs before the first line is read: a refused set answers no scenario.
     let startup: &'static Startup = match seal(fault, coefficients) {
-        Ok(startup) => Box::leak(Box::new(startup)),
+        Ok(startup) => Box::leak(Box::new(Startup { cache, ..startup })),
         Err(err) => {
             let mut line = json!({
                 "ok": false,

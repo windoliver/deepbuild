@@ -989,6 +989,10 @@ fn set(
         [field] if ITEM_OWN_FIELDS.contains(field) && !["id", "kind", "layer"].contains(field) => {
             item.insert((*field).to_string(), value);
         }
+        // #1937: an item's level of detail, whole, as the over-class fix moves a band nearer.
+        ["lod"] => {
+            item.insert("lod".to_string(), value);
+        }
         _ => return Err(unresolved(&id, op)),
     }
     Ok(())

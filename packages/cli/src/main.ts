@@ -182,7 +182,8 @@ const usage = [
   'deep off | on   every gate watch-only, or back, once the OS confirms you',
   'deep explain <recorded session folder> [--json]',
   'deep run --result <run.finished event file>',
-  'deep hub run | start | status [--root <folder>]',
+  'deep run follow <run>   a run\'s output from its start, then as it comes, until it ends',
+  'deep hub run [--safe] | start | status [--root <folder>]',
   'deep hub stop [--root <folder>]',
   'deep hub use --root <folder>   this worktree\'s sessions to a dev hub, once the OS confirms you',
   'deep fix <id>   work from an item at a source you switched on, such as LIN-42',
@@ -192,7 +193,7 @@ const usage = [
   'deep env up | down [--root <folder>] [--json]   this worktree\'s stack, through the hub',
   'deep lease [kind...] -- <command>   a heavy build or test suite run under one cpu.slot and a lease on each kind, at a lower priority',
   'deep numbers [--json] | refresh | baseline <manifest> | sample <before date> [manifest]   your readings, each with its source and age',
-  'deep show --doc <doc ID> --document <file> [--check] [--snap] [--claim <claim>] [--json]   a canvas document drawn in your layer, or in the agent\'s whose process tree runs it',
+  'deep show --doc <doc ID> --document <file> [--removes id,id] [--t <time>] [--size WxH] [--include issues,audit,timing,pixels] [--check] [--snap] [--claim <claim>] [--json]   a canvas document drawn in your layer, or in the agent\'s whose process tree runs it',
   'deep export --document <file> --still <frame | marker> --out <file.png>   one still of a document, drawn headless with no hub',
   'deep kinds --dump <folder> | --diff <a> <b>   the canvas core\'s whole listing as canonical JSON named by its module-set digest, or two such dumps diffed',
   'deep inbox [--json]   your open asks, each question first and its handle last',
@@ -200,8 +201,8 @@ const usage = [
   'deep inbox answer <ask> <option>   answer one, once the OS confirms you',
   'deep race <issue>   its sessions race: they settle on the first PASS and raise no "keep which?" ask',
   'deep inbox undo <ask>   open a defaulted ask again, once the OS confirms you',
-  'deep start approve --repo <path> --issues <n,...> --agents <agent,...> --at-once <n> --plan-share <percent>   ask to approve a run of sessions started without your Send',
-  'deep start --repo <path> --issue <n> --agent <agent> --prompt <words>   start one under it, in its own worktree',
+  'deep start approve --repo <path> --issues <n,...> --agents <agent,...> [--home <agent>=<folder> ...] [--mode <agent>=<mode> ...] --at-once <n> --plan-share <percent> [--until <ISO time>] [--host <host> ...] [--json]   ask to approve a run of sessions started without your Send',
+  'deep start --repo <path> --issue <n> --agent <agent> [--mode <mode>] --prompt <words> [--json]   start one under it, in its own worktree',
   'deep gate rules [--json]   the rulesets that make only the gate\'s status count on your repo, for you to apply',
   'deep inbox save <offer>   save a permission you said yes to as a decision for its repo, once the OS confirms you',
   'deep install [--trust-key] <package folder>   its source and permissions, then installed once the OS confirms you',
@@ -209,8 +210,8 @@ const usage = [
   'deep memory [--json]   what every agent\'s memory taught, ranked, for you to keep or remove',
   'deep memory keep | remove <lesson>   your decision on one, once the OS confirms you',
   'deep memory overrule <decision>   a rejection or a kept lesson undone, once the OS confirms you',
-  'deep rules sync | reach --repo <folder> --scope <glob> | credit <rule>   the rules page: every rule you wrote and what enforces it',
-  'deep session rules <session>   the set of rules a session runs under',
+  'deep rules sync | reach --repo <folder> --scope <glob> [--json] | credit <rule> [--json]   the rules page: every rule you wrote and what enforces it',
+  'deep session rules <session> [--json]   the set of rules a session runs under',
   'deep undo staged:<id>   a destructive command\'s run undone from the copy staged before it ran',
   'deep undo sync:<id>   an Agents page sync undone: each file put back where you haven\'t edited it since',
   'deep mcp-exec <name>   what an agent\'s entry for a synced MCP server runs: its command, its secrets by handle',
@@ -220,8 +221,8 @@ const usage = [
   'deep restore <folder>   a backup put back with the hub stopped, once the OS confirms you',
   'deep update --check   whether a newer DeepBuild is out',
   'deep debug bundle   redacted logs, versions and doctor output, for a bug report',
-  'deep read <handle> [--slice [<cursor>]] [--json] [--root <folder>]   one slice of what a handle names',
-  'deep find [<query>] [--file <path>] [--slice [<cursor>]] [--json] [--root <folder>]   handles whose text holds it; with --file, of sessions that read or edited it',
+  'deep read <handle> [--slice [<cursor>]] [--json] [--root <folder>] [-- <what>]   one slice of what a handle names',
+  'deep find [<query>] [--file <path>] [--slice [<cursor>]] [--json] [--root <folder>] [-- <what>]   handles whose text holds it; with --file, of sessions that read or edited it',
 ];
 const commandsOf = (line: string) => /^deep ([a-z-]+(?: \| [a-z-]+)*)/.exec(line)![1]!.split(' | ');
 const commands = [...new Set(usage.flatMap(commandsOf))];
@@ -296,6 +297,15 @@ if (!help && yours.includes(args[0] ?? '') && !devHub && unfinished) {
   if (code !== 0) process.exit(code);
 }
 
+const hubCommands = {
+  env: 'envCommand', gate: 'gateCommand', start: 'startCommand', inbox: 'inboxCommand', secret: 'secretCommand', race: 'raceCommand', fix: 'fixCommand',
+  workspace: 'workspaceCommand', numbers: 'numbersCommand', show: 'showCommand', export: 'exportCommand', status: 'statusCommand', install: 'installCommand',
+  undo: 'undoCommand',
+  // A project's hub on another machine, joined with the repo link and an invite (#1338).
+  join: 'joinCommand',
+  guard: 'guardCommand', memory: 'memoryCommand',
+} as const;
+
 if (help) {
   printHelp();
 } else if (args.length === 0) {
@@ -318,77 +328,28 @@ if (help) {
   // Its own entry, so a leased command starts without the hub's module graph.
   const { leaseCommand } = await import('@deepbuild/hub/lease');
   process.exitCode = await leaseCommand(args.slice(1));
-} else if (args[0] === 'env') {
-  const { envCommand } = await import('@deepbuild/hub');
-  process.exitCode = await envCommand(args.slice(1));
-} else if (args[0] === 'gate') {
-  const { gateCommand } = await import('@deepbuild/hub');
-  process.exitCode = await gateCommand(args.slice(1));
-} else if (args[0] === 'start') {
-  const { startCommand } = await import('@deepbuild/hub');
-  process.exitCode = await startCommand(args.slice(1));
-} else if (args[0] === 'inbox') {
-  const { inboxCommand } = await import('@deepbuild/hub');
-  process.exitCode = await inboxCommand(args.slice(1));
-} else if (args[0] === 'secret') {
-  const { secretCommand } = await import('@deepbuild/hub');
-  process.exitCode = await secretCommand(args.slice(1));
-} else if (args[0] === 'race') {
-  const { raceCommand } = await import('@deepbuild/hub');
-  process.exitCode = await raceCommand(args.slice(1));
-} else if (args[0] === 'fix') {
-  const { fixCommand } = await import('@deepbuild/hub');
-  process.exitCode = await fixCommand(args.slice(1));
-} else if (args[0] === 'workspace') {
-  const { workspaceCommand } = await import('@deepbuild/hub');
-  process.exitCode = await workspaceCommand(args.slice(1));
+} else if (Object.hasOwn(hubCommands, args[0]!)) {
+  const hub = await import('@deepbuild/hub');
+  process.exitCode = await hub[hubCommands[args[0] as keyof typeof hubCommands]](args.slice(1));
 } else if (args[0] === 'setup') {
   const { setupCommand } = await import('@deepbuild/hub');
   process.exitCode = await setupCommand(fileURLToPath(import.meta.url), args.slice(1));
 } else if (args.length === 1 && (args[0] === 'off' || args[0] === 'on')) {
   const { gatesCommand } = await import('@deepbuild/hub');
   process.exitCode = await gatesCommand(args[0] === 'off');
-} else if (args[0] === 'numbers') {
-  const { numbersCommand } = await import('@deepbuild/hub');
-  process.exitCode = await numbersCommand(args.slice(1));
-} else if (args[0] === 'show') {
-  const { showCommand } = await import('@deepbuild/hub');
-  process.exitCode = await showCommand(args.slice(1));
-} else if (args[0] === 'export') {
-  const { exportCommand } = await import('@deepbuild/hub');
-  process.exitCode = await exportCommand(args.slice(1));
 } else if (args[0] === 'kinds' && (args[1] === '--dump' || args[1] === '--diff')) {
   const { kindsCommand } = await import('@deepbuild/hub');
   process.exitCode = await kindsCommand(args.slice(1));
-} else if (args[0] === 'status') {
-  const { statusCommand } = await import('@deepbuild/hub');
-  process.exitCode = await statusCommand(args.slice(1));
 } else if (args.length === 1 && args[0] === 'waiter') {
   const { waiterCommand } = await import('@deepbuild/hub');
   process.exitCode = await waiterCommand();
-} else if (args[0] === 'install') {
-  const { installCommand } = await import('@deepbuild/hub');
-  process.exitCode = await installCommand(args.slice(1));
-} else if (args[0] === 'undo') {
-  const { undoCommand } = await import('@deepbuild/hub');
-  process.exitCode = await undoCommand(args.slice(1));
-} else if (args[0] === 'join') {
-  // A project's hub on another machine, joined with the repo link and an invite (#1338).
-  const { joinCommand } = await import('@deepbuild/hub');
-  process.exitCode = await joinCommand(args.slice(1));
 } else if (args[0] === 'backup' || args[0] === 'restore') {
   const { backupCommand, restoreCommand } = await import('@deepbuild/hub');
   process.exitCode = await (args[0] === 'backup' ? backupCommand : restoreCommand)(args.slice(1));
-} else if (args[0] === 'guard') {
-  const { guardCommand } = await import('@deepbuild/hub');
-  process.exitCode = await guardCommand(args.slice(1));
 } else if (args[0] === 'rules' || (args[0] === 'session' && args[1] === 'rules')) {
   // The rules page (#344): `deep rules sync | reach | credit`, and the set one session runs under.
   const { rulesCommand } = await import('@deepbuild/hub');
   process.exitCode = await rulesCommand(args[0] === 'rules' ? args.slice(1) : ['session', ...args.slice(2)]);
-} else if (args[0] === 'memory') {
-  const { memoryCommand } = await import('@deepbuild/hub');
-  process.exitCode = await memoryCommand(args.slice(1));
 } else if (args[0] === 'mcp' && (args.length === 1 || (args.length === 2 && args[1] === 'actions'))) {
   // Its own entry: an agent keeps its deep mcp open all session, and the hub's whole module graph would ride along.
   const { runMcp } = await import('@deepbuild/hub/mcp');
@@ -423,8 +384,11 @@ if (help) {
   process.exitCode = await debugBundle();
 } else if (args[0] === 'run' && args[1] === '--result' && args[2] && args.length === 3) {
   process.exitCode = await run(args[2]);
+} else if (args[0] === 'run' && args[1] === 'follow' && args[2] && args.length === 3) {
+  const { followCommand } = await import('@deepbuild/hub');
+  process.exitCode = await followCommand(args[2]);
 } else if (args[0] === 'run') {
-  console.error('Usage: deep run --result <run.finished event file>');
+  console.error('Usage: deep run --result <run.finished event file>\n       deep run follow <run>');
   process.exitCode = 2;
 } else {
   unsupported(args[0]!);

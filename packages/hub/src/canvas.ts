@@ -7,12 +7,13 @@
 // revision it makes as doc.patched@2 with the canonical document in evidence, and hands each presented revision to
 // the app over its socket. With no app connected, the reply is the headless worker's all the same.
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
-import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
 import { refuse } from './wire.js';
+import { callAsYou } from './client.js';
 
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -55,8 +56,9 @@ const STILL_DOC = '01JB4100000000000000000000';
  * `deep export --document <file> --still <frame | marker> --out <file.png>` (#41; design, Export: a single still at a
  * frame or a marker): the canvas core opens the stored document as revision 0 and renders the still headless, in a
  * process of this command's own with an evidence store of its own, so it needs neither setup nor a running hub; the
- * still's PNG is then copied to --out. A whole number is a frame at the document's rate, anything else a marker's
- * name. Exit 0 with the PNG written, 1 when the still can't be drawn, 2 for a usage error.
+ * still's PNG is then copied to --out. A document naming packs instead goes through the hub, which owns their
+ * pinned bytes and first-use authority. A whole number is a frame at the document's rate, anything else a marker's
+ * name. Exit 0 with the PNG written, 1 when the still can't be drawn, 2 for usage, 3 while pack assets are held.
  */
 export async function exportCommand(args: readonly string[]): Promise<number> {
   const opts = new Map<string, string>();
@@ -74,21 +76,24 @@ export async function exportCommand(args: readonly string[]): Promise<number> {
     process.stderr.write(`deep export: can't read ${file} as JSON: ${(error as Error).message}\n`);
     return 2;
   }
-  const evidence = mkdtempSync(join(tmpdir(), 'deep-export-'));
-  const canvas = new Canvas(evidence);
-  try {
-    const world: CanvasWorld = {
-      sessions: [{ id: EXPORTER, thread: EXPORTER, name: 'deep export' }],
-      record: {},
-      file: { panels: { still: { rect: [0, 0, 1, 1] } }, docs: { [STILL_DOC]: { panel: 'still', document } } },
-      docs: [STILL_DOC],
-    };
-    const { reply: at } = await canvas.call(world, { call: 'time', doc: STILL_DOC, text: /^\d+$/.test(still) ? `${still}f` : `@${still}` });
-    if (typeof at.t !== 'number') {
-      process.stderr.write(`deep export: ${still} is neither a frame nor a marker of ${file} (${String(at.code)})\n`);
+  if (isObj(document) && Array.isArray(document.packs) && document.packs.length) {
+    try {
+      const result = await callAsYou('canvas.export', { document, still }, 'no export was written');
+      if (typeof result === 'number') return result;
+      if (result.status !== 'exported' || typeof result.png !== 'string') {
+        process.stderr.write(`BLOCKED: deep export: ${JSON.stringify(result)}\n`);
+        return 3;
+      }
+      writeFileSync(out, Buffer.from(result.png, 'base64'));
+      return 0;
+    } catch (error) {
+      process.stderr.write(`deep export: ${(error as Error).message}\n`);
       return 1;
     }
-    const { reply } = await canvas.call(world, { call: 'render_back', session: EXPORTER, doc: STILL_DOC, t: at.t, rev: 0 });
+  }
+  const evidence = mkdtempSync(join(tmpdir(), 'deep-export-'));
+  try {
+    const reply = await renderStill(document, still, evidence);
     const shot = Array.isArray(reply.snapshots) && isObj(reply.snapshots[0]) ? reply.snapshots[0].sha256 : undefined;
     if (reply.outcome !== 'presented' || typeof shot !== 'string') {
       process.stderr.write(`deep export: the canvas core drew no still: ${JSON.stringify(reply).slice(0, 600)}\n`);
@@ -100,9 +105,31 @@ export async function exportCommand(args: readonly string[]): Promise<number> {
     process.stderr.write(`deep export: ${(error as Error).message}\n`);
     return 1;
   } finally {
-    canvas.close();
     rmSync(evidence, { recursive: true, force: true });
   }
+}
+/**
+ * The pack check of each pack folder (#306), run by the hub's own canvas core in a world that holds only those packs:
+ * the store's row per version, `{pack, version, state, checks, issues}`, as its `packs` call answers.
+ */
+export async function checkPacks(canvas: Canvas, packs: { id: string; dir: string }[]): Promise<Obj[]> {
+  const { reply } = await canvas.call({ sessions: [], record: {}, file: { packs }, docs: [] }, { call: 'packs' });
+  if (!Array.isArray(reply.packs)) throw Error(`the canvas core gave no pack rows: ${JSON.stringify(reply).slice(0, 300)}`);
+  return reply.packs as Obj[];
+}
+
+/** Still rendering is shared; only the hub supplies installed packs and checked asset bytes. */
+export async function renderStill(document: unknown, still: string, evidence: string, packs: { id: string; dir: string }[] = []): Promise<Obj> {
+  const canvas = new Canvas(evidence);
+  try {
+    const world: CanvasWorld = {
+      sessions: [{ id: EXPORTER, thread: EXPORTER, name: 'deep export' }], record: {},
+      file: { panels: { still: { rect: [0, 0, 1, 1] } }, docs: { [STILL_DOC]: { panel: 'still', document } }, packs }, docs: [STILL_DOC],
+    };
+    const { reply: at } = await canvas.call(world, { call: 'time', doc: STILL_DOC, text: /^\d+$/.test(still) ? `${still}f` : `@${still}` });
+    if (typeof at.t !== 'number') return { outcome: 'refused', code: at.code, reason: `${still} is neither a frame nor a marker` };
+    return (await canvas.call(world, { call: 'render_back', session: EXPORTER, doc: STILL_DOC, t: at.t, rev: 0 })).reply;
+  } finally { canvas.close(); }
 }
 function exportUsage(): number {
   process.stderr.write(`${EXPORT_USAGE}\n`);
@@ -191,7 +218,7 @@ function shape(world: CanvasWorld, evidence: string): Obj {
   const sessions: Obj = {};
   for (const s of world.sessions) sessions[s.id] = { thread: s.thread, name: s.name, process: { pid: 0, start: 0 } };
   const out: Obj = { evidence, sessions, record: world.record, panels: PANELS, docs: Object.fromEntries(world.docs.map((doc) => [doc, { panel: PANEL }])) };
-  for (const key of ['panels', 'docs', 'claims', 'window', 'card', 'fault']) if (world.file[key] !== undefined) out[key] = world.file[key];
+  for (const key of ['panels', 'docs', 'claims', 'window', 'card', 'fault', 'packs']) if (world.file[key] !== undefined) out[key] = world.file[key];
   return out;
 }
 

@@ -1,0 +1,12 @@
+{
+  "issue": 536,
+  "criterion": "#536.9a17b91a",
+  "verdict": "looks_right",
+  "who": "Claude (claude-opus-5-5), on the owner's delegation in session on 2026-11-10 (\"validte screrenshot fo rme\")",
+  "when": "2026-11-11T03:13:27Z",
+  "screenshots": {
+    "hex-terrain.png": "14e9fdf43519fbae04bbc562fadb76d3faf7ce860cbe04e4fcb0031f12477f8c",
+    "terrain-tiles.png": "866084bbb4f5ee8352aed9f13b707d72a3b2f1682d846e9b79f3945d8ffdd3b9"
+  },
+  "note": "Hex terrain: all 36 cells of the 6 x 6 pointy odd grid show the fixture's terrains, odd rows shifted right. Edges follow precedence grass, sand, water: sand cells take grass bands only where grass borders them (e.g. (1, 1)'s two lower edges, (3, 3)'s west edge), water cells take sand or grass bands toward those neighbours (e.g. (0, 1): sand east and south-west, grass south-east; (3, 4): grass north-west, sand west, north-east and east), grass cells are plain, and edges off the grid take the cell's own terrain. No tile's corner covers a neighbour. Tiles sheet: 3 plain grass tiles, 8 sand and 21 water, 32 in all, each a hexagon with bands on its labelled edges."
+}

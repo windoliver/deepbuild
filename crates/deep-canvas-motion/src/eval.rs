@@ -466,6 +466,27 @@ pub fn items(doc: &Map<String, Value>, program: &Program, state: &State) -> Map<
     items
 }
 
+/// [`items`] of only the items `keep` takes, each as [`items`] gives it: a view that leaves out
+/// what it can't see copies and evaluates none of it (#1486).
+pub fn items_where(
+    doc: &Map<String, Value>,
+    program: &Program,
+    state: &State,
+    keep: impl Fn(&str) -> bool,
+) -> Map<String, Value> {
+    let items = match doc.get("items") {
+        Some(Value::Object(items)) => items
+            .iter()
+            .filter(|(id, _)| keep(id))
+            .map(|(id, item)| (id.clone(), item.clone()))
+            .collect(),
+        _ => Map::new(),
+    };
+    let mut items = evaluated(items, program, state);
+    crate::held::apply(doc, program, state, &mut items);
+    items
+}
+
 /// [`items`] of only the items a field names, each as [`items`] gives it: every other evaluated
 /// item is the document's own with `at` from its slots, which a reader can take from the state
 /// without copying the item.

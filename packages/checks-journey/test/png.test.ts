@@ -1,11 +1,17 @@
 // The PNG codec and the exact comparison (#37): a round trip, a size change, one changed 4×4 block, masks painted on both sides.
 import { expect, it } from 'vitest';
-import { comparePixels, decodePng, encodePng, highlight, paintMasks, plantBlock, type Image } from '../src/png.ts';
+import { comparePixels, decodePng, encodePng, highlight, paintMasks, type Image } from '../src/png.ts';
 
 const image = (w: number, h: number, seed = 1): Image => {
   const data = new Uint8Array(w * h * 4);
   for (let i = 0; i < w * h; i++) { data[i * 4] = (i * seed) & 255; data[i * 4 + 1] = (i >> 3) & 255; data[i * 4 + 2] = (i * 7) & 255; data[i * 4 + 3] = 255; }
   return { width: w, height: h, data };
+};
+/** A copy with one 4×4 block set to one color. */
+const plantBlock = (image: Image, at: { x: number; y: number }): Image => {
+  const data = new Uint8Array(image.data);
+  for (let y = at.y; y < at.y + 4; y++) for (let x = at.x; x < at.x + 4; x++) { const o = (y * image.width + x) * 4; data[o] = 7; data[o + 1] = 200; data[o + 2] = 90; data[o + 3] = 255; }
+  return { ...image, data };
 };
 
 it('round-trips and compares exactly', () => {

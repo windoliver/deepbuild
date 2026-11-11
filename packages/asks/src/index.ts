@@ -807,7 +807,7 @@ class AsksCore implements Asks {
         if (out !== undefined) throw new AskRefused(`the batch has ${batch.length} steps, not a step ${out}`, { field: 'steps' });
         if (!indices.some((i) => batch[i] === ask.handle)) throw new AskRefused(`${ask.handle} isn't among the steps it approves`, { field: 'steps', ask: ask.handle });
       }
-      // Each member runs the plan it shows, the first the core proposed for it (the card shows that one too).
+      // Each member runs the plan it shows, the newest the core proposed for it (the card shows that one too).
       const others = steps === undefined ? [] : [...new Set(steps as number[])].sort((a, b) => a - b).map((i) => batch[i]!).filter((h) => h !== ask.handle).flatMap((h) => {
         const member = this.asks.get(bare(h));
         const allow = member?.options.find((o) => o.decision === 'allow');
@@ -1570,7 +1570,8 @@ class AsksCore implements Asks {
     for (const d of this.covering(ask)) {
       let planned = this.asks.get(bare(d.ask))?.plan?.steps;
       if (!planned) {
-        const [row] = (await record.raw(`SELECT data FROM events WHERE kind = 'plan.proposed' AND writer = 'core' AND json_extract(data, '$.ask') = ? ORDER BY log_pos LIMIT 1`, [d.ask])) as { data: string }[];
+        // The plan its answer bound: the newest the core proposed before it (#1580).
+        const [row] = (await record.raw(`SELECT data FROM events WHERE kind = 'plan.proposed' AND writer = 'core' AND json_extract(data, '$.ask') = ? AND log_pos < COALESCE((SELECT MIN(log_pos) FROM events WHERE kind = 'ask.answered' AND subject = ?), 9007199254740991) ORDER BY log_pos DESC LIMIT 1`, [d.ask, d.ask])) as { data: string }[];
         planned = row ? (JSON.parse(row.data) as { steps: PlanStep[] }).steps : [];
       }
       decisions.push({ handle: d.handle, targets: targetsOf(planned) });
@@ -1907,11 +1908,13 @@ class AsksCore implements Asks {
         return;
       }
       case 'plan.proposed': {
-        // The plan an ask shows is the first one proposed for it; your yes binds that one.
+        // The plan an ask shows is the newest the core proposed for it while it is open; your yes binds that one, and
+        // a card showing an earlier one is refused at its hash (#1580). An agent's plan.proposed binds nothing.
         const ask = this.asks.get(bare(String(d.ask)));
-        if (ask && !ask.plan && e.writer === 'core') {
+        if (ask && !ask.closed && e.writer === 'core') {
           ask.plan = { hash: String(d.hash), steps: d.steps as unknown as PlanStep[] };
           if (Array.isArray(d.targets)) ask.targets = d.targets as unknown as CardTarget[];
+          else delete ask.targets;
         }
         return;
       }

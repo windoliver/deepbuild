@@ -49,6 +49,10 @@ pub enum Planted {
     DiffBySpelling,
     /// An example whose last run exited 0 is listed verified, whatever it played.
     VerifiedByExit,
+    /// #546: the step ceilings publish the fuel budget's cap as every ceiling.
+    StepCeilingsCap,
+    /// #546: the logic guide's dice game rolls from the step's seed.
+    DiceFromStepSeed,
 }
 
 impl Planted {
@@ -63,6 +67,8 @@ impl Planted {
             "dump_fields_by_name" => Planted::DumpFieldsByName,
             "diff_by_spelling" => Planted::DiffBySpelling,
             "verified_by_exit" => Planted::VerifiedByExit,
+            "step_ceilings_publish_fuel_cap" => Planted::StepCeilingsCap,
+            "guide_dice_rolls_from_step_seed" => Planted::DiceFromStepSeed,
             _ => return None,
         })
     }
@@ -99,6 +105,7 @@ const INSTALLED: &[(&str, &str)] = &[
         "familiar-names.md",
         include_str!("../gallery/familiar-names.md"),
     ),
+    ("logic.md", include_str!("../gallery/logic.md")),
 ];
 
 /// One example of the gallery, as its index records it.
@@ -541,22 +548,21 @@ impl Hub<'_> {
         let empty = Map::new();
         let c = call.as_object().unwrap_or(&empty);
         let op = c.get("op").and_then(Value::as_str).unwrap_or_default();
-        let allowed: &[&str] = match op {
-            "list" => &["registry", "cursor"],
-            "word" => &["word"],
-            "search" => &["query", "cursor"],
-            "read" => &["example", "guide", "offset"],
-            "gallery" => &["cursor"],
-            "sheet" => &[],
-            _ => {
-                return refused(
+        let allowed: &[&str] =
+            match op {
+                "list" => &["registry", "cursor"],
+                "word" => &["word"],
+                "search" => &["query", "cursor"],
+                "read" => &["example", "guide", "offset"],
+                "gallery" => &["cursor"],
+                "sheet" | "step_ceilings" => &[],
+                _ => return refused(
                     "enum",
                     "/op",
-                    "Give op as one of list, word, search, read, gallery or sheet.",
+                    "Give op as one of list, word, search, read, gallery, sheet or step_ceilings.",
                     op,
-                )
-            }
-        };
+                ),
+            };
         // A field the op doesn't take is refused at its path; null reads as left out.
         for (k, v) in c {
             if k == "call" || k == "op" || v.is_null() {
@@ -607,6 +613,10 @@ impl Hub<'_> {
                 ),
             },
             "gallery" => self.kinds_gallery(cursor),
+            // The logic module's step ceilings (Logic: work across steps, #546).
+            "step_ceilings" => json!({"step_ceilings": deep_logic::budget::ceilings(
+                self.kinds_planted() == Some(Planted::StepCeilingsCap)
+            )}),
             _ => self.kinds_sheet(),
         }
     }
@@ -626,6 +636,7 @@ impl Hub<'_> {
             .and_then(|(a, b)| Some((a.parse::<usize>().ok()?, b.parse::<usize>().ok()?)))
             .unwrap_or((0, 0));
         let mut out = l.header.clone();
+        out["packs"] = self.packs_listed();
         let mut size = out.to_string().len() + 64;
         let mut page: Vec<Value> = Vec::new();
         let mut next = None;
@@ -667,6 +678,30 @@ impl Hub<'_> {
             out["next"] = json!(n);
         }
         out
+    }
+
+    /// The packs installed here (#1720), each with its version and origin, its recipes and the
+    /// kind each of its words maps to.
+    fn packs_listed(&self) -> Value {
+        let packs: Vec<Value> = self
+            .packs
+            .all()
+            .map(|p| {
+                let recipes: Vec<String> = p
+                    .recipes
+                    .values()
+                    .map(|r| format!("{}@{}", r.id, r.major))
+                    .collect();
+                let aliases: Map<String, Value> = p
+                    .aliases
+                    .iter()
+                    .map(|(word, a)| (word.clone(), a["target"].clone()))
+                    .collect();
+                json!({"pack": p.id.id, "version": p.id.version.to_string(),
+                       "origin": self.pack_origin(&p.id.text()), "recipes": recipes, "aliases": aliases})
+            })
+            .collect();
+        Value::Array(packs)
     }
 
     /// A word from a familiar-names pack installed here: the kind it maps to and the conversion
@@ -783,10 +818,19 @@ impl Hub<'_> {
     /// whether it was cut and where the next page starts.
     fn kinds_read_guide(&self, name: &str, offset: usize) -> Value {
         let corpus = self.corpus();
-        let text = corpus.as_ref().and_then(|c| {
+        let mut text = corpus.as_ref().and_then(|c| {
             let (_, _, file) = c.guides.iter().find(|(n, _, _)| n == name)?;
             String::from_utf8(c.bytes(file)?).ok()
         });
+        // The planted dice game keys its throws by the step's seed, at 264 in its read region.
+        if self.kinds_planted() == Some(Planted::DiceFromStepSeed) {
+            text = text.map(|t| {
+                t.replace(
+                    "(local.set $key (i64.load (i32.const 1024)))",
+                    "(local.set $key (i64.load (i32.const 264)))",
+                )
+            });
+        }
         let Some(text) = text else {
             return refused(
                 "not_found",

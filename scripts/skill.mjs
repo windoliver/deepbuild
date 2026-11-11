@@ -98,6 +98,9 @@ export function generate(rows = blocks()) {
   }
   const { version } = JSON.parse(readFileSync(join(ROOT, 'packages/hub/package.json'), 'utf8'));
   const used = rows.filter((r) => Object.keys(TOOLS).some((tool) => r.mcp.includes(`\`${tool}\``)));
+  // Every session reads the whole skill: a tool's line stands once, under the first block that names it.
+  const under = new Map();
+  const line = (tool, block) => (under.has(tool) ? `- ${tool}, as under ${under.get(tool)}.` : (under.set(tool, block), `- ${tool}. ${TOOLS[tool].use}`));
   const skill = [
     '---',
     'name: deepbuild',
@@ -113,12 +116,12 @@ export function generate(rows = blocks()) {
     '',
     ...used.flatMap((r) => {
       const tools = Object.keys(TOOLS).filter((tool) => r.mcp.includes(`\`${tool}\``));
-      return [`## ${r.block}`, '', ...tools.map((tool) => `- ${tool}. ${TOOLS[tool].use}`), '', `Never: ${plain(r.never)}.`, ''];
+      return [`## ${r.block}`, '', ...tools.map((tool) => line(tool, r.block)), '', `Never: ${plain(r.never)}.`, ''];
     }),
     // The canvas working order (#412; technical design, after the Building blocks table): what the tools can't teach.
     '## Working on a canvas document',
     '',
-    'Start from a piece recipe, or from a kind deep_kinds lists. Check the document with deep_show before you render it. Then render small and read its issues. Fix by patch, changing one item at a time, and render in full only once the numbers pass; judge by numbers, never by eye. When no kind or field does what the piece needs, raise an open item with deep_open_item naming the missing kind or field, instead of approximating it.',
+    'Start from a piece recipe, or from a kind deep_kinds lists. Check the document with deep_show before you render it. Then render small and read its issues. Fix by patch, changing one item at a time, and render in full only once the numbers pass; judge by numbers, never by eye. When no kind or field does what the piece needs, raise an open item with deep_open_item naming the missing kind or field, instead of approximating it. When a logic step needs more fuel than its step ceiling, which deep_kinds lists by step rate, budget class and host, split the work across steps and keep the progress in memory.',
     '',
   ].join('\n');
   return { descriptions, skill };

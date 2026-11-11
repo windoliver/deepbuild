@@ -25,10 +25,14 @@ use crate::snapshot::{self, Drawn, Unfit};
 pub fn op_issue(i: &OpIssue) -> Issue {
     let what = format!("{} can't evaluate this", i.operator);
     let actual = i.actual.clone().unwrap_or(Value::Null);
-    match &i.item {
+    // #544: a read a logic item doesn't declare names its close declared names as the canvas
+    // does an unknown kind's.
+    let close = actual.get("close").and_then(Value::as_array).into_iter().flatten().map(|n| json!({"name": n})).collect();
+    let issue = match &i.item {
         Some(id) => Issue::error(i.code, id, i.path.clone(), actual, &what),
         None => Issue::envelope(i.code, i.path.clone(), actual, &what),
-    }
+    };
+    Issue { close, ..issue }
 }
 
 /// What the renderer can't draw, as a revision's issue.
@@ -239,6 +243,14 @@ impl<'a> Hub<'a> {
         let Some(session) = self.sessions.get_mut(&e.doc).filter(|_| rev.is_some()) else {
             return json!({"outcome": "refused", "code": "no_revision", "issues": []});
         };
+        // #544's planted start_on: a run starts at the session's first frame at or after it.
+        if self.scenario.planted == Some(crate::hub::Planted::StartOnAtFirstFrame) && !self.first_frames.contains_key(&e.doc) {
+            self.first_frames.insert(e.doc.clone(), t);
+            if let Some(mut d) = session.document().cloned() {
+                crate::logic::from_first_frame(&mut d, t);
+                session.load(&mut self.sched, &d);
+            }
+        }
         let view = session_view(session, &e.view);
         let _ = self.sched.take_hashes();
         let perturb = e.perturb.as_deref().map(Target::parse);
@@ -282,6 +294,15 @@ impl<'a> Hub<'a> {
             "steps": report.steps.iter().map(|s| json!({"module": s.module, "t": s.t, "count": s.count, "read": s.read})).collect::<Vec<_>>(),
             "issues": report.issues.iter().map(issue_json).collect::<Vec<_>>(),
         });
+        // #535: a logic column's row whose value goes out of range raises column.out_of_range at
+        // the frame of the step its excursion begins.
+        if let (Some(doc), Some(list)) = (evaluated.document(), reply["issues"].as_array_mut()) {
+            list.extend(
+                deep_canvas::columns::raised_at(doc, t)
+                    .iter()
+                    .map(|i| i.to_json()),
+            );
+        }
         if !e.arrays.is_empty() {
             // #497: each named array as this frame read it.
             let read: Map<String, Value> = e
@@ -323,6 +344,7 @@ impl<'a> Hub<'a> {
                 reply["video"] = Value::Object(video);
             }
             self.renderer.videos = pictures;
+            self.caption_at(d, t);
         }
         if e.film {
             let glyphs = drawing
@@ -388,7 +410,16 @@ impl<'a> Hub<'a> {
             .renderer
             .prepare_drawing(drawing, &self.scenario.evidence)?;
         let size = size.unwrap_or_else(|| snapshot::px(drawn.frame.size));
-        let rgba = self.renderer.raster(&drawn, size, self.ground(opaque));
+        let rgba = if self.renderer.caption.is_some() {
+            // #502: the caption layer draws over every item and under the status marks.
+            let mut rgba = self.renderer.raster(&drawn.part(drawn.view, true, false), size, self.ground(opaque));
+            self.caption_over(&mut rgba, size);
+            let status = self.renderer.raster(&drawn.part(drawn.view, false, true), size, None);
+            snapshot::over(&mut rgba, &status);
+            rgba
+        } else {
+            self.renderer.raster(&drawn, size, self.ground(opaque))
+        };
         Ok((rgba, drawn, size))
     }
 
@@ -398,7 +429,7 @@ impl<'a> Hub<'a> {
     }
 
     /// A PNG of `rgba` in the evidence store, its SHA-256; a store that takes no write is unfit.
-    fn put_png(&self, rgba: Vec<u8>, size: [u16; 2]) -> Result<String, Unfit> {
+    pub(crate) fn put_png(&self, rgba: Vec<u8>, size: [u16; 2]) -> Result<String, Unfit> {
         evidence::put(&self.scenario.evidence, &snapshot::png(rgba, size)).map_err(|_| Unfit {
             code: "evidence_unwritable",
             path: "snapshots".into(),
@@ -450,6 +481,7 @@ impl<'a> Hub<'a> {
             (Some(mix), 2) => crate::film::blend(&pictures[0], &pictures[1], mix, size, ink),
             _ => pictures.swap_remove(0),
         };
+        self.caption_over(&mut rgba, size);
         let top = &sides.sides[sides.status.min(sides.sides.len() - 1)];
         let status = drawn.part(Some(crate::film::view(&top.pose, frame)), false, true);
         let over = self.renderer.raster(&status, size, None);
@@ -468,19 +500,9 @@ impl<'a> Hub<'a> {
         deep_canvas_marks::finish::read_tone_map(def.get("tone_map")).ok()
     }
 
-    /// [`Hub::canonical_png`] of a document with 3D writer layers: its 3D frame at `t` on the GPU,
-    /// the 2D items drawn over it with no ground of their own, as render-back draws it (#1162).
-    pub(crate) fn canonical_png3d(
-        &mut self,
-        doc: &Value,
-        t: i64,
-        drawing: &Painted,
-    ) -> Result<String, Unfit> {
-        let (rgba, size) = self.rgba3d(doc, t, drawing, None)?;
-        self.put_png(rgba, size)
-    }
-
-    /// #501: the raster [`Hub::canonical_png3d`] stores, at `size` when given.
+    /// The raster of a document with 3D writer layers: its 3D frame at `t` on the GPU, the 2D
+    /// items drawn over it with no ground of their own, as render-back draws it (#1162), at
+    /// `size` when given (#501).
     pub(crate) fn rgba3d(
         &mut self,
         doc: &Value,
@@ -498,6 +520,7 @@ impl<'a> Hub<'a> {
         })?;
         let over = self.renderer.raster(&drawn, size, None);
         snapshot::over(&mut rgba, &over);
+        self.caption_over(&mut rgba, size);
         Ok((rgba, size))
     }
 
@@ -569,6 +592,7 @@ impl<'a> Hub<'a> {
                                    "json_values": json_values});
             // #1732: the solves of each arrangement this frame ran, from the scheduler's nodes.
             frame["solves"] = solves(&self.sched, &self.sessions[&f.doc], revised_now);
+            frame["remaps"] = remaps(&self.sched, &self.sessions[&f.doc]);
             revised_now = false;
             let mut capture = 0;
             if f.pixels {
@@ -946,6 +970,7 @@ fn cell_grids(
                     mask: false,
                     align: scene::Align::Start,
                     bound: false,
+                    spans: Vec::new(),
                 },
                 origin: [g.origin[0], y],
                 role: None,
@@ -1196,6 +1221,39 @@ fn debug_digest(values: &[Val]) -> Value {
 /// How many solves of each arrangement the session's last frame ran (#1732): the document's
 /// check-phase solve when the frame took a new revision, and a frame-phase solve that wrote a
 /// result.
+/// #535: for each mark set that reads a logic array, the rows its data module mapped again for
+/// each step the frame applied, `[{set, step, rows}]`: a set's rows remapped for a step are its
+/// columns' most.
+fn remaps(
+    sched: &deep_canvas::schedule::Scheduler<'_>,
+    session: &deep_canvas::schedule::Session,
+) -> Value {
+    type Mapped = BTreeMap<String, deep_canvas::columns::Mapped>;
+    let mut out = Vec::new();
+    for n in session.nodes(sched) {
+        let (Some(set), true) = (
+            &n.item,
+            n.operator == "data.columns" && n.run == deep_canvas::schedule::Run::Ran,
+        ) else {
+            continue;
+        };
+        let Some(columns) = n.values.iter().find_map(|v| v.as_typed::<Mapped>()) else {
+            continue;
+        };
+        let mut steps: BTreeMap<i64, usize> = BTreeMap::new();
+        for (step, rows) in columns.values().flat_map(|m| &m.remaps) {
+            let e = steps.entry(*step).or_default();
+            *e = (*e).max(*rows);
+        }
+        out.extend(
+            steps
+                .into_iter()
+                .map(|(step, rows)| json!({"set": set, "step": step, "rows": rows})),
+        );
+    }
+    Value::Array(out)
+}
+
 fn solves(
     sched: &deep_canvas::schedule::Scheduler<'_>,
     session: &deep_canvas::schedule::Session,

@@ -209,6 +209,9 @@ export type Plant =
   | 'statusline-user-settings-only' | 'window-unknown-as-zero' | 'window-carried-from-other-repo' | 'sends-block-whole'
   // #1998's: a box that applies a change in words as it drafts it, and one whose approval applies whatever moved since.
   | 'box-applies-at-once' | 'box-ignores-revision'
+  // #1999's: a change whose sentence is the agent's last message, sentences a headless agent call writes, and an open
+  // item listed with no sentence.
+  | 'sentence-from-agent-text' | 'sentence-from-model' | 'open-item-no-sentence'
   // #1922's: a job key over the params' text as written, one without the tool's version, and a host whose tool build
   // hashes only the entry file, or adds where the files are, or when they were modified.
   | 'job-key-params-text' | 'job-key-no-version' | 'job-build-entry-only' | 'job-build-hashes-paths' | 'job-build-hashes-mtimes'
@@ -217,10 +220,18 @@ export type Plant =
   // without the weight hashes.
   | 'job-host-asks-again' | 'job-host-sends-early' | 'job-weights-call-anyway' | 'job-weights-not-keyed'
   // #1923's: a runner that runs a job's tool again while a job with its key runs, and one that stops the job when a joiner cancels.
-  | 'job-second-call' | 'job-joiner-cancels-job';
+  | 'job-second-call' | 'job-joiner-cancels-job'
+  // #1819's: a runner whose job is done, each output an empty record, when its tool's host doesn't answer.
+  | 'job-host-down-done'
+  // #1942's: a host link that drops every connection to a host when one stalls, and one that sends an unknown start again.
+  | 'host-link-drops-every-connection' | 'host-link-resends-on-reconnect'
+  // #2026's: a spool replay that takes a request as recorded once any newer ID is, and an asker that keeps its place by
+  // the newest hook ID it read: each leaves a spooled permission request with no ask.
+  | 'replay-keeps-place-by-id' | 'asks-keep-place-by-id';
 const PLANTS: readonly string[] = [
   'statusline-user-settings-only', 'window-unknown-as-zero', 'window-carried-from-other-repo', 'sends-block-whole',
   'box-applies-at-once', 'box-ignores-revision',
+  'sentence-from-agent-text', 'sentence-from-model', 'open-item-no-sentence',
   'posts-on-head', 'unguarded-marks-every-push', 'unguarded-marks-none',
   'writer-from-payload', 'unlink-before-lock', 'accept-stops-at-emfile', 'ends-binding', 'git-in-hook-handler', 'commit-on-event-loop',
   'parse-on-event-loop', 'origin-from-payload', 'no-run-values', 'empty-cited', 'ignores-unknown-field', 'run-spawns-itself',
@@ -306,7 +317,9 @@ const PLANTS: readonly string[] = [
   'actor-from-payload', 'reads-unfiltered', 'listen-without-members',
   'job-key-params-text', 'job-key-no-version', 'job-build-entry-only', 'job-build-hashes-paths', 'job-build-hashes-mtimes',
   'job-host-asks-again', 'job-host-sends-early', 'job-weights-call-anyway', 'job-weights-not-keyed',
-  'job-second-call', 'job-joiner-cancels-job',
+  'job-second-call', 'job-joiner-cancels-job', 'job-host-down-done',
+  'host-link-drops-every-connection', 'host-link-resends-on-reconnect',
+  'replay-keeps-place-by-id', 'asks-keep-place-by-id',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {
   if (!value) return undefined;

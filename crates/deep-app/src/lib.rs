@@ -19,6 +19,8 @@ pub mod answer;
 pub mod arming;
 pub mod bound;
 pub mod canvas;
+#[cfg(feature = "canvas-fixture")]
+pub mod canvas_fixture;
 pub mod card;
 pub mod cells;
 pub mod chrome;
@@ -29,12 +31,16 @@ pub mod chrome_gallery;
 pub mod commands;
 pub mod confirm;
 pub mod device;
+pub mod empties;
 #[cfg(feature = "fixtures")]
 pub mod events;
 pub mod gpu_view;
 pub mod hub;
+/// #1486: chrome thumbnails through the one image service.
+pub mod images;
 pub mod installed;
 pub mod kinds;
+pub mod list;
 pub mod notice;
 pub mod notify;
 pub mod open;
@@ -70,6 +76,7 @@ use gpui_shell::{
 };
 
 pub mod trusted_input;
+pub mod unread;
 
 pub mod capture;
 
@@ -123,13 +130,22 @@ pub fn stocks() -> Vec<Stock> {
 }
 
 /// What the menu bar shows: while setup hasn't finished, that it didn't, never a number (#1002); then what the app
-/// can't reach (#994); before the hub has answered, that (no count is known, so none is drawn); else the one count
-/// sentence (#1455).
+/// can't reach (#994), the hub with since when, as the list says it (#2026); before the hub has answered, that (no
+/// count is known, so none is drawn); else the one count sentence (#1455).
 pub fn menu_bar_line() -> String {
-    match setup::count().or_else(|| notify::reach().short()) {
+    let reach = notify::reach();
+    // #2026's planted menu bar keeps the last count it read while the hub isn't answering, as if live.
+    if reach.hub_down && setup::count().is_none() && !plain::planted("hub-down-keeps-count") {
+        return empties::Empty::Unreachable { since: reach.since }.words("", views::now());
+    }
+    match setup::count().or_else(|| reach.short().filter(|_| !reach.hub_down)) {
         Some(line) => line.to_owned(),
         None if record::older().is_some() => "Hub is older".to_owned(),
-        None if !record::connected() => "No hub".to_owned(),
+        None if !record::connected() && !reach.hub_down => "No hub".to_owned(),
+        // #2026's planted menu bar counts sessions, not asks.
+        None if plain::planted("menu-bar-counts-sessions") => views::asks_need_you(
+            record::with_view(|view| view.table().every_session().len()).unwrap_or(0),
+        ),
         None => views::asks_need_you(views::count()),
     }
 }
@@ -246,13 +262,14 @@ fn needs_you() -> Result<HostValue, HostError> {
     ]))
 }
 
+/// The ask a replica's fixture holds, since the record has no event for a hold yet (#1457): none in a shipped build.
 #[cfg(feature = "fixtures")]
-fn held() -> Option<String> {
+pub(crate) fn held() -> Option<String> {
     views::current_state().and_then(|state| state.held.clone())
 }
 
 #[cfg(not(feature = "fixtures"))]
-fn held() -> Option<String> {
+pub(crate) fn held() -> Option<String> {
     None
 }
 

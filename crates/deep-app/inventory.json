@@ -18,9 +18,7 @@
       "panel": "deepbuild/home",
       "entry": "crates/deep-app/src/views.rs Shipped, Kind::Home",
       "roles": [
-        "ground",
-        "ink_primary",
-        "ink_secondary"
+        "ink_primary"
       ],
       "literals": []
     },
@@ -28,8 +26,7 @@
       "panel": "deepbuild/line",
       "entry": "crates/deep-app/src/views.rs Shipped, Kind::Line",
       "roles": [
-        "ink_primary",
-        "raised"
+        "ink_primary"
       ],
       "literals": []
     },
@@ -37,9 +34,7 @@
       "panel": "deepbuild/needs-you",
       "entry": "crates/deep-app/src/views.rs Shipped, Kind::NeedsYou",
       "roles": [
-        "hover",
-        "ink_primary",
-        "ink_secondary"
+        "ink_primary"
       ],
       "literals": []
     },
@@ -57,7 +52,6 @@
       "entry": "crates/deep-app/src/views.rs Shipped, Kind::Session",
       "roles": [
         "divider",
-        "hover",
         "ink_primary",
         "ink_secondary",
         "session_line",
@@ -69,12 +63,10 @@
       "panel": "deepbuild/sidebar",
       "entry": "crates/deep-app/src/views.rs Shipped, Kind::Sidebar",
       "roles": [
-        "focus",
-        "hover",
+        "divider",
+        "ground",
         "ink_primary",
-        "ink_secondary",
-        "raised",
-        "selected"
+        "ink_secondary"
       ],
       "literals": []
     },
