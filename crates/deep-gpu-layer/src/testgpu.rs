@@ -2,8 +2,9 @@
 //! test canvas module; `test-meter` builds only). `test.texture@1` and `test.mesh@1` are results
 //! keyed by their content keys, made once on the device however many revisions read them;
 //! `test.burn@1` is the operator `test.burn`, a pass into an effect target at its resolution
-//! that the composite adds into the linear target. Its declared cost is per pixel and ignores
-//! `loops`, so the meter, not the check, catches a heavy one.
+//! that the composite adds into the linear target: each burn item its own pass, in item order
+//! (#1903 names each by its item). Its declared cost is per pixel and ignores `loops`, so the
+//! meter, not the check, catches a heavy one.
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -49,10 +50,13 @@ pub struct Placed {
     pub at: [f32; 3],
 }
 
-/// The test items of a stamped document, with their results' keys; and its burn's loops.
-pub fn items(doc: &Value) -> Result<(Vec<Placed>, Option<u32>), String> {
+/// Each `test.burn@1` item's ID and loops, in item order.
+pub type Burns = Vec<(String, u32)>;
+
+/// The test items of a stamped document, with their results' keys; and its burns.
+pub fn items(doc: &Value) -> Result<(Vec<Placed>, Burns), String> {
     let mut out = Vec::new();
-    let mut burn = None;
+    let mut burn = Burns::new();
     let Some(items) = doc.get("items").and_then(Value::as_object) else {
         return Ok((out, burn));
     };
@@ -120,7 +124,7 @@ pub fn items(doc: &Value) -> Result<(Vec<Placed>, Option<u32>), String> {
                     .as_u64()
                     .and_then(|n| u32::try_from(n).ok())
                     .ok_or(bad("loops"))?;
-                burn = Some(burn.unwrap_or(0) + loops);
+                burn.push((id.clone(), loops));
             }
             _ => {}
         }
@@ -408,6 +412,18 @@ impl Pipes {
     }
 }
 
+/// A bind group of the test pipelines' group 0 over `buffer`.
+fn frame_bind(device: &Device, pipes: &Pipes, buffer: &wgpu::Buffer) -> wgpu::BindGroup {
+    device.device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some("test.gpu"),
+        layout: &pipes.frame,
+        entries: &[wgpu::BindGroupEntry {
+            binding: 0,
+            resource: buffer.as_entire_binding(),
+        }],
+    })
+}
+
 /// What a frame draws the test items with.
 pub struct Frame {
     pub clip: [[f64; 4]; 4],
@@ -432,14 +448,9 @@ pub struct Items {
     draws: Vec<(Made, u32)>,
     /// The result keys the draws bind (#420's `binds`).
     pub bound: Vec<String>,
-    loops: Option<u32>,
-    gpu: Option<(
-        wgpu::Buffer,
-        wgpu::BindGroup,
-        wgpu::Buffer,
-        wgpu::BindGroup,
-        wgpu::Buffer,
-    )>,
+    /// Each burn item's ID, its loops' uniform and its bind group, in item order.
+    burns: Vec<(String, wgpu::Buffer, wgpu::BindGroup)>,
+    gpu: Option<(wgpu::Buffer, wgpu::BindGroup, wgpu::Buffer)>,
     gpu_bytes: Option<u64>,
     effect: Option<Effect>,
 }
@@ -451,7 +462,7 @@ impl Items {
         device: &Device,
         kit: &Kit,
         placed: &[Placed],
-        loops: Option<u32>,
+        burns: &[(String, u32)],
         results: &Cache<Made>,
     ) {
         let pipes = &kit.test;
@@ -472,7 +483,6 @@ impl Items {
             }
             at.extend_from_slice(bytemuck::cast_slice(&[p.at[0], p.at[1], p.at[2], 1.0]));
         }
-        self.loops = loops;
         if self.gpu.is_none() {
             let (gpu, bytes) = memory::across(device, || {
                 let d = &device.device;
@@ -485,41 +495,48 @@ impl Items {
                     })
                 };
                 let frame = uniform("test.gpu frame", 64);
-                let burn = uniform("test.burn loops", 16);
-                let bind = |buffer: &wgpu::Buffer| {
-                    d.create_bind_group(&wgpu::BindGroupDescriptor {
-                        label: Some("test.gpu"),
-                        layout: &pipes.frame,
-                        entries: &[wgpu::BindGroupEntry {
-                            binding: 0,
-                            resource: buffer.as_entire_binding(),
-                        }],
-                    })
-                };
-                let (frame_bind, burn_bind) = (bind(&frame), bind(&burn));
+                let frame_bind = frame_bind(device, pipes, &frame);
                 let places = d.create_buffer(&wgpu::BufferDescriptor {
                     label: Some("test.gpu places"),
                     size: 16 * 64,
                     usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
                     mapped_at_creation: false,
                 });
-                (frame, frame_bind, burn, burn_bind, places)
+                (frame, frame_bind, places)
             });
             self.gpu = Some(gpu);
             self.gpu_bytes = bytes;
         }
-        if let Some((_, _, burn, _, places)) = &self.gpu {
+        if let Some((_, _, places)) = &self.gpu {
             if !at.is_empty() {
                 device
                     .queue
                     .write_buffer(places, 0, &at[..at.len().min(16 * 64)]);
             }
-            device.queue.write_buffer(
-                burn,
-                0,
-                bytemuck::cast_slice(&[loops.unwrap_or(0), 0, 0, 0]),
-            );
         }
+        // A uniform for each burn item, kept by place across revisions.
+        self.burns.truncate(burns.len());
+        while self.burns.len() < burns.len() {
+            let buffer = device.device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("test.burn loops"),
+                size: 16,
+                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            });
+            let bind = frame_bind(device, pipes, &buffer);
+            self.burns.push((String::new(), buffer, bind));
+        }
+        for ((id, buffer, _), (item, loops)) in self.burns.iter_mut().zip(burns) {
+            id.clone_from(item);
+            device
+                .queue
+                .write_buffer(buffer, 0, bytemuck::cast_slice(&[*loops, 0, 0, 0]));
+        }
+    }
+
+    /// The burn items, in the order their passes record.
+    pub fn burn_items(&self) -> impl Iterator<Item = &str> {
+        self.burns.iter().map(|(id, ..)| id.as_str())
     }
 
     pub fn bytes(&self) -> Option<u64> {
@@ -545,7 +562,7 @@ impl Items {
         timer: &mut Timer,
         session: usize,
     ) {
-        let Some((frame_buffer, frame_bind, _, burn_bind, places)) = &self.gpu else {
+        let Some((frame_buffer, frame_bind, places)) = &self.gpu else {
             return;
         };
         let pipes = &kit.test;
@@ -597,7 +614,7 @@ impl Items {
             });
             timer.end(i);
         }
-        if self.loops.is_none() || !frame.effects {
+        if self.burns.is_empty() || !frame.effects {
             return;
         }
         let size = crate::liveview::scaled(frame.internal, frame.resolution);
@@ -628,17 +645,19 @@ impl Items {
             });
         }
         let effect = self.effect.as_ref().expect("made above");
-        let i = timer.start(TEST_BURN, session);
-        full_pass(
-            encoder,
-            TEST_BURN,
-            &effect.view,
-            &pipes.burn,
-            burn_bind,
-            false,
-            timer.writes(i),
-        );
-        timer.end(i);
+        for (_, _, burn_bind) in &self.burns {
+            let i = timer.start(TEST_BURN, session);
+            full_pass(
+                encoder,
+                TEST_BURN,
+                &effect.view,
+                &pipes.burn,
+                burn_bind,
+                false,
+                timer.writes(i),
+            );
+            timer.end(i);
+        }
         let i = timer.start(COMPOSITE, session);
         full_pass(
             encoder,
@@ -654,7 +673,7 @@ impl Items {
 
     /// The pixels the burn shaded last frame.
     pub fn effect_px(&self) -> Option<u64> {
-        let e = self.effect.as_ref().filter(|_| self.loops.is_some())?;
+        let e = self.effect.as_ref().filter(|_| !self.burns.is_empty())?;
         Some(u64::from(e.size[0]) * u64::from(e.size[1]))
     }
 }

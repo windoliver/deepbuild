@@ -431,7 +431,18 @@ impl Tree<'_, '_, '_> {
         if size <= 0. || !(1. ..=1000.).contains(&weight) {
             return refuse("bad_layout", id);
         }
+        // #1964: its runs' styled spans, so it lays out as it draws; a refusal keeps the run's path.
+        let ty = crate::scene::Type::default();
+        let item = (Some(role.family()), weight as u16);
+        let spans =
+            crate::scene::text_spans(params, &format!("items/{id}"), &ty, item).map_err(|r| {
+                Refusal {
+                    code: r.code,
+                    item: r.path.trim_start_matches("items/").to_string(),
+                }
+            })?;
         let shaped = self.shaper.shape(&Spec {
+            spans: &spans,
             family: role.family(),
             fallback: &[],
             lang: None,

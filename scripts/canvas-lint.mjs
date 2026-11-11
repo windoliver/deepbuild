@@ -79,6 +79,7 @@ const fixes = {
   target: 'Declare the dependency under [dependencies] for every platform, or drop it: a scope crate compiles with the same crates, versions and features everywhere.',
   macro: 'Keep procedural macros out of scope: write the code the macro would emit, or take an audited third-party macro crate through the listing.',
   build: 'Remove the build script from the crate in scope: generate nothing at build time, or move the generation to a crate a check never reads.',
+  allow: "Remove the attribute: the canvas lint's lints are forbidden, so no allow, expect or warn in the code lifts one.",
   include: 'Include or #[path] only a literal path to a .rs file inside the crate (include_bytes! and include_str! a file inside it), keep no symlinks under it, or make the code a plain module of the crate.',
 };
 const plural = (count, word) => `${count} ${word}${count === 1 ? '' : 's'}`;
@@ -460,7 +461,8 @@ function checkList(thirdParty, list) {
 // One clippy run over every scope crate, read as JSON compiler messages. A message of one of the lint's
 // own lints is a finding; any other error means clippy couldn't lint the crate, which blocks. The lints
 // are forbidden (-F), which an #[allow] in the code can't switch off; a finding is then a compile error,
-// so a crate with findings hides its dependents' until it's fixed. The run fails either way.
+// so a crate with findings hides its dependents' until it's fixed. The run fails either way. An attribute
+// that tries to lift one (rustc's E0453) is a finding too (#1432), never a blocked run.
 function runClippy(scope) {
   const members = scope.filter((crate) => crate.member).map((crate) => crate.name);
   if (members.length) clippyRun(members.flatMap((name) => ['-p', name]), root);
@@ -484,13 +486,15 @@ function clippyRun(cargoArgs, base, own = null) {
     const code = message.code?.code;
     const span = message.spans.find((candidate) => candidate.is_primary) ?? message.spans[0];
     const where = span ? `${relativeFile(isAbsolute(span.file_name) ? span.file_name : join(base, span.file_name))}:${span.line_start}:${span.column_start} ` : '';
-    if (lints.includes(code)) {
+    // E0453: an attribute in the code that tries to lift one of the forbidden lints.
+    const lifted = code === 'E0453' && lints.includes(/^\w+\(([\w:]+)\) incompatible with previous forbid/.exec(message.message)?.[1]);
+    if (lints.includes(code) || lifted) {
       messages++;
-      if (own && /`([A-Za-z0-9_]+)::/.exec(message.message)?.[1] === own) continue;
+      if (own && !lifted && /`([A-Za-z0-9_]+)::/.exec(message.message)?.[1] === own) continue;
       const key = `${where}${code}`;
       if (seen.has(key)) continue;
       seen.add(key);
-      report('FAIL', `${where}${message.message} (${code})`, fixes.finding);
+      report('FAIL', `${where}${message.message} (${code})`, lifted ? fixes.allow : fixes.finding);
     } else if (message.level === 'error' && !/^aborting due to|^could not compile/.test(message.message)) {
       messages++;
       report('BLOCKED', `${where}${message.message.split('\n')[0]}${code ? ` (${code})` : ''}`, fixes.cargo);

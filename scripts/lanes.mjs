@@ -47,7 +47,7 @@ export const alone = ['tests/acceptance/149/', 'tests/acceptance/1523/', 'tests/
   ...['wake', 'repeat', 'waits', 'budgets'].map((f) => `tests/acceptance/27/${f}.test.ts`), 'tests/acceptance/27/outcomes-redraft/', 'tests/acceptance/27/desktop-redraft-2/', 'tests/acceptance/124/', 'tests/acceptance/906/', 'packages/hub/test/drive.test.ts',
   'tests/acceptance/990/',
   'tests/acceptance/140/gpu/', 'tests/acceptance/140/view/', 'tests/acceptance/140/platform/', 'tests/acceptance/309/', 'tests/acceptance/385/', 'tests/acceptance/874/redraft/',
-  ...['cycles', 'planted', 'leftovers', 'sessions/readings', 'sessions/planted'].map((f) => `tests/acceptance/824/${f}.test.ts`), 'tests/acceptance/1285/', 'tests/acceptance/1294/', 'tests/acceptance/1507/', 'tests/acceptance/1998/'];
+  ...['cycles', 'planted', 'leftovers', 'sessions/readings', 'sessions/planted'].map((f) => `tests/acceptance/824/${f}.test.ts`), 'tests/acceptance/1285/', 'tests/acceptance/1294/', 'tests/acceptance/1507/', 'tests/acceptance/1998/', 'tests/acceptance/1999/'];
 /**
  * Files whose recorded run takes over two minutes on this machine, by the fastest run each that vitest's results caches
  * in the worktrees and affected.mjs's node --test reports held on 2026-11-07. affected.mjs runs them with --slow and for
@@ -210,7 +210,7 @@ export const timed = [
   'tests/acceptance/880/touch-id.test.ts', 'tests/acceptance/881/latency.test.ts',
   'tests/acceptance/896/dirty.test.ts', 'tests/acceptance/896/settled.test.ts',
   'tests/acceptance/906/prompt.test.ts', 'tests/acceptance/906/stop.test.ts', 'tests/acceptance/96/budgets.test.ts',
-  'tests/benchmark.test.mjs'
+  'tests/benchmark.test.mjs', 'tests/acceptance/1432/budgets.test.mjs'
 ];
 
 // #33's suite runs one file at a time, its live files by hand, and its budget as a timed file.
@@ -260,6 +260,8 @@ alone.push('tests/acceptance/1455/');
 alone.push('tests/acceptance/505/', 'tests/acceptance/505-oracle/');
 // #1653's files each build deep-canvas-render and draw with Vello CPU, as #467's do: one file at a time.
 alone.push('tests/acceptance/1653/', 'tests/acceptance/1653-redraft-ac2-flip/');
+// #535's files each build deep-show (one also without the logic module) and #544's assembler, and draw on the GPU.
+alone.push('tests/acceptance/535/');
 // #1479's files build deep-canvas-render and draw with GPUI's offscreen renderer, as #385's do.
 alone.push('tests/acceptance/1479/');
 // #531's files build deep-logic here and for Linux x86_64 in Docker, start headless Chrome and count a process's threads.
@@ -276,6 +278,8 @@ alone.push('tests/acceptance/532/');
 alone.push('tests/acceptance/545/', 'tests/acceptance/545-redraft-ac3/', 'tests/acceptance/545-redraft-ac5/');
 // #1731's files each start a hub that runs a sandboxed plug-in through the supervisor, against a TLS fixture library.
 alone.push('tests/acceptance/1731/');
+// #1820 starts the same real hub and sandboxed library fixture, plus the pack's HTTPS source.
+alone.push('tests/acceptance/1820/');
 // #1732's files each build deep-show: one file at a time.
 alone.push('tests/acceptance/1732/');
 
@@ -345,12 +349,30 @@ alone.push('tests/acceptance/405/broken-fixture.test.ts', 'tests/acceptance/405/
 alone.push('tests/acceptance/405-redraft-ac4/');
 timed.push('tests/acceptance/405-redraft-ac4/budgets.test.ts');
 byHand.push('tests/acceptance/405/budgets.test.ts');
+// #1936's files each build deep-show.
+alone.push('tests/acceptance/1936/');
 // #544's files build deep-logic and deep-show, draw on the GPU, export a film, and build deep-logic for Linux x86_64 in Docker.
 alone.push('tests/acceptance/544/');
+// #2015's file builds deep-show in the full set and runs it on a plate and a recipe pack.
+alone.push('tests/acceptance/2015/');
+// #1976's file builds deep-gpu and clicks 200 seeded rays through seven views of a plane and a sphere.
+alone.push('tests/acceptance/1976/');
+// #1405's spin and QoS files read a two-thread bench's count at load above the cores, and its proof runs a real budget
+// 42 times: one file at a time. #724's redraft runs perf's lane as #724's own files do, under the timed grant.
+alone.push('tests/acceptance/1405/', 'tests/acceptance/724-redraft-1405/');
+timed.push('tests/acceptance/724-redraft-1405/');
+// #1575's files each start a hub: AC5 holds 32 MiB behind a paused reader, and AC1 and its redraft time a live
+// reader beside one replaying 100,000 events, as #34's stream budget is timed.
+alone.push('tests/acceptance/1575/', 'tests/acceptance/1575-redraft-ac1/');
+timed.push('tests/acceptance/1575/budgets.test.ts', 'tests/acceptance/1575-redraft-ac1/budgets.test.ts');
+// #1964's files build deep-canvas-render and draw styled runs with Vello CPU.
+alone.push('tests/acceptance/1964/');
+// #1723's files each start a real hub whose gate runs a document check through the canvas core, under a 480 s wait.
+alone.push('tests/acceptance/1723/');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
-  { name: 'lint', commands: [['cargo', 'fmt', '--all', '--', '--check'], [process.execPath, 'scripts/repo-rules.mjs'], ['cargo', 'clippy', '--workspace', '--all-targets', '--locked', '--', '-D', 'warnings'], [process.execPath, 'scripts/vendor-rebase.mjs', 'check'], [process.execPath, 'scripts/canvas-lint.mjs'], [process.execPath, 'scripts/conformance-lint.mjs'], [process.execPath, 'scripts/slots-check.mjs'], [process.execPath, 'scripts/canvas-closures.mjs', 'closures'], [process.execPath, 'scripts/canvas-closures.mjs', 'drift'], [process.execPath, 'scripts/record-reader-guard.mjs'], [process.execPath, 'scripts/render-lint.mjs'], [process.execPath, 'scripts/plant-lint.mjs'], [process.execPath, 'scripts/blocking-call-guard.mjs'], [process.execPath, 'scripts/keymap-guard.mjs'], [process.execPath, 'scripts/color-literal-guard.mjs'], [process.execPath, 'scripts/guide.mjs', '--check'], [process.execPath, 'scripts/panel-catalog.mjs'], [process.execPath, 'scripts/known-failures-check.mjs']], fix: 'Format Rust with cargo fmt, follow the Fix line under each repo rule above, fix the clippy warnings, follow the Fix line under each canvas-lint finding, or repair the enum closure, code mapping, rule fake or planted code each conformance-lint FAIL line names, declare the slot each slots-check FAIL line names with its interface, kit and planted fill, give each canvas list a closure-lint FAIL line names its closure or make the reference table and packages/contracts/canvas-closures.json agree where a drift FAIL line says they differ, read the record through the one reader in crates/deep-app/src/record.rs from each module a record-reader FAIL line names, put each plant read a plant FAIL line names under its cargo feature, move each blocking call a blocking-call FAIL line names off the UI thread or give it its reason, give each chord a keymap FAIL line names a free key, no ⌃, or the variant_of its ⌥ needs, draw each color a color-literal FAIL line names from the role it names, regenerate the extension guide with node scripts/guide.mjs, follow the Fix line under each panel-catalog FAIL line, or give each known failure a known-failures FAIL line names an open issue and the date it was added, fixing it or taking it out once 14 days have passed.' },
+  { name: 'lint', commands: [['cargo', 'fmt', '--all', '--', '--check'], [process.execPath, 'scripts/repo-rules.mjs'], ['cargo', 'clippy', '--workspace', '--all-targets', '--locked', '--', '-D', 'warnings'], [process.execPath, 'scripts/vendor-rebase.mjs', 'check'], [process.execPath, 'scripts/canvas-lint.mjs'], [process.execPath, 'scripts/size-ratchet.mjs'], [process.execPath, 'scripts/conformance-lint.mjs'], [process.execPath, 'scripts/slots-check.mjs'], [process.execPath, 'scripts/canvas-closures.mjs', 'closures'], [process.execPath, 'scripts/canvas-closures.mjs', 'drift'], [process.execPath, 'scripts/record-reader-guard.mjs'], [process.execPath, 'scripts/render-lint.mjs'], [process.execPath, 'scripts/plant-lint.mjs'], [process.execPath, 'scripts/blocking-call-guard.mjs'], [process.execPath, 'scripts/keymap-guard.mjs'], [process.execPath, 'scripts/color-literal-guard.mjs'], [process.execPath, 'scripts/guide.mjs', '--check'], [process.execPath, 'scripts/panel-catalog.mjs'], [process.execPath, 'scripts/known-failures-check.mjs'], [process.execPath, 'scripts/fetch-lock.mjs', 'lint']], fix: 'Format Rust with cargo fmt, follow the Fix line under each repo rule above, fix the clippy warnings, follow the Fix line under each canvas-lint finding and each size FAIL line, or repair the enum closure, code mapping, rule fake or planted code each conformance-lint FAIL line names, declare the slot each slots-check FAIL line names with its interface, kit and planted fill, give each canvas list a closure-lint FAIL line names its closure or make the reference table and packages/contracts/canvas-closures.json agree where a drift FAIL line says they differ, read the record through the one reader in crates/deep-app/src/record.rs from each module a record-reader FAIL line names, put each plant read a plant FAIL line names under its cargo feature, move each blocking call a blocking-call FAIL line names off the UI thread or give it its reason, give each chord a keymap FAIL line names a free key, no ⌃, or the variant_of its ⌥ needs, draw each color a color-literal FAIL line names from the role it names, regenerate the extension guide with node scripts/guide.mjs, follow the Fix line under each panel-catalog FAIL line, or give each known failure a known-failures FAIL line names an open issue and the date it was added, fixing it or taking it out once 14 days have passed, or pin each scripts/fetch-lock.json row a fetch-lock FAIL line names to a commit with its sha256, size and credit.' },
   { name: 'unit', commands: [
     // The canvas, text and marks acceptance files each build a binary before spawning it, and cargo
     // clones the binary into target/debug anew on every build, fresh or not, so a file spawning it
