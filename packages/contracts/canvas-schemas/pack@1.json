@@ -79,6 +79,11 @@
       "type": "object",
       "additionalProperties": { "$ref": "#/$defs/kind" }
     },
+    "corpus": {
+      "$comment": "#1956: fixture documents for every major the pack's kinds shipped, by major, each an asset's sha256.",
+      "type": "object",
+      "additionalProperties": { "type": "array", "items": { "type": "string" } }
+    },
     "layouts": {
       "type": "object",
       "additionalProperties": {
@@ -143,7 +148,19 @@
             "required": ["example", "expect"]
           }
         },
-        "migrate": { "$comment": "Migrations as data land with the pack versions task; the pack check refuses this field." },
+        "migrate": {
+          "$comment": "#1956: one step a major, by the major it starts from; set expressions come from the closed function list over the old params, written old.<param>.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "rename": { "type": "object", "additionalProperties": { "type": "string" } },
+              "set": { "type": "object", "additionalProperties": { "type": "string" } },
+              "drop": { "type": "array", "items": { "type": "string" } }
+            },
+            "additionalProperties": false
+          }
+        },
         "examples": { "type": "array", "items": { "type": "string" } },
         "cost": {
           "type": "object",

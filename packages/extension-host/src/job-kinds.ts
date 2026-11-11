@@ -59,7 +59,7 @@ export function counterOf(line: string): JobCounter | undefined {
   return undefined;
 }
 
-export const TOOL = /^[a-z0-9][a-z0-9_-]*@\d+\.\d+\.\d+$/;
+const TOOL = /^[a-z0-9][a-z0-9_-]*@\d+\.\d+\.\d+$/;
 const isPlain = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const texts = (v: unknown): v is Texts => isPlain(v) && Object.values(v).every((x) => typeof x === 'string');
 const KEY_PARTS = ['tool', 'params', 'inputs'];

@@ -9,7 +9,7 @@ export const LINE_WIDTH = 80;
 /** The parts' separator. */
 const DOT = ' · ';
 /** The most send-backs a claim gets before it stalls (design: Stalled claims). */
-const ROUNDS = 3;
+export const ROUNDS = 3;
 /** The cause keeps at least this many characters before any later part gives way. */
 const CAUSE_FLOOR = 12;
 /** What joins the outcome to its cause, and what ends a cut cause. */
