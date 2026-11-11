@@ -445,6 +445,11 @@ timed.push('tests/acceptance/154/budgets.test.ts');
 alone.push('tests/acceptance/154-redraft/', 'tests/acceptance/154-oracle-redraft/');
 timed.push('tests/acceptance/154-redraft/budgets.test.ts');
 byHand.push('tests/acceptance/154/stems.test.ts');
+// #157's files each build deep-show (finite.test.ts with test-export-guards), export films through the GPU, the encode tool
+// and a fresh decode worker; lease.test.ts runs two exports at once, disk.test.ts attaches disk images with hdiutil, and
+// budgets.test.ts reads the machine's load.
+alone.push('tests/acceptance/157/', 'tests/acceptance/157-oracle/');
+timed.push('tests/acceptance/157/budgets.test.ts');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
