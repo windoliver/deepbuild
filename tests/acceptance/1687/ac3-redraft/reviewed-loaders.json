@@ -263,7 +263,7 @@
       "packages/extension-host/runtime/deep.mjs": "34873cb206cc434269f9c8f971112f61f0529224c3bb56d319b189cee53b0606",
       "packages/extension-host/runtime/runner.mjs": "a2e4ec2e91feefde7af7c88e05f4c8ac66270e87a342cae2fa72005873284793",
       "packages/hub/src/plant.ts": "2fd2bf07d3a7bc05a8eaf6327b7fd85fe1e7e5549a42f4f5f46cd764b56133b2",
-      "packages/hub/src/core.ts": "e6507f889d948cbc9347a3eadada4b5eca295ad78f993f0899edc6e2595372f2",
+      "packages/hub/src/core.ts": "b5a1d4ab6dfd6a2ee3a2129745ab801089bdea7cbe3979f81f83fcef6149efa8",
       "packages/hub/src/server.ts": "750f027319b1c4e4e3d0fc751bf699e393ca9f9724ae18a99df9d819cabc101c",
       "packages/hub/src/core-worker.ts": "6a07ece8c581d2fe60f567ebe4eb304dc1114ff95a7eb71530bd9a8aea16362d",
       "packages/hub/src/search.ts": "cb63ca4d303e52fc584eae8d6f07782d8f7362ea137fd19186a5843e9535c70f"
