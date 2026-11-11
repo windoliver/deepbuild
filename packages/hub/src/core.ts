@@ -149,6 +149,8 @@ const GITHUB_PASS_MS = 15_000;
 const HOOK_CHECK_MS = 10 * 60_000;
 /** A call that ended this recently still counts as running when our settings entries change. */
 const CALL_GRACE = 2_000;
+/** How long a call with no end yet keeps its session at work through quiet hooks (#2021): Claude Code's Bash tool's own limit. */
+const CALL_RUNS_MS = 10 * 60_000;
 /** A shell command that makes commits of its own: git commit, merge, cherry-pick, am, revert or rebase (#29). */
 const COMMITS = /(?:^|[\s;&|(])git(?:\s+-[Cc]\s+\S+|\s+--?[\w-]+(?:=\S+)?)*\s+(?:commit|merge|cherry-pick|am|revert|rebase)\b/;
 /** How long a handed answer has to show in a turn before its delivery reads stalled and goes by the next route. */
@@ -285,7 +287,7 @@ interface Live {
   agent: string; cwd: string; state?: string; last: number; quiet?: NodeJS.Timeout | undefined; quietDue?: number; heard?: number;
   /** Its newest call, and the call whose permission prompt it waits on (#992): a PermissionRequest follows its call's PreToolUse. */
   lastCall?: string; asking?: string | undefined;
-  calls: Map<string, { what: string; ended?: number }>; head?: string | undefined; unborn?: boolean; reading?: Promise<void>;
+  calls: Map<string, { what: string; at?: number; ended?: number }>; head?: string | undefined; unborn?: boolean; reading?: Promise<void>;
   from?: string; wakeups: number[]; crons: Map<string, { due: number | null; recurring: boolean }>; background: Map<string, { what: string; group?: number; watch?: { expires: number | null } }>; looping: boolean;
   /** The IDs of every watch it armed, running or ended: an event naming one is its monitor's, never another's report (#997). */
   armed?: Set<string>;
@@ -2685,7 +2687,7 @@ export class Core {
         // A late call event never reopens a turn that stopped.
         if (state !== 'finished' && state !== 'failed') state = 'working';
         if (call && draft.kind === 'tool.before') live.lastCall = call;
-        if (call && draft.kind === 'tool.before') live.calls.set(call, { what: `${String(draft.data.kind)} call ${call}${typeof draft.data.command === 'string' ? ` (\`${draft.data.command}\`)` : ''}` });
+        if (call && draft.kind === 'tool.before') live.calls.set(call, { what: `${String(draft.data.kind)} call ${call}${typeof draft.data.command === 'string' ? ` (\`${draft.data.command}\`)` : ''}`, at: now });
         else if (call) { const open = live.calls.get(call); if (open) open.ended = now; }
       } else if (draft.kind === 'agent.stop' && !draft.data.child) {
         // A turn that ended on a block only you or a service can clear (a sign-in, a rate limit) leaves the session stuck.
@@ -2762,7 +2764,9 @@ export class Core {
     const read = session?.read;
     if (session) await this.readTranscript(session);
     const due = live.quietDue ?? this.now();
-    const going = live.state === 'working' ? session !== undefined && session.read !== read
+    // A call under way writes nothing until it ends: the session waits on it, at work, for as long as such a call runs (#2021).
+    const running = [...live.calls.values()].some((c) => c.ended === undefined && c.at !== undefined && due - c.at < CALL_RUNS_MS);
+    const going = live.state === 'working' ? running || (session !== undefined && session.read !== read)
       : !(live.asking && session?.results?.includes(live.asking)) && due - (live.heard ?? due) < WAITING_QUIET_MS;
     if (going) {
       this.quietIn(id, live, since, due + QUIET_MS);
@@ -2881,7 +2885,7 @@ export class Core {
     const ts = this.now();
     const session = row.session;
     const connection = this.connection('core', { ...(this.projects.get(session) ? { project: this.projects.get(session)! } : {}), ...(this.sessionPeople.get(session) ? { actor: this.sessionPeople.get(session)! } : {}) });
-    await this.append(connection, { v: 1, id: ulid(ts), kind: 'row.set', ts, data: { listed: true, order: placed.order, ...row } as unknown as JsonValue });
+    await this.append(connection, { v: row.doing ? 3 : 1, id: ulid(ts), kind: 'row.set', ts, data: { listed: true, order: placed.order, ...row } as unknown as JsonValue });
     this.rows.set(id, { order: placed.order, row });
     return { seen: true };
   }
@@ -2926,7 +2930,8 @@ export class Core {
         }),
         ...changed.map(async (p) => {
           const ts = this.now();
-          await this.append(rowOf(p.row.session), { v: 1, id: ulid(ts), kind: 'row.set', ts, data: { listed: true, order: p.order, ...p.row } as unknown as JsonValue });
+          // A row that says what its session's turn is doing now takes the version with the field (#2021).
+          await this.append(rowOf(p.row.session), { v: p.row.doing ? 3 : 1, id: ulid(ts), kind: 'row.set', ts, data: { listed: true, order: p.order, ...p.row } as unknown as JsonValue });
           this.rows.set(p.row.id, p);
         }),
         ...left.map(async (id) => {
