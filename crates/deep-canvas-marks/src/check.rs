@@ -451,9 +451,40 @@ fn glyph_issues(items: &Map<String, Value>, ty: &Type, issues: &mut Vec<Issue>) 
     }
 }
 
-/// #1965: a text@1 refusal that names what it holds to: a text past text@1's cap or a code item's
-/// raw past its own, with its size and the cap, and a token's class outside the list (Text
-/// `text@1`; Text `text@1`: code). `None` for any other refusal.
+/// The most characters a text written as text holds (Text `text@1`: `text`); a code item's
+/// display text is held to the cap on its raw bytes instead ([`crate::code::RAW_CAP`]).
+const TEXT_CAP: usize = 4_096;
+
+/// #1965: each text@1 whose own text runs past text@1's cap, named with its size and the cap.
+/// The check holds the cap and the shaper doesn't: #856 shapes one text of 10,000 glyphs.
+fn text_cap_issues(items: &Map<String, Value>) -> Vec<Issue> {
+    let mut issues = Vec::new();
+    for (id, item) in items {
+        let text = item.get("params").and_then(|p| p.get("text"));
+        let (Some("text@1"), Some(text)) = (
+            item.get("kind").and_then(Value::as_str),
+            text.and_then(Value::as_str),
+        ) else {
+            continue;
+        };
+        let chars = text.chars().count();
+        if chars > TEXT_CAP {
+            let what =
+                format!("its text runs to {chars} characters, past text@1's cap of {TEXT_CAP}");
+            let actual = json!({"chars": chars, "cap": TEXT_CAP});
+            let path = format!("items/{id}/params/text");
+            issues.push(Issue {
+                fix: "Shorten the text, or split it between items.".into(),
+                ..Issue::error("out_of_range", id, path, actual, &what)
+            });
+        }
+    }
+    issues
+}
+
+/// #1965: a code item's refusal that names what it holds to: its raw past the code's cap, with
+/// its size and the cap, and a token's class outside the list (Text `text@1`: code). `None` for
+/// any other refusal.
 fn text_refusal(items: &Map<String, Value>, id: &str, r: &scene::Refused) -> Option<Issue> {
     let params = object_or_empty(items.get(id)?.get("params"));
     let field = r.path.strip_prefix(&format!("items/{id}/params/"))?;
@@ -461,17 +492,6 @@ fn text_refusal(items: &Map<String, Value>, id: &str, r: &scene::Refused) -> Opt
         return None;
     }
     let (actual, what, fix) = match field {
-        "text" => {
-            let (chars, cap) = (
-                params.get("text")?.as_str()?.chars().count(),
-                scene::TEXT_CAP,
-            );
-            (
-                json!({"chars": chars, "cap": cap}),
-                format!("its text runs to {chars} characters, past text@1's cap of {cap}"),
-                "Shorten the text, or split it between items.",
-            )
-        }
         "raw" => {
             let (bytes, cap) = (crate::code::raw(params)?.len(), crate::code::RAW_CAP);
             (
@@ -548,6 +568,7 @@ pub fn check(doc: &Map<String, Value>, look: &Look, min: Option<f64>) -> Vec<Iss
     let mut issues = roles_apart(items, look);
     issues.extend(numbers(doc).1);
     issues.extend(story_issues(items));
+    issues.extend(text_cap_issues(items));
     // Status can show wherever a status binding is.
     let status_shows = doc
         .get("status_bindings")

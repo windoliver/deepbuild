@@ -9,12 +9,13 @@
 //! its bytes hold.
 
 use std::borrow::Cow;
+use std::collections::BTreeMap;
 use std::ops::Range;
 
 use serde_json::{Map, Value};
 use unicode_normalization::UnicodeNormalization;
 
-use crate::scene::{refuse, Refused};
+use crate::scene::{refuse, Palette, Refused, TextRun, Type};
 
 /// The classes a token takes.
 pub const CLASSES: [&str; 10] = [
@@ -194,6 +195,64 @@ pub fn tokens(
         };
         out.push((span, class));
     }
+    Ok(out)
+}
+
+/// A text's runs in order with none overlapping: the ones its document `written`, then a code
+/// item's tokens (`d`, its display form), each a run in the role the look's type gives its class.
+/// Each grapheme stays in the first run listed that holds it, so a run a document writes paints
+/// over a token.
+pub(crate) fn runs(
+    (palette, ty): (&Palette, &Type),
+    params: &Map<String, Value>,
+    d: Option<&Display>,
+    path: &str,
+    mut written: Vec<TextRun>,
+) -> Result<Vec<TextRun>, Refused> {
+    for (span, class) in d.map_or(Ok(Vec::new()), |d| tokens(params, d, path))? {
+        let Some(name) = ty.code.get(class).filter(|_| !span.is_empty()) else {
+            continue;
+        };
+        let Some(&color) = palette.get(name) else {
+            return refuse("role_unresolved", format!("look/code/{class}: {name}"));
+        };
+        written.push(TextRun {
+            from: span.start,
+            to: span.end,
+            role: name.clone(),
+            color,
+        });
+    }
+    if written.windows(2).all(|w| w[0].to <= w[1].from) {
+        return Ok(written);
+    }
+    // The graphemes no run holds yet, as spans by their start, up to the last any run holds.
+    let last = written.iter().map(|r| r.to).max().unwrap_or(0);
+    let mut free = BTreeMap::from([(0, last)]);
+    let mut out = Vec::with_capacity(written.len());
+    for run in written {
+        let met: Vec<(usize, usize)> = free
+            .range(..run.to)
+            .rev()
+            .take_while(|(_, end)| **end > run.from)
+            .map(|(start, end)| (*start, *end))
+            .collect();
+        for (start, end) in met {
+            free.remove(&start);
+            if start < run.from {
+                free.insert(start, run.from);
+            }
+            if end > run.to {
+                free.insert(run.to, end);
+            }
+            out.push(TextRun {
+                from: start.max(run.from),
+                to: end.min(run.to),
+                ..run.clone()
+            });
+        }
+    }
+    out.sort_by_key(|r| r.from);
     Ok(out)
 }
 
@@ -420,5 +479,78 @@ mod tests {
         let p = code(read_in, json!([]));
         assert_eq!(raw(&p).as_deref(), Some(&bytes[..]));
         assert_eq!(read(&p, "items/c").unwrap().unwrap().text, "caf\u{fffd}");
+    }
+
+    /// The one code item of a board, drawn in a type that gives `code` roles: its font, its
+    /// text and its runs.
+    fn drawn(
+        params: Value,
+        code: &[(&str, &str)],
+    ) -> Result<(String, String, Vec<TextRun>), Refused> {
+        use crate::scene::{frame_planted, Mark, Planted, Record};
+        let doc = json!({"size": [200, 100], "layers": {"main": {"order": "a0"}},
+            "items": {"c": {"kind": "text@1", "layer": "main", "params": params}}});
+        let doc = doc.as_object().unwrap();
+        let palette: Palette = [
+            ("ground", [255, 255, 255]),
+            ("ink", [0, 0, 0]),
+            ("red", [200, 0, 0]),
+            ("blue", [0, 0, 200]),
+        ]
+        .map(|(role, color)| (role.to_string(), color))
+        .into();
+        let ty = Type {
+            code: code
+                .iter()
+                .map(|(c, r)| (c.to_string(), r.to_string()))
+                .collect(),
+            ..Type::default()
+        };
+        let items = doc["items"].as_object().unwrap();
+        let record = Record::default();
+        let f = frame_planted(doc, items, (&palette, &ty), &record, 1.0, Planted::None)?;
+        let Mark::Text { spec, runs, .. } = &f.layers[0].marks[0].mark else {
+            panic!("a text mark")
+        };
+        Ok((spec.font.clone(), spec.text.clone(), runs.clone()))
+    }
+
+    #[test]
+    fn a_code_item_s_tokens_are_runs_in_the_look_s_code_roles_set_in_its_mono_font() {
+        let params = json!({"raw": "def go(a):\n", "code": {"language": "python", "tokens": [
+            {"from": 0, "to": 3, "class": "keyword"}, {"from": 4, "to": 6, "class": "function"}]}});
+        let look = [("keyword", "red"), ("function", "blue")];
+        let (font, text, runs) = drawn(params.clone(), &look).unwrap();
+        assert_eq!((font.as_str(), text.as_str()), ("mono", "def go(a):"));
+        fn painted(runs: &[TextRun], g: usize) -> &str {
+            crate::scene::run_paint(runs, g, Some("ink"), [0, 0, 0])
+                .0
+                .unwrap()
+        }
+        let roles = |runs: &[TextRun]| -> Vec<String> {
+            (0..8).map(|g| painted(runs, g).to_string()).collect()
+        };
+        assert_eq!(
+            roles(&runs),
+            ["red", "red", "red", "ink", "blue", "blue", "ink", "ink"]
+        );
+
+        // A run the document writes paints over the token under it, and the token's rest stays.
+        let mut over = params.clone();
+        over["runs"] = json!([{"from": 1, "to": 5, "role": "blue"}]);
+        let (_, _, runs) = drawn(over, &look).unwrap();
+        assert_eq!(
+            roles(&runs),
+            ["red", "blue", "blue", "blue", "blue", "blue", "ink", "ink"]
+        );
+
+        // A look with no code roles draws every token in plain, and still holds its class.
+        assert!(drawn(params.clone(), &[]).unwrap().2.is_empty());
+        let mut outside = params;
+        outside["code"]["tokens"][1]["class"] = json!("identifier");
+        assert_eq!(
+            drawn(outside, &[]).unwrap_err().path,
+            "items/c/params/code/tokens/1/class: identifier"
+        );
     }
 }
