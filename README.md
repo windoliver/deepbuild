@@ -139,7 +139,7 @@ From your checkout of a repo whose delivery rule is on, `deep land judge --repo 
 - An issue closes when its change lands, never before.
 - After each landing the default branch is read back. A tree other than the one its verdict covered stops landings, names the files and marks main red in `scripts/main-watch.mjs`, whatever the forge said it merged.
 
-Landings go through the forge's pull request merge with your login, which the rules above let through. DeepBuild never closes a pull request. `deep work --repo <checkout> --issues <n,...> --once --json` makes one pass of a run over a set: an open pull request from before the run that links an issue in the set joins as its attempt, and no second one starts beside it. Others idle past 7 days are listed under `stale`.
+Landings go through the forge's pull request merge with your own login (`GH_TOKEN`, `GITHUB_TOKEN` or `gh auth token`), so with the rules above on, that login must be the repo's admin, whom the rules let through. The gate's app only posts the verdict's status. DeepBuild never closes a pull request. `deep work --repo <checkout> --issues <n,...> --once --json` makes one pass of a run over a set: an open pull request from before the run that links an issue in the set joins as its attempt, and no second one starts beside it. Others idle past 7 days are listed under `stale`.
 
 ## Approve an edit to a check
 
