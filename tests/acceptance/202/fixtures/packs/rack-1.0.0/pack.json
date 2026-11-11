@@ -1,0 +1,66 @@
+{
+  "name": "rack",
+  "version": "1.0.0",
+  "license": "MIT",
+  "description": "A test pack of the #202 acceptance suite: the kind rack.unit@1 with the rule rack.span, on a recipe that carries its own rule rack.levels.",
+  "requires": {
+    "core": ">=0.0.0",
+    "modules": {
+      "marks2d": ">=0.0.0"
+    }
+  },
+  "recipes": {
+    "rack.unit@1": "rack.unit@1.json"
+  },
+  "kinds": {
+    "rack.unit@1": {
+      "minor": 0,
+      "recipe": "rack.unit@1",
+      "children": [],
+      "capabilities": {
+        "pickable": true,
+        "snap": false
+      },
+      "rules": [
+        {
+          "code": "rack.span",
+          "expr": "width <= 0.9 * (dividers + 1)",
+          "at": "rest",
+          "fix": "Add a divider or make the rack narrower, so no bay spans more than 0.9 m."
+        }
+      ],
+      "twins": [
+        {
+          "example": "c157e128fe5cb2c7740b8a41456e97c27e6cdf4495f4a6a4f2ff6b77a5ad81ee",
+          "expect": "rack.span"
+        }
+      ],
+      "migrate": {},
+      "examples": [
+        "e73f566b0e16341c489fef408cccdd0f770d7529f8e2f3a2e88f8e3e0bf2ed57"
+      ],
+      "cost": {
+        "class": "figure",
+        "at_defaults": {
+          "cpu_ms": 0.5,
+          "gpu_ms": 0.2,
+          "items": 7
+        }
+      }
+    }
+  },
+  "assets": [
+    {
+      "path": "examples/defaults.json",
+      "sha256": "e73f566b0e16341c489fef408cccdd0f770d7529f8e2f3a2e88f8e3e0bf2ed57",
+      "size": 409,
+      "license": "MIT"
+    },
+    {
+      "path": "examples/width-2.0.json",
+      "sha256": "c157e128fe5cb2c7740b8a41456e97c27e6cdf4495f4a6a4f2ff6b77a5ad81ee",
+      "size": 482,
+      "license": "MIT"
+    }
+  ]
+}

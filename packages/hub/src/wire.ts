@@ -13,6 +13,8 @@ export const FEATURES: readonly string[] = [
 ];
 /** The hub's contract version, "major.minor": a client needing a newer one shows the hub as older (compat.ts). */
 export const CONTRACT = '1.0';
+/** What a stream subscribe asks for (#1575): one session's events, or the list's rows; with none, every event, as the app subscribes. */
+export type Scope = { kind: 'session'; session: string } | { kind: 'list' };
 
 /** error@3: one refusal. */
 export interface Refusal { code: string; retryable: boolean; remediation: string; path: string; actual: string; evidence: string[] }

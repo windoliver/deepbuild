@@ -1,0 +1,14 @@
+{
+  "status": "failed",
+  "check": "typeset.parts_apart",
+  "outcome": "failed",
+  "reason": "typst-mitex@1.0.0's output fails typeset's output check typeset.parts_apart (failed: typeset.parts_apart {\"parts\":[\"e^{i\",\"\\\\pi}\"]}); nothing was kept, so no item can name it",
+  "receipt": {
+    "kind": "typeset",
+    "tool": "typst-mitex@1.0.0",
+    "key": "3956e0602e771be0cd2bb323c97847e15cea9d7aacaf168b168a6139d8d3d5a2",
+    "build": "d1:eb3c129e90ffa523eb362a946725a82700856f35968aa7f5d0459e2ee11e068b",
+    "cache": "miss",
+    "inputs": {}
+  }
+}

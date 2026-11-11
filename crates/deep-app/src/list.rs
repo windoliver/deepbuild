@@ -237,17 +237,19 @@ pub fn opens_on(asks: &[Ask], sessions: &[Session]) -> Option<Address> {
 }
 
 thread_local! {
-    /// The last reading of the record, by its `log_pos` and the second it was read at: a frame reads it once.
+    /// The last reading of the record, by its `log_pos`, the second it was read at and whether the record before the
+    /// reads was folded (#2026): a frame reads it once.
     #[allow(clippy::type_complexity)]
-    static READ: std::cell::RefCell<Option<((u64, u64), std::rc::Rc<(Vec<Ask>, Vec<Session>)>)>> =
+    static READ: std::cell::RefCell<Option<((u64, u64, bool), std::rc::Rc<(Vec<Ask>, Vec<Session>)>)>> =
         const { std::cell::RefCell::new(None) };
 }
 
 /// The asks and sessions the list reads from the one record reader at `now` (#1461), read once per change of the
 /// record and second, so a frame over 700 rows costs what it draws. Empty with no record.
 pub fn read_now(now: u64) -> std::rc::Rc<(Vec<Ask>, Vec<Session>)> {
+    let folded = crate::record::folded();
     crate::record::with_view(|view| {
-        let key = (view.log_pos, now / 1000);
+        let key = (view.log_pos, now / 1000, folded);
         READ.with(|cell| {
             let mut cell = cell.borrow_mut();
             match cell.as_ref() {

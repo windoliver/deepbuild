@@ -121,6 +121,27 @@ pub struct Solid {
     pub batch: u32,
     /// Its row in its instancer, with a batch: where a compact step's kept rows name it (#484).
     pub row: u32,
+    /// Where its mesh's GPU sway is in time (#2016), with one.
+    pub sway: Option<Swaying>,
+}
+
+/// A swaying mesh's shape for the solid `id` (#2016): each swaying solid draws its own copy,
+/// which the GPU moves by its place, the same shape at every t.
+fn swaying_shape(mesh: u64, id: &str) -> u64 {
+    let mut h = deep_canvas::schedule::Hasher::new("scene3d.sway");
+    h.text(&format!("{mesh}#{id}"));
+    let key = h.finish().0;
+    u64::from_le_bytes([
+        key[0], key[1], key[2], key[3], key[4], key[5], key[6], key[7],
+    ])
+}
+
+/// A swaying solid's time and noise (#2016): the document's seconds and its seed, which with its
+/// mesh's [`crate::stack::Sway`] and its place give each vertex's move on the GPU.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Swaying {
+    pub t: f64,
+    pub seed: u64,
 }
 
 /// An item's adjust as a 3D item takes it in shading (Object: adjust; Item and kind: adjust):
@@ -915,6 +936,11 @@ fn world(items: &Items<'_>, id: &str) -> Affine3 {
             break;
         }
         let Some((parent, local)) = items.placed(p) else {
+            // #504: a chain that ends on an assembly rides its composed transform (Assembly: its
+            // transform composes before its members').
+            if let Some(a) = items.assemblies.get(p) {
+                m = matmul(a, &m);
+            }
             break;
         };
         m = matmul(&local, &m);
@@ -934,13 +960,15 @@ struct Items<'a> {
     /// transform is its `TRANSFORM` slots from there.
     entries: HashMap<&'a str, (&'a Value, Option<usize>)>,
     slots: &'a [f64],
+    /// #504: each assembly's world transform at this state, by ID.
+    assemblies: HashMap<String, Affine3>,
 }
 
 impl<'a> Items<'a> {
     /// `doc`'s items, with `written` from [`eval::written`] of its program at `state`. The
     /// program's items are the document's in its order, so item `i`'s transform is its
     /// `TRANSFORM` slots from `i * TRANSFORM`.
-    fn new(doc: &'a Map<String, Value>, written: &'a Map<String, Value>, state: &'a State) -> Self {
+    fn new(doc: &'a Map<String, Value>, written: &'a Map<String, Value>, state: &'a State, program: &Program) -> Self {
         let mut entries = HashMap::with_capacity(doc.len());
         let mut copies = written.iter().peekable();
         for (i, (id, item)) in doc.iter().enumerate() {
@@ -950,11 +978,18 @@ impl<'a> Items<'a> {
             };
             entries.insert(id.as_str(), entry);
         }
+        let assemblies = program
+            .assemblies
+            .iter()
+            .enumerate()
+            .map(|(i, a)| (a.id.clone(), program.assembly_world(&state.slots, i)))
+            .collect();
         Items {
             doc,
             written,
             entries,
             slots: &state.slots,
+            assemblies,
         }
     }
 
@@ -1845,7 +1880,7 @@ pub fn placed_at(doc: &Value, t: i64) -> Result<Vec<(String, Value, Affine3)>, R
         .and_then(Value::as_object)
         .unwrap_or(&empty);
     let written = eval::written(map, &program, &state);
-    let items = Items::new(doc_items, &written, &state);
+    let items = Items::new(doc_items, &written, &state, &program);
     Ok(items
         .iter()
         .map(|(id, item)| (id.clone(), item.clone(), world(&items, id)))
@@ -2113,6 +2148,7 @@ fn asset_scene(
                 adjust: None,
                 batch: 0,
                 row: 0,
+                sway: None,
             });
         }
     }
@@ -2187,7 +2223,7 @@ pub(crate) fn evaluate_compiled(
         .and_then(Value::as_object)
         .unwrap_or(&empty);
     let written = eval::written(map, program, &state);
-    let items = Items::new(doc_items, &written, &state);
+    let items = Items::new(doc_items, &written, &state, program);
     let size = match map
         .get("size")
         .and_then(Value::as_array)
@@ -2366,6 +2402,7 @@ pub(crate) fn evaluate_compiled(
                         adjust: None,
                         batch: 0,
                         row: 0,
+                        sway: None,
                     });
                 }
                 "mark.line@1" if params.get("edges").is_some_and(|e| !e.is_null()) => {
@@ -2466,6 +2503,7 @@ pub(crate) fn evaluate_compiled(
                             adjust: None,
                             batch: 0,
                             row: 0,
+                            sway: None,
                         });
                     }
                 }
@@ -2504,12 +2542,20 @@ pub(crate) fn evaluate_compiled(
                         Some(name) => h.text(name),
                         None => h.bytes(&deep_canvas::schedule::Canonical::canonical_bytes(&mesh)),
                     };
+                    // A swaying mesh moves per instance on the GPU (#2016).
+                    let sway = mesh.sway.as_ref().map(|_| Swaying {
+                        t: seconds,
+                        seed: map.get("seed").and_then(Value::as_u64).unwrap_or(0),
+                    });
                     let key = h.finish().0;
                     let material = light::material(item, |m| items.get(m), look, id)?;
                     let maps = light::maps(item, |m| items.get(m))?;
-                    let hash = u64::from_le_bytes([
+                    let mut hash = u64::from_le_bytes([
                         key[0], key[1], key[2], key[3], key[4], key[5], key[6], key[7],
                     ]);
+                    if sway.is_some() {
+                        hash = swaying_shape(hash, id);
+                    }
                     let surface = surface(&items, look, id, item)?;
                     if surface.alpha <= 0.0 {
                         continue;
@@ -2547,6 +2593,7 @@ pub(crate) fn evaluate_compiled(
                         adjust: None,
                         batch: 0,
                         row: 0,
+                        sway,
                     });
                 }
                 // A curve draws nothing; what follows it (particles along it, #420) reads it
@@ -2791,6 +2838,16 @@ pub(crate) fn evaluate_compiled(
             let place = matmul(&matmul(&at, &e.at), &from[e.proto]);
             for (k, s) in solids.iter().enumerate() {
                 let mut s = s.clone();
+                let own = if solids.len() == 1 {
+                    format!("{id}#{}", e.id)
+                } else {
+                    format!("{id}#{}#{k}", e.id)
+                };
+                // A swaying element moves by its own place on the GPU (#2016): it draws its own
+                // copy.
+                if let (Some(_), Shape::Built(h)) = (s.sway, s.shape) {
+                    s.shape = Shape::Built(swaying_shape(h, &own));
+                }
                 if gpu {
                     s.row = e.row;
                     let key = (id.as_str(), s.shape, s.material);
@@ -2800,11 +2857,7 @@ pub(crate) fn evaluate_compiled(
                         batches.len() - 1
                     }) as u32;
                 }
-                s.id = if solids.len() == 1 {
-                    format!("{id}#{}", e.id)
-                } else {
-                    format!("{id}#{}#{k}", e.id)
-                };
+                s.id = own;
                 s.model = matmul(&place, &s.model);
                 s.op = None;
                 bounds.extend(s.points());
@@ -2858,10 +2911,24 @@ pub(crate) fn evaluate_compiled(
         &cam_path,
     )?;
 
-    // A readout sits in the view's top-left corner, its text the template's (#419).
+    // A readout sits in the view's top-left corner, its text the template's (#419), filled from
+    // the values that move the parts at t; a figure's card stacks its lines below (#504).
+    let shown = (!readout_items.is_empty() || map.contains_key("card")).then(|| eval::shown_doc(map, program, &state));
+    let card: Vec<(String, Value)> = shown
+        .as_ref()
+        .map(|s| {
+            deep_canvas::template::card_lines(s)
+                .into_iter()
+                .map(|(f, t)| (format!("card/{f}"), serde_json::json!({"template": t})))
+                .collect()
+        })
+        .unwrap_or_default();
     let mut readouts = Vec::new();
-    for (id, params) in &readout_items {
-        let text = params.get("template").and_then(Value::as_str).unwrap_or("");
+    let mut top = 12.0;
+    for (id, params) in readout_items.iter().chain(card.iter()) {
+        let template = params.get("template").and_then(Value::as_str).unwrap_or("");
+        let filled = shown.as_ref().and_then(|s| deep_canvas::template::expand(s, template).ok());
+        let text = filled.as_deref().unwrap_or(template);
         let size = num(params.get("size")).unwrap_or(13.0);
         let (run_box, glyphs) = labels.run(text, Role::Body, size as f32);
         let shaped_at = glyphs.first().map_or(size as f32, |g| g.size);
@@ -2880,7 +2947,7 @@ pub(crate) fn evaluate_compiled(
             role: Role::Body,
             glyphs,
             bounds: run_box,
-            pos: camera.unproject(12.0 + quad[0] / 2.0, 12.0 + quad[1] / 2.0, depth),
+            pos: camera.unproject(12.0 + quad[0] / 2.0, top + quad[1] / 2.0, depth),
             em: size,
             quad,
             world: false,
@@ -2891,6 +2958,7 @@ pub(crate) fn evaluate_compiled(
                 .or(look.role("ink"))
                 .unwrap_or([255, 255, 255]),
         });
+        top += quad[1] + 4.0;
     }
     // Each label's glyphs from the atlas at its size on screen; a frame that found the atlas full
     // starts it over and places them all again.
@@ -3073,7 +3141,7 @@ fn origin_at(map: &Map<String, Value>, program: &Program, id: &str, t: i64) -> V
         .and_then(Value::as_object)
         .unwrap_or(&empty);
     let written = eval::written(map, program, &state);
-    let items = Items::new(doc_items, &written, &state);
+    let items = Items::new(doc_items, &written, &state, program);
     origin(&world(&items, id))
 }
 

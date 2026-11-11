@@ -2,10 +2,10 @@
   "uri": "deep://schedule/core@0.0.0",
   "core": "core@0.0.0",
   "build_set": "r1",
-  "set_digest": "809932913444bbaf32744a827a7a98e96be50fe79fca9e446ef8d7178f9c55d0",
+  "set_digest": "8993d1539049bb98c9b82b245a49b94ec025b1326db4060ed0aa9c9c651f70fa",
   "interfaces": {
     "data@1": {
-      "digest": "a743bfa040d3d697e65bb0de3eb2c4a6065d7ee983c1eb51dcd25cee5161cf49",
+      "digest": "b2095ca927d1a61295a9c0ceccafba49b656370fa1ddf538afb199b7a212a959",
       "reference": "data",
       "kit": [
         "fixtures",
@@ -316,6 +316,20 @@
         "per": "item"
       },
       {
+        "operator": "data.columns",
+        "module": "data",
+        "version": "1.0.0",
+        "reads": [
+          "self",
+          "t"
+        ],
+        "writes": [
+          "data.columns",
+          "data.mapped"
+        ],
+        "per": "item"
+      },
+      {
         "operator": "look.palette",
         "module": "look",
         "version": "1.0.0",
@@ -605,6 +619,7 @@
   },
   "contributions": {
     "core.fields": [
+      "data.columns",
       "motion.fields"
     ],
     "core.status": [

@@ -6,7 +6,9 @@
 use std::collections::BTreeMap;
 use std::f32::consts::PI;
 
-use deep_canvas_physics::backend::{Backend, BodyState, Canonical, Checkpoint, Input, State};
+use deep_canvas_physics::backend::{
+    Backend, BodyState, Canonical, Checkpoint, Input, Occurrence, ShapeRef, State,
+};
 use deep_canvas_physics::bake::{Build, Pin};
 use deep_canvas_physics::caps::{Caps, RAPIER3D};
 use deep_canvas_physics::doc::{
@@ -27,6 +29,7 @@ pub fn leaked_world() -> rapier3d::prelude::PhysicsWorld {
 }
 
 pub mod fp;
+pub mod runner;
 
 /// The code of a checkpoint refused at restore.
 pub const CHECKPOINT_REFUSED: &str = "physics.checkpoint_refused";
@@ -78,6 +81,10 @@ pub struct Rapier {
     forces: Vec<Force>,
     /// The fixed body a joint end of `world` holds to.
     world_body: Option<RigidBodyHandle>,
+    /// Each collider's shape use.
+    uses: std::collections::HashMap<ColliderHandle, ShapeRef>,
+    /// The occurrences the last step wrote.
+    occurred: Vec<Occurrence>,
     step: u64,
     /// The planted twin (#2009 Proof): restore skips the version comparison.
     pub restore_any_version: bool,
@@ -134,6 +141,38 @@ fn spring(hz: f64, zeta: f64) -> (f32, f32) {
     (w * w, 2.0 * zeta as f32 * w)
 }
 
+/// `shape` as Rapier's, or `None` when it builds nothing (a flat hull, a degenerate mesh).
+fn shared(w: &World, shape: &Shape) -> Option<SharedShape> {
+    let pts = |p: &[[f64; 3]]| p.iter().map(|x| v3(*x)).collect::<Vec<_>>();
+    Some(match shape {
+        Shape::Sphere { radius } => SharedShape::ball(*radius as f32),
+        Shape::Box { half } => SharedShape::cuboid(half[0] as f32, half[1] as f32, half[2] as f32),
+        Shape::Capsule {
+            half_height,
+            radius,
+        } => SharedShape::capsule_y(*half_height as f32, *radius as f32),
+        Shape::Cylinder {
+            half_height,
+            radius,
+        } => SharedShape::cylinder(*half_height as f32, *radius as f32),
+        Shape::Plane { normal } => SharedShape::halfspace(v3(*normal).normalize()),
+        Shape::Convex { points, radius } if *radius > 0.0 => {
+            SharedShape::round_convex_hull(&pts(points), *radius as f32)?
+        }
+        Shape::Convex { points, .. } => SharedShape::convex_hull(&pts(points))?,
+        Shape::Mesh {
+            vertices,
+            triangles,
+        } => SharedShape::trimesh(pts(vertices), triangles.clone()).ok()?,
+        Shape::Compound { children } => SharedShape::compound(
+            children
+                .iter()
+                .map(|(id, p)| Some((pose(p), shared(w, &w.shapes[id])?)))
+                .collect::<Option<Vec<_>>>()?,
+        ),
+    })
+}
+
 impl Rapier {
     /// Moves body `id`'s canonical field `field` (an index of `FIELDS`) by `ulps` f32 values: the
     /// one-field shift a golden's locator is proved on (Checkpoint ring). False for no such body.
@@ -161,6 +200,48 @@ impl Rapier {
         true
     }
 
+    /// A pair of colliders as its two shape uses, the lower first.
+    fn pair(&self, c1: ColliderHandle, c2: ColliderHandle) -> Option<(ShapeRef, ShapeRef)> {
+        let (a, b) = (self.uses.get(&c1)?.clone(), self.uses.get(&c2)?.clone());
+        Some(if a <= b { (a, b) } else { (b, a) })
+    }
+
+    /// The pairs of shape uses a sensor overlaps now, as the narrow phase holds them.
+    fn intersecting(&self) -> std::collections::BTreeSet<(ShapeRef, ShapeRef)> {
+        self.world
+            .narrow_phase
+            .intersection_pairs()
+            .filter(|(_, _, on)| *on)
+            .filter_map(|(c1, c2, _)| self.pair(c1, c2))
+            .collect()
+    }
+
+    /// The narrow-phase tests the last step ran, per pair of shape uses: a composite shape's
+    /// sub-shapes tested against the other shape (one manifold each), one for a convex pair or a
+    /// sensor's overlap test; sorted by count, most first, then by the pair.
+    pub fn narrow_phase_tests(&self) -> Vec<(ShapeRef, ShapeRef, usize)> {
+        let mut out: Vec<(ShapeRef, ShapeRef, usize)> = self
+            .world
+            .narrow_phase
+            .contact_pairs()
+            .filter_map(|p| {
+                let (a, b) = self.pair(p.collider1, p.collider2)?;
+                Some((a, b, p.manifolds().len().max(1)))
+            })
+            .chain(
+                self.world
+                    .narrow_phase
+                    .intersection_pairs()
+                    .filter_map(|(c1, c2, _)| {
+                        let (a, b) = self.pair(c1, c2)?;
+                        Some((a, b, 1))
+                    }),
+            )
+            .collect();
+        out.sort_by(|x, y| y.2.cmp(&x.2).then_with(|| (&x.0, &x.1).cmp(&(&y.0, &y.1))));
+        out
+    }
+
     fn collider(
         &self,
         w: &World,
@@ -171,34 +252,32 @@ impl Rapier {
     ) -> Option<ColliderBuilder> {
         let u = &b.shapes[i];
         let path = format!("bodies/{id}/shapes/{i}");
-        let mut c = match &w.shapes[&u.shape] {
-            Shape::Sphere { radius } => ColliderBuilder::ball(*radius as f32),
-            Shape::Box { half } => {
-                ColliderBuilder::cuboid(half[0] as f32, half[1] as f32, half[2] as f32)
-            }
-            Shape::Capsule {
-                half_height,
-                radius,
-            } => ColliderBuilder::capsule_y(*half_height as f32, *radius as f32),
-            Shape::Cylinder {
-                half_height,
-                radius,
-            } => ColliderBuilder::cylinder(*half_height as f32, *radius as f32),
-            Shape::Plane { normal } => {
-                if b.kind != BodyKind::Static {
-                    out.push(refusal(
-                        "out_of_range",
-                        format!("{path}/shape"),
-                        json!(u.shape),
-                        format!("{} is a plane, which only a static body holds", u.shape),
-                    ));
-                    return None;
-                }
-                ColliderBuilder::halfspace(rapier3d::na::Unit::new_unchecked(
-                    v3(*normal).normalize(),
-                ))
-            }
+        let shape = &w.shapes[&u.shape];
+        if matches!(shape, Shape::Plane { .. } | Shape::Mesh { .. }) && b.kind != BodyKind::Static {
+            out.push(refusal(
+                "out_of_range",
+                format!("{path}/shape"),
+                json!(u.shape),
+                format!(
+                    "{} is a plane or a mesh, which only a static body holds",
+                    u.shape
+                ),
+            ));
+            return None;
+        }
+        let Some(shared) = shared(w, shape) else {
+            out.push(refusal(
+                "out_of_range",
+                format!("shapes/{}", u.shape),
+                Value::Null,
+                format!(
+                    "{} builds no shape: its points are flat or its triangles degenerate",
+                    u.shape
+                ),
+            ));
+            return None;
         };
+        let mut c = ColliderBuilder::new(shared);
         let m: &Material = u
             .material
             .as_ref()
@@ -427,6 +506,8 @@ impl Backend for Rapier {
         self.world = PhysicsWorld::default();
         self.world_body = None;
         self.bodies.clear();
+        self.uses.clear();
+        self.occurred.clear();
         self.step = 0;
         self.world.gravity = v3(w.gravity);
         let p = &mut self.world.integration_parameters;
@@ -478,24 +559,31 @@ impl Backend for Rapier {
             let a = rb.activation_mut();
             a.normalized_linear_threshold = w.solver.sleep.speed as f32;
             a.time_until_sleep = w.solver.sleep.time as f32;
-            let colliders: Vec<ColliderBuilder> = (0..b.shapes.len())
-                .filter_map(|i| self.collider(w, id, b, i, &mut out))
+            let colliders: Vec<(usize, ColliderBuilder)> = (0..b.shapes.len())
+                .filter_map(|i| Some((i, self.collider(w, id, b, i, &mut out)?)))
                 .collect();
             let h = self.world.insert_body(rb);
             // A body's mass, when set, is shared among its shapes by volume.
             let volumes: Vec<f32> = colliders
                 .iter()
-                .map(|c| c.shape.mass_properties(1.0).mass())
+                .map(|(_, c)| c.shape.mass_properties(1.0).mass())
                 .collect();
             let total: f32 = volumes.iter().sum();
-            for (c, vol) in colliders.into_iter().zip(volumes) {
+            for ((index, c), vol) in colliders.into_iter().zip(volumes) {
                 let c = match b.mass {
                     Some(m) if b.kind == BodyKind::Dynamic && total > 0.0 => {
                         c.mass(m as f32 * vol / total)
                     }
                     _ => c,
                 };
-                self.world.insert_collider(c, Some(h));
+                let ch = self.world.insert_collider(c, Some(h));
+                self.uses.insert(
+                    ch,
+                    ShapeRef {
+                        body: id.clone(),
+                        index,
+                    },
+                );
             }
             handles.insert(id.clone(), h);
             self.bodies.push((id.clone(), h));
@@ -525,8 +613,27 @@ impl Backend for Rapier {
             )));
         }
         self.push();
+        let before = self.intersecting();
         self.world.step();
         self.step += 1;
+        let after = self.intersecting();
+        let mut occurred: Vec<Occurrence> = after
+            .difference(&before)
+            .map(|(a, b)| ("sensor_enter", a, b))
+            .chain(
+                before
+                    .difference(&after)
+                    .map(|(a, b)| ("sensor_exit", a, b)),
+            )
+            .map(|(kind, a, b)| Occurrence {
+                step: self.step,
+                kind,
+                a: a.clone(),
+                b: b.clone(),
+            })
+            .collect();
+        occurred.sort();
+        self.occurred = occurred;
         Ok(())
     }
 
@@ -565,6 +672,10 @@ impl Backend for Rapier {
             step: self.step,
             bodies,
         }
+    }
+
+    fn occurrences(&self) -> Vec<Occurrence> {
+        self.occurred.clone()
     }
 
     fn canonical(&self) -> Vec<Canonical> {

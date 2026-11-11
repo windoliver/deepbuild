@@ -124,16 +124,16 @@ it('a session has one name: yours, else its task, else its agent\'s title, else 
       await w.hook('session.start', 1, data('session.start@1'), session);
       await w.hook('user.ask', 1, prompt(text), session);
     }
-    const titles = async () => Object.fromEntries((await buildRows(w.query, await sessionStates(w.query, w.now() + 1))).filter((r) => r.id.startsWith('session:')).map((r) => [r.session, r.title]));
+    const titles = async () => Object.fromEntries((await buildRows(w.query, await sessionStates(w.query, w.now() + 1), [])).filter((r) => r.id.startsWith('session:')).map((r) => [r.session, r.title]));
     expect(await titles()).toEqual({ [S]: 'fix the flaky checkout test', [T]: long.slice(0, 60) });
     await w.core('session.named', 1, { name: 'Checkout on a phone', by: 'agent' }, undefined, T);
     expect((await titles())[T]).toBe('Checkout on a phone');
     await w.core('task.created', 1, { ...data('task.created@1'), thread: T, title: 'Phone checkout' }, undefined, T);
     expect((await titles())[T]).toBe('Phone checkout');
     // Your name is first, and naming a session is no sign of it: its row keeps its time in its state.
-    const before = new Map<string, Placed>(settle(new Map(), await buildRows(w.query, await sessionStates(w.query, w.now() + 1)), true).map((p) => [p.row.id, p]));
+    const before = new Map<string, Placed>(settle(new Map(), await buildRows(w.query, await sessionStates(w.query, w.now() + 1), []), true).map((p) => [p.row.id, p]));
     await w.core('session.named', 1, { name: 'Pay button', by: 'you' }, undefined, T);
-    const [renamed] = settle(before, await buildRows(w.query, await sessionStates(w.query, w.now() + 1)), false);
+    const [renamed] = settle(before, await buildRows(w.query, await sessionStates(w.query, w.now() + 1), []), false);
     expect([renamed?.row.title, renamed?.row.since, renamed?.row.unread]).toEqual(['Pay button', before.get(`session:${T}`)!.row.since, false]);
   });
   expect([...distinctTitles(new Map([['session:1a2b3c4d-1', 'fix it'], ['session:5e6f7a8b-2', 'fix it'], ['session:9c0d1e2f-3', 'other']]))]).toEqual([
@@ -145,7 +145,7 @@ it('why is the same reading: a session by the start of its ID, its row\'s word a
   await world(async (w) => {
     await w.hook('session.start', 1, data('session.start@1'));
     await w.hook('user.ask', 1, prompt('fix the flaky checkout test'));
-    const rows = await buildRows(w.query, await sessionStates(w.query, w.now() + 1));
+    const rows = await buildRows(w.query, await sessionStates(w.query, w.now() + 1), []);
     const why = await whyOf(w.query, w.now() + 1, '7c4d5e60', rows);
     const read = await w.read();
     // Its word and why are the row's, and each word above its own in the table is named once with what it lacked.

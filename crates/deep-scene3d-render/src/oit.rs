@@ -27,7 +27,7 @@ pub struct Oit {
     pub active: bool,
 }
 
-fn storage(d: &wgpu::Device, label: &str, size: u64) -> wgpu::Buffer {
+fn storage(d: &deep_gpu::counted::Wgpu, label: &str, size: u64) -> wgpu::Buffer {
     d.create_buffer(&wgpu::BufferDescriptor {
         label: Some(label),
         size: size.max(16),
@@ -39,7 +39,7 @@ fn storage(d: &wgpu::Device, label: &str, size: u64) -> wgpu::Buffer {
 }
 
 impl Oit {
-    pub fn new(d: &wgpu::Device) -> Oit {
+    pub fn new(d: &deep_gpu::counted::Wgpu) -> Oit {
         Oit {
             heads: storage(d, "scene3d oit heads", 16),
             nodes: storage(d, "scene3d oit nodes", 16),

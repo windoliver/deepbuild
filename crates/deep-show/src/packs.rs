@@ -4,11 +4,12 @@
 //! offer, with how many times that version's check ran, so a test reads "once per version,
 //! never on open" as a count the binary kept, not its word.
 
-use std::collections::BTreeMap;
+use std::cell::RefCell;
+use std::collections::{BTreeMap, HashMap};
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
-use deep_canvas::document::{Expansion, Issue, Packs};
+use deep_canvas::document::{CheckResult, Expansion, Issue, Pack, Packs};
 use deep_canvas::registry::Sealed;
 use serde_json::{json, Map, Value};
 
@@ -62,6 +63,10 @@ fn load(id: &str, dir: &Path) -> Result<Value, Vec<Issue>> {
     // the programs and data the sandbox module runs at the pack check.
     if let Some(Value::Array(assets)) = fields.get_mut("assets") {
         for (i, a) in assets.iter_mut().enumerate() {
+            // Network assets are fetched and admitted by the hub on first use, never at pack check.
+            if a.get("url").and_then(Value::as_str).is_some() {
+                continue;
+            }
             let path = a
                 .get("path")
                 .and_then(Value::as_str)
@@ -75,14 +80,16 @@ fn load(id: &str, dir: &Path) -> Result<Value, Vec<Issue>> {
                 Some(b) if sha.as_deref() == listed && size == Some(b.len() as u64) => {
                     a["hex"] = json!(b.iter().map(|x| format!("{x:02x}")).collect::<String>());
                 }
-                _ => return Err(vec![Issue::envelope(
-                    "ref_unresolved",
-                    format!("assets/{i}"),
-                    a.clone(),
-                    &format!(
+                _ => {
+                    return Err(vec![Issue::envelope(
+                        "ref_unresolved",
+                        format!("assets/{i}"),
+                        a.clone(),
+                        &format!(
                         "the asset `{path}` isn't there with the sha256 and size the pack lists"
                     ),
-                )]),
+                    )])
+                }
             }
         }
     }
@@ -102,6 +109,13 @@ fn load(id: &str, dir: &Path) -> Result<Value, Vec<Issue>> {
     Ok(manifest)
 }
 
+thread_local! {
+    /// Each version this process admitted, by its ID and folder, with its manifest (#1720): the
+    /// canvas side builds its store afresh for every call, and a version's check runs once, not on
+    /// each. The hub stages a pack in a folder named by its digest, so a folder never changes.
+    static ADMITTED: RefCell<HashMap<(String, PathBuf), (Value, Pack)>> = RefCell::new(HashMap::new());
+}
+
 /// Installs one pack version: the folder read, the pack check run once, the store's row kept.
 /// The reply is `install_pack`'s.
 pub fn install(
@@ -114,18 +128,34 @@ pub fn install(
     vet: Vet<'_>,
 ) -> Value {
     let mut layouts = Vec::new();
-    let (version, outcome, issues) = match load(id, dir) {
+    let key = (id.to_string(), dir.to_path_buf());
+    let known = twin
+        .is_none()
+        .then(|| ADMITTED.with(|a| a.borrow().get(&key).cloned()))
+        .flatten();
+    let loaded = match known {
+        Some((manifest, pack)) => Ok((manifest, Some(pack))),
+        None => load(id, dir).map(|manifest| (manifest, None)),
+    };
+    let (version, outcome, issues) = match loaded {
         Err(issues) => (String::new(), "refused", issues),
-        Ok(mut manifest) => {
+        Ok((mut manifest, known)) => {
             if let Some(planted) = twin {
                 crate::familiar::twin(planted, id, &mut manifest);
             }
             let version = manifest["version"].as_str().unwrap_or_default().to_string();
-            match packs.admit(&manifest, sealed).cloned() {
+            let admitted = match known {
+                Some(pack) => Ok(packs.readmit(pack).clone()),
+                None => packs.admit(&manifest, sealed).cloned(),
+            };
+            match admitted {
                 Ok(pack) => {
                     let (rows, issues) = vet(&manifest, &pack);
                     layouts = rows;
                     if issues.is_empty() {
+                        if twin.is_none() {
+                            ADMITTED.with(|a| a.borrow_mut().insert(key, (manifest, pack)));
+                        }
                         (version, "installed", Vec::new())
                     } else {
                         packs.withdraw(&pack.id.text());
@@ -184,7 +214,7 @@ pub fn rows_reply(rows: &[Row], packs: &Packs) -> Value {
 /// call asked for it.
 pub fn reply(
     expansions: &[Expansion],
-    check_ms: Option<f64>,
+    check_ms: Option<(f64, Option<f64>)>,
     timing: bool,
     reply: &mut Map<String, Value>,
 ) {
@@ -195,8 +225,12 @@ pub fn reply(
         Value::Array(rows.iter().map(|e| e.to_json()).collect()),
     );
     if timing {
-        if let Some(ms) = check_ms {
-            reply.insert("timing".into(), json!({"check_ms": ms}));
+        if let Some((ms, rules)) = check_ms {
+            let mut t = json!({"check_ms": ms});
+            if let Some(rules) = rules {
+                t["kind_rules_ms"] = json!(rules);
+            }
+            reply.insert("timing".into(), t);
         }
     }
 }
@@ -234,7 +268,13 @@ pub fn instanced(expansions: &[Expansion]) -> BTreeMap<String, (String, String)>
 pub fn batches(drew: &[crate::snapshot::Batch]) -> Value {
     Value::Array(
         drew.iter()
-            .map(|b| json!({"batch": b.key, "items": b.items}))
+            .map(|b| {
+                let mut v = json!({"batch": b.key, "items": b.items});
+                if let Some(n) = b.instances {
+                    v["instances"] = json!(n);
+                }
+                v
+            })
             .collect(),
     )
 }
@@ -244,4 +284,74 @@ pub fn blocked(issues: &[Issue]) -> bool {
     issues
         .iter()
         .any(|i| i.code == "module_missing" || i.code == "pack_missing")
+}
+
+/// The kind kit's mesh part (Pack: kind rules and the kind kit; #202): every mesh a kind's
+/// expansions name, at its defaults and its params' extremes, passes `geometry.shading` with no
+/// defect. The check is the loop module's, which the core can't import, so it runs here; a kind
+/// that makes a mesh in a build without the module is refused, never passed.
+pub fn kind_meshes(pack: &Pack, sealed: &Sealed, evidence: &Path) -> Vec<Issue> {
+    let mut issues = Vec::new();
+    let shading = sealed
+        .check_kind("geometry.shading")
+        .and_then(|(_, c)| c.report);
+    for (name, kind) in pack.kinds.iter().filter(|(_, k)| !k.meshes.is_empty()) {
+        let refuse = |code, actual: Value, what: String| {
+            Issue::envelope(code, format!("kinds/{name}"), actual, &what)
+        };
+        let Some(report) = shading else {
+            issues.push(refuse("module_missing", json!({"kind": name, "part": "cost", "module": "loop"}),
+                format!("kind `{name}` makes meshes, and geometry.shading is the loop module's, which this build lacks")));
+            continue;
+        };
+        let mut items = serde_json::Map::new();
+        let mut assets = serde_json::Map::new();
+        for (i, sha) in kind.meshes.iter().enumerate() {
+            let id = format!("m{i}");
+            items.insert(
+                id.clone(),
+                json!({"id": id, "kind": "mesh.asset@1", "params": {"sha256": sha}}),
+            );
+            if let Some(bytes) = crate::evidence::read(evidence, sha) {
+                assets.insert(sha.clone(), json!(deep_canvas::base64::encode(&bytes)));
+            }
+        }
+        let out = report(
+            &json!({"items": items}),
+            &json!({"kind": "geometry.shading", "assets": assets}),
+        );
+        let defect = out
+            .raised
+            .first()
+            .map(|(id, r, actual)| json!({"item": id, "code": r.code, "actual": actual}));
+        if let Some(found) = defect.or_else(|| out.blocked.first().cloned()) {
+            issues.push(refuse("out_of_range", json!({"kind": name, "part": "cost", "defect": found}),
+                format!("kind `{name}` fails its kit's cost part: a mesh it makes fails geometry.shading")));
+        }
+    }
+    issues
+}
+
+/// `timing.kind_rules_ms` (#202): the core's `kind_rules` check over a checked revision, run
+/// again on its lowered items and timed here, since the core reads no clock.
+pub fn kind_rules_ms(doc: &Value, checked: &CheckResult, sealed: &Sealed, packs: &Packs) -> f64 {
+    let mut ignored = Vec::new();
+    let resolved = deep_canvas::document::packs::resolve(doc, packs, Some(sealed), &mut ignored);
+    let empty = Map::new();
+    let items = checked
+        .lowered
+        .get("items")
+        .and_then(Value::as_object)
+        .unwrap_or(&empty);
+    let started = std::time::Instant::now();
+    let run = deep_canvas::document::pack_kinds::kind_rules(
+        doc,
+        items,
+        &checked.expansions,
+        &resolved,
+        packs.planted,
+    );
+    let ms = started.elapsed().as_secs_f64() * 1000.0;
+    std::hint::black_box(run);
+    ms
 }

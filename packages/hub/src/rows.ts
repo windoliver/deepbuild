@@ -142,10 +142,11 @@ const parsed = <T>(v: unknown, fallback: T): T => {
 };
 
 /**
- * The rows of `readings`' sessions and of every open ask, each as a first sighting reads it: `settle` says what is
- * unread and since when by what changed.
+ * The rows of `readings`' sessions and of the asks `open` names (`ask:<id>`), each as a first sighting reads it:
+ * `settle` says what is unread and since when by what changed. Which asks are open is the asks core's to say (#2026):
+ * the record's table gives each one's words, never whether it is open.
  */
-export async function buildRows(query: Query, readings: readonly Reading[]): Promise<Row[]> {
+export async function buildRows(query: Query, readings: readonly Reading[], open: readonly string[]): Promise<Row[]> {
   const titles = await sessionNames(query, readings.map((r) => r.id));
   const projects = new Map<string, string | null>();
   const projectOf = (worktree: string | null, project: string | null): string | null => {
@@ -162,7 +163,8 @@ export async function buildRows(query: Query, readings: readonly Reading[]): Pro
     };
     return row;
   });
-  const asks = (await query(`SELECT a.id, a.kind, a.question, a.options, a.default_option, a.deadline, a.created, a.session_id, s.agent, s.worktree, s.project_id FROM asks a LEFT JOIN sessions s ON s.id = a.session_id WHERE a.status IN ('open', 'later') ORDER BY a.created, a.id`)) as { id: string; kind: string; question: string | null; options: unknown; default_option: unknown; deadline: number | null; created: number | null; session_id: string | null; agent: string | null; worktree: string | null; project_id: string | null }[];
+  const wanted = open.map((handle) => quote(handle.slice('ask:'.length))).join(', ');
+  const asks = (!wanted ? [] : await query(`SELECT a.id, a.kind, a.question, a.options, a.default_option, a.deadline, a.created, a.session_id, s.agent, s.worktree, s.project_id FROM asks a LEFT JOIN sessions s ON s.id = a.session_id WHERE a.id IN (${wanted}) ORDER BY a.created, a.id`)) as { id: string; kind: string; question: string | null; options: unknown; default_option: unknown; deadline: number | null; created: number | null; session_id: string | null; agent: string | null; worktree: string | null; project_id: string | null }[];
   for (const a of asks) {
     const options = parsed<{ id?: unknown; label?: unknown }[]>(a.options, []).filter((o) => typeof o?.id === 'string').map((o) => ({ answer: String(o.id), label: typeof o.label === 'string' ? o.label : String(o.id) }));
     const chosen = parsed<unknown>(a.default_option, null);

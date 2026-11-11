@@ -37,7 +37,7 @@ impl Uploads {
     }
 
     /// Writes this frame's share; returns whether the frame is settling (uploads remain).
-    pub fn flush(&mut self, queue: &wgpu::Queue) -> bool {
+    pub fn flush(&mut self, queue: &crate::counted::Queue) -> bool {
         let mut left = self.per_frame;
         while left > 0 {
             let Some(p) = self.pending.front_mut() else {

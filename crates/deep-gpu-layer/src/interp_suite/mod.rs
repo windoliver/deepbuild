@@ -400,7 +400,6 @@ fn ready(
 
 /// Runs compute graphs in one submission; each one's storage outputs' words, by name.
 fn dispatch_all(device: &Device, jobs: &[&Ready]) -> Vec<BTreeMap<String, Vec<u32>>> {
-    use wgpu::util::DeviceExt as _;
     let d = &device.device;
     let mut enc = d.create_command_encoder(&Default::default());
     let mut keep = Vec::new();

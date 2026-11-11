@@ -75,7 +75,7 @@ pub fn layout_entries() -> Vec<wgpu::BindGroupLayoutEntry> {
     entries
 }
 
-pub fn layout(d: &wgpu::Device) -> wgpu::BindGroupLayout {
+pub fn layout(d: &deep_gpu::counted::Wgpu) -> wgpu::BindGroupLayout {
     d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
         label: Some("scene3d maps"),
         entries: &layout_entries(),
@@ -100,7 +100,7 @@ pub struct Store {
     next: u32,
 }
 
-fn sampler(d: &wgpu::Device, wrap: [Wrap; 2], taps: u8) -> wgpu::Sampler {
+fn sampler(d: &deep_gpu::counted::Wgpu, wrap: [Wrap; 2], taps: u8) -> wgpu::Sampler {
     let mode = |w: Wrap| match w {
         Wrap::Repeat => wgpu::AddressMode::Repeat,
         Wrap::Clamp => wgpu::AddressMode::ClampToEdge,
@@ -120,7 +120,7 @@ fn sampler(d: &wgpu::Device, wrap: [Wrap; 2], taps: u8) -> wgpu::Sampler {
 }
 
 impl Store {
-    pub fn new(d: &wgpu::Device, queue: &wgpu::Queue) -> Store {
+    pub fn new(d: &deep_gpu::counted::Wgpu, queue: &deep_gpu::counted::Queue) -> Store {
         let layout = layout(d);
         let white = d.create_texture(&wgpu::TextureDescriptor {
             label: Some("scene3d map stand-in"),
@@ -166,7 +166,7 @@ impl Store {
     /// The maps' index in draw keys (0 when none of their texels is here, so the solid draws
     /// without them), made the first time a frame draws them; `taps` is the look's (or the
     /// planted one's) default.
-    pub fn group(&mut self, d: &wgpu::Device, queue: &wgpu::Queue, maps: &Maps, taps: u8) -> u32 {
+    pub fn group(&mut self, d: &deep_gpu::counted::Wgpu, queue: &deep_gpu::counted::Queue, maps: &Maps, taps: u8) -> u32 {
         let present: String = maps
             .slots()
             .iter()
@@ -196,7 +196,7 @@ impl Store {
             .map_or(&self.none, |(_, g)| g)
     }
 
-    fn texture(&mut self, d: &wgpu::Device, queue: &wgpu::Queue, sha: &str) -> Option<String> {
+    fn texture(&mut self, d: &deep_gpu::counted::Wgpu, queue: &deep_gpu::counted::Queue, sha: &str) -> Option<String> {
         let t = self.texels.get(sha)?.clone();
         // Kept by the source's hash and its format.
         let key = format!("{sha}:{}", t.format);
@@ -263,8 +263,8 @@ impl Store {
     /// input).
     pub fn view_of(
         &mut self,
-        d: &wgpu::Device,
-        queue: &wgpu::Queue,
+        d: &deep_gpu::counted::Wgpu,
+        queue: &deep_gpu::counted::Queue,
         sha: &str,
     ) -> wgpu::TextureView {
         match self.texture(d, queue, sha) {
@@ -275,8 +275,8 @@ impl Store {
 
     fn bind(
         &mut self,
-        d: &wgpu::Device,
-        queue: &wgpu::Queue,
+        d: &deep_gpu::counted::Wgpu,
+        queue: &deep_gpu::counted::Queue,
         maps: &Maps,
         taps: u8,
     ) -> wgpu::BindGroup {
@@ -288,8 +288,8 @@ impl Store {
     /// operator's inputs (#429).
     pub fn bind_with(
         &mut self,
-        d: &wgpu::Device,
-        queue: &wgpu::Queue,
+        d: &deep_gpu::counted::Wgpu,
+        queue: &deep_gpu::counted::Queue,
         maps: &Maps,
         taps: u8,
         layout: &wgpu::BindGroupLayout,
@@ -331,8 +331,7 @@ impl Store {
             maps.alpha_cutoff as f32,
             0.0,
         ];
-        let buffer = wgpu::util::DeviceExt::create_buffer_init(
-            d,
+        let buffer = d.create_buffer_init(
             &wgpu::util::BufferInitDescriptor {
                 label: Some("scene3d maps"),
                 contents: bytemuck::bytes_of(&u),

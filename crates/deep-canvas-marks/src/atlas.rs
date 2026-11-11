@@ -3,7 +3,9 @@
 //! on a square grid or an isometric one, where the centre of cell (cx, cy) with cell [w, h] is
 //! x = (cx − cy) × w ÷ 2, y = (cx + cy) × h ÷ 2, or on a hex grid at its layout's centre (Mark
 //! set: hex grid; the floor #467's terrain recipe lays). Rows draw in order of centre y, then
-//! centre x. A hex grid's picks, hits and edge rules are #536's, and free rows #535's.
+//! centre x. Free rows are #535's. #536: a hex cell's six neighbours, which the terrain recipe's
+//! edge rules read, and its hexagon as its hit area, a point on an edge or a vertex going to the
+//! cell with the smaller (cy, cx).
 //!
 //! An animated row shows frame ⌊t × frame_rate + phase × frames⌋ mod frames, drawn as atlas cell
 //! `tile + frame`: [`apply`] resolves it at the record's time before the frame is built, as the
@@ -13,8 +15,79 @@ use serde_json::{json, Map, Value};
 
 use crate::data::Column;
 use crate::paint::Adjust;
-use crate::scene::{num, AtlasCell, ImageFit, ImageSampling, Mark, Planted, Refused};
+use crate::scene::{num, ImageFit, ImageSampling, Mark, Planted, Refused};
 use crate::story::Rows;
+
+/// #1653: the atlas cell an image draws in place of its whole asset (Mark set: atlas tiles): cell
+/// `index` in row-major order of `cell`-px cells laid from `margin`, `separation` apart, turned by
+/// `flip`'s bits (h 1, v 2, transpose 4; transpose first). Whoever decodes the atlas resolves it
+/// against its width, so a sample never leaves the cell.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct AtlasCell {
+    pub index: u64,
+    pub cell: [f64; 2],
+    pub margin: [f64; 2],
+    pub separation: [f64; 2],
+    pub flip: u8,
+    /// #536: a hex grid row's hit area in place of its quad.
+    pub hit: Option<HexArea>,
+}
+
+/// #536: the hexagon a hex cell's w × h quad holds, its hit area: edge i runs from vertex i to
+/// vertex i + 1, counterclockwise on screen from the edge facing +x (pointy) or between +x and −y
+/// (flat), and the cell owns the edges it shares with a neighbour whose (cy, cx) is larger, and
+/// its edges off the grid, so a point on an edge or a vertex hits exactly one cell.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct HexArea {
+    pub flat: bool,
+    pub owns: [bool; 6],
+}
+
+impl HexArea {
+    /// The vertices as fractions of the quad's width and height from its top-left corner.
+    pub fn outline(&self) -> [[f64; 2]; 6] {
+        if self.flat {
+            [
+                [1.0, 0.5],
+                [0.75, 0.0],
+                [0.25, 0.0],
+                [0.0, 0.5],
+                [0.25, 1.0],
+                [0.75, 1.0],
+            ]
+        } else {
+            [
+                [1.0, 0.75],
+                [1.0, 0.25],
+                [0.5, 0.0],
+                [0.0, 0.25],
+                [0.0, 0.75],
+                [0.5, 1.0],
+            ]
+        }
+    }
+}
+
+impl AtlasCell {
+    /// The cell's `[x, y, w, h]` in an atlas of `[width, height]` px, or `None` for a cell the
+    /// atlas doesn't hold.
+    pub fn rect(&self, [width, height]: [u32; 2]) -> Option<[f64; 4]> {
+        let [cw, ch] = self.cell;
+        if cw < 1.0 || ch < 1.0 {
+            return None;
+        }
+        let step = [cw + self.separation[0], ch + self.separation[1]];
+        let columns = ((f64::from(width) - self.margin[0] + self.separation[0]) / step[0]).floor();
+        if columns < 1.0 {
+            return None;
+        }
+        let columns = columns as u64;
+        let (col, row) = (self.index % columns, self.index / columns);
+        let x = self.margin[0] + col as f64 * step[0];
+        let y = self.margin[1] + row as f64 * step[1];
+        (y + ch <= f64::from(height)).then_some([x, y, cw, ch])
+    }
+}
 
 /// Flicks a second.
 const FLICKS: i64 = 705_600_000;
@@ -112,13 +185,61 @@ impl Grid {
             Shape::Hex { flat: true, .. } => [0.75 * w * cx, h * (cy + shifted(cx) / 2.0)],
         }
     }
+
+    /// #536: a hex cell's six neighbours, the cells at distance 1 in cube coordinates, edge 0 to 5
+    /// counterclockwise on screen from the one facing +x (pointy) or between +x and −y (flat);
+    /// `None` off a hex grid.
+    pub fn neighbours(&self, [cx, cy]: [i64; 2]) -> Option<[[i64; 2]; 6]> {
+        let Shape::Hex { flat, odd } = self.shape else {
+            return None;
+        };
+        // Offset coordinates: rows shift on a pointy grid, columns on a flat one.
+        let line = if flat { cx } else { cy };
+        let s = i64::from((line.rem_euclid(2) == 1) == odd);
+        let steps = if flat {
+            [[1, s - 1], [0, -1], [-1, s - 1], [-1, s], [0, 1], [1, s]]
+        } else {
+            [[1, 0], [s, -1], [s - 1, -1], [-1, 0], [s - 1, 1], [s, 1]]
+        };
+        Some(steps.map(|[dx, dy]| [cx + dx, cy + dy]))
+    }
+
+    /// #536: a hex cell's hit area; `None` off a hex grid.
+    pub fn hit_area(&self, cell: [i64; 2]) -> Option<HexArea> {
+        let flat = matches!(self.shape, Shape::Hex { flat: true, .. });
+        let owns = self
+            .neighbours(cell)?
+            .map(|[nx, ny]| (cell[1], cell[0]) < (ny, nx));
+        Some(HexArea { flat, owns })
+    }
 }
 
 fn odd_of(shape: Shape) -> bool {
     matches!(shape, Shape::Hex { odd: true, .. })
 }
 
-/// One row as it draws: its key, its grid cell, its centre and the atlas cell it shows.
+/// #535: `grid.size: [cols, rows]` on an atlas set, which lays row i at cell (i mod cols,
+/// ⌊i ÷ cols⌋); `None` without one or for a size that isn't two whole numbers from 1 to 65,535.
+pub fn sized(params: &Map<String, Value>) -> Option<[usize; 2]> {
+    let size = params.get("grid")?.get("size")?.as_array()?;
+    let side = |i: usize| {
+        let v = size.get(i)?.as_u64()?;
+        (1..=u64::from(u16::MAX)).contains(&v).then_some(v as usize)
+    };
+    (size.len() == 2 && is_atlas(params)).then_some([side(0)?, side(1)?])
+}
+
+/// Row `i`'s key: its key column's, else on a grid with `size` its cell `cx,cy` (#535), else its
+/// index.
+pub fn key(own: Option<String>, params: &Map<String, Value>, i: usize) -> String {
+    own.unwrap_or_else(|| match sized(params) {
+        Some([cols, _]) => format!("{},{}", i % cols, i / cols),
+        None => i.to_string(),
+    })
+}
+
+/// One row as it draws: its key, its grid cell (a free row's centre), its centre, the atlas cell
+/// it shows, and its turn (deg) and scale about its centre (#535).
 #[derive(Clone, Debug, PartialEq)]
 pub struct Tile {
     pub key: String,
@@ -126,6 +247,8 @@ pub struct Tile {
     pub centre: [f64; 2],
     pub index: u64,
     pub flip: u8,
+    pub angle: f64,
+    pub scale: f64,
 }
 
 fn whole(c: Option<&Column>, i: usize, default: f64, max: f64, path: &str) -> Result<f64, Refused> {
@@ -148,15 +271,25 @@ pub fn tiles(
     planted: Planted,
 ) -> Result<Vec<Tile>, Refused> {
     let path = format!("items/{id}/params");
-    if params
-        .get("place")
-        .and_then(Value::as_str)
-        .is_some_and(|p| p != "cell")
-    {
-        // #535 draws free rows.
-        return Err(refused("module_missing", format!("{path}/place")));
+    // #535: a free row sits at its own centre (x, y) rather than on a grid cell.
+    let free = match params.get("place") {
+        None | Some(Value::Null) => false,
+        Some(Value::String(p)) if p == "cell" => false,
+        Some(Value::String(p)) if p == "free" => true,
+        Some(_) => return Err(refused("bad_doc", format!("{path}/place"))),
+    };
+    let mut grid = Grid::read(params, &path)?;
+    if let (Shape::Hex { odd, .. }, Planted::HexOtherParity) = (&mut grid.shape, planted) {
+        *odd = !*odd;
     }
-    let grid = Grid::read(params, &path)?;
+    let size = sized(params);
+    if let Some([cols, rs]) = size {
+        if rows.keys.len() != cols * rs {
+            return Err(refused("out_of_range", format!("{path}/grid/size")));
+        }
+    } else if params.get("grid").and_then(|g| g.get("size")).is_some() {
+        return Err(refused("out_of_range", format!("{path}/grid/size")));
+    }
     let column = |name: &str| rows.columns.get(name);
     let col = |name: &str| format!("{path}/columns/{name}");
     let mut out = Vec::new();
@@ -164,18 +297,47 @@ pub fn tiles(
         if rows.hidden.contains(&i) {
             continue;
         }
-        let at = |name: &str| -> Result<f64, Refused> {
+        let at = |name: &str, whole: bool| -> Result<f64, Refused> {
             let v = column(name).and_then(|c| c.number(i));
-            v.filter(|v| v.fract() == 0.0)
+            v.filter(|v| v.is_finite() && (!whole || v.fract() == 0.0))
                 .ok_or_else(|| refused("bad_column", col(name)))
         };
-        let cell = [at("cx")?, at("cy")?];
+        let or = |name: &str, default: f64| match column(name) {
+            None => Ok(default),
+            Some(_) => at(name, false),
+        };
+        let (cell, centre) = match size {
+            _ if free => {
+                let c = [at("x", false)?, at("y", false)?];
+                (c, c)
+            }
+            Some([cols, _]) => {
+                let c = [(i % cols) as f64, (i / cols) as f64];
+                (
+                    c,
+                    grid.centre(c[0], c[1], planted == Planted::AtlasSquareLayout),
+                )
+            }
+            None => {
+                let c = [at("cx", true)?, at("cy", true)?];
+                (
+                    c,
+                    grid.centre(c[0], c[1], planted == Planted::AtlasSquareLayout),
+                )
+            }
+        };
+        let scale = or("scale", 1.0)?;
+        if scale <= 0.0 {
+            return Err(refused("out_of_range", col("scale")));
+        }
         out.push(Tile {
             key: key.clone(),
             cell,
-            centre: grid.centre(cell[0], cell[1], planted == Planted::AtlasSquareLayout),
+            centre,
             index: whole(column("tile"), i, 0.0, f64::from(u16::MAX), &col("tile"))? as u64,
             flip: whole(column("flip"), i, 0.0, 7.0, &col("flip"))? as u8,
+            angle: or("angle", 0.0)?,
+            scale,
         });
     }
     if planted != Planted::AtlasRowOrder {
@@ -216,18 +378,22 @@ pub fn marks(
         [0.0, 0.0],
         &format!("{path}/separation"),
     )?;
-    let [w, h] = Grid::read(params, &format!("items/{id}/params"))?.cell;
+    let grid = Grid::read(params, &format!("items/{id}/params"))?;
+    let [w, h] = grid.cell;
+    // A free row isn't a grid cell, and a turned one hits its turned quad.
+    let free = params.get("place").and_then(Value::as_str) == Some("free");
     Ok(tiles(id, params, rows, planted)?
         .into_iter()
-        .map(|t| Mark::Image {
+        .map(|t| {
+            let [w, h] = [w * t.scale, h * t.scale];
+            let centre = [pos[0] + t.centre[0], pos[1] + t.centre[1]];
+            (t, [centre[0] - w / 2.0, centre[1] - h / 2.0, w, h])
+        })
+        .map(|(t, bounds)| Mark::Image {
             item: format!("{id}#{}", t.key),
             asset: asset.to_ascii_lowercase(),
-            bounds: [
-                pos[0] + t.centre[0] - w / 2.0,
-                pos[1] + t.centre[1] - h / 2.0,
-                w,
-                h,
-            ],
+            bounds,
+            turn: t.angle,
             fit: ImageFit::Fill,
             sampling: ImageSampling::Linear,
             crop: None,
@@ -239,6 +405,9 @@ pub fn marks(
                 margin,
                 separation,
                 flip: t.flip,
+                hit: (!free && t.angle == 0.0)
+                    .then(|| grid.hit_area(t.cell.map(|c| c as i64)))
+                    .flatten(),
             }),
         })
         .collect())
@@ -390,5 +559,120 @@ mod tests {
         assert_eq!(g.centre(0.0, 1.0, false), [-16.0, 8.0]);
         assert_eq!(g.centre(2.0, 1.0, false), [16.0, 24.0]);
         assert_eq!(g.centre(1.0, 0.0, true), [32.0, 0.0]);
+    }
+
+    /// #536: each hex neighbour is at cube distance 1 and lies across the edge facing it, so the
+    /// two cells of every shared edge list each other on opposite edges, and exactly one of them,
+    /// the one with the smaller (cy, cx), owns it.
+    #[test]
+    fn hex_neighbours_face_each_other_and_one_owns_each_edge() {
+        let cube = |g: &Grid, [cx, cy]: [i64; 2]| {
+            let Shape::Hex { flat, odd } = g.shape else {
+                unreachable!("a hex grid")
+            };
+            let (line, along) = if flat { (cx, cy) } else { (cy, cx) };
+            let shift = (line
+                - if odd {
+                    line.rem_euclid(2)
+                } else {
+                    -line.rem_euclid(2)
+                })
+                / 2;
+            let (q, r) = if flat {
+                (line, along - shift)
+            } else {
+                (along - shift, line)
+            };
+            [q, r, -q - r]
+        };
+        for (flat, odd) in [(false, true), (false, false), (true, true), (true, false)] {
+            let g = Grid {
+                shape: Shape::Hex { flat, odd },
+                cell: [32.0, 28.0],
+            };
+            for cx in 0..6 {
+                for cy in 0..6 {
+                    let six = g.neighbours([cx, cy]).expect("a hex grid");
+                    let own = g.hit_area([cx, cy]).expect("a hex grid").owns;
+                    for (i, n) in six.iter().enumerate() {
+                        let [a, b] = [cube(&g, [cx, cy]), cube(&g, *n)];
+                        let d = (0..3).map(|k| (a[k] - b[k]).abs()).max();
+                        assert_eq!(d, Some(1), "{flat} {odd}: ({cx}, {cy}) edge {i} → {n:?}");
+                        let back = g.neighbours(*n).expect("a hex grid");
+                        assert_eq!(
+                            back[(i + 3) % 6],
+                            [cx, cy],
+                            "{flat} {odd}: ({cx}, {cy}) edge {i}"
+                        );
+                        let theirs = g.hit_area(*n).expect("a hex grid").owns[(i + 3) % 6];
+                        assert_ne!(own[i], theirs, "{flat} {odd}: ({cx}, {cy}) edge {i}");
+                        assert_eq!(own[i], (cy, cx) < (n[1], n[0]));
+                    }
+                }
+            }
+        }
+        // Counterclockwise on screen: a pointy cell's edge 0 faces +x and edge 1 is up and to the
+        // right; a flat cell's edge 0 is between +x and −y and edge 1 faces −y.
+        let at = |g: &Grid, c: [i64; 2]| g.centre(c[0] as f64, c[1] as f64, false);
+        let pointy = Grid {
+            shape: Shape::Hex {
+                flat: false,
+                odd: true,
+            },
+            cell: [32.0, 28.0],
+        };
+        let n = pointy.neighbours([1, 1]).expect("a hex grid");
+        assert_eq!(
+            [at(&pointy, n[0]), at(&pointy, n[1])],
+            [[80.0, 21.0], [64.0, 0.0]]
+        );
+        let flat = Grid {
+            shape: Shape::Hex {
+                flat: true,
+                odd: true,
+            },
+            cell: [32.0, 28.0],
+        };
+        let n = flat.neighbours([1, 1]).expect("a hex grid");
+        assert_eq!(
+            [at(&flat, n[0]), at(&flat, n[1])],
+            [[48.0, 28.0], [24.0, 14.0]]
+        );
+    }
+
+    /// #535: a free row scaled 2 about its centre covers twice its cell there, unturned or
+    /// turned; a scale of 0 is refused, naming the column.
+    #[test]
+    fn a_free_row_scales_about_its_centre() {
+        let params = json!({"mark": "image", "place": "free", "grid": {"cell": [4, 2]},
+            "atlas": {"asset": "a".repeat(64), "cell": [8, 4]}});
+        let params = params.as_object().expect("an object");
+        let rows = |scale: f64, angle: f64| Rows {
+            keys: vec!["0".into()],
+            columns: [("x", 10.0), ("y", 3.0), ("scale", scale), ("angle", angle)]
+                .into_iter()
+                .map(|(k, v)| (k.to_string(), Column::Numbers(vec![v])))
+                .collect(),
+            ..Rows::default()
+        };
+        let bounds = |scale, angle| match &marks(
+            "s",
+            params,
+            &rows(scale, angle),
+            [0.0, 0.0],
+            Planted::None,
+        )
+        .expect("drawn")[0]
+        {
+            Mark::Image { bounds, turn, .. } => (*bounds, *turn),
+            _ => unreachable!("an image"),
+        };
+        assert_eq!(bounds(2.0, 0.0), ([6.0, 1.0, 8.0, 4.0], 0.0));
+        assert_eq!(bounds(2.0, 90.0), ([6.0, 1.0, 8.0, 4.0], 90.0));
+        let refused = tiles("s", params, &rows(0.0, 0.0), Planted::None).expect_err("refused");
+        assert_eq!(
+            (refused.code, refused.path.as_str()),
+            ("out_of_range", "items/s/params/columns/scale")
+        );
     }
 }

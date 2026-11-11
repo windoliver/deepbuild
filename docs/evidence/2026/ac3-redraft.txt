@@ -1,0 +1,9 @@
+
+ RUN  v5.0.5 <repo>/tests/acceptance/2026-redraft-ac3
+
+
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+   Start at  18:07:05
+   Duration  99.06s (tests 99%, transform 1%)
+

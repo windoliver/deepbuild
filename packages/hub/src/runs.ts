@@ -86,8 +86,8 @@ interface RunsOptions {
   supervisor: () => Supervisor;
   leases: () => LeaseTable;
   extensions: () => ExtensionHost | undefined;
-  /** One run of a held kind's check (#1537): its result as check.kind@1's, for the run's claim, ended by `stop`. */
-  kind(run: Run, checkout: string, deadline: number, stop: AbortSignal): Promise<CheckResult>;
+  /** One run of a held kind's check (#1537): its result as check.kind@1's, for the run's claim, ended by `stop`; a document check's issues as its stdout (#1723). */
+  kind(run: Run, checkout: string, deadline: number, stop: AbortSignal): Promise<CheckResult & { stdout?: string }>;
   hosts: () => Hosts;
 }
 
@@ -323,7 +323,7 @@ export class Runs {
       // is check.kind@1's, with no exit, output, attempts or stand-ins, as a replacing package's is.
       if (run.spec) {
         ended = this.o.kind(run, run.cwd, deadline, controller.signal)
-          .then((result) => ({ code: null, record: { run: run.run, ...result, exit: null, output: empty, env: [], attempts: [], retries: null, seeded: [], contract: null, timing: null, clock: 0 } as CommandRun }))
+          .then(({ stdout = '', ...result }) => ({ code: null, record: { run: run.run, ...result, exit: null, output: { ...empty, stdout }, env: [], attempts: [], retries: null, seeded: [], contract: null, timing: null, clock: 0 } as CommandRun }))
           .catch((error: Error) => ({ code: null, failed: error.message }));
       } else ended = replaced().then(async (byPackage): Promise<{ code: number | null; record: CommandRun } | { code: null; missing: string }> => {
         if (!byPackage) {

@@ -14,6 +14,7 @@ mod diag;
 pub mod env;
 pub mod flare;
 mod glass;
+pub mod held;
 pub mod local;
 pub mod maps;
 mod mesh;
@@ -26,6 +27,7 @@ pub mod shadow;
 pub mod sss;
 pub mod status;
 pub mod surface;
+mod sway;
 pub mod targets;
 pub mod water;
 
@@ -42,6 +44,7 @@ use deep_canvas_scene3d::module::{GEOMETRY_PASS, OUTPUT_PASS};
 use deep_canvas_scene3d::scene::{Adjust3, Depth, Facing, Layer3, PointShape, Scene, Shape, Solid};
 use deep_canvas_scene3d::sky::{Curve, Fog};
 use deep_canvas_scene3d::{clusters, cut};
+use deep_gpu::counted::Written;
 use deep_gpu::device::Device;
 use deep_gpu::encode::Job;
 use deep_gpu::render::{Determinism, Pass, RenderModule, Resolution, Target};
@@ -217,6 +220,12 @@ pub struct Planted {
     pub occlusion_in_cascades: bool,
     /// #1637: the camera's occlusion test also culls the probes' captures.
     pub occlusion_in_probe_captures: bool,
+    /// #1903: one bind group made for each item every frame.
+    pub bind_group_per_item: bool,
+    /// #1903: every item's transform, 64 bytes, uploaded every frame.
+    pub uploads_every_transform: bool,
+    /// #1903: the warm-up at check makes a pipeline for each item, keyed by item, not by feature set.
+    pub warms_per_item: bool,
 }
 
 /// What one frame's preparation did (Render worker; Object; Dirty classes).
@@ -247,6 +256,10 @@ pub struct Counts {
     /// Each material operator this frame couldn't draw, `(operator, why)`: its solids draw with
     /// their material's own values, and a caller refuses the frame (#429).
     pub operators_refused: Vec<(String, String)>,
+    /// Each material operator whose light response returned a negative or non-finite value
+    /// this frame, with the time it drew at, once per operator and time (#485:
+    /// `light_response.range`).
+    pub light_response_range: Vec<(String, f64)>,
     /// The key sun's cascades drawn this frame, by index; a cached one isn't (#422).
     pub cascades_drawn: Vec<u32>,
     /// How many environment cubes the renderer has prefiltered (#422).
@@ -490,6 +503,10 @@ impl AdjustEntry {
 /// scene3d.wgsl's `P_SSS_ACROSS` (#481): the planted spread that takes every tap.
 const PLANT_SSS_ACROSS: u32 = 8192;
 
+/// scene3d.wgsl's `P_CALLS_CUT` (#485): the planted loop that calls a light response for the
+/// lights the policy cut too, as many times as it left out.
+const PLANT_CALLS_CUT: u32 = 4_194_304;
+
 /// The most distinct lobe sets a frame shades with (#428): its lobe table's entries.
 const LOBE_ENTRIES: usize = 512;
 
@@ -588,6 +605,9 @@ struct LightsUniform {
     grid: [f32; 4],
     locals: [LocalUniform; local::SLOTS],
     items: [[[f32; 4]; 6]; SHADED],
+    /// Each shaded light's weight near the cut and a hash of its ID (u32 bits), which a light
+    /// response takes (#485).
+    answers: [[f32; 4]; SHADED],
 }
 
 /// scene3d.wgsl's `Local` (#446).
@@ -1147,7 +1167,7 @@ pub(crate) fn extent([width, height]: [u32; 2]) -> wgpu::Extent3d {
 /// A 2D texture of `size`: one layer, one mip, one sample.
 /// #464: one frame's print pass, recorded after the output into where the output would write.
 struct PrintStage {
-    device: wgpu::Device,
+    device: deep_gpu::counted::Wgpu,
     printer: Arc<Mutex<print::Printer>>,
     params: print::Params,
     source: wgpu::TextureView,
@@ -1176,7 +1196,7 @@ impl PrintStage {
 }
 
 pub(crate) fn texture2d(
-    d: &wgpu::Device,
+    d: &deep_gpu::counted::Wgpu,
     label: &str,
     size: [u32; 2],
     format: wgpu::TextureFormat,
@@ -1187,7 +1207,7 @@ pub(crate) fn texture2d(
 
 /// `texture2d` with `samples` samples a pixel (#1173).
 fn multisampled(
-    d: &wgpu::Device,
+    d: &deep_gpu::counted::Wgpu,
     samples: u32,
     label: &str,
     size: [u32; 2],
@@ -1208,7 +1228,7 @@ fn multisampled(
 
 /// Writes `bytes`, `row` bytes a row, over layer `z` of `texture`, `size` texels.
 pub(crate) fn write_texture(
-    queue: &wgpu::Queue,
+    queue: &deep_gpu::counted::Queue,
     texture: &wgpu::Texture,
     z: u32,
     bytes: &[u8],
@@ -1234,7 +1254,7 @@ pub(crate) fn write_texture(
 
 /// A bind group binding `resources` at 0, 1, 2… in order.
 pub(crate) fn bind_group<const N: usize>(
-    d: &wgpu::Device,
+    d: &deep_gpu::counted::Wgpu,
     label: &str,
     layout: &wgpu::BindGroupLayout,
     resources: [wgpu::BindingResource<'_>; N],
@@ -1301,7 +1321,7 @@ pub(crate) fn target(
 /// nearest the light kept, with what lies past its near and far planes clamped where the device
 /// can (`fs`, its fragment stage, only discards).
 pub(crate) fn shadow_pipeline(
-    d: &wgpu::Device,
+    d: &deep_gpu::counted::Wgpu,
     label: &str,
     layout: &wgpu::PipelineLayout,
     module: &wgpu::ShaderModule,
@@ -1343,7 +1363,7 @@ pub(crate) fn shadow_pipeline(
 /// A render pipeline over `module`: its vertex stage `vs` reading `buffers`, and its fragment
 /// stage, when given, into `targets`.
 pub(crate) fn pipeline(
-    d: &wgpu::Device,
+    d: &deep_gpu::counted::Wgpu,
     label: &str,
     layout: Option<&wgpu::PipelineLayout>,
     module: &wgpu::ShaderModule,
@@ -1368,7 +1388,7 @@ pub(crate) fn pipeline(
 /// `cull`'s faces.
 #[allow(clippy::too_many_arguments)]
 fn culled(
-    d: &wgpu::Device,
+    d: &deep_gpu::counted::Wgpu,
     samples: u32,
     label: &str,
     layout: Option<&wgpu::PipelineLayout>,
@@ -1385,7 +1405,7 @@ fn culled(
 /// pipeline).
 #[allow(clippy::too_many_arguments)]
 fn specialized(
-    d: &wgpu::Device,
+    d: &deep_gpu::counted::Wgpu,
     samples: u32,
     label: &str,
     layout: Option<&wgpu::PipelineLayout>,
@@ -1786,8 +1806,22 @@ struct EnvState {
 /// A camera as the effects read it: world to clip (column-major), the eye and the near plane.
 pub type Camera = ([f64; 16], [f64; 3], f64);
 
+/// What each per-frame uniform last uploaded, so a frame writes only the words that changed
+/// (#1903: at most 1 KB a frame while only the camera moves).
+#[derive(Default)]
+struct Uniforms {
+    env: Written,
+    lights: Written,
+    frame: Written,
+    display: Written,
+    internal: Written,
+    tone: Written,
+}
+
 pub struct Renderer {
     planted: Planted,
+    /// The buffer #1903's planted `uploads_every_transform` writes every item's transform into.
+    planted_transforms: Option<wgpu::Buffer>,
     /// The diagnostic views' pipelines (#427), made on first use.
     diag: Option<Box<diag::Pipes>>,
     /// Motion blur by velocity (#419): its pipelines, and this frame's pass when it blurs.
@@ -1810,6 +1844,14 @@ pub struct Renderer {
     materials: BTreeMap<u64, Result<op::MatOp, String>>,
     /// Each material operator's group with one solid's maps, by (operator, maps) key.
     op_binds: BTreeMap<(u64, u32), wgpu::BindGroup>,
+    /// Each material operator with a light response that a solid drew through, by key: its ID
+    /// and the time it last drew at (#485).
+    answering: BTreeMap<u64, (String, f64)>,
+    /// The time each operator last raised `light_response.range` at, so it raises once a time.
+    raised: BTreeMap<String, u64>,
+    /// The material operators that change nothing their parts shade with, by key: their parts
+    /// draw as their materials' own (#485).
+    plain_ops: BTreeSet<u64>,
     /// The lights this frame's policy shades and the DFG table, for the solids' shading (#421).
     lights_buffer: wgpu::Buffer,
     lights_bind: wgpu::BindGroup,
@@ -1866,6 +1908,8 @@ pub struct Renderer {
     ties: BTreeMap<String, u32>,
     flip: bool,
     tone_buffer: wgpu::Buffer,
+    /// What each per-frame uniform last uploaded (#1903).
+    written: Uniforms,
     output_layout: wgpu::BindGroupLayout,
     /// What the passes after the finish cover this frame (their layer, which the view holds), as
     /// the output pass's undithered mask; one clear texel with none (#418).
@@ -1950,6 +1994,8 @@ pub struct Renderer {
     /// Whether a mask-alpha part casts this frame: its sets draw into shadow maps only then.
     mask_casts: bool,
     meshes: BTreeMap<Shape, Mesh>,
+    /// The swaying meshes' rest vertices, weights and params (#2016).
+    sways: sway::Sways,
     batches: BTreeMap<String, Batch>,
     atlas: AtlasTexture,
     picks: BTreeMap<String, u32>,
@@ -2246,7 +2292,7 @@ fn instance(
 /// environment's cubes.
 #[allow(clippy::too_many_arguments)]
 fn lights_bind(
-    d: &wgpu::Device,
+    d: &deep_gpu::counted::Wgpu,
     layout: &wgpu::BindGroupLayout,
     [lights, dfg, adjusts, lobes]: [&wgpu::Buffer; 4],
     oit: &oit::Oit,
@@ -2303,7 +2349,7 @@ fn cube_entry(binding: u32) -> wgpu::BindGroupLayoutEntry {
 }
 
 /// One texel of one cascade layer: the stand-in before the key sun's cascades are drawn.
-fn cascade_stub(d: &wgpu::Device) -> wgpu::TextureView {
+fn cascade_stub(d: &deep_gpu::counted::Wgpu) -> wgpu::TextureView {
     texture2d(
         d,
         "scene3d cascade stub",
@@ -2320,7 +2366,7 @@ fn cascade_stub(d: &wgpu::Device) -> wgpu::TextureView {
 /// A see-through solid's pipeline: depth-tested with no depth write and no object ID, blending
 /// premultiplied over what's behind it, or adding to it.
 fn clear_pipeline(
-    d: &wgpu::Device,
+    d: &deep_gpu::counted::Wgpu,
     samples: u32,
     module: &wgpu::ShaderModule,
     layout: &wgpu::PipelineLayout,
@@ -2334,7 +2380,7 @@ fn clear_pipeline(
 /// A fade's two pipelines through a material operator's fragment stage (#432): its depth pass,
 /// then its color where that depth is equal, both from the solids' one @invariant vertex stage.
 pub(crate) fn fade_pipelines(
-    d: &wgpu::Device,
+    d: &deep_gpu::counted::Wgpu,
     samples: u32,
     module: &wgpu::ShaderModule,
     layout: &wgpu::PipelineLayout,
@@ -2353,7 +2399,7 @@ pub(crate) fn fade_pipelines(
 /// `mesh_fs`).
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn shaded_clear_pipeline(
-    d: &wgpu::Device,
+    d: &deep_gpu::counted::Wgpu,
     samples: u32,
     module: &wgpu::ShaderModule,
     layout: &wgpu::PipelineLayout,
@@ -2458,7 +2504,7 @@ pub(crate) fn shaded_clear_pipeline(
 /// The per-pixel resolve's pipelines (#424): the full-screen composite over the linear target,
 /// and the per-pixel items drawn sorted, for a frame whose fragments ran out of room.
 fn oit_pipelines(
-    d: &wgpu::Device,
+    d: &deep_gpu::counted::Wgpu,
     module: &wgpu::ShaderModule,
     layout: &wgpu::PipelineLayout,
     forward_z: bool,
@@ -2519,7 +2565,7 @@ const LATE_NAMES: [&str; 2] = ["scene3d.blend_over_glass", "scene3d.add_over_gla
 
 #[allow(clippy::too_many_arguments)]
 fn draw_pipeline(
-    d: &wgpu::Device,
+    d: &deep_gpu::counted::Wgpu,
     samples: u32,
     module: &wgpu::ShaderModule,
     layout: &wgpu::PipelineLayout,
@@ -2561,7 +2607,7 @@ fn draw_pipeline(
 /// code folds away; a part with lobes draws through the one with it on.
 #[allow(clippy::too_many_arguments)]
 fn opaque_pipeline(
-    d: &wgpu::Device,
+    d: &deep_gpu::counted::Wgpu,
     samples: u32,
     module: &wgpu::ShaderModule,
     layout: &wgpu::PipelineLayout,
@@ -2602,7 +2648,7 @@ fn opaque_pipeline(
 /// A see-through part's material operator pipeline (#431): as a blend part draws, its
 /// premultiplied color over what's behind, depth-tested, writing no depth and no object ID.
 pub(crate) fn op_blend_pipeline(
-    d: &wgpu::Device,
+    d: &deep_gpu::counted::Wgpu,
     samples: u32,
     module: &wgpu::ShaderModule,
     layout: &wgpu::PipelineLayout,
@@ -2650,7 +2696,7 @@ pub(crate) fn op_blend_pipeline(
 /// The sky's pipeline: a full-screen triangle at the far plane, behind everything, writing no
 /// depth and no object ID.
 fn sky_pipeline(
-    d: &wgpu::Device,
+    d: &deep_gpu::counted::Wgpu,
     samples: u32,
     module: &wgpu::ShaderModule,
     layout: &wgpu::PipelineLayout,
@@ -2697,7 +2743,7 @@ struct Families {
 impl Families {
     /// Compiles the pipelines `layer` draws with that aren't yet, naming each in `names`; how
     /// many it compiled.
-    fn ensure(&mut self, d: &wgpu::Device, layer: &Layer3, names: &mut Vec<&'static str>) -> u32 {
+    fn ensure(&mut self, d: &deep_gpu::counted::Wgpu, layer: &Layer3, names: &mut Vec<&'static str>) -> u32 {
         let mut made = 0;
         let (module, draw, text, fz, samples) = (
             &self.module,
@@ -2980,8 +3026,7 @@ impl Renderer {
             LOBE_ENTRIES * std::mem::size_of::<LobeEntry>(),
         );
         let lights_buffer = uniform_buffer("scene3d lights", std::mem::size_of::<LightsUniform>());
-        let dfg_buffer = wgpu::util::DeviceExt::create_buffer_init(
-            d,
+        let dfg_buffer = d.create_buffer_init(
             &wgpu::util::BufferInitDescriptor {
                 label: Some("scene3d dfg"),
                 contents: bytemuck::cast_slice(&dfg_table()),
@@ -3275,6 +3320,7 @@ impl Renderer {
         };
         Renderer {
             planted,
+            planted_transforms: None,
             diag: None,
             epoch: device.epoch,
             frame_buffer,
@@ -3282,6 +3328,9 @@ impl Renderer {
             frame_layout: frame_layout.clone(),
             materials: BTreeMap::new(),
             op_binds: BTreeMap::new(),
+            answering: BTreeMap::new(),
+            raised: BTreeMap::new(),
+            plain_ops: BTreeSet::new(),
             lights_buffer,
             lights_bind,
             lights_layout,
@@ -3337,6 +3386,7 @@ impl Renderer {
             ties: BTreeMap::new(),
             flip: false,
             tone_buffer,
+            written: Uniforms::default(),
             output_layout,
             covered: (None, uncovered),
             mesh_pipeline,
@@ -3399,6 +3449,7 @@ impl Renderer {
                 RESOLVE_PASS,
             ],
             meshes: BTreeMap::new(),
+            sways: sway::Sways::default(),
             motion: motion::MotionPass::default(),
             motion_frame: None,
             core: targets::Core::default(),
@@ -3564,7 +3615,7 @@ impl Renderer {
     }
 
     /// The output pass's bind group: `linear` and the tone uniform.
-    fn output_bind(&self, d: &wgpu::Device, linear: &wgpu::TextureView) -> wgpu::BindGroup {
+    fn output_bind(&self, d: &deep_gpu::counted::Wgpu, linear: &wgpu::TextureView) -> wgpu::BindGroup {
         bind_group(
             d,
             "scene3d output",
@@ -4090,7 +4141,7 @@ impl Renderer {
         deep_gpu::alloc::outside(|| {
             device
                 .queue
-                .write_buffer(&self.env.buffer, 0, bytemuck::bytes_of(&u))
+                .write_changed(&self.env.buffer, &self.written.env, bytemuck::bytes_of(&u))
         });
     }
 
@@ -4156,6 +4207,7 @@ impl Renderer {
             grid: [0.0; 4],
             locals: [LocalUniform::zeroed(); local::SLOTS],
             items: [[[0.0; 4]; 6]; SHADED],
+            answers: [[0.0; 4]; SHADED],
         };
         // Each light's local map (#446).
         let mut local_of = BTreeMap::new();
@@ -4210,6 +4262,12 @@ impl Renderer {
                     }
                 }
             }
+        }
+        for (k, &(i, weight)) in policy.shaded.iter().enumerate().take(SHADED) {
+            u.answers[k] = [weight as f32, f32::from_bits(op::light_hash(&scene.lights[i].id)), 0.0, 0.0];
+        }
+        if self.planted.lobes & PLANT_CALLS_CUT != 0 {
+            u.answers[0][2] = policy.left_out.len() as f32;
         }
         for (slot, &(i, weight)) in u.items.iter_mut().zip(&policy.shaded) {
             let l = &scene.lights[i];
@@ -4282,7 +4340,7 @@ impl Renderer {
         deep_gpu::alloc::outside(|| {
             device
                 .queue
-                .write_buffer(&self.lights_buffer, 0, bytemuck::bytes_of(&u))
+                .write_changed(&self.lights_buffer, &self.written.lights, bytemuck::bytes_of(&u))
         });
     }
 
@@ -4334,10 +4392,20 @@ impl Renderer {
         }
     }
 
-    /// Uploads a builder's mesh the first time a batch draws one of its hash (#420).
+    /// Uploads a builder's mesh the first time a batch draws one of its hash (#420); a swaying
+    /// one's vertices the sway pass writes at every frame (#2016).
     fn built_mesh(&mut self, device: &Device, shape: Shape, m: &deep_canvas_scene3d::geom::Mesh) {
         if let std::collections::btree_map::Entry::Vacant(e) = self.meshes.entry(shape) {
-            e.insert(Mesh::of(device, m));
+            let mesh = match &m.sway {
+                Some(_) => {
+                    let v = mesh::vertices(m);
+                    let mesh = Mesh::swaying(device, &v, &m.indices);
+                    self.sways.add(device, shape, m, &v, &mesh.vertices);
+                    mesh
+                }
+                None => Mesh::of(device, m),
+            };
+            e.insert(mesh);
             self.counts.meshes_built += 1;
         }
     }
@@ -4358,6 +4426,13 @@ impl Renderer {
                 return 0;
             }
             key ^= 0x9e37_79b9_7f4a_7c15;
+        }
+        if self.plain_ops.contains(&key) {
+            return 0;
+        }
+        if !self.materials.contains_key(&key) && op::changes_nothing(o) {
+            self.plain_ops.insert(key);
+            return 0;
         }
         if !self.materials.contains_key(&key) {
             let layouts = [
@@ -4416,6 +4491,9 @@ impl Renderer {
                             (vec![s.id.clone()], created::feature_set(s), "view".into()),
                         );
                     }
+                }
+                if matches!(self.materials.get(&key), Some(Ok(m)) if m.range.is_some()) {
+                    self.answering.insert(key, (o.id.clone(), o.t));
                 }
                 return key;
             }
@@ -4481,6 +4559,13 @@ impl Renderer {
             }
         }
         self.watering = false;
+        self.planted_per_item(device, scene);
+        // The warm-up compiles the culled path whatever the item count, so the pipelines a
+        // document's check makes follow its feature sets, never how many items share them, and
+        // a set that grows past the line compiles nothing mid-play (#1903).
+        if self.log.warming {
+            self.ensure_rows(device);
+        }
         self.prepare_frame(device, scene, look);
         // #166: view3d's `reflection` target, made while a frame asks for it.
         let internal = self.internal();
@@ -4581,6 +4666,7 @@ impl Renderer {
         for layer in &scene.layers {
             self.prepare_batch(device, layer, &scene.camera);
         }
+        self.sways.move_all(device, scene);
         if !self.adjusts.is_empty() {
             deep_gpu::alloc::outside(|| {
                 device.queue.write_buffer(
@@ -4951,6 +5037,60 @@ impl Renderer {
         Some((k as u32 + 1) << 16)
     }
 
+    /// #1903's wrong programs, each reachable only through `--planted`: a bind group made for
+    /// each item every frame, every item's transform uploaded every frame, and a warm-up that
+    /// makes a pipeline for each item.
+    fn planted_per_item(&mut self, device: &Device, scene: &Scene) {
+        let p = self.planted;
+        if !(p.bind_group_per_item || p.uploads_every_transform || p.warms_per_item) {
+            return;
+        }
+        let d = &device.device;
+        let solids = || scene.layers.iter().flat_map(|l| &l.solids);
+        if p.bind_group_per_item {
+            for _ in solids() {
+                bind_group(d, "planted per item", &self.frame_layout, [self.frame_buffer.as_entire_binding()]);
+            }
+        }
+        if p.uploads_every_transform {
+            let bytes: Vec<u8> = solids()
+                .flat_map(|s| {
+                    let m = s.model;
+                    let rows = [m[0], m[1], m[2], [0.0, 0.0, 0.0, 1.0]];
+                    rows.into_iter().flatten().flat_map(|v| (v as f32).to_le_bytes())
+                })
+                .collect();
+            let size = bytes.len().max(64) as u64;
+            if self.planted_transforms.as_ref().is_none_or(|b| b.size() < size) {
+                self.planted_transforms = Some(d.create_buffer(&wgpu::BufferDescriptor {
+                    label: Some("planted transforms"),
+                    size,
+                    usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+                    mapped_at_creation: false,
+                }));
+            }
+            if let Some(b) = &self.planted_transforms {
+                device.queue.write_buffer(b, 0, &bytes);
+            }
+        }
+        if p.warms_per_item && self.log.warming {
+            let module = d.create_shader_module(wgpu::ShaderModuleDescriptor {
+                label: Some("planted per item"),
+                source: wgpu::ShaderSource::Wgsl("@compute @workgroup_size(1) fn main() {}".into()),
+            });
+            for s in solids() {
+                d.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                    label: Some(&s.id),
+                    layout: None,
+                    module: &module,
+                    entry_point: Some("main"),
+                    compilation_options: Default::default(),
+                    cache: None,
+                });
+            }
+        }
+    }
+
     /// [`Renderer::prepare`] for a scene that differs from the last one it prepared only in its
     /// size, its camera and the solids `moved` lists (layer, index): it writes those solids'
     /// records alone, so a frame costs what moved, and replays every batch.
@@ -4961,6 +5101,7 @@ impl Renderer {
         look: &Look3,
         moved: &[(usize, usize)],
     ) {
+        self.planted_per_item(device, scene);
         // See-through parts reorder as the camera moves, so a frame holding one prepares whole;
         // so does one whose level of detail the view chooses (#425).
         if self.planted.encodes_every_frame
@@ -5018,6 +5159,7 @@ impl Renderer {
             for layer in &scene.layers {
                 self.prepare_batch(device, layer, &scene.camera);
             }
+            self.sways.move_all(device, scene);
             self.update_culls(device);
             return;
         }
@@ -5052,6 +5194,7 @@ impl Renderer {
         }
         self.counts.instances_written += written;
         self.counts.replayed += scene.layers.len() as u32;
+        self.sways.move_all(device, scene);
         self.update_culls(device);
     }
 
@@ -5198,7 +5341,13 @@ impl Renderer {
         };
         self.occluders.clear();
         if occluding {
-            if let Some(t) = &self.targets {
+            // The prepass depth and pyramid are made only while a list is culled (#2189).
+            let culled = self
+                .order
+                .iter()
+                .filter_map(|id| self.batches.get(id))
+                .any(|b| b.solids.values().chain(b.casters.values()).any(|s| s.cull.is_some()));
+            if let Some(t) = self.targets.as_ref().filter(|_| culled) {
                 let samples = self.families.samples;
                 if self
                     .pyramid
@@ -5367,6 +5516,12 @@ impl Renderer {
     /// The frame's uniforms, outlines and shadow, and its atlas pages.
     fn prepare_frame(&mut self, device: &Device, scene: &Scene, look: &Look3) {
         self.counts = Counts::default();
+        // Each light response's range flag starts the frame clear (#485).
+        for key in self.answering.keys() {
+            if let Some(Ok(m)) = self.materials.get(key) {
+                m.clear_range(&device.queue);
+            }
+        }
         // #464: the print finish this frame draws, and each solid's color its separations read.
         self.print =
             (!look.print.is_identity()).then(|| (look.print.clone(), scene.print, scene.ground));
@@ -5552,9 +5707,10 @@ impl Renderer {
         };
         deep_gpu::alloc::outside(|| {
             let q = &device.queue;
-            q.write_buffer(&self.frame_buffer, 0, bytemuck::bytes_of(&frame));
-            q.write_buffer(&self.outlines.display, 0, bytemuck::bytes_of(&display));
-            q.write_buffer(&self.outlines.internal, 0, bytemuck::bytes_of(&inside));
+            let w = &self.written;
+            q.write_changed(&self.frame_buffer, &w.frame, bytemuck::bytes_of(&frame));
+            q.write_changed(&self.outlines.display, &w.display, bytemuck::bytes_of(&display));
+            q.write_changed(&self.outlines.internal, &w.internal, bytemuck::bytes_of(&inside));
         });
         self.prepare_outlines(device, scene);
         // A scene of materials shades the key sun's shadow through its cascades (#422); one of
@@ -5573,6 +5729,12 @@ impl Renderer {
         let scores = light::scores(&scene.lights, &scene.camera);
         let shadowed = light::shadowed(&scene.lights, &policy, &scene.shadowing, &scores);
         self.prepare_locals(device, scene, &frame, &shadowed.kept);
+        // A warm-up's prepare (#432) records no pass, so its maps stay undrawn: keyed as drawn,
+        // the frame after it would sample empty maps (#2186). The next frame draws them.
+        if self.log.warming {
+            self.cascaded.keys = [None; 4];
+            self.locals.forget();
+        }
         let mut dropped = shadowed.dropped;
         dropped.sort();
         if self.ies.upload(device, &scene.distributions) {
@@ -5644,7 +5806,7 @@ impl Renderer {
         deep_gpu::alloc::outside(|| {
             device
                 .queue
-                .write_buffer(&self.tone_buffer, 0, bytemuck::bytes_of(&tone))
+                .write_changed(&self.tone_buffer, &self.written.tone, bytemuck::bytes_of(&tone))
         });
         self.ground = [
             decode(scene.ground[0]),
@@ -6016,7 +6178,7 @@ impl Renderer {
             // or the items' shape's (#1637).
             if set.count == 0 {
                 set.bounds = s.mesh.as_ref().map_or([[-0.5; 3], [0.5; 3]], |m| {
-                    let b = m.bounds();
+                    let b = m.reach();
                     [b[0].map(f64::from), b[1].map(f64::from)]
                 });
             }
@@ -6226,6 +6388,21 @@ impl Renderer {
             self.rebind_lights(device);
         }
         remade
+    }
+
+    /// After a frame (#485): each material operator whose light response returned a negative or
+    /// non-finite value, read back from its flag, into this frame's counts once per operator and
+    /// time.
+    pub fn check_responses(&mut self, device: &Device) {
+        for (key, (id, t)) in &self.answering {
+            let Some(Ok(m)) = self.materials.get(key) else {
+                continue;
+            };
+            if m.range_raised(device) && self.raised.get(id) != Some(&t.to_bits()) {
+                self.raised.insert(id.clone(), t.to_bits());
+                self.counts.light_response_range.push((id.clone(), *t));
+            }
+        }
     }
 
     /// The opaque sets holding a part whose subsurface spreads, for the share pass (#481).
@@ -6541,6 +6718,32 @@ impl Renderer {
         self.ao.frame(&self.frame_bind, solids)
     }
 
+    /// What the GPU drew for `solid` in the frame just drawn (#2016): the gust its sway used,
+    /// with one, and each vertex of the mesh it draws from, through its model, in world m.
+    pub fn read_sway(
+        &self,
+        device: &Device,
+        solid: &Solid,
+    ) -> Option<(Option<f32>, Vec<[f64; 3]>)> {
+        let mesh = self.meshes.get(&solid.shape)?;
+        let size = mesh.vertices.size();
+        let bytes = read_back(device, "scene3d drawn vertices", size, |e, staging| {
+            e.copy_buffer_to_buffer(&mesh.vertices, 0, staging, 0, size)
+        })?;
+        let m = &solid.model;
+        let positions = bytemuck::cast_slice::<u8, f32>(&bytes)
+            .chunks_exact(mesh::FLOATS)
+            .map(|v| {
+                let p = [v[0], v[1], v[2]].map(f64::from);
+                [0, 1, 2].map(|r| m[r][0] * p[0] + m[r][1] * p[1] + m[r][2] * p[2] + m[r][3])
+            })
+            .collect();
+        let gust = solid
+            .sway
+            .and_then(|_| self.sways.gust(device, solid.shape));
+        Some((gust, positions))
+    }
+
     /// Every culled list as its cull last wrote it, read once the frame has drawn (#484). Nothing
     /// a frame draws reads this. An instancer's rows only; a probe's capture keeps every element
     /// (#1637), less those the camera's occlusion test hid under the planted program.
@@ -6704,6 +6907,14 @@ impl Renderer {
 
     pub fn counts(&self) -> &Counts {
         &self.counts
+    }
+
+    /// Drops every batch's encoding, so the next frame that prepares encodes each batch once:
+    /// a warm-up compiles pipelines, it draws no frame (#1903).
+    pub fn forget_encodings(&mut self) {
+        for b in self.batches.values_mut() {
+            b.bundle = None;
+        }
     }
 
     /// The key light's shadow map: the solids of every batch drawn depth-only from the light.
@@ -7842,8 +8053,7 @@ impl Renderer {
                 ],
             })
             .collect();
-        let buffer = wgpu::util::DeviceExt::create_buffer_init(
-            &device.device,
+        let buffer = device.device.create_buffer_init(
             &wgpu::util::BufferInitDescriptor {
                 label: Some("scene3d puffs"),
                 contents: bytemuck::cast_slice(&records),

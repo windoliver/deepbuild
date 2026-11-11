@@ -61,6 +61,19 @@ describe('deep checkout command', () => {
       rmSync(home, { recursive: true, force: true });
     }
   }, 70_000);
+
+  it('deep run follow in a home where no hub ever ran says so on one line, with no stack trace', () => {
+    const home = realpathSync(mkdtempSync(join(tmpdir(), 'deep-cli-home-')));
+    try {
+      const env: NodeJS.ProcessEnv = { ...process.env, HOME: home };
+      for (const key of Object.keys(env)) if (key.startsWith('DEEP_') || key.startsWith('CLAUDE')) delete env[key];
+      const result = spawnSync(process.execPath, [cli, 'run', 'follow', 'run:01K74FX2B4D6F8H0K2M4P6R8T0'], { encoding: 'utf8', env, cwd: home, timeout: 60_000 });
+      expect(result.stderr).toMatch(/^BLOCKED: [^\n]+\n$/);
+      expect(result.status).toBe(1);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  }, 70_000);
 });
 
 // #1359: help never acts. An agent asks a command for help before it uses it, so `-h`, `--help` or `help` anywhere in
@@ -100,6 +113,23 @@ describe('deep <command> --help', () => {
       expect(result.status).toBe(0);
       expect(result.stdout).toContain(`deep ${command}`);
       expect(result.stdout).not.toContain('deep doctor');
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  }, 70_000);
+
+  // The usage a command prints for arguments it can't read is the one that is right; its help names every flag in it.
+  it.each([['start'], ['rules'], ['session', 'rules'], ['show'], ['read'], ['find'], ['hub']])('deep %s --help names every flag the command says it takes', (command, ...rest) => {
+    const { home, env } = fresh();
+    try {
+      const own = spawnSync(process.execPath, [cli, command, ...rest], { encoding: 'utf8', env, cwd: home, timeout: 60_000 });
+      const help = spawnSync(process.execPath, [cli, command, '--help'], { encoding: 'utf8', env, cwd: home, timeout: 60_000 });
+      expect(own.status, own.stderr).toBe(2);
+      // Its own forms, each with the lines it runs on to; another command's form in the same usage isn't its.
+      const forms = own.stderr.split('\n').map((line) => line.replace(/^Usage:/, '').trim()).filter((line) => !line.startsWith('deep ') || line.startsWith(`deep ${command} `));
+      expect(forms.some((line) => line.startsWith(`deep ${command} `)), own.stderr).toBe(true);
+      const flags = (text: string) => [...new Set(text.match(/--[a-z-]*/g))];
+      expect(flags(forms.join('\n')).filter((flag) => !flags(help.stdout).includes(flag)), help.stdout).toEqual([]);
     } finally {
       rmSync(home, { recursive: true, force: true });
     }

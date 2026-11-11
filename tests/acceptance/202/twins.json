@@ -1,0 +1,22 @@
+{
+  "#202.9f697217": [
+    "shelf-1.0.0-rule-100"
+  ],
+  "#202.ee304566": [
+    "expander_hash_map_order",
+    "costly-1.0.0"
+  ],
+  "#202.4661a547": [
+    "counts_agent_rule_as_cover"
+  ],
+  "#202.22a0fc71": [
+    "shelf-1.0.0-rule-095"
+  ],
+  "#202.b0fcc31e": [
+    "kit_tests_defaults_only",
+    "tower-1.0.0"
+  ],
+  "#202.76f0edd8": [
+    "recipe_rules_twice"
+  ]
+}
