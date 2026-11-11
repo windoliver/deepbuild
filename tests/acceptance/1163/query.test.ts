@@ -10,7 +10,7 @@
 // 556, which the dot's base y (856) is not, so a placement that never applies, starts off its bar or repeats too few
 // times reads something else at one of the eight wraps. The notice is read from the `deep show` reply's issues; its
 // offered bar:beat form is sent back in a fresh run of the hub. The overlap: the pull back moved to bar 7, two bars
-// into the pan, with only the cut between them. No planted program: the issue names none for this criterion; the base
+// into the pan, with only the cut between them, in a revision that otherwise holds every ID the good one does. No planted program: the issue names none for this criterion; the base
 // and those twins are the wrong programs.
 import { describe, expect, it } from 'vitest';
 import {
@@ -69,9 +69,12 @@ describe(`${AC[1]} the film reads back on the tempo map, a literal cue raises it
     if (!notice) failures.push(`no literal_time_with_tempo_map notice names the cue hit; the reply's issues: ${show(issues)}`);
     else if (!offered) failures.push(`the notice offers no bar:beat form: ${show(notice)}`);
 
-    const overlap = film(bed, { pullStart: '7:1b' });
+    // The overlapping revision keeps every ID the good one holds (the cue too), so only the shots' overlap can refuse
+    // it, not a removal it doesn't name (Revision: an ID a whole revision leaves out must be in its `removes`).
+    const kept = offered ? { cue: offered } : {};
+    const overlap = film(bed, { ...kept, pullStart: '7:1b' });
     const [good, goodRead, before, refused, after] = runShow(shows.bin(), scenario(evidence, [
-      present(film(bed, offered ? { cue: offered } : {})),
+      present(film(bed, kept)),
       query({ paths: [HIT], at: ['0s'] }),
       REVISIONS,
       present(overlap),

@@ -251,9 +251,11 @@ This job writes no TASTE.json.
 - **The shots' times** are written in bar:beat, as the Scope gives them ("a push shot for bars 1 to 3"; Shot: `start,
   end: time | marker`; Time and the flick: `"2:1b"` through the tempo map), never as literal seconds, which would raise
   the very notice AC1 asks about. The base refuses them (`bad_time`); this suite holds the film to the design. The pull
-  back ends at `11:1b`, the downbeat where an eleventh bar would start, the map's end. **The overlap** moves the pull back's start to `7:1b`, two bars into the pan, with only
-  the cut joining them; "refused naming both" is a reply other than `presented` whose JSON names `shot-pan` and
-  `shot-pull`.
+  back ends at `11:1b`, the downbeat where an eleventh bar would start, the map's end.
+- **The overlap** moves the pull back's start to `7:1b`, two bars into the pan, with only the cut joining them, in a
+  revision that otherwise holds every ID the good one does (the cue `hit` included), since a whole revision that
+  leaves an ID out without naming it in `removes` is refused for that (`unintended_removal`) before its shots are
+  compared. "Refused naming both" is a reply other than `presented` whose JSON names `shot-pan` and `shot-pull`.
 - **"The bed's asset removed from the store"**: the WAV is written into the evidence store and removed before the run
   that presents and exports the film (each run is a fresh hub reading the store as it is). "The run reads BLOCKED" is
   the stop reply's `state`.
