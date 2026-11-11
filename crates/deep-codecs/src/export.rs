@@ -134,6 +134,7 @@ fn part(job: &Job) -> Result<Value, Value> {
         keys: config
             .is_some()
             .then(|| coded.iter().map(|c| c.key).collect()),
+        held: None,
     };
     let bytes = mov::write(brand, &video, None, None);
     whole(out, |tmp| std::fs::write(tmp, &bytes).map_err(error))?;
@@ -194,6 +195,13 @@ fn join(job: &Job, planted: &Planted) -> Result<Value, Value> {
             keys.push(s.key);
         }
     }
+    // Planted (#1163): the writer leaves frame 300 out and holds frame 299 over its place.
+    let mut held = None;
+    if planted.is("video_drops_frame_300") && samples.len() > 300 {
+        samples.remove(300);
+        keys.remove(300);
+        held = Some(299);
+    }
     let video = mov::Video {
         fourcc: first.entry.fourcc,
         config: first.entry.config.as_ref().map(|c| &c.1[..]),
@@ -202,6 +210,7 @@ fn join(job: &Job, planted: &Planted) -> Result<Value, Value> {
         ticks: ticks(first) as u32,
         samples,
         keys: keys.contains(&false).then_some(keys),
+        held,
     };
     let given = |key: &str| job.v.get(key).filter(|v| !v.is_null());
     let n = |v: &Value, key: &str, max: u64| v[key].as_u64().filter(|n| (1..=max).contains(n));
@@ -389,6 +398,7 @@ mod tests {
             ticks,
             samples: samples.iter().map(|s| &s[..]).collect(),
             keys: None,
+            held: None,
         };
         let bytes = mov::write(mov::Brand::Mov, &video, None, None);
         std::fs::write(dir.join(name), bytes).unwrap();

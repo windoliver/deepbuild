@@ -3032,6 +3032,8 @@ fn export_planted(name: &str) -> Option<Planted> {
         "drop_frame_every_tenth_minute" => Planted::DropFrameEveryTenthMinute,
         "timecode_track_zero" => Planted::TimecodeTrackZero,
         "png_premultiplies_straight" => Planted::PngPremultipliesStraight,
+        "video_drops_frame_300" => Planted::VideoDropsFrame300,
+        "range_starts_one_frame_late" => Planted::RangeStartsOneFrameLate,
         _ => return None,
     })
 }

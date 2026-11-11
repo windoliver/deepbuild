@@ -459,6 +459,8 @@ byHand.push('tests/acceptance/154/stems.test.ts');
 // reading against the lane's rule.
 alone.push('tests/acceptance/1700/');
 timed.push('tests/acceptance/1700/budgets.test.ts');
+// #1163's files each build deep-show; exports.test.ts exports the 600-frame 1080p film six times.
+alone.push('tests/acceptance/1163/');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },

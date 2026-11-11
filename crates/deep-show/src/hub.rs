@@ -317,6 +317,10 @@ pub enum Planted {
     TimecodeTrackZero,
     /// #501: the png writer stores premultiplied color under `alpha: straight`.
     PngPremultipliesStraight,
+    /// #1163: the video writer leaves frame 300 out, frame 299 held over its place.
+    VideoDropsFrame300,
+    /// #1163: a range export starts, and ends, one frame late.
+    RangeStartsOneFrameLate,
     /// #501: each frame's sample count rounded on its own, each span starting where the last ended.
     SpanRoundsEachFrame,
     /// #501: a frame's first sample rounded to the nearest instead of floored.
@@ -2240,6 +2244,27 @@ impl<'a> Hub<'a> {
         // A number past f64's range is refused at its path (#387).
         if let Some(doc) = &stamped {
             issues.extend(overflows(doc));
+            // #1163: a literal time in a film with a tempo map raises motion's notice, carried
+            // as a warning on the item it times, with the bar:beat form it lands on.
+            if let Some(motion) = doc
+                .as_object()
+                .and_then(|d| deep_canvas_motion::doc::read(d).ok())
+            {
+                let literal = motion
+                    .notices
+                    .iter()
+                    .filter(|n| n["code"] == "literal_time_with_tempo_map");
+                issues.extend(literal.map(|n| Issue {
+                    severity: "warning",
+                    ..Issue::error(
+                        "literal_time_with_tempo_map",
+                        n["id"].as_str().unwrap_or_default(),
+                        n["path"].as_str().unwrap_or_default().to_string(),
+                        n.clone(),
+                        "a literal time in a film with a tempo map; write it as the bar:beat it lands on",
+                    )
+                }));
+            }
         }
         // The revision's check phases and, for a session on screen, its frame at `t`, run clean
         // before it becomes current: what an operator can't evaluate is an issue of the revision
@@ -2750,7 +2775,7 @@ impl<'a> Hub<'a> {
 /// The planted renderer's grain: a few pixels' red nudged by a xorshift seeded from the clock's
 /// nanoseconds, what an honest render-back never reads (Channel and key: it can never read the
 /// clock), so two runs draw two pictures (#670).
-fn clock_noise(rgba: &mut [u8]) {
+pub(crate) fn clock_noise(rgba: &mut [u8]) {
     let nanos = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |d| d.as_nanos() as u64);
