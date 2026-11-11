@@ -159,3 +159,18 @@ Two runs at 25f35437, on the same Mac15,12 (Apple M3, 16 GB):
 
 The answer margin is thin. At about 4.1 ms the answer sits 5% under its 5 ms limit on a cool, quiet Mac. One FULL sync
 (F_FULLFSYNC) is most of that cost, and the design requires that sync.
+
+## The judge, at 25f35437
+
+`judge-25f35437.txt` is `scripts/spine.mjs`'s judge, run from a local copy (`cp -a`, no reopen) at 25f35437 on Linux.
+
+| Part | Verdict |
+|---|---|
+| #318 `#22.48b6696b` | PASS |
+| #319 `#22.1f14a778` | INCONCLUSIVE: only its two budget tests, which skip off a reference Mac |
+| #320 `#22.f57a814c` | PASS |
+| #321 `#22.3d85284a` | PASS |
+
+The two budget tests pass on the reference Mac at nominal (section above).
+
+The first attempt read BLOCKED on every part. It wasn't the code: the Spark's sccache server hung every compile, so deep-hook never built within the judge's 3 hours. The judge ran again with `RUSTC_WRAPPER=` set empty, which skips sccache for that run only.
