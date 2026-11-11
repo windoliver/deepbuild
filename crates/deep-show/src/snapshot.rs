@@ -811,6 +811,7 @@ impl Renderer {
                     bound: spec.bound,
                     tabular: spec.bound,
                     mask: false,
+                    spans: &spec.spans,
                 });
                 self.glyphs(ctx, &shaped, *origin, (*c, runs), at, None);
             }
@@ -938,6 +939,7 @@ impl Renderer {
                     .glyph_run(&mut self.resources, &g.font)
                     .font_size(g.size)
                     .hint(false)
+                    .glyph_transform(deep_text::atlas::slant(g.skew))
                     .fill_glyphs(one);
             }
             ctx.set_transform(at);
@@ -953,6 +955,7 @@ impl Renderer {
                     g.font.data.id() == first.font.data.id()
                         && g.font.index == first.font.index
                         && g.size == first.size
+                        && g.skew == first.skew
                         && paint(g) == paint(first)
                 })
                 .count();
@@ -968,8 +971,15 @@ impl Renderer {
                 .glyph_run(&mut self.resources, &first.font)
                 .font_size(first.size)
                 .hint(false)
+                .glyph_transform(deep_text::atlas::slant(first.skew))
                 .fill_glyphs(glyphs);
             start += run;
+        }
+        // #1964: underlines and strikes over the glyphs, in their span's color.
+        for d in &shaped.decorations {
+            ctx.set_paint(color(scene::run_paint(runs, d.grapheme, None, c).1));
+            let [x, y, w, h] = d.rect.map(f64::from);
+            ctx.fill_rect(&Rect::new(x, y, x + w, y + h));
         }
         ctx.set_transform(at);
     }

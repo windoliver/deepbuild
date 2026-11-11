@@ -948,6 +948,7 @@ fn cell_grids(
                     mask: false,
                     align: scene::Align::Start,
                     bound: false,
+                    spans: Vec::new(),
                 },
                 origin: [g.origin[0], y],
                 role: None,
