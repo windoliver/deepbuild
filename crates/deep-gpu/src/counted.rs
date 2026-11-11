@@ -19,6 +19,7 @@ pub struct Counts {
     buffers: AtomicU64,
     pipelines: AtomicU64,
     uploaded: AtomicU64,
+    writes: AtomicU64,
 }
 
 /// A reading of [`Counts`]; two readings' difference is what happened between them.
@@ -29,6 +30,8 @@ pub struct Reading {
     pub pipelines: u64,
     /// Bytes written to buffers and textures, a buffer's initial contents included.
     pub uploaded: u64,
+    /// The queue's writes to buffers and textures: wgpu stages each in a buffer of its own.
+    pub writes: u64,
 }
 
 impl Reading {
@@ -38,6 +41,7 @@ impl Reading {
             buffers: self.buffers - earlier.buffers,
             pipelines: self.pipelines - earlier.pipelines,
             uploaded: self.uploaded - earlier.uploaded,
+            writes: self.writes - earlier.writes,
         }
     }
 }
@@ -49,6 +53,7 @@ impl Counts {
             buffers: self.buffers.load(Ordering::Relaxed),
             pipelines: self.pipelines.load(Ordering::Relaxed),
             uploaded: self.uploaded.load(Ordering::Relaxed),
+            writes: self.writes.load(Ordering::Relaxed),
         }
     }
 }
@@ -289,6 +294,7 @@ impl Queue {
 
     pub fn write_buffer(&self, buffer: &wgpu::Buffer, offset: wgpu::BufferAddress, data: &[u8]) {
         add(&self.counts.uploaded, data.len() as u64);
+        add(&self.counts.writes, 1);
         self.raw.write_buffer(buffer, offset, data);
     }
 
@@ -330,6 +336,7 @@ impl Queue {
         size: wgpu::BufferSize,
     ) -> Option<wgpu::QueueWriteBufferView> {
         add(&self.counts.uploaded, size.get());
+        add(&self.counts.writes, 1);
         self.raw.write_buffer_with(buffer, offset, size)
     }
 
@@ -341,6 +348,7 @@ impl Queue {
         size: wgpu::Extent3d,
     ) {
         add(&self.counts.uploaded, data.len() as u64);
+        add(&self.counts.writes, 1);
         self.raw.write_texture(texture, data, layout, size);
     }
 }
