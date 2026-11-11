@@ -1,0 +1,14 @@
+{
+  "issue": 157,
+  "criterion": "#157.2b3d3587",
+  "verdict": "looks_right",
+  "who": "Claude, on the owner's standing delegation of taste calls, as #501's and #502's calls were made; the owner can overrule it on the PR",
+  "when": "2026-11-11T22:02:14Z",
+  "screenshots": {
+    "black-frames.png": "60c2bb9e9678aac79dd71cb619b396a4c2188f7c2d6c2641c9e384c58ff8bba2",
+    "grain-starved.png": "7c904c31b723987ef1bab06c4af3203aa361f6ef411ff8a0e58f4b48389b75b9",
+    "grain-raised.png": "a3abe1b3c0b78541a12ff31ebad14d420e79800f694c797400ec21db04b2496f",
+    "prores-alpha.png": "9f49feaa136808a97e6c7cc5fe687fae631c966f68d791931f6f323118e23e51"
+  },
+  "note": "Frames 22 to 29 of the black film: 22 and 23 show the panel, bar and tick, 24 to 27 are black, and 28 and 29 pick the motion up again. The starved grain frame, the check's own decode of its worst frame (frame 6, 30.99 dB), is smeared into blocks: the bar is a wide pale band and the tick is gone. The same film at its raised floor (frame 24, 50.07 dB) shows the panel, the tick and the bar sharp. The ProRes 4444 ramp at 50% straight alpha, decoded by ffmpeg over a checkerboard, runs blue to orange with the checks showing through, and the opaque yellow block covers them at frame 12's place."
+}
