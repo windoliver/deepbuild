@@ -156,8 +156,8 @@ pub enum Planted {
     /// #408: film.layout takes its texts by the kinds text@1, vector@1, mark.text and counter,
     /// not from the core's glyph-box array.
     LayoutTextByKind,
-    /// #405: a control sweep audits its samples alone and bounds nothing between them.
-    SweepAuditsSamplesOnly,
+    /// #405's and #1936's: the geometry audit's wrong programs, which its own module names.
+    Audit(crate::geometry_audit::Planted),
     /// #306: a derived item's seed comes from a counter over expansion order.
     SeedsByExpansionOrder,
     /// #2015: a repeat over elements seeds each derived item with the part's element count too.
