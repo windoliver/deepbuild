@@ -94,6 +94,11 @@ pub struct Media {
     pub(crate) exports: usize,
     /// #499: video assets' probes and decoded frames.
     pub video: crate::video::Cache,
+    /// #502: each script compiled, by its lines and the document's assets; the export that is
+    /// running, which says how captions are laid out and drawn; and each caption as drawn.
+    pub(crate) scripts: std::collections::BTreeMap<String, std::sync::Arc<crate::narration::Script>>,
+    pub(crate) captions: Option<crate::narration::View>,
+    pub(crate) captions_drawn: std::collections::BTreeMap<String, std::sync::Arc<crate::snapshot::Drawn>>,
 }
 
 /// The worker-side name of a planted wrong program, if it is one the decode worker runs.
