@@ -37,6 +37,7 @@ mod logic;
 mod media;
 mod mixdown;
 mod modes;
+mod narration;
 mod packs;
 mod placement;
 #[cfg(feature = "test-accent")]
