@@ -1203,6 +1203,14 @@
         "deep-logic": {
           "spec": "* path=../deep-logic",
           "why": "Issue #499: the logic module's world, which a live play steps on the transport's clock."
+        },
+        "deep-canvas-physics": {
+          "spec": "* path=../deep-canvas-physics",
+          "why": "Issue #1920: the physics module's manifest and register call, physics@1, in the full build set."
+        },
+        "deep-physics-rapier": {
+          "spec": "* path=../deep-physics-rapier",
+          "why": "Issue #1920: the Rapier backend the full build links, whose resolved pins the physics module's manifest and the seal's runtime digest name."
         }
       },
       "target.'cfg(target_os = \"macos\")'.dependencies": {

@@ -38,6 +38,7 @@ mod media;
 mod mixdown;
 mod modes;
 mod packs;
+mod physics;
 mod placement;
 #[cfg(feature = "test-accent")]
 mod planted;
@@ -58,6 +59,8 @@ mod terminal;
 #[cfg(feature = "test-machines")]
 mod test_machines;
 mod test_registries;
+#[cfg(feature = "test-sim")]
+mod test_sim;
 #[cfg(feature = "test-threads")]
 mod test_threads;
 mod time;
@@ -1802,6 +1805,9 @@ const TEST_BUILD: bool = cfg!(any(
     feature = "test-sim-b-false-bit",
     feature = "test-sim-b-off",
     feature = "test-sim-c",
+    feature = "test-sim-a-1-0-1",
+    feature = "test-sim-b-1-0-1",
+    feature = "test-sim-b-pin-feature",
     feature = "test-gpu-second-backend",
     feature = "test-scene3d-tie-by-order",
     feature = "test-scene3d-reads-vector",
@@ -1919,6 +1925,8 @@ fn modules(set: BuildSet) -> Vec<Module> {
         });
         // Issue #308: controls and the input track's handling, with control@1; #535: logic's arrays.
         out.extend([deep_canvas_input::module::module(), deep_logic::module()]);
+        // Issue #1920: the physics module, physics@1, on the Rapier backend this build links.
+        out.push(physics::module());
     }
     // Issue #238: the sandbox module, on core alone; `test-sandbox-alt` seals the test
     // implementation `sandbox.alt` in its place, and `test-sandbox-needs-logic` plants a manifest
@@ -2024,23 +2032,9 @@ fn modules(set: BuildSet) -> Vec<Module> {
     out.push(deep_canvas_test_modules::checks());
     #[cfg(feature = "test-glyph-label")]
     out.push(deep_canvas_test_modules::label());
-    // Issue #185: test.sim@1's implementations, and test module c.
-    #[cfg(feature = "test-sim-a")]
-    out.push(deep_canvas_test_modules::sim::a());
-    #[cfg(feature = "test-sim-b")]
-    out.push(deep_canvas_test_modules::sim::b());
-    #[cfg(feature = "test-sim-b-f64")]
-    out.push(deep_canvas_test_modules::sim::b_f64());
-    #[cfg(feature = "test-sim-b-private-renamed")]
-    out.push(deep_canvas_test_modules::sim::b_private_renamed());
-    #[cfg(feature = "test-sim-b-public-renamed")]
-    out.push(deep_canvas_test_modules::sim::b_public_renamed());
-    #[cfg(feature = "test-sim-b-false-bit")]
-    out.push(deep_canvas_test_modules::sim::b_false_bit());
-    #[cfg(feature = "test-sim-b-off")]
-    out.push(deep_canvas_test_modules::sim::b_off());
-    #[cfg(feature = "test-sim-c")]
-    out.push(deep_canvas_test_modules::sim::c());
+    // Issues #185 and #1920: test.sim@1's implementations and their variants, and test module c.
+    #[cfg(feature = "test-sim")]
+    out.extend(test_sim::modules());
     out.extend(kit::modules::built());
     #[cfg(feature = "test-leave-out-logic")]
     out.retain(|m| m.manifest.name != "logic");
@@ -2877,6 +2871,8 @@ fn planted_named(twin: &str) -> Result<StartPlanted, ()> {
         "admits_frame_json" => Ok(StartPlanted::Seal(Fault::AdmitsFrameJson)),
         "digest_hashes_private" => Ok(StartPlanted::Seal(Fault::DigestHashesPrivate)),
         "digest_covers_pins" => Ok(StartPlanted::Seal(Fault::DigestCoversPins)),
+        "runtime_digest_omits_physics" => Ok(StartPlanted::Seal(Fault::RuntimeOmitsPhysics)),
+        "runtime_digest_hashes_only_shapes" => Ok(StartPlanted::Seal(Fault::RuntimeOnlyShapes)),
         "orders_steps_by_name" => Ok(StartPlanted::StepsByName),
         "starts_without_look" => Ok(StartPlanted::StartsWithoutLook),
         "shapes_on_ui_thread" => Ok(StartPlanted::ShapesOnUiThread),

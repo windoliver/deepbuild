@@ -8,6 +8,7 @@ physics.world@1's backend (issue #2009): Rapier 0.36.1, pinned with enhanced-det
 
 - Building, stepping and reading a world, and checkpoints, go in `src/lib.rs`.
 - What the build resolved goes in `build.rs`, read by `build()` in `src/lib.rs`.
+- The physics module's manifest is deep-canvas-physics's (`module::module`), built from `build()`: deep-show's full build links this crate for it, so the plan it publishes and a golden recorded here name the same implementation and pins (issue #1920).
 - The control register's guard goes in `src/fp.rs`.
 - The JSON-lines runner goes in `src/runner.rs`, shared by the `deep-physics` binary (`src/main.rs`, stdin and
   stdout) and the wasm32 build (its `wasm` module: a module with no imports, one call line in, one reply line out),

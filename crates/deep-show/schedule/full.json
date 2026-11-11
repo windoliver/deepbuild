@@ -2,7 +2,8 @@
   "uri": "deep://schedule/core@0.0.0",
   "core": "core@0.0.0",
   "build_set": "full",
-  "set_digest": "da96b089318efeafd767db049f8ee261aa61554bdc80a93bb31c65e30d67f56b",
+  "set_digest": "aa0d4cdf369b6e0210e48352c4d367b05e00e82bd22fe39a718af1968f196b9b",
+  "runtime_digest": "b0d9637fcffe5b58be4a3025853302613578659fa143fc9ca6bd110364894ab8",
   "interfaces": {
     "building@1": {
       "digest": "0d13ed593138e9ee44e857752ef4b2a0392f03bc17c10b4f99b48746f6d580e1",
@@ -350,6 +351,119 @@
         "pins": {},
         "equivalence": "bit",
         "state": "canonical"
+      }
+    },
+    "physics@1": {
+      "digest": "646fb0ad6aeeb16878bcda7109cde8f549c03841904e3cab4c21972c67cb73c3",
+      "reference": "deep-physics-rapier",
+      "kit": [
+        "fixtures",
+        "clean_rebuild",
+        "patch_fuzz",
+        "read_set",
+        "order",
+        "schedule",
+        "repair_loop",
+        "carried_state",
+        "late_entry",
+        "time_order",
+        "contribution",
+        "catalog",
+        "migration",
+        "bit"
+      ],
+      "behavior": "none",
+      "module": "physics",
+      "implementation": {
+        "name": "deep-physics-rapier",
+        "version": "0.0.0",
+        "pins": {
+          "glam": {
+            "version": "0.33.12",
+            "features": [
+              "approx",
+              "approx-05",
+              "f64",
+              "i32",
+              "libm",
+              "nostd-libm",
+              "scalar-math",
+              "serde",
+              "std",
+              "u32"
+            ]
+          },
+          "glamx": {
+            "version": "0.3.1",
+            "features": [
+              "approx",
+              "glamx-serde",
+              "i32",
+              "libm",
+              "nalgebra",
+              "nostd-libm",
+              "scalar-math",
+              "serde",
+              "std"
+            ]
+          },
+          "libm": {
+            "version": "0.2.16",
+            "features": [
+              "arch",
+              "default"
+            ]
+          },
+          "parry3d": {
+            "version": "0.31.1",
+            "features": [
+              "alloc",
+              "dim3",
+              "downcast-rs",
+              "ena",
+              "enhanced-determinism",
+              "f32",
+              "hashbrown",
+              "indexmap",
+              "required-features",
+              "rstar",
+              "serde",
+              "serde-serialize",
+              "serde_arrays",
+              "slab",
+              "smallvec",
+              "std"
+            ]
+          },
+          "rapier3d": {
+            "version": "0.36.1",
+            "features": [
+              "alloc",
+              "dim3",
+              "enhanced-determinism",
+              "f32",
+              "serde-serialize",
+              "std"
+            ]
+          },
+          "simba": {
+            "version": "0.10.2",
+            "features": [
+              "libm",
+              "libm_force",
+              "std",
+              "wide"
+            ]
+          },
+          "wide": {
+            "version": "1.7.1",
+            "features": [
+              "std"
+            ]
+          }
+        },
+        "equivalence": "measured",
+        "state": "backend_bytes"
       }
     },
     "record@1": {

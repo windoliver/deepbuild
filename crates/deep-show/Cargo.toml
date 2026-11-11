@@ -171,6 +171,13 @@ test-sim-b-off = ["test-sim"]
 test-sim-behavior = ["test-sim"]
 test-sim-c = ["test-sim"]
 test-gpu-second-backend = []
+# Issue #1920: A and B at version 1.0.1 and B with its pin's feature changed, each built in its
+# implementation's place, and the full set with the physics module's rapier3d pin moved one patch
+# (tests/acceptance/1920/README.md: Names this suite chooses).
+test-sim-a-1-0-1 = ["test-sim"]
+test-sim-b-1-0-1 = ["test-sim"]
+test-sim-b-pin-feature = ["test-sim"]
+test-physics-rapier-patch = []
 # Issue #421: a planted implementation of scene3d@1, declared bit, whose light policy breaks a tie
 # by registration order instead of by ID; the kit fails it and a release build refuses it.
 test-scene3d-tie-by-order = []
@@ -241,6 +248,10 @@ deep-canvas-scene3d = { path = "../deep-canvas-scene3d" }
 # transport's clock.
 deep-canvas-media = { path = "../deep-canvas-media" }
 deep-logic = { path = "../deep-logic" }
+# Issue #1920: the physics module, physics@1, in the full build set, on the Rapier backend whose
+# resolved pins its manifest names.
+deep-canvas-physics = { path = "../deep-canvas-physics" }
+deep-physics-rapier = { path = "../deep-physics-rapier" }
 # Issue #380: the shipped effects module, in R2's build set beside scene3d.
 deep-canvas-effects = { path = "../deep-canvas-effects" }
 deep-canvas-sandbox = { path = "../deep-canvas-sandbox" }

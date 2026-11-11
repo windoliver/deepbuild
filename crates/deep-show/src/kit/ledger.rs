@@ -30,6 +30,7 @@ pub fn admit(sealed: &Sealed) -> Result<(), Box<SealError>> {
     }
     if let Some(i) = sealed.interfaces.iter().find(|i| {
         i.implementation.equivalence == Equivalence::Measured
+            && i.implementation.name != i.reference
             && i.behavior.as_ref().is_none_or(|b| b.fixtures.is_empty())
     }) {
         return Err(Box::new(SealError {
