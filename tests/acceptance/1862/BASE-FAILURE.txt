@@ -1,0 +1,58 @@
+Base run of the #1862 acceptance tests, on base commit 35df4523 (main), Node 24.22.2, vitest 5.0.5, macOS, after
+`npm ci`, `npm run build --workspaces` and `cargo build --locked -q -p deep-hook`, from the worktree root:
+
+  npx vitest run tests/acceptance/1862 --testTimeout=600000 --no-file-parallelism
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Duration  33.27s
+
+What the base does: the hub reviews every claim of the session that opened PR 21, and every review reads the whole
+diff from the merge base to the claim's commit (`since: null`). Round 1, on commit A: the fake reviewer reports both
+findings, the review run fails naming src/cart.ts:10 and src/cart.ts:40, the same review run on the merge base fails
+the same way (it reads the same diff), the claim is BLOCKED, and the stop's reply blocks the stop, saying the review
+is still unmet. Round 2, on commit B, which changed only src/cart.ts:10: the fake is given the diff from the merge
+base again (it adds src/auth.js:2, src/auth.js:3 and src/cart.ts:40), reports line 40, and the review run fails naming
+it a second time. The record holds no item of a review as still open and no outcome of a sent-back item. The setup
+held: the definition locked, both commits were allowed and left a clean worktree, each stop made its claim on its
+commit, the first claim's unit check and R1's drafted check passed, the first round's record named both findings
+under a verdict that isn't PASS, and commit B changed one line. Neither test was BLOCKED.
+
+rounds.test.ts (AC1 #1862.bb91163c)
+  x Error: AC1 #1862.bb91163c swallowed-error at src/cart.ts:40 (quoting "} catch {}") is sent again:
+    claim:01M75T12DS5VP693923CEYZJGR was sent back with it on commit 0aa8f8d730996a3119c711309ee68d49e396edfb, the
+    next commit d05d4abaa817c4d3c9577fbcbf93ec6ee3abb287 changed only src/cart.ts:10, and the second round sends it
+    back a second time on claim:01M75T13JT66TVZGX4B9R6EMAD: 2 of its review runs failed naming it. The second round's
+    review runs: run:01M75T13TZMX56YGA6E80QRNSD on d05d4abaa817c4d3c9577fbcbf93ec6ee3abb287 failed ["review:
+    swallowed-error (src/cart.ts:40): swallowed-error at src/cart.ts:40","same-family review (claude-sonnet-5-5)"];
+    run:01M75T1421ECJHFEQWBAAEMP4X on 3d86f7b5e55f5f04db81fad7c6746e14f7179c06 failed ["review: swallowed-error
+    (src/cart.ts:40): swallowed-error at src/cart.ts:40","same-family review (claude-sonnet-5-5)"]. The fake
+    reviewer's calls in it: run:01M75T13VNJJMNXVFZ1ZVTJZD8 finished, answering ["swallowed-error at src/cart.ts:40"];
+    run:01M75T142N59Z72WZC1FPAA1ZE finished, answering ["swallowed-error at src/cart.ts:40"]. the second stop's
+    reply: {"decision":"block","reason":"https://github.com/acme/shop/pull/21 · Part of · BLOCKED 1/1 · 3 tests ·
+    next: you · session/14cf1d05/01M75T13JT66TVZGX4B9R6EMAD\nDeepBuild: https://github.com/acme/shop/pull/21 is open
+    as Part of its issue, with review still unmet. Keep working on it in the same pull request: push to its branch,
+    open no new one.","systemMessage":"https://github.com/acme/shop/pull/21 · Part of · BLOCKED 1/1 · 3 tests · next:
+    you · session/14cf1d05/01M75T13JT66TVZGX4B9R6EMAD"}
+  (At rounds.test.ts:29, the sent-again assertion: the second round sends line 40 again, and the failure names the
+  finding. The second of the two runs is the hub's run of the failed review on the merge base, 3d86f7b5. The
+  assertions after it, on what the second review was given and on `open`, were not reached.)
+
+rounds.test.ts (AC2 #1862.d19b4826)
+  x Error: AC2 #1862.d19b4826 no outcome is recorded for off-by-one at src/cart.ts:10, nor for swallowed-error at
+    src/cart.ts:40: the record states how each sent-back item ended, as {rule, sites, ended: 'fixed' | 'left',
+    commit}, in an event's data (README, Two new surfaces in the record), and none of its 202 events does. The first
+    round sent both items back on claim:01M75T12DS5VP693923CEYZJGR at commit
+    0aa8f8d730996a3119c711309ee68d49e396edfb; the second round, claim:01M75T13JT66TVZGX4B9R6EMAD at commit
+    d05d4abaa817c4d3c9577fbcbf93ec6ee3abb287, which changed only src/cart.ts:10, has its verdict
+  (At rounds.test.ts:55, the no-outcome assertion, after reading the record for 30 s: the base records no outcome,
+  and the failure names both items. By this suite's reading the base's claim hasn't settled either, since its second
+  round sends line 40 back again; the base records no outcome in any state.)
+
+One other run was made while the suite was written, to see the story run past a round that sends nothing back. It
+used a throwaway change to the hub's build output alone (`packages/hub/dist/kinds.js`, not tracked): the second
+review of a hub process read since the commit the first one read, with no item kept and nothing else changed. There
+the second review run passed, the fake was called once and given a diff adding only src/cart.ts:10, the second
+stop's reply read PASS 1/1, AC1 passed its sent-again and reads-only assertions and failed at rounds.test.ts:44, the
+`open` assertion, and AC2 failed at rounds.test.ts:55 as above. The build output was restored byte for byte before
+the run above, and no tracked file outside this folder was changed.
