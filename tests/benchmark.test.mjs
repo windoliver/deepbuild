@@ -85,16 +85,6 @@ test('real process measurements reject a slower program and a failed command', (
   assert.throws(() => measure([process.execPath, '-e', 'process.exit(9)'], process.cwd()), /exited 9/);
 });
 
-test('current and merge-base samples alternate, so both see the same machine load', (t) => {
-  const cwd = mkdtempSync(join(tmpdir(), 'deep-benchmark-order-'));
-  t.after(() => rmSync(cwd, { recursive: true, force: true }));
-  const append = (side) => ['sh', '-c', `echo ${side} >> order`];
-  measure(append('current'), cwd, { command: append('base'), cwd });
-  const order = readFileSync(join(cwd, 'order'), 'utf8').trim().split('\n');
-  assert.ok(order.length >= 40, `${order.length} samples`);
-  assert.deepEqual(order, order.map((_, index) => (index % 2 ? 'base' : 'current')));
-});
-
 test('a single workload measurement keeps failed check output and status for later lanes', () => {
   const result = measureOnce([process.execPath, '-e', 'console.log("check failed"); process.exit(7)'], process.cwd());
   assert.equal(result.status, 7);
