@@ -23,6 +23,7 @@ import { codexRelations } from './codex-settings.js';
 import { revives } from './memory.js';
 
 import { Holds } from './holds.js';
+import type { Hosts } from './hosts.js';
 
 import { couldDo, struck } from './could-do.js';
 
@@ -54,6 +55,7 @@ export interface McpOperationsOptions {
   settings: CoreOptions;
   services: {
     readonly sessionStarts: Starts;
+    readonly hosts: Hosts;
     readonly canvasSide: HubCanvas;
     readonly replicas: Replicas;
     readonly extensions: ExtensionHost | undefined;
@@ -119,6 +121,7 @@ export class McpOperations {
         case 'deep_show': return await this.options.services.canvasSide.show(session ? { session } : { session: null }, showCall(args));
         case 'deep_kinds': return await this.options.services.canvasSide.kinds(args);
         case 'deep_job': return await this.options.control().job(args, context.call);
+        case 'deep_root_plan': return await this.options.services.hosts.proposeRoot(args);
         case 'deep_status': return await this.status(session);
         case 'deep_search': return await this.find(String(args.query), session, context, typeof args.file === 'string' ? args.file : undefined, typeof args.cursor === 'string' ? args.cursor : undefined);
         case 'deep_ask': return await this.askFor(session!, args);
