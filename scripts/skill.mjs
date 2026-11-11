@@ -98,6 +98,9 @@ export function generate(rows = blocks()) {
   }
   const { version } = JSON.parse(readFileSync(join(ROOT, 'packages/hub/package.json'), 'utf8'));
   const used = rows.filter((r) => Object.keys(TOOLS).some((tool) => r.mcp.includes(`\`${tool}\``)));
+  // Every session reads the whole skill: a tool's line stands once, under the first block that names it.
+  const under = new Map();
+  const line = (tool, block) => (under.has(tool) ? `- ${tool}, as under ${under.get(tool)}.` : (under.set(tool, block), `- ${tool}. ${TOOLS[tool].use}`));
   const skill = [
     '---',
     'name: deepbuild',
@@ -113,7 +116,7 @@ export function generate(rows = blocks()) {
     '',
     ...used.flatMap((r) => {
       const tools = Object.keys(TOOLS).filter((tool) => r.mcp.includes(`\`${tool}\``));
-      return [`## ${r.block}`, '', ...tools.map((tool) => `- ${tool}. ${TOOLS[tool].use}`), '', `Never: ${plain(r.never)}.`, ''];
+      return [`## ${r.block}`, '', ...tools.map((tool) => line(tool, r.block)), '', `Never: ${plain(r.never)}.`, ''];
     }),
     // The canvas working order (#412; technical design, after the Building blocks table): what the tools can't teach.
     '## Working on a canvas document',
