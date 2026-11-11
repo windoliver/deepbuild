@@ -1,0 +1,6 @@
+1794372862 ~/h1118c/home/deepbuild-bays/1/base ci --no-audit --no-fund
+1794372869 ~/h1118c/home/deepbuild-bays/1/base run build --workspaces --if-present
+1794373368 ~/h1118c/home/deepbuild-bays/1/change ci --no-audit --no-fund
+1794373371 ~/h1118c/home/deepbuild-bays/1/change run build --workspaces --if-present
+1794374003 ~/h1118c/home/deepbuild-bays/1/base run build --workspaces --if-present
+1794374062 ~/h1118c/home/deepbuild-bays/1/change run build --workspaces --if-present
