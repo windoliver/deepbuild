@@ -279,8 +279,8 @@ pub(crate) fn held() -> Option<String> {
 }
 
 /// The sessions as the sidebar lists them, in its order, for a view replacing its rows (`session.row@1`): each one's
-/// ID, which keys its row as `session:<id>`, its title, and its state's words and status-map entry, from the one record
-/// reader (#1459).
+/// ID, which keys its row as `session:<id>`, its title, its state's words and status-map entry, and `asks`, the hub's
+/// count of its open asks (#2018), from the one record reader (#1459).
 fn sidebar_sessions() -> Result<HostValue, HostError> {
     record::with_view(|view| {
         let table = view.table();
@@ -290,7 +290,9 @@ fn sidebar_sessions() -> Result<HostValue, HostError> {
                 .into_iter()
                 .map(|(id, title, _)| {
                     let (words, entry) = table.row(&id, views::now());
+                    let asks = table.asks_of(&id);
                     HostValue::Object(vec![
+                        ("asks".into(), HostValue::Number(asks as f64)),
                         ("id".into(), HostValue::Str(id)),
                         ("title".into(), HostValue::Str(title)),
                         ("words".into(), HostValue::Str(words)),

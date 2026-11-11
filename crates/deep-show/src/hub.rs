@@ -1500,6 +1500,14 @@ impl<'a> Hub<'a> {
                 }
                 (h.clone(), Value::Object(v))
             })
+            // #1967: each terminal recording as the decode worker converted it, which a cell
+            // grid that plays it reads by its hash.
+            .chain(
+                self.media
+                    .recordings
+                    .iter()
+                    .map(|(sha, c)| (format!("terminal:{sha}"), c.clone())),
+            )
             .collect()
     }
 
@@ -2173,7 +2181,7 @@ impl<'a> Hub<'a> {
                 notices = self.notices_reply(&show.doc, &result.notices);
                 skipped = crate::verdict::unknown_items(&result.notices);
                 blocked = self.blocked_in_claim(show, &result.notices);
-                let mut issues = result.issues;
+                let mut issues = crate::mixdown::score_plan::library_issues(&doc, result.issues);
                 issues.append(&mut probe_issues);
                 blocked.extend(self.missing_in_claim(show, &mut issues, &mut skipped));
                 // #488's planted check takes every sample rate from 8 to 192 kHz and refuses
@@ -2345,6 +2353,11 @@ impl<'a> Hub<'a> {
         if !self.sessions.contains_key(&show.doc) {
             let fresh = self.new_session();
             self.sessions.insert(show.doc.clone(), fresh);
+        }
+        // #1967: a recording this revision's cell grids play, converted at its probe.
+        let readings = self.readings();
+        if let Some(s) = self.sessions.get_mut(&show.doc) {
+            s.set_readings(readings);
         }
         // #504: the session loads the played form: the drawn form with the document's input track
         // and the session's picks, shown at `t`.

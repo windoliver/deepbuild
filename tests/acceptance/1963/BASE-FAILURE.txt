@@ -1,0 +1,50 @@
+The run at base commit 4004257c (Merge pull request #2246), trimmed: the checkout path shown as <checkout>, the
+lease line kept. Command:
+
+  NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 scripts/lease npx vitest run --root tests/acceptance/1963 --no-file-parallelism --testTimeout=600000
+
+The default reporter names only the failing test; the 5 that pass are the other 5 (README: Base run):
+  code.test.ts     AC1 the quote passes, with its digits 3 and 250 listed as quotation                 pass (on main, #406)
+  code.test.ts     AC1 a twin whose raw bytes differ on line 11 fails quote_mismatch naming line 11    pass (on main, #406)
+  code.test.ts     AC1 the same code unquoted fails honest numbers naming the item                     pass (on main, #406)
+  formula.test.ts  AC2 the formula passes when its alt equals the bytes of lines 3 to 4                pass (the base ignores a formula's quote)
+  formula.test.ts  AC2 an alt one byte off on line 4 fails quote_mismatch naming line 4                FAIL (missing behavior)
+  formula.test.ts  AC2 the same formula with no quote names no source                                  pass (the base names no source)
+
+The file's 1889 s are the first cargo build of deep-canvas-render in a fresh worktree on a loaded Mac; the test
+itself took 324 ms.
+
+----
+scripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `npx vitest run --root tests/acceptance/1963 --no-file-parallelism --testTimeout=600000` runs unleased
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/1963
+
+ ❯ formula.test.ts (3 tests | 1 failed) 1889544ms
+   ❯ AC2 a formula's `quote` holds its `alt` to the LaTeX lines it names, kept as evidence (3)
+     × AC2 an alt one byte off on line 4 fails quote_mismatch naming line 4 324ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  formula.test.ts > AC2 a formula's `quote` holds its `alt` to the LaTeX lines it names, kept as evidence > AC2 an alt one byte off on line 4 fails quote_mismatch naming line 4
+AssertionError: the check fails: []: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ formula.test.ts:61:56
+     59|     const f = folders();
+     60|     const c = check(render(), formula(f, TWIN, true), f);
+     61|     expect(c.ok, `the check fails: ${shownErrors(c)}`).toBe(false);
+       |                                                        ^
+     62|     const named = naming(c, 'quote_mismatch', ITEM);
+     63|     expect(named.length, `quote_mismatch names ${ITEM}: ${shownErrors(…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 1 passed (2)
+      Tests  1 failed | 5 passed (6)
+   Duration  1898.85s (tests 100%)

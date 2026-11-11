@@ -58824,6 +58824,152 @@ impl Contract for SessionGone {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct SessionNamedV;
+
+impl Contract for SessionNamedV {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "1").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("1").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SessionNamedKind;
+
+impl Contract for SessionNamedKind {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "\"session.named\"").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("\"session.named\"").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SessionNamedWriter;
+
+impl Contract for SessionNamedWriter {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "\"core\"").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("\"core\"").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SessionNamedDataBy {
+    You,
+    Agent,
+}
+
+impl Contract for SessionNamedDataBy {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        match deep_contracts::string(value, at)? {
+            "you" => Ok(Self::You),
+            "agent" => Ok(Self::Agent),
+            other => Err(format!("{at}: {other:?} is not one of the listed values")),
+        }
+    }
+    fn to_json(&self) -> Value {
+        Value::String(match self {
+            Self::You => "you",
+            Self::Agent => "agent",
+        }.to_string())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SessionNamedData {
+    pub name: String,
+    pub by: SessionNamedDataBy,
+}
+
+impl Contract for SessionNamedData {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["name", "by"])?;
+        deep_contracts::check_member(members, at, "name", &RULE_6)?;
+        Ok(Self {
+            name: deep_contracts::required(members, at, "name")?,
+            by: deep_contracts::required(members, at, "by")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("name".to_string(), self.name.to_json()));
+        members.push(("by".to_string(), self.by.to_json()));
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SessionNamed {
+    pub v: SessionNamedV,
+    pub id: String,
+    pub kind: SessionNamedKind,
+    pub subject: String,
+    pub writer: SessionNamedWriter,
+    pub actor: String,
+    pub scope: String,
+    pub ts: i64,
+    pub seq: Option<deep_contracts::Seq>,
+    pub log_pos: Option<i64>,
+    pub data: SessionNamedData,
+    pub evidence: Option<Vec<String>>,
+}
+
+impl Contract for SessionNamed {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["v", "id", "kind", "subject", "writer", "actor", "scope", "ts", "seq", "log_pos", "data", "evidence"])?;
+        deep_contracts::check_member(members, at, "id", &RULE_0)?;
+        deep_contracts::check_member(members, at, "subject", &RULE_2)?;
+        deep_contracts::check_member(members, at, "actor", &RULE_3)?;
+        deep_contracts::check_member(members, at, "scope", &RULE_3)?;
+        deep_contracts::check_member(members, at, "ts", &RULE_4)?;
+        deep_contracts::check_member(members, at, "log_pos", &RULE_5)?;
+        deep_contracts::check_member(members, at, "evidence", &RULE_9)?;
+        Ok(Self {
+            v: deep_contracts::required(members, at, "v")?,
+            id: deep_contracts::required(members, at, "id")?,
+            kind: deep_contracts::required(members, at, "kind")?,
+            subject: deep_contracts::required(members, at, "subject")?,
+            writer: deep_contracts::required(members, at, "writer")?,
+            actor: deep_contracts::required(members, at, "actor")?,
+            scope: deep_contracts::required(members, at, "scope")?,
+            ts: deep_contracts::required(members, at, "ts")?,
+            seq: deep_contracts::optional(members, at, "seq")?,
+            log_pos: deep_contracts::optional(members, at, "log_pos")?,
+            data: deep_contracts::required(members, at, "data")?,
+            evidence: deep_contracts::optional(members, at, "evidence")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("v".to_string(), self.v.to_json()));
+        members.push(("id".to_string(), self.id.to_json()));
+        members.push(("kind".to_string(), self.kind.to_json()));
+        members.push(("subject".to_string(), self.subject.to_json()));
+        members.push(("writer".to_string(), self.writer.to_json()));
+        members.push(("actor".to_string(), self.actor.to_json()));
+        members.push(("scope".to_string(), self.scope.to_json()));
+        members.push(("ts".to_string(), self.ts.to_json()));
+        if let Some(value) = &self.seq {
+            members.push(("seq".to_string(), value.to_json()));
+        }
+        if let Some(value) = &self.log_pos {
+            members.push(("log_pos".to_string(), value.to_json()));
+        }
+        members.push(("data".to_string(), self.data.to_json()));
+        if let Some(value) = &self.evidence {
+            members.push(("evidence".to_string(), value.to_json()));
+        }
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct SessionNeverStartedV;
 
 impl Contract for SessionNeverStartedV {
@@ -60422,6 +60568,260 @@ pub struct SessionState {
 }
 
 impl Contract for SessionState {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["v", "id", "kind", "subject", "writer", "actor", "scope", "ts", "seq", "log_pos", "data", "evidence"])?;
+        deep_contracts::check_member(members, at, "id", &RULE_0)?;
+        deep_contracts::check_member(members, at, "subject", &RULE_72)?;
+        deep_contracts::check_member(members, at, "actor", &RULE_3)?;
+        deep_contracts::check_member(members, at, "scope", &RULE_3)?;
+        deep_contracts::check_member(members, at, "ts", &RULE_4)?;
+        deep_contracts::check_member(members, at, "log_pos", &RULE_5)?;
+        deep_contracts::check_member(members, at, "evidence", &RULE_9)?;
+        Ok(Self {
+            v: deep_contracts::required(members, at, "v")?,
+            id: deep_contracts::required(members, at, "id")?,
+            kind: deep_contracts::required(members, at, "kind")?,
+            subject: deep_contracts::required(members, at, "subject")?,
+            writer: deep_contracts::required(members, at, "writer")?,
+            actor: deep_contracts::required(members, at, "actor")?,
+            scope: deep_contracts::required(members, at, "scope")?,
+            ts: deep_contracts::required(members, at, "ts")?,
+            seq: deep_contracts::optional(members, at, "seq")?,
+            log_pos: deep_contracts::optional(members, at, "log_pos")?,
+            data: deep_contracts::required(members, at, "data")?,
+            evidence: deep_contracts::optional(members, at, "evidence")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("v".to_string(), self.v.to_json()));
+        members.push(("id".to_string(), self.id.to_json()));
+        members.push(("kind".to_string(), self.kind.to_json()));
+        members.push(("subject".to_string(), self.subject.to_json()));
+        members.push(("writer".to_string(), self.writer.to_json()));
+        members.push(("actor".to_string(), self.actor.to_json()));
+        members.push(("scope".to_string(), self.scope.to_json()));
+        members.push(("ts".to_string(), self.ts.to_json()));
+        if let Some(value) = &self.seq {
+            members.push(("seq".to_string(), value.to_json()));
+        }
+        if let Some(value) = &self.log_pos {
+            members.push(("log_pos".to_string(), value.to_json()));
+        }
+        members.push(("data".to_string(), self.data.to_json()));
+        if let Some(value) = &self.evidence {
+            members.push(("evidence".to_string(), value.to_json()));
+        }
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SessionStateV2V;
+
+impl Contract for SessionStateV2V {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "2").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("2").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SessionStateV2Kind;
+
+impl Contract for SessionStateV2Kind {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "\"session.state\"").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("\"session.state\"").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SessionStateV2Writer;
+
+impl Contract for SessionStateV2Writer {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "\"core\"").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("\"core\"").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SessionStateV2DataState {
+    NeedsYou,
+    Stuck,
+    Flagged,
+    SentBack,
+    Blocked,
+    Invalid,
+    Inconclusive,
+    Stale,
+    SaysDone,
+    Working,
+    Queued,
+    Pass,
+    Finished,
+    Quiet,
+}
+
+impl Contract for SessionStateV2DataState {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        match deep_contracts::string(value, at)? {
+            "needs you" => Ok(Self::NeedsYou),
+            "stuck" => Ok(Self::Stuck),
+            "flagged" => Ok(Self::Flagged),
+            "sent back" => Ok(Self::SentBack),
+            "BLOCKED" => Ok(Self::Blocked),
+            "INVALID" => Ok(Self::Invalid),
+            "INCONCLUSIVE" => Ok(Self::Inconclusive),
+            "stale" => Ok(Self::Stale),
+            "says done" => Ok(Self::SaysDone),
+            "working" => Ok(Self::Working),
+            "queued" => Ok(Self::Queued),
+            "PASS" => Ok(Self::Pass),
+            "finished" => Ok(Self::Finished),
+            "quiet" => Ok(Self::Quiet),
+            other => Err(format!("{at}: {other:?} is not one of the listed values")),
+        }
+    }
+    fn to_json(&self) -> Value {
+        Value::String(match self {
+            Self::NeedsYou => "needs you",
+            Self::Stuck => "stuck",
+            Self::Flagged => "flagged",
+            Self::SentBack => "sent back",
+            Self::Blocked => "BLOCKED",
+            Self::Invalid => "INVALID",
+            Self::Inconclusive => "INCONCLUSIVE",
+            Self::Stale => "stale",
+            Self::SaysDone => "says done",
+            Self::Working => "working",
+            Self::Queued => "queued",
+            Self::Pass => "PASS",
+            Self::Finished => "finished",
+            Self::Quiet => "quiet",
+        }.to_string())
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SessionStateV2DataCause {
+    Ask,
+    Gone,
+    Waiting,
+    Words,
+    Stuck,
+    Promised,
+    Failed,
+    SentBack,
+    Blocked,
+    Invalid,
+    Inconclusive,
+    Stale,
+    SaysDone,
+    Working,
+    Queued,
+    Pass,
+    Interrupted,
+    Finished,
+    Quiet,
+}
+
+impl Contract for SessionStateV2DataCause {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        match deep_contracts::string(value, at)? {
+            "ask" => Ok(Self::Ask),
+            "gone" => Ok(Self::Gone),
+            "waiting" => Ok(Self::Waiting),
+            "words" => Ok(Self::Words),
+            "stuck" => Ok(Self::Stuck),
+            "promised" => Ok(Self::Promised),
+            "failed" => Ok(Self::Failed),
+            "sent_back" => Ok(Self::SentBack),
+            "blocked" => Ok(Self::Blocked),
+            "invalid" => Ok(Self::Invalid),
+            "inconclusive" => Ok(Self::Inconclusive),
+            "stale" => Ok(Self::Stale),
+            "says_done" => Ok(Self::SaysDone),
+            "working" => Ok(Self::Working),
+            "queued" => Ok(Self::Queued),
+            "pass" => Ok(Self::Pass),
+            "interrupted" => Ok(Self::Interrupted),
+            "finished" => Ok(Self::Finished),
+            "quiet" => Ok(Self::Quiet),
+            other => Err(format!("{at}: {other:?} is not one of the listed values")),
+        }
+    }
+    fn to_json(&self) -> Value {
+        Value::String(match self {
+            Self::Ask => "ask",
+            Self::Gone => "gone",
+            Self::Waiting => "waiting",
+            Self::Words => "words",
+            Self::Stuck => "stuck",
+            Self::Promised => "promised",
+            Self::Failed => "failed",
+            Self::SentBack => "sent_back",
+            Self::Blocked => "blocked",
+            Self::Invalid => "invalid",
+            Self::Inconclusive => "inconclusive",
+            Self::Stale => "stale",
+            Self::SaysDone => "says_done",
+            Self::Working => "working",
+            Self::Queued => "queued",
+            Self::Pass => "pass",
+            Self::Interrupted => "interrupted",
+            Self::Finished => "finished",
+            Self::Quiet => "quiet",
+        }.to_string())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SessionStateV2Data {
+    pub state: SessionStateV2DataState,
+    pub cause: SessionStateV2DataCause,
+}
+
+impl Contract for SessionStateV2Data {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["state", "cause"])?;
+        Ok(Self {
+            state: deep_contracts::required(members, at, "state")?,
+            cause: deep_contracts::required(members, at, "cause")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("state".to_string(), self.state.to_json()));
+        members.push(("cause".to_string(), self.cause.to_json()));
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SessionStateV2 {
+    pub v: SessionStateV2V,
+    pub id: String,
+    pub kind: SessionStateV2Kind,
+    pub subject: String,
+    pub writer: SessionStateV2Writer,
+    pub actor: String,
+    pub scope: String,
+    pub ts: i64,
+    pub seq: Option<deep_contracts::Seq>,
+    pub log_pos: Option<i64>,
+    pub data: SessionStateV2Data,
+    pub evidence: Option<Vec<String>>,
+}
+
+impl Contract for SessionStateV2 {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["v", "id", "kind", "subject", "writer", "actor", "scope", "ts", "seq", "log_pos", "data", "evidence"])?;
         deep_contracts::check_member(members, at, "id", &RULE_0)?;
@@ -76852,6 +77252,7 @@ pub fn roundtrip(schema: &str, json: &str) -> Result<String, String> {
         "session.end@1" => <SessionEnd as Contract>::from_json(&value, "")?.to_json(),
         "session.end@2" => <SessionEndV2 as Contract>::from_json(&value, "")?.to_json(),
         "session.gone@1" => <SessionGone as Contract>::from_json(&value, "")?.to_json(),
+        "session.named@1" => <SessionNamed as Contract>::from_json(&value, "")?.to_json(),
         "session.never_started@1" => <SessionNeverStarted as Contract>::from_json(&value, "")?.to_json(),
         "session.paused@1" => <SessionPaused as Contract>::from_json(&value, "")?.to_json(),
         "session.pushed@1" => <SessionPushed as Contract>::from_json(&value, "")?.to_json(),
@@ -76862,6 +77263,7 @@ pub fn roundtrip(schema: &str, json: &str) -> Result<String, String> {
         "session.start@3" => <SessionStartV3 as Contract>::from_json(&value, "")?.to_json(),
         "session.start@4" => <SessionStartV4 as Contract>::from_json(&value, "")?.to_json(),
         "session.state@1" => <SessionState as Contract>::from_json(&value, "")?.to_json(),
+        "session.state@2" => <SessionStateV2 as Contract>::from_json(&value, "")?.to_json(),
         "source.called@1" => <SourceCalled as Contract>::from_json(&value, "")?.to_json(),
         "spend.approved@1" => <SpendApproved as Contract>::from_json(&value, "")?.to_json(),
         "spend.approved@2" => <SpendApprovedV2 as Contract>::from_json(&value, "")?.to_json(),

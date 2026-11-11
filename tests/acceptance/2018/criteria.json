@@ -1,0 +1,32 @@
+[
+  {
+    "n": 1,
+    "id": "#2018.b912741a",
+    "text": "A replacement sidebar whose row reads \"done\" for a stop with no verdict yet, or shows a count other than the hub's, fails `session.row@1` at install, naming the row"
+  },
+  {
+    "n": 2,
+    "id": "#2018.2b9628d8",
+    "text": "A generated test over random event sequences finds exactly one state for every session, the same after a hub restart and after a replay to the same `log_pos`; a session with an open ask and a stale verdict reads needs you on every surface, and a fixture BLOCKED session whose unblock task defaulted reads \"BLOCKED · waits for <owner>: <evidence>\"; a bare BLOCKED fails, naming the row"
+  },
+  {
+    "n": 3,
+    "id": "#2018.f054ee4c",
+    "text": "A planted group count that includes moot asks fails, naming the group"
+  },
+  {
+    "n": 4,
+    "id": "#2018.c1948faa",
+    "text": "A session with no task whose first prompt is \"fix the flaky checkout test\" reads that name in the sidebar, on its page, in its notification and in `deep status`; two sessions with that prompt each add their short ID; on the merge base a surface shows \"Session\" and an ID, and the test fails, naming the surface"
+  },
+  {
+    "n": 5,
+    "id": "#2018.63948766",
+    "text": "For sessions reading working, quiet, says done and interrupted in a replica fixture, every fact `--why` names exists at its `log_pos`, and recomputing the state from only those facts gives the same word; a planted `--why` built from a separate reading, which says \"quiet\" for a row the table reads as working, fails, naming the session and the row"
+  },
+  {
+    "n": 6,
+    "id": "#2018.13e5e71e",
+    "text": "Rename from the Session menu puts the caret in the page's title, and Return saves the name to the row and to `deep status`. A planted app with no way to rename fails"
+  }
+]
