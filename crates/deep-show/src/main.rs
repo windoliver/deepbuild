@@ -1213,6 +1213,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 None
             }
             None if export_planted(p).is_some() => export_planted(p),
+            None if geometry_audit::planted(p).is_some() => geometry_audit::planted(p),
             None => Some(match p {
                 "presents_unnamed_removal" => Planted::PresentsUnnamedRemoval,
                 "diffs_items_only" => Planted::DiffsItemsOnly,
@@ -1270,8 +1271,6 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "checks_skip_unknown_kind" => Planted::ChecksSkipUnknownKind,
                 "missing_kind_inconclusive" => Planted::MissingKindInconclusive,
                 "layout_text_by_kind" => Planted::LayoutTextByKind,
-                "sweep_audits_samples_only" => Planted::SweepAuditsSamplesOnly,
-                "audit_checks_overlaps_only" => Planted::AuditChecksOverlapsOnly,
                 "seeds_by_expansion_order" => Planted::SeedsByExpansionOrder,
                 "each_seeds_by_element_count" => Planted::EachSeedsByElementCount,
                 "each_face_per_triangle" => Planted::EachFacePerTriangle,

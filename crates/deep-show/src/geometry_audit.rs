@@ -15,6 +15,23 @@ use serde_json::{json, Value};
 /// The check kind.
 pub const GEOMETRY_AUDIT: &str = "geometry.audit";
 
+/// The audit's wrong programs: #405's sweep, which audits its samples alone and bounds nothing
+/// between them, and #1936's audit, which runs its overlap pass alone.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Planted {
+    SamplesOnly,
+    OverlapsOnly,
+}
+
+/// A wrong program of the audit's by the name its acceptance suite gives it.
+pub(crate) fn planted(name: &str) -> Option<crate::hub::Planted> {
+    Some(crate::hub::Planted::Audit(match name {
+        "sweep_audits_samples_only" => Planted::SamplesOnly,
+        "audit_checks_overlaps_only" => Planted::OverlapsOnly,
+        _ => return None,
+    }))
+}
+
 fn apply(m: &Affine3, p: V3) -> V3 {
     let mut out = [0.0; 3];
     for (i, o) in out.iter_mut().enumerate() {
@@ -750,8 +767,8 @@ impl crate::hub::Hub<'_> {
     /// current revision: requirement ID → what it found.
     pub(crate) fn geometry_audit_runs(&mut self, claim: &str, c: &crate::hub::Claim) -> std::collections::BTreeMap<String, Judged> {
         let mut out = std::collections::BTreeMap::new();
-        let samples_only = self.planted(crate::hub::Planted::SweepAuditsSamplesOnly);
-        let overlaps_only = self.planted(crate::hub::Planted::AuditChecksOverlapsOnly);
+        let samples_only = self.planted(crate::hub::Planted::Audit(Planted::SamplesOnly));
+        let overlaps_only = self.planted(crate::hub::Planted::Audit(Planted::OverlapsOnly));
         for r in c.requirements.iter().filter(|r| r.check["kind"] == GEOMETRY_AUDIT) {
             let mut j = Judged::default();
             let prefix = format!("{claim}/{}/", r.id);
