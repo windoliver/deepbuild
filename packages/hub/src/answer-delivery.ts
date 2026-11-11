@@ -23,7 +23,7 @@ import { Holds } from './holds.js';
 
 import { registry } from './hookmap.js';
 
-import { repoOf, type Root } from './paths.js';
+import { forgeOf, type Root } from './paths.js';
 
 import { aboutPermission, type About } from './standing.js';
 
@@ -742,7 +742,9 @@ export class AnswerDelivery {
   /** The pull request the forge holds for the session's branch, or null when it holds none, or undefined when it can't be read. */
   private async pullFor(meta: HookMeta): Promise<string | null | undefined> {
     const lookup = async (): Promise<string | null | undefined> => {
-      const repo = repoOf(meta.cwd);
+      // The forge uses origin's owner/name, never the decision-scope ID (#1881).
+      const origin = forgeOf(meta.cwd);
+      const repo = origin?.slice(origin.indexOf('/') + 1);
       const [row] = (await this.options.services.record.raw(`SELECT branch FROM sessions WHERE id = ?`, [meta.session])) as { branch: string | null }[];
       const branch = row?.branch || await new Promise<string | undefined>((done) => execFile('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: meta.cwd, timeout: 2000 }, (error, out) => done(error ? undefined : out.trim())));
       if (!repo || !branch) return undefined;

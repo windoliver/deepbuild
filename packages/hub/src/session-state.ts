@@ -10,6 +10,7 @@ import { homedir } from 'node:os';
 import { isAbsolute, join, resolve } from 'node:path';
 
 import { type JsonValue } from '@deepbuild/contracts';
+import type { Asks } from '@deepbuild/asks';
 
 import { type RecordStore } from '@deepbuild/record';
 
@@ -51,6 +52,7 @@ export interface SessionStateOptions {
   settings: CoreOptions;
   services: {
     readonly gate: GateRunner;
+    readonly asks: Asks;
     readonly now: () => number;
     readonly record: RecordStore;
     readonly transcriptReader: TranscriptReader;
@@ -453,7 +455,9 @@ export class SessionState {
       const query = (q: string) => this.options.services.record.raw(q);
       const readings = await sessionStates(query, this.options.services.now(), only === 'all' ? undefined : only);
       // The list's rows (#1463): each that changed, and each ask's that left the list, in the same batch.
-      const built = await buildRows(query, readings);
+      // The open asks are the asks core's inbox projection, by its one close rule (#2026).
+      const inbox = (await this.options.services.asks.inbox()).filter((a) => a.status !== 'closed').map((a) => a.ask);
+      const built = await buildRows(query, readings, inbox);
       const changed = settle(this.rows, built, this.rowsFirst);
       const open = new Set(built.filter((r) => r.id.startsWith('ask:')).map((r) => r.id));
       const left = [...this.rows.keys()].filter((id) => id.startsWith('ask:') && !open.has(id));

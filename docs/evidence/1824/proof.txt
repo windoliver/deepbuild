@@ -1,0 +1,40 @@
+## cold fetch, network allowed
+exit 0; 3 request(s) reached the forge:
+    GET /fixture/lib/a1b2c3d4e5f60718293a4b5c6d7e8f9012345678/lib/a.txt
+    GET /fixture/lib/a1b2c3d4e5f60718293a4b5c6d7e8f9012345678/lib/b.txt
+    GET /fixture/lib/a1b2c3d4e5f60718293a4b5c6d7e8f9012345678/data/c.bin
+  > PASS fetch-lock: 3 of the lock's 3 files in ~/.deepbuild/fetched at their pinned hashes, 3 fetched now
+
+## warm fetch, network allowed (every file cached and matching)
+exit 0; 0 request(s) reached the forge
+  > PASS fetch-lock: 3 of the lock's 3 files in ~/.deepbuild/fetched at their pinned hashes, 0 fetched now
+
+## one flipped byte in lib/b.txt, network not allowed
+exit 1; 0 request(s) reached the forge
+  > BLOCKED fetch-lock: lib/b.txt in the cache hashes to b4d8ace88be2bc2d2ab7cd356939f3916c803be1b695461aac6ddcab9e9f389d, not its pinned f2c82decdd7181cf98945929a62598db7e6b477e11f6e0eb0ae97020eff151ad, and the network isn't allowed, so it isn't fetched
+  >   Unblock: let this machine fetch what the lock lists, checked against its pinned hashes: DEEP_FETCH_NETWORK=1 node scripts/fetch-lock.mjs fetch
+
+## one flipped byte in lib/b.txt, network allowed
+exit 0; 1 request(s) reached the forge:
+    GET /fixture/lib/a1b2c3d4e5f60718293a4b5c6d7e8f9012345678/lib/b.txt
+  > NOTE fetch-lock: lib/b.txt in the cache hashes to b4d8ace88be2bc2d2ab7cd356939f3916c803be1b695461aac6ddcab9e9f389d, not its pinned f2c82decdd7181cf98945929a62598db7e6b477e11f6e0eb0ae97020eff151ad; fetching it again from its pinned commit
+  > PASS fetch-lock: 3 of the lock's 3 files in ~/.deepbuild/fetched at their pinned hashes, 1 fetched now
+
+lib/b.txt in the cache now hashes to f2c82decdd7181cf98945929a62598db7e6b477e11f6e0eb0ae97020eff151ad (pinned f2c82decdd7181cf98945929a62598db7e6b477e11f6e0eb0ae97020eff151ad)
+
+## the lint over four planted rows
+exit 1; 0 request(s) reached the forge
+  > FAIL fetch-lock: scripts/fetch-lock.json row 4, planted/branch.txt: its URL names no commit by its 40 hex characters, so a branch or a tag can move it
+  >   Fix: Pin the row to a commit by its 40 hex characters, with the file's sha256, its size in bytes and the credit line its source gives, under a relative path no other row has.
+  > FAIL fetch-lock: scripts/fetch-lock.json row 5, planted/tag.txt: its URL names no commit by its 40 hex characters, so a branch or a tag can move it
+  >   Fix: Pin the row to a commit by its 40 hex characters, with the file's sha256, its size in bytes and the credit line its source gives, under a relative path no other row has.
+  > FAIL fetch-lock: scripts/fetch-lock.json row 6, planted/no-size.txt: it has no size in bytes
+  >   Fix: Pin the row to a commit by its 40 hex characters, with the file's sha256, its size in bytes and the credit line its source gives, under a relative path no other row has.
+  > FAIL fetch-lock: scripts/fetch-lock.json row 7, planted/no-sha256.txt: it has no sha256 of 64 lowercase hex characters
+  >   Fix: Pin the row to a commit by its 40 hex characters, with the file's sha256, its size in bytes and the credit line its source gives, under a relative path no other row has.
+
+## a lane asking for a URL the lock does not list
+exit 1; 0 request(s) reached the forge
+  > FAIL fetch-lock: http://127.0.0.1:<port>/fixture/lib/a1b2c3d4e5f60718293a4b5c6d7e8f9012345678/lib/unlisted.txt is no row of scripts/fetch-lock.json, so it isn't fetched
+  >   Fix: Fetch only a file the lock lists, or give this one a row: its path, its URL at a commit, its sha256, size and credit.
+

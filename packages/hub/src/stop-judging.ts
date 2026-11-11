@@ -64,6 +64,8 @@ import type { CheckSpec } from '@deepbuild/conformance';
 import { Stacks, type StackWant } from './stacks.js';
 
 import { HeavyQueue } from './heavy.js';
+import { HubCanvas } from './hub-canvas.js';
+import { docCheckIn, docCommand, docSpec } from './doc-checks.js';
 
 import { refuse, Refused, refusal, ulid, type CoreOptions, type HookMeta } from './wire.js';
 import type { Live, Counter, Routes } from './session-types.js';
@@ -97,6 +99,7 @@ export interface StopJudgingOptions {
     readonly host: Host;
     readonly runs: Runs;
     readonly stacks: Stacks;
+    readonly canvasSide: HubCanvas;
   };
   state: () => Pick<SessionStatePort, "attention" | "live" | "sessions" | "startOf">;
   mcp: () => Pick<McpOperationsPort, "checksOf" | "pinOf">;
@@ -1100,8 +1103,17 @@ export class StopJudging {
       // your reserve (#87); and the numbers check on every claim whose words state a number with the query behind it.
       const of: ReviewOf = { claim: r.claim, task: r.task, agent: this.options.state().live.get(r.session)?.agent ?? 'claude-code', transcript: this.options.state().sessions.get(r.session)?.transcript };
       const kinded = new Map<string, { spec: CheckSpec; of: ReviewOf }>();
+      const docs = this.options.services.canvasSide.docChecksOf(r.cwd);
       for (const c of checks) {
-        const spec = c.source === 'definition' && c.approved ? this.options.services.checkKinds.definitionSpec(await this.options.services.store.read(c.approved).catch(() => new Uint8Array())) : undefined;
+        const bytes = c.source === 'definition' && c.approved ? await this.options.services.store.read(c.approved).catch(() => new Uint8Array()) : undefined;
+        const doc = bytes ? docCheckIn(bytes) : c.source === 'spec' ? docs.get(c.check) : undefined;
+        if (doc) {
+          const at = await this.options.services.canvasSide.docRevision(doc.doc);
+          Object.assign(c, { command: docCommand(doc, at), document: doc.doc });
+          kinded.set(c.check, { spec: docSpec(doc, at), of });
+          continue;
+        }
+        const spec = bytes ? this.options.services.checkKinds.definitionSpec(bytes) : undefined;
         if (spec) kinded.set(c.check, { spec, of });
       }
       if (!r.joins) {
@@ -1143,9 +1155,12 @@ export class StopJudging {
     let spec: unknown;
     try { spec = parseYaml(readFileSync(join(cwd, '.deepbuild', 'done.yaml'), 'utf8')); } catch { return []; }
     const checks = this.options.mcp().checksOf(cwd);
-    const done = isObj(spec) && isObj(spec.claims) && isObj(spec.claims.done) && Array.isArray(spec.claims.done.checks) ? spec.claims.done.checks.map(String) : [...checks.keys()];
-    return done.flatMap((name) => {
+    const docs = this.options.services.canvasSide.docChecksOf(cwd);
+    const done = isObj(spec) && isObj(spec.claims) && isObj(spec.claims.done) && Array.isArray(spec.claims.done.checks) ? spec.claims.done.checks.map(String) : [...checks.keys(), ...docs.keys()];
+    return done.flatMap((name): ClaimCheck[] => {
       const check = checks.get(name);
+      const doc = docs.get(name);
+      if (!check && doc) return [{ check: name, approved: null, command: docCommand(doc, undefined), covers: [], depth: 'unit', on_base: 'passes', asserts: [], source: 'spec', document: doc.doc }];
       if (!check) return [];
       const deadline = check.deadline === undefined ? undefined : duration(check.deadline as JsonValue);
       // A journey runs on the repo's stack, as its environment block starts it (#33, #580).
@@ -1265,6 +1280,9 @@ export class StopJudging {
       const ran = await this.overridesFor(claim);
       if (ran.length) v = { ...v, outcome: 'INCONCLUSIVE', reasons: [...v.reasons, `a call DeepBuild denied ran anyway in this session: ${ran.map((o) => `${o.label} (${o.call})`).join('; ')}; its own checks can't pass it`.slice(0, 8000)] };
     }
+    // A document check's key names the revisions it read (#1723).
+    const docs = this.options.services.canvasSide.revisionsOf(claim);
+    if (docs?.size) v = { ...v, key: { ...v.key, doc_revisions: [...docs].sort() } };
     v = misjudged(v, this.options.settings.plant);
     const hash = verdictHash(v);
     if (this.verdictsMade.get(claim) === hash) return;

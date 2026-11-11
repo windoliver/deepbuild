@@ -19,7 +19,7 @@ export interface RecordedRun {
   evidence: string[];
   read: string[];
   mask: string | null;
-  exit: { code: number | null; signal: NodeJS.Signals | null; cause: 'exit' | 'deadline' | 'stop' } | null;
+  exit: { code: number | null; signal: NodeJS.Signals | null; cause: 'exit' | 'deadline' | 'stop' | 'limit' } | null;
   /** Scrubbed by value, then digested: the digests are what the run's output evidence holds. */
   output: { stdout: string; stderr: string; sha256: { stdout: string; stderr: string } };
   attempts: { test: string; outcome: 'passed' | 'failed' }[];

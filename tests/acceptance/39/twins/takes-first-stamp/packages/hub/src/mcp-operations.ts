@@ -46,6 +46,7 @@ import { Replicas } from './drive.js';
 import { refuse, Refused, refusal, ulid, type CoreOptions, type Refusal } from './wire.js';
 import type { CallContext, Stamp } from './session-types.js';
 import { HubCanvas } from './hub-canvas.js';
+import { docCommand, docSpec } from './doc-checks.js';
 
 import { sql, letters, noWake, unseenTools, type Obj, isObj, isUnder, asRefused } from "./hub-shared.js";
 
@@ -337,7 +338,7 @@ export class McpOperations {
   }
 
   private unknownCheck(worktree: string, check: unknown): Refused {
-    const names = [...this.checksOf(worktree).keys()];
+    const names = [...this.checksOf(worktree).keys(), ...this.options.services.canvasSide.docChecksOf(worktree).keys()];
     const near = typeof check === 'string' ? nearest(check, names) : undefined;
     return refuse('enum', '/params/arguments/check', near ? `Name ${near} in place of ${String(check)}.` : `Name a check this repo's .deepbuild/done.yaml names: ${names.join(', ') || 'it names none'}.`, check);
   }
@@ -556,20 +557,24 @@ export class McpOperations {
   private async runCheck(session: string, args: Obj): Promise<Obj> {
     const cwd = this.options.state().sessions.get(session)!.cwd;
     const check = this.checksOf(cwd).get(String(args.check));
-    if (check === undefined) throw this.unknownCheck(cwd, args.check);
+    const doc = check ? undefined : this.options.services.canvasSide.docChecksOf(cwd).get(String(args.check));
+    if (check === undefined && doc === undefined) throw this.unknownCheck(cwd, args.check);
     // A deadline the hub can't read is refused before the run starts, never taken as none (#822).
-    const deadline = check.deadline === undefined ? undefined : duration(check.deadline as JsonValue);
-    if (check.deadline !== undefined && !deadline) {
+    const deadline = check?.deadline === undefined ? undefined : duration(check.deadline as JsonValue);
+    if (check?.deadline !== undefined && !deadline) {
       throw refuse('pattern', `/checks/${String(args.check)}/deadline`, `Give the check's deadline in .deepbuild/done.yaml as a whole number above 0 of m, h or d, such as 30m, not ${String(check.deadline)}.`, String(check.deadline));
     }
     const which = args.claim === null ? '' : `AND id = '${sql(String(args.claim).slice(6))}'`;
     const [claim] = (await this.options.services.record.raw(`SELECT id, data FROM events WHERE session_id = ? AND kind = 'claim.made' ${which} ORDER BY log_pos DESC LIMIT 1`, [session])) as { id: string; data: string }[];
     if (!claim) throw refuse('not_found', '/params/arguments/claim', 'Run a check for a claim this session made: claim first with deep_claim.', args.claim);
     const commit = String((JSON.parse(claim.data) as Obj).commit);
-    // A check that names a host runs there, from your home on it (#1942).
-    const { run } = await this.options.services.runs.start({ check: args.check, claim: `claim:${claim.id}`, commit, argv: ['/bin/sh', '-c', check.run], ...(check.host === undefined ? { cwd } : { host: check.host }) }, deadline);
+    // A document check runs on its current revision (#1723); a host check runs at your remote home (#1942).
+    const at = doc && await this.options.services.canvasSide.docRevision(doc.doc);
+    const { run } = doc
+      ? await this.options.services.runs.start({ check: args.check, claim: `claim:${claim.id}`, commit, argv: ['/bin/sh', '-c', docCommand(doc, at)], command: docCommand(doc, at), spec: docSpec(doc, at) as unknown as Obj, cwd })
+      : await this.options.services.runs.start({ check: args.check, claim: `claim:${claim.id}`, commit, argv: ['/bin/sh', '-c', check!.run], ...(check!.host === undefined ? { cwd } : { host: check!.host }) }, deadline);
     // A run on a host is long work, such as a model download: it answers once started there, and the claim waits for it.
-    if (check.host !== undefined) return { run, claim: `claim:${claim.id}`, outcome: 'running', evidence: [] };
+    if (check?.host !== undefined) return { run, claim: `claim:${claim.id}`, outcome: 'running', evidence: [] };
     // The run's outcome once it finishes, so the agent needn't poll; past the wait, that it's still running.
     const until = Date.now() + this.askWait(session);
     for (;;) {

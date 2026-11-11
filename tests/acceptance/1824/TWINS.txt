@@ -1,0 +1,144 @@
+#1824's planted wrong programs, each laid over a copy of the base checkout f38d2b3983496ca502cb4743fda249bbc2e5b162.
+
+How this was made, once per twin (Node v24.22.0, a temporary HOME and TMPDIR; paths redacted to <repo>, ports to <port>):
+  copy the checkout to a temporary folder (without .git)
+  copy tests/acceptance/1824/twins/<name>/scripts/fetch-lock.mjs to its scripts/fetch-lock.mjs
+  write its scripts/fetch-lock.json holding {"files": []}
+  node --test --test-reporter=spec tests/acceptance/1824/warm.test.mjs tests/acceptance/1824/flipped.test.mjs tests/acceptance/1824/lint.test.mjs
+
+Below, per twin: each test's pass or fail line, then under "why" the judge's failure lines for each failed test (the
+actual list of its deepEqual against []), cut at 240 characters.
+
+Read with one thing in mind. The copy is the base, whose scripts/lanes.mjs has no lint-lane command for the fetcher,
+so the first AC3 test ("a row whose URL names a branch or a tag ...") fails on every run here, the right fetcher's too.
+Where its "why" is "the lint lane runs ..." it failed at that second assertion, having passed the lint's judge: that is
+the base, not the twin. Where its "why" names planted rows, the twin failed the lint's judge. On a change that adds the
+lane's command, only those twins fail it.
+
+What each twin's criterion needs, and what the runs show:
+  #1824.512f9fb8 AC1  refetches-cached        fails the warm test, naming all three paths
+  #1824.a44b9f7f AC2  uses-flipped            fails both flipped tests
+  #1824.a44b9f7f AC2  refetches-not-allowed   fails the network-not-allowed test
+  #1824.a44b9f7f AC2  passes-not-allowed      fails the network-not-allowed test
+  #1824.f985f5df AC3  lint-any-ref            fails the lint test at the lint's judge (branch and tag rows)
+  #1824.f985f5df AC3  lint-fields-optional    fails the lint test at the lint's judge (no-size and no-sha256 rows)
+  #1824.f985f5df AC3  fetches-unlisted        fails the planted-lane test
+The last block is the right fetcher the twins were cut from, each twin being it with one edit. It isn't kept in the
+suite. It passes every judge; its one failure is the lint-lane assertion the base can't meet.
+
+== refetches-cached
+✖ #1824.a44b9f7f AC2: with the network allowed, a cached file with one flipped byte is reported with its path and both hashes and fetched again
+✔ #1824.a44b9f7f AC2: with the network not allowed, the flipped file is not refetched and the fetch is BLOCKED with one unblock ask
+✖ #1824.f985f5df AC3: a row whose URL names a branch or a tag, or that has no size or no sha256, fails the lint, naming the row
+✔ #1824.f985f5df AC3: a planted lane that fetches a file the lock does not list fails, naming the URL
+✖ #1824.512f9fb8 AC1: with every file in the lock cached and matching, a fetch makes 0 network requests
+ℹ pass 2
+ℹ fail 3
+  why ✖ #1824.a44b9f7f AC2: with the network allowed, a cached fil…
+    'a fetch for one flipped file also requested lib/src/alpha.js, a cached, matching file',
+    'a fetch for one flipped file also requested lib/data/gamma.txt, a cached, matching file'
+  why ✖ #1824.f985f5df AC3: a row whose URL names a branch or a ta…
+    AssertionError [ERR_ASSERTION]: the lint lane runs "scripts/fetch-lock.mjs lint"; it runs: -- --check, node sc…
+  why ✖ #1824.512f9fb8 AC1: with every file in the lock cached and…
+    'a warm fetch made a network request for lib/src/alpha.js, a cached, matching file (GET http://127.0.0.1:<port>/fixture/library/5d0c3a9e7b1f24680ace13579bdf02468ace1357/lib/src/alpha.js); expected 0 requests',
+    'a warm fetch made a network request for lib/src/beta.js, a cached, matching file (GET http://127.0.0.1:<port>/fixture/library/5d0c3a9e7b1f24680ace13579bdf02468ace1357/lib/src/beta.js); expected 0 requests',
+    'a warm fetch made a network request for lib/data/gamma.txt, a cached, matching file (GET http://127.0.0.1:<port>/fixture/library/5d0c3a9e7b1f24680ace13579bdf02468ace1357/lib/data/gamma.txt); expected 0 requests'
+
+== uses-flipped
+✖ #1824.a44b9f7f AC2: with the network allowed, a cached file with one flipped byte is reported with its path and both hashes and fetched again
+✖ #1824.a44b9f7f AC2: with the network not allowed, the flipped file is not refetched and the fetch is BLOCKED with one unblock ask
+✖ #1824.f985f5df AC3: a row whose URL names a branch or a tag, or that has no size or no sha256, fails the lint, naming the row
+✔ #1824.f985f5df AC3: a planted lane that fetches a file the lock does not list fails, naming the URL
+✔ #1824.512f9fb8 AC1: with every file in the lock cached and matching, a fetch makes 0 network requests
+ℹ pass 2
+ℹ fail 3
+  why ✖ #1824.a44b9f7f AC2: with the network allowed, a cached fil…
+    "with the network allowed, lib/src/beta.js wasn't fetched again: the cache still holds bytes that don't hash to the pin, so a lane would read the flipped file",
+    'no line of the report names lib/src/beta.js with both hashes (pinned c0e2fb2776b08b94996d043b7cd19fae0dd5d4d2b987a185000dfd423d8c4fdf, found d98242a605eb7bc7400ee9b97af51ce2c9894125e044d09e73b4d006da7ec87f): (no output)',
+    'no request reached http://127.0.0.1:<port>/fixture/library/5d0c3a9e7b1f24680ace13579bdf02468ace1357/lib/src/beta.js'
+  why ✖ #1824.a44b9f7f AC2: with the network not allowed, the flip…
+    'with the network not allowed, a fetch over the flipped lib/src/beta.js exits 0, so a lane goes on to read the flipped file: (no output)',
+    'expected 1 line starting BLOCKED, found 0: (no output)',
+    'expected 1 unblock ask (a line "  Unblock: ..."), found 0: (no output)'
+  why ✖ #1824.f985f5df AC3: a row whose URL names a branch or a ta…
+    AssertionError [ERR_ASSERTION]: the lint lane runs "scripts/fetch-lock.mjs lint"; it runs: -- --check, node sc…
+
+== refetches-not-allowed
+✔ #1824.a44b9f7f AC2: with the network allowed, a cached file with one flipped byte is reported with its path and both hashes and fetched again
+✖ #1824.a44b9f7f AC2: with the network not allowed, the flipped file is not refetched and the fetch is BLOCKED with one unblock ask
+✖ #1824.f985f5df AC3: a row whose URL names a branch or a tag, or that has no size or no sha256, fails the lint, naming the row
+✔ #1824.f985f5df AC3: a planted lane that fetches a file the lock does not list fails, naming the URL
+✔ #1824.512f9fb8 AC1: with every file in the lock cached and matching, a fetch makes 0 network requests
+ℹ pass 3
+ℹ fail 2
+  why ✖ #1824.a44b9f7f AC2: with the network not allowed, the flip…
+    'with the network not allowed, a fetch requested lib/src/beta.js (GET http://127.0.0.1:<port>/fixture/library/5d0c3a9e7b1f24680ace13579bdf02468ace1357/lib/src/beta.js); expected 0 requests',
+    'with the network not allowed, a fetch over the flipped lib/src/beta.js exits 0, so a lane goes on to read the flipped file: NOTE fetch-lock: lib/src/beta.js hashes to d98242a605eb7bc7400ee9b97af51ce2c9894125e044d09e73b4d006da7ec87f, not th
+    'expected 1 line starting BLOCKED, found 0: NOTE fetch-lock: lib/src/beta.js hashes to d98242a605eb7bc7400ee9b97af51ce2c9894125e044d09e73b4d006da7ec87f, not the pinned c0e2fb2776b08b94996d043b7cd19fae0dd5d4d2b987a185000dfd423d8c4fdf; fetchi
+    'expected 1 unblock ask (a line "  Unblock: ..."), found 0: NOTE fetch-lock: lib/src/beta.js hashes to d98242a605eb7bc7400ee9b97af51ce2c9894125e044d09e73b4d006da7ec87f, not the pinned c0e2fb2776b08b94996d043b7cd19fae0dd5d4d2b987a185000dfd42
+  why ✖ #1824.f985f5df AC3: a row whose URL names a branch or a ta…
+    AssertionError [ERR_ASSERTION]: the lint lane runs "scripts/fetch-lock.mjs lint"; it runs: -- --check, node sc…
+
+== passes-not-allowed
+✔ #1824.a44b9f7f AC2: with the network allowed, a cached file with one flipped byte is reported with its path and both hashes and fetched again
+✖ #1824.a44b9f7f AC2: with the network not allowed, the flipped file is not refetched and the fetch is BLOCKED with one unblock ask
+✖ #1824.f985f5df AC3: a row whose URL names a branch or a tag, or that has no size or no sha256, fails the lint, naming the row
+✔ #1824.f985f5df AC3: a planted lane that fetches a file the lock does not list fails, naming the URL
+✔ #1824.512f9fb8 AC1: with every file in the lock cached and matching, a fetch makes 0 network requests
+ℹ pass 3
+ℹ fail 2
+  why ✖ #1824.a44b9f7f AC2: with the network not allowed, the flip…
+    "with the network not allowed, a fetch over the flipped lib/src/beta.js exits 0, so a lane goes on to read the flipped file: NOTE fetch-lock: lib/src/beta.js hashes to d98242a605eb7bc7400ee9b97af51ce2c9894125e044d09e73b4d006da7ec87f, not th
+    "expected 1 line starting BLOCKED, found 0: NOTE fetch-lock: lib/src/beta.js hashes to d98242a605eb7bc7400ee9b97af51ce2c9894125e044d09e73b4d006da7ec87f, not the pinned c0e2fb2776b08b94996d043b7cd19fae0dd5d4d2b987a185000dfd423d8c4fdf; the ne
+    `expected 1 unblock ask (a line "  Unblock: ..."), found 0: NOTE fetch-lock: lib/src/beta.js hashes to d98242a605eb7bc7400ee9b97af51ce2c9894125e044d09e73b4d006da7ec87f, not the pinned c0e2fb2776b08b94996d043b7cd19fae0dd5d4d2b987a185000dfd42
+  why ✖ #1824.f985f5df AC3: a row whose URL names a branch or a ta…
+    AssertionError [ERR_ASSERTION]: the lint lane runs "scripts/fetch-lock.mjs lint"; it runs: -- --check, node sc…
+
+== lint-any-ref
+✔ #1824.a44b9f7f AC2: with the network allowed, a cached file with one flipped byte is reported with its path and both hashes and fetched again
+✔ #1824.a44b9f7f AC2: with the network not allowed, the flipped file is not refetched and the fetch is BLOCKED with one unblock ask
+✖ #1824.f985f5df AC3: a row whose URL names a branch or a tag, or that has no size or no sha256, fails the lint, naming the row
+✔ #1824.f985f5df AC3: a planted lane that fetches a file the lock does not list fails, naming the URL
+✔ #1824.512f9fb8 AC1: with every file in the lock cached and matching, a fetch makes 0 network requests
+ℹ pass 4
+ℹ fail 1
+  why ✖ #1824.f985f5df AC3: a row whose URL names a branch or a ta…
+    'a row with a URL that names a branch (planted/branch.js) passes the lint',
+    'a row with a URL that names a tag (planted/tag.js) passes the lint'
+
+== lint-fields-optional
+✔ #1824.a44b9f7f AC2: with the network allowed, a cached file with one flipped byte is reported with its path and both hashes and fetched again
+✔ #1824.a44b9f7f AC2: with the network not allowed, the flipped file is not refetched and the fetch is BLOCKED with one unblock ask
+✖ #1824.f985f5df AC3: a row whose URL names a branch or a tag, or that has no size or no sha256, fails the lint, naming the row
+✔ #1824.f985f5df AC3: a planted lane that fetches a file the lock does not list fails, naming the URL
+✔ #1824.512f9fb8 AC1: with every file in the lock cached and matching, a fetch makes 0 network requests
+ℹ pass 4
+ℹ fail 1
+  why ✖ #1824.f985f5df AC3: a row whose URL names a branch or a ta…
+    'a row with no size (planted/no-size.js) passes the lint',
+    'a row with no sha256 (planted/no-sha256.js) passes the lint'
+
+== fetches-unlisted
+✔ #1824.a44b9f7f AC2: with the network allowed, a cached file with one flipped byte is reported with its path and both hashes and fetched again
+✔ #1824.a44b9f7f AC2: with the network not allowed, the flipped file is not refetched and the fetch is BLOCKED with one unblock ask
+✖ #1824.f985f5df AC3: a row whose URL names a branch or a tag, or that has no size or no sha256, fails the lint, naming the row
+✖ #1824.f985f5df AC3: a planted lane that fetches a file the lock does not list fails, naming the URL
+✔ #1824.512f9fb8 AC1: with every file in the lock cached and matching, a fetch makes 0 network requests
+ℹ pass 3
+ℹ fail 2
+  why ✖ #1824.f985f5df AC3: a row whose URL names a branch or a ta…
+    AssertionError [ERR_ASSERTION]: the lint lane runs "scripts/fetch-lock.mjs lint"; it runs: -- --check, node sc…
+  why ✖ #1824.f985f5df AC3: a planted lane that fetches a file the…
+    "the planted lane that fetches http://127.0.0.1:<port>/fixture/library/5d0c3a9e7b1f24680ace13579bdf02468ace1357/lib/src/unlisted.js, which the lock doesn't list, passes",
+    "the fetcher requested http://127.0.0.1:<port>/fixture/library/5d0c3a9e7b1f24680ace13579bdf02468ace1357/lib/src/unlisted.js, which the lock doesn't list"
+
+== (the right fetcher the twins were cut from; not kept)
+✔ #1824.a44b9f7f AC2: with the network allowed, a cached file with one flipped byte is reported with its path and both hashes and fetched again
+✔ #1824.a44b9f7f AC2: with the network not allowed, the flipped file is not refetched and the fetch is BLOCKED with one unblock ask
+✖ #1824.f985f5df AC3: a row whose URL names a branch or a tag, or that has no size or no sha256, fails the lint, naming the row
+✔ #1824.f985f5df AC3: a planted lane that fetches a file the lock does not list fails, naming the URL
+✔ #1824.512f9fb8 AC1: with every file in the lock cached and matching, a fetch makes 0 network requests
+ℹ pass 4
+ℹ fail 1
+  why ✖ #1824.f985f5df AC3: a row whose URL names a branch or a ta…
+    AssertionError [ERR_ASSERTION]: the lint lane runs "scripts/fetch-lock.mjs lint"; it runs: -- --check, node sc…

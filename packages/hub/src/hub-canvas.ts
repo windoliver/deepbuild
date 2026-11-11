@@ -1,5 +1,8 @@
 
 import { readFileSync } from 'node:fs';
+import { parse as parseYaml } from 'yaml';
+import type { CheckResult } from '@deepbuild/conformance';
+import { canvasClaim, docCheckOf, docResult, revisionLine, shownResult, worst, type DocCheck, type DocSpec, type Revision } from './doc-checks.js';
 
 import { join } from 'node:path';
 
@@ -31,6 +34,7 @@ export interface HubCanvasOptions {
 }
 export class HubCanvas {
   constructor(private readonly options: HubCanvasOptions) {}
+  private readonly docRevisions = new Map<string, Set<string>>();
 
   // ---- The canvas side (#806): deep_show, `deep show`, render-back, and what the app draws.
 
@@ -107,9 +111,17 @@ export class HubCanvas {
     call = game.call;
     const via = 'you' in as ? { peer: { pid: 0, start: 0 } } : { session: as.session };
     const name = 'you' in as ? 'deep show' : 'deep_show';
-    const { reply: drawn, presented } = await this.canvas().call(await this.canvasWorld(), { call: name, ...via, ...call });
+    // A hub claim is judged by its recorded runs, not by world-file fixtures (#1723).
+    const world = await this.canvasWorld();
+    const ofHub = typeof call.claim === 'string' && !(isObj(world.file.claims) && call.claim in world.file.claims) ? call.claim : undefined;
+    if (ofHub) { const { claim: _claim, ...rest } = call; call = rest; }
+    const { reply: drawn, presented } = await this.canvas().call(world, { call: name, ...via, ...call });
     const reply = game.assets.length ? { ...drawn, assets: game.assets } : drawn;
     if (presented) await this.recordRevision(as, presented, reply);
+    if (call.check === true && typeof reply.result === 'string') {
+      const hash = typeof presented?.hash === 'string' ? presented.hash : (await this.docRevision(String(call.doc)))?.hash;
+      reply.result = worst([reply.result, hash ? await this.recordedResult(String(call.doc), hash, ofHub) : 'INCONCLUSIVE']);
+    }
     // The planted hub waits for an app to draw the revision instead of rendering back headless.
     if (this.options.plant === 'deep-show-waits-for-app' && reply.outcome === 'presented' && !(await waitForApp(this.appOpen))) {
       return { ...reply, outcome: 'not_presented', reason: 'timeout', snapshots: [] };
@@ -228,6 +240,53 @@ export class HubCanvas {
       } as JsonValue,
     });
     this.presented.push({ doc: p.doc, rev: p.rev, rect: p.rect, layers: p.layers, session });
+    await this.staleOnRevision(String(p.doc), { rev: Number(p.rev), hash });
+  }
+
+  /** The document checks a worktree's spec names (#1723). */
+  docChecksOf(worktree: string): Map<string, DocCheck> {
+    let spec: unknown;
+    try { spec = parseYaml(readFileSync(join(worktree, '.deepbuild', 'done.yaml'), 'utf8')); } catch { return new Map(); }
+    const checks = isObj(spec) && isObj(spec.checks) ? spec.checks : {};
+    return new Map(Object.entries(checks).flatMap(([name, c]) => { const d = docCheckOf(c); return d ? [[name, d] as const] : []; }));
+  }
+  /** A document's newest recorded revision. */
+  async docRevision(doc: string): Promise<Revision | undefined> {
+    const [row] = (await this.options.record().raw(`SELECT json_extract(data, '$.rev') AS rev, json_extract(data, '$.hash') AS hash FROM events WHERE kind = 'doc.patched' AND subject = ? ORDER BY log_pos DESC LIMIT 1`, [`doc:${doc}`])) as { rev: number; hash: string }[];
+    return row ? { rev: Number(row.rev), hash: String(row.hash) } : undefined;
+  }
+  /** The canvas verdict for a claim holding just this document check, with the revision in its key. */
+  async documentCheck(run: { run: string; check: string; claim: string }, spec: DocSpec): Promise<CheckResult & { stdout: string }> {
+    const [owner] = (await this.options.record().raw(`SELECT session_id FROM claims WHERE id = ?`, [run.claim.slice(6)])) as { session_id: string | null }[];
+    const world = await this.canvasWorld();
+    const handle = `${run.claim}#${run.check}`;
+    world.file = { ...world.file, claims: { ...(isObj(world.file.claims) ? world.file.claims : {}), [handle]: canvasClaim(owner?.session_id ?? '', run.check, spec) } };
+    let reply: Obj;
+    try {
+      reply = (await this.canvas().call(world, { call: 'verdict', claim: handle })).reply;
+    } catch (error) {
+      reply = { result: 'BLOCKED', requirements: [{ result: 'BLOCKED', blocked: [{ code: 'canvas_unavailable', ask: error instanceof Error ? error.message : String(error) }] }] };
+    }
+    const result = docResult(spec, reply);
+    const line = result.evidence[0];
+    if (line) this.docRevisions.set(run.claim, new Set([...(this.docRevisions.get(run.claim) ?? []), line]));
+    return result;
+  }
+  /** The revisions this claim's document checks read, retained for its verdict's key. */
+  revisionsOf(claim: string): ReadonlySet<string> | undefined { return this.docRevisions.get(claim); }
+  /** A new revision makes verdicts keyed by another revision stale. */
+  private async staleOnRevision(doc: string, at: Revision): Promise<void> {
+    const rows = (await this.options.record().raw(`SELECT v.handle AS verdict, f.value AS line FROM verdicts v JOIN json_each(v.key, '$.doc_revisions') f WHERE v.stale = 0 AND f.value LIKE ?`, [`doc:${doc}@%`])) as { verdict: string; line: string }[];
+    for (const r of rows.filter((x) => x.line !== revisionLine(doc, at))) {
+      const ts = this.options.now();
+      await this.options.events.append(this.options.events.connection('core'), { v: 1, id: ulid(ts), kind: 'verdict.stale', ts, subject: r.verdict, data: { verdict: r.verdict, because: `doc:${doc} has a new revision, ${at.rev}; the verdict covers ${r.line}` } });
+    }
+  }
+  /** The worst recorded outcome on this revision; never PASS with no run. */
+  private async recordedResult(doc: string, hash: string, claim: string | undefined): Promise<string> {
+    const ofClaim = claim ? ` AND json_extract(e.data, '$.run') IN (SELECT json_extract(data, '$.run') FROM events WHERE kind = 'run.started' AND json_extract(data, '$.claim') = ?)` : '';
+    const rows = (await this.options.record().raw(`SELECT json_extract(e.data, '$.outcome') AS outcome FROM events e JOIN json_each(e.data, '$.findings') f WHERE e.kind = 'run.finished' AND f.value LIKE ?${ofClaim}`, [`doc:${doc}@% ${hash}`, ...(claim ? [claim] : [])])) as { outcome: string }[];
+    return shownResult(rows.map((r) => r.outcome));
   }
 
   /** The same first-use gate for a shown document and its exports, for every asset-reading kind. */

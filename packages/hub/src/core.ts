@@ -60,7 +60,7 @@ import { Teardowns } from './teardowns.js';
 import { Agents, type Sync } from './agents.js';
 import { Box } from './box.js';
 import { NEWER_SET, OLDER_SET } from './status.js';
-import { aboutCall } from './standing.js';
+import { aboutCall, aboutPermission } from './standing.js';
 import { Channels } from './channels.js';
 import { Workspaces } from './workspaces.js';
 import { Devices } from './trusted.js';
@@ -77,6 +77,8 @@ import { Answers } from './answers.js';
 import { Runs } from './runs.js';
 import { Kinds } from './kinds.js';
 import type { CheckSpec } from '@deepbuild/conformance';
+import type { DocSpec } from './doc-checks.js';
+const PROMPTED = new Set(['claude-code', 'claude', 'codex', 'paseo']);
 
 import { Stacks } from './stacks.js';
 import { Starts } from './starts.js';
@@ -131,7 +133,7 @@ export class Core {
     const readstopping = () => this.stopping;
     const readabandoned = () => this.abandoned;
     const readoverrides = () => this.overrides;
-    this.judging = new StopJudging({ settings: this.options, services: lazyServices({ tasks: () => this.tasks, openItems: () => this.openItems, now: () => this.now, asks: () => this.asks, agents: () => this.agents, box: () => this.box, ledger: () => this.ledger, record: () => this.record, gate: () => this.gate, raw: () => this.raw, leases: () => this.leases, extensions: () => this.extensions, sizing: () => this.sizing, root: () => this.root, holds: () => this.holds, questions: () => this.questions, runner: () => this.runner, checkKinds: () => this.checkKinds, store: () => this.store, trust: () => this.trust, heavy: () => this.heavy, host: () => this.host, runs: () => this.runs, stacks: () => this.stacks }), state: () => this.state, mcp: () => this.mcp, delivery: () => this.delivery, transcripts: () => this.transcripts, control: () => this.control, events: { appendReading: (session, agent, reading, hook) => this.appendReading(session, agent, reading, hook), connection: (writer, extra) => this.connection(writer, extra), append: (connection, input, backfill) => this.append(connection, input, backfill) }, kernel: { get stopping() { return readstopping(); }, get overrides() { return readoverrides(); }, get blocked() { return readblocked(); } }, schedule: { askingSoon: () => this.askingSoon(), queue: (work, starting) => this.queue(work, starting), get abandoned() { return readabandoned(); }, wakeable: (waits, key, ms) => this.wakeable(waits, key, ms), askingNow: () => this.askingNow() } });
+    this.judging = new StopJudging({ settings: this.options, services: lazyServices({ tasks: () => this.tasks, openItems: () => this.openItems, now: () => this.now, asks: () => this.asks, agents: () => this.agents, box: () => this.box, ledger: () => this.ledger, record: () => this.record, gate: () => this.gate, raw: () => this.raw, leases: () => this.leases, extensions: () => this.extensions, sizing: () => this.sizing, root: () => this.root, holds: () => this.holds, questions: () => this.questions, runner: () => this.runner, checkKinds: () => this.checkKinds, store: () => this.store, trust: () => this.trust, heavy: () => this.heavy, host: () => this.host, runs: () => this.runs, stacks: () => this.stacks, canvasSide: () => this.canvasSide }), state: () => this.state, mcp: () => this.mcp, delivery: () => this.delivery, transcripts: () => this.transcripts, control: () => this.control, events: { appendReading: (session, agent, reading, hook) => this.appendReading(session, agent, reading, hook), connection: (writer, extra) => this.connection(writer, extra), append: (connection, input, backfill) => this.append(connection, input, backfill) }, kernel: { get stopping() { return readstopping(); }, get overrides() { return readoverrides(); }, get blocked() { return readblocked(); } }, schedule: { askingSoon: () => this.askingSoon(), queue: (work, starting) => this.queue(work, starting), get abandoned() { return readabandoned(); }, wakeable: (waits, key, ms) => this.wakeable(waits, key, ms), askingNow: () => this.askingNow() } });
   }
   private wireSessionMemory(): void {
 
@@ -144,7 +146,7 @@ export class Core {
   }
   private wireSessionState(): void {
     const readstopping = () => this.stopping;
-    this.state = new SessionState({ settings: this.options, services: lazyServices({ gate: () => this.gate, now: () => this.now, record: () => this.record, transcriptReader: () => this.transcriptReader, stacks: () => this.stacks, replicas: () => this.replicas, archivedSessions: () => this.archivedSessions, archiveSession: () => this.archiveSession, runner: () => this.runner, root: () => this.root, siblings: () => this.siblings, sessionStarts: () => this.sessionStarts, people: () => this.people }), judging: () => this.judging, transcripts: () => this.transcripts, delivery: () => this.delivery, mcp: () => this.mcp, memory: () => this.memory, events: { appendReading: (session, agent, reading, hook) => this.appendReading(session, agent, reading, hook), append: (connection, input, backfill) => this.append(connection, input, backfill), connection: (writer, extra) => this.connection(writer, extra), appendSession: (session, agent, kind, data) => this.appendSession(session, agent, kind, data) }, kernel: { get stopping() { return readstopping(); } }, schedule: { askingSoon: () => this.askingSoon(), queue: (work, starting) => this.queue(work, starting) } });
+    this.state = new SessionState({ settings: this.options, services: lazyServices({ gate: () => this.gate, asks: () => this.asks, now: () => this.now, record: () => this.record, transcriptReader: () => this.transcriptReader, stacks: () => this.stacks, replicas: () => this.replicas, archivedSessions: () => this.archivedSessions, archiveSession: () => this.archiveSession, runner: () => this.runner, root: () => this.root, siblings: () => this.siblings, sessionStarts: () => this.sessionStarts, people: () => this.people }), judging: () => this.judging, transcripts: () => this.transcripts, delivery: () => this.delivery, mcp: () => this.mcp, memory: () => this.memory, events: { appendReading: (session, agent, reading, hook) => this.appendReading(session, agent, reading, hook), append: (connection, input, backfill) => this.append(connection, input, backfill), connection: (writer, extra) => this.connection(writer, extra), appendSession: (session, agent, kind, data) => this.appendSession(session, agent, kind, data) }, kernel: { get stopping() { return readstopping(); } }, schedule: { askingSoon: () => this.askingSoon(), queue: (work, starting) => this.queue(work, starting) } });
   }
   private wireMcpOperations(): void {
     const readreplaying = () => this.replaying;
@@ -270,6 +272,8 @@ export class Core {
   private replaying: Promise<unknown> | undefined;
   /** Only the drops-post-tool-use and replay-appends-twice plants read them. */
   private dropped = false;
+  /** The newest hook ID #2026's planted asker read; only that plant reads it. */
+  private askedThrough = '';
   /** Whether appends came back during a replay, so the files it kept are taken again after it. */
   private retake = false;
   private github: GitHub | undefined;
@@ -518,6 +522,8 @@ export class Core {
       kind: (run, checkout, deadline) => {
         const of = this.judging.kindChecks.get(run.claim)?.get(run.check)?.of ?? { claim: run.claim, task: '', agent: 'claude-code', transcript: undefined };
         const spec = run.spec as unknown as CheckSpec;
+        // A document check runs through the canvas core's verdict on the document's revision (#1723).
+        if ((spec as DocSpec).runner === 'canvas') return this.canvasSide.documentCheck(run, spec as DocSpec);
         // A review reads the diff from the merge base to the claim's snapshot, both in the hub's object store, which
         // reads the repo's objects as alternates; the checkout is the snapshot's tree alone.
         if (spec.kind === 'review') return this.checkKinds.run({ ...spec, head: this.gate.snapshotOf(run.claim) ?? run.commit } as CheckSpec, { checkout: join(this.root.dir, 'objects'), deadline, now: this.now }, of);
@@ -1248,7 +1254,7 @@ export class Core {
     if (replayed && /^[0-9A-HJKMNP-TV-Z]{26}$/.test(meta.id)) {
       // Its live copy may be acknowledged and still on its way to the record.
       await Promise.allSettled([...this.inflight]);
-      const known = await this.record.raw(`SELECT json_extract(data, '$.late') AS late FROM events WHERE id = ? LIMIT 1`, [meta.id]);
+      const known = await this.record.raw(`SELECT json_extract(data, '$.late') AS late FROM events WHERE id ${this.options.plant === 'replay-keeps-place-by-id' ? '>=' : '='} ? LIMIT 1`, [meta.id]);
       if (known.length) {
         // Unless deep-hook gave up on an acknowledgement the hub sent just too late: the live copy is in the record
         // unmarked while deep-hook acted on its own, so the session says so rather than the fail-open going unseen.
@@ -1399,6 +1405,14 @@ export class Core {
       if (drafts.some((d) => d.kind === 'agent.stop')) void this.asks.tick().catch(() => undefined);
     });
     settled.catch(() => undefined);
+    // Replayed permission prompts still raise an ask once their request is recorded (#2026).
+    const readBefore = this.options.plant === 'asks-keep-place-by-id' && meta.id <= this.askedThrough;
+    if (this.options.plant === 'asks-keep-place-by-id' && !readBefore) this.askedThrough = meta.id;
+    if (replayed && !readBefore && !meta.late && meta.event === 'PermissionRequest' && meta.call && meta.session && !meta.watchOnly && PROMPTED.has(meta.agent)) {
+      const call = meta.call;
+      void settled.then(async () => { this.delivery.prompts.add((await this.holds.asked(meta, aboutPermission(call.tool, call.input))).ask); })
+        .catch((error: unknown) => process.stderr.write(`deep hub: the replayed permission request ${meta.id} raised no ask: ${error instanceof Error ? error.message : String(error)}\n`));
+    }
     // The session map reads the hook before its reply is asked for (#352), once its appends are watched.
     if (verified && meta.session && !FOREIGN.has(meta.agent)) await this.siblings.hook(drafts, meta).catch(() => undefined);
     // A stop that leaves the agent's question open is recorded as waiting on you once the stop is in the record (#27).
