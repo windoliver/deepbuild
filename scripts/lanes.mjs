@@ -361,6 +361,8 @@ timed.push('tests/acceptance/724-redraft-1405/');
 // reader beside one replaying 100,000 events, as #34's stream budget is timed.
 alone.push('tests/acceptance/1575/', 'tests/acceptance/1575-redraft-ac1/');
 timed.push('tests/acceptance/1575/budgets.test.ts', 'tests/acceptance/1575-redraft-ac1/budgets.test.ts');
+// #1964's files build deep-canvas-render and draw styled runs with Vello CPU.
+alone.push('tests/acceptance/1964/');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },

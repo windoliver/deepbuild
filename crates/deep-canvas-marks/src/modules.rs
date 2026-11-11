@@ -224,6 +224,10 @@ impl Canonical for TextSpec {
         self.mask.encode(out);
         (self.align as u8).encode(out);
         self.bound.encode(out);
+        // #1964: a run with styled spans; one without encodes as it did before them.
+        if !self.spans.is_empty() {
+            format!("{:?}", self.spans).encode(out);
+        }
     }
 }
 
