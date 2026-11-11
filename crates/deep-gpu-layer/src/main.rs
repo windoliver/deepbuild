@@ -288,6 +288,8 @@ pub enum Planted {
     LocalMapRekeysOnAnyT,
     CutKeyOmitsPlanes,
     SinglePixelPick,
+    /// #1976's: a hit's point put back from the depth target.
+    HitFromDepth,
     CascadeCacheKeepsStale,
     PrefilterOverFrames,
     UncompensatedLobe,
@@ -531,6 +533,7 @@ impl Planted {
             "local_map_rekeys_on_any_t" => Planted::LocalMapRekeysOnAnyT,
             "cut_key_omits_planes" => Planted::CutKeyOmitsPlanes,
             "single_pixel_pick" => Planted::SinglePixelPick,
+            "hit_from_depth" => Planted::HitFromDepth,
             "cascade_cache_keeps_stale" => Planted::CascadeCacheKeepsStale,
             "prefilter_over_frames" => Planted::PrefilterOverFrames,
             "uncompensated_lobe" => Planted::UncompensatedLobe,

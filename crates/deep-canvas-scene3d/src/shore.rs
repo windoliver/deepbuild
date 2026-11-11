@@ -376,7 +376,7 @@ fn primitive(shape: Shape) -> (Vec<[f64; 3]>, Vec<u32>) {
 }
 
 /// A solid's triangles in world space.
-fn triangles(s: &Solid) -> Vec<[[f64; 3]; 3]> {
+pub(crate) fn triangles(s: &Solid) -> Vec<[[f64; 3]; 3]> {
     let (positions, indices) = match (&s.mesh, s.shape) {
         (Some(m), _) => (m.positions.clone(), m.indices.clone()),
         (None, shape) => primitive(shape),
