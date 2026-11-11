@@ -1098,3 +1098,32 @@ describe('readSince follows the log for a fold', () => {
     expect(again).toEqual([head + 1]);
   });
 });
+
+describe('a commit that waited behind an evidence sync is judged by the log as it is when it commits (#1410)', () => {
+  it('a prompt queued behind its session\'s stop, both behind a sync, still resumes with a FULL commit', async () => {
+    const storage = testStorage();
+    const store = await openEvidenceStore({ root: tempRoot(), now: () => T0 });
+    const put = await store.connect({ role: 'deepbuild', via: 'job' }).put({ bytes: Buffer.from('a log'), kind: 'log', source: 'test', redaction: 'complete', license: { name: 'record', allows: [] } });
+    if (put.status !== 'stored') throw Error(put.reason);
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const slow = { ...store, sync: async (named: readonly string[]) => { await gate; await store.sync(named); } };
+    let r = await openRecord({ path: 'record.db', now: () => T0, storage, evidence: slow, commitEach: true });
+    const S = ulidAt(T0 - 1000);
+    await r.append(hook(S), event('session.start', T0 - 1000, undefined));
+    await r.append(hook(S), event('user.ask', T0, seqAt(T0), { msg: 1 }));
+    const claim = event('claim.made', T0 + 1, undefined);
+    await r.append({ ...hook(S), writer: 'app' }, claim);
+    const verdict = r.append(core(S), { ...event('verdict.made', T0 + 2, undefined, { claim: `claim:${claim.id}`, verdict: `verdict:${ulidAt(T0 + 2)}` }, 1), evidence: [put.evidence.sha256] });
+    const stop = r.append(hook(S), { ...event('agent.stop', T0 + 100, seqAt(T0 + 100), { turn: 1 }), subject: `session:${S}` });
+    const resume = event('user.ask', T0 + 200, seqAt(T0 + 200), { msg: 2 });
+    const resumed = r.append(hook(S), resume);
+    release();
+    await Promise.all([verdict, stop, resumed]);
+    storage.cutPower();
+    r = await openRecord({ path: 'record.db', now: () => T0 + 300, storage });
+    open.push(r);
+    // A mode chosen before the wait reads the session as still running, commits the resume NORMAL, and the cut drops it.
+    expect((await r.read({ after: 0 })).map((e) => e.id), 'the resume survived the cut').toContain(resume.id);
+  });
+});

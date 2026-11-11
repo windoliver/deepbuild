@@ -579,6 +579,7 @@ class SqliteRecord implements RecordStore {
     }
     this.sealed(prepared);
     if (CORE_ONLY.has(input.kind) || this.options.commitEach) {
+      while (this.syncing) await this.syncing;
       const mode = CORE_ONLY.has(input.kind) || this.resumes([prepared]) ? 'full' : 'normal';
       const synced = this.evidenceSynced([prepared], mode);
       if (synced) await synced;
@@ -633,6 +634,7 @@ class SqliteRecord implements RecordStore {
     let outcomes: Outcome[] = [];
     try {
       const items = batch.map((p) => p.prepared);
+      while (this.syncing) await this.syncing;
       const mode = this.resumes(items) ? 'full' : 'normal';
       const synced = this.evidenceSynced(items, mode);
       if (synced) await synced;
@@ -655,17 +657,15 @@ class SqliteRecord implements RecordStore {
 
   /**
    * Before a commit: the evidence a FULL one names, synced with its folders (#1410), so a commit that survives a power
-   * cut never names a file that didn't; and any commit waits for a FULL one already waiting, so a later event never
-   * lands first. The sync runs off this thread. A record opened without a store holds no files to sync. Undefined
+   * cut never names a file that didn't. The caller first waits for a FULL commit already waiting, so a later event never
+   * lands first and its own mode is read from the log that commit left. The sync runs off this thread. A record opened without a store holds no files to sync. Undefined
    * when there is nothing to wait for, so such a commit stays in this turn.
    */
   private evidenceSynced(items: readonly Prepared[], mode: Durability): Promise<void> | undefined {
     const named = mode === 'full' && this.options.evidence ? items.flatMap((p) => p.evidence) : [];
-    return this.syncing || named.length ? this.syncNamed(items, named) : undefined;
+    return named.length ? this.syncNamed(items, named) : undefined;
   }
   private async syncNamed(items: readonly Prepared[], named: string[]): Promise<void> {
-    while (this.syncing) await this.syncing;
-    if (!named.length) return;
     const synced = this.options.evidence!.sync(named);
     const waiting = (this.syncing = synced.then(() => undefined, () => undefined).finally(() => { if (this.syncing === waiting) this.syncing = undefined; }));
     await synced.catch((error: unknown) => {

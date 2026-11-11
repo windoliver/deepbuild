@@ -173,8 +173,11 @@ export async function openEvidenceStore(options: EvidenceStoreOptions = {}): Pro
   // reasons to one journal; the last line for a hash wins.
   const journal = join(root, 'records.jsonl');
   const folders = new Set<string>(); // made in this process
-  // Files and folders synced in this process: a FULL commit naming one again syncs nothing (#1410).
-  const synced = new Set<string>();
+  // Files and folders synced in this process: a FULL commit naming one again syncs nothing (#1410). A file is here by
+  // the inode synced and its last change, and only once its folders are synced too, so one replaced since, by anyone,
+  // or whose folder's sync failed, is synced again.
+  const synced = new Map<string, string>();
+  const stampOf = (s: { ino: bigint; ctimeNs: bigint }) => `${s.ino}:${s.ctimeNs}`;
   if (!options.readOnly) await mkdir(root, { recursive: true });
   const index = new Map<string, Stored>();
   // Your yes per file and destination, by the reasons it answered.
@@ -221,12 +224,15 @@ export async function openEvidenceStore(options: EvidenceStoreOptions = {}): Pro
     const temp = join(dirname(path), `.tmp-${randomUUID()}`);
     await writeFile(temp, data);
     await rename(temp, path);
-    synced.delete(path);
   }
-  async function syncOne(path: string) {
+  /** Syncs what is at the path now, and says which file that was. */
+  async function syncOne(path: string): Promise<string> {
     const handle = await open(path, 'r');
-    try { await handle.sync(); } finally { await handle.close(); }
-    synced.add(path);
+    try {
+      const stamp = stampOf(await handle.stat({ bigint: true }));
+      await handle.sync();
+      return stamp;
+    } finally { await handle.close(); }
   }
   const exists = (path: string) => access(path).then(() => true, () => false);
   const onDisk = async (sha: string) => (await exists(fileOf(sha))) || exists(packedOf(sha));
@@ -383,13 +389,16 @@ export async function openEvidenceStore(options: EvidenceStoreOptions = {}): Pro
     // write, or wrote before a restart, is synced too: nothing says its writer did. A rename lasts once its folder is
     // synced, and a folder made since the last cut once the root is.
     async sync(sha256s) {
-      const where = async (sha: string) => (!HASH.test(sha) ? undefined : (await exists(fileOf(sha))) ? fileOf(sha) : (await exists(packedOf(sha))) ? packedOf(sha) : undefined);
-      const files = (await Promise.all([...new Set(sha256s)].map(where))).filter((path): path is string => path !== undefined && !synced.has(path));
-      await Promise.all(files.map(syncOne));
+      const unsynced = async (path: string) => stat(path, { bigint: true }).then((s) => (synced.get(path) === stampOf(s) ? [] : [path]), () => undefined);
+      const where = async (sha: string) => (!HASH.test(sha) ? [] : await unsynced(fileOf(sha)) ?? await unsynced(packedOf(sha)) ?? []);
+      const files = (await Promise.all([...new Set(sha256s)].map(where))).flat();
+      const stamps = await Promise.all(files.map(syncOne));
       const folders = [...new Set(files.map((path) => dirname(path)))];
       // The root holds the name of each folder this process hasn't synced yet, and its own parent the root's, once.
       const above = folders.some((folder) => !synced.has(folder)) ? [root, ...(synced.has(dirname(root)) ? [] : [dirname(root)])] : [];
       await Promise.all([...folders, ...above].map(syncOne));
+      for (const path of [...folders, ...above]) synced.set(path, '');
+      for (const [i, path] of files.entries()) synced.set(path, stamps[i]!);
     },
 
     async send({ files, via, destination }, boundary) {
