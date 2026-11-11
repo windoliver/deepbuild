@@ -250,27 +250,90 @@ pub fn depth(x: &Shape, y: &Shape) -> f64 {
         (Capsule { a, b, r }, Obb { c, axes, half }) | (Obb { c, axes, half }, Capsule { a, b, r }) => {
             r - seg_box(*a, *b, *c, axes, *half)
         }
-        (Obb { c: ca, axes: aa, half: ha }, Obb { c: cb, axes: ab, half: hb }) => {
-            let d = sub(*cb, *ca);
-            let mut axes: Vec<V3> = aa.iter().chain(ab.iter()).copied().collect();
-            for u in aa {
-                for v in ab {
-                    let w = cross(*u, *v);
-                    let l = len(w);
-                    if l > 1e-9 {
-                        axes.push([w[0] / l, w[1] / l, w[2] / l]);
-                    }
-                }
+        (Obb { c: ca, axes: aa, half: ha }, Obb { c: cb, axes: ab, half: hb }) => boxes(*ca, aa, *ha, *cb, ab, *hb).0,
+    }
+}
+
+/// Two boxes' least overlap over their separating axes, with that axis pointing from the first
+/// box to the second.
+fn boxes(ca: V3, aa: &[V3; 3], ha: V3, cb: V3, ab: &[V3; 3], hb: V3) -> (f64, V3) {
+    let d = sub(cb, ca);
+    let mut axes: Vec<V3> = aa.iter().chain(ab.iter()).copied().collect();
+    for u in aa {
+        for v in ab {
+            let w = cross(*u, *v);
+            let l = len(w);
+            if l > 1e-9 {
+                axes.push([w[0] / l, w[1] / l, w[2] / l]);
             }
-            axes.iter()
-                .map(|l| {
-                    let ra: f64 = (0..3).map(|k| (dot(aa[k], *l) * ha[k]).abs()).sum();
-                    let rb: f64 = (0..3).map(|k| (dot(ab[k], *l) * hb[k]).abs()).sum();
-                    ra + rb - dot(d, *l).abs()
-                })
-                .fold(f64::INFINITY, f64::min)
         }
     }
+    axes.iter()
+        .map(|l| {
+            let ra: f64 = (0..3).map(|k| (dot(aa[k], *l) * ha[k]).abs()).sum();
+            let rb: f64 = (0..3).map(|k| (dot(ab[k], *l) * hb[k]).abs()).sum();
+            let along = dot(d, *l);
+            (ra + rb - along.abs(), l.map(|x| if along < 0.0 { -x } else { x }))
+        })
+        .fold((f64::INFINITY, [0.0; 3]), |least, x| if x.0 < least.0 { x } else { least })
+}
+
+/// The least move of `b` that takes it out of `a`, where their deepest pieces are two boxes: the
+/// depth along the axis of least overlap.
+fn apart(a: &Solid, b: &Solid) -> Option<V3> {
+    let pieces = a.shapes.iter().flat_map(|x| b.shapes.iter().map(move |y| (x, y)));
+    let deepest = pieces.max_by(|p, q| depth(p.0, p.1).total_cmp(&depth(q.0, q.1)))?;
+    let (Shape::Obb { c: ca, axes: aa, half: ha }, Shape::Obb { c: cb, axes: ab, half: hb }) = deepest else {
+        return None;
+    };
+    let (d, axis) = boxes(*ca, aa, *ha, *cb, ab, *hb);
+    Some(axis.map(|x| x * d))
+}
+
+/// A piece `t` lower along -Y.
+fn lowered(s: &Shape, t: f64) -> Shape {
+    let down = |p: &V3| [p[0], p[1] - t, p[2]];
+    match s {
+        Shape::Obb { c, axes, half } => Shape::Obb { c: down(c), axes: *axes, half: *half },
+        Shape::Ball { c, r } => Shape::Ball { c: down(c), r: *r },
+        Shape::Capsule { a, b, r } => Shape::Capsule { a: down(a), b: down(b), r: *r },
+    }
+}
+
+/// How far part `i` falls along -Y before one of its pieces first meets a piece of another part
+/// under it; none where nothing is under it. Two convex pieces close steadily until they meet,
+/// so each pair's first meeting is found by halving.
+fn fall(solids: &[Solid], i: usize) -> Option<f64> {
+    let mut least: Option<f64> = None;
+    for (_, o) in solids.iter().enumerate().filter(|(j, _)| *j != i) {
+        for (x, y) in solids[i].shapes.iter().flat_map(|x| o.shapes.iter().map(move |y| (x, y))) {
+            let ([xl, xh], [yl, yh]) = (x.aabb(), y.aabb());
+            if xl[0] > yh[0] || yl[0] > xh[0] || xl[2] > yh[2] || yl[2] > xh[2] || yl[1] >= xl[1] {
+                continue;
+            }
+            let gap = |t: f64| -depth(&lowered(x, t), y);
+            // Already on a part under it, which nothing holds either: it has nowhere to fall.
+            if gap(0.0) <= 0.0 {
+                return None;
+            }
+            let (mut lo, mut hi) = (0.0, xl[1] - yl[1]);
+            if gap(hi) > 0.0 {
+                continue;
+            }
+            for _ in 0..60 {
+                let mid = (lo + hi) / 2.0;
+                if gap(mid) > 0.0 {
+                    lo = mid;
+                } else {
+                    hi = mid;
+                }
+            }
+            if least.is_none_or(|l| hi < l) {
+                least = Some(hi);
+            }
+        }
+    }
+    least
 }
 
 /// How far part `a` passes into part `b`: the deepest of their pieces' pairs.
@@ -410,7 +473,11 @@ pub fn audit(solids: &[Solid], cfg: &Config) -> Vec<Fault> {
                 ids: vec![a.id.clone(), b.id.clone()],
                 by: d,
                 fix: format!("move {} or {} apart by {:.4} m", a.id, b.id, d),
-                change: None,
+                // The move is the later part's, unless that one alone is declared floating, as a floor is.
+                change: apart(a, b).map(|v| match cfg.floating.contains(&b.id) && !cfg.floating.contains(&a.id) {
+                    true => Change::Place { id: a.id.clone(), by: v.map(|x| -x), yaw: 0.0 },
+                    false => Change::Place { id: b.id.clone(), by: v, yaw: 0.0 },
+                }),
             });
         }
         if d >= -cfg.touch || allowed {
@@ -458,12 +525,13 @@ pub fn audit(solids: &[Solid], cfg: &Config) -> Vec<Fault> {
     }
     for (i, s) in solids.iter().enumerate() {
         if !held[i] {
+            let drop = fall(solids, i);
             out.push(Fault {
                 code: FLOATING,
                 ids: vec![s.id.clone()],
                 by: 0.0,
                 fix: format!("rest {} on a part, relate it to one, or declare it floating", s.id),
-                change: None,
+                change: drop.map(|t| Change::Place { id: s.id.clone(), by: [0.0, -t, 0.0], yaw: 0.0 }),
             });
         }
     }
@@ -667,6 +735,44 @@ mod tests {
         assert!(swept.failed.is_empty());
         assert_eq!(swept.estimates.len(), 4);
         assert_eq!(swept.estimates[0].1, vec!["lid"]);
+    }
+
+    /// A floor slab from y = -0.2 to 0, which may float, before or after one part `half` about `c`:
+    /// the audit's one fault on it with the move its fix names, which, made, leaves no fault.
+    fn moved_clear(c: V3, half: V3, floor_first: bool) -> (&'static str, V3) {
+        let scene = |c: V3| {
+            let mut parts = vec![cube("floor", [0.0, -0.1, 0.0], [3.0, 0.1, 3.0]), cube("part", c, half)];
+            if !floor_first {
+                parts.reverse();
+            }
+            parts
+        };
+        let cfg = Config { floating: ["floor".to_string()].into(), ..Config::default() };
+        let f = audit(&scene(c), &cfg);
+        assert_eq!(f.len(), 1, "{f:?}");
+        let Some(Change::Place { id, by, yaw }) = &f[0].change else {
+            panic!("{} names no move: {:?}", f[0].code, f[0].change);
+        };
+        assert_eq!((id.as_str(), *yaw, by[0], by[2]), ("part", 0.0, 0.0, 0.0));
+        assert_eq!(audit(&scene([c[0], c[1] + by[1], c[2]]), &cfg), vec![]);
+        (f[0].code, *by)
+    }
+
+    #[test]
+    fn a_box_sunk_into_the_floor_is_moved_out_and_the_floor_stays() {
+        // 0.02 m into the slab's underside, the floor first; then into its top, the floor last.
+        for (y, floor_first, out) in [(-0.68, true, -0.02), (0.48, false, 0.02)] {
+            let (code, by) = moved_clear([0.0, y, 0.0], [0.5; 3], floor_first);
+            assert_eq!(code, OVERLAP);
+            assert!((by[1] - out).abs() < 1e-9, "{by:?}");
+        }
+    }
+
+    #[test]
+    fn a_vase_floating_over_the_floor_is_lowered_onto_it() {
+        let (code, by) = moved_clear([2.0, 0.7, 0.0], [0.1, 0.5, 0.1], true);
+        assert_eq!(code, FLOATING);
+        assert!((by[1] + 0.2).abs() < 1e-9, "{by:?}");
     }
 
     /// A kit sheet lying flat, 1 m square about `origin`, with its yaw and the boundary edges given.
