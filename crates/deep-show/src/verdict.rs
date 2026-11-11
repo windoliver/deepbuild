@@ -201,6 +201,16 @@ impl<'a> Hub<'a> {
         let Some(c) = scenario.claims.get(claim) else {
             return json!({"result": "INVALID", "key": {"revisions": []}, "stale": false, "requirements": []});
         };
+        // Planted (#504): the documents the agent showed on the claim judged beside its deliverables.
+        let fed;
+        let c = if self.planted(Planted::FigureFeedsVerdict) {
+            let mut x = c.clone();
+            x.deliverables.extend(scenario.docs_for.iter().filter(|(_, f)| *f == claim).map(|(d, _)| d.clone()));
+            fed = x;
+            &fed
+        } else {
+            c
+        };
         let read = self.evaluated_reads(c);
         let determinism = self.determinism_runs(c);
         let layout = self.film_layout_runs(c);
@@ -405,6 +415,7 @@ impl<'a> Hub<'a> {
                     play: crate::time::PlayPath::Warm,
                     at_times: at_times.clone(),
                     compare: crate::determinism::Compare::SameMachine,
+                    session: false,
                 };
                 let compared = self.determinism(&d);
                 if compared["code"] == "gpu_unavailable" {

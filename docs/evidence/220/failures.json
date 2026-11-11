@@ -1,0 +1,39 @@
+{
+  "unknown_command": [
+    {
+      "at": [
+        0,
+        3
+      ],
+      "code": "typeset.unknown_command",
+      "command": "\\ce"
+    }
+  ],
+  "parts_apart": [
+    {
+      "code": "typeset.parts_apart",
+      "parts": [
+        "e^{i",
+        "\\pi}"
+      ]
+    }
+  ],
+  "alt_mismatch": [
+    {
+      "check": "document.validate",
+      "code": "formula.alt_mismatch",
+      "severity": "error",
+      "ids": [
+        "eq"
+      ],
+      "path": "items/eq/params/alt",
+      "actual": {
+        "item": "eq",
+        "alt": "a^2+b^2=c^3",
+        "source": "a^2 + b^2 = c^2"
+      },
+      "what": "The vector names a typeset job's output, and its alt isn't the job's source.",
+      "fix": "Set alt to the job's source, or leave it out to take the source as the accessible name."
+    }
+  ]
+}
