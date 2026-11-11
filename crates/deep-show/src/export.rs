@@ -12,7 +12,10 @@ use deep_canvas::schedule::{default_view, Scheduler, Session as DocSession};
 use deep_canvas::time as clock;
 use deep_canvas::timecode;
 use deep_codecs::ENCODE_TOOL;
-use deep_canvas_media::mix::{Mix, Player};
+use deep_canvas_media::analysis::loudness::{self, Loudness};
+use deep_canvas_media::captions::{self, Caption};
+use deep_canvas_media::delivery::{self, Miss};
+use deep_canvas_media::mix::{amp, Mix, Player};
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 
@@ -39,6 +42,7 @@ impl Hub<'_> {
         session.frame(sched, t, &default_view(doc));
         let (_, pictures) = self.videos_at(doc, t, true);
         self.renderer.videos = pictures;
+        self.caption_at(doc, t);
         let unfit = |code| Unfit { code, path: "frames".into() };
         let drawing = drawing_of(sched, session).ok_or_else(|| unfit("no_drawing"))?;
         if deep_canvas_scene3d::scene::has_3d(doc) {
@@ -96,6 +100,7 @@ impl Hub<'_> {
             let hz = mix.rate as u32;
             let span = |k: i64| self.span_start(k, shard.frame, hz);
             let mut player = Player::new(mix.clone(), planted_of(self.scenario.planted, false));
+            player.delivery = amp(shard.gain);
             player.seek(span(shard.frames.start));
             for k in shard.frames.clone() {
                 let n = (span(k + 1) - span(k)).max(0) as usize;
@@ -105,6 +110,7 @@ impl Hub<'_> {
                 out.pcm.push(hex(Sha256::digest(&bytes)));
                 pcm.extend_from_slice(&bytes);
             }
+            out.cut = player.limited();
         }
         Ok(out)
     }
@@ -149,6 +155,23 @@ pub struct Job {
     pub readback: bool,
     /// #544: the input track the document's logic items read.
     pub track: Vec<Value>,
+    /// #502: `captions: {profile, files, mode}` and `loudness_profile`.
+    pub captions: Captions,
+    pub loudness_profile: Option<String>,
+}
+
+/// An export's `captions`: the profile that holds them, the sidecars to write (`[srt]` when left
+/// out) and whether the frames carry them (`open` when left out).
+pub struct Captions {
+    pub profile: Option<String>,
+    pub files: Vec<String>,
+    pub mode: String,
+}
+
+impl Default for Captions {
+    fn default() -> Self {
+        Captions { profile: None, files: vec!["srt".into()], mode: "open".into() }
+    }
 }
 
 impl Job {
@@ -244,6 +267,19 @@ pub fn parse(c: &Map<String, Value>) -> Option<Job> {
         },
         readback: c.get("readback").and_then(Value::as_bool).unwrap_or(false),
         track: c.get("track").map_or(Some(Vec::new()), |t| t.as_array().cloned())?,
+        captions: {
+            let cap = c.get("captions");
+            Captions {
+                profile: s(cap.and_then(|c| c.get("profile"))),
+                files: match cap.and_then(|c| c.get("files")) {
+                    None => vec!["srt".into()],
+                    Some(Value::String(f)) => vec![f.clone()],
+                    Some(f) => f.as_array()?.iter().map(|f| f.as_str().map(str::to_string)).collect::<Option<_>>()?,
+                },
+                mode: s(cap.and_then(|c| c.get("mode"))).unwrap_or_else(|| "open".into()),
+            }
+        },
+        loudness_profile: s(c.get("loudness_profile")),
     })
 }
 
@@ -270,6 +306,7 @@ impl Hub<'_> {
         let scratch = std::env::temp_dir().join(format!("deep-export-{}-{}", std::process::id(), self.media.exports));
         self.media.exports += 1;
         let result = self.export_inner(job, doc, &scratch);
+        self.media.captions = None;
         let _ = std::fs::remove_dir_all(&scratch);
         match result {
             Ok(mut receipt) => {
@@ -327,6 +364,18 @@ impl Hub<'_> {
                 return Err(json!({"code": "export_size_odd", "size": size}));
             }
         }
+        // #502: the captions asked for: a mode that draws them or sidecars that carry them.
+        let cap = &job.captions;
+        if !matches!(cap.mode.as_str(), "open" | "closed" | "both") || cap.files.iter().any(|f| f != "srt" && f != "vtt") {
+            return Err(json!({"code": "bad_captions", "captions": {"mode": cap.mode, "files": cap.files},
+                "why": "captions.mode is open, closed or both, and captions.files lists srt, vtt or both"}));
+        }
+        if cap.mode != "open" && cap.files.is_empty() {
+            return Err(json!({"code": "captions_not_carried", "captions": {"mode": cap.mode, "files": cap.files},
+                "why": format!("captions: mode {} with no file would carry no captions; name srt or vtt in captions.files", cap.mode)}));
+        }
+        let profile = job.loudness_profile.as_deref().unwrap_or("none");
+        let profile = delivery::profile(profile).ok_or_else(|| json!({"code": "unknown_loudness_profile", "loudness_profile": profile}))?;
         // The frames that leave, as absolute indices on the frame grid.
         let on_grid = |t: i64| -> Result<i64, Value> {
             if t.rem_euclid(frame) != 0 {
@@ -382,7 +431,7 @@ impl Hub<'_> {
             if self.scenario.planted == Some(Planted::ExportStartsThenStops) {
                 // Planted: it starts anyway and stops at the missing strip's first frame.
                 let stop = issue["start"].as_i64().map_or(0, |t| clock::index(t, frame));
-                let shard = Shard { frames: frames.start..stop.max(frames.start), frame, size: job.size, opaque: !job.alpha, mix: None };
+                let shard = Shard { frames: frames.start..stop.max(frames.start), frame, size: job.size, opaque: !job.alpha, mix: None, gain: 0.0 };
                 let part = self.export_shard(&doc, &shard, scratch, &mut Vec::new())?;
                 let mut bytes = Vec::new();
                 for f in &part.files {
@@ -393,6 +442,26 @@ impl Hub<'_> {
             }
             return Err(json!({"outcome": "stopped", "gate": "readiness", "frames_drawn": drawn, "issues": [issue]}));
         }
+        // #502: the script's lines, their captions laid out on this export's frames and held to
+        // their profile, before any frame is drawn.
+        if let Some(s) = self.script_of(&doc) {
+            if let Some(problem) = &s.problem {
+                return Err(problem.clone());
+            }
+            if let Some(who) = &s.unshareable {
+                return Err(json!({"outcome": "blocked", "state": "BLOCKED", "code": "narration.unshareable", "unshareable": who,
+                    "reason": format!("an export carries narration only under a license that says shareable: true; this one's doesn't: {who}")}));
+            }
+        }
+        self.media.captions = Some(crate::narration::View { frame, draw: cap.mode != "closed", profile: cap.profile.clone() });
+        let laid = self.captions_of(&doc, frame, cap.profile.as_deref())?;
+        if let Some(l) = &laid {
+            let found = captions::check(&l.captions, &l.limits, &crate::narration::graphemes);
+            if !found.is_empty() {
+                let list: Vec<Value> = found.iter().map(|v| json!({"caption": v.caption, "measure": v.limit, "what": v.what})).collect();
+                return Err(json!({"outcome": "failed", "code": "captions", "profile": l.profile.name, "issues": list}));
+            }
+        }
         let hz = job.sample_rate.unwrap_or_else(|| sample_rate_of(&doc));
         let mix = if target == "video" {
             let mut d = doc.clone();
@@ -401,6 +470,29 @@ impl Hub<'_> {
         } else {
             None
         };
+        // #502: the delivery gain: the master measured with none, then one static gain to the
+        // profile's target ahead of the master's limiter, and one correction where its cuts left
+        // the loudness outside the profile.
+        let (mut gain, mut before) = (0.0, None);
+        if let (Some(mix), Some((target_lufs, _))) = (&mix, profile.integrated) {
+            let (first, last) = (self.span_start(frames.start, frame, hz), self.span_start(frames.end, frame, hz));
+            let planted = planted_of(self.scenario.planted, false);
+            let pass = |db: f64| {
+                let mut player = Player::new(mix.clone(), planted);
+                player.delivery = amp(db);
+                player.seek(first);
+                let mut buf = vec![0f32; 2 * (last - first).max(0) as usize];
+                player.read(&mut buf);
+                (loudness::measure(&buf, &[1.0, 1.0], i64::from(hz), 8), player.limited())
+            };
+            let (master, _) = pass(0.0);
+            // Planted: no static gain; the normalizer rides the master instead.
+            if let Some(g) = profile.gain(master.integrated).filter(|_| !deep_canvas_media::planted(NORMALIZER)) {
+                let (read, cut) = pass(g);
+                gain = if cut && !profile.holds(read.integrated) { g + target_lufs - read.integrated } else { g };
+            }
+            before = Some(master);
+        }
         // Planted: the png writer exports only the session's selected items.
         if target == "png" && self.scenario.planted == Some(Planted::TargetExportsSelection) {
             let selection = self.session_state.get(&job.doc).map(|s| s["selection"].clone()).unwrap_or(Value::Null);
@@ -420,10 +512,28 @@ impl Hub<'_> {
                 size: job.size,
                 opaque: !job.alpha,
                 mix: mix.clone(),
+                gain,
             };
             let dir = scratch.join(format!("shard{i}"));
             std::fs::create_dir_all(&dir).map_err(|_| refuse("export_unwritable"))?;
             parts.push(self.export_shard(&doc, &shard, &dir, &mut pcm)?);
+        }
+        // #502: the readings of the PCM that leaves, held to the profile; and, when the
+        // limiter never cut, its loudness range held to the master's before the gain.
+        let cut = parts.iter().any(|p| p.cut);
+        let mut sound = None;
+        if mix.is_some() {
+            if before.is_some() && deep_canvas_media::planted(NORMALIZER) {
+                ride_gain(&mut pcm, hz);
+            }
+            let samples: Vec<f32> = pcm.as_chunks::<4>().0.iter().map(|b| f32::from_le_bytes(*b)).collect();
+            let read = loudness::measure(&samples, &[1.0, 1.0], i64::from(hz), 8);
+            let mut misses = profile.misses(&read);
+            misses.extend(before.as_ref().and_then(|b: &Loudness| delivery::range_kept(b.range, read.range, cut)));
+            if !misses.is_empty() {
+                return Err(loudness_failed(profile.name, "pcm", &misses, &read));
+            }
+            sound = Some(read);
         }
         let size = parts.first().map(|p| p.size).unwrap_or([0, 0]);
         let first = start_number + frames.start as u64;
@@ -443,9 +553,51 @@ impl Hub<'_> {
                 return Err(e);
             }
         };
-        if let Err(e) = std::fs::rename(&temp, &out) {
+        let drop_temp = || {
             let _ = std::fs::remove_file(&temp);
             let _ = std::fs::remove_dir_all(&temp);
+        };
+        // #502: the same readings of the decoded delivery, held to the profile too.
+        let mut delivered = None;
+        if sound.is_some() {
+            let read = match self.pcm_at(&temp, "delivery") {
+                Ok((rate, channels, samples)) => loudness::measure(&samples, &vec![1.0; channels], rate, 8),
+                Err(e) => {
+                    drop_temp();
+                    return Err(json!({"code": "delivery_unread", "why": e}));
+                }
+            };
+            let misses = profile.misses(&read);
+            if !misses.is_empty() {
+                drop_temp();
+                return Err(loudness_failed(profile.name, "delivery", &misses, &read));
+            }
+            delivered = Some(read);
+        }
+        // #502: the sidecars, beside the delivery under its name, whole or not at all.
+        let mut sidecars: Vec<(PathBuf, PathBuf)> = Vec::new();
+        if let Some(l) = &laid {
+            for kind in &job.captions.files {
+                let cues = sidecar_cues(&l.captions, frame);
+                let text = if kind == "srt" { captions::srt(&cues) } else { captions::vtt(&cues) };
+                let to = out.with_extension(kind);
+                let part = to.with_file_name(format!(".{}.part", to.file_name().map(|f| f.to_string_lossy()).unwrap_or_default()));
+                if std::fs::write(&part, text).is_err() {
+                    drop_temp();
+                    sidecars.iter().for_each(|(part, _)| drop(std::fs::remove_file(part)));
+                    return Err(refuse("export_unwritable"));
+                }
+                sidecars.push((part, to));
+            }
+        }
+        let renamed = std::fs::rename(&temp, &out).and_then(|()| sidecars.iter().try_for_each(|(part, to)| std::fs::rename(part, to)));
+        if let Err(e) = renamed {
+            drop_temp();
+            for (part, to) in &sidecars {
+                let _ = std::fs::remove_file(part);
+                let _ = std::fs::remove_file(to);
+            }
+            let _ = std::fs::remove_file(&out);
             return Err(json!({"code": "export_unwritable", "why": e.to_string()}));
         }
         // Planted: the png writer writes a baked channel back into the document.
@@ -484,6 +636,24 @@ impl Hub<'_> {
             receipt["sample_rate"] = json!(hz);
             receipt["audio"] = json!(job.audio_codec);
             receipt["pcm_hashes"] = json!(parts.iter().flat_map(|p| p.pcm.iter().cloned()).collect::<Vec<_>>());
+        }
+        if let Some(read) = &sound {
+            for (k, v) in readings(read) {
+                receipt[k] = v;
+            }
+            receipt["loudness_profile"] = json!(profile.name);
+            receipt["gain"] = json!(gain);
+            receipt["limiter_cut"] = json!(cut);
+            receipt["delivery"] = Value::Object(delivered.as_ref().map(readings).unwrap_or_default());
+        }
+        if let Some(l) = &laid {
+            receipt["captions"] = json!({
+                "profile": l.profile.name,
+                "mode": job.captions.mode,
+                "files": job.captions.files,
+                "cues": l.captions.iter().map(caption_json).collect::<Vec<_>>(),
+                "violations": [],
+            });
         }
         let mut reply = json!(receipt);
         if job.readback {
@@ -730,6 +900,69 @@ fn wav_samples(bytes: &[u8]) -> Option<(u32, u16, Vec<f32>)> {
     Some((rate, channels, samples))
 }
 
+/// The planted sidecar writer (#502): it times cues at 24 frames a second whatever the rate.
+const SIDECAR_24: &str = "sidecar_times_at_24fps";
+/// The planted normalizer (#502): it rides gain to −23 LUFS.
+const NORMALIZER: &str = "normalizer_rides_gain";
+
+/// The captions as a sidecar writes them: as they are, or, planted, each time's frame count
+/// at 1/24 s a frame.
+fn sidecar_cues(captions: &[Caption], frame: i64) -> Vec<Caption> {
+    if !deep_canvas_media::planted(SIDECAR_24) {
+        return captions.to_vec();
+    }
+    let at_24 = |t: i64| t / frame * (deep_canvas::grammar::FLICKS_PER_SECOND / 24);
+    captions.iter().map(|c| Caption { start: at_24(c.start), end: at_24(c.end), ..c.clone() }).collect()
+}
+
+/// The planted normalizer: each 10 ms of the PCM takes the gain that brings the short-term
+/// loudness of the 3 s ending there to −23 LUFS, the first 3 s the first whole window's.
+fn ride_gain(pcm: &mut [u8], hz: u32) {
+    let samples: Vec<f32> = pcm.as_chunks::<4>().0.iter().map(|b| f32::from_le_bytes(*b)).collect();
+    let short_term = loudness::measure(&samples, &[1.0, 1.0], i64::from(hz), 1).short_term;
+    let Some(last) = short_term.len().checked_sub(1) else { return };
+    let block = (hz as usize / 100).max(1) * 8;
+    for (k, bytes) in pcm.chunks_mut(block).enumerate() {
+        let read = short_term[k.clamp(299.min(last), last)];
+        if !read.is_finite() {
+            continue;
+        }
+        let gain = amp(-23.0 - read);
+        for b in bytes.as_chunks_mut::<4>().0 {
+            *b = ((f64::from(f32::from_le_bytes(*b)) * gain) as f32).to_le_bytes();
+        }
+    }
+}
+
+/// A loudness bake's readings as a receipt carries them.
+fn readings(l: &Loudness) -> serde_json::Map<String, Value> {
+    let n = |x: f64| if x.is_finite() { json!(x) } else { Value::Null };
+    let plr = l.true_peak - l.integrated;
+    [("integrated", n(l.integrated)), ("lra", n(l.range)), ("max_m", n(l.momentary_max)), ("max_s", n(l.short_term_max)),
+        ("true_peak", n(l.true_peak)), ("sample_peak", n(l.sample_peak)), ("plr", n(plr))]
+        .into_iter()
+        .map(|(k, v)| (k.to_string(), v))
+        .collect()
+}
+
+/// An export whose sound lies outside its loudness profile: each measure that does, with its
+/// reading and what it is held to, on the PCM or on the decoded delivery.
+fn loudness_failed(profile: &str, on: &str, misses: &[Miss], read: &Loudness) -> Value {
+    let issues: Vec<Value> = misses
+        .iter()
+        .map(|m| {
+            json!({"measure": m.measure, "reading": m.reading, "target": m.target, "tolerance": m.tolerance, "on": on,
+                "what": format!("{}: the {on} reads {:.2}, held to {:.2} within {:.2} by {profile}", m.measure, m.reading, m.target, m.tolerance)})
+        })
+        .collect();
+    json!({"outcome": "failed", "code": "loudness", "loudness_profile": profile, "issues": issues, "readings": readings(read)})
+}
+
+/// A caption as a receipt lists it.
+fn caption_json(c: &Caption) -> Value {
+    json!({"name": c.id, "line": c.line, "text": c.lines.join("\n"), "in": c.start, "out": c.end})
+}
+
 /// The document's span, from its transport.
 fn doc_span(doc: &Value) -> Option<i64> {
     let span = doc.pointer("/transport/span")?;
@@ -743,6 +976,8 @@ pub(crate) struct Shard {
     pub size: Option<[u16; 2]>,
     pub opaque: bool,
     pub mix: Option<Arc<Mix>>,
+    /// #502: the delivery gain on the master, dB.
+    pub gain: f64,
 }
 
 /// What a shard rendered: its frame files, their BLAKE3 digests, each frame span's SHA-256 over
@@ -753,6 +988,8 @@ pub(crate) struct Rendered {
     pub hashes: Vec<[u8; 32]>,
     pub pcm: Vec<String>,
     pub size: [u16; 2],
+    /// #502: whether the master's limiter cut a sample of the shard.
+    pub cut: bool,
 }
 
 pub(crate) fn hex(d: impl AsRef<[u8]>) -> String {

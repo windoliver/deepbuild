@@ -335,6 +335,7 @@ impl<'a> Hub<'a> {
                 reply["video"] = Value::Object(video);
             }
             self.renderer.videos = pictures;
+            self.caption_at(d, t);
         }
         if e.film {
             let glyphs = drawing
@@ -400,7 +401,16 @@ impl<'a> Hub<'a> {
             .renderer
             .prepare_drawing(drawing, &self.scenario.evidence)?;
         let size = size.unwrap_or_else(|| snapshot::px(drawn.frame.size));
-        let rgba = self.renderer.raster(&drawn, size, self.ground(opaque));
+        let rgba = if self.renderer.caption.is_some() {
+            // #502: the caption layer draws over every item and under the status marks.
+            let mut rgba = self.renderer.raster(&drawn.part(drawn.view, true, false), size, self.ground(opaque));
+            self.caption_over(&mut rgba, size);
+            let status = self.renderer.raster(&drawn.part(drawn.view, false, true), size, None);
+            snapshot::over(&mut rgba, &status);
+            rgba
+        } else {
+            self.renderer.raster(&drawn, size, self.ground(opaque))
+        };
         Ok((rgba, drawn, size))
     }
 
@@ -462,6 +472,7 @@ impl<'a> Hub<'a> {
             (Some(mix), 2) => crate::film::blend(&pictures[0], &pictures[1], mix, size, ink),
             _ => pictures.swap_remove(0),
         };
+        self.caption_over(&mut rgba, size);
         let top = &sides.sides[sides.status.min(sides.sides.len() - 1)];
         let status = drawn.part(Some(crate::film::view(&top.pose, frame)), false, true);
         let over = self.renderer.raster(&status, size, None);
@@ -500,6 +511,7 @@ impl<'a> Hub<'a> {
         })?;
         let over = self.renderer.raster(&drawn, size, None);
         snapshot::over(&mut rgba, &over);
+        self.caption_over(&mut rgba, size);
         Ok((rgba, size))
     }
 

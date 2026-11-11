@@ -245,6 +245,9 @@ pub struct Renderer {
     /// #499: each video asset's frame at the time being drawn, by asset, set before a frame is
     /// prepared; an image mark of one draws it in place of a decoded picture.
     pub videos: BTreeMap<String, Arc<Pixmap>>,
+    /// #502: the caption showing at the time being drawn, set before a frame is rastered: the
+    /// caption layer, drawn over the frame's items in the frame's own units.
+    pub caption: Option<Arc<Drawn>>,
     /// What Vello CPU draws with: the scalar level and the f32 pipeline, as deep-marks-vello pins
     /// them; only #1897's cross-machine record draws at another setting, which its record names.
     pub raster_2d: (RenderSettings, RasterizerSettings),
@@ -459,6 +462,7 @@ impl Renderer {
             shaper: Shaper::new(),
             resources: Resources::new(),
             videos: BTreeMap::new(),
+            caption: None,
             raster_2d: (deep_marks_vello::settings(), deep_marks_vello::rasterizer()),
             kept: std::collections::HashMap::new(),
         }
