@@ -3450,7 +3450,9 @@ export class Core {
   /** The pull request the forge holds for the session's branch, or null when it holds none, or undefined when it can't be read. */
   private async pullFor(meta: HookMeta): Promise<string | null | undefined> {
     const lookup = async (): Promise<string | null | undefined> => {
-      const repo = repoOf(meta.cwd);
+      // The forge knows the repo by its origin's owner and name (#1881), never by the scope ID; with no origin there is nothing to ask.
+      const origin = forgeOf(meta.cwd);
+      const repo = origin?.slice(origin.indexOf('/') + 1);
       const [row] = (await this.record.raw(`SELECT branch FROM sessions WHERE id = ?`, [meta.session])) as { branch: string | null }[];
       const branch = row?.branch || await new Promise<string | undefined>((done) => execFile('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: meta.cwd, timeout: 2000 }, (error, out) => done(error ? undefined : out.trim())));
       if (!repo || !branch) return undefined;
