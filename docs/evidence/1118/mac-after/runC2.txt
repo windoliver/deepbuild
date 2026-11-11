@@ -1,0 +1,33 @@
+BAY claim {"index":1,"role":"base","use":"before","bay":"~/h1118c/home/deepbuild-bays/1/base","base":"fde376f0f233e5f94bc6b0673f55c8e43983950d","tree":"80712004cd10b16a3fed81ed7f687ea14842574c","bundle":null,"untracked":null,"overlay":{"files":4288,"hash":"ca675310911b0972a5b01ec516a812ddeb72a47e2c12bfdabf7b5234486222de"},"sealedTree":{"base":"fde376f0f233e5f94bc6b0673f55c8e43983950d","tree":"80712004cd10b16a3fed81ed7f687ea14842574c","bundle":null,"untracked":null},"seal":"intact","cold":false,"stopped":false,"installed":false,"written":1,"deleted":32,"crates":[]}
+BAY claim {"index":1,"role":"change","use":"before","bay":"~/h1118c/home/deepbuild-bays/1/change","tree":"8a82768b8cfa621ab7d1f953d583f59670d15105","bundle":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","untracked":"a78a41157ff28da4277cc781b0a6107df25a37cdaa170f72c86cc07c513c25e9","untrackedFiles":["tests/acceptance/1118-e2e/cargo.test.mjs"],"overlay":null,"sealedTree":{"tree":"8a82768b8cfa621ab7d1f953d583f59670d15105","bundle":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","untracked":"a78a41157ff28da4277cc781b0a6107df25a37cdaa170f72c86cc07c513c25e9","untrackedFiles":["tests/acceptance/1118-e2e/cargo.test.mjs"]},"seal":"intact","cold":false,"stopped":false,"installed":false,"written":0,"deleted":30,"crates":[]}
+FAIL before: tests/acceptance/1118-e2e/cargo.test.mjs › #1118.1f06c2df the workspace builds where the proof runs it: passed on the merge base
+  Fix: Make each tagged test fail on the merge base at its assertion, or name a planted wrong program its criterion fails in tests/acceptance/<issue>/twins.json; a merge base that cannot install is repaired on main.
+PASS before: tests/acceptance/1118/lock.test.mjs › #1118.5a7b1fc3 when the change edits the lock, the next proof runs npm ci once, in the change bay: failed on the merge base at its assertion
+PASS before: tests/acceptance/1118/lock.test.mjs › #1118.5a7b1fc3 npm ci runs in the base bay only when the merge base moved past a lock change, and once then: failed on the merge base at its assertion
+PASS before: tests/acceptance/1118/run.test.mjs › #1118.5a7b1fc3 a second proof of the same tree, with no lock change, runs npm ci 0 times, though every use ran in a bay: failed on the merge base at its assertion
+PASS before: tests/acceptance/1118/run.test.mjs › #1118.dc689388 when replay runs, crash's overlay and the before lane's base overlays are absent from the bays, and each use's recipe is in the record: failed on the merge base at its assertion
+PASS before: tests/acceptance/1118/run.test.mjs › #1118.1f06c2df a second proof of the same tree, with origin/main pinned and a twin, crash overlay and base overlay that touch no Rust, compiles 0 crates in both bays: failed on the merge base at its assertion
+PASS before: tests/acceptance/1118/run.test.mjs › #1118.4cb77839 an untracked tagged test in the worktree is present in the change bay, runs there, and is named in the record: failed on the merge base at its assertion
+PASS before: tests/acceptance/1118/run.test.mjs › #1118.e7117f8d proof wall time is a reading: each proof of the same commit prints its own: failed on the merge base at its assertion
+PASS before: tests/acceptance/1118/rust.test.mjs › #1118.1f06c2df when the twin touches Rust, a second proof of the same tree rebuilds only the crate it touches, named in the record: failed on the merge base at its assertion
+BAY release {"index":1,"role":"base","bay":"~/h1118c/home/deepbuild-bays/1/base","status":null,"targetBytes":23160143046,"touched":1}
+BAY release {"index":1,"role":"change","bay":"~/h1118c/home/deepbuild-bays/1/change","status":null,"targetBytes":23160658345,"touched":0}
+proof: wall time 117.1 s
+      117.31 real       214.88 user        44.47 sys
+           671023104  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+            11496698  page reclaims
+               88824  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                7823  messages sent
+                6234  messages received
+                 320  signals received
+               76087  voluntary context switches
+              935248  involuntary context switches
+         81984780218  instructions retired
+         23153764731  cycles elapsed
+           223049792  peak memory footprint

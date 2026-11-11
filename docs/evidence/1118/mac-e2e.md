@@ -1,8 +1,9 @@
-# #1118 on the Mac: three proof runs of one fixed input in bays, and main's proof code on the same input
+# #1118 on the Mac: proof runs of one fixed input in bays, and main's proof code on the same input
 
 Reported by the Mac's Remote Control session. The 2026-11-04 runs are committed unchanged, apart from this note; their
-logs were on the Mac under /tmp/db1118-logs and were lost when that folder was emptied, so their numbers (the "after"
-readings) survive only as this reported text. The 2026-11-09 "before" run's files are committed under mac-before/.
+logs were on the Mac under /tmp/db1118-logs and were lost when that folder was emptied, so their numbers survive only
+as this reported text. The 2026-11-09 "before" run's files are committed under mac-before/, and the 2026-11-11 rerun
+of the bays code, which replaces the lost "after" logs, under mac-after/ (section at the end).
 
 A manual end-to-end run on the Mac (Mac15,12, 8 cores, macOS 14.7.7, Node 24.22.0, cargo 1.99.1) on 2026-11-04, of the
 real repository. The proof code is claude/issue-1118-040190 at f17ae5c1, with origin/main at fde376f0 pinned for the
@@ -92,6 +93,50 @@ power. The Mac session reports that it ran alone, with the next timed job waitin
 - The verdicts are the same 8 PASS and 1 FAIL as run1..run3 ([runA.txt](mac-before/runA.txt)), so both readings did
   the same work. Each copy compiled the whole workspace ([e2e.jsonl](mac-before/e2e.jsonl)), as run1-cold's bays did.
 
+## The "after" reading with its logs: the bays code on the same input (2026-11-11)
+
+The 2026-11-04 "after" logs were lost, so the bays code was run again, cold then warm, on Run A's input. Its files are
+in [mac-after/](mac-after/) (`runC1.log`, `runC2.log` and `npm.log` saved as `.txt`), with home paths written `~`.
+Same Mac, on AC power, run by the Mac's Remote Control session.
+
+- **Input and code.** The same clone as the "before" run, `~/h1118a/repo` at `f17ae5c1` with `origin/main` pinned to
+  `fde376f0` and the untracked probe its only change ([runC-meta.txt](mac-after/runC-meta.txt)). The proof code is the
+  clone's own `scripts/` at `f17ae5c1`, the #1118 bays code.
+- **Command,** in `~/h1118a/repo`: `/usr/bin/time -l node scripts/proof.mjs before`, twice, with a new empty
+  `HOME=~/h1118c/home` so the bays start cold; `RUSTUP_HOME`, `CARGO_HOME`, `npm_config_cache`, `GH_CONFIG_DIR` and
+  `GIT_CONFIG_GLOBAL` as in the "before" run, the npm shim first on PATH, `CARGO_TARGET_DIR` unset.
+- **When and load.** C1 04:54:16 to 05:12:17 UTC, C2 05:13:17 to 05:15:17 UTC. Each waited for a 1-minute load under
+  8 ([gate.txt](mac-after/gate.txt) holds the waits, the last ones reading 12.63 for C1 and 15.15 for C2), and
+  started at 6.36 and 7.02 ([runC-meta.txt](mac-after/runC-meta.txt)). Load averages: C1 6.36 / 7.60 / 5.24 at
+  start, 15.15 / 21.05 / 17.08 at the end; C2 7.02 / 17.62 / 16.07 at start (its 5-minute load was still C1's),
+  4.04 / 12.98 / 14.42 at the end. The gate read 19.31 two minutes before C1, so the Mac wasn't idle just before it.
+- **Disk** (`df -k /`): 103.5 GiB free at C1's start, lowest sample 64.1 GiB; the bays (44 GiB) were deleted after C2.
+
+| | Wall (`proof: wall time`) | `/usr/bin/time` real / user / sys | npm ci | npm run build | Crates compiled, base / change | Compiling lines | Seal, cold | Verdicts |
+|---|---|---|---|---|---|---|---|---|
+| C1 cold | **1039.0 s** | 1040.00 / 6146.88 / 516.37 s | 2: base bay 1, change bay 1 | 2 | 761 / 761 (1035 artifacts each) | 771 / 771 | none, cold (both) | 8 PASS, the probe's FAIL |
+| C2 warm | **117.1 s** | 117.31 / 214.88 / 44.47 s | **0** | 2 | **0 / 0** (1035 artifacts each, none compiled) | **0 / 0** | intact, warm (both) | the same |
+
+From [runC1.txt](mac-after/runC1.txt), [runC2.txt](mac-after/runC2.txt), [npm.txt](mac-after/npm.txt) and
+[e2e.jsonl](mac-after/e2e.jsonl):
+- **AC1.** C2, a second proof of the same tree with no lock change, runs `npm ci` 0 times: both claims say
+  `"installed":false`, and the shim logged only one `run build` per bay.
+- **AC3.** C2 compiles 0 crates in both bays: each bay's probe build reports 1035 artifacts with none in its
+  `compiled` list (the compiler-artifact messages with `fresh:false`) and no `Compiling` line; both claims list
+  `"crates":[]`.
+- **AC4.** Both change-bay claims name `"untrackedFiles":["tests/acceptance/1118-e2e/cargo.test.mjs"]`, and the probe's
+  build ran in `~/h1118c/home/deepbuild-bays/1/change` (its `cwd` in e2e.jsonl).
+- **AC5 `#1118.e7117f8d`, a reading, now with logs on both sides:** on the same commit and input, main's proof code
+  took 1065.0 s (2026-11-09); the bays code took 1039.0 s cold and 117.1 s warm (2026-11-11). Measured the same way,
+  by `/usr/bin/time`'s real time (main's code prints no wall-time line), that is 1064.98 s against 1040.00 s and
+  117.31 s. The cold runs are within 3% of each other, read as no difference: both build two full copies. The gain is the warm run, which keeps the bays'
+  builds and packages: 117 s against 1065 s. All three are readings, not budgets: each 1-minute load rose above the
+  Mac's 8 cores during the cold builds.
+- **The seal.** C1's claims say `"seal":"none","cold":true` (6281 files written in base, 6303 in change); C2's say
+  `"seal":"intact","cold":false`. The release lines report targetBytes 23,160,143,046 (base) and 23,160,658,345
+  (change).
+
 ## Not run here
 
-Nothing for the criteria. Main's proof code, open on 2026-11-04 for want of disk, ran on 2026-11-09 (above).
+Nothing for the criteria. Main's proof code, open on 2026-11-04 for want of disk, ran on 2026-11-09, and the bays code
+was rerun with its logs kept on 2026-11-11 (above).
