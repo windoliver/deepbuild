@@ -905,8 +905,9 @@ fn kit_one(
 }
 
 /// The values the kit tries for a field whose value is `now`: its hard range's ends (or one more
-/// than `now` without one), the other truth value, or its other options. A type with no such
-/// value (an ID, a vector, records, text) yields none.
+/// than `now` without one), the other truth value, its other options, each number of a vector
+/// or range one more, the text with one more character, or the records less their last row. An
+/// ID, a record, or empty records yield none: the kit can't make another that is valid.
 fn others(input: &Input, now: &Value) -> Vec<Value> {
     let n = now.as_f64();
     match input.ty.as_str() {
@@ -932,6 +933,19 @@ fn others(input: &Input, now: &Value) -> Vec<Value> {
             .iter()
             .filter(|o| now.as_str() != Some(o.as_str()))
             .map(|o| json!(o))
+            .collect(),
+        "vec3" | "range" => now
+            .as_array()
+            .map(|a| a.iter().map(|v| json!(v.as_f64().unwrap_or(0.0) + 1.0)))
+            .map(|a| json!(a.collect::<Vec<_>>()))
+            .into_iter()
+            .collect(),
+        "text" => vec![json!(format!("{}x", now.as_str().unwrap_or_default()))],
+        "records" => now
+            .as_array()
+            .and_then(|a| a.split_last())
+            .map(|(_, rest)| json!(rest))
+            .into_iter()
             .collect(),
         _ => Vec::new(),
     }
@@ -1071,6 +1085,20 @@ mod tests {
             Ok(_) => Ok(packs),
             Err(issues) => Err(issues.iter().map(|i| i.to_json()).collect()),
         }
+    }
+
+    #[test]
+    fn a_text_field_no_step_reads_fails_field_effect_naming_it() {
+        let refused = admit(&pack(
+            json!({}),
+            json!({"inputs": {"n": {"type": "integer", "default": 2, "min": 1, "max": 4},
+                              "w": {"type": "number", "default": 1.2, "min": 0.4, "max": 3.0},
+                              "label": {"type": "text", "default": "row"}}}),
+            vec![],
+        ))
+        .expect_err("an inert text field");
+        assert_eq!(refused[0]["actual"]["part"], "field.effect", "{refused:?}");
+        assert_eq!(refused[0]["actual"]["field"], "label", "{refused:?}");
     }
 
     #[test]
