@@ -67,6 +67,8 @@ struct Args {
     cull_on_cpu: bool,
     /// Each captured frame reports what each culled list kept (#484).
     cull_report: bool,
+    /// `occlusion: "off"`: the camera's lists culled by the frustum alone (#1637).
+    occlusion_off: bool,
     /// `(after, to)`: right after frame `after` draws, the session jumps to frame `to` (#484).
     seeks: Vec<(u64, u64)>,
     window: Option<Window3>,
@@ -110,6 +112,9 @@ struct Args {
     packs: Vec<(Option<String>, std::path::PathBuf)>,
     /// The paths whose evaluated values each frame reports (#429).
     evaluate: Vec<String>,
+    /// The items whose drawn vertices and sway gust each frame reports, read back from the GPU
+    /// (#2016).
+    sway: Vec<String>,
     /// Writer layers not visible in this session, which draw, light and cast nothing (#422).
     hidden: BTreeSet<String>,
     /// Each frame reports the key sun's cascade splits (#422).
@@ -397,9 +402,17 @@ fn parse(call: &Value) -> Result<Args, Value> {
             _ => return Err(bad("evaluate lists paths items/<id>/…")),
         }
     }
+    let mut sway = Vec::new();
+    for id in call["sway"].as_array().into_iter().flatten() {
+        match id.as_str() {
+            Some(id) => sway.push(id.to_string()),
+            None => return Err(bad("sway lists item IDs")),
+        }
+    }
     Ok(Args {
         packs,
         evaluate,
+        sway,
         docs,
         doc,
         look,
@@ -435,6 +448,11 @@ fn parse(call: &Value) -> Result<Args, Value> {
             Some(_) => return Err(refused("bad_input", "cull is \"cpu\" when it's given")),
         },
         cull_report: call["cull_report"].as_bool().unwrap_or(false),
+        occlusion_off: match call["occlusion"].as_str() {
+            None => false,
+            Some("off") => true,
+            Some(_) => return Err(refused("bad_input", "occlusion is \"off\" when it's given")),
+        },
         seeks: call["seeks"]
             .as_array()
             .into_iter()
@@ -689,6 +707,35 @@ fn pick(
         .iter()
         .find(|(_, v)| *v == p)
         .map(|(id, _)| id.clone())
+}
+
+/// #1976's planted depth reader: each hit's point put back from the depth target, the view-axis
+/// depth at the pointer's pixel unprojected through the pointer, as a hit must never be.
+fn depth_hits(
+    hits: &mut [deep_canvas_scene3d::hit::Hit],
+    cam: &deep_canvas_scene3d::scene::Camera,
+    depth: Option<&[u8]>,
+    size: [u32; 2],
+    at: [f64; 2],
+) {
+    let i = at[1].floor() as usize * size[0] as usize + at[0].floor() as usize;
+    let Some(z) = depth.and_then(|d| d.get(i * 4..i * 4 + 4)) else {
+        return;
+    };
+    let p = cam.unproject(
+        at[0],
+        at[1],
+        f64::from(f32::from_le_bytes([z[0], z[1], z[2], z[3]])),
+    );
+    let o = if cam.perspective {
+        cam.eye
+    } else {
+        cam.unproject(at[0], at[1], 0.0)
+    };
+    for h in hits {
+        h.point = p;
+        h.distance = (0..3).map(|k| (p[k] - o[k]).powi(2)).sum::<f64>().sqrt();
+    }
 }
 
 fn srgb_decode(c: u8) -> f64 {
@@ -969,6 +1016,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
     if args.cull_on_cpu {
         session3::cull_on_cpu(app);
     }
+    session3::set_occlusion(app, !args.occlusion_off);
     // The core targets the document's operators read, built only then (#431); the planted core
     // builds both for every frame.
     let builds_all = app.planted == Some(Planted::BuildsUnreadTargets);
@@ -1608,9 +1656,9 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             };
             let mut subs: Vec<(f64, Part)> = Vec::new();
             if !settling_now {
-                for k in 1..n_all as usize {
+                for (k, step) in plan[..n_all as usize].iter().enumerate().skip(1) {
                     subs.push((
-                        plan[k].weight,
+                        step.weight,
                         Part::of(&session3::draw(
                             app,
                             &opened,
@@ -1746,6 +1794,16 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 frame.insert("notices".into(), json!(notices));
             }
             frame.insert("resident".into(), json!(resident));
+            if !args.sway.is_empty() {
+                let rows: Map<String, Value> =
+                    session3::sway(app, scene.clone(), args.sway.clone())
+                        .into_iter()
+                        .map(|(id, gust, positions)| {
+                            (id, json!({"gust": gust, "positions": positions}))
+                        })
+                        .collect();
+                frame.insert("sway".into(), Value::Object(rows));
+            }
             if let Some(values) = values {
                 frame.insert("values".into(), values);
             }
@@ -1933,6 +1991,14 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                     }));
                 }
                 frame.insert("cull".into(), json!(rows));
+                // #1637: the whole items each pass drew.
+                let mut items = Vec::new();
+                for (view, kept) in session3::kept_items(app) {
+                    let file =
+                        write_named(out, &serde_json::to_vec(&kept).unwrap_or_default(), "json")?;
+                    items.push(json!({"view": view, "count": kept.len(), "kept": file}));
+                }
+                frame.insert("kept_items".into(), json!(items));
             }
             if args.light_cut {
                 frame.insert("light_cut".into(), crate::lod::cut_json(&evaluated, &cut));
@@ -1994,6 +2060,12 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 frame.insert("gpu_ms".into(), json!(gpu_ms));
                 frame.insert("cpu_ms".into(), json!(cpu_ms));
                 frame.insert("passes_ms".into(), json!(passes));
+                let declared: serde_json::Map<String, Value> = drawn
+                    .declared
+                    .iter()
+                    .map(|(k, v)| (k.to_string(), json!(v)))
+                    .collect();
+                frame.insert("declared_ms".into(), Value::Object(declared));
             }
             if !clicks.is_empty() {
                 let ids = drawn.targets.as_ref().map(|(_, ids)| ids.as_slice());
@@ -2011,7 +2083,20 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                                 margin,
                             )
                         });
-                        json!({"at": at, "pick": p})
+                        // #1976: where the ray through the pointer meets the picked item.
+                        let mut hit = p.as_deref().map_or_else(Vec::new, |p| {
+                            deep_canvas_scene3d::hit::hits(&evaluated, *at, &[p])
+                        });
+                        if app.planted == Some(Planted::HitFromDepth) {
+                            depth_hits(&mut hit, &evaluated.camera, drawn.view_depth.as_deref(), size, *at);
+                        }
+                        let hit: Vec<Value> = hit
+                            .iter()
+                            .map(|h| {
+                                json!({"item": h.item, "sub": h.sub, "point": h.point, "normal": h.normal, "distance": h.distance})
+                            })
+                            .collect();
+                        json!({"at": at, "pick": p, "hit": hit})
                     })
                     .collect();
                 frame.insert("clicks".into(), json!(answered));

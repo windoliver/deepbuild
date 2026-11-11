@@ -4,14 +4,23 @@
 //! in index order as that view's row list and the count lands in the view's indirect arguments.
 //! The vertex stage reads each row's record from storage, so a view costs 4 B a survivor. A view
 //! runs again only when its clip or the batch's records change, and nothing reads a count back.
+//!
+//! Issue #1637: with occlusion on, the camera's frustum list is a step, not the draw. A prepass
+//! draws the occluders it kept, a depth pyramid is built from that depth, and each row of the
+//! frustum list is tested by its bounds' screen rectangle and nearest depth against it, then
+//! compacted in index order into the list the camera draws. Everything is this frame's, so the
+//! draw set never depends on an earlier frame. Shadow maps and cascades keep their own lists.
 
 use std::sync::Arc;
 
+use deep_gpu::counted::Written;
 use deep_gpu::device::Device;
 use deep_gpu::structural::{Plan, Structural};
-use wgpu::util::DeviceExt as _;
 
 const SOURCE: &str = include_str!("cull.wgsl");
+const PYRAMID: &str = include_str!("pyramid.wgsl");
+/// The pyramid's pass, timed and priced under this name (#1637).
+pub use deep_canvas_scene3d::module::PYRAMID_PASS;
 /// Rows a dispatch's workgroup covers.
 const WORKGROUP: u32 = 256;
 /// A batch's views: the camera, the key light's fitted map and the sun's four cascades.
@@ -33,6 +42,8 @@ pub struct Plants {
     pub reversed: bool,
     /// An instances output's draw takes row r as element r, not the element at the step's r.
     pub row_as_element: bool,
+    /// #1637: the occlusion test reads each row's centre alone, never its bounds.
+    pub occlusion_by_centre: bool,
 }
 
 /// An instances output with a count (#484): the instancer it draws, the rows its compact step
@@ -94,13 +105,20 @@ pub fn reaches(planes: &[[f64; 4]; 6], m: &[[f64; 4]; 3], [lo, hi]: &[[f64; 3]; 
 pub struct Kernels {
     pipeline: wgpu::ComputePipeline,
     kept: wgpu::ComputePipeline,
+    /// #1637: the occlusion test, its two groups' layouts, and the pyramid's three steps.
+    occlude: wgpu::ComputePipeline,
+    occlude_rows: wgpu::BindGroupLayout,
+    occlude_pyramid: wgpu::BindGroupLayout,
+    first_ms: (wgpu::ComputePipeline, wgpu::BindGroupLayout),
+    first: (wgpu::ComputePipeline, wgpu::BindGroupLayout),
+    down: (wgpu::ComputePipeline, wgpu::BindGroupLayout),
     structural: Structural,
     /// The vertex stage's group of a batch's records.
     pub records: wgpu::BindGroupLayout,
 }
 
 impl Kernels {
-    pub fn new(d: &wgpu::Device) -> Kernels {
+    pub fn new(d: &deep_gpu::counted::Wgpu) -> Kernels {
         let module = d.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("scene3d cull"),
             source: wgpu::ShaderSource::Wgsl(SOURCE.into()),
@@ -128,12 +146,127 @@ impl Kernels {
                 count: None,
             }],
         });
+        let pyramid = d.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some(PYRAMID_PASS),
+            source: wgpu::ShaderSource::Wgsl(PYRAMID.into()),
+        });
+        let layout = |label: &str, entries: &[wgpu::BindGroupLayoutEntry]| {
+            d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some(label),
+                entries,
+            })
+        };
+        let explicit =
+            |module: &wgpu::ShaderModule, entry: &str, groups: &[&wgpu::BindGroupLayout]| {
+                let groups: Vec<Option<&wgpu::BindGroupLayout>> =
+                    groups.iter().map(|g| Some(*g)).collect();
+                let layout = d.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                    label: Some(entry),
+                    bind_group_layouts: &groups,
+                    immediate_size: 0,
+                });
+                d.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                    label: Some(entry),
+                    layout: Some(&layout),
+                    module,
+                    entry_point: Some(entry),
+                    compilation_options: Default::default(),
+                    cache: None,
+                })
+            };
+        let occlude_rows = layout(
+            "scene3d occlusion rows",
+            &[
+                buffer(0, wgpu::BufferBindingType::Uniform),
+                buffer(1, wgpu::BufferBindingType::Storage { read_only: true }),
+                buffer(2, wgpu::BufferBindingType::Storage { read_only: false }),
+                buffer(7, wgpu::BufferBindingType::Storage { read_only: true }),
+                buffer(8, wgpu::BufferBindingType::Storage { read_only: true }),
+            ],
+        );
+        let occlude_pyramid = layout(
+            "scene3d occlusion pyramid",
+            &[
+                buffer(0, wgpu::BufferBindingType::Uniform),
+                texture(
+                    1,
+                    wgpu::TextureSampleType::Float { filterable: false },
+                    false,
+                ),
+            ],
+        );
+        let step = |entry: &str, input: wgpu::BindGroupLayoutEntry| {
+            let l = layout(entry, &[input, level_out()]);
+            (explicit(&pyramid, entry, &[&l]), l)
+        };
         Kernels {
             pipeline: pipe("cull"),
             kept: pipe("cull_kept"),
+            occlude: explicit(&module, "occlude", &[&occlude_rows, &occlude_pyramid]),
+            occlude_rows,
+            occlude_pyramid,
+            first_ms: step(
+                "pyramid_first_ms",
+                texture(0, wgpu::TextureSampleType::Depth, true),
+            ),
+            first: step(
+                "pyramid_first",
+                texture(3, wgpu::TextureSampleType::Depth, false),
+            ),
+            down: step(
+                "pyramid_down",
+                texture(
+                    2,
+                    wgpu::TextureSampleType::Float { filterable: false },
+                    false,
+                ),
+            ),
             structural: Structural::new(d),
             records,
         }
+    }
+}
+
+fn buffer(binding: u32, ty: wgpu::BufferBindingType) -> wgpu::BindGroupLayoutEntry {
+    wgpu::BindGroupLayoutEntry {
+        binding,
+        visibility: wgpu::ShaderStages::COMPUTE,
+        ty: wgpu::BindingType::Buffer {
+            ty,
+            has_dynamic_offset: false,
+            min_binding_size: None,
+        },
+        count: None,
+    }
+}
+
+fn texture(
+    binding: u32,
+    sample_type: wgpu::TextureSampleType,
+    multisampled: bool,
+) -> wgpu::BindGroupLayoutEntry {
+    wgpu::BindGroupLayoutEntry {
+        binding,
+        visibility: wgpu::ShaderStages::COMPUTE,
+        ty: wgpu::BindingType::Texture {
+            sample_type,
+            view_dimension: wgpu::TextureViewDimension::D2,
+            multisampled,
+        },
+        count: None,
+    }
+}
+
+fn level_out() -> wgpu::BindGroupLayoutEntry {
+    wgpu::BindGroupLayoutEntry {
+        binding: 1,
+        visibility: wgpu::ShaderStages::COMPUTE,
+        ty: wgpu::BindingType::StorageTexture {
+            access: wgpu::StorageTextureAccess::WriteOnly,
+            format: wgpu::TextureFormat::R32Float,
+            view_dimension: wgpu::TextureViewDimension::D2,
+        },
+        count: None,
     }
 }
 
@@ -143,6 +276,8 @@ pub struct View {
     pub args: wgpu::Buffer,
     pub count: wgpu::Buffer,
     params: wgpu::Buffer,
+    /// What the params last uploaded (#1903).
+    written: Written,
     bind: wgpu::BindGroup,
     plan: Arc<Plan>,
     /// What its list was culled from.
@@ -164,6 +299,53 @@ pub struct Culled {
     /// The instances output it draws from: its source and each element's row in this batch.
     kept: Option<(Source, wgpu::Buffer)>,
     pub views: [Option<View>; VIEWS],
+    /// #1637: a view culled by occlusion too: its frustum list, which the prepass draws and the
+    /// occlusion test reads, and the test that compacts what may show into `views`.
+    pub frustum: [Option<View>; VIEWS],
+    tests: [Option<Test>; VIEWS],
+}
+
+/// A view's occlusion test: its flags, its rows' group and its compaction into the view's list.
+struct Test {
+    bind: wgpu::BindGroup,
+    plan: Arc<Plan>,
+    groups: u32,
+}
+
+/// One view's occlusion test this frame, recorded after the pyramid is built (#1637).
+pub struct Occlude {
+    pipeline: wgpu::ComputePipeline,
+    bind: wgpu::BindGroup,
+    plan: Arc<Plan>,
+    groups: u32,
+    count: wgpu::Buffer,
+    /// `None` on #484's planted path, whose arguments come from the CPU.
+    args: Option<wgpu::Buffer>,
+}
+
+impl Occlude {
+    /// What it writes, cleared before the frame's timed passes.
+    pub fn clear(&self, encoder: &mut wgpu::CommandEncoder) {
+        self.plan.clear(encoder);
+    }
+
+    /// The test against `pyramid`, then the compaction and the draw's count.
+    pub fn record(&self, encoder: &mut wgpu::CommandEncoder, pyramid: &Pyramid) {
+        {
+            let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                label: Some("scene3d occlusion"),
+                timestamp_writes: None,
+            });
+            pass.set_pipeline(&self.pipeline);
+            pass.set_bind_group(0, &self.bind, &[]);
+            pass.set_bind_group(1, &pyramid.test, &[]);
+            pass.dispatch_workgroups(self.groups, 1, 1);
+        }
+        self.plan.dispatch(encoder, None);
+        if let Some(args) = &self.args {
+            encoder.copy_buffer_to_buffer(&self.count, 0, args, INSTANCE_COUNT, 4);
+        }
+    }
 }
 
 /// One view's cull, recorded into the frame's first encoder.
@@ -180,23 +362,66 @@ pub struct Run {
 impl Run {
     pub fn record(&self, encoder: &mut wgpu::CommandEncoder) {
         self.plan.clear(encoder);
+        self.passes(encoder, None);
+    }
+
+    /// `runs` timed as one under `writes`, their clears first: on Metal a pass's timestamps read
+    /// 0 right after a clear, and a query left unwritten starts the frame's span at 0.
+    pub fn record_all(
+        runs: &[Run],
+        encoder: &mut wgpu::CommandEncoder,
+        writes: Option<wgpu::ComputePassTimestampWrites<'_>>,
+    ) {
+        for run in runs {
+            run.plan.clear(encoder);
+        }
+        let last = runs.len().saturating_sub(1);
+        for (k, run) in runs.iter().enumerate() {
+            let begin = writes
+                .as_ref()
+                .filter(|_| k == 0)
+                .map(|w| w.beginning_of_pass_write_index);
+            let end = writes
+                .as_ref()
+                .filter(|_| k == last)
+                .map(|w| w.end_of_pass_write_index);
+            let part = writes.as_ref().map(|w| wgpu::ComputePassTimestampWrites {
+                query_set: w.query_set,
+                beginning_of_pass_write_index: begin.flatten(),
+                end_of_pass_write_index: end.flatten(),
+            });
+            run.passes(encoder, part);
+        }
+    }
+
+    /// The flags pass writes `writes`' beginning, the compaction's last pass its end.
+    fn passes(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        writes: Option<wgpu::ComputePassTimestampWrites<'_>>,
+    ) {
         {
             let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
                 label: Some("scene3d cull"),
-                timestamp_writes: None,
+                timestamp_writes: writes
+                    .as_ref()
+                    .and_then(|w| deep_gpu::structural::spanned(Some(w), 0, 1)),
             });
             pass.set_pipeline(&self.pipeline);
             pass.set_bind_group(0, &self.bind, &[]);
             pass.dispatch_workgroups(self.groups, 1, 1);
         }
-        self.plan.dispatch(encoder, None);
+        let end = writes
+            .as_ref()
+            .and_then(|w| deep_gpu::structural::spanned(Some(w), 1, 1));
+        self.plan.dispatch_spanned(encoder, end);
         if let Some(args) = &self.args {
             encoder.copy_buffer_to_buffer(&self.count, 0, args, INSTANCE_COUNT, 4);
         }
     }
 }
 
-fn storage(d: &wgpu::Device, label: &str, n: u32, usage: wgpu::BufferUsages) -> wgpu::Buffer {
+fn storage(d: &deep_gpu::counted::Wgpu, label: &str, n: u32, usage: wgpu::BufferUsages) -> wgpu::Buffer {
     d.create_buffer(&wgpu::BufferDescriptor {
         label: Some(label),
         size: u64::from(n.max(1)) * 4,
@@ -206,7 +431,7 @@ fn storage(d: &wgpu::Device, label: &str, n: u32, usage: wgpu::BufferUsages) -> 
 }
 
 /// A draw's indirect arguments, its instance count 0 until a cull writes it.
-pub fn indirect_args(d: &wgpu::Device, index_count: u32) -> wgpu::Buffer {
+pub fn indirect_args(d: &deep_gpu::counted::Wgpu, index_count: u32) -> wgpu::Buffer {
     d.create_buffer_init(&wgpu::util::BufferInitDescriptor {
         label: Some("scene3d indirect draw"),
         contents: bytemuck::cast_slice(&[index_count, 0, 0, 0, 0]),
@@ -218,7 +443,7 @@ pub fn indirect_args(d: &wgpu::Device, index_count: u32) -> wgpu::Buffer {
 
 impl Culled {
     pub fn new(
-        d: &wgpu::Device,
+        d: &deep_gpu::counted::Wgpu,
         kernels: &Kernels,
         records: &wgpu::Buffer,
         made_for: (u64, u32),
@@ -279,6 +504,8 @@ impl Culled {
             flagged,
             kept,
             views: Default::default(),
+            frustum: Default::default(),
+            tests: Default::default(),
         }
     }
 
@@ -288,10 +515,60 @@ impl Culled {
     }
 
     /// Makes view `k`'s list and arguments, which stay its own while this cull lasts.
-    pub fn view(&mut self, d: &wgpu::Device, kernels: &Kernels, records: &wgpu::Buffer, k: usize) {
-        if self.views[k].is_some() {
+    pub fn view(&mut self, d: &deep_gpu::counted::Wgpu, kernels: &Kernels, records: &wgpu::Buffer, k: usize) {
+        if self.views[k].is_none() {
+            self.views[k] = Some(self.make_view(d, kernels, records));
+        }
+    }
+
+    /// Makes view `k`'s frustum list and its occlusion test, beside its list (#1637).
+    fn occluded_view(
+        &mut self,
+        d: &deep_gpu::counted::Wgpu,
+        kernels: &Kernels,
+        records: &wgpu::Buffer,
+        k: usize,
+    ) {
+        self.view(d, kernels, records, k);
+        if self.frustum[k].is_none() {
+            self.frustum[k] = Some(self.make_view(d, kernels, records));
+        }
+        if self.tests[k].is_some() {
             return;
         }
+        let (Some(frustum), Some(view)) = (&self.frustum[k], &self.views[k]) else {
+            return;
+        };
+        let n = self.made_for.1;
+        let flags = storage(d, "scene3d occlusion flags", n, wgpu::BufferUsages::empty());
+        fn entry(binding: u32, buffer: &wgpu::Buffer) -> wgpu::BindGroupEntry<'_> {
+            wgpu::BindGroupEntry {
+                binding,
+                resource: buffer.as_entire_binding(),
+            }
+        }
+        let bind = d.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("scene3d occlusion rows"),
+            layout: &kernels.occlude_rows,
+            entries: &[
+                entry(0, &frustum.params),
+                entry(1, records),
+                entry(2, &flags),
+                entry(7, &frustum.rows),
+                entry(8, &frustum.count),
+            ],
+        });
+        let plan = kernels
+            .structural
+            .compact(d, &frustum.rows, &flags, &view.rows, &view.count, n);
+        self.tests[k] = Some(Test {
+            bind,
+            plan: Arc::new(plan),
+            groups: n.div_ceil(WORKGROUP),
+        });
+    }
+
+    fn make_view(&self, d: &deep_gpu::counted::Wgpu, kernels: &Kernels, records: &wgpu::Buffer) -> View {
         let n = self.made_for.1;
         let rows = storage(
             d,
@@ -334,19 +611,21 @@ impl Culled {
             kernels
                 .structural
                 .compact(d, &self.identity, &self.flags, &rows, &count, self.flagged);
-        self.views[k] = Some(View {
+        View {
             args: indirect_args(d, self.index_count),
             rows,
             count,
             params,
+            written: Written::default(),
             bind,
             plan: Arc::new(plan),
             key: None,
-        });
+        }
     }
 
     /// Makes view `k`'s list current for `clip` and the records at `revision`: the run that
-    /// culls it when it's stale.
+    /// culls it when it's stale. With `occluded` (#1637), the run writes the view's frustum list,
+    /// and the test that keeps what may show from it into the view's list runs every frame.
     #[allow(clippy::too_many_arguments)]
     pub fn cull(
         &mut self,
@@ -359,16 +638,72 @@ impl Culled {
         bounds: &[[f64; 3]; 2],
         plants: Plants,
         count_read_back: bool,
-    ) -> Option<Run> {
+        occluded: bool,
+    ) -> (Option<Run>, Option<Occlude>) {
         use std::hash::{Hash, Hasher};
         let mut h = std::collections::hash_map::DefaultHasher::new();
         clip.map(f64::to_bits).hash(&mut h);
         revision.hash(&mut h);
         let key = h.finish();
         let d = &device.device;
-        deep_gpu::alloc::outside(|| self.view(d, kernels, records, k));
+        deep_gpu::alloc::outside(|| {
+            if occluded {
+                self.occluded_view(d, kernels, records, k)
+            } else {
+                self.view(d, kernels, records, k)
+            }
+        });
+        let test = if occluded {
+            if let Some(v) = self.views[k].as_mut() {
+                v.key = None;
+            }
+            match (&self.tests[k], &self.views[k]) {
+                (Some(t), Some(v)) => Some(Occlude {
+                    pipeline: kernels.occlude.clone(),
+                    bind: t.bind.clone(),
+                    plan: t.plan.clone(),
+                    groups: t.groups,
+                    count: v.count.clone(),
+                    args: (!count_read_back).then(|| v.args.clone()),
+                }),
+                _ => None,
+            }
+        } else {
+            None
+        };
+        let run = self.frustum_run(
+            device,
+            kernels,
+            k,
+            clip,
+            key,
+            bounds,
+            plants,
+            count_read_back,
+            occluded,
+        );
+        (run, test)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn frustum_run(
+        &mut self,
+        device: &Device,
+        kernels: &Kernels,
+        k: usize,
+        clip: &[f64; 16],
+        key: u64,
+        bounds: &[[f64; 3]; 2],
+        plants: Plants,
+        count_read_back: bool,
+        occluded: bool,
+    ) -> Option<Run> {
         let n = self.flagged;
-        let view = self.views[k].as_mut()?;
+        let view = if occluded {
+            self.frustum[k].as_mut()?
+        } else {
+            self.views[k].as_mut()?
+        };
         // What an operator kept can change with no change the CPU sees.
         if view.key == Some(key) && self.kept.is_none() {
             return None;
@@ -387,7 +722,7 @@ impl Culled {
         deep_gpu::alloc::outside(|| {
             device
                 .queue
-                .write_buffer(&view.params, 0, bytemuck::bytes_of(&params))
+                .write_changed(&view.params, &view.written, bytemuck::bytes_of(&params))
         });
         Some(Run {
             pipeline: match self.kept {
@@ -424,5 +759,177 @@ impl Culled {
                 );
             }
         });
+    }
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct OcclusionParams {
+    clip: [[f32; 4]; 4],
+    size: [f32; 2],
+    levels: u32,
+    centre: u32,
+}
+
+/// The camera's prepass depth and the pyramid built from it each frame (#1637), at the frame's
+/// internal size and sample count.
+pub struct Pyramid {
+    pub size: [u32; 2],
+    pub samples: u32,
+    /// The prepass's depth target.
+    pub depth: wgpu::TextureView,
+    levels: u32,
+    first: (wgpu::ComputePipeline, wgpu::BindGroup),
+    down: wgpu::ComputePipeline,
+    downs: Vec<wgpu::BindGroup>,
+    uniform: wgpu::Buffer,
+    /// What the uniform last uploaded (#1903).
+    written: Written,
+    /// The occlusion test's group 1: the camera and the pyramid.
+    test: wgpu::BindGroup,
+}
+
+impl Pyramid {
+    pub fn new(d: &deep_gpu::counted::Wgpu, kernels: &Kernels, size: [u32; 2], samples: u32) -> Pyramid {
+        let [w, h] = size.map(|v| v.max(1));
+        let levels = 32 - w.max(h).leading_zeros();
+        let extent = |depth| wgpu::Extent3d {
+            width: w,
+            height: h,
+            depth_or_array_layers: depth,
+        };
+        let depth = d
+            .create_texture(&wgpu::TextureDescriptor {
+                label: Some("scene3d occluders' depth"),
+                size: extent(1),
+                mip_level_count: 1,
+                sample_count: samples,
+                dimension: wgpu::TextureDimension::D2,
+                format: crate::DEPTH,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                    | wgpu::TextureUsages::TEXTURE_BINDING,
+                view_formats: &[],
+            })
+            .create_view(&Default::default());
+        let texture = d.create_texture(&wgpu::TextureDescriptor {
+            label: Some(PYRAMID_PASS),
+            size: extent(1),
+            mip_level_count: levels,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::R32Float,
+            usage: wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        });
+        let levels_views: Vec<wgpu::TextureView> = (0..levels)
+            .map(|l| {
+                texture.create_view(&wgpu::TextureViewDescriptor {
+                    base_mip_level: l,
+                    mip_level_count: Some(1),
+                    ..Default::default()
+                })
+            })
+            .collect();
+        let level = |l: u32| &levels_views[l as usize];
+        let group = |layout: &wgpu::BindGroupLayout,
+                     input: (u32, &wgpu::TextureView),
+                     out: &wgpu::TextureView| {
+            d.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some(PYRAMID_PASS),
+                layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: input.0,
+                        resource: wgpu::BindingResource::TextureView(input.1),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::TextureView(out),
+                    },
+                ],
+            })
+        };
+        let first = if samples > 1 {
+            (
+                kernels.first_ms.0.clone(),
+                group(&kernels.first_ms.1, (0, &depth), level(0)),
+            )
+        } else {
+            (
+                kernels.first.0.clone(),
+                group(&kernels.first.1, (3, &depth), level(0)),
+            )
+        };
+        let downs = (1..levels)
+            .map(|l| group(&kernels.down.1, (2, level(l - 1)), level(l)))
+            .collect();
+        let uniform = d.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("scene3d occlusion"),
+            size: std::mem::size_of::<OcclusionParams>() as u64,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let all = texture.create_view(&Default::default());
+        let test = d.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("scene3d occlusion pyramid"),
+            layout: &kernels.occlude_pyramid,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: uniform.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::TextureView(&all),
+                },
+            ],
+        });
+        Pyramid {
+            size: [w, h],
+            samples,
+            depth,
+            levels,
+            first,
+            down: kernels.down.0.clone(),
+            downs,
+            uniform,
+            written: Written::default(),
+            test,
+        }
+    }
+
+    /// The camera the test projects with this frame, and the planted test of centres.
+    pub fn write(&self, queue: &deep_gpu::counted::Queue, clip: &[f64; 16], centre: bool) {
+        let params = OcclusionParams {
+            clip: std::array::from_fn(|c| std::array::from_fn(|r| clip[c * 4 + r] as f32)),
+            size: self.size.map(|v| v as f32),
+            levels: self.levels,
+            centre: u32::from(centre),
+        };
+        deep_gpu::alloc::outside(|| {
+            queue.write_changed(&self.uniform, &self.written, bytemuck::bytes_of(&params))
+        });
+    }
+
+    /// Builds every level from the prepass's depth, in one compute pass.
+    pub fn record(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        timestamp_writes: Option<wgpu::ComputePassTimestampWrites<'_>>,
+    ) {
+        let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+            label: Some(PYRAMID_PASS),
+            timestamp_writes,
+        });
+        let size_of = |l: u32| self.size.map(|v| (v >> l).max(1));
+        pass.set_pipeline(&self.first.0);
+        pass.set_bind_group(0, &self.first.1, &[]);
+        pass.dispatch_workgroups(self.size[0].div_ceil(8), self.size[1].div_ceil(8), 1);
+        pass.set_pipeline(&self.down);
+        for (k, bind) in self.downs.iter().enumerate() {
+            let [w, h] = size_of(k as u32 + 1);
+            pass.set_bind_group(0, bind, &[]);
+            pass.dispatch_workgroups(w.div_ceil(8), h.div_ceil(8), 1);
+        }
     }
 }

@@ -345,7 +345,7 @@ pub const MSAA: u32 = 4;
 /// Compiles one pipeline; `fragment` names the entry point (`region_fragment`, or `fragment` in a
 /// pipeline's own module).
 pub fn compile(
-    device: &wgpu::Device,
+    device: &deep_gpu::counted::Wgpu,
     layout: Option<&wgpu::PipelineLayout>,
     module: &wgpu::ShaderModule,
     (vertex, fragment): (&str, &str),
@@ -384,7 +384,7 @@ pub fn compile(
 
 /// One of a scene's pipelines, compiled from its own module.
 pub fn compile_named(
-    device: &wgpu::Device,
+    device: &deep_gpu::counted::Wgpu,
     k: u32,
     color: [u8; 4],
 ) -> (String, wgpu::RenderPipeline) {

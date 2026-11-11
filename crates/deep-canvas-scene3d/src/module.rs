@@ -35,6 +35,10 @@ pub const LOCAL_SHADOW_PASS: &str = "scene3d.local_shadow";
 /// Instancers above 256 elements culled per view and per shadow map on the GPU (#484; Instance
 /// `instance@1`), the core's own compute pass before the frame's draws.
 pub const CULL_PASS: &str = "scene3d.cull";
+/// The camera's occluders drawn depth-only, the depth pyramid built from them and the occlusion
+/// test of the camera's lists against it (#1637; Instance `instance@1`), each frame, from that
+/// frame's depth alone, after the cull and before anything draws.
+pub const PYRAMID_PASS: &str = "scene3d.depth_pyramid";
 /// Ambient occlusion (#418; Look `look@1`: ao): the opaque solids' depth and normal prepass, the
 /// occlusion and its blur, before the geometry pass reads it; drawn only while the look has ao on.
 pub const AO_PASS: &str = "scene3d.ao";
@@ -306,6 +310,10 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
         if crate::builders::KINDS.contains(&spec.kind) || spec.kind == "curve@1" {
             let name = &spec.kind[..spec.kind.len() - "@1".len()];
             r.kind(crate::spec::entry(&spec, "", name), &[], "");
+            // A recipe repeats over a builder's elements (Recipe: repeat over elements; #2015).
+            if spec.kind != "curve@1" {
+                r.elements(name, crate::measures::elements);
+            }
         }
         if spec.kind == "mesh.asset@1" {
             r.kind(crate::spec::entry(&spec, "mesh", "asset"), &[], "");
@@ -335,6 +343,25 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
             r.kind(crate::spec::entry(&spec, "", name), &[], "");
         }
     }
+    // #419's stand-in for the physics module's baked world, which the scene draws body by body
+    // (#405: a document's checks reach it as a kind this module knows).
+    r.kind(
+        Entry {
+            family: "fixture",
+            name: "world",
+            versions: vec![Version {
+                major: 1,
+                minor: 0,
+                params: ["step_hz", "span", "gravity", "floor", "restitution", "bodies", "buoyancy", "inputs", "paint"]
+                    .into_iter()
+                    .map(json_param)
+                    .collect(),
+            }],
+            migrations: Vec::new(),
+        },
+        &[],
+        "",
+    );
     crate::build::register_scene3d(r);
     // A solid's modifier stack, every prefix kept by its content key (Modifier; #411).
     r.array("scene3d.stack", "stack", "item", "geometry", "items");
@@ -355,6 +382,7 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
         Tie::Order => lit_by_order,
     });
     r.pass(CULL_PASS, "compute");
+    r.pass(PYRAMID_PASS, "compute");
     r.pass(AO_PASS, "geometry");
     r.pass(GEOMETRY_PASS, "geometry");
     // #200: the shadow and object-ID passes compile from the core's base steps, which the seal
@@ -395,6 +423,8 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
         "codes": [],
         "covers": {"kinds": ["mark.box@1"], "fields": ["mark.box@1/params/size"]},
     }));
+    // #486: the lobe outputs, occlusion and normal in gpu.output@1, core.bump@1 in gpu.function@1.
+    crate::gpu::register(r);
 }
 
 /// 34 suns of 10,000 lx each, `s00` to `s33`, ordered last ID first.

@@ -5,6 +5,7 @@ import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import Database from 'better-sqlite3';
 import { listSchemas } from '@deepbuild/contracts';
+import { fit, type Part } from './context-fit.js';
 import { rootOf } from './paths.js';
 import type { CoreOptions } from './wire.js';
 
@@ -69,11 +70,13 @@ export class ReadOnlyCore {
   mcpHello(): Promise<string | null> { return Promise.resolve(null); }
   extensionHook(): Promise<null> { return Promise.resolve(null); }
   hookReply(): Promise<Obj> { return Promise.resolve({}); }
+  /** No record to keep the rest in: the parts joined as they came (#1296). */
+  fitContext(_meta: unknown, parts: Part[], join: string): Promise<string> { return Promise.resolve(fit(parts, Infinity, join).inline); }
   toolGate(): Promise<Obj> { return Promise.resolve({}); }
   permission(): Promise<{ decision: 'none' }> { return Promise.resolve({ decision: 'none' }); }
   paseoOwner(): Promise<string | null> { return Promise.resolve(null); }
   paseoAppAnswer(): Promise<Obj> { return Promise.resolve({}); }
-  subscribe(): Promise<void> { return Promise.resolve(); }
+  subscribe(): Promise<{ head?: number; snapshot?: true }> { return Promise.resolve({}); }
   waitsState(): Promise<{ history: [string, number][]; sessions: never[] }> { return Promise.resolve({ history: [], sessions: [] }); }
   lockLost(): void {}
   stop(): Promise<void> { return Promise.resolve(); }
@@ -81,6 +84,7 @@ export class ReadOnlyCore {
   replayed(): Promise<void> { return Promise.resolve(); }
   waiterGone(): void {}
   notifierGone(): void {}
+  callGone(): void {}
   hookGone(): void {}
   overrun(): Promise<void> { return Promise.resolve(); }
   later(): void {}

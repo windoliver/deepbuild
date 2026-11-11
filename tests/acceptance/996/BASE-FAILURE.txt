@@ -10,15 +10,15 @@
 # the Proof's list of points before: the '#996 AC1: the points the hub made while it started three runs' line below.
 
 
- RUN  v5.0.5 /home/jing/deepbuild/.claude/worktrees/agent-a223ce214b5d4f7c1/tests/acceptance/996
+ RUN  v5.0.5 ~/deepbuild/.claude/worktrees/agent-a223ce214b5d4f7c1/tests/acceptance/996
 
  × terminals.test.ts > AC2 #996.17155b2f with terminals.json holding one entry with a bad byte among three, the hub starts, two terminals reattach and the third reads lost on its session > AC2 the hub starts on the damaged index: it answers on its socket, keeps the index aside byte for byte under a name with its time, records one reading naming terminals.json and the lost terminal, and the two readable terminals run on 1474ms
    → the hub didn't start on a terminals.json holding one entry with a bad byte among three, so no terminal reattached: it exited (1); stderr: deep hub: the core stopped: SyntaxError: Bad control character in string literal in JSON at position 675 (line 23 column 16)
     at JSON.parse (<anonymous>)
-    at new Terminals (file:///home/jing/deepbuild/.claude/worktrees/agent-a223ce214b5d4f7c1/packages/extension-host/dist/terminals.js:38:53)
-    at new Host (file:///home/jing/deepbuild/.claude/worktrees/agent-a223ce214b5d4f7c1/packages/extension-host/dist/host.js:437:26)
-    at openExtensionHost (file:///home/jing/deepbuild/.claude/worktrees/agent-a223ce214b5d4f7c1/packages/extension-host/dist/host.js:3519:12)
-    at Core.init (file:///home/jing/deepbuild/.claude/worktrees/agent-a223ce214b5d4f7c1/packages/hub/dist/core.js:615:52)
+    at new Terminals (file://~/deepbuild/.claude/worktrees/agent-a223ce214b5d4f7c1/packages/extension-host/dist/terminals.js:38:53)
+    at new Host (file://~/deepbuild/.claude/worktrees/agent-a223ce214b5d4f7c1/packages/extension-host/dist/host.js:437:26)
+    at openExtensionHost (file://~/deepbuild/.claude/worktrees/agent-a223ce214b5d4f7c1/packages/extension-host/dist/host.js:3519:12)
+    at Core.init (file://~/deepbuild/.claude/worktrees/agent-a223ce214b5d4f7c1/packages/hub/dist/core.js:615:52)
  × terminals.test.ts > AC2 #996.17155b2f with terminals.json holding one entry with a bad byte among three, the hub starts, two terminals reattach and the third reads lost on its session > AC2 on their sessions: the extension host the hub opens starts on the damaged index; the piece's tabs show the two readable terminals reattached, reading on from their first byte, and the third as lost, never as closed 750ms
    → the extension host the hub opens didn't start on a terminals.json holding one entry with a bad byte among three, so none of the three terminals reattached: Bad control character in string literal in JSON at position 675 (line 23 column 16)
  ✓ terminals.test.ts > AC2 #996.17155b2f with terminals.json holding one entry with a bad byte among three, the hub starts, two terminals reattach and the third reads lost on its session > AC2 (control) with no bad byte, the same seed reattaches all three: the extension host the hub opens lists them and reads each from its first byte 3922ms
@@ -90,10 +90,10 @@ the restart recorded 0 readings naming runs.json, not one: []: expected [ …(3)
  FAIL  terminals.test.ts > AC2 #996.17155b2f with terminals.json holding one entry with a bad byte among three, the hub starts, two terminals reattach and the third reads lost on its session > AC2 the hub starts on the damaged index: it answers on its socket, keeps the index aside byte for byte under a name with its time, records one reading naming terminals.json and the lost terminal, and the two readable terminals run on
 Error: the hub didn't start on a terminals.json holding one entry with a bad byte among three, so no terminal reattached: it exited (1); stderr: deep hub: the core stopped: SyntaxError: Bad control character in string literal in JSON at position 675 (line 23 column 16)
     at JSON.parse (<anonymous>)
-    at new Terminals (file:///home/jing/deepbuild/.claude/worktrees/agent-a223ce214b5d4f7c1/packages/extension-host/dist/terminals.js:38:53)
-    at new Host (file:///home/jing/deepbuild/.claude/worktrees/agent-a223ce214b5d4f7c1/packages/extension-host/dist/host.js:437:26)
-    at openExtensionHost (file:///home/jing/deepbuild/.claude/worktrees/agent-a223ce214b5d4f7c1/packages/extension-host/dist/host.js:3519:12)
-    at Core.init (file:///home/jing/deepbuild/.claude/worktrees/agent-a223ce214b5d4f7c1/packages/hub/dist/core.js:615:52)
+    at new Terminals (file://~/deepbuild/.claude/worktrees/agent-a223ce214b5d4f7c1/packages/extension-host/dist/terminals.js:38:53)
+    at new Host (file://~/deepbuild/.claude/worktrees/agent-a223ce214b5d4f7c1/packages/extension-host/dist/host.js:437:26)
+    at openExtensionHost (file://~/deepbuild/.claude/worktrees/agent-a223ce214b5d4f7c1/packages/extension-host/dist/host.js:3519:12)
+    at Core.init (file://~/deepbuild/.claude/worktrees/agent-a223ce214b5d4f7c1/packages/hub/dist/core.js:615:52)
  ❯ new Terminals ../../../packages/extension-host/dist/terminals.js:38:53
  ❯ new Host ../../../packages/extension-host/dist/host.js:437:26
  ❯ openExtensionHost ../../../packages/extension-host/dist/host.js:3519:12

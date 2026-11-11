@@ -44,7 +44,7 @@ Never: Answered by an agent, or by an extension except by naming a decision, rul
 
 ## Decision and rule
 
-- deep_propose. Propose a change you may not make yourself, such as to a wiki page, a rule, a check or a spec, with what it rests on; it waits in the person's inbox, and nothing changes until they apply it.
+- deep_propose, as under Check.
 
 Never: Applied or widened by an agent.
 
@@ -57,14 +57,14 @@ Never: An open item closed by its own agent without evidence.
 
 ## Spec
 
-- deep_propose. Propose a change you may not make yourself, such as to a wiki page, a rule, a check or a spec, with what it rests on; it waits in the person's inbox, and nothing changes until they apply it.
+- deep_propose, as under Check.
 
 Never: In force before you approve it.
 
 ## Task definition of done
 
-- deep_status. Read where your session stands: the hub's gates, and each of your claims with its runs, its verdict and any run that contradicts what you predicted.
-- deep_propose. Propose a change you may not make yourself, such as to a wiki page, a rule, a check or a spec, with what it rests on; it waits in the person's inbox, and nothing changes until they apply it.
+- deep_status, as under Verdict.
+- deep_propose, as under Check.
 
 Never: Drafted from the working session's work, or changed by it.
 
@@ -76,23 +76,29 @@ Never: A process stopped that DeepBuild can't prove it started.
 
 ## Screen and panel
 
-- deep_propose. Propose a change you may not make yourself, such as to a wiki page, a rule, a check or a spec, with what it rests on; it waits in the person's inbox, and nothing changes until they apply it.
+- deep_propose, as under Check.
 - deep_show. Draw a canvas document, a figure, a map, a chart or a sheet, on your own claim, ask or prompt, in your own layer; it answers presented, refused or not presented, with the document's issues and snapshots by hash.
-- deep_drive. Drive a replica, a headless copy of the app on a fixture or on a read-only copy of your record. Launch it, act on what you locate by role and name, label or text, wait for it to settle, see it as text snapshots, screenshots and recordings, and close it to free it. At most two run on a machine, under a lease.
+- deep_drive. Drive a replica, a headless copy of the app on a fixture or on a read-only copy of your record. Launch it, act on what you locate by role and name, label or text, open a page by its address, wait for it to settle, see it as text snapshots, screenshots and recordings, and close it to free it. At most two run on a machine, under a lease.
 
 Never: Drawn over the question card, run past its grant, painted in the status colors except through a status binding, pushed to you, or taken as proof.
 
 ## Index
 
-- deep_search. Search your wiki, past decisions and the project's spec, and in your own session its open items and verdicts, read only; every hit names its source.
+- deep_search, as under Event.
 
 Never: The source of truth; the wiki's pages are.
 
 ## Source and reading
 
-- deep_search. Search your wiki, past decisions and the project's spec, and in your own session its open items and verdicts, read only; every hit names its source.
+- deep_search, as under Event.
 
 Never: Called from a panel or past its quota, or a reading without its source and as-of time, or a tool not counted as read.
+
+## Job (R6, with the agent tools for scenes)
+
+- deep_job. List the job kinds and the tools that qualified for each, and run a kind on one tool pinned by name@version, outside the hub's process; a rerun with the same tool, params and input bytes is a cache hit that starts no process.
+
+Never: Run in the canvas core or a frame, change a document, count as a verdict, or hand an item an output before the kind's output checks pass.
 
 ## Canvas
 
@@ -102,16 +108,16 @@ Never: Drawn outside its panel or over the question card.
 
 ## Physics
 
-- deep_show. Draw a canvas document, a figure, a map, a chart or a sheet, on your own claim, ask or prompt, in your own layer; it answers presented, refused or not presented, with the document's issues and snapshots by hash.
+- deep_show, as under Screen and panel.
 
 Never: Code run per step, a body created mid-run, a GPU simulation's result used in a check, or a claim passed by a clip.
 
 ## Media
 
-- deep_show. Draw a canvas document, a figure, a map, a chart or a sheet, on your own claim, ask or prompt, in your own layer; it answers presented, refused or not presented, with the document's issues and snapshots by hash.
+- deep_show, as under Screen and panel.
 
 Never: Sound that starts without your gesture, a capture without the system picker or the OS permission, or without its indicator, a microphone combined with network access you didn't see, or a voice cloned from evidence.
 
 ## Working on a canvas document
 
-Start from a piece recipe, or from a kind deep_kinds lists. Check the document with deep_show before you render it. Then render small and read its issues. Fix by patch, changing one item at a time, and render in full only once the numbers pass; judge by numbers, never by eye. When no kind or field does what the piece needs, raise an open item with deep_open_item naming the missing kind or field, instead of approximating it.
+Start from a piece recipe, or from a kind deep_kinds lists. Check the document with deep_show before you render it. Then render small and read its issues. Fix by patch, changing one item at a time, and render in full only once the numbers pass; judge by numbers, never by eye. When no kind or field does what the piece needs, raise an open item with deep_open_item naming the missing kind or field, instead of approximating it. When a logic step needs more fuel than its step ceiling, which deep_kinds lists by step rate, budget class and host, split the work across steps and keep the progress in memory.

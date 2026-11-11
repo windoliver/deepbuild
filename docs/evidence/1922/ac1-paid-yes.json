@@ -1,0 +1,23 @@
+[
+  {
+    "started": 1,
+    "reply": {
+      "status": "done",
+      "outputs": {
+        "text": {
+          "sha256": "b5d4045c3f466fa91fe2cc6abe79232a1a57cdf104f7a26e716e0a1e2789df78"
+        }
+      },
+      "receipt": {
+        "kind": "test.upper",
+        "tool": "upper-paid@1.0.0",
+        "key": "0ee8c560c6ecd1456129c70a9f23fcb8426fc24f1c0ee9838a72fca103f3db65",
+        "build": "d1:0823158f6022952500538308f179f4db9126ea76986a1f000402731c49442876",
+        "cache": "miss",
+        "inputs": {
+          "text": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        }
+      }
+    }
+  }
+]

@@ -57,6 +57,8 @@ pub struct Mesh {
     /// The quads the mesh had before its stack's first `subdivide`, as a `cage` mesh-edge line
     /// draws them, each edge by its two ends.
     pub cage: Option<Vec<[V3; 2]>>,
+    /// Its GPU sway (#2016): the params and weights the vertex move reads at each frame.
+    pub sway: Option<crate::stack::Sway>,
 }
 
 /// What a mesh-edge line draws.
@@ -128,6 +130,7 @@ impl Canonical for Mesh {
         let faces: Vec<(&String, &Vec<f64>)> = self.face_attributes.iter().collect();
         faces.encode(out);
         self.cage.encode(out);
+        self.sway.encode(out);
     }
 }
 
@@ -416,6 +419,13 @@ impl Mesh {
         b
     }
 
+    /// Its bounds with room for its sway (#2016): a swaying vertex moves up to `amount` m.
+    pub fn reach(&self) -> [V3; 2] {
+        let [lo, hi] = self.bounds();
+        let a = self.sway.as_ref().map_or(0.0, |s| s.amount.abs());
+        [lo.map(|x| x - a), hi.map(|x| x + a)]
+    }
+
     /// The mesh's edges as a mesh-edge line draws them (Marks in 3D: mesh edges), each by its
     /// two ends: on positions welded to 1e-6 m, so an edge split for its normals draws once;
     /// `all` draws every triangle edge, `quads` leaves out an edge both of whose triangles are one
@@ -532,7 +542,8 @@ impl Mesh {
     ) -> (std::sync::Arc<Vec<[V3; 2]>>, bool) {
         use std::collections::HashMap;
         use std::sync::{Arc, Mutex, OnceLock};
-        static MADE: OnceLock<Mutex<HashMap<[u8; 16], Arc<Vec<[V3; 2]>>>>> = OnceLock::new();
+        type Made = HashMap<[u8; 16], Arc<Vec<[V3; 2]>>>;
+        static MADE: OnceLock<Mutex<Made>> = OnceLock::new();
         let below = planted == Some("crease_below_angle");
         let mut h = deep_canvas::schedule::Hasher::new("scene3d.creases");
         h.bytes(&(&self.positions, &self.indices).canonical_bytes())

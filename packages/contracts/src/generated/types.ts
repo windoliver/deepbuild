@@ -99,6 +99,8 @@ export type AdapterFactsTexts = Array<AdapterFactsText>;
 
 export type AdapterFactsVersion = string;
 
+export type AdapterFactsReach = "model" | "user" | "debug" | "none";
+
 export type AdapterFactsTextMap = { [key: string]: AdapterFactsText };
 
 export type AdapterFactsDataTemplate = { [key: string]: AdapterFactsText };
@@ -403,6 +405,21 @@ export interface AdapterFacts {
       since?: AdapterFactsVersion;
       tools?: AdapterFactsTexts;
     }>;
+  };
+  contextOutput?: {
+    readBy: AdapterFactsText;
+    conformance: AdapterFactsText;
+    capChars: number;
+    previewChars: number;
+    versions: Array<AdapterFactsVersion>;
+    source: AdapterFactsText;
+    events: { [key: string]: {
+      additionalContext: AdapterFactsReach;
+      systemMessage: AdapterFactsReach;
+      stdout: AdapterFactsReach;
+      stderr: AdapterFactsReach;
+      stderrOnBlock: AdapterFactsReach;
+    } };
   };
   classifyStop?: AdapterFactsOperation;
   skills?: AdapterFactsOperation;
@@ -1477,6 +1494,8 @@ export type AdapterFactsV5Texts = Array<AdapterFactsV5Text>;
 
 export type AdapterFactsV5Version = string;
 
+export type AdapterFactsV5Reach = "model" | "user" | "debug" | "none";
+
 export type AdapterFactsV5TextMap = { [key: string]: AdapterFactsV5Text };
 
 export type AdapterFactsV5DataTemplate = { [key: string]: AdapterFactsV5Text };
@@ -1824,6 +1843,21 @@ export interface AdapterFactsV5 {
       since?: AdapterFactsV5Version;
       tools?: AdapterFactsV5Texts;
     }>;
+  };
+  contextOutput?: {
+    readBy: AdapterFactsV5Text;
+    conformance: AdapterFactsV5Text;
+    capChars: number;
+    previewChars: number;
+    versions: Array<AdapterFactsV5Version>;
+    source: AdapterFactsV5Text;
+    events: { [key: string]: {
+      additionalContext: AdapterFactsV5Reach;
+      systemMessage: AdapterFactsV5Reach;
+      stdout: AdapterFactsV5Reach;
+      stderr: AdapterFactsV5Reach;
+      stderrOnBlock: AdapterFactsV5Reach;
+    } };
   };
   classifyStop?: AdapterFactsV5Operation;
   skills?: AdapterFactsV5Operation;
@@ -3518,6 +3552,25 @@ export interface AskSuperseded {
   evidence?: Array<string>;
 }
 
+/** ask.taken_over@1 */
+export interface AskTakenOver {
+  v: 1;
+  id: string;
+  kind: "ask.taken_over";
+  subject: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    device: string;
+    revision: number;
+  };
+  evidence?: Array<string>;
+}
+
 /** attempt.started@1 */
 export interface AttemptStarted {
   v: 1;
@@ -3685,6 +3738,16 @@ export interface ChannelDelivered {
         id: string;
         label: string;
       }>;
+      plan?: {
+        hash: string;
+        steps: Array<{
+          does: string;
+          changes: Array<string>;
+          undo: string;
+          public: boolean;
+          cost: number;
+        }>;
+      };
       revision: number;
       hub: string;
       refused: string | null;
@@ -3715,7 +3778,7 @@ export interface ChannelRefused {
     channel: string;
     thread_key: string;
     answer: string;
-    field?: "device" | "ask" | "revision" | "card_hash" | "hub" | "at" | "signature" | "answer" | "account_link_id" | "method" | "once" | "params";
+    field?: "device" | "ask" | "revision" | "card_hash" | "plan_hash" | "hub" | "at" | "signature" | "answer" | "account_link_id" | "method" | "once" | "params";
     reason: string;
   };
   evidence?: Array<string>;
@@ -4985,7 +5048,7 @@ export interface DocPatchedV2 {
 
 /** doctor.item@1 */
 export interface DoctorItem {
-  code: "healthy" | "binary_missing" | "version_uncovered" | "hooks_missing" | "hooks_disabled" | "hooks_untrusted" | "mcp_unregistered" | "statusline_missing" | "signed_out" | "nested_session" | "timing_relation_broken" | "telemetry_unreadable" | "not_checked" | "hub_unreachable" | "disk_low" | "ports_taken" | "billing_api_key" | "binary_differs" | "token_expiring" | "prompt_failed" | "deprecated_used" | "gpu_unsupported" | "render_failed" | "job_failing" | "hook_program_missing" | "notifications_off" | "service_unpromoted" | "unknown";
+  code: "healthy" | "binary_missing" | "version_uncovered" | "hooks_missing" | "hooks_disabled" | "hooks_untrusted" | "mcp_unregistered" | "statusline_missing" | "signed_out" | "nested_session" | "timing_relation_broken" | "telemetry_unreadable" | "not_checked" | "hub_unreachable" | "disk_low" | "ports_taken" | "billing_api_key" | "binary_differs" | "token_expiring" | "prompt_failed" | "deprecated_used" | "gpu_unsupported" | "render_failed" | "job_failing" | "hook_program_missing" | "notifications_off" | "service_unpromoted" | "statusline_shadowed" | "unknown";
   level: "ok" | "warn" | "fail" | "skip";
   evidence: string;
   fix: string;
@@ -6712,6 +6775,79 @@ export interface ResourceCreated {
   evidence?: Array<string>;
 }
 
+/** row.set@1 */
+export interface RowSet {
+  v: 1;
+  id: string;
+  kind: "row.set";
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    id: string;
+    listed: boolean;
+    order?: string;
+    address?: string;
+    title?: string;
+    project?: string | null;
+    session?: string;
+    agent?: string | null;
+    entry?: "idle" | "running" | "pass" | "fail" | "blocked" | "invalid" | "inconclusive" | "needs_you" | "stale";
+    word?: "queued" | "working" | "says done" | "PASS" | "sent back" | "BLOCKED" | "INVALID" | "INCONCLUSIVE" | "needs you" | "stale" | "quiet" | "stuck" | "flagged" | "finished";
+    why?: string;
+    waits_on?: string | null;
+    since?: number | null;
+    actions?: Array<{
+      answer: string;
+      label: string;
+    }>;
+    unread?: boolean;
+    default?: string;
+    default_at?: number;
+  };
+  evidence?: Array<string>;
+}
+
+/** row.set@2 */
+export interface RowSetV2 {
+  v: 2;
+  id: string;
+  kind: "row.set";
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    id: string;
+    listed: boolean;
+    order?: string;
+    address?: string;
+    title?: string;
+    project?: string | null;
+    session?: string;
+    agent?: string | null;
+    entry?: "idle" | "running" | "pass" | "fail" | "blocked" | "invalid" | "inconclusive" | "needs_you" | "stale";
+    word?: "queued" | "working" | "says done" | "PASS" | "sent back" | "BLOCKED" | "INVALID" | "INCONCLUSIVE" | "needs you" | "stale" | "quiet" | "stuck" | "flagged" | "finished" | "running";
+    why?: string;
+    waits_on?: string | null;
+    since?: number | null;
+    actions?: Array<{
+      answer: string;
+      label: string;
+    }>;
+    unread?: boolean;
+    default?: string;
+    default_at?: number;
+    progress?: string;
+  };
+  evidence?: Array<string>;
+}
+
 /** run.cleaned@1 */
 export interface RunCleaned {
   v: 1;
@@ -6938,6 +7074,27 @@ export interface RunStartedV3 {
     command?: string;
     stand_ins?: Array<string>;
     withheld: Array<string>;
+  };
+  evidence?: Array<string>;
+}
+
+/** run.stopped_at_limit@1 */
+export interface RunStoppedAtLimit {
+  v: 1;
+  id: string;
+  kind: "run.stopped_at_limit";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    run: string;
+    limit: "memory_mb" | "file_mb";
+    max: number;
+    reading?: number;
   };
   evidence?: Array<string>;
 }
@@ -7225,6 +7382,30 @@ export interface SessionChildStarted {
   evidence?: Array<string>;
 }
 
+/** session.context_fit@1 */
+export interface SessionContextFit {
+  v: 1;
+  id: string;
+  kind: "session.context_fit";
+  subject: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    event: string;
+    cap: number;
+    chars: number;
+    inline: Array<string>;
+    inline_ids: Array<string>;
+    by_handle: Array<string>;
+    handle: string;
+  };
+  evidence?: Array<string>;
+}
+
 /** session.continued@1 */
 export interface SessionContinued {
   v: 1;
@@ -7315,6 +7496,23 @@ export interface SessionNeverStarted {
   data: {
     run: string;
     after_ms: number;
+  };
+  evidence?: Array<string>;
+}
+
+/** session.paused@1 */
+export interface SessionPaused {
+  v: 1;
+  id: string;
+  kind: "session.paused";
+  subject: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
   };
   evidence?: Array<string>;
 }

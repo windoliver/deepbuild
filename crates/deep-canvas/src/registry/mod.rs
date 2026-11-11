@@ -490,6 +490,13 @@ pub type Rule = fn(&Value, &str, &Value) -> Vec<Raised>;
 /// One item's CPU time per frame, in ms, for the budget estimate (`document.budget`).
 pub type Cost = fn(&Value) -> f64;
 
+/// The elements of a built item's named part in one domain, in index order, each an object of
+/// `i`, `center`, `normal`, `area`, `size` and the part's attributes, for a recipe's repeat over
+/// elements (Recipe: repeat over elements; #2015): `(document, item ID, item, part, domain,
+/// planted wrong program)`, or why there are none to count.
+pub type Elements =
+    fn(&Value, &str, &Value, &str, &str, Option<&str>) -> Result<Vec<Value>, String>;
+
 /// One code a canvas module's check can emit, in the check catalog: what it means, its fix, and
 /// whether that fix is given as patch ops.
 #[derive(Clone, Debug)]
@@ -729,6 +736,8 @@ pub struct Registrar {
     pub rules: Vec<(String, Rule)>,
     /// Its kinds' CPU cost per item, by kind (`family.name`).
     pub costs: Vec<(String, Cost)>,
+    /// Its builders' elements by part and domain, by kind (`family.name`; #2015).
+    pub elements: Vec<(String, Elements)>,
     /// Its carried state with checkpoints.
     pub steppers: Vec<Stepper>,
     /// The registries it declares (#200).
@@ -831,6 +840,12 @@ impl Registrar {
     /// The CPU cost of an item of the kind `family.name`.
     pub fn cost(&mut self, kind: &str, cost: Cost) -> &mut Self {
         self.costs.push((kind.into(), cost));
+        self
+    }
+
+    /// The elements of an item of the builder kind `family.name`, by part and domain (#2015).
+    pub fn elements(&mut self, kind: &str, elements: Elements) -> &mut Self {
+        self.elements.push((kind.into(), elements));
         self
     }
 
@@ -1139,11 +1154,18 @@ pub enum Fault {
     /// Registers `camera@1` in the scene3d module instead of the core (#493), so a build
     /// without scene3d has no camera.
     CameraInScene3d,
+    /// Declares `export.target@1` in the media module instead of the core (#501): the core
+    /// declares none, so a build without media refuses every other module's target.
+    ExportTargetInMedia,
 }
 
 /// The module that declares `ease@1` in the planted layout that moves it out of the core, which
 /// a build that lacks it names as missing (#490).
 pub const EASES_OUTSIDE_CORE: &str = "motion";
+
+/// The module that declares `export.target@1` in the planted layout that moves it out of the
+/// core, which the seal of a build that lacks it names (#501).
+pub const EXPORT_TARGETS_OUTSIDE_CORE: &str = "media";
 
 /// The type an array declares when it holds JSON, which only a check phase writes (#855).
 pub const JSON: &str = "json";
@@ -1514,6 +1536,15 @@ impl Sealed {
             .collect()
     }
 
+    /// The elements function of the kind `family.name`, from the first module that registers one.
+    pub fn elements_for(&self, full: &str) -> Option<Elements> {
+        self.modules
+            .iter()
+            .flat_map(|m| m.shapes.elements.iter())
+            .find(|(k, _)| k == full)
+            .map(|(_, e)| *e)
+    }
+
     /// Whether any module registered a cost: the budget estimate then sums the whole document.
     pub fn has_costs(&self) -> bool {
         self.modules.iter().any(|m| !m.shapes.costs.is_empty())
@@ -1567,9 +1598,9 @@ impl Sealed {
                 return self.left_out_kinds.get(full).cloned();
             }
         }
-        // A core kind (`text@1`, `rect@1`) has no family to name a module by; the one bare
-        // name a module's kind keeps, `cells@1` (canvas primitives: Cell grid `cells@1`), is
-        // the cells module's.
+        // A core kind (`text@1`, `rect@1`) has no family to name a module by; a bare name
+        // the design gives a module's kind (`BARE_MODULE_KINDS`, such as `cells@1`) is that
+        // module's.
         let family = match full.split_once('.') {
             Some((f, _)) => f,
             None => match BARE_MODULE_KINDS.iter().find(|(k, _)| *k == full) {
@@ -1699,13 +1730,13 @@ impl Registry {
         }
     }
 
-    /// A registry the core declares in this build beside its own (#200).
     /// Lets `module` keep the bare kind name `kind`: a test build's fixture only (#412).
     pub fn allows_bare(mut self, module: &str, kind: &str) -> Registry {
         self.bare.push((module.into(), kind.into()));
         self
     }
 
+    /// A registry the core declares in this build beside its own (#200).
     pub fn declares(mut self, def: lists::RegistryDef) -> Registry {
         self.declared.push(def);
         self
@@ -2182,7 +2213,7 @@ impl Registry {
                 }
                 // A bare name is the core's (a core kind has no family); a module's kind
                 // carries its family, so no module takes `rect` or `text` from the compositor.
-                // The one module kind the design names bare, `cells@1`, is the cells module's.
+                // The module kinds the design names bare (`BARE_MODULE_KINDS`) are their modules'.
                 let bare = BARE_MODULE_KINDS
                     .iter()
                     .any(|(kind, module)| *kind == k.entry.name && *module == name)
@@ -2904,6 +2935,9 @@ impl Registry {
         let started = self.clock.map(|c| c());
         let eases = self.fault != Some(Fault::EaseInMotion);
         let mut core_registries = core_lists::registries_with(eases);
+        if self.fault == Some(Fault::ExportTargetInMedia) {
+            core_registries.retain(|d| d.name != "export.target@1");
+        }
         core_registries.extend(self.declared.iter().cloned());
         let mut core_entries: Vec<lists::EntryDef> =
             core_lists::entries(self.fault == Some(Fault::BaseStepsElsewhere))
@@ -4753,5 +4787,54 @@ mod tests {
             .iter()
             .any(|i| i.code == "out_of_range" && i.path == "items/x/kind"));
         assert!(!result.issues.iter().any(|i| i.code == "module_missing"));
+    }
+
+    /// The module `x` filling `export.target@1` (#501) with `raw`, read back by `reader`.
+    fn export_target(r: &mut Registrar, reader: &str) {
+        r.entry(
+            "export.target@1",
+            "test.raw",
+            json!({"writer": "x", "fidelity": ["export.fidelity"], "reader": reader,
+                   "hidden": "listed"}),
+            "R6",
+        );
+    }
+
+    fn raw_target() -> Module {
+        module("x", &[], |r| export_target(r, "y"))
+    }
+
+    #[test]
+    fn a_build_without_media_seals_another_modules_export_target() {
+        let sealed = seal_core([raw_target()]).unwrap();
+        let targets = sealed.registry("export.target@1").expect("declared");
+        assert_eq!(targets.owner, "core");
+        let names: Vec<&str> = targets.entries.iter().map(|e| e.name.as_str()).collect();
+        assert_eq!(names, ["test.raw"]);
+    }
+
+    #[test]
+    fn an_export_target_read_by_its_own_writer_is_refused_by_name() {
+        let err = seal_core([module("x", &[], |r| export_target(r, "x"))]).unwrap_err();
+        assert_eq!(err.code, "entry_refused");
+        let at = err.registry.as_ref().expect("a registry refusal");
+        assert_eq!(at.name, "export.target@1");
+        assert_eq!(at.entries, [json!("test.raw")]);
+        assert_eq!(at.rules, ["reader_is_not_writer"]);
+    }
+
+    #[test]
+    fn export_targets_declared_in_media_refuse_a_build_without_it_naming_media() {
+        let err = Registry::new(BuildSet::Core)
+            .with(raw_target())
+            .plant(Fault::ExportTargetInMedia)
+            .seal()
+            .unwrap_err();
+        assert_eq!(err.code, "unknown_registry");
+        assert_eq!(err.modules, ["media", "x"]);
+        assert_eq!(
+            err.registry.as_ref().map(|r| r.name.as_str()),
+            Some("export.target@1")
+        );
     }
 }

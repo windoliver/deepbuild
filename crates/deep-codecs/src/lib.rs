@@ -11,7 +11,9 @@
 #[cfg(target_os = "macos")]
 mod apple;
 pub mod color;
+mod export;
 pub mod maps;
+pub mod mov;
 pub mod mp4;
 pub mod table;
 mod wav;
@@ -284,7 +286,7 @@ fn time(ticks: i64, timescale: u32, planted: &Planted) -> Value {
     json!([ticks, timescale])
 }
 
-fn probe(f: &Format, sha: &str, planted: &Planted) -> Value {
+fn probe(f: &Format, data: &[u8], sha: &str, planted: &Planted) -> Value {
     let (kind, streams, decoder) = match f {
         Format::Wav(w) => (
             "audio",
@@ -311,8 +313,8 @@ fn probe(f: &Format, sha: &str, planted: &Planted) -> Value {
         }
         Format::Movie(m) => {
             let edits = !planted.is("ignores_edit_lists");
-            let streams = (m.tracks.iter().enumerate())
-                .filter(|(_, t)| t.kind != mp4::Kind::Other)
+            let mut streams = (m.tracks.iter().enumerate())
+                .filter(|(_, t)| matches!(t.kind, mp4::Kind::Video | mp4::Kind::Audio))
                 .map(|(i, t)| {
                     let mut s = json!({"index": i, "codec": codec(&t.entry.fourcc),
                         "time_base": [1, t.timescale], "duration": [t.span(m.timescale), t.timescale]});
@@ -337,6 +339,14 @@ fn probe(f: &Format, sha: &str, planted: &Planted) -> Value {
                     s
                 })
                 .collect::<Vec<_>>();
+            // #501: the timecode track, its first frame read from its sample.
+            let at = m.tracks.iter().position(|t| t.kind == mp4::Kind::Timecode);
+            if let (Some(i), Some(t)) = (at, m.timecode(data)) {
+                streams.push(
+                    json!({"index": i, "type": "timecode", "start_frame": t.start_frame,
+                    "drop_frame": t.drop_frame, "rate": t.rate}),
+                );
+            }
             let kind = if m.tracks.iter().any(|t| t.kind == mp4::Kind::Video) {
                 "video"
             } else {
@@ -436,7 +446,7 @@ fn decode(
         Format::Png(..) => {
             let img = image::load_from_memory(data)
                 .map_err(|e| e.to_string())?
-                .to_rgba8();
+                .into_rgba8();
             let (w, h) = img.dimensions();
             let mut px = img.into_raw();
             if bgra {
@@ -508,7 +518,7 @@ fn decode(
                             "channels": channels, "first": first,
                             "samples": samples.len() / channels.max(1) as usize, "file": name}));
                     }
-                    mp4::Kind::Other => {}
+                    mp4::Kind::Timecode | mp4::Kind::Other => {}
                 }
             }
         }
@@ -536,7 +546,7 @@ fn video_frames(
         .iter()
         .map(|i| {
             let s = &t.samples[*i];
-            let range = s.offset as usize..s.offset as usize + s.size as usize;
+            let range = s.offset as usize..(s.offset as usize).saturating_add(s.size as usize);
             (*i, data.get(range).unwrap_or_default().to_vec())
         })
         .collect();
@@ -573,7 +583,7 @@ fn audio(
     let (rate, channels) = (t.entry.sample_rate.max(1), t.entry.channels.max(1) as u32);
     let packets: Vec<Vec<u8>> = (t.samples.iter())
         .map(|s| {
-            data.get(s.offset as usize..(s.offset + s.size as u64) as usize)
+            data.get(s.offset as usize..s.offset.saturating_add(s.size as u64) as usize)
                 .unwrap_or_default()
                 .to_vec()
         })
@@ -889,6 +899,12 @@ pub fn run(job: &Map<String, Value>, caps: &Caps, planted: &Planted) -> (Value, 
             Err(e) => (json!({"error": e}), None),
         };
     }
+    // #501: an export's parts, their join and its PNG frames (export.rs).
+    if op.starts_with("export.") {
+        let v = export::run(op, &job, planted).unwrap_or_else(|e| e);
+        let sha = v["sha256"].as_str().map(str::to_string);
+        return (v, sha);
+    }
     let Some(path) = job.s("path") else {
         return (json!({"error": "a job names its path"}), None);
     };
@@ -924,7 +940,7 @@ pub fn run(job: &Map<String, Value>, caps: &Caps, planted: &Planted) -> (Value, 
             return (r, sha);
         }
     }
-    let probed = probe(&f, &opened.sha, planted);
+    let probed = probe(&f, &opened.data, &opened.sha, planted);
     let reply = match op {
         "probe" => Ok(probed),
         "decode" => decode(&f, &opened.data, &job, planted, &probed).map(|d| json!({"decoded": d})),
@@ -1001,9 +1017,11 @@ pub fn serve(role: &str, args: &[String]) -> i32 {
             continue;
         };
         let op = job.get("op").and_then(Value::as_str).unwrap_or_default();
+        // #501: an export's jobs are the encode tool's too.
+        let encodes = op == "encode" || op.starts_with("export.");
         let allowed = match role {
-            ENCODE_TOOL => op == "encode",
-            _ => op != "encode" || planted.is("encodes_in_decode_worker"),
+            ENCODE_TOOL => encodes,
+            _ => !encodes || planted.is("encodes_in_decode_worker"),
         };
         let (reply, sha) = if allowed {
             run(&job, &caps, &planted)
@@ -1212,5 +1230,51 @@ impl Drop for Helper {
     fn drop(&mut self) {
         drop(self.stdin.take());
         let _ = self.child.wait();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// What `f` returns, or `None` when it has not returned after ten seconds.
+    pub(crate) fn finished<T: Send + 'static>(f: impl FnOnce() -> T + Send + 'static) -> Option<T> {
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || tx.send(f()));
+        rx.recv_timeout(std::time::Duration::from_secs(10)).ok()
+    }
+
+    /// A track whose one sample ends past the last byte a file can have.
+    fn track_past_the_end() -> mp4::Track {
+        mp4::Track {
+            kind: mp4::Kind::Audio,
+            timescale: 1,
+            duration: 0,
+            edits: Vec::new(),
+            entry: mp4::Entry {
+                config: Some((*b"none", Vec::new())),
+                ..Default::default()
+            },
+            samples: vec![mp4::Sample {
+                offset: u64::MAX - 1,
+                size: 4,
+                dts: 0,
+                cts: 0,
+                key: true,
+            }],
+        }
+    }
+
+    #[test]
+    fn an_audio_sample_past_the_end_of_the_file_reads_as_empty() {
+        let got = audio(&track_past_the_end(), 1, &[], &Planted::default());
+        assert!(got.is_err_and(|e| e.starts_with("no decoder for")));
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn a_video_sample_past_the_end_of_the_file_reads_as_empty() {
+        let got = video_frames(&track_past_the_end(), &[], &[0]);
+        assert!(got.is_err_and(|e| e.starts_with("no decoder for")));
     }
 }

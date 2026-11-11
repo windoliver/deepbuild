@@ -38,6 +38,10 @@ export const API = Object.freeze([
   { method: 'deep.notices.send', needs: 'notices' },
   // #350: actions, outside calls the host makes for the package, and the outputs pieces provide and use.
   { method: 'deep.registerAction', needs: null },
+  // #1922: an offline job kind, and a tool that joins one once it passes the kind's qualification; both are data, and
+  // the hub runs the tool's own files as a process of their own.
+  { method: 'deep.registerJob', needs: null },
+  { method: 'deep.registerJobTool', needs: null },
   { method: 'deep.fetch', needs: 'hosts' },
   { method: 'deep.provide', needs: null },
   { method: 'deep.use', needs: null },
@@ -321,7 +325,7 @@ export function peer(stream, serve) {
       // A line no message needs: the other side is cut off rather than held in memory.
       if (size + at - start > FRAME) return void stream.destroy();
       held.push(chunk.subarray(start, at));
-      const line = Buffer.concat(held).toString('utf8');
+      const line = (held.length === 1 ? held[0] : Buffer.concat(held)).toString('utf8');
       held = [];
       size = 0;
       start = at + 1;

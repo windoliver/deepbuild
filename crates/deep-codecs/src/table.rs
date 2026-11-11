@@ -120,7 +120,8 @@ pub fn probe(data: &[u8], key: &str) -> Result<Value, Value> {
         .flatten()
         .map(|c| &c["raw"])
         .collect();
-    if keys.iter().enumerate().any(|(i, k)| keys[..i].contains(k)) {
+    let mut seen = std::collections::HashSet::new();
+    if !keys.iter().all(|k| seen.insert(k.as_str())) {
         return Err(refused("key_not_unique", json!({"key": key})));
     }
     Ok(json!({"table": {"rows": body.len(), "columns": columns, "key": key}, "cells": cells}))
@@ -144,5 +145,27 @@ mod tests {
             assert_eq!(&data[s..e], cell["raw"].as_str().unwrap().as_bytes());
         }
         assert_eq!(p["cells"]["label"][0]["raw"], "Cafe\u{301}");
+    }
+
+    #[test]
+    fn a_repeated_key_is_refused() {
+        let refusal = probe(b"key,label\na,x\nb,y\na,z\n", "key").unwrap_err();
+        assert_eq!(refusal["refused"]["code"], "key_not_unique");
+        assert!(probe(b"key,label\na,x\nb,x\n", "key").is_ok());
+    }
+
+    #[test]
+    fn a_long_table_checks_its_keys_in_one_pass() {
+        // 100,000 rows, the last one's key `last`.
+        let table = |last: usize| {
+            let rows = (0..99_999).chain([last]);
+            let body: String = rows.map(|k| format!("{k},x\n")).collect();
+            format!("key,label\n{body}")
+        };
+        let unique = crate::tests::finished(move || probe(table(99_999).as_bytes(), "key"))
+            .expect("the probe returns");
+        assert_eq!(unique.unwrap()["table"]["rows"], 100_000);
+        let refusal = probe(table(7).as_bytes(), "key").unwrap_err();
+        assert_eq!(refusal["refused"]["code"], "key_not_unique");
     }
 }

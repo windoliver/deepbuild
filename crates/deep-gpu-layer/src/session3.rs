@@ -79,9 +79,13 @@ pub(crate) fn planted3(p: Option<Planted>) -> Planted3 {
             centers: p == Some(Planted::GpuCullByCenter),
             reversed: p == Some(Planted::CompactInReverse),
             row_as_element: p == Some(Planted::RowAsElement),
+            occlusion_by_centre: p == Some(Planted::OcclusionByCentre),
         },
         ids_by_compacted_place: p == Some(Planted::IdsByCompactedRow),
         count_read_back: p == Some(Planted::CountReadBack),
+        pyramid_from_previous_frame: p == Some(Planted::PyramidFromPreviousFrame),
+        occlusion_in_cascades: p == Some(Planted::OcclusionInCascades),
+        occlusion_in_probe_captures: p == Some(Planted::OcclusionInProbeCaptures),
         // #428's and #481's shading plants, a bit each in scene3d.wgsl's order.
         lobes: [
             Planted::AbsorptionIgnoresThickness,
@@ -96,6 +100,11 @@ pub(crate) fn planted3(p: Option<Planted>) -> Planted3 {
             // #481's.
             Planted::SubsurfaceAcrossParts,
             Planted::SubsurfaceAddsToDiffuse,
+            // #486's.
+            Planted::LobeOutputScalesField,
+            Planted::OcclusionScalesDirect,
+            Planted::BumpIgnoresHandedness,
+            Planted::CoatNormalBendsBase,
         ]
         .iter()
         .position(|q| p == Some(*q))
@@ -113,6 +122,10 @@ pub(crate) fn msaa_planted(p: Option<Planted>) -> Planted3 {
             Some(Planted::SingleSampleTargets | Planted::ClaimsMsaaOverSingleSample)
         ),
         resolve_accumulates: p == Some(Planted::ResolveAccumulatesFrames),
+        missing_lobe_turned_on: p == Some(Planted::MissingLobeTurnedOn),
+        bind_group_per_item: p == Some(Planted::BindGroupPerItem),
+        uploads_every_transform: p == Some(Planted::UploadsEveryTransform),
+        warms_per_item: p == Some(Planted::WarmsPerItem),
         ..Default::default()
     }
 }
@@ -325,6 +338,33 @@ pub fn masks(app: &mut App, key: u32, level: u32) -> Vec<(&'static str, [u32; 2]
     })
 }
 
+/// Culls the camera's lists by occlusion too, or by the frustum alone (a view's `occlusion:
+/// off`, #1637).
+pub fn set_occlusion(app: &mut App, on: bool) {
+    app.worker.call(move |state| {
+        if let Some(s) = state.scene3d.as_ref() {
+            if let Some(r) = lock(&s.shared).renderer.as_mut() {
+                r.set_occlusion(on);
+            }
+        }
+    })
+}
+
+/// Which whole solids each pass of the frame just drawn drew (#1637).
+pub fn kept_items(app: &mut App) -> Vec<(String, Vec<String>)> {
+    app.worker.call(|state| {
+        let Some(s) = state.scene3d.as_ref() else {
+            return Vec::new();
+        };
+        let device = s.view.device().clone();
+        let shared = lock(&s.shared);
+        shared
+            .renderer
+            .as_ref()
+            .map_or(Vec::new(), |r| r.read_kept_items(&device))
+    })
+}
+
 /// Draws the session from the CPU's f64 cull (#484).
 pub fn cull_on_cpu(app: &mut App) {
     app.worker.call(|state| {
@@ -348,6 +388,37 @@ pub fn kept(app: &mut App) -> Vec<deep_scene3d_render::KeptRow> {
             .renderer
             .as_ref()
             .map_or(Vec::new(), |r| r.read_kept(&device))
+    })
+}
+
+/// What the GPU drew for each of `ids` in the frame just drawn (#2016): the gust its sway used,
+/// with one, and its mesh's vertices in world m; none for an item with no solid.
+pub fn sway(
+    app: &mut App,
+    scene: Arc<Scene>,
+    ids: Vec<String>,
+) -> Vec<(String, Option<f32>, Vec<[f64; 3]>)> {
+    app.worker.call(move |state| {
+        let Some(s) = state.scene3d.as_ref() else {
+            return Vec::new();
+        };
+        let device = s.view.device().clone();
+        let shared = lock(&s.shared);
+        let Some(r) = shared.renderer.as_ref() else {
+            return Vec::new();
+        };
+        let solids: Vec<&deep_canvas_scene3d::scene::Solid> =
+            scene.layers.iter().flat_map(|l| &l.solids).collect();
+        ids.into_iter()
+            .map(|id| {
+                let read = solids
+                    .iter()
+                    .find(|s| s.id == id)
+                    .and_then(|s| r.read_sway(&device, s));
+                let (gust, positions) = read.unwrap_or_default();
+                (id, gust, positions)
+            })
+            .collect()
     })
 }
 
@@ -414,6 +485,8 @@ pub struct Drawn {
     pub pre_tone: Option<Vec<u8>>,
     /// The frame's GPU time and each pass's share, ms.
     pub timing: Option<(f64, std::collections::BTreeMap<String, f64>)>,
+    /// What the passes' declared costs price this frame at, ms (#1637).
+    pub declared: Vec<(&'static str, f64)>,
     /// How many pixels the status guard moved, when the stage ran and the frame asked.
     pub moved: Option<u32>,
     /// With timings: the GPU memory the device holds as the frame draws (#383).
@@ -582,6 +655,7 @@ pub fn draw_on(
                     .as_ref()
                     .and_then(|_| deep_gpu::memory::allocated(&device)),
                 timing,
+                declared: r.declared_ms(),
                 moved,
             })
         })

@@ -9,13 +9,19 @@
 
 mod access;
 mod audio;
+mod bake;
 mod ask;
 mod capture;
 mod costs;
+mod determinism;
 mod efficiency;
 mod familiar;
 mod evidence;
+mod export;
 mod film;
+mod film_layout;
+mod geometry_audit;
+mod film_viewer;
 mod frames;
 mod function;
 mod gate;
@@ -24,8 +30,10 @@ mod host;
 mod hub;
 mod input;
 mod jobs;
+mod kept;
 mod kinds;
 mod kit;
+mod logic;
 mod media;
 mod mixdown;
 mod modes;
@@ -44,6 +52,7 @@ mod serve;
 mod shaper;
 mod shared;
 mod snapshot;
+mod spawn;
 mod spatial;
 mod terminal;
 #[cfg(feature = "test-machines")]
@@ -226,7 +235,7 @@ fn tame_overflow(line: &str) -> Option<String> {
 }
 
 /// An optional field as `read` takes it: `Some(None)` when it's absent, `None` when `read` refuses it.
-fn optional<T>(value: Option<&Value>, read: impl FnOnce(&Value) -> Option<T>) -> Option<Option<T>> {
+pub(crate) fn optional<T>(value: Option<&Value>, read: impl FnOnce(&Value) -> Option<T>) -> Option<Option<T>> {
     value.map_or(Some(None), |v| read(v).map(Some))
 }
 
@@ -399,6 +408,41 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
     };
     match name {
         "revisions" => return Some(Call::Revisions(doc()?)),
+        "session" => {
+            return Some(Call::Session {
+                doc: doc()?,
+                set: c.get("set").cloned().filter(Value::is_object),
+            })
+        }
+        "frame_hash" => {
+            let frames = c.get("frames")?.as_array()?.iter().map(|f| {
+                let size = f.get("size")?.as_array().filter(|a| a.len() == 2)?;
+                let w = u32::try_from(size[0].as_u64()?).ok()?;
+                let h = u32::try_from(size[1].as_u64()?).ok()?;
+                Some(([w, h], f.get("bytes")?.as_str()?.to_string()))
+            });
+            return Some(Call::FrameHash {
+                frames: frames.collect::<Option<_>>()?,
+                software: match c.get("adapter") {
+                    None => false,
+                    Some(a) => a.as_str()? == "software",
+                },
+            });
+        }
+        "pixel_hash" => {
+            let frames = c.get("frames")?.as_array()?.iter().map(|f| {
+                let size = f.get("size")?.as_array().filter(|a| a.len() == 2)?;
+                let w = u32::try_from(size[0].as_u64()?).ok()?;
+                let h = u32::try_from(size[1].as_u64()?).ok()?;
+                let format = deep_gpu::pixel_hash::Format::named(f.get("format")?.as_str()?)?;
+                Some(([w, h], format, f.get("bytes")?.as_str()?.to_string()))
+            });
+            return Some(Call::PixelHash(frames.collect::<Option<_>>()?));
+        }
+        "cross_machine" => {
+            let a = c.get("audio")?.as_array().filter(|a| a.len() == 2)?;
+            return Some(Call::CrossMachine([a[0].as_str()?.to_string(), a[1].as_str()?.to_string()]));
+        }
         "input" => {
             return Some(Call::Input {
                 panel: c.get("panel")?.as_str()?.to_string(),
@@ -503,6 +547,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         }
         "see" => return Some(Call::See(c.get("panel")?.as_str()?.to_string())),
         "view" => return Some(Call::View(c.get("panel")?.as_str()?.to_string())),
+        "viewer" => return Some(Call::Viewer(c.get("panel")?.as_str()?.to_string())),
         "ask" => {
             let pointer = optional(c.get("pointer"), input::point)?;
             return Some(Call::Ask {
@@ -578,6 +623,23 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         }
         "costs" => return Some(Call::Costs),
         "migrate" => return Some(Call::Migrate(hash_named(c.get("to")?.as_str()?)?)),
+        // #1901: the fingerprint kept output is keyed by, a kept draw, and the padded key input.
+        "fingerprint" => return Some(Call::Fingerprint),
+        "draw" => {
+            let output = c.get("output")?.as_str()?;
+            return Some(Call::Draw {
+                doc: doc()?,
+                t: crate::time::eval_time(c.get("t"))?,
+                output: kept::OUTPUTS.into_iter().find(|o| *o == output)?,
+            });
+        }
+        "padded_key" => {
+            let seeds = c.get("seeds")?.as_array().filter(|s| s.len() == 2)?;
+            return Some(Call::PaddedKey {
+                fields: c.get("fields")?.as_u64()?,
+                seeds: [seeds[0].as_u64()?, seeds[1].as_u64()?],
+            });
+        }
         "keys" => {
             return Some(Call::Keys {
                 doc: doc()?,
@@ -693,7 +755,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
                 }
                 let bytes = base64(col.get("data")?.as_str()?)?;
                 let len = col.get("len")?.as_u64()? as usize;
-                if bytes.len() != len * 8 {
+                if len.checked_mul(8) != Some(bytes.len()) {
                     return None;
                 }
                 columns.insert(format!("{source}.{name}"), bytes);
@@ -709,6 +771,18 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         "catalog" => return Some(Call::Catalog),
         "verdict" => return Some(Call::Verdict(c.get("claim")?.as_str()?.to_string())),
         "verdicts" => return Some(Call::Verdicts(c.get("claim")?.as_str()?.to_string())),
+        "answer" => {
+            return Some(Call::Answer {
+                via: acting(c)?,
+                claim: c.get("claim")?.as_str()?.to_string(),
+                requirement: c.get("requirement")?.as_str()?.to_string(),
+                yes: match c.get("answer")?.as_str()? {
+                    "yes" => true,
+                    "no" => false,
+                    _ => return None,
+                },
+            })
+        }
         "golden" => {
             return Some(Call::Golden {
                 fixture: c.get("fixture")?.as_str()?.to_string(),
@@ -1119,6 +1193,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 || deep_canvas_media::PLANTED.contains(p)
                 // #1732's wrong programs live in the motion module's arrangement solve.
                 || deep_canvas_motion::arrange::PLANTED.contains(p)
+                || *p == deep_canvas_motion::module::UNDECLARED_KIND_ACCEPTED
         })
         .map(str::to_string);
     // #433's wrong programs are twins of the familiar@1 pack.
@@ -1137,6 +1212,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 *flag = true;
                 None
             }
+            None if export_planted(p).is_some() => export_planted(p),
             None => Some(match p {
                 "presents_unnamed_removal" => Planted::PresentsUnnamedRemoval,
                 "diffs_items_only" => Planted::DiffsItemsOnly,
@@ -1145,6 +1221,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "sorts_by_order_key_alone" => Planted::SortsByOrderKeyAlone,
                 "reply_without_digest" => Planted::ReplyWithoutDigest,
                 "reads_wasm_bytes" => Planted::ReadsWasmBytes,
+                "start_on_at_first_frame" => Planted::StartOnAtFirstFrame,
                 "rebase_counts_op_targets_only" => Planted::RebaseCountsOpTargetsOnly,
                 "diffs_whole_document" => Planted::DiffsWholeDocument,
                 "one_fifo_check_queue" => Planted::OneFifoCheckQueue,
@@ -1192,7 +1269,11 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "verdict_keyed_by_doc" => Planted::VerdictKeyedByDoc,
                 "checks_skip_unknown_kind" => Planted::ChecksSkipUnknownKind,
                 "missing_kind_inconclusive" => Planted::MissingKindInconclusive,
+                "layout_text_by_kind" => Planted::LayoutTextByKind,
+                "sweep_audits_samples_only" => Planted::SweepAuditsSamplesOnly,
                 "seeds_by_expansion_order" => Planted::SeedsByExpansionOrder,
+                "each_seeds_by_element_count" => Planted::EachSeedsByElementCount,
+                "each_face_per_triangle" => Planted::EachFacePerTriangle,
                 "reexpansion_overwrites_broken_out" => Planted::ReexpansionOverwritesBrokenOut,
                 "pack_check_skips_requires_modules" => Planted::PackCheckSkipsRequiresModules,
                 "packs_keyed_by_name" => Planted::PacksKeyedByName,
@@ -1487,9 +1568,12 @@ fn read_line(line: &str) -> Option<(Map<String, Value>, Scenario)> {
 }
 
 fn answer(command: &str, startup: &Startup, line: &str) -> Value {
-    let Some((input, scenario)) = read_line(line) else {
+    let Some((input, mut scenario)) = read_line(line) else {
         return bad_input();
     };
+    if scenario.planted.is_none() {
+        scenario.planted = startup.run_planted;
+    }
     match command {
         "run" => {
             let replies = jobs::around(&scenario, startup, |background| {
@@ -1742,6 +1826,7 @@ const TEST_BUILD: bool = cfg!(any(
     feature = "test-leave-out-look",
     feature = "test-leave-out-text",
     feature = "test-check-kind",
+    feature = "test-glyph-label",
     feature = "test-leave-out-logic",
     feature = "test-leave-out-data",
     feature = "test-leave-out-sandbox",
@@ -1854,6 +1939,13 @@ fn modules(set: BuildSet) -> Vec<Module> {
     out.push(deep_canvas_test_modules::sandbox::prog());
     #[cfg(feature = "test-leave-out-effects")]
     out.retain(|m| m.manifest.name != "effects");
+    // #501's planted layout: media declares export.target@1, which the core then leaves to it.
+    #[cfg(feature = "test-export-target-in-media")]
+    for m in &mut out {
+        if m.manifest.name == "media" {
+            *m = deep_canvas_media::module::declaring_export_targets();
+        }
+    }
     // #499: a build without the media module, and the test module that probes an asset through
     // the decode worker (or, planted, through media).
     #[cfg(feature = "test-leave-out-media")]
@@ -1929,6 +2021,8 @@ fn modules(set: BuildSet) -> Vec<Module> {
     out.push(deep_canvas_test_modules::deprecated());
     #[cfg(feature = "test-check-kind")]
     out.push(deep_canvas_test_modules::checks());
+    #[cfg(feature = "test-glyph-label")]
+    out.push(deep_canvas_test_modules::label());
     // Issue #185: test.sim@1's implementations, and test module c.
     #[cfg(feature = "test-sim-a")]
     out.push(deep_canvas_test_modules::sim::a());
@@ -2171,6 +2265,11 @@ fn seal(planted: Option<StartPlanted>, costs: Coefficients) -> Result<Startup, B
             }
         }
     }
+    if planted == Some(StartPlanted::Run(Planted::TargetReaderIsWriter)) {
+        for m in held.iter_mut().filter(|m| m.manifest.name == "media") {
+            *m = deep_canvas_media::module::png_reads_itself();
+        }
+    }
     if let Some(StartPlanted::ControlKind(p)) = planted {
         for m in held.iter_mut().filter(|m| m.manifest.name == "input") {
             *m = deep_canvas_input::module::with_test_kind(p);
@@ -2212,6 +2311,9 @@ fn seal(planted: Option<StartPlanted>, costs: Coefficients) -> Result<Startup, B
     }
     if cfg!(feature = "test-camera-in-scene3d") {
         registry = registry.plant(Fault::CameraInScene3d);
+    }
+    if cfg!(feature = "test-export-target-in-media") {
+        registry = registry.plant(Fault::ExportTargetInMedia);
     }
     // #412: the fixture ring keeps the bare name the issue gives it (`ring@1`, `ring@2`).
     if cfg!(any(feature = "test-ring-a", feature = "test-ring-b")) {
@@ -2269,6 +2371,11 @@ fn seal(planted: Option<StartPlanted>, costs: Coefficients) -> Result<Startup, B
             Some(StartPlanted::Layouts(l)) => l,
             _ => Default::default(),
         },
+        run_planted: match planted {
+            Some(StartPlanted::Run(p)) => Some(p),
+            _ => None,
+        },
+        cache: None,
     })
 }
 
@@ -2305,6 +2412,8 @@ enum StartPlanted {
     /// #308: the test control kind test.dial, which the input module fills under
     /// `test-control-kind`, with a planted program.
     ControlKind(&'static str),
+    /// #501: a run's wrong program given at startup, as the scenario's `planted` would give it.
+    Run(Planted),
 }
 
 #[cfg(test)]
@@ -2313,8 +2422,13 @@ mod tests {
 
     /// The core alone, sealed with no faults. `seal()` is not called: the seal-count test counts its runs.
     fn startup() -> Startup {
+        startup_of(deep_canvas::registry::core())
+    }
+
+    /// A startup holding `sealed`, with no faults; for a test in another module, without `seal()`.
+    pub(crate) fn startup_of(sealed: deep_canvas::registry::Sealed) -> Startup {
         Startup {
-            sealed: deep_canvas::registry::core(),
+            sealed,
             seal_ms: 0.0,
             steps_by_name: false,
             admits_frame_json: false,
@@ -2326,6 +2440,8 @@ mod tests {
             listing: None,
             kinds: None,
             layouts: Default::default(),
+            cache: None,
+            run_planted: None,
         }
     }
 
@@ -2341,6 +2457,101 @@ mod tests {
             .expect("the shipped set seals");
         }
         assert_eq!(hub::SEAL_RUNS.load(Ordering::Relaxed) - before, 2);
+    }
+
+    #[test]
+    fn a_batch_column_whose_length_overflows_is_no_call() {
+        let c = json!({"call": "batch", "doc": "d", "source": "s",
+            "columns": {"x": {"dtype": "f64", "data": "", "len": 1u64 << 61}}});
+        assert!(call(c.as_object().expect("an object")).is_none());
+    }
+
+    /// #138: a golden store that can't be read, or can't be written back, takes no record and no
+    /// decision: each is refused, and a store that can't be read stays as it was.
+    #[test]
+    fn a_golden_store_that_cant_be_read_or_written_refuses_a_record_and_a_decision() {
+        use std::os::unix::fs::PermissionsExt;
+        let startup = startup();
+        let dir = std::env::temp_dir().join(format!("deep-138-store-{}", std::process::id()));
+        let goldens = dir.join("goldens");
+        let store = goldens.join("store.json");
+        std::fs::create_dir_all(&goldens).expect("a folder");
+        let reply = |call: &Value| {
+            let line = json!({"evidence": dir.join("evidence"), "goldens": goldens,
+                "commit": "0123456789abcdef0123456789abcdef01234567", "calls": [call]});
+            answer("run", &startup, &line.to_string())["replies"][0].clone()
+        };
+        // The first fixture this build records on the CPU, and a decision that needs none.
+        let manifest = reply(&json!({"call": "manifest"}));
+        let record = (manifest["fixtures"].as_array().expect("fixtures").iter())
+            .map(|f| json!({"call": "record", "fixture": f["name"], "backend": "vello_cpu"}))
+            .find(|c| reply(c)["outcome"] == "recorded")
+            .expect("a fixture records");
+        let waive =
+            json!({"call": "decide", "decision": {"waive": {"fixture": "f", "reason": "r"}}});
+        let outcomes = || {
+            [&record, &waive].map(|call| {
+                let r = reply(call);
+                let text = |k: &str| r[k].as_str().unwrap_or("").to_string();
+                format!("{} {}", text("outcome"), text("code"))
+            })
+        };
+        std::fs::write(&store, "{").expect("written");
+        let unreadable = outcomes();
+        let kept = std::fs::read_to_string(&store).expect("the store");
+        std::fs::remove_file(&store).expect("removed");
+        let mode = |m| std::fs::set_permissions(&goldens, std::fs::Permissions::from_mode(m));
+        mode(0o555).expect("read-only");
+        let unwritable = outcomes();
+        mode(0o755).expect("writable");
+        let _ = std::fs::remove_dir_all(&dir);
+        let refused = |code: &str| [(); 2].map(|()| format!("refused {code}"));
+        assert_eq!(
+            (unreadable, kept.as_str(), unwritable),
+            (
+                refused("store_unreadable"),
+                "{",
+                refused("store_unwritable")
+            )
+        );
+    }
+
+    /// #138: a kit call that runs nothing passes nothing. A call that matches no module is
+    /// INVALID and leaves the ledger as it was; a module none of whose parts ran is INVALID; and
+    /// a run over some parts only writes no ledger.
+    #[test]
+    fn a_kit_call_that_runs_nothing_is_invalid_and_a_partial_run_writes_no_ledger() {
+        let startup = startup();
+        let dir = std::env::temp_dir().join(format!("deep-138-unrun-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("a folder");
+        let kit = |call: Value| {
+            let line = json!({"evidence": dir.join("evidence"), "calls": [call]});
+            answer("run", &startup, &line.to_string())["replies"][0].clone()
+        };
+        let kept = dir.join("kept.json");
+        std::fs::write(&kept, "{\"kept\": true}\n").expect("written");
+        let unmatched = kit(json!({"call": "kit", "modules": ["marks2D"], "ledger": kept}));
+        let kept = std::fs::read_to_string(&kept).expect("the ledger");
+        assert_eq!(
+            (unmatched["verdict"].as_str(), kept.as_str()),
+            (Some("INVALID"), "{\"kept\": true}\n"),
+            "no module matched"
+        );
+        for parts in [json!([]), json!(["sandbox"])] {
+            let r = kit(json!({"call": "kit", "modules": ["core"], "parts": parts}));
+            assert_eq!(
+                [&r["verdict"], &r["modules"][0]["verdict"]],
+                ["INVALID"; 2],
+                "core over the parts {parts}"
+            );
+        }
+        let partial = dir.join("partial.json");
+        let one = json!(["schedule"]);
+        let r = kit(json!({"call": "kit", "modules": ["core"], "parts": one, "ledger": partial}));
+        let written = partial.exists();
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(r["modules"][0]["parts"][0]["part"], "schedule", "{r}");
+        assert!(!written, "a run of one part wrote a ledger");
     }
 
     #[test]
@@ -2444,7 +2655,10 @@ mod tests {
     #[test]
     fn run_takes_planted_and_costs_once_each_and_nothing_else() {
         let args = |a: &[&str]| a.iter().map(|s| s.to_string()).collect::<Vec<_>>();
-        assert!(matches!(start_args(&args(&["run"])), Ok((None, None))));
+        assert!(matches!(
+            start_args(&args(&["run"])),
+            Ok((None, None, None))
+        ));
         assert!(matches!(
             start_args(&args(&[
                 "run",
@@ -2453,6 +2667,7 @@ mod tests {
             ])),
             Ok((
                 Some(StartPlanted::Seal(Fault::EveryDependencyRequired)),
+                None,
                 None
             ))
         ));
@@ -2464,7 +2679,11 @@ mod tests {
                 "--planted",
                 "admits_frame_json"
             ])),
-            Ok((Some(StartPlanted::Seal(Fault::AdmitsFrameJson)), Some(_)))
+            Ok((
+                Some(StartPlanted::Seal(Fault::AdmitsFrameJson)),
+                Some(_),
+                None
+            ))
         ));
         let twin = "treats_every_dependency_required";
         for stray in [
@@ -2474,6 +2693,7 @@ mod tests {
             &["run", "--planted", twin, "extra"],
             &["run", "--planted", twin, "--planted", twin],
             &["run", "--costs", "a", "--costs", "b"],
+            &["run", "--cache", "a", "--cache", "b"],
         ] {
             assert!(start_args(&args(stray)).is_err(), "{stray:?}");
         }
@@ -2626,19 +2846,23 @@ mod tests {
 
 /// The arguments after the command: `--planted <name>` and `--costs <path>`, each at most once,
 /// in either order; an unknown name or a stray argument is bad input.
-fn start_args(args: &[String]) -> Result<(Option<StartPlanted>, Option<String>), ()> {
-    let (mut planted, mut costs) = (None, None);
+type StartArgs = (Option<StartPlanted>, Option<String>, Option<PathBuf>);
+
+fn start_args(args: &[String]) -> Result<StartArgs, ()> {
+    let (mut planted, mut costs, mut cache) = (None, None, None);
     let mut rest = args.get(1..).unwrap_or_default();
     while let [flag, value, more @ ..] = rest {
         match flag.as_str() {
             "--planted" if planted.is_none() => planted = Some(planted_named(value)?),
             "--costs" if costs.is_none() => costs = Some(value.clone()),
+            // #1901: the folder kept output lives in across processes.
+            "--cache" if cache.is_none() => cache = Some(PathBuf::from(value)),
             _ => return Err(()),
         }
         rest = more;
     }
     if rest.is_empty() {
-        Ok((planted, costs))
+        Ok((planted, costs, cache))
     } else {
         Err(())
     }
@@ -2701,10 +2925,33 @@ fn planted_named(twin: &str) -> Result<StartPlanted, ()> {
                 name.to_string().into_boxed_str(),
             )))
         }
+        _ if export_planted(twin).is_some() => export_planted(twin).map(StartPlanted::Run).ok_or(()),
+        "fingerprint_without_sources" => Ok(StartPlanted::Run(Planted::FingerprintWithoutSources)),
+        "key_hashes_raw_bytes" => Ok(StartPlanted::Run(Planted::KeyHashesRawBytes)),
         _ => seams::NetFault::named(twin)
             .map(StartPlanted::Network)
             .ok_or(()),
     }
+}
+
+/// #501's wrong programs, and #1897's, by the names their acceptance suites give them.
+fn export_planted(name: &str) -> Option<Planted> {
+    Some(match name {
+        "hash_xors_without_position" => Planted::HashXorsWithoutPosition,
+        "span_rounds_each_frame" => Planted::SpanRoundsEachFrame,
+        "span_rounds_start" => Planted::SpanRoundsStart,
+        "chunk_tree_wrong_order" => Planted::ChunkTreeWrongOrder,
+        "range_restarts_timecode" => Planted::RangeRestartsTimecode,
+        "export_starts_then_stops" => Planted::ExportStartsThenStops,
+        "target_exports_selection" => Planted::TargetExportsSelection,
+        "target_writes_baked_channel" => Planted::TargetWritesBakedChannel,
+        "target_reader_is_writer" => Planted::TargetReaderIsWriter,
+        "mixer_linux_one_step" => Planted::MixerLinuxOneStep,
+        "drop_frame_every_tenth_minute" => Planted::DropFrameEveryTenthMinute,
+        "timecode_track_zero" => Planted::TimecodeTrackZero,
+        "png_premultiplies_straight" => Planted::PngPremultipliesStraight,
+        _ => return None,
+    })
 }
 
 /// A hash version by its name: `hash@1` or `hash@2`.
@@ -2767,7 +3014,7 @@ fn main() {
         let _ = out.flush();
         std::process::exit(code);
     }
-    let Ok((fault, costs)) = start_args(&args) else {
+    let Ok((fault, costs, cache)) = start_args(&args) else {
         let _ = writeln!(out, "{}", bad_input());
         std::process::exit(2);
     };
@@ -2784,7 +3031,7 @@ fn main() {
     };
     // The seal runs before the first line is read: a refused set answers no scenario.
     let startup: &'static Startup = match seal(fault, coefficients) {
-        Ok(startup) => Box::leak(Box::new(startup)),
+        Ok(startup) => Box::leak(Box::new(Startup { cache, ..startup })),
         Err(err) => {
             let mut line = json!({
                 "ok": false,
@@ -2827,11 +3074,15 @@ fn main() {
     };
     canvas.world.insert("evidence".into(), json!(""));
     for line in stdin.lock().lines() {
-        let Ok(line) = line else { break };
-        let reply = match command.as_str() {
-            "canvas" => canvas.line(startup, &line),
-            "live" => live(startup, &line),
-            _ => answer(&command, startup, &line),
+        let reply = match line {
+            Ok(line) => match command.as_str() {
+                "canvas" => canvas.line(startup, &line),
+                "live" => live(startup, &line),
+                _ => answer(&command, startup, &line),
+            },
+            // A line that is not UTF-8 was read to its end: it is one that can't be read.
+            Err(e) if e.kind() == io::ErrorKind::InvalidData => bad_input(),
+            Err(_) => break,
         };
         let _ = writeln!(out, "{reply}");
         let _ = out.flush();
@@ -2849,3 +3100,5 @@ mod idle;
 mod watch;
 #[cfg(target_os = "macos")]
 mod window;
+// #501: the device gate's live output on the default device, for `soak`.
+mod device;

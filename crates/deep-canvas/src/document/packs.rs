@@ -38,6 +38,10 @@ pub struct Planted {
     pub skip_requires_modules: bool,
     /// Packs resolve by name alone, so the first pack listed wins a name.
     pub key_by_name: bool,
+    /// #2015: a repeat over elements seeds each item with the part's element count too.
+    pub each_by_count: bool,
+    /// #2015: a repeat over faces walks the part's triangles (the elements function's plant).
+    pub each_per_triangle: bool,
 }
 
 /// `owner/name@major.minor.patch`, as a document's `packs` entry names a pack version.
@@ -112,6 +116,9 @@ pub struct Step {
     /// A repeat along a curve (#420): the curve (an input naming a `curve@1` item, or literal
     /// points) and the spacing that counts the copies when no count does.
     pub along: Option<(Template, Option<Template>)>,
+    /// A repeat over the elements of a builder's named part (#2015): the `ID` input that holds
+    /// the builder item, the part and the domain.
+    pub each: Option<Each>,
     /// Its condition, over the recipe's inputs and lets: false leaves the step out (#420).
     pub when: Option<Template>,
     /// The material its items name (Recipe: a step's `material`; #429).
@@ -119,6 +126,15 @@ pub struct Step {
     /// Its own channels, each targeting a field of its items (`params/size/0`), written into the
     /// document as `<item>.<channel>` as it expands (#429).
     pub channels: Vec<(String, Value)>,
+}
+
+/// What a repeat over elements reads (Recipe: repeat over elements): `part` is
+/// `<input>#<part>`, the input an `ID` input holding a builder item of the document.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Each {
+    pub input: String,
+    pub part: String,
+    pub domain: String,
 }
 
 /// A recipe as its pack ships it.
@@ -832,6 +848,7 @@ fn check_recipe(
                         .any(|n| !inputs.contains_key(n) && !lets.iter().any(|(l, _)| l == n))
                 };
                 let mut along = None;
+                let mut each = None;
                 let repeat = match s.get("repeat") {
                     None => None,
                     Some(r) => {
@@ -841,12 +858,42 @@ fn check_recipe(
                             .as_object()
                             .map(|o| o.keys().collect())
                             .unwrap_or_default();
-                        if keys
-                            .iter()
-                            .any(|k| !["count", "as", "along", "spacing"].contains(&k.as_str()))
-                        {
-                            issues.push(bad(&format!("{at}/repeat"), r.clone(), "a repeat is `{count, as}`, or `{along, count | spacing, as}`; over, on and pack land later"));
+                        if keys.iter().any(|k| {
+                            !["count", "as", "along", "spacing", "each"].contains(&k.as_str())
+                        }) {
+                            issues.push(bad(&format!("{at}/repeat"), r.clone(), "a repeat is `{count, as}`, `{along, count | spacing, as}` or `{each: {part, domain}, as}`; over, on and pack land later"));
                             continue;
+                        }
+                        if let Some(e) = member(r, "each") {
+                            // The part: `<input>#<part>`, an ID input holding a builder item.
+                            let part = member(e, "part").and_then(Value::as_str);
+                            let split = part.and_then(|p| p.split_once('#'));
+                            let domain = member(e, "domain").and_then(Value::as_str);
+                            let input_ok = split.is_some_and(|(n, p)| {
+                                !p.is_empty() && inputs.get(n).is_some_and(|i| i.ty == "ID")
+                            });
+                            let fields_ok = e
+                                .as_object()
+                                .is_some_and(|o| o.keys().all(|k| k == "part" || k == "domain"));
+                            match (split, domain) {
+                                (Some((n, p)), Some(d))
+                                    if input_ok
+                                        && fields_ok
+                                        && ["face", "point", "curve"].contains(&d)
+                                        && keys.len() == 2 =>
+                                {
+                                    each = Some(Each {
+                                        input: n.to_string(),
+                                        part: p.to_string(),
+                                        domain: d.to_string(),
+                                    });
+                                    count = Some(json!(0));
+                                }
+                                _ => {
+                                    issues.push(bad(&format!("{at}/repeat/each"), e.clone(), &format!("step `{step_id}` repeats over `{{part: \"<input>#<part>\", domain: face | point | curve}}`, its input an ID input of the recipe, beside `as` alone")));
+                                    continue;
+                                }
+                            }
                         }
                         if let Some(path) = member(r, "along") {
                             let spacing = member(r, "spacing");
@@ -955,6 +1002,7 @@ fn check_recipe(
                     lets: step_lets,
                     repeat,
                     along,
+                    each,
                     when,
                     material,
                     channels: own,
@@ -1311,6 +1359,9 @@ fn manifest_id(manifest: &Value) -> Option<String> {
 #[derive(Clone, Debug, Default)]
 pub struct Resolved<'a> {
     by_name: BTreeMap<String, &'a Pack>,
+    /// The sealed modules' elements functions by builder kind (`family.name`), which a repeat
+    /// over elements counts by (#2015).
+    elements: BTreeMap<String, registry::Elements>,
 }
 
 impl<'a> Resolved<'a> {
@@ -1346,6 +1397,13 @@ pub fn resolve<'a>(
     issues: &mut Vec<Issue>,
 ) -> Resolved<'a> {
     let mut out = Resolved::default();
+    if let Some(sealed) = sealed {
+        for m in &sealed.modules {
+            for (kind, f) in &m.shapes.elements {
+                out.elements.entry(kind.clone()).or_insert(*f);
+            }
+        }
+    }
     let Some(list) = member(doc, "packs") else {
         return out;
     };
@@ -1964,8 +2022,70 @@ fn expand_one(
             }
             _ => None,
         };
+        // A repeat over a builder's part: its elements, counted from the built item at check.
+        let elements = match &step.each {
+            None => None,
+            Some(each) => {
+                let held = inputs.get(&each.input).cloned().unwrap_or(Value::Null);
+                let path = at(&format!("steps/{}/repeat/each", step.id));
+                let builder = held
+                    .as_str()
+                    .and_then(|b| items.get(b).map(|item| (b, item)));
+                let hook = builder
+                    .and_then(|(_, item)| super::kind_text(item))
+                    .and_then(|k| k.rsplit_once('@'))
+                    .and_then(|(full, _)| resolved.elements.get(full));
+                let (Some((b, item)), Some(hook)) = (builder, hook) else {
+                    issues.push(Issue::error(
+                        "ref_unresolved",
+                        id,
+                        path,
+                        held,
+                        &format!(
+                            "step `{}` repeats over `{}`, which holds no builder item of the document",
+                            step.id, each.input
+                        ),
+                    ));
+                    return None;
+                };
+                let doc = json!({ "items": Value::Object(items.clone()) });
+                let plant = planted
+                    .each_per_triangle
+                    .then_some("each_face_per_triangle");
+                match hook(&doc, b, item, &each.part, &each.domain, plant) {
+                    Ok(list) if list.len() as u64 <= MAX_REPEAT => Some(list),
+                    Ok(list) => {
+                        issues.push(Issue::error(
+                            "out_of_range",
+                            id,
+                            path,
+                            json!(list.len()),
+                            &format!(
+                                "step `{}` repeats over at most {MAX_REPEAT} elements",
+                                step.id
+                            ),
+                        ));
+                        return None;
+                    }
+                    Err(why) => {
+                        issues.push(Issue::error(
+                            "ref_unresolved",
+                            id,
+                            path,
+                            json!(format!("{b}#{}", each.part)),
+                            &format!(
+                                "step `{}` repeats over the {}s of `{b}#{}`: {why}",
+                                step.id, each.domain, each.part
+                            ),
+                        ));
+                        return None;
+                    }
+                }
+            }
+        };
         let count: Option<u64> = match &step.repeat {
             None => None,
+            Some(_) if elements.is_some() => elements.as_ref().map(|e| e.len() as u64),
             Some(_) if spaced.is_some() => match spaced {
                 Some((n, _)) if n <= MAX_REPEAT as f64 => Some(n as u64),
                 _ => {
@@ -2043,6 +2163,8 @@ fn expand_one(
             let seed = if planted.seed_by_order {
                 *order += 1;
                 *order
+            } else if planted.each_by_count && elements.is_some() {
+                seed_of(id, &step.id, Some(index)) ^ n.wrapping_mul(0x9e37_79b9_7f4a_7c15)
             } else {
                 seed_of(id, &step.id, count.map(|_| index))
             };
@@ -2055,7 +2177,12 @@ fn expand_one(
             }
             scope.truncate(base);
             if let Some((_, as_)) = &step.repeat {
-                scope.push((as_.clone(), json!(index)));
+                // Over elements, the name reads the element: `e.i`, `e.center` and the rest.
+                let value = match &elements {
+                    Some(list) => list[index as usize].clone(),
+                    None => json!(index),
+                };
+                scope.push((as_.clone(), value));
             }
             scope.push(("seed".into(), json!(seed)));
             for (name, expr) in &step.lets {
@@ -2617,11 +2744,22 @@ enum Expr {
 
 /// The most terms a bounded sum adds (The closed function list: bounded sums).
 const MAX_SUM: f64 = 256.0;
+/// The most tokens an expression has, and the deepest its parentheses, indexes, arguments,
+/// branches and signs nest: the parser and the tree's readers recurse, so both bound the stack.
+const MAX_TOKENS: usize = 1024;
+const MAX_NESTING: usize = 64;
 
 impl Expr {
     fn parse(text: &str) -> Result<Expr, String> {
         let tokens = tokenize(text)?;
-        let mut p = Parser { tokens, at: 0 };
+        if tokens.len() > MAX_TOKENS {
+            return Err(format!("an expression has at most {MAX_TOKENS} tokens"));
+        }
+        let mut p = Parser {
+            tokens,
+            at: 0,
+            depth: 0,
+        };
         let e = p.cond()?;
         if p.at != p.tokens.len() {
             return Err(format!("unexpected `{}`", p.tokens[p.at]));
@@ -2684,7 +2822,13 @@ impl Expr {
 
     /// Its value: a number, or what a name, index or member reads.
     fn value(&self, scope: &[(String, Value)]) -> Result<Value, String> {
-        let n = |x: f64| -> Result<Value, String> { Ok(number(x)) };
+        let n = |x: f64| -> Result<Value, String> {
+            if x.is_finite() {
+                Ok(number(x))
+            } else {
+                Err(format!("the result is {x}, not a finite number"))
+            }
+        };
         match self {
             Expr::Num(x) => n(*x),
             Expr::Name(name) => scope
@@ -2783,12 +2927,12 @@ impl Expr {
                 }
                 let mut inner = scope.to_vec();
                 let mut total = 0.0;
-                let mut i = a;
-                while i <= b {
-                    inner.push((k.clone(), number(i)));
+                // Counted, not stepped: past 2^53 `i + 1.0` is `i`, and a stepped loop never ends.
+                let terms = (b - a + 1.0).max(0.0) as u64;
+                for j in 0..terms {
+                    inner.push((k.clone(), number(a + j as f64)));
                     total += args[3].eval(&inner)?;
                     inner.pop();
-                    i += 1.0;
                 }
                 n(total)
             }
@@ -2874,6 +3018,8 @@ fn tokenize(text: &str) -> Result<Vec<String>, String> {
 struct Parser {
     tokens: Vec<String>,
     at: usize,
+    /// How deep the expression being read nests.
+    depth: usize,
 }
 
 impl Parser {
@@ -2887,7 +3033,23 @@ impl Parser {
         t
     }
 
+    /// `parse`, one level deeper: refused past the deepest an expression nests.
+    fn nested(&mut self, parse: fn(&mut Self) -> Result<Expr, String>) -> Result<Expr, String> {
+        if self.depth == MAX_NESTING {
+            return Err(format!("an expression nests at most {MAX_NESTING} deep"));
+        }
+        self.depth += 1;
+        let e = parse(self);
+        self.depth -= 1;
+        e
+    }
+
     fn cond(&mut self) -> Result<Expr, String> {
+        self.nested(Self::choice)
+    }
+
+    /// `c ? a : b`, or what stands alone.
+    fn choice(&mut self) -> Result<Expr, String> {
         let c = self.or()?;
         if self.peek() != Some("?") {
             return Ok(c);
@@ -2960,11 +3122,11 @@ impl Parser {
         match self.peek() {
             Some("-") => {
                 self.at += 1;
-                Ok(Expr::Neg(Box::new(self.unary()?)))
+                Ok(Expr::Neg(Box::new(self.nested(Self::unary)?)))
             }
             Some("!") => {
                 self.at += 1;
-                Ok(Expr::Not(Box::new(self.unary()?)))
+                Ok(Expr::Not(Box::new(self.nested(Self::unary)?)))
             }
             _ => self.postfix(),
         }
@@ -3117,12 +3279,39 @@ mod tests {
         assert_eq!(e("7 % 3"), 1.0);
         assert!(Expr::parse("i +").is_err());
         assert!(Expr::parse("x").unwrap().eval(&scope()).is_err());
+        // A result that is not a finite number is an error, never a null.
+        for t in ["sqrt(0 - 1)", "pow(10, 400)"] {
+            let value = Expr::parse(t).unwrap().value(&scope());
+            assert!(value.is_err(), "{t}: {value:?}");
+        }
         let eval = |v: &Value, s: &[(String, Value)]| Template::of(v).eval(s);
         assert_eq!(eval(&json!("i * 2"), &scope()).unwrap(), json!(4));
         assert_eq!(
             eval(&json!(["i", 1.5, "ink", {"role": "muted"}]), &scope()).unwrap(),
             json!([2, 1.5, "ink", {"role": "muted"}])
         );
+    }
+
+    #[test]
+    fn a_sum_ends_where_adding_one_changes_nothing() {
+        let e = |t: &str| Expr::parse(t).unwrap().eval(&scope()).unwrap();
+        // Past 2^53 adding one changes nothing, so a sum that only counts up never ends here.
+        assert_eq!(e("sum(k, 9007199254740992, 9007199254740992, 1)"), 1.0);
+        assert_eq!(e("sum(k, 1, 4, k)"), 10.0);
+        assert_eq!(e("sum(k, 4, 1, k)"), 0.0);
+    }
+
+    #[test]
+    fn an_expression_past_the_parser_bounds_is_refused() {
+        assert!(Expr::parse(&"(".repeat(100_000)).is_err());
+        assert!(Expr::parse(&"-".repeat(100_000)).is_err());
+        assert!(Expr::parse(&vec!["1"; 100_000].join("+")).is_err());
+        let nested = |n: usize| format!("{}1{}", "(".repeat(n), ")".repeat(n));
+        assert!(Expr::parse(&nested(MAX_NESTING)).is_err());
+        // The deepest nesting and the longest chain the bounds admit still evaluate.
+        let e = |t: &str| Expr::parse(t).unwrap().eval(&scope()).unwrap();
+        assert_eq!(e(&nested(MAX_NESTING - 1)), 1.0);
+        assert_eq!(e(&vec!["1"; MAX_TOKENS / 2].join("+")), 512.0);
     }
 
     #[test]
@@ -3619,6 +3808,17 @@ mod tests {
             "{:?}",
             over.issues
         );
+        // A cap that is no whole number at or above 0 is refused, never read as no cap.
+        for cap in [json!(-1), json!(2.5), json!("2")] {
+            let budget = json!({"budget": {"lights": cap}});
+            let bad = checked(recipes.clone(), "nest.lamps@1", budget);
+            let issue = bad.issues.iter().find(|i| i.path == "budget/lights");
+            assert!(
+                issue.is_some_and(|i| i.code == "out_of_range"),
+                "{:?}",
+                bad.issues
+            );
+        }
         let fits = checked(recipes, "nest.lamps@1", json!({"budget": {"lights": 3}}));
         assert!(
             !fits.issues.iter().any(|i| i.path == "budget/lights"),

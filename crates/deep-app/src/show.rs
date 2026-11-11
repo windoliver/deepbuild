@@ -10,7 +10,11 @@
 //!
 //! Issue #995: after each presented revision the panel keeps only the pictures a shown revision uses. One it painted
 //! is also freed from the GPU's atlas the next time it draws, as deep-show's own viewer frees its replaced picture.
+//!
+//! Issue #1485: a picture is decoded in a background task, never on the panel's entity, and a revision waits for its
+//! pictures while the panel shows the one it replaces, so a big picture never stalls the app.
 
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -19,10 +23,6 @@ use serde_json::{json, Value};
 
 use crate::hub::{HubClient, HubError};
 use deep_text_gpui::{measure, paint_label, Label};
-
-/// The outline around an agent's layer, and its name tab, in px.
-const OUTLINE_PX: f32 = 1.;
-const NAME_TAB: f32 = 18.;
 
 /// One layer as the panel composes it: its panel's bounds, its picture and the name its outline shows.
 type Composed = ([f32; 4], Option<Arc<RenderImage>>, Option<String>);
@@ -147,6 +147,12 @@ pub struct CanvasPanel {
     pictures: Vec<Picture>,
     /// Painted pictures no shown revision uses any more, freed from the GPU the next time the panel draws.
     unused: Vec<Arc<RenderImage>>,
+    /// Revisions whose pictures are being decoded, the newest of each panel, and the pictures in decoding.
+    waiting: Vec<Presented>,
+    decoding: BTreeSet<String>,
+    /// #1485's fixture: the pictures the last frame painted, in paint order.
+    #[cfg(feature = "canvas-fixture")]
+    pub(crate) painted: Vec<String>,
 }
 
 impl CanvasPanel {
@@ -157,6 +163,10 @@ impl CanvasPanel {
             session: None,
             pictures: Vec::new(),
             unused: Vec::new(),
+            waiting: Vec::new(),
+            decoding: BTreeSet::new(),
+            #[cfg(feature = "canvas-fixture")]
+            painted: Vec::new(),
         }
     }
 
@@ -170,29 +180,84 @@ impl CanvasPanel {
         self.session = Some(session.to_owned());
     }
 
-    /// Takes one presented revision: its panel now shows it, replacing what it showed before, and the panel lets go of
-    /// every picture no shown revision uses.
-    pub fn present(&mut self, p: Presented) {
-        for layer in &p.layers {
-            if let Some(sha) = &layer.picture {
-                if !self.pictures.iter().any(|h| &h.sha == sha) {
-                    if let Some(image) = picture(&self.evidence, sha) {
-                        self.pictures.push(Picture {
-                            sha: sha.clone(),
-                            image,
-                            painted: false,
-                        });
-                    }
-                }
-            }
+    /// Takes one presented revision: the pictures the panel doesn't hold yet are decoded in the background, and once
+    /// they are its panel shows it, replacing what it showed before, which stays on the panel until then.
+    pub fn present(&mut self, p: Presented, cx: &mut Context<Self>) {
+        let missing: Vec<String> = (p.layers.iter())
+            .filter_map(|l| l.picture.clone())
+            .filter(|sha| !self.pictures.iter().any(|h| &h.sha == sha))
+            .collect();
+        self.waiting
+            .retain(|w| w.rect != p.rect || w.session != p.session);
+        if missing.is_empty() {
+            self.show(p);
+            return;
         }
+        // #1485's wrong program, the merge base's: each picture decoded here, on the UI thread.
+        #[cfg(feature = "canvas-fixture")]
+        if crate::canvas_fixture::in_place() {
+            for sha in missing {
+                let image = picture(&self.evidence, &sha);
+                self.decoded(sha, image);
+            }
+            self.show(p);
+            return;
+        }
+        self.waiting.push(p);
+        for sha in missing {
+            if !self.decoding.insert(sha.clone()) {
+                continue;
+            }
+            let evidence = self.evidence.clone();
+            cx.spawn(async move |panel, cx| {
+                let at = sha.clone();
+                let image = cx
+                    .background_spawn(async move { picture(&evidence, &at) })
+                    .await;
+                let _ = panel.update(cx, |panel, cx| {
+                    panel.decoded(sha, image);
+                    cx.notify();
+                });
+            })
+            .detach();
+        }
+    }
+
+    /// Whether a picture is still being decoded.
+    pub fn decoding(&self) -> bool {
+        !self.decoding.is_empty()
+    }
+
+    /// A picture's decoding ended: every waiting revision none of whose pictures is still in decoding is shown, a
+    /// picture that didn't decode drawn as none.
+    fn decoded(&mut self, sha: String, image: Option<Arc<RenderImage>>) {
+        self.decoding.remove(&sha);
+        if let Some(image) = image {
+            self.pictures.push(Picture {
+                sha,
+                image,
+                painted: false,
+            });
+        }
+        let decoding = &self.decoding;
+        let (ready, waiting): (Vec<Presented>, Vec<Presented>) = std::mem::take(&mut self.waiting)
+            .into_iter()
+            .partition(|w| {
+                (w.layers.iter()).all(|l| l.picture.as_ref().is_none_or(|s| !decoding.contains(s)))
+            });
+        self.waiting = waiting;
+        ready.into_iter().for_each(|p| self.show(p));
+    }
+
+    /// Shows a revision on its panel, replacing what it showed before, and lets go of every picture no shown or
+    /// waiting revision uses.
+    fn show(&mut self, p: Presented) {
         self.shown
             .retain(|s| s.rect != p.rect || s.session != p.session);
         self.shown.push(p);
-        let shown = &self.shown;
+        let (shown, waiting) = (&self.shown, &self.waiting);
         let used = |sha: &str| {
-            shown
-                .iter()
+            (shown.iter().chain(waiting))
                 .any(|p| p.layers.iter().any(|l| l.picture.as_deref() == Some(sha)))
         };
         let unused = &mut self.unused;
@@ -241,8 +306,8 @@ pub fn follow(panel: Entity<CanvasPanel>, cx: &mut App) {
             hub = kept;
             match took {
                 Some(Ok(presented)) if !presented.is_empty() => cx.update(|cx| {
-                    panel.update(cx, |panel, _| {
-                        presented.into_iter().for_each(|p| panel.present(p))
+                    panel.update(cx, |panel, cx| {
+                        presented.into_iter().for_each(|p| panel.present(p, cx))
                     });
                     cx.refresh_windows();
                 }),
@@ -254,12 +319,18 @@ pub fn follow(panel: Entity<CanvasPanel>, cx: &mut App) {
     .detach();
 }
 
-/// A PNG from the evidence store as the BGRA picture GPUI paints.
+/// A PNG from the evidence store as the BGRA picture GPUI paints; one whose header passes 64 MiB of pixels isn't
+/// decoded.
 fn picture(evidence: &Path, sha: &str) -> Option<Arc<RenderImage>> {
-    let bytes = std::fs::read(evidence.join(&sha[..2]).join(&sha[2..])).ok()?;
-    let mut rgba = image::load_from_memory_with_format(&bytes, image::ImageFormat::Png)
-        .ok()?
-        .to_rgba8();
+    #[cfg(feature = "canvas-fixture")]
+    crate::canvas_fixture::planted_decode();
+    let bytes = std::fs::read(evidence.join(sha.get(..2)?).join(sha.get(2..)?)).ok()?;
+    let mut reader =
+        image::ImageReader::with_format(std::io::Cursor::new(bytes), image::ImageFormat::Png);
+    let mut limits = image::Limits::default();
+    limits.max_alloc = Some(64 << 20);
+    reader.limits(limits);
+    let mut rgba = reader.decode().ok()?.into_rgba8();
     for p in rgba.as_chunks_mut::<4>().0 {
         p.swap(0, 2);
     }
@@ -300,6 +371,17 @@ impl Render for CanvasPanel {
                 ));
             }
         }
+        #[cfg(feature = "canvas-fixture")]
+        {
+            let drawn = self
+                .shown
+                .iter()
+                .filter(|p| self.session.as_deref().is_none_or(|session| of(p, session)));
+            self.painted = (drawn.flat_map(|p| &p.layers))
+                .filter_map(|l| l.picture.clone())
+                .filter(|sha| self.image(sha).is_some())
+                .collect();
+        }
         // Every picture held is a shown revision's, so this frame paints them all.
         for held in &mut self.pictures {
             held.painted = true;
@@ -310,6 +392,7 @@ impl Render for CanvasPanel {
             .collect();
         let chrome = crate::chrome::of(window);
         let (muted, ground) = (chrome.ink_secondary, chrome.ground);
+        let s = crate::chrome::sizes();
         div().size_full().child(
             canvas(
                 move |_, window, _| {
@@ -336,18 +419,19 @@ impl Render for CanvasPanel {
                                     *panel,
                                     px(0.),
                                     transparent_black(),
-                                    px(OUTLINE_PX),
+                                    s.hairline,
                                     muted,
                                     BorderStyle::Solid,
                                 ));
+                                // The name's tab: the label with a step of space each side, a line tall.
                                 let label = Label::new(name.clone());
                                 let tab = Bounds {
                                     origin: panel.origin,
-                                    size: size(measure(&label).width + px(12.), px(NAME_TAB)),
+                                    size: size(measure(&label).width + s.space(1), s.body.line),
                                 };
                                 w.paint_quad(gpui_kit::fill(tab, muted));
                                 paint_label(
-                                    panel.origin + point(px(6.), px(1.)),
+                                    panel.origin + point(s.space(0), s.hairline),
                                     &label,
                                     ground,
                                     w,

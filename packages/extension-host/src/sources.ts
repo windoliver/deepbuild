@@ -8,15 +8,18 @@
 // the source off; each live call's cost and each new reading go to the record, as the core.
 import { execFile, spawn } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
-import type { AddressInfo } from 'node:net';
+import { closeSync, createReadStream, openSync, readSync, statSync } from 'node:fs';
+import { appendFile, mkdir, rm, stat, statfs, writeFile } from 'node:fs/promises';
+import { dirname } from 'node:path';
+import { createConnection, type AddressInfo } from 'node:net';
 import { scrubValues } from '@deepbuild/evidence';
 import { ulid } from '@deepbuild/record';
 import { SERIES_MAX } from './series.js';
 
 /** One outside call the hub makes for a source, as it hands it to its HTTP client. */
-export interface HttpRequest { url: string; method: string; headers: Record<string, string>; body?: string; /** A file's bytes (#1731): the answer's body as base64. */ encoding?: 'base64' }
+export interface HttpRequest { url: string; method: string; headers: Record<string, string>; body?: string; /** A file's bytes (#1731): the answer's body as base64. */ encoding?: 'base64'; /** A binary recording refers to its downloaded bytes, never retains every chunk in memory. */ recording?: { file: string; offset: number } }
 /** What came back, as the client got it: header names lower-case, a 3xx as it is, with its Location. */
-export interface HttpAnswer { status: number; headers: Record<string, string>; body: string }
+export interface HttpAnswer { status: number; headers: Record<string, string>; body: string; partial?: true; refused?: 'range_not_supported' | 'invalid_range_response' }
 /** The hub's HTTP client for source calls: it never follows a redirect, rejects when the host can't be reached, and stops when `signal` aborts. */
 export type HttpClient = (request: HttpRequest, signal: AbortSignal) => Promise<HttpAnswer>;
 /** The OS secret store as the hub reaches it (the Keychain on macOS). */
@@ -26,7 +29,7 @@ export interface SecretStore {
   delete(key: string): Promise<void>;
 }
 /** One source call as recorded: no form of any secret value anywhere in it. */
-export interface RecordedCall { source: string; request: HttpRequest; answer: HttpAnswer | { error: 'timeout' | 'unreachable' } }
+export interface RecordedCall { source: string; request: HttpRequest; answer: HttpAnswer | { error: 'timeout' | 'unreachable' | 'asset_refused' } }
 export interface Recording { v: 1; calls: RecordedCall[] }
 /** A reading: the parser's value and unit, with the source and the as-of time of the call that fetched it. */
 export interface Reading { source: string; value: number; unit: string; as_of: number }
@@ -74,8 +77,10 @@ const secretKey = (owner: string, name: string): string => `deepbuild/${owner}/$
 
 /** The largest answer a source call takes. */
 const ANSWER = 1024 * 1024;
-/** The largest file a library fetch downloads in one call (#1731). */
-const FILE = 512 * 1024 * 1024;
+/** The largest file a library fetch downloads in one call (#1731): under what one base64 string can hold, 384 MiB of bytes. */
+const FILE = 380 * 1024 * 1024;
+/** Asset downloads keep at most one MiB in memory, even for multi-gigabyte weights. */
+const CHUNK = 1024 * 1024;
 const HOPS = 5;
 const MINUTE = 60_000;
 const DAY = 86_400_000;
@@ -160,18 +165,38 @@ export function declareSource(name: unknown, declared: unknown, own: { sources: 
 
 /** Node's fetch, never following a redirect, an answer cut at its cap. */
 export const nodeHttp: HttpClient = async (request, signal) => {
+  // Reachability before an asset ask sends no HTTP request and reads no byte. It is still a Source call,
+  // under its quota and timeout, recorded/replayed like the later authorized GETs.
+  if (request.method === 'CONNECT') return new Promise((resolve, reject) => {
+    const url = new URL(request.url);
+    const socket = createConnection({ host: url.hostname, port: Number(url.port) || 443, signal });
+    socket.once('connect', () => { socket.destroy(); resolve({ status: 200, headers: {}, body: '' }); });
+    socket.once('error', reject);
+  });
   const res = await fetch(request.url, { method: request.method, headers: request.headers, redirect: 'manual', signal, ...(request.body === undefined ? {} : { body: request.body }) });
   const chunks: Uint8Array[] = [];
   let size = 0;
-  const cap = request.encoding === 'base64' ? FILE : ANSWER;
-  for await (const chunk of res.body ?? []) {
-    size += chunk.byteLength;
-    if (size > cap) throw Error(`the answer from ${new URL(request.url).host} is over ${cap} bytes`);
-    chunks.push(chunk);
+  const ranged = request.encoding === 'base64' && request.headers.range !== undefined;
+  const cap = ranged ? CHUNK : request.encoding === 'base64' ? FILE : ANSWER;
+  if (ranged && Number(res.headers.get('content-length')) > cap) {
+    await res.body?.cancel();
+    return { status: res.status, headers: {}, body: '', refused: res.status === 200 ? 'range_not_supported' : 'invalid_range_response' };
+  }
+  let partial = false;
+  try {
+    for await (const chunk of res.body ?? []) {
+      size += chunk.byteLength;
+      if (size > cap) throw Error(`the answer from ${new URL(request.url).host} is over ${cap} bytes`);
+      chunks.push(chunk);
+    }
+  } catch (e) {
+    if (ranged && size > cap) return { status: res.status, headers: {}, body: '', refused: res.status === 200 ? 'range_not_supported' : 'invalid_range_response' };
+    if (!ranged || !size) throw e;
+    partial = true;
   }
   const headers: Record<string, string> = {};
   res.headers.forEach((v, k) => { headers[k] = v; });
-  return { status: res.status, headers, body: Buffer.concat(chunks).toString(request.encoding === 'base64' ? 'base64' : 'utf8') };
+  return { status: res.status, headers, body: Buffer.concat(chunks).toString(request.encoding === 'base64' ? 'base64' : 'utf8'), ...(partial ? { partial: true } : {}) };
 };
 /** No OS secret store this host can reach: nothing is held, so what needs a secret is BLOCKED, and none can be entered. */
 const noSecrets: SecretStore = {
@@ -270,6 +295,7 @@ export class Sources {
   private readonly spent = new Map<string, number[]>();
   private readonly backoff = new Map<string, { until: number; gap: number }>();
   private readonly recorded: RecordedCall[] = [];
+  private readonly binary = new Map<number, { file: string; offset: number; size: number; sha256: string }>();
   private readonly replayed = new Set<number>();
   /** Every secret value the hub read or was given: each is scrubbed from what a package gets and from the recording. */
   private readonly held = new Set<string>();
@@ -286,7 +312,18 @@ export class Sources {
   }
 
   recording(): Recording {
-    return { v: 1, calls: structuredClone(this.recorded) };
+    const calls = structuredClone(this.recorded);
+    for (const [at, ref] of this.binary) {
+      const bytes = Buffer.alloc(ref.size);
+      let fd: number;
+      try { fd = openSync(ref.file, 'r'); } catch { calls[at]!.answer = { error: 'asset_refused' }; continue; }
+      try {
+        if (statSync(ref.file).size < ref.offset + ref.size || readSync(fd, bytes, 0, bytes.length, ref.offset) !== bytes.length || createHash('sha256').update(bytes).digest('hex') !== ref.sha256) throw Error('recording has missing or changed asset bytes');
+      } finally { closeSync(fd); }
+      const answer = calls[at]!.answer;
+      if (!('error' in answer)) answer.body = bytes.toString('base64');
+    }
+    return { v: 1, calls };
   }
 
   /** Whether the secret store holds a package's secret now. */
@@ -460,14 +497,15 @@ export class Sources {
    * as any source call. `noAnswer` is set when the request went out and no answer came, so whether it landed is unknown.
    */
   /** A work source's call (#66), or a library source's (#1731) under its own timeout, a file's bytes as base64. */
-  async workFetch(owner: string, name: string, work: Omit<WorkDecl, 'delivers'>, request: { method: string; path: string; headers?: Record<string, string>; body?: string }, library?: { timeout: number; encoding?: 'base64' }): Promise<HttpAnswer> {
-    if (!['GET', 'POST'].includes(request?.method) || !path(request.path)) throw Error(`${name}'s call names no method and path on ${work.host}`);
+  async workFetch(owner: string, name: string, work: Omit<WorkDecl, 'delivers'>, request: { method: string; path: string; headers?: Record<string, string>; body?: string }, library?: { timeout: number; encoding?: 'base64'; recording?: { file: string; offset: number } }): Promise<HttpAnswer> {
+    if (!['GET', 'POST', 'CONNECT'].includes(request?.method) || !path(request.path)) throw Error(`${name}'s call names no method and path on ${work.host}`);
     const now = this.options.now();
     const key = `${library ? 'library' : 'work'}:${name}`;
     const times = (this.spent.get(key) ?? []).filter((t) => now - t < DAY);
     const minute = times.filter((t) => now - t < MINUTE);
     if (minute.length >= work.quota.per_minute || times.length >= work.quota.per_day) {
-      throw Error(`${name}'s quota of ${work.quota.per_minute} calls a minute and ${work.quota.per_day} a day is spent until ${new Date((minute.length >= work.quota.per_minute ? minute[0]! + MINUTE : times[0]! + DAY)).toISOString()}`);
+      const until = minute.length >= work.quota.per_minute ? minute[0]! + MINUTE : times[0]! + DAY;
+      throw Object.assign(Error(`${name}'s quota of ${work.quota.per_minute} calls a minute and ${work.quota.per_day} a day is spent until ${new Date(until).toISOString()}`), { until });
     }
     let value: string | undefined;
     if (work.secret) {
@@ -481,9 +519,40 @@ export class Sources {
       timeout: library?.timeout ?? WORK_MS, freshFor: 1, keyTest: null, shape: 'number', whileShown: null,
     };
     const headers = { ...Object.fromEntries(Object.entries(request.headers ?? {}).filter(([k]) => typeof k === 'string' && k.toLowerCase() !== 'host').map(([k, v]) => [k, String(v)])), ...this.headers(source, value) };
-    const answer = await this.call(source, { url: `https://${work.host}${request.path}`, method: request.method, headers, ...(typeof request.body === 'string' ? { body: request.body } : {}), ...(library?.encoding ? { encoding: library.encoding } : {}) });
+    const answer = await this.call(source, { url: `https://${work.host}${request.path}`, method: request.method, headers, ...(typeof request.body === 'string' ? { body: request.body } : {}), ...(library?.encoding ? { encoding: library.encoding } : {}), ...(library?.recording ? { recording: library.recording } : {}) });
     if ('error' in answer) throw new NoAnswer(`${work.host} gave no answer: ${answer.error}`);
     return answer;
+  }
+
+  /** A networked asset job's file: quota on each bounded range, resumable on no answer, admitted only by its hash. */
+  async download(owner: string, name: string, source: Omit<WorkDecl, 'delivers'> & { timeout?: number }, path: string, spec: { file: string; sha256: string; size: number; kept?: string }): Promise<string> {
+    const disk = await statfs(dirname(spec.file));
+    const free = disk.bavail * disk.bsize;
+    if (BigInt(free) * 5n < BigInt(spec.size) * 11n) throw Error(`${path}: ${spec.size} bytes needs 2.2× free on disk; only ${free} bytes free`);
+    let offset = await stat(spec.file).then((s) => s.size, () => 0);
+    const invalid = async (why: string): Promise<never> => { await rm(spec.file, { force: true }); throw Error(`${path}: ${why}`); };
+    if (offset > spec.size) return invalid(`partial file exceeds its listed ${spec.size} bytes`);
+    await mkdir(dirname(spec.file), { recursive: true });
+    if (!offset) await writeFile(spec.file, new Uint8Array());
+    while (offset < spec.size) {
+      const end = Math.min(spec.size - 1, offset + CHUNK - 1);
+      const answer = await this.workFetch(owner, name, source, { method: 'GET', path, headers: { range: `bytes=${offset}-${end}` } }, { timeout: source.timeout ?? WORK_MS, encoding: 'base64', recording: { file: spec.kept ?? spec.file, offset } });
+      if (answer.refused) return invalid(answer.refused);
+      const bytes = Buffer.from(answer.body, 'base64');
+      if (answer.status === 206) {
+        if (answer.headers['content-range'] !== `bytes ${offset}-${end}/${spec.size}` || (answer.partial ? bytes.length > end - offset + 1 : bytes.length !== end - offset + 1)) return invalid('invalid_range_response');
+      } else if (answer.status !== 200 || offset !== 0 || (answer.partial ? bytes.length > spec.size : bytes.length !== spec.size)) {
+        return invalid(`answered ${answer.status}, not the requested range or ${spec.size} bytes`);
+      }
+      await appendFile(spec.file, bytes);
+      offset += bytes.length;
+      // A partial body still advanced the cursor. Continue from there; a call that gets no answer at all
+      // ends BLOCKED, leaving these bytes for the next authorized use.
+    }
+    const hash = createHash('sha256');
+    for await (const chunk of createReadStream(spec.file)) hash.update(chunk);
+    if (hash.digest('hex') !== spec.sha256) return invalid(`bytes do not match listed sha256 ${spec.sha256}; removed`);
+    return spec.file;
   }
 
   private headers(source: Polled, value: string | undefined): Record<string, string> {
@@ -500,7 +569,7 @@ export class Sources {
     const stripped: HttpRequest = { url: this.scrub(request.url), method: request.method, headers: this.scrubAll(request.headers) };
     const replay = this.options.replay;
     if (replay) {
-      const at = replay.calls.findIndex((c, i) => !this.replayed.has(i) && c.source === source.name && c.request.method === stripped.method && c.request.url === stripped.url);
+      const at = replay.calls.findIndex((c, i) => !this.replayed.has(i) && c.source === source.name && c.request.method === stripped.method && c.request.url === stripped.url && c.request.headers.range === stripped.headers.range);
       if (at < 0) return { error: `no recorded call answers ${stripped.method} ${stripped.url}` };
       this.replayed.add(at);
       const answer = replay.calls[at]!.answer;
@@ -513,15 +582,20 @@ export class Sources {
     let bytes = 0;
     try {
       const got = await Promise.race([this.options.http(request, signal), aborted]);
-      bytes = Buffer.byteLength(got.body);
+      // A file's body is base64 text: its bytes are what the text carries.
+      bytes = Buffer.byteLength(got.body, request.encoding === 'base64' ? 'base64' : 'utf8');
       answer = this.scrubAnswer(got);
     } catch {
       answer = { error: signal.aborted ? 'timeout' : 'unreachable' };
     }
-    this.recorded.push({ source: source.name, request: stripped, answer: structuredClone(answer) });
+    if (request.recording && !('error' in answer)) {
+      const bytes = Buffer.from(answer.body, 'base64');
+      this.binary.set(this.recorded.length, { ...request.recording, size: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') });
+      this.recorded.push({ source: source.name, request: stripped, answer: { ...answer, body: '' } });
+    } else this.recorded.push({ source: source.name, request: stripped, answer: structuredClone(answer) });
     await this.options.append('source.called', {
-      source: source.name, host: new URL(request.url).host, outcome: 'error' in answer ? answer.error : 'answered',
-      ...('error' in answer ? {} : { status: answer.status }), ms: Math.round(performance.now() - started), bytes,
+      source: source.name, host: new URL(request.url).host, outcome: 'error' in answer ? answer.error : answer.partial ? 'unreachable' : 'answered',
+      ...('error' in answer || request.method === 'CONNECT' ? {} : { status: answer.status }), ms: Math.round(performance.now() - started), bytes,
     });
     return 'error' in answer ? { error: describe(answer.error, source) } : answer;
   }
@@ -533,7 +607,7 @@ export class Sources {
     return Object.fromEntries(Object.entries(headers).map(([k, v]) => [this.scrub(k.toLowerCase()), this.scrub(String(v))]));
   }
   private scrubAnswer(answer: HttpAnswer): HttpAnswer {
-    return { status: answer.status, headers: this.scrubAll(answer.headers), body: this.scrub(answer.body) };
+    return { status: answer.status, headers: this.scrubAll(answer.headers), body: this.scrub(answer.body), ...(answer.partial ? { partial: true } : {}), ...(answer.refused ? { refused: answer.refused } : {}) };
   }
 }
 

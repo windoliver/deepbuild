@@ -45,32 +45,58 @@ const RETRY: u64 = 2_000;
 const SLOW_AFTER: u64 = 60_000;
 const SLOWLY: u64 = 30_000;
 
+/// A hub that stops answering says so only once it's been down this long, and once said, says it at least this long
+/// (#1461), so a short hiccup never flashes.
+pub const SHOW_AFTER: u64 = 400;
+pub const SHOW_FOR: u64 = 400;
+
 /// When to read the hub, and whether it answered the last read.
 #[derive(Debug, Default)]
 pub struct HubWatch {
     /// Since when reads have failed, and when to try next.
     down: Option<(u64, u64)>,
+    /// Since when the window has said the hub isn't answering, and since when it's been down.
+    shown: Option<(u64, u64)>,
 }
 
 impl HubWatch {
-    /// Reads at `now` unless the hub is down and its next try isn't due; `read` says whether it answered.
+    /// Reads at `now` unless the hub is down and its next try isn't due; `read` says whether it answered. Until a
+    /// down hub has been down [`SHOW_AFTER`], it's tried again at every tick.
     pub fn tick(&mut self, now: u64, read: impl FnOnce() -> bool) {
         if self.down.is_some_and(|(_, next)| now < next) {
             return;
         }
-        self.down = (!read()).then(|| {
+        let answered = read();
+        // #1461's planted watch says the hub is down at the first read that gets no answer.
+        let first_miss = crate::plain::planted("down-at-first-miss");
+        self.down = (!answered).then(|| {
             let since = self.down.map_or(now, |(since, _)| since);
-            let wait = if now - since < SLOW_AFTER {
-                RETRY
-            } else {
-                SLOWLY
+            let wait = match now - since {
+                gone if gone < SHOW_AFTER => 0,
+                gone if gone < SLOW_AFTER => RETRY,
+                _ => SLOWLY,
             };
             (since, now + wait)
         });
+        match self.down {
+            Some((since, _))
+                if (first_miss || now - since >= SHOW_AFTER) && self.shown.is_none() =>
+            {
+                self.shown = Some((now, since));
+            }
+            None if self.shown.is_some_and(|(at, _)| now >= at + SHOW_FOR) => self.shown = None,
+            _ => {}
+        }
     }
 
+    /// Whether the window says the hub isn't answering.
     pub fn down(&self) -> bool {
-        self.down.is_some()
+        self.shown.is_some()
+    }
+
+    /// Since when the hub it says isn't answering has been down.
+    pub fn since(&self) -> Option<u64> {
+        self.shown.map(|(_, since)| since)
     }
 }
 
@@ -174,13 +200,16 @@ impl View {
                     "question": event["data"]["question"],
                 }));
             }
-        } else if kind == "ask.later" {
+        } else if kind == "ask.later" && event["writer"] == "core" {
+            // Only the core's Later hides an ask, as in the core: an app's or the CLI's own event changes nothing.
             for row in self
                 .inbox
                 .iter_mut()
                 .filter(|row| row["ask"] == event["subject"] && row["status"] != "closed")
             {
                 row["status"] = json!("later");
+                // When it comes back, which the list reads by its clock (#1462).
+                row["until"] = event["data"]["until"].clone();
             }
         } else if let Some((_, outcome)) = CLOSING.iter().find(|(k, _)| *k == kind) {
             // The close rule the rest of the app reads, and the first close to append decides, as in the core.
@@ -459,6 +488,8 @@ pub enum LocalHub {
     Answers,
     Stops,
     Refuses,
+    /// Its reads neither answer nor fail: nothing is read yet (#1461).
+    Slow,
 }
 
 /// How often the app's one reader reads the hub: the reader's tick (#1546).
@@ -498,11 +529,21 @@ fn unobserved() -> bool {
 
 /// A view observes the record: it draws again whenever [`sync`] finds the record or the bound values moved.
 pub fn observe<V: 'static>(cx: &mut gpui_kit::Context<V>) {
+    on_move(cx, |_, cx| cx.notify());
+}
+
+/// Runs `moved` whenever [`sync`] finds the record or the bound values moved, so a view can compare what it would
+/// draw with what it drew before it draws again (#2117).
+pub fn on_move<V: 'static>(
+    cx: &mut gpui_kit::Context<V>,
+    mut moved: impl FnMut(&mut V, &mut gpui_kit::Context<V>) + 'static,
+) {
     if unobserved() {
         return;
     }
     let live = live(cx);
-    cx.observe(&live, |_, _, cx| cx.notify()).detach();
+    cx.observe(&live, move |view, _, cx| moved(view, cx))
+        .detach();
 }
 
 /// Tells the views where the record and the bound values stand: those that observe them draw again if either moved.
@@ -587,6 +628,15 @@ pub fn poll(timeout: Duration) -> Result<(), HubError> {
     })
 }
 
+/// Whether the record has been read (#1461): a place with nothing read yet says "reading", never 0 or empty.
+pub fn read_yet() -> bool {
+    READER.with(|cell| match cell.borrow().as_ref() {
+        Some(Source::Hub(reader)) => reader.client.is_some() || reader.view.log_pos > 0,
+        Some(Source::Local(_, _, hub)) => *hub != LocalHub::Slow,
+        None => false,
+    })
+}
+
 /// Whether the one reader holds a connection to the hub.
 pub fn connected() -> bool {
     READER.with(|cell| match cell.borrow().as_ref() {
@@ -652,6 +702,41 @@ pub fn call(method: &str, params: Value) -> Option<Value> {
     })
 }
 
+/// A row's page was open a second while you were present (#1461): the hub marks it read in every reader, off the main
+/// thread. A replica's record marks it as the hub would, with the same `row.set`.
+pub fn mark_read(id: &str) {
+    // A replica's copy of the hub records the read itself (#1462).
+    if let Some(local) = crate::hub::local() {
+        let _ = local("row.read", &serde_json::json!({ "id": id }));
+        return;
+    }
+    let local = READER.with(|cell| matches!(cell.borrow().as_ref(), Some(Source::Local(..))));
+    if local {
+        let row = with_view(|view| view.table().row_of(id).cloned()).flatten();
+        if let Some(mut row) = row {
+            row["unread"] = Value::Bool(false);
+            row["listed"] = Value::Bool(true);
+            let order = with_view(|view| view.table().order_of(id)).flatten();
+            if let Some(order) = order {
+                row["order"] = Value::String(order);
+            }
+            let at = with_view(|view| view.log_pos).unwrap_or(0) + 1;
+            feed(
+                serde_json::json!({"kind": "row.set", "writer": "core", "log_pos": at, "data": row}),
+            );
+        }
+        return;
+    }
+    let id = id.to_owned();
+    std::thread::spawn(move || {
+        let marked = crate::hub::HubClient::app()
+            .and_then(|mut hub| hub.call("row.read", serde_json::json!({ "id": id })));
+        if let Err(error) = marked {
+            eprintln!("deep-app: {id} isn't marked read: {error:?}");
+        }
+    });
+}
+
 /// The record's events up to the one reader's `log_pos`, oldest first, for a view that needs its history: read from
 /// the hub when the view asks, or the record held in memory. Empty when the hub can't be read.
 pub fn history() -> Vec<Value> {
@@ -676,6 +761,47 @@ mod tests {
             row["status"].as_str().unwrap().to_owned(),
             row["outcome"].as_str().unwrap().to_owned(),
         )
+    }
+
+    /// A watch read every 250 ms from 0 to `until`, the hub down over `gone`; what it said at each tick.
+    fn watched(gone: std::ops::Range<u64>, until: u64) -> Vec<(u64, bool)> {
+        let mut watch = HubWatch::default();
+        (0..=until)
+            .step_by(250)
+            .map(|now| {
+                watch.tick(now, || !gone.contains(&now));
+                (now, watch.down())
+            })
+            .collect()
+    }
+
+    #[test]
+    fn a_hub_down_for_200_ms_never_reads_as_not_answering() {
+        assert!(watched(1_000..1_200, 5_000).iter().all(|(_, down)| !down));
+    }
+
+    #[test]
+    fn a_hub_down_for_a_second_says_so_within_2_s_and_for_at_least_400_ms() {
+        let said = watched(1_000..2_000, 6_000);
+        let first = said.iter().find(|(_, down)| *down).map(|(t, _)| *t);
+        assert!(
+            first.is_some_and(|t| (1_400..3_000).contains(&t)),
+            "{said:?}"
+        );
+        let shown: Vec<u64> = said.iter().filter(|(_, d)| *d).map(|(t, _)| *t).collect();
+        assert!(shown.last().unwrap() - shown[0] >= SHOW_FOR, "{said:?}");
+        assert!(!said.last().unwrap().1, "it clears once the hub answers");
+    }
+
+    #[test]
+    fn the_first_missed_reply_says_nothing() {
+        let mut watch = HubWatch::default();
+        watch.tick(0, || false);
+        assert!(!watch.down());
+        watch.tick(250, || false);
+        assert!(!watch.down());
+        watch.tick(500, || false);
+        assert_eq!((watch.down(), watch.since()), (true, Some(0)));
     }
 
     #[test]
@@ -709,5 +835,18 @@ mod tests {
         assert_eq!(row(&view, "ask:a1"), closed("decided_for_you"));
         assert_eq!(row(&view, "ask:a2"), open);
         assert_eq!(row(&view, "ask:a3"), closed("defaulted"));
+    }
+
+    #[test]
+    fn only_the_cores_later_moves_an_ask_to_later() {
+        let mut view = View::default();
+        for id in ["a1", "a2"] {
+            view.apply(json!({"kind": "ask.created", "id": id, "session": "s1", "data": {"kind": "choice"}}));
+        }
+        let later = |id: &str, writer: &str| json!({"kind": "ask.later", "writer": writer, "subject": format!("ask:{id}"), "data": {"until": 9}});
+        view.apply(later("a1", "cli"));
+        view.apply(later("a2", "core"));
+        assert_eq!(row(&view, "ask:a1").0, "shown");
+        assert_eq!(row(&view, "ask:a2").0, "later");
     }
 }

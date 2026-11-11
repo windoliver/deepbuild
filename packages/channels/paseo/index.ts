@@ -1,4 +1,5 @@
-// The paseo channel (#65): paseo's relay to your phone, whose app signs each answer with the phone's paired key. It only transports. Its provider calls are the hub's (ctx.fetch, which holds
+// The paseo channel (#65): paseo's relay to your phone, whose app signs each answer with the phone's paired key, and
+// draws a plan's steps, so a card with a plan reaches it with its steps, its hash and buttons (#1580). It only transports. Its provider calls are the hub's (ctx.fetch, which holds
 // the call to this channel's api and adds any token), and each answer's proof is passed on unchanged for the hub to
 // check: POST /messages delivers an item, acknowledged by the provider; GET /answers reads what you answered or saw.
 // The same protocol as packages/channels/{paseo,chat,email,text}, each a package of its own, installed alone.
@@ -9,7 +10,7 @@ const said = (reply: Reply): string | undefined => (reply.status === 409 ? Strin
 
 export default function (deep: any): void {
   void deep.registerChannel('paseo', {
-    slot: 'channel@1', revision: 1, kind: 'device',
+    slot: 'channel@1', revision: 1, kind: 'device', steps: true,
     async deliver(item: unknown, ctx: Ctx) {
       let reply: Reply;
       try {

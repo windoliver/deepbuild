@@ -1,6 +1,7 @@
-// #1404 acceptance through perf, the surface that names a budget. One perf run on four fixture budgets:
+// #1404 acceptance through perf, the surface that names a budget. One perf run on two fixture budgets:
 // the second criterion end to end, with its merge base run from a copy of the merge base; and the third,
 // a budget command that started a child and reports no count for it (README: Which child has no count).
+// The left-running budget's test runs from tests/acceptance/1404-redraft-1405/ under #1405's rule.
 import assert from 'node:assert/strict';
 import { join } from 'node:path';
 import { before, test } from 'node:test';
@@ -20,12 +21,6 @@ const shell = (spin, iterations) => `${JSON.stringify(spin).replaceAll('"', "'")
 status=$?
 exit $status
 `;
-// A Node wrapper that starts a child in its own session and leaves without waiting. The child sleeps
-// past the end of the round, so its count doesn't exist when the budget ends; it then exits by itself.
-const leaver = (spin) => `import { spawn } from 'node:child_process';
-spawn(${JSON.stringify(spin)}, ['1000000', '30'], { detached: true, stdio: 'ignore' }).unref();
-`;
-
 before(() => {
   if (process.platform !== 'darwin') return;
   const box = scratch(scope);
@@ -35,9 +30,6 @@ before(() => {
     tasks: [
       { id: 'tripled', command: ['node', 'benchmarks/tripled.mjs'], base: { 'benchmarks/tripled.mjs': wrapper(spin, SMALL) }, current: { 'benchmarks/tripled.mjs': wrapper(spin, 3 * SMALL) } },
       { id: 'shell-parent', command: ['/bin/sh', 'benchmarks/shell-parent.sh'], base: { 'benchmarks/shell-parent.sh': shell(spin, SMALL) }, current: { 'benchmarks/shell-parent.sh': shell(spin, 3 * SMALL) } },
-      { id: 'left-running', command: ['node', 'benchmarks/left-running.mjs'], base: { 'benchmarks/left-running.mjs': leaver(spin) }, current: {} },
-      // A budget that starts nothing, as hook-startup doesn't.
-      { id: 'childless', command: [spin, '1000000'], base: {}, current: {} },
     ],
   });
 });
@@ -62,13 +54,4 @@ test('a budget whose shell started a child it reports no count for reads INCONCL
     return;
   }
   readsInconclusive(lane, 'shell-parent');
-});
-
-// No mechanism has this count: the child hasn't finished when the budget ends. Node is the parent here,
-// so whatever a mechanism uses to see a Node wrapper's children sees this one start.
-test('a budget that started a child still running when it ended reads INCONCLUSIVE, naming the budget, never PASS, and a budget that started none does not', () => {
-  macOnly();
-  readsInconclusive(lane, 'left-running');
-  assert.deepEqual(verdicts(lane, 'childless'), [], reading(lane, 'childless'));
-  assert.equal(lane.line('childless')?.instructions?.status, 'PASS', reading(lane, 'childless'));
 });

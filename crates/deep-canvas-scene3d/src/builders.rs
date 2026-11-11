@@ -2581,8 +2581,8 @@ mod platonic_tests {
                 }
             }
             assert_eq!(distinct.len(), corners, "{base}");
-            for t in m.indices.chunks_exact(3) {
-                let [a, b, c] = [t[0], t[1], t[2]].map(|i| m.positions[i as usize]);
+            for t in m.indices.as_chunks::<3>().0 {
+                let [a, b, c] = t.map(|i| m.positions[i as usize]);
                 let n = unit(cross(sub(b, a), sub(c, a)));
                 assert!(
                     dot(n, unit(add(add(a, b), c))) > 0.0,

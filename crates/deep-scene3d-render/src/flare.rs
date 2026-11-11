@@ -7,7 +7,6 @@
 use deep_canvas_scene3d::flare::{Flare, Source, MAX_SOURCES};
 use deep_gpu::device::Device;
 use deep_gpu::encode::Job;
-use wgpu::util::DeviceExt;
 
 use crate::{FLARE_PASS, LINEAR};
 
@@ -254,7 +253,7 @@ impl Flarer {
             ];
         }
         let w = f64::from(size[0]);
-        let spikes = if flare.blades % 2 == 0 {
+        let spikes = if flare.blades.is_multiple_of(2) {
             flare.blades
         } else {
             2 * flare.blades

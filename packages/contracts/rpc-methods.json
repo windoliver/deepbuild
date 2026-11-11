@@ -36,6 +36,18 @@
     "tracking": "#1454"
   },
   {
+    "method": "ask.later",
+    "since": "R1",
+    "stability": "preview",
+    "tracking": "#1462"
+  },
+  {
+    "method": "session.pause",
+    "since": "R1",
+    "stability": "preview",
+    "tracking": "#1462"
+  },
+  {
     "method": "ask.confirm",
     "since": "R1",
     "stability": "preview",
@@ -82,6 +94,12 @@
     "since": "R1",
     "stability": "stable",
     "called_by": "deep inbox undo"
+  },
+  {
+    "method": "ask.take_over",
+    "since": "R2",
+    "stability": "preview",
+    "tracking": "#1580"
   },
   {
     "method": "device.pair",
@@ -144,6 +162,18 @@
     "called_by": "deep status"
   },
   {
+    "method": "rows.read",
+    "since": "R1",
+    "stability": "stable",
+    "called_by": "deep, deep status, deep inbox"
+  },
+  {
+    "method": "row.read",
+    "since": "R1",
+    "stability": "stable",
+    "called_by": "the app"
+  },
+  {
     "method": "hub.stop",
     "since": "R1",
     "stability": "stable",
@@ -198,6 +228,18 @@
     "called_by": "deep install"
   },
   {
+    "method": "pack.rule",
+    "since": "R6",
+    "stability": "preview",
+    "tracking": "#1820"
+  },
+  {
+    "method": "canvas.export",
+    "since": "R6",
+    "stability": "preview",
+    "tracking": "#1820"
+  },
+  {
     "method": "guard.add",
     "since": "R1",
     "stability": "stable",
@@ -220,6 +262,12 @@
     "since": "R1",
     "stability": "stable",
     "called_by": "deep mcp"
+  },
+  {
+    "method": "mcp.cancel",
+    "since": "R6",
+    "stability": "preview",
+    "tracking": "#1923"
   },
   {
     "method": "evidence.paste",

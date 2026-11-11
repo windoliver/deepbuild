@@ -269,6 +269,8 @@ export interface Asks {
   approveBatch(connection: Connection, batch: string, input: { token: string; switches: { ask: string; step: number; on: boolean }[] }): Promise<void>;
   /** Later, on the trusted path: hides the ask until `until`, never past its deadline. */
   later(connection: Connection, ask: string, until: number): Promise<void>;
+  /** Later until `before` ms ahead of the ask's deadline (#1462). */
+  laterBefore(connection: Connection, ask: string, before: number): Promise<void>;
   /** Undo, on the trusted path: a defaulted ask opens again, waiting as long as it first did. */
   undo(connection: Connection, ask: string): Promise<void>;
   /** Every ask in the record, open or closed, with its status, owner and age. */
@@ -805,7 +807,7 @@ class AsksCore implements Asks {
         if (out !== undefined) throw new AskRefused(`the batch has ${batch.length} steps, not a step ${out}`, { field: 'steps' });
         if (!indices.some((i) => batch[i] === ask.handle)) throw new AskRefused(`${ask.handle} isn't among the steps it approves`, { field: 'steps', ask: ask.handle });
       }
-      // Each member runs the plan it shows, the first the core proposed for it (the card shows that one too).
+      // Each member runs the plan it shows, the newest the core proposed for it (the card shows that one too).
       const others = steps === undefined ? [] : [...new Set(steps as number[])].sort((a, b) => a - b).map((i) => batch[i]!).filter((h) => h !== ask.handle).flatMap((h) => {
         const member = this.asks.get(bare(h));
         const allow = member?.options.find((o) => o.decision === 'allow');
@@ -939,6 +941,14 @@ class AsksCore implements Asks {
       await this.showNow([...cards].filter((a) => !a.shown || a.later !== undefined).sort((a, b) => a.pos - b.pos));
       return held.map((a) => a.handle);
     });
+  }
+
+  /** Later until `before` ms ahead of the ask's deadline, the earliest it could hide (#1462). */
+  async laterBefore(connection: Connection, handle: string, before: number): Promise<void> {
+    await this.sync();
+    const ask = this.asks.get(bare(handle));
+    if (!ask) throw new AskRefused(`${handle} is no ask`, { ask: handle });
+    return this.later(connection, handle, Math.max(0, this.dueBy(ask) - before));
   }
 
   later(connection: Connection, handle: string, until: number): Promise<void> {
@@ -1560,7 +1570,8 @@ class AsksCore implements Asks {
     for (const d of this.covering(ask)) {
       let planned = this.asks.get(bare(d.ask))?.plan?.steps;
       if (!planned) {
-        const [row] = (await record.raw(`SELECT data FROM events WHERE kind = 'plan.proposed' AND writer = 'core' AND json_extract(data, '$.ask') = ? ORDER BY log_pos LIMIT 1`, [d.ask])) as { data: string }[];
+        // The plan its answer bound: the newest the core proposed before it (#1580).
+        const [row] = (await record.raw(`SELECT data FROM events WHERE kind = 'plan.proposed' AND writer = 'core' AND json_extract(data, '$.ask') = ? AND log_pos < COALESCE((SELECT MIN(log_pos) FROM events WHERE kind = 'ask.answered' AND subject = ?), 9007199254740991) ORDER BY log_pos DESC LIMIT 1`, [d.ask, d.ask])) as { data: string }[];
         planned = row ? (JSON.parse(row.data) as { steps: PlanStep[] }).steps : [];
       }
       decisions.push({ handle: d.handle, targets: targetsOf(planned) });
@@ -1897,11 +1908,13 @@ class AsksCore implements Asks {
         return;
       }
       case 'plan.proposed': {
-        // The plan an ask shows is the first one proposed for it; your yes binds that one.
+        // The plan an ask shows is the newest the core proposed for it while it is open; your yes binds that one, and
+        // a card showing an earlier one is refused at its hash (#1580). An agent's plan.proposed binds nothing.
         const ask = this.asks.get(bare(String(d.ask)));
-        if (ask && !ask.plan && e.writer === 'core') {
+        if (ask && !ask.closed && e.writer === 'core') {
           ask.plan = { hash: String(d.hash), steps: d.steps as unknown as PlanStep[] };
           if (Array.isArray(d.targets)) ask.targets = d.targets as unknown as CardTarget[];
+          else delete ask.targets;
         }
         return;
       }
@@ -2537,7 +2550,7 @@ export async function openAsks(options: AsksOptions): Promise<Asks> {
     raise: core.raise.bind(core), answer: core.answer.bind(core), tick: core.tick.bind(core), away: core.away.bind(core), notifications: core.notifications.bind(core), card: core.card.bind(core),
     needsYou: core.needsYou.bind(core), holds: core.holds.bind(core), authorized: core.authorized.bind(core),
     beforeStep: core.beforeStep.bind(core), batch: core.batch.bind(core), approveBatch: core.approveBatch.bind(core),
-    later: core.later.bind(core), undo: core.undo.bind(core), inbox: core.inbox.bind(core), stillFails: core.stillFails.bind(core),
+    later: core.later.bind(core), laterBefore: core.laterBefore.bind(core), undo: core.undo.bind(core), inbox: core.inbox.bind(core), stillFails: core.stillFails.bind(core),
     registerResolver: core.registerResolver.bind(core), saveDecision: core.saveDecision.bind(core), revokeDecision: core.revokeDecision.bind(core), refusals: core.refusals.bind(core),
     overrule: core.overrule.bind(core), widen: core.widen.bind(core), judged: core.judged.bind(core),
   };

@@ -77,8 +77,12 @@ impl Budget {
         let get = |k: &str| v.and_then(|b| b.get(k)).and_then(Value::as_i64);
         Budget {
             fuel: get("fuel").unwrap_or(fuel),
-            stack: get("stack").unwrap_or(stack) as i32,
-            memory: get("memory_mib").map_or(memory, |m| m as u64 * MIB),
+            // Under the native stack, so the rewrite's `stack` trap comes first.
+            stack: get("stack")
+                .unwrap_or(stack)
+                .clamp(0, crate::NATIVE_STACK as i64 - 1) as i32,
+            // At most what a 32-bit memory holds.
+            memory: get("memory_mib").map_or(memory, |m| m.clamp(0, 4096) as u64 * MIB),
         }
     }
 }
@@ -513,4 +517,26 @@ fn padded(mut bytes: Vec<u8>, total: usize) -> Vec<u8> {
         return bytes;
     }
     bytes
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_stack_budget_stays_under_the_native_stack() {
+        let stack = |n: i64| Budget::of("provider", Some(&json!({"stack": n})), 0).stack;
+        assert_eq!(stack(4_294_967_295), (2 << 20) - 1, "past i32");
+        assert_eq!(stack(4_294_967_296), (2 << 20) - 1, "a multiple of 2^32");
+        assert_eq!(stack(-1), 0);
+        assert_eq!(stack(65_536), 65_536);
+    }
+
+    #[test]
+    fn a_memory_budget_stays_inside_a_32_bit_memory() {
+        let memory = |n: i64| Budget::of("provider", Some(&json!({"memory_mib": n})), 0).memory;
+        assert_eq!(memory(-1), 0);
+        assert_eq!(memory(1 << 40), 4096 * MIB);
+        assert_eq!(memory(16), 16 * MIB);
+    }
 }

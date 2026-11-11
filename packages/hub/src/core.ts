@@ -35,6 +35,7 @@ import { keychain, ownHome } from './keychain.js';
 import { recordedHome, codexRelations, holdsFor, modified, readTrust, saveTrust, sessionHomes, stopTimeoutS, trustProblems } from './codex-settings.js';
 import { codexReadings, heartbeatsGone, loopsCovered, standingReadings, stands, uncoveredLoops } from './codex-loops.js';
 import { sessionStates, statusRows, WAITING_QUIET_MS, type StatusRow } from './status.js';
+import { buildRows, jobRow, listRows, orderOf, settle, type Placed, type Row, type RunningJob } from './rows.js';
 import { addGuards, blocksCall, provenGuards, writeStanding } from './guards.js';
 import { captureRejected, decisionKey, dropKept, guardOf, keepLesson, lessonsOf, rejectedDirections, repoFolders, revives, syncRejected, tasteBlock, tastesFor, type Lesson } from './memory.js';
 import { AskTasks, type WorkItem } from './ask-tasks.js';
@@ -48,6 +49,7 @@ import { couldDo, reachOf, struck, type Reach, type ReachTool } from './could-do
 import { Staging } from './staging.js';
 import { CAN_RUN, CANT_RUN, describe, RUN_BY, unrunnable } from './hook-programs.js';
 import { SLASH_COMMAND, adapterOf, coveredBy, loopFact, registry, toolClasses, versionOf } from './hookmap.js';
+import { continueLine, fit, type Part, type Piece } from './context-fit.js';
 import { mergedWithMain, releaseSpec, switchesOff } from './release.js';
 import { briefing, commitsBetween, headOf, loadsOf } from './session-facts.js';
 import { cachedRuleFiles, creditOf, handleOf as ruleHandle, pageLines, reachOf as ruleReach, reachSince, readHeld, readRuleFiles, repoRoot, ruleId, rulesInFile, rulesOf, saveHeld, savePage, sameRule, setOf, type Held, type Rule, type RuleFile, type RuleFileBefore } from './rules.js';
@@ -64,19 +66,21 @@ import { identityAt } from './identity.js';
 import { MEMORY_TRANSCRIPTS, openWikiBuild, projectOf, type WikiBuilt } from './wiki-build.js';
 import { Teardowns } from './teardowns.js';
 import { Agents, type Sync } from './agents.js';
-import { NEWER_SET, OLDER_SET } from './status.js';
+import { Box } from './box.js';
+import { NEWER_SET, OLDER_SET, UNREAD_WINDOW } from './status.js';
 import { aboutCall, aboutPermission, standingRules, type About } from './standing.js';
 import { Channels, type ChannelAsk } from './channels.js';
 import { Workspaces } from './workspaces.js';
 import { checkKey, Devices } from './trusted.js';
 import { aboutSessions, openIndex, pageClaims, search, type IndexFill } from './search.js';
+import { changeSentence, openItemSentence, verdictSentence } from './sentences.js';
 import { gateTokens, openGitHub, type AppKey, type GitHub, type GitHubPlant } from '@deepbuild/github';
 import { closesIssue, Forge, isPrCreate, parsePrUrl, partOfIssue, prUrlIn } from './forge.js';
 import { liveFetch, liveGraphql, readIssue, recordedFetch, recordedGraphql } from './github-source.js';
 import { OpenItems } from './open-items.js';
 import { claimState, isStatusQuestion, newestClaim, statusAnswer, type ClaimState } from './verdict-chat.js';
 import { apiHost, networkCheck, reachable, slackConfig, slackThread, slackThreads } from './reach.js';
-import { blockedCause, blockedReading, dueReading, ownerOf, promisesIn, setPromise, promiseToken, wakeText, type PromiseState } from './promises.js';
+import { blockedCause, blockedReading, clockTime, dueReading, ownerOf, promisesIn, setPromise, promiseToken, wakeText, type PromiseState } from './promises.js';
 import { Answers, answerText, type Answer } from './answers.js';
 import { RUN_AS_YOU, Runs } from './runs.js';
 import { Kinds, type ReviewOf } from './kinds.js';
@@ -84,25 +88,30 @@ import type { CheckSpec } from '@deepbuild/conformance';
 import { retain } from './retention.js';
 import { Stacks, type StackWant } from './stacks.js';
 import { Starts } from './starts.js';
-import { checkArguments } from './tools.js';
-import { Canvas, nameOf, showCall, waitForApp, WorldFile, type CanvasWorld } from './canvas.js';
+import { checkArguments, nearest } from './tools.js';
+import { Canvas, nameOf, renderStill, showCall, waitForApp, WorldFile, type CanvasWorld } from './canvas.js';
 import { panelKit } from './panels.js';
 import { Replicas, REPLICA_LEASE } from './drive.js';
 import { plantedReload, plantedSessionEnd, plantedStop, type Plant } from './plant.js';
 import { draftedPools, HeavyQueue, JobPool, poolTokens } from './heavy.js';
 import { Products } from './products.js';
 import { LogReads } from './log-reads.js';
+import { Hosts } from './hosts.js';
+import { Jobs } from './jobs.js';
 import { Libraries, LibraryRefused, LIBRARY_HOST_QUOTA, LIMIT_MAX, libraryHosts, type AssetKind } from './libraries.js';
+import { readPack } from './packs.js';
 import { excerpt, historyKey, type Restored } from './waits.js';
 import { claudeHomes, claudeOnPath, denyHolds, homeMods, homeOfTranscript, loginPlan, MODS_GONE, MODS_WATCH, overrideWords, pluginDirs, type HomeMods } from './mods.js';
 import { copySynced, disk, synced, testVfs, writeSynced, type Durable } from './vfs.js';
-import { AUTHORITY as EFFECTS, CHROME, derivedId, EXTENSION_HOOK_MS, refuse, Refused, refusal, signature, ulid, ulidTime, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Refusal, SCREEN_TOOLS } from './wire.js';
+import { AUTHORITY as EFFECTS, CHROME, derivedId, EXTENSION_HOOK_MS, refuse, Refused, refusal, signature, ulid, ulidTime, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Refusal, type Scope, SCREEN_TOOLS } from './wire.js';
 
 /** A process running Codex's own binary, by the path it was started from. */
 const CODEX_BINARY = /^(?:\S*\/)?codex(?:-[^\s/]+)?(?:\s|$)/;
 /** A Claude Code process: its native binary (`claude`, `claude.exe`, `claude/versions/<version>`) or its npm entry. */
 const CLAUDE_BINARY = /^(?:\S*\/)?claude(?:\.exe)?(?:\s|$)|^\S*\/claude\/versions\/[^\s/]+(?:\s|$)|@anthropic-ai\/claude-code\//;
 const HOUR = 3_600_000;
+/** The least time between two appends of one running job's row (#1925), however fast its tool counts. */
+const JOB_ROW_MS = 1000;
 /** How often open sessions' rollouts are looked for in their agent's archived folder: no hook says one moved (#342). */
 const ARCHIVED_THREADS_MS = 5000;
 /** How often the hub reads what workspaces' verdicts pinned (#67). */
@@ -112,6 +121,11 @@ const DAY = 24 * HOUR;
 const sql = (text: string): string => text.replace(/'/g, "''");
 /** A session ID as a handle holds it: letters and digits only. */
 const letters = (session: string): string => session.replace(/[^0-9A-Za-z]/g, '');
+/** How long before its default a later ask comes back (#1462): an hour, drafted. */
+const LATER_BEFORE_MS = 60 * 60 * 1000;
+/** A rules block as pieces, one per line under its head: a rule you typed must reach the model inline (#1296). */
+const rulePieces = (head: string, rules: readonly (readonly [string, string])[]): Piece[] =>
+  [{ text: `${head}:`, keep: true }, ...rules.map(([handle, text]) => ({ text: `- ${text}`, ids: [handle], ...(handle.startsWith('rule:typed') ? { keep: true } : {}) }))];
 /** The GitHub CLI's token, only while HOME is your own account's home: the archive reads CI logs with it (#20). */
 const ghToken = (): Promise<string | undefined> => {
   if (!ownHome()) return Promise.resolve(undefined);
@@ -174,6 +188,8 @@ const noWake = (agent: string | undefined): boolean => adapterOf(agent)?.caps.wa
 const unseenTools = (agent: string | undefined): boolean => adapterOf(agent)?.caps.nativeTools === false;
 /** An agent whose own package places an answer in its session, steering a running turn or starting one (caps.steer, caps.startTurn). */
 const placesItself = (agent: string | undefined): boolean => { const caps = adapterOf(agent)?.caps; return caps !== undefined && caps.steer && caps.startTurn; };
+/** An agent one of whose processes runs many threads, as its facts' `daemon` says: a process there names no one session. */
+const manyThreads = (agent: string | undefined): boolean => (adapterOf(agent)?.facts as Obj | undefined)?.daemon !== undefined;
 /** The commands that take effect only once the OS confirms you (#19), as `you.confirm` names them. */
 /** The sign-in command each agent's facts name, by the agent's name as a task would say it (#84). */
 function signInCommands(): Record<string, string> {
@@ -199,7 +215,7 @@ const isUnder = (path: string, dir: string) => {
  * What a connection brings to a call: its role, the session it is bound to, for deep mcp the process it serves, and
  * for the app or the CLI the process its hello named as its own.
  */
-export interface CallContext { role: string; session?: string | null; parent?: { pid: number; start: string }; cwd?: string; peer?: { pid: number; start: string }; waiter?: number }
+export interface CallContext { role: string; session?: string | null; parent?: { pid: number; start: string }; cwd?: string; peer?: { pid: number; start: string }; waiter?: number; /** A deep mcp call's `<connection>:<call ID>`, which a cancel names (#1923). */ call?: string }
 /** The asks core's refusal as the socket's error@3, with the code that fits what it names. */
 const asRefused = (error: unknown): unknown => {
   if (!(error instanceof AskRefused)) return error;
@@ -415,10 +431,14 @@ export class Core {
   /** The record's raw reads, as the helpers that take them call them: parameters bound. */
   private readonly raw: RecordStore['raw'] = (sql, params) => this.record.raw(sql, params);
   /** The log's pages, read-ahead and stream; a read waits for the appends in flight, and the owner's stream reads what the owner may see (#1337). */
-  private readonly log = new LogReads({ raw: this.raw, settled: () => Promise.allSettled([...this.inflight.keys()]), ownerSeen: () => this.seenBy(OWNER), emit: (sub, json) => this.emit(sub, json) });
+  private readonly log = new LogReads({ raw: this.raw, settled: () => Promise.allSettled([...this.inflight.keys()]), ownerSeen: () => this.seenBy(OWNER), emit: (sub, json, caught) => this.emit(sub, json, caught) });
   private asks!: Asks;
   /** Online model libraries (#1731): which are on, your standing rules, searches and fetches. */
   private libraries?: Libraries;
+  /** The job kinds' runs (#1922): the cache by key, your standing rules for paid tools, and the asks they wait on. */
+  private jobKinds?: Jobs;
+  /** Hosts your SSH config names, their facts and the runs on them (#1942). */
+  private readonly hosts: Hosts;
   /** What the app last said of macOS and its notifications (#994). */
   private notifications: string | null = null;
   /** Authority at PreToolUse (#321): the planted sorter's proceeds, the servers' tool lists, and the calls held for you. */
@@ -578,6 +598,8 @@ export class Core {
   private readonly teardowns: Teardowns;
   /** The Agents page's syncs (#148): servers and skills written into each agent's own files. */
   private readonly agents: Agents;
+  /** The box (#1998): changes in words, each a proposal you approve. */
+  private readonly box: Box;
   /** Each session's deep_drive replicas (#124). */
   private readonly replicas: Replicas;
   /** The screen each session's computer use last switched to, one it leases (#332). */
@@ -704,6 +726,13 @@ export class Core {
   private restate = false;
   /** The sessions appended to since the last state pass, or all of them: at the start, each minute and after a failed pass. */
   private touched: Set<string> | 'all' = 'all';
+  /** The list's rows as last appended (#1463), by ID; empty until the record's are read at start, which makes the first pass a backfill. */
+  private rows = new Map<string, Placed>();
+  private rowsFirst = true;
+  /** Each running job's row (#1925): when it was last appended, and the newer count held until a second has passed. */
+  private readonly jobRows = new Map<string, { at: number; held?: ReturnType<typeof setTimeout> }>();
+  /** The job rows' appends in turn, so a row never leaves the list before its last count is recorded. */
+  private jobRowsAppended: Promise<void> = Promise.resolve();
   /** When each session's agent process last had its start time read, by the watch for processes gone (#992). */
   private readonly startChecked = new Map<string, number>();
   /** How far test.clock has stepped the hub's clock past the wall clock deep-hook stamps hooks by (#965). */
@@ -718,7 +747,7 @@ export class Core {
    * only where an answer may come back through it (#19: right after install no stop is held for anything else);
    * `acking` hears a session with a message typed mid-turn to acknowledge, so its next tool call's hook is held (#340).
    */
-  constructor(private readonly options: CoreOptions, private readonly emit: (sub: string, event: string) => void, private readonly asking: (sessions: string[], judged: string[], resend: string[], cantRun: string[]) => void = () => undefined, private readonly acking: (session: string) => void = () => undefined, private readonly scrubbing: (values: string[]) => void = () => undefined) {
+  constructor(private readonly options: CoreOptions, private readonly emit: (sub: string, event: string, caught?: boolean) => void, private readonly asking: (sessions: string[], judged: string[], resend: string[], cantRun: string[]) => void = () => undefined, private readonly acking: (session: string) => void = () => undefined, private readonly scrubbing: (values: string[]) => void = () => undefined) {
     this.root = rootOf(options.root);
     this.people = new People(this.root.dir);
     this.now = () => options.clock.start + (Date.now() - options.clock.real);
@@ -819,7 +848,7 @@ export class Core {
       checkouts: () => this.checkouts, invalid: (claim, commit, reason, outcome) => this.invalid(claim, commit, reason, outcome), stopping: () => this.stopping,
       stoodIn: (r) => this.tasks.stoodIn(this.connection('core'), r),
       kept: async (evidence) => (await Promise.all(evidence.map((sha) => this.store.get(sha)))).every(Boolean),
-      slots: () => ({ free: Math.max(0, Math.floor(CORES / 2) - this.runs.size) }),
+      slots: () => ({ free: Math.max(0, Math.max(1, Math.floor(CORES / 2)) - this.runs.size) }),
       capped: (session, checks) => void this.backgroundCapped(session, checks).catch(() => undefined), plant: options.plant, load: machineLoad,
       // The design's 10 s fast-lane budget and 60 s hold, proposals until the dogfood week measures them (#43).
       budget_ms: 10_000, hold_ms: STOP_HOLD_MS,
@@ -861,7 +890,23 @@ export class Core {
       sessions: () => [...this.sessions.values()].filter((s) => !s.ended).map((s) => ({ id: s.id, agent: s.agent, pid: s.pid, start: s.start })),
       older: (sync) => this.olderSet(sync),
     });
+    this.box = new Box({
+      root: this.root.dir, plant: options.plant, now: this.now,
+      raise: async (source, ask, plan) => { await this.ready; return this.asks.raise(this.connection('core'), source, ask, plan as never); },
+      folders: async () => { await this.ready; return [...new Set([...[...this.sessions.values()].map((s) => s.cwd), ...(await repoFolders(this.record, this.store)).values()])]; },
+      lessons: async () => { await this.ready; return (await this.lessons()).map((l) => ({ id: l.id, text: l.text })); },
+      forget: async (id) => {
+        const lesson = (await this.lessons()).find((l) => l.id === id);
+        if (!lesson) return `the lesson ${id} is gone`;
+        if (lesson.claim.startsWith('wiki:rules#') && lesson.why) { const r = await this.removeRule(lesson); return r.status === 'refused' ? String(r.reason) : undefined; }
+        await this.wikiBuild.forget(lesson.claim);
+        return undefined;
+      },
+      learn: async () => { await this.wikiBuild.build(); await syncRejected(this.raw, this.root.dir); },
+    });
+    this.hosts = new Hosts({ root: this.root.dir, now: this.now, plant: options.plant, raise: async (ask, plan) => { await this.ready; return this.asks.raise(this.connection('core'), 'host.change', ask, plan); } });
     this.runs = new Runs({
+      hosts: () => this.hosts,
       journalFile: this.root.runs, point: () => this.durable.point('journal_rewrite'), checkouts: join(this.root.dir, 'checkouts'), now: this.now, plant: options.plant, held: options.held,
       raw: (query, params) => this.record.raw(query, params), sync: () => this.record.sync(), appendAsCore: (input) => this.append(this.connection('core'), input as EventInput),
       appendCore: (kind, data, extra) => this.appendCore(kind, data, extra), stored: (put, what) => this.stored(put, what),
@@ -909,7 +954,7 @@ export class Core {
     // Every append reaches the stream, whoever appends it: the hub, the asks core, the supervisor or the leases.
     this.record = streamed(this.record, ({ kind, subject, data }, connection) => {
       this.log.stream();
-      if (kind !== 'session.state') {
+      if (kind !== 'session.state' && kind !== 'row.set') {
         // The next state pass reads the sessions appended to since the last; an event of no session, every session.
         if (this.touched !== 'all') { if (connection.session) this.touched.add(connection.session); else this.touched = 'all'; }
         this.stateSoon();
@@ -1033,6 +1078,11 @@ export class Core {
     this.every('gone', 1000, () => this.goneSessions());
     // Each session's state as last recorded, then any change since; a session goes quiet after a day with no hook.
     for (const row of (await this.record.raw("SELECT session_id, json_extract(data, '$.state') AS state, json_extract(data, '$.cause') AS cause FROM events WHERE kind = 'session.state' AND session_id IS NOT NULL ORDER BY log_pos")) as { session_id: string; state: string; cause: string }[]) this.states.set(row.session_id, `${row.state}/${row.cause}`);
+    // The list's rows as last appended (#1463): a record with none yet is a backfill.
+    for (const p of await listRows((q) => this.record.raw(q))) this.rows.set(p.row.id, p);
+    this.rowsFirst = this.rows.size === 0;
+    // A job's row the last hub left listed (#1925): its tool's run ended with that hub, so the row leaves the list.
+    for (const id of [...this.rows.keys()].filter((id) => id.startsWith('job:'))) this.jobRowAppend(id, null);
     this.statesRead = true;
     this.stateSoon();
     // Each minute every session is read again: a state that changes with time alone (quiet) has no append to say so.
@@ -1126,10 +1176,24 @@ export class Core {
         return (await readIssue(fetch, owner, name, n, undefined))?.[0];
       },
     });
-    const extensions = this.extensions = await openExtensionHost({ record: this.record, supervisor: this.supervisor, trust, home: this.root.dir, release: [], now: this.now, leases, runner: this.runner, evidence: this.store, point: () => this.durable.point('terminals_rewrite') });
+    // #1922's planted hosts build a tool's digest wrongly: the host's plants, selected with the hub's variable.
+    const plant = this.options.plant?.startsWith('job-build-') ? { plant: this.options.plant as 'job-build-entry-only' } : {};
+    const extensions = this.extensions = await openExtensionHost({ record: this.record, supervisor: this.supervisor, trust, home: this.root.dir, release: [], now: this.now, leases, runner: this.runner, evidence: this.store, point: () => this.durable.point('terminals_rewrite'), ...plant });
+    this.jobKinds = new Jobs({
+      root: this.root.dir, now: this.now, host: () => this.extensions, plant: this.options.plant,
+      keep: async (bytes, source) => (await this.stored(await this.store.connect({ role: 'deepbuild', via: 'job' }).put({ bytes, kind: 'file', source, redaction: 'complete', license: { name: 'job output', allows: [] } }), `a job output from ${source}`)).sha256,
+      has: async (sha) => (await this.store.get(sha)) !== undefined,
+      read: (sha) => this.store.read(sha),
+      adopt: async (bytes) => { await this.stored(await this.store.connect({ role: 'agent', session: 'unknown' }).put({ bytes, kind: 'file', source: 'unrecorded', redaction: 'unknown', license: { name: 'unknown', allows: [] } }), 'a file of unknown origin'); },
+      send: (request, boundary) => this.store.send(request, boundary),
+      raise: (source, ask, plan) => this.asks.raise(this.connection('core'), source, ask, plan),
+      row: (job, running) => this.jobShown(job, running),
+    });
     this.libraries = new Libraries({
       root: this.root.dir, now: this.now, host: () => this.extensions,
       keep: async (bytes, kind, source, license) => (await this.stored(await this.store.connect({ role: 'deepbuild', via: 'job' }).put({ bytes, kind, source, redaction: 'complete', license }), `${kind} from ${source}`)).sha256,
+      keepFile: async (file, sha256, kind, source, license) => (await this.stored(await this.store.connect({ role: 'deepbuild', via: 'job' }).file({ file, sha256, kind, source, redaction: 'complete', license }), `${kind} from ${source}`)).sha256,
+      has: (sha) => this.store.verify(sha),
       raise: (source, ask, plan) => this.asks.raise(this.connection('core'), source, ask, plan),
     });
     for (const pkg of await extensions.installed()) {
@@ -2783,6 +2847,18 @@ export class Core {
       if (this.restate) { this.restate = false; this.stateSoon(); }
     });
   }
+  /** Marks the row `id` read, as row.set with `unread: false`, if it's unread; whether it was (#1461). */
+  private async seeRow(id: string): Promise<Obj> {
+    const placed = this.rows.get(id);
+    if (!placed?.row.unread) return { seen: false };
+    const row = { ...placed.row, unread: false };
+    const ts = this.now();
+    const session = row.session;
+    const connection = this.connection('core', { ...(this.projects.get(session) ? { project: this.projects.get(session)! } : {}), ...(this.sessionPeople.get(session) ? { actor: this.sessionPeople.get(session)! } : {}) });
+    await this.append(connection, { v: 1, id: ulid(ts), kind: 'row.set', ts, data: { listed: true, order: placed.order, ...row } as unknown as JsonValue });
+    this.rows.set(id, { order: placed.order, row });
+    return { seen: true };
+  }
   /** Once no state pass is under way or due, the passes appends since asked for included. */
   private async statesSettled(): Promise<void> {
     while (this.stating) await this.stating;
@@ -2794,17 +2870,73 @@ export class Core {
     if (only !== 'all' && !only.size) return;
     try {
       // Appended together, so the record commits them in one batch, as it does a first start's state for every session.
-      await Promise.all((await sessionStates((sql) => this.record.raw(sql), this.now(), only === 'all' ? undefined : only)).map(async (r) => {
-        const state = `${r.state}/${r.cause}`;
-        if (this.states.get(r.id) === state) return;
-        const ts = this.now();
-        await this.append(this.connection('core', { session: r.id, ...(r.agent ? { agent: r.agent } : {}) }), { v: 1, id: ulid(ts), kind: 'session.state', ts, subject: `session:${letters(r.id)}`, data: { state: r.state, cause: r.cause } });
-        this.states.set(r.id, state);
-      }));
+      const query = (q: string) => this.record.raw(q);
+      const readings = await sessionStates(query, this.now(), only === 'all' ? undefined : only);
+      // The list's rows (#1463): each that changed, and each ask's that left the list, in the same batch.
+      const built = await buildRows(query, readings);
+      const changed = settle(this.rows, built, this.rowsFirst);
+      const open = new Set(built.filter((r) => r.id.startsWith('ask:')).map((r) => r.id));
+      const left = [...this.rows.keys()].filter((id) => id.startsWith('ask:') && !open.has(id));
+      this.rowsFirst = false;
+      const rowOf = (session: string) => this.connection('core', { ...(this.projects.get(session) ? { project: this.projects.get(session)! } : {}), ...(this.sessionPeople.get(session) ? { actor: this.sessionPeople.get(session)! } : {}) });
+      await Promise.all([
+        ...readings.map(async (r) => {
+          const state = `${r.state}/${r.cause}`;
+          if (this.states.get(r.id) === state) return;
+          const ts = this.now();
+          await this.append(this.connection('core', { session: r.id, ...(r.agent ? { agent: r.agent } : {}) }), { v: 1, id: ulid(ts), kind: 'session.state', ts, subject: `session:${letters(r.id)}`, data: { state: r.state, cause: r.cause } });
+          this.states.set(r.id, state);
+        }),
+        ...changed.map(async (p) => {
+          const ts = this.now();
+          await this.append(rowOf(p.row.session), { v: 1, id: ulid(ts), kind: 'row.set', ts, data: { listed: true, order: p.order, ...p.row } as unknown as JsonValue });
+          this.rows.set(p.row.id, p);
+        }),
+        ...left.map(async (id) => {
+          const ts = this.now();
+          await this.append(rowOf(this.rows.get(id)!.row.session), { v: 1, id: ulid(ts), kind: 'row.set', ts, data: { id, listed: false } });
+          this.rows.delete(id);
+        }),
+      ]);
     } catch (error) {
       this.touched = 'all';
       throw error;
     }
+  }
+  /**
+   * A running job's row as it now reads (#1925), appended at most once a second however fast its tool counts, with
+   * the newest count always appended in the end; or, once its tool's run has ended, the row leaving the list.
+   */
+  private jobShown(job: RunningJob, running: boolean): void {
+    const id = `job:${job.key}`;
+    const was = this.jobRows.get(id);
+    clearTimeout(was?.held);
+    if (!running) {
+      this.jobRows.delete(id);
+      this.jobRowAppend(id, null);
+      return;
+    }
+    const wait = was ? was.at + JOB_ROW_MS - Date.now() : 0;
+    if (wait > 0) {
+      this.jobRows.set(id, { at: was!.at, held: setTimeout(() => this.jobShown(job, true), wait) });
+      return;
+    }
+    this.jobRows.set(id, { at: Date.now() });
+    this.jobRowAppend(id, jobRow(job));
+  }
+  /** Appends a job's row as row.set@2, or with none its leaving the list, after the job rows' earlier appends. */
+  private jobRowAppend(id: string, row: Row | null): void {
+    this.jobRowsAppended = this.jobRowsAppended.then(async () => {
+      const ts = this.now();
+      if (row) {
+        const placed = { order: orderOf(row), row };
+        await this.append(this.connection('core'), { v: 2, id: ulid(ts), kind: 'row.set', ts, data: { listed: true, order: placed.order, ...row } as unknown as JsonValue });
+        this.rows.set(id, placed);
+      } else if (this.rows.has(id)) {
+        await this.append(this.connection('core'), { v: 2, id: ulid(ts), kind: 'row.set', ts, data: { id, listed: false } });
+        this.rows.delete(id);
+      }
+    }).catch(() => undefined);
   }
   /** The quiet readings a stepped test clock brought due, each quiet period that passed read in turn. */
   private async quietDue(): Promise<void> {
@@ -2823,7 +2955,7 @@ export class Core {
    * a clear, its daemon runs many threads, and its payload names no fork's parent: its thread is its own ID.
    */
   private async threadOf(session: Session, source: string | undefined): Promise<string> {
-    if (session.agent === 'codex') return session.id;
+    if (manyThreads(session.agent)) return session.id;
     if (source !== 'clear' && source !== 'compact' && source !== 'fork') return session.id;
     const before = [...this.sessions.values()].filter((s) => s.id !== session.id && s.pid === session.pid && s.start === session.start).at(-1);
     if (before) return before.thread;
@@ -3081,6 +3213,10 @@ export class Core {
     if (this.prompts.has(delivery.ask)) return;
     // Your answer to a library fetch's authority ask (#1731), which no session raised: a yes runs the fetch's job.
     if (this.libraries?.answered(delivery.ask, delivery.decision)) return;
+    // Your answer to a paid job call's authority ask (#1922): a yes lets that call run once.
+    if (this.jobKinds?.answered(delivery.ask, delivery.decision)) return;
+    // Your answer to a host's ask for changes as you there (#1942): a yes lets its runs start, now and later.
+    if (this.hosts.answered(delivery.ask, delivery.decision)) return;
     this.tasks.answered(delivery);
     this.acceptance?.answered(delivery);
     this.delivery(delivery);
@@ -3590,6 +3726,7 @@ export class Core {
   /** Your answer to an ask the done gate raised (#325): an issue's budget approved, a stalled claim split, funded or accepted, a switch left off. */
   private delivery(d: Delivery): void {
     if (this.agents.delivered(d.ask, d.option, d.decision)) return;
+    if (this.box.delivered(d.ask, d.option)) return;
     const fail = (what: string) => (error: unknown) => process.stderr.write(`deep hub: ${what} for ${d.ask} was not recorded: ${error instanceof Error ? error.message : String(error)}\n`);
     const budget = this.budgetAsks.get(d.ask);
     if (budget) {
@@ -4172,12 +4309,12 @@ export class Core {
     await this.append(this.connection('core', { session }), { v: 1, id: ulid(ts), kind: 'session.rules_delivered', ts, subject: `session:${letters(session)}`, data: { via, pos: Number(row?.pos ?? 0), rules } });
   }
   /** At a session's start: its rules, first; after a compaction or a resume its next prompt carries every rule you typed, and a scoped rule is heard once more. */
-  private async startRules(meta: HookMeta): Promise<string | undefined> {
+  private async startRules(meta: HookMeta): Promise<Piece[] | undefined> {
     const st = this.ruleStateOf(meta.session);
     const set = await this.startSet(meta.session, meta.cwd, meta.agent);
     st.given = new Set(set.handles);
     await this.delivered(meta.session, 'start', set.handles);
-    return set.lines.size ? `${RULES_HEAD}:\n${[...set.lines.values()].map((t) => `- ${t}`).join('\n')}` : undefined;
+    return set.lines.size ? rulePieces(RULES_HEAD, [...set.lines]) : undefined;
   }
   /** A rule you type, `rule: <text>.`, saved at once as yours; resolves with the targets this prompt typed. */
   private async saveTyped(prompt: string): Promise<Set<string>> {
@@ -4199,7 +4336,7 @@ export class Core {
     return out;
   }
   /** At a prompt: a new set (a rule typed anywhere, a slice entry) is carried and recorded; after a compaction or a resume, every rule you typed. */
-  private async promptRules(meta: HookMeta, prompt: string): Promise<string | undefined> {
+  private async promptRules(meta: HookMeta, prompt: string): Promise<Piece[] | undefined> {
     const typedNow = await this.saveTyped(prompt);
     const st = this.ruleStateOf(meta.session);
     const set = await this.startSet(meta.session, meta.cwd, meta.agent);
@@ -4212,7 +4349,7 @@ export class Core {
     st.given = new Set(set.handles);
     st.full = false;
     await this.delivered(meta.session, 'prompt', set.handles);
-    return carried.length ? `${RULES_HEAD}${typed.length ? ', every rule you typed again after the compaction or resume' : ', new since your last prompt'}:\n${carried.map((h) => `- ${set.lines.get(h)}`).join('\n')}` : undefined;
+    return carried.length ? rulePieces(`${RULES_HEAD}${typed.length ? ', every rule you typed again after the compaction or resume' : ', new since your last prompt'}`, carried.map((h) => [h, set.lines.get(h)!])) : undefined;
   }
   /**
    * At a tool call, behind its hook (#344): the scoped rules the server's reply carried, recorded as delivered; an agent's
@@ -4364,13 +4501,30 @@ export class Core {
       this.abandoned.delete(meta.id);
     }
   }
+  /**
+   * A reply's context inside the cap the agent's facts set on injected output (#1296): under it, the parts joined as
+   * ever; past it, the rules you typed and the requirement IDs inline first, the rest kept as evidence and named by its
+   * handle on a line saying where to continue, and the record says which part went how. The planted wrong program
+   * sends the whole block, which the agent cuts to a preview.
+   */
+  /** The extensions' context for a call, fitted as the core's own is (#1296). */
+  fitContext(meta: HookMeta, parts: Part[], join: string): Promise<string> { return this.fitted(meta, parts, join); }
+  private async fitted(meta: HookMeta, parts: Part[], join?: string): Promise<string> {
+    const cap = Number(((adapterOf(meta.agent)?.facts as Obj | undefined)?.contextOutput as Obj | undefined)?.capChars) || Infinity;
+    const out = fit(parts, this.options.plant === 'sends-block-whole' ? Infinity : cap, join);
+    if (!out.rest) return out.inline;
+    const handle = await this.record.keep(this.connection('core'), { bytes: new TextEncoder().encode(out.rest), kind: 'hook.context', source: meta.event });
+    const ts = this.now();
+    await this.append(this.connection('core', { session: meta.session }), { v: 1, id: ulid(ts), kind: 'session.context_fit', ts, subject: `session:${letters(meta.session)}`, data: { event: meta.event, cap, chars: out.inline.length + out.rest.length, inline: out.inlineNames, inline_ids: out.inlineIds, by_handle: out.restNames, handle }, evidence: [handle.slice(3)] });
+    return [out.inline, continueLine(handle, out.restNames, cap)].filter(Boolean).join('\n\n');
+  }
   private async buildReply(meta: HookMeta, until: number): Promise<{ context?: string; block?: string; message?: string }> {
     const own = !FOREIGN.has(meta.agent) && meta.session;
     // A tool call's reply carries a message typed mid-turn and the notices waiting for the session (#340, #352).
     if (own && (meta.event === 'PreToolUse' || meta.event === 'PostToolUse')) {
       return this.queue(async () => {
         const ack = this.acknowledge(meta.session);
-        const context = [ack.context, await this.siblings.deliver(meta, until)].filter(Boolean).join('\n');
+        const context = await this.fitted(meta, [{ name: 'acknowledgement', text: ack.context, keep: true }, { name: 'sibling sessions', text: await this.siblings.deliver(meta, until) }], '\n');
         return { ...ack, ...(context ? { context } : {}) };
       });
     }
@@ -4397,7 +4551,7 @@ export class Core {
       const rules = own ? await this.queue(() => this.startRules(meta)).catch((error: unknown) => { process.stderr.write(`deep hub: no rules for ${meta.session}: ${error instanceof Error ? error.message : String(error)}\n`); return undefined; }) : undefined;
       // Who else is in the repo, and on what (#352).
       const siblings = own ? await this.queue(() => this.siblings.deliver(meta, until)) : undefined;
-      const context = [rules, await placed, brief, open, answers, taste, siblings].filter(Boolean).join('\n\n');
+      const context = await this.fitted(meta, [{ name: 'rules', ...(rules ? { pieces: rules } : {}) }, { name: 'build products', text: await placed }, { name: 'briefing', text: brief }, { name: 'requirement IDs', ...(open ? { pieces: open.text.split('\n').map((text, i) => ({ text, keep: true, ...(i === 0 ? { ids: open.ids } : {}) })) } : {}) }, { name: 'answers', text: answers, keep: true }, { name: 'taste', text: taste }, { name: 'sibling sessions', text: siblings }]);
       return context ? { context } : {};
     }
     if (!own || (meta.event === 'UserPromptSubmit' && childPrompt(meta))) return {};
@@ -4468,7 +4622,8 @@ export class Core {
         // A rule you typed anywhere, or every one after a compaction or a resume (#344).
         const rules = await this.promptRules(meta, prompt).catch((error: unknown) => { process.stderr.write(`deep hub: rules at ${meta.session}'s prompt: ${error instanceof Error ? error.message : String(error)}\n`); return undefined; });
         const siblings = await this.siblings.deliver(meta, until);
-        const context = [rules, answers, promised, notes ? this.noteText(notes) : undefined, ...r.later.splice(0).filter((text) => !prompt.includes(text)), landed && `DeepBuild: ${landed}`, slow, ack.context, taste, siblings].filter(Boolean).join('\n\n');
+        const later = r.later.splice(0).filter((text) => !prompt.includes(text)).map((text) => ({ name: 'continues', text }));
+        const context = await this.fitted(meta, [{ name: 'rules', ...(rules ? { pieces: rules } : {}) }, { name: 'answers', text: answers, keep: true }, { name: 'promised checks', text: promised }, { name: 'notes', text: notes ? this.noteText(notes) : undefined }, ...later, { name: 'verdict', text: landed ? `DeepBuild: ${landed}` : undefined }, { name: 'slow verdicts', text: slow }, { name: 'acknowledgement', text: ack.context, keep: true }, { name: 'taste', text: taste }, { name: 'sibling sessions', text: siblings }]);
         const message = [status, ack.message].filter(Boolean).join('\n');
         return { ...(context ? { context } : {}), ...(message ? { message } : {}) };
       });
@@ -4953,6 +5108,13 @@ export class Core {
     // The notices it carried wait for the session's next hook (#352).
     this.siblings.gone(id);
   }
+  /**
+   * A deep mcp call cancelled, or its connection `closed` (#1923): it leaves the job it waits on. A cancel stops the job
+   * once no caller is left; a closed session never does, so the job runs on (#1925).
+   */
+  callGone(call: string, closed = false): void {
+    this.jobKinds?.gone(call, closed);
+  }
   /** A waiter whose connection closed: Claude Code stopped it, or it exited. */
   waiterGone(key: number): void {
     if (this.options.plant === 'delivered-to-dead-waiter') return;
@@ -5151,7 +5313,9 @@ export class Core {
     const claim = unjudged ? undefined : live?.claim ?? (await newestClaim(this.raw, meta.session).then((id) => (id ? `claim:${id}` : undefined)));
     const state = claim ? await this.stateOf(claim) : undefined;
     const [stop] = (await this.record.raw(`SELECT MAX(ts) AS at FROM events WHERE session_id = ? AND kind = 'agent.stop' AND json_extract(data, '$.child') IS NULL`, [meta.session])) as { at: number | null }[];
-    const needsYou = (await this.asks.inbox()).length;
+    // The list's one count (#1463): its ask rows, as deep and the app count them.
+    await this.statesSettled();
+    const needsYou = [...this.rows.keys()].filter((id) => id.startsWith('ask:')).length;
     return statusAnswer(state, { session: meta.session, agent: live?.agent ?? meta.agent, worktree: live?.cwd || meta.cwd, needsYou, now: this.now(), lastStop: stop?.at ?? null, state: claim ? undefined : live?.state });
   }
   /**
@@ -5577,7 +5741,7 @@ export class Core {
       if (!actual || actual !== parent.start) return null;
       const served = [...this.sessions.values()].filter((s) => s.pid === parent.pid && s.start === actual && !s.ended);
       // A Codex process may run another thread at any time: each of its calls binds by its own stamp.
-      return served.length === 1 && (adapterOf(served[0]!.agent)?.facts as Obj | undefined)?.daemon === undefined ? served[0]!.id : null;
+      return served.length === 1 && !manyThreads(served[0]!.agent) ? served[0]!.id : null;
     });
   }
 
@@ -5628,10 +5792,13 @@ export class Core {
       case 'test.verdict': return this.testVerdict(params);
       case 'test.clock': return this.testClock(params);
       case 'events.read': return this.log.read(params, this.seenBy(context.role));
-      case 'inbox.read': return this.log.reflecting(() => this.inbox());
+      // Behind the state pass under way, so the rows it holds are the asks as they stand (#1463).
+      case 'inbox.read': return this.statesSettled().then(() => this.log.reflecting(() => this.inbox()));
       case 'sessions.read': return this.log.reflecting(async () => ({ sessions: await this.sessionRows(this.seenBy(context.role)) }));
       case 'person.add': return this.addPerson(params, context);
       case 'library.on': case 'library.off': case 'library.rule': return this.library(method, params, context);
+      case 'pack.rule': return this.packRule(params, context);
+      case 'job.rule': return this.jobRule(params, context);
       case 'person.invite': return this.invitePerson(params, context);
       case 'person.revoke': return this.revokePerson(params, context);
       // An invite spent over the network (#1338): only the server's network hello calls it, with the key the joining machine proved.
@@ -5655,10 +5822,12 @@ export class Core {
       case 'ask.card': return this.askCard(params);
       case 'decision.overrule': return this.overrule(params, context);
       case 'ask.undo': return this.undo(params, context);
+      case 'ask.take_over': return this.takeOver(params, context);
       case 'offer.save': return this.saveOffered(params, context);
       case 'staged.undo': return this.staging.undo(params);
       case 'agents.propose': await this.ready; return this.agents.propose(params);
       case 'agents.read': return this.agents.read();
+      case 'box.say': await this.ready; return this.box.say(String(params.words ?? ''), typeof params.repo === 'string' ? params.repo : undefined);
       case 'agents.restart': await this.ready; return this.agents.restart(params);
       case 'agents.undo': return this.agents.undo(params);
       case 'mcp.exec': return this.agents.exec(params);
@@ -5677,14 +5846,29 @@ export class Core {
       case 'ask.confirm': return this.confirmCard(params);
       case 'views.installed': return { views: this.extensions?.installedViews() ?? [] };
       case 'command.run': return this.runCommand(params);
+      // The app's action table (#1462): Later on an ask, and Pause on a session's row.
+      case 'ask.later': return this.putOff(params);
+      case 'session.pause': return this.pauseSession(params);
       // A hook that ended before this read is in the row: one deep-hook spooled is replayed first, and one acknowledged has its turn on the core's queue.
       case 'status.read':
         this.replayLate();
         // The state pass under way lands first (#992): what deep status lists is in the record the app draws from.
         return (this.replaying ?? Promise.resolve()).then(() => this.queue(async () => undefined)).then(() => this.statesSettled()).then(() => this.log.reflecting(async () => ({ rows: await this.statusSeen(context.role) })));
+      // The list's rows (#1463), as status.read waits for them: behind every hook received and the state pass under way.
+      case 'rows.read':
+        this.replayLate();
+        return (this.replaying ?? Promise.resolve()).then(() => this.queue(async () => undefined)).then(() => this.statesSettled()).then(() => this.log.reflecting(() => this.rowsSeen(context.role, params.detail === true)));
+      // A row's page was open a second while you were present (#1461): the row reads as read in every reader.
+      case 'row.read':
+        if (context.role !== 'app') throw refuse('role', '/method', 'Only the app says a row was seen.', method);
+        if (typeof params.id !== 'string') throw refuse('type', '/params/id', 'Name the row by its id.', method);
+        return this.statesSettled().then(() => this.queue(() => this.seeRow(String(params.id))));
       case 'guard.add': return this.addGuard(params, context);
       case 'evidence.paste': return this.paste(params);
       case 'run.start': return this.runs.start(params);
+      case 'run.output': return this.runs.output(params);
+      case 'host.list': return { hosts: this.hosts.names().map((name) => ({ name })) };
+      case 'host.facts': return this.hosts.facts(params.host, params.refresh === true);
       case 'start.approve': return this.sessionStarts.approve(params, context);
       case 'start.session':
         if (this.draining) throw refuse('unavailable', '/method', 'A promotion is draining the hub: no session starts until it restarts on the new build. Start it again then.', method, true);
@@ -5730,6 +5914,7 @@ export class Core {
       case 'checks.kinds': return { kinds: this.checkKinds.list() };
       case 'job.output': return { stdout: await this.runner.output(String(params.job)) };
       case 'canvas.show': return this.showCli(params, context);
+      case 'canvas.export': return this.exportStill(params);
       case 'canvas.revisions': return this.canvasCall({ call: 'revisions', doc: String(params.doc) });
       case 'canvas.messages': return this.canvasCall({ call: 'messages', session: String(params.session) });
       case 'canvas.user': return this.canvasUser(params, context);
@@ -5759,7 +5944,7 @@ export class Core {
         await this.asks.notifications(setting !== 'allowed');
         return { reported: true };
       }
-      case 'windows.report': return this.runner.report(params as unknown as WindowReport).then(() => { this.tasks.windowChanged(); return { reported: true }; });
+      case 'windows.report': return this.runner.report(params as unknown as WindowReport).then(() => { this.tasks.windowChanged(); this.sessionWindow(params); return { reported: true }; });
       default: throw new Refused(refusal('unknown_method', '/method', `The hub serves no method ${method}.`, method));
     }
   }
@@ -5835,9 +6020,42 @@ export class Core {
     return value;
   }
 
+  /**
+   * The list's rows (#1463), a person's only of the sessions they may see (#1338), with each session's detail for deep
+   * status when `detail` asks for it.
+   */
+  private async rowsSeen(role: string, detail: boolean): Promise<Obj> {
+    const query = (q: string) => this.record.raw(q);
+    let rows = (await listRows(query)).map((p) => p.row);
+    const seen = role.startsWith('person:') ? this.seenBy(role) : '';
+    if (seen) {
+      const visible = new Set(((await this.record.raw(`SELECT DISTINCT session_id AS id FROM events WHERE session_id IS NOT NULL${seen}`)) as { id: string }[]).map((r) => r.id));
+      rows = rows.filter((r) => visible.has(r.session));
+    }
+    return { rows, ...(detail ? { detail: Object.fromEntries((await this.statusSeen(role)).map((r) => [`session:${r.id}`, r])) } : {}) } as unknown as Obj;
+  }
   /** deep status's rows, a person's only of the sessions they may see (#1338). */
+  /**
+   * A five-hour reading the status line forwarder sent with the session its input names (#1296): kept for that
+   * session's row alone, and only for a session the hub has met through its hooks.
+   */
+  private sessionWindow(params: Obj): void {
+    const five = isObj(params.rate_limits) && isObj(params.rate_limits.five_hour) ? params.rate_limits.five_hour : undefined;
+    if (typeof params.session !== 'string' || !this.sessions.has(params.session) || typeof five?.used_percentage !== 'number') return;
+    this.windowOf.set(params.session, { used: five.used_percentage, resets: typeof five.resets_at === 'number' ? five.resets_at * 1000 : null });
+  }
+  /** Each session's own five-hour reading, as its status line last sent it. */
+  private readonly windowOf = new Map<string, { used: number; resets: number | null }>();
   private async statusSeen(role: string): Promise<StatusRow[]> {
     const rows = await statusRows((sql) => this.record.raw(sql), this.now());
+    for (const row of rows) {
+      const own = this.windowOf.get(row.id);
+      const unread = row.readings?.[0]?.startsWith(UNREAD_WINDOW);
+      // The planted wrong programs: a session with no reading shows 0%, or the newest reading another session sent.
+      const carried = this.options.plant === 'window-carried-from-other-repo' && unread ? [...this.windowOf.values()].at(-1) : undefined;
+      const shown = own ?? carried ?? (this.options.plant === 'window-unknown-as-zero' && unread ? { used: 0, resets: null } : undefined);
+      if (shown) row.readings = [`5 h · ${Math.max(0, 100 - shown.used)}% left${shown.resets ? ` · resets ${clockTime(shown.resets)}` : ''}`, ...(row.readings ?? []).filter((r) => !r.startsWith(UNREAD_WINDOW))];
+    }
     const seen = role.startsWith('person:') ? this.seenBy(role) : '';
     if (!seen) return rows;
     const visible = new Set(((await this.record.raw(`SELECT DISTINCT session_id AS id FROM events WHERE session_id IS NOT NULL${seen}`)) as { id: string }[]).map((r) => r.id));
@@ -5886,8 +6104,27 @@ export class Core {
         files.length ? `wrote ${files.join(', ')}` : '',
         next_issue ? `next issue #${next_issue.number} ${next_issue.url}` : '',
       ].filter(Boolean).join(' · ');
-      return { change: { claim, runs, verdicts, line, second, checks: state.checks, asks, produced: { pr: url ?? null, files, pages: [] }, next_issue } };
+      // One plain sentence on the change, each verdict and each open item, from the template (#1999).
+      const say = (sentence: string): Promise<string> => this.options.plant === 'sentence-from-model' ? this.planted(sentence) : Promise.resolve(sentence);
+      const [where] = state.session ? (await this.record.raw(`SELECT worktree FROM sessions WHERE id = ?`, [state.session])) as { worktree: string | null }[] : [];
+      const named = files.map((f) => where?.worktree && f.startsWith(`${where.worktree}/`) ? relative(where.worktree, f) : basename(f));
+      const said = this.options.plant === 'sentence-from-agent-text' && state.session ? this.lastMessage.get(state.session) : undefined;
+      const sentence = said ?? await say(changeSentence(named));
+      const rounds = new Map(((await this.record.raw(`SELECT json_extract(data, '$.verdict') AS verdict, json_extract(data, '$.round') AS round FROM events WHERE kind = 'claim.sent_back' AND subject = ?`, [`claim:${id}`])) as { verdict: string; round: number }[]).map((r) => [r.verdict, Number(r.round)]));
+      for (const v of verdicts as Obj[]) {
+        const reqs = (JSON.parse(String(v.requirements ?? '[]')) as Obj[]).map((r) => ({ req: String(r.req), outcome: String(r.outcome), smallest: typeof r.smallest === 'string' ? r.smallest : null, points_to: typeof r.points_to === 'string' ? r.points_to : null }));
+        v.sentence = await say(verdictSentence({ outcome: String(v.outcome), requirements: reqs, smallest: typeof v.smallest === 'string' ? v.smallest : null, stale: Boolean(v.stale), round: rounds.get(String(v.handle)) ?? null }));
+      }
+      const open_items: Obj[] = [];
+      for (const item of (await this.record.raw(`SELECT text FROM open_items WHERE task_ref = ? AND closed IS NULL ORDER BY opened`, [state.task])) as { text: string }[]) {
+        open_items.push(this.options.plant === 'open-item-no-sentence' ? { text: item.text } : { text: item.text, sentence: await say(openItemSentence(item.text)) });
+      }
+      return { change: { claim, sentence, runs, verdicts, open_items, line, second, checks: state.checks, asks, produced: { pr: url ?? null, files, pages: [] }, next_issue } };
     });
+  }
+  /** The planted wrong program `sentence-from-model`: a headless agent call writes the sentence from the template's. */
+  private planted(sentence: string): Promise<string> {
+    return new Promise((done) => execFile('claude', ['-p', `Write one plain sentence saying: ${sentence}`], { timeout: 30_000 }, (error, out) => done(error ? sentence : String(out).trim() || sentence)));
   }
   /** evidence/:sha: what the store holds of one file, never its bytes. */
   private evidence(params: Obj): Promise<Obj> {
@@ -5969,6 +6206,8 @@ export class Core {
       }),
       // Permissions you said yes to in the terminal, offered back as decisions to save: never asks (#23).
       offers: await this.openOffers(),
+      // The open asks' rows, as every reader of the list holds them (#1463).
+      rows: (await listRows((q) => this.record.raw(q))).filter((p) => p.row.id.startsWith('ask:')).map((p) => p.row) as unknown as Obj[],
     };
   }
 
@@ -5976,7 +6215,7 @@ export class Core {
   private async handbacks(): Promise<Obj> {
     const rows = (await this.record.raw(`SELECT session_id, json_extract(data, '$.reading') AS reading FROM events WHERE kind = 'session.reading' AND json_extract(data, '$.reading') LIKE 'Hand-back %' ORDER BY log_pos`)) as { session_id: string; reading: string }[];
     const detail = rows.map((r) => ({ session: r.session_id, sent_back: r.reading.startsWith('Hand-back sent back'), reading: r.reading }));
-    return { id: 'handbacks_sent_back', label: 'Hand-backs sent back with the tool to use', value: detail.filter((d) => d.sent_back).length, of: detail.length, detail };
+    return { id: 'handbacks_sent_back', label: 'Hand-backs sent back with the tool to use', value: detail.filter((d) => d.sent_back).length, unit: 'count', source: 'record', age_ms: 0, basis: 'observed', of: detail.length, detail };
   }
   /** The question card's document (#84): the asks core's card, with the ask's text and where a task sends you. A URL in the text stays plain text. */
   private async askCard(params: Obj): Promise<Obj> {
@@ -5988,7 +6227,9 @@ export class Core {
     const question = row.question ?? '';
     const opens = card.kind === 'unblock' ? opensOf(question, signInCommands()) : undefined;
     const url = this.options.plant === 'link-from-agent-url' ? /https?:\/\/\S+/.exec(question)?.[0] : undefined;
-    return { ...card, question, ...(opens ? { opens } : {}), ...(url ? { link: url } : {}) };
+    // The card's revision, which an answer from this copy names (#1580).
+    const revision = (await this.cards(handle)).get(handle)?.revision ?? 1;
+    return { ...card, question, revision, ...(opens ? { opens } : {}), ...(url ? { link: url } : {}) };
   }
 
   /**
@@ -5996,8 +6237,8 @@ export class Core {
    * and the core saves it as a decision for the ask's repo, or its session; an ask with neither, and a block's task
    * (#85), saves none.
    */
-  private async answer(params: Obj, context: CallContext, channel?: { channel: string; proof: 'device' | 'account_link' }): Promise<Obj> {
-    const { ask: handle, device: _device, signature: _signature, ...input } = params;
+  private async answer(params: Obj, context: CallContext, channel?: { channel: string; proof: 'device' | 'account_link'; plan_hash: string | null }): Promise<Obj> {
+    const { ask: handle, device: _device, signature: _signature, revision, ...input } = params;
     if (typeof handle !== 'string' || !/^ask:[0-9A-Za-z]+$/.test(handle)) throw new Refused(refusal('handle_syntax', '/params/ask', 'Name the ask by its handle, ask:<id>, as deep inbox lists it.', handle));
     const [row] = (await this.record.raw(`SELECT e.session_id AS session, e.project_id AS project, e.data AS data, a.status AS status FROM events e JOIN asks a ON a.id = e.id WHERE e.id = ? AND e.kind = 'ask.created'`, [handle.slice(4)])) as { session: string | null; project: string | null; data: string; status: string }[];
     if (!row) throw new Refused(refusal('not_found', '/params/ask', `No ask ${handle}; answer an ask deep inbox lists.`, handle));
@@ -6022,11 +6263,15 @@ export class Core {
       throw new Refused(refusal('enum', '/params/option', `${handle} has no option ${String(input.option)}; its options are ${ask.options.map((o) => o.id).join(', ')}.`, input.option));
     }
     // A channel's answer was checked by the channels (#65): a paired device's signature over the card it showed, or an account link.
-    if (!channel) await this.trusted('ask.answer', params, context, `answer “${ask.question.slice(0, 120)}” with ${chosen ? `“${chosen.label.slice(0, 80)}”` : 'your words'}`, handle, await this.revisionOf(handle, ask));
-    // A paired phone's yes binds the plan its card stood for, and its own token, as the app's click does.
+    if (!channel) {
+      await this.trusted('ask.answer', params, context, `answer “${ask.question.slice(0, 120)}” with ${chosen ? `“${chosen.label.slice(0, 80)}”` : 'your words'}`, handle, await this.revisionOf(handle, ask));
+      await this.onRevision(handle, revision, params.signature);
+    }
+    // A paired phone's yes binds the plan its signature names, which the channels checked against the ask's (#1580),
+    // never one the hub fills in, and its own token, as the app's click does.
     if (channel?.proof === 'device' && chosen?.decision === 'allow') {
       input.token = `${channel.channel}:${ulid(this.now())}`;
-      input.plan_hash = (await this.asks.card(handle)).plan?.hash ?? null;
+      input.plan_hash = channel.plan_hash;
     }
     // From the CLI, the OS prompt that just confirmed you is the click an approval binds (#321): its token is minted here,
     // for an approval only, so any other answer is handed on as its twin from the app is (#34).
@@ -6201,13 +6446,72 @@ export class Core {
   private async channelAsks(): Promise<ChannelAsk[]> {
     const rows = (await this.record.raw('SELECT id, question, options, answer FROM asks')) as { id: string; question: string | null; options: string | null; answer: string | null }[];
     const texts = new Map(rows.map((r) => [`ask:${r.id}`, r]));
+    const cards = await this.cards();
     return (await this.asks.inbox()).map((row) => {
       const t = texts.get(row.ask);
       const options = t?.options ? (JSON.parse(t.options) as { id: string; label: string }[]).map((o) => ({ id: String(o.id), label: String(o.label) })) : [];
       let answer: string | null = null;
       try { answer = t?.answer ? String(JSON.parse(t.answer)) : null; } catch { answer = t?.answer ?? null; }
-      return { handle: row.ask, kind: row.kind, question: t?.question ?? '', options, status: row.status, outcome: row.outcome, answer };
+      const card = cards.get(row.ask);
+      return { handle: row.ask, kind: row.kind, question: t?.question ?? '', options, status: row.status, outcome: row.outcome, answer, plan: card?.plan ?? null, revision: card?.revision ?? 1 };
     });
+  }
+  /**
+   * Each ask's card as the record holds it (#1580): the newest plan the core proposed, as a card draws it; its revision,
+   * 1 and one more for each change of plan and each Take over; and the device it was taken over to last. `handle`
+   * narrows it to one ask.
+   */
+  private async cards(handle?: string): Promise<Map<string, { plan: ChannelAsk['plan']; revision: number; holder: string | null }>> {
+    const one = handle ? ` AND (subject = ? OR json_extract(data, '$.ask') = ?)` : '';
+    const rows = (await this.record.raw(`SELECT kind, subject, json_extract(data, '$.ask') AS ask, json_extract(data, '$.hash') AS hash, json_extract(data, '$.steps') AS steps, json_extract(data, '$.device') AS device FROM events WHERE ((kind = 'plan.proposed' AND writer = 'core') OR kind = 'ask.taken_over')${one} ORDER BY log_pos`, handle ? [handle, handle] : [])) as { kind: string; subject: string | null; ask: string | null; hash: string | null; steps: string | null; device: string | null }[];
+    const held = new Map<string, { hash?: string; steps?: string; revision: number; holder: string | null }>();
+    for (const r of rows) {
+      const key = String(r.kind === 'ask.taken_over' ? r.subject : r.ask);
+      const card = held.get(key) ?? { revision: 1, holder: null };
+      held.set(key, card);
+      if (r.kind === 'ask.taken_over') Object.assign(card, { revision: card.revision + 1, holder: r.device });
+      else if (r.hash !== card.hash) Object.assign(card, { revision: card.revision + (card.hash === undefined ? 0 : 1), hash: String(r.hash), steps: r.steps ?? '[]' });
+    }
+    return new Map([...held].map(([key, c]) => [key, {
+      revision: c.revision, holder: c.holder,
+      plan: c.hash === undefined ? null : {
+        hash: c.hash,
+        steps: (JSON.parse(c.steps!) as Obj[]).map((s) => ({ does: String(s.does), changes: (Array.isArray(s.changes) ? s.changes : []).map(String), undo: String(s.undo), public: s.public === true, cost: Number(s.cost) })),
+      },
+    }]));
+  }
+  /**
+   * An answer from a copy of an ask's card at an earlier revision is refused, naming the revision; so is a signed one
+   * naming none from another device once the card was taken over (#1580). An answer from the CLI, which the OS
+   * confirmed, keeps no copy of its own and is held only to a revision it names.
+   */
+  private async onRevision(handle: string, revision: unknown, signature: unknown): Promise<void> {
+    const card = (await this.cards(handle)).get(handle) ?? { revision: 1, holder: null };
+    if (revision !== undefined && revision !== card.revision) {
+      throw new Refused(refusal('credential', '/params/revision', `${handle} stays open: this answer is from its card at revision ${JSON.stringify(revision)}, and the card is at revision ${card.revision} now${card.holder ? `, taken over to ${card.holder}` : ''}. Answer from the card as it is now.`, revision));
+    }
+    const device = (signature as { signed?: { device?: unknown } } | undefined)?.signed?.device;
+    if (revision === undefined && device !== undefined && card.holder !== null && device !== card.holder) {
+      throw new Refused(refusal('credential', '/params/revision', `${handle} stays open: its card moved to ${card.holder} by Take over, at revision ${card.revision}, and this answer from ${String(device)} names no revision. Answer it there, or take it over here.`, handle));
+    }
+  }
+  /**
+   * Take over (#1580; design: Channel): a device you paired moves an open ask's card to itself on the trusted path,
+   * signing the call with its own key. The card's revision rises, so an answer from a copy at the earlier one is
+   * refused, naming the revision, and every channel's card goes out again at the new one.
+   */
+  private async takeOver(params: Obj, context: CallContext): Promise<Obj> {
+    const handle = params.ask;
+    if (typeof handle !== 'string' || !/^ask:[0-9A-Za-z]+$/.test(handle)) throw new Refused(refusal('handle_syntax', '/params/ask', 'Name the ask by its handle, ask:<id>, as deep inbox lists it.', handle));
+    const [row] = (await this.record.raw(`SELECT status FROM asks WHERE id = ?`, [handle.slice(4)])) as { status: string }[];
+    if (!row) throw new Refused(refusal('not_found', '/params/ask', `No ask ${handle}; take over an ask deep inbox lists.`, handle));
+    if (row.status !== 'open' && row.status !== 'later') throw new Refused(refusal('not_found', '/params/ask', `${handle} is closed, so its card has nowhere to move.`, handle));
+    if (params.signature === undefined) throw new Refused(refusal('unconfirmed', '/params/signature', `Take over moves ${handle}'s card to a device you paired, which signs the call with its own key.`, handle));
+    await this.trusted('ask.take_over', params, context, `take over ${handle}`, handle, 'take over');
+    const device = String((params.signature as { signed: { device: string } }).signed.device);
+    const revision = ((await this.cards(handle)).get(handle)?.revision ?? 1) + 1;
+    await this.appendCore('ask.taken_over', { device, revision }, { subject: handle });
+    return { ask: handle, device, revision };
   }
   /** Unpairs a device you paired, on the trusted path (#65): its signatures count for nothing, and it is told so. */
   private async unpair(params: Obj, context: CallContext): Promise<Obj> {
@@ -6334,6 +6638,18 @@ export class Core {
     if (context.role !== 'cli') throw new Refused(refusal('role', '/method', 'An install counts from the CLI, once the OS confirms you.', 'extension.install'));
     const agent = await this.agentAbove(context.peer);
     if (agent) throw new Refused(refusal('role', '/method', `Nothing was installed: this deep command runs inside agent session ${agent}'s process tree, and no agent installs a package. Install it from your own terminal.`, 'extension.install'));
+    if (!existsSync(join(from, 'deepbuild.json')) && existsSync(join(from, 'pack.json'))) {
+      if (!this.libraries) throw refuse('unavailable', '', 'The hub is not ready to install packs.', from, true);
+      const pack = readPack(from);
+      if (params.digest !== pack.digest) throw refuse('changed', '/params/digest', `${pack.ref} changed since its install plan was read.`, params.digest);
+      const why = await this.confirmer.you(`install ${pack.ref} (${pack.digest}) from ${from}; its assets fetch only after a separate authority ask or rule`, { handle: `pack:${pack.ref}`, revision: pack.digest, process: context.peer });
+      if (why) throw refuse('unconfirmed', '', `Nothing was installed: ${why}`, from, true);
+      const dir = this.libraries.packs.stage(pack);
+      const checked = await this.canvasCall({ call: 'install_pack', id: pack.id, dir });
+      if (checked.outcome !== 'installed') return { status: 'refused', reason: JSON.stringify(checked.issues) };
+      this.libraries.packs.admit(pack);
+      return { status: 'installed', id: pack.id, version: pack.version, digest: pack.digest };
+    }
     // Only for the prompt's words: the installer reads the manifest again, as data, and refuses what it must.
     const m = await readFile(join(from, 'deepbuild.json'), 'utf8').then((text) => JSON.parse(text) as { id?: unknown; version?: unknown; publisher_key?: unknown; sources?: { variant?: string; host?: string }[] })
       .catch(() => ({ id: undefined, version: undefined, publisher_key: undefined, sources: undefined }));
@@ -6376,6 +6692,31 @@ export class Core {
   }
 
   /** A view's ⌘K command, chosen in the app (#1454): the action its manifest declares, called as you. */
+  /**
+   * Later on an ask, from the app's action table (#1462): it goes below the open asks and comes back an hour before
+   * its default applies. The hour is drafted. The asks core checks it against every deadline it could hide.
+   */
+  private async putOff(params: Obj): Promise<Obj> {
+    const { ask } = params;
+    if (typeof ask !== 'string' || !ask.startsWith('ask:')) throw refuse('type', '/params/ask', 'Name the ask by its handle, ask:<id>.', ask);
+    try {
+      await this.asks.laterBefore(this.connection('app'), ask, LATER_BEFORE_MS);
+    } catch (error) {
+      if (error instanceof AskRefused) throw refuse('refused', '/params/ask', error.message, ask);
+      throw error;
+    }
+    return { ask };
+  }
+
+  /** Pause on a session's row, from the app (#1462): recorded as the core, the session its subject as every session event names it. */
+  private async pauseSession(params: Obj): Promise<Obj> {
+    const { session } = params;
+    if (typeof session !== 'string' || !letters(session)) throw refuse('type', '/params/session', 'Name the session by its ID.', session);
+    const ts = this.now();
+    await this.append(this.connection('core', { session }), { v: 1, id: ulid(ts), kind: 'session.paused', ts, subject: `session:${letters(session)}`, data: {} });
+    return { session, paused: true };
+  }
+
   private async runCommand(params: Obj): Promise<Obj> {
     const { action } = params;
     const view = this.extensions?.installedViews().find((v) => v.commands.some((c) => c.action === action));
@@ -6457,10 +6798,10 @@ export class Core {
     return undefined;
   }
 
-  /** Streams every event after `after` to the subscriber, then each one appended from then on. */
-  async subscribe(sub: string, after: number): Promise<void> {
+  /** Streams every event after `after` to the subscriber, then each one appended from then on; a scope narrows it (#1575). */
+  async subscribe(sub: string, after: number, scope?: Scope): Promise<{ head?: number; snapshot?: true }> {
     await this.ready;
-    this.log.subscribe(sub, after);
+    return this.log.subscribe(sub, after, scope);
   }
   unsubscribe(sub: string): void {
     this.log.unsubscribe(sub);
@@ -6485,12 +6826,13 @@ export class Core {
       await (this.replaying ?? Promise.resolve());
       // A call bound to no session still reads what belongs to no session; every other tool needs its session.
       // A deep_show bound to no session is refused by the canvas side with no_session, as its reply (#806).
-      const session = await this.queue(async () => this.bind(tool, sent, context, tool !== 'deep_status' && tool !== 'deep_search' && tool !== 'deep_show' && tool !== 'deep_kinds' && tool !== 'find_actions'));
+      const session = await this.queue(async () => this.bind(tool, sent, context, tool !== 'deep_status' && tool !== 'deep_search' && tool !== 'deep_show' && tool !== 'deep_kinds' && tool !== 'deep_job' && tool !== 'find_actions'));
       switch (tool) {
         case 'find_actions': return await this.findActions(args.query as string | null);
         case 'call_action': return await this.callPluginAction(session!, args);
         case 'deep_show': return await this.show(session ? { session } : { session: null }, showCall(args));
         case 'deep_kinds': return await this.kinds(args);
+        case 'deep_job': return await this.job(args, context.call);
         case 'deep_status': return await this.status(session);
         case 'deep_search': return await this.find(String(args.query), session, context, typeof args.file === 'string' ? args.file : undefined, typeof args.cursor === 'string' ? args.cursor : undefined);
         case 'deep_ask': return await this.askFor(session!, args);
@@ -6558,7 +6900,7 @@ export class Core {
 
   /** The world the canvas core reads: the hub's live sessions, the record's asks and readings, and the world file. */
   private async canvasWorld(): Promise<CanvasWorld> {
-    const file = this.worldFile.read();
+    const file = { ...this.worldFile.read(), packs: this.libraries?.packs.all() ?? [] };
     const sessions = [...this.sessions.values()].filter((s) => !s.ended).map((s) => ({ id: s.id, thread: s.thread, name: nameOf(file, s.id, s.agent) }));
     const record: Obj = {};
     const asks = (await this.record.raw('SELECT id, session_id, status FROM asks')) as { id: string; session_id: string | null; status: string }[];
@@ -6599,8 +6941,12 @@ export class Core {
       if (rev === null) rev = ((await this.canvasCall({ call: 'revisions', doc: call.doc })).revisions as { rev: number; state: string }[] | undefined)?.find((r) => r.state === 'current')?.rev ?? 0;
       return this.canvasCall({ ...call, rev, session: as.session });
     }
+    if (isObj(call.document)) {
+      const held = await this.preparePackAssets(call.document);
+      if (held) return held;
+    }
     // An asset.game@1 item naming an asset by hash (#1066's from: {asset}, #1731) takes the license kept with it.
-    const game = this.gameAssets(call);
+    const game = await this.gameAssets(call);
     if (game.refused) return game.refused;
     call = game.call;
     const via = 'you' in as ? { peer: { pid: 0, start: 0 } } : { session: as.session };
@@ -6619,7 +6965,7 @@ export class Core {
    * the mesh.asset@1 it draws, with the license the asset was kept with at fetch, listed in the reply's `assets`. An
    * asset no fetch kept with its license is BLOCKED, naming the item and the asset, so the revision is refused.
    */
-  private gameAssets(call: Obj): { call: Obj; assets: Obj[]; refused?: Obj } {
+  private async gameAssets(call: Obj): Promise<{ call: Obj; assets: Obj[]; refused?: Obj }> {
     const doc = call.document;
     if (!isObj(doc) || !isObj(doc.items)) return { call, assets: [] };
     const items: Obj = {};
@@ -6630,12 +6976,19 @@ export class Core {
       if (typeof sha !== 'string') { items[key] = item; continue; }
       const it = item as Obj;
       const id = typeof it.id === 'string' ? it.id : key;
-      const kept = this.libraries?.asset(sha);
+      const pinned = this.libraries?.packs.byHash(doc.packs, sha);
+      let kept = this.libraries?.asset(sha, pinned?.pack);
+      if (pinned && (!kept || !await this.store.verify(sha))) {
+        const fetched = await this.libraries!.fetchPack(pinned.pack, pinned.asset.path);
+        if (fetched.status !== 'fetched') return { call, assets, refused: { ...fetched, outcome: 'refused', code: 'asset_blocked', issues: [{ severity: 'error', code: 'asset.blocked', ids: [id], message: `BLOCKED: ${JSON.stringify(fetched)}` }], snapshots: [] } };
+        kept = fetched.asset;
+      }
+      if (kept?.pack && (!pinned || pinned.pack !== kept.pack)) kept = undefined;
       if (!kept) {
         issues.push({ severity: 'error', code: 'asset.unlicensed', ids: [id], path: `/items/${key}/from/asset`, message: `BLOCKED: ${id} names asset ${sha}, which no fetch kept with a license; fetch it from a library first` });
         continue;
       }
-      assets.push({ item: id, asset: sha, license: kept.license, upstream: kept.upstream, library: kept.library });
+      assets.push({ item: id, asset: sha, license: kept.license, upstream: kept.upstream, ...(kept.pack ? { pack: kept.pack } : { library: kept.library }) });
       const { from: _from, budget: _budget, params: _params, ...rest } = it;
       items[key] = { ...rest, kind: 'mesh.asset@1', order: typeof rest.order === 'string' ? rest.order : `a${assets.length - 1}`, params: { sha256: sha, node: 0 } };
     }
@@ -6669,11 +7022,15 @@ export class Core {
     const libraries = this.libraries;
     if (!libraries) throw refuse('unavailable', '', 'The hub has no extension host yet; try again once it is ready.', 'deep_kinds', true);
     for (const k of Object.keys(args)) {
-      const takes = args.op === 'assets' ? ['op', 'query', 'kind', 'size_m', 'license', 'limit'] : ['op', 'library', 'id'];
+      const takes = args.op === 'assets' ? ['op', 'query', 'kind', 'size_m', 'license', 'limit'] : ['op', 'library', 'id', 'pack', 'asset'];
       if (args[k] !== null && args[k] !== undefined && !takes.includes(k)) throw refuse('unlisted_field', `/params/arguments/${k}`, `Leave out ${k}: ${String(args.op)} takes only ${takes.slice(1).join(', ')}.`, k);
     }
     try {
       if (args.op === 'fetch') {
+        if (typeof args.pack === 'string') {
+          if (typeof args.asset !== 'string' || args.library || args.id) throw refuse('required', '/params/arguments/asset', 'Give pack@version and one asset path, without library or id.', args.asset);
+          return { ...(await libraries.fetchPack(args.pack, args.asset)) };
+        }
         if (typeof args.library !== 'string' || typeof args.id !== 'string') throw refuse('required', `/params/arguments/${typeof args.library === 'string' ? 'id' : 'library'}`, 'Give library and id, as a search row names them.', null);
         return { ...(await libraries.fetch(args.library, args.id)) };
       }
@@ -6687,6 +7044,36 @@ export class Core {
       if (e instanceof LibraryRefused) return { status: 'refused', reason: e.message };
       throw e;
     }
+  }
+  /**
+   * deep_job (#1922): the job kinds and their qualified tools, or one run of a kind on a pinned tool, outside the hub's
+   * process. It changes no document and needs no session; its result is a reading with a receipt, never a verdict.
+   */
+  private async job(args: Obj, caller: string | undefined): Promise<Obj> {
+    if (!this.jobKinds) throw refuse('unavailable', '', 'The hub has no extension host yet; try again once it is ready.', 'deep_job', true);
+    return args.op === 'list' ? this.jobKinds.list() : this.jobKinds.run(args, caller);
+  }
+  /** A pack's network authority is yours, never an agent's, and matches only that pack and license list. */
+  private async packRule(params: Obj, context: CallContext): Promise<Obj> {
+    const { pack, licenses } = params;
+    if (typeof pack !== 'string' || !Array.isArray(licenses) || !licenses.every((l) => typeof l === 'string' && l)) throw refuse('type', '/params', 'Name pack as owner/name and list its allowed license IDs.', params);
+    await this.asYou(context, 'pack.rule', `allow ${pack} to fetch assets under ${licenses.join(', ') || 'no license'}`, `pack:${pack}`, JSON.stringify(licenses));
+    if (!this.libraries) throw refuse('unavailable', '', 'The hub is not ready.', pack, true);
+    return this.libraries.packRule(pack, licenses as string[]);
+  }
+  /** `job.rule` (#1922): your standing rule for a paid tool, from your own terminal once the OS confirms you: the most a run may cost with no ask. */
+  private async jobRule(params: Obj, context: CallContext): Promise<Obj> {
+    const { tool, usd } = params;
+    if (typeof tool !== 'string' || !/^[a-z0-9][a-z0-9_-]*@\d+\.\d+\.\d+$/.test(tool)) throw new Refused(refusal('type', '/params/tool', 'Name the tool by name@version, as deep_job lists it.', tool));
+    if (typeof usd !== 'number' || !Number.isFinite(usd) || usd < 0) throw new Refused(refusal('type', '/params/usd', 'Give usd, the most a run of the tool may cost with no ask, in US dollars.', usd));
+    if (context.role !== 'cli') throw new Refused(refusal('role', '/method', 'A paid tool\'s standing rule is set from your own terminal, once the OS confirms you.', 'job.rule'));
+    const agent = await this.agentAbove(context.peer);
+    if (agent) throw new Refused(refusal('role', '/method', `Nothing changed: this deep command runs inside agent session ${agent}'s process tree, and no agent sets a paid tool's rule. Run it from your own terminal.`, 'job.rule'));
+    const what = `let ${tool} run at up to $${usd} a run with no ask`;
+    const why = await this.confirmer.you(what, { handle: `job:${tool}`, revision: what });
+    if (why) throw new Refused(refusal('unconfirmed', '/method', `${what} changed nothing: the OS didn't confirm you (${why}).`, 'job.rule', true));
+    if (!this.jobKinds) throw new Refused(refusal('unavailable', '', 'The hub has no extension host yet; try again once it is ready.', 'job.rule', true));
+    return this.jobKinds.rule(tool, usd);
   }
   /** `library.on`, `library.off` and `library.rule` (#1731): yours alone, from your own terminal, once the OS confirms you. */
   private async library(method: string, params: Obj, context: CallContext): Promise<Obj> {
@@ -6730,6 +7117,34 @@ export class Core {
       } as JsonValue,
     });
     this.presented.push({ doc: p.doc, rev: p.rev, rect: p.rect, layers: p.layers, session });
+  }
+  /** The same first-use gate for a shown document and its exports, for every asset-reading kind. */
+  private async preparePackAssets(document: Obj): Promise<Obj | undefined> {
+    if (!this.libraries) return { status: 'BLOCKED', outcome: 'refused', cause: 'The asset host is not ready.', snapshots: [] };
+    for (const pack of Array.isArray(document.packs) ? document.packs : []) if (typeof pack !== 'string' || !this.libraries.packs.get(pack)) {
+      return { status: 'BLOCKED', outcome: 'refused', cause: `pack_missing: ${String(pack)}`, snapshots: [] };
+    }
+    for (const { pack, asset } of this.libraries.packs.used(document)) {
+      const fetched = await this.libraries.fetchPack(pack, asset.path);
+      if (fetched.status !== 'fetched') return { ...fetched, outcome: 'refused', code: 'asset_blocked', issues: [{ severity: 'error', code: 'asset.blocked', ids: [asset.path], message: `BLOCKED: ${JSON.stringify(fetched)}` }], snapshots: [] };
+    }
+    return undefined;
+  }
+  /** The hub resolves a pack export through its pinned store. The CLI writes only the returned PNG bytes. */
+  private async exportStill(params: Obj): Promise<Obj> {
+    if (!isObj(params.document) || typeof params.still !== 'string') throw refuse('type', '/params', 'Give document and still, a frame or marker.', params);
+    const held = await this.preparePackAssets(params.document);
+    if (held) return held;
+    const game = await this.gameAssets({ document: params.document });
+    if (game.refused) return game.refused;
+    const packs = this.libraries!.packs.all();
+    const rendered = await renderStill(game.call.document, params.still, this.root.evidence, packs);
+    const hash = (rendered.snapshots as Obj[] | undefined)?.[0]?.sha256;
+    if (rendered.outcome !== 'presented' || typeof hash !== 'string') return { status: 'BLOCKED', cause: `No still could be drawn: ${JSON.stringify(rendered)}` };
+    // The canvas store's bytes are rehashed before they leave the hub; neither an input path nor an output path
+    // is accepted here, so an agent cannot make the hub read or write outside its own evidence folder.
+    const bytes = await this.store.read(hash);
+    return { status: 'exported', sha256: hash, png: Buffer.from(bytes).toString('base64') };
   }
   /** `deep show` from the CLI: the peer check makes it the agent's whose process tree runs it, never by PID alone; else yours. */
   private async showCli(params: Obj, context: CallContext): Promise<Obj> {
@@ -6846,6 +7261,8 @@ export class Core {
         contradictions: predictionContradictions(claim.predictions ?? [], checks),
       });
     }
+    // An agent's deep_status is its own session's (#1463): the planted wrong program leaks every session's asks into it.
+    if (this.options.plant === 'status-row-leak') return { session, gates, claims, rows: [...this.rows.values()].filter((p) => p.row.id.startsWith('ask:')).map((p) => p.row) as unknown as Obj[] };
     return { session, gates, claims };
   }
 
@@ -6898,18 +7315,19 @@ export class Core {
     return [...this.sessions.values()].map((s) => s.cwd).find((cwd) => cwd === real || isUnder(real, cwd));
   }
   /** The checks a worktree's spec names, by name, with the command each runs and its deadline as the spec writes it, where it gives one. */
-  private checksOf(worktree: string): Map<string, { run: string; deadline?: unknown; type?: string }> {
+  private checksOf(worktree: string): Map<string, { run: string; deadline?: unknown; type?: string; host?: string }> {
     let spec: unknown;
     try { spec = parseYaml(readFileSync(join(worktree, '.deepbuild', 'done.yaml'), 'utf8')); } catch { return new Map(); }
     const checks = isObj(spec) && isObj(spec.checks) ? spec.checks : {};
     return new Map(Object.entries(checks).flatMap(([name, c]) => {
       if (!isObj(c) || typeof c.run !== 'string') return [];
-      return [[name, { run: c.run, ...(c.deadline !== undefined ? { deadline: c.deadline } : {}), ...(typeof c.type === 'string' ? { type: c.type } : {}) }] as const];
+      return [[name, { run: c.run, ...(c.deadline !== undefined ? { deadline: c.deadline } : {}), ...(typeof c.type === 'string' ? { type: c.type } : {}), ...(typeof c.host === 'string' ? { host: c.host } : {}) }] as const];
     }));
   }
   private unknownCheck(worktree: string, check: unknown): Refused {
     const names = [...this.checksOf(worktree).keys()];
-    return refuse('enum', '/params/arguments/check', `Name a check this repo's .deepbuild/done.yaml names: ${names.join(', ') || 'it names none'}.`, check);
+    const near = typeof check === 'string' ? nearest(check, names) : undefined;
+    return refuse('enum', '/params/arguments/check', near ? `Name ${near} in place of ${String(check)}.` : `Name a check this repo's .deepbuild/done.yaml names: ${names.join(', ') || 'it names none'}.`, check);
   }
 
   /** deep_ask: raises the ask under the session, then waits for its answer as deep_wait does. */
@@ -7132,7 +7550,10 @@ export class Core {
     const [claim] = (await this.record.raw(`SELECT id, data FROM events WHERE session_id = ? AND kind = 'claim.made' ${which} ORDER BY log_pos DESC LIMIT 1`, [session])) as { id: string; data: string }[];
     if (!claim) throw refuse('not_found', '/params/arguments/claim', 'Run a check for a claim this session made: claim first with deep_claim.', args.claim);
     const commit = String((JSON.parse(claim.data) as Obj).commit);
-    const { run } = await this.runs.start({ check: args.check, claim: `claim:${claim.id}`, commit, argv: ['/bin/sh', '-c', check.run], cwd }, deadline);
+    // A check that names a host runs there, from your home on it (#1942).
+    const { run } = await this.runs.start({ check: args.check, claim: `claim:${claim.id}`, commit, argv: ['/bin/sh', '-c', check.run], ...(check.host === undefined ? { cwd } : { host: check.host }) }, deadline);
+    // A run on a host is long work, such as a model download: it answers once started there, and the claim waits for it.
+    if (check.host !== undefined) return { run, claim: `claim:${claim.id}`, outcome: 'running', evidence: [] };
     // The run's outcome once it finishes, so the agent needn't poll; past the wait, that it's still running.
     const until = Date.now() + this.askWait(session);
     for (;;) {
@@ -7327,7 +7748,12 @@ export class Core {
       return { ...ran, findings };
     })();
     this.lanes.set(r.claim, lane);
-    lane.catch((error: unknown) => process.stderr.write(`deep hub: ${r.claim}'s checks did not start: ${error instanceof Error ? error.message : String(error)}\n`));
+    // A claim whose checks could not start is INCONCLUSIVE, naming why, as one past its budget is: never left with no verdict.
+    lane.catch((error: unknown) => {
+      const why = error instanceof Error ? error.message : String(error);
+      process.stderr.write(`deep hub: ${r.claim}'s checks did not start: ${why}\n`);
+      void this.invalid(r.claim, r.commit, `its checks did not start: ${why}`, 'INCONCLUSIVE').catch((failed: unknown) => process.stderr.write(`deep hub: ${r.claim}'s verdict wasn't recorded: ${failed instanceof Error ? failed.message : String(failed)}\n`));
+    });
   }
   /**
    * The repo's spec checks (#322): each check the spec's `done` claim names (or, with no claims block, every check),
@@ -7805,10 +8231,14 @@ export class Core {
     for (const session of [...this.unplaced.keys()]) await this.queue(() => this.placeHeld(session)).catch(() => undefined);
     await this.chain;
     await this.stating;
+    // The pass the stop kept from starting, so the rows a stopped hub's database holds are the list as it stood.
+    await this.recordStates().catch(() => undefined);
     this.writeCursors();
     this.canvasCore?.close();
     await this.replicas.close();
     this.runs.stopAll();
+    // Runs on hosts go on there; only this hub's followers of them stop, and the next hub follows them again (#1942).
+    this.hosts.close();
     // Each worktree's stack goes down with the hub, through the supervisor.
     await this.stacks.close();
     // Each running job is stopped through the supervisor; one still stopping is reaped on the next start.

@@ -26,7 +26,7 @@ fn atoms(data: &[u8]) -> Vec<Atom<'_>> {
         if size < head as u64 {
             break;
         }
-        let end = (at as u64 + size).min(data.len() as u64) as usize;
+        let end = (at as u64).saturating_add(size).min(data.len() as u64) as usize;
         out.push(Atom {
             kind,
             body: &data[at + head..end],
@@ -85,6 +85,8 @@ impl<'a> Bytes<'a> {
 pub enum Kind {
     Video,
     Audio,
+    /// #501: a `tmcd` track, whose one sample is the first frame's number.
+    Timecode,
     Other,
 }
 
@@ -116,6 +118,16 @@ pub struct Entry {
     /// The codec's configuration box (`avcC`, `hvcC` or `esds`) and its body.
     pub config: Option<([u8; 4], Vec<u8>)>,
     pub colr: Option<Colr>,
+    /// #501: a `tmcd` entry's drop-frame flag and its frames per second, rounded up.
+    pub tmcd: Option<(bool, u8)>,
+}
+
+/// #501: a movie's timecode: the first frame's number at `rate` frames a second.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Timecode {
+    pub start_frame: u32,
+    pub drop_frame: bool,
+    pub rate: u8,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -178,6 +190,7 @@ fn track(trak: &[u8], urls: &mut Vec<String>) -> Option<Track> {
     let kind = match hdlr.get(8..12) {
         Some(b"vide") => Kind::Video,
         Some(b"soun") => Kind::Audio,
+        Some(b"tmcd") => Kind::Timecode,
         _ => Kind::Other,
     };
     let edits = child(trak, b"edts")
@@ -189,7 +202,11 @@ fn track(trak: &[u8], urls: &mut Vec<String>) -> Option<Track> {
         urls.extend(external(dref));
     }
     let stbl = child(minf, b"stbl")?;
-    let entry = child(stbl, b"stsd").and_then(stsd).unwrap_or_default();
+    let mut entry = child(stbl, b"stsd").and_then(stsd).unwrap_or_default();
+    // #501: a rate over 16 bits is left out of an MP4 sample entry; the track's timescale is it.
+    if kind == Kind::Audio && entry.sample_rate == 0 {
+        entry.sample_rate = timescale;
+    }
     let samples = table(stbl).unwrap_or_default();
     Some(Track {
         kind,
@@ -249,13 +266,20 @@ fn stsd(body: &[u8]) -> Option<Entry> {
         ..Entry::default()
     };
     let rest = match &e.kind {
-        b"avc1" | b"avc3" | b"hvc1" | b"hev1" | b"mp4v" | b"jpeg" | b"apcn" => {
+        b"avc1" | b"avc3" | b"hvc1" | b"hev1" | b"mp4v" | b"jpeg" | b"apcn" | b"ap4h" => {
             let mut b = Bytes(e.body, 24);
             entry.width = b.u16()?;
             entry.height = b.u16()?;
             e.body.get(78..)?
         }
-        b"mp4a" | b"lpcm" | b"sowt" | b"twos" | b"alac" => {
+        b"tmcd" => {
+            let mut b = Bytes(e.body, 12);
+            let drop = b.u32()? & 1 == 1;
+            b.take(8)?;
+            entry.tmcd = Some((drop, b.u8()?));
+            return Some(entry);
+        }
+        b"mp4a" | b"lpcm" | b"fpcm" | b"sowt" | b"twos" | b"alac" => {
             let mut b = Bytes(e.body, 8);
             let version = b.u16()?;
             b.take(6)?;
@@ -357,7 +381,7 @@ fn table(stbl: &[u8]) -> Option<Vec<Sample>> {
                 cts: 0,
                 key: true,
             });
-            at += *size as u64;
+            at = at.saturating_add(*size as u64);
             s += 1;
         }
     }
@@ -368,9 +392,8 @@ fn table(stbl: &[u8]) -> Option<Vec<Sample>> {
         let run = stts.u32()?;
         let delta = stts.u32()? as i64;
         for _ in 0..run {
-            if let Some(s) = samples.get_mut(i) {
-                s.dts = t;
-            }
+            let Some(s) = samples.get_mut(i) else { break };
+            s.dts = t;
             t += delta;
             i += 1;
         }
@@ -384,9 +407,8 @@ fn table(stbl: &[u8]) -> Option<Vec<Sample>> {
             // Read signed, as FFmpeg does for version 0 too.
             let off = b.u32()? as i32 as i64;
             for _ in 0..run {
-                if let Some(o) = offsets_c.get_mut(i) {
-                    *o = off;
-                }
+                let Some(o) = offsets_c.get_mut(i) else { break };
+                *o = off;
                 i += 1;
             }
         }
@@ -398,12 +420,27 @@ fn table(stbl: &[u8]) -> Option<Vec<Sample>> {
         let n = b.u32()?;
         samples.iter_mut().for_each(|s| s.key = false);
         for _ in 0..n {
-            if let Some(s) = samples.get_mut(b.u32()? as usize - 1) {
+            let number = b.u32()? as usize;
+            if let Some(s) = number.checked_sub(1).and_then(|k| samples.get_mut(k)) {
                 s.key = true;
             }
         }
     }
     Some(samples)
+}
+
+impl Movie {
+    /// #501: the timecode track's entry and its sample, read from the file's bytes.
+    pub fn timecode(&self, data: &[u8]) -> Option<Timecode> {
+        let t = self.tracks.iter().find(|t| t.kind == Kind::Timecode)?;
+        let (drop_frame, rate) = t.entry.tmcd?;
+        let at = t.samples.first()?.offset as usize;
+        Some(Timecode {
+            start_frame: be32(data.get(at..at.checked_add(4)?)?),
+            drop_frame,
+            rate,
+        })
+    }
 }
 
 impl Track {
@@ -427,11 +464,11 @@ impl Track {
                 let end = if e.duration == 0 {
                     i64::MAX
                 } else {
-                    e.media_time + span
+                    e.media_time.saturating_add(span)
                 };
                 for (i, s) in self.samples.iter().enumerate() {
                     if s.cts >= e.media_time && s.cts < end {
-                        out.push((i, s.cts - e.media_time + at));
+                        out.push((i, (s.cts - e.media_time).saturating_add(at)));
                     }
                 }
                 at += span;
@@ -478,44 +515,120 @@ fn scale(v: u64, from: u32, to: u32) -> i64 {
     (v as u128 * to as u128 / from as u128) as i64
 }
 
-/// The DecoderSpecificInfo inside an `esds` body (an AudioSpecificConfig for AAC).
-pub fn decoder_info(esds: &[u8]) -> Option<&[u8]> {
-    let mut b = Bytes(esds, 4);
-    let len = |b: &mut Bytes| -> Option<usize> {
-        let mut n = 0usize;
-        for _ in 0..4 {
-            let c = b.u8()?;
-            n = n << 7 | (c & 0x7f) as usize;
-            if c & 0x80 == 0 {
-                break;
-            }
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{full_box, mp4_box};
+
+    fn be(words: &[u32]) -> Vec<u8> {
+        words.iter().flat_map(|w| w.to_be_bytes()).collect()
+    }
+
+    /// The samples of a movie of one track whose sample table holds `stbl`'s boxes.
+    fn samples(stbl: &[Vec<u8>]) -> Vec<Sample> {
+        let mdhd = full_box(b"mdhd", 0, &[0; 16]);
+        let hdlr = full_box(b"hdlr", 0, b"\0\0\0\0vide");
+        let minf = mp4_box(b"minf", &mp4_box(b"stbl", &stbl.concat()));
+        let trak = mp4_box(b"trak", &mp4_box(b"mdia", &[mdhd, hdlr, minf].concat()));
+        let mut movie = parse(&mp4_box(b"moov", &trak)).expect("a movie");
+        movie.tracks.remove(0).samples
+    }
+
+    /// Two 4-byte samples in one chunk.
+    fn two_samples() -> Vec<Vec<u8>> {
+        vec![
+            full_box(b"stsz", 0, &be(&[0, 2, 4, 4])),
+            full_box(b"stco", 0, &be(&[1, 100])),
+            full_box(b"stsc", 0, &be(&[1, 1, 2, 1])),
+        ]
+    }
+
+    /// A time table's body: `head`, then 64 runs of `u32::MAX` samples each.
+    fn long_runs(head: &[u32], value: u32) -> Vec<u8> {
+        be(&[head, &[u32::MAX, value].repeat(64)].concat())
+    }
+
+    fn track(edits: Vec<Edit>) -> Track {
+        Track {
+            kind: Kind::Video,
+            timescale: 1,
+            duration: 0,
+            edits,
+            entry: Entry::default(),
+            samples: vec![Sample {
+                offset: 0,
+                size: 0,
+                dts: 0,
+                cts: 1,
+                key: true,
+            }],
         }
-        Some(n)
-    };
-    if b.u8()? != 3 {
-        return None;
     }
-    len(&mut b)?;
-    b.take(2)?;
-    let flags = b.u8()?;
-    if flags & 0x80 != 0 {
-        b.take(2)?;
+
+    #[test]
+    fn a_64_bit_box_size_past_the_end_is_cut_at_it() {
+        let mut data = mp4_box(b"free", &[]);
+        data.extend_from_slice(&be(&[1]));
+        data.extend_from_slice(b"moov");
+        data.extend_from_slice(&u64::MAX.to_be_bytes());
+        assert!(parse(&data).is_some_and(|m| m.tracks.is_empty()));
     }
-    if flags & 0x40 != 0 {
-        let n = b.u8()? as usize;
-        b.take(n)?;
+
+    #[test]
+    fn decode_time_runs_past_the_last_sample_end_there() {
+        let mut stbl = two_samples();
+        stbl.push(full_box(b"stts", 0, &long_runs(&[65, 1, 10], 5)));
+        let got = crate::tests::finished(move || samples(&stbl)).expect("the probe returns");
+        assert_eq!(got.iter().map(|s| s.dts).collect::<Vec<_>>(), [0, 10]);
     }
-    if flags & 0x20 != 0 {
-        b.take(2)?;
+
+    #[test]
+    fn composition_offset_runs_past_the_last_sample_end_there() {
+        let mut stbl = two_samples();
+        stbl.push(full_box(b"stts", 0, &be(&[1, 2, 10])));
+        stbl.push(full_box(b"ctts", 0, &long_runs(&[65, 1, 3], 7)));
+        let got = crate::tests::finished(move || samples(&stbl)).expect("the probe returns");
+        assert_eq!(got.iter().map(|s| s.cts).collect::<Vec<_>>(), [3, 17]);
     }
-    if b.u8()? != 4 {
-        return None;
+
+    #[test]
+    fn a_sync_sample_numbered_zero_marks_no_sample() {
+        let mut stbl = two_samples();
+        stbl.push(full_box(b"stts", 0, &be(&[1, 2, 10])));
+        stbl.push(full_box(b"stss", 0, &be(&[2, 0, 2])));
+        let keys: Vec<bool> = samples(&stbl).iter().map(|s| s.key).collect();
+        assert_eq!(keys, [false, true]);
     }
-    len(&mut b)?;
-    b.take(13)?;
-    if b.u8()? != 5 {
-        return None;
+
+    #[test]
+    fn a_chunk_at_the_last_offset_keeps_its_samples() {
+        let mut chunk = be(&[1]);
+        chunk.extend_from_slice(&(u64::MAX - 1).to_be_bytes());
+        let mut stbl = two_samples();
+        stbl[1] = full_box(b"co64", 0, &chunk);
+        stbl.push(full_box(b"stts", 0, &be(&[1, 2, 10])));
+        let offsets: Vec<u64> = samples(&stbl).iter().map(|s| s.offset).collect();
+        assert_eq!(offsets, [u64::MAX - 1, u64::MAX]);
     }
-    let n = len(&mut b)?;
-    b.take(n)
+
+    #[test]
+    fn an_edit_that_starts_at_the_last_tick_presents_nothing_before_it() {
+        let t = track(vec![Edit {
+            duration: 1,
+            media_time: i64::MAX,
+            rate: 1,
+        }]);
+        assert_eq!(t.presented(1, true), []);
+    }
+
+    #[test]
+    fn an_edit_placed_at_the_last_tick_presents_its_sample_there() {
+        let edit = |duration, media_time| Edit {
+            duration,
+            media_time,
+            rate: 1,
+        };
+        let t = track(vec![edit(i64::MAX as u64, -1), edit(0, 0)]);
+        assert_eq!(t.presented(1, true), [(0, i64::MAX)]);
+    }
 }

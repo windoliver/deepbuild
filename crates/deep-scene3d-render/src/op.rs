@@ -40,6 +40,12 @@ pub(crate) struct MatOp {
     pub fade: [wgpu::RenderPipeline; 2],
     /// Its depth pipeline for a shadow map, when it writes its coverage (#446).
     pub shadow: Option<wgpu::RenderPipeline>,
+    /// Its pipelines as a transmissive part draws it and as a subsurface part's share takes it
+    /// (#486), each made the first time a prepared scene holds such a part.
+    pub glass: Option<wgpu::RenderPipeline>,
+    pub share: Option<wgpu::RenderPipeline>,
+    module: wgpu::ShaderModule,
+    pipeline_layout: wgpu::PipelineLayout,
     pub layout: wgpu::BindGroupLayout,
     /// Its texture inputs in binding order, after its uniform and sampler.
     pub textures: Vec<TexIn>,
@@ -72,6 +78,40 @@ impl MatOp {
     /// Whether it reads the opaque scene's copy.
     pub fn reads_backdrop(&self) -> bool {
         self.textures.contains(&TexIn::Backdrop)
+    }
+
+    /// Makes its glass pipeline, or its share pipeline with `share`, unless it has it; whether
+    /// it made one.
+    pub fn make(&mut self, d: &deep_gpu::counted::Wgpu, samples: u32, forward_z: bool, share: bool) -> bool {
+        if share && self.share.is_none() {
+            self.share = Some(crate::sss::share_pipeline(
+                d,
+                samples,
+                &self.pipeline_layout,
+                &self.module,
+                "op_sss_fs",
+            ));
+            return true;
+        }
+        if !share && self.glass.is_none() {
+            let planted = crate::Planted {
+                forward_z,
+                ..Default::default()
+            };
+            let glass = usize::from(crate::GLASS);
+            self.glass = Some(crate::shaded_clear_pipeline(
+                d,
+                samples,
+                &self.module,
+                &self.pipeline_layout,
+                &planted,
+                glass,
+                true,
+                "op_glass_fs",
+            ));
+            return true;
+        }
+        false
     }
 }
 
@@ -151,7 +191,7 @@ pub(crate) fn seed(doc_seed: u64, id: &str) -> u32 {
 /// operator check refuses it, it reads a texture or storage (which land with the 3D frame's
 /// targets), or the device rejects its pipeline.
 pub(crate) fn compile(
-    d: &wgpu::Device,
+    d: &deep_gpu::counted::Wgpu,
     scene: &str,
     groups: [&wgpu::BindGroupLayout; 3],
     forward_z: bool,
@@ -305,8 +345,7 @@ pub(crate) fn compile(
         return Err(format!("the device rejects its pipeline: {e}"));
     }
     let values = interp::inputs(&checked, &BTreeMap::new(), &BTreeMap::new());
-    let buffer = wgpu::util::DeviceExt::create_buffer_init(
-        d,
+    let buffer = d.create_buffer_init(
         &wgpu::util::BufferInitDescriptor {
             label: Some("scene3d material operator inputs"),
             contents: &emit::input_bytes(&checked, &values),
@@ -327,6 +366,10 @@ pub(crate) fn compile(
         blend_late,
         fade,
         shadow,
+        glass: None,
+        share: None,
+        module,
+        pipeline_layout: layout,
         textures,
         layout: inputs_layout,
         buffer,

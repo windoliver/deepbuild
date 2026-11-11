@@ -46,6 +46,9 @@ const SETTLE_TIMEOUT: Duration = Duration::from_secs(2);
 /// The criteria's wrong programs, each reachable only through the scenario's `planted`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Planted {
+    /// #544: a start_on run on a logic item's occurrences starts at the first frame its session
+    /// evaluates at or after the occurrence.
+    StartOnAtFirstFrame,
     PresentsUnnamedRemoval,
     DiffsItemsOnly,
     InlinesEveryIssue,
@@ -150,8 +153,17 @@ pub enum Planted {
     ChecksSkipUnknownKind,
     /// #403: a check kind no module in the build registers is INCONCLUSIVE.
     MissingKindInconclusive,
+    /// #408: film.layout takes its texts by the kinds text@1, vector@1, mark.text and counter,
+    /// not from the core's glyph-box array.
+    LayoutTextByKind,
+    /// #405: a control sweep audits its samples alone and bounds nothing between them.
+    SweepAuditsSamplesOnly,
     /// #306: a derived item's seed comes from a counter over expansion order.
     SeedsByExpansionOrder,
+    /// #2015: a repeat over elements seeds each derived item with the part's element count too.
+    EachSeedsByElementCount,
+    /// #2015: a repeat over faces walks the part's triangles, not its polygon view's faces.
+    EachFacePerTriangle,
     /// #306: a change of inputs re-expands the broken-out item too, over the writer's own.
     ReexpansionOverwritesBrokenOut,
     /// #306: the pack check never reads `requires.modules`.
@@ -272,6 +284,34 @@ pub enum Planted {
     AssumesBt601,
     /// #499: a video frame looked up by ⌊source time × the nominal frame rate⌋.
     LookupFloorsFrameRate,
+    /// #501: the video writer starts the timecode track at frame 0 whatever the start.
+    TimecodeTrackZero,
+    /// #501: the png writer stores premultiplied color under `alpha: straight`.
+    PngPremultipliesStraight,
+    /// #501: each frame's sample count rounded on its own, each span starting where the last ended.
+    SpanRoundsEachFrame,
+    /// #501: a frame's first sample rounded to the nearest instead of floored.
+    SpanRoundsStart,
+    /// #501: the GPU BLAKE3 joins each parent's two children in the wrong order.
+    ChunkTreeWrongOrder,
+    /// #1897: the GPU pixel hash and its CPU twin XOR each pixel's words with no term for where
+    /// it is, so no swap moves it.
+    HashXorsWithoutPosition,
+    /// #501: a range's timecode starts at the job's start label, not at its first frame's.
+    RangeRestartsTimecode,
+    /// #501: the export skips its readiness gate, starts and stops at the missing asset's first
+    /// frame, leaving its partial file.
+    ExportStartsThenStops,
+    /// #501: the png target's writer exports only the session's selected items.
+    TargetExportsSelection,
+    /// #501: the png target's writer writes a baked channel back into the document.
+    TargetWritesBakedChannel,
+    /// #501: media fills export.target@1's `png` with a reader that is its own writer.
+    TargetReaderIsWriter,
+    /// #501: the mixer's Linux build adds one 16-bit step to every sample.
+    MixerLinuxOneStep,
+    /// #501: the drop-frame labeller drops frame numbers in the tenth minutes too.
+    DropFrameEveryTenthMinute,
     /// #499: a canonical seek decodes its frame from the asset's short-GOP proxy.
     SeekReadsProxy,
     /// #498: the gate trusts a shipped panel: its own request to play sounds.
@@ -324,6 +364,10 @@ pub enum Planted {
     WakerIgnoresScheduleFrame,
     /// #1551: a restarted link sits out a full refresh before its first callback.
     LinkRestartsARefreshLate,
+    /// #1901: the fingerprint kept output is keyed by leaves out the source digest.
+    FingerprintWithoutSources,
+    /// #1901: `padded_key` keys the fixture by its memory, padding and all.
+    KeyHashesRawBytes,
 }
 
 /// The build's sealed canvas-module set, registered and sealed once at startup (#305: Registry
@@ -347,11 +391,15 @@ pub struct Startup {
     pub ignores_unknown_occlusion: bool,
     /// #200: a planted wrong `deep://registries` listing.
     pub listing: Option<crate::registries::Listing>,
+    /// #501: a run's wrong program given at startup (`--planted <name>`).
+    pub run_planted: Option<Planted>,
     /// #412: a planted wrong deep_kinds listing, sheet, dump, diff or gallery.
     pub kinds: Option<crate::kinds::Planted>,
     /// #415: a planted wrong first-party layout: pages@1 under a pack's cap, or nav.graph's
     /// validators trusting the header's link count.
     pub layouts: deep_canvas_sandbox::layouts::Planted,
+    /// #1901: the folder kept output lives in across processes (`--cache <dir>`).
+    pub cache: Option<std::path::PathBuf>,
 }
 
 /// How many times this process registered and sealed: counted where it happens, so the
@@ -537,6 +585,19 @@ pub enum Call {
         doc: String,
         runs: usize,
     },
+    /// #1901: the machine fingerprint kept output is keyed by.
+    Fingerprint,
+    /// #1901: a document's frame, capture or final at a time, through the kept-output cache.
+    Draw {
+        doc: String,
+        t: EvalTime,
+        output: &'static str,
+    },
+    /// #1901: the padded key input built twice, its padding from two seeds, and its keys.
+    PaddedKey {
+        fields: u64,
+        seeds: [u64; 2],
+    },
     Show(Box<Show>),
     Patch(Box<PatchCall>),
     Read {
@@ -602,11 +663,23 @@ pub enum Call {
     },
     /// An export of a document's current revision planned at its rates (#488).
     Export(crate::time::Export),
+    /// #501: an export through a sealed `export.target@1` entry.
+    ExportRun(crate::export::Job),
+    /// #501: a document's session state, read or set.
+    Session { doc: String, set: Option<Value> },
+    /// #501: the export's GPU hash pass on given BGRA8 frames.
+    FrameHash { frames: Vec<([u32; 2], String)>, software: bool },
+    /// #501: the cross-machine audio check on two float WAVs.
+    CrossMachine([String; 2]),
+    /// #1897: the GPU pixel hash on frames from the evidence store, beside its CPU twin.
+    PixelHash(Vec<([u32; 2], deep_gpu::pixel_hash::Format, String)>),
     /// A document's session played on a virtual display to `to` (#488).
     Play {
         doc: String,
         display_hz: u32,
         to: i64,
+        /// #501: list each presented frame's display time, time evaluated and hash.
+        presented: bool,
     },
     /// Seeking against playing, on canonical renders (#488).
     Determinism(crate::time::Determinism),
@@ -710,6 +783,8 @@ pub enum Call {
     Rearm(String),
     /// A panel's view drawn: its revision with the view's filters, isolation and lens (#383).
     View(String),
+    /// #501: what a panel's film viewer shows.
+    Viewer(String),
     /// Your words from a panel's ask box to a session, about what you point at (#384).
     Ask {
         panel: String,
@@ -735,6 +810,8 @@ pub enum Call {
     Verdict(String),
     /// Every verdict made on a claim, `stale` as of now (#403).
     Verdicts(String),
+    /// #405: an answer to the approval asks a geometry audit opened on a claim's requirement.
+    Answer { via: Option<Via>, claim: String, requirement: String, yes: bool },
     /// A fixture's snapshot on a backend, judged against the golden store (#138).
     Golden {
         fixture: String,
@@ -930,12 +1007,14 @@ pub struct Hub<'a> {
     pub look_def: Option<Value>,
     pub display_only: BTreeSet<String>,
     /// #427's planted `mode_ids_by_count`: each document's mode visible table, by item count.
-    pub mode_ids: BTreeMap<String, (usize, Vec<(String, [f64; 4])>)>,
+    pub mode_ids: BTreeMap<String, ModeIds>,
     pub renderer: Renderer,
     /// The scheduler every document session shares, with its content-key cache (#387).
     pub sched: Scheduler<'a>,
     /// The scenario's background jobs' progress (#857).
     pub background: Vec<crate::jobs::Progress>,
+    /// #501: each document's session state as `session` set it: its selection and view inputs.
+    pub session_state: BTreeMap<String, Value>,
     /// Each document's session.
     pub sessions: BTreeMap<String, DocSession>,
     /// Panels a `panel` call showed or hid.
@@ -943,6 +1022,8 @@ pub struct Hub<'a> {
     /// The GPU 3D revisions draw on (#378): unopened until the first, `None` inside where there
     /// is none.
     pub gpu3: Option<Option<crate::scene3d::Gpu3>>,
+    /// The GPU pixel hash's pipeline, built on the first canonical render it hashes (#405).
+    pub hash_pass: Option<deep_gpu::pixel_hash::PixelHash>,
     /// A 3D revision's snapshot drawn for the call being presented, with its size.
     pub pending3d: Option<Result<Raster, ()>>,
     /// Each panel's interaction scope (#383).
@@ -957,6 +1038,8 @@ pub struct Hub<'a> {
     pub asks: BTreeMap<String, Vec<crate::ask::Asked>>,
     /// The verdicts made on each claim, in the order made, each as recorded (#403).
     pub verdicts_made: BTreeMap<String, Vec<Value>>,
+    /// #405: the approval asks a geometry audit made, by ID, each with your answer once given.
+    pub audit_asks: BTreeMap<String, Option<bool>>,
     /// The pack store (#306): the versions admitted, and one row per offer.
     pub packs: Packs,
     pub pack_rows: Vec<crate::packs::Row>,
@@ -964,6 +1047,8 @@ pub struct Hub<'a> {
     pub pack_authors: BTreeMap<String, String>,
     /// Each document's expansions at its last check, for the replies that carry them.
     pub expansions: BTreeMap<String, Vec<Expansion>>,
+    /// #544's planted start_on: each session's first evaluated time since its revision loaded.
+    pub first_frames: BTreeMap<String, i64>,
     /// The displays, the windows on them and the card's placement (#400).
     pub placement: Placement,
     /// Terminals, streams and session pages (#402).
@@ -988,6 +1073,9 @@ pub struct Hub<'a> {
     /// The sandbox module's check-time work (#238).
     pub sandbox: crate::sandbox::Host,
 }
+
+/// A document's item count, and its mode visible table as first seen at that count.
+pub type ModeIds = (usize, Vec<(String, [f64; 4])>);
 
 /// A snapshot's straight RGBA, its size and each item's box in its pixels.
 pub type Raster = (Vec<u8>, [u16; 2], Vec<(String, [f64; 4])>);
@@ -1074,6 +1162,8 @@ impl<'a> Hub<'a> {
             overwrite_broken_out: scenario.planted == Some(Planted::ReexpansionOverwritesBrokenOut),
             skip_requires_modules: scenario.planted == Some(Planted::PackCheckSkipsRequiresModules),
             key_by_name: scenario.planted == Some(Planted::PacksKeyedByName),
+            each_by_count: scenario.planted == Some(Planted::EachSeedsByElementCount),
+            each_per_triangle: scenario.planted == Some(Planted::EachFacePerTriangle),
         };
         let mut hub = Hub {
             scenario,
@@ -1087,12 +1177,14 @@ impl<'a> Hub<'a> {
             look_def: None,
             display_only: BTreeSet::new(),
             mode_ids: BTreeMap::new(),
+            session_state: BTreeMap::new(),
             renderer: Renderer::new(),
             sched,
             sessions: BTreeMap::new(),
             background: Vec::new(),
             panels_shown: BTreeMap::new(),
             gpu3: None,
+            hash_pass: None,
             pending3d: None,
             scopes: BTreeMap::new(),
             serial: 0,
@@ -1106,10 +1198,12 @@ impl<'a> Hub<'a> {
             shown_at: BTreeMap::new(),
             asks: BTreeMap::new(),
             verdicts_made: BTreeMap::new(),
+            audit_asks: BTreeMap::new(),
             packs: Packs::new(pack_planted),
             pack_rows: Vec::new(),
             pack_authors: BTreeMap::new(),
             expansions: BTreeMap::new(),
+            first_frames: BTreeMap::new(),
             placement: Placement::open(
                 scenario.displays.clone(),
                 scenario.window,
@@ -1602,17 +1696,26 @@ impl<'a> Hub<'a> {
             Call::RelayClient(c) => crate::seams::relay_client(c, self.startup.network),
             Call::Migrate(to) => self.migrate(*to),
             Call::Keys { doc, runs } => self.keys(doc, *runs),
+            Call::Fingerprint => self.fingerprint_reply(),
+            Call::Draw { doc, t, output } => self.draw_reply(doc, t, output),
+            Call::PaddedKey { fields, seeds } => self.padded_key_reply(*fields, *seeds),
             Call::Fixtures => self.fixtures_reply(),
             Call::Schedule => self.startup.sealed.schedule(),
             Call::Eval(e) => self.eval(e),
             Call::Rate(r) => self.rate_reply(r),
             Call::Time { doc, text } => self.time_reply(doc, text),
             Call::Export(e) => self.export_reply(e),
+            Call::ExportRun(job) => self.export_run(job),
+            Call::Session { doc, set } => self.session_reply(doc, set.as_ref()),
+            Call::FrameHash { frames, software } => self.frame_hash(frames, *software),
+            Call::CrossMachine(wavs) => self.cross_machine(wavs),
+            Call::PixelHash(frames) => self.pixel_hash(frames),
             Call::Play {
                 doc,
                 display_hz,
                 to,
-            } => self.play(doc, *display_hz, *to),
+                presented,
+            } => self.play(doc, *display_hz, *to, *presented),
             Call::Determinism(d) => self.determinism(d),
             Call::Frames(f) => self.frames(f),
             Call::ShapedRuns(text) => self.shaped_runs(text),
@@ -1697,6 +1800,7 @@ impl<'a> Hub<'a> {
             Call::Rearm(on) => self.rearm(on),
             Call::See(panel) => self.see(panel),
             Call::View(panel) => self.view(panel),
+            Call::Viewer(panel) => self.viewer_reply(panel),
             Call::Ask {
                 panel,
                 session,
@@ -1715,6 +1819,7 @@ impl<'a> Hub<'a> {
             Call::Catalog => self.catalog_reply(),
             Call::Verdict(claim) => self.verdict_call(claim),
             Call::Verdicts(claim) => self.verdicts_call(claim),
+            Call::Answer { via, claim, requirement, yes } => self.answer_call(via.as_ref(), claim, requirement, *yes),
             Call::Golden { fixture, backend } => self.golden_reply(fixture, backend),
             Call::Record {
                 via,
@@ -2054,6 +2159,14 @@ impl<'a> Hub<'a> {
                 issues.push(unfit_issue(r.code, r.path));
             }
             issues.extend(self.inline_vectors(form));
+            // #544: a spawn's reads of a logic item's occurrences, checked against its emits
+            // before any step runs; then the logic items baked into the lists their readers read.
+            if !deep_canvas_media::planted("undeclared_field_reads_zero") {
+                issues.extend(crate::spawn::undeclared_issues(form));
+            }
+            if let Err(i) = self.inline_occurrences(form, &[]) {
+                issues.push(i);
+            }
         }
         // Mark set columns that read a column source, resolved and narrowed by the core's
         // column view at the frame's step (#397).
@@ -2151,6 +2264,7 @@ impl<'a> Hub<'a> {
         if let Some(session) = self.sessions.get_mut(&show.doc) {
             session.load(&mut self.sched, drawn_form.as_ref().unwrap_or(&doc));
         }
+        self.first_frames.remove(&show.doc);
         // #1732: render-back's geometry audit of the revision, on its frame at `t`.
         if show.include.iter().any(|i| matches!(i, Include::Audit)) {
             let audit = self.audit_of(&show.doc, show.t);

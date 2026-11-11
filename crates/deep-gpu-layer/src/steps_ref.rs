@@ -886,7 +886,6 @@ fn gpu(
     data: &Data,
     [w, h]: [u32; 2],
 ) -> Result<(Vec<u8>, Vec<[f64; 4]>), String> {
-    use wgpu::util::DeviceExt as _;
     let d = &device.device;
     let scope = deep_gpu::device::push_scope(d, wgpu::ErrorFilter::Validation);
     let runner = Runner::new(d, c.clone(), TARGET);

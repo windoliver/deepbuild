@@ -1,0 +1,497 @@
+The #2009 suite run once at base commit 0c4a4ec7 (this worktree's HEAD 96b462a6, the same tree after main's history
+rewrite; no implementation of #2009), on macOS arm64 (Mac, rustup 1.99.1, Node 24.22.0), with
+`NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 npx vitest run --root tests/acceptance/2009 --testTimeout=600000 --no-file-parallelism`
+(the checkout's path redacted to `<checkout>`).
+
+10 of 10 tests fail, each because the surface is absent, none in the harness:
+- 9 tests (ac1 2, ac2 4, ac3 2, ac4's checkpoint test) fail on "deep-physics builds": cargo answers
+  "error: no bin target named `deep-physics`". The base has no physics module, no Rapier in Cargo.lock.
+- ac4's public-API test fails on "a workspace crate depends on rapier3d (crates on a Rapier crate: none)", from
+  `cargo metadata --locked` of the base.
+The type-check, `node node_modules/typescript/bin/tsc -p tests/acceptance/2009/tsconfig.json`, exits 0.
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/2009
+
+ ❯ ac4-interface.test.ts (2 tests | 2 failed) 1521ms
+   ❯ #2009.e7924149 no Rapier type crosses the backend interface; a checkpoint of another backend version is refused at restore (2)
+     × #2009.e7924149 the physics crates' public API names no Rapier type and holds the world document's fields; rapier3d resolves to =0.36.1; the twin feature test-leaks-rapier is caught 771ms
+     × #2009.e7924149 a checkpoint records rapier3d 0.36.1 and restores to the bake's states; one of backend version 0.35.3 is refused at restore naming both versions, never loaded; the twin restore_ignores_version is caught 5ms
+ ❯ ac3-rolling-and-caps.test.ts (2 tests | 2 failed) 531ms
+   ❯ #2009.43ed60cb rolling_resistance, tangent_speed and a dynamic gear are refused on Rapier; a damped rolling ball slows as v0·e^(−2ct/7) (2)
+     × #2009.43ed60cb rolling_resistance 0.05, tangent_speed 1 m/s and a gear of two hinges in dynamic mode are each refused at check naming the field and rapier3d; at 0 and without the gear each world is admitted; each cap's twin is caught 3ms
+     × #2009.43ed60cb a solid ball of radius 0.1 m rolling at 2 m/s with angular damping 2/s slows below 0.05 m/s between 6 and 7.5 s (6.46 s predicted) 1ms
+ ❯ ac1-restitution.test.ts (2 tests | 2 failed) 543ms
+   ❯ #2009.59ac371b restitution_threshold is refused on Rapier; a 0.5 ball rebounds to a quarter of a 2 m drop, then rests (2)
+     × #2009.59ac371b restitution_threshold 1 m/s is refused at check naming solver/restitution_threshold and rapier3d; 0 is admitted; the twin that admits it is caught 2ms
+     × #2009.59ac371b with restitution_threshold 0 the ball rebounds to within 0.05 of a quarter of the 2 m drop, then rests 0ms
+ ❯ ac2-integrator.test.ts (4 tests | 4 failed) 616ms
+   ❯ #2009.67d10d73 free fall and rest match the discrete solution; bounce, spring and chain match the kit's tolerances (4)
+     × #2009.67d10d73 free fall: every step within 1e-5 m of ½·g·h²·N(N+1), 4.9152 m after 1 s; a box resting on the ground stays within 1e-5 m 4ms
+     × #2009.67d10d73 restitution 0.5 against 0.9 dropped 1 m: the first bounce within 3% of e²h under each combine rule 1ms
+     × #2009.67d10d73 a hanging spring (hz 2, damping_ratio 0, 4 kg): its period within 1% of 1 ÷ hz 1ms
+     × #2009.67d10d73 a pendulum chain of 5 ball-jointed links released level: its energy never more than 1% a second above its start over 10 s 1ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 10 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac1-restitution.test.ts > #2009.59ac371b restitution_threshold is refused on Rapier; a 0.5 ball rebounds to a quarter of a 2 m drop, then rests > #2009.59ac371b restitution_threshold 1 m/s is refused at check naming solver/restitution_threshold and rapier3d; 0 is admitted; the twin that admits it is caught
+AssertionError: deep-physics builds (cargo build --locked --bin deep-physics): expected 'cargo build --locked --bin deep-physi…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-physics failed:
++ error: no bin target named `deep-physics` in default-run packages
++ help: available bin targets:
++     deep-app
++     deep-canvas
++     deep-canvas-render
++     deep-contracts
++     deep-drive
++     deep-gpu
++     deep-graph
++     deep-hook
++     deep-input
++     deep-layout
++     deep-live
++     deep-logic
++     deep-motion
++     deep-panel-host
++     deep-panel-host-jit-control
++     deep-plain-words
++     deep-relay
++     deep-relay-suite
++     deep-replica
++     deep-replica-canvas
++     deep-salience
++     deep-sandbox
++     deep-sheet
++     deep-show
++     deep-text
++     deep-text-render
++
+
+ ❯ physicsBin helpers.ts:106:92
+    104|     built = { bin, error };
+    105|   }
+    106|   expect(built.error, `${PHYSICS_BIN} builds (cargo build --locked --b…
+       |                                                                                            ^
+    107|   return built.bin;
+    108| }
+ ❯ physics helpers.ts:114:25
+ ❯ ac1-restitution.test.ts:25:33
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/10]⎯
+
+ FAIL  ac1-restitution.test.ts > #2009.59ac371b restitution_threshold is refused on Rapier; a 0.5 ball rebounds to a quarter of a 2 m drop, then rests > #2009.59ac371b with restitution_threshold 0 the ball rebounds to within 0.05 of a quarter of the 2 m drop, then rests
+AssertionError: deep-physics builds (cargo build --locked --bin deep-physics): expected 'cargo build --locked --bin deep-physi…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-physics failed:
++ error: no bin target named `deep-physics` in default-run packages
++ help: available bin targets:
++     deep-app
++     deep-canvas
++     deep-canvas-render
++     deep-contracts
++     deep-drive
++     deep-gpu
++     deep-graph
++     deep-hook
++     deep-input
++     deep-layout
++     deep-live
++     deep-logic
++     deep-motion
++     deep-panel-host
++     deep-panel-host-jit-control
++     deep-plain-words
++     deep-relay
++     deep-relay-suite
++     deep-replica
++     deep-replica-canvas
++     deep-salience
++     deep-sandbox
++     deep-sheet
++     deep-show
++     deep-text
++     deep-text-render
++
+
+ ❯ physicsBin helpers.ts:106:92
+    104|     built = { bin, error };
+    105|   }
+    106|   expect(built.error, `${PHYSICS_BIN} builds (cargo build --locked --b…
+       |                                                                                            ^
+    107|   return built.bin;
+    108| }
+ ❯ physics helpers.ts:114:25
+ ❯ ac1-restitution.test.ts:34:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/10]⎯
+
+ FAIL  ac2-integrator.test.ts > #2009.67d10d73 free fall and rest match the discrete solution; bounce, spring and chain match the kit's tolerances > #2009.67d10d73 free fall: every step within 1e-5 m of ½·g·h²·N(N+1), 4.9152 m after 1 s; a box resting on the ground stays within 1e-5 m
+AssertionError: deep-physics builds (cargo build --locked --bin deep-physics): expected 'cargo build --locked --bin deep-physi…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-physics failed:
++ error: no bin target named `deep-physics` in default-run packages
++ help: available bin targets:
++     deep-app
++     deep-canvas
++     deep-canvas-render
++     deep-contracts
++     deep-drive
++     deep-gpu
++     deep-graph
++     deep-hook
++     deep-input
++     deep-layout
++     deep-live
++     deep-logic
++     deep-motion
++     deep-panel-host
++     deep-panel-host-jit-control
++     deep-plain-words
++     deep-relay
++     deep-relay-suite
++     deep-replica
++     deep-replica-canvas
++     deep-salience
++     deep-sandbox
++     deep-sheet
++     deep-show
++     deep-text
++     deep-text-render
++
+
+ ❯ physicsBin helpers.ts:106:92
+    104|     built = { bin, error };
+    105|   }
+    106|   expect(built.error, `${PHYSICS_BIN} builds (cargo build --locked --b…
+       |                                                                                            ^
+    107|   return built.bin;
+    108| }
+ ❯ physics helpers.ts:114:25
+ ❯ ac2-integrator.test.ts:32:32
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/10]⎯
+
+ FAIL  ac2-integrator.test.ts > #2009.67d10d73 free fall and rest match the discrete solution; bounce, spring and chain match the kit's tolerances > #2009.67d10d73 restitution 0.5 against 0.9 dropped 1 m: the first bounce within 3% of e²h under each combine rule
+AssertionError: deep-physics builds (cargo build --locked --bin deep-physics): expected 'cargo build --locked --bin deep-physi…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-physics failed:
++ error: no bin target named `deep-physics` in default-run packages
++ help: available bin targets:
++     deep-app
++     deep-canvas
++     deep-canvas-render
++     deep-contracts
++     deep-drive
++     deep-gpu
++     deep-graph
++     deep-hook
++     deep-input
++     deep-layout
++     deep-live
++     deep-logic
++     deep-motion
++     deep-panel-host
++     deep-panel-host-jit-control
++     deep-plain-words
++     deep-relay
++     deep-relay-suite
++     deep-replica
++     deep-replica-canvas
++     deep-salience
++     deep-sandbox
++     deep-sheet
++     deep-show
++     deep-text
++     deep-text-render
++
+
+ ❯ physicsBin helpers.ts:106:92
+    104|     built = { bin, error };
+    105|   }
+    106|   expect(built.error, `${PHYSICS_BIN} builds (cargo build --locked --b…
+       |                                                                                            ^
+    107|   return built.bin;
+    108| }
+ ❯ physics helpers.ts:114:25
+ ❯ ac2-integrator.test.ts:60:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/10]⎯
+
+ FAIL  ac2-integrator.test.ts > #2009.67d10d73 free fall and rest match the discrete solution; bounce, spring and chain match the kit's tolerances > #2009.67d10d73 a hanging spring (hz 2, damping_ratio 0, 4 kg): its period within 1% of 1 ÷ hz
+AssertionError: deep-physics builds (cargo build --locked --bin deep-physics): expected 'cargo build --locked --bin deep-physi…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-physics failed:
++ error: no bin target named `deep-physics` in default-run packages
++ help: available bin targets:
++     deep-app
++     deep-canvas
++     deep-canvas-render
++     deep-contracts
++     deep-drive
++     deep-gpu
++     deep-graph
++     deep-hook
++     deep-input
++     deep-layout
++     deep-live
++     deep-logic
++     deep-motion
++     deep-panel-host
++     deep-panel-host-jit-control
++     deep-plain-words
++     deep-relay
++     deep-relay-suite
++     deep-replica
++     deep-replica-canvas
++     deep-salience
++     deep-sandbox
++     deep-sheet
++     deep-show
++     deep-text
++     deep-text-render
++
+
+ ❯ physicsBin helpers.ts:106:92
+    104|     built = { bin, error };
+    105|   }
+    106|   expect(built.error, `${PHYSICS_BIN} builds (cargo build --locked --b…
+       |                                                                                            ^
+    107|   return built.bin;
+    108| }
+ ❯ physics helpers.ts:114:25
+ ❯ ac2-integrator.test.ts:83:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/10]⎯
+
+ FAIL  ac2-integrator.test.ts > #2009.67d10d73 free fall and rest match the discrete solution; bounce, spring and chain match the kit's tolerances > #2009.67d10d73 a pendulum chain of 5 ball-jointed links released level: its energy never more than 1% a second above its start over 10 s
+AssertionError: deep-physics builds (cargo build --locked --bin deep-physics): expected 'cargo build --locked --bin deep-physi…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-physics failed:
++ error: no bin target named `deep-physics` in default-run packages
++ help: available bin targets:
++     deep-app
++     deep-canvas
++     deep-canvas-render
++     deep-contracts
++     deep-drive
++     deep-gpu
++     deep-graph
++     deep-hook
++     deep-input
++     deep-layout
++     deep-live
++     deep-logic
++     deep-motion
++     deep-panel-host
++     deep-panel-host-jit-control
++     deep-plain-words
++     deep-relay
++     deep-relay-suite
++     deep-replica
++     deep-replica-canvas
++     deep-salience
++     deep-sandbox
++     deep-sheet
++     deep-show
++     deep-text
++     deep-text-render
++
+
+ ❯ physicsBin helpers.ts:106:92
+    104|     built = { bin, error };
+    105|   }
+    106|   expect(built.error, `${PHYSICS_BIN} builds (cargo build --locked --b…
+       |                                                                                            ^
+    107|   return built.bin;
+    108| }
+ ❯ physics helpers.ts:114:25
+ ❯ ac2-integrator.test.ts:106:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/10]⎯
+
+ FAIL  ac3-rolling-and-caps.test.ts > #2009.43ed60cb rolling_resistance, tangent_speed and a dynamic gear are refused on Rapier; a damped rolling ball slows as v0·e^(−2ct/7) > #2009.43ed60cb rolling_resistance 0.05, tangent_speed 1 m/s and a gear of two hinges in dynamic mode are each refused at check naming the field and rapier3d; at 0 and without the gear each world is admitted; each cap's twin is caught
+AssertionError: deep-physics builds (cargo build --locked --bin deep-physics): expected 'cargo build --locked --bin deep-physi…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-physics failed:
++ error: no bin target named `deep-physics` in default-run packages
++ help: available bin targets:
++     deep-app
++     deep-canvas
++     deep-canvas-render
++     deep-contracts
++     deep-drive
++     deep-gpu
++     deep-graph
++     deep-hook
++     deep-input
++     deep-layout
++     deep-live
++     deep-logic
++     deep-motion
++     deep-panel-host
++     deep-panel-host-jit-control
++     deep-plain-words
++     deep-relay
++     deep-relay-suite
++     deep-replica
++     deep-replica-canvas
++     deep-salience
++     deep-sandbox
++     deep-sheet
++     deep-show
++     deep-text
++     deep-text-render
++
+
+ ❯ physicsBin helpers.ts:106:92
+    104|     built = { bin, error };
+    105|   }
+    106|   expect(built.error, `${PHYSICS_BIN} builds (cargo build --locked --b…
+       |                                                                                            ^
+    107|   return built.bin;
+    108| }
+ ❯ physics helpers.ts:114:25
+ ❯ ac3-rolling-and-caps.test.ts:44:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/10]⎯
+
+ FAIL  ac3-rolling-and-caps.test.ts > #2009.43ed60cb rolling_resistance, tangent_speed and a dynamic gear are refused on Rapier; a damped rolling ball slows as v0·e^(−2ct/7) > #2009.43ed60cb a solid ball of radius 0.1 m rolling at 2 m/s with angular damping 2/s slows below 0.05 m/s between 6 and 7.5 s (6.46 s predicted)
+AssertionError: deep-physics builds (cargo build --locked --bin deep-physics): expected 'cargo build --locked --bin deep-physi…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-physics failed:
++ error: no bin target named `deep-physics` in default-run packages
++ help: available bin targets:
++     deep-app
++     deep-canvas
++     deep-canvas-render
++     deep-contracts
++     deep-drive
++     deep-gpu
++     deep-graph
++     deep-hook
++     deep-input
++     deep-layout
++     deep-live
++     deep-logic
++     deep-motion
++     deep-panel-host
++     deep-panel-host-jit-control
++     deep-plain-words
++     deep-relay
++     deep-relay-suite
++     deep-replica
++     deep-replica-canvas
++     deep-salience
++     deep-sandbox
++     deep-sheet
++     deep-show
++     deep-text
++     deep-text-render
++
+
+ ❯ physicsBin helpers.ts:106:92
+    104|     built = { bin, error };
+    105|   }
+    106|   expect(built.error, `${PHYSICS_BIN} builds (cargo build --locked --b…
+       |                                                                                            ^
+    107|   return built.bin;
+    108| }
+ ❯ physics helpers.ts:114:25
+ ❯ ac3-rolling-and-caps.test.ts:71:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/10]⎯
+
+ FAIL  ac4-interface.test.ts > #2009.e7924149 no Rapier type crosses the backend interface; a checkpoint of another backend version is refused at restore > #2009.e7924149 the physics crates' public API names no Rapier type and holds the world document's fields; rapier3d resolves to =0.36.1; the twin feature test-leaks-rapier is caught
+AssertionError: a workspace crate depends on rapier3d (crates on a Rapier crate: none): expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ ac4-interface.test.ts:68:218
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/10]⎯
+
+ FAIL  ac4-interface.test.ts > #2009.e7924149 no Rapier type crosses the backend interface; a checkpoint of another backend version is refused at restore > #2009.e7924149 a checkpoint records rapier3d 0.36.1 and restores to the bake's states; one of backend version 0.35.3 is refused at restore naming both versions, never loaded; the twin restore_ignores_version is caught
+AssertionError: deep-physics builds (cargo build --locked --bin deep-physics): expected 'cargo build --locked --bin deep-physi…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-physics failed:
++ error: no bin target named `deep-physics` in default-run packages
++ help: available bin targets:
++     deep-app
++     deep-canvas
++     deep-canvas-render
++     deep-contracts
++     deep-drive
++     deep-gpu
++     deep-graph
++     deep-hook
++     deep-input
++     deep-layout
++     deep-live
++     deep-logic
++     deep-motion
++     deep-panel-host
++     deep-panel-host-jit-control
++     deep-plain-words
++     deep-relay
++     deep-relay-suite
++     deep-replica
++     deep-replica-canvas
++     deep-salience
++     deep-sandbox
++     deep-sheet
++     deep-show
++     deep-text
++     deep-text-render
++
+
+ ❯ physicsBin helpers.ts:106:92
+    104|     built = { bin, error };
+    105|   }
+    106|   expect(built.error, `${PHYSICS_BIN} builds (cargo build --locked --b…
+       |                                                                                            ^
+    107|   return built.bin;
+    108| }
+ ❯ physics helpers.ts:114:25
+ ❯ ac4-interface.test.ts:91:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/10]⎯
+
+
+ Test Files  4 failed (4)
+      Tests  10 failed (10)
+   Start at  22:40:50
+   Duration  3.64s (tests 98%, transform 1%, import 1%)
+

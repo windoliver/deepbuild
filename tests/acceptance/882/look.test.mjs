@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { test } from 'node:test';
 import { AC, buildBin, repoRoot } from './common.mjs';
-import { judgeInkGuard, judgeLook } from './look-judge.mjs';
+import { judgeInkGuard } from './look-judge.mjs';
 
 /** `deep-canvas-render look`, one line per input, the answers in order. */
 function ask(inputs) {
@@ -27,9 +27,8 @@ function ask(inputs) {
   });
 }
 
-test(`${AC[1]} the shipped look passes its guard with the chrome roles in light and dark; the session readout at #b45309 fails it, naming the role, blocked and 0.044`, () => {
-  assert.deepEqual(judgeLook(ask), []);
-});
+// #882.98cbaa26's case is in redraft-1458/look.test.mjs: #1458 leaves the chrome two inks and disabled, so the case that
+// required a fourth ink tier was redrafted blind and swapped in with the owner's approval.
 
 test(`${AC[1]} (scope) the guard holds each ink tier to its contrast floor: a light tertiary ink in the ground's color is refused, naming it`, () => {
   assert.deepEqual(judgeInkGuard(ask), []);

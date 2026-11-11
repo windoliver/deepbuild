@@ -14,6 +14,7 @@ mod diag;
 pub mod env;
 pub mod flare;
 mod glass;
+pub mod held;
 pub mod local;
 pub mod maps;
 mod mesh;
@@ -26,6 +27,7 @@ pub mod shadow;
 pub mod sss;
 pub mod status;
 pub mod surface;
+mod sway;
 pub mod targets;
 pub mod water;
 
@@ -34,6 +36,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc, Mutex, MutexGuard};
 
 use bytemuck::{Pod, Zeroable};
+use deep_canvas_scene3d::gpu;
 use deep_canvas_scene3d::label::{half_fraction, AtlasPage, PAGE, PAGES};
 use deep_canvas_scene3d::light::{self, AlphaMode, LightKind, SHADED};
 use deep_canvas_scene3d::look::{Look3, ToneMap};
@@ -41,6 +44,7 @@ use deep_canvas_scene3d::module::{GEOMETRY_PASS, OUTPUT_PASS};
 use deep_canvas_scene3d::scene::{Adjust3, Depth, Facing, Layer3, PointShape, Scene, Shape, Solid};
 use deep_canvas_scene3d::sky::{Curve, Fog};
 use deep_canvas_scene3d::{clusters, cut};
+use deep_gpu::counted::Written;
 use deep_gpu::device::Device;
 use deep_gpu::encode::Job;
 use deep_gpu::render::{Determinism, Pass, RenderModule, Resolution, Target};
@@ -97,6 +101,16 @@ const LABEL: &str = include_str!("label.wgsl");
 const RESOLVE: &str = include_str!("resolve.wgsl");
 /// The pass that draws the key light's shadow map, in the frame's shadows place.
 pub const SHADOW_PASS: &str = "scene3d.shadow";
+/// The depth pyramid's declared cost per pixel of the frame (#1637): 0.385 ms at 1920 × 1080
+/// in the city walk, the median of four frames on an M5 Max (Mac17,10).
+pub const PYRAMID_NS_PER_PX: f32 = 0.186;
+/// The camera's occluders drawn depth-only before the pyramid is built from them (#1637).
+pub const OCCLUDER_PASS: &str = "scene3d.occluders";
+/// The occluders: a culled set whose mesh has at most this many indices (64 triangles) draws
+/// into the camera's prepass, so the prepass costs a fraction of the frame it saves.
+const OCCLUDER_INDICES: u32 = 192;
+/// Above this many records an item set is culled on the GPU as an instancer's batch is (#1637).
+const CULLED_ITEMS: usize = 256;
 /// The sky's pipeline, drawn first in the geometry pass behind everything (#422).
 pub const SKY_PASS: &str = "scene3d.sky";
 /// The puffs' pipeline (#422).
@@ -187,6 +201,9 @@ pub struct Planted {
     pub single_sample: bool,
     /// #1173: each frame's resolve blends in half of the previous frame's.
     pub resolve_accumulates: bool,
+    /// #486: a material operator that writes a lobe its material lacks turns the lobe on, compiled
+    /// the first time a frame draws its part, never in the warm-up.
+    pub missing_lobe_turned_on: bool,
     /// #428's and #481's shading plants as the shader's bits (scene3d.wgsl: `P_*`), 0 for none.
     pub lobes: u32,
     /// #446: the local maps' wrong programs.
@@ -197,6 +214,18 @@ pub struct Planted {
     pub ids_by_compacted_place: bool,
     /// #484: a batch draws the count its last frame's cull read back to the CPU.
     pub count_read_back: bool,
+    /// #1637: the occlusion test reads the pyramid the previous frame's prepass built.
+    pub pyramid_from_previous_frame: bool,
+    /// #1637: the camera's occlusion test also culls the cascades' lists.
+    pub occlusion_in_cascades: bool,
+    /// #1637: the camera's occlusion test also culls the probes' captures.
+    pub occlusion_in_probe_captures: bool,
+    /// #1903: one bind group made for each item every frame.
+    pub bind_group_per_item: bool,
+    /// #1903: every item's transform, 64 bytes, uploaded every frame.
+    pub uploads_every_transform: bool,
+    /// #1903: the warm-up at check makes a pipeline for each item, keyed by item, not by feature set.
+    pub warms_per_item: bool,
 }
 
 /// What one frame's preparation did (Render worker; Object; Dirty classes).
@@ -209,6 +238,8 @@ pub struct Counts {
     pub instances_written: u32,
     /// Compute culls run this frame: one per batch and view that changed (#484).
     pub culls: u32,
+    /// Whether this frame built the camera's depth pyramid (#1637).
+    pub pyramid: bool,
     /// Indexed indirect draws this frame, one per batch and view drawn (#484).
     pub indirect_draws: u32,
     /// Elements the CPU tested for a view this frame: only ever the reference's (#484).
@@ -479,11 +510,16 @@ struct LobeEntry {
 }
 
 /// A material's lobes as the shader reads them; `seed` its flake seed, the pattern seed's hash.
-fn lobe_entry(l: &light::Lobes, seed: u32, scale: f64) -> LobeEntry {
+/// With `apart` (a material operator writes its sheen, #486) the sheen's color is unweighted, and
+/// its weight is in the last row's w either way.
+fn lobe_entry(l: &light::Lobes, seed: u32, scale: f64, apart: bool) -> LobeEntry {
     let c = |v: [f64; 3], w: f64| [v[0] as f32, v[1] as f32, v[2] as f32, w as f32];
     LobeEntry {
         v: [
-            c(l.sheen, l.sheen_roughness),
+            c(
+                if apart { l.sheen_color } else { l.sheen },
+                l.sheen_roughness,
+            ),
             [
                 l.anisotropy as f32,
                 l.anisotropy_rotation as f32,
@@ -509,7 +545,7 @@ fn lobe_entry(l: &light::Lobes, seed: u32, scale: f64) -> LobeEntry {
                 f32::from_bits(seed),
                 l.amount as f32,
                 l.subsurface as f32,
-                0.0,
+                l.sheen_weight as f32,
             ],
         ],
     }
@@ -776,7 +812,7 @@ struct SegmentRecord {
 /// 0 below the smallest normal half, which `unpack2x16float` reads back.
 fn half_bits(x: f64) -> u32 {
     let x = x as f32;
-    if !(x >= 6.103_515_6e-5) {
+    if x.is_nan() || x < 6.103_515_6e-5 {
         return 0;
     }
     let b = x.min(65504.0).to_bits();
@@ -1049,6 +1085,18 @@ type LateDraw = (
     ),
 );
 
+/// A see-through draw: its mesh, its records and which, and its group 3; a glass part with a
+/// material operator draws through that operator's glass pipeline (#486).
+type ClearDraw = (
+    wgpu::Buffer,
+    wgpu::Buffer,
+    u32,
+    wgpu::Buffer,
+    u32,
+    wgpu::BindGroup,
+    Option<wgpu::RenderPipeline>,
+);
+
 /// A transmissive part (#428): drawn after the geometry pass over the opaque scene's copy.
 const GLASS: u8 = 5;
 
@@ -1062,13 +1110,17 @@ fn transmits(s: &Solid) -> bool {
 /// Whether a solid's subsurface lobe spreads (#481): an opaque or masked lit part drawn in the
 /// geometry pass by the scene shader, which the share pass draws again. Any other keeps its
 /// diffuse whole.
+/// Whether a solid's material operator writes any of `outputs` (#486).
+fn op_writes(s: &Solid, outputs: &[&str]) -> bool {
+    s.op.as_ref().is_some_and(|o| gpu::writes(&o.item, outputs))
+}
+
 fn spreads(s: &Solid) -> bool {
     s.material.is_some_and(|m| {
         m.lobes.subsurface > 0.0 && !m.unlit && m.catch.is_none() && !m.alpha_mode.see_through()
     }) && !s.per_pixel
         && !faded(s)
         && !transmits(s)
-        && s.op.is_none()
         && s.batch == 0
 }
 
@@ -1104,7 +1156,7 @@ pub(crate) fn extent([width, height]: [u32; 2]) -> wgpu::Extent3d {
 /// A 2D texture of `size`: one layer, one mip, one sample.
 /// #464: one frame's print pass, recorded after the output into where the output would write.
 struct PrintStage {
-    device: wgpu::Device,
+    device: deep_gpu::counted::Wgpu,
     printer: Arc<Mutex<print::Printer>>,
     params: print::Params,
     source: wgpu::TextureView,
@@ -1133,7 +1185,7 @@ impl PrintStage {
 }
 
 pub(crate) fn texture2d(
-    d: &wgpu::Device,
+    d: &deep_gpu::counted::Wgpu,
     label: &str,
     size: [u32; 2],
     format: wgpu::TextureFormat,
@@ -1144,7 +1196,7 @@ pub(crate) fn texture2d(
 
 /// `texture2d` with `samples` samples a pixel (#1173).
 fn multisampled(
-    d: &wgpu::Device,
+    d: &deep_gpu::counted::Wgpu,
     samples: u32,
     label: &str,
     size: [u32; 2],
@@ -1165,7 +1217,7 @@ fn multisampled(
 
 /// Writes `bytes`, `row` bytes a row, over layer `z` of `texture`, `size` texels.
 pub(crate) fn write_texture(
-    queue: &wgpu::Queue,
+    queue: &deep_gpu::counted::Queue,
     texture: &wgpu::Texture,
     z: u32,
     bytes: &[u8],
@@ -1191,7 +1243,7 @@ pub(crate) fn write_texture(
 
 /// A bind group binding `resources` at 0, 1, 2… in order.
 pub(crate) fn bind_group<const N: usize>(
-    d: &wgpu::Device,
+    d: &deep_gpu::counted::Wgpu,
     label: &str,
     layout: &wgpu::BindGroupLayout,
     resources: [wgpu::BindingResource<'_>; N],
@@ -1258,7 +1310,7 @@ pub(crate) fn target(
 /// nearest the light kept, with what lies past its near and far planes clamped where the device
 /// can (`fs`, its fragment stage, only discards).
 pub(crate) fn shadow_pipeline(
-    d: &wgpu::Device,
+    d: &deep_gpu::counted::Wgpu,
     label: &str,
     layout: &wgpu::PipelineLayout,
     module: &wgpu::ShaderModule,
@@ -1300,7 +1352,7 @@ pub(crate) fn shadow_pipeline(
 /// A render pipeline over `module`: its vertex stage `vs` reading `buffers`, and its fragment
 /// stage, when given, into `targets`.
 pub(crate) fn pipeline(
-    d: &wgpu::Device,
+    d: &deep_gpu::counted::Wgpu,
     label: &str,
     layout: Option<&wgpu::PipelineLayout>,
     module: &wgpu::ShaderModule,
@@ -1325,7 +1377,7 @@ pub(crate) fn pipeline(
 /// `cull`'s faces.
 #[allow(clippy::too_many_arguments)]
 fn culled(
-    d: &wgpu::Device,
+    d: &deep_gpu::counted::Wgpu,
     samples: u32,
     label: &str,
     layout: Option<&wgpu::PipelineLayout>,
@@ -1342,7 +1394,7 @@ fn culled(
 /// pipeline).
 #[allow(clippy::too_many_arguments)]
 fn specialized(
-    d: &wgpu::Device,
+    d: &deep_gpu::counted::Wgpu,
     samples: u32,
     label: &str,
     layout: Option<&wgpu::PipelineLayout>,
@@ -1656,6 +1708,24 @@ pub struct KeptRow {
     pub ids: Vec<u32>,
 }
 
+/// A culled list as its cull last wrote it: its rows, `count` of them.
+fn read_list(device: &Device, view: &cull::View) -> Vec<u32> {
+    let count = read_back(device, "scene3d kept", cull::ARGS, |e, staging| {
+        e.copy_buffer_to_buffer(&view.args, 0, staging, 0, cull::ARGS)
+    })
+    .map_or(0, |b| u32::from_le_bytes([b[4], b[5], b[6], b[7]]));
+    let size = u64::from(count.max(1)) * 4;
+    let kept = read_back(device, "scene3d kept", size, |e, staging| {
+        e.copy_buffer_to_buffer(&view.rows, 0, staging, 0, size)
+    });
+    kept.as_deref()
+        .map_or(&[][..], bytemuck::cast_slice::<u8, u32>)
+        .iter()
+        .take(count as usize)
+        .copied()
+        .collect()
+}
+
 fn view_name(k: usize) -> String {
     match k {
         cull::CAMERA => "view".to_string(),
@@ -1686,6 +1756,8 @@ struct Rows {
     culled: [wgpu::RenderPipeline; 2],
     shadow: wgpu::RenderPipeline,
     cut: Option<wgpu::RenderPipeline>,
+    /// The occluders' depth prepass (#1637), by the faces it culls: none, back, front.
+    prepass: [wgpu::RenderPipeline; 3],
 }
 
 /// The key sun's cascades (#422): one depth layer each, drawn only when its key changes.
@@ -1723,8 +1795,22 @@ struct EnvState {
 /// A camera as the effects read it: world to clip (column-major), the eye and the near plane.
 pub type Camera = ([f64; 16], [f64; 3], f64);
 
+/// What each per-frame uniform last uploaded, so a frame writes only the words that changed
+/// (#1903: at most 1 KB a frame while only the camera moves).
+#[derive(Default)]
+struct Uniforms {
+    env: Written,
+    lights: Written,
+    frame: Written,
+    display: Written,
+    internal: Written,
+    tone: Written,
+}
+
 pub struct Renderer {
     planted: Planted,
+    /// The buffer #1903's planted `uploads_every_transform` writes every item's transform into.
+    planted_transforms: Option<wgpu::Buffer>,
     /// The diagnostic views' pipelines (#427), made on first use.
     diag: Option<Box<diag::Pipes>>,
     /// Motion blur by velocity (#419): its pipelines, and this frame's pass when it blurs.
@@ -1803,6 +1889,8 @@ pub struct Renderer {
     ties: BTreeMap<String, u32>,
     flip: bool,
     tone_buffer: wgpu::Buffer,
+    /// What each per-frame uniform last uploaded (#1903).
+    written: Uniforms,
     output_layout: wgpu::BindGroupLayout,
     /// What the passes after the finish cover this frame (their layer, which the view holds), as
     /// the output pass's undithered mask; one clear texel with none (#418).
@@ -1822,6 +1910,14 @@ pub struct Renderer {
     sources: Vec<cull::Source>,
     /// Draws every batch from the CPU's f64 cull, the reference a GPU frame is judged against.
     cpu_cull: bool,
+    /// #1637: whether the camera's lists are culled by occlusion too (a view's `occlusion: off`
+    /// clears it); the camera's prepass depth and pyramid; and this frame's occluders and tests.
+    occlusion: bool,
+    pyramid: Option<Arc<cull::Pyramid>>,
+    occluders: Vec<(usize, RowDraw)>,
+    occlude_runs: Vec<cull::Occlude>,
+    /// This frame's light probes (#427), whose captures see every solid (#1637's report).
+    probe_ids: Vec<String>,
     capped: bool,
     /// Ambient occlusion's prepass, passes and the solids' group 2 (#418).
     ao: ao::Passes,
@@ -1879,6 +1975,8 @@ pub struct Renderer {
     /// Whether a mask-alpha part casts this frame: its sets draw into shadow maps only then.
     mask_casts: bool,
     meshes: BTreeMap<Shape, Mesh>,
+    /// The swaying meshes' rest vertices, weights and params (#2016).
+    sways: sway::Sways,
     batches: BTreeMap<String, Batch>,
     atlas: AtlasTexture,
     picks: BTreeMap<String, u32>,
@@ -2014,8 +2112,8 @@ fn contour(
         .collect();
     let sub = |a: [f64; 3], b: [f64; 3]| [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
     let mut faces_by_edge: BTreeMap<(u32, u32), Vec<bool>> = BTreeMap::new();
-    for t in mesh.indices.chunks_exact(3) {
-        let [a, b, c] = [t[0], t[1], t[2]].map(|i| ids[i as usize]);
+    for t in mesh.indices.as_chunks::<3>().0 {
+        let [a, b, c] = t.map(|i| ids[i as usize]);
         let [pa, pb, pc] = [a, b, c].map(|i| world[i as usize]);
         let (u, v) = (sub(pb, pa), sub(pc, pa));
         let n = [
@@ -2052,8 +2150,10 @@ fn contour(
     };
     let flat: Vec<[[f64; 2]; 3]> = mesh
         .indices
-        .chunks_exact(3)
-        .map(|t| [t[0], t[1], t[2]].map(|i| proj(world[ids[i as usize] as usize])))
+        .as_chunks::<3>()
+        .0
+        .iter()
+        .map(|t| t.map(|i| proj(world[ids[i as usize] as usize])))
         .collect();
     let covered = |q: [f64; 2]| {
         flat.iter().any(|[a, b, c]| {
@@ -2171,8 +2271,9 @@ fn instance(
 /// forward Z).
 /// The lights' bind group: the lights, the DFG table, the key sun's cascades and the
 /// environment's cubes.
+#[allow(clippy::too_many_arguments)]
 fn lights_bind(
-    d: &wgpu::Device,
+    d: &deep_gpu::counted::Wgpu,
     layout: &wgpu::BindGroupLayout,
     [lights, dfg, adjusts, lobes]: [&wgpu::Buffer; 4],
     oit: &oit::Oit,
@@ -2229,7 +2330,7 @@ fn cube_entry(binding: u32) -> wgpu::BindGroupLayoutEntry {
 }
 
 /// One texel of one cascade layer: the stand-in before the key sun's cascades are drawn.
-fn cascade_stub(d: &wgpu::Device) -> wgpu::TextureView {
+fn cascade_stub(d: &deep_gpu::counted::Wgpu) -> wgpu::TextureView {
     texture2d(
         d,
         "scene3d cascade stub",
@@ -2246,7 +2347,7 @@ fn cascade_stub(d: &wgpu::Device) -> wgpu::TextureView {
 /// A see-through solid's pipeline: depth-tested with no depth write and no object ID, blending
 /// premultiplied over what's behind it, or adding to it.
 fn clear_pipeline(
-    d: &wgpu::Device,
+    d: &deep_gpu::counted::Wgpu,
     samples: u32,
     module: &wgpu::ShaderModule,
     layout: &wgpu::PipelineLayout,
@@ -2260,7 +2361,7 @@ fn clear_pipeline(
 /// A fade's two pipelines through a material operator's fragment stage (#432): its depth pass,
 /// then its color where that depth is equal, both from the solids' one @invariant vertex stage.
 pub(crate) fn fade_pipelines(
-    d: &wgpu::Device,
+    d: &deep_gpu::counted::Wgpu,
     samples: u32,
     module: &wgpu::ShaderModule,
     layout: &wgpu::PipelineLayout,
@@ -2275,10 +2376,11 @@ pub(crate) fn fade_pipelines(
         .map(|k| shaded_clear_pipeline(d, samples, module, layout, &planted, k, false, fs))
 }
 
-/// [`clear_pipeline`] with `fs` as the color kinds' fragment stage.
+/// [`clear_pipeline`] with `fs` as the color kinds' fragment stage (and glass's, when it isn't
+/// `mesh_fs`).
 #[allow(clippy::too_many_arguments)]
-fn shaded_clear_pipeline(
-    d: &wgpu::Device,
+pub(crate) fn shaded_clear_pipeline(
+    d: &deep_gpu::counted::Wgpu,
     samples: u32,
     module: &wgpu::ShaderModule,
     layout: &wgpu::PipelineLayout,
@@ -2368,7 +2470,7 @@ fn shaded_clear_pipeline(
         Some((
             if per_pixel {
                 "oit_fs"
-            } else if glass {
+            } else if glass && fs == "mesh_fs" {
                 "glass_fs"
             } else {
                 fs
@@ -2383,7 +2485,7 @@ fn shaded_clear_pipeline(
 /// The per-pixel resolve's pipelines (#424): the full-screen composite over the linear target,
 /// and the per-pixel items drawn sorted, for a frame whose fragments ran out of room.
 fn oit_pipelines(
-    d: &wgpu::Device,
+    d: &deep_gpu::counted::Wgpu,
     module: &wgpu::ShaderModule,
     layout: &wgpu::PipelineLayout,
     forward_z: bool,
@@ -2444,7 +2546,7 @@ const LATE_NAMES: [&str; 2] = ["scene3d.blend_over_glass", "scene3d.add_over_gla
 
 #[allow(clippy::too_many_arguments)]
 fn draw_pipeline(
-    d: &wgpu::Device,
+    d: &deep_gpu::counted::Wgpu,
     samples: u32,
     module: &wgpu::ShaderModule,
     layout: &wgpu::PipelineLayout,
@@ -2486,7 +2588,7 @@ fn draw_pipeline(
 /// code folds away; a part with lobes draws through the one with it on.
 #[allow(clippy::too_many_arguments)]
 fn opaque_pipeline(
-    d: &wgpu::Device,
+    d: &deep_gpu::counted::Wgpu,
     samples: u32,
     module: &wgpu::ShaderModule,
     layout: &wgpu::PipelineLayout,
@@ -2527,7 +2629,7 @@ fn opaque_pipeline(
 /// A see-through part's material operator pipeline (#431): as a blend part draws, its
 /// premultiplied color over what's behind, depth-tested, writing no depth and no object ID.
 pub(crate) fn op_blend_pipeline(
-    d: &wgpu::Device,
+    d: &deep_gpu::counted::Wgpu,
     samples: u32,
     module: &wgpu::ShaderModule,
     layout: &wgpu::PipelineLayout,
@@ -2575,7 +2677,7 @@ pub(crate) fn op_blend_pipeline(
 /// The sky's pipeline: a full-screen triangle at the far plane, behind everything, writing no
 /// depth and no object ID.
 fn sky_pipeline(
-    d: &wgpu::Device,
+    d: &deep_gpu::counted::Wgpu,
     samples: u32,
     module: &wgpu::ShaderModule,
     layout: &wgpu::PipelineLayout,
@@ -2622,7 +2724,7 @@ struct Families {
 impl Families {
     /// Compiles the pipelines `layer` draws with that aren't yet, naming each in `names`; how
     /// many it compiled.
-    fn ensure(&mut self, d: &wgpu::Device, layer: &Layer3, names: &mut Vec<&'static str>) -> u32 {
+    fn ensure(&mut self, d: &deep_gpu::counted::Wgpu, layer: &Layer3, names: &mut Vec<&'static str>) -> u32 {
         let mut made = 0;
         let (module, draw, text, fz, samples) = (
             &self.module,
@@ -2905,8 +3007,7 @@ impl Renderer {
             LOBE_ENTRIES * std::mem::size_of::<LobeEntry>(),
         );
         let lights_buffer = uniform_buffer("scene3d lights", std::mem::size_of::<LightsUniform>());
-        let dfg_buffer = wgpu::util::DeviceExt::create_buffer_init(
-            d,
+        let dfg_buffer = d.create_buffer_init(
             &wgpu::util::BufferInitDescriptor {
                 label: Some("scene3d dfg"),
                 contents: bytemuck::cast_slice(&dfg_table()),
@@ -3200,6 +3301,7 @@ impl Renderer {
         };
         Renderer {
             planted,
+            planted_transforms: None,
             diag: None,
             epoch: device.epoch,
             frame_buffer,
@@ -3262,6 +3364,7 @@ impl Renderer {
             ties: BTreeMap::new(),
             flip: false,
             tone_buffer,
+            written: Uniforms::default(),
             output_layout,
             covered: (None, uncovered),
             mesh_pipeline,
@@ -3272,6 +3375,11 @@ impl Renderer {
             cull_runs: Vec::new(),
             sources: Vec::new(),
             cpu_cull: false,
+            occlusion: true,
+            pyramid: None,
+            occluders: Vec::new(),
+            occlude_runs: Vec::new(),
+            probe_ids: Vec::new(),
             capped: false,
             ao,
             scene_module: module.clone(),
@@ -3319,6 +3427,7 @@ impl Renderer {
                 RESOLVE_PASS,
             ],
             meshes: BTreeMap::new(),
+            sways: sway::Sways::default(),
             motion: motion::MotionPass::default(),
             motion_frame: None,
             core: targets::Core::default(),
@@ -3484,7 +3593,7 @@ impl Renderer {
     }
 
     /// The output pass's bind group: `linear` and the tone uniform.
-    fn output_bind(&self, d: &wgpu::Device, linear: &wgpu::TextureView) -> wgpu::BindGroup {
+    fn output_bind(&self, d: &deep_gpu::counted::Wgpu, linear: &wgpu::TextureView) -> wgpu::BindGroup {
         bind_group(
             d,
             "scene3d output",
@@ -3511,7 +3620,7 @@ impl Renderer {
         let view = match &layer {
             Some(l) => {
                 // Every pixel the layer draws over or one of its boxes owns, grown a pixel.
-                let mut alpha: Vec<u8> = l.rgba.chunks_exact(4).map(|p| p[3]).collect();
+                let mut alpha: Vec<u8> = l.rgba.as_chunks::<4>().0.iter().map(|p| p[3]).collect();
                 let [w, h] = l.size.map(f64::from);
                 for b in &l.covers {
                     let x0 = (b[0] - 1.0).floor().clamp(0.0, w) as usize;
@@ -4010,7 +4119,7 @@ impl Renderer {
         deep_gpu::alloc::outside(|| {
             device
                 .queue
-                .write_buffer(&self.env.buffer, 0, bytemuck::bytes_of(&u))
+                .write_changed(&self.env.buffer, &self.written.env, bytemuck::bytes_of(&u))
         });
     }
 
@@ -4202,7 +4311,7 @@ impl Renderer {
         deep_gpu::alloc::outside(|| {
             device
                 .queue
-                .write_buffer(&self.lights_buffer, 0, bytemuck::bytes_of(&u))
+                .write_changed(&self.lights_buffer, &self.written.lights, bytemuck::bytes_of(&u))
         });
     }
 
@@ -4254,10 +4363,20 @@ impl Renderer {
         }
     }
 
-    /// Uploads a builder's mesh the first time a batch draws one of its hash (#420).
+    /// Uploads a builder's mesh the first time a batch draws one of its hash (#420); a swaying
+    /// one's vertices the sway pass writes at every frame (#2016).
     fn built_mesh(&mut self, device: &Device, shape: Shape, m: &deep_canvas_scene3d::geom::Mesh) {
         if let std::collections::btree_map::Entry::Vacant(e) = self.meshes.entry(shape) {
-            e.insert(Mesh::of(device, m));
+            let mesh = match &m.sway {
+                Some(_) => {
+                    let v = mesh::vertices(m);
+                    let mesh = Mesh::swaying(device, &v, &m.indices);
+                    self.sways.add(device, shape, m, &v, &mesh.vertices);
+                    mesh
+                }
+                None => Mesh::of(device, m),
+            };
+            e.insert(mesh);
             self.counts.meshes_built += 1;
         }
     }
@@ -4267,7 +4386,18 @@ impl Renderer {
     /// one that can't draw, which this frame's counts name.
     fn material_op(&mut self, device: &Device, s: &Solid, see_through: bool) -> u64 {
         let Some(o) = &s.op else { return 0 };
-        let key = op::key(o);
+        let mut key = op::key(o);
+        // The planted missing_lobe_turned_on: a part whose operator writes a lobe its material
+        // lacks gets the lobe in its own pipeline, which the warm-up leaves out.
+        if self.planted.missing_lobe_turned_on
+            && op_writes(s, gpu::TABLE_LOBES)
+            && !s.material.as_ref().is_some_and(|m| m.lobes.on())
+        {
+            if self.log.warming {
+                return 0;
+            }
+            key ^= 0x9e37_79b9_7f4a_7c15;
+        }
         if !self.materials.contains_key(&key) {
             let layouts = [
                 &self.frame_layout,
@@ -4290,6 +4420,12 @@ impl Renderer {
             if made.is_ok() {
                 self.compiled += 1;
                 self.names.push("scene3d.material_op");
+                // Logged under the part that first needs it (#486), as the lobed sets are.
+                let items = vec![s.id.clone()];
+                self.made_for.insert(
+                    "scene3d.material_op",
+                    (items, created::feature_set(s), "view".into()),
+                );
             }
             self.materials.insert(key, made);
         }
@@ -4298,7 +4434,30 @@ impl Renderer {
             Ok(_) if see_through => {
                 "a see-through part's operator lands with see-through materials".into()
             }
-            Ok(_) => return key,
+            Ok(_) => {
+                // A transmissive part draws through the operator's glass pipeline, a spreading
+                // part's share through its share pipeline, each made when first needed (#486).
+                for (share, name) in [
+                    (false, "scene3d.material_op_glass"),
+                    (true, "scene3d.material_op_share"),
+                ] {
+                    let wanted = if share { spreads(s) } else { transmits(s) };
+                    let (samples, forward_z) = (self.families.samples, self.planted.forward_z);
+                    let made = match self.materials.get_mut(&key) {
+                        Some(Ok(m)) if wanted => m.make(&device.device, samples, forward_z, share),
+                        _ => false,
+                    };
+                    if made {
+                        self.compiled += 1;
+                        self.names.push(name);
+                        self.made_for.insert(
+                            name,
+                            (vec![s.id.clone()], created::feature_set(s), "view".into()),
+                        );
+                    }
+                }
+                return key;
+            }
         };
         if !self
             .counts
@@ -4332,6 +4491,7 @@ impl Renderer {
     /// Takes the frame's scene: the uniforms, each batch's changed records, and the batches
     /// whose draw key changed encoded again. What it did is in [`Renderer::counts`].
     pub fn prepare(&mut self, device: &Device, scene: &Scene, look: &Look3) {
+        self.probe_ids = scene.probes.iter().map(|p| p.id.clone()).collect();
         // Level of detail at this view (#425): a scene whose solids still carry bands or mesh
         // levels draws what scene3d's pure choice resolves them to.
         if leveled(scene) {
@@ -4360,6 +4520,13 @@ impl Renderer {
             }
         }
         self.watering = false;
+        self.planted_per_item(device, scene);
+        // The warm-up compiles the culled path whatever the item count, so the pipelines a
+        // document's check makes follow its feature sets, never how many items share them, and
+        // a set that grows past the line compiles nothing mid-play (#1903).
+        if self.log.warming {
+            self.ensure_rows(device);
+        }
         self.prepare_frame(device, scene, look);
         // #166: view3d's `reflection` target, made while a frame asks for it.
         let internal = self.internal();
@@ -4460,6 +4627,7 @@ impl Renderer {
         for layer in &scene.layers {
             self.prepare_batch(device, layer, &scene.camera);
         }
+        self.sways.move_all(device, scene);
         if !self.adjusts.is_empty() {
             deep_gpu::alloc::outside(|| {
                 device.queue.write_buffer(
@@ -4502,7 +4670,7 @@ impl Renderer {
         // #465: the mirror's view at t, drawn whole each frame.
         self.mirroring = match &scene.mirror {
             Some(m) => {
-                let planted = self.planted.clone();
+                let planted = self.planted;
                 let mirrorer = self
                     .mirrorer
                     .get_or_insert_with(|| Box::new(mirror::Mirrorer::new(device, planted)));
@@ -4815,7 +4983,9 @@ impl Renderer {
     /// aren't in this frame's table (#428).
     fn lobe_slot(&self, s: &Solid) -> Option<u32> {
         let lobes = s.material.as_ref().map(|m| drawn_lobes(s, &m.lobes));
-        let (Some(m), Some(lobes)) = (s.material.as_ref(), lobes.filter(|l| l.on())) else {
+        // A part whose operator writes a lobe has its entry while that lobe sits at 0 (#486).
+        let on = |l: &light::Lobes| l.on() || op_writes(s, gpu::TABLE_LOBES);
+        let (Some(m), Some(lobes)) = (s.material.as_ref(), lobes.filter(on)) else {
             return Some(0);
         };
         let scale = if s.mesh.is_some() {
@@ -4823,9 +4993,63 @@ impl Renderer {
         } else {
             1.0
         };
-        let e = lobe_entry(&lobes, m.pattern_seed, scale);
+        let e = lobe_entry(&lobes, m.pattern_seed, scale, op_writes(s, gpu::SHEEN));
         let k = lobes_at(&self.lobe_table, &e, subsurface_entry(&lobes).as_ref())?;
         Some((k as u32 + 1) << 16)
+    }
+
+    /// #1903's wrong programs, each reachable only through `--planted`: a bind group made for
+    /// each item every frame, every item's transform uploaded every frame, and a warm-up that
+    /// makes a pipeline for each item.
+    fn planted_per_item(&mut self, device: &Device, scene: &Scene) {
+        let p = self.planted;
+        if !(p.bind_group_per_item || p.uploads_every_transform || p.warms_per_item) {
+            return;
+        }
+        let d = &device.device;
+        let solids = || scene.layers.iter().flat_map(|l| &l.solids);
+        if p.bind_group_per_item {
+            for _ in solids() {
+                bind_group(d, "planted per item", &self.frame_layout, [self.frame_buffer.as_entire_binding()]);
+            }
+        }
+        if p.uploads_every_transform {
+            let bytes: Vec<u8> = solids()
+                .flat_map(|s| {
+                    let m = s.model;
+                    let rows = [m[0], m[1], m[2], [0.0, 0.0, 0.0, 1.0]];
+                    rows.into_iter().flatten().flat_map(|v| (v as f32).to_le_bytes())
+                })
+                .collect();
+            let size = bytes.len().max(64) as u64;
+            if self.planted_transforms.as_ref().is_none_or(|b| b.size() < size) {
+                self.planted_transforms = Some(d.create_buffer(&wgpu::BufferDescriptor {
+                    label: Some("planted transforms"),
+                    size,
+                    usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+                    mapped_at_creation: false,
+                }));
+            }
+            if let Some(b) = &self.planted_transforms {
+                device.queue.write_buffer(b, 0, &bytes);
+            }
+        }
+        if p.warms_per_item && self.log.warming {
+            let module = d.create_shader_module(wgpu::ShaderModuleDescriptor {
+                label: Some("planted per item"),
+                source: wgpu::ShaderSource::Wgsl("@compute @workgroup_size(1) fn main() {}".into()),
+            });
+            for s in solids() {
+                d.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                    label: Some(&s.id),
+                    layout: None,
+                    module: &module,
+                    entry_point: Some("main"),
+                    compilation_options: Default::default(),
+                    cache: None,
+                });
+            }
+        }
     }
 
     /// [`Renderer::prepare`] for a scene that differs from the last one it prepared only in its
@@ -4838,6 +5062,7 @@ impl Renderer {
         look: &Look3,
         moved: &[(usize, usize)],
     ) {
+        self.planted_per_item(device, scene);
         // See-through parts reorder as the camera moves, so a frame holding one prepares whole;
         // so does one whose level of detail the view chooses (#425).
         if self.planted.encodes_every_frame
@@ -4895,6 +5120,7 @@ impl Renderer {
             for layer in &scene.layers {
                 self.prepare_batch(device, layer, &scene.camera);
             }
+            self.sways.move_all(device, scene);
             self.update_culls(device);
             return;
         }
@@ -4929,6 +5155,7 @@ impl Renderer {
         }
         self.counts.instances_written += written;
         self.counts.replayed += scene.layers.len() as u32;
+        self.sways.move_all(device, scene);
         self.update_culls(device);
     }
 
@@ -4981,6 +5208,25 @@ impl Renderer {
                 )
             };
             let opaque = mesh(None);
+            let prepass = [None, Some(wgpu::Face::Back), Some(wgpu::Face::Front)].map(|cull| {
+                culled(
+                    d,
+                    samples,
+                    OCCLUDER_PASS,
+                    Some(&shadow_layout),
+                    module,
+                    ("mesh_row_vs", &buffers),
+                    Some(("occluder_fs", &[])),
+                    Some(wgpu::DepthStencilState {
+                        format: DEPTH,
+                        depth_write_enabled: Some(true),
+                        depth_compare: Some(wgpu::CompareFunction::GreaterEqual),
+                        stencil: Default::default(),
+                        bias: Default::default(),
+                    }),
+                    cull,
+                )
+            });
             let culled = [mesh(Some(wgpu::Face::Back)), mesh(Some(wgpu::Face::Front))];
             let shadow = shadow_pipeline(
                 d,
@@ -4997,13 +5243,17 @@ impl Renderer {
                 culled,
                 shadow,
                 cut: None,
+                prepass,
             });
-            self.compiled += 4;
+            self.compiled += 7;
             self.names.extend([
                 "scene3d.rows",
                 "scene3d.rows_back",
                 "scene3d.rows_front",
                 "scene3d.rows_shadow",
+                OCCLUDER_PASS,
+                "scene3d.occluders_back",
+                "scene3d.occluders_front",
             ]);
         }
         let capped = self.capped;
@@ -5042,16 +5292,51 @@ impl Renderer {
         let plants = self.planted.cull;
         let read_back = self.planted.count_read_back;
         let stale = &self.cascaded.stale;
+        // #1637: the camera's lists are culled by this frame's depth too, unless a view turned it
+        // off or the frame is the CPU's reference; the planted program culls the cascades' too.
+        let occluding = self.occlusion && !self.cpu_cull && !self.planted.forward_z;
+        let occluded = |k: usize| {
+            occluding
+                && (k == cull::CAMERA
+                    || (self.planted.occlusion_in_cascades && k >= cull::CASCADES))
+        };
+        self.occluders.clear();
+        if occluding {
+            // The prepass depth and pyramid are made only while a list is culled (#2189).
+            let culled = self
+                .order
+                .iter()
+                .filter_map(|id| self.batches.get(id))
+                .any(|b| b.solids.values().chain(b.casters.values()).any(|s| s.cull.is_some()));
+            if let Some(t) = self.targets.as_ref().filter(|_| culled) {
+                let samples = self.families.samples;
+                if self
+                    .pyramid
+                    .as_ref()
+                    .is_none_or(|p| p.size != t.size || p.samples != samples)
+                {
+                    self.pyramid = Some(Arc::new(deep_gpu::alloc::outside(|| {
+                        cull::Pyramid::new(&device.device, &rows.kernels, t.size, samples)
+                    })));
+                }
+            }
+            if let Some(p) = &self.pyramid {
+                p.write(&device.queue, &self.camera.0, plants.occlusion_by_centre);
+            }
+        }
         for id in &self.order {
             let Some(batch) = self.batches.get_mut(id) else {
                 continue;
             };
-            for (key, set) in batch.solids.iter_mut().chain(batch.casters.iter_mut()) {
+            let sets = batch.solids.iter_mut().map(|s| (s, false));
+            for ((key, set), caster) in sets.chain(batch.casters.iter_mut().map(|s| (s, true))) {
                 let (Some(c), Some(records)) = (set.cull.as_mut(), set.buffer.as_ref()) else {
                     continue;
                 };
                 let item = set.owners.first().and_then(|o| o.split('#').next());
                 let item = item.unwrap_or_default().to_string();
+                // A caster set draws only into the shadow maps, so the camera never tests it.
+                let occluded = |k: usize| occluded(k) && !(caster && k == cull::CAMERA);
                 for (k, clip) in views.iter().enumerate() {
                     let Some(clip) = clip else { continue };
                     // The planted path: this frame draws the count the last one wrote.
@@ -5080,23 +5365,113 @@ impl Renderer {
                             .collect();
                         self.counts.cpu_culled += set.models.len() as u32;
                         c.write_kept(device, &rows.kernels, records, k, &kept);
-                    } else if let Some(run) = c.cull(
-                        device,
-                        &rows.kernels,
-                        records,
-                        k,
-                        clip,
-                        set.revision,
-                        &set.bounds,
-                        plants,
-                        read_back,
-                    ) {
-                        self.counts.culls += 1;
-                        self.cull_runs.push(run);
+                    } else {
+                        let (run, test) = c.cull(
+                            device,
+                            &rows.kernels,
+                            records,
+                            k,
+                            clip,
+                            set.revision,
+                            &set.bounds,
+                            plants,
+                            read_back,
+                            occluded(k) && self.pyramid.is_some(),
+                        );
+                        if let Some(run) = run {
+                            self.counts.culls += 1;
+                            self.cull_runs.push(run);
+                        }
+                        self.occlude_runs.extend(test);
+                    }
+                }
+                // The camera's occluders: low sets drawn from the camera's frustum list.
+                let mesh = self.meshes.get(&key.0);
+                if let (Some(view), Some(mesh)) = (&c.frustum[cull::CAMERA], mesh) {
+                    if occluded(cull::CAMERA) && mesh.count <= OCCLUDER_INDICES {
+                        let faces = ((key.1 >> CULL_SHIFT) as usize).min(2);
+                        self.occluders.push((
+                            faces,
+                            (
+                                mesh.vertices.clone(),
+                                mesh.indices.clone(),
+                                c.records.clone(),
+                                view.rows.clone(),
+                                view.args.clone(),
+                            ),
+                        ));
                     }
                 }
             }
         }
+    }
+
+    /// The camera's occlusion step this frame (#1637): its occluders' depth, the pyramid built
+    /// from it, and each list's test; `None` when no list is culled by occlusion.
+    fn occlusion_job(&mut self) -> Option<Job> {
+        let tests = std::mem::take(&mut self.occlude_runs);
+        let occluders = std::mem::take(&mut self.occluders);
+        if tests.is_empty() {
+            return None;
+        }
+        let pyramid = self.pyramid.clone()?;
+        let pipelines = self.rows.as_ref()?.prepass.clone();
+        let frame = self.frame_bind.clone();
+        let profiler = self.profiler.clone();
+        let previous = self.planted.pyramid_from_previous_frame;
+        self.counts.pyramid = true;
+        Some(Box::new(move |encoder| {
+            // Every clear before the timed passes: on Metal a pass's timestamps read 0 right after one.
+            for t in &tests {
+                t.clear(encoder);
+            }
+            // The planted program tests against what the pyramid holds from the frame before.
+            if previous {
+                for t in &tests {
+                    t.record(encoder, &pyramid);
+                }
+            }
+            timed(&profiler, OCCLUDER_PASS, encoder, |encoder, timestamps| {
+                let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some(OCCLUDER_PASS),
+                    color_attachments: &[],
+                    depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                        view: &pyramid.depth,
+                        depth_ops: Some(wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(0.0),
+                            store: wgpu::StoreOp::Store,
+                        }),
+                        stencil_ops: None,
+                    }),
+                    timestamp_writes: timestamps,
+                    occlusion_query_set: None,
+                    multiview_mask: None,
+                });
+                pass.set_bind_group(0, &frame, &[]);
+                for (faces, (vertices, indices, records, rows, args)) in &occluders {
+                    pass.set_pipeline(&pipelines[*faces]);
+                    pass.set_bind_group(4, records, &[]);
+                    pass.set_vertex_buffer(0, vertices.slice(..));
+                    pass.set_vertex_buffer(1, rows.slice(..));
+                    pass.set_index_buffer(indices.slice(..), wgpu::IndexFormat::Uint32);
+                    pass.draw_indexed_indirect(args, 0);
+                }
+            });
+            match &profiler {
+                Some(p) => {
+                    let p = lock(p);
+                    let q = p.begin_pass_query(cull::PYRAMID_PASS, encoder);
+                    pyramid.record(encoder, q.compute_pass_timestamp_writes());
+                    p.end_query(encoder, q);
+                }
+                None => pyramid.record(encoder, None),
+            }
+            if !previous {
+                for t in &tests {
+                    t.record(encoder, &pyramid);
+                }
+            }
+        }))
     }
 
     /// The frame's uniforms, outlines and shadow, and its atlas pages.
@@ -5287,9 +5662,10 @@ impl Renderer {
         };
         deep_gpu::alloc::outside(|| {
             let q = &device.queue;
-            q.write_buffer(&self.frame_buffer, 0, bytemuck::bytes_of(&frame));
-            q.write_buffer(&self.outlines.display, 0, bytemuck::bytes_of(&display));
-            q.write_buffer(&self.outlines.internal, 0, bytemuck::bytes_of(&inside));
+            let w = &self.written;
+            q.write_changed(&self.frame_buffer, &w.frame, bytemuck::bytes_of(&frame));
+            q.write_changed(&self.outlines.display, &w.display, bytemuck::bytes_of(&display));
+            q.write_changed(&self.outlines.internal, &w.internal, bytemuck::bytes_of(&inside));
         });
         self.prepare_outlines(device, scene);
         // A scene of materials shades the key sun's shadow through its cascades (#422); one of
@@ -5308,6 +5684,12 @@ impl Renderer {
         let scores = light::scores(&scene.lights, &scene.camera);
         let shadowed = light::shadowed(&scene.lights, &policy, &scene.shadowing, &scores);
         self.prepare_locals(device, scene, &frame, &shadowed.kept);
+        // A warm-up's prepare (#432) records no pass, so its maps stay undrawn: keyed as drawn,
+        // the frame after it would sample empty maps (#2186). The next frame draws them.
+        if self.log.warming {
+            self.cascaded.keys = [None; 4];
+            self.locals.forget();
+        }
         let mut dropped = shadowed.dropped;
         dropped.sort();
         if self.ies.upload(device, &scene.distributions) {
@@ -5379,7 +5761,7 @@ impl Renderer {
         deep_gpu::alloc::outside(|| {
             device
                 .queue
-                .write_buffer(&self.tone_buffer, 0, bytemuck::bytes_of(&tone))
+                .write_changed(&self.tone_buffer, &self.written.tone, bytemuck::bytes_of(&tone))
         });
         self.ground = [
             decode(scene.ground[0]),
@@ -5474,7 +5856,7 @@ impl Renderer {
                 BLEND
             }
         };
-        for k in 0..6 {
+        for (k, &name) in CLEAR_NAMES.iter().enumerate() {
             let of_kind = |s: &&Solid| {
                 clear(s) && usize::from(kind_of(s)) == if k == 3 { usize::from(FADE) } else { k }
             };
@@ -5482,7 +5864,7 @@ impl Renderer {
             if wanted && self.clear_pipelines[k].is_none() {
                 let items: Vec<String> = layer.solids.iter().filter(of_kind).map(|s| created::item_of(&s.id).to_string()).collect();
                 let set = layer.solids.iter().find(of_kind).map(created::feature_set).unwrap_or_default();
-                self.made_for.insert(CLEAR_NAMES[k], (items, set, "view".into()));
+                self.made_for.insert(name, (items, set, "view".into()));
                 self.clear_pipelines[k] = Some(clear_pipeline(
                     &device.device,
                     self.families.samples,
@@ -5493,7 +5875,7 @@ impl Renderer {
                     k == usize::from(GLASS) || k == usize::from(PER_PIXEL),
                 ));
                 self.compiled += 1;
-                self.names.push(CLEAR_NAMES[k]);
+                self.names.push(name);
             }
         }
         // Blend and add parts draw after the opaque copy whenever there is one: for glass, or
@@ -5535,8 +5917,11 @@ impl Renderer {
         } else {
             self.filter_taps
         };
-        // A batch above the line needs its pipelines before it encodes (#484).
-        if layer.solids.iter().any(|s| s.batch != 0 && !clear(s)) {
+        // A batch above the line needs its pipelines before it encodes (#484), and so may a set
+        // of items above it (#1637).
+        if layer.solids.len() > CULLED_ITEMS
+            || layer.solids.iter().any(|s| s.batch != 0 && !clear(s))
+        {
             self.ensure_rows(device);
         }
         for s in &layer.solids {
@@ -5547,7 +5932,11 @@ impl Renderer {
             let tie = self.ties.get(&s.id).copied().unwrap_or(0);
             // A see-through part blends through its material operator (#431); the other
             // see-through kinds still refuse one.
-            let op = self.material_op(device, s, clear(s) && !matches!(kind_of(s), BLEND | FADE));
+            let op = self.material_op(
+                device,
+                s,
+                clear(s) && !matches!(kind_of(s), BLEND | FADE | GLASS),
+            );
             let maps = match (&s.maps, &s.material) {
                 (Some(m), Some(_)) => self.maps.group(&device.device, &device.queue, m, taps),
                 _ => 0,
@@ -5673,7 +6062,8 @@ impl Renderer {
         let lobe_table = &mut self.lobe_table;
         let mut lobes_of = |s: &Solid| -> u32 {
             let lobes = s.material.as_ref().map(|m| drawn_lobes(s, &m.lobes));
-            let (Some(m), Some(lobes)) = (s.material.as_ref(), lobes.filter(|l| l.on())) else {
+            let on = |l: &light::Lobes| l.on() || op_writes(s, gpu::TABLE_LOBES);
+            let (Some(m), Some(lobes)) = (s.material.as_ref(), lobes.filter(on)) else {
                 return 0;
             };
             // The flakes hash the material's pattern seed with the cell.
@@ -5684,7 +6074,7 @@ impl Renderer {
             } else {
                 1.0
             };
-            let e = lobe_entry(&lobes, m.pattern_seed, scale);
+            let e = lobe_entry(&lobes, m.pattern_seed, scale, op_writes(s, gpu::SHEEN));
             let sub = subsurface_entry(&lobes);
             let k = match lobes_at(lobe_table, &e, sub.as_ref()) {
                 Some(k) => k,
@@ -5739,18 +6129,19 @@ impl Renderer {
             set.lower |= s.mask.is_some_and(|m| m.lower);
             set.subsurface |= spreads(s);
             slot.1 = set.count as u32;
-            if slot.0 .3 != 0 {
-                // One box per set: its elements share the set's shape, so its mesh's bounds.
-                if set.count == 0 {
-                    set.bounds = s.mesh.as_ref().map_or([[-0.5; 3], [0.5; 3]], |m| {
-                        let b = m.bounds();
-                        [b[0].map(f64::from), b[1].map(f64::from)]
-                    });
-                }
+            // A set's records share one mesh, so one set of bounds: an instancer's prototype's,
+            // or the items' shape's (#1637).
+            if set.count == 0 {
+                set.bounds = s.mesh.as_ref().map_or([[-0.5; 3], [0.5; 3]], |m| {
+                    let b = m.reach();
+                    [b[0].map(f64::from), b[1].map(f64::from)]
+                });
+            }
+            if slot.0.3 != 0 {
                 set.elements.push(s.row);
-                if self.cpu_cull {
-                    set.models.push(s.model);
-                }
+            }
+            if self.cpu_cull {
+                set.models.push(s.model);
             }
             // The planted wrong program writes an element's place in its draw as its ID.
             if by_position {
@@ -5779,9 +6170,19 @@ impl Renderer {
                 let item = o.split('#').next()?;
                 self.sources.iter().find(|s| s.instancer == item)
             });
+            // Items above the line cull as an instancer's batch does (#1637), unless they draw
+            // through a material operator, the lobes' pipeline or the mask caster, which a row
+            // list doesn't.
+            let items = key.3 == 0
+                && key.2 == 0
+                && key.1 & (LOBES_BIT | MASK_BIT) == 0
+                && set.count > CULLED_ITEMS;
+            if key.3 == 0 && !items {
+                set.cull = None;
+            }
             match (&self.rows, self.meshes.get(&key.0), &set.buffer) {
                 (Some(rows), Some(mesh), Some(records))
-                    if key.3 != 0
+                    if (key.3 != 0 || items)
                         && set.cull.as_ref().is_none_or(|c| {
                             c.made_for != made_for || c.from_output() != source.is_some()
                         }) =>
@@ -5894,6 +6295,7 @@ impl Renderer {
                 set.generation,
                 u64::from(set.len()),
                 u64::from(set.cull.as_ref().is_some_and(cull::Culled::from_output)),
+                u64::from(set.cull.is_some()),
             ]);
         }
         for (family, set) in [(10, &batch.lines), (11, &batch.points), (12, &batch.labels)] {
@@ -5947,7 +6349,7 @@ impl Renderer {
     fn share_draws(&self) -> Vec<sss::ShareDraw> {
         let mut draws = Vec::new();
         for id in &self.order {
-            for ((shape, maps, _, _), set) in &self.batches[id].solids {
+            for ((shape, maps, op, _), set) in &self.batches[id].solids {
                 let (true, None, Some(buffer), Some(mesh)) = (
                     set.subsurface,
                     &set.cull,
@@ -5956,13 +6358,19 @@ impl Renderer {
                 ) else {
                     continue;
                 };
+                // A part with a material operator takes its share through it (#486).
+                let (group, own) = match self.see_through_op(*op, *maps) {
+                    Some((m, g)) if m.share.is_some() => (g.clone(), m.share.clone()),
+                    _ => (self.maps.by_index(*maps & MAPS_INDEX).clone(), None),
+                };
                 draws.push((
                     mesh.vertices.clone(),
                     mesh.indices.clone(),
                     mesh.count,
                     buffer.clone(),
                     set.len(),
-                    self.maps.by_index(*maps & MAPS_INDEX).clone(),
+                    group,
+                    own,
                 ));
             }
         }
@@ -5971,16 +6379,7 @@ impl Renderer {
 
     /// The per-pixel items' draws in see-through order, for the sorted fallback (#424).
     #[allow(clippy::type_complexity)]
-    fn per_pixel_draws(
-        &self,
-    ) -> Vec<(
-        wgpu::Buffer,
-        wgpu::Buffer,
-        u32,
-        wgpu::Buffer,
-        u32,
-        wgpu::BindGroup,
-    )> {
+    fn per_pixel_draws(&self) -> Vec<ClearDraw> {
         self.clear_kind_draws(PER_PIXEL)
     }
 
@@ -6046,17 +6445,7 @@ impl Renderer {
 
     /// Every see-through draw of `kind` across the batches, in layer order then back to front.
     #[allow(clippy::type_complexity)]
-    fn clear_kind_draws(
-        &self,
-        of: u8,
-    ) -> Vec<(
-        wgpu::Buffer,
-        wgpu::Buffer,
-        u32,
-        wgpu::Buffer,
-        u32,
-        wgpu::BindGroup,
-    )> {
+    fn clear_kind_draws(&self, of: u8) -> Vec<ClearDraw> {
         let mut draws = Vec::new();
         for id in &self.order {
             let batch = &self.batches[id];
@@ -6065,13 +6454,21 @@ impl Renderer {
             };
             for (k, ((shape, maps), kind)) in batch.clear_draws.iter().enumerate() {
                 if let (true, Some(mesh)) = (*kind == of, self.meshes.get(shape)) {
+                    let op = batch.clear_ops.get(k).copied().unwrap_or(0);
+                    let (group, own) = match self.see_through_op(op, *maps) {
+                        Some((m, g)) if of == GLASS && m.glass.is_some() => {
+                            (g.clone(), m.glass.clone())
+                        }
+                        _ => (self.maps.by_index(*maps).clone(), None),
+                    };
                     draws.push((
                         mesh.vertices.clone(),
                         mesh.indices.clone(),
                         mesh.count,
                         buffer.clone(),
                         k as u32,
-                        self.maps.by_index(*maps).clone(),
+                        group,
+                        own,
                     ));
                 }
             }
@@ -6261,9 +6658,37 @@ impl Renderer {
         self.ao.frame(&self.frame_bind, solids)
     }
 
+    /// What the GPU drew for `solid` in the frame just drawn (#2016): the gust its sway used,
+    /// with one, and each vertex of the mesh it draws from, through its model, in world m.
+    pub fn read_sway(
+        &self,
+        device: &Device,
+        solid: &Solid,
+    ) -> Option<(Option<f32>, Vec<[f64; 3]>)> {
+        let mesh = self.meshes.get(&solid.shape)?;
+        let size = mesh.vertices.size();
+        let bytes = read_back(device, "scene3d drawn vertices", size, |e, staging| {
+            e.copy_buffer_to_buffer(&mesh.vertices, 0, staging, 0, size)
+        })?;
+        let m = &solid.model;
+        let positions = bytemuck::cast_slice::<u8, f32>(&bytes)
+            .chunks_exact(mesh::FLOATS)
+            .map(|v| {
+                let p = [v[0], v[1], v[2]].map(f64::from);
+                [0, 1, 2].map(|r| m[r][0] * p[0] + m[r][1] * p[1] + m[r][2] * p[2] + m[r][3])
+            })
+            .collect();
+        let gust = solid
+            .sway
+            .and_then(|_| self.sways.gust(device, solid.shape));
+        Some((gust, positions))
+    }
+
     /// Every culled list as its cull last wrote it, read once the frame has drawn (#484). Nothing
-    /// a frame draws reads this.
+    /// a frame draws reads this. An instancer's rows only; a probe's capture keeps every element
+    /// (#1637), less those the camera's occlusion test hid under the planted program.
     pub fn read_kept(&self, device: &Device) -> Vec<KeptRow> {
+        let hidden = self.hidden_from_camera(device);
         let mut rows = Vec::new();
         for id in &self.order {
             let Some(batch) = self.batches.get(id) else {
@@ -6271,6 +6696,9 @@ impl Renderer {
             };
             for (key, set) in batch.solids.iter().chain(&batch.casters) {
                 let Some(c) = &set.cull else { continue };
+                if key.3 == 0 {
+                    continue;
+                }
                 let stable: Vec<u32> = set
                     .owners
                     .iter()
@@ -6284,25 +6712,26 @@ impl Renderer {
                 let item = set.owners.first().and_then(|o| o.split('#').next());
                 for (k, view) in c.views.iter().enumerate() {
                     let Some(view) = view else { continue };
-                    let count = read_back(device, "scene3d kept", cull::ARGS, |e, staging| {
-                        e.copy_buffer_to_buffer(&view.args, 0, staging, 0, cull::ARGS)
-                    })
-                    .map_or(0, |b| u32::from_le_bytes([b[4], b[5], b[6], b[7]]));
-                    let size = u64::from(count.max(1)) * 4;
-                    let kept = read_back(device, "scene3d kept", size, |e, staging| {
-                        e.copy_buffer_to_buffer(&view.rows, 0, staging, 0, size)
-                    });
-                    let words = kept
-                        .as_deref()
-                        .map_or(&[][..], bytemuck::cast_slice::<u8, u32>);
                     rows.push(KeptRow {
                         item: item.unwrap_or_default().to_string(),
                         view: view_name(k),
                         batch: batch_name(key),
-                        ids: words
+                        ids: read_list(device, view)
                             .iter()
-                            .take(count as usize)
                             .map(|r| stable.get(*r as usize).copied().unwrap_or(u32::MAX))
+                            .collect(),
+                    });
+                }
+                for probe in &self.probe_ids {
+                    rows.push(KeptRow {
+                        item: item.unwrap_or_default().to_string(),
+                        view: format!("probe:{probe}"),
+                        batch: batch_name(key),
+                        ids: (0..set.count)
+                            .filter_map(|r| {
+                                let o = set.owners.get(r)?;
+                                (!hidden.contains(o)).then(|| stable[r])
+                            })
                             .collect(),
                     });
                 }
@@ -6311,8 +6740,121 @@ impl Renderer {
         rows
     }
 
+    /// Which whole solids each pass drew, by ID, read once the frame has drawn (#1637): a culled
+    /// set of items as its list kept them, every other set's solids whole. The camera's passes
+    /// are `view`, the key light's map `key`, cascade k `cascade<k>`, and each probe's capture
+    /// `probe:<id>`, which sees every solid. Nothing a frame draws reads this.
+    pub fn read_kept_items(&self, device: &Device) -> Vec<(String, Vec<String>)> {
+        let hidden = self.hidden_from_camera(device);
+        let mut views: Vec<usize> = vec![cull::CAMERA];
+        if self.shadow.clip.is_some() {
+            views.push(cull::KEY_MAP);
+        }
+        views.extend((0..self.cascaded.list.len()).map(|i| cull::CASCADES + i));
+        let mut out: Vec<(String, Vec<String>)> =
+            views.iter().map(|k| (view_name(*k), Vec::new())).collect();
+        let mut seen = Vec::new();
+        for id in &self.order {
+            let Some(batch) = self.batches.get(id) else {
+                continue;
+            };
+            let sets = batch
+                .solids
+                .iter()
+                .map(|s| (s, false))
+                .chain(batch.casters.iter().map(|s| (s, true)));
+            for ((key, set), caster) in sets {
+                if set.cull.is_some() && key.3 != 0 {
+                    continue;
+                }
+                let owners = &set.owners[..set.count.min(set.owners.len())];
+                seen.extend(owners.iter().cloned());
+                for (slot, k) in views.iter().enumerate() {
+                    // A caster set draws only into the shadow maps.
+                    let drawn: Vec<String> =
+                        match set.cull.as_ref().and_then(|c| c.views[*k].as_ref()) {
+                            _ if caster && *k == cull::CAMERA => Vec::new(),
+                            Some(view) => read_list(device, view)
+                                .iter()
+                                .filter_map(|r| owners.get(*r as usize).cloned())
+                                .collect(),
+                            None => owners.to_vec(),
+                        };
+                    out[slot].1.extend(drawn);
+                }
+            }
+            let clear = &batch.clear.owners[..batch.clear.count.min(batch.clear.owners.len())];
+            seen.extend(clear.iter().cloned());
+            out[0].1.extend(clear.iter().cloned());
+        }
+        for probe in &self.probe_ids {
+            let kept = seen
+                .iter()
+                .filter(|o| !hidden.contains(*o))
+                .cloned()
+                .collect();
+            out.push((format!("probe:{probe}"), kept));
+        }
+        out
+    }
+
+    /// Under the planted program that culls the probes' captures by the camera's occlusion test,
+    /// the solids that test hid this frame: in the camera's frustum list and not in its list.
+    fn hidden_from_camera(&self, device: &Device) -> BTreeSet<String> {
+        let mut hidden = BTreeSet::new();
+        if !self.planted.occlusion_in_probe_captures {
+            return hidden;
+        }
+        for batch in self.order.iter().filter_map(|id| self.batches.get(id)) {
+            for set in batch.solids.values() {
+                let Some(c) = &set.cull else { continue };
+                let (Some(frustum), Some(view)) =
+                    (&c.frustum[cull::CAMERA], &c.views[cull::CAMERA])
+                else {
+                    continue;
+                };
+                let kept: BTreeSet<u32> = read_list(device, view).into_iter().collect();
+                for r in read_list(device, frustum)
+                    .into_iter()
+                    .filter(|r| !kept.contains(r))
+                {
+                    if let Some(o) = set.owners.get(r as usize) {
+                        hidden.insert(o.clone());
+                    }
+                }
+            }
+        }
+        hidden
+    }
+
+    /// What the depth pyramid's pass prices this frame at, in ms, when the frame built one
+    /// (#1637): its declared cost per pixel at the frame's internal size.
+    pub fn declared_ms(&self) -> Vec<(&'static str, f64)> {
+        match (&self.pyramid, self.counts.pyramid) {
+            (Some(p), true) => vec![(
+                cull::PYRAMID_PASS,
+                f64::from(PYRAMID_NS_PER_PX) * f64::from(p.size[0]) * f64::from(p.size[1]) / 1e6,
+            )],
+            _ => Vec::new(),
+        }
+    }
+
+    /// Turns the camera's occlusion cull on or off: off, its lists are the frustum's (a view's
+    /// `occlusion: off`, #1637).
+    pub fn set_occlusion(&mut self, on: bool) {
+        self.occlusion = on;
+    }
+
     pub fn counts(&self) -> &Counts {
         &self.counts
+    }
+
+    /// Drops every batch's encoding, so the next frame that prepares encodes each batch once:
+    /// a warm-up compiles pipelines, it draws no frame (#1903).
+    pub fn forget_encodings(&mut self) {
+        for b in self.batches.values_mut() {
+            b.bundle = None;
+        }
     }
 
     /// The key light's shadow map: the solids of every batch drawn depth-only from the light.
@@ -6710,7 +7252,7 @@ impl Renderer {
                         pass.set_pipeline(pipeline);
                         pass.draw(0..3, 0..1);
                         pass.set_pipeline(fallback);
-                        for (vertices, indices, count, instances, k, maps) in draws {
+                        for (vertices, indices, count, instances, k, maps, _) in draws {
                             pass.set_bind_group(3, maps, &[]);
                             pass.set_vertex_buffer(0, vertices.slice(..));
                             pass.set_vertex_buffer(1, instances.slice(..));
@@ -6786,14 +7328,21 @@ impl Renderer {
             let profiler = self.profiler.clone();
             jobs.push((
                 CULL_PASS.into(),
-                Box::new(move |encoder| {
-                    timed(&profiler, CULL_PASS, encoder, |encoder, _| {
-                        for run in &runs {
-                            run.record(encoder);
-                        }
-                    })
+                Box::new(move |encoder| match &profiler {
+                    Some(p) => {
+                        let p = lock(p);
+                        let q = p.begin_pass_query(CULL_PASS, encoder);
+                        cull::Run::record_all(&runs, encoder, q.compute_pass_timestamp_writes());
+                        p.end_query(encoder, q);
+                    }
+                    None => cull::Run::record_all(&runs, encoder, None),
                 }),
             ));
+        }
+        // #1637: the camera's occluders, its pyramid and the occlusion tests, before anything draws
+        // from the lists they keep.
+        if let Some(job) = self.occlusion_job() {
+            jobs.push((cull::PYRAMID_PASS.into(), job));
         }
         if let Some(s) = shadow {
             jobs.push((SHADOW_PASS.into(), s));
@@ -7364,6 +7913,9 @@ impl Renderer {
         for run in std::mem::take(&mut self.cull_runs) {
             run.record(encoder);
         }
+        if let Some(job) = self.occlusion_job() {
+            job(encoder);
+        }
         let Some(t) = self.targets.as_ref() else {
             return;
         };
@@ -7441,8 +7993,7 @@ impl Renderer {
                 ],
             })
             .collect();
-        let buffer = wgpu::util::DeviceExt::create_buffer_init(
-            &device.device,
+        let buffer = device.device.create_buffer_init(
             &wgpu::util::BufferInitDescriptor {
                 label: Some("scene3d puffs"),
                 contents: bytemuck::cast_slice(&records),
@@ -7591,8 +8142,8 @@ impl Renderer {
         let empty = self.clear_depth() as f32;
         let [w, h] = t.size.map(f64::from);
         let mut out = Vec::with_capacity(raw.len());
-        for (k, z) in raw.chunks_exact(4).enumerate() {
-            let z = f32::from_le_bytes([z[0], z[1], z[2], z[3]]);
+        for (k, z) in raw.as_chunks::<4>().0.iter().enumerate() {
+            let z = f32::from_le_bytes(*z);
             let d = if z == empty {
                 f32::INFINITY
             } else {
@@ -7993,14 +8544,7 @@ fn per_pixel_pass(
     [linear, ids, depth]: [&wgpu::TextureView; 3],
     pipeline: &wgpu::RenderPipeline,
     binds: &[wgpu::BindGroup; 4],
-    draws: &[(
-        wgpu::Buffer,
-        wgpu::Buffer,
-        u32,
-        wgpu::Buffer,
-        u32,
-        wgpu::BindGroup,
-    )],
+    draws: &[ClearDraw],
 ) {
     let load = wgpu::Operations {
         load: wgpu::LoadOp::Load,
@@ -8031,7 +8575,7 @@ fn per_pixel_pass(
         pass.set_bind_group(i as u32, b, &[]);
     }
     pass.set_pipeline(pipeline);
-    for (vertices, indices, count, instances, k, maps) in draws {
+    for (vertices, indices, count, instances, k, maps, _) in draws {
         pass.set_bind_group(3, maps, &[]);
         pass.set_vertex_buffer(0, vertices.slice(..));
         pass.set_vertex_buffer(1, instances.slice(..));
@@ -8092,14 +8636,7 @@ fn glass_pass(
     [linear, ids, depth]: [&wgpu::TextureView; 3],
     pipeline: Option<&wgpu::RenderPipeline>,
     binds: &[wgpu::BindGroup; 3],
-    draws: &[(
-        wgpu::Buffer,
-        wgpu::Buffer,
-        u32,
-        wgpu::Buffer,
-        u32,
-        wgpu::BindGroup,
-    )],
+    draws: &[ClearDraw],
     late: &[LateDraw],
     timestamps: Option<wgpu::RenderPassTimestampWrites<'_>>,
 ) {
@@ -8132,12 +8669,12 @@ fn glass_pass(
     for (i, b) in binds.iter().enumerate() {
         pass.set_bind_group(i as u32, b, &[]);
     }
-    if let Some(pipeline) = pipeline {
-        pass.set_pipeline(pipeline);
-    }
-    for (vertices, indices, count, instances, k, maps) in
-        draws.iter().filter(|_| pipeline.is_some())
-    {
+    for (vertices, indices, count, instances, k, maps, own) in draws {
+        // A part with a material operator draws through its own glass pipeline (#486).
+        let Some(p) = own.as_ref().or(pipeline) else {
+            continue;
+        };
+        pass.set_pipeline(p);
         pass.set_bind_group(3, maps, &[]);
         pass.set_vertex_buffer(0, vertices.slice(..));
         pass.set_vertex_buffer(1, instances.slice(..));
@@ -8371,6 +8908,18 @@ impl Module3 {
                 writes: vec!["rows"],
                 resolution: Resolution::Full,
                 ns_per_px: 0.0,
+                determinism: Determinism::SameMachine,
+            },
+            // The camera's occluders and the depth pyramid built from them (#1637): its cost is the
+            // pyramid's, a read of every sample and the levels above.
+            Pass {
+                name: cull::PYRAMID_PASS.into(),
+                place: "compute",
+                order: u32::MAX,
+                reads: vec!["rows"],
+                writes: vec!["rows"],
+                resolution: Resolution::Full,
+                ns_per_px: PYRAMID_NS_PER_PX,
                 determinism: Determinism::SameMachine,
             },
             // The key sun's cascades (#422), each drawn only when its key changed.

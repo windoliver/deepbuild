@@ -70,14 +70,14 @@ pub struct Plants {
     canonical_climbs: bool,
     /// #429's: the emitter's and the check's planted programs; a render-back that draws
     /// live-only operators; a core that calls a frame drawn with a fallback settled.
-    ops: (
+    pub(crate) ops: (
         deep_canvas_effects::emit::Options,
         deep_canvas_effects::check::CheckOptions,
     ),
     render_back_live_only: bool,
     settles_with_fallback: bool,
     /// #431's: a core that builds the velocity and emission targets for every frame.
-    builds_unread_targets: bool,
+    pub(crate) builds_unread_targets: bool,
     /// #1173's: scene3d's sample count (session3::msaa_planted) and the claimed one.
     planted: Option<Planted>,
 }
@@ -259,7 +259,7 @@ struct Args {
     calibration: bool,
 }
 
-fn pair(v: &Value) -> Option<[u32; 2]> {
+pub(crate) fn pair(v: &Value) -> Option<[u32; 2]> {
     let a = v.as_array().filter(|a| a.len() == 2)?;
     Some([
         u32::try_from(a[0].as_u64()?).ok().filter(|n| *n > 0)?,
@@ -586,7 +586,7 @@ struct Rev {
     #[cfg(feature = "test-meter")]
     placed: Vec<crate::testgpu::Placed>,
     #[cfg(feature = "test-meter")]
-    loops: Option<u32>,
+    burns: crate::testgpu::Burns,
 }
 
 struct Pending {
@@ -599,8 +599,8 @@ struct Pending {
 /// What a revision's warm-up compiles at check (#432): the scenes it can reach over its span and
 /// its controls, each state's document, and the operators that run apart.
 #[derive(Default)]
-struct Warm {
-    scenes: Vec<deep_canvas_scene3d::scene::Scene>,
+pub(crate) struct Warm {
+    pub(crate) scenes: Vec<deep_canvas_scene3d::scene::Scene>,
     docs: Vec<Value>,
     apart: BTreeSet<String>,
 }
@@ -675,22 +675,29 @@ fn issue(code: &str, path: &str, actual: Value, what: &str) -> Value {
 }
 
 /// A revision that passed admission.
-struct Admitted {
-    doc: Value,
-    frames: Content,
+pub(crate) struct Admitted {
+    pub(crate) doc: Value,
+    pub(crate) frames: Content,
     class: Option<Class>,
-    limits: Limits,
-    fit: Estimate,
-    size: [u32; 2],
+    pub(crate) limits: Limits,
+    pub(crate) fit: Estimate,
+    pub(crate) size: [u32; 2],
     /// The climb rungs that don't fit its memory cap (#425).
     skips: Vec<Rung>,
-    warm: Warm,
+    pub(crate) warm: Warm,
+}
+
+impl Admitted {
+    /// The revision's frames, for a view that already shows the document.
+    pub(crate) fn into_frames(self) -> Content {
+        self.frames
+    }
 }
 
 /// A writer's payload checked as its session's next revision, before it shows: stamped by the
 /// core, checked in the build's sealed set, compiled for its frames and fitted to the window's
 /// GPU memory.
-fn read_payload(path: &PathBuf) -> Result<Value, Vec<Value>> {
+pub(crate) fn read_payload(path: &PathBuf) -> Result<Value, Vec<Value>> {
     let text = std::fs::read_to_string(path)
         .map_err(|e| vec![issue("out_of_range", "doc", json!(path), &e.to_string())])?;
     serde_json::from_str(&text)
@@ -747,23 +754,36 @@ fn warm_up(
     }
     warm.apart = crate::warm::apart(&warm.docs);
     match plants.planted {
-        Some(Planted::WarmsInUseAtT0) => warm.docs.truncate(0),
+        Some(Planted::WarmsInUseAtT0) => warm.docs.clear(),
         Some(Planted::FusesDefaultOptions) => warm.docs.truncate(1),
         _ => {}
     }
     Ok(warm)
 }
 
+/// Whether a check issue is #486's refusal of a lobe output its material lacks.
+fn missing_lobe(code: &str, path: &str) -> bool {
+    let output = path.split_once("/params/outputs/").map(|(_, o)| o);
+    code == "operator_kind_rule"
+        && output.is_some_and(|o| {
+            deep_canvas_scene3d::gpu::OUTPUTS
+                .iter()
+                .any(|(n, _, lobe)| *n == o && lobe.is_some())
+        })
+}
+
 #[allow(clippy::too_many_arguments)]
-fn admit(
+pub(crate) fn admit(
     payload: Value,
     writer: &str,
     doc_id: &str,
     size: Option<[u32; 2]>,
     look: &Look3,
     history: u32,
+    path: Path,
     labels: &mut Labels,
     warm: Option<(&Value, &Plants)>,
+    planted: Option<Planted>,
 ) -> Result<Admitted, Vec<Value>> {
     let w = writer_of(writer).ok_or_else(|| {
         vec![issue(
@@ -781,10 +801,13 @@ fn admit(
         let program = s.spawn(|| Frames::compile(&doc));
         (check_in(&doc, sealed()), program.join())
     });
+    // The planted missing_lobe_turned_on (#486): the check admits a lobe output its material lacks.
+    let turned_on = planted == Some(Planted::MissingLobeTurnedOn);
     let errors: Vec<Value> = checked
         .issues
         .iter()
         .filter(|i| i.severity == "error")
+        .filter(|i| !(turned_on && missing_lobe(i.code, &i.path)))
         .map(|i| i.to_json())
         .collect();
     // The check's lowered copy of the document is freed off the admission path: a 10,000-item
@@ -815,11 +838,23 @@ fn admit(
     let effects = doc["items"]
         .as_object()
         .is_some_and(|items| items.values().any(|i| i["kind"] == "test.burn@1"));
+    // What the renderer will hold for the scene it opens with (#2189); a 2D document's targets
+    // are counted at 16 bytes a pixel, as before.
+    let held = match &frames {
+        Content::Scene(f) => deep_scene3d_render::held::of(f.scene()),
+        Content::Flat(_) => deep_scene3d_render::held::Held {
+            per_px: 16.0,
+            fixed: 0,
+        },
+    };
     let shape = Shape {
         size,
         slots: SLOTS,
         hdr: false,
         effects,
+        read_back: path == Path::Copy,
+        per_px: held.per_px,
+        fixed: held.fixed,
     };
     let fit = meter::fit(&shape, base_scale, history, limits.gpu_bytes).map_err(|floor| {
         vec![json!({
@@ -1304,8 +1339,10 @@ impl Live {
             size,
             &self.args.look,
             self.args.history,
+            self.path,
             &mut self.labels,
             (!input).then_some((&raw, &self.plants)),
+            self.plants.planted,
         );
         let ses = &mut self.sessions[s];
         ses.checks
@@ -1323,7 +1360,7 @@ impl Live {
                 warm,
             }) => {
                 #[cfg(feature = "test-meter")]
-                let (placed, loops) = match crate::testgpu::items(&doc) {
+                let (placed, burns) = match crate::testgpu::items(&doc) {
                     Ok(x) => x,
                     Err(path) => {
                         ses.revisions.push((
@@ -1361,7 +1398,7 @@ impl Live {
                     #[cfg(feature = "test-meter")]
                     placed,
                     #[cfg(feature = "test-meter")]
-                    loops,
+                    burns,
                 });
                 self.next_rev += 1;
             }
@@ -1489,7 +1526,7 @@ impl Live {
                 &self.device,
                 &self.kit,
                 &rev.placed,
-                rev.loops,
+                &rev.burns,
                 &self.results,
             );
         }
@@ -2802,7 +2839,7 @@ impl Live {
                         "limits": {"gpu_ms": l.gpu_ms, "cpu_ms": l.cpu_ms, "gpu_bytes": l.gpu_bytes},
                         "estimate": {
                             "gpu_bytes": fit.bytes(), "internal_scale": fit.scale, "history_frames": fit.history,
-                            "parts": {"slots": fit.slots, "hdr_slots": fit.hdr_slots, "targets": fit.targets, "upscale": fit.upscale, "frame_history": fit.frame_history, "effects": fit.effects},
+                            "parts": {"slots": fit.slots, "hdr_slots": fit.hdr_slots, "read_back": fit.read_back, "targets": fit.targets, "upscale": fit.upscale, "frame_history": fit.frame_history, "effects": fit.effects, "scene": fit.scene},
                         },
                         "measured": s.ring.oldest_first().collect::<Vec<_>>(),
                     })
@@ -2876,7 +2913,7 @@ fn render_canonical(
     let mut results: Cache<crate::testgpu::Made> = Cache::new(cache::Planted::default());
     #[cfg(feature = "test-meter")]
     {
-        let (placed, loops) = crate::testgpu::items(&doc).unwrap_or_default();
+        let (placed, burns) = crate::testgpu::items(&doc).unwrap_or_default();
         let reader = Reader {
             revision: 0,
             writer: "canonical".into(),
@@ -2888,7 +2925,7 @@ fn render_canonical(
                 return refused("asset_unreadable", e);
             }
         }
-        view.test.set(device, kit, &placed, loops, &results);
+        view.test.set(device, kit, &placed, &burns, &results);
     }
     let (options, planted) = plants.ops;
     view.ops = DocOps::new(device, &doc, options, planted, fail);
@@ -3031,7 +3068,9 @@ pub fn canonical(app: &mut App, out: &str, call: &Value) -> Value {
                 Some(size),
                 &look,
                 0,
+                Path::Copy,
                 &mut labels,
+                None,
                 None,
             )
         });
@@ -3062,4 +3101,50 @@ pub fn canonical(app: &mut App, out: &str, call: &Value) -> Value {
         }
         c
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// #2189: #1903's every-pass scene, which the device held at 659 MB full screen at the
+    /// showpiece's floors on the copy path, is refused at check, naming bytes within 10% of that.
+    #[test]
+    fn the_check_refuses_the_full_screen_every_pass_scene_naming_what_the_device_held() {
+        let evidence: Value =
+            serde_json::from_str(include_str!("../../../docs/evidence/1903/envelope.json"))
+                .expect("the #1903 evidence");
+        let held = evidence["reply"]["fixtures"][0]["gpu_memory"]["peak_bytes"]
+            .as_u64()
+            .expect("the device's peak");
+        let look: Value = serde_json::from_str(include_str!(
+            "../../../tests/acceptance/1903/fixtures/look.json"
+        ))
+        .expect("the #1903 look");
+        let look = Look3::read(&look).expect("a look");
+        let issues = admit(
+            evidence["scene"].clone(),
+            "agent:alpha",
+            "01jb3790000000000000000000",
+            Some([3456, 2234]),
+            &look,
+            0,
+            Path::Copy,
+            &mut Labels::new(),
+            None,
+            None,
+        )
+        .map(|a| a.fit)
+        .expect_err("the scene is refused at check");
+        let over = issues
+            .iter()
+            .find(|i| i["code"] == "over_budget")
+            .expect("an over_budget issue");
+        assert_eq!(over["actual"]["size"], json!([3456, 2234]));
+        let named = over["actual"]["gpu_bytes"].as_u64().expect("its bytes");
+        assert!(
+            named.abs_diff(held) * 10 <= held,
+            "the check names {named} bytes, the device held {held}"
+        );
+    }
 }

@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { isUtf8 } from 'node:buffer';
-import { access, mkdir, open, readFile, rename, rm, writeFile, type FileHandle } from 'node:fs/promises';
+import { createReadStream } from 'node:fs';
+import { access, copyFile, mkdir, open, readFile, rename, rm, stat, writeFile, type FileHandle } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { promisify } from 'node:util';
@@ -50,7 +51,12 @@ export interface LayerKey { id: string; parent: string | null; level: number }
 export interface Step { step: string; startMs: number; endMs: number }
 export interface TextRequest extends Common { run?: Run }
 export interface TextSink { write(chunk: Uint8Array | string): Promise<void>; close(): Promise<PutResult> }
-export interface Writer { put(request: PutRequest): Promise<PutResult>; text(request: TextRequest): TextSink }
+export interface Writer {
+  put(request: PutRequest): Promise<PutResult>;
+  /** A job's downloaded binary, streamed from disk rather than held whole in memory. */
+  file(request: Common & { file: string; sha256?: string }): Promise<PutResult>;
+  text(request: TextRequest): TextSink;
+}
 
 export type SlotReading = { state: 'captured' } | { state: 'truncated'; missing: string } | { state: 'missing'; reason: string };
 export type PutResult =
@@ -82,8 +88,12 @@ export interface RetainInput {
   kinds?: ReadonlySet<string>;
 }
 export interface RetainResult { removed: string[] }
-export interface SendRequest { files: readonly string[]; via: ShareVia; destination: string }
-export interface ShareAsk { sha256: string; destination: string; via: ShareVia; reason: string }
+/**
+ * `job` is a job tool's host (#1924): there a file goes under its origin rule alone, while its kind's own ask and budget
+ * stand for the redaction and license rules that guard what people see in an export, a report or a post.
+ */
+export interface SendRequest { files: readonly string[]; via: ShareVia | 'job'; destination: string }
+export interface ShareAsk { sha256: string; destination: string; via: ShareVia | 'job'; reason: string }
 export interface SendBoundary {
   ask(question: ShareAsk): Promise<boolean>;
   deliver(file: { sha256: string; bytes: Uint8Array }, destination: string): Promise<void>;
@@ -95,6 +105,8 @@ export interface EvidenceStore {
   get(sha256: string): Promise<Evidence | undefined>;
   /** The bytes, checked against their hash. */
   read(sha256: string): Promise<Uint8Array>;
+  /** A cached binary's bytes still match its hash, streamed without loading a large asset into memory. */
+  verify(sha256: string): Promise<boolean>;
   /** Resolves only for a whole file, so a truncated one never becomes a baseline. */
   admitBaseline(sha256: string): Promise<void>;
   retain(input: RetainInput): Promise<RetainResult>;
@@ -225,8 +237,9 @@ export async function openEvidenceStore(options: EvidenceStoreOptions = {}): Pro
       : !Array.isArray(request.license?.allows) || typeof request.license.name !== 'string' ? 'evidence needs a license'
       : request.kind === 'layer.rows' && !request.layer ? 'a layer.rows file needs its layer, parent and level' : undefined;
 
-  async function save(peer: Peer, request: Common & { steps?: readonly Step[] }, bytes: Uint8Array, type: Evidence['type'], redaction: Redaction, missing?: string): Promise<PutResult> {
-    const sha = hashOf(bytes);
+  async function save(peer: Peer, request: Common & { steps?: readonly Step[] }, bytes: Uint8Array | { file: string; sha256: string; size: number }, type: Evidence['type'], redaction: Redaction, missing?: string): Promise<PutResult> {
+    const file = 'file' in bytes ? bytes : undefined;
+    const sha = file ? file.sha256 : hashOf(bytes as Uint8Array);
     const derivedFrom = [...(request.derivedFrom ?? [])];
     const steps = request.steps?.map(({ step, startMs, endMs }) => ({ step, startMs, endMs }));
     // An input that is gone or unknown might have been an agent's, so it counts as one.
@@ -235,10 +248,19 @@ export async function openEvidenceStore(options: EvidenceStoreOptions = {}): Pro
     const existed = index.has(sha) && await onDisk(sha);
     await options.hooks?.afterExistsCheck?.(sha);
     return serial(sha, async () => {
-      if (!existed || !(await onDisk(sha))) await (PACKED.has(request.kind) ? writeAtomic(packedOf(sha), await pack(bytes)) : writeAtomic(fileOf(sha), bytes));
+      if (file || !existed || !(await onDisk(sha))) {
+        if (file) {
+          const path = fileOf(sha);
+          await mkdir(dirname(path), { recursive: true });
+          await rename(file.file, path);
+        } else {
+          const data = bytes as Uint8Array;
+          await (PACKED.has(request.kind) ? writeAtomic(packedOf(sha), await pack(data)) : writeAtomic(fileOf(sha), data));
+        }
+      }
       const earlier = index.get(sha);
       const record: Stored = {
-        sha256: sha, size: bytes.length, type, kind: request.kind, source: request.source,
+        sha256: sha, size: file ? file.size : (bytes as Uint8Array).length, type, kind: request.kind, source: request.source,
         // The same bytes keep the most cautious origin and label any writer gave them.
         origin: fromAgent || peer.role === 'agent' || earlier?.origin === 'agent' ? 'agent' : peer.role,
         redaction: earlier && earlier.redaction !== 'complete' ? earlier.redaction : redaction,
@@ -272,8 +294,22 @@ export async function openEvidenceStore(options: EvidenceStoreOptions = {}): Pro
         if (backwards) return refuse(`step ${backwards.step} must start at 0 ms or later and end no earlier than it starts`);
         if (request.declares === undefined) return save(peer, request, request.bytes, 'binary', request.redaction);
         const found = detect(request.bytes);
-        if (found !== request.declares) return refuse(`the slot declares ${request.declares}, but the bytes are ${found ?? 'not png, jpeg or mp4'}`);
+        if (found !== request.declares) return refuse(`the slot declares ${request.declares}, but the bytes are ${found ?? 'not png, jpeg, mp4 or webm'}`);
         return save(peer, request, request.bytes, found, request.redaction, missingEnd(found, request.bytes));
+      },
+      async file(request) {
+        const invalid = unlabelled(request);
+        if (invalid) return refuse(invalid);
+        // Hash the store's private copy, not a path that can change between its hash and the copy.
+        const file = join(root, `.tmp-${randomUUID()}`);
+        try {
+          await copyFile(request.file, file);
+          const hash = createHash('sha256');
+          for await (const chunk of createReadStream(file)) hash.update(chunk);
+          const sha256 = hash.digest('hex');
+          if (request.sha256 !== undefined && request.sha256 !== sha256) return refuse(`file bytes do not match listed sha256 ${request.sha256}; nothing kept`);
+          return await save(peer, request, { file, sha256, size: (await stat(file)).size }, 'binary', request.redaction);
+        } finally { await rm(file, { force: true }); }
       },
       text(request) {
         const chunks: Buffer[] = [];
@@ -299,6 +335,16 @@ export async function openEvidenceStore(options: EvidenceStoreOptions = {}): Pro
     },
 
     read,
+
+    async verify(sha) {
+      if (!HASH.test(sha) || !index.has(sha)) return false;
+      try {
+        if (!await exists(fileOf(sha))) { await read(sha); return true; }
+        const hash = createHash('sha256');
+        for await (const chunk of createReadStream(fileOf(sha))) hash.update(chunk);
+        return hash.digest('hex') === sha;
+      } catch { return false; }
+    },
 
     async admitBaseline(sha) {
       const record = index.get(sha);
@@ -366,8 +412,8 @@ export async function openEvidenceStore(options: EvidenceStoreOptions = {}): Pro
         const yes = approved.get(pair) ?? new Set<string>();
         const reasons = [
           record.origin === 'agent' && 'an agent put it there',
-          record.redaction !== 'complete' && `its redaction is ${record.redaction}`,
-          !record.license.allows.includes(via) && `its license ${record.license.name} doesn't allow ${via}`,
+          via !== 'job' && record.redaction !== 'complete' && `its redaction is ${record.redaction}`,
+          via !== 'job' && !record.license.allows.includes(via) && `its license ${record.license.name} doesn't allow ${via}`,
         ].filter((reason): reason is string => !!reason && !yes.has(reason));
         if (reasons.length) {
           if (!(await boundary.ask({ sha256: sha, destination, via, reason: reasons.join('; ') }))) {

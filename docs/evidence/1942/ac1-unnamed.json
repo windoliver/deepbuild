@@ -1,0 +1,17 @@
+{
+  "listed": {
+    "hosts": [
+      {
+        "name": "dh-ubuntu"
+      }
+    ]
+  },
+  "strangers": [
+    "dh1942-stranger",
+    "127.0.0.1",
+    "ssh://dh@127.0.0.1:55307"
+  ],
+  "problems": [],
+  "stranger_connections": 0,
+  "named_connections": 1
+}

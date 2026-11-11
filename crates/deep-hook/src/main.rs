@@ -102,10 +102,14 @@ fn home() -> PathBuf {
     PathBuf::from(env::var_os("HOME").unwrap_or_default()).join(".deepbuild")
 }
 
+/// ~/.deepbuild/config.json, when it is there and reads as JSON.
+fn config() -> Option<Value> {
+    parse(&fs::read_to_string(home().join("config.json")).ok()?).ok()
+}
+
 /// The setting `section.key` in ~/.deepbuild/config.json.
 fn setting(section: &str, key: &str) -> Option<Value> {
-    let config = parse(&fs::read_to_string(home().join("config.json")).ok()?).ok()?;
-    member(member(&config, section)?, key).cloned()
+    member(member(&config()?, section)?, key).cloned()
 }
 
 /// The hook's working folder, once its payload is read: a worktree `deep hub use --root` sent to a dev hub.
@@ -115,10 +119,12 @@ static CWD: OnceLock<PathBuf> = OnceLock::new();
 /// A worktree named in `hub.use`, `{<worktree>: "unix:<path>"}`, which `deep hub use --root` writes once the OS
 /// confirms you, sends its sessions to that dev hub instead; the longest worktree that holds the folder wins.
 fn address() -> PathBuf {
-    if let Some(path) = worktree_hub() {
+    let config = config();
+    let hub = |key: &str| member(member(config.as_ref()?, "hub")?, key);
+    if let Some(path) = worktree_hub(hub("use")) {
         return path;
     }
-    match setting("hub", "address") {
+    match hub("address") {
         Some(Value::String(address)) if address.starts_with("unix:") => {
             PathBuf::from(&address[5..])
         }
@@ -126,9 +132,10 @@ fn address() -> PathBuf {
     }
 }
 
-/// The dev hub `deep hub use --root` sent this worktree to, the longest such worktree winning.
-fn worktree_hub() -> Option<PathBuf> {
-    let (Some(cwd), Some(Value::Object(uses))) = (CWD.get(), setting("hub", "use")) else {
+/// The dev hub `deep hub use --root` sent this worktree to in `uses`, the `hub.use` setting, the longest such
+/// worktree winning.
+fn worktree_hub(uses: Option<&Value>) -> Option<PathBuf> {
+    let (Some(cwd), Some(Value::Object(uses))) = (CWD.get(), uses) else {
         return None;
     };
     let real = fs::canonicalize(cwd).unwrap_or_else(|_| cwd.clone());
@@ -1609,18 +1616,21 @@ fn statusline() -> ExitCode {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default();
+        let mut params = vec![
+            ("agent".into(), Value::String("claude-code".into())),
+            ("account".into(), Value::String(account)),
+            ("rate_limits".into(), limits.clone()),
+        ];
+        // The session the reading is of, as its input names it, so it shows on that session's row alone (#1296).
+        if let Some(Value::String(session)) = status.as_ref().and_then(|s| member(s, "session_id"))
+        {
+            params.push(("session".into(), Value::String(session.clone())));
+        }
         let report = Value::Object(vec![
             ("v".into(), Value::Number(1.0)),
             ("id".into(), Value::String(ulid(now.as_millis()))),
             ("method".into(), Value::String("windows.report".into())),
-            (
-                "params".into(),
-                Value::Object(vec![
-                    ("agent".into(), Value::String("claude-code".into())),
-                    ("account".into(), Value::String(account)),
-                    ("rate_limits".into(), limits.clone()),
-                ]),
-            ),
+            ("params".into(), Value::Object(params)),
         ]);
         // A sender of its own, which nothing waits for: it holds none of the status line's output open.
         if let Ok(me) = env::current_exe() {

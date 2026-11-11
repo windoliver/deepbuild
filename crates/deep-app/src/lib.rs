@@ -13,10 +13,14 @@
 #[cfg(all(feature = "env-plants", not(debug_assertions)))]
 compile_error!("the env-plants feature is for test builds only, never a release build");
 
+pub mod actions;
+pub mod address;
 pub mod answer;
 pub mod arming;
 pub mod bound;
 pub mod canvas;
+#[cfg(feature = "canvas-fixture")]
+pub mod canvas_fixture;
 pub mod card;
 pub mod cells;
 pub mod chrome;
@@ -27,13 +31,19 @@ pub mod chrome_gallery;
 pub mod commands;
 pub mod confirm;
 pub mod device;
+pub mod empties;
 #[cfg(feature = "fixtures")]
 pub mod events;
 pub mod gpu_view;
 pub mod hub;
+/// #1486: chrome thumbnails through the one image service.
+pub mod images;
 pub mod installed;
 pub mod kinds;
+pub mod list;
+pub mod notice;
 pub mod notify;
+pub mod open;
 #[cfg(feature = "panel-check")]
 pub mod panel_check;
 #[cfg(feature = "panel-check")]
@@ -55,6 +65,7 @@ pub mod states;
 pub mod table;
 pub mod text;
 pub mod views;
+pub mod words;
 
 use std::{path::Path, rc::Rc, sync::atomic::AtomicU64};
 
@@ -65,6 +76,7 @@ use gpui_shell::{
 };
 
 pub mod trusted_input;
+pub mod unread;
 
 pub mod capture;
 
@@ -188,6 +200,13 @@ fn needs_you() -> Result<HostValue, HostError> {
         .ok_or_else(|| HostError::new("the app hasn't read the record from the hub yet"))?;
     let text =
         |row: &serde_json::Value, key: &str| row[key].as_str().unwrap_or_default().to_owned();
+    // Needs you's order (#1462): open asks oldest first, those put off with Later after them until they come back.
+    let now = views::now();
+    let later = |row: &serde_json::Value| {
+        row["status"] == "later" && row["until"].as_u64().is_none_or(|until| until > now)
+    };
+    let mut inbox = inbox;
+    inbox.sort_by_key(|row| later(row));
     let open: Vec<&serde_json::Value> = inbox
         .iter()
         .filter(|row| row["status"] != "closed")
@@ -234,13 +253,14 @@ fn needs_you() -> Result<HostValue, HostError> {
     ]))
 }
 
+/// The ask a replica's fixture holds, since the record has no event for a hold yet (#1457): none in a shipped build.
 #[cfg(feature = "fixtures")]
-fn held() -> Option<String> {
+pub(crate) fn held() -> Option<String> {
     views::current_state().and_then(|state| state.held.clone())
 }
 
 #[cfg(not(feature = "fixtures"))]
-fn held() -> Option<String> {
+pub(crate) fn held() -> Option<String> {
     None
 }
 
@@ -302,13 +322,27 @@ pub fn new_runtime() -> anyhow::Result<Rc<ShellRuntime>> {
 /// Registers gpui-shell's component catalog, the shipped views and DeepBuild's empty-policy
 /// default.
 pub fn init(cx: &mut App) {
+    // The chrome's code face is bundled, not the system's (#1458), so GPUI's text system is given it; a test build's
+    // planted row asks for the canvas's face, which it's given too.
+    let code = chrome::sizes().code.clone();
+    let canvas =
+        plain::planted("row-label-canvas-face").then(|| deep_text_gpui::Role::Body.family());
+    let faces = deep_text::FACES
+        .iter()
+        .filter(|face| face.family == code.as_ref() || Some(face.family) == canvas)
+        .map(|face| std::borrow::Cow::Borrowed(face.bytes))
+        .collect();
+    let _ = cx.text_system().add_fonts(faces);
     gpui_shell::components::init(cx);
     views::register_views(cx);
     card::init(cx);
     commands::init(cx);
+    actions::init(cx);
     // Chrome effects hold their still pose under macOS's Reduce Motion (#1436).
     #[cfg(target_os = "macos")]
-    cx.set_reduce_motion(objc2_app_kit::NSWorkspace::sharedWorkspace().accessibilityDisplayShouldReduceMotion());
+    cx.set_reduce_motion(
+        objc2_app_kit::NSWorkspace::sharedWorkspace().accessibilityDisplayShouldReduceMotion(),
+    );
     gpui_shell::policy::set_default(
         Policy::new()
             .with_application("deepbuild-panel")

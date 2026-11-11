@@ -8,9 +8,11 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use deep_canvas_media::emitter::{Cone, Distance, Model};
+use deep_canvas_media::delay::{DelaySpec, PitchSpec};
+use deep_canvas_media::dynamics::{CompressorSpec, LimiterSpec, Makeup};
 use deep_canvas_media::mix::{
-    Bus, Curve, Emit, Gain, Mix, Place, Planted as MixPlanted, Player, Proc, ProcKind, Source,
-    Strip,
+    Bus, BusSend, Curve, Emit, Gain, Mix, Place, Planted as MixPlanted, Player, Proc, ProcKind,
+    Source, Strip,
 };
 use deep_canvas_media::{doc, eq, reverb, FLICKS};
 use deep_codecs::DECODE_WORKER;
@@ -20,6 +22,7 @@ use sha2::{Digest, Sha256};
 use crate::evidence;
 use crate::hub::{Hub, Planted};
 use crate::refused;
+use crate::spawn;
 
 /// An open span's end: far past any play, with room for sums of flicks.
 const OPEN: i64 = i64::MAX / 8;
@@ -28,11 +31,20 @@ pub enum MixCall {
     Mix {
         doc: Value,
         segments: Vec<(i64, i64, bool)>,
+        /// #544: the input track the document's logic items read.
+        track: Vec<Value>,
     },
     Handed {
         panel: String,
         from: i64,
         to: i64,
+    },
+    /// #500: one analysis bake of one asset.
+    Bake(Value),
+    /// #501: a media document played live on the default output for `seconds` of real time.
+    Soak {
+        media: Value,
+        seconds: u64,
     },
 }
 
@@ -51,11 +63,17 @@ pub fn parse_call(name: &str, c: &Map<String, Value>) -> Option<MixCall> {
                     Some((s.get("from")?.as_i64()?, s.get("to")?.as_i64()?, write))
                 })
                 .collect::<Option<_>>()?,
+            track: c.get("track").map_or(Some(Vec::new()), |t| t.as_array().cloned())?,
         },
+        "media_bake" => MixCall::Bake(c.get("bake").filter(|b| b.is_object())?.clone()),
         "handed" => MixCall::Handed {
             panel: c.get("panel")?.as_str()?.to_string(),
             from: t("from")?,
             to: t("to")?,
+        },
+        "soak" => MixCall::Soak {
+            media: c.get("media").filter(|d| d.is_object())?.clone(),
+            seconds: c.get("seconds")?.as_u64().filter(|s| *s > 0)?,
         },
         _ => return None,
     })
@@ -101,6 +119,13 @@ pub fn planted_of(p: Option<Planted>, live: bool) -> MixPlanted {
         holds_gain_per_block: live && p == Some(Planted::MixerHoldsGainPerBlock),
         inverse_only: p == Some(Planted::EmitterAlwaysInverse),
         cone_reversed: p == Some(Planted::ConeSignReversed),
+        // #1818's live in the media module's list, planted for the whole run.
+        limiter_sample_peaks: deep_canvas_media::planted("limiter_holds_sample_peaks"),
+        hard_knee: deep_canvas_media::planted("compressor_hard_knee"),
+        no_latency_compensation: deep_canvas_media::planted("mix_without_latency_compensation"),
+        pitch_ignores_semitones: deep_canvas_media::planted("pitch_ignores_semitones"),
+        sends_tap_post: deep_canvas_media::planted("send_always_post"),
+        delay_empties_at_seek: deep_canvas_media::planted("delay_empties_line_at_seek"),
     }
 }
 
@@ -148,11 +173,26 @@ fn vec3(v: Option<&Value>) -> Option<[f64; 3]> {
 }
 
 impl Hub<'_> {
-    /// An asset from the evidence store, decoded in the decode worker: interleaved f32 frames.
-    fn source(&mut self, sha: &str) -> Result<Arc<Source>, Value> {
+    /// An asset from the evidence store, decoded in the decode worker, for the mix: interleaved
+    /// f32 frames of its first two channels' worth.
+    pub(crate) fn source(&mut self, sha: &str) -> Result<Arc<Source>, Value> {
         if let Some(s) = self.gate.sources.get(sha) {
             return Ok(s.clone());
         }
+        let (rate, channels, samples) = self.pcm(sha)?;
+        let s = Arc::new(Source {
+            rate,
+            channels: channels.clamp(1, 2),
+            samples,
+            loop_region: None,
+        });
+        self.gate.sources.insert(sha.to_string(), s.clone());
+        Ok(s)
+    }
+
+    /// An asset from the evidence store, decoded in the decode worker: its rate, its channel
+    /// count and its interleaved f32 frames, every channel kept.
+    pub(crate) fn pcm(&mut self, sha: &str) -> Result<(i64, usize, Vec<f32>), Value> {
         if sha.len() < 3 || evidence::read(&self.scenario.evidence, sha).is_none() {
             return Err(json!({"code": "unknown_asset", "asset": sha}));
         }
@@ -168,29 +208,33 @@ impl Hub<'_> {
             let bytes = std::fs::read(out.join(s["file"].as_str().unwrap_or_default()))
                 .map_err(|_| refused("unreadable"))?;
             let samples = bytes.as_chunks::<4>().0.iter().map(|b| f32::from_le_bytes(*b)).collect();
-            Ok(Arc::new(Source {
-                rate: s["sample_rate"].as_i64().unwrap_or(48_000).max(1),
-                channels: s["channels"].as_u64().unwrap_or(1).clamp(1, 2) as usize,
+            Ok((
+                s["sample_rate"].as_i64().unwrap_or(48_000).max(1),
+                s["channels"].as_u64().unwrap_or(1).max(1) as usize,
                 samples,
-                loop_region: None,
-            }))
+            ))
         })();
         let _ = std::fs::remove_dir_all(&out);
-        if let Ok(s) = &result {
-            self.gate.sources.insert(sha.to_string(), s.clone());
-        }
         result
     }
 
     /// A media document's mix: its strips, buses, processors and emitters.
     pub(crate) fn mix_of(&mut self, d: &Value) -> Result<Mix, Value> {
+        self.mix_with(d).map(|(m, _)| m)
+    }
+
+    /// A media document's mix, and what #500 adds to the reply: its spawns' `voices` and its
+    /// sound `cues`.
+    fn mix_with(&mut self, d: &Value) -> Result<(Mix, Map<String, Value>), Value> {
         let bad = |what: String| json!({"code": "bad_media", "what": what});
         let rate = d.pointer("/transport/sample_rate").and_then(Value::as_i64).unwrap_or(48_000);
         if rate <= 0 || FLICKS % rate != 0 {
             return Err(json!({"code": "bad_rate", "sample_rate": rate}));
         }
         let span = match d.pointer("/transport/span") {
+            // An open span has no end: the mix plays on as with no span (Transport).
             None => None,
+            Some(Value::String(s)) if s == "open" => None,
             v => Some(time(d, v).map_err(bad)?),
         };
         let empty = Map::new();
@@ -214,7 +258,23 @@ impl Hub<'_> {
             for p in b.get("processors").and_then(Value::as_array).into_iter().flatten() {
                 let pid = p.as_str().ok_or_else(|| bad(format!("bus {id}: a processor ID")))?;
                 let pv = procs.get(pid).ok_or_else(|| bad(format!("bus {id}: no processor {pid}")))?;
-                processors.push(processor(pid, pv).map_err(bad)?);
+                processors.push(processor(pid, pv, &index).map_err(bad)?);
+            }
+            // #1818: sends, each tapped pre or post (post by default).
+            let mut sends = Vec::new();
+            for (j, sv) in b.get("sends").and_then(Value::as_array).into_iter().flatten().enumerate() {
+                let to = sv.get("to").and_then(Value::as_str).ok_or_else(|| bad(format!("bus {id}: send {j}'s to")))?;
+                let pre = match sv.get("tap").and_then(Value::as_str) {
+                    None | Some("post") => false,
+                    Some("pre") => true,
+                    Some(t) => return Err(bad(format!("bus {id}: send {j}'s tap {t} isn't pre or post"))),
+                };
+                sends.push(BusSend {
+                    id: format!("{id}/sends/{j}"),
+                    to: index(to).ok_or_else(|| bad(format!("bus {id} sends to {to}, which isn't a bus")))?,
+                    gain_db: sv.get("gain").and_then(Value::as_f64).unwrap_or(0.0),
+                    pre,
+                });
             }
             buses.push(Bus {
                 id: id.clone(),
@@ -223,6 +283,7 @@ impl Hub<'_> {
                 mute: b.get("mute").and_then(Value::as_bool).unwrap_or(false),
                 processors,
                 out,
+                sends,
             });
         }
         // Emitters, by the strip they play.
@@ -303,7 +364,7 @@ impl Hub<'_> {
                 None => index("master").unwrap_or(0),
                 Some(b) => index(b).ok_or_else(|| bad(format!("strip {sid}: no bus {b}")))?,
             };
-            strips.push(Strip {
+            let mut strip = Strip {
                 id: sid.clone(),
                 source,
                 start,
@@ -319,16 +380,34 @@ impl Hub<'_> {
                 bus,
                 disabled,
                 emitter: emits.remove(sid),
-            });
+            };
+            if let Some(at) = spawn::aligned_start(d, sid, s, &strip).map_err(bad)? {
+                strip.start = at;
+            }
+            strips.push(strip);
         }
-        Mix::new(rate, strips, buses).map_err(|b| json!({"code": "bus_cycle", "bus": b}))
+        let mut extra = Map::new();
+        if d.get("cues").is_some() {
+            extra.insert("cues".into(), Value::Object(spawn::cues(d, &mut strips)));
+        }
+        if d.get("spawns").is_some() {
+            let (voices, report) = self.spawned(d, index("master").unwrap_or(0))?;
+            strips.extend(voices);
+            extra.insert("voices".into(), Value::Array(report));
+        }
+        let mix = Mix::new(rate, strips, buses).map_err(|b| json!({"code": "bus_cycle", "bus": b}))?;
+        Ok((mix, extra))
     }
 
     pub fn mix_call(&mut self, call: &MixCall) -> Value {
         match call {
-            MixCall::Mix { doc, segments } => {
-                let mix = match self.mix_of(doc) {
-                    Ok(m) => Arc::new(m),
+            MixCall::Mix { doc, segments, track } => {
+                let mut doc = doc.clone();
+                if let Err(i) = self.inline_occurrences(&mut doc, track) {
+                    return json!({"code": i.code, "issues": [i.to_json()]});
+                }
+                let (mix, extra) = match self.mix_with(&doc) {
+                    Ok((m, extra)) => (Arc::new(m), extra),
                     Err(e) => return e,
                 };
                 let rate = mix.rate;
@@ -348,7 +427,13 @@ impl Hub<'_> {
                         Value::Null
                     };
                     player.take_taps();
-                    let (sha, pcm) = read(&mut player, (last - first).max(0), *write);
+                    // #501: the planted mixer whose Linux build is one 16-bit step off.
+                    let step = if cfg!(target_os = "linux") && self.scenario.planted == Some(Planted::MixerLinuxOneStep) {
+                        1.0 / 32_768.0
+                    } else {
+                        0.0
+                    };
+                    let (sha, pcm) = read(&mut player, (last - first).max(0), *write, step);
                     let mut seg = json!({"from": from, "to": to, "first": first, "frames": (last - first).max(0),
                         "channels": 2, "sha256": sha, "seek": seek,
                         "taps": player.take_taps().into_iter().map(|(k, v)| (k, json!(v))).collect::<Map<String, Value>>()});
@@ -370,8 +455,11 @@ impl Hub<'_> {
                                      "checkpoints": r.checkpoints.iter().map(|(t, b)| json!({"t": t, "bytes": b})).collect::<Vec<_>>()}}))
                     })
                     .collect();
-                json!({"mix": {"sample_rate": rate, "channels": 2, "segments": out, "processors": processors}})
+                let mut reply = json!({"sample_rate": rate, "channels": 2, "segments": out, "processors": processors});
+                reply.as_object_mut().into_iter().for_each(|r| r.extend(extra.clone()));
+                json!({"mix": reply})
             }
+            MixCall::Bake(b) => self.bake_call(b),
             MixCall::Handed { panel, from, to } => {
                 let now = self.now;
                 let Some(live) = self.gate.live_of(panel, now) else {
@@ -390,13 +478,17 @@ impl Hub<'_> {
                 json!({"handed": {"sample_rate": rate, "channels": 2, "first": first, "frames": last - first,
                     "sha256": sha, "wav": w}})
             }
+            MixCall::Soak { media, seconds } => match self.mix_of(media) {
+                Ok(m) => crate::device::soak(Player::new(Arc::new(m), planted_of(self.scenario.planted, true)), *seconds),
+                Err(e) => e,
+            },
         }
     }
 }
 
-/// Reads `frames` from `player`: the SHA-256 of the interleaved f32le samples, and the samples
-/// themselves when `keep`.
-fn read(player: &mut Player, frames: i64, keep: bool) -> (String, Option<Vec<f32>>) {
+/// Reads `frames` from `player`, each sample `step` higher: the SHA-256 of the interleaved f32le
+/// samples, and the samples themselves when `keep`.
+fn read(player: &mut Player, frames: i64, keep: bool, step: f32) -> (String, Option<Vec<f32>>) {
     let mut h = Sha256::new();
     let mut kept = keep.then(Vec::new);
     let mut buf = vec![0f32; 2 * 4096];
@@ -404,6 +496,9 @@ fn read(player: &mut Player, frames: i64, keep: bool) -> (String, Option<Vec<f32
     while left > 0 {
         let n = left.min(4096);
         player.read(&mut buf[..2 * n]);
+        for x in &mut buf[..2 * n] {
+            *x += step;
+        }
         for x in &buf[..2 * n] {
             h.update(x.to_le_bytes());
         }
@@ -415,7 +510,8 @@ fn read(player: &mut Player, frames: i64, keep: bool) -> (String, Option<Vec<f32
     (hex(h.finalize()), kept)
 }
 
-fn processor(id: &str, p: &Value) -> Result<Proc, String> {
+fn processor(id: &str, p: &Value, bus: &dyn Fn(&str) -> Option<usize>) -> Result<Proc, String> {
+    let n = |k: &str| p.get(k).and_then(Value::as_f64);
     let kind = match p.get("kind").and_then(Value::as_str) {
         Some("eq") => ProcKind::Eq(
             p.get("bands")
@@ -443,6 +539,56 @@ fn processor(id: &str, p: &Value) -> Result<Proc, String> {
                 mix: p.get("mix").and_then(Value::as_f64).unwrap_or(0.3),
             })
         }
+        // #1818: the compressor, limiter, delay and pitch, at the Processor row's defaults.
+        Some("compressor") => {
+            let d = CompressorSpec::default();
+            let makeup = match p.get("makeup") {
+                None => d.makeup,
+                Some(Value::String(a)) if a == "auto" => Makeup::Auto,
+                Some(v) => Makeup::Db(v.as_f64().ok_or(format!("processor {id}: makeup is dB or auto"))?),
+            };
+            let key = match p.get("key").and_then(Value::as_str) {
+                None => None,
+                Some(k) => Some(bus(k).ok_or(format!("processor {id}: key {k} isn't a bus"))?),
+            };
+            ProcKind::Compressor(
+                CompressorSpec {
+                    threshold: n("threshold").unwrap_or(d.threshold),
+                    knee: n("knee").unwrap_or(d.knee).max(0.0),
+                    ratio: n("ratio").unwrap_or(d.ratio).max(1.0),
+                    attack: n("attack").unwrap_or(d.attack).max(0.0),
+                    release: n("release").unwrap_or(d.release).max(0.0),
+                    makeup,
+                },
+                key,
+            )
+        }
+        Some("limiter") => {
+            let d = LimiterSpec::default();
+            let oversample = match p.get("oversample").and_then(Value::as_u64) {
+                None => d.oversample,
+                Some(o @ (4 | 8)) => o as u32,
+                Some(o) => return Err(format!("processor {id}: oversample {o} isn't 4 or 8")),
+            };
+            ProcKind::Limiter(LimiterSpec {
+                ceiling: n("ceiling").unwrap_or(d.ceiling),
+                lookahead: n("lookahead").unwrap_or(d.lookahead).max(0.0),
+                release: n("release").unwrap_or(d.release).max(0.0),
+                oversample,
+            })
+        }
+        Some("delay") => {
+            let time = n("time").ok_or(format!("processor {id}: time"))?;
+            let feedback = n("feedback").unwrap_or(0.0);
+            if !(0.0..=2.0).contains(&time) || !(0.0..1.0).contains(&feedback) {
+                return Err(format!("processor {id}: time is 0 to 2 s and feedback in [0, 1)"));
+            }
+            ProcKind::Delay(DelaySpec { time, feedback, mix: n("mix").unwrap_or(1.0).clamp(0.0, 1.0) })
+        }
+        Some("pitch") => ProcKind::Pitch(PitchSpec {
+            semitones: n("semitones").unwrap_or(0.0),
+            window: n("window").unwrap_or(0.1),
+        }),
         k => return Err(format!("processor {id}: kind {k:?} isn't built")),
     };
     Ok(Proc {
@@ -451,6 +597,15 @@ fn processor(id: &str, p: &Value) -> Result<Proc, String> {
         every: p.get("checkpoint_every").and_then(Value::as_f64).map_or(1, |s| (s.round() as i64).max(1)),
         budget: p.get("byte_budget").and_then(Value::as_u64).map(|b| b as usize),
     })
+}
+
+/// The listener (the camera) and its right, forward × up.
+pub(crate) fn listener(d: &Value) -> ([f64; 3], [f64; 3]) {
+    let cam = vec3(d.pointer("/scene/camera/position")).unwrap_or([0.0; 3]);
+    let fwd = vec3(d.pointer("/scene/camera/forward")).unwrap_or([0.0, 0.0, -1.0]);
+    let r = [-fwd[2], 0.0, fwd[0]];
+    let rl = deep_canvas::ops::sqrt(r[0] * r[0] + r[2] * r[2]);
+    (cam, if rl > 0.0 { [r[0] / rl, 0.0, r[2] / rl] } else { [1.0, 0.0, 0.0] })
 }
 
 /// An emitter: its item's place in the document's scene at t, heard by the camera.
@@ -468,12 +623,7 @@ fn emitter(d: &Value, id: &str, e: &Value) -> Result<Emit, String> {
             .collect::<Option<_>>()
             .ok_or(format!("emitter {id}: a yaw key"))?,
     };
-    let cam = vec3(d.pointer("/scene/camera/position")).unwrap_or([0.0; 3]);
-    let fwd = vec3(d.pointer("/scene/camera/forward")).unwrap_or([0.0, 0.0, -1.0]);
-    // The listener's right: forward × up.
-    let r = [-fwd[2], 0.0, fwd[0]];
-    let rl = deep_canvas::ops::sqrt(r[0] * r[0] + r[2] * r[2]);
-    let right = if rl > 0.0 { [r[0] / rl, 0.0, r[2] / rl] } else { [1.0, 0.0, 0.0] };
+    let (cam, right) = listener(d);
     let dist = e.get("distance");
     let f = |o: Option<&Value>, k: &str, dflt: f64| o.and_then(|o| o.get(k)).and_then(Value::as_f64).unwrap_or(dflt);
     let model = match dist.and_then(|o| o.get("model")).and_then(Value::as_str) {

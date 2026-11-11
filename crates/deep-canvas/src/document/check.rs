@@ -209,6 +209,7 @@ fn check_by(
                 pack_declared: &pack_declared,
                 derived: &derived,
                 sealed,
+                kinds,
                 facts: &facts,
             };
             // Each item checks on its own, so a big document's items check in chunks across the
@@ -481,10 +482,16 @@ fn module_checks(
 /// those a recipe derived among them (Recipe: lights count in the budget; #420), and a
 /// document with more is refused, naming them.
 fn lights_check(lowered: &Value, issues: &mut Vec<Issue>) {
-    let Some(cap) = member(lowered, "budget")
-        .and_then(|b| member(b, "lights"))
-        .and_then(Value::as_u64)
-    else {
+    let Some(given) = member(lowered, "budget").and_then(|b| member(b, "lights")) else {
+        return;
+    };
+    let Some(cap) = given.as_u64() else {
+        issues.push(Issue::envelope(
+            "out_of_range",
+            "budget/lights".into(),
+            given.clone(),
+            "not a whole number at or above 0",
+        ));
         return;
     };
     let lights: Vec<String> = member(lowered, "items")
@@ -1209,6 +1216,7 @@ struct ItemContext<'a> {
     /// The IDs expansion wrote.
     derived: &'a BTreeSet<&'a str>,
     sealed: &'a Sealed,
+    kinds: &'a Registry,
     /// What the build says about each kind text the lowered items write.
     facts: &'a BTreeMap<String, KindFacts<'a>>,
 }
@@ -1526,6 +1534,7 @@ fn check_item(
             version,
             required_minor,
             ctx.sealed,
+            ctx.kinds,
             issues,
             notices,
         );
@@ -1784,6 +1793,7 @@ fn check_params(
     version: &Version,
     required_minor: Option<u32>,
     sealed: &Sealed,
+    kinds: &Registry,
     issues: &mut Vec<Issue>,
     notices: &mut Vec<Notice>,
 ) {
@@ -1810,8 +1820,22 @@ fn check_params(
                 });
                 dropped.push(name.clone());
             } else {
+                // A field another kind defines names that kind after any rename, in the close
+                // names, and first in the fix when no rename comes before it (#1970).
+                let owners = super::close::owners(name, entry, kinds, sealed.close_fault);
+                let close =
+                    super::close::field_names(name, entry, version, &owners, sealed.close_fault);
+                let fix = if close.first().is_some_and(|c| c.get("defines").is_some()) {
+                    format!(
+                        "`{name}` is a field of {}: give the item that kind, or remove the field.",
+                        owners.join(" or ")
+                    )
+                } else {
+                    super::fix_for("unknown_field")
+                };
                 issues.push(Issue {
-                    close: super::close::field_names(name, entry, version, sealed.close_fault),
+                    close,
+                    fix,
                     ..Issue::error(
                         "unknown_field",
                         key,
@@ -1942,7 +1966,6 @@ pub fn literal_forms(unit: &str) -> Vec<String> {
         .collect()
 }
 
-/// Checks a map of `{target: path[, source: handle]}` entries against the lowered document.
 /// Every map keyed by ID takes keys in the ID grammar; a key a path can't name is `bad_id`.
 fn check_key(section: &str, key: &str, issues: &mut Vec<Issue>) {
     if let Err(r) = Id::parse(key) {
@@ -1989,6 +2012,13 @@ fn check_controls(doc: &Value, sealed: &Sealed, issues: &mut Vec<Issue>) {
     };
     for (key, entry) in entries {
         let Some(fields) = entry.as_object() else {
+            issues.push(Issue::error(
+                "out_of_range",
+                key,
+                format!("controls/{key}"),
+                entry.clone(),
+                "not an object",
+            ));
             continue;
         };
         if let Some(kind) = fields.get("kind").and_then(Value::as_str) {
@@ -2029,6 +2059,13 @@ fn check_time_remaps(doc: &Value, expansions: &[Expansion], issues: &mut Vec<Iss
     let placements = member(doc, "placements").and_then(Value::as_object);
     for (key, entry) in entries {
         let Some(fields) = entry.as_object() else {
+            issues.push(Issue::error(
+                "out_of_range",
+                key,
+                format!("time_remaps/{key}"),
+                entry.clone(),
+                "not an object",
+            ));
             continue;
         };
         let mut bad = |code, field: &str, what: &str| {

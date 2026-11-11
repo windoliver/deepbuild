@@ -1,0 +1,72 @@
+# #486 acceptance suite at the base, d51be2c3 (Merge pull request #2108), before any implementation.
+#
+# Not run against the binary: this job read the base's code to say why each test fails there; it didn't build deep-gpu.
+# Run here:
+#   npm ci                                                                         -> node_modules installed
+#   node node_modules/typescript/bin/tsc -p tests/acceptance/486/tsconfig.json     -> exit 0, no errors
+#   node --experimental-strip-types reference.ts's functions from a scratch script -> the numbers below
+#
+# Why each test fails at the base, read from its code. Every test loads; each fails at an assertion, none in the harness.
+#
+# The planted names. lobe_output_scales_field, occlusion_scales_direct, missing_lobe_turned_on, bump_ignores_handedness
+# and coat_normal_bends_base are not in crates/deep-gpu-layer/src/main.rs's Planted::parse, so `deep-gpu run --planted
+# <name>` prints {"ok": false, "code": "bad_input"} and exits 2: runGpu's "deep-gpu run --planted <name> exited 0" fails.
+#
+# The outputs and steps. crates/deep-canvas/src/registry/core_lists.rs's OUTPUTS holds a material operator's
+# base_color, emission, alpha, metallic, roughness and shadow_filter only, so the operator check
+# (crates/deep-canvas-effects/src/check.rs) refuses coat, coat_roughness, coat_normal, sheen, occlusion, normal and every
+# other lobe output with operator_type ("a material operator has no output …"); the op table
+# (crates/deep-canvas/src/steps.rs) has no uv0@1 and no use@1, so a document's operator holding either is refused with
+# operator_unknown_op at that step (use@1 is inlined only for check_operator's pack functions, effects.rs); no
+# core.bump@1 exists anywhere. Where the check refuses a material operator:
+#   - view3d doesn't refuse the document: crates/deep-scene3d-render/src/lib.rs's material_op files it under
+#     counts.operators_refused and the part draws with its material's own values;
+#   - live refuses the session (live.rs: admit runs the document check, whose effects rule operator_rule runs the
+#     operator check): its row's state is "refused", its issues operator_type or operator_unknown_op.
+#
+# coat.test.ts          AC1 1  coat_split and coat_split_15 are refused, so the plate draws at its own coat 0.5 on both
+#                              halves: the left half is off the coat-1 half and the right off the coat-0 half by the
+#                              coat's Fresnel under the sun and the studio environment, far more than 0.1% of pixels:
+#                              "the per-pixel coat against the halves" fails.
+#                       AC1 2  --planted lobe_output_scales_field: bad_input.
+# occlusion.test.ts     AC2 1  `occ` is refused, so "occlusion 0" draws the plate and the square with the environment's
+#                              light kept: every lit plate pixel is off the plate without it (the fixture's own check,
+#                              that the environment brightens 90% of the plate, holds at the base); "occlusion 0 and 1
+#                              against their references" fails.
+#                       AC2 2  --planted occlusion_scales_direct: bad_input.
+# missing-lobe.test.ts  AC3 1  On the noop lane every session is refused with operator_type and operator_unknown_op, none
+#                              with operator_kind_rule: felt and matte "refused, but with no operator_kind_rule naming …",
+#                              and velvet "doesn't check": "the refusals and the velvet on the noop lane" fails (the
+#                              planted run after it would be bad_input).
+#                       AC3 2  `glaze` is refused in view3d, so the velvet plate draws at its own sheen 0.6 on both
+#                              halves; the left matches the velvet half and the sheen shows there (the fixture's checks
+#                              hold), but the right half is off the bare half by its sheen on nearly every pixel: "the
+#                              velvet under glaze" fails.
+# relief.test.ts        AC4 1  `relief` is refused (uv0@1, use@1, the normal output), so both plates draw flat: each of the
+#                              200 sampled normals is (0, 0, 1), 11.31° from the analytic one: "the relief on the plate
+#                              and the twin" fails.
+#                       AC4 2  On the noop lane the relief document is refused with operator_unknown_op or
+#                              operator_type (uv0@1 and use@1 aren't in the op table; normal isn't an output): "the relief
+#                              document checks" fails.
+# coat-normal.test.ts   AC5 1  The CPU reference's check passes (below). `coat_tilt` is refused, so the coat shades about
+#                              the plate's own normal and its peak sits near 0°, 11.3° from the reference's -11.32°:
+#                              "the coat's and the base lobe's peaks" fails.
+#                       AC5 2  --planted coat_normal_bends_base: bad_input.
+# warm-furnace.test.ts  AC6 1  On the noop lane the lacquer's session is refused with operator_type (fourteen unknown
+#                              outputs): "the lacquer's operator checks" fails.
+#                       AC6 2  On the noop lane the furnace's document is refused with operator_type: "the furnace's
+#                              eight operators check" fails before anything is drawn. (Drawn anyway, view3d would show
+#                              the balls with their half-strength fields, which a white furnace reads as about 1, as it
+#                              would the outputs: hence that check first.)
+# taste.test.ts         AC7    INCONCLUSIVE: no TASTE.json is recorded (and the pictures show no lobe output, occlusion
+#                              or relief, the operators being refused).
+#
+# reference.ts on its own, before this commit:
+#   AC4: the directions toward the three suns (0, 0, 1), (0.6428, 0, 0.7660), (0, 0.6428, 0.7660); the analytic normal
+#        (0, -0.196116, 0.980581), 11.3099° from the plate's; it reads 0.9806, 0.7512 and 0.6251 under them; photometric
+#        stereo recovers it within 8.5e-7° (2.1e-6° from f32 values); the normal turned toward +v lies 22.6199° from it and
+#        reads 0.9806, 0.7512 and 0.8772, all lit.
+#   AC5: over the frame's two centre columns at 512 × 512, the coat's peak at row 131.52, a half vector -11.3199° from the
+#        plate's normal; the base lobe's at row 379.52, +0.0252°; 11.3451° apart (the tilt within 0.04°); with the base
+#        normal bent too (the planted program) the base lobe's peak at -11.2765°. 0.0446° of half vector a row near both
+#        peaks. The centre columns meet the 2 m plate from y = -0.892 m to y = 0.401 m, so every row is on it.

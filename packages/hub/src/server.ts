@@ -17,7 +17,8 @@ import { stopTimeoutS } from './codex-settings.js';
 import { contractAdapter, rpcTable, type DeprecatedNotice } from './contracts.js';
 import type { CoreMessage, CoreRequest } from './core-worker.js';
 import { isPrCreate, isPrEdit } from './forge.js';
-import { registry } from './hookmap.js';
+import { adapterOf, registry } from './hookmap.js';
+import type { Part } from './context-fit.js';
 import { takeLock, type Lock } from './lock.js';
 import { reaches } from './memory.js';
 import { handleOf as ruleHandle, noticeText, scopedAt } from './rules.js';
@@ -29,7 +30,7 @@ import { Waits, type HookSeen, type OpenCall, type Reply as WaitReply, type Rest
 import { People } from './people.js';
 import { identityAt, idOf, type Identity } from './identity.js';
 import { plantedStart } from './plant.js';
-import { AUTHORITY, CONTRACT, EXTENSION_HOLD_MS, FEATURES, line, plantOf, refusal, Refused, STAGE_HOLD_MS, ulid, VERSION, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Parsed, type Plant, type Refusal, type Scoped, SCREEN_TOOLS, type StageReach, type VfsSettings } from './wire.js';
+import { AUTHORITY, CONTRACT, EXTENSION_HOLD_MS, FEATURES, line, plantOf, refuse, refusal, Refused, STAGE_HOLD_MS, ulid, VERSION, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Parsed, type Plant, type Refusal, type Scope, type Scoped, SCREEN_TOOLS, type StageReach, type VfsSettings } from './wire.js';
 
 /** How often the hub checks that its lock file is still the one it holds (#909): the design says at least once a minute. */
 const LOCK_CHECK_MS = 5000;
@@ -39,8 +40,10 @@ const MAX_LINE = 64 << 20;
 /**
  * A consumer more than this many frames behind is cut off with fell_behind, never dropped silently (#34): the
  * socket holds at most this many of its frames, and one that takes none of them for STALL_MS while more wait is cut.
+ * Bytes count too (#1575): one frame can be as large as an event, so the socket holds at most BEHIND_BYTES of them.
  */
 const BEHIND = 10_000;
+const BEHIND_BYTES = 8 << 20;
 const STALL_MS = 100;
 
 /** A person's connection (#1337) reads only what that person may see. */
@@ -52,15 +55,15 @@ const ALLOWED = new Map<string, readonly Role[]>([
   ['hub.health', ['app', 'cli', 'person']], ['health', ['app', 'cli', 'person']], ['events.read', ['app', 'cli', 'person']], ['stream.subscribe', ['app', 'cli']], ['ask.answer', ['app', 'cli']], ['ask.confirm', ['app']], ['views.installed', ['app']], ['command.run', ['app']],
   // The App API (#34): its reads, each with the log_pos it reflects and the hub's start ID, an overrule and pairing a device.
   ['inbox.read', ['app', 'cli']], ['ask.card', ['app', 'cli']], ['sessions.read', ['app', 'cli', 'person']], ['changes.read', ['app', 'cli']], ['evidence.read', ['app', 'cli']],
-  ['numbers.read', ['app', 'cli']], ['numbers.baseline', ['cli']], ['race.start', ['cli']], ['numbers.refresh', ['cli']], ['numbers.sample', ['cli']], ['decision.overrule', ['app', 'cli']], ['ask.undo', ['app', 'cli']], ['device.pair', ['app', 'cli']], ['device.unpair', ['app', 'cli']], ['channel.link', ['app', 'cli']], ['confirm.enroll', ['app']],
+  ['numbers.read', ['app', 'cli']], ['numbers.baseline', ['cli']], ['race.start', ['cli']], ['numbers.refresh', ['cli']], ['numbers.sample', ['cli']], ['decision.overrule', ['app', 'cli']], ['ask.undo', ['app', 'cli']], ['ask.take_over', ['app', 'cli']], ['device.pair', ['app', 'cli']], ['device.unpair', ['app', 'cli']], ['channel.link', ['app', 'cli']], ['confirm.enroll', ['app']],
   // A permission you said yes to in the terminal, offered back, saved as a decision with one click (#23).
   ['offer.save', ['app', 'cli']],
   // A run of a destructive command undone from the copy staged before it ran (#347).
   ['staged.undo', ['app', 'cli']],
   // The Agents page (#148): a server or a skill proposed for the agents you choose, the page's model, Codex's daemon
   // restarted through an ask, a sync undone; and `deep mcp-exec`, a synced server's command with its secrets by handle.
-  ['agents.propose', ['app', 'cli']], ['agents.read', ['app', 'cli']], ['agents.restart', ['app', 'cli']], ['agents.undo', ['app', 'cli']], ['mcp.exec', ['cli']],
-  ['gates.off', ['app', 'cli']], ['gates.on', ['app', 'cli']], ['you.confirm', ['cli']], ['status.read', ['app', 'cli', 'person']], ['hub.stop', ['app', 'cli']], ['run.start', ['app', 'cli']], ['test.load', ['app', 'cli']],
+  ['agents.propose', ['app', 'cli']], ['agents.read', ['app', 'cli']], ['agents.restart', ['app', 'cli']], ['agents.undo', ['app', 'cli']], ['box.say', ['app', 'cli']], ['mcp.exec', ['cli']],
+  ['gates.off', ['app', 'cli']], ['gates.on', ['app', 'cli']], ['you.confirm', ['cli']], ['status.read', ['app', 'cli', 'person']], ['rows.read', ['app', 'cli', 'person']], ['row.read', ['app']], ['hub.stop', ['app', 'cli']], ['run.start', ['app', 'cli']], ['run.output', ['app', 'cli']], ['host.list', ['app', 'cli']], ['host.facts', ['app', 'cli']], ['test.load', ['app', 'cli']],
   // A new secret, on the trusted path, and which are held; values never come back (#70).
   ['secret.enter', ['cli']], ['secret.list', ['app', 'cli']],
   // A hosted terminal the hub reattaches after a restart (#70).
@@ -71,12 +74,12 @@ const ALLOWED = new Map<string, readonly Role[]>([
   // A person added to a project, with a credential of their own (#1337).
   ['person.add', ['cli']],
   // An online model library turned on or off, and your standing rule for it (#1731).
-  ['library.on', ['cli']], ['library.off', ['cli']], ['library.rule', ['cli']],
+  ['library.on', ['cli']], ['library.off', ['cli']], ['library.rule', ['cli']], ['pack.rule', ['cli']], ['job.rule', ['cli']],
   // A one-time invite to a project, and a person's credentials revoked (#1338).
   ['person.invite', ['cli']], ['person.revoke', ['cli']],
   // `deep lease` (#1015): a heavy command's place in the queue, its process group once it starts, and its first process's exit.
   ['lease.wait', ['cli']], ['lease.started', ['cli']], ['lease.exited', ['cli']], ['extension.install', ['cli']], ['guard.add', ['cli']], ['record.backup', ['cli']], ['test.verdict', ['cli']],
-  ['mcp.call', ['mcp']], ['evidence.paste', ['app']],
+  ['mcp.call', ['mcp']], ['mcp.cancel', ['mcp']], ['evidence.paste', ['app']],
   // Setup reads your history into the wiki (#356).
   ['wiki.build', ['cli']],
   // Every agent's memory: the ranked list, and your keep or remove of a lesson (#111).
@@ -95,12 +98,12 @@ const ALLOWED = new Map<string, readonly Role[]>([
   // What macOS says of the app's notifications (#994), when the app connects and when it changes.
   ['notifications.report', ['app']],
   // The canvas side (#806): `deep show` from the CLI; revisions and messages read; the app's input and what it draws.
-  ['canvas.show', ['cli']], ['canvas.revisions', ['app', 'cli']], ['canvas.messages', ['app', 'cli']], ['canvas.user', ['app']], ['canvas.drawn', ['app']],
+  ['canvas.show', ['cli']], ['canvas.export', ['cli']], ['canvas.revisions', ['app', 'cli']], ['canvas.messages', ['app', 'cli']], ['canvas.user', ['app']], ['canvas.drawn', ['app']],
   // Our waiter, run by Claude Code's Stop entry as you, holds until an answer for its session is ready (#18, #25).
   // The pi package holds the same wait on its own connection, and says what became of each answer it took (#40).
   ['session.wait', ['cli', 'mcp']], ['session.delivered', ['mcp']], ['session.stop_waiting', ['mcp']],
   // Your words into a session from the app, a note or a page's box, recorded from: app by their request ID (#340).
-  ['session.note', ['app']],
+  ['session.note', ['app']], ['ask.later', ['app']], ['session.pause', ['app']],
   // A send-back planted for a session's next stop, served only to a hub a test started with DEEP_HUB_TEST_SEND_BACK=1 (#25).
   ['test.send_back', ['cli']],
   // The hub's clock stepped forward, served only to a hub a test started with DEEP_HUB_TEST_CLOCK_STEPS=1 (#965).
@@ -155,21 +158,32 @@ const warnings = (ruled: string): string[] =>
  * labelled with its extension. `ruled` is the guard entries' reply: an agent with no context channel, or a reply
  * with no context, gets it as it is.
  */
-function agentReply(agent: string, reply: ExtensionReply, ruled: string): string {
+function agentReply(agent: string, reply: ExtensionReply, ruled: string, fitted?: string): string {
   if (reply.denies.length) return line({ exit: 2, stdout: '', stderr: reply.denies.map((d) => `DeepBuild blocked this: [${d.extension}] ${d.reason}`).join('\n') + '\n' });
   if (!reply.context.length || (agent !== 'claude-code' && agent !== 'claude')) return ruled;
-  const additionalContext = [...warnings(ruled), ...reply.context.map((b) => `[${b.extension}] ${b.text}`)].join('\n');
+  const additionalContext = fitted ?? contextParts(reply, ruled).map((p) => p.text).join('\n');
   return line({ exit: 0, stdout: JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', additionalContext } }), stderr: '' });
 }
+/** A warn entry's words, then each extension's block, labelled: the parts of a call's context the cap fits (#1296). */
+const contextParts = (reply: ExtensionReply, ruled: string): Part[] =>
+  [...warnings(ruled).map((text) => ({ name: 'guard warnings', text, keep: true })), ...reply.context.map((b) => ({ name: `${b.extension}'s context`, text: `[${b.extension}] ${b.text}` }))];
 /**
  * The core's reply as the agent's hook output: a block with its reason (a stop sent back, a prompt answered from the
  * record), or context the agent adds at a session's start or a prompt, never a decision; beside either, the one
  * line the chat shows (`systemMessage`, #83). Nothing to say is the hook's empty reply.
  */
-function coreReplyLine(event: string, reply: { context?: string; block?: string; message?: string }, watchPaths?: string[]): string {
+function coreReplyLine(agent: string, event: string, reply: { context?: string; block?: string; message?: string }, watchPaths?: string[]): string {
   const out: Record<string, unknown> = {};
+  // Context goes as the agent's adapter gives it the model (#1296); one that gives none at this event sends nothing.
+  const adapter = adapterOf(agent);
+  const given = reply.context && !reply.block && adapter?.contextReply ? adapter.contextReply(event, reply.context) : undefined;
   if (reply.block) Object.assign(out, { decision: 'block', reason: reply.block });
-  else if (reply.context) out.hookSpecificOutput = { hookEventName: event, additionalContext: reply.context };
+  else if (given) {
+    const json = ((): unknown => { try { return JSON.parse(given.stdout); } catch { return undefined; } })();
+    if (!isObj(json)) return line(given);
+    Object.assign(out, json);
+  }
+  else if (reply.context && !adapter?.contextReply) out.hookSpecificOutput = { hookEventName: event, additionalContext: reply.context };
   // A session's start names the ticker file whose change fires its FileChanged hook: the route a line takes into the
   // terminal while a call still runs (#120).
   if (watchPaths?.length && !reply.block) out.hookSpecificOutput = { hookEventName: event, ...(isObj(out.hookSpecificOutput) ? out.hookSpecificOutput : {}), watchPaths };
@@ -196,10 +210,18 @@ function withWaits(ruled: string, event: string, wait: WaitReply): string {
 const fileKey = (file: string): string => { try { const s = statSync(file); return `${s.ino}:${s.size}:${s.mtimeMs}`; } catch { return 'none'; } };
 const versionRefusal = (value: Obj): Refusal =>
   refusal('v' in value ? 'const' : 'required', '/v', 'Send every line with "v": 1, the socket protocol version.', value.v);
+/** A subscribe's scope (#1575): none, as the app subscribes; one session; or the list's rows. Anything else is refused, never read as none. */
+function scopeOf(given: unknown): Scope | undefined | Refused {
+  if (given === undefined) return undefined;
+  if (isObj(given) && given.kind === 'list') return { kind: 'list' };
+  if (!isObj(given) || given.kind !== 'session') return refuse('enum', '/params/scope/kind', 'Scope the stream to one session, {"kind": "session", "session": <its ID>}, or to the list\'s rows, {"kind": "list"}.', isObj(given) ? given.kind : given);
+  if (typeof given.session !== 'string' || !given.session) return refuse('required', '/params/scope/session', 'Name the session the stream is scoped to by its ID.', given.session);
+  return { kind: 'session', session: given.session };
+}
 
 
 interface CoreLink {
-  post(message: CoreMessage & { op: 'hook' | 'replayed' | 'unsubscribe' | 'waiter-gone' | 'notifier-gone' | 'hook-gone' | 'overrun' | 'later' | 'line' | 'denied' }): void;
+  post(message: CoreMessage & { op: 'hook' | 'replayed' | 'unsubscribe' | 'waiter-gone' | 'notifier-gone' | 'hook-gone' | 'overrun' | 'later' | 'line' | 'denied' | 'call-gone' }): void;
   request(request: CoreRequest): Promise<unknown>;
   /** Resolves once the record is open, the spool replayed, in-flight runs recovered and the extensions started, with the hook kinds they handle. */
   started: Promise<{ hooks: string[] }>;
@@ -208,8 +230,8 @@ interface CoreLink {
 /** `scrub` adds values every hook line read from now on is scrubbed of (#332: credentials env-local loaded). */
 interface Parsers { parse(chunks: Buffer[], first: boolean): Promise<Parsed>; scrub(values: string[]): void; close(): Promise<void> }
 
-/** A frame from the core: its event's JSON text. */
-type OnFrame = (sub: string, event: string) => void;
+/** A frame from the core: its event's JSON text, or, `caught` set, the head its subscriber's replay reached (#1575). */
+type OnFrame = (sub: string, event: string, caught?: boolean) => void;
 
 function coreWorker(options: CoreOptions, onFrame: OnFrame, onFatal: (why: string) => void, onAsking: (sessions: string[], judged: string[], resend: string[], cantRun: string[]) => void, onAcking: (session: string) => void, onScrub: (values: string[]) => void): CoreLink {
   const worker = new Worker(new URL('./core-worker.js', import.meta.url), { workerData: { core: options }, resourceLimits: YOUNG });
@@ -217,8 +239,8 @@ function coreWorker(options: CoreOptions, onFrame: OnFrame, onFatal: (why: strin
   let n = 0;
   let started!: (v: { hooks: string[] }) => void;
   const ready = new Promise<{ hooks: string[] }>((resolve) => { started = resolve; });
-  worker.on('message', (m: { op?: string; n?: number; sub?: string; event?: string; message?: string; result?: unknown; error?: Refusal; hooks?: string[]; sessions?: string[]; judged?: string[]; resend?: string[]; cantRun?: string[]; session?: string; values?: string[] }) => {
-    if (m.op === 'frame') return onFrame(m.sub!, m.event!);
+  worker.on('message', (m: { op?: string; n?: number; sub?: string; event?: string; caught?: boolean; message?: string; result?: unknown; error?: Refusal; hooks?: string[]; sessions?: string[]; judged?: string[]; resend?: string[]; cantRun?: string[]; session?: string; values?: string[] }) => {
+    if (m.op === 'frame') return onFrame(m.sub!, m.event!, m.caught);
     if (m.op === 'asking') return onAsking(m.sessions ?? [], m.judged ?? [], m.resend ?? [], m.cantRun ?? []);
     if (m.op === 'acking') return onAcking(m.session!);
     if (m.op === 'scrub') return onScrub(m.values ?? []);
@@ -259,6 +281,7 @@ async function coreInline(options: CoreOptions, onFrame: OnFrame, onFatal: (why:
       else if (message.op === 'later') core.later(message.session, message.cwd, message.text);
       else if (message.op === 'line') void core.line(message.session, message.agent, message.text).catch(() => undefined);
       else if (message.op === 'denied') core.denied(message.session, message.call, { guard: message.guard, label: message.label });
+      else if (message.op === 'call-gone') core.callGone(message.call, message.closed === true);
       else core.unsubscribe(message.sub);
     },
     request: (request) => answer(core, request).catch((error: unknown) => { throw new Refused(asRefusal(error)); }),
@@ -342,6 +365,8 @@ class Conn {
   pending: Buffer[] = [];
   size = 0;
   readonly subs = new Set<string>();
+  /** Its deep mcp calls in flight, each `<connection>:<call ID>`: a cancel or the connection's close tells the core their caller is gone (#1923). */
+  readonly calls = new Set<string>();
   constructor(readonly id: number, readonly sock: net.Socket) {}
   write(o: object): void {
     if (!this.done && this.sock.writable) this.sock.write(line(o));
@@ -354,10 +379,10 @@ class Conn {
 }
 
 /**
- * One subscription: how many of its frames the socket holds and hasn't taken, the frames waiting beyond those,
- * and since when it has taken none.
+ * One subscription: how many of its frames the socket holds and hasn't taken, and their bytes, the frames waiting
+ * beyond those, and since when it has taken none.
  */
-interface Sub { conn: Conn; id: unknown; queued: number; held: string[]; next: number; since: number; watch?: NodeJS.Timeout | undefined }
+interface Sub { conn: Conn; id: unknown; queued: number; bytes: number; held: string[]; next: number; since: number; watch?: NodeJS.Timeout | undefined }
 /** What the hub reads of a guard@1 entry in rules.json. */
 /** The defaults the core decides from the thread's prompts (#84), each with what it does. */
 const NAMED_RULES: Record<string, 'push' | 'pr' | 'merge'> = { 'push-needs-ask': 'push', 'pr-needs-ask': 'pr', 'merge-needs-ask': 'merge', 'merge-names-head': 'merge' };
@@ -440,11 +465,11 @@ class Hub {
       ...(process.env.DEEP_HUB_TEST_PRICES ? { prices: process.env.DEEP_HUB_TEST_PRICES } : {}),
       ...(process.env.DEEP_HUB_TEST_GITHUB ? { github: process.env.DEEP_HUB_TEST_GITHUB } : {}),
       ...(process.env.DEEP_HUB_TEST_FAIL_JOB ? { failJob: process.env.DEEP_HUB_TEST_FAIL_JOB } : {}) };
-    const frame = (sub: string, event: string) => {
+    const frame = (sub: string, event: string, caught?: boolean) => {
       const s = this.subs.get(sub);
       if (!s || s.conn.done) return;
-      const text = `{"v":${VERSION},"id":${JSON.stringify(s.id)},"event":${event}}\n`;
-      if (s.queued < BEHIND) return this.send(sub, s, text);
+      const text = `{"v":${VERSION},"id":${JSON.stringify(s.id)},${caught ? `"caught_up":${event}` : `"event":${event}`}}\n`;
+      if (s.next === s.held.length && s.queued < BEHIND && s.bytes < BEHIND_BYTES) return this.send(sub, s, text);
       s.held.push(text);
       s.watch ??= setInterval(() => {
         if (s.next < s.held.length && Date.now() - s.since > STALL_MS) this.cut(sub, s);
@@ -601,6 +626,7 @@ class Hub {
       this.conns.delete(conn);
       for (const sub of conn.subs) this.unsubscribe(conn, sub);
       if (conn.waiter) this.core.post({ op: 'waiter-gone', key: conn.id });
+      for (const call of conn.calls) this.core.post({ op: 'call-gone', call, closed: true });
       if (conn === this.notifier) {
         this.notifier = undefined;
         this.core.post({ op: 'notifier-gone' });
@@ -617,29 +643,34 @@ class Hub {
     this.subs.delete(sub);
     this.core.post({ op: 'unsubscribe', sub });
   }
-  /** Hands the socket one frame; each frame it takes lets a held one through. */
+  /** Hands the socket one frame; the frames and bytes it takes let held ones through. */
   private send(sub: string, s: Sub, text: string): void {
     // Since the socket last took a frame, or since it was handed one with none waiting.
     if (s.queued++ === 0) s.since = Date.now();
+    const size = Buffer.byteLength(text);
+    s.bytes += size;
     s.conn.sock.write(text, () => {
       s.queued--;
+      s.bytes -= size;
       s.since = Date.now();
-      if (this.subs.get(sub) !== s || s.next === s.held.length) return;
-      const next = s.held[s.next++]!;
-      if (s.next === s.held.length) {
+      if (this.subs.get(sub) !== s) return;
+      while (s.next < s.held.length && s.queued < BEHIND && s.bytes < BEHIND_BYTES) this.send(sub, s, s.held[s.next++]!);
+      if (s.next === s.held.length && s.held.length) {
         s.held = [];
         s.next = 0;
         clearInterval(s.watch);
         s.watch = undefined;
       }
-      this.send(sub, s, next);
     });
   }
-  /** Cut off, never dropped silently: after the frames the socket holds, the consumer resumes from its last log_pos. */
+  /**
+   * Cut off, never dropped silently: after the frames the socket holds, the consumer resumes from its last log_pos.
+   * The refusal counts the frames and bytes the socket held for it (#1575).
+   */
   private cut(sub: string, s: Sub): void {
     this.unsubscribe(s.conn, sub);
     s.held = [];
-    s.conn.write({ id: s.id, error: refusal('fell_behind', '', `This consumer fell more than ${BEHIND} frames behind; subscribe again after the last log_pos you hold.`, s.queued) });
+    s.conn.write({ id: s.id, error: refusal('fell_behind', '', `This consumer fell more than ${BEHIND} frames or ${BEHIND_BYTES >> 20} MiB behind; subscribe again after the last log_pos you hold.`, { frames: s.queued, bytes: s.bytes }) });
   }
 
   /** Frames lines: each newline ends one, however the bytes arrived. */
@@ -1051,7 +1082,7 @@ class Hub {
     // With DeepBuild off every gate is watch-only: a status answer shows beside the prompt, never in its place.
     const shown = reply && this.off && meta.event === 'UserPromptSubmit' && reply.block ? { ...(reply.context ? { context: reply.context } : {}), message: reply.block } : reply;
     const watch = meta.event === 'SessionStart' && !meta.watchOnly && meta.session && this.watches(meta.agent) ? [this.ticker(meta.session)] : undefined;
-    conn.sock.end(shown || watch ? coreReplyLine(meta.event, shown ?? {}, watch) : EMPTY_REPLY);
+    conn.sock.end(shown || watch ? coreReplyLine(meta.agent, meta.event, shown ?? {}, watch) : EMPTY_REPLY);
   }
 
   /**
@@ -1064,7 +1095,9 @@ class Hub {
     const asked = this.core.request({ op: 'extension-hook', data }).catch(() => null) as Promise<ExtensionReply | null>;
     const reply = await Promise.race([asked, late]).finally(() => clearTimeout(timer));
     await this.lateReply(hold);
-    if (conn.sock.writable) conn.sock.end(reply ? agentReply(meta.agent, reply, ruled) : ruled);
+    // Past the agent's cap, the core keeps what doesn't fit and names where to continue (#1296).
+    const fitted = reply?.context.length && !reply.denies.length ? ((await this.core.request({ op: 'context-fit', meta, parts: contextParts(reply, ruled), join: '\n' }).catch(() => undefined)) as string | undefined) : undefined;
+    if (conn.sock.writable) conn.sock.end(reply ? agentReply(meta.agent, reply, ruled, fitted) : ruled);
   }
 
   /**
@@ -1307,11 +1340,22 @@ class Hub {
         return void reply(this.core.request({ op: 'health' }).then(async (health) => ({ pid: process.pid, start: this.start, off: this.off, ...(health as Obj), process: await processHealth() })));
       case 'stream.subscribe': {
         const sub = `${conn.id}:${JSON.stringify(id)}`;
-        conn.subs.add(sub);
-        this.subs.set(sub, { conn, id, queued: 0, held: [], next: 0, since: Date.now() });
         const after = Number.isSafeInteger(params.after) && (params.after as number) >= 0 ? (params.after as number) : 0;
+        const scope = scopeOf(params.scope);
+        if (scope instanceof Refused) return conn.write({ id, error: scope.refusal });
+        conn.subs.add(sub);
+        this.subs.set(sub, { conn, id, queued: 0, bytes: 0, held: [], next: 0, since: Date.now() });
         // The reply is the stream's first frame: it carries the start ID, so a consumer that sees a new one redoes its reads.
-        return void reply(this.core.request({ op: 'subscribe', sub, after }).then(() => ({ subscribed: true, after, start: this.start })));
+        // A scoped one also names the head (#1575): its replay ends there, with one frame marking it; or, too far behind
+        // for a replay, it says to read a fresh snapshot, and no frame follows.
+        return void reply(this.core.request({ op: 'subscribe', sub, after, ...(scope ? { scope } : {}) }).then((got) => {
+          if (!scope) return { subscribed: true, after, start: this.start };
+          const { head, snapshot } = got as { head: number; snapshot?: true };
+          if (!snapshot) return { subscribed: true, after, start: this.start, head };
+          conn.subs.delete(sub);
+          this.subs.delete(sub);
+          return { subscribed: false, snapshot: true, after, start: this.start, head };
+        }));
       }
       case 'person.add':
       case 'person.invite':
@@ -1323,6 +1367,11 @@ class Hub {
           await this.syncNetwork();
           return result;
         }));
+      case 'mcp.cancel': {
+        const call = `${conn.id}:${String(params.call)}`;
+        if (conn.calls.delete(call)) this.core.post({ op: 'call-gone', call });
+        return conn.write({ id, result: {} });
+      }
       case 'session.wait':
         conn.waiter = true;
         return void reply(this.core.request({ op: 'call', method, params, context: { role: conn.name, waiter: conn.id, session: conn.session } }));
@@ -1337,7 +1386,12 @@ class Hub {
         if (READS.has(method)) {
           return void reply(this.core.request({ op: 'call', method, params, context: { role: conn.name } }).then((result) => ({ start: this.start, ...(result as Obj) })));
         }
-        return void reply(this.core.request({ op: 'call', method, params, context: { role: conn.name, session: conn.session, ...(conn.parent ? { parent: conn.parent } : {}), ...(conn.cwd ? { cwd: conn.cwd } : {}), ...(conn.peer ? { peer: conn.peer } : {}) } }));
+        {
+          const call = method === 'mcp.call' ? `${conn.id}:${String(id)}` : undefined;
+          if (call) conn.calls.add(call);
+          const work = this.core.request({ op: 'call', method, params, context: { role: conn.name, session: conn.session, ...(conn.parent ? { parent: conn.parent } : {}), ...(conn.cwd ? { cwd: conn.cwd } : {}), ...(conn.peer ? { peer: conn.peer } : {}), ...(call ? { call } : {}) } });
+          return void reply(call ? work.finally(() => conn.calls.delete(call)) : work);
+        }
     }
   }
 
