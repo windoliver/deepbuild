@@ -6000,7 +6000,7 @@ export class Core {
     // reads a watch-only session's unverified events too, or its own SessionEnd would leave it open here for good.
     const sessions = ((await this.record.raw(`SELECT s.id, COALESCE((SELECT e.kind <> 'session.start' FROM events e WHERE e.session_id = s.id AND e.kind IN ('session.start', 'session.end', 'session.archived') ORDER BY e.log_pos DESC LIMIT 1), 0) AS closed
       FROM sessions s WHERE s.last_seen IS NOT NULL ORDER BY s.last_seen DESC LIMIT 100`)) as { id: string; closed: number }[]).map((s) => ({ id: s.id, closed: s.closed === 1 }));
-    return { gates: { watch_only: this.blocked !== undefined, reason: this.blocked ?? null }, notifications: this.notifications, secrets: await this.secretStore(), network, claude, codex, sessions, jobs: Object.fromEntries([...this.jobs].map(([name, failing]) => [name, { failing }])), packs: await this.libraries?.packs.shipped(false) ?? [] };
+    return { gates: { watch_only: this.blocked !== undefined, reason: this.blocked ?? null }, notifications: this.notifications, secrets: await this.secretStore(), network, claude, codex, sessions, jobs: Object.fromEntries([...this.jobs].map(([name, failing]) => [name, { failing }])), packs: await this.libraries?.packs.shipped() ?? [] };
   }
   /** Whether this process can reach the OS secret store, read at most every ten seconds. */
   private secretStore(): Promise<string> {
@@ -6830,7 +6830,7 @@ export class Core {
 
   /** The world the canvas core reads: the hub's live sessions, the record's asks and readings, and the world file. */
   private async canvasWorld(): Promise<CanvasWorld> {
-    const file = { ...this.worldFile.read(), packs: await this.libraries?.packs.installed() ?? [] };
+    const file = { ...this.worldFile.read(), packs: await this.libraries?.packs.installed(this.canvas()) ?? [] };
     const sessions = [...this.sessions.values()].filter((s) => !s.ended).map((s) => ({ id: s.id, thread: s.thread, name: nameOf(file, s.id, s.agent) }));
     const record: Obj = {};
     const asks = (await this.record.raw('SELECT id, session_id, status FROM asks')) as { id: string; session_id: string | null; status: string }[];
@@ -7051,7 +7051,7 @@ export class Core {
   /** The same first-use gate for a shown document and its exports, for every asset-reading kind. */
   private async preparePackAssets(document: Obj): Promise<Obj | undefined> {
     if (!this.libraries) return { status: 'BLOCKED', outcome: 'refused', cause: 'The asset host is not ready.', snapshots: [] };
-    for (const pack of Array.isArray(document.packs) ? document.packs : []) if (typeof pack !== 'string' || !(await this.libraries.packs.has(pack))) {
+    for (const pack of Array.isArray(document.packs) ? document.packs : []) if (typeof pack !== 'string' || !(await this.libraries.packs.has(pack, this.canvas()))) {
       return { status: 'BLOCKED', outcome: 'refused', cause: `pack_missing: ${String(pack)}`, snapshots: [] };
     }
     for (const { pack, asset } of this.libraries.packs.used(document)) {

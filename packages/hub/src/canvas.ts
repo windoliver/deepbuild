@@ -109,25 +109,13 @@ export async function exportCommand(args: readonly string[]): Promise<number> {
   }
 }
 /**
- * The pack check of each pack folder (#306), run once in a canvas core of its own so nothing replays it: the store's
- * row per version, `{pack, version, state, checks, issues}`, as `deep-show run` answers its `packs` call.
+ * The pack check of each pack folder (#306), run by the hub's own canvas core in a world that holds only those packs:
+ * the store's row per version, `{pack, version, state, checks, issues}`, as its `packs` call answers.
  */
-export function checkPacks(packs: { id: string; dir: string }[]): Promise<Obj[]> {
-  const evidence = mkdtempSync(join(tmpdir(), 'deep-pack-check-'));
-  return new Promise<Obj[]>((done, fail) => {
-    const child = spawn(canvasCore(), ['run'], { stdio: ['pipe', 'pipe', 'ignore'] });
-    let out = '';
-    child.stdout.on('data', (chunk: Buffer) => { out += chunk.toString('utf8'); });
-    child.on('error', fail);
-    child.on('exit', () => {
-      try {
-        const reply = (JSON.parse(out.split('\n')[0] ?? '') as { replies?: { packs?: Obj[] }[] }).replies?.[0]?.packs;
-        if (!Array.isArray(reply)) throw Error(out.slice(0, 300));
-        done(reply);
-      } catch (error) { fail(Error(`the canvas core gave no pack rows: ${(error as Error).message}`)); }
-    });
-    child.stdin.end(`${JSON.stringify({ evidence, packs, calls: [{ call: 'packs' }] })}\n`);
-  }).finally(() => rmSync(evidence, { recursive: true, force: true }));
+export async function checkPacks(canvas: Canvas, packs: { id: string; dir: string }[]): Promise<Obj[]> {
+  const { reply } = await canvas.call({ sessions: [], record: {}, file: { packs }, docs: [] }, { call: 'packs' });
+  if (!Array.isArray(reply.packs)) throw Error(`the canvas core gave no pack rows: ${JSON.stringify(reply).slice(0, 300)}`);
+  return reply.packs as Obj[];
 }
 
 /** Still rendering is shared; only the hub supplies installed packs and checked asset bytes. */

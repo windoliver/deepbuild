@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameS
 import { isAbsolute, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { canonicalize, type JsonValue } from '@deepbuild/contracts';
-import { checkPacks } from './canvas.js';
+import { checkPacks, type Canvas } from './canvas.js';
 
 type Obj = Record<string, unknown>;
 const object = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -101,18 +101,18 @@ export class Packs {
     writeFileSync(`${file}.tmp`, JSON.stringify(refusal));
     renameSync(`${file}.tmp`, file);
   }
-  /** The store's packs once the release's are checked and installed: what the canvas core holds. */
-  async installed(): Promise<{ id: string; dir: string }[]> { await this.shipped(true); return this.all(); }
-  async has(ref: string): Promise<boolean> { await this.shipped(true); return this.held.has(ref); }
+  /** The store's packs once `canvas` checked and installed the release's: what the canvas core holds. */
+  async installed(canvas: Canvas): Promise<{ id: string; dir: string }[]> { await this.shipped(canvas); return this.all(); }
+  async has(ref: string, canvas: Canvas): Promise<boolean> { await this.shipped(canvas); return this.held.has(ref); }
   /**
-   * Each pack the release ships, as the store holds it: installed, refused with its issues, or not checked yet. With
-   * `check`, a version the store has no check of is checked once, by the canvas core's pack check, and installed if
-   * it passes, so a restart checks nothing again.
+   * Each pack the release ships, as the store holds it: installed, refused with its issues, or not checked yet. Given
+   * the canvas core, a version the store has no check of is checked once, by its pack check, and installed if it
+   * passes, so a restart checks nothing again.
    */
-  shipped(check: boolean): Promise<Obj[]> {
-    return check ? (this.release ??= this.ship()) : (this.release ?? this.ship(false));
+  shipped(canvas?: Canvas): Promise<Obj[]> {
+    return canvas ? (this.release ??= this.ship(canvas)) : (this.release ?? this.ship());
   }
-  private async ship(check = true): Promise<Obj[]> {
+  private async ship(canvas?: Canvas): Promise<Obj[]> {
     const rows: Obj[] = [];
     const fresh: { folder: string; pack: PackVersion }[] = [];
     for (const { folder, pack, error } of (this.shipping ??= releasePacks())) {
@@ -123,14 +123,14 @@ export class Packs {
       if (held && held.digest !== pack.digest) rows.push({ ...row, state: 'refused', issues: [`${pack.ref} is installed with other bytes, and a published version never changes`] });
       else if (held) rows.push({ ...row, state: 'installed', issues: [], checks: held.checks ?? 0 });
       else if (refused?.digest === pack.digest) rows.push({ ...row, state: 'refused', issues: refused.issues, checks: refused.checks });
-      else if (check) fresh.push({ folder, pack });
+      else if (canvas) fresh.push({ folder, pack });
       else rows.push({ ...row, state: 'not_checked', issues: [] });
     }
-    if (!fresh.length) return rows;
+    if (!canvas || !fresh.length) return rows;
     const staged = fresh.map(({ folder, pack }) => ({ folder, pack, dir: this.stage(pack) }));
     let checked: Obj[];
     try {
-      checked = await checkPacks(staged.map(({ pack, dir }) => ({ id: pack.id, dir })));
+      checked = await checkPacks(canvas, staged.map(({ pack, dir }) => ({ id: pack.id, dir })));
     } catch (error) {
       const why = error instanceof Error ? error.message : String(error);
       return [...rows, ...fresh.map(({ folder, pack }) => ({ folder, pack: pack.id, version: pack.version, state: 'not_checked', issues: [why] }))];
