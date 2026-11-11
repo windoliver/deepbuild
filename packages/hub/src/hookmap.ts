@@ -338,6 +338,12 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
           data.nested = { complete: mapped.nested.complete, ...(Number.isSafeInteger(mapped.nested.calls) ? { calls: mapped.nested.calls } : {}) };
           v = 3;
         }
+        // What the target said first when it failed, scrubbed and clamped: the receipt quotes it, never the agent's words.
+        const said = mapped.outcome === 'failed' ? [...scrub(errorLine(str(payload.error)))] : [];
+        if (said.length) {
+          data.error = said.length > ERROR_LINE ? `${said.slice(0, ERROR_LINE - 1).join('')}…` : said.join('');
+          v = 4;
+        }
         // The pull request a `gh pr create` call opened, from the call's own response (#83): only a call that is that
         // one command counts, so an echoed URL never passes for the one gh printed. Read here for both agents, since a
         // Codex session's rollout is never read.
@@ -452,6 +458,19 @@ function failure(failed: boolean, payload: JsonObject, kind: string, cwd: string
   const exit = code ? Number(code[1]) : null;
   const cause = payload.is_interrupt === true ? 'interrupted' : exit !== null ? 'command_failed' : /permission|denied by the user/i.test(error) ? 'permission_denied' : error ? 'tool_error' : 'unknown';
   return { outcome: 'failed', exit_code: exit !== null && exit <= 255 ? exit : null, signature: signature(`${kind}:${cause}`, error, cwd), cause, owner: cause === 'permission_denied' ? 'you' : 'agent' };
+}
+
+/** The most characters of a failed call's error line the record keeps (tool.after@4's `error`). */
+const ERROR_LINE = 300;
+/**
+ * A failure's first error line from its target (#2029), which an allowed step's receipt quotes: the agent's own
+ * "Exit code N" line left out and whitespace runs made one space; the first line that reads as an error (git's `!`,
+ * `error:`, `fatal:`, an exception's name), else the first line.
+ */
+function errorLine(error: string): string {
+  const lines = error.split('\n').map((l) => l.replace(/\s+/g, ' ').trim()).filter(Boolean);
+  const own = /^Exit code \d+$/.test(lines[0] ?? '') ? lines.slice(1) : lines;
+  return own.find((l) => /^(!|error\b|fatal\b|\w*(Error|Exception)\b)/i.test(l)) ?? own[0] ?? '';
 }
 
 /** The loop fact a tool hook carries, by the agent's loop facts: wake-ups and crons once they ran, background subagents and commands, and monitors' watches. */

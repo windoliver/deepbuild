@@ -4,6 +4,7 @@
 // claim, its newest claim's line, the one its chat showed (#669). `deep numbers` reads the hub's readings.
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
+import { codeWords } from '@deepbuild/contracts';
 import { billingMode } from '@deepbuild/readings';
 import { shadowedBy, topLevel } from './claude-settings.js';
 import { call } from './client.js';
@@ -34,6 +35,8 @@ export const OLDER_SET = 'Runs the older set:';
 /** A Claude Code session's five-hour window where the repo's own status line shadows the forwarder (#1296). */
 export const UNREAD_WINDOW = '5 h · unknown:';
 export const NEWER_SET = 'Runs the current set:';
+/** A stop's cause in words, from the one list every view reads (#2029); a cause the list doesn't know reads as unknown's. */
+const causeWords = (cause: string): string => codeWords('stop.cause', cause) ?? codeWords('stop.cause', 'unknown')!;
 /** The most tool calls a finished turn lists; the rest are counted on one line. */
 const CALLS_SHOWN = 20;
 
@@ -101,9 +104,9 @@ export async function sessionStates(query: (sql: string) => Promise<unknown[]>, 
       : s.status === 'waiting' && now - (s.last_seen ?? 0) <= WAITING_QUIET_MS ? ['needs you', 'waiting', 'a permission prompt waits on you', 'a permission prompt waits on you', seen]
       // A session whose hooks can't run sends no hook to say so (#993): stuck, never folded away as quiet.
       : note?.startsWith(CANT_RUN) ? ['stuck', 'stuck', 'BLOCKED: its hooks can\'t run, so its gates are watch-only; run `deep setup`', 'BLOCKED: its hooks can\'t run, so its gates are watch-only; run `deep setup`', seen]
-      : s.status === 'stuck' ? ['stuck', 'stuck', `blocked on something only you or a service can clear${s.cause ? ` (${s.cause})` : ''}`, `blocked on something only you or a service can clear${s.cause ? ` (${s.cause})` : ''}`, seen]
+      : s.status === 'stuck' ? ['stuck', 'stuck', `blocked on something only you or a service can clear${s.cause ? ` (${causeWords(s.cause)})` : ''}`, `blocked on something only you or a service can clear${s.cause ? ` (${causeWords(s.cause)})` : ''}`, seen]
       : promised ? ['flagged', 'promised', `a promised check is due since ${clockTime(promised.due)}, waiting for its next prompt or stop: "${promised.quote}"`, `a promised check is due, waiting for its next prompt or stop: "${promised.quote}"`, promised.due]
-      : s.status === 'failed' ? ['flagged', 'failed', `its turn ended failed, with no claim${s.cause ? ` (${s.cause})` : ''}`, `its turn ended failed, with no claim${s.cause ? ` (${s.cause})` : ''}`, seen]
+      : s.status === 'failed' ? ['flagged', 'failed', `its turn ended failed, with no claim${s.cause ? ` (${causeWords(s.cause)})` : ''}`, `its turn ended failed, with no claim${s.cause ? ` (${causeWords(s.cause)})` : ''}`, seen]
       : midTurn ? ['flagged', 'gone', 'its process is gone mid-turn', 'its process is gone mid-turn', seen]
       : s.status === 'unknown' || s.status === 'waiting' || now - (s.last_seen ?? 0) > QUIET_MS ? ['quiet', 'quiet', `last seen ${ago(s.last_seen)} ago`, 'no hook since', seen]
       // A session waiting on its monitor (#997) is still at work.

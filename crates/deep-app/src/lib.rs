@@ -28,6 +28,7 @@ pub mod chrome;
 pub mod chrome_fixture;
 pub mod chrome_fx;
 pub mod chrome_gallery;
+pub mod codes;
 pub mod commands;
 pub mod confirm;
 pub mod device;
