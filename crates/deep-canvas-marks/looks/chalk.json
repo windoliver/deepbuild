@@ -8,7 +8,12 @@
     "board": "#22332b",
     "chalk_white": "#efeee6",
     "dust": "#7d9488",
-    "chalk_yellow": "#f3d36b"
+    "chalk_yellow": "#f3d36b",
+    "chalk_blue": "#9ecbf0",
+    "chalk_pink": "#f2a7b8",
+    "chalk_green": "#a9dba8",
+    "chalk_orange": "#f0b48a",
+    "chalk_grey": "#a9b8b0"
   },
   "roles": {
     "ground": "board",
@@ -16,7 +21,16 @@
     "muted": "dust",
     "accent": "chalk_yellow",
     "body": "hand",
-    "math": "math"
+    "math": "math",
+    "code_keyword": "chalk_yellow",
+    "code_type": "chalk_blue",
+    "code_function": "chalk_pink",
+    "code_string": "chalk_green",
+    "code_number": "chalk_orange",
+    "code_comment": "chalk_grey",
+    "diff_added": "chalk_green",
+    "diff_removed": "chalk_pink",
+    "diff_changed": "chalk_blue"
   },
   "themes": {
     "light": {},
@@ -58,6 +72,23 @@
     "glyph": "⚠"
   },
   "legend": "auto",
+  "code": {
+    "keyword": "code_keyword",
+    "type": "code_type",
+    "function": "code_function",
+    "variable": "ink",
+    "string": "code_string",
+    "number": "code_number",
+    "comment": "code_comment",
+    "operator": "ink",
+    "punctuation": "ink",
+    "plain": "ink"
+  },
+  "diff": {
+    "added": "diff_added",
+    "removed": "diff_removed",
+    "changed": "diff_changed"
+  },
   "lines": {
     "line": {
       "kind": "chalk",

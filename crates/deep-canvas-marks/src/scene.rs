@@ -69,6 +69,9 @@ pub type Palette = BTreeMap<String, Rgb>;
 pub struct Type {
     pub fonts: BTreeMap<String, &'static str>,
     pub fallback: Vec<&'static str>,
+    /// #1965: the look's code roles, the role each token class draws in (Look `look@1`: `code`);
+    /// empty for a look that gives none, where every token draws in plain.
+    pub code: BTreeMap<String, String>,
     /// #149: the look's drawn fields, when marks are dressed by them.
     pub drawn: Option<Arc<deep_canvas_drawn::spec::Look>>,
     /// #149's wrong programs: only a look's first rim, and every ink fill flat.
@@ -619,7 +622,8 @@ pub enum ImageSampling {
 pub use crate::atlas::AtlasCell;
 
 /// A styled span of a text's one shaped run (`runs: [{from, to, role}]`): graphemes `[from, to)`
-/// painted in `role`. It changes no glyph, so the run is shaped once and kerns across it.
+/// painted in `role`. It changes no glyph, so the run is shaped once and kerns across it. A
+/// text's spans are in order and never overlap ([`text_runs`]).
 #[derive(Clone, Debug, PartialEq)]
 pub struct TextRun {
     pub from: usize,
@@ -635,29 +639,34 @@ pub fn run_paint<'a>(
     role: Option<&'a str>,
     color: Rgb,
 ) -> (Option<&'a str>, Rgb) {
-    runs.iter()
-        .find(|r| (r.from..r.to).contains(&grapheme))
+    runs.get(runs.partition_point(|r| r.to <= grapheme))
+        .filter(|r| r.from <= grapheme)
         .map_or((role, color), |r| (Some(r.role.as_str()), r.color))
 }
 
 /// A text's runs that paint in a role of their own; a run that sets no role keeps the item's
-/// paint. [`text_spans`] has already held every run's fields.
+/// paint. [`text_spans`] has already held every run's fields. #1965: after them, a code item's
+/// tokens (`code`, its display form), each a run in the role the look's type gives its class.
+/// The runs come out in order with none overlapping, each grapheme in the first listed that
+/// holds it, so a run a document writes paints over a token.
 fn text_runs(
-    palette: &Palette,
+    (palette, ty): (&Palette, &Type),
     params: &Map<String, Value>,
     path: &str,
+    code: Option<&crate::code::Display>,
 ) -> Result<Vec<TextRun>, Refused> {
-    let Some(Value::Array(list)) = params.get("runs") else {
-        return Ok(Vec::new());
-    };
     let mut out = Vec::new();
-    for (i, run) in list.iter().enumerate() {
+    let list = params.get("runs").and_then(Value::as_array);
+    for (i, run) in list.into_iter().flatten().enumerate() {
         let index = |k: &str| run.get(k).and_then(Value::as_u64).map(|n| n as usize);
         let (Some(from), Some(to), Some(Value::String(name))) =
             (index("from"), index("to"), run.get("role"))
         else {
             continue;
         };
+        if from >= to {
+            continue;
+        }
         let at = format!("{path}/params/runs/{i}/role");
         out.push(TextRun {
             from,
@@ -666,7 +675,58 @@ fn text_runs(
             role: name.clone(),
         });
     }
-    Ok(out)
+    if let Some(code) = code {
+        for (span, class) in crate::code::tokens(params, code, path)? {
+            let Some(name) = ty.code.get(class).filter(|_| !span.is_empty()) else {
+                continue;
+            };
+            let Some(&color) = palette.get(name) else {
+                return refuse("role_unresolved", format!("look/code/{class}: {name}"));
+            };
+            out.push(TextRun {
+                from: span.start,
+                to: span.end,
+                role: name.clone(),
+                color,
+            });
+        }
+    }
+    Ok(disjoint(out))
+}
+
+/// `runs` in order with none overlapping: each grapheme stays in the first run listed that
+/// holds it.
+fn disjoint(runs: Vec<TextRun>) -> Vec<TextRun> {
+    if runs.windows(2).all(|w| w[0].to <= w[1].from) {
+        return runs;
+    }
+    // The graphemes no run holds yet, as spans by their start.
+    let mut free = BTreeMap::from([(0, usize::MAX)]);
+    let mut out = Vec::with_capacity(runs.len());
+    for run in runs {
+        let met: Vec<(usize, usize)> = free
+            .range(..run.to)
+            .rev()
+            .take_while(|(_, end)| **end > run.from)
+            .map(|(start, end)| (*start, *end))
+            .collect();
+        for (start, end) in met {
+            free.remove(&start);
+            if start < run.from {
+                free.insert(start, run.from);
+            }
+            if end > run.to {
+                free.insert(run.to, end);
+            }
+            out.push(TextRun {
+                from: start.max(run.from),
+                to: end.min(run.to),
+                ..run.clone()
+            });
+        }
+    }
+    out.sort_by_key(|r| r.from);
+    out
 }
 
 /// #1964: a text's `runs` as styled spans of its one shaped run (`[{from, to, role, font, weight,
@@ -865,6 +925,10 @@ pub fn text_spec(
     text_spec_in(id, params, shown, &Type::default())
 }
 
+/// The most characters a text written as text holds (Text `text@1`: `text`); a code item's
+/// display text is held to the cap on its raw bytes instead ([`crate::code::RAW_CAP`]).
+pub const TEXT_CAP: usize = 4_096;
+
 /// [`text_spec`] in a look's type (#417): its font names and roles, and its fallback families.
 pub fn text_spec_in(
     id: &str,
@@ -872,28 +936,39 @@ pub fn text_spec_in(
     shown: Option<&Shown>,
     ty: &Type,
 ) -> Result<TextSpec, Refused> {
+    let code = crate::code::read(params, &format!("items/{id}"))?;
+    text_spec_of(id, params, shown, ty, code.map(|d| d.text))
+}
+
+/// [`text_spec_in`] for an item whose code, if it is code, shows the display text `code`.
+fn text_spec_of(
+    id: &str,
+    params: &Map<String, Value>,
+    shown: Option<&Shown>,
+    ty: &Type,
+    code: Option<String>,
+) -> Result<TextSpec, Refused> {
     let path = format!("items/{id}");
+    let written = params.get("text").and_then(Value::as_str);
+    if written.is_some_and(|t| t.chars().count() > TEXT_CAP) {
+        return refuse("out_of_range", format!("{path}/params/text"));
+    }
     // A code item shows its raw bytes' display form (Text `text@1`: code).
-    let code = || match (params.get("code"), params.get("raw")) {
-        (Some(_), Some(Value::String(raw))) => {
-            Some(crate::code::display(raw, crate::code::tab(params)).text)
-        }
-        _ => None,
-    };
-    let text = shown.map(|s| s.text.clone()).or_else(|| {
-        params
-            .get("text")
-            .and_then(Value::as_str)
-            .map(str::to_string)
-            .or_else(code)
-    });
+    let text = shown
+        .map(|s| s.text.clone())
+        .or_else(|| written.map(str::to_string).or(code));
     let Some(text) = text else {
         return refuse("bad_doc", format!("{path}/params/text"));
     };
+    // #1965: code is set in the look's monospace font role.
     let font = params
         .get("font")
         .and_then(Value::as_str)
-        .unwrap_or("body")
+        .unwrap_or(if params.contains_key("code") {
+            "mono"
+        } else {
+            "body"
+        })
         .to_string();
     let lang = match params.get("lang") {
         None => None,
@@ -5135,9 +5210,15 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
                         .cloned()
                         .unwrap_or(Value::String("ink".into()))
                 };
+                let code = crate::code::read(params, &path)?;
+                let text = code.as_ref().map(|d| d.text.clone());
+                // Tokens land on the display text, which a code item shows where nothing else does.
+                let tokened = code
+                    .as_ref()
+                    .filter(|_| shown.is_none() && !params.contains_key("text"));
                 Mark::Text {
                     item: id.clone(),
-                    spec: text_spec_in(id, params, shown, ctx.ty)?,
+                    spec: text_spec_of(id, params, shown, ctx.ty, text)?,
                     origin: pos,
                     color: role(
                         ctx.palette,
@@ -5145,7 +5226,7 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
                         &format!("{path}/params/paint/fill/role"),
                     )?,
                     role: color_role.as_str().map(str::to_string),
-                    runs: text_runs(ctx.palette, params, &path)?,
+                    runs: text_runs((ctx.palette, ctx.ty), params, &path, tokened)?,
                 }
             }
             // A 2D layer's pass runs on the target of a group that names it, and draws nothing.
@@ -6312,5 +6393,90 @@ mod tests {
             .map(|m| m.mark.item().to_string())
             .collect();
         assert_eq!(marks, ["d", "c", "r"]);
+    }
+
+    /// #1965: the one code item of a board, drawn in a type that gives `code` roles.
+    fn code_runs(
+        params: Value,
+        code: &[(&str, &str)],
+    ) -> Result<(TextSpec, Vec<TextRun>), Refused> {
+        let doc = board(json!({"c": {"kind": "text@1", "layer": "main", "params": params}}));
+        let doc = doc.as_object().unwrap();
+        let mut palette = palette();
+        palette.insert("red".into(), [200, 0, 0]);
+        palette.insert("blue".into(), [0, 0, 200]);
+        let ty = Type {
+            code: code
+                .iter()
+                .map(|(c, r)| (c.to_string(), r.to_string()))
+                .collect(),
+            ..Type::default()
+        };
+        let items = doc["items"].as_object().unwrap();
+        let f = frame_planted(
+            doc,
+            items,
+            (&palette, &ty),
+            &Record::default(),
+            1.0,
+            Planted::None,
+        )?;
+        let Mark::Text { spec, runs, .. } = &f.layers[0].marks[0].mark else {
+            panic!("a text mark")
+        };
+        Ok((spec.clone(), runs.clone()))
+    }
+
+    #[test]
+    fn a_code_item_s_tokens_are_runs_in_the_look_s_code_roles_set_in_its_mono_font() {
+        let params = json!({"raw": "def go(a):\n", "code": {"language": "python", "tokens": [
+            {"from": 0, "to": 3, "class": "keyword"}, {"from": 4, "to": 6, "class": "function"}]}});
+        let look = [("keyword", "red"), ("function", "blue")];
+        let (spec, runs) = code_runs(params.clone(), &look).unwrap();
+        assert_eq!(
+            (spec.font.as_str(), spec.text.as_str()),
+            ("mono", "def go(a):")
+        );
+        fn painted(runs: &[TextRun], g: usize) -> (Option<&str>, Rgb) {
+            run_paint(runs, g, Some("ink"), [0, 0, 0])
+        }
+        assert_eq!(painted(&runs, 0), (Some("red"), [200, 0, 0]));
+        assert_eq!(painted(&runs, 2), (Some("red"), [200, 0, 0]));
+        assert_eq!(painted(&runs, 3), (Some("ink"), [0, 0, 0]));
+        assert_eq!(painted(&runs, 5), (Some("blue"), [0, 0, 200]));
+        assert_eq!(painted(&runs, 7), (Some("ink"), [0, 0, 0]));
+
+        // A run the document writes paints over the token under it, and the token's rest stays.
+        let mut over = params.clone();
+        over["runs"] = json!([{"from": 1, "to": 5, "role": "blue"}]);
+        let (_, runs) = code_runs(over, &look).unwrap();
+        let roles: Vec<_> = (0..7).map(|g| painted(&runs, g).0.unwrap()).collect();
+        assert_eq!(
+            roles,
+            ["red", "blue", "blue", "blue", "blue", "blue", "ink"]
+        );
+
+        // A look with no code roles draws every token in plain, and still holds its class.
+        assert!(code_runs(params.clone(), &[]).unwrap().1.is_empty());
+        let mut outside = params;
+        outside["code"]["tokens"][1]["class"] = json!("identifier");
+        assert_eq!(
+            code_runs(outside, &[]).unwrap_err().path,
+            "items/c/params/code/tokens/1/class: identifier"
+        );
+    }
+
+    #[test]
+    fn a_text_written_as_text_holds_4096_characters_and_a_code_item_s_display_text_more() {
+        let text =
+            |n: usize| code_runs(json!({"text": "é".repeat(n)}), &[]).map(|(spec, _)| spec.font);
+        assert_eq!(text(TEXT_CAP).as_deref(), Ok("body"));
+        let over = text(TEXT_CAP + 1).unwrap_err();
+        assert_eq!(
+            (over.code, over.path.as_str()),
+            ("out_of_range", "items/c/params/text")
+        );
+        let code = json!({"raw": "a".repeat(TEXT_CAP + 1), "code": {"language": "text"}});
+        assert_eq!(code_runs(code, &[]).unwrap().0.text.len(), TEXT_CAP + 1);
     }
 }

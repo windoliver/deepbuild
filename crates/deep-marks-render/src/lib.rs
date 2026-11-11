@@ -698,12 +698,14 @@ fn inline_sidecars(input: &mut Map<String, Value>) -> Result<(), Value> {
         .map(PathBuf::from);
     if let Some(Value::Object(doc)) = input.get_mut("doc") {
         asset::sidecars(doc, store)?;
+        asset::raws(doc, store)?;
         asset::tables(doc, evidence.as_deref())?;
     }
     if let Some(Value::Array(steps)) = input.get_mut("steps") {
         for step in steps {
             if let Some(Value::Object(doc)) = step.get_mut("doc") {
                 asset::sidecars(doc, store)?;
+                asset::raws(doc, store)?;
             }
         }
     }

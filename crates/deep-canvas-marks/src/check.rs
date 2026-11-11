@@ -205,7 +205,8 @@ fn text_numbers(doc: &Map<String, Value>, id: &str, item: &Value) -> Vec<Value> 
             .chain(anchors)
             .collect();
     }
-    let (Some(quote), Some(Value::String(raw))) = (p.get("quote"), p.get("raw")) else {
+    let raw = crate::code::raw(p).filter(|r| r.len() <= crate::code::RAW_CAP);
+    let (Some(quote), Some(raw)) = (p.get("quote"), raw) else {
         return Vec::new();
     };
     crate::code::digits(&crate::code::display(raw, crate::code::tab(p)))
@@ -224,7 +225,7 @@ pub fn quotes(doc: &Map<String, Value>, bytes: impl Fn(&str) -> Option<Vec<u8>>)
     let mut issues = Vec::new();
     for (id, item) in object_or_empty(doc.get("items")) {
         let p = object_or_empty(item.get("params"));
-        let (Some(quote), Some(Value::String(raw))) = (p.get("quote"), p.get("raw")) else {
+        let (Some(quote), Some(raw)) = (p.get("quote"), crate::code::raw(p)) else {
             continue;
         };
         let source = quote.get("source").and_then(Value::as_str).unwrap_or("");
@@ -245,9 +246,7 @@ pub fn quotes(doc: &Map<String, Value>, bytes: impl Fn(&str) -> Option<Vec<u8>>)
                 .and_then(Value::as_u64)
                 .map_or(1, |n| n as usize)
         };
-        if let Some((line, byte)) =
-            crate::code::mismatch(raw.as_bytes(), &found, [line(0), line(1)])
-        {
+        if let Some((line, byte)) = crate::code::mismatch(&raw, &found, [line(0), line(1)]) {
             issues.push(Issue {
                 fix: "Quote the source's bytes exactly, line ends included, or don't quote it."
                     .into(),
@@ -452,6 +451,56 @@ fn glyph_issues(items: &Map<String, Value>, ty: &Type, issues: &mut Vec<Issue>) 
     }
 }
 
+/// #1965: a text@1 refusal that names what it holds to: a text past text@1's cap or a code item's
+/// raw past its own, with its size and the cap, and a token's class outside the list (Text
+/// `text@1`; Text `text@1`: code). `None` for any other refusal.
+fn text_refusal(items: &Map<String, Value>, id: &str, r: &scene::Refused) -> Option<Issue> {
+    let params = object_or_empty(items.get(id)?.get("params"));
+    let field = r.path.strip_prefix(&format!("items/{id}/params/"))?;
+    if r.code != "out_of_range" {
+        return None;
+    }
+    let (actual, what, fix) = match field {
+        "text" => {
+            let (chars, cap) = (
+                params.get("text")?.as_str()?.chars().count(),
+                scene::TEXT_CAP,
+            );
+            (
+                json!({"chars": chars, "cap": cap}),
+                format!("its text runs to {chars} characters, past text@1's cap of {cap}"),
+                "Shorten the text, or split it between items.",
+            )
+        }
+        "raw" => {
+            let (bytes, cap) = (crate::code::raw(params)?.len(), crate::code::RAW_CAP);
+            (
+                json!({"bytes": bytes, "cap": cap}),
+                format!(
+                    "its raw holds {bytes} bytes, past a code item's cap of 256 KiB ({cap} bytes)"
+                ),
+                "Quote only the lines the film shows.",
+            )
+        }
+        _ => {
+            let (_, class) = field.strip_prefix("code/tokens/")?.split_once("/class: ")?;
+            let classes = crate::code::CLASSES;
+            (
+                json!({"class": class, "classes": classes}),
+                format!(
+                    "a token's class is one of {}; `{class}` is none of them",
+                    classes.join(", ")
+                ),
+                "Give the token a class of the list.",
+            )
+        }
+    };
+    Some(Issue {
+        fix: fix.into(),
+        ..Issue::error(r.code, id, r.path.clone(), actual, &what)
+    })
+}
+
 /// Each mark set's transforms read at check, standing ranked among them, and every row a log
 /// scale can't place, each named.
 fn story_issues(items: &Map<String, Value>) -> Vec<Issue> {
@@ -542,6 +591,10 @@ pub fn check(doc: &Map<String, Value>, look: &Look, min: Option<f64>) -> Vec<Iss
                 .strip_prefix("items/")
                 .and_then(|rest| rest.split(['/', ':']).next())
                 .unwrap_or("");
+            if let Some(issue) = text_refusal(items, id, &r) {
+                issues.push(issue);
+                break;
+            }
             // A segment budget names the count the ops declared (#160).
             let actual = if r.code == "segment_budget" {
                 scene::declared_of(items, id).map_or(
