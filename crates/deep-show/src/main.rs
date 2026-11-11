@@ -1271,6 +1271,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "missing_kind_inconclusive" => Planted::MissingKindInconclusive,
                 "layout_text_by_kind" => Planted::LayoutTextByKind,
                 "sweep_audits_samples_only" => Planted::SweepAuditsSamplesOnly,
+                "audit_checks_overlaps_only" => Planted::AuditChecksOverlapsOnly,
                 "seeds_by_expansion_order" => Planted::SeedsByExpansionOrder,
                 "reexpansion_overwrites_broken_out" => Planted::ReexpansionOverwritesBrokenOut,
                 "pack_check_skips_requires_modules" => Planted::PackCheckSkipsRequiresModules,

@@ -19,18 +19,34 @@ pub enum Shape {
     Capsule { a: V3, b: V3, r: f64 },
 }
 
-/// A part: its ID, its true shape, the ends a wire or tube must land, and whether motion (a
-/// driver, a channel or an assembly's value) places it, which holds it.
+/// Where a scene's item sits (Geometry audit: scenes): its geometry's hash, the corners of its own
+/// bounds placed in the world, its origin, its yaw about +Y in degrees, and its mesh's boundary
+/// edges placed in the world, each an edge one face holds; a closed solid has none.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Seat {
+    pub geometry: crate::schedule::Key,
+    pub corners: [V3; 8],
+    pub origin: V3,
+    pub yaw: f64,
+    pub edges: Vec<[V3; 2]>,
+}
+
+/// A part: its ID, its true shape, the ends a wire or tube must land, whether motion (a
+/// driver, a channel or an assembly's value) places it, which holds it, and where a scene's item
+/// sits.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Solid {
     pub id: String,
     pub shapes: Vec<Shape>,
     pub ends: Vec<V3>,
     pub moved: bool,
+    pub seat: Option<Seat>,
 }
 
 /// What the audit allows (Geometry audit: Fields): the tolerances, the items declared floating,
-/// and the contacts relations allow, as unordered pairs.
+/// and the contacts relations allow, as unordered pairs. For a scene: whether one item added
+/// twice is found before the overlap pass, the kit pieces with the sub-grid their origins sit on,
+/// and the pairs of item sets whose boundary edges must meet with the widest gap that still does.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Config {
     pub sunk: f64,
@@ -38,6 +54,9 @@ pub struct Config {
     pub land: f64,
     pub floating: BTreeSet<String>,
     pub relations: BTreeSet<(String, String)>,
+    pub scene: bool,
+    pub grid: Option<(f64, BTreeSet<String>)>,
+    pub seams: Option<(Vec<[BTreeSet<String>; 2]>, f64)>,
 }
 
 impl Default for Config {
@@ -48,6 +67,9 @@ impl Default for Config {
             land: 0.005,
             floating: BTreeSet::new(),
             relations: BTreeSet::new(),
+            scene: false,
+            grid: None,
+            seams: None,
         }
     }
 }
@@ -59,13 +81,23 @@ impl Config {
     }
 }
 
-/// One failure: its code, the part IDs, how deep or how far, and a fix.
+/// What a fix changes, for a patch to write (Patch): an item removed, or one moved by world
+/// metres and turned about +Y by degrees, which is a snap or a move.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Change {
+    Remove(String),
+    Place { id: String, by: V3, yaw: f64 },
+}
+
+/// One failure: its code, the part IDs, how deep or how far, a fix in words, and what that fix
+/// changes where a patch can make it.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Fault {
     pub code: &'static str,
     pub ids: Vec<String>,
     pub by: f64,
     pub fix: String,
+    pub change: Option<Change>,
 }
 
 /// Two parts pass into each other past `sunk`.
@@ -74,6 +106,20 @@ pub const OVERLAP: &str = "geometry.overlap";
 pub const FLOATING: &str = "geometry.floating";
 /// A wire's or tube's end lands on no part.
 pub const UNLANDED: &str = "geometry.unlanded";
+/// Two items of one geometry whose bounds' corners each lie within `SAME` of the other's.
+pub const COINCIDENT: &str = "geometry.coincident";
+/// A kit piece whose origin is off the sub-grid, or whose yaw isn't a multiple of 90°.
+pub const OFF_GRID: &str = "geometry.off_grid";
+/// A boundary edge that comes within `NEAR` of another item's and doesn't meet it.
+pub const SEAM: &str = "geometry.seam";
+
+/// Corners this close are one corner (0.1 mm).
+const SAME: f64 = 1e-4;
+/// Boundary edges this close must meet.
+const NEAR: f64 = 0.01;
+/// An origin this far off a grid point, in metres, or a yaw this far off a quarter turn, in
+/// degrees, is on it: what f64 arithmetic on a placed transform leaves.
+const ON_GRID: f64 = 1e-6;
 
 fn sub(a: V3, b: V3) -> V3 {
     [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
@@ -129,13 +175,19 @@ fn seg_point(a: V3, b: V3, p: V3) -> f64 {
     len(sub(p, lerp(a, b, t)))
 }
 
-/// The distance between two segments (Ericson, Real-Time Collision Detection 5.1.9).
+/// The distance between two segments.
 fn seg_seg(p1: V3, q1: V3, p2: V3, q2: V3) -> f64 {
+    let (x, y) = seg_closest(p1, q1, p2, q2);
+    len(sub(x, y))
+}
+
+/// The closest points of two segments (Ericson, Real-Time Collision Detection 5.1.9).
+fn seg_closest(p1: V3, q1: V3, p2: V3, q2: V3) -> (V3, V3) {
     let (d1, d2, r) = (sub(q1, p1), sub(q2, p2), sub(p1, p2));
     let (a, e, f) = (dot(d1, d1), dot(d2, d2), dot(d2, r));
     let (s, t);
     if a <= 1e-18 && e <= 1e-18 {
-        return len(r);
+        return (p1, p2);
     }
     if a <= 1e-18 {
         s = 0.0;
@@ -162,7 +214,7 @@ fn seg_seg(p1: V3, q1: V3, p2: V3, q2: V3) -> f64 {
             }
         }
     }
-    len(sub(lerp(p1, q1, s), lerp(p2, q2, t)))
+    (lerp(p1, q1, s), lerp(p2, q2, t))
 }
 
 /// The least signed distance from the segment `ab` to a box: convex along the segment, so a
@@ -275,12 +327,65 @@ fn lands(e: V3, s: &Solid, land: f64) -> bool {
     s.shapes.iter().any(|sh| depth(&p, sh) >= -land)
 }
 
+/// The widest gap the seam between two items leaves, from their boundary edges `ea` and `eb`:
+/// over each edge of one that comes within `NEAR` of the other's edges, how far it stops short of
+/// the nearest, with the move of the second item that closes it. None when every such edge meets
+/// within `max_gap`.
+fn seam_gap(ea: &[[V3; 2]], eb: &[[V3; 2]], max_gap: f64) -> Option<(f64, V3)> {
+    let mut worst: Option<(f64, V3)> = None;
+    for (from, to, toward_a) in [(ea, eb, 1.0), (eb, ea, -1.0)] {
+        for e in from {
+            let nearest = to
+                .iter()
+                .map(|f| {
+                    let (p, q) = seg_closest(e[0], e[1], f[0], f[1]);
+                    (len(sub(p, q)), sub(p, q))
+                })
+                .min_by(|x, y| x.0.total_cmp(&y.0));
+            let Some((d, v)) = nearest.filter(|(d, _)| *d > max_gap && *d <= NEAR) else {
+                continue;
+            };
+            if worst.is_none_or(|(w, _)| d > w) {
+                worst = Some((d, v.map(|x| x * toward_a)));
+            }
+        }
+    }
+    worst
+}
+
+/// The move onto the nearest sub-grid point and the turn to the nearest quarter turn, for a kit
+/// piece that is off either.
+fn off_grid(seat: &Seat, sub: f64) -> Option<(V3, f64)> {
+    let by = seat.origin.map(|o| (o / sub).round() * sub - o);
+    let yaw = (seat.yaw / 90.0).round() * 90.0 - seat.yaw;
+    (len(by) > ON_GRID || yaw.abs() > ON_GRID).then_some((by, yaw))
+}
+
 /// The audit of one state: each fault names its part IDs in document order (Geometry audit).
 pub fn audit(solids: &[Solid], cfg: &Config) -> Vec<Fault> {
     let n = solids.len();
-    let margin = cfg.touch.max(cfg.land).max(0.0);
+    let margin = cfg.touch.max(cfg.land).max(if cfg.seams.is_some() { NEAR } else { 0.0 });
     let pairs = near_pairs(solids, margin);
     let mut out = Vec::new();
+    // A scene's coincident items, before the overlap pass, which then leaves the pair alone: one
+    // geometry, each corner of its bounds on the other's. The fix removes the later one.
+    let mut twins: BTreeSet<(usize, usize)> = BTreeSet::new();
+    for &(i, j) in if cfg.scene { &pairs[..] } else { &[] } {
+        let (Some(a), Some(b)) = (&solids[i].seat, &solids[j].seat) else {
+            continue;
+        };
+        let apart = (0..8).map(|k| len(sub(a.corners[k], b.corners[k]))).fold(0.0, f64::max);
+        if a.geometry == b.geometry && apart <= SAME {
+            twins.insert((i, j));
+            out.push(Fault {
+                code: COINCIDENT,
+                ids: vec![solids[i].id.clone(), solids[j].id.clone()],
+                by: apart,
+                fix: format!("remove {}, which is {} again", solids[j].id, solids[i].id),
+                change: Some(Change::Remove(solids[j].id.clone())),
+            });
+        }
+    }
     // Each end of a wire or tube lands on some other part; the part it lands on may hold it.
     let mut landed_on: BTreeSet<(usize, usize)> = BTreeSet::new();
     let mut end_ok: Vec<Vec<bool>> = solids.iter().map(|s| vec![false; s.ends.len()]).collect();
@@ -299,12 +404,13 @@ pub fn audit(solids: &[Solid], cfg: &Config) -> Vec<Fault> {
         let (a, b) = (&solids[i], &solids[j]);
         let d = pair_depth(a, b);
         let allowed = cfg.related(&a.id, &b.id) || landed_on.contains(&(i, j));
-        if d > cfg.sunk && !allowed {
+        if d > cfg.sunk && !allowed && !twins.contains(&(i, j)) {
             out.push(Fault {
                 code: OVERLAP,
                 ids: vec![a.id.clone(), b.id.clone()],
                 by: d,
                 fix: format!("move {} or {} apart by {:.4} m", a.id, b.id, d),
+                change: None,
             });
         }
         if d >= -cfg.touch || allowed {
@@ -320,6 +426,7 @@ pub fn audit(solids: &[Solid], cfg: &Config) -> Vec<Fault> {
                     ids: vec![s.id.clone()],
                     by: k as f64,
                     fix: format!("end {}'s end {k} at ({:.4}, {:.4}, {:.4}) m on a part", s.id, e[0], e[1], e[2]),
+                    change: None,
                 });
             }
         }
@@ -356,6 +463,44 @@ pub fn audit(solids: &[Solid], cfg: &Config) -> Vec<Fault> {
                 ids: vec![s.id.clone()],
                 by: 0.0,
                 fix: format!("rest {} on a part, relate it to one, or declare it floating", s.id),
+                change: None,
+            });
+        }
+    }
+    // Kit pieces: each listed item's origin on the sub-grid, its yaw a quarter turn; the fix snaps it.
+    if let Some((sub, ids)) = &cfg.grid {
+        for s in solids.iter().filter(|s| ids.contains(&s.id)) {
+            let Some((by, yaw)) = s.seat.as_ref().and_then(|seat| off_grid(seat, *sub)) else {
+                continue;
+            };
+            out.push(Fault {
+                code: OFF_GRID,
+                ids: vec![s.id.clone()],
+                by: len(by),
+                fix: format!("snap {} by ({:.4}, {:.4}, {:.4}) m and {yaw:.2}° onto the {sub} m grid", s.id, by[0], by[1], by[2]),
+                change: Some(Change::Place { id: s.id.clone(), by, yaw }),
+            });
+        }
+    }
+    // Seams: between the listed sets, a boundary edge near another item's meets it. The fix moves
+    // the item more seams name, since one moved piece opens a gap to each neighbour, else the later.
+    if let Some((sets, max_gap)) = &cfg.seams {
+        let listed = |a: &str, b: &str| sets.iter().any(|[x, y]| x.contains(a) && y.contains(b) || x.contains(b) && y.contains(a));
+        let edges = |i: usize| solids[i].seat.as_ref().map_or(&[][..], |s| &s.edges[..]);
+        let gaps: Vec<(usize, usize, f64, V3)> = pairs
+            .iter()
+            .filter(|&&(i, j)| listed(&solids[i].id, &solids[j].id))
+            .filter_map(|&(i, j)| seam_gap(edges(i), edges(j), *max_gap).map(|(d, v)| (i, j, d, v)))
+            .collect();
+        let named = |i: usize| gaps.iter().filter(|g| g.0 == i || g.1 == i).count();
+        for &(i, j, d, v) in &gaps {
+            let (id, by) = if named(i) > named(j) { (&solids[i].id, v.map(|x| -x)) } else { (&solids[j].id, v) };
+            out.push(Fault {
+                code: SEAM,
+                ids: vec![solids[i].id.clone(), solids[j].id.clone()],
+                by: d,
+                fix: format!("move {id} by ({:.4}, {:.4}, {:.4}) m to close the {d:.4} m gap", by[0], by[1], by[2]),
+                change: Some(Change::Place { id: id.clone(), by, yaw: 0.0 }),
             });
         }
     }
@@ -464,7 +609,7 @@ mod tests {
     const I3: [V3; 3] = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
 
     fn cube(id: &str, c: V3, half: V3) -> Solid {
-        Solid { id: id.into(), shapes: vec![Shape::Obb { c, axes: I3, half }], ends: vec![], moved: false }
+        Solid { id: id.into(), shapes: vec![Shape::Obb { c, axes: I3, half }], ends: vec![], moved: false, seat: None }
     }
 
     #[test]
@@ -480,6 +625,7 @@ mod tests {
             shapes: vec![Shape::Capsule { a: [0.0, 0.2, 0.0], b: [0.0, 0.6, 0.0], r: 0.01 }],
             ends: vec![[0.0, 0.2, 0.0], [0.0, 0.6, 0.0]],
             moved: false,
+            seat: None,
         };
         let f = audit(&[base, top, sunk, loose, wire], &cfg);
         let got: Vec<(&str, Vec<&str>)> = f.iter().map(|f| (f.code, f.ids.iter().map(String::as_str).collect())).collect();
@@ -521,6 +667,38 @@ mod tests {
         assert!(swept.failed.is_empty());
         assert_eq!(swept.estimates.len(), 4);
         assert_eq!(swept.estimates[0].1, vec!["lid"]);
+    }
+
+    /// A kit sheet lying flat, 1 m square about `origin`, with its yaw and the boundary edges given.
+    fn sheet(id: &str, origin: V3, yaw: f64, edges: Vec<[V3; 2]>) -> Solid {
+        let seat = Seat { geometry: crate::schedule::Key::default(), corners: [origin; 8], origin, yaw, edges };
+        Solid { seat: Some(seat), ..cube(id, origin, [0.5, 0.0, 0.5]) }
+    }
+
+    #[test]
+    fn a_kit_piece_turned_off_a_quarter_turn_is_off_its_grid() {
+        let kit: BTreeSet<String> = ["turned".to_string(), "square".to_string()].into();
+        let cfg = Config { floating: kit.clone(), grid: Some((0.5, kit)), ..Config::default() };
+        let f = audit(&[sheet("turned", [1.0, 0.0, 2.5], 100.0, vec![]), sheet("square", [4.0, 0.0, 0.0], -90.0, vec![])], &cfg);
+        assert_eq!(f.len(), 1, "{f:?}");
+        assert_eq!((f[0].code, f[0].ids.as_slice()), (OFF_GRID, &["turned".to_string()][..]));
+        assert_eq!(f[0].change, Some(Change::Place { id: "turned".into(), by: [0.0; 3], yaw: -10.0 }));
+    }
+
+    #[test]
+    fn a_seam_fix_moves_the_piece_both_gaps_name() {
+        // Three sheets edge to edge along x; the middle one, first in the document, sits 2 mm up.
+        let side = |x: f64, y: f64| [[x, y, 0.0], [x, y, 1.0]];
+        let pieces = [
+            sheet("mid", [1.5, 0.002, 0.5], 0.0, vec![side(1.0, 0.002), side(2.0, 0.002)]),
+            sheet("left", [0.5, 0.0, 0.5], 0.0, vec![side(1.0, 0.0)]),
+            sheet("right", [2.5, 0.0, 0.5], 0.0, vec![side(2.0, 0.0)]),
+        ];
+        let kit: BTreeSet<String> = pieces.iter().map(|p| p.id.clone()).collect();
+        let cfg = Config { floating: kit.clone(), seams: Some((vec![[kit.clone(), kit]], 0.001)), ..Config::default() };
+        let got: Vec<_> = audit(&pieces, &cfg).into_iter().map(|f| (f.code, f.ids.join("+"), f.by, f.change)).collect();
+        let lower = Some(Change::Place { id: "mid".into(), by: [0.0, -0.002, 0.0], yaw: 0.0 });
+        assert_eq!(got, vec![(SEAM, "mid+left".to_string(), 0.002, lower.clone()), (SEAM, "mid+right".to_string(), 0.002, lower)]);
     }
 
     #[test]

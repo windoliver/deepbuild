@@ -158,6 +158,8 @@ pub enum Planted {
     LayoutTextByKind,
     /// #405: a control sweep audits its samples alone and bounds nothing between them.
     SweepAuditsSamplesOnly,
+    /// #1936: the geometry audit runs its overlap pass alone.
+    AuditChecksOverlapsOnly,
     /// #306: a derived item's seed comes from a counter over expansion order.
     SeedsByExpansionOrder,
     /// #306: a change of inputs re-expands the broken-out item too, over the writer's own.
