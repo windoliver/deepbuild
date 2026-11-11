@@ -1,0 +1,22 @@
+[
+  {
+    "n": 1,
+    "id": "#1723.8ec20125",
+    "text": "A claim whose spec names `geometry.audit` on a deliverable document gets a run in the record whose outcome is the canvas core's for that revision. A planted twin with an item floating 0.2 m above the floor makes the run fail and the verdict FAIL, naming the item. On the merge base the spec entry has no `run` line and is dropped, and the test fails, naming the check."
+  },
+  {
+    "n": 2,
+    "id": "#1723.ee7e66b6",
+    "text": "A patch that makes a new revision after a PASS makes that verdict stale, and `deep_run` runs the check again on the new revision."
+  },
+  {
+    "n": 3,
+    "id": "#1723.ee326673",
+    "text": "`logic.determinism` named in a build without `logic` reads BLOCKED with `module_missing`, never PASS."
+  },
+  {
+    "n": 4,
+    "id": "#1723.bfd5e63a",
+    "text": "`deep show --check` reads its result from the recorded runs; a presented document with no run never reads PASS."
+  }
+]

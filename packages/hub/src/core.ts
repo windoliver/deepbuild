@@ -84,7 +84,8 @@ import { blockedCause, blockedReading, clockTime, dueReading, ownerOf, promisesI
 import { Answers, answerText, type Answer } from './answers.js';
 import { RUN_AS_YOU, Runs } from './runs.js';
 import { Kinds, type ReviewOf } from './kinds.js';
-import type { CheckSpec } from '@deepbuild/conformance';
+import { canvasClaim, docCheckIn, docCheckOf, docCommand, docResult, docSpec, revisionLine, shownResult, worst, type DocCheck, type DocSpec, type Revision } from './doc-checks.js';
+import type { CheckResult, CheckSpec } from '@deepbuild/conformance';
 import { retain } from './retention.js';
 import { Stacks, type StackWant } from './stacks.js';
 import { Starts } from './starts.js';
@@ -592,6 +593,8 @@ export class Core {
   private readonly checkKinds: Kinds;
   /** Each claim's checks of a kind other than command, by check (#1537): its spec, and the claim's session for a review. */
   private readonly kindChecks = new Map<string, Map<string, { spec: CheckSpec; of: ReviewOf }>>();
+  /** The document revisions each claim's document checks read (#1723), as its verdict's key names them. */
+  private readonly docRevisions = new Map<string, Set<string>>();
   /** Each worktree's stack and every stack run a check started (#331, #332). */
   private readonly stacks: Stacks;
   /** Each outside resource a session created, and its teardown task (#342). */
@@ -912,6 +915,8 @@ export class Core {
       kind: (run, checkout, deadline) => {
         const of = this.kindChecks.get(run.claim)?.get(run.check)?.of ?? { claim: run.claim, task: '', agent: 'claude-code', transcript: undefined };
         const spec = run.spec as unknown as CheckSpec;
+        // A document check runs through the canvas core's verdict on the document's revision (#1723).
+        if ((spec as DocSpec).runner === 'canvas') return this.documentCheck(run, spec as DocSpec);
         // A review reads the diff from the merge base to the claim's snapshot, both in the hub's object store, which
         // reads the repo's objects as alternates; the checkout is the snapshot's tree alone.
         if (spec.kind === 'review') return this.checkKinds.run({ ...spec, head: this.gate.snapshotOf(run.claim) ?? run.commit } as CheckSpec, { checkout: join(this.root.dir, 'objects'), deadline, now: this.now }, of);
@@ -6947,9 +6952,18 @@ export class Core {
     call = game.call;
     const via = 'you' in as ? { peer: { pid: 0, start: 0 } } : { session: as.session };
     const name = 'you' in as ? 'deep show' : 'deep_show';
-    const { reply: drawn, presented } = await this.canvas().call(await this.canvasWorld(), { call: name, ...via, ...call });
+    // A claim the hub made, not one of the world file's, is judged by its recorded runs (#1723), never by the canvas core.
+    const world = await this.canvasWorld();
+    const ofHub = typeof call.claim === 'string' && !(isObj(world.file.claims) && call.claim in world.file.claims) ? call.claim : undefined;
+    if (ofHub) { const { claim: _claim, ...rest } = call; call = rest; }
+    const { reply: drawn, presented } = await this.canvas().call(world, { call: name, ...via, ...call });
     const reply = game.assets.length ? { ...drawn, assets: game.assets } : drawn;
     if (presented) await this.recordRevision(as, presented, reply);
+    // `deep show --check` reads its result from the runs recorded on the revision (#1723): one with none never passes.
+    if (call.check === true && typeof reply.result === 'string') {
+      const hash = typeof presented?.hash === 'string' ? presented.hash : (await this.docRevision(String(call.doc)))?.hash;
+      reply.result = worst([reply.result, hash ? await this.recordedResult(String(call.doc), hash, ofHub) : 'INCONCLUSIVE']);
+    }
     // The planted hub waits for an app to draw the revision instead of rendering back headless.
     if (this.options.plant === 'deep-show-waits-for-app' && reply.outcome === 'presented' && !(await waitForApp(this.appOpen))) {
       return { ...reply, outcome: 'not_presented', reason: 'timeout', snapshots: [] };
@@ -7113,6 +7127,7 @@ export class Core {
       } as JsonValue,
     });
     this.presented.push({ doc: p.doc, rev: p.rev, rect: p.rect, layers: p.layers, session });
+    await this.staleOnRevision(String(p.doc), { rev: Number(p.rev), hash });
   }
   /** The same first-use gate for a shown document and its exports, for every asset-reading kind. */
   private async preparePackAssets(document: Obj): Promise<Obj | undefined> {
@@ -7320,8 +7335,55 @@ export class Core {
       return [[name, { run: c.run, ...(c.deadline !== undefined ? { deadline: c.deadline } : {}), ...(typeof c.type === 'string' ? { type: c.type } : {}), ...(typeof c.host === 'string' ? { host: c.host } : {}) }] as const];
     }));
   }
+  /** The document checks a worktree's spec names (#1723), by name: a kind of check.kind.doc@1, its input and the deliverable document. */
+  private docChecksOf(worktree: string): Map<string, DocCheck> {
+    let spec: unknown;
+    try { spec = parseYaml(readFileSync(join(worktree, '.deepbuild', 'done.yaml'), 'utf8')); } catch { return new Map(); }
+    const checks = isObj(spec) && isObj(spec.checks) ? spec.checks : {};
+    return new Map(Object.entries(checks).flatMap(([name, c]) => { const d = docCheckOf(c); return d ? [[name, d] as const] : []; }));
+  }
+  /** A document's newest revision the record holds (#1723), or undefined while it has none. */
+  private async docRevision(doc: string): Promise<Revision | undefined> {
+    const [row] = (await this.record.raw(`SELECT json_extract(data, '$.rev') AS rev, json_extract(data, '$.hash') AS hash FROM events WHERE kind = 'doc.patched' AND subject = ? ORDER BY log_pos DESC LIMIT 1`, [`doc:${doc}`])) as { rev: number; hash: string }[];
+    return row ? { rev: Number(row.rev), hash: String(row.hash) } : undefined;
+  }
+  /**
+   * A document check's run (#1723): the canvas core's verdict on a claim holding this check alone, on the document's
+   * current revision, as #403 judges one; the revision it read is kept for the claim's verdict key.
+   */
+  private async documentCheck(run: { run: string; check: string; claim: string }, spec: DocSpec): Promise<CheckResult & { stdout: string }> {
+    const [owner] = (await this.record.raw(`SELECT session_id FROM claims WHERE id = ?`, [run.claim.slice(6)])) as { session_id: string | null }[];
+    const world = await this.canvasWorld();
+    const handle = `${run.claim}#${run.check}`;
+    world.file = { ...world.file, claims: { ...(isObj(world.file.claims) ? world.file.claims : {}), [handle]: canvasClaim(owner?.session_id ?? '', run.check, spec) } };
+    let reply: Obj;
+    try {
+      reply = (await this.canvas().call(world, { call: 'verdict', claim: handle })).reply;
+    } catch (error) {
+      // No canvas core to run it is missing something outside the code: BLOCKED, never a FAIL.
+      reply = { result: 'BLOCKED', requirements: [{ result: 'BLOCKED', blocked: [{ code: 'canvas_unavailable', ask: error instanceof Error ? error.message : String(error) }] }] };
+    }
+    const result = docResult(spec, reply);
+    const line = result.evidence[0];
+    if (line) this.docRevisions.set(run.claim, new Set([...(this.docRevisions.get(run.claim) ?? []), line]));
+    return result;
+  }
+  /** A new revision of a document makes each verdict whose key names another revision of it stale (#1723). */
+  private async staleOnRevision(doc: string, at: Revision): Promise<void> {
+    const rows = (await this.record.raw(`SELECT v.handle AS verdict, f.value AS line FROM verdicts v JOIN json_each(v.key, '$.doc_revisions') f WHERE v.stale = 0 AND f.value LIKE ?`, [`doc:${doc}@%`])) as { verdict: string; line: string }[];
+    for (const r of rows.filter((x) => x.line !== revisionLine(doc, at))) {
+      const ts = this.now();
+      await this.append(this.connection('core'), { v: 1, id: ulid(ts), kind: 'verdict.stale', ts, subject: r.verdict, data: { verdict: r.verdict, because: `doc:${doc} has a new revision, ${at.rev}; the verdict covers ${r.line}` } });
+    }
+  }
+  /** What `deep show --check` reads of a revision from the recorded runs of document checks on it (#1723), the named claim's alone when it names one. */
+  private async recordedResult(doc: string, hash: string, claim: string | undefined): Promise<string> {
+    const ofClaim = claim ? ` AND json_extract(e.data, '$.run') IN (SELECT json_extract(data, '$.run') FROM events WHERE kind = 'run.started' AND json_extract(data, '$.claim') = ?)` : '';
+    const rows = (await this.record.raw(`SELECT json_extract(e.data, '$.outcome') AS outcome FROM events e JOIN json_each(e.data, '$.findings') f WHERE e.kind = 'run.finished' AND f.value LIKE ?${ofClaim}`, [`doc:${doc}@% ${hash}`, ...(claim ? [claim] : [])])) as { outcome: string }[];
+    return shownResult(rows.map((r) => r.outcome));
+  }
   private unknownCheck(worktree: string, check: unknown): Refused {
-    const names = [...this.checksOf(worktree).keys()];
+    const names = [...this.checksOf(worktree).keys(), ...this.docChecksOf(worktree).keys()];
     const near = typeof check === 'string' ? nearest(check, names) : undefined;
     return refuse('enum', '/params/arguments/check', near ? `Name ${near} in place of ${String(check)}.` : `Name a check this repo's .deepbuild/done.yaml names: ${names.join(', ') || 'it names none'}.`, check);
   }
@@ -7536,20 +7598,25 @@ export class Core {
   private async runCheck(session: string, args: Obj): Promise<Obj> {
     const cwd = this.sessions.get(session)!.cwd;
     const check = this.checksOf(cwd).get(String(args.check));
-    if (check === undefined) throw this.unknownCheck(cwd, args.check);
+    const doc = check ? undefined : this.docChecksOf(cwd).get(String(args.check));
+    if (check === undefined && doc === undefined) throw this.unknownCheck(cwd, args.check);
     // A deadline the hub can't read is refused before the run starts, never taken as none (#822).
-    const deadline = check.deadline === undefined ? undefined : duration(check.deadline as JsonValue);
-    if (check.deadline !== undefined && !deadline) {
+    const deadline = check?.deadline === undefined ? undefined : duration(check.deadline as JsonValue);
+    if (check?.deadline !== undefined && !deadline) {
       throw refuse('pattern', `/checks/${String(args.check)}/deadline`, `Give the check's deadline in .deepbuild/done.yaml as a whole number above 0 of m, h or d, such as 30m, not ${String(check.deadline)}.`, String(check.deadline));
     }
     const which = args.claim === null ? '' : `AND id = '${sql(String(args.claim).slice(6))}'`;
     const [claim] = (await this.record.raw(`SELECT id, data FROM events WHERE session_id = ? AND kind = 'claim.made' ${which} ORDER BY log_pos DESC LIMIT 1`, [session])) as { id: string; data: string }[];
     if (!claim) throw refuse('not_found', '/params/arguments/claim', 'Run a check for a claim this session made: claim first with deep_claim.', args.claim);
     const commit = String((JSON.parse(claim.data) as Obj).commit);
-    // A check that names a host runs there, from your home on it (#1942).
-    const { run } = await this.runs.start({ check: args.check, claim: `claim:${claim.id}`, commit, argv: ['/bin/sh', '-c', check.run], ...(check.host === undefined ? { cwd } : { host: check.host }) }, deadline);
+    // A document check runs through the canvas core on the document's revision now (#1723); a check that names a host
+    // runs there, from your home on it (#1942).
+    const at = doc && await this.docRevision(doc.doc);
+    const { run } = doc
+      ? await this.runs.start({ check: args.check, claim: `claim:${claim.id}`, commit, argv: ['/bin/sh', '-c', docCommand(doc, at)], command: docCommand(doc, at), spec: docSpec(doc, at) as unknown as Obj, cwd })
+      : await this.runs.start({ check: args.check, claim: `claim:${claim.id}`, commit, argv: ['/bin/sh', '-c', check!.run], ...(check!.host === undefined ? { cwd } : { host: check!.host }) }, deadline);
     // A run on a host is long work, such as a model download: it answers once started there, and the claim waits for it.
-    if (check.host !== undefined) return { run, claim: `claim:${claim.id}`, outcome: 'running', evidence: [] };
+    if (check?.host !== undefined) return { run, claim: `claim:${claim.id}`, outcome: 'running', evidence: [] };
     // The run's outcome once it finishes, so the agent needn't poll; past the wait, that it's still running.
     const until = Date.now() + this.askWait(session);
     for (;;) {
@@ -7717,8 +7784,19 @@ export class Core {
       // your reserve (#87); and the numbers check on every claim whose words state a number with the query behind it.
       const of: ReviewOf = { claim: r.claim, task: r.task, agent: this.live.get(r.session)?.agent ?? 'claude-code', transcript: this.sessions.get(r.session)?.transcript };
       const kinded = new Map<string, { spec: CheckSpec; of: ReviewOf }>();
+      // A document check, the spec's or a drafted check's (#1723), runs through the canvas core on the revision the
+      // document has as the claim is made, which its command names, so its key changes with the revision.
+      const docs = this.docChecksOf(r.cwd);
       for (const c of checks) {
-        const spec = c.source === 'definition' && c.approved ? this.checkKinds.definitionSpec(await this.store.read(c.approved).catch(() => new Uint8Array())) : undefined;
+        const bytes = c.source === 'definition' && c.approved ? await this.store.read(c.approved).catch(() => new Uint8Array()) : undefined;
+        const doc = bytes ? docCheckIn(bytes) : c.source === 'spec' ? docs.get(c.check) : undefined;
+        if (doc) {
+          const at = await this.docRevision(doc.doc);
+          Object.assign(c, { command: docCommand(doc, at), document: doc.doc });
+          kinded.set(c.check, { spec: docSpec(doc, at), of });
+          continue;
+        }
+        const spec = bytes ? this.checkKinds.definitionSpec(bytes) : undefined;
         if (spec) kinded.set(c.check, { spec, of });
       }
       if (!r.joins) {
@@ -7759,9 +7837,13 @@ export class Core {
     let spec: unknown;
     try { spec = parseYaml(readFileSync(join(cwd, '.deepbuild', 'done.yaml'), 'utf8')); } catch { return []; }
     const checks = this.checksOf(cwd);
-    const done = isObj(spec) && isObj(spec.claims) && isObj(spec.claims.done) && Array.isArray(spec.claims.done.checks) ? spec.claims.done.checks.map(String) : [...checks.keys()];
-    return done.flatMap((name) => {
+    const docs = this.docChecksOf(cwd);
+    const done = isObj(spec) && isObj(spec.claims) && isObj(spec.claims.done) && Array.isArray(spec.claims.done.checks) ? spec.claims.done.checks.map(String) : [...checks.keys(), ...docs.keys()];
+    return done.flatMap((name): ClaimCheck[] => {
       const check = checks.get(name);
+      // A document check (#1723): its command is named once its claim pins the document's revision.
+      const doc = docs.get(name);
+      if (!check && doc) return [{ check: name, approved: null, command: docCommand(doc, undefined), covers: [], depth: 'unit', on_base: 'passes', asserts: [], source: 'spec', document: doc.doc }];
       if (!check) return [];
       const deadline = check.deadline === undefined ? undefined : duration(check.deadline as JsonValue);
       // A journey runs on the repo's stack, as its environment block starts it (#33, #580).
@@ -7901,6 +7983,9 @@ export class Core {
       const ran = await this.overridesFor(claim);
       if (ran.length) v = { ...v, outcome: 'INCONCLUSIVE', reasons: [...v.reasons, `a call DeepBuild denied ran anyway in this session: ${ran.map((o) => `${o.label} (${o.call})`).join('; ')}; its own checks can't pass it`.slice(0, 8000)] };
     }
+    // Its key names each document revision its document checks read (#1723), so a new revision makes it stale.
+    const docs = this.docRevisions.get(claim);
+    if (docs?.size) v = { ...v, key: { ...v.key, doc_revisions: [...docs].sort() } };
     v = misjudged(v, this.options.plant);
     const hash = verdictHash(v);
     if (this.verdictsMade.get(claim) === hash) return;
