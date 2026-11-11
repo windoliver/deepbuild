@@ -167,6 +167,8 @@ pub enum Planted {
     CitesEmptyPasses,
     /// #405's and #1936's: the geometry audit's wrong programs, which its own module names.
     Audit(crate::geometry_audit::Planted),
+    /// #1921's: a world's outputs' wrong programs, which the physics host names.
+    Physics(crate::physics::Planted),
     /// #202: a kind_rules requirement counts the working agent's own pack rule as its cover.
     OwnRuleCountsAsCover,
     /// #202: the kind_rules check evaluates a pack kind's recipe rules a second time.

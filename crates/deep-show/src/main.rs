@@ -1233,6 +1233,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
             }
             None if export_planted(p).is_some() => export_planted(p),
             None if geometry_audit::planted(p).is_some() => geometry_audit::planted(p),
+            None if physics::planted(p).is_some() => physics::planted(p),
             None => Some(match p {
                 "presents_unnamed_removal" => Planted::PresentsUnnamedRemoval,
                 "diffs_items_only" => Planted::DiffsItemsOnly,
