@@ -310,6 +310,10 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
         if crate::builders::KINDS.contains(&spec.kind) || spec.kind == "curve@1" {
             let name = &spec.kind[..spec.kind.len() - "@1".len()];
             r.kind(crate::spec::entry(&spec, "", name), &[], "");
+            // A recipe repeats over a builder's elements (Recipe: repeat over elements; #2015).
+            if spec.kind != "curve@1" {
+                r.elements(name, crate::measures::elements);
+            }
         }
         if spec.kind == "mesh.asset@1" {
             r.kind(crate::spec::entry(&spec, "mesh", "asset"), &[], "");
@@ -339,7 +343,30 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
             r.kind(crate::spec::entry(&spec, "", name), &[], "");
         }
     }
+    // #419's stand-in for the physics module's baked world, which the scene draws body by body
+    // (#405: a document's checks reach it as a kind this module knows).
+    r.kind(
+        Entry {
+            family: "fixture",
+            name: "world",
+            versions: vec![Version {
+                major: 1,
+                minor: 0,
+                params: ["step_hz", "span", "gravity", "floor", "restitution", "bodies", "buoyancy", "inputs", "paint"]
+                    .into_iter()
+                    .map(json_param)
+                    .collect(),
+            }],
+            migrations: Vec::new(),
+        },
+        &[],
+        "",
+    );
     crate::build::register_scene3d(r);
+    // #2013: rest_on onto true shapes, solved at check (Constraint: rest_on).
+    crate::rest::register(r);
+    // #2013: an instancer's scatter, laid out at check (Attribute and field: distribute).
+    crate::distribute::register(r);
     // A solid's modifier stack, every prefix kept by its content key (Modifier; #411).
     r.array("scene3d.stack", "stack", "item", "geometry", "items");
     r.operator("stack", "items", &["self"], &["scene3d.stack"])
@@ -400,8 +427,71 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
         "codes": [],
         "covers": {"kinds": ["mark.box@1"], "fields": ["mark.box@1/params/size"]},
     }));
+    // #2013: a scattered garden, so the scatter's and the rest's operators have nodes the kit
+    // evaluates: shrubs pruned by their bounds around a table, and a vase resting on it.
+    r.fixture("garden", garden(), None).sidecar(json!({
+        "codes": [],
+        "covers": {"kinds": ["instance@1"], "fields": ["instance@1/params/of", "instance@1/params/from"]},
+    }));
+    // #2013: a ball told to rest on a shelf it doesn't stand over, which raises `no_support`.
+    r.fixture("rest-no-support", unsupported(), None).sidecar(json!({
+        "codes": ["no_support"],
+        "covers": {"kinds": ["mark.sphere@1"], "fields": ["mark.sphere@1/params/size"]},
+    }));
     // #486: the lobe outputs, occlusion and normal in gpu.output@1, core.bump@1 in gpu.function@1.
     crate::gpu::register(r);
+}
+
+/// A 10 × 10 m plate with bushes and flowers scattered over it at least 0.5 m apart, none in
+/// the table or passing into another, and a vase written above the table that rests on its top.
+pub fn garden() -> Value {
+    let part = |id: &str, name: &str, order: &str, kind: &str, params: Value, pos: [f64; 3], role: &str| {
+        let mut params = params;
+        params["paint"] = json!({"fill": {"role": role}});
+        json!({"id": id, "kind": kind, "name": name, "order": order, "params": params, "at": {"pos": pos}})
+    };
+    let mut bush = part("bush", "Bush", "a4", "slab@1", json!({"size": [0.9, 0.7, 0.9]}), [0.0; 3], "accent");
+    let mut flower = part("flower", "Flower", "a5", "slab@1", json!({"size": [0.2, 0.3, 0.2]}), [0.0; 3], "ink");
+    bush["visible"] = json!(false);
+    flower["visible"] = json!(false);
+    json!({
+        "format": 1, "profile": "figure", "title": "A scattered garden",
+        "description": "Bushes and flowers scattered over a plate around a table, and a vase resting on the table.",
+        "size": [480, 360], "camera": "cam", "requires": {"modules": {"scene3d": "^1", "motion": "^1"}},
+        "constraints": {"rest": {"owner": "vase", "kind": "rest_on", "on": "table"}},
+        "items": {
+            "cam": {"id": "cam", "kind": "camera@1", "name": "Camera", "order": "a0",
+                    "params": {"projection": "isometric", "target": [0, 0.5, 0], "view_width": 14}},
+            "ground": part("ground", "Ground", "a1", "plate@1", json!({"grid": [1, 1], "size": [10, 10]}), [0.0; 3], "muted"),
+            "table": part("table", "Table", "a2", "slab@1", json!({"size": [1.2, 0.75, 0.8]}), [0.0; 3], "ground"),
+            "vase": part("vase", "Vase", "a3", "lathe@1", json!({"outline": [[0.0, 0.0], [0.08, 0.0], [0.12, 0.15], [0.05, 0.3]]}), [0.2, 2.0, 0.1], "accent"),
+            "bush": bush,
+            "flower": flower,
+            "shrubs": {"id": "shrubs", "kind": "instance@1", "name": "Shrubs", "order": "a6",
+                       "params": {"of": ["bush", "flower"], "from": {"distribute": {
+                           "on": "ground", "mode": "poisson", "min_distance": 0.5, "margin": 0.5,
+                           "prune": "larger_first", "avoid": ["table"], "seed": 2013}}}}
+        }
+    })
+}
+
+/// A ball 3 m to the side of the shelf its `rest_on` names: nothing of the shelf lies under it.
+fn unsupported() -> Value {
+    json!({
+        "format": 1, "profile": "figure", "title": "A ball beside a shelf",
+        "description": "A ball told to rest on a shelf it doesn't stand over, so its rest finds no support.",
+        "size": [480, 360], "camera": "cam", "requires": {"modules": {"scene3d": "^1", "motion": "^1"}},
+        "constraints": {"rest": {"owner": "ball", "kind": "rest_on", "on": "shelf"}},
+        "items": {
+            "cam": {"id": "cam", "kind": "camera@1", "name": "Camera", "order": "a0",
+                    "params": {"projection": "isometric", "target": [0, 0.5, 0], "view_width": 8}},
+            "shelf": {"id": "shelf", "kind": "mark.box@1", "name": "Shelf", "order": "a1",
+                      "params": {"size": [1, 0.1, 1], "paint": {"fill": {"role": "muted"}}}},
+            "ball": {"id": "ball", "kind": "mark.sphere@1", "name": "Ball", "order": "a2",
+                     "params": {"size": [0.2, 0.2, 0.2], "paint": {"fill": {"role": "accent"}}},
+                     "at": {"pos": [3, 1, 0]}}
+        }
+    })
 }
 
 /// 34 suns of 10,000 lx each, `s00` to `s33`, ordered last ID first.

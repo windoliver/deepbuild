@@ -101,18 +101,32 @@ impl Moves {
     }
 }
 
+/// #504: a stage's shot starting on its camera: at `t` (`i64::MIN` for a stages control's
+/// default), the shot `shot` (an index in [`Motion::shots`]) glides in from the pose shown over
+/// `span` by `ease`, or with a span of 0 (`join: cut`) shows its framed pose at once.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Staged {
+    pub t: i64,
+    pub shot: usize,
+    pub span: i64,
+    pub ease: Ease,
+}
+
 /// What an input track moves, compiled once per track: each follow channel's value and each
-/// camera's target, in [`Motion::follows`] and [`Motion::cameras`] order.
+/// camera's target, in [`Motion::follows`] and [`Motion::cameras`] order, and (#504) each
+/// camera's stage shots in time order, whose framed poses the shots plan glides between.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Inputs {
     pub follows: Vec<Moves>,
     pub cameras: Vec<Moves>,
+    pub staged: Vec<Vec<Staged>>,
 }
 
 impl Inputs {
-    /// The moves `track` makes in `motion` under the time feel `feel`, or `None` for an entry
-    /// naming a control motion doesn't read, or a value that isn't one of its options. Before any
-    /// entry each control holds its default, so each stages control's default shot holds.
+    /// The moves `track` makes in `motion` under the time feel `feel`, or `None` for a value that
+    /// isn't one of its control's options. An entry on a control motion doesn't read here (a
+    /// slider, a press) moves nothing here. Before any entry each control holds its default, so
+    /// each stages control's default shot holds.
     pub fn new(motion: &Motion, feel: Feel, track: &[Entry]) -> Option<Inputs> {
         let mut options: Vec<usize> = motion.controls.iter().map(|c| c.default).collect();
         let mut follows: Vec<Moves> = motion
@@ -125,16 +139,20 @@ impl Inputs {
             .iter()
             .map(|(_, t)| Moves::held(*t))
             .collect();
+        let mut staged: Vec<Vec<Staged>> = vec![Vec::new(); motion.cameras.len()];
         for control in &motion.controls {
-            if let Some(&s) = control.shots.get(control.default) {
+            if let Some(&Some(s)) = control.shots.get(control.default) {
                 let shot = &motion.shots[s];
                 cameras[shot.camera].start = shot.target;
+                staged[shot.camera].push(Staged { t: i64::MIN, shot: s, span: 0, ease: feel.ease });
             }
         }
         let mut entries: Vec<&Entry> = track.iter().collect();
         entries.sort_by_key(|e| e.key());
         for e in entries {
-            let c = motion.controls.iter().position(|c| c.id == e.control)?;
+            let Some(c) = motion.controls.iter().position(|c| c.id == e.control) else {
+                continue;
+            };
             let control = &motion.controls[c];
             let option = match (control.kind, &e.value) {
                 ("toggle", Value::Bool(on)) => usize::from(*on),
@@ -155,21 +173,33 @@ impl Inputs {
                     follows[f].push(e.t, [follow.values[option], 0.0, 0.0], span, ease);
                 }
             }
-            if let Some(&s) = control.shots.get(option) {
+            if let Some(&Some(s)) = control.shots.get(option) {
                 let shot = &motion.shots[s];
                 let ease = shot.ease.unwrap_or(feel.ease);
                 cameras[shot.camera].push(e.t, shot.target, shot.glide, ease);
+                staged[shot.camera].push(Staged { t: e.t, shot: s, span: shot.glide, ease });
             }
         }
-        Some(Inputs { follows, cameras })
+        Some(Inputs { follows, cameras, staged })
     }
 
     /// The earliest time after `t` at which anything the track moves may differ.
     pub fn next_change(&self, t: i64) -> Option<i64> {
+        // A stage shot's glide moves its whole pose, whether or not its target moves.
+        let staged = self.staged.iter().filter_map(|list| {
+            let i = list.partition_point(|s| s.t <= t);
+            let gliding = i.checked_sub(1).is_some_and(|k| t.saturating_sub(list[k].t) < list[k].span);
+            if gliding {
+                Some(t + 1)
+            } else {
+                list.get(i).map(|s| s.t)
+            }
+        });
         self.follows
             .iter()
             .chain(&self.cameras)
             .filter_map(|m| m.next_change(t))
+            .chain(staged)
             .min()
     }
 }

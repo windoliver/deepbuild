@@ -3,11 +3,12 @@
 // asks for, naming the package; the installer's own refusals (a digest, a signature, a conflict...) come back named.
 // `--trust-key` trusts the publisher key the package names first, in the same confirmation: an update signed by
 // another key than the one trusted for the package installs only that way.
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { callAsYou } from './client.js';
 import { deprecatedCalls } from './contracts.js';
 import { libraryHosts } from './libraries.js';
+import { readPack } from './packs.js';
 
 const USAGE = 'Usage: deep install [--trust-key] <package folder>';
 
@@ -28,6 +29,17 @@ export async function installCommand(args: readonly string[]): Promise<number> {
     return 2;
   }
   const from = resolve(folders[0]!);
+  if (!existsSync(join(from, 'deepbuild.json')) && existsSync(join(from, 'pack.json'))) {
+    try {
+      const pack = readPack(from);
+      process.stdout.write(`Source: ${from}\n  ${pack.ref}, digest ${pack.digest}\n  Assets fetch only on first use after an authority ask or your standing rule.\n`);
+      const result = await callAsYou('extension.install', { from, digest: pack.digest }, 'nothing was installed');
+      if (typeof result === 'number') return result;
+      if (result.status !== 'installed') { process.stderr.write(`deep install: ${String(result.reason ?? JSON.stringify(result))}\n`); return 1; }
+      process.stdout.write(`Installed ${pack.ref}\n`);
+      return 0;
+    } catch (e) { process.stderr.write(`deep install: ${e instanceof Error ? e.message : String(e)}\n`); return 1; }
+  }
   let m: Manifest;
   try {
     m = JSON.parse(readFileSync(join(from, 'deepbuild.json'), 'utf8')) as Manifest;

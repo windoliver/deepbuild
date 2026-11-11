@@ -186,7 +186,7 @@ fn register_compiling(
     r.array("motion.next", "i64", "document", "time", "items");
     r.operator("clock", "items", &["motion.program", "t"], &["motion.next"])
         .document()
-        .applies(has_motion)
+        .applies(has_clock)
         .run(clock);
     r.operator(
         "channels",
@@ -240,6 +240,12 @@ fn register_compiling(
         false,
     );
     r.code(
+        "occurrence.undeclared",
+        "A start_on, a mark set's rows or a driver reads a logic item's occurrences by a kind or field the item doesn't declare in emits.",
+        "Name a kind the item's emits declares and a field that kind declares, or declare it in emits.",
+        false,
+    );
+    r.code(
         "transition_kind",
         "A transition of a kind motion doesn't land.",
         "Use a cut.",
@@ -280,6 +286,21 @@ fn has_motion(doc: &Value, _: &str, _: &Value) -> bool {
     })
 }
 
+/// A `rest_on` that names `on` (#2013): it rests its owner on true shapes at check.
+pub fn rests_at_check(constraint: &Value) -> bool {
+    constraint.get("kind").and_then(Value::as_str) == Some("rest_on") && constraint.get("on").is_some()
+}
+
+/// A document with motion a frame's time can change: any section's entry but a rest solved at
+/// check, which alone gives a frame nothing to evaluate (Constraint: rest_on).
+fn has_clock(doc: &Value, _: &str, _: &Value) -> bool {
+    SECTIONS.iter().any(|s| {
+        doc.get(*s)
+            .and_then(Value::as_object)
+            .is_some_and(|m| m.values().any(|entry| *s != "constraints" || !rests_at_check(entry)))
+    })
+}
+
 /// An item a document channel or driver targets, a limit constraint holds or a placement binds.
 fn is_target(doc: &Value, id: &str, item: &Value) -> bool {
     // #493: a parallax group moves with the camera's pose and its drift.
@@ -304,7 +325,8 @@ fn is_target(doc: &Value, id: &str, item: &Value) -> bool {
     let channel = targets("channels")
         || targets("drivers")
         || !keyed_data(doc, item).is_empty()
-        || counter_data(doc, item).is_some();
+        || counter_data(doc, item).is_some()
+        || reads_moving(doc, item);
     let held = doc
         .get("constraints")
         .and_then(Value::as_object)
@@ -331,6 +353,26 @@ fn is_target(doc: &Value, id: &str, item: &Value) -> bool {
             _ => false,
         });
     channel || held || bound
+}
+
+/// #504: whether a text's template reads a value that moves at t: a control's, an assembly's, or
+/// a data value a driver or a stage's `set` writes (Overlay: a readout and the parts it describes
+/// come from one model).
+fn reads_moving(doc: &Value, item: &Value) -> bool {
+    let Some(template) = item.pointer("/params/template").and_then(Value::as_str) else {
+        return false;
+    };
+    let written = |slot: &str| {
+        let drivers = doc.get("drivers").and_then(Value::as_object).into_iter().flatten();
+        let set = doc.get("controls").and_then(Value::as_object).into_iter().flatten().flat_map(|(_, c)| {
+            c.get("stages").and_then(Value::as_object).into_iter().flatten().filter_map(|(_, s)| s.get("set")?.as_object())
+        });
+        drivers.into_iter().any(|(_, d)| d.get("target").and_then(Value::as_str) == Some(slot)) || set.into_iter().any(|s| s.contains_key(slot))
+    };
+    deep_canvas::template::parts(template).unwrap_or_default().into_iter().any(|p| match p {
+        deep_canvas::template::Part::Slot(s) => s.starts_with("controls/") || s.starts_with("assemblies/") || (s.starts_with("data/") && written(s)),
+        deep_canvas::template::Part::Words(_) => false,
+    })
 }
 
 /// The data value a counter's driver writes (`data/<name>`), which its text shows at t.
@@ -379,6 +421,13 @@ fn keyed_data(doc: &Value, item: &Value) -> Vec<(String, String)> {
     out
 }
 
+/// #544's wrong program (scenario `planted`): a check that passes a reader of a logic item's
+/// occurrences naming a kind or field the item doesn't declare.
+pub const UNDECLARED_KIND_ACCEPTED: &str = "undeclared_kind_accepted";
+
+/// #504's wrong programs a scenario names, each compiled into the program.
+pub const PLANTED: [&str; 3] = ["slider_entries_ignored", "stage_sets_nothing", "stage_shot_cuts"];
+
 /// The revision's motion, compiled once at check.
 fn compile(v: &mut View<'_>) -> Result<(), OpError> {
     // Compiled from the canonical form, members in name order, so a program's layout (its items'
@@ -388,7 +437,17 @@ fn compile(v: &mut View<'_>) -> Result<(), OpError> {
     let Value::Object(doc) = &canonical else {
         return Err(OpError::new("bad_doc", ""));
     };
-    let program = Program::compile(doc).map_err(|r| OpError::new(r.code, r.path))?;
+    // #544's planted check passes a reader naming what a logic item doesn't emit.
+    let planted = match v.planted() {
+        Some(UNDECLARED_KIND_ACCEPTED) => crate::program::Planted::AcceptsUndeclaredOccurrence,
+        Some("slider_entries_ignored") => crate::program::Planted::SliderEntriesIgnored,
+        Some("stage_sets_nothing") => crate::program::Planted::StageSetIgnored,
+        Some("stage_shot_cuts") => crate::program::Planted::StageShotCuts,
+        _ => Default::default(),
+    };
+    let options = crate::program::Options { planted, ..Default::default() };
+    // What a refusal names past its path (#544: the reader, the undeclared name, close names).
+    let program = Program::compile_with(doc, options).map_err(|r| OpError { actual: r.detail, ..OpError::new(r.code, r.path) })?;
     v.write("motion.program", Val::typed(Arc::new(program)))
 }
 
@@ -419,6 +478,10 @@ fn channels(v: &mut View<'_>) -> Result<(), OpError> {
     let Some((mut transform, mut fields)) = program.item_values(&state, &id) else {
         return Ok(());
     };
+    // #504: a part whose parent names an assembly rides it; the core composes item parents only.
+    if let Some(a) = program.assembly_of(&id) {
+        crate::assembly::placed(&program.assembly_world(&state.slots, a), &mut transform);
+    }
     // #493: a parallax group's offset (Frame and group: parallax).
     if let Some(plan) = program.shots.as_deref() {
         if let Some(o) = plan.parallax(&program, &id, t, v.reduced_motion()?) {
@@ -438,6 +501,29 @@ fn channels(v: &mut View<'_>) -> Result<(), OpError> {
         let keyed = program.motion.channels.iter().find(|c| c.target.owner == owner);
         if let Some(x) = keyed.and_then(|c| program.channel_value(&state, &c.id)) {
             fields.push((vec!["params".into(), "data".into(), name], Datum::Num(x)));
+        }
+    }
+    // #504: a slot on a data value a driver or a stage writes, on a control's value or on an
+    // assembly's shows it at t too: data rides as `params/data/<name>`, a control's or an
+    // assembly's as `params/shown/<section>/<id>/value`, which the template reads first.
+    for slot in template.iter().flat_map(|t| deep_canvas::template::parts(t).unwrap_or_default()) {
+        let deep_canvas::template::Part::Slot(slot) = slot else { continue };
+        if let Some(name) = slot.strip_prefix("data/") {
+            let field = program.fields.iter().find(|f| f.written && f.data.as_deref() == Some(name));
+            if let Some(f) = field.filter(|_| !fields.iter().any(|(p, _)| p.last().map(String::as_str) == Some(name))) {
+                fields.push((vec!["params".into(), "data".into(), name.to_string()], Datum::Num(state.slots[f.slot])));
+            }
+        } else if let Some(id) = slot.strip_prefix("assemblies/").and_then(|r| r.strip_suffix("/value")) {
+            if let Some(a) = program.assemblies.iter().find(|a| a.id == id) {
+                let path = ["params", "shown", "assemblies", id, "value"].map(String::from).to_vec();
+                fields.push((path, Datum::Num(a.held(state.slots[a.slot]))));
+            }
+        } else if let Some(id) = slot.strip_prefix("controls/").and_then(|r| r.strip_suffix("/value")) {
+            let last = program.options.input.iter().filter(|e| e.control == id && e.t <= t).max_by_key(|e| e.key());
+            if let Some(x) = last.and_then(|e| e.value.as_f64()) {
+                let path = ["params", "shown", "controls", id, "value"].map(String::from).to_vec();
+                fields.push((path, Datum::Num(x)));
+            }
         }
     }
     // A counter on a driver of a data value shows it at t the same way.
@@ -528,7 +614,10 @@ fn register_arrange(r: &mut Registrar) {
         "",
     );
     // One solve per revision of every arrangement in the document, at check: the frames read
-    // its places and never solve.
+    // its places and never solve. #504: only a document that holds an arrangement has the node,
+    // so a revision of any other one leaves every solid's place, and what reads it, kept (a
+    // saved file reloads in place); a revision that adds one gains the node, and the readers it
+    // binds run again.
     r.array(
         "motion.arranged",
         "arranged",
@@ -536,10 +625,9 @@ fn register_arrange(r: &mut Registrar) {
         "transform",
         "plan",
     );
-    // It runs on every document, so the readers on each solid always have their writer: the
-    // core keeps an unchanged item's nodes, and their bindings, across revisions.
     r.operator("arrange", "plan", &["refs"], &["motion.arranged"])
         .document()
+        .applies(has_arrangement)
         .run(arrange_op);
     r.contribution(
         "motion.placed",
@@ -578,6 +666,11 @@ fn register_arrange(r: &mut Registrar) {
 /// A solid: what an arrangement can place. It reads only the item, since the core keeps an
 /// unchanged item's nodes from one revision to the next; the node writes only for the items an
 /// arrangement places.
+/// Whether the document holds an arrangement (asked once per document).
+fn has_arrangement(doc: &Value, _: &str, _: &Value) -> bool {
+    doc.get("items").and_then(Value::as_object).is_some_and(|items| items.values().any(crate::arrange::is_arrangement))
+}
+
 fn is_arranged(_: &Value, _: &str, item: &Value) -> bool {
     crate::arrange::is_solid(item)
 }

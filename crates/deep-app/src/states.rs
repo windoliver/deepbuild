@@ -219,15 +219,31 @@ pub fn mark(state: &State, now: u64) -> String {
     format!("{} {}", glyph(state.entry()), state.text(now))
 }
 
-const CLOSING: [&str; 7] = [
-    "decision.applied",
-    "ask.answered",
-    "ask.defaulted",
-    "ask.escalated",
-    "ask.cancelled",
-    "ask.superseded",
-    "ask.moot",
-];
+/// The kinds that close an ask: each move of the contract's ask.machine@1 into a final state, so the app keeps no
+/// close list of its own (#2026).
+pub fn closing() -> &'static [String] {
+    static KINDS: OnceLock<Vec<String>> = OnceLock::new();
+    KINDS.get_or_init(|| {
+        let machine: Value = serde_json::from_str(include_str!(
+            "../../../packages/contracts/schemas/ask.machine@1.json"
+        ))
+        .expect("ask.machine@1 is JSON");
+        let mut kinds: Vec<String> = machine["moves"]
+            .as_array()
+            .expect("ask.machine@1 holds moves")
+            .iter()
+            .filter(|step| {
+                machine["final"]
+                    .as_array()
+                    .is_some_and(|end| end.contains(&step["to"]))
+            })
+            .filter_map(|step| step["event"].as_str().map(str::to_owned))
+            .collect();
+        kinds.sort();
+        kinds.dedup();
+        kinds
+    })
+}
 
 /// An ask's handle, `ask:<the id of its ask.created>`.
 pub fn handle(ask: &Value) -> String {
@@ -243,7 +259,7 @@ pub fn closes(event: &Value, handle: &str) -> bool {
     } else {
         &event["subject"]
     };
-    CLOSING.contains(&event["kind"].as_str().unwrap_or_default())
+    closing().iter().any(|kind| event["kind"] == kind.as_str())
         && ask == handle
         && writer != "hook"
         && !writer.starts_with("mcp:")
@@ -296,7 +312,10 @@ impl Reading {
     /// One event about this ask, in log order.
     fn read(&mut self, event: &Value, handle: &str) {
         if self.closed.is_none() && closes(event, handle) {
-            self.closed = CLOSING.into_iter().find(|kind| event["kind"] == *kind);
+            self.closed = closing()
+                .iter()
+                .find(|kind| event["kind"] == kind.as_str())
+                .map(String::as_str);
         } else if self.closed.is_none()
             && event["kind"] == "deadline.moved"
             && event["writer"] == "core"
@@ -513,6 +532,23 @@ impl Table {
             .apply(event, kind);
     }
 
+    /// The rows a read of the hub gives, in its order (#2026): what the views draw until the record before the read is
+    /// folded, so Needs you never waits on the history.
+    pub fn seeded(rows: &[Value]) -> Table {
+        let mut table = Table {
+            listed: true,
+            ..Table::default()
+        };
+        for (at, row) in rows.iter().enumerate() {
+            if let Some(id) = row["id"].as_str() {
+                table
+                    .rows
+                    .insert(id.to_owned(), (format!("{at:010}"), row.clone()));
+            }
+        }
+        table
+    }
+
     /// Whether the record holds the list's rows (#1463), so every view reads them and not its own reading.
     pub fn listed(&self) -> bool {
         self.listed
@@ -527,6 +563,11 @@ impl Table {
             .collect();
         rows.sort_by(|a, b| (a.0, a.1).cmp(&(b.0, b.1)));
         rows.into_iter().map(|(.., row)| row).collect()
+    }
+
+    /// The list's order key of the row with this ID.
+    pub fn order_of(&self, id: &str) -> Option<String> {
+        self.rows.get(id).map(|(order, _)| order.clone())
     }
 
     /// The list's row with this ID.
@@ -637,6 +678,14 @@ impl Table {
             .filter(|ask| session.is_none_or(|session| ask["session"] == session))
             .filter(|ask| self.is_open(&handle(ask)))
             .collect()
+    }
+
+    /// How many asks a decision applied for you closed: #2026's planted count adds them back.
+    pub fn decided(&self) -> usize {
+        self.readings
+            .values()
+            .filter(|reading| reading.closed == Some("decision.applied"))
+            .count()
     }
 
     /// Whether the ask `handle` is open: any ask no event closed is, whether or not the record holds its creation.

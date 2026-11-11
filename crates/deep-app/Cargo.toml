@@ -119,6 +119,8 @@ deep-text = { path = "../deep-text" }
 deep-marks-gpui = { path = "../deep-marks-gpui" }
 # Issue #326: the look's status map, which every surface draws a state with.
 deep-canvas-marks = { path = "../deep-canvas-marks" }
+# Issue #1486: chrome thumbnails through the one image service.
+deep-images = { path = "../deep-images" }
 # Issue #1436: chrome-fx@1, the pack the chrome's effects come from, read and checked as data.
 deep-canvas-effects = { path = "../deep-canvas-effects" }
 # Issue #402: the cell grid's emulator and palette, whose screen the app paints row by row.

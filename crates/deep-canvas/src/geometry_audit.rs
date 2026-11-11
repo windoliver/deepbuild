@@ -1,0 +1,818 @@
+//! Issue #405: the core's `geometry.audit` check kind on a figure (canvas primitives: Geometry
+//! audit) and the search a control sweep runs between its samples (Control sweep). It reads true
+//! shapes placed in world metres, never pixels: nothing passes into anything past `sunk`, every
+//! part is held, and every wire and tube end lands within `land`. All math is f64 on the CPU.
+
+use std::collections::BTreeSet;
+
+use crate::ops::sqrt;
+
+pub type V3 = [f64; 3];
+
+/// One piece of a part's true shape, placed in the world.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Shape {
+    /// An oriented box: its centre, its three unit axes and its half extents along them.
+    Obb { c: V3, axes: [V3; 3], half: V3 },
+    Ball { c: V3, r: f64 },
+    /// A segment swept by a ball: a wire, a tube or a rod.
+    Capsule { a: V3, b: V3, r: f64 },
+}
+
+/// Where a scene's item sits (Geometry audit: scenes): its geometry's hash, the corners of its own
+/// bounds placed in the world, its origin, its yaw about +Y in degrees, and its mesh's boundary
+/// edges placed in the world, each an edge one face holds; a closed solid has none.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Seat {
+    pub geometry: crate::schedule::Key,
+    pub corners: [V3; 8],
+    pub origin: V3,
+    pub yaw: f64,
+    pub edges: Vec<[V3; 2]>,
+}
+
+/// A part: its ID, its true shape, the ends a wire or tube must land, whether motion (a
+/// driver, a channel or an assembly's value) places it, which holds it, and where a scene's item
+/// sits.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Solid {
+    pub id: String,
+    pub shapes: Vec<Shape>,
+    pub ends: Vec<V3>,
+    pub moved: bool,
+    pub seat: Option<Seat>,
+}
+
+/// What the audit allows (Geometry audit: Fields): the tolerances, the items declared floating,
+/// and the contacts relations allow, as unordered pairs. For a scene: whether one item added
+/// twice is found before the overlap pass, the kit pieces with the sub-grid their origins sit on,
+/// and the pairs of item sets whose boundary edges must meet with the widest gap that still does.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Config {
+    pub sunk: f64,
+    pub touch: f64,
+    pub land: f64,
+    pub floating: BTreeSet<String>,
+    pub relations: BTreeSet<(String, String)>,
+    pub scene: bool,
+    pub grid: Option<(f64, BTreeSet<String>)>,
+    pub seams: Option<(Vec<[BTreeSet<String>; 2]>, f64)>,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Config {
+            sunk: 0.002,
+            touch: 0.005,
+            land: 0.005,
+            floating: BTreeSet::new(),
+            relations: BTreeSet::new(),
+            scene: false,
+            grid: None,
+            seams: None,
+        }
+    }
+}
+
+impl Config {
+    fn related(&self, a: &str, b: &str) -> bool {
+        let key = if a <= b { (a.to_string(), b.to_string()) } else { (b.to_string(), a.to_string()) };
+        self.relations.contains(&key)
+    }
+}
+
+/// What a fix changes, for a patch to write (Patch): an item removed, or one moved by world
+/// metres and turned about +Y by degrees, which is a snap or a move.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Change {
+    Remove(String),
+    Place { id: String, by: V3, yaw: f64 },
+}
+
+/// One failure: its code, the part IDs, how deep or how far, a fix in words, and what that fix
+/// changes where a patch can make it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Fault {
+    pub code: &'static str,
+    pub ids: Vec<String>,
+    pub by: f64,
+    pub fix: String,
+    pub change: Option<Change>,
+}
+
+/// Two parts pass into each other past `sunk`.
+pub const OVERLAP: &str = "geometry.overlap";
+/// A part nothing holds that isn't declared floating.
+pub const FLOATING: &str = "geometry.floating";
+/// A wire's or tube's end lands on no part.
+pub const UNLANDED: &str = "geometry.unlanded";
+/// Two items of one geometry whose bounds' corners each lie within `SAME` of the other's.
+pub const COINCIDENT: &str = "geometry.coincident";
+/// A kit piece whose origin is off the sub-grid, or whose yaw isn't a multiple of 90°.
+pub const OFF_GRID: &str = "geometry.off_grid";
+/// A boundary edge that comes within `NEAR` of another item's and doesn't meet it.
+pub const SEAM: &str = "geometry.seam";
+
+/// Corners this close are one corner (0.1 mm).
+const SAME: f64 = 1e-4;
+/// Boundary edges this close must meet.
+const NEAR: f64 = 0.01;
+/// An origin this far off a grid point, in metres, or a yaw this far off a quarter turn, in
+/// degrees, is on it: what f64 arithmetic on a placed transform leaves.
+const ON_GRID: f64 = 1e-6;
+
+fn sub(a: V3, b: V3) -> V3 {
+    [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
+}
+fn dot(a: V3, b: V3) -> f64 {
+    a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+}
+fn cross(a: V3, b: V3) -> V3 {
+    [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]
+}
+fn len(a: V3) -> f64 {
+    sqrt(dot(a, a))
+}
+fn lerp(a: V3, b: V3, t: f64) -> V3 {
+    [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t]
+}
+
+impl Shape {
+    /// Its world bounds.
+    pub fn aabb(&self) -> [V3; 2] {
+        match self {
+            Shape::Obb { c, axes, half } => {
+                let mut e = [0.0; 3];
+                for (k, ek) in e.iter_mut().enumerate() {
+                    *ek = (0..3).map(|j| (axes[j][k] * half[j]).abs()).sum();
+                }
+                [sub(*c, e), [c[0] + e[0], c[1] + e[1], c[2] + e[2]]]
+            }
+            Shape::Ball { c, r } => [sub(*c, [*r; 3]), [c[0] + r, c[1] + r, c[2] + r]],
+            Shape::Capsule { a, b, r } => {
+                let lo = [a[0].min(b[0]) - r, a[1].min(b[1]) - r, a[2].min(b[2]) - r];
+                let hi = [a[0].max(b[0]) + r, a[1].max(b[1]) + r, a[2].max(b[2]) + r];
+                [lo, hi]
+            }
+        }
+    }
+}
+
+/// The signed distance from `p` to an oriented box: negative inside.
+fn box_sdf(p: V3, c: V3, axes: &[V3; 3], half: V3) -> f64 {
+    let q = sub(p, c);
+    let d: Vec<f64> = (0..3).map(|k| dot(q, axes[k]).abs() - half[k]).collect();
+    let out = sqrt(d.iter().map(|x| x.max(0.0) * x.max(0.0)).sum());
+    let inside = d[0].max(d[1]).max(d[2]).min(0.0);
+    out + inside
+}
+
+/// The distance from `p` to the segment `ab`.
+fn seg_point(a: V3, b: V3, p: V3) -> f64 {
+    let ab = sub(b, a);
+    let l = dot(ab, ab);
+    let t = if l > 0.0 { (dot(sub(p, a), ab) / l).clamp(0.0, 1.0) } else { 0.0 };
+    len(sub(p, lerp(a, b, t)))
+}
+
+/// The distance between two segments.
+fn seg_seg(p1: V3, q1: V3, p2: V3, q2: V3) -> f64 {
+    let (x, y) = seg_closest(p1, q1, p2, q2);
+    len(sub(x, y))
+}
+
+/// The closest points of two segments (Ericson, Real-Time Collision Detection 5.1.9).
+fn seg_closest(p1: V3, q1: V3, p2: V3, q2: V3) -> (V3, V3) {
+    let (d1, d2, r) = (sub(q1, p1), sub(q2, p2), sub(p1, p2));
+    let (a, e, f) = (dot(d1, d1), dot(d2, d2), dot(d2, r));
+    let (s, t);
+    if a <= 1e-18 && e <= 1e-18 {
+        return (p1, p2);
+    }
+    if a <= 1e-18 {
+        s = 0.0;
+        t = (f / e).clamp(0.0, 1.0);
+    } else {
+        let c = dot(d1, r);
+        if e <= 1e-18 {
+            t = 0.0;
+            s = (-c / a).clamp(0.0, 1.0);
+        } else {
+            let b = dot(d1, d2);
+            let den = a * e - b * b;
+            let s0 = if den > 0.0 { ((b * f - c * e) / den).clamp(0.0, 1.0) } else { 0.0 };
+            let t0 = (b * s0 + f) / e;
+            if t0 < 0.0 {
+                t = 0.0;
+                s = (-c / a).clamp(0.0, 1.0);
+            } else if t0 > 1.0 {
+                t = 1.0;
+                s = ((b - c) / a).clamp(0.0, 1.0);
+            } else {
+                t = t0;
+                s = s0;
+            }
+        }
+    }
+    (lerp(p1, q1, s), lerp(p2, q2, t))
+}
+
+/// The least signed distance from the segment `ab` to a box: convex along the segment, so a
+/// golden-section search finds it.
+fn seg_box(a: V3, b: V3, c: V3, axes: &[V3; 3], half: V3) -> f64 {
+    let f = |t: f64| box_sdf(lerp(a, b, t), c, axes, half);
+    let (mut lo, mut hi) = (0.0f64, 1.0f64);
+    for _ in 0..80 {
+        let m1 = lo + (hi - lo) * 0.381_966_011_250_105;
+        let m2 = hi - (hi - lo) * 0.381_966_011_250_105;
+        if f(m1) <= f(m2) {
+            hi = m2;
+        } else {
+            lo = m1;
+        }
+    }
+    f(0.0).min(f(1.0)).min(f((lo + hi) / 2.0))
+}
+
+/// How far `x` passes into `y`: positive is the depth, negative the gap. For two boxes it is the
+/// least overlap over the separating axes, whose negative bounds the gap from below.
+pub fn depth(x: &Shape, y: &Shape) -> f64 {
+    use Shape::*;
+    match (x, y) {
+        (Ball { c: a, r: ra }, Ball { c: b, r: rb }) => ra + rb - len(sub(*a, *b)),
+        (Ball { c: p, r }, Obb { c, axes, half }) | (Obb { c, axes, half }, Ball { c: p, r }) => {
+            r - box_sdf(*p, *c, axes, *half)
+        }
+        (Capsule { a, b, r: ra }, Ball { c, r: rb }) | (Ball { c, r: rb }, Capsule { a, b, r: ra }) => {
+            ra + rb - seg_point(*a, *b, *c)
+        }
+        (Capsule { a: a1, b: b1, r: r1 }, Capsule { a: a2, b: b2, r: r2 }) => r1 + r2 - seg_seg(*a1, *b1, *a2, *b2),
+        (Capsule { a, b, r }, Obb { c, axes, half }) | (Obb { c, axes, half }, Capsule { a, b, r }) => {
+            r - seg_box(*a, *b, *c, axes, *half)
+        }
+        (Obb { c: ca, axes: aa, half: ha }, Obb { c: cb, axes: ab, half: hb }) => boxes(*ca, aa, *ha, *cb, ab, *hb).0,
+    }
+}
+
+/// Two boxes' least overlap over their separating axes, with that axis pointing from the first
+/// box to the second.
+fn boxes(ca: V3, aa: &[V3; 3], ha: V3, cb: V3, ab: &[V3; 3], hb: V3) -> (f64, V3) {
+    let d = sub(cb, ca);
+    let mut axes: Vec<V3> = aa.iter().chain(ab.iter()).copied().collect();
+    for u in aa {
+        for v in ab {
+            let w = cross(*u, *v);
+            let l = len(w);
+            if l > 1e-9 {
+                axes.push([w[0] / l, w[1] / l, w[2] / l]);
+            }
+        }
+    }
+    axes.iter()
+        .map(|l| {
+            let ra: f64 = (0..3).map(|k| (dot(aa[k], *l) * ha[k]).abs()).sum();
+            let rb: f64 = (0..3).map(|k| (dot(ab[k], *l) * hb[k]).abs()).sum();
+            let along = dot(d, *l);
+            (ra + rb - along.abs(), l.map(|x| if along < 0.0 { -x } else { x }))
+        })
+        .fold((f64::INFINITY, [0.0; 3]), |least, x| if x.0 < least.0 { x } else { least })
+}
+
+/// The least move of `b` that takes it out of `a`, where their deepest pieces are two boxes: the
+/// depth along the axis of least overlap.
+fn apart(a: &Solid, b: &Solid) -> Option<V3> {
+    let pieces = a.shapes.iter().flat_map(|x| b.shapes.iter().map(move |y| (x, y)));
+    let deepest = pieces.max_by(|p, q| depth(p.0, p.1).total_cmp(&depth(q.0, q.1)))?;
+    let (Shape::Obb { c: ca, axes: aa, half: ha }, Shape::Obb { c: cb, axes: ab, half: hb }) = deepest else {
+        return None;
+    };
+    let (d, axis) = boxes(*ca, aa, *ha, *cb, ab, *hb);
+    Some(axis.map(|x| x * d))
+}
+
+/// A piece `t` lower along -Y.
+fn lowered(s: &Shape, t: f64) -> Shape {
+    let down = |p: &V3| [p[0], p[1] - t, p[2]];
+    match s {
+        Shape::Obb { c, axes, half } => Shape::Obb { c: down(c), axes: *axes, half: *half },
+        Shape::Ball { c, r } => Shape::Ball { c: down(c), r: *r },
+        Shape::Capsule { a, b, r } => Shape::Capsule { a: down(a), b: down(b), r: *r },
+    }
+}
+
+/// How far part `i` falls along -Y before one of its pieces first meets a piece of another part
+/// under it; none where nothing is under it. Two convex pieces close steadily until they meet,
+/// so each pair's first meeting is found by halving.
+fn fall(solids: &[Solid], i: usize) -> Option<f64> {
+    let mut least: Option<f64> = None;
+    for (_, o) in solids.iter().enumerate().filter(|(j, _)| *j != i) {
+        for (x, y) in solids[i].shapes.iter().flat_map(|x| o.shapes.iter().map(move |y| (x, y))) {
+            let ([xl, xh], [yl, yh]) = (x.aabb(), y.aabb());
+            if xl[0] > yh[0] || yl[0] > xh[0] || xl[2] > yh[2] || yl[2] > xh[2] || yl[1] >= xl[1] {
+                continue;
+            }
+            let gap = |t: f64| -depth(&lowered(x, t), y);
+            // Already on a part under it, which nothing holds either: it has nowhere to fall.
+            if gap(0.0) <= 0.0 {
+                return None;
+            }
+            let (mut lo, mut hi) = (0.0, xl[1] - yl[1]);
+            if gap(hi) > 0.0 {
+                continue;
+            }
+            for _ in 0..60 {
+                let mid = (lo + hi) / 2.0;
+                if gap(mid) > 0.0 {
+                    lo = mid;
+                } else {
+                    hi = mid;
+                }
+            }
+            if least.is_none_or(|l| hi < l) {
+                least = Some(hi);
+            }
+        }
+    }
+    least
+}
+
+/// How far part `a` passes into part `b`: the deepest of their pieces' pairs.
+pub fn pair_depth(a: &Solid, b: &Solid) -> f64 {
+    a.shapes
+        .iter()
+        .flat_map(|x| b.shapes.iter().map(move |y| depth(x, y)))
+        .fold(f64::NEG_INFINITY, f64::max)
+}
+
+/// A part's world bounds.
+pub fn bounds(s: &Solid) -> [V3; 2] {
+    let mut out = [[f64::INFINITY; 3], [f64::NEG_INFINITY; 3]];
+    for sh in &s.shapes {
+        let [lo, hi] = sh.aabb();
+        for k in 0..3 {
+            out[0][k] = out[0][k].min(lo[k]);
+            out[1][k] = out[1][k].max(hi[k]);
+        }
+    }
+    for e in &s.ends {
+        for k in 0..3 {
+            out[0][k] = out[0][k].min(e[k]);
+            out[1][k] = out[1][k].max(e[k]);
+        }
+    }
+    out
+}
+
+/// Every pair of parts whose bounds, grown by `margin`, meet: sorted on x and swept, so
+/// O(n log n + pairs) (the broad phase).
+pub fn near_pairs(solids: &[Solid], margin: f64) -> Vec<(usize, usize)> {
+    let b: Vec<[V3; 2]> = solids.iter().map(bounds).collect();
+    let mut order: Vec<usize> = (0..solids.len()).filter(|&i| b[i][0][0].is_finite()).collect();
+    order.sort_by(|&i, &j| b[i][0][0].total_cmp(&b[j][0][0]).then(i.cmp(&j)));
+    let mut out = Vec::new();
+    for (k, &i) in order.iter().enumerate() {
+        for &j in &order[k + 1..] {
+            if b[j][0][0] > b[i][1][0] + margin {
+                break;
+            }
+            if (1..3).all(|a| b[j][0][a] <= b[i][1][a] + margin && b[i][0][a] <= b[j][1][a] + margin) {
+                out.push((i.min(j), i.max(j)));
+            }
+        }
+    }
+    out.sort_unstable();
+    out
+}
+
+/// Whether end `e` lands on part `s`: within `land` of its surface or inside it.
+fn lands(e: V3, s: &Solid, land: f64) -> bool {
+    let p = Shape::Ball { c: e, r: 0.0 };
+    s.shapes.iter().any(|sh| depth(&p, sh) >= -land)
+}
+
+/// The widest gap the seam between two items leaves, from their boundary edges `ea` and `eb`:
+/// over each edge of one that comes within `NEAR` of the other's edges, how far it stops short of
+/// the nearest, with the move of the second item that closes it. None when every such edge meets
+/// within `max_gap`.
+fn seam_gap(ea: &[[V3; 2]], eb: &[[V3; 2]], max_gap: f64) -> Option<(f64, V3)> {
+    let mut worst: Option<(f64, V3)> = None;
+    for (from, to, toward_a) in [(ea, eb, 1.0), (eb, ea, -1.0)] {
+        for e in from {
+            let nearest = to
+                .iter()
+                .map(|f| {
+                    let (p, q) = seg_closest(e[0], e[1], f[0], f[1]);
+                    (len(sub(p, q)), sub(p, q))
+                })
+                .min_by(|x, y| x.0.total_cmp(&y.0));
+            let Some((d, v)) = nearest.filter(|(d, _)| *d > max_gap && *d <= NEAR) else {
+                continue;
+            };
+            if worst.is_none_or(|(w, _)| d > w) {
+                worst = Some((d, v.map(|x| x * toward_a)));
+            }
+        }
+    }
+    worst
+}
+
+/// The move onto the nearest sub-grid point and the turn to the nearest quarter turn, for a kit
+/// piece that is off either.
+fn off_grid(seat: &Seat, sub: f64) -> Option<(V3, f64)> {
+    let by = seat.origin.map(|o| (o / sub).round() * sub - o);
+    let yaw = (seat.yaw / 90.0).round() * 90.0 - seat.yaw;
+    (len(by) > ON_GRID || yaw.abs() > ON_GRID).then_some((by, yaw))
+}
+
+/// The audit of one state: each fault names its part IDs in document order (Geometry audit).
+pub fn audit(solids: &[Solid], cfg: &Config) -> Vec<Fault> {
+    let n = solids.len();
+    let margin = cfg.touch.max(cfg.land).max(if cfg.seams.is_some() { NEAR } else { 0.0 });
+    let pairs = near_pairs(solids, margin);
+    let mut out = Vec::new();
+    // A scene's coincident items, before the overlap pass, which then leaves the pair alone: one
+    // geometry, each corner of its bounds on the other's. The fix removes the later one.
+    let mut twins: BTreeSet<(usize, usize)> = BTreeSet::new();
+    for &(i, j) in if cfg.scene { &pairs[..] } else { &[] } {
+        let (Some(a), Some(b)) = (&solids[i].seat, &solids[j].seat) else {
+            continue;
+        };
+        let apart = (0..8).map(|k| len(sub(a.corners[k], b.corners[k]))).fold(0.0, f64::max);
+        if a.geometry == b.geometry && apart <= SAME {
+            twins.insert((i, j));
+            out.push(Fault {
+                code: COINCIDENT,
+                ids: vec![solids[i].id.clone(), solids[j].id.clone()],
+                by: apart,
+                fix: format!("remove {}, which is {} again", solids[j].id, solids[i].id),
+                change: Some(Change::Remove(solids[j].id.clone())),
+            });
+        }
+    }
+    // Each end of a wire or tube lands on some other part; the part it lands on may hold it.
+    let mut landed_on: BTreeSet<(usize, usize)> = BTreeSet::new();
+    let mut end_ok: Vec<Vec<bool>> = solids.iter().map(|s| vec![false; s.ends.len()]).collect();
+    for &(i, j) in &pairs {
+        for (w, o) in [(i, j), (j, i)] {
+            for (k, e) in solids[w].ends.iter().enumerate() {
+                if lands(*e, &solids[o], cfg.land) {
+                    end_ok[w][k] = true;
+                    landed_on.insert((i, j));
+                }
+            }
+        }
+    }
+    let mut contact: Vec<Vec<usize>> = vec![Vec::new(); n];
+    for &(i, j) in &pairs {
+        let (a, b) = (&solids[i], &solids[j]);
+        let d = pair_depth(a, b);
+        let allowed = cfg.related(&a.id, &b.id) || landed_on.contains(&(i, j));
+        if d > cfg.sunk && !allowed && !twins.contains(&(i, j)) {
+            out.push(Fault {
+                code: OVERLAP,
+                ids: vec![a.id.clone(), b.id.clone()],
+                by: d,
+                fix: format!("move {} or {} apart by {:.4} m", a.id, b.id, d),
+                // The move is the later part's, unless that one alone is declared floating, as a floor is.
+                change: apart(a, b).map(|v| match cfg.floating.contains(&b.id) && !cfg.floating.contains(&a.id) {
+                    true => Change::Place { id: a.id.clone(), by: v.map(|x| -x), yaw: 0.0 },
+                    false => Change::Place { id: b.id.clone(), by: v, yaw: 0.0 },
+                }),
+            });
+        }
+        if d >= -cfg.touch || allowed {
+            contact[i].push(j);
+            contact[j].push(i);
+        }
+    }
+    for (i, s) in solids.iter().enumerate() {
+        for (k, e) in s.ends.iter().enumerate() {
+            if !end_ok[i][k] {
+                out.push(Fault {
+                    code: UNLANDED,
+                    ids: vec![s.id.clone()],
+                    by: k as f64,
+                    fix: format!("end {}'s end {k} at ({:.4}, {:.4}, {:.4}) m on a part", s.id, e[0], e[1], e[2]),
+                    change: None,
+                });
+            }
+        }
+    }
+    // Held: joined by contacts or relations to a part motion places or to one declared floating
+    // (Geometry audit: scenes: every item rests on something unless declared floating).
+    let mut held = vec![false; n];
+    let mut stack: Vec<usize> = (0..n)
+        .filter(|&i| solids[i].moved || cfg.floating.contains(&solids[i].id))
+        .collect();
+    for &i in &stack {
+        held[i] = true;
+    }
+    for (i, a) in solids.iter().enumerate().filter(|_| !cfg.relations.is_empty()) {
+        for (j, b) in solids.iter().enumerate().skip(i + 1) {
+            if cfg.related(&a.id, &b.id) && !contact[i].contains(&j) {
+                contact[i].push(j);
+                contact[j].push(i);
+            }
+        }
+    }
+    while let Some(i) = stack.pop() {
+        for &j in &contact[i] {
+            if !held[j] {
+                held[j] = true;
+                stack.push(j);
+            }
+        }
+    }
+    for (i, s) in solids.iter().enumerate() {
+        if !held[i] {
+            let drop = fall(solids, i);
+            out.push(Fault {
+                code: FLOATING,
+                ids: vec![s.id.clone()],
+                by: 0.0,
+                fix: format!("rest {} on a part, relate it to one, or declare it floating", s.id),
+                change: drop.map(|t| Change::Place { id: s.id.clone(), by: [0.0, -t, 0.0], yaw: 0.0 }),
+            });
+        }
+    }
+    // Kit pieces: each listed item's origin on the sub-grid, its yaw a quarter turn; the fix snaps it.
+    if let Some((sub, ids)) = &cfg.grid {
+        for s in solids.iter().filter(|s| ids.contains(&s.id)) {
+            let Some((by, yaw)) = s.seat.as_ref().and_then(|seat| off_grid(seat, *sub)) else {
+                continue;
+            };
+            out.push(Fault {
+                code: OFF_GRID,
+                ids: vec![s.id.clone()],
+                by: len(by),
+                fix: format!("snap {} by ({:.4}, {:.4}, {:.4}) m and {yaw:.2}° onto the {sub} m grid", s.id, by[0], by[1], by[2]),
+                change: Some(Change::Place { id: s.id.clone(), by, yaw }),
+            });
+        }
+    }
+    // Seams: between the listed sets, a boundary edge near another item's meets it. The fix moves
+    // the item more seams name, since one moved piece opens a gap to each neighbour, else the later.
+    if let Some((sets, max_gap)) = &cfg.seams {
+        let listed = |a: &str, b: &str| sets.iter().any(|[x, y]| x.contains(a) && y.contains(b) || x.contains(b) && y.contains(a));
+        let edges = |i: usize| solids[i].seat.as_ref().map_or(&[][..], |s| &s.edges[..]);
+        let gaps: Vec<(usize, usize, f64, V3)> = pairs
+            .iter()
+            .filter(|&&(i, j)| listed(&solids[i].id, &solids[j].id))
+            .filter_map(|&(i, j)| seam_gap(edges(i), edges(j), *max_gap).map(|(d, v)| (i, j, d, v)))
+            .collect();
+        let named = |i: usize| gaps.iter().filter(|g| g.0 == i || g.1 == i).count();
+        for &(i, j, d, v) in &gaps {
+            let (id, by) = if named(i) > named(j) { (&solids[i].id, v.map(|x| -x)) } else { (&solids[j].id, v) };
+            out.push(Fault {
+                code: SEAM,
+                ids: vec![solids[i].id.clone(), solids[j].id.clone()],
+                by: d,
+                fix: format!("move {id} by ({:.4}, {:.4}, {:.4}) m to close the {d:.4} m gap", by[0], by[1], by[2]),
+                change: Some(Change::Place { id: id.clone(), by, yaw: 0.0 }),
+            });
+        }
+    }
+    out
+}
+
+/// What a sweep found over a control's range: each value where the audit failed with its faults,
+/// the values it audited, and the stretches between samples where some part has no bound, each
+/// with those parts: there the sweep only sampled, an estimate that never decides a check.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Swept {
+    pub failed: Vec<(f64, Vec<Fault>)>,
+    pub audited: Vec<f64>,
+    pub estimates: Vec<([f64; 2], Vec<String>)>,
+}
+
+/// How far each part can move over a stretch of a sweep's values, given the stretch and its
+/// start's parts: `None` for a part no interval form bounds.
+pub type Reach<'a> = dyn FnMut(f64, f64, &[Solid]) -> Vec<Option<f64>> + 'a;
+
+/// The most stretches a sweep holds and the narrowest it splits, as camera paths settle.
+pub const MAX_PIECES: usize = 4096;
+pub const MIN_WIDTH: f64 = 1e-9;
+
+/// A control's sweep (Control sweep): the audit at each of `samples`, then, between each two
+/// neighbours, a bound on how far each pair of parts can pass into each other: their depth at the
+/// stretch's start plus the most any point of either moves over it (`reach`). A pair whose bound
+/// exceeds `sunk` splits the stretch, with the audit run at the split, until the bound clears it
+/// or the audit fails it; a pair that fails once is found and stops splitting. A part `reach`
+/// can't bound makes its samples' stretch an estimate; the other pairs are still bounded. What
+/// `MAX_PIECES` or `MIN_WIDTH` leaves open is an estimate too.
+pub fn sweep(samples: &[f64], cfg: &Config, state_at: &mut dyn FnMut(f64) -> Vec<Solid>, reach: &mut Reach<'_>) -> Swept {
+    let mut out = Swept::default();
+    let mut found: BTreeSet<(String, String)> = BTreeSet::new();
+    let mut audit_at = |v: f64, out: &mut Swept, found: &mut BTreeSet<(String, String)>| {
+        let solids = state_at(v);
+        let faults = audit(&solids, cfg);
+        for f in faults.iter().filter(|f| f.code == OVERLAP) {
+            found.insert((f.ids[0].clone(), f.ids[1].clone()));
+        }
+        out.audited.push(v);
+        if !faults.is_empty() {
+            out.failed.push((v, faults));
+        }
+        solids
+    };
+    let mut vs: Vec<f64> = samples.to_vec();
+    vs.sort_by(f64::total_cmp);
+    vs.dedup();
+    let states: Vec<Vec<Solid>> = vs.iter().map(|&v| audit_at(v, &mut out, &mut found)).collect();
+    // Each piece: its stretch, its start's parts, and the samples' stretch it lies in.
+    let mut pieces: Vec<(f64, f64, Vec<Solid>, usize)> = vs
+        .windows(2)
+        .zip(states)
+        .enumerate()
+        .map(|(k, (w, s))| (w[0], w[1], s, k))
+        .collect();
+    pieces.reverse();
+    let mut unbounded: Vec<BTreeSet<String>> = vec![BTreeSet::new(); pieces.len()];
+    let mut unsettled: Vec<bool> = vec![false; pieces.len()];
+    let mut count = pieces.len();
+    while let Some((a, b, start, root)) = pieces.pop() {
+        let r = reach(a, b, &start);
+        for (s, _) in start.iter().zip(&r).filter(|(_, r)| r.is_none()) {
+            unbounded[root].insert(s.id.clone());
+        }
+        let grow = r.iter().flatten().copied().fold(0.0, f64::max) * 2.0;
+        let open = near_pairs(&start, grow).into_iter().any(|(i, j)| {
+            let (x, y) = (&start[i], &start[j]);
+            let (Some(ri), Some(rj)) = (r[i], r[j]) else {
+                return false;
+            };
+            ri + rj > 0.0
+                && !cfg.related(&x.id, &y.id)
+                && !found.contains(&(x.id.clone(), y.id.clone()))
+                && pair_depth(x, y) + ri + rj > cfg.sunk
+        });
+        if !open {
+            continue;
+        }
+        if b - a < MIN_WIDTH || count >= MAX_PIECES {
+            unsettled[root] = true;
+            continue;
+        }
+        let m = a + (b - a) / 2.0;
+        let mid = audit_at(m, &mut out, &mut found);
+        count += 1;
+        pieces.push((m, b, mid, root));
+        pieces.push((a, m, start, root));
+    }
+    for (k, w) in vs.windows(2).enumerate() {
+        if !unbounded[k].is_empty() || unsettled[k] {
+            out.estimates.push(([w[0], w[1]], unbounded[k].iter().cloned().collect()));
+        }
+    }
+    out.failed.sort_by(|x, y| x.0.total_cmp(&y.0));
+    out.audited.sort_by(f64::total_cmp);
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ops::exp;
+
+    const I3: [V3; 3] = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
+
+    fn cube(id: &str, c: V3, half: V3) -> Solid {
+        Solid { id: id.into(), shapes: vec![Shape::Obb { c, axes: I3, half }], ends: vec![], moved: false, seat: None }
+    }
+
+    #[test]
+    fn a_stack_passes_and_each_fault_names_its_parts() {
+        let base = cube("base", [0.0, 0.05, 0.0], [0.5, 0.05, 0.5]);
+        let top = cube("top", [0.0, 0.15, 0.0], [0.1, 0.05, 0.1]);
+        let cfg = Config { floating: ["base".to_string()].into(), ..Config::default() };
+        assert!(audit(&[base.clone(), top.clone()], &cfg).is_empty());
+        let sunk = cube("sunk", [0.3, 0.12, 0.0], [0.1, 0.05, 0.1]);
+        let loose = cube("loose", [2.0, 1.0, 0.0], [0.1, 0.1, 0.1]);
+        let wire = Solid {
+            id: "wire".into(),
+            shapes: vec![Shape::Capsule { a: [0.0, 0.2, 0.0], b: [0.0, 0.6, 0.0], r: 0.01 }],
+            ends: vec![[0.0, 0.2, 0.0], [0.0, 0.6, 0.0]],
+            moved: false,
+            seat: None,
+        };
+        let f = audit(&[base, top, sunk, loose, wire], &cfg);
+        let got: Vec<(&str, Vec<&str>)> = f.iter().map(|f| (f.code, f.ids.iter().map(String::as_str).collect())).collect();
+        assert_eq!(
+            got,
+            vec![
+                (OVERLAP, vec!["base", "sunk"]),
+                (UNLANDED, vec!["wire"]),
+                (FLOATING, vec!["loose"])
+            ]
+        );
+    }
+
+    #[test]
+    fn a_lid_that_peaks_between_samples_is_found() {
+        // The lid's top at 0.1 m, the shelf 0.03 m above it; lift 0.05·exp(−((s − 0.6)/0.05)²).
+        let lift = |s: f64| 0.05 * exp(-((s - 0.6) / 0.05) * ((s - 0.6) / 0.05));
+        let state = |s: f64| {
+            let mut lid = cube("lid", [0.0, 0.09 + lift(s), 0.0], [0.1, 0.01, 0.1]);
+            lid.moved = true;
+            vec![lid, cube("shelf", [0.0, 0.14, 0.0], [0.3, 0.01, 0.3])]
+        };
+        let samples = [0.0, 0.25, 0.5, 0.75, 1.0];
+        assert!(samples.iter().all(|&s| lift(s) < 0.001));
+        let cfg = Config { floating: ["shelf".to_string()].into(), ..Config::default() };
+        // The lift's interval form over [a, b]: its peak where the stretch holds 0.6.
+        let mut reach = |a: f64, b: f64, _: &[Solid]| {
+            let hi = if a <= 0.6 && 0.6 <= b { 0.05 } else { lift(a).max(lift(b)) };
+            let lo = lift(a).min(lift(b));
+            vec![Some(hi - lo), Some(0.0)]
+        };
+        let swept = sweep(&samples, &cfg, &mut |s| state(s), &mut reach);
+        let (s, faults) = &swept.failed[0];
+        assert!((0.56..=0.64).contains(s), "{s}");
+        assert_eq!(faults[0].ids, vec!["lid", "shelf"]);
+        assert!(swept.estimates.is_empty());
+        // A part no form bounds leaves its stretches an estimate.
+        let swept = sweep(&samples, &cfg, &mut |s| state(s), &mut |_, _, _| vec![None, Some(0.0)]);
+        assert!(swept.failed.is_empty());
+        assert_eq!(swept.estimates.len(), 4);
+        assert_eq!(swept.estimates[0].1, vec!["lid"]);
+    }
+
+    /// A floor slab from y = -0.2 to 0, which may float, before or after one part `half` about `c`:
+    /// the audit's one fault on it with the move its fix names, which, made, leaves no fault.
+    fn moved_clear(c: V3, half: V3, floor_first: bool) -> (&'static str, V3) {
+        let scene = |c: V3| {
+            let mut parts = vec![cube("floor", [0.0, -0.1, 0.0], [3.0, 0.1, 3.0]), cube("part", c, half)];
+            if !floor_first {
+                parts.reverse();
+            }
+            parts
+        };
+        let cfg = Config { floating: ["floor".to_string()].into(), ..Config::default() };
+        let f = audit(&scene(c), &cfg);
+        assert_eq!(f.len(), 1, "{f:?}");
+        let Some(Change::Place { id, by, yaw }) = &f[0].change else {
+            panic!("{} names no move: {:?}", f[0].code, f[0].change);
+        };
+        assert_eq!((id.as_str(), *yaw, by[0], by[2]), ("part", 0.0, 0.0, 0.0));
+        assert_eq!(audit(&scene([c[0], c[1] + by[1], c[2]]), &cfg), vec![]);
+        (f[0].code, *by)
+    }
+
+    #[test]
+    fn a_box_sunk_into_the_floor_is_moved_out_and_the_floor_stays() {
+        // 0.02 m into the slab's underside, the floor first; then into its top, the floor last.
+        for (y, floor_first, out) in [(-0.68, true, -0.02), (0.48, false, 0.02)] {
+            let (code, by) = moved_clear([0.0, y, 0.0], [0.5; 3], floor_first);
+            assert_eq!(code, OVERLAP);
+            assert!((by[1] - out).abs() < 1e-9, "{by:?}");
+        }
+    }
+
+    #[test]
+    fn a_vase_floating_over_the_floor_is_lowered_onto_it() {
+        let (code, by) = moved_clear([2.0, 0.7, 0.0], [0.1, 0.5, 0.1], true);
+        assert_eq!(code, FLOATING);
+        assert!((by[1] + 0.2).abs() < 1e-9, "{by:?}");
+    }
+
+    /// A kit sheet lying flat, 1 m square about `origin`, with its yaw and the boundary edges given.
+    fn sheet(id: &str, origin: V3, yaw: f64, edges: Vec<[V3; 2]>) -> Solid {
+        let seat = Seat { geometry: crate::schedule::Key::default(), corners: [origin; 8], origin, yaw, edges };
+        Solid { seat: Some(seat), ..cube(id, origin, [0.5, 0.0, 0.5]) }
+    }
+
+    #[test]
+    fn a_kit_piece_turned_off_a_quarter_turn_is_off_its_grid() {
+        let kit: BTreeSet<String> = ["turned".to_string(), "square".to_string()].into();
+        let cfg = Config { floating: kit.clone(), grid: Some((0.5, kit)), ..Config::default() };
+        let f = audit(&[sheet("turned", [1.0, 0.0, 2.5], 100.0, vec![]), sheet("square", [4.0, 0.0, 0.0], -90.0, vec![])], &cfg);
+        assert_eq!(f.len(), 1, "{f:?}");
+        assert_eq!((f[0].code, f[0].ids.as_slice()), (OFF_GRID, &["turned".to_string()][..]));
+        assert_eq!(f[0].change, Some(Change::Place { id: "turned".into(), by: [0.0; 3], yaw: -10.0 }));
+    }
+
+    #[test]
+    fn a_seam_fix_moves_the_piece_both_gaps_name() {
+        // Three sheets edge to edge along x; the middle one, first in the document, sits 2 mm up.
+        let side = |x: f64, y: f64| [[x, y, 0.0], [x, y, 1.0]];
+        let pieces = [
+            sheet("mid", [1.5, 0.002, 0.5], 0.0, vec![side(1.0, 0.002), side(2.0, 0.002)]),
+            sheet("left", [0.5, 0.0, 0.5], 0.0, vec![side(1.0, 0.0)]),
+            sheet("right", [2.5, 0.0, 0.5], 0.0, vec![side(2.0, 0.0)]),
+        ];
+        let kit: BTreeSet<String> = pieces.iter().map(|p| p.id.clone()).collect();
+        let cfg = Config { floating: kit.clone(), seams: Some((vec![[kit.clone(), kit]], 0.001)), ..Config::default() };
+        let got: Vec<_> = audit(&pieces, &cfg).into_iter().map(|f| (f.code, f.ids.join("+"), f.by, f.change)).collect();
+        let lower = Some(Change::Place { id: "mid".into(), by: [0.0, -0.002, 0.0], yaw: 0.0 });
+        assert_eq!(got, vec![(SEAM, "mid+left".to_string(), 0.002, lower.clone()), (SEAM, "mid+right".to_string(), 0.002, lower)]);
+    }
+
+    #[test]
+    fn a_rotated_box_and_a_capsule_meet_only_when_they_do() {
+        let s = sqrt(0.5);
+        let turned = Shape::Obb { c: [0.0; 3], axes: [[s, s, 0.0], [-s, s, 0.0], [0.0, 0.0, 1.0]], half: [0.5; 3] };
+        let rod = |x: f64| Shape::Capsule { a: [x, -1.0, 0.0], b: [x, 1.0, 0.0], r: 0.05 };
+        assert!(depth(&turned, &rod(0.75)) > 0.0);
+        assert!(depth(&turned, &rod(0.8)) < 0.0);
+    }
+}

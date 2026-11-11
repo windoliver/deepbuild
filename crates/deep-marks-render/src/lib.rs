@@ -150,6 +150,8 @@ enum Request {
         store: Option<PathBuf>,
         pans: Vec<(f64, [f64; 4])>,
     },
+    /// #1486: a document's live view on the real clock, its image service reported frame by frame.
+    Live(Box<Live>),
     Render {
         out: String,
         doc: Map<String, Value>,
@@ -167,6 +169,98 @@ enum Request {
         /// #1485's wrong program on the images' cap.
         image_plant: asset::Plant,
     },
+}
+
+/// Where a `live` run's frame is written: one frame of a phase (`None`: its last), or every
+/// frame of it into a folder.
+enum Shot {
+    One(Option<u32>, String),
+    Every(PathBuf),
+}
+
+/// #1486: a `live` run: the document's view opened, moved, settled and redrawn on the real clock.
+struct Live {
+    doc: Map<String, Value>,
+    look: Look,
+    view: View,
+    rect: [f64; 4],
+    store: Option<PathBuf>,
+    /// Each move-phase frame: the view's origin and the document time, flicks.
+    moves: Vec<([f64; 2], i64)>,
+    settle_ms: f64,
+    redraws: u32,
+    budget: Option<u64>,
+    /// Each phase's shots, by phase: open, move, settle, redraw.
+    shots: [Vec<Shot>; 4],
+    plant: asset::Plant,
+}
+
+/// The phases of a `live` run, in order.
+const PHASES: [&str; 4] = ["open", "move", "settle", "redraw"];
+
+fn live_request(input: &Map<String, Value>, look: Look) -> Option<Live> {
+    let view_value = input.get("view")?;
+    let r: Vec<f64> = (view_value.get("rect")?.as_array()?.iter())
+        .map(Value::as_f64)
+        .collect::<Option<_>>()?;
+    let [x, y, w, h] = r[..] else { return None };
+    if !(r.iter().all(|n| n.is_finite()) && w > 0.0 && h > 0.0) {
+        return None;
+    }
+    let moves = match input.get("moves") {
+        None => Vec::new(),
+        Some(list) => (list.as_array()?.iter())
+            .map(|m| {
+                let at = m.get("at")?.as_array()?;
+                let at = [at.first()?.as_f64()?, at.get(1)?.as_f64()?];
+                let t = match m.get("t") {
+                    None => 0,
+                    Some(t) => t.as_i64()?,
+                };
+                Some((at, t))
+            })
+            .collect::<Option<Vec<_>>>()?,
+    };
+    let mut shots: [Vec<Shot>; 4] = Default::default();
+    for c in input.get("captures").map_or(Some(&[][..]), |c| c.as_array().map(Vec::as_slice))? {
+        let named = c.get("phase")?.as_str()?;
+        let phase = PHASES.iter().position(|p| *p == named)?;
+        let shot = match (c.get("dir"), c.get("frame"), c.get("out")) {
+            (Some(dir), None, None) => Shot::Every(PathBuf::from(dir.as_str()?)),
+            (None, Some(f), Some(out)) => {
+                let frame = match f {
+                    Value::String(l) if l == "last" => None,
+                    f => Some(u32::try_from(f.as_u64()?).ok()?),
+                };
+                Shot::One(frame, out.as_str()?.to_string())
+            }
+            _ => return None,
+        };
+        shots[phase].push(shot);
+    }
+    Some(Live {
+        doc: doc(input.get("doc"))?,
+        look,
+        view: view(Some(view_value))?,
+        rect: [x, y, w, h],
+        store: store(input.get("store"))?,
+        moves,
+        settle_ms: input.get("settle_ms").map_or(Some(10_000.0), Value::as_f64)?,
+        redraws: u32::try_from(input.get("redraws").map_or(Some(0), Value::as_u64)?).ok()?,
+        budget: match input.get("images") {
+            None => None,
+            Some(i) => Some(i.get("budget")?.as_u64().filter(|b| *b > 0)?),
+        },
+        shots,
+        plant: match input.get("planted") {
+            None => asset::Plant::None,
+            Some(Value::String(p)) => match asset::Plant::named(p)? {
+                p @ (asset::Plant::QueueWithoutCancel | asset::Plant::EvictorIgnoresTwoFrames) => p,
+                _ => return None,
+            },
+            Some(_) => return None,
+        },
+    })
 }
 
 /// A line answered before any platform-specific work: a check, a look, or a refusal of either.
@@ -332,7 +426,7 @@ fn check(
     doc: &Map<String, Value>,
     look: Option<&Look>,
     store: Option<&Path>,
-    (twin, distance_0_03, twin_parallax): (Twin, bool, bool),
+    (twin, distance_0_03, twin_parallax, square_sides): (Twin, bool, bool, bool),
     ctx: &formulas::Ctx,
 ) -> (Value, Vectors) {
     let result = deep_canvas::document::check(&Value::Object(doc.clone()));
@@ -357,19 +451,22 @@ fn check(
         if item.get("kind").and_then(Value::as_str) != Some(deep_canvas_marks::terrain::KIND) {
             continue;
         }
-        match deep_canvas_marks::terrain::expand(id, item) {
+        let planted = match square_sides {
+            true => Planted::TerrainSquareSides,
+            false => Planted::None,
+        };
+        match deep_canvas_marks::terrain::expand(id, item, planted) {
             Ok((name, derived)) => {
                 expansions.push(json!({"instance": id, "derived": {name: derived}}))
             }
             Err(r) => issues.push(deep_canvas::document::Issue::error(
-                r.code,
-                id,
-                r.path,
-                Value::Null,
-                "the terrain recipe can't expand as its params say",
+                r.code, id, r.path, r.actual, &r.message,
             )),
         }
     }
+    // #536: a set that reads a logic array is checked as far as the document fixes it.
+    let (logic_sets, found) = arrays::sets(doc);
+    issues.extend(found);
     let (found, vectors) = deep_canvas_vector::check(doc, |sha| asset::bytes(store, sha), twin);
     issues.extend(found);
     // #406: a quote's raw bytes against its source's, and a formula's numbers.
@@ -448,9 +545,11 @@ fn check(
             .or(doc.get("items"))
         {
             let mut items = deep_canvas_vector::lower_items(items, &vectors, Default::default());
-            // A terrain draws as the atlas set it expands into, which marks2d doesn't check.
-            items.retain(|_, i| {
+            // A terrain draws as the atlas set it expands into, which marks2d doesn't check, and
+            // a set that reads a logic array draws only where the logic module runs.
+            items.retain(|id, i| {
                 i.get("kind").and_then(Value::as_str) != Some(deep_canvas_marks::terrain::KIND)
+                    && !logic_sets.contains(id)
             });
             // #399: graphs draw as marks2d's items, and labels place where the view draws them.
             let items = match graphs::lower(doc, &items, &vectors, Default::default()) {
@@ -688,7 +787,7 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
             &doc,
             look.as_ref().map(|(l, _)| l),
             store_dir.as_deref(),
-            (skips, near, unwrapped),
+            (skips, near, unwrapped, false),
             &ctx,
         );
         if let Some(refused) = refused_by_check(&checked) {
@@ -709,13 +808,18 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
     let straight = input.get("planted").and_then(Value::as_str) == Some("straight_router");
     // #1653 AC4's square layout of an isometric grid, which `geometry` takes.
     let square = input.get("planted").and_then(Value::as_str) == Some("isometric_as_square_grid");
+    // #536's twins: a hex grid's other parity shifted (`geometry`), and the terrain recipe reading
+    // a square grid's sides (`check`).
+    let parity = input.get("planted").and_then(Value::as_str) == Some("hex_shifts_other_parity");
+    let sides = input.get("planted").and_then(Value::as_str) == Some("terrain_reads_square_sides");
     if command == "check" || command == "geometry" {
         if input.get("planted").is_some()
             && skips == Twin::Honest
             && !near
             && !(unwrapped && command == "check")
             && !(straight && command == "geometry")
-            && !(square && command == "geometry")
+            && !((square || parity) && command == "geometry")
+            && !(sides && command == "check")
             && formula_plant.is_none()
         {
             return None;
@@ -725,7 +829,7 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
             &doc,
             look.as_ref().map(|(l, _)| l),
             store_dir.as_deref(),
-            (skips, near, unwrapped),
+            (skips, near, unwrapped, sides && command == "check"),
             &ctx,
         );
         let timing = input.get("timing") == Some(&Value::Bool(true));
@@ -775,10 +879,10 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
                     &vectors,
                     (
                         router,
-                        if square {
-                            Planted::AtlasSquareLayout
-                        } else {
-                            Planted::None
+                        match (square, parity) {
+                            (true, _) => Planted::AtlasSquareLayout,
+                            (_, true) => Planted::HexOtherParity,
+                            _ => Planted::None,
                         },
                     ),
                     (look, timing),
@@ -817,7 +921,7 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
             &doc,
             Some(&look),
             store_dir.as_deref(),
-            (Twin::Honest, false, false),
+            (Twin::Honest, false, false, false),
             &formulas::Ctx::default(),
         );
         if let Some(refusal) = refused_by_check(&checked) {
@@ -974,7 +1078,7 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
             &request.doc,
             Some(&request.look),
             request.store.as_deref(),
-            (skips, near, unwrapped),
+            (skips, near, unwrapped, false),
             &request.formulas,
         );
         request.vectors = vectors;
@@ -985,6 +1089,7 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
         return Some(Answer::Now(answer));
     }
     let request = match command {
+        "live" => Request::Live(Box::new(live_request(input, look)?)),
         "frames" => {
             let hz = match input.get("refresh_hz") {
                 None => 60,
@@ -1181,6 +1286,7 @@ pub fn main() {
         "raster",
         "geometry",
         "idle",
+        "live",
         "labels",
         "crosshair",
         "path",
@@ -1188,7 +1294,7 @@ pub fn main() {
     .contains(&command.as_str())
     {
         eprintln!(
-            "deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry | labels | crosshair | path"
+            "deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry | idle | live | labels | crosshair | path"
         );
         std::process::exit(2);
     }
@@ -1234,21 +1340,31 @@ pub fn main() {
 /// #499: the heap allocations the process has made, on every thread.
 pub static ALLOCATIONS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
+/// #1486: the allocations made while the image service's own code ran, on any thread.
+pub static SERVICE_ALLOCATIONS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+fn counted() {
+    ALLOCATIONS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    if deep_images::in_service() {
+        SERVICE_ALLOCATIONS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    }
+}
+
 /// The system allocator, counting each allocation (the binary installs it as the global one).
 pub struct Counting;
 
 // SAFETY: every call goes to the system allocator unchanged; only a counter is added.
 unsafe impl std::alloc::GlobalAlloc for Counting {
     unsafe fn alloc(&self, layout: std::alloc::Layout) -> *mut u8 {
-        ALLOCATIONS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        counted();
         unsafe { std::alloc::System.alloc(layout) }
     }
     unsafe fn alloc_zeroed(&self, layout: std::alloc::Layout) -> *mut u8 {
-        ALLOCATIONS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        counted();
         unsafe { std::alloc::System.alloc_zeroed(layout) }
     }
     unsafe fn realloc(&self, ptr: *mut u8, layout: std::alloc::Layout, size: usize) -> *mut u8 {
-        ALLOCATIONS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        counted();
         unsafe { std::alloc::System.realloc(ptr, layout, size) }
     }
     unsafe fn dealloc(&self, ptr: *mut u8, layout: std::alloc::Layout) {
@@ -1256,6 +1372,7 @@ unsafe impl std::alloc::GlobalAlloc for Counting {
     }
 }
 
+mod arrays;
 mod asset;
 mod formulas;
 pub mod gpu;

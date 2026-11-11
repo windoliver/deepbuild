@@ -10,6 +10,7 @@ use deep_canvas_media::analysis::onsets::{self, Method, Onset};
 use deep_canvas_media::emitter::{Cone, Distance, Model};
 use deep_canvas_media::mix::{Emit, Gain, Place, Source, Strip};
 use deep_canvas_media::spawn::{self, Occ, Pick, Plan, Steal};
+use deep_canvas::expr::{Expr, Nothing};
 use deep_canvas_media::{doc, FLICKS};
 use serde_json::{json, Map, Value};
 
@@ -208,6 +209,29 @@ impl Hub<'_> {
         for (sid, sp) in spawns {
             let on = sp.get("on").ok_or_else(|| bad(format!("spawn {sid}: on")))?;
             let list = on.get("list").and_then(Value::as_str).ok_or_else(|| bad(format!("spawn {sid}: on.list")))?;
+            // gain and pan: a number, or an expression over the occurrence's fields (#544).
+            let num = |k: &str| match sp.get(k) {
+                None => Ok(None),
+                Some(Value::String(text)) => Expr::compile(text, &Nothing, 64)
+                    .map(|e| Some(Num::Expr(e)))
+                    .map_err(|r| bad(format!("spawn {sid}: {k} `{text}`: {}", r.why))),
+                Some(v) => v.as_f64().map(|n| Some(Num::Fixed(n))).ok_or_else(|| bad(format!("spawn {sid}: {k} is a number or an expression"))),
+            };
+            let (gain, pan, pitch) = (num("gain")?, num("pan")?, num("pitch")?);
+            // A field a row lacks reads as NaN; the planted twin reads an undeclared one as 0.
+            let missing = if planted("undeclared_field_reads_zero") { 0.0 } else { f64::NAN };
+            if !matches!(pitch, None | Some(Num::Fixed(0.0))) {
+                return Err(bad(format!("spawn {sid}: pitch isn't read here")));
+            }
+            let kinds_of = |k: &str| -> Option<Vec<String>> {
+                Some(on.get(k)?.as_array()?.iter().filter_map(|v| v.as_str().map(str::to_string)).collect())
+            };
+            if !planted("undeclared_field_reads_zero") {
+                if let Some(mut u) = undeclared(d, sid, sp) {
+                    u["code"] = json!("occurrence.undeclared");
+                    return Err(u);
+                }
+            }
             let Some(rows) = obj("occurrences").get(list).and_then(Value::as_array) else {
                 return Err(json!({"code": "unbaked_list", "spawn": sid, "list": list,
                     "why": format!("spawn {sid} reads `{list}`, which isn't a baked occurrence list in the document")}));
@@ -215,10 +239,7 @@ impl Hub<'_> {
             if on.get("where").is_some() {
                 return Err(bad(format!("spawn {sid}: on.where isn't read here")));
             }
-            let strs = |k: &str| -> Option<Vec<String>> {
-                Some(on.get(k)?.as_array()?.iter().filter_map(|v| v.as_str().map(str::to_string)).collect())
-            };
-            let (kinds, tags) = (strs("kinds"), strs("tags"));
+            let (kinds, tags) = (kinds_of("kinds"), kinds_of("tags"));
             let keep = |r: &Value| {
                 let kind = r.get("kind").and_then(Value::as_str).unwrap_or("");
                 let has = |t: &String| r.get("tags").and_then(Value::as_array).is_some_and(|a| a.iter().any(|x| x.as_str() == Some(t)));
@@ -269,14 +290,6 @@ impl Hub<'_> {
                 Some(Value::String(s)) => s.clone(),
                 Some(v) => v.to_string(),
             };
-            let num = |k: &str| match sp.get(k) {
-                None => Ok(None),
-                Some(v) => v.as_f64().map(Some).ok_or_else(|| bad(format!("spawn {sid}: {k} as an expression over occurrence fields isn't read here"))),
-            };
-            let (gain_db, pan, pitch) = (num("gain")?.unwrap_or(0.0), num("pan")?, num("pitch")?);
-            if pitch.is_some_and(|p| p != 0.0) {
-                return Err(bad(format!("spawn {sid}: pitch isn't read here")));
-            }
             let at = sp.get("at").and_then(Value::as_str).unwrap_or("point");
             if !["point", "a", "b", "none"].contains(&at) {
                 return Err(bad(format!("spawn {sid}: at {at}")));
@@ -350,7 +363,8 @@ impl Hub<'_> {
                 });
                 let id = |k: &str| r.get(k).map_or_else(String::new, Value::to_string);
                 index.push(k);
-                occs.push(Occ { t, start, pair: (id("a"), id("b")), gain: 1.0, distance });
+                let gain = gain.as_ref().map_or(1.0, |g| 10f64.powf(g.at(r, missing) / 20.0));
+                occs.push(Occ { t, start, pair: (id("a"), id("b")), gain, distance });
             }
             let plan = Plan {
                 id: sid.clone(),
@@ -388,8 +402,8 @@ impl Hub<'_> {
                     r#in: t.r#in,
                     out: t.out,
                     rate,
-                    gain: Gain::Db(gain_db),
-                    pan: pan.unwrap_or(0.0),
+                    gain: Gain::Db(gain.as_ref().map_or(0.0, |g| g.at(row, missing))),
+                    pan: pan.as_ref().map_or(0.0, |p| p.at(row, missing)),
                     fade_in: None,
                     fade_out: None,
                     looped: false,
@@ -416,6 +430,61 @@ impl Hub<'_> {
             reports.push(v.report);
         }
         Ok((strips, reports))
+    }
+}
+
+/// What a spawn on a logic item's occurrences reads that the item doesn't declare in `emits` (a
+/// kind its filter names, or a field its gain or pan expression reads): `{spawn, reader, list,
+/// name, close, why}`, from the document alone, before any step runs (#544).
+pub(crate) fn undeclared(d: &Value, sid: &str, sp: &Value) -> Option<Value> {
+    let on = sp.get("on")?;
+    let list = on.get("list")?.as_str()?;
+    let item = d.get("items")?.get(list.strip_suffix(".occurrences")?)?;
+    if item.get("kind").and_then(Value::as_str) != Some("logic@1") {
+        return None;
+    }
+    let emits = item.pointer("/params/emits").and_then(Value::as_object).cloned().unwrap_or_default();
+    let kinds: Option<Vec<String>> = on.get("kinds").and_then(Value::as_array).map(|a| a.iter().filter_map(|k| k.as_str().map(str::to_string)).collect());
+    let exprs: Vec<Expr> = ["gain", "pan"].iter().filter_map(|k| Expr::compile(sp.get(*k)?.as_str()?, &Nothing, 64).ok()).collect();
+    let fields: Vec<&str> = exprs.iter().flat_map(|e| e.vars.iter().map(String::as_str)).collect();
+    let (name, close) = deep_canvas::document::undeclared(&emits, kinds.as_deref(), &fields)?;
+    let logic = list.trim_end_matches(".occurrences");
+    Some(json!({"spawn": sid, "reader": format!("spawns/{sid}"), "list": list, "name": name, "close": close,
+        "why": format!("spawn {sid} reads `{name}`, which {logic} doesn't declare in emits")}))
+}
+
+/// Each spawn's [`undeclared`] read, as the check's error on it.
+pub(crate) fn undeclared_issues(d: &Value) -> Vec<deep_canvas::document::Issue> {
+    let spawns = d.get("spawns").and_then(Value::as_object).into_iter().flatten();
+    spawns
+        .filter_map(|(sid, sp)| {
+            let u = undeclared(d, sid, sp)?;
+            let close = u["close"].as_array().into_iter().flatten().map(|n| json!({"name": n})).collect();
+            let why = u["why"].as_str().unwrap_or_default().to_string();
+            Some(deep_canvas::document::Issue {
+                close,
+                ..deep_canvas::document::Issue::envelope("occurrence.undeclared", format!("spawns/{sid}"), u, &why)
+            })
+        })
+        .collect()
+}
+
+/// A spawn's gain or pan: a number, or an expression over its occurrence's fields.
+enum Num {
+    Fixed(f64),
+    Expr(Expr),
+}
+
+impl Num {
+    /// Its value for an occurrence row, a field the row lacks reading as `missing`.
+    fn at(&self, row: &Value, missing: f64) -> f64 {
+        match self {
+            Num::Fixed(n) => *n,
+            Num::Expr(e) => {
+                let vars: Vec<f64> = e.vars.iter().map(|v| row.get(v).and_then(Value::as_f64).unwrap_or(missing)).collect();
+                e.eval_num(&vars)
+            }
+        }
     }
 }
 

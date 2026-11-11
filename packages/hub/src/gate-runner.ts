@@ -49,6 +49,8 @@ export interface ClaimCheck {
   runs?: number; held_out?: { files: Record<string, string> }[];
   /** A timing check (#352): a run that fails while the machine's load is past its core count is rerun alone once. */
   timing?: boolean;
+  /** A document check's deliverable, by doc ID (#1723): the merge base holds no revision of it, so it never runs there. */
+  document?: string;
 }
 /**
  * What a workspace claim's checks read (#67): the digests its verdict pins, the reading each check's checkout holds
@@ -763,7 +765,7 @@ export class GateRunner {
   private async onBase(c: Claim, e: Entry): Promise<void> {
     // A fix check runs there once it passed, to prove the fix; a spec check once it failed, so a failure the merge base
     // shares reads as inherited, BLOCKED, never as the claim's own FAIL (design: How runs become one of five verdicts).
-    if (e.outcome !== (e.check.on_base === 'fails' ? 'passed' : e.check.source === 'spec' ? 'failed' : null)) return;
+    if (e.outcome !== (e.check.on_base === 'fails' ? 'passed' : e.check.source === 'spec' ? 'failed' : null) || e.check.document !== undefined) return;
     const check = e.check.check;
     const token = `${e.claim} ${check} base`;
     const surface = this.o.plant === 'stand-in-surface-dropped' ? null : e.check.surface ?? null;

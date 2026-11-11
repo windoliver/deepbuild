@@ -1,0 +1,71 @@
+# #545 acceptance suite at the base: this worktree's HEAD f38d2b3983496ca502cb4743fda249bbc2e5b162 ("Merge pull request
+# #2155 …"; clean but for tests/acceptance/545 added)
+# Command: NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 npx vitest run --root tests/acceptance/545 --testTimeout=600000 --no-file-parallelism
+# Result: 17 of 17 tests fail (7 of 7 files), every one on a surface the base lacks. Nothing is BLOCKED. `npx tsc -p
+# tests/acceptance/545/tsconfig.json` passes. The base's deep-logic builds and runs, and answers:
+#   - an item with `clock: on_input` (criteria 1, 2) with logic_refused, "clock isn't built yet in logic@1";
+#   - a `frame` with no `draws` and no `play` (the playhead stays at 0 s) (criteria 3, 5, and the comment's test);
+#   - an i32 declared linear by admitting it (criterion 3's refusal test);
+#   - a `view` with `span: "open"` with {"ok":false,"code":"bad_input","what":"span"} (criterion 4);
+#   - a `check` with no `issues` (criterion 6).
+# Every planted twin's test fails first on the real program's leg, as above, before it starts the twin (the base would
+# exit 2 with one bad_input line for each planted name). Criterion 7 is INCONCLUSIVE: no pictures in docs/evidence/545/.
+# Criterion 4's deep-show legs are not reached at the base (its live leg fails first). Run alone on the base deep-show
+# (full), the export document answers: loop wrap refused with bad_time at transport/span (not transport/loop); the open
+# figure presented; the export with no range refused no_span (not span_open); the one over [0, 600 s] refused bad_media
+# ("not a time: \"open\""). The same figure with a 10 s span exports 80 frames, h264 at 64 x 64, 8 fps, 8 kHz PCM.
+
+ RUN  v5.0.5 tests/acceptance/545
+ ❯ ac01-turn-clock.test.ts (3 tests | 3 failed) 1508ms
+   ❯ #545.f3d39699 a turn clock runs only the steps an entry, a reading or due calls for (3)
+     × #545.f3d39699 idle for 60 s after step 0 the game runs no step, adds no step hash, array range or checkpoint to its bake, and its view submits no frame in those 60 s 747ms
+     × #545.f3d39699 an entry stamped at 30.008 s runs step 1,801, the first step at or after it, exactly once, with seed hash(document seed, logic ID, 1,801) 161ms
+     × #545.f3d39699 a planted module that runs the entry at the next 30 fps frame boundary (turn_runs_at_frame_boundary), step 1,802, fails, naming the entry and both steps 150ms
+ ❯ ac02-turns-and-due.test.ts (3 tests | 3 failed) 1104ms
+   ❯ #545.f3b004c6 40 moves over 10 minutes on the turn clock: due runs the AI's turn, and seeking equals playing (3)
+     × #545.f3b004c6 the AI runs on consecutive steps while it writes due = k + 1, until turn_done = 1, then none until the next entry; checkpoints come every 60 steps that ran, and seeks to 20 times and restores from each checkpoint give playing's full-state hashes and arrays 659ms
+     × #545.f3b004c6 a live view played straight through the 10 minutes and seeked to each of the 20 times shows the same arrays and full-state hashes 6ms
+     × #545.f3b004c6 a planted module that ignores due (turn_ignores_due) leaves turn_done at 0 and fails on that array, naming the step that should have run 5ms
+ ❯ ac03-linear-writes.test.ts (4 tests | 4 failed) 876ms
+   ❯ #545.10859a3c a linear write draws one step late, blended toward the stored value, and nothing else reads the blend (4)
+     × #545.10859a3c the 10 Hz item's linear vec3 draws 0.5 m at 0.15 s and 0 m at 0.1 s played and seeked, held it draws 1 m; a reader reads whole metres; step and full-state hashes are equal either way 369ms
+     × #545.10859a3c a planted blend toward the next step (linear_blends_forward) draws 1.5 m at 0.15 s and fails, naming the time and both values 16ms
+     × #545.10859a3c an i32 or bool write declared linear is refused at check, naming it; f64, vec2, vec3 and quat writes may be linear 11ms
+     × #545.10859a3c (the issue's comment) linear f64, vec2 and quat writes draw blended too: 0.5, [0.5, 0] and the nlerp halfway to a quarter turn at 0.15 s, played and seeked 25ms
+ ❯ ac06-judder.test.ts (2 tests | 2 failed) 1053ms
+   ❯ #545.c54e53c9 logic.judder: a held pose drawn faster than its item steps is raised at check, naming the item, the array, the reader and both rates (2)
+     × #545.c54e53c9 the held position read by the shot raises it naming cam, cam.position, follow, 60 Hz and 120 Hz; linear, the brief's hold and 120 Hz raise none; the instancer's pos raises it naming swarm, its i32 proto none 597ms
+     × #545.c54e53c9 a planted check that looks only at shots (judder_checks_shots_only) misses the instancer and fails, naming it 5ms
+ ❯ ac04-open-span.test.ts (2 tests | 2 failed) 742ms
+   ❯ #545.ef12c43a an open span plays live with no end, seeks only what was played, and an export takes a finite range (2)
+     × #545.ef12c43a a piece with span open, a logic item and a 10-minute recorded track plays past any authored end, seeks anywhere in what was played and lands a seek past it on the last step played; loop wrap is refused naming loop; an export with no range is refused naming span open, and one over the track's range exports 10 minutes 352ms
+     × #545.ef12c43a a planted transport that reads open as a span of 0 (open_span_reads_zero) stops play at the start and fails 5ms
+ ❯ ac05-seek-blend.test.ts (2 tests | 2 failed) 245ms
+   ❯ #545.fd1e802b a checkpoint keeps what a linear write held the step before, so a seek blends as playing does (2)
+     × #545.fd1e802b with a checkpoint every 60 steps the 10 Hz item seeked to 6.05 s draws x = 59.5 m, the blend of steps 59 and 60, as playing does 139ms
+     × #545.fd1e802b a planted seek that restores only the arrays of the checkpoint at step 60 (seek_restores_arrays_only) draws 60 m and fails, naming the time and both values 105ms
+ ❯ ac07-taste.test.ts (1 test | 1 failed) 4ms
+   ❯ #545.f348ec28 the screenshots, the interpolated item's recording and the one taste call on them (1)
+     × #545.f348ec28 the recorded call on exactly the check run's pictures says they look right; with none the run is INCONCLUSIVE, never PASS 3ms
+
+ Test Files  7 failed (7)
+      Tests  17 failed (17)
+
+First failure of each test (in file order):
+  ac01 1: the idle bake baked the piece (ok: true): {"ok":false,"code":"logic_refused","item":"turn","refusals":[{"rule":"field","what":"clock isn't built yet in logic@1 …","field":"clock"}]}
+  ac01 2: the bake of the entry's track baked the piece (ok: true): … the same refusal
+  ac01 3: the bake of the entry's track baked the piece (ok: true): … the same refusal
+  ac02 1: the straight bake baked the piece (ok: true): … the same refusal
+  ac02 2: the straight bake of the 40 moves baked the piece (ok: true): … the same refusal
+  ac02 3: the straight bake of the 40 moves baked the piece (ok: true): … the same refusal
+  ac03 1: linear, played to 6/60 s: the frame reports what drawing reads (draws): {"want":1,"at":1,"stale":false,"steps":0,…,"ok":true,"frame":7,"t":0,…}: expected null not to be null
+  ac03 2: linear, played to 6/60 s: the frame reports what drawing reads (draws): … the same
+  ac03 3: the item with an i32 declared linear is refused by the logic module's check: {"ok":true,"items":{"cam":…}}
+  ac03 4: played to 0.1 s: the frame reports what drawing reads (draws): {…,"ok":true,"frame":7,"t":0,…}: expected null not to be null
+  ac04 1: view opened the piece (span open): {"ok":false,"code":"bad_input","what":"span"}
+  ac04 2: view opened the piece (span open): {"ok":false,"code":"bad_input","what":"span"}
+  ac05 1: played to 6.05 s: the frame reports what drawing reads (draws): {…,"ok":true,"frame":364,"t":0,…}: expected null not to be null
+  ac05 2: played to 6.05 s: the frame reports what drawing reads (draws): … the same
+  ac06 1: the check of the held position read by the shot.issues is an array, got undefined
+  ac06 2: the check of the held position read by the shot.issues is an array, got undefined
+  ac07 1: INCONCLUSIVE: the check run's pictures are not in docs/evidence/545/: linear-0.15s.png, linear-6.05s.png, follow-hold.png, linear.apng; this is not a pass

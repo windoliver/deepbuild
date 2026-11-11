@@ -1,0 +1,158 @@
+# #1580's acceptance suite on the base: main at de304b9f (merge base), built here with
+#   npm ci --no-audit --no-fund && npm run build --workspaces
+#   CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 cargo build --locked -q -p deep-hook   (the hub won't start without it)
+# Each file run once: NO_COLOR=1 npx vitest run tests/acceptance/1580/<file>.test.ts --testTimeout=600000 --no-file-parallelism
+# Result: 4 files, 4 tests, 4 failed, each at a named assertion (none failed to load or at setup). The checkout's
+# path in the output is redacted to <base>.
+#
+# Per test, the assertion it failed at on the base:
+#
+# AC1 #1580.c589397a  plan.test.ts: FAIL at `first.kind` toBe 'channel.refused'. The base counted the phone's yes
+#   signed before the plan changed (ask.answered, binding plan 4d5762a8...). That is the first plan: the base's asks
+#   core keeps the first plan the core proposed, and its hub fills the plan's hash in itself for a phone's allow. The
+#   card the phone signed carried no plan ("plan none on the card"), so the phone signed no plan_hash. This is "The
+#   merge base accepts it", the Proof's merge-base half.
+# AC2 #1580.e4bc2c78  view.test.ts: FAIL at `card.answerable` toBe 'view'. The base gave the watch (a device channel
+#   declaring `steps: false`) the push ask's card answerable, with 2 buttons and no plan: every item on a device
+#   channel is answerable there. The planted package installed and loaded on the base.
+# AC3 #1580.96c9855a  take-over.test.ts: FAIL at `took.error` toBeUndefined. The base serves no ask.take_over
+#   (unknown_method at /method), so Take over has no code. The control before it held: the app's signed answer
+#   counted on the second ask.
+# AC4 #1580.787b444a  words.test.ts: FAIL at `r.data.field` toBe 'revision'. The base refused the signature over the
+#   chat card's earlier words naming card_hash: its revision is always 1, so the revision check can never refuse. The
+#   card's words did change once the account was linked (the setup wait passed).
+#
+# No implementation of #1580 exists, and none was run, so the suite's passing path is untried.
+# ---------------------------------------------------------------------------------------------------
+
+### plan.test.ts
+
+ RUN  v5.0.5 <base>
+
+ ❯ tests/acceptance/1580/plan.test.ts (1 test | 1 failed) 8268ms
+   ❯ AC1 #1580.c589397a A phone's yes on a plan signs that plan's hash, and a plan changed after signing is refused, naming the hash. The merge base accepts it (1)
+     × AC1 #1580.c589397a the phone's yes over the plan its card showed is refused naming plan_hash once the plan changed, and the ask stays open; a yes over the card's new plan counts and binds that plan 8163ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1580/plan.test.ts > AC1 #1580.c589397a A phone's yes on a plan signs that plan's hash, and a plan changed after signing is refused, naming the hash. The merge base accepts it > AC1 #1580.c589397a the phone's yes over the plan its card showed is refused naming plan_hash once the plan changed, and the ask stays open; a yes over the card's new plan counts and binds that plan
+AssertionError: the phone's yes over the card it showed (plan none on the card) is refused once the plan changed to 821cbd7711fb5fd6ebde213105ac80ca4d9b5b73f327d4c5468ccc7236725e61; the hub counted it, binding the plan 4d5762a8772469550e9d7726b5749c9773ba967640a6acef20fd90ad1408f7ac: expected 'ask.answered' to be 'channel.refused' // Object.is equality
+
+Expected: "channel.refused"
+Received: "ask.answered"
+
+ ❯ tests/acceptance/1580/plan.test.ts:35:188
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  15:46:46
+   Duration  9.48s (tests 91%, import 5%, transform 4%)
+
+
+### view.test.ts
+
+ RUN  v5.0.5 <base>
+
+ ❯ tests/acceptance/1580/view.test.ts (1 test | 1 failed) 5922ms
+   ❯ AC2 #1580.e4bc2c78 A channel with no room for steps gets the item view only, saying where to answer (1)
+     × AC2 #1580.e4bc2c78 a card with a plan reaches the watch, which can't draw steps, as the item view with no buttons, saying to answer in the app; an ask with no plan stays answerable there 5797ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1580/view.test.ts > AC2 #1580.e4bc2c78 A channel with no room for steps gets the item view only, saying where to answer > AC2 #1580.e4bc2c78 a card with a plan reaches the watch, which can't draw steps, as the item view with no buttons, saying to answer in the app; an ask with no plan stays answerable there
+AssertionError: the plan's card is the item view only on a channel with no room for steps: revision 1, answer, 2 buttons, plan none, "Delete the branch feature/1580-old on origin?": expected 'answer' to be 'view' // Object.is equality
+
+Expected: "view"
+Received: "answer"
+
+ ❯ tests/acceptance/1580/view.test.ts:18:129
+     16|     const watch = w.relays.watch!;
+     17|     const card = await waitFor(() => watch.latest(push.handle), MINUTE…
+     18|     expect(card.answerable, `the plan's card is the item view only on …
+       |                                                                                                                                 ^
+     19|     expect(card.options, 'with no answer buttons').toEqual([]);
+     20|     expect(card.summary, 'it shows the item').toContain(push.question);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  15:45:59
+   Duration  11.13s (tests 56%, transform 40%, import 2%, setup 2%)
+
+
+### take-over.test.ts
+
+ RUN  v5.0.5 <base>
+
+ ❯ tests/acceptance/1580/take-over.test.ts (1 test | 1 failed) 4844ms
+   ❯ AC3 #1580.96c9855a Take over from the phone refuses a later answer from the app's old copy, naming the revision (1)
+     × AC3 #1580.96c9855a once the phone takes the card over, the app's answer from the copy it held before is refused naming the revision and counts for nothing; the phone's answer counts 4743ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1580/take-over.test.ts > AC3 #1580.96c9855a Take over from the phone refuses a later answer from the app's old copy, naming the revision > AC3 #1580.96c9855a once the phone takes the card over, the app's answer from the copy it held before is refused naming the revision and counts for nothing; the phone's answer counts
+AssertionError: Take over from the phone, signed with its paired key, counts: {"code":"unknown_method","retryable":false,"remediation":"The hub serves no method ask.take_over.","path":"/method","actual":"ask.take_over","evidence":[]}: expected { code: 'unknown_method', …(5) } to be undefined
+
+- Expected:
+undefined
+
++ Received:
+{
+  "actual": "ask.take_over",
+  "code": "unknown_method",
+  "evidence": [],
+  "path": "/method",
+  "remediation": "The hub serves no method ask.take_over.",
+  "retryable": false,
+}
+
+ ❯ tests/acceptance/1580/take-over.test.ts:32:119
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  15:46:18
+   Duration  6.83s (tests 75%, import 13%, transform 11%)
+
+
+### words.test.ts
+
+ RUN  v5.0.5 <base>
+
+ ❯ tests/acceptance/1580/words.test.ts (1 test | 1 failed) 6818ms
+   ❯ AC4 #1580.787b444a A signature over a card whose words changed is refused, naming the revision (1)
+     × AC4 #1580.787b444a the phone's signature over the chat card as it read before your account was linked is refused naming revision and counts for nothing; one over the card as it reads now counts 6725ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1580/words.test.ts > AC4 #1580.787b444a A signature over a card whose words changed is refused, naming the revision > AC4 #1580.787b444a the phone's signature over the chat card as it read before your account was linked is refused naming revision and counts for nothing; one over the card as it reads now counts
+AssertionError: the refusal names the revision: channel.refused@14 {"channel":"chat","thread_key":"ask:01M73XPBVV04B7PSW3DEY19BPV","answer":"sqlite","field":"card_hash","reason":"it signs a card that isn't the one this hub sent chat on ask:01M73XPBVV04B7PSW3DEY19BPV"}: expected 'card_hash' to be 'revision' // Object.is equality
+
+Expected: "revision"
+Received: "card_hash"
+
+ ❯ tests/acceptance/1580/words.test.ts:29:74
+     27|     const r = await outcomeOf(w, ask.handle, since, 'the hub refusing …
+     28|     expect(r.kind, `the signature over the card's earlier words is ref…
+     29|     expect(r.data.field, `the refusal names the revision: ${said([r])}…
+       |                                                                          ^
+     30|     await sleep(2000);
+     31|     expect(await answeredOf(w, ask.handle), 'it counted for nothing').…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  15:46:31
+   Duration  7.91s (tests 89%, transform 7%, import 4%)
+

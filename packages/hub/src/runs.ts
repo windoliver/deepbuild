@@ -86,8 +86,8 @@ interface RunsOptions {
   supervisor: () => Supervisor;
   leases: () => LeaseTable;
   extensions: () => ExtensionHost | undefined;
-  /** One run of a held kind's check (#1537): its result as check.kind@1's, for the run's claim, ended by `stop`. */
-  kind(run: Run, checkout: string, deadline: number, stop: AbortSignal): Promise<CheckResult>;
+  /** One run of a held kind's check (#1537): its result as check.kind@1's, for the run's claim, ended by `stop`; a document check's issues as its stdout (#1723). */
+  kind(run: Run, checkout: string, deadline: number, stop: AbortSignal): Promise<CheckResult & { stdout?: string }>;
   hosts: () => Hosts;
 }
 
@@ -178,8 +178,8 @@ export class Runs {
     }
     const aside = keepAside(this.o.journalFile, bytes, this.o.now());
     // The core's run.started@3 carries what a run runs; an earlier one can't be run again from the record, and no
-    // other writer's start or finish counts.
-    const rows = (await this.o.raw(`SELECT s.data FROM events s WHERE s.kind = 'run.started' AND s.writer = 'core' AND s.v >= 3 AND NOT EXISTS
+    // other writer's start or finish counts. A root plan's run (#1945) is never the hub's to run.
+    const rows = (await this.o.raw(`SELECT s.data FROM events s WHERE s.kind = 'run.started' AND s.writer = 'core' AND s.v >= 3 AND json_extract(s.data, '$.ask') IS NULL AND NOT EXISTS
       (SELECT 1 FROM events f WHERE f.kind = 'run.finished' AND f.writer = 'core' AND json_extract(f.data, '$.run') = json_extract(s.data, '$.run')) ORDER BY s.log_pos`)) as { data: string }[];
     // The reading first, then the journal written again: a cut in between finds it damaged and rebuilds it again.
     const now = this.o.now();
@@ -323,7 +323,7 @@ export class Runs {
       // is check.kind@1's, with no exit, output, attempts or stand-ins, as a replacing package's is.
       if (run.spec) {
         ended = this.o.kind(run, run.cwd, deadline, controller.signal)
-          .then((result) => ({ code: null, record: { run: run.run, ...result, exit: null, output: empty, env: [], attempts: [], retries: null, seeded: [], contract: null, timing: null, clock: 0 } as CommandRun }))
+          .then(({ stdout = '', ...result }) => ({ code: null, record: { run: run.run, ...result, exit: null, output: { ...empty, stdout }, env: [], attempts: [], retries: null, seeded: [], contract: null, timing: null, clock: 0 } as CommandRun }))
           .catch((error: Error) => ({ code: null, failed: error.message }));
       } else ended = replaced().then(async (byPackage): Promise<{ code: number | null; record: CommandRun } | { code: null; missing: string }> => {
         if (!byPackage) {

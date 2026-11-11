@@ -39,6 +39,8 @@ pub struct PanelScope {
     seen: Vec<(i64, Seen)>,
     /// #501: the panel's film viewer, made when a film it shows first takes a key or is read.
     pub(crate) viewer: Option<crate::film_viewer::FilmViewer>,
+    /// #504: when the pointer last went down, the time a click's pick is stamped at.
+    pressed: i64,
 }
 
 pub fn point(v: &Value) -> Option<[f64; 2]> {
@@ -186,6 +188,7 @@ impl Hub<'_> {
                 pick_mid_gesture: p == Some(Planted::PickMidGesture),
                 full_screen_only_3d: p == Some(Planted::FullScreenOnly3d),
                 esc_to_root: p == Some(Planted::EscToRoot),
+                pick_selects: p == Some(Planted::PickSelectsItem),
             };
             let scope = Scope::new(&doc, rect, display, planted)
                 .map_err(|r| json!({"code": r.code, "path": r.path}))?;
@@ -195,6 +198,7 @@ impl Hub<'_> {
                     scope,
                     seen: Vec::new(),
                     viewer: None,
+                    pressed: 0,
                 },
             );
             let first = self.seen(panel).ok_or_else(|| refused("not_presented"))?;
@@ -329,10 +333,58 @@ impl Hub<'_> {
         }
         let late = self.scenario.planted == Some(Planted::DragShowsOnRelease)
             && matches!(event, Event::Move(_));
+        // #504: a value for one of the document's own controls goes to its input track or its
+        // session state (Control), never to the scope's view.
+        let doc_id = self.panel_doc(panel);
+        if let (Event::Control { control, value }, Some(id)) = (event, doc_id.as_deref()) {
+            if doc.get("controls").and_then(|c| c.get(control.as_str())).is_some() {
+                return match self.enter(id, control, value.clone(), now, serial) {
+                    Ok(entry) => json!({"serial": serial, "state": self.state(panel), "picks": 0,
+                        "commits": [{"gesture": serial}], "appended": entry.into_iter().collect::<Vec<_>>()}),
+                    Err(e) => e,
+                };
+            }
+        }
+        // #535: a press meets the mark set rows the panel's document draws now, each a target
+        // `<set>#<key>` with its box, stacked over its set.
+        let mut doc = doc;
+        if matches!(event, Event::Down { .. }) {
+            let drawn = self
+                .panel_doc(panel)
+                .and_then(|d| self.sessions.get(&d)?.document().cloned());
+            let t = self
+                .scopes
+                .get(panel)
+                .and_then(|s| s.scope.time())
+                .unwrap_or(self.now);
+            for (row, b, hull) in drawn.map(|d| self.row_boxes(&d, t)).unwrap_or_default() {
+                let order = &doc["items"][row.split('#').next().unwrap_or_default()]["order"];
+                let target = json!({"id": row, "order": order, "params": {"box": b, "hull": hull}});
+                if let Some(items) = doc["items"].as_object_mut() {
+                    items.insert(row, target);
+                }
+            }
+        }
         let done = match self.scopes.get_mut(panel) {
-            Some(s) => s.scope.input(&doc, now, serial, event),
+            Some(s) => {
+                if matches!(event, Event::Down { .. }) {
+                    s.pressed = now;
+                }
+                s.scope.input(&doc, now, serial, event)
+            }
             None => return refused("unknown_panel"),
         };
+        // #504: a click on a target, or Enter on a focused one, picks its option or stage: one
+        // entry for a document-class control, stamped when the click pressed, and never a
+        // selection.
+        let mut appended = Vec::new();
+        if let (Some(pick), Some(id)) = (done.pick.as_ref(), doc_id.as_deref()) {
+            let at = if matches!(event, Event::Up(_)) { self.scopes[panel].pressed } else { now };
+            match self.enter(id, &pick.control, json!(pick.option), at, serial) {
+                Ok(entry) => appended.extend(entry),
+                Err(e) => return e,
+            }
+        }
         let seen = self.seen(panel);
         if let (false, Some(seen), Some(s)) = (late, seen, self.scopes.get_mut(panel)) {
             s.seen.push((now, seen));
@@ -342,6 +394,8 @@ impl Hub<'_> {
             "state": self.state(panel),
             "picks": done.picks,
             "commits": done.commits.iter().map(|g| json!({"gesture": g})).collect::<Vec<_>>(),
+            // #504: the entries this input appended to the document's input track.
+            "appended": appended,
         })
     }
 
@@ -366,7 +420,12 @@ impl Hub<'_> {
         else {
             return refused("not_presented");
         };
-        let shown = crate::shared::drawable(&s.scope.view_document(&doc, before.as_ref()));
+        // #504: the revision played, so a view-class pick shows; never saved.
+        let played = match self.panel_doc(panel) {
+            Some(id) => self.shown_at(&id, &doc, 0),
+            None => doc,
+        };
+        let shown = crate::shared::drawable(&s.scope.view_document(&played, before.as_ref()));
         match self.snapshot(&shown, 0, None) {
             Ok(snap) => json!({"snapshot": snap}),
             Err(e) => e,

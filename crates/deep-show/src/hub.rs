@@ -46,6 +46,9 @@ const SETTLE_TIMEOUT: Duration = Duration::from_secs(2);
 /// The criteria's wrong programs, each reachable only through the scenario's `planted`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Planted {
+    /// #544: a start_on run on a logic item's occurrences starts at the first frame its session
+    /// evaluates at or after the occurrence.
+    StartOnAtFirstFrame,
     PresentsUnnamedRemoval,
     DiffsItemsOnly,
     InlinesEveryIssue,
@@ -153,10 +156,41 @@ pub enum Planted {
     /// #408: film.layout takes its texts by the kinds text@1, vector@1, mark.text and counter,
     /// not from the core's glyph-box array.
     LayoutTextByKind,
+    /// #407: a verdict that counts only the issues the patch brought, never those its last good
+    /// revision had too.
+    VerdictCountsNewIssues,
+    /// #407: the flicker check counts each single change of a region as a flash.
+    FlickerCountsSingleChanges,
+    /// #407: the flicker check reads one region, the whole view, by its mean luminance.
+    FlickerWholeViewMean,
+    /// #407: the claim check takes `cites: []` as cited.
+    CitesEmptyPasses,
+    /// #405's and #1936's: the geometry audit's wrong programs, which its own module names.
+    Audit(crate::geometry_audit::Planted),
+    /// #202: a kind_rules requirement counts the working agent's own pack rule as its cover.
+    OwnRuleCountsAsCover,
+    /// #202: the kind_rules check evaluates a pack kind's recipe rules a second time.
+    RulesEvaluatedTwice,
+    /// #202: the kind kit tests each kind at its defaults only.
+    KitDefaultsOnly,
+    /// #202: the expander walks an instance's inputs in a hash map's order.
+    ExpandsInHashOrder,
+    /// #1956: the pack check of a kind's migration stops at its first fault.
+    MigrationFirstFault,
     /// #306: a derived item's seed comes from a counter over expansion order.
     SeedsByExpansionOrder,
+    /// #2015: a repeat over elements seeds each derived item with the part's element count too.
+    EachSeedsByElementCount,
+    /// #2015: a repeat over faces walks the part's triangles, not its polygon view's faces.
+    EachFacePerTriangle,
     /// #306: a change of inputs re-expands the broken-out item too, over the writer's own.
     ReexpansionOverwritesBrokenOut,
+    /// #1961: a load under a version that no longer derives a broken-out ID drops the item.
+    OrphanLoadDropsBrokenOut,
+    /// #1961: that load hands the broken-out ID to the new version's expansion.
+    OrphanLoadHandsIdToExpansion,
+    /// #1961: expansions are cached by kind and inputs, without the recipe's version.
+    ExpansionCacheWithoutRecipeVersion,
     /// #306: the pack check never reads `requires.modules`.
     PackCheckSkipsRequiresModules,
     /// #306: the store and a document's `packs` are keyed by the name half alone.
@@ -359,6 +393,25 @@ pub enum Planted {
     FingerprintWithoutSources,
     /// #1901: `padded_key` keys the fixture by its memory, padding and all.
     KeyHashesRawBytes,
+    /// #504: every evaluated frame of a document with controls runs a program through the
+    /// sandbox module, as a per-frame plug-in callback would.
+    BoardRunsProgramPerFrame,
+    /// #504: a verdict judges, beside a claim's deliverables, the documents its agent showed on it.
+    FigureFeedsVerdict,
+    /// #504: a whole revision presented again rebuilds every part, changed or not.
+    ReloadRebuildsEveryPart,
+    /// #504: a control sweep steps the control but poses every assembly at its rest value.
+    SweepPosesAssembliesAtRest,
+    /// #504: a pick on a target also selects the item and opens its panel.
+    PickSelectsItem,
+    /// #504: a view-class pick applies the option's patch as a revision of the document.
+    VariantPickWritesRevision,
+    /// #504: an export applies only the last entry's option, over its whole span.
+    VariantExportFinalChoice,
+    /// #504: a template slot shows the value the document holds as written, never at t.
+    ReadoutReadsDefaults,
+    /// #504: each frame runs a plug-in's code the seal doesn't hold, listed among its nodes.
+    PluginCodePerFrame,
 }
 
 /// The build's sealed canvas-module set, registered and sealed once at startup (#305: Registry
@@ -471,15 +524,20 @@ pub struct RecordObject {
     pub as_of: Option<i64>,
 }
 
+#[derive(Clone)]
 pub struct Claim {
     /// The session that made the claim: its working agent.
     pub session: String,
     pub deliverables: Vec<String>,
     /// The locked definition's requirements, each one check input (#403).
     pub requirements: Vec<Requirement>,
+    /// #407: a film's brief, drafted with the definition: `{goal, moments, holds, cues,
+    /// sources}`, whose moments, holds and cues each become a check.
+    pub brief: Option<Value>,
 }
 
 /// One requirement of a claim's definition: its handle and its check input.
+#[derive(Clone)]
 pub struct Requirement {
     pub id: String,
     pub check: Value,
@@ -801,6 +859,8 @@ pub enum Call {
     Verdict(String),
     /// Every verdict made on a claim, `stale` as of now (#403).
     Verdicts(String),
+    /// #405: an answer to the approval asks a geometry audit opened on a claim's requirement.
+    Answer { via: Option<Via>, claim: String, requirement: String, yes: bool },
     /// A fixture's snapshot on a backend, judged against the golden store (#138).
     Golden {
         fixture: String,
@@ -867,14 +927,16 @@ pub struct Eval {
     pub clean: bool,
     pub perturb: Option<String>,
     pub pixels: bool,
-    /// #493: the film block, each camera's pose, a reduced-motion cut's dissolve, each parallax
-    /// group's offset and each text's glyphs.
+    /// #493: the film block, camera poses, a reduced-motion cut's dissolve, parallax and glyphs.
     pub film: bool,
     pub size: Option<[u16; 2]>,
     /// #855: each node's Debug text digest beside its result, a diagnostic only.
     pub debug_text: bool,
-    /// #497: document arrays to answer as the frame read them.
+    /// #497: arrays to answer as the frame read them; #1918: item paths whose values it answers.
     pub arrays: Vec<String>,
+    pub paths: Vec<String>,
+    /// #504: the document's input track for this evaluation, over the hub's.
+    pub track: Option<Vec<Value>>,
 }
 
 pub struct Scenario {
@@ -883,6 +945,8 @@ pub struct Scenario {
     pub processes: Vec<Process>,
     pub panels: BTreeMap<String, Panel>,
     pub docs: BTreeMap<String, String>,
+    /// #504: the claim or ask each document was minted for (`docs.<id>.for`), where named.
+    pub docs_for: BTreeMap<String, String>,
     pub record: BTreeMap<String, RecordObject>,
     /// #629: a replay's run record entries, each as a `run` call's reply gave it (`record` as a
     /// list).
@@ -942,6 +1006,8 @@ pub struct Scenario {
     pub audio: Option<crate::audio::Backend>,
     /// The packs installed in the store before the first call (#306), each `(owner/name, dir)`.
     pub packs: Vec<(String, PathBuf)>,
+    /// #1961: your notes the hub holds when the run starts, each `{note, doc, item, …}`.
+    pub notes: Vec<Value>,
     /// #200: the hub's installed slot fills, each `{slot, fill, kit}` with the kit result the hub
     /// recorded at install.
     pub installed: Vec<Value>,
@@ -1004,6 +1070,10 @@ pub struct Hub<'a> {
     pub background: Vec<crate::jobs::Progress>,
     /// #501: each document's session state as `session` set it: its selection and view inputs.
     pub session_state: BTreeMap<String, Value>,
+    /// #504: each document's one input track (Input track), and the form its session loaded at
+    /// its last `deep_show`, before the track and the session's picks (crate::played).
+    pub tracks: BTreeMap<String, deep_canvas_input::track::Track>,
+    pub forms: BTreeMap<String, Value>,
     /// Each document's session.
     pub sessions: BTreeMap<String, DocSession>,
     /// Panels a `panel` call showed or hid.
@@ -1011,6 +1081,8 @@ pub struct Hub<'a> {
     /// The GPU 3D revisions draw on (#378): unopened until the first, `None` inside where there
     /// is none.
     pub gpu3: Option<Option<crate::scene3d::Gpu3>>,
+    /// The GPU pixel hash's pipeline, built on the first canonical render it hashes (#405).
+    pub hash_pass: Option<deep_gpu::pixel_hash::PixelHash>,
     /// A 3D revision's snapshot drawn for the call being presented, with its size.
     pub pending3d: Option<Result<Raster, ()>>,
     /// Each panel's interaction scope (#383).
@@ -1025,6 +1097,8 @@ pub struct Hub<'a> {
     pub asks: BTreeMap<String, Vec<crate::ask::Asked>>,
     /// The verdicts made on each claim, in the order made, each as recorded (#403).
     pub verdicts_made: BTreeMap<String, Vec<Value>>,
+    /// #405: the approval asks a geometry audit made, by ID, each with your answer once given.
+    pub audit_asks: BTreeMap<String, Option<bool>>,
     /// The pack store (#306): the versions admitted, and one row per offer.
     pub packs: Packs,
     pub pack_rows: Vec<crate::packs::Row>,
@@ -1032,6 +1106,10 @@ pub struct Hub<'a> {
     pub pack_authors: BTreeMap<String, String>,
     /// Each document's expansions at its last check, for the replies that carry them.
     pub expansions: BTreeMap<String, Vec<Expansion>>,
+    /// #1961's planted expansion cache, by kind and inputs without the recipe's version.
+    pub expansion_cache: BTreeMap<String, Expansion>,
+    /// #544's planted start_on: each session's first evaluated time since its revision loaded.
+    pub first_frames: BTreeMap<String, i64>,
     /// The displays, the windows on them and the card's placement (#400).
     pub placement: Placement,
     /// Terminals, streams and session pages (#402).
@@ -1145,6 +1223,15 @@ impl<'a> Hub<'a> {
             overwrite_broken_out: scenario.planted == Some(Planted::ReexpansionOverwritesBrokenOut),
             skip_requires_modules: scenario.planted == Some(Planted::PackCheckSkipsRequiresModules),
             key_by_name: scenario.planted == Some(Planted::PacksKeyedByName),
+            each_by_count: scenario.planted == Some(Planted::EachSeedsByElementCount),
+            each_per_triangle: scenario.planted == Some(Planted::EachFacePerTriangle),
+            orphan_drops: scenario.planted == Some(Planted::OrphanLoadDropsBrokenOut),
+            orphan_hands_id: scenario.planted == Some(Planted::OrphanLoadHandsIdToExpansion),
+            rules_twice: scenario.planted == Some(Planted::RulesEvaluatedTwice),
+            kit_defaults_only: scenario.planted == Some(Planted::KitDefaultsOnly),
+            migration_first_fault: scenario.planted == Some(Planted::MigrationFirstFault),
+            walk_inputs: (scenario.planted == Some(Planted::ExpandsInHashOrder))
+                .then_some(walk_in_hash_order as deep_canvas::document::packs::WalkInputs),
         };
         let mut hub = Hub {
             scenario,
@@ -1159,12 +1246,17 @@ impl<'a> Hub<'a> {
             display_only: BTreeSet::new(),
             mode_ids: BTreeMap::new(),
             session_state: BTreeMap::new(),
-            renderer: Renderer::new(),
+            tracks: BTreeMap::new(),
+            forms: BTreeMap::new(),
+            renderer: Renderer::new().turning_about_corner(
+                scenario.module_planted.as_deref() == Some("turns_about_corner"),
+            ),
             sched,
             sessions: BTreeMap::new(),
             background: Vec::new(),
             panels_shown: BTreeMap::new(),
             gpu3: None,
+            hash_pass: None,
             pending3d: None,
             scopes: BTreeMap::new(),
             serial: 0,
@@ -1178,10 +1270,13 @@ impl<'a> Hub<'a> {
             shown_at: BTreeMap::new(),
             asks: BTreeMap::new(),
             verdicts_made: BTreeMap::new(),
+            audit_asks: BTreeMap::new(),
             packs: Packs::new(pack_planted),
             pack_rows: Vec::new(),
             pack_authors: BTreeMap::new(),
             expansions: BTreeMap::new(),
+            expansion_cache: BTreeMap::new(),
+            first_frames: BTreeMap::new(),
             placement: Placement::open(
                 scenario.displays.clone(),
                 scenario.window,
@@ -1315,6 +1410,7 @@ impl<'a> Hub<'a> {
     ) -> Value {
         let sealed = &self.startup.sealed;
         let sandbox = &mut self.sandbox;
+        let evidence = &self.scenario.evidence;
         let reply = crate::packs::install(
             &mut self.packs,
             &mut self.pack_rows,
@@ -1322,7 +1418,11 @@ impl<'a> Hub<'a> {
             id,
             dir,
             self.scenario.pack_planted.as_deref(),
-            &mut |manifest, pack| sandbox.vet(manifest, pack, sealed),
+            &mut |manifest, pack| {
+                let (rows, mut issues) = sandbox.vet(manifest, pack, sealed);
+                issues.extend(crate::packs::kind_meshes(pack, sealed, evidence));
+                (rows, issues)
+            },
         );
         // #200: a pack installed through a session is that agent's own: its entries are listed
         // with origin agent, and in a registry that binds author they bind only its own claims.
@@ -1406,7 +1506,7 @@ impl<'a> Hub<'a> {
     /// A new session for a document: its epochs from the scenario's start, the look's tokens
     /// and the record's readings.
     /// The look a document names by asset, resolved over the bundled faces (#1162).
-    fn look_of(&self, doc: &Value) -> Option<Look> {
+    pub(crate) fn look_of(&self, doc: &Value) -> Option<Look> {
         let def = self.look_def_of(doc)?;
         let bundled: Vec<&str> = deep_text::FACES.iter().map(|f| f.file).collect();
         // The status distance holds wherever status can show: a document with a status binding
@@ -1424,7 +1524,7 @@ impl<'a> Hub<'a> {
     }
 
     /// The look@1 a document names by asset, as the evidence store holds it.
-    fn look_def_of(&self, doc: &Value) -> Option<Value> {
+    pub(crate) fn look_def_of(&self, doc: &Value) -> Option<Value> {
         let name = doc.pointer("/look/asset")?.as_str()?;
         let id = name.split('@').next()?;
         let sha = doc.pointer(&format!("/assets/{id}/sha256"))?.as_str()?;
@@ -1474,6 +1574,13 @@ impl<'a> Hub<'a> {
                 }
                 if let Some(params) = item.get_mut("params").and_then(Value::as_object_mut) {
                     params.insert("outline".into(), outline);
+                    // #220: a typeset formula with no alt takes the job's source as its name.
+                    if let (None, Some(source)) = (
+                        params.get("alt"),
+                        deep_canvas_vector::typeset_source(&found.svg),
+                    ) {
+                        params.insert("alt".into(), Value::String(source));
+                    }
                 }
             }
         }
@@ -1604,6 +1711,8 @@ impl<'a> Hub<'a> {
 
     /// One call's reply.
     pub fn call(&mut self, call: &Call) -> Value {
+        // #502: a caption set for a frame of the last call draws in no frame of this one.
+        self.renderer.caption = None;
         // #856's planted cache per document: each document's runs are keyed apart.
         if self.startup.run_per_document {
             let doc = match call {
@@ -1797,6 +1906,7 @@ impl<'a> Hub<'a> {
             Call::Catalog => self.catalog_reply(),
             Call::Verdict(claim) => self.verdict_call(claim),
             Call::Verdicts(claim) => self.verdicts_call(claim),
+            Call::Answer { via, claim, requirement, yes } => self.answer_call(via.as_ref(), claim, requirement, *yes),
             Call::Golden { fixture, backend } => self.golden_reply(fixture, backend),
             Call::Record {
                 via,
@@ -2033,7 +2143,7 @@ impl<'a> Hub<'a> {
         // The items the check skipped as `unknown_kind`: kept as written, never drawn (#389).
         let mut skipped: Vec<String> = Vec::new();
         // The revision's expansions and its check's time (#306): the document's once it is current.
-        let mut fresh: Option<(Vec<Expansion>, f64)> = None;
+        let mut fresh: Option<(Vec<Expansion>, CheckTimes)> = None;
         let (stamped, mut issues, diff) = match stamped {
             Err(issues) => (None, issues, None),
             Ok(mut doc) => {
@@ -2054,8 +2164,13 @@ impl<'a> Hub<'a> {
                     }
                     _ => check_packed(&doc, &self.startup.sealed, &self.packs),
                 };
-                fresh = Some((result.expansions, started.elapsed().as_secs_f64() * 1000.0));
-                notices = self.notices_reply(&result.notices);
+                let check_ms = started.elapsed().as_secs_f64() * 1000.0;
+                let timing = show.include.iter().any(|i| matches!(i, Include::Timing));
+                let rules_ms = timing.then(|| {
+                    crate::packs::kind_rules_ms(&doc, &result, &self.startup.sealed, &self.packs)
+                });
+                fresh = Some((result.expansions, (check_ms, rules_ms)));
+                notices = self.notices_reply(&show.doc, &result.notices);
                 skipped = crate::verdict::unknown_items(&result.notices);
                 blocked = self.blocked_in_claim(show, &result.notices);
                 let mut issues = result.issues;
@@ -2136,18 +2251,19 @@ impl<'a> Hub<'a> {
                 issues.push(unfit_issue(r.code, r.path));
             }
             issues.extend(self.inline_vectors(form));
+            // #544: a spawn's reads of a logic item's occurrences, checked against its emits
+            // before any step runs; then the logic items baked into the lists their readers read.
+            if !deep_canvas_media::planted("undeclared_field_reads_zero") {
+                issues.extend(crate::spawn::undeclared_issues(form));
+            }
+            if let Err(i) = self.inline_occurrences(form, &[]) {
+                issues.push(i);
+            }
         }
         // Mark set columns that read a column source, resolved and narrowed by the core's
         // column view at the frame's step (#397).
         if let Some(form) = drawn_form.as_mut() {
-            let entries = self
-                .startup
-                .sealed
-                .registry(deep_canvas::columns::REGISTRY)
-                .map_or(&[][..], |r| r.entries.as_slice());
-            // A step is a 60 fps frame: 11,760,000 flicks.
-            let step = show.t.max(0) as u64 / 11_760_000;
-            issues.extend(deep_canvas::columns::view(form, entries, step));
+            issues.extend(self.column_view(form, show.t));
         }
         if let Some(doc) = stamped
             .as_ref()
@@ -2230,9 +2346,18 @@ impl<'a> Hub<'a> {
             let fresh = self.new_session();
             self.sessions.insert(show.doc.clone(), fresh);
         }
-        if let Some(session) = self.sessions.get_mut(&show.doc) {
-            session.load(&mut self.sched, drawn_form.as_ref().unwrap_or(&doc));
+        // #504: the session loads the played form: the drawn form with the document's input track
+        // and the session's picks, shown at `t`.
+        let again = self.forms.insert(show.doc.clone(), drawn_form.clone().unwrap_or_else(|| doc.clone())).is_some();
+        if again && self.planted(Planted::ReloadRebuildsEveryPart) {
+            // Planted (#504): a revision presented again rebuilds every part, kept or cached.
+            let startup = self.startup;
+            self.sched = Scheduler::new(&startup.sealed, self.options());
+            let fresh = self.new_session();
+            self.sessions.insert(show.doc.clone(), fresh);
         }
+        self.replay(&show.doc, show.t);
+        self.first_frames.remove(&show.doc);
         // #1732: render-back's geometry audit of the revision, on its frame at `t`.
         if show.include.iter().any(|i| matches!(i, Include::Audit)) {
             let audit = self.audit_of(&show.doc, show.t);
@@ -2249,7 +2374,8 @@ impl<'a> Hub<'a> {
             None
         };
         if three {
-            let placed = self.arranged(&show.doc, &doc);
+            let shown = self.shown_at(&show.doc, &doc, show.t);
+            let placed = self.arranged(&show.doc, &shown);
             self.pending3d = Some(self.draw3d(&placed, show.t, show.size));
         }
         self.present(show, visible, drawn.as_ref(), reply)
@@ -2298,7 +2424,7 @@ impl<'a> Hub<'a> {
 
     /// The check's notices as a reply carries them. The planted check that loads a deprecated
     /// kind silently leaves its `deprecated` notices out.
-    pub fn notices_reply(&self, notices: &[Notice]) -> Vec<Value> {
+    pub fn notices_reply(&self, doc: &str, notices: &[Notice]) -> Vec<Value> {
         notices
             .iter()
             .filter(|n| {
@@ -2308,7 +2434,14 @@ impl<'a> Hub<'a> {
             // A kind this build draws without a kind registry entry (rect@1, path@1) is drawn,
             // not skipped, as `unknown_items` reads it, so no notice says it is (#490).
             .filter(|n| !(n.code == "unknown_kind" && n.actual.as_str().is_some_and(shared::knows)))
-            .map(Notice::to_json)
+            .map(|n| {
+                let mut out = n.to_json();
+                if let ("derived_orphan", Some(id)) = (n.code, n.ids.first()) {
+                    out["notes"] = json!(self.notes_on(doc, id));
+                    out["handles"] = json!(self.handles_to(doc, id));
+                }
+                out
+            })
             .collect()
     }
 
@@ -2662,4 +2795,26 @@ impl BandRow {
             "name": self.name,
         })
     }
+}
+
+/// A revision's check time and its `kind_rules` check's own time, when asked for (#202), in ms.
+type CheckTimes = (f64, Option<f64>);
+
+/// #202's planted expander: an instance's inputs walked through a std hash map, whose order a
+/// fresh random state picks, so two expansions of one example differ in their bytes. It redraws
+/// until the order differs from the previous walk's, which three inputs would match by chance.
+fn walk_in_hash_order(inputs: serde_json::Map<String, Value>) -> serde_json::Map<String, Value> {
+    thread_local! {
+        static LAST: std::cell::RefCell<Vec<String>> = const { std::cell::RefCell::new(Vec::new()) };
+    }
+    let last = LAST.with(|l| l.borrow().clone());
+    for _ in 0..64 {
+        let walked: std::collections::HashMap<String, Value> = inputs.clone().into_iter().collect();
+        let order: Vec<String> = walked.keys().cloned().collect();
+        if order != last || inputs.len() < 2 {
+            LAST.with(|l| *l.borrow_mut() = order);
+            return walked.into_iter().collect();
+        }
+    }
+    inputs
 }

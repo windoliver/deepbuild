@@ -2,7 +2,7 @@
   "uri": "deep://schedule/core@0.0.0",
   "core": "core@0.0.0",
   "build_set": "full",
-  "set_digest": "90de4d0ff0c955c8dc05ed40062c110ec7215b6b6bf91f78473fa73fe468e7b8",
+  "set_digest": "932c82ee183d8b226f33c5a137ff599209cf2c537e5cda6e877ba94b341421b9",
   "interfaces": {
     "building@1": {
       "digest": "0d13ed593138e9ee44e857752ef4b2a0392f03bc17c10b4f99b48746f6d580e1",
@@ -63,7 +63,7 @@
       }
     },
     "data@1": {
-      "digest": "a743bfa040d3d697e65bb0de3eb2c4a6065d7ee983c1eb51dcd25cee5161cf49",
+      "digest": "b2095ca927d1a61295a9c0ceccafba49b656370fa1ddf538afb199b7a212a959",
       "reference": "data",
       "kit": [
         "fixtures",
@@ -172,6 +172,35 @@
       "module": "input",
       "implementation": {
         "name": "input",
+        "version": "1.0.0",
+        "pins": {},
+        "equivalence": "bit",
+        "state": "canonical"
+      }
+    },
+    "logic@1": {
+      "digest": "8905fd3b732dfa94de4bea62a96a48dc5e2bfd887765fd226b5aad6bc6978281",
+      "reference": "logic",
+      "kit": [
+        "fixtures",
+        "clean_rebuild",
+        "patch_fuzz",
+        "read_set",
+        "order",
+        "schedule",
+        "repair_loop",
+        "carried_state",
+        "late_entry",
+        "time_order",
+        "contribution",
+        "catalog",
+        "migration",
+        "bit"
+      ],
+      "behavior": "none",
+      "module": "logic",
+      "implementation": {
+        "name": "logic",
         "version": "1.0.0",
         "pins": {},
         "equivalence": "bit",
@@ -323,6 +352,35 @@
         "state": "canonical"
       }
     },
+    "physics@1": {
+      "digest": "8071ab44e877e00d90807062cf69c0c913d493ffcd131a1e27e50b78dd6c1242",
+      "reference": "physics",
+      "kit": [
+        "fixtures",
+        "clean_rebuild",
+        "patch_fuzz",
+        "read_set",
+        "order",
+        "schedule",
+        "repair_loop",
+        "carried_state",
+        "late_entry",
+        "time_order",
+        "contribution",
+        "catalog",
+        "migration",
+        "bit"
+      ],
+      "behavior": "none",
+      "module": "physics",
+      "implementation": {
+        "name": "physics",
+        "version": "1.0.0",
+        "pins": {},
+        "equivalence": "bit",
+        "state": "canonical"
+      }
+    },
     "record@1": {
       "digest": "65f77a1cb350e333bb96a1f36a254f4d489bbb36a3a919391654a723b30c1021",
       "reference": "record",
@@ -393,7 +451,7 @@
       }
     },
     "scene3d@1": {
-      "digest": "cb30e7a45648f00f9852b595b7ddd84992d7f5bf5331828c1debebe42d50d81e",
+      "digest": "37d4cb1807acc482d198f9e539a3dde7ed34e55c1c32d2de1f003e4a942a598e",
       "reference": "scene3d",
       "kit": [
         "fixtures",
@@ -548,6 +606,33 @@
           "motion.program"
         ],
         "per": "document"
+      },
+      {
+        "operator": "scene3d.rest",
+        "module": "scene3d",
+        "version": "1.0.0",
+        "reads": [
+          "refs"
+        ],
+        "writes": [
+          "scene3d.rests"
+        ],
+        "per": "document"
+      }
+    ],
+    "build": [
+      {
+        "operator": "scene3d.scatter",
+        "module": "scene3d",
+        "version": "1.0.0",
+        "reads": [
+          "self",
+          "refs"
+        ],
+        "writes": [
+          "scene3d.scattered"
+        ],
+        "per": "item"
       }
     ],
     "items": [
@@ -597,6 +682,20 @@
         ],
         "writes": [
           "core.transform"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "data.columns",
+        "module": "data",
+        "version": "1.0.0",
+        "reads": [
+          "self",
+          "t"
+        ],
+        "writes": [
+          "data.columns",
+          "data.mapped"
         ],
         "per": "item"
       },
@@ -745,19 +844,6 @@
         "per": "item"
       },
       {
-        "operator": "core.world",
-        "module": "core",
-        "version": "0.0.0",
-        "reads": [
-          "core.transform",
-          "parent"
-        ],
-        "writes": [
-          "core.world"
-        ],
-        "per": "item"
-      },
-      {
         "operator": "record.salience",
         "module": "record",
         "version": "1.0.0",
@@ -822,6 +908,46 @@
         ],
         "writes": [
           "scene3d.livebuilt"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "scene3d.restlive",
+        "module": "scene3d",
+        "version": "1.0.0",
+        "reads": [
+          "refs",
+          "t",
+          "motion.program"
+        ],
+        "writes": [
+          "scene3d.restslive"
+        ],
+        "per": "document"
+      },
+      {
+        "operator": "scene3d.rested",
+        "module": "scene3d",
+        "version": "1.0.0",
+        "reads": [
+          "scene3d.rests",
+          "scene3d.restslive"
+        ],
+        "writes": [
+          "scene3d.rested"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "core.world",
+        "module": "core",
+        "version": "0.0.0",
+        "reads": [
+          "core.transform",
+          "parent"
+        ],
+        "writes": [
+          "core.world"
         ],
         "per": "item"
       },
@@ -1022,6 +1148,7 @@
   },
   "contributions": {
     "core.fields": [
+      "data.columns",
       "motion.fields"
     ],
     "core.glyphs": [
@@ -1032,7 +1159,8 @@
     ],
     "core.transform": [
       "motion.at",
-      "motion.placed"
+      "motion.placed",
+      "scene3d.rested"
     ]
   }
 }

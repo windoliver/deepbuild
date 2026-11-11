@@ -1,0 +1,15 @@
+{
+  "issue": 504,
+  "criterion": "#504.a3d1f3d0",
+  "verdict": "looks_right",
+  "who": "Claude, on the owner's standing delegation of taste calls; the owner can overrule it on the PR",
+  "when": "2026-11-11T00:21:37Z",
+  "screenshots": {
+    "projectile-board.png": "944f8f89a55959c87272747af3ebba4e0d4f9185fcefb29ab76c395f65681fa9",
+    "take-apart.png": "dc239dbca9150e05342e2d693a6dc36b6c9275d91373a9550dea954e2077e85c",
+    "recoloured-case.png": "0425f696a2016b425490a6ce01e71a30bf960f9f443a010fb777dfab760267af",
+    "stage-glide.apng": "317180ea6db18f982778ca26c6ec33800dabe714043d125901f8c17344c85ba0",
+    "take-apart.apng": "44cf9e8b943d5a5484ab08627257228b239bf94d79018656dcb9fb5b8d7b0416"
+  },
+  "note": "Read the three stills at full size and frames 0, 8, 20, 30, 45, 63, 70 and 84 of the glide and 0, 8, 14, 30, 50 and 60 of the take-apart. Board: three frames of the canvas, one per stage (launch framed on the cannon, top on the whole arc, landing on the impact), the ball where the closed form puts it on the dotted path; the readouts show Angle 45°, Speed 15 m/s and Range 22.94 m (15² sin 90° / 9.81). The canvas draws no slider or stage widget itself (the app's control strip does), so the sliders show only through their values, and the readouts sit in the board's own space, so only the wide top stage shows them. Take-apart: body, lid and knob leave in order and come back to rest by 5.5 s; the 3D frame path doesn't draw the card's text. Case: muted before any pick, then lagoon, orchid and graphite. Glide: each entry starts from the pose shown and eases into its stage's framed pose; snap cuts. Plain boxes in the clean look: no art direction was asked for."
+}

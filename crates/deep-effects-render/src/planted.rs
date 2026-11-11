@@ -2,7 +2,6 @@
 //! through the binary's `--planted`: a sort fed its input reversed, so equal keys come out in
 //! decreasing index, and a compaction that appends at an atomic counter's returned value.
 
-use wgpu::util::DeviceExt as _;
 
 /// Dispatches recorded before (or instead of) a shipped step's plan, a compute pass each.
 pub struct Pre {
@@ -10,7 +9,7 @@ pub struct Pre {
     _keep: Vec<wgpu::Buffer>,
 }
 
-fn pipeline(d: &wgpu::Device, entry: &str) -> wgpu::ComputePipeline {
+fn pipeline(d: &deep_gpu::counted::Wgpu, entry: &str) -> wgpu::ComputePipeline {
     let module = d.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: Some("planted structural steps"),
         source: wgpu::ShaderSource::Wgsl(include_str!("planted.wgsl").into()),
@@ -26,7 +25,7 @@ fn pipeline(d: &wgpu::Device, entry: &str) -> wgpu::ComputePipeline {
 }
 
 fn group(
-    d: &wgpu::Device,
+    d: &deep_gpu::counted::Wgpu,
     p: &wgpu::ComputePipeline,
     n: u32,
     bufs: &[&wgpu::Buffer],
@@ -59,7 +58,7 @@ fn group(
 
 impl Pre {
     /// `src` reversed into `dst`, for each (src, dst).
-    pub fn reverse(d: &wgpu::Device, pairs: &[(&wgpu::Buffer, &wgpu::Buffer)], n: u32) -> Pre {
+    pub fn reverse(d: &deep_gpu::counted::Wgpu, pairs: &[(&wgpu::Buffer, &wgpu::Buffer)], n: u32) -> Pre {
         let p = pipeline(d, "reverse");
         let mut out = Pre {
             dispatches: Vec::new(),
@@ -76,7 +75,7 @@ impl Pre {
     /// The flagged words of `src` appended to `out` at a counter's returned value, the count into
     /// `count` (which the caller clears first).
     pub fn append(
-        d: &wgpu::Device,
+        d: &deep_gpu::counted::Wgpu,
         src: &wgpu::Buffer,
         flag: &wgpu::Buffer,
         out: &wgpu::Buffer,

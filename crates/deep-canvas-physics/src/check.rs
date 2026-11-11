@@ -5,15 +5,18 @@ use serde_json::Value;
 
 use crate::caps::Caps;
 use crate::doc::{read, Refusal, World};
+use crate::roles::{self, Row};
 
 /// The code of a refusal by a backend's caps.
 pub const BACKEND_CAP: &str = "physics.backend_cap";
 
 /// The codes this module adds to the check catalog: each with its meaning and fix.
-pub const CODES: [(&str, &str, &str); 3] = [
+pub const CODES: [(&str, &str, &str); 5] = [
     (BACKEND_CAP, "The backend this build pins can't run the field as written; the issue names the field and the backend.", "Set the field to what the backend runs (most often 0), or use a construct the backend has."),
     ("physics.unsupported", "The field is in physics.world@1 but this backend interface doesn't run it yet; the issue names the issue that brings it.", "Remove the field until that issue lands."),
     ("physics.missing_field", "A required world field is missing.", "Add the field."),
+    ("physics.role", "A shape use's role can't expand: it also names explicit groups, the role isn't in the table, or its owner isn't a shot's or isn't a body.", "Give the shape a role or explicit member and collides, not both; a shot's owner names the body that fired it."),
+    ("physics.no_group", "A shape is a member of no collision group, so physics.pairs can't place it in the matrix.", "Name at least one group in the shape's member, or give it a role."),
 ];
 
 /// The one-line fix of `code`: this module's, else the core's.
@@ -24,9 +27,11 @@ pub fn fix(code: &str) -> String {
     )
 }
 
-/// Every refusal `doc` raises against `caps`, the reader's and the caps' together, or the world it
-/// builds when there is none.
-pub fn check(doc: &Value, caps: &Caps) -> Result<World, Vec<Refusal>> {
+/// Every refusal `doc` raises against `caps`, its roles expanded through `table` (roles.rs), the
+/// reader's and the caps' together, or the world it builds when there is none.
+pub fn check(doc: &Value, caps: &Caps, table: &[Row]) -> Result<World, Vec<Refusal>> {
+    let expanded = roles::expand(doc, table)?;
+    let doc = &expanded.doc;
     let mut out = refused_by(doc, caps);
     match read(doc) {
         Ok(w) if out.is_empty() => {
@@ -129,14 +134,6 @@ fn refused_by(doc: &Value, caps: &Caps) -> Vec<Refusal> {
         }
     }
     let kinematic = doc.get("mode").and_then(Value::as_str) == Some("kinematic");
-    if kinematic {
-        out.push(Refusal {
-            code: "physics.unsupported",
-            path: "mode".into(),
-            actual: doc["mode"].clone(),
-            what: "kinematic mode isn't run by this backend interface yet; #523 brings it".into(),
-        });
-    }
     for (id, j) in doc
         .get("joints")
         .and_then(Value::as_object)
@@ -159,6 +156,15 @@ fn refused_by(doc: &Value, caps: &Caps) -> Vec<Refusal> {
                     "has no {k} joint in dynamic mode (joint {id}); it runs only in kinematic mode"
                 ),
             ));
+        } else if kinematic {
+            out.push(Refusal {
+                code: "physics.unsupported",
+                path: format!("joints/{id}/kind"),
+                actual: j["kind"].clone(),
+                what: format!(
+                    "a {k} joint isn't run by this backend interface yet; #523 brings it"
+                ),
+            });
         }
     }
     out

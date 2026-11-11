@@ -69,6 +69,10 @@ const TOOLS = {
     use: 'Bring your worktree\'s own stack up, on ports leased to that worktree, ready only once its health route answers, or take it down; every process runs through the supervisor.',
     proves: 'A stack that is up does not prove any check passes, and a port leased to your worktree is never another worktree\'s: a child session in its own worktree gets its own.',
   },
+  deep_root_plan: {
+    use: 'Propose a root plan for a host: the script you wrote there, locked by its hash, and each step with its undo or null when it has none. The person reads it, says yes or no, and runs it themselves with deep host run in their own terminal, where sudo asks for their password.',
+    proves: 'A plan proposed has not run: only the run deep host run records, from a copy only root can write, shows what it did.',
+  },
 };
 
 /** Table text as an agent reads it: no backticks or bold. */
@@ -98,6 +102,9 @@ export function generate(rows = blocks()) {
   }
   const { version } = JSON.parse(readFileSync(join(ROOT, 'packages/hub/package.json'), 'utf8'));
   const used = rows.filter((r) => Object.keys(TOOLS).some((tool) => r.mcp.includes(`\`${tool}\``)));
+  // Every session reads the whole skill: a tool's line stands once, under the first block that names it.
+  const under = new Map();
+  const line = (tool, block) => (under.has(tool) ? `- ${tool}, as under ${under.get(tool)}.` : (under.set(tool, block), `- ${tool}. ${TOOLS[tool].use}`));
   const skill = [
     '---',
     'name: deepbuild',
@@ -113,12 +120,12 @@ export function generate(rows = blocks()) {
     '',
     ...used.flatMap((r) => {
       const tools = Object.keys(TOOLS).filter((tool) => r.mcp.includes(`\`${tool}\``));
-      return [`## ${r.block}`, '', ...tools.map((tool) => `- ${tool}. ${TOOLS[tool].use}`), '', `Never: ${plain(r.never)}.`, ''];
+      return [`## ${r.block}`, '', ...tools.map((tool) => line(tool, r.block)), '', `Never: ${plain(r.never)}.`, ''];
     }),
     // The canvas working order (#412; technical design, after the Building blocks table): what the tools can't teach.
     '## Working on a canvas document',
     '',
-    'Start from a piece recipe, or from a kind deep_kinds lists. Check the document with deep_show before you render it. Then render small and read its issues. Fix by patch, changing one item at a time, and render in full only once the numbers pass; judge by numbers, never by eye. When no kind or field does what the piece needs, raise an open item with deep_open_item naming the missing kind or field, instead of approximating it.',
+    'Start from a piece recipe, or from a kind deep_kinds lists. Check the document with deep_show before you render it. Then render small and read its issues. Fix by patch, changing one item at a time, and render in full only once the numbers pass; judge by numbers, never by eye. When no kind or field does what the piece needs, raise an open item with deep_open_item naming the missing kind or field, instead of approximating it. When a logic step needs more fuel than its step ceiling, which deep_kinds lists by step rate, budget class and host, split the work across steps and keep the progress in memory. For a formula, run the typeset job with deep_job: it turns LaTeX or Typst into an SVG with one id per term, which a vector@1 item imports, so a step moves the terms two formulas share; never set a formula as text.',
     '',
   ].join('\n');
   return { descriptions, skill };

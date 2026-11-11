@@ -124,6 +124,9 @@ impl Hub<'_> {
             out: out.to_string_lossy().into_owned(),
             software: false,
             readback: false,
+            track: Vec::new(),
+            captions: Default::default(),
+            loudness_profile: None,
         };
         let revisions = |hub: &Hub| -> Vec<(u64, String, &'static str)> {
             hub.revisions.get(KIT_DOC).map_or_else(Vec::new, |rows| {

@@ -1,7 +1,7 @@
 {
   "core": {
     "version": "0.0.0",
-    "digest": "90de4d0ff0c955c8dc05ed40062c110ec7215b6b6bf91f78473fa73fe468e7b8",
+    "digest": "932c82ee183d8b226f33c5a137ff599209cf2c537e5cda6e877ba94b341421b9",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
@@ -50,7 +50,7 @@
   },
   "data": {
     "version": "1.0.0",
-    "digest": "a743bfa040d3d697e65bb0de3eb2c4a6065d7ee983c1eb51dcd25cee5161cf49",
+    "digest": "b2095ca927d1a61295a9c0ceccafba49b656370fa1ddf538afb199b7a212a959",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
@@ -109,6 +109,16 @@
       "read_region": "PASS",
       "keyboard": "PASS",
       "input": "PASS"
+    }
+  },
+  "logic": {
+    "version": "1.0.0",
+    "digest": "8905fd3b732dfa94de4bea62a96a48dc5e2bfd887765fd226b5aad6bc6978281",
+    "verdict": "PASS",
+    "parts": {
+      "clean_rebuild": "PASS",
+      "patch_fuzz": "PASS",
+      "schedule": "PASS"
     }
   },
   "look": {
@@ -193,6 +203,16 @@
       "migration": "PASS"
     }
   },
+  "physics": {
+    "version": "1.0.0",
+    "digest": "8071ab44e877e00d90807062cf69c0c913d493ffcd131a1e27e50b78dd6c1242",
+    "verdict": "PASS",
+    "parts": {
+      "clean_rebuild": "PASS",
+      "patch_fuzz": "PASS",
+      "schedule": "PASS"
+    }
+  },
   "record": {
     "version": "1.0.0",
     "digest": "65f77a1cb350e333bb96a1f36a254f4d489bbb36a3a919391654a723b30c1021",
@@ -222,7 +242,7 @@
   },
   "scene3d": {
     "version": "1.0.0",
-    "digest": "cb30e7a45648f00f9852b595b7ddd84992d7f5bf5331828c1debebe42d50d81e",
+    "digest": "37d4cb1807acc482d198f9e539a3dde7ed34e55c1c32d2de1f003e4a942a598e",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",

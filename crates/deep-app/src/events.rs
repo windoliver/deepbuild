@@ -10,16 +10,6 @@ use serde_json::Value;
 
 use crate::record::FOLD_AFTER;
 
-/// The kinds that end an ask.
-const CLOSING: [&str; 6] = [
-    "ask.answered",
-    "ask.defaulted",
-    "ask.escalated",
-    "ask.cancelled",
-    "ask.superseded",
-    "ask.moot",
-];
-
 #[derive(Clone, Debug)]
 pub struct Row {
     pub session_id: String,
@@ -164,22 +154,16 @@ pub fn inbox(fixture: &Fixture, log_pos: u64) -> Inbox {
     }
     for row in &seen {
         let event = &row.event;
-        let Some(subject) = event["subject"].as_str() else {
-            continue;
-        };
         let kind = event["kind"].as_str().unwrap_or_default();
         let pos = event["log_pos"].as_u64().unwrap_or_default();
-        let Some(ask) = asks
-            .iter_mut()
-            .find(|ask| ask.handle == subject && ask.created < pos)
-        else {
-            continue;
-        };
-        if CLOSING.contains(&kind) && ask.closed.is_none() {
-            ask.closed = Some(kind.to_owned());
-        }
-        if kind == "ask.later" {
-            ask.later_until = event["data"]["until"].as_u64();
+        for ask in asks.iter_mut().filter(|ask| ask.created < pos) {
+            // The app's one close rule (#2026): a decision applied names its ask in its data, and no agent closes one.
+            if ask.closed.is_none() && crate::states::closes(event, &ask.handle) {
+                ask.closed = Some(kind.to_owned());
+            }
+            if kind == "ask.later" && event["subject"] == ask.handle.as_str() {
+                ask.later_until = event["data"]["until"].as_u64();
+            }
         }
     }
     asks.sort_by_key(|ask| ask.created);
