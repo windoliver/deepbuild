@@ -1,0 +1,302 @@
+#1163: the suite run once at the base 937da9d44 ("Merge pull request #2275"), each file once, on the Mac that wrote it
+(macOS 27.2, an Apple M5 Max), with deep-show built by
+  CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 node scripts/throttle.mjs build --wait 240 -- \
+    scripts/lease cargo build --locked --bin deep-show --no-default-features --features full
+and each file run by
+  CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 NO_COLOR=1 node node_modules/vitest/vitest.mjs run \
+    --root tests/acceptance/1163 --testTimeout=600000 <file>
+Typecheck: node node_modules/typescript/bin/tsc -p tests/acceptance/1163/tsconfig.json exits 0. Paths below are cut to
+<checkout>; nothing else is changed.
+
+Summary: 13 tests, 13 fail at the base, none passes, none is skipped.
+
+- query.test.ts (AC1): fails at "the film is presented": `deep show` refuses the film, `bad_time` at
+  shots/shot-pan/start ("motion.compile can't evaluate this"): the base doesn't compile a shot time written on the
+  tempo map (`4:1b`). Behind it (by hand, below): the shot and placement paths read null with `ref_unresolved`.
+- exports.test.ts (AC2-AC6, 9 tests): every test that presents the film fails at the same refusal (run A's first
+  `deep show`, remembered and rethrown by the tests that share run A, so they report 0 ms); AC2's plant fails earlier,
+  at `bad_input` for the unknown `video_drops_frame_300`; AC3's and AC4's plants report run A's refusal, since they
+  read run A first; AC5's plant fails at its own `deep show`.
+- readiness.test.ts (AC7): fails at the same refusal. Behind it (debug run): only "the run reads undefined, not
+  BLOCKED".
+- shown.test.ts (AC8): INCONCLUSIVE: docs/evidence/1163/ holds none of the five files.
+
+Debug runs, to learn what lies behind the refusal and to check this suite's readers against real exports: the fixture's
+shot times were changed by hand in helpers.ts to 0s, 6s, 14s and 20s (the same instants), the runs below made, and the
+file restored before the commit (the shot times are bar:beat in the committed file). No expectation changed.
+
+- exports.test.ts with -t "the receipt records|the 30 PNGs|AC4 #1163|AC6 #1163": AC2's main test, AC3's main test,
+  AC4's main test and AC6 pass at the base, in 592 s (a whole export of the film takes about 9.5 minutes there); AC4's
+  plant fails, "found nothing wrong": in a fresh process the base has no checkpoint to restore, renders the reverb
+  from 0, and `reverb_restores_without_tail` changes nothing (README: Not settled).
+- readiness.test.ts: fails only on the stop's `state`.
+- By hand, with the same shot times, from scratch scripts that import helpers.ts: deep_query read the dot's y as 556
+  at 2 s, 5 s and 9 s and 596.46 at 2.25 s, and shots/shot-pan/start and placements/title-in/start as null
+  (`ref_unresolved`); the viewer opened paused at frame 0 and ⌥→ landed on frame 120 at 2,822,400,000; the whole
+  export's MP4 read by this suite held 600 video samples at k/30 s and `fpcm` sound of 960,000 samples a channel from
+  time 0, each frame's span hashing to the receipt's, with 600 distinct frame hashes; the film's sound by `media_mix`
+  equalled the MP4's sample for sample; the bed's end fade, through the reverb, matched cos(π/2 · i/240) within 9e-9,
+  while a fade on (i + 1)/240 missed by 5e-4; `play` in the film's own panel answers `no_document` (#499's gate plays
+  only what `open` put there).
+
+So once the shots compile, AC2's, AC3's and AC4's main tests and AC6 already pass at the base; each criterion still
+has a leg the base fails: AC1 the shot and placement paths and the notice in `deep show`'s issues, AC2 and AC3 their
+new plants, AC4 its plant in a cold jump, AC5 the live transport in a film's panel and the clock-seeded export, AC6
+only the refusal (its legs are #501's, here on this film), AC7 `state`, AC8 the pictures and the call.
+
+==================================================================================================== shown.test.ts
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/1163
+
+ ❯ shown.test.ts (1 test | 1 failed) 12ms
+   ❯ AC8 #1163.28f11e13 the check run's pictures and the one taste call on them (1)
+     × AC8 #1163.28f11e13 the check run's screenshots and recording exist in docs/evidence/1163/, and the run reads INCONCLUSIVE unless a recorded taste call on exactly these files says they look right 11ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  shown.test.ts > AC8 #1163.28f11e13 the check run's pictures and the one taste call on them > AC8 #1163.28f11e13 the check run's screenshots and recording exist in docs/evidence/1163/, and the run reads INCONCLUSIVE unless a recorded taste call on exactly these files says they look right
+AssertionError: INCONCLUSIVE: the check run's pictures are not in docs/evidence/1163/: push.png, pan-cross-fade.png, pull-back.png, viewer-step.png, film-recording.mp4; run node scripts/checkpoint-1163-shots.mjs; this is not a pass
+ ❯ inconclusive helpers.ts:92:17
+     90| /** The criterion stays open, whatever the reason: never a pass (AGENT…
+     91| export function inconclusive(reason: string): never {
+     92|   return expect.fail(`INCONCLUSIVE: ${reason}; this is not a pass`);
+       |                 ^
+     93| }
+     94|
+ ❯ shown.test.ts:29:25
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  11:09:04
+   Duration  4.10s (transform 72%, worker 19%, import 9%, tests 1%)
+
+==================================================================================================== query.test.ts
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/1163
+
+ ❯ query.test.ts (1 test | 1 failed) 7123ms
+   ❯ AC1 #1163.d0a72903 the film reads back on the tempo map, a literal cue raises its notice, and an overlapping shot is refused (1)
+     × AC1 #1163.d0a72903 deep_query reads shot 2's start at 4,233,600,000 and the title placement's at 2,822,400,000, the dot's y at each of the bounce's eight wraps equals the clip's value at 0, the literal 12.5 s cue raises literal_time_with_tempo_map whose bar:beat form lands on 8,820,000,000, and the pull back moved into the pan is refused naming both shots with the last good revision still current 2661ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  query.test.ts > AC1 #1163.d0a72903 the film reads back on the tempo map, a literal cue raises its notice, and an overlapping shot is refused > AC1 #1163.d0a72903 deep_query reads shot 2's start at 4,233,600,000 and the title placement's at 2,822,400,000, the dot's y at each of the bounce's eight wraps equals the clip's value at 0, the literal 12.5 s cue raises literal_time_with_tempo_map whose bar:beat form lands on 8,820,000,000, and the pull back moved into the pan is refused naming both shots with the last good revision still current
+AssertionError: the film is presented: {"rev":1,"expansions":[],"issues":[{"check":"document.validate","code":"bad_time","severity":"error","ids":[],"path":"shots/shot-pan/start","actual":null,"what":"motion.compile can't evaluate this","fix":"Write the time as a span such as 2s or 120f."}],"issues_evidence":"37a3445a78033f4d1abd44571cc1494b4907f8166d38ffba92801634ae1f37b9","snapshots":[],"outcome":"refused","backends":{"fonts":{"name":"fonts.bundled","version":"1.0.0"},"cpu":{"name":"aarch64","version":"1.0.0"}},"core":"core@0.0.0","set_digest":"bf57ee612c863284a30bdcc7b8ed4066bbba7b87664a043f363001165f6c69f7"}: expected 'refused' to be 'presented' // Object.is equality
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ presented helpers.ts:217:79
+    215| export const present = (document: JsonObject): JsonObject => ({ call: …
+    216| export function presented(reply: JsonObject | undefined, what: string)…
+    217|   expect(obj(reply, what)['outcome'], `${what} is presented: ${show(re…
+       |                                                                               ^
+    218| }
+    219| export const query = (fields: JsonObject): JsonObject => ({ call: 'dee…
+ ❯ query.test.ts:53:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  13:32:47
+   Duration  8.19s (tests 92%, transform 5%, import 3%)
+
+==================================================================================================== exports.test.ts
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/1163
+
+ ❯ exports.test.ts (9 tests | 9 failed) 9071ms
+   ❯ AC2 #1163.5c7e06ab the whole export: its receipt, its frames and samples read back, and the bed's end fade (2)
+     × AC2 #1163.5c7e06ab the receipt records 1920 × 1080, 30 fps, 20 s and 600 frame hashes; the MP4 read by this suite holds 600 frames and 960,000 samples a channel, frame k's audio from sample k × 1,600, and the bed's last 240 samples follow the 5 ms equal-power fade within 1e-6 2805ms
+     × AC2 #1163.5c7e06ab a planted video writer that drops frame 300 delivers 599 frames and fails, naming frame 300 511ms
+   ❯ AC3 #1163.86d53f4f the PNG range and the still at title are the whole export's frames and the live frame (2)
+     × AC3 #1163.86d53f4f the 30 PNGs of [300, 330), decoded, hash equal to their raw frames and to the whole export's frames 300 to 329, and the still at title equals the settled live frame at the marker by hash 0ms
+     × AC3 #1163.86d53f4f a planted range that starts one frame late fails, naming frame 300 0ms
+   ❯ AC4 #1163.dd932548 seeking equals playing in the exports: a cold jump to 15 s (2)
+     × AC4 #1163.dd932548 [450, 480) exported from a fresh process equals frames 450 to 479 and their PCM spans in the whole export by hash, sample for sample from 15 s 0ms
+     × AC4 #1163.dd932548 a planted reverb checkpoint without its tail differs at the first sample after 15 s and fails, naming the processor 0ms
+   ❯ AC5 #1163.57ed0658 the export again, with 3 shards and live: the same frames and sound (2)
+     × AC5 #1163.57ed0658 the whole film exported again in a fresh process and with 3 shards gives the same frame hashes and PCM hash, and the PCM the live transport hands the device gate over the 20 s equals the export's by hash 0ms
+     × AC5 #1163.57ed0658 a planted renderer that seeds noise from the clock fails, naming the first frame that differs 368ms
+   ❯ AC6 #1163.715560ce the film viewer moves only the transport, and no export changes the document or the session (1)
+     × AC6 #1163.715560ce . while paused at frame 100 shows export frame 101 by hash, ⌥→ from frame 0 lands on the marker title's first frame, and after each of the three exports the revision hash and the session state are unchanged 0ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 9 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  exports.test.ts > AC2 #1163.5c7e06ab the whole export: its receipt, its frames and samples read back, and the bed's end fade > AC2 #1163.5c7e06ab the receipt records 1920 × 1080, 30 fps, 20 s and 600 frame hashes; the MP4 read by this suite holds 600 frames and 960,000 samples a channel, frame k's audio from sample k × 1,600, and the bed's last 240 samples follow the 5 ms equal-power fade within 1e-6
+ FAIL  exports.test.ts > AC3 #1163.86d53f4f the PNG range and the still at title are the whole export's frames and the live frame > AC3 #1163.86d53f4f the 30 PNGs of [300, 330), decoded, hash equal to their raw frames and to the whole export's frames 300 to 329, and the still at title equals the settled live frame at the marker by hash
+ FAIL  exports.test.ts > AC3 #1163.86d53f4f the PNG range and the still at title are the whole export's frames and the live frame > AC3 #1163.86d53f4f a planted range that starts one frame late fails, naming frame 300
+ FAIL  exports.test.ts > AC4 #1163.dd932548 seeking equals playing in the exports: a cold jump to 15 s > AC4 #1163.dd932548 [450, 480) exported from a fresh process equals frames 450 to 479 and their PCM spans in the whole export by hash, sample for sample from 15 s
+ FAIL  exports.test.ts > AC4 #1163.dd932548 seeking equals playing in the exports: a cold jump to 15 s > AC4 #1163.dd932548 a planted reverb checkpoint without its tail differs at the first sample after 15 s and fails, naming the processor
+ FAIL  exports.test.ts > AC5 #1163.57ed0658 the export again, with 3 shards and live: the same frames and sound > AC5 #1163.57ed0658 the whole film exported again in a fresh process and with 3 shards gives the same frame hashes and PCM hash, and the PCM the live transport hands the device gate over the 20 s equals the export's by hash
+ FAIL  exports.test.ts > AC6 #1163.715560ce the film viewer moves only the transport, and no export changes the document or the session > AC6 #1163.715560ce . while paused at frame 100 shows export frame 101 by hash, ⌥→ from frame 0 lands on the marker title's first frame, and after each of the three exports the revision hash and the session state are unchanged
+AssertionError: the film is presented: {"rev":1,"expansions":[],"issues":[{"check":"document.validate","code":"bad_time","severity":"error","ids":[],"path":"shots/shot-pan/start","actual":null,"what":"motion.compile can't evaluate this","fix":"Write the time as a span such as 2s or 120f."}],"issues_evidence":"37a3445a78033f4d1abd44571cc1494b4907f8166d38ffba92801634ae1f37b9","snapshots":[],"outcome":"refused","backends":{"fonts":{"name":"fonts.bundled","version":"1.0.0"},"cpu":{"name":"aarch64","version":"1.0.0"}},"core":"core@0.0.0","set_digest":"bf57ee612c863284a30bdcc7b8ed4066bbba7b87664a043f363001165f6c69f7"}: expected 'refused' to be 'presented' // Object.is equality
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ presented helpers.ts:217:79
+    215| export const present = (document: JsonObject): JsonObject => ({ call: …
+    216| export function presented(reply: JsonObject | undefined, what: string)…
+    217|   expect(obj(reply, what)['outcome'], `${what} is presented: ${show(re…
+       |                                                                               ^
+    218| }
+    219| export const query = (fields: JsonObject): JsonObject => ({ call: 'dee…
+ ❯ makeA exports.test.ts:64:3
+ ❯ runA exports.test.ts:56:17
+ ❯ exports.test.ts:264:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/9]⎯
+
+ FAIL  exports.test.ts > AC2 #1163.5c7e06ab the whole export: its receipt, its frames and samples read back, and the bed's end fade > AC2 #1163.5c7e06ab a planted video writer that drops frame 300 delivers 599 frames and fails, naming frame 300
+AssertionError: the whole film (planted video_drops_frame_300): deep-show run answers the scenario ok; got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:188:88
+    186|   expect(lines.length, `${tag}: one answer line`).toBe(1);
+    187|   const out = obj(JSON.parse(lines[0]!) as JsonValue, `${tag}: the ans…
+    188|   expect(out['ok'], `${tag}: deep-show run answers the scenario ok; go…
+       |                                                                                        ^
+    189|   const replies = arr(out['replies'], `${tag}: replies`).map((x, i) =>…
+    190|   expect(replies.length, `${tag}: one reply per call`).toBe(arr(sc['ca…
+ ❯ fresh exports.test.ts:111:19
+ ❯ exports.test.ts:278:39
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/9]⎯
+
+ FAIL  exports.test.ts > AC5 #1163.57ed0658 the export again, with 3 shards and live: the same frames and sound > AC5 #1163.57ed0658 a planted renderer that seeds noise from the clock fails, naming the first frame that differs
+AssertionError: the whole film: the film is presented: {"rev":1,"expansions":[],"issues":[{"check":"document.validate","code":"bad_time","severity":"error","ids":[],"path":"shots/shot-pan/start","actual":null,"what":"motion.compile can't evaluate this","fix":"Write the time as a span such as 2s or 120f."}],"issues_evidence":"37a3445a78033f4d1abd44571cc1494b4907f8166d38ffba92801634ae1f37b9","snapshots":[],"outcome":"refused","backends":{"fonts":{"name":"fonts.bundled","version":"1.0.0"},"cpu":{"name":"aarch64","version":"1.0.0"}},"core":"core@0.0.0","set_digest":"bf57ee612c863284a30bdcc7b8ed4066bbba7b87664a043f363001165f6c69f7"}: expected 'refused' to be 'presented' // Object.is equality
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ presented helpers.ts:217:79
+    215| export const present = (document: JsonObject): JsonObject => ({ call: …
+    216| export function presented(reply: JsonObject | undefined, what: string)…
+    217|   expect(obj(reply, what)['outcome'], `${what} is presented: ${show(re…
+       |                                                                               ^
+    218| }
+    219| export const query = (fields: JsonObject): JsonObject => ({ call: 'dee…
+ ❯ fresh exports.test.ts:112:3
+ ❯ exports.test.ts:354:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/9]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  9 failed (9)
+   Start at  13:33:06
+   Duration  9.63s (tests 100%)
+
+==================================================================================================== readiness.test.ts
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/1163
+
+ ❯ readiness.test.ts (1 test | 1 failed) 7116ms
+   ❯ AC7 #1163.cf2adc67 a missing bed stops the export at its readiness gate (1)
+     × AC7 #1163.cf2adc67 with the bed's asset removed from the store, the export stops at its readiness gate naming the asset, leaves no file in its folder, and reads BLOCKED, never PASS 2682ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  readiness.test.ts > AC7 #1163.cf2adc67 a missing bed stops the export at its readiness gate > AC7 #1163.cf2adc67 with the bed's asset removed from the store, the export stops at its readiness gate naming the asset, leaves no file in its folder, and reads BLOCKED, never PASS
+AssertionError: the film is presented: {"rev":1,"expansions":[],"issues":[{"check":"document.validate","code":"bad_time","severity":"error","ids":[],"path":"shots/shot-pan/start","actual":null,"what":"motion.compile can't evaluate this","fix":"Write the time as a span such as 2s or 120f."}],"issues_evidence":"37a3445a78033f4d1abd44571cc1494b4907f8166d38ffba92801634ae1f37b9","snapshots":[],"outcome":"refused","backends":{"fonts":{"name":"fonts.bundled","version":"1.0.0"},"cpu":{"name":"aarch64","version":"1.0.0"}},"core":"core@0.0.0","set_digest":"bf57ee612c863284a30bdcc7b8ed4066bbba7b87664a043f363001165f6c69f7"}: expected 'refused' to be 'presented' // Object.is equality
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ presented helpers.ts:217:79
+    215| export const present = (document: JsonObject): JsonObject => ({ call: …
+    216| export function presented(reply: JsonObject | undefined, what: string)…
+    217|   expect(obj(reply, what)['outcome'], `${what} is presented: ${show(re…
+       |                                                                               ^
+    218| }
+    219| export const query = (fields: JsonObject): JsonObject => ({ call: 'dee…
+ ❯ readiness.test.ts:23:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  13:32:57
+   Duration  7.88s (tests 94%, import 6%)
+
+==================================================================================================== debug run: exports.test.ts, shot times in seconds
+deep lease: DeepBuild isn't set up here (no hub token), so `node node_modules/vitest/vitest.mjs run --root tests/acceptance/1163 --testTimeout=600000 exports.test.ts -t the receipt records|the 30 PNGs|AC4 #1163|AC6 #1163` runs unleased
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/1163
+
+ ❯ exports.test.ts (9 tests | 1 failed | 4 skipped) 591221ms
+   ❯ AC4 #1163.dd932548 seeking equals playing in the exports: a cold jump to 15 s (2)
+     × AC4 #1163.dd932548 a planted reverb checkpoint without its tail differs at the first sample after 15 s and fails, naming the processor 12331ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  exports.test.ts > AC4 #1163.dd932548 seeking equals playing in the exports: a cold jump to 15 s > AC4 #1163.dd932548 a planted reverb checkpoint without its tail differs at the first sample after 15 s and fails, naming the processor
+AssertionError: the planted reverb checkpoint (reverb_restores_without_tail): the check fails the planted program, but it found nothing wrong: expected 0 to be greater than 0
+ ❯ failsNaming helpers.ts:87:103
+     85| /** A planted program's run: this suite's check must fail on it, and s…
+     86| export function failsNaming(failures: readonly string[], named: RegExp…
+     87|   expect(failures.length, `${what}: the check fails the planted progra…
+       |                                                                                                       ^
+     88|   expect(failures.some((f) => named.test(f)), `${what}: a failure name…
+     89| }
+ ❯ exports.test.ts:323:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 4 passed | 4 skipped (9)
+   Start at  13:21:40
+   Duration  591.61s (tests 100%)
+
+==================================================================================================== debug run: readiness.test.ts, shot times in seconds
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/1163
+
+ ❯ readiness.test.ts (1 test | 1 failed) 5667ms
+   ❯ AC7 #1163.cf2adc67 a missing bed stops the export at its readiness gate (1)
+     × AC7 #1163.cf2adc67 with the bed's asset removed from the store, the export stops at its readiness gate naming the asset, leaves no file in its folder, and reads BLOCKED, never PASS 1972ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  readiness.test.ts > AC7 #1163.cf2adc67 a missing bed stops the export at its readiness gate > AC7 #1163.cf2adc67 with the bed's asset removed from the store, the export stops at its readiness gate naming the asset, leaves no file in its folder, and reads BLOCKED, never PASS
+AssertionError: the readiness gate:
+  the run reads undefined, not BLOCKED: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the run reads undefined, not BLOCKED",
++ ]
+
+ ❯ none helpers.ts:83:73
+     81|
+     82| export function none(failures: readonly string[], what: string): void {
+     83|   expect(failures, `${what}:\n  ${failures.slice(0, 12).join('\n  ')}`…
+       |                                                                         ^
+     84| }
+     85| /** A planted program's run: this suite's check must fail on it, and s…
+ ❯ readiness.test.ts:36:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  13:21:48
+   Duration  6.02s (tests 97%, import 2%, transform 1%)
+
