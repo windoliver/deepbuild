@@ -658,38 +658,10 @@ fn placed_op(v: &mut View<'_>) -> Result<(), OpError> {
     )
 }
 
-/// #154: `score.music@1`, music as data, checked here because its onsets resolve through the
+/// #154: the check of `score.music@1`, music as data, here because its onsets resolve through the
 /// tempo map and markers; and the `samples` a library pack lists its presets in.
 fn register_score(r: &mut Registrar) {
-    use deep_canvas::kinds::{Entry, Param, ParamType, Version};
-    let json_param = |name: &'static str| Param {
-        name,
-        ty: ParamType::Json,
-        unit: "",
-        default: Value::Null,
-        min: None,
-        max: None,
-        minor: 0,
-        module: "",
-        operator: "",
-    };
-    r.kind(
-        Entry {
-            family: "score",
-            name: "music",
-            versions: vec![Version {
-                major: 1,
-                minor: 0,
-                params: ["instruments", "events", "loop", "stems"]
-                    .into_iter()
-                    .map(json_param)
-                    .collect(),
-            }],
-            migrations: Vec::new(),
-        },
-        &[],
-        "",
-    );
+    // The kind is the core's (`score.music@1`), its fields this module's: the rule here checks it.
     r.rule("score.music", crate::score::rule);
     r.pack_field("samples", samples_field);
     r.check(
