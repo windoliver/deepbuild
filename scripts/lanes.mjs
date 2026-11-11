@@ -403,6 +403,9 @@ alone.push('tests/acceptance/1056/');
 // build deep-gpu for release and draw on this Mac's Metal GPU, so no two device runs share it.
 alone.push('tests/acceptance/1897/', 'tests/acceptance/1899/', 'tests/acceptance/1903/');
 alone.push('tests/acceptance/2189/', 'tests/acceptance/2189-redraft-ac1/');
+// #547's files build deep-logic and bake 108,000 and 72,000 steps; AC4 judges 20 seeks of a recorded match against 2 s.
+alone.push('tests/acceptance/547/');
+timed.push('tests/acceptance/547/ac4-keyframes.test.ts');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
