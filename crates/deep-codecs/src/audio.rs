@@ -531,31 +531,27 @@ pub fn decode(t: &Track) -> Result<Decoded, String> {
             if head.get(18).is_some_and(|family| *family != 0) {
                 return Err("an Opus stream of more than two channels".into());
             }
-            let stereo = head.get(9).is_some_and(|c| *c >= 2);
-            let channels = if stereo {
-                ropus::Channels::Stereo
+            let ch = if head.get(9).is_some_and(|c| *c >= 2) {
+                2
             } else {
-                ropus::Channels::Mono
+                1
             };
-            let mut dec = ropus::Decoder::new(48_000, channels).map_err(|e| format!("{e:?}"))?;
+            let mut dec = opus_rs::OpusDecoder::new(48_000, ch)?;
+            // OpusHead's output gain, in 1/256 dB, applied as FFmpeg applies it; through libm,
+            // as the decoder's own math is, so no platform's math library changes a sample.
             let gain = head
                 .get(16..18)
                 .map_or(0, |g| i16::from_le_bytes([g[0], g[1]]));
-            if gain != 0 {
-                dec.set_gain(i32::from(gain))
-                    .map_err(|e| format!("{e:?}"))?;
-            }
-            let ch = if stereo { 2 } else { 1 };
-            let mut pcm = vec![0i16; 5760 * ch];
+            let scale = libm::exp10(f64::from(gain) / 5120.0) as f32;
+            let mut pcm = vec![0f32; 5760 * ch];
             for (i, pk) in t.packets.iter().enumerate() {
                 let n = dec
-                    .decode(pk, &mut pcm, ropus::DecodeMode::Normal)
-                    .map_err(|e| format!("Opus packet {i}: {e:?}"))?;
-                let f: Vec<f32> = pcm[..n * ch]
-                    .iter()
-                    .map(|s| int_to_f32(i32::from(*s), 16))
-                    .collect();
-                push(&mut d, &f, ch as u32);
+                    .decode(pk, 5760, &mut pcm)
+                    .map_err(|e| format!("Opus packet {i}: {e}"))?;
+                if gain != 0 {
+                    pcm[..n * ch].iter_mut().for_each(|s| *s *= scale);
+                }
+                push(&mut d, &pcm[..n * ch], ch as u32);
             }
             d.rate = 48_000;
         }
