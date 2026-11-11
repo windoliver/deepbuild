@@ -377,6 +377,9 @@ timed.push('tests/acceptance/202/budgets.test.ts');
 alone.push('tests/acceptance/1957/');
 // #1961's files build deep-show and patch an open document to another version of its pack.
 alone.push('tests/acceptance/1961/');
+// #1399's files build deep-show in the full set and deep-gpu, and run the kind kit, the seam suite, the flicker check
+// and the golden guard on them.
+alone.push('tests/acceptance/1399/');
 // #2015's file builds deep-show in the full set and runs it on a plate and a recipe pack.
 alone.push('tests/acceptance/2015/');
 // #220's files start hubs, build deep-show in the full set and time the typeset tool's own process.
