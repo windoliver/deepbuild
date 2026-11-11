@@ -3,24 +3,31 @@
 //! (issue #2012). `check` runs the document check with caps() and the build; `bake` runs a world from step 0, keyed,
 //! and kept by key in a store; `restore` runs it on from a checkpoint; `play` reads a stored bake's outputs and never
 //! steps; `runtime` names the build; `golden`, `golden_verify` and `golden_cross` record a golden, replay it and say
-//! where it stands across machines. A planted name runs one criterion's wrong program.
+//! where it stands across machines; `pairs` is the check kind physics.pairs (#2011); `time` steps a world timing each
+//! step natively, and `time_build`, `time_end` with the wasm32 exports `deep_physics_step` and `deep_physics_note` let a
+//! page time the same steps on its own clock (scripts/physics-budget.mjs). A planted name runs one criterion's wrong
+//! program.
 use std::collections::BTreeMap;
 use std::path::Path;
 
 use crate::scene::Scene;
 use crate::{fp, Rapier};
 use base64::Engine;
-use deep_canvas_physics::backend::{Backend, BodyState, Canonical, Checkpoint, Targets, FIELDS};
+use deep_canvas_physics::backend::{
+    Backend, BodyState, Canonical, Checkpoint, ShapeRef, Targets, FIELDS,
+};
 use deep_canvas_physics::bake::{self, Build, Parts};
 use deep_canvas_physics::caps::{Caps, RAPIER3D};
 use deep_canvas_physics::check::{check, fix};
 use deep_canvas_physics::doc::{Read, Refusal, World};
 use deep_canvas_physics::golden;
-use deep_canvas_physics::occurrence::{self, Row};
+use deep_canvas_physics::occurrence;
+use deep_canvas_physics::pairs::{pairs, Brief};
+use deep_canvas_physics::roles::{self, Row};
 use serde_json::{json, Map, Value};
 
 /// The planted wrong programs, by name.
-pub const PLANTED: [&str; 8] = [
+pub const PLANTED: [&str; 9] = [
     "caps_allow_restitution_threshold",
     "caps_allow_rolling_resistance",
     "caps_allow_tangent_speed",
@@ -28,6 +35,7 @@ pub const PLANTED: [&str; 8] = [
     "restore_ignores_version",
     "hash_rounds_1e6",
     "key_omits_frame_rate",
+    "role_table_pickup_solid",
     "occurrences_in_engine_order",
 ];
 
@@ -42,6 +50,8 @@ pub struct Run {
     round_hashes: bool,
     /// #2010 criterion 5's twin: the bake key leaves out the frame rate.
     key_without_rate: bool,
+    /// The role table roles expand through; #2011 criterion 3's twin makes a pickup solid.
+    table: &'static [Row],
     /// #1918 criterion 5's twin: the list keeps each step's rows as the backend reads them.
     engine_order: bool,
     build: Build,
@@ -91,6 +101,72 @@ fn checkpoint_of(c: &Value) -> Option<Checkpoint> {
             .decode(c.get("state")?.as_str()?)
             .ok()?,
     })
+}
+
+/// A shape use as the surface names it: its body, its index among the body's shapes and its shape.
+fn shape_use(w: &World, r: &ShapeRef) -> Value {
+    let shape = w
+        .bodies
+        .get(&r.body)
+        .and_then(|b| b.shapes.get(r.index))
+        .map(|u| u.shape.as_str());
+    json!({"body": r.body, "index": r.index, "shape": shape})
+}
+
+/// #2011's view of the occurrence list (`bake` with `occurrences: true`): each row's two shape
+/// uses as `{body, index, shape}`, the lower first; a row of one subject names it as `a`.
+fn shape_uses(rows: &[occurrence::Row], w: &World) -> Vec<Value> {
+    let one = |body: &str, index: Option<u32>| {
+        let r = ShapeRef {
+            body: body.into(),
+            index: index.unwrap_or(0) as usize,
+        };
+        shape_use(w, &r)
+    };
+    rows.iter()
+        .map(|r| {
+            let o = &r.raw;
+            let kind = occurrence::KINDS[usize::from(o.kind)];
+            match &o.b {
+                Some(b) if o.a_use.is_some() => json!({"step": r.step, "kind": kind,
+                    "a": one(&o.a, o.a_use), "b": one(b, o.b_use)}),
+                _ => json!({"step": r.step, "kind": kind, "a": o.a, "b": o.b}),
+            }
+        })
+        .collect()
+}
+
+/// The pair of shape uses that ran the most narrow-phase tests in the last step, and their count.
+fn most_tested(w: &World, b: &Rapier) -> Value {
+    b.narrow_phase_tests().first().map_or(
+        Value::Null,
+        |(a, c, n)| json!({"pair": [shape_use(w, a), shape_use(w, c)], "tests": n}),
+    )
+}
+
+thread_local! {
+    /// The world a page times step by step (`time_build`, `deep_physics_step`, `deep_physics_note`, `time_end`): the
+    /// world, its backend and the most-tested pair after each step so far.
+    static TIMED: std::cell::RefCell<Option<(World, Rapier, Vec<Value>)>> = const { std::cell::RefCell::new(None) };
+}
+
+/// One step of the world `time_build` built, nothing else, so the page's clock reads the step alone; false when there
+/// is none or the step is refused.
+pub fn timed_step() -> bool {
+    TIMED.with(|t| {
+        t.borrow_mut()
+            .as_mut()
+            .is_some_and(|(_, b, _)| b.step(&[], &Targets::default()).is_ok())
+    })
+}
+
+/// Notes the most-tested pair of the step `timed_step` just ran, outside the timed step.
+pub fn timed_note() {
+    TIMED.with(|t| {
+        if let Some((w, b, top)) = t.borrow_mut().as_mut() {
+            top.push(most_tested(w, b));
+        }
+    });
 }
 
 /// The bodies `read` names (every body when absent), as `{ID: [state]}` to fill.
@@ -190,7 +266,9 @@ struct Trace {
     /// Each output's body's position after each step.
     positions: BTreeMap<String, Vec<[f32; 3]>>,
     /// The occurrence list, each step's rows sorted (#1918).
-    occurrences: Vec<Row>,
+    occurrences: Vec<occurrence::Row>,
+    /// The list as #2011's shape uses, for `bake` with `occurrences: true`.
+    shaped: Vec<Value>,
 }
 
 /// What a run's world reads of its scene over `steps` steps, as its bake key holds it: `[]` when
@@ -221,6 +299,7 @@ impl Run {
             restore_any_version: false,
             round_hashes: false,
             key_without_rate: false,
+            table: &roles::TABLE,
             engine_order: false,
             build: crate::build(),
         };
@@ -233,6 +312,7 @@ impl Run {
             Some("hash_rounds_1e6") => run.round_hashes = true,
             Some("key_omits_frame_rate") => run.key_without_rate = true,
             Some("restore_ignores_version") => run.restore_any_version = true,
+            Some("role_table_pickup_solid") => run.table = &roles::PLANTED_SOLID_PICKUP,
             Some("occurrences_in_engine_order") => run.engine_order = true,
             Some(_) => return None,
         }
@@ -286,7 +366,7 @@ impl Run {
     /// The world `v` holds, built, or the issues that refuse it.
     fn build(&self, v: &Value) -> Result<(World, Rapier), Value> {
         let refused = |e: Vec<Refusal>| refused(&e);
-        let w = check(v, &self.caps).map_err(refused)?;
+        let w = check(v, &self.caps, self.table).map_err(refused)?;
         let mut b = Rapier {
             restore_any_version: self.restore_any_version,
             reverse_pairs: cfg!(feature = "test-reverse-pairs"),
@@ -305,7 +385,7 @@ impl Run {
         };
         let id = world.as_str()?;
         let doc = scene.get("worlds")?.get(id)?;
-        let read = check(doc, &self.caps).and_then(|w| Scene::read(scene, id, &w));
+        let read = check(doc, &self.caps, self.table).and_then(|w| Scene::read(scene, id, &w));
         Some(read.map(|s| (doc, Some(s))).map_err(|e| refused(&e)))
     }
 
@@ -352,7 +432,7 @@ impl Run {
                 .map_err(|r| Stop::Refused(json!({"ok": false, "issues": [issue(&r)]})))?;
             if self.engine_order {
                 t.occurrences
-                    .extend(b.occurrences().into_iter().map(|raw| Row {
+                    .extend(b.occurrences().into_iter().map(|raw| occurrence::Row {
                         step: k as u32,
                         raw,
                     }));
@@ -397,6 +477,7 @@ impl Run {
         );
         let outputs = bake::outputs(&t.positions, &rate, frame, w.step_rate, steps);
         let rank = occurrence::ranks(&w);
+        t.shaped = shape_uses(&t.occurrences, &w);
         let record = json!({"key": key, "step_hashes": t.step_hashes, "checkpoints": t.checkpoints, "outputs": outputs,
                             "occurrences": occurrence::listed(&t.occurrences),
                             "occurrences_hash": occurrence::hash(&t.occurrences, &rank)});
@@ -481,6 +562,9 @@ impl Run {
                                            "occurrences_hash": record["occurrences_hash"]});
                     if with_checkpoints {
                         reply["checkpoints"] = Value::Array(t.checkpoints);
+                    }
+                    if call.get("occurrences") == Some(&json!(true)) {
+                        reply["occurrences"] = Value::Array(t.shaped);
                     }
                     if dir.is_some() {
                         reply["reused"] = json!(false);
@@ -588,6 +672,41 @@ impl Run {
                 }))
             }
             "golden_verify" => self.verify(call),
+            "pairs" => {
+                Some(self.pairs(call.get("world")?, call.get("brief").unwrap_or(&json!({})))?)
+            }
+            "time" => {
+                let (w, mut b) = match self.build(call.get("world")?) {
+                    Ok(x) => x,
+                    Err(e) => return Some(e),
+                };
+                let mut ms = Vec::new();
+                let mut top = Vec::new();
+                for _ in 0..steps()? {
+                    let at = std::time::Instant::now();
+                    let stepped = b.step(&[], &Targets::default());
+                    ms.push(at.elapsed().as_secs_f64() * 1e3);
+                    if let Err(r) = stepped {
+                        return Some(json!({"ok": false, "issues": [issue(&r)]}));
+                    }
+                    top.push(most_tested(&w, &b));
+                }
+                Some(json!({"ok": true, "target": self.build.target, "ms": ms, "top": top}))
+            }
+            "time_build" => {
+                let built = self.build(call.get("world")?);
+                Some(TIMED.with(|t| match built {
+                    Ok(x) => {
+                        *t.borrow_mut() = Some((x.0, x.1, Vec::new()));
+                        json!({"ok": true, "target": self.build.target})
+                    }
+                    Err(e) => e,
+                }))
+            }
+            "time_end" => TIMED.with(|t| {
+                let (_, _, top) = t.borrow_mut().take()?;
+                Some(json!({"ok": true, "top": top}))
+            }),
             "golden_cross" => golden::cross(
                 call.get("golden")?,
                 call.get("machines")?.as_array()?,
@@ -600,6 +719,34 @@ impl Run {
     /// Replays a golden's world on this machine (Golden): each step's start asserts the control
     /// register; then the first step whose hash differs, and the first body and field that differ
     /// at the recording bake's first checkpoint at or after it.
+    /// physics.pairs over `world` against `brief` (`{touch?, never?}`), with the document check's refusals.
+    fn pairs(&self, world: &Value, brief: &Value) -> Option<Value> {
+        let locks = |k: &str| -> Option<Vec<[String; 2]>> {
+            brief.get(k).map_or(Some(Vec::new()), |v| {
+                v.as_array()?
+                    .iter()
+                    .map(|p| match p.as_array()?.as_slice() {
+                        [a, b] => Some([a.as_str()?.to_string(), b.as_str()?.to_string()]),
+                        _ => None,
+                    })
+                    .collect()
+            })
+        };
+        let brief = Brief {
+            touch: locks("touch")?,
+            never: locks("never")?,
+        };
+        let refused = |e: Vec<Refusal>| json!({"ok": false, "issues": e.iter().map(issue).collect::<Vec<_>>()});
+        let expanded = match roles::expand(world, self.table) {
+            Ok(x) => x,
+            Err(e) => return Some(refused(e)),
+        };
+        Some(match self.build(world) {
+            Ok((w, _)) => pairs(&w, &expanded.assumptions, &brief),
+            Err(e) => e,
+        })
+    }
+
     fn verify(&self, call: &Value) -> Option<Value> {
         let (g, world) = (call.get("golden")?, call.get("world")?);
         let shift = match call.get("shift") {
@@ -723,6 +870,18 @@ mod wasm {
     pub unsafe extern "C" fn deep_physics_free(ptr: *mut u8, len: usize) {
         // SAFETY: the caller gives back a room this module leaked with exactly this length and capacity.
         drop(unsafe { Vec::from_raw_parts(ptr, len, len) });
+    }
+
+    /// One step of the world `time_build` built, for a page that times it on its own clock: 1, or 0 without one.
+    #[no_mangle]
+    pub extern "C" fn deep_physics_step() -> u32 {
+        u32::from(super::timed_step())
+    }
+
+    /// Notes the step's most-tested pair, outside the timed step.
+    #[no_mangle]
+    pub extern "C" fn deep_physics_note() {
+        super::timed_note();
     }
 
     /// # Safety

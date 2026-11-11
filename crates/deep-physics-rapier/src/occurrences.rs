@@ -63,15 +63,17 @@ impl Rapier {
         out
     }
 
-    /// The sensor pairs overlapping now, each candidate tested on the poses the world holds:
-    /// Rapier sets a pair's flag only when the next step starts, a step after the overlap.
+    /// The sensor pairs overlapping now, each candidate whose collision groups interact tested
+    /// on the poses the world holds: Rapier sets a pair's flag only when the next step starts, a
+    /// step after the overlap.
     fn sensing(&self) -> Vec<Pair> {
         let mut out: Vec<Pair> = self
             .world
             .intersection_pairs()
             .filter(|(_, c1, _, c2, _)| {
-                intersection_test(c1.position(), c1.shape(), c2.position(), c2.shape())
-                    .is_ok_and(|i| i.intersecting)
+                c1.collision_groups().test(c2.collision_groups())
+                    && intersection_test(c1.position(), c1.shape(), c2.position(), c2.shape())
+                        .is_ok_and(|i| i.intersecting)
             })
             .map(|p| self.key(p.0, p.2))
             .collect();

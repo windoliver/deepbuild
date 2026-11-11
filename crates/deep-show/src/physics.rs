@@ -252,7 +252,7 @@ impl Hub<'_> {
         let run = Run::new(None).expect("the unplanted runner");
         let (mut lists, mut channels, mut arrays) = (Map::new(), Map::new(), Map::new());
         for (id, doc) in &worlds {
-            let w = check(doc, &RAPIER3D).map_err(|e| {
+            let w = check(doc, &RAPIER3D, &deep_canvas_physics::roles::TABLE).map_err(|e| {
                 refused(
                     id,
                     json!(e
@@ -304,7 +304,8 @@ mod tests {
         let world = json!({"kind": "physics.world@1", "capacity": {"bodies": 1, "shapes": 1, "joints": 0, "contacts": 0, "particles": 0},
             "shapes": {"ball": {"kind": "sphere", "radius": 0.1}}, "contact_materials": {"m": {"density": 100}},
             "bodies": {"ball": {"kind": "dynamic", "shapes": [{"shape": "ball", "contact_material": "m"}]}}});
-        let w = check(&world, &RAPIER3D).expect("the world checks");
+        let w =
+            check(&world, &RAPIER3D, &deep_canvas_physics::roles::TABLE).expect("the world checks");
         let state = |y: f64| json!({"pos": [0.0, y, 0.0], "linear": [0.0, 0.0, 0.0]});
         let bodies = json!({"ball": [state(1.0), state(0.9), state(0.9), state(0.7)]});
         let column = json!({"array": "lab.ball.position", "as": "f64", "part": "y"});

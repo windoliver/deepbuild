@@ -11,3 +11,5 @@ pub mod doc;
 pub mod golden;
 pub mod module;
 pub mod occurrence;
+pub mod pairs;
+pub mod roles;

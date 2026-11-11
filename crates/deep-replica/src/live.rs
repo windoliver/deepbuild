@@ -6,8 +6,9 @@
 //!
 //! Issue #1546: `deep-live --view <id> --out <file> --watch` shows the real app window on your hub's record instead,
 //! read through the app's one record reader on its tick, sends it no input and forces no frame, and writes one JSON
-//! line per frame the window draws, `{"frame", "at", "log_pos", "names"}`, after `{"ready": true, "at"}` once the
-//! reader has reached the hub. It runs until stopped.
+//! line per frame the window draws, `{"frame", "at", "log_pos", "names", "snapshot"}` (#2026: the replica's snapshot
+//! of that frame, with the menu bar's title), after `{"ready": true, "at"}` once the reader has reached the hub. It
+//! runs until stopped.
 
 fn main() {
     #[cfg(target_os = "macos")]
@@ -126,11 +127,11 @@ mod live {
         };
 
         use deep_app::{
-            hub,
+            hub, notify,
             record::{self, HubWatch, RecordReader},
             views::{Layout, Shell},
         };
-        use deep_replica::shell::window_options;
+        use deep_replica::{shell::window_options, snapshot::from_observed};
         use gpui_kit::{base::test_support::snapshots, *};
         use serde_json::json;
 
@@ -160,8 +161,11 @@ mod live {
                     let at = now();
                     // Once the frame is drawn, its elements are what it painted.
                     cx.defer(move |cx| {
-                        let names = handle
-                            .update(cx, |_, window, _| names_in(window, &view))
+                        // What it drew, as names and as the replica's snapshot with the menu bar's title (#2026).
+                        let (names, snapshot) = handle
+                            .update(cx, |_, window, _| {
+                                (names_in(window, &view), from_observed(window).to_json())
+                            })
                             .unwrap_or_default();
                         let mut line = match frames.get() {
                             None if !record::connected() => return,
@@ -171,9 +175,8 @@ mod live {
                         let frame = frames.get().map_or(0, |n| n + 1);
                         frames.set(Some(frame));
                         let log_pos = record::with_view(|v| v.log_pos).unwrap_or(0);
-                        line +=
-                            &json!({"frame": frame, "at": at, "log_pos": log_pos, "names": names})
-                                .to_string();
+                        line += &json!({"frame": frame, "at": at, "log_pos": log_pos, "names": names, "snapshot": snapshot})
+                            .to_string();
                         let _ = writeln!(out.borrow_mut(), "{line}");
                     });
                 };
@@ -238,13 +241,31 @@ mod live {
                 })
                 .expect("the window opens");
                 cx.activate(true);
-                // The reader's tick, as the app runs it: read the hub, then tell the views what moved.
+                // The reader's tick, as the app runs it: read the hub, say whether it answers and since when, then tell
+                // the views what moved and the menu bar's line (#2026).
                 cx.spawn(async move |cx| {
                     let mut watch = HubWatch::default();
+                    let mut shown = String::new();
                     loop {
                         cx.background_executor().timer(record::TICK).await;
                         watch.tick(now(), || record::read(Duration::from_millis(5)));
-                        cx.update(record::sync);
+                        let reach = notify::Reach {
+                            hub_down: watch.down(),
+                            since: watch.since(),
+                            ..notify::reach()
+                        };
+                        let reached = reach != notify::reach();
+                        if reached {
+                            notify::publish(reach);
+                        }
+                        cx.update(|cx| {
+                            record::sync(cx);
+                            let line = deep_app::menu_bar_line();
+                            if reached || line != shown {
+                                record::notify_views(cx);
+                                shown = line;
+                            }
+                        });
                     }
                 })
                 .detach();

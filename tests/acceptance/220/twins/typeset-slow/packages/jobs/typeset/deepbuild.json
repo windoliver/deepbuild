@@ -1,0 +1,26 @@
+{
+  "id": "deepbuild/typeset",
+  "version": "1.0.0",
+  "digest": "d1:0a0be81340cff3cbbad7c47cbfa3bc0ad5d89a971898b13c998a96884ca7403b",
+  "checks": [
+    "typeset.unknown_command",
+    "typeset.parts_apart",
+    "typeset.outlines"
+  ],
+  "jobs": [
+    "typeset"
+  ],
+  "job_tools": [
+    {
+      "kind": "typeset",
+      "tool": "typst-mitex@1.0.0"
+    }
+  ],
+  "requires": {
+    "preview": [
+      "deep.registerCheck",
+      "deep.registerJob",
+      "deep.registerJobTool"
+    ]
+  }
+}

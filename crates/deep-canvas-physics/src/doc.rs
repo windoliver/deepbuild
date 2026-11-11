@@ -63,11 +63,37 @@ pub struct Material {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Shape {
-    Sphere { radius: f64 },
-    Box { half: [f64; 3] },
-    Capsule { half_height: f64, radius: f64 },
-    Cylinder { half_height: f64, radius: f64 },
-    Plane { normal: [f64; 3] },
+    Sphere {
+        radius: f64,
+    },
+    Box {
+        half: [f64; 3],
+    },
+    Capsule {
+        half_height: f64,
+        radius: f64,
+    },
+    Cylinder {
+        half_height: f64,
+        radius: f64,
+    },
+    Plane {
+        normal: [f64; 3],
+    },
+    /// The hull of at most 64 points, rounded by `radius`.
+    Convex {
+        points: Vec<[f64; 3]>,
+        radius: f64,
+    },
+    /// Triangles over vertices; static only.
+    Mesh {
+        vertices: Vec<[f64; 3]>,
+        triangles: Vec<[u32; 3]>,
+    },
+    /// Other shapes of the world by ID, each at its pose.
+    Compound {
+        children: Vec<(String, Pose)>,
+    },
 }
 
 /// A rotation as written: a quaternion `[x, y, z, w]` or Euler degrees `[x, y, z]`.
@@ -234,6 +260,8 @@ pub struct World {
     pub contact_materials: BTreeMap<String, Material>,
     /// Steps between deep checkpoints (Checkpoint ring: `every`).
     pub checkpoint_every: u64,
+    /// ms: the 95th percentile of a step's time each host it ships to holds (World: `budget`).
+    pub step_p95: f64,
     pub groups: Vec<String>,
     pub shapes: BTreeMap<String, Shape>,
     pub bodies: BTreeMap<String, Body>,
@@ -604,6 +632,19 @@ impl Reader {
         );
         let checkpoint_every =
             self.num(cp, "every", "checkpoint", 60.0, 1.0, f64::from(u32::MAX)) as u64;
+        let budget = &self.obj(
+            m.get("budget").unwrap_or(&Value::Null),
+            "budget",
+            &["step_p95", "memory", "bake_10s"],
+        );
+        let step_p95 = self.num(
+            budget,
+            "step_p95",
+            "budget",
+            2.0,
+            f64::MIN_POSITIVE,
+            f64::MAX,
+        );
         let groups = self.groups(m);
         let mut shapes = BTreeMap::new();
         for (id, v) in self.map(m, "shapes") {
@@ -611,6 +652,7 @@ impl Reader {
                 shapes.insert(id.clone(), s);
             }
         }
+        self.children(&shapes);
         let mut bodies = BTreeMap::new();
         for (id, v) in self.map(m, "bodies") {
             let b = self.body(
@@ -655,6 +697,7 @@ impl Reader {
             defaults,
             contact_materials: materials,
             checkpoint_every,
+            step_p95,
             groups,
             shapes,
             bodies,
@@ -770,6 +813,23 @@ impl Reader {
         }
     }
 
+    /// A shape use's `member`: all groups when absent; an empty list, a member of no group, is
+    /// refused, naming the shape use (Collision group; #2011).
+    fn member(&mut self, m: &Map<String, Value>, path: &str, groups: &[String]) -> u32 {
+        if m.get("member")
+            .and_then(Value::as_array)
+            .is_some_and(Vec::is_empty)
+        {
+            self.refuse(
+                "physics.no_group",
+                join(path, "member"),
+                &m["member"],
+                format!("shape {path} is a member of no collision group; name at least one, or give it a role"),
+            );
+        }
+        self.mask(m, "member", path, groups)
+    }
+
     /// The bit mask of the group names at `key`; all bits when absent.
     fn mask(&mut self, m: &Map<String, Value>, key: &str, path: &str, groups: &[String]) -> u32 {
         let Some(v) = m.get(key) else { return u32::MAX };
@@ -801,7 +861,21 @@ impl Reader {
     }
 
     fn shape(&mut self, v: &Value, p: &str) -> Option<Shape> {
-        let s = &self.obj(v, p, &["kind", "radius", "half", "half_height", "normal"]);
+        let s = &self.obj(
+            v,
+            p,
+            &[
+                "kind",
+                "radius",
+                "half",
+                "half_height",
+                "normal",
+                "points",
+                "vertices",
+                "triangles",
+                "children",
+            ],
+        );
         let kind = s.get("kind").and_then(Value::as_str).unwrap_or("");
         let pos = f64::MIN_POSITIVE;
         Some(match kind {
@@ -822,14 +896,88 @@ impl Reader {
             "plane" => Shape::Plane {
                 normal: self.vec3(s, "normal", p, [0.0, 1.0, 0.0]),
             },
-            "convex" | "mesh" | "heightfield" | "compound" => {
+            "convex" => {
+                let points = self.points(s, "points", p)?;
+                if points.len() < 4 || points.len() > 64 {
+                    self.refuse(
+                        "out_of_range",
+                        join(p, "points"),
+                        &s["points"],
+                        format!("a convex shape takes 4 to 64 points, not {}", points.len()),
+                    );
+                    return None;
+                }
+                Shape::Convex {
+                    points,
+                    radius: self.num(s, "radius", p, 0.0, 0.0, f64::MAX),
+                }
+            }
+            "mesh" => {
+                let vertices = self.points(s, "vertices", p)?;
+                let tp = join(p, "triangles");
+                let triangles = s
+                    .get("triangles")
+                    .and_then(Value::as_array)
+                    .and_then(|a| {
+                        a.iter()
+                            .map(|t| {
+                                let t = t.as_array().filter(|t| t.len() == 3)?;
+                                let i = |k: usize| {
+                                    t[k].as_u64()
+                                        .filter(|&i| (i as usize) < vertices.len())
+                                        .map(|i| i as u32)
+                                };
+                                Some([i(0)?, i(1)?, i(2)?])
+                            })
+                            .collect::<Option<Vec<_>>>()
+                    })
+                    .filter(|t| !t.is_empty());
+                let Some(triangles) = triangles else {
+                    self.refuse(
+                        "out_of_range",
+                        tp,
+                        s.get("triangles").unwrap_or(&Value::Null),
+                        "a mesh's triangles must be a list of three indices into its vertices"
+                            .into(),
+                    );
+                    return None;
+                };
+                Shape::Mesh {
+                    vertices,
+                    triangles,
+                }
+            }
+            "compound" => {
+                let cp = join(p, "children");
+                let Some(list) = s
+                    .get("children")
+                    .and_then(Value::as_array)
+                    .filter(|a| !a.is_empty())
+                else {
+                    self.refuse(
+                        "out_of_range",
+                        cp,
+                        s.get("children").unwrap_or(&Value::Null),
+                        "a compound's children must be a list of {shape, pose}".into(),
+                    );
+                    return None;
+                };
+                let mut children = Vec::new();
+                for (i, c) in list.iter().enumerate() {
+                    let at = format!("{cp}/{i}");
+                    let m = &self.obj(c, &at, &["shape", "pose"]);
+                    let id = m.get("shape").and_then(Value::as_str).unwrap_or("");
+                    children.push((id.to_string(), self.pose(m.get("pose"), &at)));
+                }
+                Shape::Compound { children }
+            }
+            "heightfield" => {
                 self.refuse(
                     "physics.unsupported",
                     join(p, "kind"),
                     &s["kind"],
-                    format!(
-                        "a {kind} shape isn't built by this backend interface yet; #927 brings it"
-                    ),
+                    "a heightfield shape isn't built by this backend interface yet; #927 brings it"
+                        .into(),
                 );
                 return None;
             }
@@ -838,11 +986,62 @@ impl Reader {
                     "out_of_range",
                     join(p, "kind"),
                     s.get("kind").unwrap_or(&Value::Null),
-                    "a shape's kind must be sphere, box, capsule, cylinder or plane".into(),
+                    "a shape's kind must be sphere, box, capsule, cylinder, plane, convex, mesh or compound".into(),
                 );
                 return None;
             }
         })
+    }
+
+    /// A list of points `[x, y, z]` at `key`, or its refusal.
+    fn points(&mut self, m: &Map<String, Value>, key: &str, p: &str) -> Option<Vec<[f64; 3]>> {
+        let got = m.get(key).and_then(Value::as_array).and_then(|a| {
+            a.iter()
+                .map(|x| {
+                    let x = x.as_array().filter(|x| x.len() == 3)?;
+                    Some([x[0].as_f64()?, x[1].as_f64()?, x[2].as_f64()?])
+                })
+                .collect::<Option<Vec<_>>>()
+        });
+        if got.is_none() {
+            self.refuse(
+                "out_of_range",
+                join(p, key),
+                m.get(key).unwrap_or(&Value::Null),
+                format!("{} must be a list of points [x, y, z]", show(&join(p, key))),
+            );
+        }
+        got
+    }
+
+    /// A compound's children name shapes of the world that a compound can hold: no mesh, plane or
+    /// other compound.
+    fn children(&mut self, shapes: &BTreeMap<String, Shape>) {
+        for (id, s) in shapes {
+            let Shape::Compound { children } = s else {
+                continue;
+            };
+            for (i, (child, _)) in children.iter().enumerate() {
+                let at = format!("shapes/{id}/children/{i}/shape");
+                match shapes.get(child) {
+                    None => self.refuse(
+                        "ref_unresolved",
+                        at,
+                        &Value::from(child.as_str()),
+                        format!("{child:?} is not a shape of this world"),
+                    ),
+                    Some(Shape::Mesh { .. } | Shape::Plane { .. } | Shape::Compound { .. }) => {
+                        self.refuse(
+                            "out_of_range",
+                            at,
+                            &Value::from(child.as_str()),
+                            format!("{child} is a mesh, a plane or a compound, which a compound can't hold"),
+                        )
+                    }
+                    Some(_) => {}
+                }
+            }
+        }
     }
 
     fn pose(&mut self, v: Option<&Value>, p: &str) -> Pose {
@@ -997,7 +1196,7 @@ impl Reader {
                 shape,
                 offset: self.pose(m.get("offset"), &join(&up, "offset")),
                 material,
-                member: self.mask(m, "member", &up, groups),
+                member: self.member(m, &up, groups),
                 collides: self.mask(m, "collides", &up, groups),
                 sensor: self.flag(m, "sensor", &up, false),
             });

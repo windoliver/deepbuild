@@ -1,0 +1,47 @@
+{
+  "name": "shelf",
+  "version": "1.0.3",
+  "license": "MIT",
+  "description": "A planted pack of the #202 acceptance suite: a kind named slab@1, the first-party name.",
+  "requires": {
+    "core": ">=0.0.0",
+    "modules": {
+      "marks2d": ">=0.0.0"
+    }
+  },
+  "recipes": {
+    "shelf.bookcase@1": "shelf.bookcase@1.json"
+  },
+  "kinds": {
+    "slab@1": {
+      "minor": 0,
+      "recipe": "shelf.bookcase@1",
+      "children": [],
+      "capabilities": {
+        "pickable": true,
+        "snap": false
+      },
+      "rules": [],
+      "migrate": {},
+      "examples": [
+        "0452354c79c0009107a902f40d06b0e5bf359ec1d5bbd4537eeb7a7550cf0d20"
+      ],
+      "cost": {
+        "class": "figure",
+        "at_defaults": {
+          "cpu_ms": 0.5,
+          "gpu_ms": 0.2,
+          "items": 7
+        }
+      }
+    }
+  },
+  "assets": [
+    {
+      "path": "examples/defaults.json",
+      "sha256": "0452354c79c0009107a902f40d06b0e5bf359ec1d5bbd4537eeb7a7550cf0d20",
+      "size": 400,
+      "license": "MIT"
+    }
+  ]
+}

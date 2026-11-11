@@ -1,7 +1,8 @@
 //! The backend interface (World and backend): what the physics module asks of a backend, in this
-//! crate's own types only, so no engine type crosses it. `query`, `move_character` and
-//! `drive_vehicle` join it with the issues that run them (#1919, #182, #251); the hash reads
-//! `canonical` (golden.rs).
+//! crate's own types only, so no engine type crosses it. `occurrences` reports what a step wrote
+//! (#2011's sensor entries and exits, #1918's other kinds), which the module sorts; `query`,
+//! `move_character` and `drive_vehicle` join it with the issues that run them (#1919, #182,
+//! #251); the hash reads `canonical` (golden.rs).
 
 use std::collections::BTreeMap;
 
@@ -52,6 +53,13 @@ pub struct BodyState {
 pub struct State {
     pub step: u64,
     pub bodies: Vec<BodyState>,
+}
+
+/// One shape use: its body's ID and its index among the body's shapes.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct ShapeRef {
+    pub body: String,
+    pub index: usize,
 }
 
 /// The fields of a body's canonical state, in canonical order: pose, then velocity (Checkpoint

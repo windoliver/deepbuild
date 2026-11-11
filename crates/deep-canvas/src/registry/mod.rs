@@ -746,6 +746,8 @@ pub struct Registrar {
     pub entries: Vec<lists::EntryDef>,
     /// Its Rust for the entries it fills in the core's `outline.source@1`, by entry name (#443).
     pub outline_fills: Vec<(String, crate::outline::Fill)>,
+    /// The pack fields it reads, each with its check at the pack check (#1720).
+    pub pack_fields: Vec<(String, crate::document::packs::module_fields::PackField)>,
 }
 
 impl Registrar {
@@ -1042,19 +1044,6 @@ impl Registrar {
         self
     }
 
-    /// Fills an entry of the core's `outline.source@1` (#443): its value, which the registry's kit
-    /// holds to its item's 2D fill, and its own Rust, which `extrude` reads outlines through.
-    pub fn outline_source(
-        &mut self,
-        name: &str,
-        value: Value,
-        fill: crate::outline::Fill,
-    ) -> &mut Self {
-        self.entry(crate::outline::REGISTRY, name, value, "R6");
-        self.outline_fills.push((name.into(), fill));
-        self
-    }
-
     /// A GPU pass that fills the items of `kind` with its WGSL fragment shader.
     pub fn gpu_pass(
         &mut self,
@@ -1157,6 +1146,10 @@ pub enum Fault {
     /// Declares `export.target@1` in the media module instead of the core (#501): the core
     /// declares none, so a build without media refuses every other module's target.
     ExportTargetInMedia,
+    /// Declares `gpu.output@1` in the effects module instead of the core, which fills today's
+    /// outputs there too (#485): a build without effects leaves scene3d's outputs with no
+    /// registry.
+    GpuOutputInEffects,
 }
 
 /// The module that declares `ease@1` in the planted layout that moves it out of the core, which
@@ -2938,6 +2931,10 @@ impl Registry {
         if self.fault == Some(Fault::ExportTargetInMedia) {
             core_registries.retain(|d| d.name != "export.target@1");
         }
+        let outputs_elsewhere = self.fault == Some(Fault::GpuOutputInEffects);
+        if outputs_elsewhere {
+            core_registries.retain(|d| d.name != "gpu.output@1");
+        }
         core_registries.extend(self.declared.iter().cloned());
         let mut core_entries: Vec<lists::EntryDef> =
             core_lists::entries(self.fault == Some(Fault::BaseStepsElsewhere))
@@ -2946,6 +2943,9 @@ impl Registry {
                 .collect();
         if eases {
             core_entries.extend(core_lists::ease_entries(self.fault == Some(Fault::EaseRenumbered)));
+        }
+        if outputs_elsewhere {
+            core_entries.retain(|e| e.registry != "gpu.output@1");
         }
         let (registries, parts) = lists::seal(
             core_registries,

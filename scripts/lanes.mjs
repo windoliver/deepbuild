@@ -260,6 +260,8 @@ alone.push('tests/acceptance/1455/');
 alone.push('tests/acceptance/505/', 'tests/acceptance/505-oracle/');
 // #1653's files each build deep-canvas-render and draw with Vello CPU, as #467's do: one file at a time.
 alone.push('tests/acceptance/1653/', 'tests/acceptance/1653-redraft-ac2-flip/');
+// #536's files each build deep-canvas-render and draw with Vello CPU, as #1653's do: one file at a time.
+alone.push('tests/acceptance/536/');
 // #535's files each build deep-show (one also without the logic module) and #544's assembler, and draw on the GPU.
 alone.push('tests/acceptance/535/');
 // #1479's files build deep-canvas-render and draw with GPUI's offscreen renderer, as #385's do.
@@ -300,6 +302,9 @@ alone.push('tests/acceptance/501/', 'tests/acceptance/501-redraft-ac10/');
 timed.push('tests/acceptance/501/budgets.test.ts');
 // #1818's files each build deep-show and mix seconds of audio through the media processors.
 alone.push('tests/acceptance/1818/');
+// #1720's files build deep-show and deep-hook, start and restart hubs and lay out an installed tree; so do the
+// #1718 tests it redrafts.
+alone.push('tests/acceptance/1720/', 'tests/acceptance/1718-redraft-1720/');
 // #1461's files build deep-drive plain and with env-plants, start real hubs and many replicas; its AC1 and AC14 file and
 // its AC28 file open the real app's window, with Accessibility and Screen Recording, by hand; its AC9 file is timed.
 alone.push('tests/acceptance/1461/');
@@ -341,6 +346,9 @@ timed.push('tests/acceptance/408-redraft-ac5/machines.test.ts');
 // #1819's files each build deep-show, start a hub and the bakes plug-in's model host on its fixed port 8719, and run
 // pinned open models on CPU: one file at a time.
 alone.push('tests/acceptance/1819/');
+// #502's files each build deep-show, export films through the GPU and the encode tool and speak their fixture with
+// `say`; onsets.test.ts also starts a hub and the model host on its fixed port 8719: one file at a time.
+alone.push('tests/acceptance/502/', 'tests/acceptance/502-oracle/');
 byHand.push('tests/acceptance/408/machines.test.ts');
 // #405's files each build deep-show. Criterion 4 runs from its redraft, which also builds it in release on a machine
 // that can judge a timing now and times the geometry audit and determinism hashing against the lane's rule; the
@@ -353,8 +361,15 @@ byHand.push('tests/acceptance/405/budgets.test.ts');
 alone.push('tests/acceptance/1936/');
 // #544's files build deep-logic and deep-show, draw on the GPU, export a film, and build deep-logic for Linux x86_64 in Docker.
 alone.push('tests/acceptance/544/');
+// #202's files each build deep-show (and the budgets the merge base too); its budgets time the check, kind_rules and
+// the kind kit.
+alone.push('tests/acceptance/202/');
+timed.push('tests/acceptance/202/budgets.test.ts');
 // #2015's file builds deep-show in the full set and runs it on a plate and a recipe pack.
 alone.push('tests/acceptance/2015/');
+// #220's files start hubs, build deep-show in the full set and time the typeset tool's own process.
+alone.push('tests/acceptance/220/');
+timed.push('tests/acceptance/220/budgets.test.ts');
 // #1976's file builds deep-gpu and clicks 200 seeded rays through seven views of a plane and a sphere.
 alone.push('tests/acceptance/1976/');
 // #1405's spin and QoS files read a two-thread bench's count at load above the cores, and its proof runs a real budget
@@ -369,6 +384,25 @@ timed.push('tests/acceptance/1575/budgets.test.ts', 'tests/acceptance/1575-redra
 alone.push('tests/acceptance/1964/');
 // #1723's files each start a real hub whose gate runs a document check through the canvas core, under a 480 s wait.
 alone.push('tests/acceptance/1723/');
+// #504's files each build deep-show or deep-motion with cargo, and criterion 2's hub test starts a hub and agents.
+alone.push('tests/acceptance/504/');
+// #504's blind redrafts of criteria 1, 2 and 8 each build deep-show or deep-motion with cargo; criterion 2's starts a
+// hub and an agent stand-in.
+alone.push('tests/acceptance/504-redraft-ac1/', 'tests/acceptance/504-redraft-ac2/', 'tests/acceptance/504-redraft-ac8/');
+// #2026's files build the replica and deep-live plain and planted and run a hub over 30 days of history; three judge
+// wall-clock limits (Needs you's load, a replayed ask within 1 s, the hub-down line within 2 s).
+// The first draft's AC3 file is kept by hand: its wrong program, the app's reader keeping its place by event ID, can't
+// fail under the design, since the hub raises the replayed request's ask as a new event; its blind redraft runs in its place.
+alone.push('tests/acceptance/2026/', 'tests/acceptance/2026-redraft-ac3/');
+timed.push('tests/acceptance/2026/load.test.ts', 'tests/acceptance/2026/outage.test.ts', 'tests/acceptance/2026-redraft-ac3/replay.test.ts');
+byHand.push('tests/acceptance/2026/replay.test.ts');
+// #1056's files build deep-gpu and draw #464's pixel fixtures; records.test.ts runs #464's two-GPU tests.
+alone.push('tests/acceptance/1056/');
+// #404's parts: #1897's files each build deep-show in their own feature set and hold the GPU for the pixel hash;
+// #1899's and #1903's build deep-gpu with test-meter, as #377's and #379's do; #2189's and its criterion-1 redraft
+// build deep-gpu for release and draw on this Mac's Metal GPU, so no two device runs share it.
+alone.push('tests/acceptance/1897/', 'tests/acceptance/1899/', 'tests/acceptance/1903/');
+alone.push('tests/acceptance/2189/', 'tests/acceptance/2189-redraft-ac1/');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
