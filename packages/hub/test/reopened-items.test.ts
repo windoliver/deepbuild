@@ -20,7 +20,13 @@ const ISSUE = { ...workIssue(7), body: `The auth middleware still accepts expire
 const DRAFT = workDraft(7, { requirements: [req('R1', CRITERIA[0], { source_line: 'item-7#L3', check: EXPIRED.check, asserts: EXPIRED.asserts })] });
 const T: Thread = { id: 'PRRT_kwDOAcme1633r', path: 'src/auth.js', line: 3, comment: { id: 16339, author: REVIEWER, body: 'Name the reason a token was rejected in the 401 body.' }, resolvedBy: null };
 const PR_BODY = 'Part of #7, R1 to prove';
-const answers = (resolvedBy: string | null): Answer[] => prAnswers([{ n: 21, body: PR_BODY, threads: [{ ...T, resolvedBy }] }]) as unknown as Answer[];
+/** Who resolved T at a stop (null: unresolved), and whether GitHub tells the hub its signed-in account then. */
+type Seen = string | null | { by: string; signedIn: false };
+const answers = (seen: Seen): Answer[] => {
+  const by = seen !== null && typeof seen === 'object' ? seen.by : seen;
+  const all = prAnswers([{ n: 21, body: PR_BODY, threads: [{ ...T, resolvedBy: by }] }]) as unknown as Answer[];
+  return seen !== null && typeof seen === 'object' ? all.map((a) => (a.path === '/user' ? { ...a, status: 500, body: { message: 'Server Error' } } : a)) : all;
+};
 const namesT = (e: Ev): boolean => strings(e.data).some((x) => x.includes(T.id));
 const asksForT = (events: readonly Ev[], since = 0): Ev[] => events.filter((e) => e.kind === 'ask.created' && e.log_pos > since && namesT(e));
 
@@ -28,7 +34,7 @@ const asksForT = (events: readonly Ev[], since = 0): Ev[] => events.filter((e) =
  * Opens PR 21, then makes one stop per entry of `resolved` (who resolved T at it, null: unresolved), calling `between`
  * after each. `deadline`: the exception asks' deadline in your settings, in place of the world's.
  */
-async function play(resolved: (string | null)[], between?: (n: number, events: Ev[], w: World, hub: Hub) => Promise<void>, deadline?: string): Promise<{ ref: string; hub: Hub; stops: { since: number; events: Ev[] }[] }> {
+async function play(resolved: Seen[], between?: (n: number, events: Ev[], w: World, hub: Hub) => Promise<void>, deadline?: string): Promise<{ ref: string; hub: Hub; stops: { since: number; events: Ev[] }[] }> {
   const w = makeWorld({ drafts: [DRAFT], readings: [ISSUE], answers: answers(resolved[0]!), files: EXPIRED.files });
   if (deadline) {
     const config = JSON.parse(readFileSync(join(w.root, 'config.json'), 'utf8')) as { asks: { deadline: Record<string, string> } };
@@ -220,6 +226,23 @@ describe('#1633 review rounds: a reopened review note and its ask', () => {
     // An ask is raised apart from the claim: give one the time it would take to land.
     const last = await settle(hub, () => false, 5000);
     expect(asksForT(last, defaulted), 'that was decided when the thread was unresolved, as for a note never held, so the same question never reaches you twice').toEqual([]);
+  }, 900_000);
+
+  it('a note reopened while its resolver can\'t be told apart, then held by the session\'s own account, gets its new accept ask once the thread is unresolved', async () => {
+    let defaulted = 0;
+    const { ref, stops } = await play([null, REVIEWER, { by: REVIEWER, signedIn: false }, YOU_GH, null], async (n, events, _w, hub) => {
+      // The first stop's accept ask takes its default, keep, at its one-minute deadline: you never answered it.
+      if (n !== 0) return;
+      const [ask] = asksForT(events);
+      expect(ask, `the first stop raised an accept ask for ${T.id}`).toBeDefined();
+      const all = await settle(hub, (e) => e.some((x) => x.kind === 'ask.defaulted' && x.subject === `ask:${ask!.id}`), 150_000);
+      expect(all.some((x) => x.kind === 'ask.defaulted' && x.subject === `ask:${ask!.id}`), 'the ask defaults at its deadline').toBe(true);
+      defaulted = await lastPos(hub);
+    }, '1m');
+    const item = itemsOf(stops[2]!.events, ref).find(namesT)!;
+    expect(isOpen(stops[2]!.events, item), 'with no signed-in account to tell whose the resolution is, it opens again').toBe(true);
+    const fifth = stops[4]!;
+    expect(asksForT(fifth.events, defaulted).length, 'it opened again, none is open for T and you never answered one, so its note gets one new accept ask, as when the account is known throughout').toBe(1);
   }, 900_000);
 
   it('a note whose ask you answered "keep it open" opens again when its thread is unresolved after a reviewer resolved it, with no new ask', async () => {

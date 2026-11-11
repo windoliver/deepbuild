@@ -56,7 +56,8 @@ interface ClaimRead {
 interface Found extends Omit<LeftOpen, 'from'> { from: LeftOpen['from'] | 'review_thread'; resolved_by?: string }
 /**
  * An item as the record has it. `resolved_by`: who its newest opening says resolved its thread, the session's own
- * account, which raised no ask then; `reopened`: that opening came after a closing.
+ * account, which raised no ask then; `reopened`: it opened again after a closing while that account held its thread
+ * resolved, and every opening since says so too: its ask is owed as an item opened again.
  */
 interface Standing { item: string; text: string; from: string; open: boolean; by: string | null; resolved_by: string | null; closing: string | null; reopened: boolean }
 
@@ -88,7 +89,7 @@ export class OpenItems {
       const d = JSON.parse(row.data) as Obj;
       const item = String(d.item);
       const was = out.get(item);
-      if (row.kind === 'open_item.opened') out.set(item, { item, text: String(d.text), from: String(d.from), open: true, by: null, resolved_by: typeof d.resolved_by === 'string' ? d.resolved_by : null, closing: null, reopened: was !== undefined && !was.open });
+      if (row.kind === 'open_item.opened') out.set(item, { item, text: String(d.text), from: String(d.from), open: true, by: null, resolved_by: typeof d.resolved_by === 'string' ? d.resolved_by : null, closing: null, reopened: was !== undefined && typeof d.resolved_by === 'string' && (!was.open || was.reopened) });
       else if (was) out.set(item, { ...was, open: false, by: String(d.by), closing: row.id });
     }
     return out;
