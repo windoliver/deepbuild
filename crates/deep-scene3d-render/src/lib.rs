@@ -8,6 +8,7 @@
 //! target and writes the slot.
 
 pub mod ao;
+mod backdrop;
 pub mod cull;
 pub mod created;
 mod diag;
@@ -183,6 +184,8 @@ pub struct Planted {
     pub cascade_cache_keeps_stale: bool,
     /// #422: the environment prefiltered one roughness mip per frame from the session's first.
     pub prefilter_over_frames: bool,
+    /// #503: a video background's frame prefiltered into the environment, keyed per frame.
+    pub video_prefilters_environment: bool,
     /// #1174: screen-size labels draw in the geometry pass at the internal size, before the
     /// upscale, as the base drew them.
     pub labels_before_upscale: bool,
@@ -1873,9 +1876,11 @@ pub struct Renderer {
     cluster_buffer: wgpu::Buffer,
     /// The environment's prefilter and cubes (#422).
     env: EnvState,
-    /// Whether this frame has a sky, which draws first; its pipeline once compiled (#422).
+    /// Whether this frame has a sky, which draws first; its pipeline once compiled (#422); the
+    /// video background that draws in its place (#503).
     sky: bool,
     sky_pipeline: Option<wgpu::RenderPipeline>,
+    backdrop: backdrop::Backdrop,
     /// This frame's puffs, back to front, and their pipeline once compiled (#422).
     puffs: Option<(wgpu::Buffer, u32)>,
     puff_pipeline: Option<wgpu::RenderPipeline>,
@@ -2693,40 +2698,6 @@ pub(crate) fn op_blend_pipeline(
     )
 }
 
-/// The sky's pipeline: a full-screen triangle at the far plane, behind everything, writing no
-/// depth and no object ID.
-fn sky_pipeline(
-    d: &deep_gpu::counted::Wgpu,
-    samples: u32,
-    module: &wgpu::ShaderModule,
-    layout: &wgpu::PipelineLayout,
-    forward_z: bool,
-) -> wgpu::RenderPipeline {
-    let depth = wgpu::DepthStencilState {
-        format: DEPTH,
-        depth_write_enabled: Some(false),
-        depth_compare: Some(if forward_z {
-            wgpu::CompareFunction::LessEqual
-        } else {
-            wgpu::CompareFunction::GreaterEqual
-        }),
-        stencil: Default::default(),
-        bias: Default::default(),
-    };
-    let targets = [target(LINEAR, None), target(IDS_MS, None)];
-    culled(
-        d,
-        samples,
-        SKY_PASS,
-        Some(layout),
-        module,
-        ("sky_vs", &[]),
-        Some(("sky_fs", &targets)),
-        Some(depth),
-        None,
-    )
-}
-
 /// The line, point and text pipelines, each compiled the first time a batch draws its family, so
 /// a patch that adds a family compiles a new pipeline and one that changes only values doesn't.
 struct Families {
@@ -3366,6 +3337,7 @@ impl Renderer {
             env,
             sky: false,
             sky_pipeline: None,
+            backdrop: Default::default(),
             puffs: None,
             puff_pipeline: None,
             solid_layout: mesh_layout.clone(),
@@ -4008,9 +3980,12 @@ impl Renderer {
     fn prepare_env(&mut self, device: &Device, scene: &Scene, camera: &[f64; 16]) {
         let mut u = EnvUniform::zeroed();
         u.moon[3] = 2.0;
+        // #503's planted video_prefilters_environment: the video's frame is the source.
+        let video = backdrop::planted_source(self.planted.video_prefilters_environment, scene);
         let wanted = scene.sky.as_ref().and_then(|s| {
             let e = s.environment.as_ref()?;
-            Some((env::key(s, &e.from, e.size), e))
+            let key = video.map_or_else(|| env::key(s, &e.from, e.size), |v| v.0);
+            Some((key, e))
         });
         let mut rebuilt = false;
         match wanted {
@@ -4026,7 +4001,8 @@ impl Renderer {
                 let partial = self.planted.prefilter_over_frames;
                 let behind = self.env.cube.as_ref().is_some_and(|c| c.filled < c.mips);
                 if self.env.cube.as_ref().map(|c| c.key) != Some(key) || (partial && behind) {
-                    let source = env::source(sky, &e.from);
+                    let source = (video.map(|v| backdrop::equirect(v.1)))
+                        .unwrap_or_else(|| env::source(sky, &e.from));
                     let filled = match (&self.env.cube, partial) {
                         (Some(c), true) if c.key == key => Some(c.filled + 1),
                         (_, true) => Some(1),
@@ -5744,7 +5720,7 @@ impl Renderer {
         self.sky = scene.sky.as_ref().is_some_and(|s| s.draws_background());
         self.prepare_puffs(device, scene);
         if self.sky && self.sky_pipeline.is_none() {
-            self.sky_pipeline = Some(sky_pipeline(
+            self.sky_pipeline = Some(backdrop::sky_pipeline(
                 &device.device,
                 self.families.samples,
                 &self.scene_module,
@@ -5753,6 +5729,12 @@ impl Renderer {
             ));
             self.compiled += 1;
             self.names.push(SKY_PASS);
+        }
+        let shader = (self.families.samples, self.planted.forward_z);
+        let view = (&camera, internal);
+        if (self.backdrop).prepare(device, scene, view, &self.row_groups, shader) {
+            self.compiled += 1;
+            self.names.push(backdrop::PASS);
         }
         self.prepare_lights(device, scene, policy, dropped);
         if let Some(m) = self.shadow.clip {
@@ -8105,14 +8087,16 @@ impl Renderer {
     /// The sky's draw this frame, when it has one (#422).
     fn sky_draw(&self) -> Option<SkyDraw> {
         let p = self.sky_pipeline.clone().filter(|_| self.sky)?;
+        // The solids' layout holds the maps' group 3 since #423; a video background its own.
+        let maps = || (p, self.maps.by_index(0).clone());
+        let (p, group) = self.backdrop.draw().unwrap_or_else(maps);
         Some((
             p,
             [
                 self.frame_bind.clone(),
                 self.lights_bind.clone(),
                 self.ao.shade().clone(),
-                // The solids' layout holds the maps' group 3 since #423.
-                self.maps.by_index(0).clone(),
+                group,
             ],
         ))
     }
