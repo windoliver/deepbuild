@@ -2,7 +2,7 @@
   "uri": "deep://schedule/core@0.0.0",
   "core": "core@0.0.0",
   "build_set": "r2",
-  "set_digest": "9de4386fedfd9e3b3658745ff7c6c92a6373aee2607263c903450c51b26a5b58",
+  "set_digest": "c8978d35af7a86099d247d0896b45b9e8c813f8afbd0726200ccbdd279b7f00e",
   "interfaces": {
     "cells@1": {
       "digest": "5135370a4e353acec15fa8b5b3964084440a827188dea0bca29c796669a50bad",
@@ -34,7 +34,7 @@
       }
     },
     "data@1": {
-      "digest": "a743bfa040d3d697e65bb0de3eb2c4a6065d7ee983c1eb51dcd25cee5161cf49",
+      "digest": "b2095ca927d1a61295a9c0ceccafba49b656370fa1ddf538afb199b7a212a959",
       "reference": "data",
       "kit": [
         "fixtures",
@@ -445,6 +445,20 @@
         "per": "item"
       },
       {
+        "operator": "data.columns",
+        "module": "data",
+        "version": "1.0.0",
+        "reads": [
+          "self",
+          "t"
+        ],
+        "writes": [
+          "data.columns",
+          "data.mapped"
+        ],
+        "per": "item"
+      },
+      {
         "operator": "look.palette",
         "module": "look",
         "version": "1.0.0",
@@ -839,6 +853,7 @@
   },
   "contributions": {
     "core.fields": [
+      "data.columns",
       "motion.fields"
     ],
     "core.glyphs": [

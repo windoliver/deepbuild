@@ -615,39 +615,8 @@ pub enum ImageSampling {
     Cubic,
 }
 
-/// #1653: the atlas cell an image draws in place of its whole asset (Mark set: atlas tiles): cell
-/// `index` in row-major order of `cell`-px cells laid from `margin`, `separation` apart, turned by
-/// `flip`'s bits (h 1, v 2, transpose 4; transpose first). Whoever decodes the atlas resolves it
-/// against its width, so a sample never leaves the cell.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct AtlasCell {
-    pub index: u64,
-    pub cell: [f64; 2],
-    pub margin: [f64; 2],
-    pub separation: [f64; 2],
-    pub flip: u8,
-}
-
-impl AtlasCell {
-    /// The cell's `[x, y, w, h]` in an atlas of `[width, height]` px, or `None` for a cell the
-    /// atlas doesn't hold.
-    pub fn rect(&self, [width, height]: [u32; 2]) -> Option<[f64; 4]> {
-        let [cw, ch] = self.cell;
-        if cw < 1.0 || ch < 1.0 {
-            return None;
-        }
-        let step = [cw + self.separation[0], ch + self.separation[1]];
-        let columns = ((f64::from(width) - self.margin[0] + self.separation[0]) / step[0]).floor();
-        if columns < 1.0 {
-            return None;
-        }
-        let columns = columns as u64;
-        let (col, row) = (self.index % columns, self.index / columns);
-        let x = self.margin[0] + col as f64 * step[0];
-        let y = self.margin[1] + row as f64 * step[1];
-        (y + ch <= f64::from(height)).then_some([x, y, cw, ch])
-    }
-}
+/// #1653: the atlas cell an image draws, laid out where atlas sets are.
+pub use crate::atlas::AtlasCell;
 
 /// A styled span of a text's one shaped run (`runs: [{from, to, role}]`): graphemes `[from, to)`
 /// painted in `role`. It changes no glyph, so the run is shaped once and kerns across it.
@@ -1057,6 +1026,8 @@ pub enum Mark {
         adjust: Adjust,
         /// #1653: the atlas cell it draws, for a row of an atlas set.
         tile: Option<AtlasCell>,
+        /// #535: degrees it turns about the centre of `bounds`, x toward y.
+        turn: f64,
     },
 }
 
@@ -1089,7 +1060,8 @@ impl Drawn {
     pub fn extent(&self) -> [f64; 4] {
         let grown = |b: [f64; 4], m: f64| [b[0] - m, b[1] - m, b[2] + 2.0 * m, b[3] + 2.0 * m];
         let b = match &self.mark {
-            Mark::Rect { bounds, .. } | Mark::Image { bounds, .. } => *bounds,
+            Mark::Rect { bounds, .. } => *bounds,
+            Mark::Image { bounds, turn, .. } => crate::turn::turned_box(*bounds, *turn),
             Mark::Circle { center, r, .. } => [center[0] - r, center[1] - r, 2.0 * r, 2.0 * r],
             Mark::Path {
                 geometry, offset, ..
@@ -1340,6 +1312,7 @@ impl Mark {
                 opacity,
                 adjust,
                 tile,
+                turn,
                 ..
             } => {
                 // An asset enters by its sha256, as every asset does.
@@ -1364,6 +1337,10 @@ impl Mark {
                         .for_each(|v| {
                             k.number(*v);
                         });
+                }
+                // Unturned is the default, so an image without a turn keeps its key.
+                if *turn != 0.0 {
+                    k.text("turn").number(*turn);
                 }
                 k.number(*opacity);
                 if !adjust.is_identity() {
@@ -2757,7 +2734,8 @@ fn boxes_of(frame: &Frame, items: &Map<String, Value>) -> BTreeMap<String, [f64;
     let mut own: BTreeMap<String, [f64; 4]> = BTreeMap::new();
     for drawn in frame.layers.iter().flat_map(|l| &l.marks) {
         let b = match &drawn.mark {
-            Mark::Rect { bounds, .. } | Mark::Image { bounds, .. } => *bounds,
+            Mark::Rect { bounds, .. } => *bounds,
+            Mark::Image { bounds, turn, .. } => crate::turn::turned_box(*bounds, *turn),
             Mark::Circle { center, r, .. } => [center[0] - r, center[1] - r, 2.0 * r, 2.0 * r],
             Mark::Path {
                 geometry, offset, ..
@@ -5071,16 +5049,20 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
                 Some(Value::String(s)) if s == "cubic" => ImageSampling::Cubic,
                 Some(_) => return refuse("bad_doc", format!("{path}/params/sampling")),
             };
+            // #535: `at.rot`'s z (degrees) turns the image about its origin.
+            let turn = num(item.pointer("/at/rot/2")).unwrap_or(0.0);
+            let origin = place.at([0.0, 0.0]);
             vec![Mark::Image {
                 item: id.clone(),
                 asset: asset.to_ascii_lowercase(),
-                bounds: place.rect(bounds),
+                bounds: crate::turn::about(place.rect(bounds), origin, turn),
                 fit,
                 sampling,
                 crop: four(params.get("crop")),
                 opacity: num(params.get("opacity")).unwrap_or(1.0).clamp(0.0, 1.0),
                 adjust: Adjust::default(),
                 tile: None,
+                turn,
             }]
         }
         _ => vec![match kind {

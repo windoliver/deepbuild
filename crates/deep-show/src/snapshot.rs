@@ -148,7 +148,10 @@ impl Drawn {
         let mut out: Vec<(String, [f64; 4])> = Vec::new();
         for drawn in self.frame.layers.iter().flat_map(|l| &l.marks) {
             let b = match &drawn.mark {
-                Mark::Rect { bounds, .. } | Mark::Image { bounds, .. } => *bounds,
+                Mark::Rect { bounds, .. } => *bounds,
+                Mark::Image { bounds, turn, .. } => {
+                    deep_canvas_marks::turn::turned_box(*bounds, *turn)
+                }
                 Mark::Circle { center, r, .. } => [center[0] - r, center[1] - r, 2.0 * r, 2.0 * r],
                 Mark::Text { spec, origin, .. } => [
                     origin[0],
@@ -250,6 +253,8 @@ pub struct Renderer {
     pub raster_2d: (RenderSettings, RasterizerSettings),
     /// #1485: each image asset the last frame drew, decoded, so the next frame decodes only what's new.
     kept: std::collections::HashMap<deep_images::Key, Arc<Pixmap>>,
+    /// #535 AC6's planted renderer: an atlas row turns about its quad's corner.
+    corner: bool,
 }
 
 fn color(c: Rgb) -> AlphaColor<Srgb> {
@@ -267,6 +272,21 @@ fn rect_path(b: [f64; 4], radius: f64) -> BezPath {
 pub struct Batch {
     pub key: String,
     pub items: Vec<String>,
+    /// #535: an atlas's run of rows, the rows it drew.
+    pub instances: Option<usize>,
+}
+
+/// #535: the atlas an atlas set's row draws from, outside any clip: rows next to each other in
+/// stacking order that share it draw as one instanced batch.
+fn atlas_of(d: &scene::Drawn) -> Option<&str> {
+    match &d.mark {
+        Mark::Image {
+            asset,
+            tile: Some(_),
+            ..
+        } if d.clip.is_none() => Some(asset),
+        _ => None,
+    }
 }
 
 /// The item a mark draws for: its ID, without a part after `#`.
@@ -406,12 +426,13 @@ fn decode_all(
             return unfit("ref_unresolved", path());
         };
         let size = deep_images::shared().size(&store, &hash).or_else(|r| unfit(code(r), path()))?;
-        // #1653: an atlas row shows its cell (its flip bits aren't drawn here yet).
+        // #1653: an atlas row shows its cell, turned by its flip bits (#535).
         let cell = tile.as_ref().map(|t| t.rect(size).map(|r| r.map(|v| v as u32)));
         let Some(cut) = cell.unwrap_or_else(|| deep_images::crop_px(*crop, size)) else {
             continue;
         };
-        let mut key = deep_images::Key { hash, crop: cut, flip: 0, level: 0 };
+        let flip = tile.as_ref().map_or(0, |t| t.flip);
+        let mut key = deep_images::Key { hash, crop: cut, flip, level: 0 };
         let to = fit.fitted(*bounds, key.shown());
         key.level = deep_images::level_for(key.shown(), [to[2], to[3]]);
         if drawn.insert(key) {
@@ -461,7 +482,13 @@ impl Renderer {
             videos: BTreeMap::new(),
             raster_2d: (deep_marks_vello::settings(), deep_marks_vello::rasterizer()),
             kept: std::collections::HashMap::new(),
+            corner: false,
         }
+    }
+
+    /// #535: the planted renderer that turns an atlas row about its quad's corner, when `corner`.
+    pub fn turning_about_corner(self, corner: bool) -> Self {
+        Renderer { corner, ..self }
     }
 
     /// `doc` evaluated at `t` and its draw list, with every image decoded.
@@ -589,6 +616,31 @@ impl Renderer {
         let mut i = 0;
         while i < marks.len() {
             let d = marks[i];
+            if let Some(atlas) = atlas_of(d).filter(|_| key_of(d).is_none()) {
+                let mut end = i + 1;
+                while end < marks.len()
+                    && atlas_of(marks[end]) == Some(atlas)
+                    && marks[end].scopes == d.scopes
+                {
+                    end += 1;
+                }
+                ctx.set_transform(at);
+                scopes.enter(&mut ctx, &mut self.resources, &d.scopes);
+                let mut items: Vec<String> = Vec::new();
+                for m in &marks[i..end] {
+                    self.mark(&mut ctx, &m.mark, drawn, at);
+                    items.push(item_of(&m.mark).to_string());
+                }
+                items.sort_unstable();
+                items.dedup();
+                batches.push(Batch {
+                    key: format!("atlas:{atlas}"),
+                    items,
+                    instances: Some(end - i),
+                });
+                i = end;
+                continue;
+            }
             let Some((key, _)) = key_of(d) else {
                 ctx.set_transform(at);
                 scopes.enter(&mut ctx, &mut self.resources, &d.scopes);
@@ -610,6 +662,7 @@ impl Renderer {
                 batches.push(Batch {
                     key: key.clone(),
                     items,
+                    instances: None,
                 });
             }
             i = end;
@@ -825,7 +878,7 @@ impl Renderer {
                 adjust,
                 crop,
                 tile,
-                ..
+                turn,
             } => {
                 // #1486: a still picture draws the level the drawing's scale takes, cut as its
                 // request is; a video's frame draws whole, cut by its crop.
@@ -873,6 +926,18 @@ impl Renderer {
                 // #499: a crop (image px) is the part of the picture the box shows.
                 let [cx, cy, cw, ch] = cut;
                 let [x, y, w, h] = fit.fitted(*bounds, shown);
+                // #535: a turned image draws turned about its box's centre; the planted renderer
+                // turns an atlas row about its quad's top-left corner.
+                if *turn != 0.0 {
+                    let corner = [bounds[0], bounds[1], 0.0, 0.0];
+                    let about = if self.corner && tile.is_some() {
+                        corner
+                    } else {
+                        *bounds
+                    };
+                    let turned = deep_canvas_marks::turn::turn_of(about, *turn);
+                    ctx.set_transform(at * Affine::new(turned));
+                }
                 ctx.set_paint(Image {
                     image: ImageSource::Pixmap(pixmap.clone()),
                     sampler: ImageSampler {
@@ -894,6 +959,7 @@ impl Renderer {
                 );
                 ctx.fill_rect(&shown);
                 ctx.reset_paint_transform();
+                ctx.set_transform(at);
             }
         }
     }
@@ -1207,11 +1273,13 @@ mod tests {
             vec![
                 Batch {
                     key: "k".into(),
-                    items: ids(&["c1", "c2"])
+                    items: ids(&["c1", "c2"]),
+                    instances: None,
                 },
                 Batch {
                     key: "k".into(),
-                    items: ids(&["c4"])
+                    items: ids(&["c4"]),
+                    instances: None,
                 },
             ],
             "c1 and c2 draw as one batch; c3's taller bars draw alone; c4, past `gap`, starts another; c5 and c6's ramps keep them out"

@@ -2,7 +2,7 @@
   "uri": "deep://schedule/core@0.0.0",
   "core": "core@0.0.0",
   "build_set": "full",
-  "set_digest": "d3a88904ca29b49b542628f6f924cd551240c4c962bf80c03b6cc8ef8e5bf8f7",
+  "set_digest": "da96b089318efeafd767db049f8ee261aa61554bdc80a93bb31c65e30d67f56b",
   "interfaces": {
     "building@1": {
       "digest": "0d13ed593138e9ee44e857752ef4b2a0392f03bc17c10b4f99b48746f6d580e1",
@@ -63,7 +63,7 @@
       }
     },
     "data@1": {
-      "digest": "a743bfa040d3d697e65bb0de3eb2c4a6065d7ee983c1eb51dcd25cee5161cf49",
+      "digest": "b2095ca927d1a61295a9c0ceccafba49b656370fa1ddf538afb199b7a212a959",
       "reference": "data",
       "kit": [
         "fixtures",
@@ -172,6 +172,35 @@
       "module": "input",
       "implementation": {
         "name": "input",
+        "version": "1.0.0",
+        "pins": {},
+        "equivalence": "bit",
+        "state": "canonical"
+      }
+    },
+    "logic@1": {
+      "digest": "8905fd3b732dfa94de4bea62a96a48dc5e2bfd887765fd226b5aad6bc6978281",
+      "reference": "logic",
+      "kit": [
+        "fixtures",
+        "clean_rebuild",
+        "patch_fuzz",
+        "read_set",
+        "order",
+        "schedule",
+        "repair_loop",
+        "carried_state",
+        "late_entry",
+        "time_order",
+        "contribution",
+        "catalog",
+        "migration",
+        "bit"
+      ],
+      "behavior": "none",
+      "module": "logic",
+      "implementation": {
+        "name": "logic",
         "version": "1.0.0",
         "pins": {},
         "equivalence": "bit",
@@ -601,6 +630,20 @@
         "per": "item"
       },
       {
+        "operator": "data.columns",
+        "module": "data",
+        "version": "1.0.0",
+        "reads": [
+          "self",
+          "t"
+        ],
+        "writes": [
+          "data.columns",
+          "data.mapped"
+        ],
+        "per": "item"
+      },
+      {
         "operator": "look.palette",
         "module": "look",
         "version": "1.0.0",
@@ -1022,6 +1065,7 @@
   },
   "contributions": {
     "core.fields": [
+      "data.columns",
       "motion.fields"
     ],
     "core.glyphs": [

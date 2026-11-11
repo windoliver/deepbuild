@@ -724,27 +724,20 @@ impl<C: Glyphs> Painter<'_, C> {
                 opacity,
                 adjust,
                 tile,
+                turn,
             } => {
                 let looks = (*opacity, adjust);
                 let placed = (*bounds, *fit, self.zoom);
-                let (pixmap, [w, h], to) = match self.kept {
-                    Some(kept) => kept.borrow_mut().pixmap(
-                        self.store,
-                        hash,
-                        (*crop, tile.as_ref()),
-                        looks,
-                        placed,
-                        item,
-                    )?,
-                    None => asset::Kept::default().pixmap(
-                        self.store,
-                        hash,
-                        (*crop, tile.as_ref()),
-                        looks,
-                        placed,
-                        item,
-                    )?,
-                };
+                let mut fresh = asset::Kept::default();
+                let mut kept = self.kept.map(|k| k.borrow_mut());
+                let kept = kept.as_deref_mut().unwrap_or(&mut fresh);
+                let cut = (*crop, tile.as_ref());
+                let (pixmap, [w, h], to) =
+                    kept.pixmap(self.store, hash, cut, looks, placed, item)?;
+                // #535: a turned image draws turned about its box's centre.
+                let unturned = self.ctx.transform();
+                let t = deep_canvas_marks::turn::turn_of(*bounds, *turn);
+                self.ctx.set_transform(unturned * Affine::new(t));
                 self.ctx.set_paint(
                     Image {
                         image: ImageSource::Pixmap(pixmap),
@@ -762,6 +755,7 @@ impl<C: Glyphs> Painter<'_, C> {
                     self.ctx.fill_rect(&shown);
                 }
                 self.ctx.reset_paint_transform();
+                self.ctx.set_transform(unturned);
             }
         }
         Ok(())
