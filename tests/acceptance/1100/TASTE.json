@@ -1,0 +1,9 @@
+{
+  "issue": 1100,
+  "criterion": "#1100.616f99b5",
+  "verdict": null,
+  "who": null,
+  "when": null,
+  "files": {},
+  "note": "No call recorded yet. A person fills this in once, on the files one check run of shown.test.ts wrote to $DA1100_SCREENS: verdict looks_right or looks_wrong, who, when, and files with each file's name and SHA-256, first-launch-1512x982-light.png and run.json."
+}
