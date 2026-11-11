@@ -1,0 +1,24 @@
+Base commit: b726c8be8 ("design(#154): score.music@1 as built: the plan call, per-stem render job, list inputs, loop
+points in the stem, score.pitch as an output check"), main 3c36f9180 plus that one design commit; no implementation of #154.
+Built first: npm ci; npm run build --workspaces; cargo build --locked -p deep-hook; cargo build --locked --bin deep-show
+(rustup's toolchain, CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0), through scripts/throttle.mjs build and scripts/lease.
+Command: node node_modules/vitest/vitest.mjs run --root tests/acceptance/154-oracle-redraft --testTimeout=600000 --no-file-parallelism
+Date: 2026-11-10  Machine: macOS 27.2 (arm64)  Node: v24.22.2  vitest 5.0.5. <repo> is the worktree.
+Result: Test Files 1 failed (1); Tests 1 failed (1); 10.6 s.
+
+The one test failed for the expected reason, at the named assertion in ../154-redraft/helpers.ts installScore. Before it,
+the world opened: a test CA and leaf were made, the take server listened on 127.0.0.1, the hub started (deep hub run,
+ready), deep mcp answered initialize, and deep-show built. The base has no packages/jobs/score:
+
+ FAIL  sample-accurate.test.ts > AC2 #154.8b0e5b99 (Oracle: web-platform-tests/wpt 2f57f45d21 webaudio/the-audio-api/
+       the-audiobuffersourcenode-interface/sample-accurate-scheduling.html) each note starts on exactly its scheduled
+       sample > AC2 #154.8b0e5b99 sample-accurate scheduling, ported: nine notes at upstream's offsets each start on
+       exactly their sample and nowhere else, left and right match, nine found and none misplaced
+AssertionError: the first-party plug-in deepbuild/score is at packages/jobs/score (Score: As built (#154)): there is no
+packages/jobs/score/deepbuild.json: expected false to be true // Object.is equality
+ ❯ installScore ../154-redraft/helpers.ts
+ ❯ scoreWorld ../154-redraft/helpers.ts
+ ❯ sample-accurate.test.ts
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)

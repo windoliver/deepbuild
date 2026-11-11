@@ -1211,6 +1211,8 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 || *p == deep_canvas_motion::module::UNDECLARED_KIND_ACCEPTED
                 || deep_canvas_motion::module::PLANTED.contains(p)
                 || deep_canvas_marks::arrays::PLANTED.contains(p)
+                // #1967's wrong programs live in the cells module's playback and conversion.
+                || deep_canvas_cells::recording::PLANTED.contains(p)
         })
         .map(str::to_string);
     // #433's wrong programs are twins of the familiar@1 pack.

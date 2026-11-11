@@ -3,7 +3,7 @@
 // app and the replica fold those events, and deep, deep status and deep inbox read the `rows` table they project, from
 // the hub or, with it down, from its database. So every reader holds the same rows, words and order at one log_pos.
 import { SECTION } from './list.js';
-import { repoOf, type Reading } from './status.js';
+import { repoOf, sessionStates, WORDS, type Fact, type Reading } from './status.js';
 
 /** A row as every reader shows it (row.set's data, less `listed` and `order`): @1 for a session or an ask, @2 for a running job (#1925). */
 export interface Row {
@@ -46,7 +46,7 @@ export interface RunningJob { key: string; kind: string; tool: string; started: 
 const TIME_LEFT_AFTER = 30_000;
 
 /** A length of time as every surface writes it (crates/deep-app/src/states.rs: span): "40 s", "12 min", "3 h", "2 d". */
-export function span(ms: number): string {
+function span(ms: number): string {
   const s = Math.floor(Math.max(0, ms) / 1000);
   return s >= 86_400 ? `${Math.floor(s / 86_400)} d` : s >= 3600 ? `${Math.floor(s / 3600)} h` : s >= 60 ? `${Math.floor(s / 60)} min` : `${s} s`;
 }
@@ -55,7 +55,7 @@ export function span(ms: number): string {
  * The time a running job has left by the rate its tool's counter measured so far, once its run is 30 s old: none
  * before, with no counter, or with nothing done yet. Never a guess from elapsed time alone.
  */
-export function timeLeft(job: RunningJob): number | undefined {
+function timeLeft(job: RunningJob): number | undefined {
   if (!job.counter || job.at === undefined || job.at - job.started < TIME_LEFT_AFTER) return undefined;
   const [done, total] = 'percent' in job.counter ? [job.counter.percent, 100] : [job.counter.done, job.counter.total];
   return done > 0 ? ((total - done) * (job.at - job.started)) / done : undefined;
@@ -78,15 +78,60 @@ export function jobRow(job: RunningJob): Row {
 }
 
 /** Each state of the one reading, with the states table's word and status-map entry (crates/deep-app/src/states.rs: TABLE). */
-const ENTRY: Record<Reading['state'], string> = { 'needs you': 'needs_you', stuck: 'blocked', flagged: 'fail', working: 'running', finished: 'idle', quiet: 'idle' };
-/** The order of states, what needs you first. */
-const RANK: Record<Reading['state'], number> = { 'needs you': 0, stuck: 1, flagged: 2, working: 3, finished: 4, quiet: 5 };
+const ENTRY: Record<Reading['state'], string> = {
+  'needs you': 'needs_you', stuck: 'blocked', flagged: 'fail', 'sent back': 'fail', BLOCKED: 'blocked', INVALID: 'invalid', INCONCLUSIVE: 'inconclusive', stale: 'stale',
+  'says done': 'running', working: 'running', queued: 'idle', PASS: 'pass', finished: 'idle', quiet: 'idle',
+};
+/** The order of states inside a section of the list (list.ts: SECTION), what needs you first: one digit each, so a row's place sorts by its bytes. */
+const RANK: Record<Reading['state'], number> = {
+  'needs you': 0, stuck: 1, flagged: 2, BLOCKED: 3, INVALID: 4, INCONCLUSIVE: 5, stale: 6,
+  'sent back': 1, 'says done': 2, working: 3, queued: 4, PASS: 3, finished: 4, quiet: 5,
+};
 /** An agent by the name a person knows it by, for a session with no task to title it. */
 const AGENTS: Record<string, string> = { 'claude-code': 'Claude Code', codex: 'Codex' };
 /** What kind of ask a row is, in a few words. */
 const KINDS: Record<string, string> = { taste: 'a taste call', authority: 'an approval', unblock: 'something only you can clear', exception: 'an exception', choice: 'a choice', definition: 'a definition to approve' };
 /** Each state a session's first sighting is unread in: what ended badly (#1461). */
 const FIRST_UNREAD = new Set(['stuck', 'flagged', 'interrupted']);
+/** How much of a first prompt's first line names a session no one named (#2018). */
+const PROMPT_NAME = 60;
+
+/**
+ * Each session's one name (#2018), the same on every surface: the name you gave it, else its task's title, else its
+ * agent's own title for it, else the first line of its first prompt cut to 60 characters. A session with none of
+ * them, one that hasn't been prompted yet, has no entry.
+ */
+async function sessionNames(query: Query, ids: readonly string[]): Promise<Map<string, string>> {
+  const names = new Map<string, string>();
+  if (!ids.length) return names;
+  const of = ids.map(quote).join(', ');
+  const yours = new Map<string, string>();
+  const agents = new Map<string, string>();
+  for (const n of (await query(`SELECT session_id, json_extract(data, '$.name') AS name, json_extract(data, '$.by') AS by FROM events WHERE kind = 'session.named' AND session_id IN (${of}) ORDER BY log_pos`)) as { session_id: string; name: string; by: string }[]) (n.by === 'you' ? yours : agents).set(n.session_id, n.name);
+  // A session's task is the first task.created that names it, as the app reads it.
+  const tasks = new Map<string, string>();
+  for (const t of (await query(`SELECT thread, title FROM tasks WHERE thread IN (${of}) AND title IS NOT NULL ORDER BY created DESC`)) as { thread: string; title: string }[]) tasks.set(t.thread, t.title);
+  for (const id of ids) {
+    const named = yours.get(id) ?? tasks.get(id) ?? agents.get(id);
+    if (named) { names.set(id, named); continue; }
+    // Its first prompt of its own, read through the session index, which stops at the first one.
+    const [first] = (await query(`SELECT json_extract(data, '$.text') AS text FROM events INDEXED BY events_session WHERE session_id = ${quote(id)} AND kind = 'user.ask' AND json_extract(data, '$.from') <> 'subagent' AND trim(json_extract(data, '$.text')) <> '' ORDER BY log_pos LIMIT 1`)) as { text: string }[];
+    const line = first?.text.split(/\r?\n/).map((l) => l.trim()).find((l) => l);
+    // By code point, so an emoji is never cut in half.
+    if (line) names.set(id, [...line].slice(0, PROMPT_NAME).join(''));
+  }
+  return names;
+}
+
+/**
+ * Each session row's title as it's shown, by row ID, from every session row's name: the name, with the session's
+ * short ID after it only where another session's row would otherwise read the same (#2018).
+ */
+export function distinctTitles(names: ReadonlyMap<string, string>): Map<string, string> {
+  const count = new Map<string, number>();
+  for (const name of names.values()) count.set(name, (count.get(name) ?? 0) + 1);
+  return new Map([...names].map(([id, name]) => [id, count.get(name)! > 1 ? `${name} · ${id.slice('session:'.length, 'session:'.length + 8)}` : name]));
+}
 
 type Query = (sql: string) => Promise<unknown[]>;
 const quote = (v: string): string => `'${v.replace(/'/g, "''")}'`;
@@ -102,12 +147,7 @@ const parsed = <T>(v: unknown, fallback: T): T => {
  * the record's table gives each one's words, never whether it is open.
  */
 export async function buildRows(query: Query, readings: readonly Reading[], open: readonly string[]): Promise<Row[]> {
-  const ids = readings.map((r) => quote(r.id)).join(', ');
-  const titles = new Map<string, string>();
-  if (ids) {
-    // A session's task is the first task.created that names it, as the app reads it.
-    for (const t of (await query(`SELECT thread, title FROM tasks WHERE thread IN (${ids}) AND title IS NOT NULL ORDER BY created DESC`)) as { thread: string; title: string }[]) titles.set(t.thread, t.title);
-  }
+  const titles = await sessionNames(query, readings.map((r) => r.id));
   const projects = new Map<string, string | null>();
   const projectOf = (worktree: string | null, project: string | null): string | null => {
     const key = `${worktree ?? ''}\n${project ?? ''}`;
@@ -118,7 +158,7 @@ export async function buildRows(query: Query, readings: readonly Reading[], open
     const project = projectOf(r.worktree, r.project_id);
     const row: Row = {
       id: `session:${r.id}`, address: `session/${r.id}`, title: titles.get(r.id) ?? AGENTS[r.agent ?? ''] ?? r.agent ?? 'agent', project, session: r.id, agent: r.agent,
-      entry: ENTRY[r.state], word: r.state, why: r.plain, waits_on: r.state === 'needs you' || r.state === 'stuck' ? 'you' : r.state === 'working' ? 'agent' : null,
+      entry: ENTRY[r.state], word: r.state, why: r.plain, waits_on: r.waits_on,
       since: r.since, actions: [], unread: FIRST_UNREAD.has(r.cause) || FIRST_UNREAD.has(r.state),
     };
     return row;
@@ -139,6 +179,33 @@ export async function buildRows(query: Query, readings: readonly Reading[], open
   return rows;
 }
 
+/**
+ * Why a session reads as it does (#2018): its row's ID, word and why, the row of the state table that matched, each
+ * record fact that row read (event kind, time and log_pos) and, for each word above its own in the table's order, the
+ * fact that word's rows lacked.
+ */
+export interface Why { id: string; title: string; project: string | null; word: string; why: string; rule: string; facts: Fact[]; lacked: { row: string; fact: string }[] }
+
+/**
+ * Why the session `session` names reads as it does, among the list's `rows`: by its ID, its row's ID, or the start of
+ * its ID when one session's alone. The word, the why and the facts come from the one reading (status.ts:
+ * sessionStates), the call that picks every row's state, never from a second one.
+ */
+export async function whyOf(query: Query, now: number, session: string, rows: readonly Row[]): Promise<Why | { refused: string }> {
+  const named = session.replace(/^session:/, '');
+  const sessions = rows.filter((r) => r.id.startsWith('session:'));
+  const exact = sessions.filter((r) => r.session === named);
+  const found = exact.length ? exact : named ? sessions.filter((r) => r.session.startsWith(named)) : [];
+  if (found.length !== 1) return { refused: found.length ? `${found.length} sessions' IDs start with ${named}: give more of the ID.` : 'No session has that ID: deep status --json lists each row with its session.' };
+  const row = found[0]!;
+  const [reading] = await sessionStates(query, now, new Set([row.session]));
+  if (!reading) return { refused: 'The record holds no event of that session.' };
+  // Each word above its own, once, with what every row of that word lacked.
+  const above = WORDS.slice(0, WORDS.indexOf(reading.state));
+  const lacked = above.map((word) => ({ row: word as string, fact: reading.lacked.filter((l) => l.state === word).map((l) => l.fact).join('; ') }));
+  return { id: row.id, title: row.title, project: row.project, word: reading.state, why: reading.plain, rule: reading.rule, facts: reading.facts, lacked };
+}
+
 /** A row's content but its unread and since, which a change of state alone moves. */
 const content = (r: Row): string => JSON.stringify({ ...r, unread: undefined, since: undefined });
 
@@ -154,7 +221,8 @@ export function settle(before: ReadonlyMap<string, Placed>, built: readonly Row[
     const was = before.get(r.id)?.row;
     const moved = was !== undefined && (was.word !== r.word || was.entry !== r.entry);
     const row: Row = { ...r, since: was && !moved ? was.since : r.since, unread: !was ? (first ? r.unread : true) : moved || was.unread };
-    if (!was || content(was) !== content(row) || was.since !== row.since || was.unread !== row.unread) set.push({ order: orderOf(row), row });
+    const order = orderOf(row);
+    if (!was || content(was) !== content(row) || was.since !== row.since || was.unread !== row.unread || before.get(r.id)!.order !== order) set.push({ order, row });
   }
   return set;
 }
