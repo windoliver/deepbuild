@@ -58,6 +58,7 @@ mod shared;
 mod snapshot;
 mod spawn;
 mod spatial;
+mod terrain;
 mod terminal;
 #[cfg(feature = "test-machines")]
 mod test_machines;
@@ -583,6 +584,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         "geometry" => return geometry::parse(c).map(|g| Call::Geometry(Box::new(g))),
         "kinds" => return Some(Call::KindSchemas),
         "spatial" => return spatial::parse(c).map(|s| Call::Spatial(Box::new(s))),
+        "terrain_rays" => return terrain::parse(c).map(|r| Call::TerrainRays(Box::new(r))),
         "packs" => return Some(Call::Packs),
         "install_pack" => {
             return Some(Call::InstallPack {
