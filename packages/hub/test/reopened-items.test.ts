@@ -136,6 +136,29 @@ describe('#1633 review rounds: a reopened review note and its ask', () => {
     expect(asksForT(last, defaulted), 'nothing changed about the open note, so the same question never reaches you twice').toEqual([]);
   }, 900_000);
 
+  it('a note that opens again while the session\'s own account holds its thread resolved gets its new accept ask once the thread is unresolved, and only once', async () => {
+    let defaulted = 0;
+    let owed = 0;
+    const { ref, hub, stops } = await play([null, REVIEWER, YOU_GH, null, null], async (n, events, _w, hub) => {
+      // The first stop's accept ask, then the one the fourth raises, each take their default, keep, at the deadline.
+      if (n !== 0 && n !== 3) return;
+      const [ask] = asksForT(events, n === 0 ? 0 : defaulted);
+      expect(ask, `stop ${n + 1} raised an accept ask for ${T.id}`).toBeDefined();
+      const all = await settle(hub, (e) => e.some((x) => x.kind === 'ask.defaulted' && x.subject === `ask:${ask!.id}`), 150_000);
+      expect(all.some((x) => x.kind === 'ask.defaulted' && x.subject === `ask:${ask!.id}`), 'the ask defaults at its deadline').toBe(true);
+      if (n === 0) defaulted = await lastPos(hub);
+      else owed = await lastPos(hub);
+    }, '1m');
+    const [, , third, fourth] = stops;
+    const item = itemsOf(third!.events, ref).find(namesT)!;
+    expect(isOpen(third!.events, item), 'a reviewer closed it, so seen again it opens again, resolved by the session\'s own account').toBe(true);
+    expect(asksForT(third!.events, third!.since), 'the agent\'s own resolution raises no accept ask').toEqual([]);
+    expect(asksForT(fourth!.events, fourth!.since).length, 'unresolved, none is open for T and you never answered one, so its reopened note gets one new accept ask').toBe(1);
+    // An ask is raised apart from the claim: give one the time it would take to land.
+    const last = await settle(hub, () => false, 5000);
+    expect(asksForT(last, owed), 'that ask passed its deadline too, so the same question never reaches you a third time').toEqual([]);
+  }, 1_200_000);
+
   it('a note whose ask you answered "keep it open" opens again when its thread is unresolved after a reviewer resolved it, with no new ask', async () => {
     let kept = 0;
     const { ref, stops } = await play([null, REVIEWER, null], async (n, events, w, hub) => {
