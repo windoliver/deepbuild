@@ -365,6 +365,8 @@ alone.push('tests/acceptance/544/');
 // the kind kit.
 alone.push('tests/acceptance/202/');
 timed.push('tests/acceptance/202/budgets.test.ts');
+// #1957's file builds deep-show and offers it pack graphs.
+alone.push('tests/acceptance/1957/');
 // #2015's file builds deep-show in the full set and runs it on a plate and a recipe pack.
 alone.push('tests/acceptance/2015/');
 // #220's files start hubs, build deep-show in the full set and time the typeset tool's own process.
