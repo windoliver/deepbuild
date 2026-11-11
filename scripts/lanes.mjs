@@ -459,6 +459,8 @@ byHand.push('tests/acceptance/154/stems.test.ts');
 // reading against the lane's rule.
 alone.push('tests/acceptance/1700/');
 timed.push('tests/acceptance/1700/budgets.test.ts');
+// #409's files each build deep-show and export films through the GPU; 409-oracle also runs the outside film gate.
+alone.push('tests/acceptance/409/', 'tests/acceptance/409-oracle/');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
