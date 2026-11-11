@@ -310,6 +310,8 @@ alone.push('tests/acceptance/1720/', 'tests/acceptance/1718-redraft-1720/');
 alone.push('tests/acceptance/1461/');
 byHand.push('tests/acceptance/1461/shell.test.ts', 'tests/acceptance/1461/shown.test.ts');
 timed.push('tests/acceptance/1461/budget.test.ts');
+// #2018's files build deep-drive plain and with env-plants, and start real hubs and many replicas.
+alone.push('tests/acceptance/2018/');
 // #1922's files each start a hub that installs sandboxed plug-ins and runs their job tools through the supervisor,
 // counting the record's process starts around each deep_job call: one file at a time.
 alone.push('tests/acceptance/1922/');
@@ -326,6 +328,9 @@ timed.push('tests/acceptance/1942/budgets.test.ts', 'tests/acceptance/1942/stall
 // #1945's files each start a hub on this Mac's Lima VMs and make a throwaway user there, cut every SSH connection of
 // that user for a minute, and run root plans with its sudo password: one file at a time.
 alone.push('tests/acceptance/1945/');
+// #1943's files restart user services on this Mac's Lima VMs and judge check runs against deadlines there: one file at
+// a time.
+alone.push('tests/acceptance/1943/');
 // #1983's files run the x86_64 lane, which builds deep-logic in linux/amd64 and linux/arm64 containers under emulation,
 // and read the container runtime's image list, which another file's container run could change.
 alone.push('tests/acceptance/1983/');
@@ -370,6 +375,8 @@ alone.push('tests/acceptance/202/');
 timed.push('tests/acceptance/202/budgets.test.ts');
 // #1957's file builds deep-show and offers it pack graphs.
 alone.push('tests/acceptance/1957/');
+// #1961's files build deep-show and patch an open document to another version of its pack.
+alone.push('tests/acceptance/1961/');
 // #2015's file builds deep-show in the full set and runs it on a plate and a recipe pack.
 alone.push('tests/acceptance/2015/');
 // #220's files start hubs, build deep-show in the full set and time the typeset tool's own process.
@@ -387,6 +394,8 @@ alone.push('tests/acceptance/1575/', 'tests/acceptance/1575-redraft-ac1/');
 timed.push('tests/acceptance/1575/budgets.test.ts', 'tests/acceptance/1575-redraft-ac1/budgets.test.ts');
 // #1964's files build deep-canvas-render and draw styled runs with Vello CPU.
 alone.push('tests/acceptance/1964/');
+// #1963's files each build deep-canvas-render and check quoted code and formulas against stored sources.
+alone.push('tests/acceptance/1963/');
 // #1723's files each start a real hub whose gate runs a document check through the canvas core, under a 480 s wait.
 alone.push('tests/acceptance/1723/');
 // #504's files each build deep-show or deep-motion with cargo, and criterion 2's hub test starts a hub and agents.
@@ -421,8 +430,21 @@ timed.push('tests/acceptance/2011/ac2-step-budget.test.ts');
 // #547's files build deep-logic and bake 108,000 and 72,000 steps; AC4 judges 20 seeks of a recorded match against 2 s.
 alone.push('tests/acceptance/547/');
 timed.push('tests/acceptance/547/ac4-keyframes.test.ts');
+// #1967's files build deep-show, and determinism renders each side's canonical picture on the GPU.
+alone.push('tests/acceptance/1967/');
 // #407's files each build deep-show (carried.test.ts also with test-hold-min-2s); 407-oracle builds it too.
 alone.push('tests/acceptance/407/', 'tests/acceptance/407-oracle/');
+// #1956's files each build deep-show (r1) and install the shelf pack's versions in order.
+alone.push('tests/acceptance/1956/');
+// #154's files each start hubs that render stems through the supervisor, and build deep-show once; AC9 times a 60 s
+// six-stem render against the reference Mac.
+alone.push('tests/acceptance/154/', 'tests/acceptance/154-oracle/');
+timed.push('tests/acceptance/154/budgets.test.ts');
+// Its blind redraft runs the same way. The first draft's AC1 file is kept by hand: its harp test spreads a whole stem
+// into Math.max, which throws on a stem that starts at the film's time 0 (tests/acceptance/154-redraft/DISPUTE.md).
+alone.push('tests/acceptance/154-redraft/', 'tests/acceptance/154-oracle-redraft/');
+timed.push('tests/acceptance/154-redraft/budgets.test.ts');
+byHand.push('tests/acceptance/154/stems.test.ts');
 // #1700's files each build deep-show; budgets.test.ts also builds it in release and times every geometry.shape
 // reading against the lane's rule.
 alone.push('tests/acceptance/1700/');

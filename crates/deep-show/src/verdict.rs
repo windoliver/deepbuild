@@ -800,7 +800,25 @@ impl<'a> Hub<'a> {
             return Err(json!({"code": r.code, "kind": HONEST, "ids": [], "path": r.path}));
         }
         let empty = serde_json::Map::new();
-        Ok(deep_canvas_marks::check::numbers(doc.as_object().unwrap_or(&empty)))
+        let (mut numbers, issues) = deep_canvas_marks::check::numbers(doc.as_object().unwrap_or(&empty));
+        // #1967: a cell grid that plays a recording quotes it, so its digits are quotation.
+        for (id, item) in doc["items"].as_object().into_iter().flatten() {
+            let played = (item["kind"] == "cells@1")
+                .then(|| item.pointer("/params/play/asset")?.as_str())
+                .flatten();
+            let Some(sha) = played else { continue };
+            for d in self
+                .media
+                .recordings
+                .get(sha)
+                .map(deep_canvas_cells::recording::digits)
+                .unwrap_or_default()
+            {
+                numbers.push(json!({"item": id, "text": d["text"],
+                    "source": {"quotation": {"source": sha}, "at": d["at"], "row": d["row"], "x": d["x"]}}));
+            }
+        }
+        Ok((numbers, issues))
     }
 
     /// The bytes of every asset a lowered document's items name by hash that the evidence store

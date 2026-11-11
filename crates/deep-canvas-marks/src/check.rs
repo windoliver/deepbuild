@@ -217,24 +217,31 @@ fn text_numbers(doc: &Map<String, Value>, id: &str, item: &Value) -> Vec<Value> 
         .collect()
 }
 
-/// Each quoting code item whose raw bytes differ from its source's lines, line ends included
+/// Each quoting item whose quoted bytes differ from its source's lines, line ends included
 /// (`quote_mismatch`, naming the first line and byte that differ), or whose source `bytes` can't
-/// read by its sha256 (`asset_missing`). The display text never decides it (Text `text@1`: code).
+/// read by its sha256 (`asset_missing`): a code item's raw (Text `text@1`: code), or a formula's
+/// `alt` (#1963, Vector and formula `vector@1`: quote). The source is an evidence file,
+/// `ev:<sha256>`, or an asset's sha256. The display text never decides it.
 pub fn quotes(doc: &Map<String, Value>, bytes: impl Fn(&str) -> Option<Vec<u8>>) -> Vec<Issue> {
     let mut issues = Vec::new();
     for (id, item) in object_or_empty(doc.get("items")) {
         let p = object_or_empty(item.get("params"));
-        let (Some(quote), Some(Value::String(raw))) = (p.get("quote"), p.get("raw")) else {
+        let Some(quote) = p.get("quote") else {
             continue;
         };
+        let field = match item.get("kind").and_then(Value::as_str) {
+            Some("vector@1") => "alt",
+            _ => "raw",
+        };
+        let raw = p.get(field).and_then(Value::as_str).unwrap_or("");
         let source = quote.get("source").and_then(Value::as_str).unwrap_or("");
-        let Some(found) = bytes(source) else {
+        let Some(found) = bytes(source.strip_prefix("ev:").unwrap_or(source)) else {
             issues.push(Issue::error(
                 "asset_missing",
                 id,
                 format!("items/{id}/params/quote/source"),
                 json!(source),
-                "no stored source has this sha256",
+                "no stored evidence or asset has this sha256",
             ));
             continue;
         };
@@ -254,9 +261,11 @@ pub fn quotes(doc: &Map<String, Value>, bytes: impl Fn(&str) -> Option<Vec<u8>>)
                 ..Issue::error(
                     "quote_mismatch",
                     id,
-                    format!("items/{id}/params/raw"),
+                    format!("items/{id}/params/{field}"),
                     json!({"line": line, "byte": byte}),
-                    &format!("the raw bytes differ from the source's at line {line}, byte {byte}"),
+                    &format!(
+                        "its {field} differs from the source's bytes at line {line}, byte {byte}"
+                    ),
                 )
             });
         }

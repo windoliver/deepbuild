@@ -1,0 +1,14 @@
+{
+  "v": 2,
+  "id": "01KB2018ST0000000000000001",
+  "kind": "session.state",
+  "subject": "session:01K74G1Z3X5V7T9R1P3N5M7K9H",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013452123,
+  "data": {
+    "state": "says done",
+    "cause": "says_done"
+  }
+}
