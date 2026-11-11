@@ -2492,9 +2492,10 @@ fn cuts_of(
 }
 
 /// The marker kinds (canvas primitives: Marker), with a reading hold (#419), which motion blur
-/// never spans. Stage markers wait on present mode (Marker: present mode), which motion doesn't
-/// land yet, so they are refused rather than played through.
-pub(crate) const MARKER_KINDS: [&str; 8] = ["cue", "shot", "section", "beat", "word", "moment", "record", "hold"];
+/// never spans. #407: a stage marker plays through outside present mode (Marker: present mode);
+/// one that waits for a control holds even there, which motion doesn't land yet, so that one is
+/// refused rather than played through.
+pub(crate) const MARKER_KINDS: [&str; 9] = ["cue", "shot", "section", "stage", "beat", "word", "moment", "record", "hold"];
 
 /// Resolves every marker at check, in dependency order: a marker whose time names another marker
 /// waits for it, so a relative time keeps its offset when its marker moves. One that never
@@ -2508,6 +2509,9 @@ fn markers_of(doc: &Map<String, Value>, ctx: &mut Ctx) -> Result<(Vec<Marker>, V
         let kind = m.get("kind").and_then(Value::as_str).unwrap_or("cue");
         if !MARKER_KINDS.contains(&kind) {
             return refuse("bad_marker_kind", format!("{path}/kind"));
+        }
+        if kind == "stage" && m.get("waits_for").is_some() {
+            return refuse("bad_marker_kind", format!("{path}/waits_for"));
         }
         // Word markers come only from a bake; beat markers from the tempo map or a beats bake.
         let on_beat = matches!(m.get("t").and_then(Value::as_str).map(Time::parse), Some(Ok(Time::Beats { .. })));
