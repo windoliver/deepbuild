@@ -1,0 +1,88 @@
+#2019's acceptance suite, run at the base 35df4523f (this job's own worktree, its branch set to 35df4523f; no implementation;
+only tests/acceptance/2019/ untracked).
+
+Machine: Mac17,10, Apple M5 Max, 64 GiB, 18 cores, macOS 27.2; Node v24.22.2; cargo 1.99.1 (/opt/homebrew/opt/rustup/bin first
+on PATH); vitest 5.0.5; tsc 5.9.3. Load averages: 210.80 at the start of the recorded run, 206.33 at its end (other sessions'
+builds and test runs). The suite measures no time but AC3's 30 s window; no test reached a timeout.
+Prerequisites, before the runs:
+  npm ci --ignore-scripts (exit 0); npm run build --workspaces (exit 0);
+  CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 scripts/lease cargo build --locked -q -p deep-hook -p deep-replica (exit 0, warnings
+  only, finished 19:49:17Z after about 70 min at load 150 to 320);
+  the two deep-drive builds the helpers make, made ahead the same way (--features env-plants, then plain with deep-hook; 19:52:14Z
+  and 19:52:27Z, exit 0 each). scripts/lease ran them unleased: "deep lease: DeepBuild isn't set up here (no hub token)". The
+  suite ran the same cargo commands itself.
+
+  node node_modules/typescript/bin/tsc -p tests/acceptance/2019/tsconfig.json   exit 0 (19:59:13Z to 19:59:39Z, the files as delivered)
+
+Command (2026-11-11T19:59:43Z to 20:02:45Z):
+  NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/2019 --no-file-parallelism --testTimeout=600000
+Result: Test Files 5 failed (5); Tests 12 failed | 0 passed (12); exit 1.
+
+This is the one run of the files as delivered. One earlier run, 19:53:05Z to 19:56:40Z, was of an earlier state of these files,
+with AC1's and AC2's sessions in a repo named shop that sorted last in the list: the same 12 tests failed at the same assertions,
+and AC1's also named "the app's list draws no row session:<id>" for the usage-limited and the unpushed session. The base's list
+draws only the rows that fit in the window and doesn't scroll (#1808), so those two were cut off at the reference window, which
+an implementation of #2019 could not change. The criteria's sessions moved to a repo first by name, `cart` (README, The
+fixture); no criterion, value, judge or assertion changed. Before that, two throwaway checks (a file deleted since) built the
+fixture at the base, played three failing calls, and ran `deep setup` in a stand-in home, to see that they work there.
+
+Failures, each at its assertion:
+
+AC1 #2019.3052d233 (interrupted.test.ts:41, one test)
+  "the usage-limited session and the idle sessions with commits, in deep status --json and the app's list", 4 findings:
+  - "session 01a1581d-… (row session:01a1581d-…), stopped by a usage limit, shows the flag null in deep status --json, not
+    interrupted (README, Pinned 1)". The base reads that Codex stop (cause plan_window_spent) as finished, "its turn stopped".
+  - "session 3305a472-… (row session:3305a472-…), idle with a commit on no remote branch, shows the flag null in deep status
+    --json, not unpushed (README, Pinned 1)".
+  - "the app's row session:01a1581d-… has no flag in its right slot (no node session:01a1581d-…:flag, README, Pinned 1); it
+    reads "○ Invoice schema · finished …"", and the same for session:3305a472-… ("○ Cart totals · finished …").
+  The session whose commit is on origin/main and the 24 other sessions carry no flag at the base, as the test wants.
+
+AC2 #2019.92d09557 (interrupted.test.ts:53, one test)
+  "the session that can't be read and the one that exited mid-turn", 2 findings:
+  - "session 9dba7f7c-… (row session:9dba7f7c-…), which the session map shows exited mid-turn, shows the flag null beside
+    "flagged" in deep status --json, not interrupted (README, Pinned 1)".
+  - "the app's row session:9dba7f7c-… has no flag in its right slot (…); it reads "✗ Search index · flagged …"".
+  The session that can't be read reads quiet and nothing in its row says interrupted at the base, as the test wants; the base
+  fails this criterion on its second half.
+
+AC3 #2019.52aac98e (retrying.test.ts, 2 tests)
+  - retrying.test.ts:60: "session 3b9aa801-… (row session:3b9aa801-…), whose transcript records 2 model-call retries for
+    overload, reads "working" with the flag null for 30 s after the second retry, with no event since: a row that reads
+    working through the retries". The base reads no retry record. (Before the retries the session read working, as the test
+    asks first.)
+  - planted retry-reads-working (retrying.test.ts:65): "BLOCKED: the hub didn't start (deep hub run): … Error:
+    DEEP_HUB_PLANT=retry-reads-working names no planted program". The base has no such plant.
+
+AC4 #2019.3a943830 (watch-only.test.ts, 2 tests)
+  - watch-only.test.ts:27, "the session on a version past its facts", 7 findings: its --json row reads "sent back" with no
+    hold delivered; its flag is null, not watch-only; its row line in deep status ("  Users endpoint  claude-code  sent back ·
+    its checks sent its claim back, round 1 of 3, 20m") and its verdict line ("      sent back 1/3: users 404 · next: agent;
+    1 call, 0 failed, no commits: …") read "sent back"; that verdict line doesn't read watch-only; the app's row has no flag in
+    its right slot, and its word slot reads "sent back". Each names the session 4e2ceaad-…. The base's own reading, "This
+    session runs claude-code 2.1.321, past the versions its facts cover: … watch-only …", stands under the row, on a line of
+    its own, not on the verdict line.
+  - planted sent-back-without-hold (watch-only.test.ts:33): "BLOCKED: the hub didn't start … DEEP_HUB_PLANT=sent-back-without-
+    hold names no planted program".
+
+AC5 #2019.524707a3 (agents.test.ts, 2 tests)
+  - agents.test.ts:22, "the Agents page right after Set up", 6 findings: with Codex's hooks trusted and untrusted alike, "the
+    Agents page has no row agent:claude-code for Claude Code (README, Pinned 5)", and the same for agent:codex and agent:pi.
+    `deep setup` exited 0 in both homes; the list had no row, as the test wants. In the replica the base's Agents page reads
+    no model (a replica's hub calls answer nothing), and it has no row per agent.
+  - planted agents-title-only (agents.test.ts:28): fails one step before the plant, at "the replica's env-plants build, with no
+    plant chosen, draws the Agents page as the app does", with the same three findings; the plant was not reached.
+
+AC6 #2019.ea7b05b6 (repeating.test.ts, 4 tests)
+  - repeating.test.ts:53, "the turns that run pnpm test --filter api", 3 findings: "call 3 (toolu_f6a1…, pnpm test --filter api,
+    failed), the third identical failure in a row: after it the row reads "working" with the flag null, not repeating (README,
+    Pinned 1)"; the same for call 4; and "call 3 (…), the third identical failure in a row, brought the agent no notice through
+    the notice route: no notice.delivered names "pnpm test --filter api"". The fixture's checks held at the base: the four
+    failures share one signature in the record (exit 1, sig:…), the twin's three carry two, and neither twin reads repeating,
+    raises an ask or gets a notice.
+  - planted repeat-by-command (repeating.test.ts:58), repeat-notifies-each (:64), repeat-raises-ask (:70): each "BLOCKED: the hub
+    didn't start … DEEP_HUB_PLANT=<name> names no planted program".
+
+Passing at the base: none. Every criterion's test fails at its own assertion because the surface or behavior is missing; every
+plant test fails because the base has no such plant (the hub refuses an unknown name at its start; the replica's env-plants
+build draws no agent rows at all).

@@ -1,0 +1,28 @@
+{
+  "v": 1,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6W",
+  "kind": "review.read",
+  "subject": "claim:01K74FKZVK8Q2X5R7M3N9P4T6V",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "data": {
+    "pr": "https://github.com/acme/shop/pull/21",
+    "claim": "claim:01K74FKZVK8Q2X5R7M3N9P4T6V",
+    "commit": "2222222222222222222222222222222222222222",
+    "sent": [],
+    "open": [
+      {
+        "rule": "swallowed-error",
+        "sites": [
+          {
+            "file": "src/cart.ts",
+            "line": 40,
+            "quote": "} catch {}"
+          }
+        ]
+      }
+    ]
+  }
+}

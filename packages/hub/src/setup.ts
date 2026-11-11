@@ -121,6 +121,11 @@ async function install(cli: string, quiet = false): Promise<number> {
     if (paseo) {
       try { installPaseo(root, record, paseo, cli); } catch (e) { process.stderr.write(`paseo was left out of setup: ${e instanceof Error ? e.message : String(e)}. Run deep setup again once paseo's daemon runs.\n`); }
     }
+    // pi loads DeepBuild's package in-process (#40): added where pi and its folder are found, so its sessions reach the hub (#2019).
+    const pi = onPath('pi');
+    if (pi && existsSync(piHome())) {
+      try { installPi(root, pi); } catch (e) { process.stderr.write(`pi was left out of setup: ${e instanceof Error ? e.message : String(e)}. Run deep setup again.\n`); }
+    }
     const settings = withStatusLine(root, withHooks(root, planned.get(settingsFile)!, groups), `${q(hook)} statusline`);
     writeJson(settingsFile, settings);
     noteWritten(record, settingsFile);
@@ -344,6 +349,7 @@ async function undo(): Promise<number> {
     putBack(root, record, userFile, mcpOut),
     ...removeCodex(root, record),
     undoPaseo(root, record),
+    undoPi(root),
   ].filter((n): n is string => n !== undefined);
   // Every other agent file an Agents page sync wrote (#148): its original bytes back where you haven't edited it since.
   const handled = new Set([settingsFile, userFile, join(homedir(), '.paseo', 'config.json')]);
@@ -380,6 +386,28 @@ export function removeCodex(root: string, record = setupRecord(root)): string[] 
   return notes;
 }
 
+const piHome = (): string => join(homedir(), '.pi', 'agent');
+/** DeepBuild's pi package (#40), added through pi's own manager at the one version its facts pin, said before it is (#2019). */
+function installPi(root: string, pi: string): void {
+  const source = readFacts<{ install: { source: string } }>('pi.facts.json').install.source;
+  console.log(`pi: + package ${source}, through pi install; deep setup --undo takes it out.`);
+  editConfig(root, (c) => { c.pi = { package: source }; });
+  execFileSync(pi, ['install', source], { stdio: ['ignore', 'pipe', 'pipe'], timeout: 300_000 });
+}
+/** The package setup added taken out through pi's own manager. */
+function undoPi(root: string): string | undefined {
+  let source: unknown;
+  try { source = ((JSON.parse(readFileSync(join(root, 'config.json'), 'utf8')) as Obj).pi as Obj | undefined)?.package; } catch { return undefined; }
+  const pi = onPath('pi');
+  if (typeof source !== 'string' || !pi) return undefined;
+  try {
+    execFileSync(pi, ['remove', source], { stdio: ['ignore', 'pipe', 'pipe'], timeout: 120_000 });
+  } catch (e) {
+    return `pi didn't remove the package ${source} (${e instanceof Error ? e.message.split('\n')[0] : String(e)}); run pi remove ${source}`;
+  }
+  editConfig(root, (c) => { delete c.pi; });
+  return undefined;
+}
 /** paseo's command on this PATH, or none: setup adds the plugin only where paseo is found (#55). */
 function paseoCli(): string | undefined {
   return onPath('paseo');

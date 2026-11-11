@@ -73,7 +73,9 @@ export function fileStorage(): Backend {
 
 /** A read-only connection to a record file that exists: it reads the WAL a writer keeps, and writes nothing. */
 export function openReadOnly(path: string): Db {
-  return new Database(path, { readonly: true, fileMustExist: true });
+  const db = new Database(path, { readonly: true, fileMustExist: true });
+  try { db.pragma('cache_size = -2000'); } catch { /* a file SQLite can't read: the first read reports it */ }
+  return db;
 }
 
 /**

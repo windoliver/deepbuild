@@ -12,4 +12,6 @@ pub mod golden;
 pub mod module;
 pub mod occurrence;
 pub mod pairs;
+pub mod query;
 pub mod roles;
+pub mod written;

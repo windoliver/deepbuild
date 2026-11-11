@@ -1,0 +1,14 @@
+{
+  "v": 1,
+  "id": "01K9QZ6V2T8M4R1N5P7W3X9Z07",
+  "kind": "agent.reach",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013447000,
+  "data": {
+    "agent": "claude-code",
+    "name": "Claude Code",
+    "state": "waiting"
+  }
+}

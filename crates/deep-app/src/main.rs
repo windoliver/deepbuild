@@ -528,6 +528,14 @@ mod notifications {
             }
             loop {
                 cx.background_executor().timer(TICK).await;
+                // macOS's Reduce Motion as it is now, not only at launch: the working marks hold still under it (#2021).
+                #[cfg(target_os = "macos")]
+                cx.update(|cx| {
+                    cx.set_reduce_motion(
+                        objc2_app_kit::NSWorkspace::sharedWorkspace()
+                            .accessibilityDisplayShouldReduceMotion(),
+                    )
+                });
                 // A later launch brings the app forward; `deep open` and a link open their address (#1460).
                 for call in held.as_ref().map(Held::calls).unwrap_or_default() {
                     eprintln!("deep-app: brought forward");

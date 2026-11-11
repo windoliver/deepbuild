@@ -144,7 +144,12 @@ pub(crate) fn values(
 ) -> Value {
     let read = |p: &String| {
         let (id, field) = item_path(p)?;
-        item_value(sched, s, id, field).map(|(v, _)| v)
+        // #1921: a field the core's lowered form doesn't hold, such as a 3D kind's params, reads
+        // as the frame's document holds it, an instancer's columns a world writes included.
+        let drawn = || at_field(s.document()?.get("items")?.get(id)?, field).cloned();
+        item_value(sched, s, id, field)
+            .map(|(v, _)| v)
+            .or_else(drawn)
     };
     Value::Object(
         paths

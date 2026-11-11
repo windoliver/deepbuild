@@ -1,7 +1,7 @@
 {
   "core": {
     "version": "0.0.0",
-    "digest": "430018c070b8d2822476ad7d170dc4cd689cd1276c0ed0aff58213e1ddd2d061",
+    "digest": "bb1ce085ea00121aa2bbae2fb10f2b8723ae6a554930a05a9e51e1da4b3d56b3",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",

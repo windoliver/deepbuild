@@ -215,6 +215,16 @@ fn item_at(v: &mut View<'_>) -> Result<Value, OpError> {
     })
 }
 
+/// A fault, carrying a terrain plate's block as written where it names the plate's terrain, so
+/// a plate past its cap is named with its size and spacing (#2014).
+fn fault_of(id: &str, item: &Value, path: String) -> OpError {
+    let e = fault(id, path);
+    match item.pointer("/params/terrain") {
+        Some(t) if e.path.starts_with(&format!("items/{id}/params/terrain")) => e.with(t.clone()),
+        _ => e,
+    }
+}
+
 fn fault(id: &str, path: String) -> OpError {
     if path == crate::hull::FLAT {
         return OpError::new(crate::hull::FLAT, format!("items/{id}"));
@@ -300,7 +310,7 @@ fn run_scene3d(v: &mut View<'_>) -> Result<(), OpError> {
         outlines: v.outlines().to_vec(),
         ..Default::default()
     };
-    let out = built(doc, &id, &item, &run, 0.0).map_err(|p| fault(&id, p))?;
+    let out = built(doc, &id, &item, &run, 0.0).map_err(|p| fault_of(&id, &item, p))?;
     v.write("scene3d.built", Val::typed(out))
 }
 
@@ -314,7 +324,7 @@ fn run_scene3d_live(v: &mut View<'_>) -> Result<(), OpError> {
         outlines: v.outlines().to_vec(),
         ..Default::default()
     };
-    let out = built(doc, &id, &item, &run, t).map_err(|p| fault(&id, p))?;
+    let out = built(doc, &id, &item, &run, t).map_err(|p| fault_of(&id, &item, p))?;
     v.write("scene3d.livebuilt", Val::typed(out))
 }
 

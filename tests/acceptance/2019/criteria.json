@@ -1,0 +1,32 @@
+[
+  {
+    "n": 1,
+    "id": "#2019.3052d233",
+    "text": "A session stopped by a usage limit shows as interrupted, with what it was doing and when it can pick up; an idle session with unpushed commits is flagged"
+  },
+  {
+    "n": 2,
+    "id": "#2019.92d09557",
+    "text": "A session whose adapter can't be read reads quiet, never interrupted; one the session map shows exited mid-turn reads interrupted"
+  },
+  {
+    "n": 3,
+    "id": "#2019.52aac98e",
+    "text": "A Claude Code session whose transcript records model-call retries for overload shows retrying with the cause, the count and the time of the first within one event of the second retry, and returns to working at the next model reply in that turn; a row that reads working through the retries fails this test"
+  },
+  {
+    "n": 4,
+    "id": "#2019.3a943830",
+    "text": "A fixture Claude Code session on a version past its facts reads watch-only on its row and verdict line; a row that reads \"sent back\" with no hold delivered fails, naming the session"
+  },
+  {
+    "n": 5,
+    "id": "#2019.524707a3",
+    "text": "Right after Set up with no session, the Agents page lists Claude Code, Codex and pi as waiting for a first session, and the list has no row for them; with Codex's hooks untrusted its row there says so with the fix; a planted Agents page that shows only its title fails"
+  },
+  {
+    "n": 6,
+    "id": "#2019.ea7b05b6",
+    "text": "A fixture Claude Code turn runs `pnpm test --filter api` three times, each failing with the same exit code and error signature: the row reads repeating with the command and 3, the agent gets one notice at the third failure, and a fourth identical failure brings none; the same command failing with two different signatures, or passing on its second run, never reads repeating. A detector keyed on the command alone, or one that notifies at every repeat or raises an ask, fails, naming the call"
+  }
+]

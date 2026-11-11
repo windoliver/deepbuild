@@ -111,6 +111,18 @@ mod replica {
                 println!("{}", verdict.to_json());
                 return i32::from(!verdict.pass);
             }
+            // Issue #2029: `--words`, what each view draws for each closed-set code on stdin, with the core's text for it.
+            Some("--words") => {
+                let asked: serde_json::Value = match serde_json::from_reader(std::io::stdin()) {
+                    Ok(asked) => asked,
+                    Err(error) => {
+                        eprintln!("deep-replica: --words reads one JSON array of {{set, code, core}}: {error}");
+                        return 2;
+                    }
+                };
+                println!("{}", deep_app::codes::answer(&asked));
+                return 0;
+            }
             _ => {}
         }
         let (view, out, dark, bound, click, size) =
