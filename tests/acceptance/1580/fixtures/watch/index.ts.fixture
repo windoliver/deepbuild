@@ -1,0 +1,41 @@
+// #1580 AC2's planted channel: a paired device with no room for a plan's steps, such as a watch. It is paseo's channel
+// (packages/channels/paseo/index.ts, same repo, same license) under another name, declaring on its channel@1 fill that
+// it can't draw a plan's steps (README, Surfaces this suite chose: `steps: false`). Its provider speaks paseo's
+// protocol, so the suite's relay stand-in serves it. Its manifest's digest is a placeholder the test's copy replaces
+// (helpers.ts, watchPackage).
+type Reply = { status: number; body: any };
+type Ctx = { settings: Record<string, unknown>; fetch(request: { method: 'GET' | 'POST'; path: string; body?: unknown }): Promise<Reply> };
+let cursor: string | undefined;
+const said = (reply: Reply): string | undefined => (reply.status === 409 ? String(reply.body?.conflict ?? 'another client holds this account') : undefined);
+
+export default function (deep: any): void {
+  void deep.registerChannel('watch', {
+    slot: 'channel@1', revision: 1, kind: 'device', steps: false,
+    async deliver(item: unknown, ctx: Ctx) {
+      let reply: Reply;
+      try {
+        reply = await ctx.fetch({ method: 'POST', path: '/messages', body: { to: ctx.settings.to ?? null, item } });
+      } catch {
+        return { outcome: 'timed_out' };
+      }
+      const conflict = said(reply);
+      if (conflict) return { outcome: 'conflict', conflict };
+      const ack = reply.body?.ack;
+      return reply.status === 200 && typeof ack === 'string' && ack ? { outcome: 'delivered', ack } : { outcome: 'stalled' };
+    },
+    async receive(ctx: Ctx) {
+      const reply = await ctx.fetch({ method: 'GET', path: cursor === undefined ? '/answers' : `/answers?after=${encodeURIComponent(cursor)}` });
+      const conflict = said(reply);
+      if (conflict) return { answers: [], seen: [], conflict };
+      if (reply.status !== 200) return { answers: [], seen: [], conflict: null };
+      const body = reply.body ?? {};
+      if (typeof body.cursor === 'string') cursor = body.cursor;
+      const answers = (Array.isArray(body.answers) ? body.answers : []).map((a: any) => ({
+        thread_key: String(a?.thread_key ?? ''), answer: String(a?.answer ?? ''),
+        ...(a?.signature !== undefined ? { signature: a.signature } : {}),
+        ...(typeof a?.account === 'string' ? { account_link_id: a.account } : {}),
+      }));
+      return { answers, seen: Array.isArray(body.seen) ? body.seen.map(String) : [], conflict: null };
+    },
+  });
+}

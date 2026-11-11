@@ -144,6 +144,13 @@ describe('deep numbers', () => {
     expect(lines[1]).toContain('cost.turn msg_low: unknown usd unpriced');
     expect(lines[1]).not.toContain('0 usd');
   });
+  it('prints the hand-backs reading as it prints every row, with its unit, source, basis and age (#84)', async () => {
+    await withHub(async (_root, home) => {
+      const cli = fileURLToPath(new URL('../../cli/dist/main.js', import.meta.url));
+      const ran = spawnSync(process.execPath, [cli, 'numbers'], { env: { ...process.env, HOME: home }, cwd: home, encoding: 'utf8' });
+      expect(ran.stdout).toMatch(/^handbacks_sent_back: 0 count · record · observed · 0ms$/m);
+    });
+  }, 60_000);
 });
 
 describe('deep_search', () => {

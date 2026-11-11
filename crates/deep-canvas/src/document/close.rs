@@ -100,12 +100,36 @@ pub(super) fn kind_names(text: &str, kinds: &Registry, fault: Option<Fault>) -> 
         .collect()
 }
 
+/// Every other kind whose build major defines a field of exactly `name`, as `family.name@major`,
+/// by name (#1970).
+pub(super) fn owners(
+    name: &str,
+    entry: &Entry,
+    kinds: &Registry,
+    fault: Option<Fault>,
+) -> Vec<String> {
+    if matches!(fault, Some(Fault::NoCloseNames | Fault::CloseBySpelling)) {
+        return Vec::new();
+    }
+    let own = entry.full_name();
+    let mut out: Vec<String> = kinds
+        .entries()
+        .iter()
+        .filter(|e| e.current().param(name).is_some() && e.full_name() != own)
+        .map(|e| format!("{}@{}", e.full_name(), e.current().major))
+        .collect();
+    out.sort();
+    out
+}
+
 /// The close names for a field `name` the kind's `version` doesn't define: the name a rename
-/// record up to that version gives it, then its params by spelling.
+/// record up to that version gives it, then each kind in `owners` that defines it, then its
+/// params by spelling.
 pub(super) fn field_names(
     name: &str,
     entry: &Entry,
     version: &Version,
+    owners: &[String],
     fault: Option<Fault>,
 ) -> Vec<Value> {
     if fault == Some(Fault::NoCloseNames) {
@@ -121,6 +145,7 @@ pub(super) fn field_names(
             }
         }
     }
+    out.extend(owners.iter().map(|k| json!({"name": k, "defines": name})));
     for n in by_spelling(name, version.params.iter().map(|p| p.name)) {
         if !out.iter().any(|c| c["name"] == n) {
             out.push(json!({"name": n}));

@@ -229,8 +229,8 @@ export interface RuntimeEnvironment {
 
 export interface ExtensionHost {
   install(from: InstallFrom): Promise<Installed>;
-  /** The channels of the packages loaded and started (#65), each by name with what it reaches. */
-  channels(): { name: string; kind: 'device' | 'chat' | 'email' | 'text'; extension: string }[];
+  /** The channels of the packages loaded and started (#65), each by name with what it reaches and whether it draws a plan's steps (#1580). */
+  channels(): { name: string; kind: 'device' | 'chat' | 'email' | 'text'; steps: boolean; extension: string }[];
   /** A live state source by its registered name (#67): what a workspace's touch reads through. */
   stateSource(name: string): Promise<Omit<StateSource, 'fixture'>>;
   /** You are in this project (#67): its packs, as `.deepbuild/packs.json` names them, install and load if you trust it; an untrusted project's stay out, none installed, none run. */
@@ -609,8 +609,8 @@ interface Ext {
   routes: Set<string>;
   /** The adapter names it registered. */
   adapters: Set<string>;
-  /** The channels it registered (#65), by name, with what each reaches; their deliver and receive stay with the package. */
-  channels: Map<string, ChannelKind>;
+  /** The channels it registered (#65), by name, with what each reaches and whether it draws a plan's steps (#1580); their deliver and receive stay with the package. */
+  channels: Map<string, { kind: ChannelKind; steps: boolean }>;
   /** The state sources it registered (#67), by name; their read, compare, undo and fixture stay with the package. */
   stateSources: string[];
   /** The index it registered, by name, with the kit revision it declares, and how the host reaches it once loaded. */
@@ -1791,9 +1791,9 @@ class Host implements ExtensionHost {
     return this.packsOf(project).filter((e) => e.live).flatMap((e) => [...e.views.keys()].map((name) => ({ name, extension: e.entry.id, commands: e.commands.get(name) ?? [] })));
   }
 
-  /** The channels of the packages loaded and started (#65): each by name, with what it reaches. */
-  channels(): { name: string; kind: ChannelKind; extension: string }[] {
-    return [...this.exts.values()].filter((e) => e.live && e.ask).flatMap((e) => [...e.channels].map(([name, kind]) => ({ name, kind, extension: e.entry.id })));
+  /** The channels of the packages loaded and started (#65): each by name, with what it reaches and whether it draws a plan's steps (#1580). */
+  channels(): { name: string; kind: ChannelKind; steps: boolean; extension: string }[] {
+    return [...this.exts.values()].filter((e) => e.live && e.ask).flatMap((e) => [...e.channels].map(([name, c]) => ({ name, ...c, extension: e.entry.id })));
   }
   /** One send or read of a loaded channel, its context's fetch the caller's; bounded, and never unloading it. */
   async channel(name: string, op: 'deliver', item: ChannelItem, ctx: ChannelCtx): Promise<ChannelDelivered>;
@@ -2320,7 +2320,7 @@ class Host implements ExtensionHost {
     // Each channel it registers is held to channel@1's kit (#65), its code running where conformance runs it.
     const kitted: string[] = [];
     try {
-      for (const [name, kind] of ext.channels) {
+      for (const [name, { kind }] of ext.channels) {
         const { runKit, slotKits } = await import('@deepbuild/conformance');
         const kit = slotKits().find((k) => k.slot === CHANNEL) as SlotKit<ChannelFill> | undefined;
         if (!kit) { kitted.push(`the conformance package ships no ${CHANNEL} kit, so its channel ${name} is unkitted`); continue; }
@@ -2861,13 +2861,14 @@ class Host implements ExtensionHost {
         return null;
       }
       case 'deep.registerChannel': {
-        const [name, channel] = args as [unknown, { slot?: unknown; revision?: unknown; kind?: unknown } | null | undefined];
+        const [name, channel] = args as [unknown, { slot?: unknown; revision?: unknown; kind?: unknown; steps?: unknown } | null | undefined];
         if (typeof name !== 'string' || !ADAPTER_NAME.test(name)) throw Error(`deep.registerChannel takes the channel's name first, one lower-case word, not ${JSON.stringify(name)}`);
         if (channel?.slot !== CHANNEL || !Number.isSafeInteger(channel.revision) || (channel.revision as number) < 1) throw Error(`deep.registerChannel: ${name} declares itself a ${CHANNEL} fill, with the kit revision it was built against`);
         if (!CHANNEL_KINDS.includes(channel.kind as ChannelKind)) throw Error(`deep.registerChannel: ${name}'s kind is one of ${CHANNEL_KINDS.join(', ')}`);
         const owner = conformance ? undefined : [...this.exts.values()].find((e) => e !== ext && e.channels.has(name));
         if (owner) throw Error(`the channel ${name} is already registered by ${owner.entry.id}`);
-        ext.channels.set(name, channel.kind as ChannelKind);
+        // Only a channel that says it draws a plan's steps gets a card with a plan to answer (#1580).
+        ext.channels.set(name, { kind: channel.kind as ChannelKind, steps: channel.steps === true });
         return null;
       }
       case 'deep.registerStateSource': {

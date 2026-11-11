@@ -11,7 +11,7 @@ use std::sync::mpsc::{self, Sender};
 use std::sync::{Arc, LazyLock, Mutex};
 use std::thread;
 
-use deep_text::shape::{Shaper, Spec};
+use deep_text::shape::{Shaper, Span, Spec};
 
 /// A text handed to the worker: ready once its run is in the shaped-run cache.
 #[derive(Clone, Debug)]
@@ -28,6 +28,8 @@ struct Job {
     /// #417: the spec's fallback families and language, which the spec borrows.
     fallback: Vec<&'static str>,
     lang: Option<String>,
+    /// #1964: the spec's styled spans, which it borrows.
+    spans: Vec<Span>,
     spec: Spec<'static>,
     done: Arc<AtomicBool>,
 }
@@ -43,6 +45,7 @@ static WORKER: LazyLock<Mutex<Sender<Job>>> = LazyLock::new(|| {
                     text: &job.text,
                     fallback: &job.fallback,
                     lang: job.lang.as_deref(),
+                    spans: &job.spans,
                     ..job.spec
                 });
                 job.done.store(true, Ordering::Release);
@@ -66,6 +69,7 @@ pub fn shape_later(spec: &Spec<'_>) -> Pending {
         text: spec.text.to_owned(),
         fallback: spec.fallback.iter().map(|f| bundled(f)).collect(),
         lang: spec.lang.map(str::to_owned),
+        spans: spec.spans.to_vec(),
         spec: Spec {
             text: "",
             family: bundled(spec.family),
@@ -80,6 +84,7 @@ pub fn shape_later(spec: &Spec<'_>) -> Pending {
             bound: spec.bound,
             tabular: spec.tabular,
             mask: spec.mask,
+            spans: &[],
         },
         done: done.clone(),
     };
