@@ -20,7 +20,7 @@
   "crates/deep-canvas-vector/src/svg.rs": 2537,
   "crates/deep-canvas/src/document/check.rs": 2583,
   "crates/deep-canvas/src/document/mod.rs": 1583,
-  "crates/deep-canvas/src/document/packs.rs": 3824,
+  "crates/deep-canvas/src/document/packs.rs": 3829,
   "crates/deep-canvas/src/expr.rs": 2710,
   "crates/deep-canvas/src/registry/mod.rs": 4829,
   "crates/deep-canvas/src/schedule/mod.rs": 3548,

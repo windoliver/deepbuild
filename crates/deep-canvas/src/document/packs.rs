@@ -1328,6 +1328,11 @@ impl Packs {
         Ok(self.by_id.entry(pack.id.text()).or_insert(pack))
     }
 
+    /// Admits a version this process's check admitted before, as it was, without checking again.
+    pub fn readmit(&mut self, pack: Pack) -> &Pack {
+        self.by_id.entry(pack.id.text()).or_insert(pack)
+    }
+
     /// How often the pack check has run for `owner/name@version`.
     pub fn checks(&self, id: &str) -> u32 {
         self.checks.get(id).copied().unwrap_or(0)
