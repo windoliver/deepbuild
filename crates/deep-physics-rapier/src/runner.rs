@@ -3,22 +3,27 @@
 //! (issue #2012). `check` runs the document check with caps() and the build; `bake` runs a world from step 0, keyed,
 //! and kept by key in a store; `restore` runs it on from a checkpoint; `play` reads a stored bake's outputs and never
 //! steps; `runtime` names the build; `golden`, `golden_verify` and `golden_cross` record a golden, replay it and say
-//! where it stands across machines. A planted name runs one criterion's wrong program.
+//! where it stands across machines; `pairs` is the check kind physics.pairs (#2011); `time` steps a world timing each
+//! step natively, and `time_build`, `time_end` with the wasm32 exports `deep_physics_step` and `deep_physics_note` let a
+//! page time the same steps on its own clock (scripts/physics-budget.mjs). A planted name runs one criterion's wrong
+//! program.
 use std::collections::BTreeMap;
 use std::path::Path;
 
 use crate::{fp, Rapier};
 use base64::Engine;
-use deep_canvas_physics::backend::{Backend, BodyState, Canonical, Checkpoint, FIELDS};
+use deep_canvas_physics::backend::{Backend, BodyState, Canonical, Checkpoint, ShapeRef, FIELDS};
 use deep_canvas_physics::bake::{self, Build, Parts};
 use deep_canvas_physics::caps::{Caps, RAPIER3D};
 use deep_canvas_physics::check::{check, fix};
 use deep_canvas_physics::doc::{Refusal, World};
 use deep_canvas_physics::golden;
+use deep_canvas_physics::pairs::{pairs, Brief};
+use deep_canvas_physics::roles::{self, Row};
 use serde_json::{json, Map, Value};
 
 /// The planted wrong programs, by name.
-pub const PLANTED: [&str; 7] = [
+pub const PLANTED: [&str; 8] = [
     "caps_allow_restitution_threshold",
     "caps_allow_rolling_resistance",
     "caps_allow_tangent_speed",
@@ -26,6 +31,7 @@ pub const PLANTED: [&str; 7] = [
     "restore_ignores_version",
     "hash_rounds_1e6",
     "key_omits_frame_rate",
+    "role_table_pickup_solid",
 ];
 
 /// The reply to a line that isn't a call.
@@ -39,6 +45,8 @@ pub struct Run {
     round_hashes: bool,
     /// #2010 criterion 5's twin: the bake key leaves out the frame rate.
     key_without_rate: bool,
+    /// The role table roles expand through; #2011 criterion 3's twin makes a pickup solid.
+    table: &'static [Row],
     build: Build,
 }
 
@@ -86,6 +94,49 @@ fn checkpoint_of(c: &Value) -> Option<Checkpoint> {
             .decode(c.get("state")?.as_str()?)
             .ok()?,
     })
+}
+
+/// A shape use as the surface names it: its body, its index among the body's shapes and its shape.
+fn shape_use(w: &World, r: &ShapeRef) -> Value {
+    let shape = w
+        .bodies
+        .get(&r.body)
+        .and_then(|b| b.shapes.get(r.index))
+        .map(|u| u.shape.as_str());
+    json!({"body": r.body, "index": r.index, "shape": shape})
+}
+
+/// The pair of shape uses that ran the most narrow-phase tests in the last step, and their count.
+fn most_tested(w: &World, b: &Rapier) -> Value {
+    b.narrow_phase_tests().first().map_or(
+        Value::Null,
+        |(a, c, n)| json!({"pair": [shape_use(w, a), shape_use(w, c)], "tests": n}),
+    )
+}
+
+thread_local! {
+    /// The world a page times step by step (`time_build`, `deep_physics_step`, `deep_physics_note`, `time_end`): the
+    /// world, its backend and the most-tested pair after each step so far.
+    static TIMED: std::cell::RefCell<Option<(World, Rapier, Vec<Value>)>> = const { std::cell::RefCell::new(None) };
+}
+
+/// One step of the world `time_build` built, nothing else, so the page's clock reads the step alone; false when there
+/// is none or the step is refused.
+pub fn timed_step() -> bool {
+    TIMED.with(|t| {
+        t.borrow_mut()
+            .as_mut()
+            .is_some_and(|(_, b, _)| b.step(&[]).is_ok())
+    })
+}
+
+/// Notes the most-tested pair of the step `timed_step` just ran, outside the timed step.
+pub fn timed_note() {
+    TIMED.with(|t| {
+        if let Some((w, b, top)) = t.borrow_mut().as_mut() {
+            top.push(most_tested(w, b));
+        }
+    });
 }
 
 /// The bodies `read` names (every body when absent), as `{ID: [state]}` to fill.
@@ -182,6 +233,8 @@ struct Trace {
     at: BTreeMap<u64, Vec<Canonical>>,
     /// Each output's body's position after each step.
     positions: BTreeMap<String, Vec<[f32; 3]>>,
+    /// The occurrences each step wrote, in order.
+    occurrences: Vec<Value>,
 }
 
 /// Why a run stopped.
@@ -199,6 +252,7 @@ impl Run {
             restore_any_version: false,
             round_hashes: false,
             key_without_rate: false,
+            table: &roles::TABLE,
             build: crate::build(),
         };
         match planted {
@@ -210,6 +264,7 @@ impl Run {
             Some("hash_rounds_1e6") => run.round_hashes = true,
             Some("key_omits_frame_rate") => run.key_without_rate = true,
             Some("restore_ignores_version") => run.restore_any_version = true,
+            Some("role_table_pickup_solid") => run.table = &roles::PLANTED_SOLID_PICKUP,
             Some(_) => return None,
         }
         Some(run)
@@ -255,7 +310,7 @@ impl Run {
     /// The world `v` holds, built, or the issues that refuse it.
     fn build(&self, v: &Value) -> Result<(World, Rapier), Value> {
         let refused = |e: Vec<Refusal>| json!({"ok": false, "issues": e.iter().map(issue).collect::<Vec<_>>()});
-        let w = check(v, &self.caps).map_err(refused)?;
+        let w = check(v, &self.caps, self.table).map_err(refused)?;
         let mut b = Rapier {
             restore_any_version: self.restore_any_version,
             ..Rapier::default()
@@ -303,6 +358,9 @@ impl Run {
             }
             b.step(&[])
                 .map_err(|r| Stop::Refused(json!({"ok": false, "issues": [issue(&r)]})))?;
+            t.occurrences.extend(b.occurrences().iter().map(|o| {
+                json!({"step": o.step, "kind": o.kind, "a": shape_use(w, &o.a), "b": shape_use(w, &o.b)})
+            }));
             if let Some((s, id, field, ulps)) = &plan.shift {
                 if *s == k {
                     b.shift(id, *field, *ulps);
@@ -395,6 +453,9 @@ impl Run {
                                            "step_hashes": t.step_hashes, "outputs": record["outputs"]});
                     if with_checkpoints {
                         reply["checkpoints"] = Value::Array(t.checkpoints);
+                    }
+                    if call.get("occurrences") == Some(&json!(true)) {
+                        reply["occurrences"] = Value::Array(t.occurrences);
                     }
                     if dir.is_some() {
                         reply["reused"] = json!(false);
@@ -492,6 +553,41 @@ impl Run {
                 }))
             }
             "golden_verify" => self.verify(call),
+            "pairs" => {
+                Some(self.pairs(call.get("world")?, call.get("brief").unwrap_or(&json!({})))?)
+            }
+            "time" => {
+                let (w, mut b) = match self.build(call.get("world")?) {
+                    Ok(x) => x,
+                    Err(e) => return Some(e),
+                };
+                let mut ms = Vec::new();
+                let mut top = Vec::new();
+                for _ in 0..steps()? {
+                    let at = std::time::Instant::now();
+                    let stepped = b.step(&[]);
+                    ms.push(at.elapsed().as_secs_f64() * 1e3);
+                    if let Err(r) = stepped {
+                        return Some(json!({"ok": false, "issues": [issue(&r)]}));
+                    }
+                    top.push(most_tested(&w, &b));
+                }
+                Some(json!({"ok": true, "target": self.build.target, "ms": ms, "top": top}))
+            }
+            "time_build" => {
+                let built = self.build(call.get("world")?);
+                Some(TIMED.with(|t| match built {
+                    Ok(x) => {
+                        *t.borrow_mut() = Some((x.0, x.1, Vec::new()));
+                        json!({"ok": true, "target": self.build.target})
+                    }
+                    Err(e) => e,
+                }))
+            }
+            "time_end" => TIMED.with(|t| {
+                let (_, _, top) = t.borrow_mut().take()?;
+                Some(json!({"ok": true, "top": top}))
+            }),
             "golden_cross" => golden::cross(
                 call.get("golden")?,
                 call.get("machines")?.as_array()?,
@@ -504,6 +600,34 @@ impl Run {
     /// Replays a golden's world on this machine (Golden): each step's start asserts the control
     /// register; then the first step whose hash differs, and the first body and field that differ
     /// at the recording bake's first checkpoint at or after it.
+    /// physics.pairs over `world` against `brief` (`{touch?, never?}`), with the document check's refusals.
+    fn pairs(&self, world: &Value, brief: &Value) -> Option<Value> {
+        let locks = |k: &str| -> Option<Vec<[String; 2]>> {
+            brief.get(k).map_or(Some(Vec::new()), |v| {
+                v.as_array()?
+                    .iter()
+                    .map(|p| match p.as_array()?.as_slice() {
+                        [a, b] => Some([a.as_str()?.to_string(), b.as_str()?.to_string()]),
+                        _ => None,
+                    })
+                    .collect()
+            })
+        };
+        let brief = Brief {
+            touch: locks("touch")?,
+            never: locks("never")?,
+        };
+        let refused = |e: Vec<Refusal>| json!({"ok": false, "issues": e.iter().map(issue).collect::<Vec<_>>()});
+        let expanded = match roles::expand(world, self.table) {
+            Ok(x) => x,
+            Err(e) => return Some(refused(e)),
+        };
+        Some(match self.build(world) {
+            Ok((w, _)) => pairs(&w, &expanded.assumptions, &brief),
+            Err(e) => e,
+        })
+    }
+
     fn verify(&self, call: &Value) -> Option<Value> {
         let (g, world) = (call.get("golden")?, call.get("world")?);
         let shift = match call.get("shift") {
@@ -623,6 +747,18 @@ mod wasm {
     pub unsafe extern "C" fn deep_physics_free(ptr: *mut u8, len: usize) {
         // SAFETY: the caller gives back a room this module leaked with exactly this length and capacity.
         drop(unsafe { Vec::from_raw_parts(ptr, len, len) });
+    }
+
+    /// One step of the world `time_build` built, for a page that times it on its own clock: 1, or 0 without one.
+    #[no_mangle]
+    pub extern "C" fn deep_physics_step() -> u32 {
+        u32::from(super::timed_step())
+    }
+
+    /// Notes the step's most-tested pair, outside the timed step.
+    #[no_mangle]
+    pub extern "C" fn deep_physics_note() {
+        super::timed_note();
     }
 
     /// # Safety
