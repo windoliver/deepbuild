@@ -46,7 +46,7 @@ export interface RunningJob { key: string; kind: string; tool: string; started: 
 const TIME_LEFT_AFTER = 30_000;
 
 /** A length of time as every surface writes it (crates/deep-app/src/states.rs: span): "40 s", "12 min", "3 h", "2 d". */
-export function span(ms: number): string {
+function span(ms: number): string {
   const s = Math.floor(Math.max(0, ms) / 1000);
   return s >= 86_400 ? `${Math.floor(s / 86_400)} d` : s >= 3600 ? `${Math.floor(s / 3600)} h` : s >= 60 ? `${Math.floor(s / 60)} min` : `${s} s`;
 }
@@ -55,7 +55,7 @@ export function span(ms: number): string {
  * The time a running job has left by the rate its tool's counter measured so far, once its run is 30 s old: none
  * before, with no counter, or with nothing done yet. Never a guess from elapsed time alone.
  */
-export function timeLeft(job: RunningJob): number | undefined {
+function timeLeft(job: RunningJob): number | undefined {
   if (!job.counter || job.at === undefined || job.at - job.started < TIME_LEFT_AFTER) return undefined;
   const [done, total] = 'percent' in job.counter ? [job.counter.percent, 100] : [job.counter.done, job.counter.total];
   return done > 0 ? ((total - done) * (job.at - job.started)) / done : undefined;

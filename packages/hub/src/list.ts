@@ -27,7 +27,7 @@ export const SECTION: Record<string, number> = { 'needs you': 0, stuck: 0, flagg
 export const asksNeedYou = (n: number): string => (n === 1 ? '1 ask needs you' : `${n} asks need you`);
 
 /** `at` as a clock time in your time zone: 16:40. */
-export const clock = (at: number): string => new Date(at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
+const clock = (at: number): string => new Date(at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
 /**
  * When `at` comes, as the app's notification says it (crates/deep-app/src/notify.rs: clock_time): "at 16:40" today,
  * "tomorrow at 16:40", else "on Wed 11 Nov at 16:40".

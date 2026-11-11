@@ -249,7 +249,8 @@ export class Libraries {
   /** A deep_kinds fetch of a row a library gave: held on your answer, fetched, refused naming why, or BLOCKED with one unblock ask. */
   async fetch(library: string, id: string): Promise<FetchReply> {
     if (!this.saved.on.includes(library) || !this.registered(library)) {
-      return { status: 'refused', reason: `${library} is ${this.saved.on.includes(library) ? 'not loaded' : 'off'}, so nothing is fetched from it; turn it on to fetch ${id}` };
+      const on = this.saved.on.includes(library);
+      return { status: 'refused', reason: `${library} is ${on ? 'not loaded' : 'off'}, so nothing is fetched from it; turn it on to fetch ${id}${on ? '' : `: deep library on ${library}, from the person's own terminal`}` };
     }
     const key = `${library}#${id}`;
     const now = this.fetches.get(key);

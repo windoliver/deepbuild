@@ -17,6 +17,7 @@ export const backupCommand = async (args: Args): Promise<number> => (await impor
 export const restoreCommand = async (args: Args): Promise<number> => (await import('./backup.js')).restoreCommand(args);
 export const envCommand = async (args: Args): Promise<number> => (await import('./env.js')).envCommand(args);
 export const guardCommand = async (args: Args): Promise<number> => (await import('./guards.js')).guardCommand(args);
+export const confirmedCommand = async (args: Args): Promise<number> => (await import('./confirmed-command.js')).confirmedCommand(args);
 export const inboxCommand = async (args: Args): Promise<number> => (await import('./inbox.js')).inboxCommand(args);
 export const raceCommand = async (args: Args): Promise<number> => (await import('./inbox.js')).raceCommand(args);
 export const startCommand = async (args: Args): Promise<number> => (await import('./start-command.js')).startCommand(args);
