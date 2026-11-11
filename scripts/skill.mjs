@@ -69,6 +69,10 @@ const TOOLS = {
     use: 'Bring your worktree\'s own stack up, on ports leased to that worktree, ready only once its health route answers, or take it down; every process runs through the supervisor.',
     proves: 'A stack that is up does not prove any check passes, and a port leased to your worktree is never another worktree\'s: a child session in its own worktree gets its own.',
   },
+  deep_root_plan: {
+    use: 'Propose a root plan for a host: the script you wrote there, locked by its hash, and each step with its undo or null when it has none. The person reads it, says yes or no, and runs it themselves with deep host run in their own terminal, where sudo asks for their password.',
+    proves: 'A plan proposed has not run: only the run deep host run records, from a copy only root can write, shows what it did.',
+  },
 };
 
 /** Table text as an agent reads it: no backticks or bold. */

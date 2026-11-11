@@ -908,7 +908,12 @@ export class Core {
       },
       learn: async () => { await this.wikiBuild.build(); await syncRejected(this.raw, this.root.dir); },
     });
-    this.hosts = new Hosts({ root: this.root.dir, now: this.now, plant: options.plant, raise: async (ask, plan) => { await this.ready; return this.asks.raise(this.connection('core'), 'host.change', ask, plan); } });
+    this.hosts = new Hosts({
+      root: this.root.dir, now: this.now, plant: options.plant, raise: async (source, ask, plan) => { await this.ready; return this.asks.raise(this.connection('core'), source, ask, plan); },
+      append: (kind, data, extra) => this.appendCore(kind, data, extra), raw: (query, params) => this.record.raw(query, params),
+      // Bytes as the host gave them, so their hash is the hash of what was read there (#1945).
+      put: async (bytes, kind, source) => (await this.stored(await this.store.connect({ role: 'deepbuild', via: 'job' }).put({ bytes, kind, source, redaction: 'complete', license: { name: 'local', allows: [] } }), kind)).sha256,
+    });
     this.runs = new Runs({
       hosts: () => this.hosts,
       journalFile: this.root.runs, point: () => this.durable.point('journal_rewrite'), checkouts: join(this.root.dir, 'checkouts'), now: this.now, plant: options.plant, held: options.held,
@@ -5889,6 +5894,10 @@ export class Core {
       case 'run.output': return this.runs.output(params);
       case 'host.list': return { hosts: this.hosts.names().map((name) => ({ name })) };
       case 'host.facts': return this.hosts.facts(params.host, params.refresh === true);
+      // A root plan you said yes to, for `deep host run`, and what its run left on the host (#1945).
+      case 'host.plan': return this.hosts.plan(params.ask);
+      case 'host.ran': return this.hosts.ran(params.ask, params.run);
+      case 'host.changes': return this.hosts.changes(params.host);
       case 'start.approve': return this.sessionStarts.approve(params, context);
       case 'start.session':
         if (this.draining) throw refuse('unavailable', '/method', 'A promotion is draining the hub: no session starts until it restarts on the new build. Start it again then.', method, true);
@@ -6853,6 +6862,7 @@ export class Core {
         case 'deep_show': return await this.show(session ? { session } : { session: null }, showCall(args));
         case 'deep_kinds': return await this.kinds(args);
         case 'deep_job': return await this.job(args, context.call);
+        case 'deep_root_plan': return await this.hosts.proposeRoot(args);
         case 'deep_status': return await this.status(session);
         case 'deep_search': return await this.find(String(args.query), session, context, typeof args.file === 'string' ? args.file : undefined, typeof args.cursor === 'string' ? args.cursor : undefined);
         case 'deep_ask': return await this.askFor(session!, args);
