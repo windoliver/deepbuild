@@ -414,6 +414,8 @@ alone.push('tests/acceptance/2189/', 'tests/acceptance/2189-redraft-ac1/');
 // #547's files build deep-logic and bake 108,000 and 72,000 steps; AC4 judges 20 seeks of a recorded match against 2 s.
 alone.push('tests/acceptance/547/');
 timed.push('tests/acceptance/547/ac4-keyframes.test.ts');
+// #1967's files build deep-show, and determinism renders each side's canonical picture on the GPU.
+alone.push('tests/acceptance/1967/');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
