@@ -1,0 +1,209 @@
+Base commit: ba3bb543 (main, "Merge pull request #2208 from windoliver/worktree-github-issue-1970-d871e0"; descends from de304b9f
+"Merge pull request #2192 … feat/1820-pack-assets", with no #1720 change between them)
+Command: CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/1720 --no-file-parallelism --testTimeout=600000
+Run in the worktree at the base commit holding only these test files (uncommitted), node_modules from npm ci, the workspaces
+built (npm run build --workspaces), and cargo build --locked --bin deep-show and --bin deep-hook done beforehand (each file
+builds them again, warm). The suite typechecks: node node_modules/typescript/bin/tsc -p tests/acceptance/1720/tsconfig.json.
+Date: 2026-11-10T23:45:43Z  Node v24.22.2  vitest 5.0.5  darwin-arm64 (Mac17,10)  cargo 1.99.1
+Exit code: 1. Paths below have the checkout's absolute path replaced by <worktree>.
+
+Result: 5 tests, 5 failed. Each failure is at the criterion's own assertion; the harness came up every time (hubs started in
+temp HOMEs, the Claude Code session's session.start recorded from its hooks, its deep mcp initialized, deep-show run's reference
+taken, the installed tree laid out, three hub runs in one home).
+
+- AC1 (hub.test.ts): deep_show of castle.json through the hub and deep mcp is refused before the canvas core, with
+  status BLOCKED and cause "pack_missing: deepbuild/composites@1.0.0"; the failure names the pack, deepbuild/composites@1.0.0.
+- AC2 (hub.test.ts): deep_kinds word BoxGeometry answers no_match (no target, no conversion), not byte-equal to deep-show run's
+  answer with the familiar pack installed, which is familiar.box@1 with the pack's conversion.
+- AC3 listing (hub.test.ts): none of the seven folders of packs/ with a pack.json (blender, chrome-fx, composites, familiar, fx,
+  godot, unreal) is named with its version on any of the 12 pages of deep_kinds list.
+- AC3 plant (planted.test.ts): the installed tree (scripts/install-prefix.mjs) ships no first-party pack folder, so there is no
+  release folder to plant beside and its hub can install none; the test stops there, before the listing and deep doctor.
+- AC4 (restarts.test.ts): in each of the three runs deep_kinds word BoxGeometry answers no_match, and no record under
+  <home>/.deepbuild/packs/ keeps a count of checks for any of the seven versions.
+
+Rerun: after this run, restarts.test.ts was changed only in how it reports (its two assertions joined into one list, so the base
+run shows the store's missing counts beside the unanswered runs; the conditions asserted are the same) and run alone once more
+at 2026-11-10T23:47:46Z with the same command plus restarts.test.ts. Its output follows the full run's; the full run's AC4 block
+is the earlier wording.
+
+Not checked at the base, because no implementation exists: that each passing side holds on a fixed hub. Checked by hand at the
+base, outside the suite, with deep-show run: with the seven packs in its store, castle.json is presented with no issue; the
+canvas core's pack check admits five of the seven and refuses fx and chrome-fx (unknown_field at operators and functions; README,
+What the base has); the planted pack is refused (out_of_range at recipes/plant1720.box@1/inputs/width/default).
+
+==== The full run
+
+
+ RUN  v5.0.5 <worktree>/tests/acceptance/1720
+
+ ❯ hub.test.ts (3 tests | 3 failed) 19988ms
+   ❯ AC1 through a running hub and deep mcp, the castle example is presented (1)
+     × AC1 packs/examples/castle.json is presented with no pack_missing issue and no unknown_kind notice 137ms
+   ❯ AC2 a familiar word through deep mcp answers as deep-show run does with the familiar pack installed (1)
+     × AC2 deep_kinds word BoxGeometry answers familiar.box@1 with the pack conversion, byte-equal to deep-show run 4970ms
+   ❯ AC3 every first-party pack is listed by deep_kinds list on a live hub, with its version (1)
+     × AC3 each folder of packs/ with a pack.json is listed by deep_kinds list with its version 5396ms
+ ❯ planted.test.ts (1 test | 1 failed) 25567ms
+   ❯ AC3 a planted pack folder whose recipe fails the pack check is absent from the listing and named by deep doctor (1)
+     × AC3 the planted pack is refused: absent from deep_kinds list beside the shipped packs, and named by deep doctor 342ms
+ ❯ restarts.test.ts (1 test | 1 failed) 18288ms
+   ❯ AC4 the packs are checked once per version across two hub restarts, by the store's own count (1)
+     × AC4 across a start and two restarts, each first-party pack version's store count of checks is 1 11631ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  hub.test.ts > AC1 through a running hub and deep mcp, the castle example is presented > AC1 packs/examples/castle.json is presented with no pack_missing issue and no unknown_kind notice
+AssertionError: deep_show of packs/examples/castle.json through the hub and deep mcp: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "deep_show castle.json: outcome refused, not presented ({\"status\":\"BLOCKED\",\"cause\":\"pack_missing: deepbuild/composites@1.0.0\"})",
++   "deep_show castle.json: refused with pack_missing, naming deepbuild/composites@1.0.0",
++ ]
+
+ ❯ hub.test.ts:42:103
+     40|   it('AC1 packs/examples/castle.json is presented with no pack_missing…
+     41|     const o = await showCastle(session());
+     42|     expect(castleFailures(o), 'deep_show of packs/examples/castle.json…
+       |                                                                                                       ^
+     43|   }, 900_000);
+     44| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+
+ FAIL  hub.test.ts > AC2 a familiar word through deep mcp answers as deep-show run does with the familiar pack installed > AC2 deep_kinds word BoxGeometry answers familiar.box@1 with the pack conversion, byte-equal to deep-show run
+AssertionError: deep_kinds word BoxGeometry through the hub and deep mcp: expected [ …(3) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "deep_kinds word BoxGeometry: target undefined, not familiar.box@1 (the reply: {\"word\":\"BoxGeometry\",\"code\":\"no_match\",\"core\":\"core@0.0.0\",\"set_digest\":\"d3a88904ca29b49b542628f6f924cd551240c4c962bf80c03b6cc8ef8e5bf8f7\"})",
++   "deep_kinds word BoxGeometry: conversion undefined, not the familiar pack's \"its parameters by name; angles in degrees; Object3D's rotation (XYZ) through the rotation matrix to ours (Rz·Ry·Rx), its pivot to our position plus that pivot\"",
++   "deep_kinds word BoxGeometry: not byte-equal to deep-show run's answer with the pack installed: {\"word\":\"BoxGeometry\",\"code\":\"no_match\",\"core\":\"core@0.0.0\",\"set_digest\":\"d3a88904ca29b49b542628f6f924cd551240c4c962bf80c03b6cc8ef8e5bf8f7\"} against {\"word\":\"BoxGeometry\",\"target\":\"familiar.box@1\",\"conversion\":\"its parameters by name; angles in degrees; Object3D's rotation (XYZ) through the rotation matrix to ours (Rz·Ry·Rx), its pivot to our position plus that pivot\",\"pack\":\"deepbuild/familiar@1.0.0\",\"renamed_from\":\"CubeGeometry\",\"core\":\"core@0.0.0\",\"set_digest\":\"d3a88904ca29b49b542628f6f924cd551240c4c962bf80c03b6cc8ef8e5bf8f7\"}",
++ ]
+
+ ❯ hub.test.ts:51:112
+     49|     const want = wordOnRun(checkoutCore(), 'BoxGeometry');
+     50|     const got = await kindsOverMcp(live.agent, { op: 'word', word: 'Bo…
+     51|     expect(wordFailures('BoxGeometry', got, want), 'deep_kinds word Bo…
+       |                                                                                                                ^
+     52|   }, 900_000);
+     53| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯
+
+ FAIL  hub.test.ts > AC3 every first-party pack is listed by deep_kinds list on a live hub, with its version > AC3 each folder of packs/ with a pack.json is listed by deep_kinds list with its version
+AssertionError: deep_kinds list on the live hub (12 page(s)) lists each first-party pack with its version: expected [ …(7) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "blender-1.0.0 (deepbuild/blender@1.0.0)",
++   "chrome-fx-1.0.0 (deepbuild/chrome-fx@1.0.0)",
++   "composites-1.0.0 (deepbuild/composites@1.0.0)",
++   "familiar-1.0.0 (deepbuild/familiar@1.0.0)",
++   "fx-1.0.0 (deepbuild/fx@1.0.0)",
++   "godot-1.0.0 (deepbuild/godot@1.0.0)",
++   "unreal-1.0.0 (deepbuild/unreal@1.0.0)",
++ ]
+
+ ❯ hub.test.ts:63:127
+     61|     expect(failure, 'deep_kinds list answers every page through the hu…
+     62|     const missing = packs.filter((p) => !listed(pages, p)).map((p) => …
+     63|     expect(missing, `deep_kinds list on the live hub (${pages.length} …
+       |                                                                                                                               ^
+     64|   }, 900_000);
+     65| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/5]⎯
+
+ FAIL  planted.test.ts > AC3 a planted pack folder whose recipe fails the pack check is absent from the listing and named by deep doctor > AC3 the planted pack is refused: absent from deep_kinds list beside the shipped packs, and named by deep doctor
+AssertionError: the installed tree /private/tmp/dh1720-p-DHsc4Y/lib/node_modules/deepbuild ships the first-party packs: a folder holding pack folders whose pack.json is one of the checkout's packs/*/pack.json: expected [] to not deeply equal []
+
+Compared values have no visual difference.
+
+ ❯ planted.test.ts:32:177
+     30|     expect(laid, 'the canvas core is built and the installed tree laid…
+     31|     const roots = shippedPackRoots(tree!.tree);
+     32|     expect(roots, `the installed tree ${tree!.tree} ships the first-pa…
+       |                                                                                                                                                                                 ^
+     33|     for (const root of roots) plant(root);
+     34|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/5]⎯
+
+ FAIL  restarts.test.ts > AC4 the packs are checked once per version across two hub restarts, by the store's own count > AC4 across a start and two restarts, each first-party pack version's store count of checks is 1
+AssertionError: in the first run and after each restart, the familiar pack answers BoxGeometry through deep mcp: expected [ …(3) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "run 1: deep_kinds word BoxGeometry answered {\"word\":\"BoxGeometry\",\"code\":\"no_match\",\"core\":\"core@0.0.0\",\"set_digest\":\"d3a88904ca29b49b542628f6f924cd551240c4c962bf80c03b6cc8ef8e5bf8f7\"}, not familiar.box@1",
++   "run 2: deep_kinds word BoxGeometry answered {\"word\":\"BoxGeometry\",\"code\":\"no_match\",\"core\":\"core@0.0.0\",\"set_digest\":\"d3a88904ca29b49b542628f6f924cd551240c4c962bf80c03b6cc8ef8e5bf8f7\"}, not familiar.box@1",
++   "run 3: deep_kinds word BoxGeometry answered {\"word\":\"BoxGeometry\",\"code\":\"no_match\",\"core\":\"core@0.0.0\",\"set_digest\":\"d3a88904ca29b49b542628f6f924cd551240c4c962bf80c03b6cc8ef8e5bf8f7\"}, not familiar.box@1",
++ ]
+
+ ❯ restarts.test.ts:45:208
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/5]⎯
+
+
+ Test Files  3 failed (3)
+      Tests  5 failed (5)
+   Start at  15:45:45
+   Duration  67.40s (tests 96%, transform 3%, import 1%)
+
+
+==== restarts.test.ts alone, after the change in how it reports
+
+
+ RUN  v5.0.5 <worktree>/tests/acceptance/1720
+
+ ❯ restarts.test.ts (1 test | 1 failed) 13438ms
+   ❯ AC4 the packs are checked once per version across two hub restarts, by the store's own count (1)
+     × AC4 across a start and two restarts, each first-party pack version's store count of checks is 1 9001ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  restarts.test.ts > AC4 the packs are checked once per version across two hub restarts, by the store's own count > AC4 across a start and two restarts, each first-party pack version's store count of checks is 1
+AssertionError: in each of a start and two restarts the familiar pack answers through deep mcp, and afterwards the store under /private/tmp/dh1720-clEJFi/h/.deepbuild/packs counts one check per first-party pack version: expected [ …(10) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "run 1: deep_kinds word BoxGeometry answered {\"word\":\"BoxGeometry\",\"code\":\"no_match\",\"core\":\"core@0.0.0\",\"set_digest\":\"d3a88904ca29b49b542628f6f924cd551240c4c962bf80c03b6cc8ef8e5bf8f7\"}, not familiar.box@1",
++   "run 2: deep_kinds word BoxGeometry answered {\"word\":\"BoxGeometry\",\"code\":\"no_match\",\"core\":\"core@0.0.0\",\"set_digest\":\"d3a88904ca29b49b542628f6f924cd551240c4c962bf80c03b6cc8ef8e5bf8f7\"}, not familiar.box@1",
++   "run 3: deep_kinds word BoxGeometry answered {\"word\":\"BoxGeometry\",\"code\":\"no_match\",\"core\":\"core@0.0.0\",\"set_digest\":\"d3a88904ca29b49b542628f6f924cd551240c4c962bf80c03b6cc8ef8e5bf8f7\"}, not familiar.box@1",
++   "deepbuild/blender@1.0.0: the store's count of its checks is nowhere",
++   "deepbuild/chrome-fx@1.0.0: the store's count of its checks is nowhere",
++   "deepbuild/composites@1.0.0: the store's count of its checks is nowhere",
++   "deepbuild/familiar@1.0.0: the store's count of its checks is nowhere",
++   "deepbuild/fx@1.0.0: the store's count of its checks is nowhere",
++   "deepbuild/godot@1.0.0: the store's count of its checks is nowhere",
++   "deepbuild/unreal@1.0.0: the store's count of its checks is nowhere",
++ ]
+
+ ❯ restarts.test.ts:53:236
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  15:47:47
+   Duration  14.11s (tests 96%, transform 2%, import 2%)
+

@@ -1,0 +1,88 @@
+
+ RUN  v5.0.5 <repo>/tests/acceptance/2026
+
+ ❯ outage.test.ts (3 tests | 3 failed) 161336ms
+   ❯ #2026 AC5 #2026.3529e9fd (3)
+     × within 2 s of the hub stopping, the menu bar, Home and Needs you say it isn't answering and since when; on reconnect they show the record at the new log_pos 161318ms
+     × a Needs you that shows nothing needs you while the hub is down (hub-down-nothing-needs-you) fails, naming Needs you 1ms
+     × a menu bar that keeps the old count as live (hub-down-keeps-count) fails, naming the menu bar 1ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  outage.test.ts > #2026 AC5 #2026.3529e9fd > within 2 s of the hub stopping, the menu bar, Home and Needs you say it isn't answering and since when; on reconnect they show the record at the new log_pos
+AssertionError: expected [ …(7) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "while the hub is down: Home doesn't say the hub isn't answering and since when (a clock time among 07:12, 07:13, 07:14): \"Pop out Needs you\" (the last frame, 13307 ms after the stop)",
++   "once it's back: the app holds the record at log_pos 12, not the hub's new 16 (the last frame, -2138 ms after the hub started again)",
++   "once it's back: the menu bar reads no number once the hub answers again at log_pos 16, where the record holds 2 open asks: \"The hub isn't answering since 07:13\" (the last frame, -2138 ms after the hub started again)",
++   "once it's back: Home reads no number once the hub answers again at log_pos 16, where the record holds 2 open asks: {\"value\":\"\",\"words\":[\"Pop out Needs you\"]} (the last frame, -2138 ms after the hub started again)",
++   "once it's back: Needs you still lists ask:01M744BTT57YTHBPE472EAWZZD, which the record closed (ask.cancelled), once the hub answers again (the last frame, -2138 ms after the hub started again)",
++   "once it's back: the menu bar still says the hub isn't answering once it answers again: [\"The hub isn't answering since 07:13\"] (the last frame, -2138 ms after the hub started again)",
++   "once it's back: Needs you still says the hub isn't answering once it answers again: [\"The hub isn't answering since 07:13\",\"Outage 2: keep the sessions on SQLite or plain files?\",\"!\",\"Outage 1: keep the sessions on SQLite or plain files?\",\"Outage 3: keep the sessions on SQLite or plain files?\"] (the last frame, -2138 ms after the hub started again)",
++ ]
+
+ ❯ outage.test.ts:93:33
+     91|   it('within 2 s of the hub stopping, the menu bar, Home and Needs you…
+     92|     const outcome = await cleanRun();
+     93|     expect(failuresOf(outcome)).toEqual([]);
+       |                                 ^
+     94|     const reading = `every surface said the hub isn't answering, and s…
+     95|     console.log(`#2026 AC5: ${reading}`);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  outage.test.ts > #2026 AC5 #2026.3529e9fd > a Needs you that shows nothing needs you while the hub is down (hub-down-nothing-needs-you) fails, naming Needs you
+AssertionError: the clean run already fails AC5, so the plant can't be told from it: expected [ …(7) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "while the hub is down: Home doesn't say the hub isn't answering and since when (a clock time among 07:12, 07:13, 07:14): \"Pop out Needs you\" (the last frame, 13307 ms after the stop)",
++   "once it's back: the app holds the record at log_pos 12, not the hub's new 16 (the last frame, -2138 ms after the hub started again)",
++   "once it's back: the menu bar reads no number once the hub answers again at log_pos 16, where the record holds 2 open asks: \"The hub isn't answering since 07:13\" (the last frame, -2138 ms after the hub started again)",
++   "once it's back: Home reads no number once the hub answers again at log_pos 16, where the record holds 2 open asks: {\"value\":\"\",\"words\":[\"Pop out Needs you\"]} (the last frame, -2138 ms after the hub started again)",
++   "once it's back: Needs you still lists ask:01M744BTT57YTHBPE472EAWZZD, which the record closed (ask.cancelled), once the hub answers again (the last frame, -2138 ms after the hub started again)",
++   "once it's back: the menu bar still says the hub isn't answering once it answers again: [\"The hub isn't answering since 07:13\"] (the last frame, -2138 ms after the hub started again)",
++   "once it's back: Needs you still says the hub isn't answering once it answers again: [\"The hub isn't answering since 07:13\",\"Outage 2: keep the sessions on SQLite or plain files?\",\"!\",\"Outage 1: keep the sessions on SQLite or plain files?\",\"Outage 3: keep the sessions on SQLite or plain files?\"] (the last frame, -2138 ms after the hub started again)",
++ ]
+
+ ❯ outage.test.ts:103:114
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  outage.test.ts > #2026 AC5 #2026.3529e9fd > a menu bar that keeps the old count as live (hub-down-keeps-count) fails, naming the menu bar
+AssertionError: the clean run already fails AC5, so the plant can't be told from it: expected [ …(7) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "while the hub is down: Home doesn't say the hub isn't answering and since when (a clock time among 07:12, 07:13, 07:14): \"Pop out Needs you\" (the last frame, 13307 ms after the stop)",
++   "once it's back: the app holds the record at log_pos 12, not the hub's new 16 (the last frame, -2138 ms after the hub started again)",
++   "once it's back: the menu bar reads no number once the hub answers again at log_pos 16, where the record holds 2 open asks: \"The hub isn't answering since 07:13\" (the last frame, -2138 ms after the hub started again)",
++   "once it's back: Home reads no number once the hub answers again at log_pos 16, where the record holds 2 open asks: {\"value\":\"\",\"words\":[\"Pop out Needs you\"]} (the last frame, -2138 ms after the hub started again)",
++   "once it's back: Needs you still lists ask:01M744BTT57YTHBPE472EAWZZD, which the record closed (ask.cancelled), once the hub answers again (the last frame, -2138 ms after the hub started again)",
++   "once it's back: the menu bar still says the hub isn't answering once it answers again: [\"The hub isn't answering since 07:13\"] (the last frame, -2138 ms after the hub started again)",
++   "once it's back: Needs you still says the hub isn't answering once it answers again: [\"The hub isn't answering since 07:13\",\"Outage 2: keep the sessions on SQLite or plain files?\",\"!\",\"Outage 1: keep the sessions on SQLite or plain files?\",\"Outage 3: keep the sessions on SQLite or plain files?\"] (the last frame, -2138 ms after the hub started again)",
++ ]
+
+ ❯ outage.test.ts:109:114
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed (3)
+   Start at  17:42:45
+   Duration  166.16s (tests 98%, transform 2%)
+

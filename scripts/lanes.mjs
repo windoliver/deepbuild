@@ -300,6 +300,9 @@ alone.push('tests/acceptance/501/', 'tests/acceptance/501-redraft-ac10/');
 timed.push('tests/acceptance/501/budgets.test.ts');
 // #1818's files each build deep-show and mix seconds of audio through the media processors.
 alone.push('tests/acceptance/1818/');
+// #1720's files build deep-show and deep-hook, start and restart hubs and lay out an installed tree; so do the
+// #1718 tests it redrafts.
+alone.push('tests/acceptance/1720/', 'tests/acceptance/1718-redraft-1720/');
 // #1461's files build deep-drive plain and with env-plants, start real hubs and many replicas; its AC1 and AC14 file and
 // its AC28 file open the real app's window, with Accessibility and Screen Recording, by hand; its AC9 file is timed.
 alone.push('tests/acceptance/1461/');
@@ -371,8 +374,16 @@ alone.push('tests/acceptance/1964/');
 alone.push('tests/acceptance/1723/');
 // #504's files each build deep-show or deep-motion with cargo, and criterion 2's hub test starts a hub and agents.
 alone.push('tests/acceptance/504/');
-// #504's blind redrafts of criteria 1 and 8 each build deep-show or deep-motion with cargo.
-alone.push('tests/acceptance/504-redraft-ac1/', 'tests/acceptance/504-redraft-ac8/');
+// #504's blind redrafts of criteria 1, 2 and 8 each build deep-show or deep-motion with cargo; criterion 2's starts a
+// hub and an agent stand-in.
+alone.push('tests/acceptance/504-redraft-ac1/', 'tests/acceptance/504-redraft-ac2/', 'tests/acceptance/504-redraft-ac8/');
+// #2026's files build the replica and deep-live plain and planted and run a hub over 30 days of history; three judge
+// wall-clock limits (Needs you's load, a replayed ask within 1 s, the hub-down line within 2 s).
+// The first draft's AC3 file is kept by hand: its wrong program, the app's reader keeping its place by event ID, can't
+// fail under the design, since the hub raises the replayed request's ask as a new event; its blind redraft runs in its place.
+alone.push('tests/acceptance/2026/', 'tests/acceptance/2026-redraft-ac3/');
+timed.push('tests/acceptance/2026/load.test.ts', 'tests/acceptance/2026/outage.test.ts', 'tests/acceptance/2026-redraft-ac3/replay.test.ts');
+byHand.push('tests/acceptance/2026/replay.test.ts');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },

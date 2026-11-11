@@ -4,11 +4,12 @@
 //! offer, with how many times that version's check ran, so a test reads "once per version,
 //! never on open" as a count the binary kept, not its word.
 
-use std::collections::BTreeMap;
+use std::cell::RefCell;
+use std::collections::{BTreeMap, HashMap};
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
-use deep_canvas::document::{Expansion, Issue, Packs};
+use deep_canvas::document::{Expansion, Issue, Pack, Packs};
 use deep_canvas::registry::Sealed;
 use serde_json::{json, Map, Value};
 
@@ -108,6 +109,13 @@ fn load(id: &str, dir: &Path) -> Result<Value, Vec<Issue>> {
     Ok(manifest)
 }
 
+thread_local! {
+    /// Each version this process admitted, by its ID and folder, with its manifest (#1720): the
+    /// canvas side builds its store afresh for every call, and a version's check runs once, not on
+    /// each. The hub stages a pack in a folder named by its digest, so a folder never changes.
+    static ADMITTED: RefCell<HashMap<(String, PathBuf), (Value, Pack)>> = RefCell::new(HashMap::new());
+}
+
 /// Installs one pack version: the folder read, the pack check run once, the store's row kept.
 /// The reply is `install_pack`'s.
 pub fn install(
@@ -120,18 +128,34 @@ pub fn install(
     vet: Vet<'_>,
 ) -> Value {
     let mut layouts = Vec::new();
-    let (version, outcome, issues) = match load(id, dir) {
+    let key = (id.to_string(), dir.to_path_buf());
+    let known = twin
+        .is_none()
+        .then(|| ADMITTED.with(|a| a.borrow().get(&key).cloned()))
+        .flatten();
+    let loaded = match known {
+        Some((manifest, pack)) => Ok((manifest, Some(pack))),
+        None => load(id, dir).map(|manifest| (manifest, None)),
+    };
+    let (version, outcome, issues) = match loaded {
         Err(issues) => (String::new(), "refused", issues),
-        Ok(mut manifest) => {
+        Ok((mut manifest, known)) => {
             if let Some(planted) = twin {
                 crate::familiar::twin(planted, id, &mut manifest);
             }
             let version = manifest["version"].as_str().unwrap_or_default().to_string();
-            match packs.admit(&manifest, sealed).cloned() {
+            let admitted = match known {
+                Some(pack) => Ok(packs.readmit(pack).clone()),
+                None => packs.admit(&manifest, sealed).cloned(),
+            };
+            match admitted {
                 Ok(pack) => {
                     let (rows, issues) = vet(&manifest, &pack);
                     layouts = rows;
                     if issues.is_empty() {
+                        if twin.is_none() {
+                            ADMITTED.with(|a| a.borrow_mut().insert(key, (manifest, pack)));
+                        }
                         (version, "installed", Vec::new())
                     } else {
                         packs.withdraw(&pack.id.text());

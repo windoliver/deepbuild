@@ -519,9 +519,11 @@ pub fn count_line() -> String {
     reach.count(asks_need_you(count()))
 }
 
-/// The one count sentence, which Home, the list and the menu bar say (#1455).
+/// The one count sentence, which Home, the list and the menu bar say (#1455), in words that agree with the number
+/// (#2026).
 pub fn asks_need_you(count: usize) -> String {
     match count {
+        0 => "Nothing needs you".to_owned(),
         1 => "1 ask needs you".to_owned(),
         count => format!("{count} asks need you"),
     }
@@ -1695,8 +1697,18 @@ fn needs_you_count(
     now: u64,
 ) -> (String, Option<String>, String) {
     use crate::empties::Empty;
+    // #2026's planted count leaves out a decision's close: each ask a decision closed counts as open.
+    let count = if crate::plain::planted("home-skips-decision-close") {
+        count + crate::record::with_view(|view| view.table().decided()).unwrap_or(0)
+    } else {
+        count
+    };
     match empty {
-        Empty::Nothing if count == 0 => ("Nothing needs you".to_owned(), None, "0".to_owned()),
+        // Nothing needs you only once setup finished (#2026): until then, what setup says, and no number.
+        Empty::Nothing if count == 0 => match crate::setup::count() {
+            Some(setup) => (setup.to_owned(), None, String::new()),
+            None => ("Nothing needs you".to_owned(), None, "0".to_owned()),
+        },
         // The planted count says "1 asks need you".
         Empty::Nothing if crate::plain::planted("count-one-asks") => (
             format!("{count} asks need you"),
@@ -1713,7 +1725,11 @@ fn needs_you_count(
             Some(crate::empties::READING.to_owned()),
             String::new(),
         ),
-        Empty::Unreachable { .. } => (empty.words("", now), None, String::new()),
+        // Every count says the hub isn't answering and since when, in place of a number (#2026).
+        Empty::Unreachable { .. } => {
+            let words = empty.words("", now);
+            (words.clone(), Some(words), String::new())
+        }
     }
 }
 
@@ -2051,6 +2067,8 @@ impl Render for Shipped {
                     .flatten();
                 RING.with(|ring| *ring.borrow_mut() = focused.clone());
                 let current = crate::open::current(cx);
+                let planted_nothing = crate::plain::planted("hub-down-nothing-needs-you")
+                    && matches!(empty, crate::empties::Empty::Unreachable { .. });
                 let mut drawn: Vec<AnyElement> = Vec::new();
                 for item in &items {
                     match item {
@@ -2067,8 +2085,14 @@ impl Render for Shipped {
                                     .into_any_element(),
                                 );
                                 if matches!(empty, crate::empties::Empty::Unreachable { .. }) {
+                                    // #2026's planted section says nothing needs you while the hub is down.
+                                    let (nothing, empty) = if planted_nothing {
+                                        ("Nothing needs you", crate::empties::Empty::Nothing)
+                                    } else {
+                                        ("", empty)
+                                    };
                                     drawn.push(
-                                        empty_line("list-empty", "", empty, now, chrome)
+                                        empty_line("list-empty", nothing, empty, now, chrome)
                                             .into_any_element(),
                                     );
                                 }
@@ -2103,6 +2127,9 @@ impl Render for Shipped {
                                 );
                             }
                         }
+                        // #2026's planted section draws no ask rows while the hub is down.
+                        crate::list::Item::Row(row)
+                            if planted_nothing && row.id.starts_with("ask:") => {}
                         crate::list::Item::Row(row) => {
                             let selected = current.as_ref() == Some(&row.address)
                                 || (current.is_none()
@@ -2319,8 +2346,14 @@ impl Render for Shipped {
                     crate::empties::Empty::Nothing if !asks.is_empty() => {
                         label("home-needs-you", asks_need_you(asks.len())).into_any_element()
                     }
-                    _ => empty_line("empty", "Nothing needs you", empty, now, chrome)
-                        .into_any_element(),
+                    _ => empty_line(
+                        "empty",
+                        crate::setup::count().unwrap_or("Nothing needs you"),
+                        empty,
+                        now,
+                        chrome,
+                    )
+                    .into_any_element(),
                 };
                 let heading = project.clone().unwrap_or_else(|| {
                     if read {

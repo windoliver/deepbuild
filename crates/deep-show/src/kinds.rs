@@ -636,6 +636,7 @@ impl Hub<'_> {
             .and_then(|(a, b)| Some((a.parse::<usize>().ok()?, b.parse::<usize>().ok()?)))
             .unwrap_or((0, 0));
         let mut out = l.header.clone();
+        out["packs"] = self.packs_listed();
         let mut size = out.to_string().len() + 64;
         let mut page: Vec<Value> = Vec::new();
         let mut next = None;
@@ -677,6 +678,30 @@ impl Hub<'_> {
             out["next"] = json!(n);
         }
         out
+    }
+
+    /// The packs installed here (#1720), each with its version and origin, its recipes and the
+    /// kind each of its words maps to.
+    fn packs_listed(&self) -> Value {
+        let packs: Vec<Value> = self
+            .packs
+            .all()
+            .map(|p| {
+                let recipes: Vec<String> = p
+                    .recipes
+                    .values()
+                    .map(|r| format!("{}@{}", r.id, r.major))
+                    .collect();
+                let aliases: Map<String, Value> = p
+                    .aliases
+                    .iter()
+                    .map(|(word, a)| (word.clone(), a["target"].clone()))
+                    .collect();
+                json!({"pack": p.id.id, "version": p.id.version.to_string(),
+                       "origin": self.pack_origin(&p.id.text()), "recipes": recipes, "aliases": aliases})
+            })
+            .collect();
+        Value::Array(packs)
     }
 
     /// A word from a familiar-names pack installed here: the kind it maps to and the conversion
