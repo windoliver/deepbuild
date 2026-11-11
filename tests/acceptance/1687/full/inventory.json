@@ -1,0 +1,391 @@
+{
+  "base": "c52f1c66d22886c336189d41237265e82843c34a",
+  "monolithOverlayCount": 19,
+  "twins": [
+    {
+      "manifest": "tests/acceptance/18/twins.json",
+      "twin": "unbound-reads-all",
+      "criteria": [
+        "#18.7f5b2ce8"
+      ],
+      "overlays": [
+        "packages/hub/src/core.ts"
+      ]
+    },
+    {
+      "manifest": "tests/acceptance/21/twins.json",
+      "twin": "plant-ignored",
+      "criteria": [
+        "#21.9a5768d4"
+      ],
+      "overlays": [
+        "packages/hub/src/core.ts"
+      ]
+    },
+    {
+      "manifest": "tests/acceptance/25/twins.json",
+      "twin": "waiter-never-wakes",
+      "criteria": [
+        "#25.ee0f30b0"
+      ],
+      "overlays": [
+        "packages/hub/src/plant.ts"
+      ]
+    },
+    {
+      "manifest": "tests/acceptance/25/twins.json",
+      "twin": "waiter-outlives-session",
+      "criteria": [
+        "#25.008fdf08"
+      ],
+      "overlays": [
+        "packages/hub/src/plant.ts",
+        "packages/hub/src/setup.ts"
+      ]
+    },
+    {
+      "manifest": "tests/acceptance/25/twins.json",
+      "twin": "routes-from-settings",
+      "criteria": [
+        "#25.c5d6abef"
+      ],
+      "overlays": [
+        "packages/hub/src/plant.ts"
+      ]
+    },
+    {
+      "manifest": "tests/acceptance/25/twins.json",
+      "twin": "routes-kept-across-sessions",
+      "criteria": [
+        "#25.c5d6abef"
+      ],
+      "overlays": [
+        "packages/hub/src/plant.ts"
+      ]
+    },
+    {
+      "manifest": "tests/acceptance/27/twins.json",
+      "twin": "waiter-never-wakes",
+      "criteria": [
+        "#27.778c531d"
+      ],
+      "overlays": [
+        "packages/hub/src/plant.ts"
+      ]
+    },
+    {
+      "manifest": "tests/acceptance/27/twins.json",
+      "twin": "repeat-reaches-you",
+      "criteria": [
+        "#27.6e863673"
+      ],
+      "overlays": [
+        "packages/hub/src/plant.ts"
+      ]
+    },
+    {
+      "manifest": "tests/acceptance/27/twins.json",
+      "twin": "wake-assumed",
+      "criteria": [
+        "#27.f8331d25",
+        "#27.e6116d56"
+      ],
+      "overlays": [
+        "packages/hub/src/plant.ts"
+      ]
+    },
+    {
+      "manifest": "tests/acceptance/27/twins.json",
+      "twin": "skip-default-at-deadline",
+      "criteria": [
+        "#27.e6116d56"
+      ],
+      "overlays": [
+        "packages/hub/src/plant.ts"
+      ]
+    },
+    {
+      "manifest": "tests/acceptance/27/twins.json",
+      "twin": "waiter-outlives-session",
+      "criteria": [
+        "#27.e6116d56"
+      ],
+      "overlays": [
+        "packages/hub/src/plant.ts",
+        "packages/hub/src/setup.ts"
+      ]
+    },
+    {
+      "manifest": "tests/acceptance/27/twins.json",
+      "twin": "answer-skips-held-stop",
+      "criteria": [
+        "#27.e6116d56"
+      ],
+      "overlays": [
+        "packages/hub/src/plant.ts"
+      ]
+    },
+    {
+      "manifest": "tests/acceptance/27/twins.json",
+      "twin": "waiter-checks-every-5s",
+      "criteria": [
+        "#27.ffbe7d6f"
+      ],
+      "overlays": [
+        "packages/hub/src/plant.ts"
+      ]
+    },
+    {
+      "manifest": "tests/acceptance/332/twins.json",
+      "twin": "clone-record-under-plant",
+      "criteria": [
+        "#332.92539e14"
+      ],
+      "overlays": [
+        "packages/hub/src/core.ts"
+      ]
+    },
+    {
+      "manifest": "tests/acceptance/349/twins.json",
+      "twin": "passed-without-results",
+      "criteria": [
+        "#349.68572cba"
+      ],
+      "overlays": [
+        "packages/extension-host/src/host.ts"
+      ]
+    },
+    {
+      "manifest": "tests/acceptance/349/twins.json",
+      "twin": "routes-by-name",
+      "criteria": [
+        "#349.009ae072"
+      ],
+      "overlays": [
+        "packages/extension-host/src/host.ts"
+      ]
+    },
+    {
+      "manifest": "tests/acceptance/349/twins.json",
+      "twin": "refusals-unrecorded",
+      "criteria": [
+        "#349.27abd805",
+        "#349.70f6262e"
+      ],
+      "overlays": [
+        "packages/asks/src/index.ts"
+      ]
+    },
+    {
+      "manifest": "tests/acceptance/349/twins.json",
+      "twin": "applied-but-never-handed",
+      "criteria": [
+        "#349.27abd805"
+      ],
+      "overlays": [
+        "packages/asks/src/index.ts"
+      ]
+    },
+    {
+      "manifest": "tests/acceptance/349/twins.json",
+      "twin": "kit-skipped-at-install",
+      "criteria": [
+        "#349.e98531fc"
+      ],
+      "overlays": [
+        "packages/extension-host/src/host.ts"
+      ]
+    },
+    {
+      "manifest": "tests/acceptance/349/twins.json",
+      "twin": "both-adapters-deliver",
+      "criteria": [
+        "#349.77853dd0"
+      ],
+      "overlays": [
+        "packages/extension-host/src/host.ts"
+      ]
+    },
+    {
+      "manifest": "tests/acceptance/349/twins.json",
+      "twin": "plants-ignored",
+      "criteria": [
+        "#349.77853dd0",
+        "#349.70f6262e"
+      ],
+      "overlays": [
+        "packages/asks/src/index.ts",
+        "packages/extension-host/src/host.ts"
+      ]
+    },
+    {
+      "manifest": "tests/acceptance/351/twins.json",
+      "twin": "admits-everything",
+      "criteria": [
+        "#351.83b84661",
+        "#351.542cefd7",
+        "#351.f151ca10",
+        "#351.86308453",
+        "#351.838460c6",
+        "#351.c5e40eeb"
+      ],
+      "overlays": [
+        "packages/extension-host/src/host.ts"
+      ]
+    },
+    {
+      "manifest": "tests/acceptance/351/twins.json",
+      "twin": "plants-ignored",
+      "criteria": [
+        "#351.f151ca10",
+        "#351.86308453"
+      ],
+      "overlays": [
+        "packages/extension-host/src/host.ts"
+      ]
+    },
+    {
+      "manifest": "tests/acceptance/351/twins.json",
+      "twin": "replaced-kind-kept",
+      "criteria": [
+        "#351.c5e40eeb"
+      ],
+      "overlays": [
+        "packages/extension-host/src/host.ts"
+      ]
+    },
+    {
+      "manifest": "tests/acceptance/39/twins.json",
+      "twin": "takes-first-stamp",
+      "criteria": [
+        "#39.de9f23ce"
+      ],
+      "overlays": [
+        "packages/hub/src/core.ts"
+      ]
+    },
+    {
+      "manifest": "tests/acceptance/39-redraft/twins.json",
+      "twin": "job-hooks-as-session",
+      "criteria": [
+        "#39.edfd0196"
+      ],
+      "overlays": [
+        "packages/hub/src/core.ts"
+      ]
+    },
+    {
+      "manifest": "tests/acceptance/40/twins.json",
+      "twin": "accepts-replaced",
+      "criteria": [
+        "#40.5fd13825"
+      ],
+      "overlays": [
+        "packages/hub/src/plant.ts"
+      ]
+    },
+    {
+      "manifest": "tests/acceptance/40/twins.json",
+      "twin": "plants-ignored",
+      "criteria": [
+        "#40.5fd13825"
+      ],
+      "overlays": [
+        "packages/hub/src/plant.ts",
+        "packages/pi/src/index.ts"
+      ]
+    },
+    {
+      "manifest": "tests/acceptance/55/twins.json",
+      "twin": "delivers-beside-waiter",
+      "criteria": [
+        "#55.480a0e0c"
+      ],
+      "overlays": [
+        "packages/hub/src/plant.ts"
+      ]
+    },
+    {
+      "manifest": "tests/acceptance/567/twins.json",
+      "twin": "no-stop-hold",
+      "criteria": [
+        "#567.4297f978"
+      ],
+      "overlays": [
+        "packages/hub/src/server.ts"
+      ]
+    },
+    {
+      "manifest": "tests/acceptance/823/twins.json",
+      "twin": "deep-wait-polls",
+      "criteria": [
+        "#823.da880762",
+        "#823.f1b9ae1e"
+      ],
+      "overlays": [
+        "packages/hub/src/plant.ts"
+      ]
+    },
+    {
+      "manifest": "tests/acceptance/823/twins.json",
+      "twin": "stop-answers-waiting",
+      "criteria": [
+        "#823.d60a913c"
+      ],
+      "overlays": [
+        "packages/hub/src/plant.ts"
+      ]
+    },
+    {
+      "manifest": "tests/acceptance/83/twins.json",
+      "twin": "stop-without-line",
+      "criteria": [
+        "#83.8a03aacc"
+      ],
+      "overlays": [
+        "packages/hub/src/core.ts"
+      ]
+    },
+    {
+      "manifest": "tests/acceptance/83/twins.json",
+      "twin": "answers-any-origin",
+      "criteria": [
+        "#83.4b0836ba"
+      ],
+      "overlays": [
+        "packages/hub/src/core.ts"
+      ]
+    },
+    {
+      "manifest": "tests/acceptance/83/twins.json",
+      "twin": "plant-ignored",
+      "criteria": [
+        "#83.4b0836ba"
+      ],
+      "overlays": [
+        "packages/hub/src/core.ts"
+      ]
+    },
+    {
+      "manifest": "tests/acceptance/906/twins.json",
+      "twin": "delivered-when-written",
+      "criteria": [
+        "#906.b7af9874",
+        "#906.ac643af8"
+      ],
+      "overlays": [
+        "packages/hub/src/plant.ts"
+      ]
+    },
+    {
+      "manifest": "tests/acceptance/906/twins.json",
+      "twin": "sends-shown-again",
+      "criteria": [
+        "#906.02f9eada"
+      ],
+      "overlays": [
+        "packages/hub/src/plant.ts"
+      ]
+    }
+  ]
+}
