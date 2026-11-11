@@ -34,5 +34,6 @@ mod rows;
 pub mod schedule;
 pub mod shots;
 pub mod spring;
-mod tempo;
+pub mod score;
+pub mod tempo;
 pub mod travel;

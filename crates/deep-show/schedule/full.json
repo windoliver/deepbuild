@@ -2,7 +2,7 @@
   "uri": "deep://schedule/core@0.0.0",
   "core": "core@0.0.0",
   "build_set": "full",
-  "set_digest": "0aac98f10a25dcaef5fad99a63b2def0e4de054cbe67bde45c86ad09cafe70c9",
+  "set_digest": "932c82ee183d8b226f33c5a137ff599209cf2c537e5cda6e877ba94b341421b9",
   "interfaces": {
     "building@1": {
       "digest": "0d13ed593138e9ee44e857752ef4b2a0392f03bc17c10b4f99b48746f6d580e1",
@@ -451,7 +451,7 @@
       }
     },
     "scene3d@1": {
-      "digest": "7f6b7e00a75e936a2385cff4bcabe8f5a3dde3480cb5fe8f4c2d6bdab09435ea",
+      "digest": "37d4cb1807acc482d198f9e539a3dde7ed34e55c1c32d2de1f003e4a942a598e",
       "reference": "scene3d",
       "kit": [
         "fixtures",
@@ -606,6 +606,33 @@
           "motion.program"
         ],
         "per": "document"
+      },
+      {
+        "operator": "scene3d.rest",
+        "module": "scene3d",
+        "version": "1.0.0",
+        "reads": [
+          "refs"
+        ],
+        "writes": [
+          "scene3d.rests"
+        ],
+        "per": "document"
+      }
+    ],
+    "build": [
+      {
+        "operator": "scene3d.scatter",
+        "module": "scene3d",
+        "version": "1.0.0",
+        "reads": [
+          "self",
+          "refs"
+        ],
+        "writes": [
+          "scene3d.scattered"
+        ],
+        "per": "item"
       }
     ],
     "items": [
@@ -615,7 +642,9 @@
         "version": "1.0.0",
         "reads": [
           "self",
-          "look"
+          "look",
+          "t",
+          "reading"
         ],
         "writes": [
           "cells.grid"
@@ -817,19 +846,6 @@
         "per": "item"
       },
       {
-        "operator": "core.world",
-        "module": "core",
-        "version": "0.0.0",
-        "reads": [
-          "core.transform",
-          "parent"
-        ],
-        "writes": [
-          "core.world"
-        ],
-        "per": "item"
-      },
-      {
         "operator": "record.salience",
         "module": "record",
         "version": "1.0.0",
@@ -894,6 +910,46 @@
         ],
         "writes": [
           "scene3d.livebuilt"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "scene3d.restlive",
+        "module": "scene3d",
+        "version": "1.0.0",
+        "reads": [
+          "refs",
+          "t",
+          "motion.program"
+        ],
+        "writes": [
+          "scene3d.restslive"
+        ],
+        "per": "document"
+      },
+      {
+        "operator": "scene3d.rested",
+        "module": "scene3d",
+        "version": "1.0.0",
+        "reads": [
+          "scene3d.rests",
+          "scene3d.restslive"
+        ],
+        "writes": [
+          "scene3d.rested"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "core.world",
+        "module": "core",
+        "version": "0.0.0",
+        "reads": [
+          "core.transform",
+          "parent"
+        ],
+        "writes": [
+          "core.world"
         ],
         "per": "item"
       },
@@ -1105,7 +1161,8 @@
     ],
     "core.transform": [
       "motion.at",
-      "motion.placed"
+      "motion.placed",
+      "scene3d.rested"
     ]
   }
 }

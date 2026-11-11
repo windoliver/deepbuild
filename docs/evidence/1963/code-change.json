@@ -1,0 +1,84 @@
+{
+  "format": 1,
+  "id": "code-change-1963",
+  "profile": "film",
+  "title": "Code change 1963",
+  "description": "A function quoted from its commit, and a formula quoted from a paper.",
+  "size": [
+    960,
+    540
+  ],
+  "layers": {
+    "main": {
+      "writer": "agent-a",
+      "title": "Main",
+      "order": "a0"
+    }
+  },
+  "items": {
+    "tab": {
+      "id": "tab",
+      "kind": "text@1",
+      "layer": "main",
+      "name": "tab",
+      "order": "a1",
+      "at": {
+        "pos": [
+          24,
+          40,
+          0
+        ]
+      },
+      "params": {
+        "font": "mono",
+        "size": 14,
+        "code": {
+          "language": "rust",
+          "first_line": 102
+        },
+        "raw": "/// A code item's `tab` (`code.tab`, 4 by default).\npub fn tab(params: &Map<String, Value>) -> usize {\n    params\n        .get(\"code\")\n        .and_then(|c| c.get(\"tab\"))\n        .and_then(Value::as_u64)\n        .map_or(4, |t| t as usize)\n}\n",
+        "quote": {
+          "source": "ev:76fd709c20dfd98c5ec05833a16e22d831cd9a5c6522a1b0a02117f49c0f3ac0",
+          "path": "crates/deep-canvas-marks/src/code.rs",
+          "lines": [
+            102,
+            109
+          ]
+        }
+      }
+    },
+    "snell": {
+      "id": "snell",
+      "kind": "vector@1",
+      "layer": "main",
+      "name": "Snell",
+      "order": "a2",
+      "at": {
+        "pos": [
+          24,
+          360,
+          0
+        ]
+      },
+      "params": {
+        "src": "0e9de7047e6ab5b3cfb6d0ec0593b2960809fae2aaca04e724fa050137ad7f4a",
+        "size": [
+          300,
+          60
+        ],
+        "colors": {
+          "#000000": "ink"
+        },
+        "alt": "  n_1 \\sin\\theta_1 =\n  n_2 \\sin\\theta_2\n",
+        "quote": {
+          "source": "ev:c606b22a633a40cfb5d78c12a9d581f363023b488781167609d393a5a0d051e8",
+          "path": "paper/main.tex",
+          "lines": [
+            3,
+            4
+          ]
+        }
+      }
+    }
+  }
+}
