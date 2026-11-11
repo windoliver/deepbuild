@@ -96,6 +96,12 @@
     "called_by": "deep inbox undo"
   },
   {
+    "method": "ask.take_over",
+    "since": "R2",
+    "stability": "preview",
+    "tracking": "#1580"
+  },
+  {
     "method": "device.pair",
     "since": "R1",
     "stability": "preview",
@@ -220,6 +226,18 @@
     "since": "R1",
     "stability": "stable",
     "called_by": "deep install"
+  },
+  {
+    "method": "pack.rule",
+    "since": "R6",
+    "stability": "preview",
+    "tracking": "#1820"
+  },
+  {
+    "method": "canvas.export",
+    "since": "R6",
+    "stability": "preview",
+    "tracking": "#1820"
   },
   {
     "method": "guard.add",

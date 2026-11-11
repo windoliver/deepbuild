@@ -1,0 +1,40 @@
+{
+  "scene": "repeat-plate-faces",
+  "format": 1,
+  "about": "Parity fixture for #2015 AC1 (Recipe: repeat over elements; Builder: plate). A grid plate `plot` and an instance `lot` of test/lots@1.0.0's recipe lots.post@1, whose step `post` repeats over {each: {part: \"ground#top\", domain: \"face\"}, as: \"e\"} with its ID input `ground` holding `plot`, and stands one mark.box@1 at each face's e.center. Both items stand at the world origin with no rotation, so the plate's item space, the instance's and the world coincide. Revision 0 is a 3 x 2 plate of 1 m cells; revision 1 is the same instance over the plate with one more row of cells (3 x 3), so three faces are added after the six there were, at indices 6, 7 and 8. Expected (the design: a grid plate's faces are its cells, x fastest, then z; one derived step per element, `<instance>.<step>.<index>`; seeds from (instance, step, element index)): revision 0 expands `lot` into exactly lot.post.0 ... lot.post.5 and revision 1 into lot.post.0 ... lot.post.8, each a mark.box@1 at its cell's centre, the cell of index k being cells[k] = [i, j] (column i along x, row j along z); the centre of cell [i, j] is the plate's least corner plus ((i + 1/2) * size[0] / grid[0], 0, (j + 1/2) * size[1] / grid[1]), the least corner read from the plate's own built positions, since the design doesn't fix where a grid plate stands about its origin; each derived item has its own seed, and lot.post.0 ... lot.post.5 keep their seeds in revision 1. The twins are planted programs, reachable only through the scenario's `planted`, that must fail the check named in `check`, a failure naming each text in `names`.",
+  "packs": ["test/lots@1.0.0"],
+  "plate": "plot",
+  "instance": "lot",
+  "step": "post",
+  "kind": "mark.box@1",
+  "revisions": [
+    {
+      "name": "3 x 2",
+      "items": {
+        "plot": { "kind": "plate@1", "params": { "grid": [3, 2], "size": [3, 2] } },
+        "lot": { "kind": "lots.post@1", "params": { "ground": "plot" }, "at": { "pos": [0, 0, 0] } }
+      },
+      "grid": [3, 2],
+      "size": [3, 2],
+      "derived": ["lot.post.0", "lot.post.1", "lot.post.2", "lot.post.3", "lot.post.4", "lot.post.5"],
+      "cells": [[0, 0], [1, 0], [2, 0], [0, 1], [1, 1], [2, 1]]
+    },
+    {
+      "name": "3 x 3",
+      "items": {
+        "plot": { "kind": "plate@1", "params": { "grid": [3, 3], "size": [3, 3] } },
+        "lot": { "kind": "lots.post@1", "params": { "ground": "plot" }, "at": { "pos": [0, 0, 0] } }
+      },
+      "grid": [3, 3],
+      "size": [3, 3],
+      "derived": ["lot.post.0", "lot.post.1", "lot.post.2", "lot.post.3", "lot.post.4", "lot.post.5", "lot.post.6", "lot.post.7", "lot.post.8"],
+      "cells": [[0, 0], [1, 0], [2, 0], [0, 1], [1, 1], [2, 1], [0, 2], [1, 2], [2, 2]]
+    }
+  ],
+  "kept": ["lot.post.0", "lot.post.1", "lot.post.2", "lot.post.3", "lot.post.4", "lot.post.5"],
+  "tolerance_m": 1e-9,
+  "twins": [
+    { "planted": "each_seeds_by_element_count", "wrong": "a derived item's seed hashes the part's element count with (instance, step, element index), so adding faces reseeds every element", "check": "reseed", "names": ["lot.post.0"] },
+    { "planted": "each_face_per_triangle", "wrong": "the repeat walks the part's triangles, not its polygon view's faces, so each grid cell makes two derived steps", "check": "faces", "names": ["12 derived items for 6 faces"] }
+  ]
+}

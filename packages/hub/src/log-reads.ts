@@ -2,8 +2,21 @@
 // event appended. Taken out of the core as one seam with its own state and four things it asks of the core, as
 // spool.ts, holds.ts and stacks.ts are.
 import type { RecordStore } from '@deepbuild/record';
+import type { Scope } from './wire.js';
 
 type Obj = Record<string, unknown>;
+
+/** The events a flush sends one subscriber in its turn (#1575): one reader's backlog never holds another's frames. */
+const TURN = 128;
+/** A scoped subscribe further behind than this is told to read a fresh snapshot, never replayed (#1575). */
+const REPLAY_EVENTS = 128;
+const REPLAY_BYTES = 1 << 20;
+
+/**
+ * One subscription: the log_pos it was sent up to, its scope as SQL, and the head its reply named until it reaches it;
+ * `replying` while its reply is on its way, since no frame goes before the reply.
+ */
+interface Subscriber { last: number; scope?: { sql: string; values: string[] }; head?: number; replying?: true }
 
 /**
  * An event's JSON text, built by SQLite from the stored row: the record's toJson fields, seq as its decimal string, and
@@ -24,12 +37,12 @@ interface LogReadsOptions {
   settled(): Promise<unknown>;
   /** The events the owner may see, as SQL (#1337): only the owner subscribes. */
   ownerSeen(): string;
-  /** Sends one event's JSON text to a subscriber. */
-  emit(sub: string, json: string): void;
+  /** Sends one event's JSON text to a subscriber; or, `caught` set, the frame marking that it reached its head. */
+  emit(sub: string, json: string, caught?: boolean): void;
 }
 
 export class LogReads {
-  private readonly subscribers = new Map<string, number>();
+  private readonly subscribers = new Map<string, Subscriber>();
   private streaming = false;
   private restream = false;
   /** The full page after the last one read, built ahead for a reader paging in order. */
@@ -87,10 +100,37 @@ export class LogReads {
     return out;
   }
 
-  /** Streams every event after `after` to the subscriber, then each one appended from then on. */
-  subscribe(sub: string, after: number): void {
-    this.subscribers.set(sub, after);
-    this.stream();
+  /**
+   * Streams every event after `after` to the subscriber, then each one appended from then on. A scoped subscribe
+   * (#1575) gets only its scope's events and a reply naming the head: its replay up to the head, one frame marking it,
+   * then live frames. One more than 128 events or 1 MiB behind is told to read a fresh snapshot, and isn't subscribed.
+   */
+  async subscribe(sub: string, after: number, scope?: Scope): Promise<{ head?: number; snapshot?: true }> {
+    // Held from the first, so an unsubscribe that comes while the head is read removes it; served once its reply is out.
+    const s: Subscriber = { last: after, replying: true };
+    this.subscribers.set(sub, s);
+    const serve = () => setImmediate(() => {
+      delete s.replying;
+      this.stream();
+    });
+    if (!scope) {
+      serve();
+      return {};
+    }
+    const where = scope.kind === 'list' ? { sql: ` AND kind = 'row.set'`, values: [] } : { sql: ' AND session_id = ?', values: [scope.session] };
+    // Every event at or before the head is replay, and every one after it live: one committed after this read takes a
+    // later log_pos, so it is live however soon it lands.
+    await this.o.settled();
+    const head = Number(((await this.o.raw('SELECT coalesce(max(log_pos), 0) AS head FROM events')) as { head: number }[])[0]!.head);
+    const [behind] = (await this.o.raw(`SELECT count(*) AS n, coalesce(sum(octet_length(json)), 0) AS bytes FROM (SELECT ${EVENT_TEXT} AS json FROM events WHERE log_pos > ? AND log_pos <= ?${where.sql}${this.o.ownerSeen()} ORDER BY log_pos LIMIT ?)`, [after, head, ...where.values, REPLAY_EVENTS + 1])) as { n: number; bytes: number }[];
+    if (behind!.n > REPLAY_EVENTS || behind!.bytes > REPLAY_BYTES) {
+      if (this.subscribers.get(sub) === s) this.subscribers.delete(sub);
+      return { head, snapshot: true };
+    }
+    s.scope = where;
+    s.head = head;
+    serve();
+    return { head };
   }
   unsubscribe(sub: string): void {
     this.subscribers.delete(sub);
@@ -112,18 +152,35 @@ export class LogReads {
       }
     }));
   }
+  /**
+   * One page for each subscriber in turn, until each has every event (#1575): a reader replaying a long backlog holds
+   * no other reader's frames, and the core takes hooks between turns.
+   */
   private async flushStream(): Promise<void> {
-    for (const [sub, after] of this.subscribers) {
-      let last = after;
-      for (;;) {
-        // Only the owner subscribes, and reads what the owner may see (#1337).
-        const events = await this.page(last, 1000, undefined, this.o.ownerSeen());
-        if (!this.subscribers.has(sub)) break;
+    for (let more = true; more;) {
+      more = false;
+      for (const [sub, s] of this.subscribers) {
+        if (s.replying) continue;
+        const events = await this.turn(s);
+        if (this.subscribers.get(sub) !== s) continue;
         for (const event of events) this.o.emit(sub, event.json);
-        if (events.length) last = events[events.length - 1]!.log_pos;
-        if (events.length < 1000) break;
+        if (events.length) s.last = events[events.length - 1]!.log_pos;
+        if (events.length === TURN) more = true;
+        else if (s.head !== undefined) {
+          // Its replay reached the head its reply named: one frame marks it, and every frame after it is live.
+          this.o.emit(sub, String(s.head), true);
+          s.last = Math.max(s.last, s.head);
+          delete s.head;
+          more = true;
+        }
       }
-      if (this.subscribers.has(sub)) this.subscribers.set(sub, last);
+      if (more) await new Promise((done) => setImmediate(done));
     }
+  }
+  /** A subscriber's next page: its scope's events after its last, up to the head its reply named while it replays. */
+  private async turn(s: Subscriber): Promise<{ log_pos: number; json: string }[]> {
+    const upTo = s.head === undefined ? [] : [s.head];
+    // Only the owner subscribes, and reads what the owner may see (#1337).
+    return (await this.o.raw(`SELECT log_pos, ${EVENT_TEXT} AS json FROM events WHERE log_pos > ?${upTo.length ? ' AND log_pos <= ?' : ''}${s.scope?.sql ?? ''}${this.o.ownerSeen()} ORDER BY log_pos LIMIT ?`, [s.last, ...upTo, ...(s.scope?.values ?? []), TURN])) as { log_pos: number; json: string }[];
   }
 }

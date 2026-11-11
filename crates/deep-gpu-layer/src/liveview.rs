@@ -659,13 +659,15 @@ impl View {
     }
 
     /// The warm-up at check (#432): prepares each scene a revision can reach, so every pipeline
-    /// they draw with is compiled before its first frame; none of them is a frame's.
+    /// they draw with is compiled before its first frame; none of them is a frame's, so the
+    /// first frame after it encodes each batch (#1903).
     pub fn warm(&mut self, device: &Device, look: &Look3, scenes: &[deep_canvas_scene3d::scene::Scene]) {
         self.renderer.log.warming = true;
         for scene in scenes {
             self.renderer.prepare(device, scene, look);
         }
         self.renderer.log.warming = false;
+        self.renderer.forget_encodings();
         self.prepared = false;
     }
 
