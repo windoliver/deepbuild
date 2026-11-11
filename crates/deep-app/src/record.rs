@@ -26,16 +26,6 @@ use crate::states::{closes, handle, Table};
 /// Once a session holds this many open asks, its further asks fold into one exception.
 pub const FOLD_AFTER: usize = 5;
 
-/// The kinds that close an ask, and the outcome the inbox shows for each, as the asks core names them.
-const CLOSING: [(&str, &str); 7] = [
-    ("decision.applied", "decided_for_you"),
-    ("ask.answered", "answered"),
-    ("ask.defaulted", "defaulted"),
-    ("ask.escalated", "escalated"),
-    ("ask.cancelled", "cancelled"),
-    ("ask.superseded", "superseded"),
-    ("ask.moot", "moot"),
-];
 /// The events one refetch asks for at a time.
 const PAGE: usize = 1000;
 /// The newest events a view keeps.
@@ -211,8 +201,10 @@ impl View {
                 // When it comes back, which the list reads by its clock (#1462).
                 row["until"] = event["data"]["until"].clone();
             }
-        } else if let Some((_, outcome)) = CLOSING.iter().find(|(k, _)| *k == kind) {
-            // The close rule the rest of the app reads, and the first close to append decides, as in the core.
+        } else if crate::states::closing().iter().any(|k| k == kind) {
+            // The contract's close rule, and the first close to append decides, as in the core; the outcome is the
+            // inbox's word for the kind, as the asks core names it.
+            let outcome = kind.strip_prefix("ask.").unwrap_or("decided_for_you");
             for row in self.inbox.iter_mut().filter(|row| {
                 row["status"] != "closed" && closes(&event, row["ask"].as_str().unwrap_or_default())
             }) {
@@ -255,6 +247,8 @@ pub struct RecordReader {
     setting: Option<&'static str>,
     /// Whether each new read also folds the record before it, for the window's views.
     folds: bool,
+    /// Whether the record before the newest read is still to be folded (#2026).
+    owed: bool,
     /// Whether it checks the hub's hello covers the app before any call (#41), as the window's reader does.
     checks: bool,
 }
@@ -269,6 +263,7 @@ impl RecordReader {
             view: View::default(),
             setting: None,
             folds: false,
+            owed: false,
             checks: false,
         }
     }
@@ -317,7 +312,23 @@ impl RecordReader {
 
     /// `deep-app --hub-check` (#41): connects as the window does, once, making the calls it makes on connect.
     pub fn check(&mut self) -> Result<(), HubError> {
-        self.connect()
+        self.connect()?;
+        self.fold()
+    }
+
+    /// Folds the record before the newest read into a table of its own, which the views then read in place of the
+    /// rows the read gave (#2026).
+    fn fold(&mut self) -> Result<(), HubError> {
+        let Some(client) = self.client.as_mut().filter(|_| self.owed) else {
+            return Ok(());
+        };
+        let seeded = std::mem::take(&mut self.view.table);
+        if let Err(error) = self.view.fold_before(client) {
+            self.view.table = seeded;
+            return Err(error);
+        }
+        self.owed = false;
+        Ok(())
     }
 
     pub fn view(&self) -> View {
@@ -337,6 +348,17 @@ impl RecordReader {
                     return Ok(());
                 }
             }
+            // A new read's rows are drawn first; the record before them folds at the next poll (#2026).
+            if self.owed {
+                return Ok(());
+            }
+        }
+        if let Err(error) = self.fold() {
+            if let HubError::Refused(_) = error {
+                return Err(error);
+            }
+            self.client = None;
+            return Ok(());
         }
         loop {
             let left = deadline.saturating_duration_since(Instant::now());
@@ -380,21 +402,29 @@ impl RecordReader {
             .as_str()
             .unwrap_or_default()
             .to_string();
+        let mut seeded = false;
         if start != self.view.start {
             let inbox = client.call("inbox.read", json!({}))?;
+            // A hub that builds the list's rows (#1463) gives the open asks' rows with the read: the views draw them
+            // until the record before the read is folded, so Needs you never waits on the history (#2026).
+            let rows = inbox["rows"].as_array().filter(|_| self.folds);
+            seeded = rows.is_some();
             self.view = View {
                 start,
                 log_pos: inbox["log_pos"].as_u64().unwrap_or(0),
                 inbox: inbox["asks"].as_array().cloned().unwrap_or_default(),
+                table: rows.map_or_else(Table::default, |rows| Table::seeded(rows)),
                 ..View::default()
             };
-            if self.folds {
-                self.view.fold_before(&mut client)?;
-            }
+            self.owed = self.folds;
         }
         client.call("stream.subscribe", json!({ "after": self.view.log_pos }))?;
         self.client = Some(client);
         self.send_report();
+        // A read without rows has nothing to draw first, so its record folds now.
+        if !seeded {
+            self.fold()?;
+        }
         Ok(())
     }
 
