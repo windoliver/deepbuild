@@ -1,0 +1,25 @@
+Base: f28d8777 (f28d8777e6759ce413394f5453d36fcd8a449956, origin/main, "Merge pull request #2229 ..."). macOS arm64,
+this Mac's Metal GPU, 2026-11-10.
+
+Command (run once):
+  export PATH="$HOME/.rustup/toolchains/1.99.1-aarch64-apple-darwin/bin:/opt/homebrew/opt/rustup/bin:$PATH"
+  CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 NO_COLOR=1 npx vitest run --root tests/acceptance/2189-redraft-ac1 --no-file-parallelism --testTimeout=1800000
+
+Outcome: 1 test, 1 failed, at the named cap assertion. The release build of deep-gpu succeeded (cold, about 9 min of
+the 535 s), the binary found a Metal device, and the envelope call was refused at check. The test itself took 1.4 s.
+
+  FAIL  ac1-full-screen.test.ts > #2189 the every-pass scene at full screen, against the showpiece class's 512 MB >
+        #2189.0da003b3 on Metal the every-pass scene at 3456 × 2234 is refused at check naming its size, bytes over
+        512,000,000 and cap_bytes 512,000,000, or plays with every fixture's peak at most 512,000,000
+  AssertionError: an over_budget issue naming cap_bytes 512000000, the showpiece class's cap since #2234:
+    [{"code":"over_budget","severity":"error","ids":[],"path":"size","actual":{"size":[3456,2234],"gpu_bytes":644762384,
+      "cap_bytes":256000000},"what":"a 3456 × 2234 view needs 644.8 MB of GPU memory at scale 0.5 with a 0-frame window,
+      past its class's 256 MB"}]: expected [ 256000000 ] to include 512000000
+   ❯ ac1-full-screen.test.ts:36:160
+
+Why: at the base, Class::Showpiece in crates/deep-canvas/src/budget.rs gives gpu_bytes 256 MB, so admit's over_budget
+issue names cap_bytes 256,000,000. Everything before that assertion held: code "refused", one over_budget issue naming
+[3456, 2234]. Its gpu_bytes, 644,762,384, is over 512,000,000, so once the showpiece class's cap is 512,000,000 the same
+refusal would meet the criterion.
+
+Type-check: npx tsc -p tests/acceptance/2189-redraft-ac1/tsconfig.json -> exit 0.

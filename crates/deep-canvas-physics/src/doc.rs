@@ -57,6 +57,8 @@ pub struct Material {
     pub density: Option<f64>,
     pub rolling_resistance: f64,
     pub tangent_speed: f64,
+    /// Such as "wood": a hit carries both sides' tags (#1918).
+    pub tag: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -87,6 +89,16 @@ pub enum Shape {
     Mesh {
         vertices: Vec<[f64; 3]>,
         triangles: Vec<[u32; 3]>,
+    },
+    /// #2014: `rows` × `cols` heights, row by row, row along +Z and column along +X, spanning
+    /// `scale[0]` × `scale[2]` m centred on the body with each height times `scale[1]`; each cell
+    /// splits along the diagonal from its (column, row + 1) corner to its (column + 1, row) one,
+    /// as a terrain plate draws it. Static only.
+    Heightfield {
+        cols: usize,
+        rows: usize,
+        heights: Vec<f64>,
+        scale: [f64; 3],
     },
     /// Other shapes of the world by ID, each at its pose.
     Compound {
@@ -123,12 +135,17 @@ pub struct ShapeUse {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BodyKind {
     Static,
+    /// Moved only to its `follow` channel's pose at each step's time (#1918).
+    Kinematic,
     Dynamic,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Body {
     pub kind: BodyKind,
+    /// The channel path a kinematic body follows (Body: `follow`).
+    pub follow: Option<String>,
+    pub priority: i64,
     pub shapes: Vec<ShapeUse>,
     pub pose: Pose,
     pub linear: [f64; 3],
@@ -175,6 +192,8 @@ pub struct Spring {
 pub struct Motor {
     pub velocity: bool,
     pub target: f64,
+    /// A channel path the target reads at each step's time instead (Joint: motor target).
+    pub channel: Option<String>,
     pub max: Option<f64>,
     pub hz: f64,
     pub damping_ratio: f64,
@@ -189,8 +208,17 @@ pub struct Joint {
     pub limits: Option<[f64; 2]>,
     pub spring: Option<Spring>,
     pub motor: Option<Motor>,
+    /// `{force: N, torque: N·m, over_steps}`: past either for that many steps, it breaks.
+    pub breaks_at: Option<Breaks>,
     pub collide_connected: bool,
     pub active: bool,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct Breaks {
+    pub force: Option<f64>,
+    pub torque: Option<f64>,
+    pub over_steps: u32,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -250,28 +278,14 @@ pub struct World {
     pub joints: BTreeMap<String, Joint>,
     pub forces: BTreeMap<String, Force>,
     pub outputs: BTreeMap<String, Output>,
+    /// In kinematic mode, what sets each driven joint's coordinate (#1918).
+    pub solve: Option<Solve>,
 }
 
-/// A physics output (Physics output: `from`, `read`): before #1918 only a body's position.
-#[derive(Clone, Debug, PartialEq)]
-pub struct Output {
-    /// The body it reads.
-    pub from: String,
-}
-
-/// A physics output's fields; all but `from` and `read` wait for #1918.
-const OUTPUT_KEYS: &[&str] = &[
-    "from",
-    "read",
-    "to",
-    "interpolate",
-    "reduce",
-    "average",
-    "sample",
-    "keep",
-    "expr",
-    "unit",
-];
+mod heightfield;
+mod reads;
+pub use heightfield::HEIGHTFIELD_SAMPLES;
+pub use reads::{Output, Read, Solve, READS};
 
 /// The world document's own fields; `kind` names it.
 const WORLD_KEYS: &[&str] = &[
@@ -298,6 +312,7 @@ const WORLD_KEYS: &[&str] = &[
     "forces",
     "inputs",
     "outputs",
+    "solve",
 ];
 /// Fields this backend interface doesn't run yet, each with the issue that brings it.
 const LATER: &[(&str, &str)] = &[("inputs", "#522")];
@@ -585,6 +600,7 @@ impl Reader {
             density: None,
             rolling_resistance: 0.0,
             tangent_speed: 0.0,
+            tag: None,
         };
         let default_damping = self.num(d, "damping", "defaults", 0.0, 0.0, f64::MAX);
         let mut materials = BTreeMap::new();
@@ -617,6 +633,7 @@ impl Reader {
                     density: self.opt_num(c, "density", &p, 0.0),
                     rolling_resistance: self.num(c, "rolling_resistance", &p, 0.0, 0.0, f64::MAX),
                     tangent_speed: self.num(c, "tangent_speed", &p, 0.0, f64::MIN, f64::MAX),
+                    tag: self.text(c, "tag", &p),
                 },
             );
         }
@@ -672,9 +689,10 @@ impl Reader {
                 forces.insert(id.clone(), f);
             }
         }
+        let solve = self.solve(m, mode == Mode::Kinematic, &joints);
         let mut outputs = BTreeMap::new();
         for (id, v) in self.map(m, "outputs") {
-            if let Some(o) = self.output(v, &format!("outputs/{id}"), &bodies) {
+            if let Some(o) = self.output(v, &format!("outputs/{id}"), &bodies, &joints) {
                 outputs.insert(id.clone(), o);
             }
         }
@@ -698,47 +716,7 @@ impl Reader {
             joints,
             forces,
             outputs,
-        }
-    }
-
-    /// An output reading a body's position; its other fields and reads are refused, naming #1918.
-    fn output(&mut self, v: &Value, p: &str, bodies: &BTreeMap<String, Body>) -> Option<Output> {
-        let o = &self.obj(v, p, OUTPUT_KEYS);
-        for (k, x) in o.iter().filter(|(k, _)| *k != "from" && *k != "read") {
-            self.refuse(
-                "physics.unsupported",
-                join(p, k),
-                x,
-                format!("an output's {k} isn't run by this backend interface yet; #1918 brings it"),
-            );
-        }
-        match o.get("read") {
-            Some(Value::String(r)) if r == "position" => {}
-            None => self.refuse(
-                "physics.missing_field",
-                join(p, "read"),
-                &Value::Null,
-                format!("{p} needs a read"),
-            ),
-            Some(r) => self.refuse(
-                "physics.unsupported",
-                join(p, "read"),
-                r,
-                "an output reads only a body's position before #1918 brings the other reads".into(),
-            ),
-        }
-        let from = o.get("from").unwrap_or(&Value::Null);
-        match from.as_str() {
-            Some(id) if bodies.contains_key(id) => Some(Output { from: id.into() }),
-            _ => {
-                self.refuse(
-                    "ref_unresolved",
-                    join(p, "from"),
-                    from,
-                    format!("{from} is not a body of this world"),
-                );
-                None
-            }
+            solve,
         }
     }
 
@@ -908,6 +886,10 @@ impl Reader {
                 "vertices",
                 "triangles",
                 "children",
+                "cols",
+                "rows",
+                "heights",
+                "scale",
             ],
         );
         let kind = s.get("kind").and_then(Value::as_str).unwrap_or("");
@@ -1005,22 +987,13 @@ impl Reader {
                 }
                 Shape::Compound { children }
             }
-            "heightfield" => {
-                self.refuse(
-                    "physics.unsupported",
-                    join(p, "kind"),
-                    &s["kind"],
-                    "a heightfield shape isn't built by this backend interface yet; #927 brings it"
-                        .into(),
-                );
-                return None;
-            }
+            "heightfield" => self.heightfield(s, p)?,
             _ => {
                 self.refuse(
                     "out_of_range",
                     join(p, "kind"),
                     s.get("kind").unwrap_or(&Value::Null),
-                    "a shape's kind must be sphere, box, capsule, cylinder, plane, convex, mesh or compound".into(),
+                    "a shape's kind must be sphere, box, capsule, cylinder, plane, convex, mesh, heightfield or compound".into(),
                 );
                 return None;
             }
@@ -1064,12 +1037,17 @@ impl Reader {
                         &Value::from(child.as_str()),
                         format!("{child:?} is not a shape of this world"),
                     ),
-                    Some(Shape::Mesh { .. } | Shape::Plane { .. } | Shape::Compound { .. }) => {
+                    Some(
+                        Shape::Mesh { .. }
+                        | Shape::Plane { .. }
+                        | Shape::Compound { .. }
+                        | Shape::Heightfield { .. },
+                    ) => {
                         self.refuse(
                             "out_of_range",
                             at,
                             &Value::from(child.as_str()),
-                            format!("{child} is a mesh, a plane or a compound, which a compound can't hold"),
+                            format!("{child} is a mesh, a plane, a heightfield or a compound, which a compound can't hold"),
                         )
                     }
                     Some(_) => {}
@@ -1135,12 +1113,9 @@ impl Reader {
         let kind = match b.get("kind").and_then(Value::as_str) {
             Some("static") => BodyKind::Static,
             Some("dynamic") => BodyKind::Dynamic,
-            Some(k @ ("kinematic" | "character" | "vehicle")) => {
-                let issue = match k {
-                    "kinematic" => "#522",
-                    "character" => "#182",
-                    _ => "#251",
-                };
+            Some("kinematic") => BodyKind::Kinematic,
+            Some(k @ ("character" | "vehicle")) => {
+                let issue = if k == "character" { "#182" } else { "#251" };
                 self.refuse(
                     "physics.unsupported",
                     join(p, "kind"),
@@ -1161,16 +1136,15 @@ impl Reader {
                 BodyKind::Static
             }
         };
-        for (key, issue) in [("follow", "#522"), ("inertia", "#2098")] {
-            if let Some(x) = b.get(key) {
-                self.refuse(
-                    "physics.unsupported",
-                    join(p, key),
-                    x,
-                    format!("{key} isn't run by this backend interface yet; {issue} brings it"),
-                );
-            }
+        if let Some(x) = b.get("inertia") {
+            self.refuse(
+                "physics.unsupported",
+                join(p, "inertia"),
+                x,
+                "inertia isn't run by this backend interface yet; #2098 brings it".into(),
+            );
         }
+        let follow = self.follow(b, p, kind);
         let mut uses = Vec::new();
         for (i, u) in b
             .get("shapes")
@@ -1271,6 +1245,15 @@ impl Reader {
         }
         Body {
             kind,
+            follow,
+            priority: self.num(
+                b,
+                "priority",
+                p,
+                0.0,
+                f64::from(i32::MIN),
+                f64::from(i32::MAX),
+            ) as i64,
             shapes: uses,
             pose: self.pose(b.get("pose"), &join(p, "pose")),
             linear: self.vec3(vel, "linear", &join(p, "velocity"), [0.0; 3]),
@@ -1387,7 +1370,7 @@ impl Reader {
                 return None;
             }
         };
-        for (key, issue) in [("breaks_at", "#523"), ("swing", "#132"), ("twist", "#132")] {
+        for (key, issue) in [("swing", "#132"), ("twist", "#132")] {
             if let Some(x) = j.get(key) {
                 self.refuse(
                     "physics.unsupported",
@@ -1417,14 +1400,32 @@ impl Reader {
         });
         let motor = j.get("motor").map(|s| {
             let mp = join(p, "motor");
-            let m = &self.obj(s, &mp, &["mode", "target", "max_force", "max_torque", "hz", "damping_ratio"]);
-            if let Some(t) = m.get("target").filter(|t| t.is_string()) {
-                self.refuse("physics.unsupported", join(&mp, "target"), t, "a motor target read from a channel isn't run by this backend interface yet; #522 brings it".into());
-            }
+            let m = &self.obj(
+                s,
+                &mp,
+                &[
+                    "mode",
+                    "target",
+                    "max_force",
+                    "max_torque",
+                    "hz",
+                    "damping_ratio",
+                ],
+            );
             Motor {
-                velocity: self.word(m, "mode", &mp, "velocity", &["velocity", "position"]) == "velocity",
+                velocity: self.word(m, "mode", &mp, "velocity", &["velocity", "position"])
+                    == "velocity",
                 target: m.get("target").and_then(Value::as_f64).unwrap_or(0.0),
-                max: self.opt_num(m, "max_force", &mp, 0.0).or(self.opt_num(m, "max_torque", &mp, 0.0)),
+                channel: m
+                    .get("target")
+                    .filter(|t| !t.is_number())
+                    .and_then(|_| self.text(m, "target", &mp)),
+                max: self.opt_num(m, "max_force", &mp, 0.0).or(self.opt_num(
+                    m,
+                    "max_torque",
+                    &mp,
+                    0.0,
+                )),
                 hz: self.num(m, "hz", &mp, 1.0, f64::MIN_POSITIVE, f64::MAX),
                 damping_ratio: self.num(m, "damping_ratio", &mp, 1.0, 0.0, f64::MAX),
             }
@@ -1436,6 +1437,7 @@ impl Reader {
             limits,
             spring,
             motor,
+            breaks_at: self.breaks(j, p),
             collide_connected: self.flag(j, "collide_connected", p, false),
             active: self.flag(j, "active", p, true),
         })

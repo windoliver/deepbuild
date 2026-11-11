@@ -7,14 +7,15 @@ use std::collections::BTreeMap;
 use std::f32::consts::PI;
 
 use deep_canvas_physics::backend::{
-    Backend, BodyState, Canonical, Checkpoint, Input, Occurrence, ShapeRef, State,
+    Backend, BodyState, Canonical, Checkpoint, Input, ShapeRef, State, Targets,
 };
 use deep_canvas_physics::bake::{Build, Pin};
 use deep_canvas_physics::caps::{Caps, RAPIER3D};
 use deep_canvas_physics::doc::{
-    BodyKind, End, Force, ForceKind, Joint, JointKind, Material, Pose as DocPose, Refusal, Region,
-    Rot, Rule, Shape, World,
+    BodyKind, Breaks, End, Force, ForceKind, Joint, JointKind, Material, Mode, Motor,
+    Pose as DocPose, Refusal, Region, Rot, Rule, Shape, World,
 };
+use deep_canvas_physics::occurrence::Raw;
 use rapier3d::math::glamx::EulerRot;
 use rapier3d::math::{Pose, Rotation};
 use rapier3d::prelude::*;
@@ -28,8 +29,11 @@ pub fn leaked_world() -> rapier3d::prelude::PhysicsWorld {
     PhysicsWorld::default()
 }
 
+pub mod bound;
 pub mod fp;
+mod occurrences;
 pub mod runner;
+pub mod scene;
 
 /// The code of a checkpoint refused at restore.
 pub const CHECKPOINT_REFUSED: &str = "physics.checkpoint_refused";
@@ -83,11 +87,22 @@ pub struct Rapier {
     world_body: Option<RigidBodyHandle>,
     /// Each collider's shape use.
     uses: std::collections::HashMap<ColliderHandle, ShapeRef>,
-    /// The occurrences the last step wrote.
-    occurred: Vec<Occurrence>,
     step: u64,
     /// The planted twin (#2009 Proof): restore skips the version comparison.
     pub restore_any_version: bool,
+    /// #1918: the joints that break at a threshold, those whose motor target a channel sets, and
+    /// those a kinematic solve drives.
+    breakable: Vec<(String, ImpulseJointHandle, Breaks)>,
+    motors: Vec<(String, ImpulseJointHandle, JointKind, Motor)>,
+    solved: BTreeMap<String, Joint>,
+    /// Each tagged shape use's material tag, by (body, shape-use index).
+    tags: BTreeMap<(String, u32), String>,
+    hit_threshold: f32,
+    /// What the last step wrote.
+    last: Vec<Raw>,
+    /// #1918's test backend (`test-reverse-pairs`): reads every pair last to first, from its
+    /// second collider's side.
+    reverse_pairs: bool,
 }
 
 fn v3(a: [f64; 3]) -> Vector {
@@ -164,6 +179,22 @@ fn shared(w: &World, shape: &Shape) -> Option<SharedShape> {
             vertices,
             triangles,
         } => SharedShape::trimesh(pts(vertices), triangles.clone()).ok()?,
+        // #2014: row along +Z, column along +X, in Rapier's column-major layout; no cell zigzags,
+        // so each splits as a terrain plate draws it.
+        Shape::Heightfield {
+            cols,
+            rows,
+            heights,
+            scale,
+        } => {
+            let mut zx = vec![0.0f32; rows * cols];
+            for r in 0..*rows {
+                for c in 0..*cols {
+                    zx[r + c * rows] = heights[r * cols + c] as f32;
+                }
+            }
+            SharedShape::heightfield(Array2::new(*rows, *cols, zx), v3(*scale))
+        }
         Shape::Compound { children } => SharedShape::compound(
             children
                 .iter()
@@ -174,6 +205,11 @@ fn shared(w: &World, shape: &Shape) -> Option<SharedShape> {
 }
 
 impl Rapier {
+    /// The bodies in the order this world built them (#1921: `check`'s `built`).
+    pub fn built(&self) -> Vec<String> {
+        self.bodies.iter().map(|(id, _)| id.clone()).collect()
+    }
+
     /// Moves body `id`'s canonical field `field` (an index of `FIELDS`) by `ulps` f32 values: the
     /// one-field shift a golden's locator is proved on (Checkpoint ring). False for no such body.
     pub fn shift(&mut self, id: &str, field: usize, ulps: i64) -> bool {
@@ -204,16 +240,6 @@ impl Rapier {
     fn pair(&self, c1: ColliderHandle, c2: ColliderHandle) -> Option<(ShapeRef, ShapeRef)> {
         let (a, b) = (self.uses.get(&c1)?.clone(), self.uses.get(&c2)?.clone());
         Some(if a <= b { (a, b) } else { (b, a) })
-    }
-
-    /// The pairs of shape uses a sensor overlaps now, as the narrow phase holds them.
-    fn intersecting(&self) -> std::collections::BTreeSet<(ShapeRef, ShapeRef)> {
-        self.world
-            .narrow_phase
-            .intersection_pairs()
-            .filter(|(_, _, on)| *on)
-            .filter_map(|(c1, c2, _)| self.pair(c1, c2))
-            .collect()
     }
 
     /// The narrow-phase tests the last step ran, per pair of shape uses: a composite shape's
@@ -253,13 +279,17 @@ impl Rapier {
         let u = &b.shapes[i];
         let path = format!("bodies/{id}/shapes/{i}");
         let shape = &w.shapes[&u.shape];
-        if matches!(shape, Shape::Plane { .. } | Shape::Mesh { .. }) && b.kind != BodyKind::Static {
+        if matches!(
+            shape,
+            Shape::Plane { .. } | Shape::Mesh { .. } | Shape::Heightfield { .. }
+        ) && b.kind != BodyKind::Static
+        {
             out.push(refusal(
                 "out_of_range",
                 format!("{path}/shape"),
                 json!(u.shape),
                 format!(
-                    "{} is a plane or a mesh, which only a static body holds",
+                    "{} is a plane, a mesh or a heightfield, which only a static body holds",
                     u.shape
                 ),
             ));
@@ -294,7 +324,7 @@ impl Rapier {
                 InteractionTestMode::And,
             ))
             .sensor(u.sensor);
-        if b.kind == BodyKind::Static || b.mass.is_some() {
+        if b.kind != BodyKind::Dynamic || w.mode == Mode::Kinematic || b.mass.is_some() {
             return Some(c);
         }
         match m.density {
@@ -430,7 +460,97 @@ impl Rapier {
         };
         data.set_contacts_enabled(j.collide_connected);
         data.set_enabled(j.active);
-        self.world.insert_impulse_joint(h1, h2, data);
+        let h = self.world.insert_impulse_joint(h1, h2, data);
+        if let Some(b) = &j.breaks_at {
+            self.breakable.push((id.into(), h, b.clone()));
+        }
+        if let Some(m) = j.motor.as_ref().filter(|m| m.channel.is_some()) {
+            self.motors.push((id.into(), h, j.kind, m.clone()));
+        }
+    }
+
+    fn handle_of(&self, id: &str) -> Option<RigidBodyHandle> {
+        self.bodies.iter().find(|(b, _)| b == id).map(|(_, h)| *h)
+    }
+
+    /// Sets what a step reads of its scene (#1918): each kinematic body's next position, keeping
+    /// its rotation; each channel motor's target, touching the joint only when it changes; and
+    /// each solved joint's coordinate, placing its second body from its first, in the solve's order.
+    fn aim(&mut self, t: &Targets) {
+        for (id, pos) in &t.poses {
+            if let Some(h) = self.handle_of(id) {
+                let rb = &mut self.world.bodies[h];
+                let p = Pose::from_parts(v3(*pos), *rb.rotation());
+                rb.set_next_kinematic_position(p);
+            }
+        }
+        for (id, h, kind, m) in &self.motors {
+            let Some(target) = t.motors.get(id) else {
+                continue;
+            };
+            let (axis, x) = match kind {
+                JointKind::Hinge => (JointAxis::AngX, *target as f32 * PI / 180.0),
+                _ => (JointAxis::LinX, *target as f32),
+            };
+            let now = self
+                .world
+                .impulse_joints
+                .get(*h)
+                .and_then(|j| j.data.motor(axis));
+            if now.is_some_and(|n| {
+                if m.velocity {
+                    n.target_vel == x
+                } else {
+                    n.target_pos == x
+                }
+            }) {
+                continue;
+            }
+            let Some(j) = self.world.impulse_joints.get_mut(*h, true) else {
+                continue;
+            };
+            let (k, c) = spring(m.hz, m.damping_ratio);
+            if m.velocity {
+                j.data.set_motor_velocity(axis, x, c);
+            } else {
+                j.data.set_motor_position(axis, x, k, c);
+            }
+        }
+        let mut placed: BTreeMap<String, Pose> = BTreeMap::new();
+        for (id, q) in &t.coords {
+            let Some(j) = self.solved.get(id) else {
+                continue;
+            };
+            let (Some(b), Some(hb)) = (
+                &j.b.body,
+                j.b.body.as_deref().and_then(|b| self.handle_of(b)),
+            ) else {
+                continue;
+            };
+            let from = |a: &str| {
+                placed
+                    .get(a)
+                    .copied()
+                    .or_else(|| Some(*self.world.bodies[self.handle_of(a)?].position()))
+            };
+            let a =
+                j.a.body
+                    .as_deref()
+                    .map_or(Some(Pose::IDENTITY), from)
+                    .unwrap_or(Pose::IDENTITY);
+            let axis = v3(j.a.axis).normalize();
+            let (rot, along) = match j.kind {
+                JointKind::Hinge => (
+                    a.rotation * Rotation::from_axis_angle(axis, *q as f32 * PI / 180.0),
+                    Vector::ZERO,
+                ),
+                _ => (a.rotation, axis * *q as f32),
+            };
+            let pos = a.transform_point(v3(j.a.point) + along) - rot * v3(j.b.point);
+            let p = Pose::from_parts(pos, rot);
+            placed.insert(b.clone(), p);
+            self.world.bodies[hb].set_next_kinematic_position(p);
+        }
     }
 
     /// Each force's push on each body it applies to, from the state at t(k), held over the step.
@@ -507,7 +627,25 @@ impl Backend for Rapier {
         self.world_body = None;
         self.bodies.clear();
         self.uses.clear();
-        self.occurred.clear();
+        self.breakable.clear();
+        self.motors.clear();
+        self.solved = w
+            .solve
+            .iter()
+            .flat_map(|s| &s.drivers)
+            .filter_map(|(j, _)| Some((j.clone(), w.joints.get(j)?.clone())))
+            .collect();
+        self.last.clear();
+        self.hit_threshold = w.solver.hit_threshold as f32;
+        self.tags = w
+            .bodies
+            .iter()
+            .flat_map(|(id, b)| b.shapes.iter().enumerate().map(move |(i, u)| (id, i, u)))
+            .filter_map(|(id, i, u)| {
+                let tag = w.contact_materials.get(u.material.as_ref()?)?.tag.clone()?;
+                Some(((id.clone(), i as u32), tag))
+            })
+            .collect();
         self.step = 0;
         self.world.gravity = v3(w.gravity);
         let p = &mut self.world.integration_parameters;
@@ -524,7 +662,8 @@ impl Backend for Rapier {
         p.normalized_max_linear_velocity = w.solver.max_speed as f32;
         p.max_ccd_substeps = usize::from(w.solver.ccd);
         let mut handles = BTreeMap::new();
-        for (id, b) in &w.bodies {
+        for id in deep_canvas_physics::occurrence::built_order(w) {
+            let b = &w.bodies[id];
             let mut locks = LockedAxes::empty();
             let flags = [
                 (b.lock_linear[0], LockedAxes::TRANSLATION_LOCKED_X),
@@ -540,9 +679,11 @@ impl Backend for Rapier {
                 }
             }
             let deg = |a: [f64; 3]| v3(a) * (PI / 180.0);
+            // In kinematic mode the solve places every body that isn't static (#1918).
             let builder = match b.kind {
                 BodyKind::Static => RigidBodyBuilder::fixed(),
-                BodyKind::Dynamic => RigidBodyBuilder::dynamic(),
+                BodyKind::Dynamic if w.mode != Mode::Kinematic => RigidBodyBuilder::dynamic(),
+                _ => RigidBodyBuilder::kinematic_position_based(),
             };
             let mut rb = builder
                 .pose(pose(&b.pose))
@@ -599,7 +740,7 @@ impl Backend for Rapier {
         }
     }
 
-    fn step(&mut self, inputs: &[Input]) -> Result<(), Box<Refusal>> {
+    fn step(&mut self, inputs: &[Input], targets: &Targets) -> Result<(), Box<Refusal>> {
         // A world declares no inputs yet (the reader refuses `inputs`), so none can arrive.
         if let Some(i) = inputs.first() {
             return Err(Box::new(refusal(
@@ -612,29 +753,19 @@ impl Backend for Rapier {
                 ),
             )));
         }
+        let before = self.before();
+        self.aim(targets);
         self.push();
-        let before = self.intersecting();
         self.world.step();
         self.step += 1;
-        let after = self.intersecting();
-        let mut occurred: Vec<Occurrence> = after
-            .difference(&before)
-            .map(|(a, b)| ("sensor_enter", a, b))
-            .chain(
-                before
-                    .difference(&after)
-                    .map(|(a, b)| ("sensor_exit", a, b)),
-            )
-            .map(|(kind, a, b)| Occurrence {
-                step: self.step,
-                kind,
-                a: a.clone(),
-                b: b.clone(),
-            })
-            .collect();
-        occurred.sort();
-        self.occurred = occurred;
+        self.last = self.gather(&before);
+        let broken = self.breaks();
+        self.last.extend(broken);
         Ok(())
+    }
+
+    fn occurrences(&self) -> Vec<Raw> {
+        self.last.clone()
     }
 
     fn read(&self) -> State {
@@ -672,10 +803,6 @@ impl Backend for Rapier {
             step: self.step,
             bodies,
         }
-    }
-
-    fn occurrences(&self) -> Vec<Occurrence> {
-        self.occurred.clone()
     }
 
     fn canonical(&self) -> Vec<Canonical> {
@@ -731,6 +858,49 @@ impl Backend for Rapier {
         })?;
         self.world = world;
         self.step = cp.step;
+        self.last.clear();
         Ok(())
+    }
+
+    /// Each collider's own ray cast at its placed pose, so a world never stepped answers too.
+    fn ray(&self, from: [f64; 3], dir: [f64; 3], max: f64) -> Option<f64> {
+        let ray = Ray::new(v3(from), v3(dir));
+        self.world
+            .colliders
+            .iter()
+            .filter_map(|(_, c)| c.shape().cast_ray(c.position(), &ray, max as f32, true))
+            .min_by(f32::total_cmp)
+            .map(f64::from)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A static 2 × 2 m height field of 3 × 3 samples, raised only at its (column 2, row 0)
+    /// corner, through the physics document and the backend interface.
+    #[test]
+    fn a_ray_down_meets_a_heightfield_on_its_shipped_split() {
+        let mut heights = vec![0.0; 9];
+        heights[2] = 1.0;
+        let doc = json!({
+            "kind": "physics.world@1", "dimensions": 3, "step_rate": 60, "substeps": 1,
+            "gravity": [0, 0, 0], "mode": "dynamic",
+            "capacity": {"bodies": 1, "shapes": 1, "joints": 0, "contacts": 0, "particles": 0},
+            "backend": {"name": "rapier3d", "version": "=0.36.1"},
+            "shapes": {"land": {"kind": "heightfield", "cols": 3, "rows": 3, "heights": heights, "scale": [2, 1, 2]}},
+            "bodies": {"ground": {"kind": "static", "shapes": [{"shape": "land"}]}}
+        });
+        let w = deep_canvas_physics::check::check(&doc, &RAPIER3D, &deep_canvas_physics::roles::TABLE)
+            .unwrap_or_else(|e| panic!("{e:?}"));
+        let mut b = Rapier::default();
+        b.build(&w).unwrap();
+        let down = [0.0, -1.0, 0.0];
+        // The raised cell's centre lies on the diagonal through its raised corner: 0.5 m.
+        let k = b.ray([0.5, 2.0, -0.5], down, 10.0).unwrap();
+        assert!((2.0 - k - 0.5).abs() < 1e-6, "{k}");
+        assert!((2.0 - b.ray([-0.5, 2.0, 0.5], down, 10.0).unwrap()).abs() < 1e-6);
+        assert_eq!(b.ray([5.0, 2.0, 0.0], down, 10.0), None);
     }
 }

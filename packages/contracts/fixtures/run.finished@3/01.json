@@ -1,0 +1,28 @@
+{
+  "v": 3,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6W",
+  "kind": "run.finished",
+  "writer": "app",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "data": {
+    "run": "run:01K74G3A5C7E9G1J3M5P7R9T1V",
+    "outcome": "passed",
+    "tests_run": 0,
+    "passed": 0,
+    "runs": 1,
+    "evidence": [
+      "9f2b8a3c1d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8"
+    ],
+    "check": "root plan",
+    "assertion": null,
+    "expected": null,
+    "actual": null,
+    "step": null,
+    "points_to": null,
+    "findings": [],
+    "environment": "linux-arm64",
+    "exit": 0
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "format": 1,
+  "profile": "board",
+  "title": "puppet.rig@1 at its defaults",
+  "description": "puppet.rig@1 at its defaults: one puppet.rig@1 item, an example of the #202 acceptance suite's packs.",
+  "size": [
+    320,
+    360
+  ],
+  "packs": [
+    "acme/shelf@1.0.4"
+  ],
+  "items": {
+    "x1": {
+      "id": "x1",
+      "kind": "puppet.rig@1",
+      "name": "X1",
+      "order": "a0",
+      "params": {}
+    }
+  }
+}

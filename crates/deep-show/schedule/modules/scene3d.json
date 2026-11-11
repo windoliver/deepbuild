@@ -1,6 +1,35 @@
 {
   "module": "scene3d",
   "phases": {
+    "plan": [
+      {
+        "operator": "scene3d.rest",
+        "module": "scene3d",
+        "version": "1.0.0",
+        "reads": [
+          "refs"
+        ],
+        "writes": [
+          "scene3d.rests"
+        ],
+        "per": "document"
+      }
+    ],
+    "build": [
+      {
+        "operator": "scene3d.scatter",
+        "module": "scene3d",
+        "version": "1.0.0",
+        "reads": [
+          "self",
+          "refs"
+        ],
+        "writes": [
+          "scene3d.scattered"
+        ],
+        "per": "item"
+      }
+    ],
     "items": [
       {
         "operator": "scene3d.build",
@@ -59,6 +88,33 @@
         "per": "item"
       },
       {
+        "operator": "scene3d.restlive",
+        "module": "scene3d",
+        "version": "1.0.0",
+        "reads": [
+          "refs",
+          "t",
+          "motion.program"
+        ],
+        "writes": [
+          "scene3d.restslive"
+        ],
+        "per": "document"
+      },
+      {
+        "operator": "scene3d.rested",
+        "module": "scene3d",
+        "version": "1.0.0",
+        "reads": [
+          "scene3d.rests",
+          "scene3d.restslive"
+        ],
+        "writes": [
+          "scene3d.rested"
+        ],
+        "per": "item"
+      },
+      {
         "operator": "scene3d.shade",
         "module": "scene3d",
         "version": "1.0.0",
@@ -85,5 +141,9 @@
       }
     ]
   },
-  "contributions": {}
+  "contributions": {
+    "core.transform": [
+      "scene3d.rested"
+    ]
+  }
 }

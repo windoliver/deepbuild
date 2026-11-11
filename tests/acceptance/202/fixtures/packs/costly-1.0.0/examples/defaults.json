@@ -1,0 +1,22 @@
+{
+  "format": 1,
+  "profile": "board",
+  "title": "One unit at its defaults",
+  "description": "One unit at its defaults: one costly.unit@1 item, an example of the #202 acceptance suite's packs.",
+  "size": [
+    64,
+    64
+  ],
+  "packs": [
+    "acme/costly@1.0.0"
+  ],
+  "items": {
+    "x1": {
+      "id": "x1",
+      "kind": "costly.unit@1",
+      "name": "X1",
+      "order": "a0",
+      "params": {}
+    }
+  }
+}

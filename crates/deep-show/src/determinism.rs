@@ -182,6 +182,8 @@ impl Hub<'_> {
                 software: false,
                 readback: false,
                 track: Vec::new(),
+                captions: Default::default(),
+                loudness_profile: None,
             };
             let reply = self.export_run(&job);
             let _ = std::fs::remove_dir_all(&out);
@@ -234,7 +236,7 @@ impl Hub<'_> {
         let view = deep_canvas::schedule::default_view(document);
         let mut frames = Vec::with_capacity(at_times.len());
         for &t in at_times {
-            let (drawing, nodes, _) = self.evaluate(document, &view, &[t], true)?;
+            let (drawing, nodes, _, _) = self.evaluate(document, &view, &[t], true)?;
             let pinned = std::mem::replace(&mut self.renderer.raster_2d, settings);
             let drawn = self.canonical_rgba(&drawing, None, true);
             self.renderer.raster_2d = pinned;

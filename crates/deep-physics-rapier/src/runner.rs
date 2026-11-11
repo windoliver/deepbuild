@@ -10,20 +10,24 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
+use crate::scene::Scene;
 use crate::{fp, Rapier};
 use base64::Engine;
-use deep_canvas_physics::backend::{Backend, BodyState, Canonical, Checkpoint, ShapeRef, FIELDS};
+use deep_canvas_physics::backend::{
+    Backend, BodyState, Canonical, Checkpoint, ShapeRef, Targets, FIELDS,
+};
 use deep_canvas_physics::bake::{self, Build, Parts};
 use deep_canvas_physics::caps::{Caps, RAPIER3D};
 use deep_canvas_physics::check::{check, fix};
-use deep_canvas_physics::doc::{Refusal, World};
+use deep_canvas_physics::doc::{Read, Refusal, World};
 use deep_canvas_physics::golden;
+use deep_canvas_physics::occurrence;
 use deep_canvas_physics::pairs::{pairs, Brief};
 use deep_canvas_physics::roles::{self, Row};
 use serde_json::{json, Map, Value};
 
 /// The planted wrong programs, by name.
-pub const PLANTED: [&str; 8] = [
+pub const PLANTED: [&str; 9] = [
     "caps_allow_restitution_threshold",
     "caps_allow_rolling_resistance",
     "caps_allow_tangent_speed",
@@ -32,6 +36,7 @@ pub const PLANTED: [&str; 8] = [
     "hash_rounds_1e6",
     "key_omits_frame_rate",
     "role_table_pickup_solid",
+    "occurrences_in_engine_order",
 ];
 
 /// The reply to a line that isn't a call.
@@ -47,6 +52,8 @@ pub struct Run {
     key_without_rate: bool,
     /// The role table roles expand through; #2011 criterion 3's twin makes a pickup solid.
     table: &'static [Row],
+    /// #1918 criterion 5's twin: the list keeps each step's rows as the backend reads them.
+    engine_order: bool,
     build: Build,
 }
 
@@ -106,6 +113,29 @@ fn shape_use(w: &World, r: &ShapeRef) -> Value {
     json!({"body": r.body, "index": r.index, "shape": shape})
 }
 
+/// #2011's view of the occurrence list (`bake` with `occurrences: true`): each row's two shape
+/// uses as `{body, index, shape}`, the lower first; a row of one subject names it as `a`.
+fn shape_uses(rows: &[occurrence::Row], w: &World) -> Vec<Value> {
+    let one = |body: &str, index: Option<u32>| {
+        let r = ShapeRef {
+            body: body.into(),
+            index: index.unwrap_or(0) as usize,
+        };
+        shape_use(w, &r)
+    };
+    rows.iter()
+        .map(|r| {
+            let o = &r.raw;
+            let kind = occurrence::KINDS[usize::from(o.kind)];
+            match &o.b {
+                Some(b) if o.a_use.is_some() => json!({"step": r.step, "kind": kind,
+                    "a": one(&o.a, o.a_use), "b": one(b, o.b_use)}),
+                _ => json!({"step": r.step, "kind": kind, "a": o.a, "b": o.b}),
+            }
+        })
+        .collect()
+}
+
 /// The pair of shape uses that ran the most narrow-phase tests in the last step, and their count.
 fn most_tested(w: &World, b: &Rapier) -> Value {
     b.narrow_phase_tests().first().map_or(
@@ -126,7 +156,7 @@ pub fn timed_step() -> bool {
     TIMED.with(|t| {
         t.borrow_mut()
             .as_mut()
-            .is_some_and(|(_, b, _)| b.step(&[]).is_ok())
+            .is_some_and(|(_, b, _)| b.step(&[], &Targets::default()).is_ok())
     })
 }
 
@@ -211,8 +241,10 @@ fn keep(dir: &str, key: &str, record: &Value) -> Result<(), Value> {
 }
 
 /// What one run steps and takes besides its hashes.
-struct Plan {
+struct Plan<'a> {
     steps: u64,
+    /// The scene whose paths each step reads at its own time (#1918).
+    scene: Option<&'a Scene>,
     /// `bodies` holds a state each `every` steps.
     every: u64,
     /// Golden runs assert the floating-point control register at each step's start.
@@ -233,8 +265,23 @@ struct Trace {
     at: BTreeMap<u64, Vec<Canonical>>,
     /// Each output's body's position after each step.
     positions: BTreeMap<String, Vec<[f32; 3]>>,
-    /// The occurrences each step wrote, in order.
-    occurrences: Vec<Value>,
+    /// The occurrence list, each step's rows sorted (#1918).
+    occurrences: Vec<occurrence::Row>,
+    /// The list as #2011's shape uses, for `bake` with `occurrences: true`.
+    shaped: Vec<Value>,
+}
+
+/// What a run's world reads of its scene over `steps` steps, as its bake key holds it: `[]` when
+/// it reads nothing (#1918).
+fn reads(plan: &Plan, steps: u64) -> Value {
+    plan.scene
+        .filter(|s| !s.reads_nothing())
+        .map_or_else(|| json!([]), |s| s.key_reads(steps))
+}
+
+/// The refusing reply to a world's or a scene's refusals.
+fn refused(e: &[Refusal]) -> Value {
+    json!({"ok": false, "issues": e.iter().map(issue).collect::<Vec<_>>()})
 }
 
 /// Why a run stopped.
@@ -253,6 +300,7 @@ impl Run {
             round_hashes: false,
             key_without_rate: false,
             table: &roles::TABLE,
+            engine_order: false,
             build: crate::build(),
         };
         match planted {
@@ -265,6 +313,7 @@ impl Run {
             Some("key_omits_frame_rate") => run.key_without_rate = true,
             Some("restore_ignores_version") => run.restore_any_version = true,
             Some("role_table_pickup_solid") => run.table = &roles::PLANTED_SOLID_PICKUP,
+            Some("occurrences_in_engine_order") => run.engine_order = true,
             Some(_) => return None,
         }
         Some(run)
@@ -294,12 +343,19 @@ impl Run {
         golden::step_hash(&rounded)
     }
 
-    /// The bake key of `world` at `rate` over `steps`; a golden's when `target` is `None`. Worlds
-    /// read no scene channel, driver or input yet (#522, #1918), so those parts are empty.
-    fn key(&self, world: &Value, rate: &str, steps: u64, target: Option<&str>) -> String {
+    /// The bake key of `world` at `rate` over `steps`, with what it reads of its scene (`[]` when
+    /// nothing); a golden's when `target` is `None`. Worlds take no input yet (#522).
+    fn key(
+        &self,
+        world: &Value,
+        reads: &Value,
+        rate: &str,
+        steps: u64,
+        target: Option<&str>,
+    ) -> String {
         let parts = Parts {
             world,
-            reads: &json!([]),
+            reads,
             track: &json!([]),
             frame_rate: if self.key_without_rate { "" } else { rate },
             steps,
@@ -309,21 +365,40 @@ impl Run {
 
     /// The world `v` holds, built, or the issues that refuse it.
     fn build(&self, v: &Value) -> Result<(World, Rapier), Value> {
-        let refused = |e: Vec<Refusal>| json!({"ok": false, "issues": e.iter().map(issue).collect::<Vec<_>>()});
+        let refused = |e: Vec<Refusal>| refused(&e);
         let w = check(v, &self.caps, self.table).map_err(refused)?;
         let mut b = Rapier {
             restore_any_version: self.restore_any_version,
+            reverse_pairs: cfg!(feature = "test-reverse-pairs"),
             ..Rapier::default()
         };
         b.build(&w).map_err(refused)?;
         Ok((w, b))
     }
 
+    /// The world a call names (#1918): `world` a document, or with `scene` the ID of a world the
+    /// scene lists, with the scene's reads of it; the reply refusing either; `None` for bad input.
+    /// #1921: the world's bodies bound to the scene's items expanded first (bound.rs).
+    fn subject(&self, call: &Value) -> Option<Result<(Value, Option<Scene>), Value>> {
+        let world = call.get("world")?;
+        let Some(scene) = call.get("scene") else {
+            let doc = crate::bound::expand(None, world);
+            return Some(doc.map(|d| (d, None)).map_err(|e| refused(&e)));
+        };
+        let id = world.as_str()?;
+        let doc = scene.get("worlds")?.get(id)?;
+        let read = crate::bound::expand(Some(scene), doc).and_then(|doc| {
+            let w = check(&doc, &self.caps, self.table)?;
+            Ok((doc, Some(Scene::read(scene, id, &w)?)))
+        });
+        Some(read.map_err(|e| refused(&e)))
+    }
+
     /// The state after step `k` into `t`.
     fn take(&self, b: &Rapier, w: &World, plan: &Plan, t: &mut Trace, k: u64, start: u64) {
         let c = b.canonical();
         t.step_hashes.push(self.hash(&c));
-        for (id, o) in &w.outputs {
+        for (id, o) in w.outputs.iter().filter(|(_, o)| o.read == Read::Position) {
             if let Some(body) = c.iter().find(|x| x.id == o.from) {
                 let p = [body.values[0], body.values[1], body.values[2]];
                 t.positions.entry(id.clone()).or_default().push(p);
@@ -345,6 +420,7 @@ impl Run {
     /// Steps `b` `plan.steps` times from where it stands.
     fn run(&self, b: &mut Rapier, w: &World, plan: &Plan, t: &mut Trace) -> Result<(), Stop> {
         let start = b.read().step;
+        let rank = occurrence::ranks(w);
         self.take(b, w, plan, t, start, start);
         for k in start + 1..=start + plan.steps {
             if plan.ftz_at == Some(k) {
@@ -356,11 +432,19 @@ impl Run {
                     return Err(Stop::Register(k, what));
                 }
             }
-            b.step(&[])
+            let targets = plan.scene.map_or_else(Targets::default, |s| s.targets(k));
+            b.step(&[], &targets)
                 .map_err(|r| Stop::Refused(json!({"ok": false, "issues": [issue(&r)]})))?;
-            t.occurrences.extend(b.occurrences().iter().map(|o| {
-                json!({"step": o.step, "kind": o.kind, "a": shape_use(w, &o.a), "b": shape_use(w, &o.b)})
-            }));
+            if self.engine_order {
+                t.occurrences
+                    .extend(b.occurrences().into_iter().map(|raw| occurrence::Row {
+                        step: k as u32,
+                        raw,
+                    }));
+            } else {
+                t.occurrences
+                    .extend(occurrence::sorted(k as u32, b.occurrences(), &rank));
+            }
             if let Some((s, id, field, ulps)) = &plan.shift {
                 if *s == k {
                     b.shift(id, *field, *ulps);
@@ -389,9 +473,19 @@ impl Run {
             Stop::Refused(v) => v,
             Stop::Register(step, what) => json!({"ok": false, "code": "physics.fp_control", "step": step, "register": fp::REGISTER, "what": what}),
         })?;
-        let key = self.key(world, &rate, steps, Some(&self.build.target));
+        let key = self.key(
+            world,
+            &reads(plan, steps),
+            &rate,
+            steps,
+            Some(&self.build.target),
+        );
         let outputs = bake::outputs(&t.positions, &rate, frame, w.step_rate, steps);
-        let record = json!({"key": key, "step_hashes": t.step_hashes, "checkpoints": t.checkpoints, "outputs": outputs});
+        let rank = occurrence::ranks(&w);
+        t.shaped = shape_uses(&t.occurrences, &w);
+        let record = json!({"key": key, "step_hashes": t.step_hashes, "checkpoints": t.checkpoints, "outputs": outputs,
+                            "occurrences": occurrence::listed(&t.occurrences),
+                            "occurrences_hash": occurrence::hash(&t.occurrences, &rank)});
         if let Some(dir) = call.get("store") {
             keep(
                 dir.as_str()
@@ -409,7 +503,13 @@ impl Run {
         let done = |r: Result<Value, Value>| Some(r.unwrap_or_else(|e| e));
         match call.get("call")?.as_str()? {
             "check" => Some(
-                json!({"ok": true, "issues": self.build(call.get("world")?).err().map_or(json!([]), |e| e["issues"].clone())}),
+                match self
+                    .subject(call)?
+                    .and_then(|(world, _)| self.build(&world))
+                {
+                    Ok((_, b)) => json!({"ok": true, "issues": [], "built": b.built()}),
+                    Err(e) => json!({"ok": true, "issues": e["issues"]}),
+                },
             ),
             "runtime" => {
                 let b = &self.build;
@@ -418,9 +518,13 @@ impl Run {
                     "pins": b.pins.iter().map(|p| p.json()).collect::<Vec<_>>()}))
             }
             "bake" => {
-                let world = call.get("world")?;
+                let (world, scene) = match self.subject(call)? {
+                    Ok(x) => x,
+                    Err(e) => return Some(e),
+                };
                 let plan = Plan {
                     steps: steps()?,
+                    scene: scene.as_ref(),
                     every: call.get("every").map_or(Some(1), Value::as_u64)?.max(1),
                     guard: false,
                     ftz_at: None,
@@ -438,24 +542,33 @@ impl Run {
                         Ok(r) => r,
                         Err(e) => return Some(e),
                     };
-                    let key = self.key(world, &rate, plan.steps, Some(&self.build.target));
-                    if self.build(world).is_ok() {
+                    let key = self.key(
+                        &world,
+                        &reads(&plan, plan.steps),
+                        &rate,
+                        plan.steps,
+                        Some(&self.build.target),
+                    );
+                    if self.build(&world).is_ok() {
                         if let Some(r) = stored(dir, &key) {
                             return Some(
                                 json!({"ok": true, "key": key, "step_hashes": r["step_hashes"],
-                                               "outputs": r["outputs"], "reused": true}),
+                                       "outputs": r["outputs"], "occurrences": r["occurrences"],
+                                       "occurrences_hash": r["occurrences_hash"], "reused": true}),
                             );
                         }
                     }
                 }
-                done(self.bake(call, world, &plan).map(|(key, t, record)| {
+                done(self.bake(call, &world, &plan).map(|(key, t, record)| {
                     let mut reply = json!({"ok": true, "key": key, "bodies": t.bodies,
-                                           "step_hashes": t.step_hashes, "outputs": record["outputs"]});
+                                           "step_hashes": t.step_hashes, "outputs": record["outputs"],
+                                           "occurrences": record["occurrences"],
+                                           "occurrences_hash": record["occurrences_hash"]});
                     if with_checkpoints {
                         reply["checkpoints"] = Value::Array(t.checkpoints);
                     }
                     if call.get("occurrences") == Some(&json!(true)) {
-                        reply["occurrences"] = Value::Array(t.occurrences);
+                        reply["occurrences"] = Value::Array(t.shaped);
                     }
                     if dir.is_some() {
                         reply["reused"] = json!(false);
@@ -464,19 +577,23 @@ impl Run {
                 }))
             }
             "restore" => {
-                let world = call.get("world")?;
+                let (world, scene) = match self.subject(call)? {
+                    Ok(x) => x,
+                    Err(e) => return Some(e),
+                };
                 let cp = checkpoint_of(call.get("checkpoint")?)?;
                 let with_checkpoints = call
                     .get("checkpoints")
                     .map_or(Some(false), Value::as_bool)?;
                 let plan = Plan {
                     steps: steps()?,
+                    scene: scene.as_ref(),
                     every: 1,
                     guard: false,
                     ftz_at: None,
                     shift: None,
                 };
-                let (w, mut b) = match self.build(world) {
+                let (w, mut b) = match self.build(&world) {
                     Ok(x) => x,
                     Err(e) => return Some(e),
                 };
@@ -492,8 +609,10 @@ impl Run {
                 if let Err(Stop::Refused(v)) = self.run(&mut b, &w, &plan, &mut t) {
                     return Some(v);
                 }
-                let mut reply =
-                    json!({"ok": true, "bodies": t.bodies, "step_hashes": t.step_hashes});
+                let rank = occurrence::ranks(&w);
+                let mut reply = json!({"ok": true, "bodies": t.bodies, "step_hashes": t.step_hashes,
+                                       "occurrences": occurrence::listed(&t.occurrences),
+                                       "occurrences_hash": occurrence::hash(&t.occurrences, &rank)});
                 if with_checkpoints {
                     reply["checkpoints"] = Value::Array(t.checkpoints);
                 }
@@ -509,9 +628,11 @@ impl Run {
                 if let Err(e) = self.build(world) {
                     return Some(e);
                 }
-                let key = self.key(world, &rate, steps, Some(&self.build.target));
+                let key = self.key(world, &json!([]), &rate, steps, Some(&self.build.target));
                 Some(match stored(dir, &key) {
-                    Some(r) => json!({"ok": true, "key": key, "outputs": r["outputs"]}),
+                    Some(r) => {
+                        json!({"ok": true, "key": key, "outputs": r["outputs"], "occurrences": r["occurrences"]})
+                    }
                     None => {
                         json!({"ok": false, "code": "no_bake", "key": key,
                                "what": "the store holds no bake under this key; playback never steps the world"})
@@ -529,6 +650,7 @@ impl Run {
                     .collect::<Option<_>>()?;
                 let plan = Plan {
                     steps: steps()?,
+                    scene: None,
                     every: 1,
                     guard: true,
                     ftz_at: None,
@@ -546,9 +668,10 @@ impl Run {
                         .map(|c| json!({"step": c["step"], "deep_hash": c["deep_hash"]}))
                         .collect();
                     json!({"ok": true, "golden": {
-                        "bake_key": self.key(world, &rate, plan.steps, None),
+                        "bake_key": self.key(world, &json!([]), &rate, plan.steps, None),
                         "runtime_digest": self.build.runtime_digest(), "machine": machine(&self.build.target),
-                        "step_hashes": t.step_hashes, "checkpoint_hashes": hashes, "occurrences_hash": null,
+                        "step_hashes": t.step_hashes, "checkpoint_hashes": hashes,
+                        "occurrences_hash": record["occurrences_hash"],
                         "record_on": self.build.target, "verify_on": verify_on}})
                 }))
             }
@@ -557,7 +680,10 @@ impl Run {
                 Some(self.pairs(call.get("world")?, call.get("brief").unwrap_or(&json!({})))?)
             }
             "time" => {
-                let (w, mut b) = match self.build(call.get("world")?) {
+                let built = self
+                    .subject(call)?
+                    .and_then(|(world, _)| self.build(&world));
+                let (w, mut b) = match built {
                     Ok(x) => x,
                     Err(e) => return Some(e),
                 };
@@ -565,7 +691,7 @@ impl Run {
                 let mut top = Vec::new();
                 for _ in 0..steps()? {
                     let at = std::time::Instant::now();
-                    let stepped = b.step(&[]);
+                    let stepped = b.step(&[], &Targets::default());
                     ms.push(at.elapsed().as_secs_f64() * 1e3);
                     if let Err(r) = stepped {
                         return Some(json!({"ok": false, "issues": [issue(&r)]}));
@@ -575,7 +701,9 @@ impl Run {
                 Some(json!({"ok": true, "target": self.build.target, "ms": ms, "top": top}))
             }
             "time_build" => {
-                let built = self.build(call.get("world")?);
+                let built = self
+                    .subject(call)?
+                    .and_then(|(world, _)| self.build(&world));
                 Some(TIMED.with(|t| match built {
                     Ok(x) => {
                         *t.borrow_mut() = Some((x.0, x.1, Vec::new()));
@@ -643,6 +771,7 @@ impl Run {
         };
         let plan = Plan {
             steps: call.get("steps")?.as_u64()?,
+            scene: None,
             every: 1,
             guard: true,
             ftz_at: call
@@ -663,7 +792,7 @@ impl Run {
             Ok(x) => x,
             Err(e) => return Some(e),
         };
-        let key = self.key(world, &rate, plan.steps, None);
+        let key = self.key(world, &json!([]), &rate, plan.steps, None);
         let digest = self.build.runtime_digest();
         let here = machine(&self.build.target);
         let machines = golden::machines(g, &here);
@@ -706,7 +835,10 @@ impl Run {
         let checkpoint = (c <= plan.steps).then_some(c);
         let field = checkpoint.zip(dir).and_then(|(c, dir)| {
             let target = g["record_on"].as_str()?;
-            let bake = stored(dir, &self.key(world, &rate, plan.steps, Some(target)))?;
+            let bake = stored(
+                dir,
+                &self.key(world, &json!([]), &rate, plan.steps, Some(target)),
+            )?;
             let cp = bake["checkpoints"]
                 .as_array()?
                 .iter()

@@ -1,0 +1,15 @@
+{
+  "plant": "unpassed_on_fail_only",
+  "failures": {
+    "bed": [
+      "the strip naming the bed 5c5308066a0eb41132269fa54306042b218ba2606a0137a85d8b9647ee1f1349, whose audio.gen is BLOCKED (no beats record): `outcome` is \"applied\"; the check must refuse it with audio.gen.unpassed naming 5c5308066a0eb41132269fa54306042b218ba2606a0137a85d8b9647ee1f1349 (reply {\"cost_delta\":{\"cpu_ms\":0.01236764,\"gpu_ms\":0,\"vertices\":0,\"lights\":0,\"gpu_mb\":0},\"outcome\":\"applied\",\"rev\":1,\"ids\":{},\"achieved\":{\"created\":{\"media.strip@1\":1},\"updated\":0,\"deleted\":{},\"unchanged\":false},\"issues\":[],\"undo\":[{\"op\":\"delete\",\"id\":\"strip.bed\",\"cascade\":false}],\"core\":\"core@0.0.0\",\"set_digest\":\"0aac98f10a25dcaef5fad99a63b2def0e4de054cbe67bde45c86ad09cafe70c9\"})",
+      "the strip naming the bed 5c5308066a0eb41132269fa54306042b218ba2606a0137a85d8b9647ee1f1349, whose audio.gen is BLOCKED (no beats record): `rev` is 1; revision 0, the one before it, must stay current",
+      "the strip naming the bed 5c5308066a0eb41132269fa54306042b218ba2606a0137a85d8b9647ee1f1349, whose audio.gen is BLOCKED (no beats record): no audio.gen.unpassed issue naming the asset 5c5308066a0eb41132269fa54306042b218ba2606a0137a85d8b9647ee1f1349 among []"
+    ],
+    "hot": [],
+    "rest": [
+      "the strip naming the clean take f355be58fa129ce848c20a8646b2b6dfa354c2b1d6f8f7d01a91baed0c49c2b1, whose audio.gen passes: `outcome` \"applied\" `rev` 2; it must apply as revision 1 (reply {\"cost_delta\":{\"cpu_ms\":0.01236764,\"gpu_ms\":0,\"vertices\":0,\"lights\":0,\"gpu_mb\":0},\"outcome\":\"applied\",\"rev\":2,\"ids\":{},\"achieved\":{\"created\":{\"media.strip@1\":1},\"updated\":0,\"deleted\":{},\"unchanged\":false},\"issues\":[],\"undo\":[{\"op\":\"delete\",\"id\":\"strip.coin\",\"cascade\":false}],\"core\":\"core@0.0.0\",\"set_digest\":\"0aac98f10a25dcaef5fad99a63b2def0e4de054cbe67bde45c86ad09cafe70c9\"})",
+      "after the three patches `revisions` has [2] current; revision 1, the clean take's strip, must be (reply {\"revisions\":[{\"rev\":0,\"base_rev\":0,\"writer\":null,\"hash\":\"6c974548b8799fd15d74a014cfb5e589157c1e727e1fbc4dd56c3a2101e35a35\",\"state\":\"superseded\",\"patches\":[]},{\"rev\":1,\"base_rev\":0,\"writer\":{\"kind\":\"agent\",\"id\":\"thread-alpha\"},\"hash\":\"ca29c41b59e5fff5efe1a90b52390a3763fc3f4f2a24f517d07efff39d0169e0\",\"state\":\"superseded\",\"patches\":[\"01JB935P000000000000000001\"]},{\"rev\":2,\"base_rev\":0,\"writer\":{\"kind\":\"agent\",\"id\":\"thread-alpha\"},\"hash\":\"94b95e90ecc091d5a1e502ed278c0cf622ee1fad20eef7cec45592f11d899f79\",\"state\":\"current\",\"patches\":[\"01JB935P000000000000000003\"]}],\"core\":\"core@0.0.0\",\"set_digest\":)"
+    ]
+  }
+}

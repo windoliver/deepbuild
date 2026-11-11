@@ -4,7 +4,9 @@
 //! ask's handle, so a view draws its question and never the handle (#1459).
 //!
 //! `session.row@1`: a view replacing the sidebar's session rows draws one row per session, in the sidebar's order, keyed
-//! by `session:<id>`, each drawing its title and its state's words; a failure names the session (#1459).
+//! by `session:<id>`, each drawing its title and its state's words; a failure names the session (#1459). The words are
+//! the hub's one reading of the session, so a row that reads "done" for a stop with no verdict yet fails, and a count a
+//! row shows in `session:<id>:count` is the hub's count of that session's open asks, or the row fails (#2018).
 //!
 //! Issue #326 adds the notifier's kit and States people see's, below.
 
@@ -61,23 +63,29 @@ pub fn needs_you_view(dir: &std::path::Path) -> Verdict {
 
 /// `session.row@1` on the view in `dir`, as `deep install` runs it for a view replacing the sidebar's session rows: the
 /// view mounted in the shell's center, in a replica over the kit's fixture record, its rows read by element id in the
-/// order drawn, with the text drawn in each, against the sessions as the sidebar lists them (#1459).
+/// order drawn, with the text drawn in each, against the sessions as the sidebar lists them (#1459). The record is the
+/// kit's own, whose rows the hub built (#2018).
 pub fn session_row_view(dir: &std::path::Path) -> Verdict {
-    deep_app::views::set_state(crate::load_state());
-    let expected: Vec<(String, String, String)> = deep_app::record::with_view(|view| {
+    deep_app::views::set_state(crate::load_state_from(&crate::session_row_fixture()));
+    let expected: Vec<(String, String, String, usize)> = deep_app::record::with_view(|view| {
         let table = view.table();
         table
             .every_session()
             .into_iter()
             .map(|(id, title, _)| {
                 let (words, _) = table.row(&id, deep_app::views::now());
-                (format!("session:{id}"), title, words)
+                let asks = table.asks_of(&id);
+                (format!("session:{id}"), title, words, asks)
             })
             .collect()
     })
     .unwrap_or_default();
     match view_tree(dir, SESSION_ROWS_PANEL) {
-        Ok(tree) => session_rows(&crate::shell::keyed(&tree, "session:"), &expected),
+        Ok(tree) => session_rows(
+            &crate::shell::keyed(&tree, "session:"),
+            &crate::shell::counts_of(&tree),
+            &expected,
+        ),
         Err(why) => Verdict {
             pass: false,
             names: Some(format!("session.row@1 refused this view: {why}")),
@@ -85,21 +93,33 @@ pub fn session_row_view(dir: &std::path::Path) -> Verdict {
     }
 }
 
-/// Each session's row, by `(id, title, words)`, against the rows drawn, by `(id, text drawn inside)`: the first
-/// session whose row is missing, out of place or drawn without its title or its state's words, or a row of no session.
-pub fn session_rows(rows: &[(String, String)], expected: &[(String, String, String)]) -> Verdict {
+/// Each session's row, by `(id, title, words, the hub's count of its open asks)`, against the rows drawn, by `(id, text
+/// drawn inside)`, and the counts they show, by row: the first session whose row is missing, out of place, drawn
+/// without its title or its state's words, or showing a count other than the hub's, or a row of no session.
+pub fn session_rows(
+    rows: &[(String, String)],
+    counts: &[(String, String)],
+    expected: &[(String, String, String, usize)],
+) -> Verdict {
     let fail = |names: String| Verdict {
         pass: false,
         names: Some(names),
     };
     for index in 0..rows.len().max(expected.len()) {
         match (rows.get(index), expected.get(index)) {
-            (Some((id, drawn)), Some((session, title, words))) if id == session => {
+            (Some((id, drawn)), Some((session, title, words, asks))) if id == session => {
                 if let Some(missing) = [title, words]
                     .into_iter()
                     .find(|word| !drawn.contains(word.as_str()))
                 {
                     return fail(format!("{session}: its row draws no {missing:?}"));
+                }
+                if let Some((_, shown)) = counts.iter().find(|(row, _)| row == session) {
+                    if shown.trim().parse::<usize>().ok() != Some(*asks) {
+                        return fail(format!(
+                            "{session}: its row shows the count {shown:?}, and the hub's count of its open asks is {asks}"
+                        ));
+                    }
                 }
             }
             (_, Some((session, ..))) => return fail(format!("{session}: no row in its place")),

@@ -676,15 +676,15 @@ pub struct Report {
 
 pub type ReportRun = fn(&Value, &Value) -> Report;
 
-/// The core's own document check kinds (canvas primitives: Check input). Each reads only the
-/// core's arrays, which canvas modules fill through `contributes_to`, and names no module's kind.
-pub const CORE_CHECK_KINDS: [&str; 11] = [
+/// The core's own document check kinds (canvas primitives: Check input), each reading only the core's arrays and naming no module's kind.
+pub const CORE_CHECK_KINDS: [&str; 12] = [
     "document.validate",
     "document.budget",
     "document.frame_time",
     "document.layout",
     "document.determinism",
     "geometry.audit",
+    "geometry.shape",
     "film.audit",
     "film.flicker",
     "film.layout",
@@ -1146,6 +1146,10 @@ pub enum Fault {
     /// Declares `export.target@1` in the media module instead of the core (#501): the core
     /// declares none, so a build without media refuses every other module's target.
     ExportTargetInMedia,
+    /// Declares `gpu.output@1` in the effects module instead of the core, which fills today's
+    /// outputs there too (#485): a build without effects leaves scene3d's outputs with no
+    /// registry.
+    GpuOutputInEffects,
 }
 
 /// The module that declares `ease@1` in the planted layout that moves it out of the core, which
@@ -2927,6 +2931,10 @@ impl Registry {
         if self.fault == Some(Fault::ExportTargetInMedia) {
             core_registries.retain(|d| d.name != "export.target@1");
         }
+        let outputs_elsewhere = self.fault == Some(Fault::GpuOutputInEffects);
+        if outputs_elsewhere {
+            core_registries.retain(|d| d.name != "gpu.output@1");
+        }
         core_registries.extend(self.declared.iter().cloned());
         let mut core_entries: Vec<lists::EntryDef> =
             core_lists::entries(self.fault == Some(Fault::BaseStepsElsewhere))
@@ -2935,6 +2943,9 @@ impl Registry {
                 .collect();
         if eases {
             core_entries.extend(core_lists::ease_entries(self.fault == Some(Fault::EaseRenumbered)));
+        }
+        if outputs_elsewhere {
+            core_entries.retain(|e| e.registry != "gpu.output@1");
         }
         let (registries, parts) = lists::seal(
             core_registries,

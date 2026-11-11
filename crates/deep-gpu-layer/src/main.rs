@@ -10,6 +10,8 @@
 //! and no app, so no window. #385 adds the 2D calls (`layers`, `window2d`, `vello_gpu`,
 //! `spike2d`; tests/acceptance/385/README.md) and, in test-spike builds, `--spike-record <file>`.
 //! #417 adds `film2d`: a 2D film in the window under a look, with its look switches timed.
+//! #1056 adds `index_record` and `cross_index`: a pixel look's per-frame index records, compared
+//! across GPU families (records.rs).
 
 #[cfg(feature = "test-meter")]
 mod allocations;
@@ -44,8 +46,10 @@ mod marks2d;
 mod opframe;
 mod paintfx;
 mod parity;
+mod physics;
 mod plugin;
 mod print2d;
+mod records;
 mod reference;
 mod scene;
 mod seam;
@@ -332,6 +336,15 @@ pub enum Planted {
     BumpIgnoresHandedness,
     CoatNormalBendsBase,
     MissingLobeTurnedOn,
+    // #485: core.light@1 without its Fresnel term; core.ambient@1 adding 0.01 × n.z; the light
+    // loop handing `light` a shadow of 1, calling it for the lights the policy cut too, handing
+    // `ambient` the world-space normal, and handing both `v` away from the eye.
+    LightDropsFresnel,
+    AmbientAddsNz,
+    LoopShadowOne,
+    LoopCallsCutLights,
+    LoopWorldNormal,
+    LoopViewAway,
     // #483: the structural steps' wrong programs.
     IterateFeedsFirst,
     SortTiesDecreasing,
@@ -565,6 +578,12 @@ impl Planted {
             "bump_ignores_handedness" => Planted::BumpIgnoresHandedness,
             "coat_normal_bends_base" => Planted::CoatNormalBendsBase,
             "missing_lobe_turned_on" => Planted::MissingLobeTurnedOn,
+            "light_drops_fresnel" => Planted::LightDropsFresnel,
+            "ambient_adds_nz" => Planted::AmbientAddsNz,
+            "loop_shadow_one" => Planted::LoopShadowOne,
+            "loop_calls_cut_lights" => Planted::LoopCallsCutLights,
+            "loop_world_normal" => Planted::LoopWorldNormal,
+            "loop_view_away" => Planted::LoopViewAway,
             "iterate_feeds_first" => Planted::IterateFeedsFirst,
             "sort_ties_decreasing" => Planted::SortTiesDecreasing,
             "compact_by_atomic" => Planted::CompactByAtomic,
@@ -840,6 +859,8 @@ impl App {
             Some("columns") => columns::call(self, call),
             Some("exact") => effects::exact(self, out),
             Some("cross_gpu") => effects::cross_gpu(self, call),
+            Some("index_record") => records::index_record(self, out, call),
+            Some("cross_index") => records::cross_index(call),
             Some("op_table") => steps_ref::op_table(),
             Some("steps_reference") => steps_ref::steps_reference(self, out),
             Some("interp_suite") => interp_suite::call(self, call),

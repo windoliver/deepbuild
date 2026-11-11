@@ -17,6 +17,8 @@ sha2 = "0.10"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 # Issue #423: KTX2 maps (Basis Universal ETC1S or UASTC) transcoded to BC in the decode worker.
 basisu_c_sys = { version = "0.9.1", features = ["extra"] }
+# Issue #1967: terminal recordings, converted at import by the cells module's emulator.
+deep-canvas-cells = { path = "../deep-canvas-cells" }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 libc = "0.2"

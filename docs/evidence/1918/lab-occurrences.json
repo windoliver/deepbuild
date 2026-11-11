@@ -1,0 +1,120 @@
+{
+ "world": "ball-and-goal lab (tests/acceptance/2010/helpers.ts ballAndGoal)",
+ "steps": 360,
+ "key": "166a6b5820c65d4d21e5ef2e2f68c0394c5fba097ec6460d918a166ee86d2aed",
+ "occurrences_hash": "1dff895c3cf8e16bf30efd010771a36b6fc480a541d4555a5200e337977ea0c9",
+ "occurrences": [
+  {
+   "step": 1,
+   "kind": "contact_begin",
+   "a": "ball",
+   "b": "floor",
+   "a_use": 0,
+   "b_use": 0,
+   "point": [
+    0.02500000223517418,
+    0.012287113815546036,
+    0.0016666668234393
+   ],
+   "normal": [
+    0,
+    -1,
+    0
+   ]
+  },
+  {
+   "step": 2,
+   "kind": "contact_end",
+   "a": "ball",
+   "b": "floor",
+   "a_use": 0,
+   "b_use": 0
+  },
+  {
+   "step": 74,
+   "kind": "contact_begin",
+   "a": "ball",
+   "b": "floor",
+   "a_use": 0,
+   "b_use": 0,
+   "point": [
+    3.651221752166748,
+    0.0025923624634742737,
+    0.24341395497322083
+   ],
+   "normal": [
+    0,
+    -1,
+    0
+   ]
+  },
+  {
+   "step": 74,
+   "kind": "hit",
+   "a": "ball",
+   "b": "floor",
+   "a_use": 0,
+   "b_use": 0,
+   "point": [
+    3.651221752166748,
+    0.0025923624634742737,
+    0.24341395497322083
+   ],
+   "normal": [
+    0,
+    -1,
+    0
+   ],
+   "speed": 2.967745304107666,
+   "impulse": 1.8217352628707886,
+   "tags": []
+  },
+  {
+   "step": 78,
+   "kind": "contact_end",
+   "a": "ball",
+   "b": "floor",
+   "a_use": 0,
+   "b_use": 0
+  },
+  {
+   "step": 102,
+   "kind": "contact_begin",
+   "a": "ball",
+   "b": "floor",
+   "a_use": 0,
+   "b_use": 0,
+   "point": [
+    4.670146942138672,
+    0.006374143064022064,
+    0.3113420605659485
+   ],
+   "normal": [
+    0,
+    -1.000000238418579,
+    1.1175870895385742e-8
+   ]
+  },
+  {
+   "step": 102,
+   "kind": "hit",
+   "a": "ball",
+   "b": "floor",
+   "a_use": 0,
+   "b_use": 0,
+   "point": [
+    4.670146942138672,
+    0.006374143064022064,
+    0.3113420605659485
+   ],
+   "normal": [
+    0,
+    -1.000000238418579,
+    1.1175870895385742e-8
+   ],
+   "speed": 1.065608263015747,
+   "impulse": 0,
+   "tags": []
+  }
+ ]
+}
