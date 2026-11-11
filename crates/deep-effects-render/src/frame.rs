@@ -122,6 +122,8 @@ pub struct Effects {
     pub op_canonical: bool,
     /// What each operator drew last frame.
     pub op_rows: Vec<crate::docops::Row>,
+    /// Each depth-video point set's last dispatch, by item (#503).
+    pub(crate) clouds: BTreeMap<String, crate::cloud::Held>,
 }
 
 struct SparkDraw {
@@ -179,6 +181,7 @@ impl Effects {
             op_resolution: BTreeMap::new(),
             op_canonical: false,
             op_rows: Vec::new(),
+            clouds: BTreeMap::new(),
         }
     }
 
@@ -198,7 +201,7 @@ impl Effects {
         self.dirt.as_ref().expect("made above").1.clone()
     }
 
-    fn runner(&mut self, device: &Device, id: &str) -> Arc<Runner> {
+    pub(crate) fn runner(&mut self, device: &Device, id: &str) -> Arc<Runner> {
         let karis = !self.planted.without_karis;
         let options = Options {
             off_by_two: self.planted.off_by_two,
