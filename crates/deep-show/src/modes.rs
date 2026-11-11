@@ -405,6 +405,7 @@ impl Hub<'_> {
                             b: *b,
                             wa: 1.5,
                             wb: 1.5,
+                            hidden: false,
                         })
                         .collect(),
                     world: false,
@@ -415,9 +416,7 @@ impl Hub<'_> {
                     dash: [0.0; 2],
                     dash_world: false,
                 }],
-                points: Vec::new(),
-                labels: Vec::new(),
-                puffs: Vec::new(),
+                ..Default::default()
             });
         }
         let diag = diag.unwrap_or(deep_scene3d_render::Diag::Plain);

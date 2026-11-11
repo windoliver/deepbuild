@@ -2353,6 +2353,7 @@ fn shade(in0: MeshOut, front: bool, local_n: vec3<f32>, g: array<vec4<f32>, 2>, 
             m = mapped(in, geometric, m.s, g);
             cutoff = maps.values.z;
         }
+        m.s.base = tinted(m.s.base, in.pick, in.local);
         // A material operator's normal replaces the mapped one, its coat's bends the coat alone,
         // and its occlusion scales only what the map's does: the ambient light (#486).
         if op_normal.w > 0.0 {
@@ -2447,7 +2448,7 @@ fn shade(in0: MeshOut, front: bool, local_n: vec3<f32>, g: array<vec4<f32>, 2>, 
     if lights.count.w > 0u && (in.flags & NO_RECEIVE) == 0u {
         direct = direct * lit_share(in.world, n, curved, in.pos.xy) * contact_at(in.pos.xy);
     }
-    let albedo = paint(in.color);
+    let albedo = tinted(paint(in.color), in.pick, in.local);
     let lit = ambient * occlusion(in.pos.xy, albedo) + vec3<f32>(direct);
     let a = in.emission.w;
     return targets(vec4<f32>(fogged(adjusted(albedo * lit + in.emission.rgb, in.op.w), in.world) * a, a), in.pick);
@@ -2922,7 +2923,7 @@ fn line_vs(
     } else {
         out.dash = out.dash * frame.px.x;
     }
-    if ca.w <= 0.0 || cb.w <= 0.0 {
+    if ca.w <= 0.0 || cb.w <= 0.0 || (flags & 32u) != 0u {
         out.pos = OFF;
         return out;
     }

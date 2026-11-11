@@ -135,9 +135,15 @@ impl Hub<'_> {
         out
     }
 
-    /// `form` played and shown at `t`, owned: what a 3D frame of the document draws.
+    /// `form` played and shown at `t`, owned: what a 3D frame of the document draws, with the
+    /// logic arrays its drawn form baked, which scene3d's readers fold (#537).
     pub(crate) fn shown_at(&self, doc: &str, form: &Value, t: i64) -> Value {
-        at(&self.played(doc, form), t).into_owned()
+        let mut shown = at(&self.played(doc, form), t).into_owned();
+        let baked = self.forms.get(doc).and_then(|f| f.get("arrays"));
+        if let (Some(arrays), Some(o)) = (baked, shown.as_object_mut()) {
+            o.entry("arrays").or_insert_with(|| arrays.clone());
+        }
+        shown
     }
 
     /// The played form of the document as its last `deep_show` loaded it, if any.
