@@ -746,6 +746,8 @@ pub struct Registrar {
     pub entries: Vec<lists::EntryDef>,
     /// Its Rust for the entries it fills in the core's `outline.source@1`, by entry name (#443).
     pub outline_fills: Vec<(String, crate::outline::Fill)>,
+    /// The pack fields it reads, each with its check at the pack check (#1720).
+    pub pack_fields: Vec<(String, crate::document::packs::module_fields::PackField)>,
 }
 
 impl Registrar {
@@ -1039,19 +1041,6 @@ impl Registrar {
             value,
             since: since.into(),
         });
-        self
-    }
-
-    /// Fills an entry of the core's `outline.source@1` (#443): its value, which the registry's kit
-    /// holds to its item's 2D fill, and its own Rust, which `extrude` reads outlines through.
-    pub fn outline_source(
-        &mut self,
-        name: &str,
-        value: Value,
-        fill: crate::outline::Fill,
-    ) -> &mut Self {
-        self.entry(crate::outline::REGISTRY, name, value, "R6");
-        self.outline_fills.push((name.into(), fill));
         self
     }
 

@@ -123,6 +123,14 @@ export async function doctorItems(env: NodeJS.ProcessEnv, options: { prompt: boo
       });
       for (const f of failing) add('hub.jobs', 'deepbuild', 'job_failing', 'warn', `the hub's job ${f.name} failed ${f.failures} times in a row since ${new Date(f.since).toISOString()}: ${f.error}`, 'Read the error; the job runs again on its own, and its next clean run clears this.');
       if (!failing.length) add('hub.jobs', 'deepbuild', 'healthy', 'ok', `none of the hub's ${Object.keys(jobs).length} jobs has failed ${JOB_FAILURES} times in a row`, 'Nothing to do.');
+      // The release's packs (#1720): one that failed the canvas core's pack check isn't installed, and is named here.
+      const packs = Array.isArray(reply.result.packs) ? reply.result.packs.filter(isObj) : [];
+      const named = (p: Obj) => `${typeof p.pack === 'string' ? `${p.pack}@${String(p.version)}` : 'a pack'} (packs/${String(p.folder)})`;
+      const refused = packs.filter((p) => p.state === 'refused');
+      const unchecked = packs.filter((p) => p.state === 'not_checked');
+      for (const p of refused) add('canvas.packs', 'deepbuild', 'pack_refused', 'fail', `the release's pack ${named(p)} failed the pack check, so it isn't installed: ${JSON.stringify(p.issues).slice(0, 600)}`, `Fix packs/${String(p.folder)} so it passes the pack check, or reinstall DeepBuild; then restart the hub.`);
+      if (!refused.length && unchecked.length) add('canvas.packs', 'deepbuild', 'not_checked', 'skip', `the canvas core hasn't checked ${unchecked.map(named).join(', ')} since the hub started`, 'Show a document or run deep_kinds once, then `deep doctor` again.');
+      if (!refused.length && !unchecked.length) add('canvas.packs', 'deepbuild', 'healthy', 'ok', `the release's ${packs.length} packs passed the pack check and are installed`, 'Nothing to do.');
       // What macOS says of the app's notifications (#994): only the app can read it, so with no reading it isn't checked.
       const setting = reply.result.notifications;
       if (setting === 'allowed') add('app.notifications', 'deepbuild', 'healthy', 'ok', 'macOS shows the app\'s notifications', 'Nothing to do.');

@@ -380,8 +380,27 @@ impl Hub<'_> {
         }
     }
 
-    /// `time`: a literal's flicks in a document.
-    pub fn time_reply(&self, doc: &str, text: &str) -> Value {
+    /// `time`: a literal's flicks in a document. A word anchor (#502), `@line.word:text#k`,
+    /// resolves to the word marker the line's words record places.
+    pub fn time_reply(&mut self, doc: &str, text: &str) -> Value {
+        if let Ok(Time::Word { line, text: word, k, offset }) = Time::parse(text) {
+            let Some(document) = self.current(doc).map(|r| r.doc.clone()) else {
+                return refused("no_revision");
+            };
+            let markers = self.script_of(&document).map(|s| s.markers.clone()).unwrap_or_default();
+            let prefix = format!("{}.word:{word}#", line.as_str());
+            let found: Vec<i64> = markers.iter().filter(|(name, _)| name.starts_with(&prefix)).map(|(_, t)| *t).collect();
+            let at = match k {
+                Some(k) => found.get(k as usize - 1).copied(),
+                None if found.len() == 1 => Some(found[0]),
+                None => None,
+            };
+            let offset = offset.map_or(Ok(0), |o| o.resolve(&context_of(&document)));
+            return match (at, offset) {
+                (Some(t), Ok(o)) => json!({"outcome": "resolved", "t": t + o}),
+                _ => refused("time_unresolved"),
+            };
+        }
         match self.resolve_time(doc, &EvalTime::Literal(text.to_string())) {
             Ok(t) => json!({"outcome": "resolved", "t": t}),
             Err(code) => refused(code),
@@ -599,6 +618,7 @@ impl Hub<'_> {
             let (block, pictures) = self.videos_at(doc, t, seek);
             video = block;
             self.renderer.videos = pictures;
+            self.caption_at(doc, t);
         }
         let drawing =
             crate::frames::drawing_of(&sched, &session).ok_or_else(|| "no_drawing".to_string())?;

@@ -314,6 +314,8 @@ pub struct Bus {
     /// Index of the bus it feeds, or `None` for the master.
     pub out: Option<usize>,
     pub sends: Vec<BusSend>,
+    /// #502: the ducking entry that targets it (Ducking), multiplied into its gain per sample.
+    pub duck: Option<crate::duck::Duck>,
 }
 
 impl Bus {
@@ -685,6 +687,8 @@ pub struct Player {
     edge: Vec<f32>,
     planted: Planted,
     taps: Vec<sha2::Sha256>,
+    /// #502: an export's delivery gain, as an amplitude, on the master ahead of its end limiter.
+    pub delivery: f64,
 }
 
 impl Player {
@@ -715,9 +719,11 @@ impl Player {
             edge: vec![0.0; n],
             read: n,
             planted,
+            delivery: 1.0,
         };
         p.seek_graph(lead);
         p.take_taps();
+        p.end.cut = false;
         p
     }
 
@@ -742,6 +748,11 @@ impl Player {
         }
     }
 
+    /// #502: whether the master's end limiter has cut since the last seek.
+    pub fn limited(&self) -> bool {
+        self.end.cut
+    }
+
     /// Each processor's ID and the SHA-256 of its output read since the last call.
     pub fn take_taps(&mut self) -> Vec<(String, String)> {
         use sha2::Digest;
@@ -756,7 +767,9 @@ impl Player {
     /// Moves to `sample`: restores the latest checkpoint at or before it that every processor's
     /// ring holds, renders forward from there and returns what each processor did.
     pub fn seek(&mut self, sample: i64) -> Vec<(String, Sought)> {
-        self.seek_graph(sample + self.edges.lead)
+        let sought = self.seek_graph(sample + self.edges.lead);
+        self.end.cut = false;
+        sought
     }
 
     /// Moves the graph, which runs `lead` samples ahead of what is heard, to `sample`.
@@ -932,8 +945,15 @@ impl Player {
                 self.pre.copy_from_slice(&block);
             }
             let g = if bus.mute { 0.0 } else { amp(bus.gain_db) };
-            for f in block.as_chunks_mut::<2>().0 {
+            // A sample's duck is read at the time of the sound it scales: its place in the
+            // graph less the bus's latency.
+            let t0 = (k * BLOCK - mix.latency[b]) * step;
+            for (i, f) in block.as_chunks_mut::<2>().0.iter_mut().enumerate() {
                 let (l, r) = balance(f[0], f[1], bus.pan);
+                let g = match &bus.duck {
+                    Some(d) => g * d.at(t0 + i as i64 * step),
+                    None => g,
+                };
                 f[0] = (l as f64 * g) as f32;
                 f[1] = (r as f64 * g) as f32;
             }
@@ -968,6 +988,11 @@ impl Player {
         }
         // The master ends in its true-peak limiter, after its gain and pan.
         self.buf.copy_from_slice(&self.buses[mix.master]);
+        if self.delivery != 1.0 {
+            for x in &mut self.buf {
+                *x = (f64::from(*x) * self.delivery) as f32;
+            }
+        }
         self.end.process(&mut self.buf);
         self.read = 0;
         self.block = k + 1;

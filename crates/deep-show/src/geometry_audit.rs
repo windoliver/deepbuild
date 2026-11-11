@@ -6,7 +6,7 @@
 
 use std::collections::BTreeSet;
 
-use deep_canvas::geometry_audit::{Config, Fault, Shape, Solid, V3};
+use deep_canvas::geometry_audit::{Change, Config, Fault, Seat, Shape, Solid, V3};
 use deep_canvas::interval::Iv;
 use deep_canvas_motion::program::{Program, TRANSFORM};
 use deep_canvas_scene3d::scene::{self, Affine3};
@@ -14,6 +14,23 @@ use serde_json::{json, Value};
 
 /// The check kind.
 pub const GEOMETRY_AUDIT: &str = "geometry.audit";
+
+/// The audit's wrong programs: #405's sweep, which audits its samples alone and bounds nothing
+/// between them, and #1936's audit, which runs its overlap pass alone.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Planted {
+    SamplesOnly,
+    OverlapsOnly,
+}
+
+/// A wrong program of the audit's by the name its acceptance suite gives it.
+pub(crate) fn planted(name: &str) -> Option<crate::hub::Planted> {
+    Some(crate::hub::Planted::Audit(match name {
+        "sweep_audits_samples_only" => Planted::SamplesOnly,
+        "audit_checks_overlaps_only" => Planted::OverlapsOnly,
+        _ => return None,
+    }))
+}
 
 fn apply(m: &Affine3, p: V3) -> V3 {
     let mut out = [0.0; 3];
@@ -92,6 +109,42 @@ fn built_shapes(doc: &Value, item: &Value, mesh: &deep_canvas_scene3d::geom::Mes
     (shapes, ends)
 }
 
+/// Where an item sits (Geometry audit: scenes): the hash of its geometry, which is its kind and
+/// the numbers that shape it in its own space; its own bounds `[lo, hi]` placed by `m`; its
+/// origin, which is its pivot where it has one; its yaw; and its boundary edges.
+fn seat_of(item: &Value, shape: impl Iterator<Item = f64>, m: &Affine3, [lo, hi]: [V3; 2], edges: Vec<[V3; 2]>) -> Seat {
+    let mut h = deep_canvas::schedule::Hasher::new(GEOMETRY_AUDIT);
+    h.text(item.get("kind").and_then(Value::as_str).unwrap_or(""));
+    for x in shape {
+        h.bytes(&x.to_bits().to_le_bytes());
+    }
+    Seat {
+        geometry: h.finish(),
+        corners: std::array::from_fn(|k| apply(m, std::array::from_fn(|j| if k >> j & 1 == 0 { lo[j] } else { hi[j] }))),
+        origin: apply(m, item.pointer("/at/pivot").and_then(v3).unwrap_or([0.0; 3])),
+        yaw: deep_canvas::ops::deg(deep_canvas::ops::atan2(-m[2][0], m[0][0])),
+        edges,
+    }
+}
+
+/// A built mesh's boundary edges placed by `m`: each edge one face holds, on positions welded as
+/// geometry.shading welds them (Check input: loop kinds: shading defects).
+fn boundary_edges(mesh: &deep_canvas_scene3d::geom::Mesh, m: &Affine3) -> Vec<[V3; 2]> {
+    let (welded, _) = deep_canvas_loop::count::weld(&mesh.positions, 0.00001);
+    let mut faces: std::collections::BTreeMap<[u32; 2], (usize, [u32; 2])> = std::collections::BTreeMap::new();
+    for t in mesh.indices.chunks_exact(3) {
+        let w = [t[0], t[1], t[2]].map(|i| welded[i as usize]);
+        // A face whose corners weld together has no edges.
+        if w[0] == w[1] || w[1] == w[2] || w[0] == w[2] {
+            continue;
+        }
+        for (k, j) in [(0, 1), (1, 2), (2, 0)] {
+            faces.entry([w[k].min(w[j]), w[k].max(w[j])]).or_insert((0, [t[k], t[j]])).0 += 1;
+        }
+    }
+    faces.values().filter(|(n, _)| *n == 1).map(|(_, e)| e.map(|i| apply(m, mesh.positions[i as usize]))).collect()
+}
+
 /// Every solid part of `doc` at `t` (flicks), as the audit reads it: its true shape placed in the
 /// world by its evaluated transform and its parents', and a wire's or tube's ends; paint and light
 /// play no part. `moved` names the parts motion places.
@@ -106,11 +159,14 @@ pub(crate) fn solids_at(doc: &Value, t: i64, moved: &BTreeSet<String>) -> Result
         let kind = item.get("kind").and_then(Value::as_str).unwrap_or("");
         let size = item.pointer("/params/size").and_then(v3).unwrap_or([1.0; 3]);
         let half = [size[0] / 2.0, size[1] / 2.0, size[2] / 2.0];
-        let (shapes, ends) = match kind {
-            "mark.box@1" | "mark.cylinder@1" => (vec![placed_box(m, [-half[0], -half[1], -half[2]], half)], Vec::new()),
+        let low = [-half[0], -half[1], -half[2]];
+        // A mark is a closed solid: it has no boundary edge.
+        let mark = || seat_of(item, size.into_iter(), m, [low, half], Vec::new());
+        let (shapes, ends, seat) = match kind {
+            "mark.box@1" | "mark.cylinder@1" => (vec![placed_box(m, low, half)], Vec::new(), mark()),
             "mark.sphere@1" => {
                 let r = (0..3).map(|j| norm(column(m, j)) * half[j]).fold(0.0, f64::max);
-                (vec![Shape::Ball { c: apply(m, [0.0; 3]), r }], Vec::new())
+                (vec![Shape::Ball { c: apply(m, [0.0; 3]), r }], Vec::new(), mark())
             }
             // #419's stand-in for the physics module: each body a ball at the bake's position.
             "fixture.world@1" => {
@@ -118,7 +174,7 @@ pub(crate) fn solids_at(doc: &Value, t: i64, moved: &BTreeSet<String>) -> Result
                 let w = deep_canvas_scene3d::fixtures::bake(&params, &format!("items/{id}/params"))
                     .map_err(|r| format!("{} at {}", r.code, r.path))?;
                 for (b, p) in w.bodies.iter().zip(w.at(t)) {
-                    out.push(Solid { id: format!("{id}#{}", b.id), shapes: vec![Shape::Ball { c: p, r: b.radius }], ends: Vec::new(), moved: true });
+                    out.push(Solid { id: format!("{id}#{}", b.id), shapes: vec![Shape::Ball { c: p, r: b.radius }], ends: Vec::new(), moved: true, seat: None });
                 }
                 continue;
             }
@@ -129,11 +185,13 @@ pub(crate) fn solids_at(doc: &Value, t: i64, moved: &BTreeSet<String>) -> Result
                 let Some(mesh) = built.mesh.filter(|m| m.triangles() > 0) else {
                     continue;
                 };
-                built_shapes(doc, item, &mesh, m)
+                let numbers = mesh.positions.iter().flatten().copied().chain(mesh.indices.iter().map(|i| f64::from(*i)));
+                let (shapes, ends) = built_shapes(doc, item, &mesh, m);
+                (shapes, ends, seat_of(item, numbers, m, mesh.bounds(), boundary_edges(&mesh, m)))
             }
             _ => continue,
         };
-        out.push(Solid { id: id.clone(), shapes, ends, moved: moved.contains(id) });
+        out.push(Solid { id: id.clone(), shapes, ends, moved: moved.contains(id), seat: Some(seat) });
     }
     Ok(out)
 }
@@ -362,18 +420,55 @@ pub(crate) struct DocRun {
     pub ms: f64,
 }
 
+/// A collection's members (Document envelope: `collections`), or none for one the document
+/// doesn't list by its members.
+fn members(doc: &Value, name: &Value) -> Option<BTreeSet<String>> {
+    let list = doc.get("collections")?.get(name.as_str()?)?.get("members")?.as_array()?;
+    Some(list.iter().filter_map(Value::as_str).map(str::to_string).collect())
+}
+
+/// A fault's fix as patch ops (Patch), where a patch can make it: an item removed, or an item
+/// with no parent that no motion places set to its new place. Any other fix is its words.
+fn fix_of(f: &Fault, doc: &Value, moved: &BTreeSet<String>) -> Value {
+    let ops = match &f.change {
+        Some(Change::Remove(id)) => Some(vec![json!({"op": "delete", "id": id})]),
+        Some(Change::Place { id, by, yaw }) => doc
+            .pointer(&format!("/items/{id}"))
+            .filter(|item| item.get("parent").is_none() && !moved.contains(id))
+            .map(|item| {
+                let pos = item.pointer("/at/pos").and_then(v3).unwrap_or([0.0; 3]);
+                let turn = item.pointer("/at/rot/1").and_then(Value::as_f64).unwrap_or(0.0) + yaw;
+                let set = |path: &str, value: Value| json!({"op": "set", "id": id, "path": format!("items/{id}/at/{path}"), "value": value});
+                let mut ops = vec![set("pos", json!([pos[0] + by[0], pos[1] + by[1], pos[2] + by[2]]))];
+                if *yaw != 0.0 {
+                    ops.push(set("rot/1", json!(turn)));
+                }
+                ops
+            }),
+        None => None,
+    };
+    ops.map_or_else(|| json!(f.fix), Value::Array)
+}
+
 /// A fault as an issue (What holds a document to its rules): the state it was found in, its time
 /// and, in a sweep, the control and its value there.
-fn issue(f: &Fault, state: &str, t: i64, sweep: Option<(&str, f64)>) -> Value {
+fn issue(f: &Fault, state: &str, t: i64, sweep: Option<(&str, f64)>, fix: Value) -> Value {
+    use deep_canvas::geometry_audit::{COINCIDENT, FLOATING, OFF_GRID, OVERLAP, SEAM};
     let what = match f.code {
-        deep_canvas::geometry_audit::OVERLAP => format!("{} passes {:.4} m into {}", f.ids[0], f.by, f.ids[1]),
-        deep_canvas::geometry_audit::FLOATING => format!("nothing holds {}", f.ids[0]),
+        OVERLAP => format!("{} passes {:.4} m into {}", f.ids[0], f.by, f.ids[1]),
+        FLOATING => format!("nothing holds {}", f.ids[0]),
+        COINCIDENT => format!("{} and {} are one geometry in one place", f.ids[0], f.ids[1]),
+        OFF_GRID => format!("{} is {:.4} m off its grid, or turned off a quarter turn", f.ids[0], f.by),
+        SEAM => format!("the seam between {} and {} leaves a {:.4} m gap", f.ids[0], f.ids[1], f.by),
         _ => format!("an end of {} lands on nothing", f.ids[0]),
     };
     let mut v = json!({"check": GEOMETRY_AUDIT, "code": f.code, "severity": "error", "ids": f.ids,
-                       "state": state, "t": t, "what": what, "fix": f.fix});
-    if f.code == deep_canvas::geometry_audit::OVERLAP {
+                       "state": state, "t": t, "what": what, "fix": fix});
+    if f.code == OVERLAP {
         v["depth"] = json!(f.by);
+    }
+    if f.code == SEAM {
+        v["gap"] = json!(f.by);
     }
     if let Some((control, value)) = sweep {
         v["sweep"] = json!({"control": control, "value": value});
@@ -406,10 +501,14 @@ pub(crate) struct Audit<'a> {
     pub approved: &'a BTreeSet<String>,
     /// #405's planted sweep: its samples alone, nothing bounded between them.
     pub samples_only: bool,
+    /// #1936's planted audit: the overlap pass alone.
+    pub overlaps_only: bool,
 }
 
 impl Audit<'_> {
-    fn config(&self, own: bool) -> Config {
+    /// What the input allows and, for a scene, asks for (Geometry audit: scenes): coincident
+    /// items, `grid` and `seams`. A collection the document doesn't list is never passed over.
+    fn config(&self, own: bool, out: &mut DocRun) -> Config {
         let d = Config::default();
         let tol = |k: &str, def: f64| self.input.pointer(&format!("/tolerance/{k}")).and_then(Value::as_f64).unwrap_or(def);
         let (mut floating, mut relations) = exceptions_of(self.input);
@@ -420,13 +519,33 @@ impl Audit<'_> {
             floating.extend(f);
             relations.extend(r);
         }
-        Config { sunk: tol("sunk", d.sunk), touch: tol("touch", d.touch), land: tol("land", d.land), floating, relations }
+        let mut cfg = Config { sunk: tol("sunk", d.sunk), touch: tol("touch", d.touch), land: tol("land", d.land), floating, relations, ..d };
+        if self.overlaps_only {
+            return cfg;
+        }
+        cfg.scene = self.input.get("scope").and_then(Value::as_str) == Some("scene");
+        if let Some(g) = self.input.get("grid") {
+            let sub = g.get("sub").and_then(Value::as_f64).filter(|s| *s > 0.0);
+            cfg.grid = sub.zip(members(&self.doc, &g["items"]));
+            if cfg.grid.is_none() {
+                out.not_run.push("grid".into());
+            }
+        }
+        if let Some(s) = self.input.get("seams") {
+            let sets = |pair: &Value| Some([members(&self.doc, &pair[0])?, members(&self.doc, &pair[1])?]);
+            let pairs: Option<Vec<_>> = s.get("pairs").and_then(Value::as_array).and_then(|p| p.iter().map(sets).collect());
+            cfg.seams = pairs.map(|p| (p, s.get("max_gap").and_then(Value::as_f64).unwrap_or(0.001)));
+            if cfg.seams.is_none() {
+                out.not_run.push("seams".into());
+            }
+        }
+        cfg
     }
 
     /// Runs every state the input names, or every state the document can reach, with the
     /// document's own exceptions (`own`) or with the definition's alone.
     fn run(&self, own: bool, out: &mut DocRun) -> Vec<Value> {
-        let cfg = self.config(own);
+        let cfg = self.config(own, out);
         let doc = &self.doc;
         let program = doc.as_object().and_then(|m| Program::compile(m).ok());
         let moved = moved_items(doc, program.as_ref());
@@ -470,8 +589,11 @@ impl Audit<'_> {
         let mut issues: Vec<Value> = Vec::new();
         let mut seen: BTreeSet<(String, Vec<String>)> = BTreeSet::new();
         let mut push = |f: &Fault, state: &str, t: i64, sweep: Option<(&str, f64)>, issues: &mut Vec<Value>| {
+            if self.overlaps_only && f.code != deep_canvas::geometry_audit::OVERLAP {
+                return;
+            }
             if seen.insert((f.code.to_string(), f.ids.clone())) {
-                issues.push(issue(f, state, t, sweep));
+                issues.push(issue(f, state, t, sweep, fix_of(f, doc, &moved)));
             }
         };
         for state in &states {
@@ -645,7 +767,8 @@ impl crate::hub::Hub<'_> {
     /// current revision: requirement ID → what it found.
     pub(crate) fn geometry_audit_runs(&mut self, claim: &str, c: &crate::hub::Claim) -> std::collections::BTreeMap<String, Judged> {
         let mut out = std::collections::BTreeMap::new();
-        let samples_only = self.planted(crate::hub::Planted::SweepAuditsSamplesOnly);
+        let samples_only = self.planted(crate::hub::Planted::Audit(Planted::SamplesOnly));
+        let overlaps_only = self.planted(crate::hub::Planted::Audit(Planted::OverlapsOnly));
         for r in c.requirements.iter().filter(|r| r.check["kind"] == GEOMETRY_AUDIT) {
             let mut j = Judged::default();
             let prefix = format!("{claim}/{}/", r.id);
@@ -663,7 +786,7 @@ impl crate::hub::Hub<'_> {
                 if drawn.get("size").is_none() {
                     drawn["size"] = json!([640, 480]);
                 }
-                let run = audit_document(&Audit { doc: drawn, input: &r.check, approved: &approved, samples_only });
+                let run = audit_document(&Audit { doc: drawn, input: &r.check, approved: &approved, samples_only, overlaps_only });
                 j.ms += run.ms;
                 for mut i in run.issues {
                     i["doc"] = json!(doc);
@@ -723,5 +846,56 @@ impl crate::hub::Hub<'_> {
             self.audit_asks.insert(k.clone(), Some(yes));
         }
         json!({"outcome": "answered", "asks": open, "answer": if yes { "yes" } else { "no" }})
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The scene audit of a floor, which may float, and one kit piece, a 1 m box placed by `at`
+    /// under `parent`, with `check`'s fields.
+    fn audited(at: Value, parent: Option<&str>, check: Value) -> DocRun {
+        let solid = |id: &str, size: [f64; 3], at: Value| {
+            json!({"id": id, "kind": "mark.box@1", "layer": "main", "name": id, "order": "a1", "params": {"size": size}, "at": at})
+        };
+        let mut piece = solid("piece", [1.0; 3], at);
+        if let Some(p) = parent {
+            piece["parent"] = json!(p);
+        }
+        let doc = json!({
+            "format": 1, "profile": "scene", "title": "T", "description": "D", "size": [64, 64],
+            "layers": {"main": {"writer": "agent-a", "title": "Main", "order": "a0"}},
+            "collections": {"kit": {"members": ["piece"]}},
+            "items": {"floor": solid("floor", [6.0, 0.2, 6.0], json!({"pos": [0, -0.1, 0]})), "piece": piece},
+        });
+        let mut input = json!({"kind": GEOMETRY_AUDIT, "scope": "scene", "support": {"floating": ["floor"]}});
+        input.as_object_mut().expect("an object").extend(check.as_object().expect("an object").clone());
+        audit_document(&Audit { doc, input: &input, approved: &BTreeSet::new(), samples_only: false, overlaps_only: false })
+    }
+
+    #[test]
+    fn a_turned_piece_is_snapped_by_ops_and_a_parented_one_in_words() {
+        let grid = json!({"grid": {"unit": 1, "sub": 0.5, "items": "kit"}});
+        let turned = audited(json!({"pos": [2, 0.5, 0], "rot": [0, 80, 0]}), None, grid.clone()).issues;
+        assert_eq!(turned.len(), 1, "{turned:?}");
+        assert_eq!((&turned[0]["code"], &turned[0]["ids"]), (&json!("geometry.off_grid"), &json!(["piece"])));
+        let ops = turned[0]["fix"].as_array().expect("the fix is patch ops");
+        assert_eq!(ops[0], json!({"op": "set", "id": "piece", "path": "items/piece/at/pos", "value": [2.0, 0.5, 0.0]}));
+        assert_eq!((&ops[1]["op"], &ops[1]["path"]), (&json!("set"), &json!("items/piece/at/rot/1")));
+        assert!((ops[1]["value"].as_f64().expect("a yaw") - 90.0).abs() < 1e-9, "{ops:?}");
+        // Under the floor, 0.05 m off in x: its `at` is not its place, so no op sets it.
+        let parented = audited(json!({"pos": [2.05, 0.6, 0]}), Some("floor"), grid).issues;
+        assert_eq!(parented.len(), 1, "{parented:?}");
+        assert_eq!(parented[0]["code"], "geometry.off_grid");
+        assert!(parented[0]["fix"].is_string(), "{parented:?}");
+    }
+
+    #[test]
+    fn a_collection_the_document_lacks_is_never_passed_over() {
+        let check = json!({"grid": {"sub": 0.5, "items": "nope"}, "seams": {"pairs": [["kit", "nope"]]}});
+        let run = audited(json!({"pos": [2, 0.5, 0]}), None, check);
+        assert_eq!(run.not_run, ["grid", "seams"]);
+        assert!(run.issues.is_empty(), "{:?}", run.issues);
     }
 }

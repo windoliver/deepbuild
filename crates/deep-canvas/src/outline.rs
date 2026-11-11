@@ -105,6 +105,16 @@ pub struct Refusal {
 /// An entry's Rust: its outlines, or why not.
 pub type Fill = fn(&Request<'_>) -> Result<Outlines, Refusal>;
 
+impl crate::registry::Registrar {
+    /// Fills an entry of the core's `outline.source@1` (#443): its value, which the registry's kit
+    /// holds to its item's 2D fill, and its own Rust, which `extrude` reads outlines through.
+    pub fn outline_source(&mut self, name: &str, value: Value, fill: Fill) -> &mut Self {
+        self.entry(REGISTRY, name, value, "R6");
+        self.outline_fills.push((name.into(), fill));
+        self
+    }
+}
+
 /// One filled region: its outer ring (counter-clockwise), its holes (clockwise) and what the
 /// outer ring came from.
 #[derive(Clone, Debug, PartialEq)]
