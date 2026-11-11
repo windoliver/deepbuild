@@ -1,0 +1,27 @@
+{
+ "mac+wasm32+linux-x86_64": {
+  "ok": true,
+  "verdict": "PASS",
+  "asks": []
+ },
+ "mac+wasm32": {
+  "ok": true,
+  "verdict": "PENDING",
+  "asks": []
+ },
+ "mac+linux-x86_64": {
+  "ok": true,
+  "verdict": "PENDING",
+  "asks": []
+ },
+ "linux-vm alone": {
+  "ok": true,
+  "verdict": "PENDING",
+  "asks": []
+ },
+ "mac+linux-vm": {
+  "ok": true,
+  "verdict": "PENDING",
+  "asks": []
+ }
+}

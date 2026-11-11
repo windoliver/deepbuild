@@ -138,7 +138,7 @@ struct SparkDraw {
 }
 
 /// An instance buffer for `count` particles.
-fn instance_buffer(d: &wgpu::Device, count: u32) -> wgpu::Buffer {
+fn instance_buffer(d: &deep_gpu::counted::Wgpu, count: u32) -> wgpu::Buffer {
     d.create_buffer(&wgpu::BufferDescriptor {
         label: Some("particles instances"),
         size: u64::from(count) * u64::from(PARTICLE_FLOATS) * 4,
@@ -386,7 +386,6 @@ impl Effects {
         depth: wgpu::TextureView,
         size: [u32; 2],
     ) -> Job {
-        use wgpu::util::DeviceExt as _;
         let d = &device.device;
         let compute = self.runner(device, "particles.sparks@1");
         self.spark_draw(device);

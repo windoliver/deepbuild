@@ -1,0 +1,552 @@
+{
+  "base": "a04378eb2fd34a6c7df923a6077e77c996153752",
+  "note": "Results read from the runners JSONL records. The first overall affected invocation was stopped at the tool deadline; its completed test report is retained, not counted as a passing lane. One load-affected timeout received one isolated rerun without changing checks; both outcomes are retained. Acceptance and library runs completed after the scheduling correction. This is not a full-preflight PASS.",
+  "runs": [
+    {
+      "name": "interrupted-regressions",
+      "results": [
+        {
+          "type": "pass",
+          "file": "packages/evidence/test/evidence.test.ts",
+          "name": "retention of a series and of map layers › drops uncited batches after 24 hours and uncited minute rollups after 7 days; cited ones and hour rollups follow 30 days"
+        },
+        {
+          "type": "pass",
+          "file": "packages/evidence/test/evidence.test.ts",
+          "name": "retention of a series and of map layers › keeps an installed layer's newest rows file for each parent and level, and lets it go once the layer is removed"
+        },
+        {
+          "type": "pass",
+          "file": "packages/evidence/test/evidence.test.ts",
+          "name": "video step times › keeps where each step starts and ends, and refuses a step that runs backwards"
+        },
+        {
+          "type": "pass",
+          "file": "packages/evidence/test/evidence.test.ts",
+          "name": "your yes to a send › holds after the store reopens, so the same file to the same host is never asked about twice"
+        },
+        {
+          "type": "pass",
+          "file": "packages/evidence/test/evidence.test.ts",
+          "name": "the scrub by field name › keeps JSON parseable, plain and escaped once, with every secret-named value masked and the rest unchanged"
+        },
+        {
+          "type": "pass",
+          "file": "packages/evidence/test/evidence.test.ts",
+          "name": "the scrub by field name › masks a field's value when a held value covers all or part of its name"
+        },
+        {
+          "type": "pass",
+          "file": "packages/evidence/test/evidence.test.ts",
+          "name": "the scrub by field name › keeps JSON parseable when a held value is a secret field's whole value"
+        },
+        {
+          "type": "pass",
+          "file": "packages/evidence/test/evidence.test.ts",
+          "name": "the scrub by field name › ends a value inside a JSON string at that string, and leaves empty values and the next field alone"
+        },
+        {
+          "type": "pass",
+          "file": "packages/evidence/test/evidence.test.ts",
+          "name": "the scrub by field name › reads a name after an escaped newline, a value quoted inside a JSON string twice, and `&` outside a query"
+        },
+        {
+          "type": "pass",
+          "file": "packages/evidence/test/evidence.test.ts",
+          "name": "the scrub by field name › leaves a string that ends at a secret name and its separator, as a prompt does, and reads JSON after a log prefix"
+        },
+        {
+          "type": "pass",
+          "file": "packages/evidence/test/evidence.test.ts",
+          "name": "the scrub by field name › keeps pretty-printed JSON parseable with a secret field's object or array value across lines"
+        },
+        {
+          "type": "pass",
+          "file": "packages/evidence/test/evidence.test.ts",
+          "name": "the scrub by field name › keeps JSON escaped twice parseable with quotes inside its strings, and a value longer than 16 KB whole"
+        },
+        {
+          "type": "pass",
+          "file": "packages/evidence/test/evidence.test.ts",
+          "name": "the scrub by field name › reads an unclosed JSON value only as far as the text stays JSON, so later lines keep their own masks"
+        },
+        {
+          "type": "pass",
+          "file": "packages/evidence/test/evidence.test.ts",
+          "name": "the scrub by field name › ends a value that runs to the end of its line at the string it sits in, pretty-printed or escaped"
+        },
+        {
+          "type": "pass",
+          "file": "packages/evidence/test/evidence.test.ts",
+          "name": "the scrub by field name › ends an unclosed value escaped in a string at that string"
+        },
+        {
+          "type": "pass",
+          "file": "packages/evidence/test/evidence.test.ts",
+          "name": "the scrub by field name › masks JSON escaped twice, keys and all"
+        },
+        {
+          "type": "pass",
+          "file": "packages/evidence/test/evidence.test.ts",
+          "name": "the scrub by field name › ends a bare value before sentence punctuation and a bracket it did not open"
+        },
+        {
+          "type": "pass",
+          "file": "packages/evidence/test/evidence.test.ts",
+          "name": "the scrub by field name › masks a bare value after `name: ` to the end of its line or string, with a YAML tag or anchor, and a doubled quote"
+        },
+        {
+          "type": "pass",
+          "file": "packages/evidence/test/evidence.test.ts",
+          "name": "the scrub by field name › masks the value after a type annotation and a quoted value after a string prefix"
+        },
+        {
+          "type": "pass",
+          "file": "packages/evidence/test/evidence.test.ts",
+          "name": "the scrub by field name › masks the value after a nested, generic or quoted annotation, and inside triple quotes"
+        },
+        {
+          "type": "pass",
+          "file": "packages/evidence/test/evidence.test.ts",
+          "name": "the scrub by field name › masks the value after a Rust, Kotlin or TypeScript annotation, escaped in a string or not, and keeps comparisons and comments"
+        },
+        {
+          "type": "pass",
+          "file": "packages/evidence/test/evidence.test.ts",
+          "name": "the scrub by field name › reads compound assignments and an optional member as separators, and counts flags as words"
+        },
+        {
+          "type": "pass",
+          "file": "packages/evidence/test/evidence.test.ts",
+          "name": "the scrub by field name › keeps a path through a secret-named module and a file position in a secret-named file"
+        },
+        {
+          "type": "pass",
+          "file": "packages/evidence/test/evidence.test.ts",
+          "name": "the scrub by field name › masks a value whose scheme prefix sits in braces, with the hash after it"
+        },
+        {
+          "type": "pass",
+          "file": "packages/extension-host/test/sources.test.ts",
+          "name": "#364 back-off, cost and readings › a call the provider fails backs off: no call until its gap passes, each failure doubles it, and an answer resets it"
+        },
+        {
+          "type": "pass",
+          "file": "packages/extension-host/test/sources.test.ts",
+          "name": "#364 back-off, cost and readings › each live call records its cost as source.called by the core, naming no URL, header or value; a timeout records no status"
+        },
+        {
+          "type": "pass",
+          "file": "packages/extension-host/test/sources.test.ts",
+          "name": "#364 back-off, cost and readings › each reading the hub makes is recorded once by the core, and readings(source, window) gives those in the window in as-of order"
+        },
+        {
+          "type": "pass",
+          "file": "packages/extension-host/test/sources.test.ts",
+          "name": "#364 secrets on the trusted path › removing a secret lists the sources that go BLOCKED, and removes it only on your yes naming that list"
+        },
+        {
+          "type": "pass",
+          "file": "packages/extension-host/test/sources.test.ts",
+          "name": "#364 secrets on the trusted path › the Keychain store keeps, reads and deletes a value in its keychain"
+        },
+        {
+          "type": "skip",
+          "file": "packages/extension-host/test/sources.test.ts",
+          "name": "#364 secrets on the trusted path › the Secret Service store keeps, reads and deletes a value in the Secret Service"
+        },
+        {
+          "type": "pass",
+          "file": "packages/evidence/test/evidence.test.ts",
+          "name": "the scrub by field name › ends a URL user's password at the host"
+        },
+        {
+          "type": "pass",
+          "file": "packages/evidence/test/evidence.test.ts",
+          "name": "the scrub by field name › masks a private key block whose first line a field also masks"
+        },
+        {
+          "type": "pass",
+          "file": "packages/extension-host/test/sources.test.ts",
+          "name": "#364 secrets on the trusted path › sign-in through an OAuth loopback: the browser goes to the source's host with PKCE and a state, the code comes back to 127.0.0.1, and the token is saved as the secret"
+        },
+        {
+          "type": "pass",
+          "file": "packages/extension-host/test/sources.test.ts",
+          "name": "#1731 a library file's call › records the bytes of the file, not the length of the base64 text that carries them"
+        },
+        {
+          "type": "pass",
+          "file": "packages/extension-host/test/sources.test.ts",
+          "name": "#1731 a library file's call › stops a download at a size one base64 string can still hold, not after the whole file is in"
+        },
+        {
+          "type": "fail",
+          "file": "packages/extension-host/test/asset-download.test.ts",
+          "name": "#1820 resumes bounded Source ranges after a lost connection and records their cost",
+          "error": "Test timed out in 5000ms.\nIf this is a long-running test, pass a timeout value as the last argument or configure it globally with \"testTimeout\"."
+        },
+        {
+          "type": "pass",
+          "file": "packages/extension-host/test/asset-download.test.ts",
+          "name": "#1820 refuses disk pressure before any source call and removes a corrupt download"
+        },
+        {
+          "type": "pass",
+          "file": "packages/extension-host/test/asset-download.test.ts",
+          "name": "#1820 a resumed range is checked and every chunk consumes the source quota"
+        },
+        {
+          "type": "pass",
+          "file": "packages/evidence/test/evidence.test.ts",
+          "name": "the scrub by field name › reads a megabyte of dense names and values in linear time"
+        },
+        {
+          "type": "pass",
+          "file": "packages/evidence/test/evidence.test.ts",
+          "name": "the scrub by field name › reads a megabyte-long word of names after `name: ` in linear time"
+        },
+        {
+          "type": "pass",
+          "file": "packages/extension-host/test/sources.test.ts",
+          "name": "#364 stream sources at run time › reads on from the cursor the hub keeps, across a restart, and refuses a page with an event that isn't its reading type, the cursor kept"
+        },
+        {
+          "type": "pass",
+          "file": "packages/extension-host/test/sources.test.ts",
+          "name": "#364 stream sources at run time › keeps each stream's cursor when two streams are read at once"
+        },
+        {
+          "type": "pass",
+          "file": "packages/hub/test/pack-license-authority.test.ts",
+          "name": "#1820 CC-BY license terms cannot be stored as a manifest claim of CC0 with no attribution"
+        },
+        {
+          "type": "pass",
+          "file": "packages/hub/test/pack-rule-after-decline.test.ts",
+          "name": "#1820 a later explicit pack rule supersedes a declined one-off fetch without borrowing another pack rule"
+        },
+        {
+          "type": "pass",
+          "file": "packages/hub/test/pack-envelope.test.ts",
+          "name": "#1820 an asset in the document envelope waits on the same authority job before any kind can read it"
+        },
+        {
+          "type": "pass",
+          "file": "packages/hub/test/pack-ref-safety.test.ts",
+          "name": "#1820 a kind naming a pinned hash in params starts the same first-use job as a declared document asset"
+        },
+        {
+          "type": "pass",
+          "file": "packages/hub/test/pack-restart.test.ts",
+          "name": "#1820 restores pending authority from its persisted fetch record without another ask or a network call"
+        },
+        {
+          "type": "pass",
+          "file": "packages/evidence/test/asset-file-integrity.test.ts",
+          "name": "#1820 a file intake repairs corrupt cached bytes and never keeps a file that changed after the download checked it"
+        },
+        {
+          "type": "pass",
+          "file": "packages/hub/test/pack-cache.test.ts",
+          "name": "a document starts its missing asset job; corrupt cached bytes are never a fetched result, online or offline"
+        },
+        {
+          "type": "pass",
+          "file": "packages/extension-host/test/asset-failed-recording.test.ts",
+          "name": "#1820 removed mismatched bytes leave a recorded failure, not a broken recording or retained rejected content"
+        },
+        {
+          "type": "pass",
+          "file": "packages/evidence/test/asset-file.test.ts",
+          "name": "#1820 keeps a downloaded file by its bytes, independently of the staging file, with its license"
+        },
+        {
+          "type": "pass",
+          "file": "packages/extension-host/test/asset-range.test.ts",
+          "name": "#1820 a reachable server ignoring large ranges is refused as range_not_supported, never offline"
+        },
+        {
+          "type": "pass",
+          "file": "packages/extension-host/test/asset-range.test.ts",
+          "name": "#1820 replay of a resumed download chooses its recorded range, not an earlier range of the same URL"
+        },
+        {
+          "type": "pass",
+          "file": "packages/hub/test/pack-license-forms.test.ts",
+          "name": "#1820 GPL and noncommercial license spellings remain forbidden, not unknown permissive IDs"
+        },
+        {
+          "type": "pass",
+          "file": "packages/extension-host/test/asset-recording.test.ts",
+          "name": "#1820 binary Source recordings read the kept asset; missing or changed bytes cannot be exported as a replay"
+        },
+        {
+          "type": "pass",
+          "file": "packages/extension-host/test/asset-probe.test.ts",
+          "name": "#1820 reachability sends no asset request, consumes Source quota and records no invented HTTP status"
+        },
+        {
+          "type": "pass",
+          "file": "packages/hub/test/pack-export-write.test.ts",
+          "name": "#1820 a pack export reports an unwritable output as one CLI error, not an uncaught stack"
+        },
+        {
+          "type": "pass",
+          "file": "packages/extension-host/test/asset-quota.test.ts",
+          "name": "#1820 a quota pause is retryable at its reset and resumes the verified partial cursor"
+        },
+        {
+          "type": "pass",
+          "file": "packages/hub/test/pack-offline-many.test.ts",
+          "name": "#1820 two assets waiting for the same pack host cause one unblock ask, never one per asset"
+        }
+      ]
+    },
+    {
+      "name": "closure-acceptance",
+      "results": [
+        {
+          "type": "pass",
+          "file": "packages/extension-host/test/asset-download.test.ts",
+          "name": "#1820 resumes bounded Source ranges after a lost connection and records their cost"
+        },
+        {
+          "type": "pass",
+          "file": "packages/extension-host/test/asset-download.test.ts",
+          "name": "#1820 refuses disk pressure before any source call and removes a corrupt download"
+        },
+        {
+          "type": "pass",
+          "file": "packages/extension-host/test/asset-download.test.ts",
+          "name": "#1820 a resumed range is checked and every chunk consumes the source quota"
+        },
+        {
+          "type": "pass",
+          "file": "tests/acceptance/1820/offline.test.ts",
+          "name": "#1820.09114f60 with no network, a document that uses an unfetched asset is BLOCKED with one unblock ask, never PASS, and no fetch starts without an answered ask or a standing rule; a planted hub that fetches under another pack's standing rule fails, naming the pack › no fetch starts without an answered ask: left unanswered, no request reaches the server"
+        },
+        {
+          "type": "pass",
+          "file": "tests/acceptance/1820/offline.test.ts",
+          "name": "#1820.09114f60 with no network, a document that uses an unfetched asset is BLOCKED with one unblock ask, never PASS, and no fetch starts without an answered ask or a standing rule; a planted hub that fetches under another pack's standing rule fails, naming the pack › a standing rule for one pack lets that pack fetch with no ask, and covers no other pack: the other holds on its own ask, naming it, with no request"
+        },
+        {
+          "type": "pass",
+          "file": "tests/acceptance/1820/offline.test.ts",
+          "name": "#1820.09114f60 with no network, a document that uses an unfetched asset is BLOCKED with one unblock ask, never PASS, and no fetch starts without an answered ask or a standing rule; a planted hub that fetches under another pack's standing rule fails, naming the pack › offline, a fetch of an unfetched asset is BLOCKED with exactly one unblock ask and no authority ask, and nothing is stored; a document that uses it is never PASS"
+        },
+        {
+          "type": "pass",
+          "file": "tests/acceptance/1820/fetch.test.ts",
+          "name": "#1820.34edde87 a pack asset fetched on first use, after its one ask, lands in the store by its sha256, and a second use fetches nothing; a fetched file whose bytes don't match its listed sha256 is refused and removed, naming the asset, and a planted fetch that keeps it fails › holds on one authority ask with the plan, fetches nothing before the yes, lands by sha256, and a second use fetches nothing"
+        },
+        {
+          "type": "pass",
+          "file": "tests/acceptance/1820/fetch.test.ts",
+          "name": "#1820.34edde87 a pack asset fetched on first use, after its one ask, lands in the store by its sha256, and a second use fetches nothing; a fetched file whose bytes don't match its listed sha256 is refused and removed, naming the asset, and a planted fetch that keeps it fails › refuses a file whose bytes don't match its listed sha256, removes it, and names the asset"
+        },
+        {
+          "type": "pass",
+          "file": "tests/acceptance/1820/export-redraft/export.test.ts",
+          "name": "#1820 scope: a document names pack@version, so a re-export uses the same bytes › each pinned version exports its own bytes: the document naming v1 draws red, the one naming v2 draws blue"
+        },
+        {
+          "type": "pass",
+          "file": "tests/acceptance/1820/export-redraft/export.test.ts",
+          "name": "#1820 scope: a document names pack@version, so a re-export uses the same bytes › after v2 exists and the upstream changed and the network is gone, v1 re-exports the same bytes twice: no request, no ask"
+        },
+        {
+          "type": "pass",
+          "file": "tests/acceptance/1820/export-redraft/export.test.ts",
+          "name": "#1820 scope: a document names pack@version, so a re-export uses the same bytes › a document naming a pack version that is not installed is refused with no PNG, naming the pack, and no other version stands in"
+        },
+        {
+          "type": "pass",
+          "file": "tests/acceptance/1820/export-redraft/export.test.ts",
+          "name": "#1820.09114f60 AC4: offline, a document that uses an unfetched asset is BLOCKED with one unblock ask, never PASS › two exports are each BLOCKED with no PNG; together they raised exactly one unblock ask and no authority ask, and nothing was fetched"
+        },
+        {
+          "type": "pass",
+          "file": "tests/acceptance/1820/scope/reuse.test.ts",
+          "name": "#1820 (supplement) a document names pack@version, so a re-export uses the same bytes › two versions list one path with different bytes: each fetch lands by its own sha256, and a document is bound to the version it names"
+        },
+        {
+          "type": "pass",
+          "file": "tests/acceptance/1820/scope/reuse.test.ts",
+          "name": "#1820 (supplement) a document names pack@version, so a re-export uses the same bytes › a re-export with the network gone, and the upstream bytes changed, uses the same bytes: no request, no ask, no BLOCKED"
+        },
+        {
+          "type": "pass",
+          "file": "tests/acceptance/1820/scope/license-file.test.ts",
+          "name": "#1820.a489b5cd (supplement) the license FILE is read, not just the listing's license id › refuses an asset listed CC0 whose license file reads CC BY-SA, naming CC BY-SA"
+        },
+        {
+          "type": "pass",
+          "file": "tests/acceptance/1820/scope/license-file.test.ts",
+          "name": "#1820.a489b5cd (supplement) the license FILE is read, not just the listing's license id › refuses an asset listed CC0 whose license file reads CC BY-NC, naming NC"
+        },
+        {
+          "type": "pass",
+          "file": "tests/acceptance/1820/scope/license-file.test.ts",
+          "name": "#1820.a489b5cd (supplement) the license FILE is read, not just the listing's license id › refuses an asset listed CC0 whose license file reads GPL, naming GPL"
+        },
+        {
+          "type": "pass",
+          "file": "tests/acceptance/1820/scope/license-file.test.ts",
+          "name": "#1820.a489b5cd (supplement) the license FILE is read, not just the listing's license id › control: an asset whose license file reads CC0 is fetched, after its license file was requested"
+        },
+        {
+          "type": "pass",
+          "file": "tests/acceptance/1820/scope/resume.test.ts",
+          "name": "#1820 (supplement) resume and the whole-file check › a download cut midway resumes from the offset, lands by its sha256, and one ask covers it"
+        },
+        {
+          "type": "pass",
+          "file": "tests/acceptance/1820/scope/resume.test.ts",
+          "name": "#1820 (supplement) resume and the whole-file check › a resumed download whose rest does not match is refused as a whole, naming the asset, and kept nowhere"
+        },
+        {
+          "type": "pass",
+          "file": "tests/acceptance/1820/scope/resume.test.ts",
+          "name": "#1820 (supplement) resume and the whole-file check › judge self-check (a planted restart-from-zero log fails, a resumed one passes)"
+        },
+        {
+          "type": "pass",
+          "file": "tests/acceptance/1820/license.test.ts",
+          "name": "#1820.a489b5cd an asset whose license file reads CC BY-SA, NC or GPL is refused before use, naming its license › refuses a CC BY-SA asset, naming CC BY-SA"
+        },
+        {
+          "type": "pass",
+          "file": "tests/acceptance/1820/license.test.ts",
+          "name": "#1820.a489b5cd an asset whose license file reads CC BY-SA, NC or GPL is refused before use, naming its license › refuses a CC BY-NC asset, naming NC"
+        },
+        {
+          "type": "pass",
+          "file": "tests/acceptance/1820/license.test.ts",
+          "name": "#1820.a489b5cd an asset whose license file reads CC BY-SA, NC or GPL is refused before use, naming its license › refuses a GPL asset, naming GPL"
+        },
+        {
+          "type": "pass",
+          "file": "tests/acceptance/1820/license.test.ts",
+          "name": "#1820.a489b5cd an asset whose license file reads CC BY-SA, NC or GPL is refused before use, naming its license › control: a CC0 asset is not refused for its license, so the refusals above are not refuse-everything"
+        },
+        {
+          "type": "pass",
+          "file": "tests/acceptance/1820/disk.test.ts",
+          "name": "#1820.bd8f8f74 with less than 2.2× the asset's size free on disk, the fetch is refused before any byte is read, naming both sizes › refuses an asset listed at 0.6 of the free space (more than free/2.2, less than free), reading no byte, naming its size and the free space"
+        },
+        {
+          "type": "pass",
+          "file": "tests/acceptance/1820/judges.test.ts",
+          "name": "#1820 the judges tell a planted wrong program from the right one › fails a planted fetch that keeps the mismatched file, naming the asset"
+        },
+        {
+          "type": "pass",
+          "file": "tests/acceptance/1820/judges.test.ts",
+          "name": "#1820 the judges tell a planted wrong program from the right one › fails a hub that fetches under another pack's standing rule, naming the pack"
+        },
+        {
+          "type": "pass",
+          "file": "tests/acceptance/1731/offline.test.ts",
+          "name": "#1731.19849fe1 Offline, a search answers from cached thumbnails with a `stale` flag and the cache's age, and a fetch is BLOCKED with one unblock ask, as the pack fetch is. › offline, the search answers from its cache, stale with its age, and a fetch is BLOCKED with one unblock ask"
+        },
+        {
+          "type": "pass",
+          "file": "tests/acceptance/1731/unknown.test.ts",
+          "name": "#1731.0d3831dc The unknown-license model is BLOCKED at fetch with one unblock ask, and no item can name it. A planted fill that reports it as CC0 fails, because the license is read from the fixture's own record, naming the row. › the unknown-license armchair is BLOCKED at fetch with one unblock ask, and an asset.game@1 item naming it is refused"
+        },
+        {
+          "type": "pass",
+          "file": "tests/acceptance/1731/unknown.test.ts",
+          "name": "#1731.0d3831dc The unknown-license model is BLOCKED at fetch with one unblock ask, and no item can name it. A planted fill that reports it as CC0 fails, because the license is read from the fixture's own record, naming the row. › the planted fill that reports it as CC0 fails, naming the row, because the license is read from the library's own record"
+        },
+        {
+          "type": "pass",
+          "file": "tests/acceptance/1731/fetch.test.ts",
+          "name": "#1731.e4d0ddba Fetching a CC-BY chair raises one authority ask naming the library, its bytes and CC-BY 4.0. After the yes, the asset is in the store by hash, with its license and upstream URL, and an `asset.game@1` `from: {asset}` names it with that license (#1066). The same fetch under a standing rule for that library and CC0 only is refused, naming the license. › fetching the CC-BY oak chair raises one authority ask naming the library, its bytes and CC-BY 4.0; after the yes it is stored by hash with its license and upstream, and an asset.game@1 item names it with that license"
+        },
+        {
+          "type": "pass",
+          "file": "tests/acceptance/1731/fetch.test.ts",
+          "name": "#1731.e4d0ddba Fetching a CC-BY chair raises one authority ask naming the library, its bytes and CC-BY 4.0. After the yes, the asset is in the store by hash, with its license and upstream URL, and an `asset.game@1` `from: {asset}` names it with that license (#1066). The same fetch under a standing rule for that library and CC0 only is refused, naming the license. › under a standing rule for the library and CC0 only, the same fetch is refused naming CC-BY 4.0, while a CC0 chair fetches under it with no ask"
+        },
+        {
+          "type": "pass",
+          "file": "tests/acceptance/1731/search.test.ts",
+          "name": "#1731.999d16ba A fixture library server with 30 models, 5 HDRIs and 5 textures under CC0, CC-BY 4.0 and one unknown license answers `deep_kinds` asset searches through the slot. A search for \"chair\" with `size_m: [0.4, 1.2]` returns only chairs in that range, ranked as #979 ranks catalog rows, and fetches no file. A planted fill that downloads each hit to measure it fails, naming the request log. › a search for chair in [0.4, 1.2] through the asset.library@1 slot returns only the chairs in range, in #979's order, and the request log holds no file"
+        },
+        {
+          "type": "pass",
+          "file": "tests/acceptance/1731/search.test.ts",
+          "name": "#1731.999d16ba A fixture library server with 30 models, 5 HDRIs and 5 textures under CC0, CC-BY 4.0 and one unknown license answers `deep_kinds` asset searches through the slot. A search for \"chair\" with `size_m: [0.4, 1.2]` returns only chairs in that range, ranked as #979 ranks catalog rows, and fetches no file. A planted fill that downloads each hit to measure it fails, naming the request log. › the planted fill that downloads each hit to measure it fails, naming the request log"
+        },
+        {
+          "type": "pass",
+          "file": "tests/acceptance/1731/off.test.ts",
+          "name": "#1731.826a5cb7 With the library turned off, the same search returns installed packs' rows only, and a fetch by its old id is refused, naming the library. › turned off, the library leaves the search and a fetch by an id it gave is refused, naming it, with no request to it"
+        }
+      ]
+    },
+    {
+      "name": "restored-export",
+      "results": [
+        {
+          "type": "pass",
+          "file": "tests/acceptance/1820/export-redraft/export.test.ts",
+          "name": "#1820 scope: a document names pack@version, so a re-export uses the same bytes › each pinned version exports its own bytes: the document naming v1 draws red, the one naming v2 draws blue"
+        },
+        {
+          "type": "pass",
+          "file": "tests/acceptance/1820/export-redraft/export.test.ts",
+          "name": "#1820 scope: a document names pack@version, so a re-export uses the same bytes › after v2 exists and the upstream changed and the network is gone, v1 re-exports the same bytes twice: no request, no ask"
+        },
+        {
+          "type": "pass",
+          "file": "tests/acceptance/1820/export-redraft/export.test.ts",
+          "name": "#1820 scope: a document names pack@version, so a re-export uses the same bytes › a document naming a pack version that is not installed is refused with no PNG, naming the pack, and no other version stands in"
+        },
+        {
+          "type": "pass",
+          "file": "tests/acceptance/1820/export-redraft/export.test.ts",
+          "name": "#1820.09114f60 AC4: offline, a document that uses an unfetched asset is BLOCKED with one unblock ask, never PASS › two exports are each BLOCKED with no PNG; together they raised exactly one unblock ask and no authority ask, and nothing was fetched"
+        }
+      ]
+    },
+    {
+      "name": "restored-mutants",
+      "results": [
+        {
+          "type": "pass",
+          "file": "packages/hub/test/pack-offline-many.test.ts",
+          "name": "#1820 two assets waiting for the same pack host cause one unblock ask, never one per asset"
+        },
+        {
+          "type": "pass",
+          "file": "tests/acceptance/1820/offline.test.ts",
+          "name": "#1820.09114f60 with no network, a document that uses an unfetched asset is BLOCKED with one unblock ask, never PASS, and no fetch starts without an answered ask or a standing rule; a planted hub that fetches under another pack's standing rule fails, naming the pack › no fetch starts without an answered ask: left unanswered, no request reaches the server"
+        },
+        {
+          "type": "pass",
+          "file": "tests/acceptance/1820/offline.test.ts",
+          "name": "#1820.09114f60 with no network, a document that uses an unfetched asset is BLOCKED with one unblock ask, never PASS, and no fetch starts without an answered ask or a standing rule; a planted hub that fetches under another pack's standing rule fails, naming the pack › a standing rule for one pack lets that pack fetch with no ask, and covers no other pack: the other holds on its own ask, naming it, with no request"
+        },
+        {
+          "type": "pass",
+          "file": "tests/acceptance/1820/offline.test.ts",
+          "name": "#1820.09114f60 with no network, a document that uses an unfetched asset is BLOCKED with one unblock ask, never PASS, and no fetch starts without an answered ask or a standing rule; a planted hub that fetches under another pack's standing rule fails, naming the pack › offline, a fetch of an unfetched asset is BLOCKED with exactly one unblock ask and no authority ask, and nothing is stored; a document that uses it is never PASS"
+        },
+        {
+          "type": "pass",
+          "file": "tests/acceptance/1820/fetch.test.ts",
+          "name": "#1820.34edde87 a pack asset fetched on first use, after its one ask, lands in the store by its sha256, and a second use fetches nothing; a fetched file whose bytes don't match its listed sha256 is refused and removed, naming the asset, and a planted fetch that keeps it fails › holds on one authority ask with the plan, fetches nothing before the yes, lands by sha256, and a second use fetches nothing"
+        },
+        {
+          "type": "pass",
+          "file": "tests/acceptance/1820/fetch.test.ts",
+          "name": "#1820.34edde87 a pack asset fetched on first use, after its one ask, lands in the store by its sha256, and a second use fetches nothing; a fetched file whose bytes don't match its listed sha256 is refused and removed, naming the asset, and a planted fetch that keeps it fails › refuses a file whose bytes don't match its listed sha256, removes it, and names the asset"
+        }
+      ]
+    }
+  ]
+}

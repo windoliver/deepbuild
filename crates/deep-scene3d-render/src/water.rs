@@ -13,7 +13,6 @@ use deep_canvas_scene3d::scene::{Scene, Shape};
 use deep_canvas_scene3d::water::{Water, MAX_WAKE, MAX_WAVES};
 use deep_gpu::device::Device;
 use deep_gpu::encode::Job;
-use wgpu::util::DeviceExt;
 
 use crate::{DEPTH, IDS_MS, LINEAR, WATER_PASS};
 

@@ -73,6 +73,7 @@ import { Channels, type ChannelAsk } from './channels.js';
 import { Workspaces } from './workspaces.js';
 import { checkKey, Devices } from './trusted.js';
 import { aboutSessions, openIndex, pageClaims, search, type IndexFill } from './search.js';
+import { changeSentence, openItemSentence, verdictSentence } from './sentences.js';
 import { gateTokens, openGitHub, type AppKey, type GitHub, type GitHubPlant } from '@deepbuild/github';
 import { closesIssue, Forge, isPrCreate, parsePrUrl, partOfIssue, prUrlIn } from './forge.js';
 import { liveFetch, liveGraphql, readIssue, recordedFetch, recordedGraphql } from './github-source.js';
@@ -87,8 +88,8 @@ import type { CheckSpec } from '@deepbuild/conformance';
 import { retain } from './retention.js';
 import { Stacks, type StackWant } from './stacks.js';
 import { Starts } from './starts.js';
-import { checkArguments } from './tools.js';
-import { Canvas, nameOf, showCall, waitForApp, WorldFile, type CanvasWorld } from './canvas.js';
+import { checkArguments, nearest } from './tools.js';
+import { Canvas, nameOf, renderStill, showCall, waitForApp, WorldFile, type CanvasWorld } from './canvas.js';
 import { panelKit } from './panels.js';
 import { Replicas, REPLICA_LEASE } from './drive.js';
 import { plantedReload, plantedSessionEnd, plantedStop, type Plant } from './plant.js';
@@ -98,6 +99,7 @@ import { LogReads } from './log-reads.js';
 import { Hosts } from './hosts.js';
 import { Jobs } from './jobs.js';
 import { Libraries, LibraryRefused, LIBRARY_HOST_QUOTA, LIMIT_MAX, libraryHosts, type AssetKind } from './libraries.js';
+import { readPack } from './packs.js';
 import { excerpt, historyKey, type Restored } from './waits.js';
 import { claudeHomes, claudeOnPath, denyHolds, homeMods, homeOfTranscript, loginPlan, MODS_GONE, MODS_WATCH, overrideWords, pluginDirs, type HomeMods } from './mods.js';
 import { copySynced, disk, synced, testVfs, writeSynced, type Durable } from './vfs.js';
@@ -1187,6 +1189,8 @@ export class Core {
     this.libraries = new Libraries({
       root: this.root.dir, now: this.now, host: () => this.extensions,
       keep: async (bytes, kind, source, license) => (await this.stored(await this.store.connect({ role: 'deepbuild', via: 'job' }).put({ bytes, kind, source, redaction: 'complete', license }), `${kind} from ${source}`)).sha256,
+      keepFile: async (file, sha256, kind, source, license) => (await this.stored(await this.store.connect({ role: 'deepbuild', via: 'job' }).file({ file, sha256, kind, source, redaction: 'complete', license }), `${kind} from ${source}`)).sha256,
+      has: (sha) => this.store.verify(sha),
       raise: (source, ask, plan) => this.asks.raise(this.connection('core'), source, ask, plan),
     });
     for (const pkg of await extensions.installed()) {
@@ -5789,6 +5793,7 @@ export class Core {
       case 'sessions.read': return this.log.reflecting(async () => ({ sessions: await this.sessionRows(this.seenBy(context.role)) }));
       case 'person.add': return this.addPerson(params, context);
       case 'library.on': case 'library.off': case 'library.rule': return this.library(method, params, context);
+      case 'pack.rule': return this.packRule(params, context);
       case 'job.rule': return this.jobRule(params, context);
       case 'person.invite': return this.invitePerson(params, context);
       case 'person.revoke': return this.revokePerson(params, context);
@@ -5904,6 +5909,7 @@ export class Core {
       case 'checks.kinds': return { kinds: this.checkKinds.list() };
       case 'job.output': return { stdout: await this.runner.output(String(params.job)) };
       case 'canvas.show': return this.showCli(params, context);
+      case 'canvas.export': return this.exportStill(params);
       case 'canvas.revisions': return this.canvasCall({ call: 'revisions', doc: String(params.doc) });
       case 'canvas.messages': return this.canvasCall({ call: 'messages', session: String(params.session) });
       case 'canvas.user': return this.canvasUser(params, context);
@@ -6093,8 +6099,27 @@ export class Core {
         files.length ? `wrote ${files.join(', ')}` : '',
         next_issue ? `next issue #${next_issue.number} ${next_issue.url}` : '',
       ].filter(Boolean).join(' · ');
-      return { change: { claim, runs, verdicts, line, second, checks: state.checks, asks, produced: { pr: url ?? null, files, pages: [] }, next_issue } };
+      // One plain sentence on the change, each verdict and each open item, from the template (#1999).
+      const say = (sentence: string): Promise<string> => this.options.plant === 'sentence-from-model' ? this.planted(sentence) : Promise.resolve(sentence);
+      const [where] = state.session ? (await this.record.raw(`SELECT worktree FROM sessions WHERE id = ?`, [state.session])) as { worktree: string | null }[] : [];
+      const named = files.map((f) => where?.worktree && f.startsWith(`${where.worktree}/`) ? relative(where.worktree, f) : basename(f));
+      const said = this.options.plant === 'sentence-from-agent-text' && state.session ? this.lastMessage.get(state.session) : undefined;
+      const sentence = said ?? await say(changeSentence(named));
+      const rounds = new Map(((await this.record.raw(`SELECT json_extract(data, '$.verdict') AS verdict, json_extract(data, '$.round') AS round FROM events WHERE kind = 'claim.sent_back' AND subject = ?`, [`claim:${id}`])) as { verdict: string; round: number }[]).map((r) => [r.verdict, Number(r.round)]));
+      for (const v of verdicts as Obj[]) {
+        const reqs = (JSON.parse(String(v.requirements ?? '[]')) as Obj[]).map((r) => ({ req: String(r.req), outcome: String(r.outcome), smallest: typeof r.smallest === 'string' ? r.smallest : null, points_to: typeof r.points_to === 'string' ? r.points_to : null }));
+        v.sentence = await say(verdictSentence({ outcome: String(v.outcome), requirements: reqs, smallest: typeof v.smallest === 'string' ? v.smallest : null, stale: Boolean(v.stale), round: rounds.get(String(v.handle)) ?? null }));
+      }
+      const open_items: Obj[] = [];
+      for (const item of (await this.record.raw(`SELECT text FROM open_items WHERE task_ref = ? AND closed IS NULL ORDER BY opened`, [state.task])) as { text: string }[]) {
+        open_items.push(this.options.plant === 'open-item-no-sentence' ? { text: item.text } : { text: item.text, sentence: await say(openItemSentence(item.text)) });
+      }
+      return { change: { claim, sentence, runs, verdicts, open_items, line, second, checks: state.checks, asks, produced: { pr: url ?? null, files, pages: [] }, next_issue } };
     });
+  }
+  /** The planted wrong program `sentence-from-model`: a headless agent call writes the sentence from the template's. */
+  private planted(sentence: string): Promise<string> {
+    return new Promise((done) => execFile('claude', ['-p', `Write one plain sentence saying: ${sentence}`], { timeout: 30_000 }, (error, out) => done(error ? sentence : String(out).trim() || sentence)));
   }
   /** evidence/:sha: what the store holds of one file, never its bytes. */
   private evidence(params: Obj): Promise<Obj> {
@@ -6543,6 +6568,18 @@ export class Core {
     if (context.role !== 'cli') throw new Refused(refusal('role', '/method', 'An install counts from the CLI, once the OS confirms you.', 'extension.install'));
     const agent = await this.agentAbove(context.peer);
     if (agent) throw new Refused(refusal('role', '/method', `Nothing was installed: this deep command runs inside agent session ${agent}'s process tree, and no agent installs a package. Install it from your own terminal.`, 'extension.install'));
+    if (!existsSync(join(from, 'deepbuild.json')) && existsSync(join(from, 'pack.json'))) {
+      if (!this.libraries) throw refuse('unavailable', '', 'The hub is not ready to install packs.', from, true);
+      const pack = readPack(from);
+      if (params.digest !== pack.digest) throw refuse('changed', '/params/digest', `${pack.ref} changed since its install plan was read.`, params.digest);
+      const why = await this.confirmer.you(`install ${pack.ref} (${pack.digest}) from ${from}; its assets fetch only after a separate authority ask or rule`, { handle: `pack:${pack.ref}`, revision: pack.digest, process: context.peer });
+      if (why) throw refuse('unconfirmed', '', `Nothing was installed: ${why}`, from, true);
+      const dir = this.libraries.packs.stage(pack);
+      const checked = await this.canvasCall({ call: 'install_pack', id: pack.id, dir });
+      if (checked.outcome !== 'installed') return { status: 'refused', reason: JSON.stringify(checked.issues) };
+      this.libraries.packs.admit(pack);
+      return { status: 'installed', id: pack.id, version: pack.version, digest: pack.digest };
+    }
     // Only for the prompt's words: the installer reads the manifest again, as data, and refuses what it must.
     const m = await readFile(join(from, 'deepbuild.json'), 'utf8').then((text) => JSON.parse(text) as { id?: unknown; version?: unknown; publisher_key?: unknown; sources?: { variant?: string; host?: string }[] })
       .catch(() => ({ id: undefined, version: undefined, publisher_key: undefined, sources: undefined }));
@@ -6793,7 +6830,7 @@ export class Core {
 
   /** The world the canvas core reads: the hub's live sessions, the record's asks and readings, and the world file. */
   private async canvasWorld(): Promise<CanvasWorld> {
-    const file = this.worldFile.read();
+    const file = { ...this.worldFile.read(), packs: this.libraries?.packs.all() ?? [] };
     const sessions = [...this.sessions.values()].filter((s) => !s.ended).map((s) => ({ id: s.id, thread: s.thread, name: nameOf(file, s.id, s.agent) }));
     const record: Obj = {};
     const asks = (await this.record.raw('SELECT id, session_id, status FROM asks')) as { id: string; session_id: string | null; status: string }[];
@@ -6834,8 +6871,12 @@ export class Core {
       if (rev === null) rev = ((await this.canvasCall({ call: 'revisions', doc: call.doc })).revisions as { rev: number; state: string }[] | undefined)?.find((r) => r.state === 'current')?.rev ?? 0;
       return this.canvasCall({ ...call, rev, session: as.session });
     }
+    if (isObj(call.document)) {
+      const held = await this.preparePackAssets(call.document);
+      if (held) return held;
+    }
     // An asset.game@1 item naming an asset by hash (#1066's from: {asset}, #1731) takes the license kept with it.
-    const game = this.gameAssets(call);
+    const game = await this.gameAssets(call);
     if (game.refused) return game.refused;
     call = game.call;
     const via = 'you' in as ? { peer: { pid: 0, start: 0 } } : { session: as.session };
@@ -6854,7 +6895,7 @@ export class Core {
    * the mesh.asset@1 it draws, with the license the asset was kept with at fetch, listed in the reply's `assets`. An
    * asset no fetch kept with its license is BLOCKED, naming the item and the asset, so the revision is refused.
    */
-  private gameAssets(call: Obj): { call: Obj; assets: Obj[]; refused?: Obj } {
+  private async gameAssets(call: Obj): Promise<{ call: Obj; assets: Obj[]; refused?: Obj }> {
     const doc = call.document;
     if (!isObj(doc) || !isObj(doc.items)) return { call, assets: [] };
     const items: Obj = {};
@@ -6865,12 +6906,19 @@ export class Core {
       if (typeof sha !== 'string') { items[key] = item; continue; }
       const it = item as Obj;
       const id = typeof it.id === 'string' ? it.id : key;
-      const kept = this.libraries?.asset(sha);
+      const pinned = this.libraries?.packs.byHash(doc.packs, sha);
+      let kept = this.libraries?.asset(sha, pinned?.pack);
+      if (pinned && (!kept || !await this.store.verify(sha))) {
+        const fetched = await this.libraries!.fetchPack(pinned.pack, pinned.asset.path);
+        if (fetched.status !== 'fetched') return { call, assets, refused: { ...fetched, outcome: 'refused', code: 'asset_blocked', issues: [{ severity: 'error', code: 'asset.blocked', ids: [id], message: `BLOCKED: ${JSON.stringify(fetched)}` }], snapshots: [] } };
+        kept = fetched.asset;
+      }
+      if (kept?.pack && (!pinned || pinned.pack !== kept.pack)) kept = undefined;
       if (!kept) {
         issues.push({ severity: 'error', code: 'asset.unlicensed', ids: [id], path: `/items/${key}/from/asset`, message: `BLOCKED: ${id} names asset ${sha}, which no fetch kept with a license; fetch it from a library first` });
         continue;
       }
-      assets.push({ item: id, asset: sha, license: kept.license, upstream: kept.upstream, library: kept.library });
+      assets.push({ item: id, asset: sha, license: kept.license, upstream: kept.upstream, ...(kept.pack ? { pack: kept.pack } : { library: kept.library }) });
       const { from: _from, budget: _budget, params: _params, ...rest } = it;
       items[key] = { ...rest, kind: 'mesh.asset@1', order: typeof rest.order === 'string' ? rest.order : `a${assets.length - 1}`, params: { sha256: sha, node: 0 } };
     }
@@ -6904,11 +6952,15 @@ export class Core {
     const libraries = this.libraries;
     if (!libraries) throw refuse('unavailable', '', 'The hub has no extension host yet; try again once it is ready.', 'deep_kinds', true);
     for (const k of Object.keys(args)) {
-      const takes = args.op === 'assets' ? ['op', 'query', 'kind', 'size_m', 'license', 'limit'] : ['op', 'library', 'id'];
+      const takes = args.op === 'assets' ? ['op', 'query', 'kind', 'size_m', 'license', 'limit'] : ['op', 'library', 'id', 'pack', 'asset'];
       if (args[k] !== null && args[k] !== undefined && !takes.includes(k)) throw refuse('unlisted_field', `/params/arguments/${k}`, `Leave out ${k}: ${String(args.op)} takes only ${takes.slice(1).join(', ')}.`, k);
     }
     try {
       if (args.op === 'fetch') {
+        if (typeof args.pack === 'string') {
+          if (typeof args.asset !== 'string' || args.library || args.id) throw refuse('required', '/params/arguments/asset', 'Give pack@version and one asset path, without library or id.', args.asset);
+          return { ...(await libraries.fetchPack(args.pack, args.asset)) };
+        }
         if (typeof args.library !== 'string' || typeof args.id !== 'string') throw refuse('required', `/params/arguments/${typeof args.library === 'string' ? 'id' : 'library'}`, 'Give library and id, as a search row names them.', null);
         return { ...(await libraries.fetch(args.library, args.id)) };
       }
@@ -6930,6 +6982,14 @@ export class Core {
   private async job(args: Obj, caller: string | undefined): Promise<Obj> {
     if (!this.jobKinds) throw refuse('unavailable', '', 'The hub has no extension host yet; try again once it is ready.', 'deep_job', true);
     return args.op === 'list' ? this.jobKinds.list() : this.jobKinds.run(args, caller);
+  }
+  /** A pack's network authority is yours, never an agent's, and matches only that pack and license list. */
+  private async packRule(params: Obj, context: CallContext): Promise<Obj> {
+    const { pack, licenses } = params;
+    if (typeof pack !== 'string' || !Array.isArray(licenses) || !licenses.every((l) => typeof l === 'string' && l)) throw refuse('type', '/params', 'Name pack as owner/name and list its allowed license IDs.', params);
+    await this.asYou(context, 'pack.rule', `allow ${pack} to fetch assets under ${licenses.join(', ') || 'no license'}`, `pack:${pack}`, JSON.stringify(licenses));
+    if (!this.libraries) throw refuse('unavailable', '', 'The hub is not ready.', pack, true);
+    return this.libraries.packRule(pack, licenses as string[]);
   }
   /** `job.rule` (#1922): your standing rule for a paid tool, from your own terminal once the OS confirms you: the most a run may cost with no ask. */
   private async jobRule(params: Obj, context: CallContext): Promise<Obj> {
@@ -6987,6 +7047,34 @@ export class Core {
       } as JsonValue,
     });
     this.presented.push({ doc: p.doc, rev: p.rev, rect: p.rect, layers: p.layers, session });
+  }
+  /** The same first-use gate for a shown document and its exports, for every asset-reading kind. */
+  private async preparePackAssets(document: Obj): Promise<Obj | undefined> {
+    if (!this.libraries) return { status: 'BLOCKED', outcome: 'refused', cause: 'The asset host is not ready.', snapshots: [] };
+    for (const pack of Array.isArray(document.packs) ? document.packs : []) if (typeof pack !== 'string' || !this.libraries.packs.get(pack)) {
+      return { status: 'BLOCKED', outcome: 'refused', cause: `pack_missing: ${String(pack)}`, snapshots: [] };
+    }
+    for (const { pack, asset } of this.libraries.packs.used(document)) {
+      const fetched = await this.libraries.fetchPack(pack, asset.path);
+      if (fetched.status !== 'fetched') return { ...fetched, outcome: 'refused', code: 'asset_blocked', issues: [{ severity: 'error', code: 'asset.blocked', ids: [asset.path], message: `BLOCKED: ${JSON.stringify(fetched)}` }], snapshots: [] };
+    }
+    return undefined;
+  }
+  /** The hub resolves a pack export through its pinned store. The CLI writes only the returned PNG bytes. */
+  private async exportStill(params: Obj): Promise<Obj> {
+    if (!isObj(params.document) || typeof params.still !== 'string') throw refuse('type', '/params', 'Give document and still, a frame or marker.', params);
+    const held = await this.preparePackAssets(params.document);
+    if (held) return held;
+    const game = await this.gameAssets({ document: params.document });
+    if (game.refused) return game.refused;
+    const packs = this.libraries!.packs.all();
+    const rendered = await renderStill(game.call.document, params.still, this.root.evidence, packs);
+    const hash = (rendered.snapshots as Obj[] | undefined)?.[0]?.sha256;
+    if (rendered.outcome !== 'presented' || typeof hash !== 'string') return { status: 'BLOCKED', cause: `No still could be drawn: ${JSON.stringify(rendered)}` };
+    // The canvas store's bytes are rehashed before they leave the hub; neither an input path nor an output path
+    // is accepted here, so an agent cannot make the hub read or write outside its own evidence folder.
+    const bytes = await this.store.read(hash);
+    return { status: 'exported', sha256: hash, png: Buffer.from(bytes).toString('base64') };
   }
   /** `deep show` from the CLI: the peer check makes it the agent's whose process tree runs it, never by PID alone; else yours. */
   private async showCli(params: Obj, context: CallContext): Promise<Obj> {
@@ -7168,7 +7256,8 @@ export class Core {
   }
   private unknownCheck(worktree: string, check: unknown): Refused {
     const names = [...this.checksOf(worktree).keys()];
-    return refuse('enum', '/params/arguments/check', `Name a check this repo's .deepbuild/done.yaml names: ${names.join(', ') || 'it names none'}.`, check);
+    const near = typeof check === 'string' ? nearest(check, names) : undefined;
+    return refuse('enum', '/params/arguments/check', near ? `Name ${near} in place of ${String(check)}.` : `Name a check this repo's .deepbuild/done.yaml names: ${names.join(', ') || 'it names none'}.`, check);
   }
 
   /** deep_ask: raises the ask under the session, then waits for its answer as deep_wait does. */

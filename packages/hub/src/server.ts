@@ -72,7 +72,7 @@ const ALLOWED = new Map<string, readonly Role[]>([
   // A person added to a project, with a credential of their own (#1337).
   ['person.add', ['cli']],
   // An online model library turned on or off, and your standing rule for it (#1731).
-  ['library.on', ['cli']], ['library.off', ['cli']], ['library.rule', ['cli']], ['job.rule', ['cli']],
+  ['library.on', ['cli']], ['library.off', ['cli']], ['library.rule', ['cli']], ['pack.rule', ['cli']], ['job.rule', ['cli']],
   // A one-time invite to a project, and a person's credentials revoked (#1338).
   ['person.invite', ['cli']], ['person.revoke', ['cli']],
   // `deep lease` (#1015): a heavy command's place in the queue, its process group once it starts, and its first process's exit.
@@ -96,7 +96,7 @@ const ALLOWED = new Map<string, readonly Role[]>([
   // What macOS says of the app's notifications (#994), when the app connects and when it changes.
   ['notifications.report', ['app']],
   // The canvas side (#806): `deep show` from the CLI; revisions and messages read; the app's input and what it draws.
-  ['canvas.show', ['cli']], ['canvas.revisions', ['app', 'cli']], ['canvas.messages', ['app', 'cli']], ['canvas.user', ['app']], ['canvas.drawn', ['app']],
+  ['canvas.show', ['cli']], ['canvas.export', ['cli']], ['canvas.revisions', ['app', 'cli']], ['canvas.messages', ['app', 'cli']], ['canvas.user', ['app']], ['canvas.drawn', ['app']],
   // Our waiter, run by Claude Code's Stop entry as you, holds until an answer for its session is ready (#18, #25).
   // The pi package holds the same wait on its own connection, and says what became of each answer it took (#40).
   ['session.wait', ['cli', 'mcp']], ['session.delivered', ['mcp']], ['session.stop_waiting', ['mcp']],
