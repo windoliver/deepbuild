@@ -1,7 +1,7 @@
 {
   "core": {
     "version": "0.0.0",
-    "digest": "0aac98f10a25dcaef5fad99a63b2def0e4de054cbe67bde45c86ad09cafe70c9",
+    "digest": "6442670da973bffc603697a99022dc58f30a0879087ee5608514882f2cbea3df",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
@@ -290,7 +290,7 @@
   },
   "vector": {
     "version": "1.0.0",
-    "digest": "2b0f07530c67f0a57f36cc513e85d204d613ea8ea819a928a9015b078c42f418",
+    "digest": "f717e7c51b21a2e1afbd6af9237dfca270f86117be776bb9f4e04b568428c4a1",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
