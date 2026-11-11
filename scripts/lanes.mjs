@@ -363,6 +363,9 @@ alone.push('tests/acceptance/1936/');
 alone.push('tests/acceptance/544/');
 // #2015's file builds deep-show in the full set and runs it on a plate and a recipe pack.
 alone.push('tests/acceptance/2015/');
+// #220's files start hubs, build deep-show in the full set and time the typeset tool's own process.
+alone.push('tests/acceptance/220/');
+timed.push('tests/acceptance/220/budgets.test.ts');
 // #1976's file builds deep-gpu and clicks 200 seeded rays through seven views of a plane and a sphere.
 alone.push('tests/acceptance/1976/');
 // #1405's spin and QoS files read a two-thread bench's count at load above the cores, and its proof runs a real budget
@@ -386,9 +389,11 @@ timed.push('tests/acceptance/2026/load.test.ts', 'tests/acceptance/2026/outage.t
 byHand.push('tests/acceptance/2026/replay.test.ts');
 // #1056's files build deep-gpu and draw #464's pixel fixtures; records.test.ts runs #464's two-GPU tests.
 alone.push('tests/acceptance/1056/');
-// #220's files start hubs, build deep-show in the full set and time the typeset tool's own process.
-alone.push('tests/acceptance/220/');
-timed.push('tests/acceptance/220/budgets.test.ts');
+// #404's parts: #1897's files each build deep-show in their own feature set and hold the GPU for the pixel hash;
+// #1899's and #1903's build deep-gpu with test-meter, as #377's and #379's do; #2189's and its criterion-1 redraft
+// build deep-gpu for release and draw on this Mac's Metal GPU, so no two device runs share it.
+alone.push('tests/acceptance/1897/', 'tests/acceptance/1899/', 'tests/acceptance/1903/');
+alone.push('tests/acceptance/2189/', 'tests/acceptance/2189-redraft-ac1/');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
