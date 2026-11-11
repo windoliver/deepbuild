@@ -12,10 +12,11 @@ import type { Message } from './learned.js';
 export interface FoundMessage extends Message { session: string }
 
 /**
- * A character lowercased for matching, as `deep find` matches: a final sigma is a sigma. The index holds each
- * message's text folded so, a character at a time, so a substring of the folded text is exactly a match.
+ * A text lowercased for matching, as `deep find` matches: a final sigma is a sigma. The index holds each
+ * message's text folded so, which is the text each of its characters lowercased alone would give, so a substring
+ * of the folded text is exactly a match.
  */
-export const foldText = (text: string): string => [...text].map((ch) => ch.toLowerCase().replace(/ς/g, 'σ')).join('');
+export const foldText = (text: string): string => text.toLowerCase().replace(/ς/g, 'σ');
 
 const DDL = `
 CREATE VIRTUAL TABLE IF NOT EXISTS archive_text USING fts5(folded, content = '', contentless_delete = 1, tokenize = 'trigram case_sensitive 1');
