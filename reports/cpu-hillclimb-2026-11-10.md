@@ -122,9 +122,17 @@ base's.
 | `tests/acceptance/1515/search.test.ts` | 7 of 7 pass |
 | `tests/acceptance/30/sandbox.test.ts` | 2 of 2 pass: a refused write is recorded as `sandbox.denied` through the new filter. In one earlier run the file's `afterAll`, which deletes its folders, timed out at 10 s after both cases had passed |
 | `tests/acceptance/236/cleanup.test.ts`, `contain.test.ts` | **BLOCKED on this Mac as committed:** `fixtures/devices.m` does not compile on macOS 27 (`CGDisplayCreateImage` is obsoleted since macOS 15), so every case fails at the fixture build, on main too. Filed as #2281. Run from a scratch copy of the suite with only that fixture's build line taken out: 10 of 10 pass, among them AC4 (the denial recorded) and AC11 (a late grandchild recorded by the timed scan). The copy was deleted; the committed suite is untouched |
-| AC11 of that suite, before the scan kept its beat | Its own precondition (`BLOCKED: the grandchild has its own session and group`, read before the grandchild's `setsid`) failed in 2 of 11 runs on the change and 0 of 9 on the base copy, run in turn. It names no scan, and the two sides differ by too few runs to tell; on the final tree the case passed in its one run |
+| AC11 of that suite | Its two cases stop now and then at the test's own precondition, `BLOCKED: the grandchild has its own session and group`: 3 of 27 case runs on the change, 0 of 21 on the base copy, run in turn. The fixture writes the grandchild's mark before its `setsid`, and the helper reads its group and its command in separate `ps` calls, so a grandchild the machine parks between the two reads so. One of the three was the wrong-program case, whose plant makes no scan on either side, so the scan is not what it turns on; the counts are too few to tell the sides apart. Not settled further |
 | `tsc --noEmit` on the root config | 3 errors, the same 3 on the base copy: `packages/hub/test/hosts.test.ts`, `packages/hub/test/job-session-close.test.ts`, `tests/acceptance/20/helpers.ts`. None in a touched file |
 | `scripts/repo-rules.mjs` | Fails with 21 lines (18 `deps`, 2 `cards`, 1 `secrets`), none naming a touched file or this report; the same 21 before and after the report was added. No comparison with the base: the base copy is no git checkout, so the script is BLOCKED there |
+
+### After merging main
+
+Main was merged once at `3134672e`, 85 commits past the base, with no conflict. Among the touched packages it
+changed only `packages/record/src/projections.ts`. The workspaces were built again and the seven files above ran
+once more: 40 of 41 pass. The one that doesn't is AC11's wrong-program case, at the precondition in the row
+above; both AC11 cases then passed 6 of 6 on the merged tree and 6 of 6 on the base copy, run in turn. The
+readings in Measured were taken before the merge and not repeated.
 
 **Not run:** `node scripts/affected.mjs`, the preflight, the perf lane (`scripts/perf.mjs`), clippy, `cargo test`,
 any Linux run, and every acceptance suite not named above.
