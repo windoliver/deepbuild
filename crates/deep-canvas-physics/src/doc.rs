@@ -273,7 +273,7 @@ pub struct World {
 }
 
 mod reads;
-pub use reads::{Output, Read, Solve, READS};
+pub use reads::{probe_pose, probe_shape, Output, Read, Solve, READS};
 
 /// The world document's own fields; `kind` names it.
 const WORLD_KEYS: &[&str] = &[

@@ -14,7 +14,7 @@ use crate::scene::Scene;
 use crate::{fp, Rapier};
 use base64::Engine;
 use deep_canvas_physics::backend::{
-    Backend, BodyState, Canonical, Checkpoint, ShapeRef, Targets, FIELDS,
+    Backend, BodyState, Canonical, Checkpoint, Query, ShapeRef, Targets, FIELDS,
 };
 use deep_canvas_physics::bake::{self, Build, Parts};
 use deep_canvas_physics::caps::{Caps, RAPIER3D};
@@ -27,7 +27,7 @@ use deep_canvas_physics::roles::{self, Row};
 use serde_json::{json, Map, Value};
 
 /// The planted wrong programs, by name.
-pub const PLANTED: [&str; 9] = [
+pub const PLANTED: [&str; 11] = [
     "caps_allow_restitution_threshold",
     "caps_allow_rolling_resistance",
     "caps_allow_tangent_speed",
@@ -37,6 +37,8 @@ pub const PLANTED: [&str; 9] = [
     "key_omits_frame_rate",
     "role_table_pickup_solid",
     "occurrences_in_engine_order",
+    "query_bypasses_backend",
+    "query_machines_any",
 ];
 
 /// The reply to a line that isn't a call.
@@ -54,6 +56,10 @@ pub struct Run {
     table: &'static [Row],
     /// #1918 criterion 5's twin: the list keeps each step's rows as the backend reads them.
     engine_order: bool,
+    /// #1919's twins: physics.query asks Rapier's spatial queries past `query()`, and reports
+    /// `machines: any` whatever its golden's standing.
+    bypass: bool,
+    machines_any: bool,
     build: Build,
 }
 
@@ -291,6 +297,53 @@ enum Stop {
     Register(u64, String),
 }
 
+/// A ray, sweep or overlap probe as the backend interface's query, or the refusals of its shape
+/// and poses.
+fn spatial(kind: &str, p: &Value) -> Result<Query, Vec<Refusal>> {
+    use deep_canvas_physics::doc::{probe_pose, probe_shape};
+    let path = format!("probe/{kind}");
+    let pose = |k: &str| probe_pose(&p[k], &format!("{path}/{k}"));
+    let v3 = |k: &str| -> Option<[f64; 3]> {
+        let a: Vec<f64> = p
+            .get(k)?
+            .as_array()?
+            .iter()
+            .map(Value::as_f64)
+            .collect::<Option<_>>()?;
+        <[f64; 3]>::try_from(a).ok()
+    };
+    let bad = |what: &str| {
+        vec![Refusal {
+            code: "out_of_range",
+            path: path.clone(),
+            actual: p.clone(),
+            what: what.into(),
+        }]
+    };
+    Ok(match kind {
+        "ray" => Query::Ray {
+            from: v3("from").ok_or_else(|| bad("a ray needs from: vec3"))?,
+            dir: v3("dir")
+                .filter(|d| d.iter().any(|x| *x != 0.0))
+                .ok_or_else(|| bad("a ray needs a dir: vec3 other than 0"))?,
+            max: p
+                .get("max")
+                .map_or(Some(100.0), Value::as_f64)
+                .ok_or_else(|| bad("max is m"))?,
+        },
+        "sweep" => Query::Sweep {
+            shape: probe_shape(&p["shape"], &format!("{path}/shape"))?,
+            from: pose("from")?,
+            to: pose("to")?,
+        },
+        "overlap" => Query::Overlap {
+            shape: probe_shape(&p["shape"], &format!("{path}/shape"))?,
+            at: pose("at")?,
+        },
+        _ => return Err(bad("a probe is output, occurrences, ray, sweep or overlap")),
+    })
+}
+
 impl Run {
     /// The runner, or with `planted` one criterion's wrong program; `None` for a name it doesn't plant.
     pub fn new(planted: Option<&str>) -> Option<Self> {
@@ -301,6 +354,8 @@ impl Run {
             key_without_rate: false,
             table: &roles::TABLE,
             engine_order: false,
+            bypass: false,
+            machines_any: false,
             build: crate::build(),
         };
         match planted {
@@ -314,6 +369,8 @@ impl Run {
             Some("restore_ignores_version") => run.restore_any_version = true,
             Some("role_table_pickup_solid") => run.table = &roles::PLANTED_SOLID_PICKUP,
             Some("occurrences_in_engine_order") => run.engine_order = true,
+            Some("query_bypasses_backend") => run.bypass = true,
+            Some("query_machines_any") => run.machines_any = true,
             Some(_) => return None,
         }
         Some(run)
@@ -479,6 +536,7 @@ impl Run {
         let rank = occurrence::ranks(&w);
         t.shaped = shape_uses(&t.occurrences, &w);
         let record = json!({"key": key, "step_hashes": t.step_hashes, "checkpoints": t.checkpoints, "outputs": outputs,
+                            "positions": t.positions,
                             "occurrences": occurrence::listed(&t.occurrences),
                             "occurrences_hash": occurrence::hash(&t.occurrences, &rank)});
         if let Some(dir) = call.get("store") {
@@ -672,6 +730,20 @@ impl Run {
                 }))
             }
             "golden_verify" => self.verify(call),
+            "query" => self.query(call),
+            #[cfg(feature = "test-count-calls")]
+            "backend_calls" => {
+                let mut calls = Map::new();
+                for (method, n) in crate::CALLS.lock().ok()?.iter() {
+                    match method.split_once('.') {
+                        Some((m, kind)) => {
+                            calls.entry(m).or_insert_with(|| json!({}))[kind] = json!(n)
+                        }
+                        None => drop(calls.insert(method.to_string(), json!(n))),
+                    }
+                }
+                Some(json!({"ok": true, "calls": calls}))
+            }
             "pairs" => {
                 Some(self.pairs(call.get("world")?, call.get("brief").unwrap_or(&json!({})))?)
             }
@@ -745,6 +817,215 @@ impl Run {
             Ok((w, _)) => pairs(&w, &expanded.assumptions, &brief),
             Err(e) => e,
         })
+    }
+
+    /// physics.query (#1919; Check input: `physics.query`): `probe` over the bake of `world` kept
+    /// in `store`, never stepping past it, judged against `expect` within `tolerance`, with
+    /// `machines` from where the bake's `golden` stands given the `runs` made of it. A missing
+    /// bake is BLOCKED; an occurrence that never comes fails, naming the list and the filter.
+    fn query(&self, call: &Value) -> Option<Value> {
+        let (world, steps) = (call.get("world")?, call.get("steps")?.as_u64()?);
+        let (dir, probe, want) = (
+            call.get("store")?.as_str()?,
+            call.get("probe")?,
+            call.get("expect")?,
+        );
+        let tolerance = call.get("tolerance").map_or(Some(0.0), Value::as_f64)?;
+        let (rate, _) = match rate(call) {
+            Ok(r) => r,
+            Err(e) => return Some(e),
+        };
+        let (w, mut b) = match self.build(world) {
+            Ok(x) => x,
+            Err(e) => return Some(e),
+        };
+        let key = self.key(world, &json!([]), &rate, steps, Some(&self.build.target));
+        let Some(bake) = stored(dir, &key) else {
+            let what = format!("the store holds no bake under {key}: physics.query reads a bake and never steps or bakes the world");
+            return Some(
+                json!({"ok": true, "verdict": "BLOCKED", "result": null, "key": key, "what": what}),
+            );
+        };
+        let refuse = |path: &str, what: String| {
+            Some(json!({"ok": false, "code": "bad_probe", "path": path, "what": what}))
+        };
+        let rows = bake["occurrences"].as_array().cloned().unwrap_or_default();
+        let h = occurrence::step_flicks(&w);
+        // The step an occurrence anchor `{list, filter, nth}` names, or the failure naming them.
+        let anchor = |a: &Value| -> Result<u64, String> {
+            let kept = deep_canvas_physics::query::kept(&rows, &a["filter"]);
+            let row = deep_canvas_physics::query::nth(&kept, a.get("nth"));
+            row.and_then(|r| r["step"].as_u64()).ok_or_else(|| {
+                format!(
+                    "no occurrence of {} matching {} ({}) comes within the bake's {steps} steps",
+                    a["list"],
+                    a["filter"],
+                    a.get("nth").unwrap_or(&json!("first"))
+                )
+            })
+        };
+        let at_time = |v: &Value| v.as_u64().map(|t| t / h as u64);
+        let (kind, p) = probe.as_object()?.iter().next()?;
+        let reading = match kind.as_str() {
+            "output" => {
+                let path = p["path"].as_str()?;
+                let (id, i) = path.strip_prefix("outputs/")?.split_once('/')?;
+                let (series, i) = (
+                    &bake["positions"][id],
+                    i.parse::<usize>().ok().filter(|i| *i < 3)?,
+                );
+                if !series.is_array() {
+                    return refuse(
+                        "probe/output/path",
+                        format!("{path} reads no position output of this world"),
+                    );
+                }
+                let x = |k: u64| series[k as usize][i].as_f64().map(|v| f64::from(v as f32));
+                let (step, value) = match &p["at"] {
+                    a if a.is_object() => match anchor(a) {
+                        Ok(k) => (k, x(k)),
+                        Err(what) => {
+                            return Some(
+                                json!({"ok": true, "verdict": "FAIL", "key": key, "result": null, "what": what}),
+                            )
+                        }
+                    },
+                    // At a time, the two steps around it mixed (Physics output).
+                    t => {
+                        let k = at_time(t)?;
+                        let alpha = (t.as_u64()? % h as u64) as f32 / h as f32;
+                        let next = x(k + 1).filter(|_| k < steps);
+                        let mix =
+                            |a: f64, b: f64| f64::from(a as f32 + alpha * (b as f32 - a as f32));
+                        (k, x(k).map(|a| next.map_or(a, |b| mix(a, b))))
+                    }
+                };
+                deep_canvas_physics::query::Reading {
+                    value,
+                    step,
+                    ids: Vec::new(),
+                }
+            }
+            "occurrences" => {
+                let kept = deep_canvas_physics::query::kept(&rows, &p["filter"]);
+                deep_canvas_physics::query::measure(&kept, p.get("measure"), h)?
+            }
+            _ => {
+                let step = match call.get("state") {
+                    None => 0,
+                    Some(s) if s.get("occurrence").is_some() => match anchor(&s["occurrence"]) {
+                        Ok(k) => k,
+                        Err(what) => {
+                            return Some(
+                                json!({"ok": true, "verdict": "FAIL", "key": key, "result": null, "what": what}),
+                            )
+                        }
+                    },
+                    Some(s) => s
+                        .get("step")
+                        .and_then(Value::as_u64)
+                        .or_else(|| at_time(s.get("t")?))?,
+                };
+                if step > steps {
+                    return refuse("state", format!("step {step} is past the bake's {steps} steps, which physics.query never steps past"));
+                }
+                let q = match spatial(kind, p) {
+                    Ok(q) => q,
+                    Err(e) => return Some(refused(&e)),
+                };
+                let mut groups = 0u32;
+                for g in p
+                    .get("groups")
+                    .and_then(Value::as_array)
+                    .into_iter()
+                    .flatten()
+                {
+                    match w.groups.iter().position(|n| g == n) {
+                        Some(bit) => groups |= 1 << bit,
+                        None => {
+                            return refuse(
+                                "probe/groups",
+                                format!("{g} is not one of the world's collision_groups"),
+                            )
+                        }
+                    }
+                }
+                if p.get("groups").is_none() {
+                    groups = u32::MAX;
+                }
+                // The state at `step`: the nearest checkpoint at or before it restored, then stepped to it.
+                let cp = bake["checkpoints"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .rev()
+                    .find(|c| c["step"].as_u64().is_some_and(|c| c <= step))
+                    .and_then(checkpoint_of);
+                if let Some(cp) = cp {
+                    b.restore(&cp).ok()?;
+                }
+                let rest = step - b.read().step;
+                let plan = Plan {
+                    steps: rest,
+                    scene: None,
+                    every: rest.max(1),
+                    guard: false,
+                    ftz_at: None,
+                    shift: None,
+                };
+                if let Err(Stop::Refused(v)) = self.run(&mut b, &w, &plan, &mut Trace::default()) {
+                    return Some(v);
+                }
+                let hits = if self.bypass {
+                    b.hits(&q, groups)
+                } else {
+                    b.query(&q, groups)
+                };
+                let mut ids: Vec<String> = Vec::new();
+                for hit in &hits {
+                    if !ids.contains(&hit.shape.body) {
+                        ids.push(hit.shape.body.clone());
+                    }
+                }
+                // A ray's or a sweep's value is its nearest hit's distance, an overlap's its count.
+                let value = if kind == "overlap" {
+                    Some(ids.len() as f64)
+                } else {
+                    hits.first().map(|x| x.distance)
+                };
+                deep_canvas_physics::query::Reading { value, step, ids }
+            }
+        };
+        let machines = if self.machines_any {
+            "any"
+        } else {
+            let runs = call
+                .get("runs")
+                .and_then(Value::as_array)
+                .map_or(&[][..], Vec::as_slice);
+            deep_canvas_physics::query::machines(call.get("golden"), runs)
+        };
+        let Some(met) = deep_canvas_physics::query::meets(&reading, want, tolerance) else {
+            return refuse(
+                "expect",
+                format!("expect {want} names no value, range, ids or order"),
+            );
+        };
+        let t = reading.step as i64 * h;
+        let result = json!({"value": reading.value, "step": reading.step, "t": t, "ids": reading.ids, "machines": machines});
+        let what = format!(
+            "{kind} read {} at step {} (t = {t} flicks){}; expected {want} within {tolerance}",
+            reading.value.map_or("nothing".into(), |v| v.to_string()),
+            reading.step,
+            if reading.ids.is_empty() {
+                String::new()
+            } else {
+                format!(", ids {:?}", reading.ids)
+            },
+        );
+        Some(
+            json!({"ok": true, "verdict": if met { "PASS" } else { "FAIL" }, "key": key, "result": result, "what": what}),
+        )
     }
 
     fn verify(&self, call: &Value) -> Option<Value> {
