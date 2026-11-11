@@ -1,0 +1,92 @@
+#2029 acceptance suite on the base commit 04f44a4ba (main, "Merge pull request #2230"), 2026-11-10, before any #2029 code.
+
+Machine: macOS, 18 cores, Node 24.22.2; 1-minute load 140 to 340 throughout the job.
+Builds: npm ci --ignore-scripts; npm run build --workspaces; then, in one grant of
+  node scripts/throttle.mjs build --wait 60 -- /bin/sh -c '...'
+  with CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 and cargo 1.99.1: deep-hook, deep-drive with --features env-plants,
+  deep-drive and deep-replica plain, copied into $TMPDIR/da2029-bin-<uid>-<checkout>/ (the helpers' own build, run
+  ahead; at the run the copies were fresh, so the helpers built nothing).
+Type-check: node node_modules/typescript/bin/tsc -p tests/acceptance/2029/tsconfig.json -> no errors.
+
+Command (one run, no rerun):
+  npx vitest run --root tests/acceptance/2029 --no-file-parallelism --testTimeout=600000
+Result: Test Files 3 failed (3); Tests 7 failed (7); 151.6 s.
+
+Each test failed at its own assertion, for the expected reason; none stopped BLOCKED or on setup. On the way, every
+setup step the base already holds went through: each `git push` was held by push-needs-ask with an authority ask; the
+card's signed allow was recorded (ask.answered, via card, decision allow; for the batch, all three members by one
+answer with steps [0, 1, 2]); the allowed pushes ran again and their PostToolUse / PostToolUseFailure were recorded
+(tool.after ok / failed); the batch window showed the three asks as one ask.batched; deep-drive copied the record and
+opened each answered ask's page at its address.
+
+Per test:
+  words.test.ts (AC1 #2029.9136787a)
+    x every ask outcome, stop cause and verdict reason the contracts close has words in each view that shows it
+      -> the contracts close no verdict reasons (verdict.made's reasons are free text), and no view gives words for any
+         ask outcome or stop cause: `deep-replica --words` doesn't exist ("unknown argument --words"). Each code named.
+    x a planted outcome added to the ask outcome set with no words fails, naming it
+      -> stops at its first assertion: the contracts' own sets already fail, so the plant can't be told from them.
+  receipt.test.ts (AC2 #2029.af116b92)
+    x a push allowed on its card whose git push fails reads "Allowed · it failed: ! [rejected] main -> main (fetch first) · the agent was told"
+      -> the answered ask's page has no receipt: it says only how the ask closed ("... Answered "Push it" at 22:17 in
+         the app. Nothing is left to answer."). Names the ask.
+    x a push allowed on its card whose PostToolUse never arrives reads "Allowed · outcome unknown"
+      -> the same: no receipt on the page. Names the ask.
+    x a receipt that stays "Allowed" (receipt-stays-allowed) fails, naming the ask
+    x a receipt that takes "pushed" from the agent's next message (receipt-from-agent-text) fails, naming the ask
+      -> both stop at their first assertion: the clean receipt already fails, so the plant can't be told from it.
+         (Neither plant exists at the base.)
+  batch.test.ts (AC2 #2029.af116b92)
+    x a batch of three allowed steps where the second fails reads "3 ran · 1 failed" with that step's error
+      -> the answered card's page has no receipt: neither "3 ran · 1 failed" nor "! [rejected] v2.0.0 -> v2.0.0
+         (already exists)". Names the ask.
+
+The failures as vitest printed them (diffs and code frames cut):
+
+ ❯ receipt.test.ts (4 tests | 4 failed) 3909ms
+   ❯ #2029 AC2 #2029.af116b92 (4)
+     × #2029.af116b92 a push allowed on its card whose git push fails reads "Allowed · it failed: ! [rejected] main -> main (fetch first) · the agent was told" 3781ms
+     × #2029.af116b92 a push allowed on its card whose PostToolUse never arrives reads "Allowed · outcome unknown" 1ms
+     × #2029.af116b92 a receipt that stays "Allowed" (receipt-stays-allowed) fails, naming the ask 0ms
+     × #2029.af116b92 a receipt that takes "pushed" from the agent's next message (receipt-from-agent-text) fails, naming the ask 0ms
+ ❯ batch.test.ts (1 test | 1 failed) 145040ms
+   ❯ #2029 AC2 #2029.af116b92 (1)
+     × #2029.af116b92 a batch of three allowed steps where the second fails reads "3 ran · 1 failed" with that step's error 144934ms
+ ❯ words.test.ts (2 tests | 2 failed) 1886ms
+   ❯ #2029 AC1 #2029.9136787a (2)
+     × #2029.9136787a every ask outcome, stop cause and verdict reason the contracts close has words in each view that shows it 1884ms
+     × #2029.9136787a a planted outcome added to the ask outcome set with no words fails, naming it 1ms
+
+ FAIL  batch.test.ts > #2029 AC2 #2029.af116b92 > #2029.af116b92 a batch of three allowed steps where the second fails reads "3 ran · 1 failed" with that step's error
+AssertionError: ask:01M74M36D9VVX7CZQWYYH5PNMG ("Run `git push origin main`? It pushes, and no request in this thread names that."): the receipt must read "3 ran · 1 failed"; no receipt is on its page (ask/01M74M36D9VVX7CZQWYYH5PNMG; the page shows "Run `git push origin main`? It pushes, and no request in this thread names that. Answered "Push it" at 22:20 in the app. Nothing is left to answer.", "New task", "Nothing needs you", "idle", "Say a change in words", "Send")
+ask:01M74M36D9VVX7CZQWYYH5PNMG ("Run `git push origin main`? It pushes, and no request in this thread names that."): the receipt must read "! [rejected] v2.0.0 -> v2.0.0 (already exists)"; no receipt is on its page (ask/01M74M36D9VVX7CZQWYYH5PNMG; the page shows "Run `git push origin main`? It pushes, and no request in this thread names that. Answered "Push it" at 22:20 in the app. Nothing is left to answer.", "New task", "Nothing needs you", "idle", "Say a change in words", "Send"): expected [ …(2) ] to deeply equal []
+ ❯ batch.test.ts:66:43
+ FAIL  receipt.test.ts > #2029 AC2 #2029.af116b92 > #2029.af116b92 a push allowed on its card whose git push fails reads "Allowed · it failed: ! [rejected] main -> main (fetch first) · the agent was told"
+AssertionError: ask:01M74M2HY3CAMVBE28W6531PQ9 ("Run `git push origin main`? It pushes, and no request in this thread names that."): the receipt must read "Allowed · it failed: ! [rejected] main -> main (fetch first) · the agent was told"; no receipt is on its page (ask/01M74M2HY3CAMVBE28W6531PQ9; the page shows "Run `git push origin main`? It pushes, and no request in this thread names that. Answered "Push it" at 22:17 in the app. Nothing is left to answer.", "New task", "Nothing needs you", "idle", "Say a change in words", "Send"): expected [ Array(1) ] to deeply equal []
+ ❯ receipt.test.ts:82:39
+ FAIL  receipt.test.ts > #2029 AC2 #2029.af116b92 > #2029.af116b92 a push allowed on its card whose PostToolUse never arrives reads "Allowed · outcome unknown"
+AssertionError: ask:01M74M2J3BW8AMGEF6RP189ZRG ("Run `git push origin release`? It pushes, and no request in this thread names that."): the receipt must read "Allowed · outcome unknown"; no receipt is on its page (ask/01M74M2J3BW8AMGEF6RP189ZRG; the page shows "Run `git push origin release`? It pushes, and no request in this thread names that. Answered "Push it" at 22:17 in the app. Nothing is left to answer.", "New task", "Nothing needs you", "idle", "Say a change in words", "Send"): expected [ Array(1) ] to deeply equal []
+ ❯ receipt.test.ts:87:41
+ FAIL  receipt.test.ts > #2029 AC2 #2029.af116b92 > #2029.af116b92 a receipt that stays "Allowed" (receipt-stays-allowed) fails, naming the ask
+AssertionError: the clean receipt already fails, so the plant can't be told from it: ask:01M74M2HY3CAMVBE28W6531PQ9 ("Run `git push origin main`? It pushes, and no request in this thread names that."): the receipt must read "Allowed · it failed: ! [rejected] main -> main (fetch first) · the agent was told"; no receipt is on its page (ask/01M74M2HY3CAMVBE28W6531PQ9; the page shows "Run `git push origin main`? It pushes, and no request in this thread names that. Answered "Push it" at 22:17 in the app. Nothing is left to answer.", "New task", "Nothing needs you", "idle", "Say a change in words", "Send"): expected [ Array(1) ] to deeply equal []
+ ❯ receipt.test.ts:92:113
+ FAIL  receipt.test.ts > #2029 AC2 #2029.af116b92 > #2029.af116b92 a receipt that takes "pushed" from the agent's next message (receipt-from-agent-text) fails, naming the ask
+AssertionError: the clean receipt already fails, so the plant can't be told from it: ask:01M74M2HY3CAMVBE28W6531PQ9 ("Run `git push origin main`? It pushes, and no request in this thread names that."): the receipt must read "Allowed · it failed: ! [rejected] main -> main (fetch first) · the agent was told"; no receipt is on its page (ask/01M74M2HY3CAMVBE28W6531PQ9; the page shows "Run `git push origin main`? It pushes, and no request in this thread names that. Answered "Push it" at 22:17 in the app. Nothing is left to answer.", "New task", "Nothing needs you", "idle", "Say a change in words", "Send"): expected [ Array(1) ] to deeply equal []
+ ❯ receipt.test.ts:99:113
+ FAIL  words.test.ts > #2029 AC1 #2029.9136787a > #2029.9136787a every ask outcome, stop cause and verdict reason the contracts close has words in each view that shows it
+AssertionError: @deepbuild/contracts publishes no closed set of verdict reasons: no verdict.reason@n, and the newest verdict.made's reasons are free text, so no view can be checked against them
+no view gave words for any ask.outcome (deep-replica --words ended with exit 2: deep-replica: unknown argument --words), so none of these has words: answered, decided_for_you, escalated, defaulted, unanswerable, cancelled, superseded, moot, unanswered
+no view gave words for any stop.cause (deep-replica --words ended with exit 2: deep-replica: unknown argument --words), so none of these has words: sign_in_required, token_refresh_failed, plan_window_spent, rate_limited, refusal, max_turns, context_overflow, tool_schema_rejected, agent_crashed, timed_out, unknown
+(read: ask.outcome from answer.refused@1 data.outcome: answered, decided_for_you, escalated, defaulted, unanswerable, cancelled, superseded, moot, unanswered
+stop.cause from agent.stop@5 data.cause: sign_in_required, token_refresh_failed, plan_window_spent, rate_limited, refusal, max_turns, context_overflow, tool_schema_rejected, agent_crashed, timed_out, unknown): expected [ …(3) ] to deeply equal []
+ ❯ words.test.ts:25:65
+ FAIL  words.test.ts > #2029 AC1 #2029.9136787a > #2029.9136787a a planted outcome added to the ask outcome set with no words fails, naming it
+AssertionError: the contracts' own sets already fail, so the planted outcome can't be told from them: @deepbuild/contracts publishes no closed set of verdict reasons: no verdict.reason@n, and the newest verdict.made's reasons are free text, so no view can be checked against them
+no view gave words for any ask.outcome (deep-replica --words ended with exit 2: deep-replica: unknown argument --words), so none of these has words: answered, decided_for_you, escalated, defaulted, unanswerable, cancelled, superseded, moot, unanswered
+no view gave words for any stop.cause (deep-replica --words ended with exit 2: deep-replica: unknown argument --words), so none of these has words: sign_in_required, token_refresh_failed, plan_window_spent, rate_limited, refusal, max_turns, context_overflow, tool_schema_rejected, agent_crashed, timed_out, unknown: expected [ …(3) ] to deeply equal []
+ ❯ words.test.ts:30:134
+ Test Files  3 failed (3)
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 7 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  7 failed (7)
+   Start at  22:17:39
+   Duration  151.63s (tests 100%)

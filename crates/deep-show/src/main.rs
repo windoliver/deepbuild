@@ -26,6 +26,7 @@ mod film_viewer;
 mod frames;
 mod function;
 mod gate;
+mod generated;
 mod geometry;
 mod host;
 mod hub;

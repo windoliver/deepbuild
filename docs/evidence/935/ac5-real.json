@@ -1,0 +1,341 @@
+{
+  "assets": {
+    "bed": "5c5308066a0eb41132269fa54306042b218ba2606a0137a85d8b9647ee1f1349",
+    "hot": "bb664b945ea305baa59549ac4e99e4dd762e2f8709aca16e3ece0f34c69cdcb3",
+    "coin": "f355be58fa129ce848c20a8646b2b6dfa354c2b1d6f8f7d01a91baed0c49c2b1",
+    "all": [
+      "5c5308066a0eb41132269fa54306042b218ba2606a0137a85d8b9647ee1f1349",
+      "f355be58fa129ce848c20a8646b2b6dfa354c2b1d6f8f7d01a91baed0c49c2b1",
+      "ad733409b4d74d129b87bb75e4d5f5265c96ea63e6a45a8ca9e508dec9827877",
+      "13c86f438b3c7175806a099fd7a61eda1900e33b404f2e41dcf169c815820ce7",
+      "cbd26fe0818c63f1b4d13d87676bf0aea72bab827f198b4ec0fb8962eded6b5c",
+      "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa",
+      "997739980328e3b315f0016f83c3d9d57c6e7cd01fbe77ca16e54843aa63d898",
+      "2087b7f9cc5d4ca82f14b402a7385ae5a56fad7f0011604c5ac3fee19d177610",
+      "208655de011ec646d5a3f6aad2388be9b2386f926f58aa2dc549259a864a193a",
+      "724bb4f4af9059ff98565d3d19060571f76d81b9854795de12c77f0d2e9b6789",
+      "d4fcde79f470b1b319900d1094bce0a3f1aec0de83bda2cffc94986725768b28",
+      "abf8bc68ebb7995fc32bbf3aaa2b225ec7f66eae853c85d631ff2fc9660729e4",
+      "7e5796983dfdbd55d109c7be92cd14ddd6910c6eaa854e7d4e10c1e228f7a5c7",
+      "bb664b945ea305baa59549ac4e99e4dd762e2f8709aca16e3ece0f34c69cdcb3"
+    ]
+  },
+  "replies": [
+    {
+      "rev": 0,
+      "hash": "6c974548b8799fd15d74a014cfb5e589157c1e727e1fbc4dd56c3a2101e35a35",
+      "draws": [],
+      "issues": [],
+      "files": {
+        "main": "99d3e2d639a50205a94ec1fd00ae29fbd45690893d7bbcec7607d07b4bc6ab09"
+      },
+      "document": {
+        "format": 1,
+        "profile": "film",
+        "title": "Hub level sounds",
+        "description": "A hub level's music bed and coin pickup, each held by audio.gen before a strip may name it.",
+        "requires": {
+          "modules": {
+            "media": "^1"
+          }
+        },
+        "size": [
+          640,
+          360
+        ],
+        "transport": {
+          "frame_rate": [
+            30,
+            1
+          ],
+          "span": "10s"
+        },
+        "assets": {
+          "sound0.wav": {
+            "sha256": "5c5308066a0eb41132269fa54306042b218ba2606a0137a85d8b9647ee1f1349",
+            "license": "CC0-1.0"
+          },
+          "sound1.wav": {
+            "sha256": "f355be58fa129ce848c20a8646b2b6dfa354c2b1d6f8f7d01a91baed0c49c2b1",
+            "license": "CC0-1.0"
+          },
+          "sound2.wav": {
+            "sha256": "ad733409b4d74d129b87bb75e4d5f5265c96ea63e6a45a8ca9e508dec9827877",
+            "license": "CC0-1.0"
+          },
+          "sound3.wav": {
+            "sha256": "13c86f438b3c7175806a099fd7a61eda1900e33b404f2e41dcf169c815820ce7",
+            "license": "CC0-1.0"
+          },
+          "sound4.wav": {
+            "sha256": "cbd26fe0818c63f1b4d13d87676bf0aea72bab827f198b4ec0fb8962eded6b5c",
+            "license": "CC0-1.0"
+          },
+          "sound5.wav": {
+            "sha256": "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa",
+            "license": "CC0-1.0"
+          },
+          "sound6.wav": {
+            "sha256": "997739980328e3b315f0016f83c3d9d57c6e7cd01fbe77ca16e54843aa63d898",
+            "license": "CC0-1.0"
+          },
+          "sound7.wav": {
+            "sha256": "2087b7f9cc5d4ca82f14b402a7385ae5a56fad7f0011604c5ac3fee19d177610",
+            "license": "CC0-1.0"
+          },
+          "sound8.wav": {
+            "sha256": "208655de011ec646d5a3f6aad2388be9b2386f926f58aa2dc549259a864a193a",
+            "license": "CC0-1.0"
+          },
+          "sound9.wav": {
+            "sha256": "724bb4f4af9059ff98565d3d19060571f76d81b9854795de12c77f0d2e9b6789",
+            "license": "CC0-1.0"
+          },
+          "sound10.wav": {
+            "sha256": "d4fcde79f470b1b319900d1094bce0a3f1aec0de83bda2cffc94986725768b28",
+            "license": "CC0-1.0"
+          },
+          "sound11.wav": {
+            "sha256": "abf8bc68ebb7995fc32bbf3aaa2b225ec7f66eae853c85d631ff2fc9660729e4",
+            "license": "CC0-1.0"
+          },
+          "sound12.wav": {
+            "sha256": "7e5796983dfdbd55d109c7be92cd14ddd6910c6eaa854e7d4e10c1e228f7a5c7",
+            "license": "CC0-1.0"
+          },
+          "sound13.wav": {
+            "sha256": "bb664b945ea305baa59549ac4e99e4dd762e2f8709aca16e3ece0f34c69cdcb3",
+            "license": "CC0-1.0"
+          }
+        },
+        "layers": {
+          "main": {
+            "writer": "agent:thread-alpha",
+            "title": "Claude Code: hub level sounds",
+            "order": "a0"
+          }
+        },
+        "items": {},
+        "buses": {
+          "music": {
+            "out": "master",
+            "loudness_target": -23
+          },
+          "master": {}
+        },
+        "sounds": {
+          "bed": {
+            "kind": "music",
+            "asset": "5c5308066a0eb41132269fa54306042b218ba2606a0137a85d8b9647ee1f1349",
+            "tempo": 100,
+            "meter": "4/4",
+            "loop": {
+              "start": 0,
+              "end": 460800
+            },
+            "bus": "music"
+          },
+          "coin": {
+            "kind": "sound",
+            "variants": [
+              {
+                "target": -28,
+                "takes": [
+                  "f355be58fa129ce848c20a8646b2b6dfa354c2b1d6f8f7d01a91baed0c49c2b1",
+                  "ad733409b4d74d129b87bb75e4d5f5265c96ea63e6a45a8ca9e508dec9827877",
+                  "13c86f438b3c7175806a099fd7a61eda1900e33b404f2e41dcf169c815820ce7",
+                  "cbd26fe0818c63f1b4d13d87676bf0aea72bab827f198b4ec0fb8962eded6b5c"
+                ]
+              },
+              {
+                "target": -22,
+                "takes": [
+                  "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa",
+                  "997739980328e3b315f0016f83c3d9d57c6e7cd01fbe77ca16e54843aa63d898",
+                  "2087b7f9cc5d4ca82f14b402a7385ae5a56fad7f0011604c5ac3fee19d177610",
+                  "208655de011ec646d5a3f6aad2388be9b2386f926f58aa2dc549259a864a193a"
+                ]
+              },
+              {
+                "target": -16,
+                "takes": [
+                  "724bb4f4af9059ff98565d3d19060571f76d81b9854795de12c77f0d2e9b6789",
+                  "d4fcde79f470b1b319900d1094bce0a3f1aec0de83bda2cffc94986725768b28",
+                  "abf8bc68ebb7995fc32bbf3aaa2b225ec7f66eae853c85d631ff2fc9660729e4",
+                  "7e5796983dfdbd55d109c7be92cd14ddd6910c6eaa854e7d4e10c1e228f7a5c7"
+                ]
+              }
+            ]
+          },
+          "hot_coin": {
+            "kind": "sound",
+            "variants": [
+              {
+                "target": -28,
+                "takes": [
+                  "f355be58fa129ce848c20a8646b2b6dfa354c2b1d6f8f7d01a91baed0c49c2b1",
+                  "ad733409b4d74d129b87bb75e4d5f5265c96ea63e6a45a8ca9e508dec9827877",
+                  "13c86f438b3c7175806a099fd7a61eda1900e33b404f2e41dcf169c815820ce7",
+                  "cbd26fe0818c63f1b4d13d87676bf0aea72bab827f198b4ec0fb8962eded6b5c"
+                ]
+              },
+              {
+                "target": -22,
+                "takes": [
+                  "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa",
+                  "997739980328e3b315f0016f83c3d9d57c6e7cd01fbe77ca16e54843aa63d898",
+                  "2087b7f9cc5d4ca82f14b402a7385ae5a56fad7f0011604c5ac3fee19d177610",
+                  "208655de011ec646d5a3f6aad2388be9b2386f926f58aa2dc549259a864a193a"
+                ]
+              },
+              {
+                "target": -16,
+                "takes": [
+                  "724bb4f4af9059ff98565d3d19060571f76d81b9854795de12c77f0d2e9b6789",
+                  "bb664b945ea305baa59549ac4e99e4dd762e2f8709aca16e3ece0f34c69cdcb3",
+                  "abf8bc68ebb7995fc32bbf3aaa2b225ec7f66eae853c85d631ff2fc9660729e4",
+                  "7e5796983dfdbd55d109c7be92cd14ddd6910c6eaa854e7d4e10c1e228f7a5c7"
+                ]
+              }
+            ]
+          }
+        },
+        "id": "01jb935d000000000000000001"
+      },
+      "core": "core@0.0.0",
+      "set_digest": "0aac98f10a25dcaef5fad99a63b2def0e4de054cbe67bde45c86ad09cafe70c9"
+    },
+    {
+      "outcome": "refused",
+      "rev": 0,
+      "ids": {},
+      "achieved": {
+        "created": {},
+        "updated": 0,
+        "deleted": {},
+        "unchanged": true
+      },
+      "issues": [
+        {
+          "check": "document.validate",
+          "code": "audio.gen.unpassed",
+          "severity": "error",
+          "ids": [
+            "strip.bed"
+          ],
+          "path": "items/strip.bed/params/src",
+          "actual": "5c5308066a0eb41132269fa54306042b218ba2606a0137a85d8b9647ee1f1349",
+          "what": "strip.bed names asset 5c5308066a0eb41132269fa54306042b218ba2606a0137a85d8b9647ee1f1349 of the sound bed, whose audio.gen doesn't pass (BLOCKED: no record of beat-this@1.1.0 for the PCM 0c276333dfa3ce4ae43fe063f6c87c0e910ceb86d2a7d7dc4c1e76b2dc509e40: run bake.beats on beat-this@1.1.0 with the input pcm 0c276333dfa3ce4ae43fe063f6c87c0e910ceb86d2a7d7dc4c1e76b2dc509e40, sample_rate 48000 and channels 1)",
+          "fix": "See the issue."
+        }
+      ],
+      "cost_delta": {
+        "cpu_ms": 0,
+        "gpu_ms": 0,
+        "vertices": 0,
+        "lights": 0,
+        "gpu_mb": 0
+      },
+      "undo": [],
+      "core": "core@0.0.0",
+      "set_digest": "0aac98f10a25dcaef5fad99a63b2def0e4de054cbe67bde45c86ad09cafe70c9"
+    },
+    {
+      "outcome": "refused",
+      "rev": 0,
+      "ids": {},
+      "achieved": {
+        "created": {},
+        "updated": 0,
+        "deleted": {},
+        "unchanged": true
+      },
+      "issues": [
+        {
+          "check": "document.validate",
+          "code": "audio.gen.unpassed",
+          "severity": "error",
+          "ids": [
+            "strip.hot"
+          ],
+          "path": "items/strip.hot/params/src",
+          "actual": "bb664b945ea305baa59549ac4e99e4dd762e2f8709aca16e3ece0f34c69cdcb3",
+          "what": "strip.hot names asset bb664b945ea305baa59549ac4e99e4dd762e2f8709aca16e3ece0f34c69cdcb3 of the sound hot_coin, whose audio.gen doesn't pass (FAIL: sounds/hot_coin/variants/2/takes/1 peaks at 0.40 dBTP, over the -1 dBTP ceiling)",
+          "fix": "See the issue."
+        }
+      ],
+      "cost_delta": {
+        "cpu_ms": 0,
+        "gpu_ms": 0,
+        "vertices": 0,
+        "lights": 0,
+        "gpu_mb": 0
+      },
+      "undo": [],
+      "core": "core@0.0.0",
+      "set_digest": "0aac98f10a25dcaef5fad99a63b2def0e4de054cbe67bde45c86ad09cafe70c9"
+    },
+    {
+      "cost_delta": {
+        "cpu_ms": 0.01236764,
+        "gpu_ms": 0,
+        "vertices": 0,
+        "lights": 0,
+        "gpu_mb": 0
+      },
+      "outcome": "applied",
+      "rev": 1,
+      "ids": {},
+      "achieved": {
+        "created": {
+          "media.strip@1": 1
+        },
+        "updated": 0,
+        "deleted": {},
+        "unchanged": false
+      },
+      "issues": [],
+      "undo": [
+        {
+          "op": "delete",
+          "id": "strip.coin",
+          "cascade": false
+        }
+      ],
+      "core": "core@0.0.0",
+      "set_digest": "0aac98f10a25dcaef5fad99a63b2def0e4de054cbe67bde45c86ad09cafe70c9"
+    },
+    {
+      "revisions": [
+        {
+          "rev": 0,
+          "base_rev": 0,
+          "writer": null,
+          "hash": "6c974548b8799fd15d74a014cfb5e589157c1e727e1fbc4dd56c3a2101e35a35",
+          "state": "superseded",
+          "patches": []
+        },
+        {
+          "rev": 1,
+          "base_rev": 0,
+          "writer": {
+            "kind": "agent",
+            "id": "thread-alpha"
+          },
+          "hash": "40f6c962d1c528ea58f35322df3e5ad710464376144d3d7fb421a240f02b80d0",
+          "state": "current",
+          "patches": [
+            "01JB935P000000000000000003"
+          ]
+        }
+      ],
+      "core": "core@0.0.0",
+      "set_digest": "0aac98f10a25dcaef5fad99a63b2def0e4de054cbe67bde45c86ad09cafe70c9"
+    }
+  ],
+  "failures": {
+    "bed": [],
+    "hot": [],
+    "rest": []
+  }
+}
