@@ -1,6 +1,6 @@
 # Hill-climb audit: GPU usage, package by package
 
-Base: `435141d51` (main, 2026-11-10 23:01). Branch `audit/gpu-hillclimb-1110`, uncommitted. 5 source files differ from main, +517 −137, of which about 250 lines are three new tests and their helpers.
+Base: `435141d51` (main, 2026-11-10 23:01), merged with main at `9d0d58511` before the PR. Branch `audit/gpu-hillclimb-1110`. 5 source files differ from main, +517 −137, of which about 250 lines are three new tests and their helpers.
 
 Seven changes cut what the 3D renderer creates and uploads each frame. None changes a pixel, a pass list or a public count. The rest of what the audit found is listed under [Found and not applied](#found-and-not-applied), with the reason each one waits.
 
@@ -47,6 +47,7 @@ All in `crates/deep-scene3d-render` unless named.
 | `rustfmt --check` on the five files | no finding on a line this change touches. Main's drift in `lib.rs` and `liveview.rs` is left as it is |
 | `tests/acceptance/1903/counts.test.ts` (noop, `test-meter` build, on the changed tree) | 6 of 6 pass: no later frame of `separate-items` creates a bind group, a buffer or a pipeline; an unchanged orbit uploads at most 1 KB a frame and a one-item move at most 256 bytes more; the three planted renderers fail |
 | On Metal, `cargo build --bin deep-gpu` of the changed tree, one run each: `1285/puffs`; `465/mirror`, `occlusion`, `streaks`, `edge`; `378/move`, `replay`; `418/bloom` | 8 files, 17 tests, all pass: the puffs draw, the mirror's and the flare's pixels hold, a move writes one record and equals a fresh run by pixel hash, and the output reads the effects' target |
+| After merging main at `9d0d58511` (36 commits, none in a file this change touches): `cargo test -p deep-scene3d-render --lib` | 20 pass. Nothing else was run again on the merged tree |
 
 Each edit was re-read against its callers after it compiled. Two things were checked by reading, not by a test: a set's pending run is always flushed before `prepare_moved` returns (no return sits between its write loop and the flush, and a whole prepare never leaves a run behind), and the puffs' set passes a throwaway generation because no draw key names their buffer.
 
