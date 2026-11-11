@@ -40,6 +40,7 @@ mod modes;
 mod narration;
 mod packs;
 mod placement;
+mod played;
 #[cfg(feature = "test-accent")]
 mod planted;
 mod query;
@@ -368,6 +369,7 @@ fn query_call(c: &Map<String, Value>) -> Option<query::Query> {
             None => None,
             Some(p) => Some(p.as_str()?.to_string()),
         },
+        track: optional(c.get("track"), |t| t.as_array().cloned())?.unwrap_or_default(),
         t: match c.get("t") {
             None => 0,
             Some(t) => flicks(t.as_str()?)?,
@@ -676,6 +678,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
                     a.as_array()?.iter().map(|n| Some(n.as_str()?.to_string())).collect()
                 })?
                 .unwrap_or_default(),
+                track: optional(c.get("track"), |t| t.as_array().cloned())?,
             })));
         }
         "frames" => {
@@ -997,6 +1000,13 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
     let docs = entries(input, "docs", |d| {
         Some(d.get("panel")?.as_str()?.to_string())
     })?;
+    let docs_for = entries(input, "docs", |d| match d.get("for") {
+        None => Some(None),
+        Some(f) => Some(Some(f.as_str()?.to_string())),
+    })?
+    .into_iter()
+    .filter_map(|(d, f)| Some((d, f?)))
+    .collect();
     let seeds = entries(input, "docs", |d| Some(d.get("document").cloned()))?
         .into_iter()
         .filter_map(|(id, seed)| Some((id, seed?)))
@@ -1195,6 +1205,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 // #1732's wrong programs live in the motion module's arrangement solve.
                 || deep_canvas_motion::arrange::PLANTED.contains(p)
                 || *p == deep_canvas_motion::module::UNDECLARED_KIND_ACCEPTED
+                || deep_canvas_motion::module::PLANTED.contains(p)
                 || deep_canvas_marks::arrays::PLANTED.contains(p)
         })
         .map(str::to_string);
@@ -1225,6 +1236,15 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "reply_without_digest" => Planted::ReplyWithoutDigest,
                 "reads_wasm_bytes" => Planted::ReadsWasmBytes,
                 "start_on_at_first_frame" => Planted::StartOnAtFirstFrame,
+                "board_runs_program_per_frame" => Planted::BoardRunsProgramPerFrame,
+                "figure_feeds_verdict" => Planted::FigureFeedsVerdict,
+                "reload_rebuilds_every_part" => Planted::ReloadRebuildsEveryPart,
+                "sweep_poses_assemblies_at_rest" => Planted::SweepPosesAssembliesAtRest,
+                "pick_selects_item" => Planted::PickSelectsItem,
+                "variant_pick_writes_revision" => Planted::VariantPickWritesRevision,
+                "variant_export_final_choice" => Planted::VariantExportFinalChoice,
+                "readout_reads_defaults" => Planted::ReadoutReadsDefaults,
+                "plugin_code_per_frame" => Planted::PluginCodePerFrame,
                 "rebase_counts_op_targets_only" => Planted::RebaseCountsOpTargetsOnly,
                 "diffs_whole_document" => Planted::DiffsWholeDocument,
                 "one_fifo_check_queue" => Planted::OneFifoCheckQueue,
@@ -1514,6 +1534,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
         processes,
         panels,
         docs,
+        docs_for,
         record,
         runs,
         claims,

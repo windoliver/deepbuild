@@ -936,6 +936,11 @@ fn world(items: &Items<'_>, id: &str) -> Affine3 {
             break;
         }
         let Some((parent, local)) = items.placed(p) else {
+            // #504: a chain that ends on an assembly rides its composed transform (Assembly: its
+            // transform composes before its members').
+            if let Some(a) = items.assemblies.get(p) {
+                m = matmul(a, &m);
+            }
             break;
         };
         m = matmul(&local, &m);
@@ -955,13 +960,15 @@ struct Items<'a> {
     /// transform is its `TRANSFORM` slots from there.
     entries: HashMap<&'a str, (&'a Value, Option<usize>)>,
     slots: &'a [f64],
+    /// #504: each assembly's world transform at this state, by ID.
+    assemblies: HashMap<String, Affine3>,
 }
 
 impl<'a> Items<'a> {
     /// `doc`'s items, with `written` from [`eval::written`] of its program at `state`. The
     /// program's items are the document's in its order, so item `i`'s transform is its
     /// `TRANSFORM` slots from `i * TRANSFORM`.
-    fn new(doc: &'a Map<String, Value>, written: &'a Map<String, Value>, state: &'a State) -> Self {
+    fn new(doc: &'a Map<String, Value>, written: &'a Map<String, Value>, state: &'a State, program: &Program) -> Self {
         let mut entries = HashMap::with_capacity(doc.len());
         let mut copies = written.iter().peekable();
         for (i, (id, item)) in doc.iter().enumerate() {
@@ -971,11 +978,18 @@ impl<'a> Items<'a> {
             };
             entries.insert(id.as_str(), entry);
         }
+        let assemblies = program
+            .assemblies
+            .iter()
+            .enumerate()
+            .map(|(i, a)| (a.id.clone(), program.assembly_world(&state.slots, i)))
+            .collect();
         Items {
             doc,
             written,
             entries,
             slots: &state.slots,
+            assemblies,
         }
     }
 
@@ -1866,7 +1880,7 @@ pub fn placed_at(doc: &Value, t: i64) -> Result<Vec<(String, Value, Affine3)>, R
         .and_then(Value::as_object)
         .unwrap_or(&empty);
     let written = eval::written(map, &program, &state);
-    let items = Items::new(doc_items, &written, &state);
+    let items = Items::new(doc_items, &written, &state, &program);
     Ok(items
         .iter()
         .map(|(id, item)| (id.clone(), item.clone(), world(&items, id)))
@@ -2209,7 +2223,7 @@ pub(crate) fn evaluate_compiled(
         .and_then(Value::as_object)
         .unwrap_or(&empty);
     let written = eval::written(map, program, &state);
-    let items = Items::new(doc_items, &written, &state);
+    let items = Items::new(doc_items, &written, &state, program);
     let size = match map
         .get("size")
         .and_then(Value::as_array)
@@ -2897,10 +2911,24 @@ pub(crate) fn evaluate_compiled(
         &cam_path,
     )?;
 
-    // A readout sits in the view's top-left corner, its text the template's (#419).
+    // A readout sits in the view's top-left corner, its text the template's (#419), filled from
+    // the values that move the parts at t; a figure's card stacks its lines below (#504).
+    let shown = (!readout_items.is_empty() || map.contains_key("card")).then(|| eval::shown_doc(map, program, &state));
+    let card: Vec<(String, Value)> = shown
+        .as_ref()
+        .map(|s| {
+            deep_canvas::template::card_lines(s)
+                .into_iter()
+                .map(|(f, t)| (format!("card/{f}"), serde_json::json!({"template": t})))
+                .collect()
+        })
+        .unwrap_or_default();
     let mut readouts = Vec::new();
-    for (id, params) in &readout_items {
-        let text = params.get("template").and_then(Value::as_str).unwrap_or("");
+    let mut top = 12.0;
+    for (id, params) in readout_items.iter().chain(card.iter()) {
+        let template = params.get("template").and_then(Value::as_str).unwrap_or("");
+        let filled = shown.as_ref().and_then(|s| deep_canvas::template::expand(s, template).ok());
+        let text = filled.as_deref().unwrap_or(template);
         let size = num(params.get("size")).unwrap_or(13.0);
         let (run_box, glyphs) = labels.run(text, Role::Body, size as f32);
         let shaped_at = glyphs.first().map_or(size as f32, |g| g.size);
@@ -2919,7 +2947,7 @@ pub(crate) fn evaluate_compiled(
             role: Role::Body,
             glyphs,
             bounds: run_box,
-            pos: camera.unproject(12.0 + quad[0] / 2.0, 12.0 + quad[1] / 2.0, depth),
+            pos: camera.unproject(12.0 + quad[0] / 2.0, top + quad[1] / 2.0, depth),
             em: size,
             quad,
             world: false,
@@ -2930,6 +2958,7 @@ pub(crate) fn evaluate_compiled(
                 .or(look.role("ink"))
                 .unwrap_or([255, 255, 255]),
         });
+        top += quad[1] + 4.0;
     }
     // Each label's glyphs from the atlas at its size on screen; a frame that found the atlas full
     // starts it over and places them all again.
@@ -3112,7 +3141,7 @@ fn origin_at(map: &Map<String, Value>, program: &Program, id: &str, t: i64) -> V
         .and_then(Value::as_object)
         .unwrap_or(&empty);
     let written = eval::written(map, program, &state);
-    let items = Items::new(doc_items, &written, &state);
+    let items = Items::new(doc_items, &written, &state, program);
     origin(&world(&items, id))
 }
 

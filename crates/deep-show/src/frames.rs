@@ -221,6 +221,7 @@ impl<'a> Hub<'a> {
 
     /// The session's own frame at `t` in its current view, drawn: render-back's snapshot.
     pub fn live_drawn(&mut self, doc: &str, t: i64) -> Option<Drawn> {
+        self.load_frame(doc, t);
         let session = self.sessions.get_mut(doc)?;
         let view = session_view(session, &Map::new());
         session.frame(&mut self.sched, t, &view);
@@ -240,6 +241,16 @@ impl<'a> Hub<'a> {
             Ok(t) => t,
             Err(code) => return json!({"outcome": "refused", "code": code, "issues": []}),
         };
+        match &e.track {
+            Some(track) => self.load_with(&e.doc, track, t),
+            None => self.load_frame(&e.doc, t),
+        }
+        // Planted (#504): a document with controls runs a program through the sandbox each frame.
+        if self.planted(crate::hub::Planted::BoardRunsProgramPerFrame)
+            && self.forms.get(&e.doc).is_some_and(|f| f.get("controls").is_some())
+        {
+            self.sandbox.runs += 1;
+        }
         let Some(session) = self.sessions.get_mut(&e.doc).filter(|_| rev.is_some()) else {
             return json!({"outcome": "refused", "code": "no_revision", "issues": []});
         };
@@ -268,7 +279,7 @@ impl<'a> Hub<'a> {
             session
         };
         let frame_ms = started.elapsed().as_secs_f64() * 1000.0;
-        let nodes: Vec<Value> = evaluated
+        let mut nodes: Vec<Value> = evaluated
             .nodes(&self.sched)
             .into_iter()
             .map(|n| {
@@ -280,6 +291,10 @@ impl<'a> Hub<'a> {
                 node
             })
             .collect();
+        // Planted (#504): a plug-in's code computes a part each frame, outside every sealed operator.
+        if self.scenario.planted == Some(crate::hub::Planted::PluginCodePerFrame) {
+            nodes.push(json!({"operator": "plugin.place", "module": "plugin", "phase": "items", "item": null, "run": "ran"}));
+        }
         let report = &evaluated.report;
         let mut reply = json!({
             "outcome": if evaluated.frozen().is_some() { "frozen" } else { "evaluated" },
@@ -380,6 +395,10 @@ impl<'a> Hub<'a> {
                         .push(json!({"code": code, "severity": "error", "path": path, "ids": []}));
                 }
             }
+        }
+        // #504: an eval's own track lasts the call: the session goes back to the hub's.
+        if e.track.is_some() {
+            self.replay(&e.doc, t);
         }
         reply
     }
@@ -569,11 +588,12 @@ impl<'a> Hub<'a> {
                 revised = self.revise(&f.doc, document);
                 revised_now = true;
             }
+            let t = f.from + f.step * k as i64;
+            self.load_frame(&f.doc, t);
             let Some(session) = self.sessions.get_mut(&f.doc) else {
                 break;
             };
             let view = session_view(session, &Map::new());
-            let t = f.from + f.step * k as i64;
             let _ = self.sched.take_json();
             let frame_started = Instant::now();
             let (ran, allocs) =

@@ -377,6 +377,11 @@ timed.push('tests/acceptance/1575/budgets.test.ts', 'tests/acceptance/1575-redra
 alone.push('tests/acceptance/1964/');
 // #1723's files each start a real hub whose gate runs a document check through the canvas core, under a 480 s wait.
 alone.push('tests/acceptance/1723/');
+// #504's files each build deep-show or deep-motion with cargo, and criterion 2's hub test starts a hub and agents.
+alone.push('tests/acceptance/504/');
+// #504's blind redrafts of criteria 1, 2 and 8 each build deep-show or deep-motion with cargo; criterion 2's starts a
+// hub and an agent stand-in.
+alone.push('tests/acceptance/504-redraft-ac1/', 'tests/acceptance/504-redraft-ac2/', 'tests/acceptance/504-redraft-ac8/');
 // #2026's files build the replica and deep-live plain and planted and run a hub over 30 days of history; three judge
 // wall-clock limits (Needs you's load, a replayed ask within 1 s, the hub-down line within 2 s).
 // The first draft's AC3 file is kept by hand: its wrong program, the app's reader keeping its place by event ID, can't
