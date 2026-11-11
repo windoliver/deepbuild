@@ -13,7 +13,8 @@ import { join } from 'node:path';
 import type { AdapterRegistry } from '@deepbuild/adapters';
 import type { Asks } from '@deepbuild/asks';
 import { patternMatches, scrubText, type EvidenceStore, type Writer } from '@deepbuild/evidence';
-import { ulid, type Connection, type Event, type EventInput, type RecordStore } from '@deepbuild/record';
+import type { Connection, Event, EventInput, RecordStore } from '@deepbuild/record';
+import { ulid } from '@deepbuild/record/ids';
 
 export interface ArchiveOptions {
   record: RecordStore;

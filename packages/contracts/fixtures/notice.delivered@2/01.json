@@ -1,0 +1,24 @@
+{
+  "v": 2,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6W",
+  "kind": "notice.delivered",
+  "subject": "session:01K74G4B6D8F0H2K4M6P8R0T2V",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "data": {
+    "notice": "notice:01K74J8F0H2K4M6P8R0T2V4Y6A",
+    "type": "behavior",
+    "source": "session:01K74H6D8F0H2K4M6P8R0T2V4Y",
+    "target": "session:01K74G4B6D8F0H2K4M6P8R0T2V",
+    "files": [
+      "src/cart.js"
+    ],
+    "pr": null,
+    "key": "file src/cart.js session:01K74H6D8F0H2K4M6P8R0T2V4Y",
+    "version": "01K74H6D8F0H2K4M6P8R0T2V4Y",
+    "via": "PreToolUse",
+    "text": "DeepBuild: session 01K74H6D (codex) also changed src/cart.js, lines 3-22: a behavior change."
+  }
+}

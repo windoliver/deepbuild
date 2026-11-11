@@ -127,6 +127,20 @@ function contextOutputFactsCase(claude) {
   return missing.length ? [[`the Claude Code facts' context-output entry (claude-code.facts.json) lacks ${missing.join(', ')}`, fix]] : [];
 }
 
+/**
+ * The adapter-facts case for Claude Code's retry records (#2019): the entry that marks a model call the agent retries,
+ * its attempt, its most, its time, its identity, the causes its error names and the reply that ends them. A row reads
+ * retrying from these alone; a file without them fails, naming the field.
+ */
+function retriesFactsCase(claude) {
+  if (!claude) return [];
+  const entry = claude.retries;
+  const fix = "Give adapters/claude-code.facts.json its retries entry: match, attempt, max, at, id, cause and reply, as its transcripts record a model call it retries.";
+  if (!entry || typeof entry !== 'object') return [["the Claude Code facts (claude-code.facts.json) have no retries entry, so no core rule reads a model call it retries", fix]];
+  const missing = ['match', 'attempt', 'max', 'at', 'id', 'cause', 'reply'].filter((field) => entry[field] === undefined).map((field) => `retries.${field}`);
+  return missing.length ? [[`the Claude Code facts' retries entry (claude-code.facts.json) lacks ${missing.join(', ')}`, fix]] : [];
+}
+
 async function replayCommand(options) {
   const started = performance.now();
   let failed = false;
@@ -154,6 +168,7 @@ async function checkCommand(options) {
   failures.push(...loopFactsCase(facts.loops?.facts, options.corpus));
   failures.push(...modsFactsCase(facts['claude-code']?.facts));
   failures.push(...contextOutputFactsCase(facts['claude-code']?.facts));
+  failures.push(...retriesFactsCase(facts['claude-code']?.facts));
   const bytes = size(options.corpus);
   say({ type: 'size', bytes, limit: LIMIT });
   if (bytes >= LIMIT) failures.push([`the corpus is ${bytes} bytes, over the 200 MB limit (${LIMIT} bytes)`, 'Trim transcripts or drop sessions that add no event, version or tag.']);

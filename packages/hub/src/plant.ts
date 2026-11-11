@@ -5,7 +5,6 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import { openSync } from 'node:fs';
-import { close as closeInspector } from 'node:inspector';
 import { createServer, type Server } from 'node:net';
 
 /** The planted wrong programs a test selects with DEEP_HUB_PLANT; only tests set it. */
@@ -93,6 +92,9 @@ export type Plant =
   // #2018's: a `--why` built from a reading of its own, a BLOCKED row that names no one and no evidence, and a
   // reading that tries the stale row before needs you.
   | 'why-second-reading' | 'blocked-bare' | 'stale-before-ask'
+  // #2019's: a reading that never reads a model-call retry, a FAIL read as sent back with no hold delivered, and a repeat
+  // detector keyed on the command alone, one that notifies at every repeat, and one that raises an ask.
+  | 'retry-reads-working' | 'sent-back-without-hold' | 'repeat-by-command' | 'repeat-notifies-each' | 'repeat-raises-ask'
   // #1455's: a doctor that prints a fix under a healthy item.
   | 'doctor-healthy-fix'
   // #303's: a task for every first prompt or mid-turn message, hashes blind to text or check bytes, a role read from
@@ -272,6 +274,7 @@ const PLANTS: readonly string[] = [
   'status-omits-commit', 'doctor-misses-hooks', 'on-stays-off',
   'status-second-order', 'status-own-word', 'status-unread-flipped', 'deep-second-count', 'inbox-no-default', 'inbox-adds-unread', 'status-row-leak',
   'why-second-reading', 'blocked-bare', 'stale-before-ask',
+  'retry-reads-working', 'sent-back-without-hold', 'repeat-by-command', 'repeat-notifies-each', 'repeat-raises-ask',
   'doctor-healthy-fix',
   'first-prompt-always-task', 'midturn-always-task', 'hash-ids-only', 'hash-check-paths', 'role-from-text', 'claim-on-tool-calls',
   'runs-disk-bytes',
@@ -371,7 +374,7 @@ export function plantedReload(plant: Plant | undefined): void {
 }
 /** What a planted hub takes away at its start: the inspector that forces a collection, or its resident memory. */
 export function plantedStart(plant: Plant | undefined): void {
-  if (plant === 'churn-no-full-collection') closeInspector();
+  if (plant === 'churn-no-full-collection') process.getBuiltinModule('node:inspector').close();
   if (plant === 'churn-no-resident-read') process.memoryUsage = (() => { throw Error('this platform reads no resident memory'); }) as unknown as typeof process.memoryUsage;
 }
 /** The hub stops: nothing a planted run left outlives it. */
