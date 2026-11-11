@@ -1941,6 +1941,36 @@ fn modules(set: BuildSet) -> Vec<Module> {
     out.push(deep_canvas_test_modules::sandbox::prog());
     #[cfg(feature = "test-leave-out-effects")]
     out.retain(|m| m.manifest.name != "effects");
+    // #485: a build without scene3d, and without each module that can't seal without it.
+    #[cfg(feature = "test-leave-out-scene3d")]
+    {
+        let mut gone = vec!["scene3d".to_string()];
+        loop {
+            let more: Vec<String> = out
+                .iter()
+                .filter(|m| !gone.contains(&m.manifest.name))
+                .filter(|m| {
+                    m.manifest
+                        .depends_on
+                        .iter()
+                        .any(|(n, d)| !d.optional && gone.contains(n))
+                })
+                .map(|m| m.manifest.name.clone())
+                .collect();
+            if more.is_empty() {
+                break;
+            }
+            gone.extend(more);
+        }
+        out.retain(|m| !gone.contains(&m.manifest.name));
+    }
+    // #485's planted layout: effects declares gpu.output@1, which the core then leaves to it.
+    #[cfg(feature = "test-gpu-output-in-effects")]
+    for m in &mut out {
+        if m.manifest.name == "effects" {
+            *m = test_registries::effects_declaring_outputs();
+        }
+    }
     // #501's planted layout: media declares export.target@1, which the core then leaves to it.
     #[cfg(feature = "test-export-target-in-media")]
     for m in &mut out {
@@ -2315,6 +2345,9 @@ fn seal(planted: Option<StartPlanted>, costs: Coefficients) -> Result<Startup, B
     }
     if cfg!(feature = "test-export-target-in-media") {
         registry = registry.plant(Fault::ExportTargetInMedia);
+    }
+    if cfg!(feature = "test-gpu-output-in-effects") {
+        registry = registry.plant(Fault::GpuOutputInEffects);
     }
     // #412: the fixture ring keeps the bare name the issue gives it (`ring@1`, `ring@2`).
     if cfg!(any(feature = "test-ring-a", feature = "test-ring-b")) {
