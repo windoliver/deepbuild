@@ -4253,10 +4253,8 @@ pub enum Planted {
     /// drawn in row order rather than by centre.
     AtlasSquareLayout,
     AtlasRowOrder,
-    /// #536 AC1's twin: a hex grid shifts the rows (pointy) or columns (flat) of the other parity.
+    /// #536's twins: a hex grid shifting the other parity; terrain reading a square grid's sides.
     HexOtherParity,
-    /// #536 AC2's twin: the terrain recipe reads a square grid's four sides as a hex cell's
-    /// neighbours, each edge the side it faces.
     TerrainSquareSides,
 }
 
