@@ -8386,6 +8386,40 @@ For: generated textures and textured meshes, and any base color map that may hol
 
 **Lands:** R6, with generated meshes
 
+#### Check input: asset kinds: generated sound
+
+For: a generated or imported sound before an item names it: a coin pickup's takes, a 90-second calm loop for a hub level
+
+**Fields**
+
+- In a document, `sounds` is a map by ID beside `strips`, each entry one result to hold:
+  - `music {asset, tempo: BPM, meter: "n/d", loop: {start, end: samples}, beats: record, stems: {name → asset} (optional), bus = master}` (`loop` as the Asset's; `beats` the hash of the `bake.beats` record of the asset's PCM, made by `beat-this@1.1.0`)
+  - `sound {variants: [{target: LUFS, takes: [asset]}]}` (one entry per level, its round robins as its takes)
+- `audio.gen`: the media module's call `media_gen {doc, sound: ID}` → `{gen: {sound, state: PASS | FAIL | BLOCKED, readings, issues, blocked}}`
+- Codes: `audio.gen.tempo | audio.gen.bars | audio.gen.seam | audio.gen.stems | audio.gen.level | audio.gen.peak | audio.gen.duration | audio.gen.same | audio.gen.onset`, and at check `audio.gen.unpassed`
+
+**Semantics:** Every reading comes from the decoded PCM, every channel kept, through the media module's pinned analysis; `made_by` and anything a model said about its output are never read. A `music` bed is held to five rules:
+
+- **Tempo:** the beats bake's `tempo`, read from `beats` as `media_bake` reads a record, is within ±0.5 BPM of `tempo`, or `audio.gen.tempo` names the measured tempo. With no record it is BLOCKED, naming the analyzer and the PCM's hash, and the PCM is kept by that hash for the job.
+- **Bars:** the loop region, (end − start) ÷ the rate, is within 1 ms of a whole number of bars, at least 1. A bar is n beats at the declared tempo, so 4/4 at 100 BPM is 2.4 s. Otherwise `audio.gen.bars` names the bar count the region implies, its length over a bar's, unrounded.
+- **Seam:** two measures at the join from sample end − 1 to sample start must each be at or under the 99th percentile (nearest rank) of the bed's own:
+  - the step, the largest |x[start] − x[end − 1]| over the channels, against the steps |x[i + 1] − x[i]| inside the region;
+  - the spectral flux, the largest over the frames that straddle the join, against the flux of the frames inside the region. Flux is read as the onsets kind's spectral flux reads it: 1024-sample periodic Hann frames every 256 samples on the channels' mean, Σ max(0, |X_f(k)| − |X_{f−1}(k)|), over the region played twice.
+
+  Otherwise `audio.gen.seam` names the join's sample offset, `end`, with both readings and both percentiles.
+- **Stems:** with `stems`, the mix less the sum of its stems, sample by sample, has an RMS at or under −60 dBFS, 20 log10 of the RMS over every sample and channel; a file shorter than the mix reads as silence past its end. Otherwise `audio.gen.stems` names the residual and the stem that correlates most with it. A stem of another rate or channel count fails, naming it.
+- **Loudness:** integrated loudness, the loudness kind's, is within ±1 LU of its bus's `loudness_target`, and true peak read at 8× is at or under −1 dBTP. Otherwise `audio.gen.level` or `audio.gen.peak` names the reading and its limit. A bus with no target is BLOCKED, naming the bus.
+
+A `sound` holds each take to its level's `target` within ±1 LU and to a true peak at or under −1 dBTP, as a bed is held to its bus's. A take shorter than one 400 ms gating block reads the K-weighted power of its whole 10 ms sub-blocks. Each take's duration is within ±20% of the median of all the takes, the mean of the two middle ones for an even count (`audio.gen.duration`, naming the take). No two takes may be equal by hash or within a log-spectral distance of 0.5 dB (`audio.gen.same`, one issue per pair, naming both). The distance is the mean, over the frames both takes have, of the RMS over bins 1 to 1024 of the difference of their powers in dB. Frames are 2048-sample periodic Hann windows every 1024 samples on the channels' mean, each power floored at −120 dB, with no loudness matching. Every bed and take is held to no leading silence past the onset limit, 10 ms: its first sample at or above −60 dBFS in any channel lies within 10 ms of its start, or `audio.gen.onset` names it.
+
+The state is FAIL when any rule fails, with every issue listed; otherwise BLOCKED when an input is missing, naming it; otherwise PASS. An issue is `{code, path, actual, what}`, with `path` under `sounds/<ID>`. Numbers here are proposals to calibrate on generated results; a brief may only tighten them. At check, a strip (in `strips` or a `media.strip@1` item) or a spawn template that names an asset of an entry in `sounds` (its bed, a stem or a take) is refused unless that entry's `audio.gen` reads PASS. The error `audio.gen.unpassed`, at the strip's or template's path, names the asset, the sound, and its state with its first issue or block, and the revision is refused. An asset no entry declares isn't held here; a generation kind declares each result it writes.
+
+**Cost:** One decode and one pass per file at each check: about a second for a 40 s bed, and well under one for 12 takes' pairwise distances (estimates). Budget class: checks.
+
+**It can never:** Read `made_by` or a model's report; pass with a record or a target missing; take a threshold from an agent; let an item name a result before it passes
+
+**Lands:** R6, with the media module
+
 #### Check input: pixel kinds
 
 For: pixel art that stays pixel art: palette colors only, hard edges, a tile for every neighbour the map can make, walk frames that don't swim
