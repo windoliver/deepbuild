@@ -1,0 +1,80 @@
+#2024's acceptance suite, run at the base cbd5e4f98 (Merge pull request #2284, origin/main; no implementation; only
+tests/acceptance/2024/ untracked).
+
+Machine: Mac17,10, Apple M5 Max, 64 GiB (a reference Mac), macOS 27.2; Node v24.22; cargo 1.99.1 (the repo's toolchain, first
+on PATH); vitest 5.0.5. Shared with other sessions: load averages 183.19 at the start and 173.44 at the end on 18 cores, so
+#1551's gate reads any timing here as a reading only. No timing was reached: every test failed at a missing surface first.
+
+Prerequisites, done before the run:
+  npm ci --ignore-scripts && npm run build --workspaces                                    exit 0
+  CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 cargo build --locked -q -p deep-replica --bin deep-drive --features env-plants
+                                                                                           exit 0
+  CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 cargo build --locked -q -p deep-replica --bin deep-drive -p deep-hook --bin deep-hook
+                                                                                           exit 101 at the base:
+    error[E0425]: cannot find value `RULE_322` in this scope
+         --> crates/deep-contracts/src/generated.rs:74307:59
+    error: could not compile `deep-contracts` (lib) due to 2 previous errors
+  The base's generated.rs is stale against packages/contracts/schemas (last touched by the merge of #2271, 63b9e8057). For this
+  run only, the file the contracts' own generator writes (generateRust(listSchemas()) from packages/contracts/dist, 52 diff
+  lines, rule numbers renumbered) was put in its place; the same build then exited 0, the run below was made, and the tracked
+  file was restored with `git checkout -- crates/deep-contracts/src/generated.rs`. Nothing of it is committed. The suite's
+  own cargo commands (#2018's driveBinaries) ran inside the run as no-ops.
+  scripts/lease was not used: DeepBuild isn't set up on this Mac (no hub token), as #2018's base run found.
+
+Command (2026-11-11T20:04:10Z to 20:06:06Z):
+  PATH=<node 24.22>:<toolchain 1.99.1>:$PATH CARGO_HOME=$HOME/.cargo RUSTUP_HOME=$HOME/.rustup NO_COLOR=1 \
+    node node_modules/vitest/vitest.mjs run --root tests/acceptance/2024 --no-file-parallelism --testTimeout=600000
+Result: Test Files 2 failed (2); Tests 8 failed (8); Duration 115.25s; exit 1.
+  node node_modules/typescript/bin/tsc -p tests/acceptance/2024/tsconfig.json   exit 0 (just before, on the same files)
+
+Both worlds built: AC1/AC2's fixture check passed at the base (the hub's archive copied the Codex rollout, and the base's
+`deep find "reconnect backoff"` found its message with the key scrubbed); AC3's index held 1000 of 1000 sessions when the
+replica copied the record.
+
+Two earlier runs at the base were of earlier states of these files, and are void: the first blocked building AC1/AC2's world
+(#2018's Seeder.verdict can't write a PASS, since verdict.made@2 publishes only a BLOCKED fixture; the PASS is now
+verdict.made@1's fixture); the second closed each replica and launched it again on the real clock, after which the base's
+⌘K opens nothing (the replica is now launched once). Their failures named the same missing surfaces as below, except that the
+second's ⌘K showed no "No match" line.
+
+Failures, each at its assertion:
+
+commandk.test.ts
+  × AC1 #2024.cb3a3faf  pasting a PR URL opens the session that made it, with its verdict
+      "pasting https://github.com/acme/shop/pull/412 in ⌘K and pressing Return opened project/shop, not
+       session/b67e8ff3-427a-4558-8805-817c9b7ae73d: the page of P (…, "Cart totals rounding"), the session that opened
+       https://github.com/acme/shop/pull/412; ⌘K listed the hits []"
+      (the base's ⌘K takes no reference: "No match", Return does nothing, the window stays on its first page)
+  × AC1 #2024.cb3a3faf  a SHA prefix nothing names lists the kinds accepted, in ⌘K and at deep open
+      ⌘K "5ad1be4c0d" (a SHA prefix nothing names) doesn't list a PR URL / an issue URL / #n / a commit SHA / a branch /
+        a session ID / an agent app link / an ask handle among the kinds it takes: its line reads "No match\nNo match"
+      deep open 5ad1be4c0d (…) doesn't list any of the eight kinds: exit 1, it says "deep open: the app is not running"
+  × AC1 #2024.cb3a3faf  with two queries in flight only the later one's results show
+      "with "reconnect backoff" and then https://github.com/acme/shop/pull/412 in flight, the later query's hit for P
+       (b67e8ff3-…, "Cart totals rounding") never showed once the hub answered: ⌘K lists []"
+  × AC2 #2024.a9de042e  ⌘K "reconnect backoff" lists the Codex session's message and the wiki claim, opens the session's
+                        page at that message, and no hit shows the scrubbed key
+      "⌘K "reconnect backoff" lists no hit of the Codex session 01a1581d-7535-7b62-8f4f-64097e3f65a1 ("Pool retry tuning")'s
+       message (an id hit:session:01a1581d75357b628f4f64097e3f65a1#<message>); it lists []"
+      "⌘K "reconnect backoff" lists no hit of the wiki claim wiki:repos/shop#reconnect-backoff beside the Codex session …"
+  × AC2 #2024.a9de042e  a ⌘K that searches only references fails, naming the session
+      "the planted ⌘K that searches only references must still open a pasted PR URL, or it is not the wrong program the
+       criterion names: pasting https://github.com/acme/shop/pull/412 in ⌘K and pressing Return opened project/shop, …"
+      (DEEP_HUB_PLANT=commandk-references-only plants nothing at the base, so this planted build is the base)
+  × AC2 #2024.a9de042e  a ⌘K that reads the agent's own transcript files instead of the archive fails, naming the session
+      "the planted ⌘K that reads the agent's own files must find the Codex session's message in its rollout
+       (/private/tmp/dh16-…/h/.codex/sessions/2026/10/28/rollout-2026-10-28T20-05-26-01a1581d-7535-….jsonl), or it is not the
+       wrong program the criterion names; the judge found: ⌘K "reconnect backoff" lists no hit of the Codex session …"
+      (DEEP_HUB_PLANT=commandk-reads-agent-files plants nothing at the base either)
+
+budget.test.ts
+  × AC3 #2024.04c79639  the perf lane has a first measurement naming #2024, valid against the merge base's budgets, and it runs
+      "benchmarks/budgets.json has a task whose initialReason names issue #2024 (README, Pinned 6): expected [] to not deeply
+       equal []"
+  × AC3 #2024.04c79639  over 1000 archived sessions, ⌘K's first hits draw within 200 ms of the last keystroke
+      "⌘K "quillfeather" over 1000 archived sessions drew no hit hit:session:sa012c#myou within 10 s of the replica's real
+       clock: {"code":"timeout","message":"{\"state\":\"visible\"} didn't come within 10000 ms","timeout_ms":10000}"
+      (the warm-up; the base has no word search behind ⌘K, so no timed run was made: the budget is shown failing first)
+
+Not run: no implementation exists, so the passing side of every test is unverified, and neither plant was seen caught by the
+judge (only that each planted build, which is the base here, fails it).
