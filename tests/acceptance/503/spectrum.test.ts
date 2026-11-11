@@ -14,10 +14,7 @@ import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
-  AC, ARRAY, BAKE16, BAND8, CHART, DOC, FLICKS, FLOOR, FULL, LINUX_STORE, TIMEOUT, arr, decodePng, docRun, emptyBands, failsNaming, getEvidence,
-  hex64, isObject, logEdges, namedEmptyBands, none, num, obj, onLinux, present, putEvidence, rowAt, runShowPid, scenario, secs, show,
-  spectrumCall, spectrumDocument, spectrumFailures, spectrumOf, str, toneWav, useShow, useTemp, barHeight, type JsonObject, type ShowPlanted,
-  type Spectrum, type SpectrumAsk,
+  AC, BAKE16, BAND8, DOC, FULL, LINUX_STORE, TIMEOUT, arr, emptyBands, failsNaming, hex64, logEdges, namedEmptyBands, none, obj, onLinux, present, putEvidence, rowAt, runShowPid, scenario, show, spectrumCall, spectrumDocument, spectrumFailures, spectrumOf, toneWav, useShow, useTemp, type JsonObject, type ShowPlanted, type Spectrum, type SpectrumAsk,
 } from './helpers.ts';
 
 const show_ = useShow([FULL]);
@@ -72,49 +69,8 @@ describe(`${AC[1]} spectrum bands as an analysis bake`, () => {
     expect(replies[1]!['outcome'], `the same document with bands 16 at window 2048 is presented: ${show(replies[1])}`).toBe('presented');
   }, TIMEOUT);
 
-  it(`${AC[1]} a bar chart whose 16 rows' heights read the bands draws the band levels, and the same heights seeked or played at every frame`, () => {
-    const evidence = temp();
-    const sha = putEvidence(evidence, toneWav());
-    const frame = FLICKS / CHART.fps;
-    const times = Array.from({ length: CHART.seconds * CHART.fps }, (_, k) => k * frame);
-    const [baked, at1, at3, compared] = docRun(show_.bin(FULL), evidence, spectrumDocument(sha, BAKE16, true), [
-      spectrumCall(sha, BAKE16),
-      { call: 'eval', doc: DOC.a, t: FLICKS, pixels: true, arrays: [ARRAY] },
-      { call: 'eval', doc: DOC.a, t: 3 * FLICKS, pixels: true, arrays: [ARRAY] },
-      { call: 'determinism', doc: DOC.a, display_hz: CHART.fps, at_times: times, compare: 'same_machine' },
-    ], 'the bar chart');
-    const s = spectrumOf(baked!, 'the bake');
-    none(spectrumFailures(s, 'the bake'), 'the bake the chart reads');
-    for (const [seconds, reply] of [[1, at1!], [3, at3!]] as const) {
-      const what = `the chart at ${seconds} s`;
-      expect(reply['outcome'], `${what} is evaluated: ${show(reply)}`).toBe('evaluated');
-      const read = arr(obj(reply['arrays'], `${what}: arrays`)[ARRAY], `${what}: arrays["${ARRAY}"], its 16 bands as the frame read them`).map((v, i) => num(v, `${what}: band ${i}`));
-      expect(read, `${what}: the array holds the bake's row for ${seconds} s exactly`).toEqual(rowAt(s, seconds));
-      const shot = arr(reply['snapshots'], `${what}: snapshots`);
-      const png = decodePng(getEvidence(evidence, str(obj(shot[0], `${what}: snapshots[0]`)['sha256'], `${what}: snapshots[0].sha256`), `${what}: the snapshot`));
-      expect([png.width, png.height], `${what}: the snapshot is the page`).toEqual(CHART.size);
-      const ground: [number, number, number] = [png.rgba[8]!, png.rgba[9]!, png.rgba[10]!];
-      const failures: string[] = [];
-      read.forEach((level, i) => {
-        const [x0, x1] = CHART.bar(i);
-        const got = barHeight(png, Math.round((x0 + x1) / 2), ground);
-        const want = level - FLOOR;
-        if (Math.abs(got - want) > 1.5) failures.push(`${what}: bar ${i} is ${got} px tall, not band ${i}'s ${level.toFixed(2)} dB + 120 = ${want.toFixed(2)} u`);
-      });
-      none(failures, `${what}: each bar's height reads its band`);
-    }
-    expect(compared!['outcome'], `the comparison of seek and play: ${show(compared)}`).toBe('compared');
-    const frames = arr(compared!['frames'], 'the comparison: frames').map((v, i) => obj(v, `the comparison: frames[${i}]`));
-    expect(frames.length, 'one comparison per frame of the 6 s chart at 30 fps').toBe(times.length);
-    const failures: string[] = [];
-    for (const f of frames) {
-      const t = num(f['t'], 'a compared frame t');
-      const play = obj(f['play'], `played to ${secs(t)}`); const seek = obj(f['seek'], `seeked to ${secs(t)}`);
-      if (str(play['pixels'], `played to ${secs(t)}: pixels`) !== str(seek['pixels'], `seeked to ${secs(t)}: pixels`)) failures.push(`frame ${Math.round(t / frame)} (${secs(t)}): the played and seeked frames differ`);
-      if (isObject(play) && typeof play['pixel_hash'] === 'string' && play['pixel_hash'] !== seek['pixel_hash']) failures.push(`frame ${Math.round(t / frame)} (${secs(t)}): the pixel hashes differ`);
-    }
-    none(failures, 'the chart seeked equals the chart played at every frame');
-  }, TIMEOUT);
+  // The bar chart's test is replaced by tests/acceptance/503-redraft-ac1/ (its blind redraft): this draft framed the
+  // chart with a 2D camera off the page's centre, which the canonical snapshot doesn't apply (#503 proposal).
 
   it(`${AC[1]} the bake run again on the Linux machine is byte for byte equal`, () => {
     const started = Date.now();
