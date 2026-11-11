@@ -23,6 +23,9 @@ use serde_json::{json, Value};
 use crate::hub::{HubClient, HubError};
 use crate::states::{closes, handle, Table};
 
+/// The hub methods this one reader calls, and no other module of the app (#326): the hub's hello must list them (#41).
+pub const READS: &[&str] = &["inbox.read", "stream.subscribe", "events.read"];
+
 /// Once a session holds this many open asks, its further asks fold into one exception.
 pub const FOLD_AFTER: usize = 5;
 

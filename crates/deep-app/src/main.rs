@@ -131,7 +131,7 @@ fn main() {
         return;
     }
     if mode == Mode::HubNeeds {
-        let needs = serde_json::json!({ "contract": deep_app::hub::CONTRACT, "features": deep_app::hub::NEEDS });
+        let needs = serde_json::json!({ "contract": deep_app::hub::CONTRACT, "features": deep_app::hub::needs() });
         println!("{needs}");
         return;
     }

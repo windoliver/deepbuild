@@ -237,6 +237,12 @@ struct TerminalTab {
     _poll: Task<()>,
 }
 
+/// The list as last built: the reading of the record it was built from, and its items.
+type Built = (
+    std::rc::Rc<(Vec<crate::list::Ask>, Vec<crate::list::Session>)>,
+    Vec<crate::list::Item>,
+);
+
 /// One shipped view, drawn as a dock panel.
 pub struct Shipped {
     kind: Kind,
@@ -265,10 +271,7 @@ pub struct Shipped {
     /// The row a press went down on and when: a press on a row that just moved is dropped (#1461).
     pressed: Option<(String, u64)>,
     /// The list as last built, with the reading of the record it was built from.
-    built: Option<(
-        std::rc::Rc<(Vec<crate::list::Ask>, Vec<crate::list::Session>)>,
-        Vec<crate::list::Item>,
-    )>,
+    built: Option<Built>,
     /// What you typed in the list, and when the last key came: typing moves to the first row it starts (#1462).
     typed: (String, u64),
     /// The first of the list's items drawn: the drawn rows follow the keyboard, so the row it's on is in view (#2021).
@@ -379,7 +382,8 @@ impl Shipped {
     /// the name you gave it, through the hub, and the field going out of focus leaves the name as it was.
     fn start_rename(&mut self, session: String, window: &mut Window, cx: &mut Context<Self>) {
         use gpui_kit::base::input::{InputEvent, InputState};
-        let name = crate::record::with_view(|view| view.table().title(&session)).unwrap_or_default();
+        let name =
+            crate::record::with_view(|view| view.table().title(&session)).unwrap_or_default();
         let input = cx.new(|cx| InputState::new(window, cx).default_value(name));
         let entered = cx.subscribe_in(
             &input,

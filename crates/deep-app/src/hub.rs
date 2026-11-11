@@ -39,11 +39,8 @@ pub fn address() -> PathBuf {
 
 /// The hub contract the app speaks, "major.minor" (#41): the hub's `CONTRACT` in packages/hub/src/wire.ts.
 pub const CONTRACT: &str = "1.0";
-/// Every hub method the app calls (#41), which the hub's hello must list (`FEATURES` in packages/hub/src/wire.ts).
-pub const NEEDS: &[&str] = &[
-    "inbox.read",
-    "stream.subscribe",
-    "events.read",
+/// Every hub method the app calls besides the record's reads, which only the one reader names (#326).
+const CALLS: &[&str] = &[
     "notifications.report",
     "views.shown",
     "views.hidden",
@@ -52,6 +49,12 @@ pub const NEEDS: &[&str] = &[
     "canvas.user",
     "find.read",
 ];
+
+/// Every hub method the app calls (#41), which the hub's hello must list (`FEATURES` in packages/hub/src/wire.ts): the
+/// one reader's reads, then the rest.
+pub fn needs() -> Vec<&'static str> {
+    crate::record::READS.iter().chain(CALLS).copied().collect()
+}
 const HUB_FIX: &str =
     "Update DeepBuild so the hub matches this app, then restart it with `deep setup`.";
 const CLIENT_FIX: &str = "Update this app or CLI to the version that matches the running hub.";
@@ -74,7 +77,7 @@ pub fn older(hello: &Value) -> Option<String> {
             .and_then(Value::as_array)
             .is_some_and(|features| features.iter().any(|f| f.as_str() == Some(method)))
     };
-    let missing: Vec<&str> = NEEDS.iter().filter(|m| !listed(m)).copied().collect();
+    let missing: Vec<&str> = needs().into_iter().filter(|m| !listed(m)).collect();
     match contract.map(parts) {
         Some(have) if have.0 > need.0 => Some(format!(
             "This app is older than the hub: it speaks contract {CONTRACT} and the hub speaks {}.\n{CLIENT_FIX}",
