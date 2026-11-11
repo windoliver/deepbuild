@@ -347,6 +347,9 @@ alone.push('tests/acceptance/1819/');
 // #502's files each build deep-show, export films through the GPU and the encode tool and speak their fixture with
 // `say`; onsets.test.ts also starts a hub and the model host on its fixed port 8719: one file at a time.
 alone.push('tests/acceptance/502/', 'tests/acceptance/502-oracle/');
+// #503's files each build deep-show or deep-gpu, draw on the GPU, decode every listed audio format in the decode worker
+// and rebake a spectrum in a linux/amd64 container; its oracle lane fetches and decodes the FATE audio samples.
+alone.push('tests/acceptance/503/', 'tests/acceptance/503-oracle/');
 byHand.push('tests/acceptance/408/machines.test.ts');
 // #405's files each build deep-show. Criterion 4 runs from its redraft, which also builds it in release on a machine
 // that can judge a timing now and times the geometry audit and determinism hashing against the lane's rule; the
