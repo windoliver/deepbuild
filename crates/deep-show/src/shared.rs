@@ -22,8 +22,8 @@ use std::rc::Rc;
 use std::time::Instant;
 
 use deep_canvas::document::{
-    apply_ops, canonical_in, check_packed, recheck_with, rollback, store_migrations, touched_in,
-    Issue, Packs, Patched, Referrers, Writing, ID_MAPS,
+    apply_ops, canonical_in, check_packed, pack_kinds, recheck_with, rollback, store_migrations,
+    touched_in, Issue, Packs, Patched, Referrers, Writing, ID_MAPS,
 };
 use deep_canvas::grammar::{Path as FieldPath, Section};
 use deep_canvas::kinds::{lookup, registry, Lookup};
@@ -1010,6 +1010,10 @@ impl Hub<'_> {
             for (id, was) in store_migrations(&mut shared.doc, &layer) {
                 patched.before.entry(id).or_insert(Some(was));
             }
+        }
+        // A pack kind's items at an earlier major of their pinned pack's kind, too (#1956).
+        for (id, was) in pack_kinds::store_migrations(&mut shared.doc, &layer, &self.packs) {
+            patched.before.entry(id).or_insert(Some(was));
         }
         let patch_id = patch["patch"].as_str().unwrap_or_default().to_string();
         let current_at = self.scenario.clock.map(|c| c.latch_from(checked));
