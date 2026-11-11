@@ -260,6 +260,8 @@ alone.push('tests/acceptance/1455/');
 alone.push('tests/acceptance/505/', 'tests/acceptance/505-oracle/');
 // #1653's files each build deep-canvas-render and draw with Vello CPU, as #467's do: one file at a time.
 alone.push('tests/acceptance/1653/', 'tests/acceptance/1653-redraft-ac2-flip/');
+// #536's files each build deep-canvas-render and draw with Vello CPU, as #1653's do: one file at a time.
+alone.push('tests/acceptance/536/');
 // #535's files each build deep-show (one also without the logic module) and #544's assembler, and draw on the GPU.
 alone.push('tests/acceptance/535/');
 // #1479's files build deep-canvas-render and draw with GPUI's offscreen renderer, as #385's do.
@@ -382,6 +384,8 @@ alone.push('tests/acceptance/1723/');
 alone.push('tests/acceptance/2026/', 'tests/acceptance/2026-redraft-ac3/');
 timed.push('tests/acceptance/2026/load.test.ts', 'tests/acceptance/2026/outage.test.ts', 'tests/acceptance/2026-redraft-ac3/replay.test.ts');
 byHand.push('tests/acceptance/2026/replay.test.ts');
+// #1056's files build deep-gpu and draw #464's pixel fixtures; records.test.ts runs #464's two-GPU tests.
+alone.push('tests/acceptance/1056/');
 // #220's files start hubs, build deep-show in the full set and time the typeset tool's own process.
 alone.push('tests/acceptance/220/');
 timed.push('tests/acceptance/220/budgets.test.ts');

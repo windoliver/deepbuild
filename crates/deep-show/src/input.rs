@@ -341,9 +341,9 @@ impl Hub<'_> {
                 .get(panel)
                 .and_then(|s| s.scope.time())
                 .unwrap_or(self.now);
-            for (row, b) in drawn.map(|d| self.row_boxes(&d, t)).unwrap_or_default() {
+            for (row, b, hull) in drawn.map(|d| self.row_boxes(&d, t)).unwrap_or_default() {
                 let order = &doc["items"][row.split('#').next().unwrap_or_default()]["order"];
-                let target = json!({"id": row, "order": order, "params": {"box": b}});
+                let target = json!({"id": row, "order": order, "params": {"box": b, "hull": hull}});
                 if let Some(items) = doc["items"].as_object_mut() {
                     items.insert(row, target);
                 }
