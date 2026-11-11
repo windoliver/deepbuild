@@ -403,6 +403,8 @@ alone.push('tests/acceptance/1056/');
 // build deep-gpu for release and draw on this Mac's Metal GPU, so no two device runs share it.
 alone.push('tests/acceptance/1897/', 'tests/acceptance/1899/', 'tests/acceptance/1903/');
 alone.push('tests/acceptance/2189/', 'tests/acceptance/2189-redraft-ac1/');
+// #1956's files each build deep-show (r1) and install the shelf pack's versions in order.
+alone.push('tests/acceptance/1956/');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
