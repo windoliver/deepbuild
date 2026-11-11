@@ -2401,6 +2401,7 @@ name = "deep-codecs"
 version = "0.0.0"
 dependencies = [
  "basisu_c_sys",
+ "deep-canvas-cells",
  "image",
  "libc",
  "serde_json",
@@ -2454,6 +2455,7 @@ dependencies = [
  "deep-canvas-input",
  "deep-canvas-marks",
  "deep-canvas-motion",
+ "deep-canvas-physics",
  "deep-canvas-record",
  "deep-canvas-scene3d",
  "deep-canvas-seams",
@@ -2464,6 +2466,7 @@ dependencies = [
  "deep-effects-render",
  "deep-gpu",
  "deep-marks-render",
+ "deep-physics-rapier",
  "deep-replica",
  "deep-scene3d-render",
  "deep-text",

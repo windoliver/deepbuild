@@ -377,6 +377,9 @@ timed.push('tests/acceptance/202/budgets.test.ts');
 alone.push('tests/acceptance/1957/');
 // #1961's files build deep-show and patch an open document to another version of its pack.
 alone.push('tests/acceptance/1961/');
+// #1399's files build deep-show in the full set and deep-gpu, and run the kind kit, the seam suite, the flicker check
+// and the golden guard on them.
+alone.push('tests/acceptance/1399/');
 // #2015's file builds deep-show in the full set and runs it on a plate and a recipe pack.
 alone.push('tests/acceptance/2015/');
 // #220's files start hubs, build deep-show in the full set and time the typeset tool's own process.
@@ -394,6 +397,8 @@ alone.push('tests/acceptance/1575/', 'tests/acceptance/1575-redraft-ac1/');
 timed.push('tests/acceptance/1575/budgets.test.ts', 'tests/acceptance/1575-redraft-ac1/budgets.test.ts');
 // #1964's files build deep-canvas-render and draw styled runs with Vello CPU.
 alone.push('tests/acceptance/1964/');
+// #1963's files each build deep-canvas-render and check quoted code and formulas against stored sources.
+alone.push('tests/acceptance/1963/');
 // #1723's files each start a real hub whose gate runs a document check through the canvas core, under a 480 s wait.
 alone.push('tests/acceptance/1723/');
 // #504's files each build deep-show or deep-motion with cargo, and criterion 2's hub test starts a hub and agents.
@@ -428,8 +433,12 @@ timed.push('tests/acceptance/2011/ac2-step-budget.test.ts');
 // #547's files build deep-logic and bake 108,000 and 72,000 steps; AC4 judges 20 seeks of a recorded match against 2 s.
 alone.push('tests/acceptance/547/');
 timed.push('tests/acceptance/547/ac4-keyframes.test.ts');
+// #1967's files build deep-show, and determinism renders each side's canonical picture on the GPU.
+alone.push('tests/acceptance/1967/');
 // #407's files each build deep-show (carried.test.ts also with test-hold-min-2s); 407-oracle builds it too.
 alone.push('tests/acceptance/407/', 'tests/acceptance/407-oracle/');
+// #2014's files and its oracle each build deep-show; criterion 2 builds and rests on a 24 km plate of 801 × 801 samples.
+alone.push('tests/acceptance/2014/', 'tests/acceptance/2014-oracle/');
 // #1956's files each build deep-show (r1) and install the shelf pack's versions in order.
 alone.push('tests/acceptance/1956/');
 // #154's files each start hubs that render stems through the supervisor, and build deep-show once; AC9 times a 60 s
@@ -441,6 +450,10 @@ timed.push('tests/acceptance/154/budgets.test.ts');
 alone.push('tests/acceptance/154-redraft/', 'tests/acceptance/154-oracle-redraft/');
 timed.push('tests/acceptance/154-redraft/budgets.test.ts');
 byHand.push('tests/acceptance/154/stems.test.ts');
+// #1700's files each build deep-show; budgets.test.ts also builds it in release and times every geometry.shape
+// reading against the lane's rule.
+alone.push('tests/acceptance/1700/');
+timed.push('tests/acceptance/1700/budgets.test.ts');
 // #1971's files each build deep-show (refusal.test.ts deep-hook too), start a hub, and time op: field calls.
 alone.push('tests/acceptance/1971/');
 timed.push('tests/acceptance/1971/budget.test.ts');

@@ -378,15 +378,20 @@ impl Run {
 
     /// The world a call names (#1918): `world` a document, or with `scene` the ID of a world the
     /// scene lists, with the scene's reads of it; the reply refusing either; `None` for bad input.
-    fn subject<'c>(&self, call: &'c Value) -> Option<Result<(&'c Value, Option<Scene>), Value>> {
+    /// #1921: the world's bodies bound to the scene's items expanded first (bound.rs).
+    fn subject(&self, call: &Value) -> Option<Result<(Value, Option<Scene>), Value>> {
         let world = call.get("world")?;
         let Some(scene) = call.get("scene") else {
-            return Some(Ok((world, None)));
+            let doc = crate::bound::expand(None, world);
+            return Some(doc.map(|d| (d, None)).map_err(|e| refused(&e)));
         };
         let id = world.as_str()?;
         let doc = scene.get("worlds")?.get(id)?;
-        let read = check(doc, &self.caps, self.table).and_then(|w| Scene::read(scene, id, &w));
-        Some(read.map(|s| (doc, Some(s))).map_err(|e| refused(&e)))
+        let read = crate::bound::expand(Some(scene), doc).and_then(|doc| {
+            let w = check(&doc, &self.caps, self.table)?;
+            Ok((doc, Some(Scene::read(scene, id, &w)?)))
+        });
+        Some(read.map_err(|e| refused(&e)))
     }
 
     /// The state after step `k` into `t`.
@@ -497,16 +502,15 @@ impl Run {
         let steps = || call.get("steps").and_then(Value::as_u64);
         let done = |r: Result<Value, Value>| Some(r.unwrap_or_else(|e| e));
         match call.get("call")?.as_str()? {
-            "check" => {
-                let issues = match self.subject(call)? {
-                    Ok((world, _)) => self
-                        .build(world)
-                        .err()
-                        .map_or(json!([]), |e| e["issues"].clone()),
-                    Err(e) => e["issues"].clone(),
-                };
-                Some(json!({"ok": true, "issues": issues}))
-            }
+            "check" => Some(
+                match self
+                    .subject(call)?
+                    .and_then(|(world, _)| self.build(&world))
+                {
+                    Ok((_, b)) => json!({"ok": true, "issues": [], "built": b.built()}),
+                    Err(e) => json!({"ok": true, "issues": e["issues"]}),
+                },
+            ),
             "runtime" => {
                 let b = &self.build;
                 Some(json!({"ok": true, "runtime_digest": b.runtime_digest(),
@@ -539,13 +543,13 @@ impl Run {
                         Err(e) => return Some(e),
                     };
                     let key = self.key(
-                        world,
+                        &world,
                         &reads(&plan, plan.steps),
                         &rate,
                         plan.steps,
                         Some(&self.build.target),
                     );
-                    if self.build(world).is_ok() {
+                    if self.build(&world).is_ok() {
                         if let Some(r) = stored(dir, &key) {
                             return Some(
                                 json!({"ok": true, "key": key, "step_hashes": r["step_hashes"],
@@ -555,7 +559,7 @@ impl Run {
                         }
                     }
                 }
-                done(self.bake(call, world, &plan).map(|(key, t, record)| {
+                done(self.bake(call, &world, &plan).map(|(key, t, record)| {
                     let mut reply = json!({"ok": true, "key": key, "bodies": t.bodies,
                                            "step_hashes": t.step_hashes, "outputs": record["outputs"],
                                            "occurrences": record["occurrences"],
@@ -589,7 +593,7 @@ impl Run {
                     ftz_at: None,
                     shift: None,
                 };
-                let (w, mut b) = match self.build(world) {
+                let (w, mut b) = match self.build(&world) {
                     Ok(x) => x,
                     Err(e) => return Some(e),
                 };
@@ -676,7 +680,10 @@ impl Run {
                 Some(self.pairs(call.get("world")?, call.get("brief").unwrap_or(&json!({})))?)
             }
             "time" => {
-                let (w, mut b) = match self.build(call.get("world")?) {
+                let built = self
+                    .subject(call)?
+                    .and_then(|(world, _)| self.build(&world));
+                let (w, mut b) = match built {
                     Ok(x) => x,
                     Err(e) => return Some(e),
                 };
@@ -694,7 +701,9 @@ impl Run {
                 Some(json!({"ok": true, "target": self.build.target, "ms": ms, "top": top}))
             }
             "time_build" => {
-                let built = self.build(call.get("world")?);
+                let built = self
+                    .subject(call)?
+                    .and_then(|(world, _)| self.build(&world));
                 Some(TIMED.with(|t| match built {
                     Ok(x) => {
                         *t.borrow_mut() = Some((x.0, x.1, Vec::new()));

@@ -2159,5 +2159,46 @@
         "decision": "deny"
       }
     }
+  },
+  {
+    "source": "replay.routing",
+    "kind": "choice",
+    "fixture": {
+      "ask": {
+        "kind": "choice",
+        "question": "Evaluation 1829617: 688 jobs newly fail with merge 3b4545497180. Fix them, revert the merge, or leave them failing?",
+        "options": [
+          {
+            "id": "fix",
+            "label": "Fix the failing jobs",
+            "decision": "none"
+          },
+          {
+            "id": "revert",
+            "label": "Revert the merge",
+            "decision": "none"
+          },
+          {
+            "id": "leave",
+            "label": "Leave them failing",
+            "decision": "none"
+          }
+        ],
+        "recommended": "fix",
+        "deadline": 1760186251123,
+        "fallback": "queue:nixpkgs-unstable",
+        "default": "leave",
+        "provisional": false,
+        "owner": "maintainer-1",
+        "key": "9c3e1a5b7d2f4c6e8a0b1d3f5a7c9e2b4d6f8a0c1e3b5d7f9a2c4e6b8d0f1a3c",
+        "pinned_to": {
+          "kind": "commit",
+          "ref": "3b454549718018467a25fc5d40a910132dc45709"
+        }
+      },
+      "at_deadline": {
+        "decision": "none"
+      }
+    }
   }
 ]

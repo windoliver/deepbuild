@@ -58,6 +58,7 @@ mod shared;
 mod snapshot;
 mod spawn;
 mod spatial;
+mod terrain;
 mod terminal;
 #[cfg(feature = "test-machines")]
 mod test_machines;
@@ -583,6 +584,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         "geometry" => return geometry::parse(c).map(|g| Call::Geometry(Box::new(g))),
         "kinds" => return Some(Call::KindSchemas),
         "spatial" => return spatial::parse(c).map(|s| Call::Spatial(Box::new(s))),
+        "terrain_rays" => return terrain::parse(c).map(|r| Call::TerrainRays(Box::new(r))),
         "packs" => return Some(Call::Packs),
         "install_pack" => {
             return Some(Call::InstallPack {
@@ -1211,6 +1213,8 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 || *p == deep_canvas_motion::module::UNDECLARED_KIND_ACCEPTED
                 || deep_canvas_motion::module::PLANTED.contains(p)
                 || deep_canvas_marks::arrays::PLANTED.contains(p)
+                // #1967's wrong programs live in the cells module's playback and conversion.
+                || deep_canvas_cells::recording::PLANTED.contains(p)
         })
         .map(str::to_string);
     // #433's wrong programs are twins of the familiar@1 pack.
@@ -1231,6 +1235,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
             }
             None if export_planted(p).is_some() => export_planted(p),
             None if geometry_audit::planted(p).is_some() => geometry_audit::planted(p),
+            None if physics::planted(p).is_some() => physics::planted(p),
             None => Some(match p {
                 "presents_unnamed_removal" => Planted::PresentsUnnamedRemoval,
                 "diffs_items_only" => Planted::DiffsItemsOnly,
@@ -1300,6 +1305,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "verdict_counts_new_issues" => Planted::VerdictCountsNewIssues,
                 "flicker_counts_single_changes" => Planted::FlickerCountsSingleChanges,
                 "flicker_whole_view_mean" => Planted::FlickerWholeViewMean,
+                "flicker_analyzes_once" => Planted::FlickerAnalyzesOnce,
                 "cites_empty_passes" => Planted::CitesEmptyPasses,
                 "seeds_by_expansion_order" => Planted::SeedsByExpansionOrder,
                 "each_seeds_by_element_count" => Planted::EachSeedsByElementCount,
