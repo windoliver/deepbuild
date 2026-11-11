@@ -10,7 +10,7 @@ Run on the reference Mac (Mac17,10, M5 Max, AC power) on Nov 10, 2026, at load a
 | AC2 | `#220.ec8a4363` | 2/2 pass |
 | AC3 | `#220.472f9775` | 3/3 pass |
 | AC4 | `#220.e4f3b85e` | the 40-glyph SVG is 26,398 bytes, under 64 KB: pass. The times are INCONCLUSIVE (load about 347 on 18 cores, thermal state "fair"): warm 7.6, 117.8, 20.2, 5.7, 4.8 ms against 50; cold 238.6, 276.8, 535.9, 257.7, 185.1 ms against 1,000. An earlier run read warm 5.3 to 11.0 ms and cold 273 to 466 ms |
-| AC5 | `#220.56b932fa` | INCONCLUSIVE until the owner's taste call on the three pictures below is recorded in `tests/acceptance/220/TASTE.json` |
+| AC5 | `#220.56b932fa` | 1/1 pass: `looks_right` on the three pictures below, made by Claude on the owner's delegation in session (`tests/acceptance/220/TASTE.json`) |
 
 `proof/` holds the suite's own proof files: the SVGs (`ac1-five-linux.svg` is the container's), the morph's pieces at 0, 0.5 and 1 s, the three issues' replies, and the times.
 
