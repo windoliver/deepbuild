@@ -28,6 +28,9 @@ pub fn modules() -> Vec<Module> {
     let mut out: Vec<Module> = Vec::new();
     #[cfg(feature = "test-mark")]
     out.push(deep_canvas_test_modules::registries::mark());
+    // Issue #202's test canvas module: an item kind of 0.20 ms of CPU.
+    #[cfg(feature = "test-weight")]
+    out.push(deep_canvas_test_modules::weight::module());
     #[cfg(feature = "test-column-source")]
     out.push(deep_canvas_test_modules::registries::columns());
     // Issue #412's test canvas modules.

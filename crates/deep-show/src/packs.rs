@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
 
-use deep_canvas::document::{Expansion, Issue, Packs};
+use deep_canvas::document::{CheckResult, Expansion, Issue, Pack, Packs};
 use deep_canvas::registry::Sealed;
 use serde_json::{json, Map, Value};
 
@@ -184,7 +184,7 @@ pub fn rows_reply(rows: &[Row], packs: &Packs) -> Value {
 /// call asked for it.
 pub fn reply(
     expansions: &[Expansion],
-    check_ms: Option<f64>,
+    check_ms: Option<(f64, Option<f64>)>,
     timing: bool,
     reply: &mut Map<String, Value>,
 ) {
@@ -195,8 +195,12 @@ pub fn reply(
         Value::Array(rows.iter().map(|e| e.to_json()).collect()),
     );
     if timing {
-        if let Some(ms) = check_ms {
-            reply.insert("timing".into(), json!({"check_ms": ms}));
+        if let Some((ms, rules)) = check_ms {
+            let mut t = json!({"check_ms": ms});
+            if let Some(rules) = rules {
+                t["kind_rules_ms"] = json!(rules);
+            }
+            reply.insert("timing".into(), t);
         }
     }
 }
@@ -244,4 +248,74 @@ pub fn blocked(issues: &[Issue]) -> bool {
     issues
         .iter()
         .any(|i| i.code == "module_missing" || i.code == "pack_missing")
+}
+
+/// The kind kit's mesh part (Pack: kind rules and the kind kit; #202): every mesh a kind's
+/// expansions name, at its defaults and its params' extremes, passes `geometry.shading` with no
+/// defect. The check is the loop module's, which the core can't import, so it runs here; a kind
+/// that makes a mesh in a build without the module is refused, never passed.
+pub fn kind_meshes(pack: &Pack, sealed: &Sealed, evidence: &Path) -> Vec<Issue> {
+    let mut issues = Vec::new();
+    let shading = sealed
+        .check_kind("geometry.shading")
+        .and_then(|(_, c)| c.report);
+    for (name, kind) in pack.kinds.iter().filter(|(_, k)| !k.meshes.is_empty()) {
+        let refuse = |code, actual: Value, what: String| {
+            Issue::envelope(code, format!("kinds/{name}"), actual, &what)
+        };
+        let Some(report) = shading else {
+            issues.push(refuse("module_missing", json!({"kind": name, "part": "cost", "module": "loop"}),
+                format!("kind `{name}` makes meshes, and geometry.shading is the loop module's, which this build lacks")));
+            continue;
+        };
+        let mut items = serde_json::Map::new();
+        let mut assets = serde_json::Map::new();
+        for (i, sha) in kind.meshes.iter().enumerate() {
+            let id = format!("m{i}");
+            items.insert(
+                id.clone(),
+                json!({"id": id, "kind": "mesh.asset@1", "params": {"sha256": sha}}),
+            );
+            if let Some(bytes) = crate::evidence::read(evidence, sha) {
+                assets.insert(sha.clone(), json!(deep_canvas::base64::encode(&bytes)));
+            }
+        }
+        let out = report(
+            &json!({"items": items}),
+            &json!({"kind": "geometry.shading", "assets": assets}),
+        );
+        let defect = out
+            .raised
+            .first()
+            .map(|(id, r, actual)| json!({"item": id, "code": r.code, "actual": actual}));
+        if let Some(found) = defect.or_else(|| out.blocked.first().cloned()) {
+            issues.push(refuse("out_of_range", json!({"kind": name, "part": "cost", "defect": found}),
+                format!("kind `{name}` fails its kit's cost part: a mesh it makes fails geometry.shading")));
+        }
+    }
+    issues
+}
+
+/// `timing.kind_rules_ms` (#202): the core's `kind_rules` check over a checked revision, run
+/// again on its lowered items and timed here, since the core reads no clock.
+pub fn kind_rules_ms(doc: &Value, checked: &CheckResult, sealed: &Sealed, packs: &Packs) -> f64 {
+    let mut ignored = Vec::new();
+    let resolved = deep_canvas::document::packs::resolve(doc, packs, Some(sealed), &mut ignored);
+    let empty = Map::new();
+    let items = checked
+        .lowered
+        .get("items")
+        .and_then(Value::as_object)
+        .unwrap_or(&empty);
+    let started = std::time::Instant::now();
+    let run = deep_canvas::document::pack_kinds::kind_rules(
+        doc,
+        items,
+        &checked.expansions,
+        &resolved,
+        packs.planted,
+    );
+    let ms = started.elapsed().as_secs_f64() * 1000.0;
+    std::hint::black_box(run);
+    ms
 }

@@ -158,6 +158,14 @@ pub enum Planted {
     LayoutTextByKind,
     /// #405: a control sweep audits its samples alone and bounds nothing between them.
     SweepAuditsSamplesOnly,
+    /// #202: a kind_rules requirement counts the working agent's own pack rule as its cover.
+    OwnRuleCountsAsCover,
+    /// #202: the kind_rules check evaluates a pack kind's recipe rules a second time.
+    RulesEvaluatedTwice,
+    /// #202: the kind kit tests each kind at its defaults only.
+    KitDefaultsOnly,
+    /// #202: the expander walks an instance's inputs in a hash map's order.
+    ExpandsInHashOrder,
     /// #306: a derived item's seed comes from a counter over expansion order.
     SeedsByExpansionOrder,
     /// #306: a change of inputs re-expands the broken-out item too, over the writer's own.
@@ -1158,6 +1166,10 @@ impl<'a> Hub<'a> {
             overwrite_broken_out: scenario.planted == Some(Planted::ReexpansionOverwritesBrokenOut),
             skip_requires_modules: scenario.planted == Some(Planted::PackCheckSkipsRequiresModules),
             key_by_name: scenario.planted == Some(Planted::PacksKeyedByName),
+            rules_twice: scenario.planted == Some(Planted::RulesEvaluatedTwice),
+            kit_defaults_only: scenario.planted == Some(Planted::KitDefaultsOnly),
+            walk_inputs: (scenario.planted == Some(Planted::ExpandsInHashOrder))
+                .then_some(walk_in_hash_order as deep_canvas::document::packs::WalkInputs),
         };
         let mut hub = Hub {
             scenario,
@@ -1331,6 +1343,7 @@ impl<'a> Hub<'a> {
     ) -> Value {
         let sealed = &self.startup.sealed;
         let sandbox = &mut self.sandbox;
+        let evidence = &self.scenario.evidence;
         let reply = crate::packs::install(
             &mut self.packs,
             &mut self.pack_rows,
@@ -1338,7 +1351,11 @@ impl<'a> Hub<'a> {
             id,
             dir,
             self.scenario.pack_planted.as_deref(),
-            &mut |manifest, pack| sandbox.vet(manifest, pack, sealed),
+            &mut |manifest, pack| {
+                let (rows, mut issues) = sandbox.vet(manifest, pack, sealed);
+                issues.extend(crate::packs::kind_meshes(pack, sealed, evidence));
+                (rows, issues)
+            },
         );
         // #200: a pack installed through a session is that agent's own: its entries are listed
         // with origin agent, and in a registry that binds author they bind only its own claims.
@@ -2050,7 +2067,7 @@ impl<'a> Hub<'a> {
         // The items the check skipped as `unknown_kind`: kept as written, never drawn (#389).
         let mut skipped: Vec<String> = Vec::new();
         // The revision's expansions and its check's time (#306): the document's once it is current.
-        let mut fresh: Option<(Vec<Expansion>, f64)> = None;
+        let mut fresh: Option<(Vec<Expansion>, (f64, Option<f64>))> = None;
         let (stamped, mut issues, diff) = match stamped {
             Err(issues) => (None, issues, None),
             Ok(mut doc) => {
@@ -2071,7 +2088,12 @@ impl<'a> Hub<'a> {
                     }
                     _ => check_packed(&doc, &self.startup.sealed, &self.packs),
                 };
-                fresh = Some((result.expansions, started.elapsed().as_secs_f64() * 1000.0));
+                let check_ms = started.elapsed().as_secs_f64() * 1000.0;
+                let timing = show.include.iter().any(|i| matches!(i, Include::Timing));
+                let rules_ms = timing.then(|| {
+                    crate::packs::kind_rules_ms(&doc, &result, &self.startup.sealed, &self.packs)
+                });
+                fresh = Some((result.expansions, (check_ms, rules_ms)));
                 notices = self.notices_reply(&result.notices);
                 skipped = crate::verdict::unknown_items(&result.notices);
                 blocked = self.blocked_in_claim(show, &result.notices);
@@ -2688,4 +2710,23 @@ impl BandRow {
             "name": self.name,
         })
     }
+}
+
+/// #202's planted expander: an instance's inputs walked through a std hash map, whose order a
+/// fresh random state picks, so two expansions of one example differ in their bytes. It redraws
+/// until the order differs from the previous walk's, which three inputs would match by chance.
+fn walk_in_hash_order(inputs: serde_json::Map<String, Value>) -> serde_json::Map<String, Value> {
+    thread_local! {
+        static LAST: std::cell::RefCell<Vec<String>> = const { std::cell::RefCell::new(Vec::new()) };
+    }
+    let last = LAST.with(|l| l.borrow().clone());
+    for _ in 0..64 {
+        let walked: std::collections::HashMap<String, Value> = inputs.clone().into_iter().collect();
+        let order: Vec<String> = walked.keys().cloned().collect();
+        if order != last || inputs.len() < 2 {
+            LAST.with(|l| *l.borrow_mut() = order);
+            return walked.into_iter().collect();
+        }
+    }
+    inputs
 }
