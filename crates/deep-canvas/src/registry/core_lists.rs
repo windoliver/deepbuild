@@ -231,6 +231,11 @@ fn body_steps(e: &Value, out: &mut Vec<String>) {
 }
 
 fn function_resolves(v: &Value) -> Result<(), String> {
+    // A body given as WGSL source (Pack graphs and step functions: `source: {wgsl}`), as the
+    // light loop's defaults name the core's own shading (#485).
+    if v["body"]["source"]["wgsl"].is_string() {
+        return Ok(());
+    }
     let mut used = Vec::new();
     body_steps(v.get("body").unwrap_or(&Value::Null), &mut used);
     if used.is_empty() {
@@ -245,6 +250,9 @@ fn function_resolves(v: &Value) -> Result<(), String> {
 fn function_exact(v: &Value) -> Result<(), String> {
     if v.get("exact") != Some(&Value::Bool(true)) {
         return Ok(());
+    }
+    if v["body"]["source"]["wgsl"].is_string() {
+        return Err("declared exact, its body is WGSL source, whose steps no check reads".into());
     }
     let mut used = Vec::new();
     body_steps(v.get("body").unwrap_or(&Value::Null), &mut used);
@@ -1244,6 +1252,16 @@ pub fn registries_with(eases: bool) -> Vec<RegistryDef> {
 /// Every registry the core declares, by name.
 pub fn registries() -> Vec<RegistryDef> {
     registries_with(true)
+}
+
+/// `gpu.output@1`'s declaration and the core's own entries of it, today's outputs, for the planted
+/// layout that declares it in the effects module (#485).
+pub fn gpu_output_registry() -> (RegistryDef, Vec<EntryDef>) {
+    let entries = entries(false)
+        .into_iter()
+        .filter(|e| e.registry == "gpu.output@1")
+        .collect();
+    (gpu_output(), entries)
 }
 
 /// `ease@1`'s declaration, for the planted layout that declares it in the motion module.

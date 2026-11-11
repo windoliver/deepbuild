@@ -3303,7 +3303,20 @@ pub fn text_at(
         }
         let path = format!("items/{id}/params/template");
         let mut text = String::new();
-        let at_t = Value::Object(data.map(|d| ("data".to_string(), d)).into_iter().collect());
+        let mut at_t = Value::Object(data.map(|d| ("data".to_string(), d)).into_iter().collect());
+        // #504: a control's value and an assembly's as the frame evaluated them, over the
+        // document's own (a control's default before any entry).
+        for section in ["controls", "assemblies"] {
+            let mut entries = doc.get(section).cloned().unwrap_or_else(|| json!({}));
+            if let Some(shown) = item.pointer(&format!("/params/shown/{section}")).and_then(Value::as_object) {
+                for (k, v) in shown {
+                    if let Some(Value::Object(e)) = entries.get_mut(k) {
+                        e.insert("value".into(), v["value"].clone());
+                    }
+                }
+            }
+            at_t[section] = entries;
+        }
         for part in template::parts(template).or_else(|_| refuse("ref_unresolved", path.clone()))? {
             match part {
                 template::Part::Words(w) => text.push_str(w),
@@ -3768,11 +3781,15 @@ fn scopes_of(
     palette: &Palette,
     mattes: &BTreeMap<String, Arc<Vec<Drawn>>>,
 ) -> Result<BTreeMap<String, Vec<Scope>>, Refused> {
+    // #504: a parent that names an assembly ends the chain of item scopes; the motion module
+    // composes the assembly's transform.
+    let assembly = |id: &str| doc.get("assemblies").and_then(|a| a.get(id)).is_some();
     let parent = |id: &str| {
         items
             .get(id)
             .and_then(|i| i.get("parent"))
             .and_then(Value::as_str)
+            .filter(|p| !assembly(p))
             .map(str::to_string)
     };
     let shown =
@@ -4253,6 +4270,9 @@ pub enum Planted {
     /// drawn in row order rather than by centre.
     AtlasSquareLayout,
     AtlasRowOrder,
+    /// #536's twins: a hex grid shifting the other parity; terrain reading a square grid's sides.
+    HexOtherParity,
+    TerrainSquareSides,
 }
 
 /// The draw list for evaluated `items` of `doc`, in `palette`, at `zoom` (which picks each path's

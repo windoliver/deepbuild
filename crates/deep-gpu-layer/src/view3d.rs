@@ -1940,6 +1940,15 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                     .expect("a list")
                     .push(json!({"code": "fragments_capped", "fragments": drawn.counts.fragments}));
             }
+            // A light response's negative or non-finite return, once per operator and time (#485).
+            for (op, t) in &drawn.counts.light_response_range {
+                frame
+                    .entry("notices")
+                    .or_insert_with(|| json!([]))
+                    .as_array_mut()
+                    .expect("a list")
+                    .push(json!({"code": "light_response.range", "op": op, "t": t}));
+            }
             // Lights the budget left out, and shadows it dropped, reported once per change.
             let c = &drawn.counts;
             if c.lights_left_out != left_out || c.shadows_dropped != dropped {

@@ -41,7 +41,7 @@ pub fn os() -> String {
 }
 
 /// This run's fingerprint: the OS, the GPU, its driver and the wgpu this binary is built with.
-fn fingerprint(app: &App) -> Value {
+pub(crate) fn fingerprint(app: &App) -> Value {
     let info = app.worker.call(|state| state.gpu.device().adapter.clone());
     let (gpu, driver) = match info {
         Some(i) => {

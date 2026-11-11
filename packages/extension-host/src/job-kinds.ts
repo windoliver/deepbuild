@@ -96,7 +96,8 @@ export function paramsOf(schema: Schema, value: unknown): Record<string, JsonVal
 export function kindOf(kind: string, raw: unknown): JobKind {
   const k = (isPlain(raw) ? raw : {}) as Partial<JobKind>;
   const fixtures = isPlain(k.qualification) && Array.isArray(k.qualification.fixtures) ? k.qualification.fixtures : [];
-  if (!isPlain(k.schema) || !isPlain(k.schema.params) || !isPlain(k.schema.inputs) || !Object.keys(k.schema.inputs).length) throw Error(`the job kind ${kind} declares no params schema and inputs`);
+  // A kind whose params hold everything it reads, such as typeset (#220), declares no inputs.
+  if (!isPlain(k.schema) || !isPlain(k.schema.params) || !isPlain(k.schema.inputs)) throw Error(`the job kind ${kind} declares no params schema and inputs`);
   if (!isPlain(k.outputs) || !Object.keys(k.outputs).length) throw Error(`the job kind ${kind} declares no outputs`);
   if (!Array.isArray(k.key) || KEY_PARTS.some((p) => !k.key!.includes(p)) || k.key.some((p) => !KEY_PARTS.includes(p))) throw Error(`the job kind ${kind}'s key is hash(tool@version, params, input hashes): its key lists tool, params and inputs`);
   if (!Array.isArray(k.output_checks) || !k.output_checks.every((c) => typeof c === 'string' && c)) throw Error(`the job kind ${kind} lists its output checks by check kind`);
