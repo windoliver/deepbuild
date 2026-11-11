@@ -353,6 +353,9 @@ alone.push('tests/acceptance/502/', 'tests/acceptance/502-oracle/');
 // and rebake a spectrum in a linux/amd64 container; its oracle lane fetches and decodes the FATE audio samples; so does
 // the blind redraft of AC1's bar chart, which builds deep-show and plays and seeks the chart's 600 frames.
 alone.push('tests/acceptance/503/', 'tests/acceptance/503-oracle/', 'tests/acceptance/503-redraft-ac1/');
+// #503's blind redraft of AC4's lossy test is kept by hand, as the record of its dispute: it also failed on the work
+// (FFmpeg's arm64 Vorbis decode and its HE-AAC v2 decode at 32k), so the first draft stands and runs in its place.
+byHand.push('tests/acceptance/503-redraft-ac4/');
 byHand.push('tests/acceptance/408/machines.test.ts');
 // #405's files each build deep-show. Criterion 4 runs from its redraft, which also builds it in release on a machine
 // that can judge a timing now and times the geometry audit and determinism hashing against the lane's rule; the
