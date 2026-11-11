@@ -48,6 +48,9 @@ import type { CallContext, Session, Live } from './session-types.js';
 import { TranscriptReader } from './transcript-reader.js';
 import { CODEX_BINARY, CLAUDE_BINARY, JOB_ROW_MS, sql, letters, QUIET_MS, CALL_GRACE, COMMITS, ENDED_KEPT, manyThreads, type Obj, reusedPids, isObj, isUnder } from "./hub-shared.js";
 
+/** How long a call with no end yet keeps its session at work through quiet hooks (#2021): Claude Code's Bash tool's own limit. */
+const CALL_RUNS_MS = 10 * 60_000;
+
 export interface SessionStateOptions {
   settings: CoreOptions;
   services: {
@@ -235,7 +238,7 @@ export class SessionState {
         // A late call event never reopens a turn that stopped.
         if (state !== 'finished' && state !== 'failed') state = 'working';
         if (call && draft.kind === 'tool.before') live.lastCall = call;
-        if (call && draft.kind === 'tool.before') live.calls.set(call, { what: `${String(draft.data.kind)} call ${call}${typeof draft.data.command === 'string' ? ` (\`${draft.data.command}\`)` : ''}` });
+        if (call && draft.kind === 'tool.before') live.calls.set(call, { what: `${String(draft.data.kind)} call ${call}${typeof draft.data.command === 'string' ? ` (\`${draft.data.command}\`)` : ''}`, at: now });
         else if (call) { const open = live.calls.get(call); if (open) open.ended = now; }
       } else if (draft.kind === 'agent.stop' && !draft.data.child) {
         // A turn that ended on a block only you or a service can clear (a sign-in, a rate limit) leaves the session stuck.
@@ -316,7 +319,9 @@ export class SessionState {
     const read = session?.read;
     if (session) await this.options.services.transcriptReader.readTranscript(session);
     const due = live.quietDue ?? this.options.services.now();
-    const going = live.state === 'working' ? session !== undefined && session.read !== read
+    // A call under way writes nothing until it ends: the session waits on it, at work, for as long as such a call runs (#2021).
+    const running = [...live.calls.values()].some((c) => c.ended === undefined && c.at !== undefined && due - c.at < CALL_RUNS_MS);
+    const going = live.state === 'working' ? running || (session !== undefined && session.read !== read)
       : !(live.asking && session?.results?.includes(live.asking)) && due - (live.heard ?? due) < WAITING_QUIET_MS;
     if (going) {
       this.quietIn(id, live, since, due + QUIET_MS);
@@ -456,7 +461,7 @@ export class SessionState {
     const ts = this.options.services.now();
     const session = row.session;
     const connection = this.options.events.connection('core', { ...(this.projects.get(session) ? { project: this.projects.get(session)! } : {}), ...(this.sessionPeople.get(session) ? { actor: this.sessionPeople.get(session)! } : {}) });
-    await this.options.events.append(connection, { v: 1, id: ulid(ts), kind: 'row.set', ts, data: { listed: true, order: placed.order, ...row } as unknown as JsonValue });
+    await this.options.events.append(connection, { v: row.doing ? 3 : 1, id: ulid(ts), kind: 'row.set', ts, data: { listed: true, order: placed.order, ...row } as unknown as JsonValue });
     this.rows.set(id, { order: placed.order, row });
     return { seen: true };
   }
@@ -503,7 +508,8 @@ export class SessionState {
         }),
         ...changed.map(async (p) => {
           const ts = this.options.services.now();
-          await this.options.events.append(rowOf(p.row.session), { v: 1, id: ulid(ts), kind: 'row.set', ts, data: { listed: true, order: p.order, ...p.row } as unknown as JsonValue });
+          // A row that says what its session's turn is doing now takes the version with the field (#2021).
+          await this.options.events.append(rowOf(p.row.session), { v: p.row.doing ? 3 : 1, id: ulid(ts), kind: 'row.set', ts, data: { listed: true, order: p.order, ...p.row } as unknown as JsonValue });
           this.rows.set(p.row.id, p);
         }),
         ...left.map(async (id) => {

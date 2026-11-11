@@ -43,6 +43,92 @@ pub struct Session {
     pub unread: bool,
     /// Why it reads as it does, as the hub's row says it (#2018): whom it waits for and what it needs.
     pub why: String,
+    /// What its turn is doing now, as the hub's row says it (#2021).
+    pub doing: Option<Doing>,
+    /// How many events its hooks have sent, and when the newest came (#2021).
+    pub hooks: (u64, Option<u64>),
+}
+
+/// What a working session's turn is doing now (#2021): its latest tool event's words, when that event came, and
+/// whether the step is over, so its time reads "2 min ago" rather than how long it has run.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Doing {
+    pub words: String,
+    pub at: u64,
+    pub ago: bool,
+}
+
+impl Doing {
+    /// The line as every surface says it at `now`: "Running npm · 40 s", "Edited cart/total.ts · 2 min ago". It
+    /// changes with its events and its time alone.
+    pub fn line(&self, now: u64) -> String {
+        let age = now.saturating_sub(self.at);
+        crate::states::changes_after(crate::states::changes_in(age));
+        let ago = if self.ago { " ago" } else { "" };
+        format!("{} · {}{ago}", self.words, crate::states::span(age))
+    }
+}
+
+/// What `session`'s turn is doing now, from its hub row `row` (#2021), with the planted wrong lines of #2021's suite in
+/// a build with `env-plants`: none reads anything but the row's hook facts as shipped.
+pub fn doing_of(
+    view: &crate::record::View,
+    row: &serde_json::Value,
+    session: &str,
+    now: u64,
+) -> Option<Doing> {
+    let given = &row["doing"];
+    let mut doing = Doing {
+        words: crate::question::visible(given["words"].as_str()?),
+        at: given["at"].as_u64()?,
+        ago: given["ago"].as_bool().unwrap_or(false),
+    };
+    let newest = |kind: &str| {
+        view.events
+            .iter()
+            .rev()
+            .find(|e| e["kind"] == kind && of_session(e, session))
+    };
+    if crate::plain::planted("line-reads-message") {
+        if let Some(said) = newest("session.activity").and_then(|e| e["data"]["activity"].as_str())
+        {
+            doing.words = said.to_owned();
+        }
+    }
+    if crate::plain::planted("line-keeps-running") {
+        if let Some(object) = doing.words.strip_prefix("Couldn't run ") {
+            (doing.words, doing.ago) = (format!("Running {object}"), false);
+        }
+    }
+    if crate::plain::planted("line-whole-command") {
+        if let Some(command) = newest("tool.before").and_then(|e| e["data"]["command"].as_str()) {
+            doing.words = format!("Running {command}");
+        }
+    }
+    if crate::plain::planted("line-stalls-on-timer") && stalled(view, session, now) {
+        doing.words = "stalled".to_owned();
+    }
+    Some(doing)
+}
+
+/// #2021's planted timer: two minutes after a session's last event.
+fn stalled(view: &crate::record::View, session: &str, now: u64) -> bool {
+    view.table()
+        .hooks(session)
+        .1
+        .is_some_and(|heard| now.saturating_sub(heard) >= 120_000)
+}
+
+/// Whether `event` is `session`'s: by its session, or by its subject's letters.
+fn of_session(event: &serde_json::Value, session: &str) -> bool {
+    event["session"] == session
+        || event["subject"].as_str().is_some_and(|s| {
+            s.trim_start_matches("session:")
+                == session
+                    .chars()
+                    .filter(char::is_ascii_alphanumeric)
+                    .collect::<String>()
+        })
 }
 
 /// What a row's time slot shows.
@@ -72,6 +158,11 @@ pub struct Row {
     pub left: bool,
     /// A session's why, as the hub's row says it (#2018); empty for any other row.
     pub why: String,
+    /// What a working session's turn is doing now (#2021); none for any other row.
+    pub doing: Option<Doing>,
+    /// How many events a session's hooks have sent and when the newest came (#2021): its working mark's step, and its
+    /// time under reduce motion.
+    pub hooks: (u64, Option<u64>),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -170,6 +261,8 @@ pub fn build(asks: &[Ask], sessions: &[Session]) -> Vec<Item> {
                 && ask.status != "held",
             left: false,
             why: String::new(),
+            doing: None,
+            hooks: (0, None),
         }));
     }
     let mut projects: Vec<Option<&str>> = Vec::new();
@@ -201,6 +294,8 @@ pub fn build(asks: &[Ask], sessions: &[Session]) -> Vec<Item> {
                 loud: s.unread || s.entry == "needs_you",
                 left: false,
                 why: s.why.clone(),
+                doing: s.doing.clone(),
+                hooks: s.hooks,
             }));
         }
         if !quiet.is_empty() {
@@ -219,6 +314,8 @@ pub fn build(asks: &[Ask], sessions: &[Session]) -> Vec<Item> {
                 loud: quiet.iter().any(|s| s.unread),
                 left: false,
                 why: String::new(),
+                doing: None,
+                hooks: (0, None),
             }));
         }
     }
@@ -356,7 +453,13 @@ pub fn read(view: &crate::record::View, now: u64) -> (Vec<Ask>, Vec<Session>) {
                 if crate::plain::planted("waiting-as-working") && word == "needs you" {
                     (word, entry) = ("working".to_owned(), "running");
                 }
+                // #2021's planted row says stalled two minutes after its session's last event.
+                if crate::plain::planted("line-stalls-on-timer") && stalled(view, &session, now) {
+                    word = "stalled".to_owned();
+                }
                 Session {
+                    doing: doing_of(view, row, &session, now),
+                    hooks: table.hooks(&session),
                     id: text(row, "session"),
                     title: crate::question::visible(&text(row, "title")),
                     project: row["project"].as_str().map(str::to_owned),
@@ -383,6 +486,7 @@ pub fn read(view: &crate::record::View, now: u64) -> (Vec<Ask>, Vec<Session>) {
         .map(|(id, title, _)| {
             let (word, entry) = table.row(&id, now);
             Session {
+                hooks: table.hooks(&id),
                 id,
                 title,
                 project: None,
@@ -391,6 +495,7 @@ pub fn read(view: &crate::record::View, now: u64) -> (Vec<Ask>, Vec<Session>) {
                 since: None,
                 unread: false,
                 why: String::new(),
+                doing: None,
             }
         })
         .collect();
@@ -587,6 +692,8 @@ mod tests {
             since: Some(10),
             unread: false,
             why: String::new(),
+            doing: None,
+            hooks: (0, None),
         }
     }
 
