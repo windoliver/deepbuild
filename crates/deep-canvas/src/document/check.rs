@@ -170,6 +170,25 @@ fn check_by(
             // checks and the budget as any item does.
             issues.extend(packs::driven_counts(doc, items, &resolved));
             expansions = packs::expand(items, &resolved, packs.planted, &mut issues);
+            // A broken-out item its instance's version no longer derives stays the writer's
+            // own, and the load says so (Pack: migrations as data; #1961).
+            for e in &expansions {
+                for (i, orphan) in &e.orphaned {
+                    notices.push(Notice {
+                        code: "derived_orphan",
+                        ids: vec![orphan.clone(), e.instance.clone()],
+                        path: format!("items/{}/broken_out/{i}", e.instance),
+                        actual: json!(orphan),
+                        what: format!(
+                            "{} no longer derives `{orphan}`, broken out of `{}`: it stays the writer's own",
+                            e.pack, e.instance
+                        ),
+                        migration: None,
+                        replaced_by: None,
+                        close: Vec::new(),
+                    });
+                }
+            }
             // The core's `kind_rules` check: each instance's rules once, after its expansion (#202).
             let rules = kind_rules(doc, items, &expansions, &resolved, packs.planted);
             issues.extend(rules.issues);
