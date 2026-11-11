@@ -41,6 +41,8 @@ const ISSUE = /^https?:\/\/[^/\s]+\/([^/\s]+\/[^/\s]+)\/issues\/(\d+)(?:[/?#]\S*
 const NUMBER = /^#(\d+)$/;
 const SHA = /^[0-9a-f]{7,40}$/i;
 const ASK = /^(?:ask:)?([0-7][0-9A-HJKMNP-TV-Z]{25})$/;
+/** A session ID or a branch: letters, digits and the marks IDs and branch names use. */
+const NAME = /^[0-9A-Za-z][0-9A-Za-z._/:@+-]*$/;
 /** An agent app's link to a session: the Codex app's thread, the Claude app's `session=` (design: view). */
 const LINKS = [/^codex:\/\/threads\/([A-Za-z0-9-]+)/, /^claude:\/\/\S*[?&]session=([A-Za-z0-9-]+)/];
 /** The most word hits one lookup lists, and how many sessions' messages it asks the archive for at a time. */
@@ -113,9 +115,12 @@ async function references(r: LookupRecord, query: string): Promise<LookupHit[] |
   const link = LINKS.map((re) => re.exec(q)).find(Boolean);
   if (link) return sessions(await sessionsWhere(r, 's.id = ? OR s.thread_id = ?', [link[1]!, link[1]!]), `linked ${q}`);
   if (SHA.test(q)) found.push(...sessions(await sessionsWhere(r, 's.id IN (SELECT session_id FROM commits WHERE sha LIKE ?)', [`${q.toLowerCase()}%`]), `made commit ${q.toLowerCase()}`));
-  // A session ID, whole, shortened to 8 or more, or in letters and digits as a handle writes it; and a branch.
+  // A session ID, whole, shortened to 8 letters and digits or more, or in letters and digits as a handle writes it;
+  // and a branch. Either is written in an ID's characters: words in any other script are words, never an ID.
+  if (!NAME.test(q)) return found;
   const id = q.replace(/^session[:/]/, '');
-  found.push(...sessions(await sessionsWhere(r, `s.id = ? OR s.thread_id = ? OR (length(?) >= 8 AND (s.id LIKE ? || '%' OR replace(s.id, '-', '') LIKE ? || '%'))`, [id, id, id, id, letters(id)]), `session ${id}`));
+  const prefix = letters(id).length >= 8 ? letters(id) : null;
+  found.push(...sessions(await sessionsWhere(r, `s.id = ? OR s.thread_id = ? OR replace(s.id, '-', '') LIKE ? || '%'`, [id, id, prefix]), `session ${id}`));
   found.push(...sessions(await sessionsWhere(r, 's.branch = ?', [q]), `on branch ${q}`));
   return found.filter((h, i) => found.findIndex((o) => o.handle === h.handle) === i);
 }

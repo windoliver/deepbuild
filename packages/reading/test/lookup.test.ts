@@ -1,6 +1,7 @@
 // #2024's Scope beyond its acceptance tests: ⌘K and `deep open` take what people paste, a PR URL or `#n`, a commit
 // SHA or a prefix of 7 or more, a branch, a session ID or a prefix of it, and an agent app link, each naming what the
-// record ties to it, newest first when several match; a reference nothing names says so with the kinds it takes.
+// record ties to it, newest first when several match; a reference nothing names says so with the kinds it takes; and a
+// word in another script names no session.
 // Real record in a temp folder.
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -46,6 +47,8 @@ test('each kind of pasted reference names the sessions the record ties to it, ne
     expect(await named(newer.slice(0, 13))).toEqual([`session/${newer}`]);
     expect(await named(older.replace(/-/g, ''))).toEqual([`session/${older}`]);
     expect(await named(`codex://threads/${older}`)).toEqual([`session/${older}`]);
+    // A word in a script with no ID's letters is a word, never a prefix of every session's ID.
+    expect(await named('επανασύνδεση')).toEqual([]);
     const none = await lookup(reader, 'b7e1d0c9f8');
     expect(none.hits).toEqual([]);
     for (const kind of [/PR/, /issue/, /#n/, /SHA/, /branch/, /session ID/, /link/, /ask/]) expect(none.none).toMatch(kind);
