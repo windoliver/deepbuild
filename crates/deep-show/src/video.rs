@@ -55,15 +55,6 @@ pub struct Cache {
     made: usize,
 }
 
-/// The source time an item's `frames` shows at `t`.
-fn source_time(doc: &Value, frames_v: &Value, t: i64) -> i64 {
-    let start = media_doc::time(doc, frames_v.get("start")).unwrap_or(0);
-    let r#in = media_doc::time(doc, frames_v.get("in")).unwrap_or(0);
-    let rate = media_doc::rate(frames_v.get("rate")).unwrap_or((1, 1));
-    // Before start it shows its first frame.
-    frames::source_time(t.max(start), start, r#in, rate)
-}
-
 /// The proxy a document's assets list for `sha`, if any.
 fn proxy_of(doc: &Value, sha: &str) -> Option<String> {
     let assets = doc.get("assets")?.as_object()?;
@@ -180,7 +171,7 @@ impl Hub<'_> {
             let Some(stream) = self.stream(&sha) else {
                 continue;
             };
-            let src = source_time(doc, &params["frames"], t);
+            let src = media_doc::source_time(doc, &params["frames"], t);
             let k = match self.scenario.planted {
                 Some(Planted::LookupFloorsFrameRate) => {
                     frames::frame_by_rate(src, stream.nominal(), stream.pts.len())
