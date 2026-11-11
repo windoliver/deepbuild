@@ -459,6 +459,10 @@ byHand.push('tests/acceptance/154/stems.test.ts');
 // reading against the lane's rule.
 alone.push('tests/acceptance/1700/');
 timed.push('tests/acceptance/1700/budgets.test.ts');
+// #2024's files build deep-drive twice and start real hubs and replicas; budget.test.ts times ⌘K's first hit over 1,000
+// archived sessions against the reference Mac.
+alone.push('tests/acceptance/2024/');
+timed.push('tests/acceptance/2024/budget.test.ts');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
