@@ -1,0 +1,319 @@
+{
+  "title": "run.started@4",
+  "description": "A check run started, with where it ran, what it needed (#29) and what it runs (#996); since @4, a root plan's run (#1945) names the plan's ask and has no claim or commit.",
+  "x-since": "R3",
+  "x-stability": "preview",
+  "x-tracking": "#1945",
+  "x-feeds": [
+    "runs"
+  ],
+  "type": "object",
+  "properties": {
+    "v": {
+      "const": 4,
+      "description": "The kind's schema version."
+    },
+    "id": {
+      "type": "string",
+      "format": "ulid",
+      "description": "The event's ULID, its identity."
+    },
+    "kind": {
+      "const": "run.started"
+    },
+    "subject": {
+      "type": "string",
+      "pattern": "^(task|ask|claim|verdict|run|req|decision|plan|lease|reading|notice|doc|ev|session):[0-9A-Za-z]+(#[A-Za-z0-9][A-Za-z0-9._-]*)?$",
+      "description": "The record object this event is about."
+    },
+    "writer": {
+      "type": "string",
+      "pattern": "^(hook|app|cli|core|mcp:[^\\s]+|ext:[^\\s]+)$",
+      "description": "Who wrote it, from the connection, never the payload."
+    },
+    "actor": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The person behind it, from the credential."
+    },
+    "scope": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Who may see it."
+    },
+    "ts": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "Milliseconds since the Unix epoch."
+    },
+    "seq": {
+      "type": "string",
+      "format": "seq",
+      "description": "Order within the session: ns since the epoch when the hook started."
+    },
+    "log_pos": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991,
+      "description": "Its position in the event log, assigned by the hub at append."
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "run": {
+          "type": "string",
+          "pattern": "^run:[0-9A-Za-z]+$",
+          "description": "A run: handle.",
+          "maxLength": 8192
+        },
+        "check": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192
+        },
+        "claim": {
+          "type": "string",
+          "pattern": "^claim:[0-9A-Za-z]+$",
+          "description": "A claim: handle.",
+          "maxLength": 8192
+        },
+        "commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$",
+          "maxLength": 8192
+        },
+        "host": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "Where it ran: local in R1."
+        },
+        "needs": {
+          "type": "object",
+          "description": "What it needed: its cores, memory, stack slot, GPUs and expected time.",
+          "properties": {
+            "cores": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991,
+              "description": "CPU cores."
+            },
+            "memory_mb": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991,
+              "description": "Memory, in MB."
+            },
+            "stack_slot": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991,
+              "description": "Stack slots."
+            },
+            "gpus": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991,
+              "description": "GPUs."
+            },
+            "expected_ms": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0,
+              "maximum": 9007199254740991,
+              "description": "Its expected time, in ms, a stack's start included; null before it has a clean run."
+            }
+          },
+          "required": [
+            "cores",
+            "memory_mb",
+            "stack_slot",
+            "gpus",
+            "expected_ms"
+          ],
+          "additionalProperties": false
+        },
+        "lane": {
+          "type": "string",
+          "enum": [
+            "fast",
+            "slow"
+          ],
+          "description": "The lane it ran in: inside its stop's hold, or in the background.",
+          "x-closure": {
+            "closed": "each value is a state the record defines and every reader acts on, so a value outside the list has no meaning",
+            "reopens": "a new major of this schema",
+            "mark": "exhaustive"
+          }
+        },
+        "argv": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 65536,
+          "items": {
+            "type": "string",
+            "maxLength": 8192
+          },
+          "description": "Its program and arguments, as the evidence store would scrub them and cut at the read cap when `withheld` names argv."
+        },
+        "cwd": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "Its folder, an absolute path."
+        },
+        "env": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[^=]+$"
+          },
+          "additionalProperties": {
+            "type": "string",
+            "maxLength": 8192
+          },
+          "description": "What the caller added to its environment, but each variable `withheld` names; the run token is never in it."
+        },
+        "grant": {
+          "type": "object",
+          "description": "What it may touch beyond the system's own runtime.",
+          "properties": {
+            "read": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 8192
+              },
+              "maxItems": 65536,
+              "description": "Absolute paths it may read."
+            },
+            "write": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 8192
+              },
+              "maxItems": 65536,
+              "description": "Absolute paths it may read and write."
+            },
+            "hosts": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "maxLength": 8192
+              },
+              "maxItems": 65536,
+              "description": "<host>:<port> it may connect to."
+            },
+            "sockets": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 8192
+              },
+              "maxItems": 65536,
+              "description": "Absolute paths of local sockets it may connect to."
+            },
+            "listen": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "maxLength": 8192
+              },
+              "maxItems": 65536,
+              "description": "<host>:<port> it may listen on."
+            },
+            "run_as_you": {
+              "type": "boolean",
+              "description": "It runs as you."
+            }
+          },
+          "additionalProperties": false
+        },
+        "deadline_ms": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "Its deadline, in ms from its start; null when its spec gives none."
+        },
+        "environment": {
+          "type": "boolean",
+          "description": "It needs its folder's stack running."
+        },
+        "command": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "A claim's check (#30): the command line the command check kind runs, cut at the read cap when `withheld` names command."
+        },
+        "stand_ins": {
+          "type": "array",
+          "maxItems": 1024,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8192
+          },
+          "description": "The commands a base run of it finds as stand-ins by name (#874)."
+        },
+        "withheld": {
+          "type": "array",
+          "maxItems": 65536,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8192
+          },
+          "description": "What of it the record doesn't keep as it was, so a run rebuilt from the record can't run again: each variable whose value the evidence store would scrub, past the read cap or whose name no environment takes, as $NAME; and argv, cwd, command, stand_ins, deadline or a grant list (grant.<name>) when scrubbed, cut or out of bounds."
+        },
+        "ask": {
+          "type": "string",
+          "pattern": "^ask:[0-9A-Za-z]+$",
+          "maxLength": 8192,
+          "description": "A root plan's run (#1945): the plan's ask, approved, whose script `deep host run` ran as root from a copy only root can write."
+        }
+      },
+      "required": [
+        "run",
+        "check",
+        "host",
+        "needs",
+        "lane",
+        "argv",
+        "cwd",
+        "env",
+        "grant",
+        "deadline_ms",
+        "withheld"
+      ],
+      "additionalProperties": false
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$",
+        "description": "A SHA-256, in lower-case hex."
+      }
+    }
+  },
+  "required": [
+    "v",
+    "id",
+    "kind",
+    "writer",
+    "actor",
+    "scope",
+    "ts",
+    "data"
+  ],
+  "additionalProperties": false
+}

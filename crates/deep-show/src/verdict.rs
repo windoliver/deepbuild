@@ -215,6 +215,12 @@ impl<'a> Hub<'a> {
         let determinism = self.determinism_runs(c);
         let layout = self.film_layout_runs(c);
         let audits = self.geometry_audit_runs(claim, c);
+        // #407: the film audit and the flicker check on every deliverable, the brief's own checks,
+        // and the frame each honest-numbers subject first shows in.
+        let films = self.film_audit_runs(c);
+        let flickers = self.film_flicker_runs(c);
+        let briefed = self.brief_rows(claim, c);
+        let shown = self.first_shown_by_doc(c);
         let mut docs: Vec<(String, Current)> = Vec::new();
         let mut missing = false;
         for d in &c.deliverables {
@@ -244,10 +250,29 @@ impl<'a> Hub<'a> {
                 let laid = layout.get(&r.id);
                 let timed = determinism.get(&r.id);
                 let compared = timed.map(|(i, _)| i).or(laid.map(|(i, _)| i));
-                let mut row = match audits.get(&r.id) {
-                    Some(j) if !missing && !docs.is_empty() => self.judge_audit(r, j),
+                let mut row = match (audits.get(&r.id), films.get(&r.id), flickers.get(&r.id)) {
+                    (Some(j), _, _) if !missing && !docs.is_empty() => self.judge_audit(r, j),
+                    (_, Some(a), _) if !missing && !docs.is_empty() => {
+                        film_row(r, &a.issues, &a.blocked, &a.not_run)
+                    }
+                    (_, _, Some(f)) if !missing && !docs.is_empty() => match f {
+                        Ok(issues) => film_row(r, issues, &[], &[]),
+                        Err(b) => film_row(r, &[], std::slice::from_ref(b), &[]),
+                    },
                     _ => self.judge(r, &docs, missing, &read, &c.session, compared),
                 };
+                // #407: an unsourced number in a film names the frame its item first shows in.
+                if r.check["kind"] == HONEST {
+                    if let Some(list) = row.get_mut("issues").and_then(Value::as_array_mut) {
+                        for i in list.iter_mut().filter(|i| i["code"] == "number_unsourced") {
+                            let doc = i["doc"].as_str().unwrap_or_default();
+                            let id = i["ids"][0].as_str().unwrap_or_default();
+                            if let Some(t) = shown.get(doc).and_then(|m| m.get(id)) {
+                                i["t"] = json!(t);
+                            }
+                        }
+                    }
+                }
                 // #405: what hashing adds to the canonical renders, both in ms.
                 if let (Some((_, t)), Some(map)) = (timed, row.as_object_mut()) {
                     if t.render_ms > 0.0 {
@@ -261,6 +286,10 @@ impl<'a> Hub<'a> {
                 row
             })
             .collect();
+        let mut rows = rows;
+        if !missing && !docs.is_empty() {
+            rows.extend(briefed);
+        }
         // A deliverable the hub doesn't hold is INVALID; a definition with no requirement checks
         // nothing, so it never passes.
         let result = if missing {
@@ -789,6 +818,30 @@ impl<'a> Hub<'a> {
         }
         Value::Object(out)
     }
+}
+
+/// #407: a film audit's or flicker check's row: BLOCKED where it can't decide (a script with no
+/// stated rate, a locale no caption profile covers), FAIL on any error, else PASS, with the parts
+/// it didn't run listed and never passed.
+fn film_row(r: &Requirement, issues: &[Value], blocked: &[Value], not_run: &[&str]) -> Value {
+    let mut row = Map::new();
+    row.insert("id".into(), json!(r.id));
+    row.insert("kind".into(), r.check["kind"].clone());
+    row.insert("machines".into(), json!("any"));
+    row.insert("determinism".into(), json!("exact"));
+    row.insert("issues".into(), json!(issues));
+    if !not_run.is_empty() {
+        row.insert("not_run".into(), json!(not_run));
+    }
+    if !blocked.is_empty() {
+        return done(row, "BLOCKED", blocked.to_vec());
+    }
+    let result = if issues.iter().any(|i| i["severity"] == "error") {
+        "FAIL"
+    } else {
+        "PASS"
+    };
+    done(row, result, Vec::new())
 }
 
 /// A module's check kind run on the lowered document for the check input `input`: its errors
