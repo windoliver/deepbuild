@@ -66,7 +66,7 @@ export function readPack(from: string, shipped = false): PackVersion {
 const SHIPPED = fileURLToPath(new URL('../../../packs/', import.meta.url));
 
 /** The packs the release ships: each folder of its packs/ that holds a pack.json, or why it can't be read. */
-export function releasePacks(): { folder: string; pack?: PackVersion; error?: string }[] {
+function releasePacks(): { folder: string; pack?: PackVersion; error?: string }[] {
   if (!existsSync(SHIPPED)) return [];
   return readdirSync(SHIPPED).sort().filter((name) => existsSync(join(SHIPPED, name, 'pack.json'))).map((folder) => {
     try { return { folder, pack: readPack(join(SHIPPED, folder), true) }; } catch (error) { return { folder, error: error instanceof Error ? error.message : String(error) }; }
