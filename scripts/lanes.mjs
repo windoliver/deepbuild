@@ -353,6 +353,10 @@ alone.push('tests/acceptance/544/');
 alone.push('tests/acceptance/2015/');
 // #1976's file builds deep-gpu and clicks 200 seeded rays through seven views of a plane and a sphere.
 alone.push('tests/acceptance/1976/');
+// #1405's spin and QoS files read a two-thread bench's count at load above the cores, and its proof runs a real budget
+// 42 times: one file at a time. #724's redraft runs perf's lane as #724's own files do, under the timed grant.
+alone.push('tests/acceptance/1405/', 'tests/acceptance/724-redraft-1405/');
+timed.push('tests/acceptance/724-redraft-1405/');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },

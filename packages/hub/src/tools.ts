@@ -27,6 +27,8 @@ const LOCATOR = object({
   text: maybe(str('The innermost element whose drawn text is exactly this.')),
   label: maybe(str('The form control whose accessible name, or else visible label, is this.')),
 });
+/** The same fields where another locator goes: every session loads this schema, so they are described once, above. */
+const LOCATOR_BARE = object(Object.fromEntries(Object.keys(LOCATOR.properties as object).map((field) => [field, maybe(str())])));
 
 /** Each tool's input schema, by name, in the order deep mcp lists them. */
 const SCHEMAS: Readonly<Record<string, Schema>> = {
@@ -99,12 +101,12 @@ const SCHEMAS: Readonly<Record<string, Schema>> = {
         keyboard: maybe({ ...INT, description: 'Points of on-screen keyboard over the bottom edge while a text input has focus.' }),
       })),
     })),
-    locator: maybe({ ...LOCATOR, description: 'The call\'s target: what act clicks, types into or scrolls, what expect, wait_for and see look at; null to type or press into the focused element.' }),
+    locator: maybe({ ...LOCATOR, description: 'The call\'s target: what act clicks, types into or scrolls, what expect, wait_for and see look at; null to type or press into the focused element. Every other locator in this call takes the same fields.' }),
     act: maybe(object({
       kind: { type: 'string', enum: ['click', 'double_click', 'type', 'press', 'drag', 'scroll', 'hover', 'set'] },
       text: maybe(str()),
       keys: maybe(str('Space-separated keystrokes, such as enter, tab or cmd-enter.')),
-      to: maybe({ ...LOCATOR, description: 'drag only: where it drops. The thing acted on goes in locator.' }),
+      to: maybe({ ...LOCATOR_BARE, description: 'drag only: where it drops. The thing acted on goes in locator.' }),
       to_point: { ...PAIR, description: 'drag only: where it drops, [x, y] in device pixels.' },
       dx: maybe(INT),
       dy: maybe(INT),
@@ -127,12 +129,12 @@ const SCHEMAS: Readonly<Record<string, Schema>> = {
       scope: oneOf(['window', 'panel', 'locator']),
       include: maybe({ type: 'array', items: { type: 'string', enum: ['roles', 'names', 'values', 'bounds', 'items'] } }),
     })),
-    screenshot: maybe(object({ target: oneOf(['window', 'panel', 'locator']), highlight: maybe({ type: 'array', items: LOCATOR }), mask: maybe({ type: 'array', items: LOCATOR }) })),
+    screenshot: maybe(object({ target: oneOf(['window', 'panel', 'locator']), highlight: maybe({ type: 'array', items: LOCATOR_BARE }), mask: maybe({ type: 'array', items: LOCATOR_BARE }) })),
     record: maybe(object({
       action: { type: 'string', enum: ['start', 'stop'] },
       fps: maybe(INT),
       marks: oneOf(['per_action']),
-      mask: maybe({ type: 'array', items: LOCATOR }),
+      mask: maybe({ type: 'array', items: LOCATOR_BARE }),
       mask_kind: oneOf(['fill', 'blur']),
     })),
     expect: maybe(object({
