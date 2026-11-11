@@ -419,6 +419,9 @@ byHand.push('tests/acceptance/2026/replay.test.ts');
 // #2028's files build deep-drive plain and with env-plants, start real hubs and run three replicas each over three hours
 // of the virtual clock, a frame each second while you're away.
 alone.push('tests/acceptance/2028/');
+// #2021's files build deep-drive plain and with env-plants and drive replicas over real hubs on a stepped clock, with
+// agents' hooks and transcripts written as the run goes.
+alone.push('tests/acceptance/2021/');
 // #2029's files build the replica and deep-drive plain and planted, start real hubs and draw the answered asks' pages.
 alone.push('tests/acceptance/2029/');
 // #1056's files build deep-gpu and draw #464's pixel fixtures; records.test.ts runs #464's two-GPU tests.
