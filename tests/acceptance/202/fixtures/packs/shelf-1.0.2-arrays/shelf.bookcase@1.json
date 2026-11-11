@@ -1,0 +1,125 @@
+{
+  "id": "shelf.bookcase",
+  "version": "1.0",
+  "title": "Bookcase",
+  "license": "MIT",
+  "author": "the #202 acceptance suite",
+  "description": "A bookcase drawn from the front at 100 u a metre: two sides, one board per level 40 u apart, and the dividers between its bays, each a 2D rect.",
+  "inputs": {
+    "width": {
+      "type": "number",
+      "unit": "m",
+      "default": 1.2,
+      "min": 0.4,
+      "max": 3,
+      "about": "the outside width, in metres"
+    },
+    "levels": {
+      "type": "integer",
+      "default": 4,
+      "min": 1,
+      "max": 8,
+      "about": "how many boards, one per level, 0.4 m apart"
+    },
+    "dividers": {
+      "type": "integer",
+      "default": 1,
+      "min": 0,
+      "max": 3,
+      "about": "how many upright dividers split the width into bays"
+    }
+  },
+  "steps": {
+    "sides": {
+      "op": "mark",
+      "kind": "rect@1",
+      "repeat": {
+        "count": 2,
+        "as": "i"
+      },
+      "params": {
+        "box": [
+          0,
+          0,
+          2,
+          "levels * 40"
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          "i * (width * 100 - 2)",
+          0,
+          0
+        ]
+      }
+    },
+    "boards": {
+      "op": "mark",
+      "kind": "rect@1",
+      "repeat": {
+        "count": "levels",
+        "as": "i"
+      },
+      "params": {
+        "box": [
+          0,
+          0,
+          "width * 100",
+          2
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          0,
+          "(i + 1) * 40 - 2",
+          0
+        ]
+      }
+    },
+    "dividers": {
+      "op": "mark",
+      "kind": "rect@1",
+      "repeat": {
+        "count": "dividers",
+        "as": "i"
+      },
+      "params": {
+        "box": [
+          0,
+          0,
+          2,
+          "levels * 40"
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          "(i + 1) * width * 100 / (dividers + 1) - 1",
+          0,
+          0
+        ]
+      }
+    }
+  },
+  "outputs": {
+    "parts": [
+      "sides",
+      "boards",
+      "dividers"
+    ]
+  }
+}

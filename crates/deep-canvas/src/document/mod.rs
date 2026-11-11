@@ -21,12 +21,14 @@ mod check;
 mod close;
 mod merge;
 mod order;
+pub mod pack_kinds;
 pub mod packs;
 mod requires;
 mod rows;
 mod rules;
 mod shape;
 mod transform;
+pub mod variants;
 
 use serde_json::{json, Map, Value};
 
@@ -96,8 +98,7 @@ pub const ENVELOPE_KEYS: &[&str] = &[
     "worlds",
     "brief",
     "checks",
-    // The media module's strips and the positional voices placed on items (#427; Strip and
-    // track, Emitter), read by the media module.
+    // #427: the media module's strips and the voices placed on items (Strip and track, Emitter).
     "strips",
     "emitters",
     // #499: the media module's buses and processors (Bus, Processor).
@@ -107,6 +108,7 @@ pub const ENVELOPE_KEYS: &[&str] = &[
     "spawns",
     // #502: the media module's ducking entries (Ducking), each a bus's gain under speech spans.
     "ducking",
+    "tempo_map",
 ];
 
 /// An item's keys (Item and kind), in this slice.
@@ -994,6 +996,28 @@ mod tests {
             );
             assert!(!result.ok);
         }
+    }
+
+    #[test]
+    fn assemblies_refuse_a_cycle_a_chain_past_four_and_a_missing_parent_and_items_join_them() {
+        let mut doc = base();
+        let a = |parent: Option<&str>| json!({"parent": parent, "motion": {"kind": "slide", "axis": [0, 1, 0], "range": [0, 1]}, "apart": [0, 0.1, 0], "order": 1});
+        doc["assemblies"] = json!({
+            "a1": a(None), "a2": a(Some("a1")), "a3": a(Some("a2")), "a4": a(Some("a3")), "a5": a(Some("a4")),
+            "x": a(Some("y")), "y": a(Some("x")), "lost": a(Some("nowhere")),
+        });
+        doc["items"]["a"]["parent"] = json!("a1");
+        let result = check(&doc);
+        let found: Vec<String> = result
+            .issues
+            .iter()
+            .filter(|i| i.path.starts_with("assemblies/") || i.path.starts_with("items/a/parent"))
+            .map(|i| format!("{} {}", i.code, i.path))
+            .collect();
+        assert!(found.contains(&"out_of_range assemblies/a5/parent".to_string()), "{found:?}");
+        assert!(found.contains(&"cycle assemblies/x/parent".to_string()), "{found:?}");
+        assert!(found.contains(&"ref_unresolved assemblies/lost/parent".to_string()), "{found:?}");
+        assert!(!found.iter().any(|f| f.contains("a4") || f.contains("items/a/parent")), "{found:?}");
     }
 
     #[test]

@@ -1,0 +1,22 @@
+{
+  "format": 1,
+  "profile": "board",
+  "title": "A stack at its defaults",
+  "description": "A stack at its defaults: one tower.stack@1 item, an example of the #202 acceptance suite's packs.",
+  "size": [
+    700,
+    64
+  ],
+  "packs": [
+    "acme/tower@1.0.0"
+  ],
+  "items": {
+    "x1": {
+      "id": "x1",
+      "kind": "tower.stack@1",
+      "name": "X1",
+      "order": "a0",
+      "params": {}
+    }
+  }
+}

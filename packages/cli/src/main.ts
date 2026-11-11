@@ -179,10 +179,12 @@ async function updateCheck(): Promise<number> {
 const usage = [
   'deep doctor [--json] [--prompt]   --prompt also sends each signed-in agent one test prompt, which spends plan usage',
   'deep status [--json]   every session with its detail, ending on what needs you',
+  'deep status <session> --why [--json]   why that session reads as it does: the one sentence, each record fact it was read from, and what each higher state lacked',
   'deep off | on   every gate watch-only, or back, once the OS confirms you',
   'deep explain <recorded session folder> [--json]',
   'deep run --result <run.finished event file>',
   'deep run follow <run>   a run\'s output from its start, then as it comes, until it ends',
+  'deep host run <ask> | changes <host> | list | facts <host> [--refresh]   run a root plan you said yes to, in this terminal; list a host\'s changes with their undo; or the hosts your SSH config names, and one\'s facts',
   'deep hub run [--safe] | start | status [--root <folder>]',
   'deep hub stop [--root <folder>]',
   'deep hub use --root <folder>   this worktree\'s sessions to a dev hub, once the OS confirms you',
@@ -217,6 +219,10 @@ const usage = [
   'deep mcp-exec <name>   what an agent\'s entry for a synced MCP server runs: its command, its secrets by handle',
   'deep secret add <package> <name> | list [--json]   a package\'s secret, typed at your terminal and kept in the OS secret store',
   'deep join <repo link> --invite <invite>   a project\'s hub on another machine, from a clone of its repo',
+  'deep person invite <login> --address <host>:<port> | revoke <login>   a one-time invite to this clone\'s project, for deep join; or a person\'s credentials ended, once the OS confirms you',
+  'deep library on <library> | off <library> | rule <library> <license>...   an installed model library in or out of your agents\' asset search, and the licenses it fetches under with no ask, once the OS confirms you',
+  'deep pack rule <owner/name> <license>...   the licenses an installed pack fetches its assets under with no ask, once the OS confirms you',
+  'deep job rule <tool@version> <usd>   the most a run of a paid tool may cost with no ask, once the OS confirms you',
   'deep backup <folder>   the record, its evidence and its wiki, copied through the running hub',
   'deep restore <folder>   a backup put back with the hub stopped, once the OS confirms you',
   'deep update --check   whether a newer DeepBuild is out',
@@ -236,7 +242,7 @@ const help = asksHelp && !(args[0] === 'backup' && (await import('@deepbuild/hub
 // What a person runs first, then their work, then what developers run (#1455); a command no group names is a developer's.
 const groups: [string, string[]][] = [
   ['Start here', ['setup', 'status', 'inbox', 'doctor', 'off', 'install', 'memory', 'secret', 'update']],
-  ['Your work', ['open', 'fix', 'start', 'race', 'workspace', 'join', 'gate', 'rules', 'session', 'guard', 'undo', 'numbers', 'backup', 'restore', 'debug']],
+  ['Your work', ['open', 'fix', 'start', 'race', 'workspace', 'join', 'person', 'gate', 'rules', 'session', 'guard', 'undo', 'numbers', 'backup', 'restore', 'debug', 'host', 'library', 'pack', 'job']],
   ['For developers', ['explain', 'run', 'hub', 'mcp', 'env', 'lease', 'show', 'export', 'kinds', 'mcp-exec', 'read', 'find']],
 ];
 const groupOf = (line: string): number => {
@@ -331,6 +337,10 @@ if (help) {
 } else if (Object.hasOwn(hubCommands, args[0]!)) {
   const hub = await import('@deepbuild/hub');
   process.exitCode = await hub[hubCommands[args[0] as keyof typeof hubCommands]](args.slice(1));
+} else if (['library', 'pack', 'job', 'person'].includes(args[0]!)) {
+  // What the hub takes only from your own terminal, once the OS confirms you.
+  const { confirmedCommand } = await import('@deepbuild/hub');
+  process.exitCode = await confirmedCommand(args);
 } else if (args[0] === 'setup') {
   const { setupCommand } = await import('@deepbuild/hub');
   process.exitCode = await setupCommand(fileURLToPath(import.meta.url), args.slice(1));
@@ -387,6 +397,9 @@ if (help) {
 } else if (args[0] === 'run' && args[1] === 'follow' && args[2] && args.length === 3) {
   const { followCommand } = await import('@deepbuild/hub');
   process.exitCode = await followCommand(args[2]);
+} else if (args[0] === 'host') {
+  const { hostCommand } = await import('@deepbuild/hub');
+  process.exitCode = await hostCommand(args.slice(1));
 } else if (args[0] === 'run') {
   console.error('Usage: deep run --result <run.finished event file>\n       deep run follow <run>');
   process.exitCode = 2;

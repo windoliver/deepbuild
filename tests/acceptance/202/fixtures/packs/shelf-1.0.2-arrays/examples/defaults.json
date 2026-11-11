@@ -1,0 +1,22 @@
+{
+  "format": 1,
+  "profile": "board",
+  "title": "shelf.grid@1 at its defaults",
+  "description": "shelf.grid@1 at its defaults: one shelf.grid@1 item, an example of the #202 acceptance suite's packs.",
+  "size": [
+    320,
+    360
+  ],
+  "packs": [
+    "acme/shelf@1.0.2"
+  ],
+  "items": {
+    "x1": {
+      "id": "x1",
+      "kind": "shelf.grid@1",
+      "name": "X1",
+      "order": "a0",
+      "params": {}
+    }
+  }
+}

@@ -12,6 +12,7 @@
 mod apple;
 pub mod color;
 mod export;
+mod flac;
 pub mod maps;
 pub mod mov;
 pub mod mp4;
@@ -107,6 +108,8 @@ fn reduce(n: i64, d: i64) -> [i64; 2] {
 /// What a file is, by its first bytes.
 enum Format<'a> {
     Wav(wav::Wav),
+    /// #154: a score's stem, decoded whole, with its loop points.
+    Flac(flac::Flac),
     Png(u32, u32, bool),
     Playlist(&'a str),
     Movie(mp4::Movie),
@@ -118,6 +121,14 @@ fn format(data: &[u8]) -> Result<Format<'_>, Value> {
             refused(
                 "unreadable",
                 json!({"why": "a WAVE file without fmt and data"}),
+            )
+        });
+    }
+    if data.starts_with(b"fLaC") {
+        return flac::parse(data).map(Format::Flac).ok_or_else(|| {
+            refused(
+                "unreadable",
+                json!({"why": "a FLAC stream that doesn't decode"}),
             )
         });
     }
@@ -212,6 +223,10 @@ fn over_caps(f: &Format, caps: &Caps) -> Option<Value> {
             seconds_over(w.frames as i64, w.rate, caps.max_duration),
             0u64,
         ),
+        Format::Flac(f) => (
+            seconds_over(f.frames as i64, f.rate, caps.max_duration),
+            0u64,
+        ),
         Format::Png(w, h, _) => (false, *w as u64 * *h as u64),
         Format::Movie(m) => (
             m.tracks
@@ -295,6 +310,15 @@ fn probe(f: &Format, data: &[u8], sha: &str, planted: &Planted) -> Value {
                 "sample_rate": w.rate, "channels": w.channels, "duration": [w.frames, w.rate]}),
             ],
             json!({"name": "deep-codecs wav", "version": env!("CARGO_PKG_VERSION")}),
+        ),
+        Format::Flac(f) => (
+            "audio",
+            vec![
+                json!({"index": 0, "type": "audio", "codec": "flac", "time_base": [1, f.rate],
+                "sample_rate": f.rate, "channels": f.channels, "duration": [f.frames, f.rate],
+                "loop": f.loop_region.map(|(s, e)| json!([s, e]))}),
+            ],
+            json!({"name": "deep-codecs flac", "version": env!("CARGO_PKG_VERSION")}),
         ),
         Format::Png(w, h, srgb) => {
             let mut c = json!({"primaries": "bt709", "transfer": "srgb", "matrix": "rgb", "range": "full",
@@ -441,6 +465,14 @@ fn decode(
             streams.push(
                 json!({"index": 0, "type": "audio", "sample_rate": w.rate, "channels": w.channels,
                 "first": [0, w.rate], "samples": w.frames, "file": "0.f32"}),
+            );
+        }
+        Format::Flac(fl) => {
+            write("0.f32", &f32_bytes(&fl.samples))?;
+            streams.push(
+                json!({"index": 0, "type": "audio", "sample_rate": fl.rate, "channels": fl.channels,
+                "first": [0, fl.rate], "samples": fl.frames, "file": "0.f32",
+                "loop": fl.loop_region.map(|(s, e)| json!([s, e]))}),
             );
         }
         Format::Png(..) => {

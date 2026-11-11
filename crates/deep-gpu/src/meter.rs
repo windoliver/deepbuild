@@ -683,7 +683,8 @@ mod tests {
             fixed: 0,
         };
         let cap = Class::Showpiece.limits().gpu_bytes;
-        let e = fit(&view([3456, 2234]), 0.5, 8, cap).unwrap();
+        // A 5K display: at 512 MB the reference Mac's 3456 × 2234 keeps an 8-frame window (#2234).
+        let e = fit(&view([5120, 2880]), 0.5, 8, cap).unwrap();
         assert!(e.history >= 2 && e.history < 8 && e.bytes() < cap, "{e:?}");
         let refused = fit(&view([8192, 8192]), 0.5, 8, cap).unwrap_err();
         assert_eq!((refused.scale, refused.history), (0.5, 2));
