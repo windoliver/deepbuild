@@ -20,6 +20,7 @@ pub mod expr;
 pub mod film_audit;
 pub mod film_layout;
 pub mod geometry_audit;
+pub mod geometry_shape;
 pub mod grammar;
 pub mod interval;
 pub mod kinds;
