@@ -179,6 +179,22 @@ fn shared(w: &World, shape: &Shape) -> Option<SharedShape> {
             vertices,
             triangles,
         } => SharedShape::trimesh(pts(vertices), triangles.clone()).ok()?,
+        // #2014: row along +Z, column along +X, in Rapier's column-major layout; no cell zigzags,
+        // so each splits as a terrain plate draws it.
+        Shape::Heightfield {
+            cols,
+            rows,
+            heights,
+            scale,
+        } => {
+            let mut zx = vec![0.0f32; rows * cols];
+            for r in 0..*rows {
+                for c in 0..*cols {
+                    zx[r + c * rows] = heights[r * cols + c] as f32;
+                }
+            }
+            SharedShape::heightfield(Array2::new(*rows, *cols, zx), v3(*scale))
+        }
         Shape::Compound { children } => SharedShape::compound(
             children
                 .iter()
@@ -263,13 +279,17 @@ impl Rapier {
         let u = &b.shapes[i];
         let path = format!("bodies/{id}/shapes/{i}");
         let shape = &w.shapes[&u.shape];
-        if matches!(shape, Shape::Plane { .. } | Shape::Mesh { .. }) && b.kind != BodyKind::Static {
+        if matches!(
+            shape,
+            Shape::Plane { .. } | Shape::Mesh { .. } | Shape::Heightfield { .. }
+        ) && b.kind != BodyKind::Static
+        {
             out.push(refusal(
                 "out_of_range",
                 format!("{path}/shape"),
                 json!(u.shape),
                 format!(
-                    "{} is a plane or a mesh, which only a static body holds",
+                    "{} is a plane, a mesh or a heightfield, which only a static body holds",
                     u.shape
                 ),
             ));
@@ -840,5 +860,47 @@ impl Backend for Rapier {
         self.step = cp.step;
         self.last.clear();
         Ok(())
+    }
+
+    /// Each collider's own ray cast at its placed pose, so a world never stepped answers too.
+    fn ray(&self, from: [f64; 3], dir: [f64; 3], max: f64) -> Option<f64> {
+        let ray = Ray::new(v3(from), v3(dir));
+        self.world
+            .colliders
+            .iter()
+            .filter_map(|(_, c)| c.shape().cast_ray(c.position(), &ray, max as f32, true))
+            .min_by(f32::total_cmp)
+            .map(f64::from)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A static 2 × 2 m height field of 3 × 3 samples, raised only at its (column 2, row 0)
+    /// corner, through the physics document and the backend interface.
+    #[test]
+    fn a_ray_down_meets_a_heightfield_on_its_shipped_split() {
+        let mut heights = vec![0.0; 9];
+        heights[2] = 1.0;
+        let doc = json!({
+            "kind": "physics.world@1", "dimensions": 3, "step_rate": 60, "substeps": 1,
+            "gravity": [0, 0, 0], "mode": "dynamic",
+            "capacity": {"bodies": 1, "shapes": 1, "joints": 0, "contacts": 0, "particles": 0},
+            "backend": {"name": "rapier3d", "version": "=0.36.1"},
+            "shapes": {"land": {"kind": "heightfield", "cols": 3, "rows": 3, "heights": heights, "scale": [2, 1, 2]}},
+            "bodies": {"ground": {"kind": "static", "shapes": [{"shape": "land"}]}}
+        });
+        let w = deep_canvas_physics::check::check(&doc, &RAPIER3D, &deep_canvas_physics::roles::TABLE)
+            .unwrap_or_else(|e| panic!("{e:?}"));
+        let mut b = Rapier::default();
+        b.build(&w).unwrap();
+        let down = [0.0, -1.0, 0.0];
+        // The raised cell's centre lies on the diagonal through its raised corner: 0.5 m.
+        let k = b.ray([0.5, 2.0, -0.5], down, 10.0).unwrap();
+        assert!((2.0 - k - 0.5).abs() < 1e-6, "{k}");
+        assert!((2.0 - b.ray([-0.5, 2.0, 0.5], down, 10.0).unwrap()).abs() < 1e-6);
+        assert_eq!(b.ray([5.0, 2.0, 0.0], down, 10.0), None);
     }
 }

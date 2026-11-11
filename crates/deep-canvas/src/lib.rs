@@ -21,6 +21,7 @@ pub mod film_audit;
 pub mod film_layout;
 pub mod geometry_audit;
 pub mod grammar;
+pub mod heights;
 pub mod interval;
 pub mod kinds;
 pub mod ops;
