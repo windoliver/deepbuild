@@ -1,16 +1,13 @@
-✔ #1824.a44b9f7f AC2: with the network allowed, a cached file with one flipped byte is reported with its path and both hashes and fetched again (362.5895ms)
-✔ #1824.a44b9f7f AC2: with the network not allowed, the flipped file is not refetched and the fetch is BLOCKED with one unblock ask (326.751375ms)
-✔ #1824.a44b9f7f AC2: the planted fetchers that use the flipped file, refetch it when the network is not allowed, or pass there, each fail (1865.608708ms)
-✔ #1824.f985f5df AC3: a row whose URL names a branch or a tag, or that has no size or no sha256, fails the lint, naming the row (573.528125ms)
-✔ #1824.f985f5df AC3: a planted lane that fetches a file the lock does not list fails, naming the URL (503.98325ms)
-✔ #1824.f985f5df AC3: the planted lints that pass a moving ref or a row without its size or sha256, and the planted fetcher that fetches an unlisted file, each fail (1945.605042ms)
-✔ #1824.512f9fb8 AC1: with every file in the lock cached and matching, a fetch makes 0 network requests (344.783458ms)
-✔ #1824.512f9fb8 AC1: the planted fetcher that fetches a cached, matching file fails, naming the path (723.203375ms)
-ℹ tests 8
+✔ #1824.a44b9f7f AC2: with the network allowed, a cached file with one flipped byte is reported with its path and both hashes and fetched again (476.331875ms)
+✔ #1824.a44b9f7f AC2: with the network not allowed, the flipped file is not refetched and the fetch is BLOCKED with one unblock ask (289.753041ms)
+✔ #1824.f985f5df AC3: a row whose URL names a branch or a tag, or that has no size or no sha256, fails the lint, naming the row (674.714167ms)
+✔ #1824.f985f5df AC3: a planted lane that fetches a file the lock does not list fails, naming the URL (384.542083ms)
+✔ #1824.512f9fb8 AC1: with every file in the lock cached and matching, a fetch makes 0 network requests (490.195292ms)
+ℹ tests 5
 ℹ suites 0
-ℹ pass 8
+ℹ pass 5
 ℹ fail 0
 ℹ cancelled 0
 ℹ skipped 0
 ℹ todo 0
-ℹ duration_ms 3091.429583
+ℹ duration_ms 1170.024792
