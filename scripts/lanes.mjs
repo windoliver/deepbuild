@@ -347,6 +347,10 @@ timed.push('tests/acceptance/405-redraft-ac4/budgets.test.ts');
 byHand.push('tests/acceptance/405/budgets.test.ts');
 // #544's files build deep-logic and deep-show, draw on the GPU, export a film, and build deep-logic for Linux x86_64 in Docker.
 alone.push('tests/acceptance/544/');
+// #504's files each build deep-show or deep-motion with cargo, and criterion 2's hub test starts a hub and agents.
+alone.push('tests/acceptance/504/');
+// #504's blind redrafts of criteria 1 and 8 each build deep-show or deep-motion with cargo.
+alone.push('tests/acceptance/504-redraft-ac1/', 'tests/acceptance/504-redraft-ac8/');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
