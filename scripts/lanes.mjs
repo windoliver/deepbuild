@@ -351,6 +351,8 @@ byHand.push('tests/acceptance/405/budgets.test.ts');
 alone.push('tests/acceptance/544/');
 // #2015's file builds deep-show in the full set and runs it on a plate and a recipe pack.
 alone.push('tests/acceptance/2015/');
+// #1723's files each start a real hub whose gate runs a document check through the canvas core, under a 480 s wait.
+alone.push('tests/acceptance/1723/');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
