@@ -85,6 +85,7 @@ import { blockedCause, blockedReading, clockTime, dueReading, ownerOf, promisesI
 import { Answers, answerText, type Answer } from './answers.js';
 import { RUN_AS_YOU, Runs } from './runs.js';
 import { Kinds, type ReviewOf } from './kinds.js';
+import { ReviewRounds } from './review-rounds.js';
 import { canvasClaim, docCheckIn, docCheckOf, docCommand, docResult, docSpec, revisionLine, shownResult, worst, type DocCheck, type DocSpec, type Revision } from './doc-checks.js';
 import type { CheckResult, CheckSpec } from '@deepbuild/conformance';
 import { retain } from './retention.js';
@@ -598,6 +599,7 @@ export class Core {
   /** The supervisor's runs (runs.ts). */
   private readonly runs: Runs;
   private readonly checkKinds: Kinds;
+  private readonly reviewRounds: ReviewRounds;
   /** Each claim's checks of a kind other than command, by check (#1537): its spec, and the claim's session for a review. */
   private readonly kindChecks = new Map<string, Map<string, { spec: CheckSpec; of: ReviewOf }>>();
   /** The document revisions each claim's document checks read (#1723), as its verdict's key names them. */
@@ -928,18 +930,26 @@ export class Core {
       appendCore: (kind, data, extra) => this.appendCore(kind, data, extra), stored: (put, what) => this.stored(put, what),
       invalid: (claim, commit, reason, outcome) => this.invalid(claim, commit, reason, outcome), recorded: (run, record) => this.gate.recorded(run, record), keyed: (key, run, record) => this.gate.keyed(key, run, record),
       stopping: () => this.stopping, stacks: this.stacks, store: () => this.store, host: () => this.host, supervisor: () => this.supervisor, leases: () => this.leases, extensions: () => this.extensions,
-      kind: (run, checkout, deadline) => {
-        const of = this.kindChecks.get(run.claim)?.get(run.check)?.of ?? { claim: run.claim, task: '', agent: 'claude-code', transcript: undefined };
+      kind: async (run, checkout, deadline) => {
+        const of: ReviewOf = this.kindChecks.get(run.claim)?.get(run.check)?.of ?? { claim: run.claim, task: '', agent: 'claude-code', transcript: undefined };
         const spec = run.spec as unknown as CheckSpec;
         // A document check runs through the canvas core's verdict on the document's revision (#1723).
         if ((spec as DocSpec).runner === 'canvas') return this.documentCheck(run, spec as DocSpec);
         // A review reads the diff from the merge base to the claim's snapshot, both in the hub's object store, which
         // reads the repo's objects as alternates; the checkout is the snapshot's tree alone.
-        if (spec.kind === 'review') return this.checkKinds.run({ ...spec, head: this.gate.snapshotOf(run.claim) ?? run.commit } as CheckSpec, { checkout: join(this.root.dir, 'objects'), deadline, now: this.now }, of);
+        // On a pull request it reads from the commit the last round read, and its own run on the snapshot is the next round (#1862).
+        if (spec.kind === 'review') {
+          const head = this.gate.snapshotOf(run.claim) ?? run.commit;
+          const since = of.pr ? await this.reviewRounds.since(of.pr, run.claim) : null;
+          const { round, ...result } = await this.checkKinds.run({ ...spec, head, since } as CheckSpec, { checkout: join(this.root.dir, 'objects'), deadline, now: this.now }, of);
+          if (round && of.pr && run.commit === head) await this.reviewRounds.read(of.pr, run.claim, head, round);
+          return result;
+        }
         return this.checkKinds.run(spec, { checkout, deadline, now: this.now }, of);
       },
     });
     // The check kinds the hub holds (#1537): command, review, numbers and the work kinds, each with its routes.
+    this.reviewRounds = new ReviewRounds({ raw: (query, params) => this.record.raw(query, params), appendCore: (kind, data, extra) => this.appendCore(kind, data, extra), objects: join(this.root.dir, 'objects') });
     this.checkKinds = new Kinds({ host: () => this.host, submit: (spec) => this.runner.submit(spec), wait: (job) => this.runner.wait(job), cancel: (job) => this.runner.cancel(job), plant: options.plant });
     this.replicas = new Replicas({ folder: join(this.root.dir, 'replicas'), now: this.now, leases: () => this.leases, plant: options.plant });
     this.numbers = new Numbers({
@@ -7958,7 +7968,7 @@ export class Core {
       // The checks of the other kinds the hub holds (#1537), each run through its kind: a drafted check whose bytes name
       // a work kind; the review on every claim that opens or updates a PR, its second model through the runner under
       // your reserve (#87); and the numbers check on every claim whose words state a number with the query behind it.
-      const of: ReviewOf = { claim: r.claim, task: r.task, agent: this.live.get(r.session)?.agent ?? 'claude-code', transcript: this.sessions.get(r.session)?.transcript };
+      const of: ReviewOf = { claim: r.claim, task: r.task, agent: this.live.get(r.session)?.agent ?? 'claude-code', transcript: this.sessions.get(r.session)?.transcript, pr: await this.prOf(r.session) };
       const kinded = new Map<string, { spec: CheckSpec; of: ReviewOf }>();
       // A document check, the spec's or a drafted check's (#1723), runs through the canvas core on the revision the
       // document has as the claim is made, which its command names, so its key changes with the revision.
@@ -8226,6 +8236,9 @@ export class Core {
     try {
       await recordVerdict(this.record, v, this.now());
       this.verdictsMade.set(claim, hash);
+      // A claim on a pull request settles when it passes: how each item its review rounds sent back ended is recorded (#1862).
+      const pr = v.outcome === 'PASS' ? await this.prOf(owner?.session_id ?? null) : undefined;
+      if (pr) await this.reviewRounds.settled(pr, claim).catch((error: unknown) => process.stderr.write(`deep hub: how ${claim}'s sent-back review items ended was not recorded: ${error instanceof Error ? error.message : String(error)}\n`));
     } catch (error) {
       process.stderr.write(`deep hub: ${claim}'s verdict was not recorded: ${error instanceof Error ? error.message : String(error)}\n`);
     }
