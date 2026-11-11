@@ -22,8 +22,8 @@ use std::rc::Rc;
 use std::time::Instant;
 
 use deep_canvas::document::{
-    apply_ops, canonical_in, check_packed, recheck_with, rollback, store_migrations, touched_in,
-    Issue, Packs, Patched, Referrers, Writing, ID_MAPS,
+    apply_ops, canonical_in, check_packed, pack_kinds, recheck_with, rollback, store_migrations,
+    touched_in, Issue, Packs, Patched, Referrers, Writing, ID_MAPS,
 };
 use deep_canvas::grammar::{Path as FieldPath, Section};
 use deep_canvas::kinds::{lookup, registry, Lookup};
@@ -228,6 +228,8 @@ struct Applied {
     current_at: Option<i64>,
     /// The issues the last good revision had too, returned marked carried.
     carried: Vec<Issue>,
+    /// The notices of its check, when it checked the whole document (#1961).
+    notices: Vec<Value>,
 }
 
 /// A writer as a layer's `writer` holds it: `kind:id`.
@@ -665,8 +667,12 @@ impl Hub<'_> {
                     ids,
                     current_at,
                     carried,
+                    notices,
                 } = *a;
                 reply.insert("cost_delta".into(), cost);
+                if !notices.is_empty() {
+                    reply.insert("notices".into(), Value::Array(notices));
+                }
                 ("applied", rev, achieved, undo, carried, ids, current_at)
             }
             Outcome::Refused(issues) => (
@@ -889,8 +895,19 @@ impl Hub<'_> {
         };
         let applied = match undoing {
             Some(target) => {
+                // The pack versions it named in place of others, named back (#1961).
+                let pins = shared.revs[target]
+                    .envelope_before
+                    .as_ref()
+                    .map(|(fields, _)| fields.get("packs").cloned().unwrap_or(Value::Null))
+                    .filter(|was| *was != shared.at(target).0["packs"]);
                 let t = &shared.revs[target];
-                put_back(&mut shared.doc, &t.before, &t.paths, &layer)
+                put_back(&mut shared.doc, &t.before, &t.paths, &layer).map(|mut p| {
+                    if let Some(was) = pins {
+                        p.packs_before = Some(std::mem::replace(&mut shared.doc["packs"], was));
+                    }
+                    p
+                })
             }
             None => {
                 // The build knows the kinds its canvas modules register, too.
@@ -929,6 +946,7 @@ impl Hub<'_> {
         // Re-checked incrementally where the patch reached only items; else in full, which
         // expands the recipe instances again (#306): the one check, never per frame.
         let mut expansions = None;
+        let mut notices = Vec::new();
         let issues = if added.is_some() {
             None
         } else {
@@ -947,6 +965,7 @@ impl Hub<'_> {
         .unwrap_or_else(|| {
             let result = check_packed(&shared.doc, &self.startup.sealed, &self.packs);
             expansions = Some(result.expansions);
+            notices = result.notices;
             result.issues
         });
         // #407: a film a claim's definition audits gets the film audit's issues at show time,
@@ -1026,12 +1045,17 @@ impl Hub<'_> {
                 ids,
                 current_at: None,
                 carried: kept,
+                notices: self.notices_reply(&call.doc, &notices),
             }));
         }
         if shared.older.contains(&layer) {
             for (id, was) in store_migrations(&mut shared.doc, &layer) {
                 patched.before.entry(id).or_insert(Some(was));
             }
+        }
+        // A pack kind's items at an earlier major of their pinned pack's kind, too (#1956).
+        for (id, was) in pack_kinds::store_migrations(&mut shared.doc, &layer, &self.packs) {
+            patched.before.entry(id).or_insert(Some(was));
         }
         let patch_id = patch["patch"].as_str().unwrap_or_default().to_string();
         let current_at = self.scenario.clock.map(|c| c.latch_from(checked));
@@ -1044,13 +1068,24 @@ impl Hub<'_> {
             changed,
             paths: paths_of(&patched.before, &shared.doc),
             before: patched.before.clone(),
-            envelope_before: added.clone(),
+            // A layer added, or another pack version named (#1961): the envelope before.
+            envelope_before: added.clone().or_else(|| {
+                patched.packs_before.as_ref().map(|packs| {
+                    let (mut fields, owners) = shared.envelope();
+                    fields.insert("packs".into(), packs.clone());
+                    (fields, owners)
+                })
+            }),
             issues: Rc::new(issues),
             hash: OnceCell::new(),
             current_at,
         };
         if self.commit(&call.doc, next, session, &recorded_by(&call.via), &achieved) {
             if let Some(expansions) = expansions {
+                let doc = &self.shared[&call.doc].doc;
+                let planted = self.scenario.planted;
+                let cache = &mut self.expansion_cache;
+                let expansions = crate::packs::planted_cache(planted, cache, doc, expansions);
                 self.expansions.insert(call.doc.clone(), expansions);
             }
             // The writer's layer holds no older major now: this patch migrated it.
@@ -1086,6 +1121,7 @@ impl Hub<'_> {
             ids,
             current_at,
             carried: kept,
+            notices: self.notices_reply(&call.doc, &notices),
         }))
     }
 
@@ -1413,7 +1449,7 @@ impl Hub<'_> {
             }
         }
         reply.insert("rev".into(), json!(cur));
-        let notices = self.notices_reply(&result.notices);
+        let notices = self.notices_reply(&show.doc, &result.notices);
         if !notices.is_empty() {
             reply.insert("notices".into(), Value::Array(notices));
         }
@@ -1535,8 +1571,12 @@ impl Hub<'_> {
                 }
                 None => {
                     let checked = check_packed(&shown, &self.startup.sealed, &self.packs);
+                    let planted = self.scenario.planted;
+                    let cache = &mut self.expansion_cache;
+                    let expansions =
+                        crate::packs::planted_cache(planted, cache, &shown, checked.expansions);
                     reply.insert("draws".into(), json!(draws(&checked.lowered)));
-                    crate::packs::reply(&checked.expansions, None, false, &mut reply);
+                    crate::packs::reply(&expansions, None, false, &mut reply);
                 }
             }
         } else {

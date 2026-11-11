@@ -1305,12 +1305,18 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "each_seeds_by_element_count" => Planted::EachSeedsByElementCount,
                 "each_face_per_triangle" => Planted::EachFacePerTriangle,
                 "reexpansion_overwrites_broken_out" => Planted::ReexpansionOverwritesBrokenOut,
+                "orphan_load_drops_broken_out" => Planted::OrphanLoadDropsBrokenOut,
+                "orphan_load_hands_id_to_expansion" => Planted::OrphanLoadHandsIdToExpansion,
+                "expansion_cache_without_recipe_version" => {
+                    Planted::ExpansionCacheWithoutRecipeVersion
+                }
                 "pack_check_skips_requires_modules" => Planted::PackCheckSkipsRequiresModules,
                 "packs_keyed_by_name" => Planted::PacksKeyedByName,
                 "counts_agent_rule_as_cover" => Planted::OwnRuleCountsAsCover,
                 "recipe_rules_twice" => Planted::RulesEvaluatedTwice,
                 "kit_tests_defaults_only" => Planted::KitDefaultsOnly,
                 "expander_hash_map_order" => Planted::ExpandsInHashOrder,
+                "migration_stops_at_first_fault" => Planted::MigrationFirstFault,
                 "checkpoint_nearest_in_distance" => Planted::CheckpointNearestInDistance,
                 "merges_in_finish_order" => Planted::MergesInFinishOrder,
                 "runs_every_node" => Planted::RunsEveryNode,
@@ -1492,6 +1498,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
             })
             .collect::<Option<_>>()?,
     };
+    let notes = packs::notes(input.get("notes"))?;
     // #200: the hub's installed slot fills, each `{slot, fill, kit}`.
     let installed = match input.get("installed") {
         None => Vec::new(),
@@ -1538,6 +1545,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
     Some(Scenario {
         evidence: PathBuf::from(input.get("evidence")?.as_str()?),
         packs,
+        notes,
         installed,
         plugin_entries,
         gallery: optional(input.get("gallery"), |g| Some(PathBuf::from(g.as_str()?)))?,

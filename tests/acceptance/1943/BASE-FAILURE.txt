@@ -1,0 +1,56 @@
+Base commit: 07b63844 (Merge pull request #2257), the brief's base; no implementation of #1943 exists there.
+Built first (by this job): npm ci; npm run build --workspaces (vitest.config.ts loads scripts/lanes.mjs, which needs them).
+Command: NO_COLOR=1 node node_modules/vitest/vitest.mjs run tests/acceptance/1943 --testTimeout=600000 --no-file-parallelism
+Date: 2026-11-10 (23:48 local)  Machine: Mac17,10 (Apple silicon), 18 cores, load average 215 (1-minute) at the start
+Node: v24.22.0  vitest 5.0.5. Hosts: the Lima VMs deep-ubuntu and deep-fedora, reached over SSH at their forwarded
+ports. Paths: <repo> is the worktree, ~ the home; the VM user is redacted.
+Result: Test Files 3 failed (3); Tests 6 failed (6); about 23 s. Short on purpose: the surface doesn't exist.
+
+No test passed at the base. Every world was built first: the harness's link reached its VM and made ~/dh1943-<id>/
+there; setting.test.ts wrote its settings file; machine.test.ts made its two user units and read each back as
+`enabled` and `active` (with the stale unit's lock in place) before calling into the plug-in. Each test then fails at
+its first call into the plug-in, which isn't at the base:
+
+  setting.test.ts (#1943.9249618e, the setting clause, deep-ubuntu)
+    x setting: a required setting that holds ... naming the setting
+    x setting, the wrong program: the planted runner misses-the-drift fails that test ...
+  machine.test.ts (#1943.9249618e, the machine clause, deep-fedora)
+    x machine: an enabled user service that survives a restart passes; ... naming the service
+    x machine, the wrong program: the planted runner never-restarts fails that test ...
+  kit.test.ts (#1943.9249618e, the conformance clause)
+    x setting: passes check.kind@1 on a test host (deep-ubuntu), ...
+    x machine: passes check.kind@1 on a test host (deep-fedora), ...
+
+  each: Error: Cannot find module '/packages/checks-host/src/index.ts' imported from
+        <repo>/tests/acceptance/1943/helpers.ts, at `await hostChecks()` (setting.test.ts:18 and :27,
+        machine.test.ts:18 and :27, kit.test.ts:19).
+
+Behind that, also missing at the base (from reading the code): any setting or machine check kind, any kit for them,
+and any check kind that reads a host; the hub's kind table (packages/hub/src/kinds.ts) holds command, review, numbers
+and #68's four work kinds only, and the `host` state source (packages/workspaces) reads a local change log, not a host.
+
+Type check:
+  - At the base: node node_modules/typescript/bin/tsc -p tests/acceptance/1943/tsconfig.json exits 2, every error
+    from the missing surface: TS2307 "Cannot find module '../../../packages/checks-host/src/index.ts'" (helpers.ts
+    18, 22, 23; kit.test.ts 11) and the TS7006 implicit-any errors that follow from it.
+  - With a declaration-only copy of the surface (README, reading 1) placed temporarily at
+    packages/checks-host/src/index.ts and removed afterwards, the same command exits 0 with no output.
+
+Checked of the harness at the base, by hand, in a throwaway test not kept in the suite (it used helpers.ts), on both
+VMs: the world's SSH config alone reached each VM (`ssh -F <config> dh1943-ubuntu uname -s` printed Linux); the
+settings file landed; both user units read enabled and active; after `systemctl --user restart` the steady unit was
+active and the stale one failed (its stale lock in the way). After that check and after the base run, a read-only look
+on each VM found no ~/dh1943-* folder, no user unit and no file or link under ~/.config/systemd/user whose name holds
+dh1943-, and no /tmp/dh1943-* folder was left here.
+
+The run's test list, as printed:
+----------------------------------------------------------------------------------------------------------------
+ ❯ tests/acceptance/1943/kit.test.ts (2 tests | 2 failed) 2602ms
+     × setting: passes check.kind@1 on a test host (deep-ubuntu), fixed and seeded, catching its planted failure; its planted runners each fail the kit with their own message 822ms
+     × machine: passes check.kind@1 on a test host (deep-fedora), fixed and seeded, catching its planted failure; its planted runners each fail the kit with their own message 422ms
+ ❯ tests/acceptance/1943/setting.test.ts (2 tests | 2 failed) 4173ms
+     × setting: a required setting that holds on the host passes; changed there by a planted drift, it fails at the check's assertion, naming the setting 860ms
+     × setting, the wrong program: the planted runner misses-the-drift fails that test, missing the drift of max_connections 322ms
+ ❯ tests/acceptance/1943/machine.test.ts (2 tests | 2 failed) 8531ms
+     × machine: an enabled user service that survives a restart passes; one that doesn't survive a restart fails at the check's assertion, naming the service 4057ms
+     × machine, the wrong program: the planted runner never-restarts fails that test, passing the service that doesn't survive a restart 3159ms
