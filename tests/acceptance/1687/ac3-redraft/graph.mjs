@@ -140,9 +140,9 @@ export function newCycles(base, current, runtimeOnly) {
 // Roles are frozen from the design and BASE package responsibilities, not inferred from candidate import choices.
 export const corePackages = new Set(['adapters', 'asks', 'budget', 'conformance', 'contracts', 'evidence',
   'extension-host', 'gate', 'leases', 'readings', 'record', 'runner', 'supervisor', 'verdicts']);
-export const extensionPackages = new Set(['archive', 'buying', 'checks-command', 'checks-journey', 'checks-numbers',
+export const extensionPackages = new Set(['archive', 'buying', 'checks-command', 'checks-host', 'checks-journey', 'checks-numbers',
   'checks-review', 'checks-work', 'config-eval', 'env-local', 'github', 'otlp', 'paseo', 'pi', 'proof',
-  'resolver-decisions', 'wiki', 'workspaces']);
+  'resolver-decisions', 'routing-replay', 'wiki', 'workspaces']);
 const owner = (file) => file.match(/^packages\/([^/]+)\//)?.[1];
 export function boundary(graph) {
   const roots = [...graph.nodes].filter((file) => corePackages.has(owner(file)) || file === 'packages/hub/src/core.ts');
