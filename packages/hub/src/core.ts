@@ -181,6 +181,8 @@ const machineLoad = (): { load: number; cores: number } => {
 const ENDED_KEPT = 64;
 /** The agents whose hooks run Claude Code's entries but who aren't Claude Code: never a session's asks or claims. */
 const FOREIGN = new Set(['cursor', 'grok']);
+/** The agents whose permission prompts the hub asks about (server.ts: prompted). */
+const PROMPTED = new Set(['claude-code', 'claude', 'codex', 'paseo']);
 /** The agents whose adapter has no route to hold a prompt at its submit: pi's package and paseo's plugin take none (#40, #55). */
 const HOLDS_NO_PROMPT = new Set(['pi', 'paseo']);
 /** An agent whose idle session no answer can wake (caps.wakeIdle): what it is to read reaches it in a held stop or a call's reply. */
@@ -622,6 +624,8 @@ export class Core {
   private replaying: Promise<unknown> | undefined;
   /** Only the drops-post-tool-use and replay-appends-twice plants read them. */
   private dropped = false;
+  /** The newest hook ID #2026's planted asker read; only that plant reads it. */
+  private askedThrough = '';
   /** Whether appends came back during a replay, so the files it kept are taken again after it. */
   private retake = false;
   /** Every session the hooks named, checked or not, by ID. */
@@ -1614,7 +1618,8 @@ export class Core {
     if (replayed && /^[0-9A-HJKMNP-TV-Z]{26}$/.test(meta.id)) {
       // Its live copy may be acknowledged and still on its way to the record.
       await Promise.allSettled([...this.inflight]);
-      const known = await this.record.raw(`SELECT json_extract(data, '$.late') AS late FROM events WHERE id = ? LIMIT 1`, [meta.id]);
+      // #2026's planted replay keeps its place by the newest ID: a line with any ID at or after it recorded counts as recorded.
+      const known = await this.record.raw(`SELECT json_extract(data, '$.late') AS late FROM events WHERE id ${this.options.plant === 'replay-keeps-place-by-id' ? '>=' : '='} ? LIMIT 1`, [meta.id]);
       if (known.length) {
         // Unless deep-hook gave up on an acknowledgement the hub sent just too late: the live copy is in the record
         // unmarked while deep-hook acted on its own, so the session says so rather than the fail-open going unseen.
@@ -1851,6 +1856,16 @@ export class Core {
       if (drafts.some((d) => d.kind === 'agent.stop')) void this.asks.tick().catch(() => undefined);
     });
     settled.catch(() => undefined);
+    // A permission prompt deep-hook spooled with the hub away still becomes an ask you see, once its request is in the
+    // record (#2026; design: the hook protocol). One the hub answered too late was its terminal prompt's to ask (#18).
+    // #2026's planted asker keeps its place by the newest hook ID it read, not by log_pos: an older one counts as read.
+    const readBefore = this.options.plant === 'asks-keep-place-by-id' && meta.id <= this.askedThrough;
+    if (this.options.plant === 'asks-keep-place-by-id' && !readBefore) this.askedThrough = meta.id;
+    if (replayed && !readBefore && !meta.late && meta.event === 'PermissionRequest' && meta.call && meta.session && !meta.watchOnly && PROMPTED.has(meta.agent)) {
+      const call = meta.call;
+      void settled.then(async () => { this.prompts.add((await this.holds.asked(meta, aboutPermission(call.tool, call.input))).ask); })
+        .catch((error: unknown) => process.stderr.write(`deep hub: the replayed permission request ${meta.id} raised no ask: ${error instanceof Error ? error.message : String(error)}\n`));
+    }
     // The session map reads the hook before its reply is asked for (#352), once its appends are watched.
     if (verified && meta.session && !FOREIGN.has(meta.agent)) await this.siblings.hook(drafts, meta).catch(() => undefined);
     // A stop that leaves the agent's question open is recorded as waiting on you once the stop is in the record (#27).
@@ -2875,7 +2890,9 @@ export class Core {
       const query = (q: string) => this.record.raw(q);
       const readings = await sessionStates(query, this.now(), only === 'all' ? undefined : only);
       // The list's rows (#1463): each that changed, and each ask's that left the list, in the same batch.
-      const built = await buildRows(query, readings);
+      // The open asks are the asks core's inbox projection, by its one close rule (#2026).
+      const inbox = (await this.asks.inbox()).filter((a) => a.status !== 'closed').map((a) => a.ask);
+      const built = await buildRows(query, readings, inbox);
       const changed = settle(this.rows, built, this.rowsFirst);
       const open = new Set(built.filter((r) => r.id.startsWith('ask:')).map((r) => r.id));
       const left = [...this.rows.keys()].filter((id) => id.startsWith('ask:') && !open.has(id));
