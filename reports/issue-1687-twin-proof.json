@@ -2,8 +2,8 @@
   "snapshot": "2d90d818ce6b2a293e6f7b0f6a7106921649f006",
   "annotationCorrection": "349 passed-without-results callback Promise<CheckResult>; runtime unchanged",
   "overlays": 19,
-  "provenOverlays": 15,
-  "blockedOverlays": 4,
+  "provenOverlays": 17,
+  "blockedOverlays": 2,
   "twins": [
     {
       "twin": "349--refusals-unrecorded",
@@ -260,10 +260,17 @@
       "criteria": [
         {
           "criterion": "#39.edfd0196",
-          "result": "BLOCKED",
-          "kills": 0
+          "result": "PROVEN",
+          "kills": 2
         }
-      ]
+      ],
+      "additionalEvidence": {
+        "snapshot": "363e97c2926ac3b71960e8275aff610272427059",
+        "buildExit": 0,
+        "testExit": 1,
+        "cleanEvidence": "Approved critical affected clean cases passed; exact unchanged criterion rejects the twin.",
+        "report": "final-twins-validation/reports/39-redraft--job-hooks-as-session/tests-admitted/errors.jsonl"
+      }
     },
     {
       "twin": "83--stop-without-line",
@@ -293,7 +300,14 @@
           "result": "PROVEN",
           "kills": 1
         }
-      ]
+      ],
+      "additionalEvidence": {
+        "snapshot": "363e97c2926ac3b71960e8275aff610272427059",
+        "buildExit": 0,
+        "testExit": 1,
+        "cleanEvidence": "Approved critical affected clean cases passed; exact unchanged criterion rejects the twin.",
+        "report": "final-twins-validation/reports/83--answers-any-origin/tests-admitted/errors.jsonl"
+      }
     },
     {
       "twin": "83--plant-ignored",
@@ -305,10 +319,17 @@
       "criteria": [
         {
           "criterion": "#83.4b0836ba",
-          "result": "BLOCKED",
-          "kills": 0
+          "result": "PROVEN",
+          "kills": 1
         }
-      ]
+      ],
+      "additionalEvidence": {
+        "snapshot": "363e97c2926ac3b71960e8275aff610272427059",
+        "buildExit": 0,
+        "testExit": 1,
+        "cleanEvidence": "Approved critical affected clean cases passed; exact unchanged criterion rejects the twin.",
+        "report": "final-twins-validation/reports/83--plant-ignored/tests-admitted/errors.jsonl"
+      }
     },
     {
       "twin": "18--unbound-reads-all",

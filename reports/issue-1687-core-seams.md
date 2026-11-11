@@ -4,7 +4,76 @@
 whole issue, overriding the earlier seam-per-PR packaging. No acceptance criterion
 was waived. Original base: `c52f1c66d22886c336189d41237265e82843c34a`.
 
-## Latest integration and proof
+## Approved completion of construction and dependency gaps
+
+The person explicitly approved `issue-1687-boundary-proposal.md`. Check-owner edits
+are isolated in `acc5121c5` and `cd178e26f`; implementation is `363e97c29`, following
+a main merge at `18bd97abaa09c3dbbdf43354b77c51627657de0e`. No further approval is
+being requested. This message approval is recorded in
+`issue-1687-approved-check-changes.md`; it is not a fabricated signed guard tag.
+
+**Implemented and checked:**
+
+- `hub-runtime.createCore` is the shared synchronous outer composition entry for
+  the worker, inline server and #822 setup. Core requires six domain capabilities:
+  checks, environment, decisions, knowledge, forge and workspaces. Concrete
+  implementations stay outside its closure. No default registry or concealed
+  dynamic import was introduced.
+- Direct, transitive and type-only core→extension edges are **zero**. The original
+  and independently redrafted absolute-boundary checks pass. Reviewed computed
+  imports add their resolved edges and reject unreviewed loaders, changed input
+  guards, escapes or a provider path smuggled back into core.
+- Final architecture/ownership/oracle run: **29/29 pass, no skips**. Core maximum
+  body length remains 95. No new runtime/type-inclusive cycles.
+- #822 setup uses the production factory; all 21 assertion expressions and seven
+  complete case bodies were independently checked byte-identical. Final real
+  in-process run: **7/7 pass**, including 30-day and no-deadline fake-clock cases.
+- The long-clock run initially exposed shutdown waiting forever on a debounced
+  state pass after fake-timer uninstall. An isolated trace localized the wait;
+  production now explicitly wakes and drains that owned debounce before shutdown.
+  Neither timeout nor assertion changed. Corrected hub typecheck exits **0**.
+- Job replies now share event-path job ownership before session-only side effects,
+  preserving the original hook sequence. The existing unplaced-person wrong
+  program bypasses transcript deferral so its original origin mutation remains
+  observable. Unchanged clean #39 job-isolation and #83 origin/plant cases pass;
+  their migrated twins compile and fail their named assertions. **17/19 original
+  overlays now have formal compiling fault proof** (`issue-1687-twin-proof.json`).
+
+**Proof that remains non-PASS:**
+
+- #18's compiled twin does fail the explicit unchanged `holds()` criterion at the
+  named session leak, with clean 2/2 pass; formal runner `atAssertion` classification
+  still rejects its plain Error. Its machine result was not overwritten.
+- Clean and wrong #21 replay snapshots both compile (including their own release
+  hook); the timed 1,000-call test was not admitted after a 60-minute wait:
+  `INCONCLUSIVE no grant: no timed grant came within 60 min`. No replay PASS or kill
+  is claimed.
+- Full affected baseline was attempted with `--slow`, built successfully and began
+  execution. Under sustained heavy shared-machine load it accumulated inherited
+  failures; it was interrupted after more than an hour. Partial results and stopped
+  owned-PID receipt are retained. Full before/after equivalence remains unproven.
+- Final #822 affected invocation reports **7 passed**, but overall **FAIL** from
+  repository lint: 52 findings outside known-failure entries, 10 unrun build-granted
+  lint jobs. The exact INCONCLUSIVE lines name vendor-rebase, canvas-lint,
+  size-ratchet, render-lint, plant-lint, blocking-call-guard, keymap-guard,
+  panel-catalog, known-failures-check and fetch-lock. No WIDE line in this selection.
+- Candidate `target/` disappeared while compilation queued; a missing-binary run
+  remains blocked evidence. For the final #822 run, an independent file copy of the
+  successful base hook was used only after byte-equality of all hook/contracts,
+  lock/toolchain inputs and absence of compiled worktree paths were verified.
+  SHA-256 `f5c8c03d3d6960c053492f2be4e2f0d6dffcbe7ed7e9414a10a8f3d75b71944b`.
+  No shared target/symlink or foreign TypeScript build was used. This native artifact
+  reuse is disclosed, not counted as a second compile.
+
+Local receipts: `/tmp/deep-1687-approved-final-structural.log`,
+`/tmp/deep-1687-final-flush-build.log`,
+`/tmp/deep-1687-final-822-restored-artifact.log`,
+`/tmp/deep-1687-final-twins-validation/`, `/tmp/deep-1687-replay-proof/` and
+`/tmp/deep-1687-full-base-interrupted.json`. All processes this run started ended;
+only owned processes were stopped. The code/approved-check gaps are closed; these
+unrun/inherited proof gates still prevent an honest `Closes #1687` claim.
+
+## Previous integration and proof (retained history)
 
 Main `909b85e9efab4a5ff4d620070998578ddfb1095d` was merged as `2d90d818c`.
 The document checks (#1723), origin-based PR lookup (#1881), and replay/inbox rules
