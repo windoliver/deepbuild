@@ -175,6 +175,10 @@ fn main() {
                     .or_else(deep_app::setup::reason)
                     .unwrap_or_default();
                 eprintln!("deep-app: {line}");
+                // A terminal shows what setup printed too; the window keeps it one press away (#1100).
+                if !stopped.output.trim().is_empty() {
+                    eprintln!("{}", stopped.output.trim());
+                }
                 std::process::exit(1);
             }
         }
