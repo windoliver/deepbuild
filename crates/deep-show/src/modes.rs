@@ -271,12 +271,7 @@ impl Hub<'_> {
                           "snapshots": [], "drawn": []});
         };
         reply["rev"] = json!(revision.rev);
-        // A document with a 3D layer, or one that requires scene3d, such as one of glTF meshes.
-        let three = deep_canvas_scene3d::scene::has_3d(&revision.drawn)
-            || revision
-                .drawn
-                .pointer("/requires/modules/scene3d")
-                .is_some();
+        let three = crate::probe::draws_3d(&revision.drawn);
         let drawn = if three {
             let placed = self.arranged(&show.doc, &self.with_outputs(&show.doc, &revision.drawn));
             match self.mode_3d(show, args, &placed, &mut reply) {
