@@ -412,6 +412,30 @@ pub fn reveal_levels(
     Ok(Some((0..n).map(|u| (u as f64 * lag + 0.5) * w).collect()))
 }
 
+/// #407: each glyph's opacity under a text's `reveal` at the progress its evaluated params hold,
+/// as laying out fades it; `None` when the text has no reveal.
+pub fn reveal_opacity(
+    params: &Map<String, Value>,
+    run: &Shaped,
+    id: &str,
+) -> Result<Option<Vec<f64>>, Refused> {
+    let Some(progress) = reveal_of(params, id)? else {
+        return Ok(None);
+    };
+    let (units, n) = units_of("grapheme", run, &format!("items/{id}/params/reveal"))?;
+    let (lag, w) = reveal_span(n);
+    Ok(Some(
+        units
+            .iter()
+            .map(|u| {
+                u.map_or(1.0, |u| {
+                    ((progress - u as f64 * lag * w) / w).clamp(0.0, 1.0)
+                })
+            })
+            .collect(),
+    ))
+}
+
 /// What laying out may ask its caller for: a text shaped in the item's own style (a glyph
 /// shift's set member, a counter's previous string), and a counter's string at another value
 /// of its source.

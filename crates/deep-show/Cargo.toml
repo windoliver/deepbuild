@@ -45,6 +45,9 @@ test-check-kind = ["dep:deep-canvas-test-modules"]
 # Issue #408: a test canvas module whose kind's items contribute glyph boxes to the core's
 # glyph-box array, and draw nothing else.
 test-glyph-label = ["dep:deep-canvas-test-modules"]
+# Issue #407: the film audit with a shortest reading hold of 2 s, standing in for a new release's
+# stricter rule; nothing else changes.
+test-hold-min-2s = []
 test-leave-out-logic = []
 # Issue #489: the full set without the data module, so motion@1's digest is compared without it.
 test-leave-out-data = []
