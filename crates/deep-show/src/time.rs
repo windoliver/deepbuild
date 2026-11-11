@@ -59,6 +59,9 @@ pub struct Determinism {
     pub at_times: Option<Vec<i64>>,
     /// #1897: on this machine by the GPU pixel hash, or a cross-machine record.
     pub compare: Compare,
+    /// #504: the call's own run replays the session's input track and picks; a check's run
+    /// (the verdict's) reads the saved revision alone.
+    pub session: bool,
 }
 
 /// One of this issue's calls, parsed; `None` is `bad_input`.
@@ -155,6 +158,7 @@ pub fn parse_call(name: &str, c: &Map<String, Value>) -> Option<Call> {
                 play,
                 at_times,
                 compare,
+                session: true,
             }))
         }
         _ => None,
@@ -470,7 +474,7 @@ impl Hub<'_> {
     /// operator steps, a change (Frame clock and scheduler: never unasked). With `presented`
     /// (#501), each vsync's display time, the time it evaluates and the hash of the frame shown.
     pub fn play(&mut self, doc: &str, display_hz: u32, to: i64, presented: bool) -> Value {
-        let document = match self.current_doc(doc) {
+        let document = match self.current_doc(doc).map(|d| self.played(doc, &d)) {
             Ok(doc) => doc,
             Err(reply) => return reply,
         };
@@ -539,7 +543,8 @@ impl Hub<'_> {
     /// reached by seeking to it, each on a fresh scheduler and session, as canonical renders
     /// and node results.
     pub fn determinism(&mut self, d: &Determinism) -> Value {
-        let document = match self.current_doc(&d.doc) {
+        let current = self.current_doc(&d.doc);
+        let document = match current.map(|doc| if d.session { self.played(&d.doc, &doc) } else { doc }) {
             Ok(doc) => doc,
             Err(reply) => return reply,
         };

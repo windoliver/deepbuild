@@ -1,0 +1,33 @@
+Where each test fails at the base, read from the base's code; the suite was not built or run (the job's instruction: the
+machine is shared and loaded). Base a04378eb2; the code read is identical at e546517e9, where this was written (README:
+Base).
+
+1. take-apart-framing.test.ts:93, "#504.a17a1463 a hold shot keeping all six parts of a staggered take-apart has each
+   part's projected bounds inside the safe frame at each of its 120 samples at 30 a second, the parts ending apart"
+
+   Fails at helpers.ts:136, evalOk's
+     expect(answer['ok'], 'the take-apart is accepted: …').toBe(true)
+   with the answer
+     {"ok":false,"code":"ref_unresolved","path":"items/plate/parent"}
+
+   Why: deep-motion eval compiles the document (deep-canvas-motion Program::compile_with -> doc::read_with). The
+   transport (span "4s", frame_rate "30/1"), the camera and the follow channel on data/apart are read without a
+   refusal: target_of takes `data/<name>`, the follow's held keys and its spring at 2 Hz, damping ratio 1 are valid, and
+   follow_spec_of ignores the unknown `stagger`. Then parents_of (doc.rs 3015-3048) refuses a `parent` that isn't an
+   item with `ref_unresolved` at `items/<id>/parent`; the base knows no `assemblies` map, so the assembly IDs aren't
+   items, and with serde_json's preserve_order the first parented item in the document is `plate`. No frame is
+   evaluated, so neither the take-apart check nor the safe-frame check runs.
+
+2. take-apart-framing.test.ts:99, "#504.a17a1463 a planted framer that frames the parts at rest, ignoring the
+   take-apart, loses the plate and the knob from the safe frame by the last sample"
+
+   Fails at helpers.ts:142, evalPlanted's
+     expect(answer['ok'], 'the planted framer: the planted program framer_ignores_apart answers with frames: …').toBe(true)
+   with the answer
+     {"ok":false,"code":"bad_input"}
+
+   Why: crates/deep-motion/src/main.rs planted_of (55-91) knows no `framer_ignores_apart`, so eval_line answers
+   bad_input before compiling the document.
+
+Both fail for the expected reason: the base has no assemblies, no take-apart and no plant; nothing in the test is
+special-cased to fail there.

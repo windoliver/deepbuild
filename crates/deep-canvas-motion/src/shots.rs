@@ -211,6 +211,23 @@ fn mixed(a: &Pose, b: &Pose, w: f64) -> Pose {
     }
 }
 
+/// #504: a glide into `pose` from `before` over `[start, start + g)` by `ease` (Shot: `join:
+/// glide`), for a timeline shot's first span and a stage's shot alike: [`mixed`] by the eased
+/// share, `before` itself at `start` and `pose` from `start + g` on. Under reduced motion
+/// (`reduced`), a cut at the glide's midpoint with a 200 ms dissolve (Transport). Answers the
+/// pose, the dissolve inside its window, and whether the glide moves the camera.
+pub fn joined(before: &Pose, pose: &Pose, start: i64, g: i64, ease: Ease, t: i64, reduced: bool) -> (Pose, Option<(f64, Pose, Pose)>, bool) {
+    if g <= 0 || t < start || t >= start + g {
+        return (*pose, None, false);
+    }
+    if reduced {
+        let mid = start + g / 2;
+        let dissolve = ((t - mid).abs() < DISSOLVE / 2).then(|| ((t - (mid - DISSOLVE / 2)) as f64 / DISSOLVE as f64, *before, *pose));
+        return (if t < mid { *before } else { *pose }, dissolve, false);
+    }
+    (mixed(before, pose, ease.at((t - start) as f64 / g as f64)), None, true)
+}
+
 /// An angle in (−180, 180].
 fn wrap(d: f64) -> f64 {
     let w = d.rem_euclid(360.0);
@@ -387,6 +404,12 @@ pub struct Plan {
     /// The envelope's camera, an index in `cameras`.
     pub doc_camera: Option<usize>,
     pub groups: Vec<Parallax>,
+    /// #504: the shots stages name, in `Motion::shots` order, each with its framed pose (an
+    /// explicit pose, or a fit of its kept items); `None` for one with a start of its own, a
+    /// timeline's, or on a camera whose params aren't a pose.
+    pub stage: Vec<Option<Shot>>,
+    /// #504: each camera's stage shots from the input track, in time order (`Inputs::staged`).
+    pub staged: Vec<Vec<crate::input::Staged>>,
 }
 
 /// What an evaluation of a pose reads besides t.
@@ -404,6 +427,8 @@ pub struct At<'a> {
 pub struct Shown {
     pub pose: Pose,
     pub shot: Option<usize>,
+    /// #504: the stage shot that writes it, an index in [`Plan::stage`].
+    pub stage: Option<usize>,
     /// Under reduced motion, a cut's dissolve: the incoming pose's share and the two poses.
     pub dissolve: Option<(f64, Pose, Pose)>,
     /// Inside a declared move: a shot's move or a whip.
@@ -475,11 +500,12 @@ fn framing_of(v: &Map<String, Value>, base: Option<&Framing>, path: &str) -> Res
     })
 }
 
-/// An item's extent about its position: a box's size, a rect's box, else a point.
+/// An item's extent about its position: a box's, a cylinder's or a sphere's size (#504, read as
+/// the geometry audit reads it), a rect's box, else a point.
 fn extent(item: &Value) -> [Vec3; 2] {
     let params = item.get("params");
     match item.get("kind").and_then(Value::as_str) {
-        Some("mark.box@1") => {
+        Some("mark.box@1" | "mark.cylinder@1" | "mark.sphere@1") => {
             let half = match params.and_then(|p| p.get("size")) {
                 Some(Value::Array(s)) if s.len() == 3 => [0, 1, 2].map(|k| s[k].as_f64().unwrap_or(0.0) / 2.0),
                 Some(v) => [v.as_f64().unwrap_or(0.0) / 2.0; 3],
@@ -788,10 +814,16 @@ fn union_over(
             return refused("ref_unresolved", format!("shots/{shot}/frame/keep"), json!({"item": id, "shot": shot}));
         };
         let e = extent(items.and_then(|m| m.get(id)).unwrap_or(&Value::Null));
+        // #504: an assembly's part is bounded in the assembly's space, then widened by its reach.
+        let member = program.member(id);
+        let mut own = [[f64::INFINITY; 3], [f64::NEG_INFINITY; 3]];
         for axis in 0..3 {
             let slot = i * TRANSFORM + axis;
             let mut sample = |t: i64| {
-                program.evaluate(t, Validity::Full, &mut state);
+                match member {
+                    Some(_) => program.evaluate_unassembled(t, &mut state),
+                    None => program.evaluate(t, Validity::Full, &mut state),
+                }
                 state.slots[slot]
             };
             let iv = match planted {
@@ -813,11 +845,72 @@ fn union_over(
                     )
                 })?,
             };
-            out[0][axis] = out[0][axis].min(iv.lo + e[0][axis]);
-            out[1][axis] = out[1][axis].max(iv.hi + e[1][axis]);
+            own[0][axis] = iv.lo + e[0][axis];
+            own[1][axis] = iv.hi + e[1][axis];
+        }
+        if let Some(assembly) = member {
+            // The span's start, where a planted framer reads each share.
+            program.evaluate(a, Validity::Full, &mut state);
+            own = reached(program, doc, assembly, own, &state).map_or_else(
+                || {
+                    refused(
+                        "framing_unsettled",
+                        format!("shots/{shot}/frame/keep"),
+                        json!({"item": id, "shot": shot, "why": "the part's assembly has a value nothing bounds: give its motion a range"}),
+                    )
+                },
+                Ok,
+            )?;
+        }
+        for k in 0..3 {
+            out[0][k] = out[0][k].min(own[0][k]);
+            out[1][k] = out[1][k].max(own[1][k]);
         }
     }
     Ok(out)
+}
+
+/// #504: a box in assembly `a`'s space carried up its chain into the world, widened at each
+/// assembly by its reach (Camera `camera@1`: framing): the hull of the box's corners through
+/// the assembly's transform at its value's and share's ends (a turn sampled every 5° at most and
+/// padded by the sagitta of a step), never by sampling time. The planted framer takes each
+/// share as `state` holds it. `None` where an assembly's value has no bound.
+fn reached(program: &Program, doc: &Map<String, Value>, a: usize, mut b: [Vec3; 2], state: &State) -> Option<[Vec3; 2]> {
+    let mut at = Some(a);
+    while let Some(i) = at {
+        let x = &program.assemblies[i];
+        let (mut value, mut share) = program.assembly_reach(doc, i)?;
+        if program.options.planted == Planted::FramerIgnoresApart {
+            (value, share) = (Iv::point(state.slots[x.slot]), Iv::point(state.slots[x.slot + 1]));
+        }
+        let (values, pad) = match x.joint {
+            Some(j) if j.kind == crate::assembly::Kind::Turn && value.hi > value.lo => {
+                let n = ((value.hi - value.lo) / 5.0).ceil().max(1.0);
+                let step = (value.hi - value.lo) / n;
+                let r = corners(&b).iter().map(|c| length(sub(*c, j.pivot))).fold(0.0, f64::max);
+                let stretch = (0..3).map(|k| length([x.at[0][k], x.at[1][k], x.at[2][k]])).fold(0.0, f64::max);
+                let values: Vec<f64> = (0..=n as usize).map(|k| value.lo + step * k as f64).collect();
+                (values, r * stretch * (1.0 - cos(rad(step) / 2.0)) * (1.0 + 1e-9) + 1e-12)
+            }
+            _ => (vec![value.lo, value.hi], 0.0),
+        };
+        let mut out = [[f64::INFINITY; 3], [f64::NEG_INFINITY; 3]];
+        for v in values {
+            for s in [share.lo, share.hi] {
+                let m = x.local(v, s);
+                for c in corners(&b) {
+                    let p = crate::assembly::apply(&m, c);
+                    for k in 0..3 {
+                        out[0][k] = out[0][k].min(p[k] - pad);
+                        out[1][k] = out[1][k].max(p[k] + pad);
+                    }
+                }
+            }
+        }
+        b = out;
+        at = x.parent;
+    }
+    Some(b)
 }
 
 /// The kept items' union at one time.
@@ -842,6 +935,19 @@ pub fn bounds_at(program: &Program, doc: &Map<String, Value>, state: &State, id:
     let i = program.items.iter().position(|x| x == id)?;
     let pos = [0, 1, 2].map(|k| state.slots[i * TRANSFORM + k]);
     let e = extent(doc.get("items")?.get(id)?);
+    // #504: an assembly's part's extent turns with the assembly.
+    if let Some(a) = program.member(id) {
+        let m = program.assembly_world(&state.slots, a);
+        let mut out = [[f64::INFINITY; 3], [f64::NEG_INFINITY; 3]];
+        for c in corners(&e) {
+            let p = add(pos, crate::assembly::turn(&m, c));
+            for k in 0..3 {
+                out[0][k] = out[0][k].min(p[k]);
+                out[1][k] = out[1][k].max(p[k]);
+            }
+        }
+        return Some(out);
+    }
     Some([add(pos, e[0]), add(pos, e[1])])
 }
 
@@ -1066,7 +1172,23 @@ impl Plan {
             let (start, end) = (cut - span / 2, cut + (span - span / 2));
             transitions.push(Transition { id, from, to, kind, cut, start, end, ease });
         }
+        // #504: each stage's shot, framed once (its kept items bounded over the document's span).
+        let transport = program.motion.transport;
+        let (from, until) = (transport.start, transport.start + transport.span.unwrap_or(0));
+        let mut stage = Vec::with_capacity(program.motion.shots.len());
+        for s in &program.motion.shots {
+            let def = shots_json.and_then(|m| m.get(&s.id)).and_then(Value::as_object);
+            stage.push(match def {
+                Some(def) if !def.contains_key("start") && cameras[s.camera].own.is_some() => {
+                    let r = Raw { id: s.id.clone(), def, camera: s.camera, start: from, end: until };
+                    Some(Plan::shot_of(doc, program, &cameras, &r, &frame, planted)?)
+                }
+                _ => None,
+            });
+        }
         Ok(Some(Plan {
+            stage,
+            staged: program.inputs.staged.clone(),
             size,
             safe,
             frame_rate: rate,
@@ -1302,6 +1424,15 @@ impl Plan {
     }
 
     fn shown_bare(&self, cam: usize, t: i64, at: &At) -> Shown {
+        self.shown_upto(cam, self.staged.get(cam).map_or(0, Vec::len), t, at)
+    }
+
+    /// [`Plan::shown_bare`] counting only the camera's first `n` stage shots: a stage shot's
+    /// pose first, else the timeline's.
+    fn shown_upto(&self, cam: usize, n: usize, t: i64, at: &At) -> Shown {
+        if let Some(shown) = self.staged(cam, n, t, at) {
+            return shown;
+        }
         let camera = &self.cameras[cam];
         // A whip's window turns the side it shows (Transition: whip).
         for tr in &self.transitions {
@@ -1326,19 +1457,21 @@ impl Plan {
                 let (y, p) = yaw_pitch(sub(pose.target, pose.position));
                 aimed(&pose, y + a * cos(rad(angle)), p - a * sin(rad(angle)))
             };
-            return Shown { pose: turned, shot: Some(side), dissolve: None, moving: true };
+            return Shown { pose: turned, shot: Some(side), stage: None, dissolve: None, moving: true };
         }
         match self.shot_at(cam, t) {
             Some(i) if t < self.shots[i].end => self.shot_pose(i, t, at),
             Some(i) => Shown {
                 pose: self.shot_pose(i, self.shots[i].end, at).pose,
                 shot: Some(i),
+                stage: None,
                 dissolve: None,
                 moving: false,
             },
             None => Shown {
                 pose: camera.own.unwrap_or(Pose { position: [0.0; 3], target: [0.0; 3], fov: 0.0, view_width: 1.0, roll: 0.0, flat: true }),
                 shot: None,
+                stage: None,
                 dissolve: None,
                 moving: false,
             },
@@ -1351,7 +1484,7 @@ impl Plan {
         let s = &self.shots[i];
         if s.keyed {
             let pose = (at.keyed)(s.camera).unwrap_or(s.framed);
-            return Shown { pose, shot: Some(i), dissolve: None, moving: false };
+            return Shown { pose, shot: Some(i), stage: None, dissolve: None, moving: false };
         }
         let reduced_cut = at.reduced && !self.slow && !s.essential;
         let span = (s.end - s.start).max(1);
@@ -1384,26 +1517,39 @@ impl Plan {
                 .map(|(k, p)| self.shot_pose(k, p.end, at).pose)
                 .or(self.cameras[s.camera].own);
             if let Some(before) = before {
-                if reduced_cut {
-                    let mid = s.start + g / 2;
-                    if (t - mid).abs() < DISSOLVE / 2 {
-                        let mix = (t - (mid - DISSOLVE / 2)) as f64 / DISSOLVE as f64;
-                        dissolve = Some((mix, before, pose));
-                    }
-                    if t < mid {
-                        pose = before;
-                    }
-                } else {
-                    let w = s.ease.at((t - s.start) as f64 / g as f64);
-                    pose = mixed(&before, &pose, w);
-                    moving = true;
-                }
+                let (glided, faded, glides) = joined(&before, &pose, s.start, g, s.ease, t, reduced_cut);
+                pose = glided;
+                dissolve = faded.or(dissolve);
+                moving |= glides;
             }
         }
         if let Some(k) = s.shake.filter(|_| !at.reduced) {
             pose = self.shaken(s, &pose, k, t, at);
         }
-        Shown { pose, shot: Some(i), dissolve, moving }
+        Shown { pose, shot: Some(i), stage: None, dissolve, moving }
+    }
+
+    /// #504: what camera `cam` shows at t from its stage shots, counting the first `n`: the
+    /// latest at or before t, unless a timeline shot started after it, glides from the pose shown
+    /// at its entry into its stage's framed pose (Control: "A stage's shot starts at the stage's
+    /// entry and, unless it says `join: cut`, glides there over 0.8 s from the pose shown").
+    /// `None` where no stage shot writes the camera at t.
+    fn staged(&self, cam: usize, n: usize, t: i64, at: &At) -> Option<Shown> {
+        let list = self.staged.get(cam)?;
+        let k = list[..n.min(list.len())].partition_point(|s| s.t <= t).checked_sub(1)?;
+        let st = list[k];
+        let stage = self.stage.get(st.shot)?.as_ref()?;
+        if self.shots.iter().any(|s| s.camera == cam && s.start > st.t && s.start <= t) {
+            return None;
+        }
+        // The pose shown at the entry: the earlier stage shots' and the timeline's.
+        let before = self.shown_upto(cam, k, st.t, at).pose;
+        let reduced = at.reduced && !self.slow && !stage.essential;
+        let (mut pose, dissolve, moving) = joined(&before, &stage.framed, st.t, st.span, st.ease, t, reduced);
+        if at.planted == Planted::StageGlideMovesTargetOnly {
+            pose.position = stage.framed.position;
+        }
+        Some(Shown { pose, shot: None, stage: Some(st.shot), dissolve, moving })
     }
 
     /// The pose turned by the shot's shake: lattice noise of (t × hz, the shot's ID) on yaw and

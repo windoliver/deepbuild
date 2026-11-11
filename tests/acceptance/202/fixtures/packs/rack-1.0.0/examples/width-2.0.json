@@ -1,0 +1,25 @@
+{
+  "format": 1,
+  "profile": "board",
+  "title": "A rack 2.0 m wide with one divider",
+  "description": "A rack 2.0 m wide with one divider: one rack.unit@1 item, an example of the #202 acceptance suite's packs.",
+  "size": [
+    320,
+    360
+  ],
+  "packs": [
+    "acme/rack@1.0.0"
+  ],
+  "items": {
+    "x1": {
+      "id": "x1",
+      "kind": "rack.unit@1",
+      "name": "X1",
+      "order": "a0",
+      "params": {
+        "width": 2,
+        "dividers": 1
+      }
+    }
+  }
+}
