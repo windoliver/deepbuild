@@ -51,6 +51,7 @@ mod scene;
 mod seam;
 mod session3;
 mod simplify;
+mod spawn;
 mod status;
 mod steps_ref;
 #[cfg(feature = "test-meter")]
@@ -384,8 +385,8 @@ pub enum Planted {
     /// #503's wrong programs: a point set's video frame chosen at a time that advances only on a
     /// played step, so a session opened later or a seek keeps the frame decoded before it; the
     /// video background's frame prefiltered into the environment, keyed per frame.
-    VideoFrameKeptOverSeek,
-    VideoPrefiltersEnvironment,
+    PointVideoKeepsFrameBeforeSeek,
+    VideoBackgroundPrefiltered,
 }
 
 impl Planted {
@@ -618,8 +619,8 @@ impl Planted {
             "times_only_scene" => Planted::TimesOnlyScene,
             "wait_clock_after_warmup" => Planted::WaitClockAfterWarmup,
             "picks_largest_gain" => Planted::PicksLargestGain,
-            "video_frame_kept_over_seek" => Planted::VideoFrameKeptOverSeek,
-            "video_prefilters_environment" => Planted::VideoPrefiltersEnvironment,
+            "point_video_keeps_frame_before_seek" => Planted::PointVideoKeepsFrameBeforeSeek,
+            "video_background_prefiltered" => Planted::VideoBackgroundPrefiltered,
             _ => return None,
         })
     }

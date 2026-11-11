@@ -9,6 +9,7 @@
 
 pub mod ao;
 mod backdrop;
+pub mod clouds;
 pub mod cull;
 pub mod created;
 mod diag;
@@ -185,7 +186,7 @@ pub struct Planted {
     /// #422: the environment prefiltered one roughness mip per frame from the session's first.
     pub prefilter_over_frames: bool,
     /// #503: a video background's frame prefiltered into the environment, keyed per frame.
-    pub video_prefilters_environment: bool,
+    pub video_background_prefiltered: bool,
     /// #1174: screen-size labels draw in the geometry pass at the internal size, before the
     /// upscale, as the base drew them.
     pub labels_before_upscale: bool,
@@ -1642,6 +1643,8 @@ struct Batch {
     casters: BTreeMap<SetKey, Set>,
     lines: Set,
     points: Set,
+    /// Its point sets' records from a depth video (#503).
+    clouds: Vec<(wgpu::Buffer, u32)>,
     /// One record per inked glyph of its labels.
     labels: Set,
     bundle: Option<wgpu::RenderBundle>,
@@ -1881,6 +1884,8 @@ pub struct Renderer {
     sky: bool,
     sky_pipeline: Option<wgpu::RenderPipeline>,
     backdrop: backdrop::Backdrop,
+    /// This frame's point sets from a depth video, as the effects wrote them (#503).
+    clouds: clouds::Clouds,
     /// This frame's puffs, back to front, and their pipeline once compiled (#422).
     puffs: Option<(wgpu::Buffer, u32)>,
     puff_pipeline: Option<wgpu::RenderPipeline>,
@@ -3338,6 +3343,7 @@ impl Renderer {
             sky: false,
             sky_pipeline: None,
             backdrop: Default::default(),
+            clouds: Default::default(),
             puffs: None,
             puff_pipeline: None,
             solid_layout: mesh_layout.clone(),
@@ -3980,8 +3986,8 @@ impl Renderer {
     fn prepare_env(&mut self, device: &Device, scene: &Scene, camera: &[f64; 16]) {
         let mut u = EnvUniform::zeroed();
         u.moon[3] = 2.0;
-        // #503's planted video_prefilters_environment: the video's frame is the source.
-        let video = backdrop::planted_source(self.planted.video_prefilters_environment, scene);
+        // #503's planted video_background_prefiltered: the video's frame is the source.
+        let video = backdrop::planted_source(self.planted.video_background_prefiltered, scene);
         let wanted = scene.sky.as_ref().and_then(|s| {
             let e = s.environment.as_ref()?;
             let key = video.map_or_else(|| env::key(s, &e.from, e.size), |v| v.0);
@@ -6255,7 +6261,10 @@ impl Renderer {
         }
         batch.lines.finish(device, &mut next, &mut written);
         batch.points.begin();
-        for p in &layer.points {
+        // A set from a depth video draws its operator's records, never one of its own (#503).
+        let sets = layer.points.iter().filter_map(|p| self.clouds.get(&p.id).cloned());
+        batch.clouds = sets.collect();
+        for p in layer.points.iter().filter(|p| p.cloud.is_none()) {
             let shape = match p.shape {
                 PointShape::Dot => 0,
                 PointShape::Square => 1,
@@ -6332,6 +6341,7 @@ impl Renderer {
                     .extend([family, set.generation, u64::from(set.len())]);
             }
         }
+        batch.next_key.extend(clouds::key(&batch.clouds));
         if !batch.clear_draws.is_empty() {
             batch.next_key.extend([13, batch.clear.generation]);
             for ((shape, maps), kind) in &batch.clear_draws {
@@ -6663,6 +6673,7 @@ impl Renderer {
                 enc.draw(0..6, 0..set.len());
             }
         }
+        clouds::draw(&mut enc, self.families.point.as_ref(), &batch.clouds);
         if let (Some(buffer), Some(pipeline), true) = (
             &batch.labels.buffer,
             &self.families.text,
@@ -8084,23 +8095,6 @@ impl Renderer {
         self.puffs = Some((buffer, records.len() as u32));
     }
 
-    /// The sky's draw this frame, when it has one (#422).
-    fn sky_draw(&self) -> Option<SkyDraw> {
-        let p = self.sky_pipeline.clone().filter(|_| self.sky)?;
-        // The solids' layout holds the maps' group 3 since #423; a video background its own.
-        let maps = || (p, self.maps.by_index(0).clone());
-        let (p, group) = self.backdrop.draw().unwrap_or_else(maps);
-        Some((
-            p,
-            [
-                self.frame_bind.clone(),
-                self.lights_bind.clone(),
-                self.ao.shade().clone(),
-                group,
-            ],
-        ))
-    }
-
     /// The output pass, tone-mapping the linear target into `target`.
     pub fn record_output(
         &self,
@@ -8777,6 +8771,8 @@ pub struct Shared {
     pub post: Option<Box<dyn Post>>,
     /// Passes after the finish: the status guard and the status colors, where status can show.
     pub after: Option<Box<dyn After>>,
+    /// The next frame's point sets from a depth video, as the driver's effects wrote them (#503).
+    pub clouds: clouds::Clouds,
 }
 
 /// scene3d as the GPU layer's render module: one view's renderer.
@@ -8792,6 +8788,7 @@ impl Module3 {
             planted,
             post: None,
             after: None,
+            clouds: Default::default(),
         }));
         (
             Module3 {
@@ -8918,11 +8915,13 @@ impl RenderModule for Module3 {
             renderer,
             post,
             after,
+            clouds,
             ..
         } = &mut *s;
         let Some(renderer) = renderer.as_mut() else {
             return Vec::new();
         };
+        renderer.clouds.clone_from(clouds);
         // The instances outputs the frame's instancers draw from (#484).
         if let Some(p) = post.as_deref_mut() {
             renderer.feed(p.sources(device));

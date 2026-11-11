@@ -290,7 +290,27 @@ impl Backdrop {
     }
 }
 
-/// `video_prefilters_environment`'s wrong program (#503): the environment's source is the video
+impl crate::Renderer {
+    /// The sky's draw this frame, when it has one (#422): its pipeline and the solids' groups,
+    /// the maps' group 3 since #423; or the video background's pipeline and its own group 3.
+    pub(crate) fn sky_draw(&self) -> Option<crate::SkyDraw> {
+        let p = self.sky_pipeline.clone().filter(|_| self.sky)?;
+        let maps = || (p, self.maps.by_index(0).clone());
+        let (p, group) = self.backdrop.draw().unwrap_or_else(maps);
+        let shade = self.ao.shade().clone();
+        Some((
+            p,
+            [
+                self.frame_bind.clone(),
+                self.lights_bind.clone(),
+                shade,
+                group,
+            ],
+        ))
+    }
+}
+
+/// `video_background_prefiltered`'s wrong program (#503): the environment's source is the video
 /// background's frame, keyed by its texels, so each new frame prefilters the environment again
 /// and every reflection shows the video.
 pub(crate) fn planted_source(on: bool, scene: &Scene) -> Option<(u64, &Arc<Texels>)> {

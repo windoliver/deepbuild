@@ -165,6 +165,16 @@ impl Effects {
         );
         out
     }
+
+    /// A set's records as its last dispatch wrote them.
+    pub fn cloud_out(&self, item: &str) -> Option<&CloudOut> {
+        self.clouds.get(item).map(|h| &h.out)
+    }
+
+    /// Drops the buffers of every set `kept` doesn't keep: a set gone from the scene holds none.
+    pub fn keep_clouds(&mut self, kept: impl Fn(&str) -> bool) {
+        self.clouds.retain(|item, _| kept(item));
+    }
 }
 
 #[cfg(test)]
