@@ -614,6 +614,14 @@
         }
       }
     },
+    "packages/checks-host/package.json": {
+      "dependencies": {
+        "@deepbuild/conformance": {
+          "spec": "0.0.0",
+          "why": "Issue #1943: the check.kind@1 slot's fill, context and result types, the probe runner that ends a run at its deadline, and the kit types and Finding each host kind's own kit is judged with by the one kit runner."
+        }
+      }
+    },
     "packages/proof/package.json": {
       "dependencies": {
         "@deepbuild/conformance": {
