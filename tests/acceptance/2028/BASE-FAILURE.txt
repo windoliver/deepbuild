@@ -1,0 +1,77 @@
+#2028's acceptance suite on the base commit 04f44a4ba921c111fd3fd7be689ca46c27ea6dcc (#1461 and #2026 merged), before any
+#2028 code.
+
+Machine:   Mac17,10, 18 cores, macOS 27.2, logged in.
+Toolchain: Node v24.22.2; cargo 1.99.1 (5f94df478 2026-08-27).
+Prepared:  npm ci --ignore-scripts; npm run build --workspaces; then, through scripts/lease (no hub token here, so it ran
+           unleased) at nice 10, CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0:
+           cargo build --locked -p deep-hook --bin deep-hook
+           cargo build --locked -p deep-replica --bin deep-drive --features env-plants,deep-app/test-confirm
+           cargo build --locked -p deep-replica --bin deep-drive --features deep-app/test-confirm
+           21:11 to 21:30 PST, load average 200 to 300.
+Command:   NO_COLOR=1 npx vitest run --root tests/acceptance/2028 --no-file-parallelism --testTimeout=600000
+           node node_modules/typescript/bin/tsc -p tests/acceptance/2028/tsconfig.json   (clean, exit 0)
+
+## The run at the base: both files, once, 22:03:32 to 22:03:57 PST (25 s)
+
+uptime at start: load averages 115.01 177.45 227.10; at end: 113.91 172.28 223.80.
+Totals: 7 tests, 7 failed, all BLOCKED on one missing surface (README, Pinned 1). No test was edited after this run.
+
+marks.test.ts (AC1 #2028.c2f64186): 3 failed, BLOCKED.
+  The world was made (a real hub's backfill of eight sessions and one ask), three replicas copied it (as shipped,
+  marks-whole-day, unread-on-message), morning's PASS was fed; the first second of the clock between your inputs:
+    Error: BLOCKED: deep-drive's wait_for ran its clock a frame each 60th of a second, not each 1000 ms (its reply says
+    no step_ms; README, Pinned 1): three hours that way are 648,000 frames, {"ok":true,"t":717360000}
+  The two plant tests fail on the same error, awaiting the same run.
+
+count.test.ts (AC2 #2028.cb5e7641): 4 failed, BLOCKED.
+  The world was made (two asks open), three replicas copied it (as shipped, menu-bar-adds-unread, list-adds-unread),
+  14:00 was read on the three surfaces, the two agents' SessionStart and tool-call hooks went to the real hub; the
+  first second of the clock between your inputs:
+    Error: BLOCKED: deep-drive's wait_for ran its clock a frame each 60th of a second, not each 1000 ms (its reply says
+    no step_ms; README, Pinned 1): three hours that way are 648,000 frames, {"ok":true,"t":776160000}
+  The three plant tests fail on the same error.
+
+Why Pinned 1: the base's `wait_for {t}` ticks a frame each 60th of a second (crates/deep-replica/src/drive/mod.rs
+`wait_for`, `tick`: step FRAME). Timed with a scratch script on the base's planted deep-drive, `launch.from: "fixture"`
+at 1512 x 982, 30 s of the clock at load average about 210: 71,355 ms, 39.6 ms a frame; with `launch.frames:
+"dirty"`, 57,074 ms, 31.7 ms a frame. The smoke run below did 5 minutes of the clock in three replicas at once in 79 s
+at load average 130 to 180, about 4 ms a frame. Three hours a frame each 60th is 648,000 frames: 45 minutes to 7 hours
+a replica on this machine.
+
+## Smoke runs at the base, not the suite: the flow and the judges with the absence cut to minutes
+
+To see the judges at work at the base, a scratch copy of this folder (tests/acceptance/2028-smoke, deleted after,
+never committed) ran with the clock a frame each 60th (no step_ms), its calls 20 s of the clock, and the absence cut
+from three hours to five minutes: in AC1 the changes at 150 s plus their minute numbers in seconds after 14:00
+(14:30 became 180 s, and so on) and the return at 330 s; in AC2 the afternoon's hub events spread from 150 s to 300 s
+and the return at 300 s. Each first change lands past 2 minutes without input, so you're away for it, as in the suite.
+Everything else was this folder's code as committed.
+
+  The first two smoke runs showed the suite's own bug: `sent`'s title, "Checkout page" at weight 600, was cut beside
+  "sent back" and "2 min", and #1461's reader takes a weight only from runs wholly inside the title's slot, so it read
+  "has no title slot … with a run that says its weight". The titles are now a word or two (helpers.ts, MARKS_WORLD and
+  COUNT_WORLD), and the pointer rests on the page's title after each press.
+
+  Run with the committed code, marks.test.ts, 21:58:59 to 22:01:41 PST (162 s), load average 197 to 200:
+    ✓ AC1 the shipped app: at 14:00 morning reads regular a second after its page opened; at 17:00 the five rows read
+      medium and morning, chatty and still regular; each of the five reads regular a second after its page opened.
+    ✓ unread-on-message (#1461's merged plant) caught: a failure matched the test's pattern, naming chatty's row
+      drawn medium at 17:00 ("at 17:00, the row with only its agent's messages since 14:00, row session:…").
+    × marks-whole-day not caught: the base has no such plant.
+        AssertionError: the planted mark from the whole day wasn't caught, naming the row read at 14:00: []
+
+  Run with the committed code, count.test.ts, 22:01:56 to 22:03:15 PST (79 s), load average 131 to 181:
+    ✓ AC2 the shipped app, hub and CLI: the menu bar, the list's Needs you heading and deep inbox each read 2 at 14:00,
+      at the return and once the hub marked w1 and w2 (deep status --json read both unread, none before); Needs you
+      listed exactly the two asks; no row read medium at the return, and w1 and w2 read medium once marked.
+    × menu-bar-adds-unread, list-adds-unread, inbox-adds-unread not caught: the base has none of them.
+        AssertionError: the planted menu bar wasn't caught, naming the menu bar: []
+        (and the same for the list and deep inbox)
+
+  The count judge's words were also checked against the plant tests' patterns on made-up readings (a menu bar, a
+  heading, a Needs you with an extra row and a deep inbox each reading 4 against 2 open asks): each named its surface.
+
+So at the base the shipped program already holds both criteria over a short absence; what #2028 must add is Pinned 1
+(a clock that steps between your inputs), marks-whole-day, menu-bar-adds-unread, list-adds-unread and
+inbox-adds-unread. With them, the expected results are: both shipped runs pass, all five plants are caught.

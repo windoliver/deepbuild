@@ -184,6 +184,7 @@ const usage = [
   'deep explain <recorded session folder> [--json]',
   'deep run --result <run.finished event file>',
   'deep run follow <run>   a run\'s output from its start, then as it comes, until it ends',
+  'deep host run <ask> | changes <host>   run a root plan you said yes to, in this terminal; or list a host\'s changes with their undo',
   'deep hub run [--safe] | start | status [--root <folder>]',
   'deep hub stop [--root <folder>]',
   'deep hub use --root <folder>   this worktree\'s sessions to a dev hub, once the OS confirms you',
@@ -237,7 +238,7 @@ const help = asksHelp && !(args[0] === 'backup' && (await import('@deepbuild/hub
 // What a person runs first, then their work, then what developers run (#1455); a command no group names is a developer's.
 const groups: [string, string[]][] = [
   ['Start here', ['setup', 'status', 'inbox', 'doctor', 'off', 'install', 'memory', 'secret', 'update']],
-  ['Your work', ['open', 'fix', 'start', 'race', 'workspace', 'join', 'gate', 'rules', 'session', 'guard', 'undo', 'numbers', 'backup', 'restore', 'debug']],
+  ['Your work', ['open', 'fix', 'start', 'race', 'workspace', 'join', 'gate', 'rules', 'session', 'guard', 'undo', 'numbers', 'backup', 'restore', 'debug', 'host']],
   ['For developers', ['explain', 'run', 'hub', 'mcp', 'env', 'lease', 'show', 'export', 'kinds', 'mcp-exec', 'read', 'find']],
 ];
 const groupOf = (line: string): number => {
@@ -388,6 +389,9 @@ if (help) {
 } else if (args[0] === 'run' && args[1] === 'follow' && args[2] && args.length === 3) {
   const { followCommand } = await import('@deepbuild/hub');
   process.exitCode = await followCommand(args[2]);
+} else if (args[0] === 'host') {
+  const { hostCommand } = await import('@deepbuild/hub');
+  process.exitCode = await hostCommand(args.slice(1));
 } else if (args[0] === 'run') {
   console.error('Usage: deep run --result <run.finished event file>\n       deep run follow <run>');
   process.exitCode = 2;

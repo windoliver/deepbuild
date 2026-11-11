@@ -221,3 +221,87 @@ pub fn is_default_ignorable(c: char) -> bool {
         | 0xFEFF | 0xFFA0 | 0xFFF0..=0xFFF8 | 0x1BCA0..=0x1BCA3 | 0x1D173..=0x1D17A
         | 0xE0000..=0xE0FFF)
 }
+
+/// #407: what a grapheme counts as in a film's reading hold (canvas primitives: Film audit).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Reading {
+    /// Han, Hiragana, Katakana or Hangul, read at the CJK rate.
+    Cjk,
+    /// Latin, Greek or Cyrillic, or a digit, punctuation or another common character.
+    Other,
+    /// White space, which is never counted.
+    Space,
+    /// A script with no stated rate, by its Unicode long name (`Thai`, `Arabic`, …).
+    Unrated(String),
+}
+
+/// What the grapheme cluster `g` counts as in a reading hold, by its first character's script:
+/// Han, Hiragana, Katakana and Hangul are CJK; Latin, Greek, Cyrillic and the common and
+/// inherited characters (digits, punctuation, symbols) are other; any other script has no stated
+/// rate, named by its long name.
+pub fn reading(g: &str) -> Reading {
+    use icu_properties::props::Script;
+    use icu_properties::PropertyNamesLong;
+    let Some(first) = g.chars().next() else {
+        return Reading::Space;
+    };
+    if g.chars().all(char::is_whitespace) {
+        return Reading::Space;
+    }
+    match Properties::get(first).script() {
+        Script::Han | Script::Hiragana | Script::Katakana | Script::Hangul => Reading::Cjk,
+        Script::Latin | Script::Greek | Script::Cyrillic | Script::Common | Script::Inherited => {
+            Reading::Other
+        }
+        other => Reading::Unrated(
+            PropertyNamesLong::<Script>::new()
+                .get(other)
+                .unwrap_or("Unknown")
+                .to_string(),
+        ),
+    }
+}
+
+/// `text`'s grapheme clusters, by the layout's own segmenter.
+pub fn grapheme_clusters(text: &str) -> Vec<&str> {
+    let starts = grapheme_starts(text);
+    starts
+        .iter()
+        .enumerate()
+        .map(|(k, &a)| &text[a..starts.get(k + 1).copied().unwrap_or(text.len())])
+        .collect()
+}
+
+#[cfg(test)]
+mod reading_tests {
+    use super::*;
+
+    fn count(text: &str) -> (usize, usize, Vec<Reading>) {
+        let (mut cjk, mut other, mut unrated) = (0, 0, Vec::new());
+        for g in grapheme_clusters(text) {
+            match reading(g) {
+                Reading::Cjk => cjk += 1,
+                Reading::Other => other += 1,
+                Reading::Space => {}
+                r => unrated.push(r),
+            }
+        }
+        (cjk, other, unrated)
+    }
+
+    #[test]
+    fn graphemes_count_by_script_and_an_unrated_script_is_named() {
+        assert_eq!(count("THE KETTLE SINGS"), (0, 14, vec![]));
+        assert_eq!(count("Steam lifts the lid."), (0, 17, vec![]));
+        // Seven Han and two full-width punctuation marks, which count as other.
+        assert_eq!(count("水开了，壶在唱歌。"), (7, 2, vec![]));
+        assert_eq!(count("かなカナ한글"), (6, 0, vec![]));
+        let (_, _, unrated) = count("สวัสดี");
+        assert!(
+            !unrated.is_empty()
+                && unrated
+                    .iter()
+                    .all(|r| *r == Reading::Unrated("Thai".into()))
+        );
+    }
+}

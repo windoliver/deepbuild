@@ -265,6 +265,18 @@ pub fn read_now(now: u64) -> std::rc::Rc<(Vec<Ask>, Vec<Session>)> {
     .unwrap_or_default()
 }
 
+/// How many of the list's rows are unread: what #2028's planted counts add to the asks.
+pub fn unread_rows() -> usize {
+    crate::record::with_view(|view| {
+        view.table()
+            .list()
+            .into_iter()
+            .filter(|row| row["unread"].as_bool() == Some(true))
+            .count()
+    })
+    .unwrap_or(0)
+}
+
 /// The asks and sessions the list reads from `view` at `now`: the hub's rows (#1463) where the record holds them, else
 /// the app's own reading of a record from before them.
 pub fn read(view: &crate::record::View, now: u64) -> (Vec<Ask>, Vec<Session>) {
@@ -321,6 +333,11 @@ pub fn read(view: &crate::record::View, now: u64) -> (Vec<Ask>, Vec<Session>) {
             .filter(|row| text(row, "id").starts_with("session:"))
             .map(|row| {
                 let session = text(row, "session");
+                // #2028's planted app marks every row whose state changed in the last day, read or not.
+                let whole_day = crate::plain::planted("marks-whole-day")
+                    && row["since"]
+                        .as_u64()
+                        .is_some_and(|since| now.saturating_sub(since) < 86_400_000);
                 // #1461's planted app marks a session unread when its agent says anything.
                 let spoke = crate::plain::planted("unread-on-message")
                     && view.events.iter().any(|e| {
@@ -346,7 +363,7 @@ pub fn read(view: &crate::record::View, now: u64) -> (Vec<Ask>, Vec<Session>) {
                     word,
                     entry,
                     since: row["since"].as_u64(),
-                    unread: row["unread"].as_bool().unwrap_or(false) || spoke,
+                    unread: row["unread"].as_bool().unwrap_or(false) || spoke || whole_day,
                     why: crate::question::visible(&text(row, "why")),
                 }
             })
