@@ -349,6 +349,9 @@ byHand.push('tests/acceptance/405/budgets.test.ts');
 alone.push('tests/acceptance/544/');
 // #2015's file builds deep-show in the full set and runs it on a plate and a recipe pack.
 alone.push('tests/acceptance/2015/');
+// #220's files start hubs, build deep-show in the full set and time the typeset tool's own process.
+alone.push('tests/acceptance/220/');
+timed.push('tests/acceptance/220/budgets.test.ts');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
