@@ -11,7 +11,7 @@
   "crates/deep-canvas-marks/src/pathops.rs": 2240,
   "crates/deep-canvas-marks/src/scene.rs": 6202,
   "crates/deep-canvas-motion/src/doc.rs": 3048,
-  "crates/deep-canvas-motion/src/program.rs": 3130,
+  "crates/deep-canvas-motion/src/program.rs": 3129,
   "crates/deep-canvas-motion/src/shots.rs": 1675,
   "crates/deep-canvas-scene3d/src/builders.rs": 2600,
   "crates/deep-canvas-scene3d/src/scene.rs": 3603,
