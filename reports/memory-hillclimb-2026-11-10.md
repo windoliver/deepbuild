@@ -74,11 +74,23 @@ a schema reads its file again: 10 more small reads at a hub's start.
 | `packages/contracts/test/contracts.test.ts`, 1 new case | fails on the base: 1.63 MB stay after 0.98 MB of schemas are read and dropped; passes here |
 | The main thread's case, with `server.js` importing the record's main entry again | fails, naming the three modules |
 | The planted `churn-no-full-collection` | the inspector closes on both sides |
-| `tsc --noEmit` | see the PR: the errors it reports are in files this change does not touch |
-| `node scripts/affected.mjs` | see the PR |
+| Focused suites after merging main at `35df4523`, 26 files | 218 of 220 pass. The 2 of `packages/hub/test/memory-overrule.test.ts` failed with no `cargo` on the run's PATH, and pass with it |
+| `tsc --noEmit` after the merge, under a build grant | 2 errors, in `packages/hub/test/job-session-close.test.ts` and `tests/acceptance/20/helpers.ts`, which this change does not touch; both are on main at `435141d5` too |
+| `npm run build --workspaces` after the merge | builds |
+| `scripts/repo-rules.mjs` (before the merge) | 21 FAIL lines, none in a file this change touches; not compared with main's line by line |
+| `scripts/public-text.mjs` (before the merge) | passes |
+| `tests/package-deps.test.mjs`, `tests/record-ids.test.mjs` | pass |
+| `node scripts/affected.mjs` | not run to its end: see below |
 
 The cache cases assert the pragma each connection sets, through a spy on better-sqlite3, not memory itself: its build
 keeps no memory statistics. The memory is the high-water reading above.
+
+**Not run.** `node scripts/affected.mjs` selects 1,618 test files for these edits after the merge (590 parallel and 743
+alone vitest files, 121 node files, 110 timed and 52 slow files, and `cargo test` for deep-app and deep-logic). A run
+before the merge waited 42 minutes for one of the machine's two test slots, which other sessions held, and was stopped
+by its PID; the focused suites above stand in for it and are not an affected verdict. No timed budget, #824's planted
+suites or the preflight ran. The readings in [Measured](#measured) are from before the merge, against main at
+`435141d5`; the high-water mark and `deep mcp`'s CPU time are from before the schema and record-entry changes.
 
 ## Found and not applied
 
