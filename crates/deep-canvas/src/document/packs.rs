@@ -19,6 +19,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde_json::{json, Map, Value};
 
+use super::pack_kinds::check_kinds;
 use super::{member, Issue};
 use crate::ops;
 use crate::registry::{self, Range, Sealed, Semver};
@@ -52,6 +53,12 @@ pub struct Planted {
     pub each_by_count: bool,
     /// #2015: a repeat over faces walks the part's triangles (the elements function's plant).
     pub each_per_triangle: bool,
+    /// #1956: the pack check of a kind's migration stops at its first fault.
+    pub migration_first_fault: bool,
+    /// #1961: a load under a version that no longer derives a broken-out ID drops the item.
+    pub orphan_drops: bool,
+    /// #1961: that load hands the broken-out ID to the new expansion, which writes it.
+    pub orphan_hands_id: bool,
 }
 
 /// A planted expander's walk over an instance's inputs (#202).
@@ -214,7 +221,7 @@ impl KindRule {
 }
 
 /// What a kind rule's expression resolves through: the build's `ease@1`, when it has one.
-struct RuleScope<'a>(&'a Sealed);
+pub(super) struct RuleScope<'a>(pub(super) &'a Sealed);
 
 impl crate::expr::Resolve for RuleScope<'_> {
     fn eases(&self) -> Result<(), String> {
@@ -438,10 +445,14 @@ pub fn check_pack(manifest: &Value, sealed: &Sealed, planted: Planted) -> Result
         None => BTreeMap::new(),
         Some(a) => check_aliases(a, &mut issues),
     };
-    let kinds = match fields.get("kinds") {
-        None => BTreeMap::new(),
-        Some(k) => super::pack_kinds::check_kinds(&id, k, &recipes, &assets, sealed, &mut issues),
-    };
+    let kinds = check_kinds(
+        &id,
+        fields,
+        &recipes,
+        &assets,
+        (sealed, planted),
+        &mut issues,
+    );
     for key in fields.keys().filter(|k| !PACK_KEYS.contains(&k.as_str())) {
         issues.extend(module_fields::check(sealed, manifest, key));
     }
@@ -666,6 +677,7 @@ const PACK_KEYS: &[&str] = &[
     "providers",
     "layouts",
     "kinds",
+    "corpus",
 ];
 
 /// The canvas module that admits and runs a pack's programs (#238).
@@ -1314,7 +1326,7 @@ fn read_lets(
 }
 
 /// Why `value` is no value of `input`, if it isn't.
-fn input_fault(input: &Input, value: &Value) -> Option<String> {
+pub(super) fn input_fault(input: &Input, value: &Value) -> Option<String> {
     let range = |n: f64| -> Option<String> {
         let below = input.min.is_some_and(|min| n < min);
         let above = input.max.is_some_and(|max| n > max);
@@ -1472,7 +1484,7 @@ fn manifest_id(manifest: &Value) -> Option<String> {
 /// The packs a document resolved: by name, for a kind's `<pack>` half.
 #[derive(Clone, Debug, Default)]
 pub struct Resolved<'a> {
-    by_name: BTreeMap<String, &'a Pack>,
+    pub(super) by_name: BTreeMap<String, &'a Pack>,
     /// The sealed modules' elements functions by builder kind (`family.name`), which a repeat
     /// over elements counts by (#2015).
     elements: BTreeMap<String, registry::Elements>,
@@ -1631,6 +1643,9 @@ pub struct Expansion {
     pub derived: Map<String, Value>,
     /// The derived IDs a patch broke out, which the instance no longer writes.
     pub broken_out: Vec<String>,
+    /// Each `broken_out` entry, by its index there, that this version no longer derives: the
+    /// writer's own item, raised as `derived_orphan` (Pack: migrations as data; #1961).
+    pub orphaned: Vec<(usize, String)>,
     /// The recipe's channels, each targeting a derived item, by `<instance>.<channel>[.<k>]`.
     pub channels: Map<String, Value>,
 }
@@ -1975,12 +1990,32 @@ fn expand_one(
         // Planted (#202): the inputs walked in another order than the recipe's.
         inputs = walk(inputs);
     }
+    // Broken-out items this version no longer derives (#1961): each stays the writer's own.
+    let mut orphaned = Vec::new();
+    // The planted loaders' orphans (#1961): dropped, or handed to the new expansion.
+    let mut handed = Vec::new();
     let broken_out: Vec<String> = match member(&item, "broken_out") {
         None => Vec::new(),
         Some(Value::Array(list)) => {
             let mut out = Vec::new();
             for (i, v) in list.iter().enumerate() {
                 match v.as_str() {
+                    // Broken out under an earlier version that derived it: the writer holds it,
+                    // it stays listed so a later version that derives it again never writes it.
+                    Some(s)
+                        if !derives(recipe, id, s)
+                            && items.contains_key(s)
+                            && s.strip_prefix(id).is_some_and(|r| r.starts_with('.')) =>
+                    {
+                        if planted.orphan_drops {
+                            items.shift_remove(s);
+                        } else if planted.orphan_hands_id {
+                            handed.push(s.to_string());
+                        } else {
+                            out.push(s.to_string());
+                            orphaned.push((i, s.to_string()));
+                        }
+                    }
                     Some(s) if derives(recipe, id, s) => {
                         // Broken out, so the writer holds it: a list entry with no item behind
                         // it would make the recipe's output vanish.
@@ -2518,6 +2553,20 @@ fn expand_one(
             channels.insert(cid, out);
         }
     }
+    // Planted (#1961): each orphaned ID goes to the new derived item at its index, in the
+    // writer's item's place.
+    for orphan in handed {
+        let index = orphan.rsplit_once('.').map_or("", |(_, i)| i);
+        let heir = derived_items
+            .iter()
+            .find(|(d, _)| d.rsplit_once('.').is_some_and(|(_, i)| i == index))
+            .map(|(_, fields)| fields.clone());
+        if let Some(mut fields) = heir {
+            fields["id"] = json!(orphan);
+            fields["name"] = json!(orphan);
+            derived_items.insert(orphan, fields);
+        }
+    }
     // Written only once the whole expansion went through: a refused instance writes nothing.
     for (derived_id, fields) in &derived_items {
         items.insert(derived_id.clone(), fields.clone());
@@ -2530,6 +2579,7 @@ fn expand_one(
         items: derived,
         derived: derived_items,
         broken_out,
+        orphaned,
         channels,
     })
 }

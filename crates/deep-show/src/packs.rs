@@ -376,3 +376,91 @@ pub fn kind_rules_ms(doc: &Value, checked: &CheckResult, sealed: &Sealed, packs:
     std::hint::black_box(run);
     ms
 }
+
+/// #1961: your notes the scenario gives, each `{note, doc, item, …}` (Note).
+pub fn notes(list: Option<&Value>) -> Option<Vec<Value>> {
+    let Some(list) = list else {
+        return Some(Vec::new());
+    };
+    list.as_array()?
+        .iter()
+        .map(|n| {
+            for field in ["note", "doc", "item"] {
+                n.get(field)?.as_str()?;
+            }
+            Some(n.clone())
+        })
+        .collect()
+}
+
+/// The planted cache (#1961): each expansion of `doc`'s instances kept by the instance's kind
+/// and inputs, without its recipe's version, and served again for an equal kind and inputs.
+pub fn planted_cache(
+    planted: Option<crate::hub::Planted>,
+    cache: &mut BTreeMap<String, Expansion>,
+    doc: &Value,
+    mut expansions: Vec<Expansion>,
+) -> Vec<Expansion> {
+    if planted != Some(crate::hub::Planted::ExpansionCacheWithoutRecipeVersion) {
+        return expansions;
+    }
+    for e in &mut expansions {
+        let key = format!("{}|{}", e.kind, doc["items"][&e.instance]["params"]);
+        match cache.get(&key) {
+            Some(kept) => *e = kept.clone(),
+            None => {
+                cache.insert(key, e.clone());
+            }
+        }
+    }
+    expansions
+}
+
+/// What a `derived_orphan` names besides the item (#1961).
+impl crate::hub::Hub<'_> {
+    /// #1961: your notes on item `id` of `doc`, by their ULIDs.
+    pub fn notes_on(&self, doc: &str, id: &str) -> Vec<Value> {
+        self.scenario
+            .notes
+            .iter()
+            .filter(|n| {
+                n["doc"]
+                    .as_str()
+                    .is_some_and(|d| d.eq_ignore_ascii_case(doc))
+            })
+            .filter(|n| n["item"] == id)
+            .map(|n| n["note"].clone())
+            .collect()
+    }
+
+    /// #1961: each handle `doc:<doc>#<id>` an item of an open shared document holds in its
+    /// params, as `{doc, item, handle}`.
+    pub fn handles_to(&self, doc: &str, id: &str) -> Vec<Value> {
+        let names = |text: &str| {
+            deep_canvas::grammar::Handle::parse(text).is_ok_and(|h| {
+                h.scheme() == deep_canvas::grammar::Scheme::Doc
+                    && h.id().as_str().eq_ignore_ascii_case(doc)
+                    && h.fragment() == Some(id)
+            })
+        };
+        fn walk<'v>(v: &'v Value, out: &mut Vec<&'v str>) {
+            match v {
+                Value::String(s) => out.push(s),
+                Value::Array(list) => list.iter().for_each(|x| walk(x, out)),
+                Value::Object(map) => map.values().for_each(|x| walk(x, out)),
+                _ => {}
+            }
+        }
+        let mut out = Vec::new();
+        for (holder, shared) in &self.shared {
+            for (item, fields) in shared.doc["items"].as_object().into_iter().flatten() {
+                let mut strings = Vec::new();
+                walk(&fields["params"], &mut strings);
+                for handle in strings.into_iter().filter(|s| names(s)) {
+                    out.push(json!({"doc": holder, "item": item, "handle": handle}));
+                }
+            }
+        }
+        out
+    }
+}

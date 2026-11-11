@@ -373,6 +373,8 @@ alone.push('tests/acceptance/202/');
 timed.push('tests/acceptance/202/budgets.test.ts');
 // #1957's file builds deep-show and offers it pack graphs.
 alone.push('tests/acceptance/1957/');
+// #1961's files build deep-show and patch an open document to another version of its pack.
+alone.push('tests/acceptance/1961/');
 // #2015's file builds deep-show in the full set and runs it on a plate and a recipe pack.
 alone.push('tests/acceptance/2015/');
 // #220's files start hubs, build deep-show in the full set and time the typeset tool's own process.
@@ -426,6 +428,8 @@ alone.push('tests/acceptance/547/');
 timed.push('tests/acceptance/547/ac4-keyframes.test.ts');
 // #407's files each build deep-show (carried.test.ts also with test-hold-min-2s); 407-oracle builds it too.
 alone.push('tests/acceptance/407/', 'tests/acceptance/407-oracle/');
+// #1956's files each build deep-show (r1) and install the shelf pack's versions in order.
+alone.push('tests/acceptance/1956/');
 // #154's files each start hubs that render stems through the supervisor, and build deep-show once; AC9 times a 60 s
 // six-stem render against the reference Mac.
 alone.push('tests/acceptance/154/', 'tests/acceptance/154-oracle/');

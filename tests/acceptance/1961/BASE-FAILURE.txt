@@ -1,0 +1,46 @@
+Base commit: 07b638444 ("Merge pull request #2257 from windoliver/worktree-adoring-swirles-e7f2b6")
+Run: CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 node node_modules/vitest/vitest.mjs run --root tests/acceptance/1961 --no-file-parallelism --testTimeout=600000
+     (vitest 5.0.5; deep-show built with --features r1 in this checkout's target/, warm from one prior build of the same
+     command, which also made fixtures/bookcase-1.0-broken-out.json)
+Result: Test Files 2 failed (2); Tests 9 failed (9); exit 1. Duration 34.85 s.
+Type check: node node_modules/typescript/bin/tsc -p tests/acceptance/1961/tsconfig.json, exit 0.
+Date: 2026-11-10  darwin-arm64
+
+Why each test fails at the base: no patch can name a pack version. The pin patch
+{op: set, id: shelf, path: packs/shelf, value: acme/shelf@1.1.0} is refused with
+  bad_path at items/shelf, actual "packs/shelf": "`packs/shelf`: section `packs` is not one of items, controls,
+  channels, markers, data, inputs, assemblies"
+so the document never loads under shelf.bookcase 1.1, and neither the patch nor its undo applies. The planted values
+are not planted names at the base (crates/deep-show/src/main.rs, the `planted` match ends `_ => return None`), so those
+scenarios answer {"ok": false, "code": "bad_input"}. Everything before the failing line passes at the base: both pack
+versions install, and revision 0 of each corpus document reads as the criteria start (b expands through
+acme/shelf@1.0.0; in the broken-out document b.board.2 is your item and b doesn't write it; in the plain one b derives
+b.board.2 and no b.shelf.2). The scenario field `notes` is ignored at the base, not refused.
+
+orphan.test.ts
+  × #1961.0c0ae838 … keeps that item as the writer's own by hash
+      at "your patch that names acme/shelf@1.1.0 applies": refused (bad_path, above)
+  × #1961.0c0ae838 the load under shelf.bookcase 1.1 raises derived_orphan naming b.board.2 and the note on it
+      at "your patch that names acme/shelf@1.1.0 applies": refused (bad_path)
+  × #1961.0c0ae838 after the load under shelf.bookcase 1.1, b.shelf.2 expands
+      at "your patch that names acme/shelf@1.1.0 applies": refused (bad_path)
+  × #1961.0c0ae838 a planted loader (orphan_load_drops_broken_out) fails this check, naming b.board.2
+      at "deep-show run refused the scenario": {"ok":false,"code":"bad_input"} (unknown planted value)
+  × #1961.0c0ae838 a planted loader (orphan_load_hands_id_to_expansion) fails this check, naming b.board.2
+      at "deep-show run refused the scenario": {"ok":false,"code":"bad_input"} (unknown planted value)
+
+versions.test.ts
+  × #1961.7bc49ab6 a patch that names the pack version carrying shelf.bookcase 1.1 derives b.shelf.2 and no b.board.2
+      at "your patch that names acme/shelf@1.1.0 applies": refused (bad_path)
+  × #1961.7bc49ab6 its undo derives b.board.2 again and no b.shelf.2
+      at "your patch that names acme/shelf@1.1.0 applies": refused (bad_path)
+  × #1961.7bc49ab6 after the patch and after its undo, every evaluated output and content key equals a cold evaluation …
+      at "your patch that names acme/shelf@1.1.0 applies": refused (bad_path)
+  × #1961.7bc49ab6 a planted expansion cache … keeps b.board.2 after the patch and fails, naming b and both versions
+      at "deep-show run refused the scenario": {"ok":false,"code":"bad_input"} (unknown planted value)
+
+Fixture check, outside the suite, on the same base binary: bookcase-1.0.json opened at revision 0 expands b through
+acme/shelf@1.0.0 into b.sides.0-1 and b.board.0-2; your break_out {instance: b, item: b.board.2} applies, and the read's
+stored document (its `id` left out, its description reworded) is bookcase-1.0-broken-out.json. With that document
+opened and your note in `notes`, `packs` installs acme/shelf@1.0.0 and 1.1.0 with no issue, the read of revision 0 has
+no issue and draws b.board.0-2 and b.sides.0-1, and the pin patch is refused as above.

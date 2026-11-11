@@ -175,6 +175,8 @@ pub enum Planted {
     KitDefaultsOnly,
     /// #202: the expander walks an instance's inputs in a hash map's order.
     ExpandsInHashOrder,
+    /// #1956: the pack check of a kind's migration stops at its first fault.
+    MigrationFirstFault,
     /// #306: a derived item's seed comes from a counter over expansion order.
     SeedsByExpansionOrder,
     /// #2015: a repeat over elements seeds each derived item with the part's element count too.
@@ -183,6 +185,12 @@ pub enum Planted {
     EachFacePerTriangle,
     /// #306: a change of inputs re-expands the broken-out item too, over the writer's own.
     ReexpansionOverwritesBrokenOut,
+    /// #1961: a load under a version that no longer derives a broken-out ID drops the item.
+    OrphanLoadDropsBrokenOut,
+    /// #1961: that load hands the broken-out ID to the new version's expansion.
+    OrphanLoadHandsIdToExpansion,
+    /// #1961: expansions are cached by kind and inputs, without the recipe's version.
+    ExpansionCacheWithoutRecipeVersion,
     /// #306: the pack check never reads `requires.modules`.
     PackCheckSkipsRequiresModules,
     /// #306: the store and a document's `packs` are keyed by the name half alone.
@@ -998,6 +1006,8 @@ pub struct Scenario {
     pub audio: Option<crate::audio::Backend>,
     /// The packs installed in the store before the first call (#306), each `(owner/name, dir)`.
     pub packs: Vec<(String, PathBuf)>,
+    /// #1961: your notes the hub holds when the run starts, each `{note, doc, item, …}`.
+    pub notes: Vec<Value>,
     /// #200: the hub's installed slot fills, each `{slot, fill, kit}` with the kit result the hub
     /// recorded at install.
     pub installed: Vec<Value>,
@@ -1096,6 +1106,8 @@ pub struct Hub<'a> {
     pub pack_authors: BTreeMap<String, String>,
     /// Each document's expansions at its last check, for the replies that carry them.
     pub expansions: BTreeMap<String, Vec<Expansion>>,
+    /// #1961's planted expansion cache, by kind and inputs without the recipe's version.
+    pub expansion_cache: BTreeMap<String, Expansion>,
     /// #544's planted start_on: each session's first evaluated time since its revision loaded.
     pub first_frames: BTreeMap<String, i64>,
     /// The displays, the windows on them and the card's placement (#400).
@@ -1213,8 +1225,11 @@ impl<'a> Hub<'a> {
             key_by_name: scenario.planted == Some(Planted::PacksKeyedByName),
             each_by_count: scenario.planted == Some(Planted::EachSeedsByElementCount),
             each_per_triangle: scenario.planted == Some(Planted::EachFacePerTriangle),
+            orphan_drops: scenario.planted == Some(Planted::OrphanLoadDropsBrokenOut),
+            orphan_hands_id: scenario.planted == Some(Planted::OrphanLoadHandsIdToExpansion),
             rules_twice: scenario.planted == Some(Planted::RulesEvaluatedTwice),
             kit_defaults_only: scenario.planted == Some(Planted::KitDefaultsOnly),
+            migration_first_fault: scenario.planted == Some(Planted::MigrationFirstFault),
             walk_inputs: (scenario.planted == Some(Planted::ExpandsInHashOrder))
                 .then_some(walk_in_hash_order as deep_canvas::document::packs::WalkInputs),
         };
@@ -1260,6 +1275,7 @@ impl<'a> Hub<'a> {
             pack_rows: Vec::new(),
             pack_authors: BTreeMap::new(),
             expansions: BTreeMap::new(),
+            expansion_cache: BTreeMap::new(),
             first_frames: BTreeMap::new(),
             placement: Placement::open(
                 scenario.displays.clone(),
@@ -2154,7 +2170,7 @@ impl<'a> Hub<'a> {
                     crate::packs::kind_rules_ms(&doc, &result, &self.startup.sealed, &self.packs)
                 });
                 fresh = Some((result.expansions, (check_ms, rules_ms)));
-                notices = self.notices_reply(&result.notices);
+                notices = self.notices_reply(&show.doc, &result.notices);
                 skipped = crate::verdict::unknown_items(&result.notices);
                 blocked = self.blocked_in_claim(show, &result.notices);
                 let mut issues = crate::mixdown::score_plan::library_issues(&doc, result.issues);
@@ -2408,7 +2424,7 @@ impl<'a> Hub<'a> {
 
     /// The check's notices as a reply carries them. The planted check that loads a deprecated
     /// kind silently leaves its `deprecated` notices out.
-    pub fn notices_reply(&self, notices: &[Notice]) -> Vec<Value> {
+    pub fn notices_reply(&self, doc: &str, notices: &[Notice]) -> Vec<Value> {
         notices
             .iter()
             .filter(|n| {
@@ -2418,7 +2434,14 @@ impl<'a> Hub<'a> {
             // A kind this build draws without a kind registry entry (rect@1, path@1) is drawn,
             // not skipped, as `unknown_items` reads it, so no notice says it is (#490).
             .filter(|n| !(n.code == "unknown_kind" && n.actual.as_str().is_some_and(shared::knows)))
-            .map(Notice::to_json)
+            .map(|n| {
+                let mut out = n.to_json();
+                if let ("derived_orphan", Some(id)) = (n.code, n.ids.first()) {
+                    out["notes"] = json!(self.notes_on(doc, id));
+                    out["handles"] = json!(self.handles_to(doc, id));
+                }
+                out
+            })
             .collect()
     }
 
