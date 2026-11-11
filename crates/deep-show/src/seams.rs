@@ -68,7 +68,8 @@ impl NetFault {
 }
 
 /// `{"call": "seam_suite", "seam": "network", "messages": n, "seed": n}`, and `"backend":
-/// "network.macos"` for the macOS backend.
+/// "network.macos"` for the macOS backend. `"exercise": [{counter, min}]` (#1399) is the floor
+/// each of the run's relay counts must reach before the suite's result counts.
 pub fn parse(c: &Map<String, Value>) -> Option<Call> {
     if c.get("seam")?.as_str()? != "network" {
         return None;
@@ -77,14 +78,62 @@ pub fn parse(c: &Map<String, Value>) -> Option<Call> {
         None => false,
         Some(b) => b.as_str()? == macos::BACKEND.name,
     };
-    Some(Call::NetworkSuite {
+    let exercise = match c.get("exercise") {
+        None => Vec::new(),
+        Some(e) => e
+            .as_array()?
+            .iter()
+            .map(|f| {
+                Some((
+                    f.get("counter")?.as_str()?.to_string(),
+                    f.get("min")?.as_u64()?,
+                ))
+            })
+            .collect::<Option<_>>()?,
+    };
+    Some(Call::NetworkSuite(Box::new(Suite {
         macos,
         messages: c
             .get("messages")?
             .as_u64()
             .filter(|n| (1..=1_000_000).contains(n))?,
         seed: c.get("seed")?.as_u64()?,
-    })
+        exercise,
+    })))
+}
+
+/// `{"call": "seam_suite", "seam": "network", …}`, parsed.
+pub struct Suite {
+    macos: bool,
+    messages: u64,
+    seed: u64,
+    /// #1399: `[{counter, min}]`, floors on the run's relay counts.
+    exercise: Vec<(String, u64)>,
+}
+
+/// The network suite's reply, held to its `exercise` floors (#1399): each row names its counter,
+/// its floor and the count the run's relay reported; a count under its floor, or one the run
+/// didn't report, leaves the result INCONCLUSIVE, never PASS.
+pub fn suite(s: &Suite, planted: Option<NetFault>) -> Value {
+    let mut reply = network(s.messages, s.seed, s.macos, planted);
+    if s.exercise.is_empty() {
+        return reply;
+    }
+    let mut under = false;
+    let rows: Vec<Value> = s
+        .exercise
+        .iter()
+        .map(|(counter, min)| {
+            let count = reply["relay"][counter.as_str()].as_u64();
+            under |= count.is_none_or(|n| n < *min);
+            json!({"counter": counter, "min": min, "count": count})
+        })
+        .collect();
+    if under {
+        reply["status"] = json!("INCONCLUSIVE");
+    }
+    reply["exercise"] = json!(rows);
+    reply
 }
 
 /// A correct backend with one fault planted past the middle of the match.
@@ -154,7 +203,7 @@ impl Transport for Planted {
 }
 
 /// The suite's reply: its verdict beside what was sent and delivered and what the relay did.
-pub fn network(messages: u64, seed: u64, macos: bool, planted: Option<NetFault>) -> Value {
+fn network(messages: u64, seed: u64, macos: bool, planted: Option<NetFault>) -> Value {
     let mut backend = None;
     let fault = match planted {
         Some(NetFault::MacosDeliversTwice) => Some(NetFault::DeliversTwice),
@@ -267,10 +316,14 @@ pub fn relay_client(c: &RelayClient, planted: Option<NetFault>) -> Value {
         Err(Ended::Refused(why)) => ("refused", json!(why)),
         Err(Ended::Failed(why)) => ("failed", json!(why)),
     };
+    // #1399: a reader that never ran reads failing, not PASS on no failures.
     let failures = crossed
         .player
-        .map(|me| deep_relay::suite::read(&crossed.received, &c.game, me, c.players))
-        .unwrap_or_default();
+        .map(|me| deep_relay::suite::read(&crossed.received, &c.game, me, c.players));
+    let status = match &failures {
+        Some(f) if f.is_empty() => "PASS",
+        _ => "FAIL",
+    };
     let planted_backend = matches!(
         planted,
         Some(NetFault::SkipsHelloCheck | NetFault::WritesStepBigEndian)
@@ -289,7 +342,7 @@ pub fn relay_client(c: &RelayClient, planted: Option<NetFault>) -> Value {
         "player": crossed.player,
         "sent": hexes(&crossed.sent),
         "received": hexes(&crossed.received),
-        "reader": {"status": if failures.is_empty() { "PASS" } else { "FAIL" }, "failures": failures},
+        "reader": {"status": status, "ran": failures.is_some(), "failures": failures.unwrap_or_default()},
     })
 }
 

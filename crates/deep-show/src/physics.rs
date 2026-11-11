@@ -13,6 +13,7 @@ use deep_canvas_physics::check::check;
 use deep_canvas_physics::doc::{Read, World};
 use deep_canvas_physics::module::changed;
 use deep_canvas_physics::occurrence::{step_flicks, timed};
+use deep_canvas_physics::written;
 use deep_physics_rapier::runner::Run;
 use serde_json::{json, Map, Value};
 
@@ -43,6 +44,24 @@ pub(crate) fn motion() -> Module {
         };
     }
     m
+}
+
+/// #1921's wrong programs for a world's outputs, by the names its acceptance suite gives them.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Planted {
+    /// An output to an item's `at` writes the body's whole transform: its position, its rotation
+    /// and a scale of 1, so the item's own scale is reset.
+    WholeTransform,
+    /// A `<body>#*` output writes, at each frame, the columns of the frame its session drew before.
+    PreviousColumns,
+}
+
+pub(crate) fn planted(name: &str) -> Option<crate::hub::Planted> {
+    Some(crate::hub::Planted::Physics(match name {
+        "output_writes_whole_transform" => Planted::WholeTransform,
+        "output_keeps_previous_columns" => Planted::PreviousColumns,
+        _ => return None,
+    }))
 }
 
 fn refused(id: &str, what: Value) -> Issue {
@@ -107,16 +126,19 @@ fn keyed(target: String, values: Vec<[f64; 3]>) -> Value {
 }
 
 /// The channels a world's outputs write in its scene, each `to` an item's `at` (a pose: its
-/// position and rotation) or a vec3 field (a position), keyed at every frame of the span.
+/// position and rotation, never its scale) or a vec3 field (a position), keyed at every frame of
+/// the span; a `<body>#*` output writes an instancer's columns instead (#1921: written.rs).
+/// `whole`: #1921's planted output, which writes a scale of 1 with the pose.
 fn output_channels(
     id: &str,
     w: &World,
     bodies: &Value,
     frames: &[i64],
+    whole: bool,
     out: &mut Map<String, Value>,
 ) -> Result<(), Value> {
     let step = step_flicks(w);
-    for (oid, o) in &w.outputs {
+    for (oid, o) in w.outputs.iter().filter(|(_, o)| !o.from.ends_with("#*")) {
         let Some(to) = &o.to else { continue };
         let states = bodies[&o.from].as_array().cloned().unwrap_or_default();
         let poses: Vec<_> = frames
@@ -140,6 +162,10 @@ fn output_channels(
                         poses.iter().map(|p| euler(p.1)).collect(),
                     ),
                 );
+                if whole {
+                    let ones = vec![[1.0; 3]; poses.len()];
+                    out.insert(name("scale"), keyed(format!("{item}/at/scale"), ones));
+                }
             }
             (Read::Pose | Read::Position, _) => {
                 let to = to
@@ -251,8 +277,11 @@ impl Hub<'_> {
             .collect();
         let run = Run::new(None).expect("the unplanted runner");
         let (mut lists, mut channels, mut arrays) = (Map::new(), Map::new(), Map::new());
+        let whole = self.planted(crate::hub::Planted::Physics(Planted::WholeTransform));
         for (id, doc) in &worlds {
-            let w = check(doc, &RAPIER3D, &deep_canvas_physics::roles::TABLE).map_err(|e| {
+            let w = deep_physics_rapier::bound::expand(Some(form), doc);
+            let w = w.and_then(|d| check(&d, &RAPIER3D, &deep_canvas_physics::roles::TABLE));
+            let w = w.map_err(|e| {
                 refused(
                     id,
                     json!(e
@@ -270,9 +299,10 @@ impl Hub<'_> {
             }
             let rows = reply["occurrences"].as_array().cloned().unwrap_or_default();
             lists.insert(format!("{id}.occurrences"), json!(timed(&rows, &w)));
-            output_channels(id, &w, &reply["bodies"], &frames, &mut channels)
+            output_channels(id, &w, &reply["bodies"], &frames, whole, &mut channels)
                 .map_err(|e| refused(id, e))?;
             arrays.extend(readings(form, id, &w, &reply["bodies"]).map_err(|e| refused(id, e))?);
+            arrays.extend(written::arrays(id, &w, form, &reply["bodies"]));
         }
         let entries = self.startup.sealed.registry(deep_canvas::columns::REGISTRY);
         let entries = entries.map_or(&[][..], |r| r.entries.as_slice());

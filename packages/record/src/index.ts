@@ -18,10 +18,12 @@ import { movable, type Refusal } from './lifecycle.js';
 import { PROJECTIONS, Projector, tableDef, type Projected } from './projections.js';
 import type { Statement } from 'better-sqlite3';
 import { fileStorage, isBackend, openReadOnly, testStorage, type Backend, type Db, type Durability, type Storage, type SyncCall, type TestStorage } from './storage.js';
+import { metaOf, RecordError } from './meta.js';
 
 export { compareReplay, foldText, parseClaimLine, planHash, PROJECTIONS, testStorage, ulid };
 export type { FoundMessage };
 export { openTrust, type ProjectTrust } from './trust.js';
+export { RecordError, writerGeneration, type RecordErrorCode } from './meta.js';
 export type { Comparison, Measure, MeasureResult, ReplayPlan, ReplayResult, ReplayRun, TaskPair, Variant } from './replay.js';
 export type { Backend, ClaimLine, HeldAtLoad, LearnedLoad, Message, Resolved, SliceEntry, Storage, SyncCall, TestStorage };
 
@@ -69,23 +71,6 @@ export interface Event {
   unverified?: true;
 }
 export interface Appended { log_pos: number; existing: boolean }
-export type RecordErrorCode = 'schema' | 'forged' | 'writer' | 'conflict' | 'storage' | 'closed';
-
-export class RecordError extends Error {
-  readonly code: RecordErrorCode;
-  readonly path?: string;
-  readonly kind?: string;
-  readonly id?: string;
-  constructor(code: RecordErrorCode, message: string, named: { path?: string; kind?: string; id?: string } = {}) {
-    super(message);
-    this.name = 'RecordError';
-    this.code = code;
-    if (named.path !== undefined) this.path = named.path;
-    if (named.kind !== undefined) this.kind = named.kind;
-    if (named.id !== undefined) this.id = named.id;
-  }
-}
-
 /** A forward-only migration of one kind's data from one schema version to the next. */
 export interface Migration { kind: string; from: number; to: number; up(data: JsonValue): JsonValue }
 
@@ -979,33 +964,6 @@ export async function openRecord(options: RecordOptions): Promise<RecordStore> {
   if (record.stale) await record.rebuild();
   record.start();
   return record;
-}
-
-/**
- * What a record's meta says (#572): its writer generation, 1 for a record no restore raised, and the first log
- * position it may hand out next. A record whose meta can't be read is an error, never generation 1.
- */
-function metaOf(path: string): { generation: number; next: number } {
-  const db = openReadOnly(path);
-  try {
-    const has = (table: string) => db.prepare("SELECT 1 FROM sqlite_schema WHERE type = 'table' AND name = ?").get(table) !== undefined;
-    const value = (key: string) => (has('meta') ? (db.prepare('SELECT value FROM meta WHERE key = ?').get(key) as { value: string } | undefined)?.value : undefined);
-    const positive = (key: string) => {
-      const said = value(key);
-      const n = said === undefined ? 1 : Number(said);
-      if (!Number.isSafeInteger(n) || n < 1) throw new RecordError('storage', `${path} names ${key} ${said}, not a positive integer`);
-      return n;
-    };
-    const last = has('events') ? Number((db.prepare('SELECT coalesce(max(log_pos), 0) AS last FROM events').get() as { last: number }).last) : 0;
-    return { generation: positive('generation'), next: Math.max(positive('log_block_end'), last + 1) };
-  } finally {
-    db.close();
-  }
-}
-
-/** The writer generation the record at `path` names (#572): 1 for one that doesn't exist or never named one. */
-export function writerGeneration(path: string): number {
-  return existsSync(path) ? metaOf(path).generation : 1;
 }
 
 /** Syncs a folder, so the names a rename put in it last. */

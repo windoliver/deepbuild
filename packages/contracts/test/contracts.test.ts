@@ -1,5 +1,6 @@
 // Regressions the acceptance suite doesn't reach: schemas the lint must refuse because the validator or a
 // generator can't serve them, and refusals that must stay in the one error shape.
+import { spawnSync } from 'node:child_process';
 import { describe, expect, it } from 'vitest';
 import { canonicalize, contextBoundFor, decode, encode, fixtures, generateRust, generateTypeScript, joinHookReplies, lintSchemas, parseHandle, recordHash, registry, sha256Hex, validate } from '../src/index.js';
 import type { JsonValue, Schema } from '../src/index.js';
@@ -384,4 +385,22 @@ it("encode reads a seq array by its indices, never through the array's own map",
   Object.defineProperty(own, 'map', { value: () => ['2'] });
   class Mapped extends Array<unknown> { override map<U>(): U[] { return ['2'] as U[]; } }
   for (const s of [own, Mapped.from([1n])]) expect(reg.encode('s@1', { s })).toBe('{"s":["1"]}');
+});
+
+describe('a schema an entry read', () => {
+  it("is kept once, parsed: its file's text goes", () => {
+    // The built package in a process of its own, so the heap read is this module's alone.
+    const script = `import { listSchemas } from ${JSON.stringify(new URL('../dist/index.js', import.meta.url).href)};
+const settle = () => { for (let i = 0; i < 3; i++) gc({ type: 'major', execution: 'sync', flavor: 'last-resort' }); return process.memoryUsage().heapUsed; };
+const before = settle();
+let bytes = 0;
+for (const entry of listSchemas()) bytes += JSON.stringify(entry.schema).length;
+console.log(JSON.stringify({ kept: settle() - before, bytes }));`;
+    const ran = spawnSync(process.execPath, ['--expose-gc', '--input-type=module', '-e', script], { encoding: 'utf8' });
+    expect(ran.status, ran.stderr).toBe(0);
+    const { kept, bytes } = JSON.parse(ran.stdout) as { kept: number; bytes: number };
+    expect(bytes, 'every published schema was read').toBeGreaterThan(500_000);
+    // The entries are gone with the loop. A module that keeps each text it read holds as much again as the schemas.
+    expect(kept, `${kept} B stay on the heap after ${bytes} B of schemas were read and dropped`).toBeLessThan(bytes / 4);
+  });
 });

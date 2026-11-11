@@ -1,5 +1,9 @@
 # #1687 — user-directed best-effort tracker closure
 
+> Snapshot note: the results below describe the pre-merge head `f8d0cff0a`.
+> The later conflict-resolution merge and its additional verification limits are
+> recorded in [issue-1687-merge-conflicts.md](issue-1687-merge-conflicts.md).
+
 The person explicitly requested a bounded best-effort finish and closure even if
 all remaining gaps could not be resolved, with no more hour-long waits or approval
 questions. This records an **administrative tracker closure**, not an acceptance
