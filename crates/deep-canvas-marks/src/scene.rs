@@ -700,8 +700,9 @@ fn disjoint(runs: Vec<TextRun>) -> Vec<TextRun> {
     if runs.windows(2).all(|w| w[0].to <= w[1].from) {
         return runs;
     }
-    // The graphemes no run holds yet, as spans by their start.
-    let mut free = BTreeMap::from([(0, usize::MAX)]);
+    // The graphemes no run holds yet, as spans by their start, up to the last any run holds.
+    let last = runs.iter().map(|r| r.to).max().unwrap_or(0);
+    let mut free = BTreeMap::from([(0, last)]);
     let mut out = Vec::with_capacity(runs.len());
     for run in runs {
         let met: Vec<(usize, usize)> = free
