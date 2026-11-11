@@ -6,7 +6,7 @@
 
 use std::collections::BTreeMap;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use deep_canvas::document::{Expansion, Issue, Packs};
 use deep_canvas::registry::Sealed;
@@ -20,6 +20,51 @@ pub struct Row {
     pub issues: Vec<Value>,
     /// Each layout, as its validator judged its twins at the pack check (#238).
     pub layouts: Vec<Value>,
+    /// The hub's release ships this version, so its origin is first-party (#1720).
+    pub first_party: bool,
+}
+
+/// A pack the store holds before the first call (#306): `{id, dir}`, with `origin: "first_party"`
+/// for one the hub's release ships (#1720).
+pub struct Stored {
+    pub id: String,
+    pub dir: PathBuf,
+    pub first_party: bool,
+}
+
+/// A scenario's `packs`: none when it gives none, `None` when one isn't `{id, dir}`.
+pub fn stored(list: Option<&Value>) -> Option<Vec<Stored>> {
+    let Some(list) = list else {
+        return Some(Vec::new());
+    };
+    list.as_array()?
+        .iter()
+        .map(|p| {
+            Some(Stored {
+                id: p.get("id")?.as_str()?.to_string(),
+                dir: PathBuf::from(p.get("dir")?.as_str()?),
+                first_party: p.get("origin").and_then(Value::as_str) == Some("first_party"),
+            })
+        })
+        .collect()
+}
+
+impl crate::hub::Hub<'_> {
+    /// Installs a pack the store holds before the first call: checked once here and never on a
+    /// document's open; one the hub's release ships is first-party.
+    pub fn install_stored(&mut self, stored: &Stored) {
+        let reply = self.install_pack(&stored.id, &stored.dir, None);
+        if stored.first_party && reply["outcome"] == "installed" {
+            let version = reply["version"].as_str().unwrap_or_default();
+            if let Some(row) = self
+                .pack_rows
+                .iter_mut()
+                .find(|r| r.pack == stored.id && r.version == version)
+            {
+                row.first_party = true;
+            }
+        }
+    }
 }
 
 /// The half of the pack check that runs a pack's programs, after the core's half admitted it:
@@ -162,6 +207,7 @@ pub fn install(
             state: outcome,
             issues: issues.clone(),
             layouts: layouts.clone(),
+            first_party: false,
         }),
     }
     json!({"outcome": outcome, "pack": id, "version": version, "issues": issues, "layouts": layouts})

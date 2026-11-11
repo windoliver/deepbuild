@@ -24,6 +24,8 @@ use crate::ops;
 use crate::registry::{self, Range, Sealed, Semver};
 use crate::schedule::{canonical, Hasher};
 
+pub mod module_fields;
+
 /// The most derived items one repeat makes (Recipe: cost).
 pub const MAX_REPEAT: u64 = 1024;
 
@@ -409,33 +411,8 @@ pub fn check_pack(manifest: &Value, sealed: &Sealed, planted: Planted) -> Result
         None => BTreeMap::new(),
         Some(a) => check_aliases(a, &mut issues),
     };
-    for key in fields.keys() {
-        if PACK_KEYS.contains(&key.as_str()) {
-            continue;
-        }
-        // A field a canvas module reads is its module's to check (#1720).
-        let claimed = sealed.modules.iter().find_map(|m| {
-            m.shapes
-                .pack_fields
-                .iter()
-                .find(|(f, _)| f == key)
-                .map(|(_, check)| *check)
-        });
-        match claimed {
-            Some(check) => {
-                for (path, why) in check(manifest) {
-                    let at = format!("{key}/{path}");
-                    let actual = fields[key].get(&path).cloned().unwrap_or(Value::Null);
-                    issues.push(Issue::envelope("out_of_range", at, actual, &why));
-                }
-            }
-            None => issues.push(Issue::envelope(
-                "unknown_field",
-                key.clone(),
-                fields[key].clone(),
-                "not a field of a pack in this slice",
-            )),
-        }
+    for key in fields.keys().filter(|k| !PACK_KEYS.contains(&k.as_str())) {
+        issues.extend(module_fields::check(sealed, manifest, key));
     }
     if !issues.is_empty() {
         return Err(issues);

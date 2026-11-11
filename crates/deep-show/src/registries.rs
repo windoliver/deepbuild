@@ -49,9 +49,13 @@ impl Hub<'_> {
     /// Where an admitted pack, `owner/name@version`, came from: `agent` when the working agent
     /// installed it through its session, `first_party` when the hub's release ships it, else `pack`.
     pub fn pack_origin(&self, pack: &str) -> &'static str {
+        let shipped = self
+            .pack_rows
+            .iter()
+            .any(|r| r.first_party && format!("{}@{}", r.pack, r.version) == pack);
         if self.pack_authors.contains_key(pack) {
             "agent"
-        } else if self.first_party.contains(pack) {
+        } else if shipped {
             "first_party"
         } else {
             "pack"

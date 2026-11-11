@@ -747,12 +747,8 @@ pub struct Registrar {
     /// Its Rust for the entries it fills in the core's `outline.source@1`, by entry name (#443).
     pub outline_fills: Vec<(String, crate::outline::Fill)>,
     /// The pack fields it reads, each with its check at the pack check (#1720).
-    pub pack_fields: Vec<(String, PackField)>,
+    pub pack_fields: Vec<(String, crate::document::packs::module_fields::PackField)>,
 }
-
-/// A module's check of a pack field it reads (Pack: fields that land with their features): over the
-/// whole manifest, each refusal `(path under the field, why)`.
-pub type PackField = fn(&Value) -> Vec<(String, String)>;
 
 impl Registrar {
     pub fn kind(&mut self, entry: Entry, needs: &[&str], draws_as: &str) -> &mut Self {
@@ -1045,26 +1041,6 @@ impl Registrar {
             value,
             since: since.into(),
         });
-        self
-    }
-
-    /// A pack field this module reads, which the pack check holds to `check` (#1720): a pack that
-    /// carries it is checked by its module, never refused as a field no one reads.
-    pub fn pack_field(&mut self, name: &str, check: PackField) -> &mut Self {
-        self.pack_fields.push((name.into(), check));
-        self
-    }
-
-    /// Fills an entry of the core's `outline.source@1` (#443): its value, which the registry's kit
-    /// holds to its item's 2D fill, and its own Rust, which `extrude` reads outlines through.
-    pub fn outline_source(
-        &mut self,
-        name: &str,
-        value: Value,
-        fill: crate::outline::Fill,
-    ) -> &mut Self {
-        self.entry(crate::outline::REGISTRY, name, value, "R6");
-        self.outline_fills.push((name.into(), fill));
         self
     }
 

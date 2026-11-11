@@ -5,6 +5,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameS
 import { isAbsolute, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { canonicalize, type JsonValue } from '@deepbuild/contracts';
+import { checkPacks } from './canvas.js';
 
 type Obj = Record<string, unknown>;
 const object = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -75,6 +76,9 @@ export interface Refusal { ref: string; digest: string; issues: unknown[]; check
 export class Packs {
   private readonly held = new Map<string, PackVersion>();
   private readonly folder: string;
+  /** The release's packs, read, checked and installed once a process, as the canvas core starts (#1720). */
+  private shipping?: ReturnType<typeof releasePacks>;
+  private release?: Promise<Obj[]>;
   constructor(root: string) {
     this.folder = join(root, 'packs');
     mkdirSync(join(this.folder, 'refused'), { recursive: true });
@@ -84,14 +88,63 @@ export class Packs {
     }
   }
   private refusalFile(ref: string): string { return join(this.folder, 'refused', `${hash(ref)}.json`); }
-  refusal(ref: string): Refusal | undefined {
+  private refusal(ref: string): Refusal | undefined {
     const file = this.refusalFile(ref);
     return existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) as Refusal : undefined;
   }
-  refuse(refusal: Refusal): void {
+  private refuse(refusal: Refusal): void {
     const file = this.refusalFile(refusal.ref);
     writeFileSync(`${file}.tmp`, JSON.stringify(refusal));
     renameSync(`${file}.tmp`, file);
+  }
+  /** The store's packs once the release's are checked and installed: what the canvas core holds. */
+  async installed(): Promise<{ id: string; dir: string; origin?: string }[]> { await this.shipped(true); return this.all(); }
+  async has(ref: string): Promise<boolean> { await this.shipped(true); return this.held.has(ref); }
+  /**
+   * Each pack the release ships, as the store holds it: installed, refused with its issues, or not checked yet. With
+   * `check`, a version the store has no check of is checked once, by the canvas core's pack check, and installed if
+   * it passes, so a restart checks nothing again.
+   */
+  shipped(check: boolean): Promise<Obj[]> {
+    return check ? (this.release ??= this.ship()) : (this.release ?? this.ship(false));
+  }
+  private async ship(check = true): Promise<Obj[]> {
+    const rows: Obj[] = [];
+    const fresh: { folder: string; pack: PackVersion }[] = [];
+    for (const { folder, pack, error } of (this.shipping ??= releasePacks())) {
+      if (!pack) { rows.push({ folder, state: 'refused', issues: [error] }); continue; }
+      const row = { folder, pack: pack.id, version: pack.version };
+      const held = this.held.get(pack.ref);
+      const refused = this.refusal(pack.ref);
+      if (held && held.digest !== pack.digest) rows.push({ ...row, state: 'refused', issues: [`${pack.ref} is installed with other bytes, and a published version never changes`] });
+      else if (held) rows.push({ ...row, state: 'installed', issues: [], checks: held.checks ?? 0 });
+      else if (refused?.digest === pack.digest) rows.push({ ...row, state: 'refused', issues: refused.issues, checks: refused.checks });
+      else if (check) fresh.push({ folder, pack });
+      else rows.push({ ...row, state: 'not_checked', issues: [] });
+    }
+    if (!fresh.length) return rows;
+    const staged = fresh.map(({ folder, pack }) => ({ folder, pack, dir: this.stage(pack) }));
+    let checked: Obj[];
+    try {
+      checked = await checkPacks(staged.map(({ pack, dir }) => ({ id: pack.id, dir })));
+    } catch (error) {
+      const why = error instanceof Error ? error.message : String(error);
+      return [...rows, ...fresh.map(({ folder, pack }) => ({ folder, pack: pack.id, version: pack.version, state: 'not_checked', issues: [why] }))];
+    }
+    for (const { folder, pack } of staged) {
+      const got = checked.find((r) => r.pack === pack.id && r.version === pack.version);
+      const state = got?.state === 'installed' ? 'installed' : 'refused';
+      const issues = Array.isArray(got?.issues) ? got.issues : ['the canvas core gave this version no row'];
+      // The store's own count: the runs the canvas core counted, added to an earlier refusal's.
+      const checks = (this.refusal(pack.ref)?.checks ?? 0) + (typeof got?.checks === 'number' ? got.checks : 0);
+      if (state === 'installed') this.admit({ ...pack, origin: 'first_party', checks });
+      else {
+        this.refuse({ ref: pack.ref, digest: pack.digest, issues, checks });
+        process.stderr.write(`deep hub: the release's pack ${pack.ref} failed its check and isn't installed: ${JSON.stringify(issues).slice(0, 600)}\n`);
+      }
+      rows.push({ folder, pack: pack.id, version: pack.version, state, issues, checks });
+    }
+    return rows;
   }
   get(ref: string): PackVersion | undefined { return this.held.get(ref); }
   named(id: string): boolean { return [...this.held.values()].some((p) => p.id === id); }
