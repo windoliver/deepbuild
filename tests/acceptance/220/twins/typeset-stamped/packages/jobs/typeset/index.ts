@@ -4,7 +4,6 @@
 // inputs, since its params hold everything it reads. Its output checks are its two issues, typeset.unknown_command
 // and typeset.parts_apart, which the tool writes into the probe, and typeset.outlines, which holds the SVG to
 // outlines only: no <text>, no <use>, no outside reference, every paint currentColor, no id twice.
-import { readFileSync } from 'node:fs';
 
 const TOOL = 'typst-mitex@1.0.0';
 

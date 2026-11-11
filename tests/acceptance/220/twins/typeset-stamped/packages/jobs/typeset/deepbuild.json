@@ -1,7 +1,7 @@
 {
   "id": "deepbuild/typeset",
   "version": "1.0.0",
-  "digest": "d1:3af547671f2d4618dd771973008714c11a9c015f2b4604edef317f62b76ee923",
+  "digest": "d1:ba3d350ddda16987656e996df8ae0423168387b66a9c267964cbc7e3bc0830e5",
   "checks": [
     "typeset.unknown_command",
     "typeset.parts_apart",
