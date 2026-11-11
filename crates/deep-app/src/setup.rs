@@ -398,7 +398,10 @@ pub fn reason() -> Option<String> {
 
 fn read_reason() -> Option<String> {
     let (reason, fix) = stopped()?;
-    let line = format!("Setup didn't finish: {}. {fix}", reason.trim_end_matches('.'));
+    let line = format!(
+        "Setup didn't finish: {}. {fix}",
+        reason.trim_end_matches('.')
+    );
     let home = PathBuf::from(std::env::var_os("HOME").unwrap_or_default());
     // macOS resolves /tmp and /var to /private, so setup may have named either form of the same home.
     let homes = [std::fs::canonicalize(&home).unwrap_or_default(), home];
