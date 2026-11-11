@@ -1,7 +1,7 @@
 {
   "id": "deepbuild/score",
   "version": "1.0.0",
-  "digest": "d1:8c259befcf3da5f162be1b117a9cc2ea5ef90b86e697b1390f5ace4e9ba70258",
+  "digest": "d1:29f0e68b5fa9248fddfd71659afa8e84c83b2975c997d36980178166edf9702b",
   "checks": [
     "score.render.pitch"
   ],
