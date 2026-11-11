@@ -1,0 +1,36 @@
+
+ RUN  v5.0.5 ~/private/dbc-22d/tests/acceptance/319
+
+ ✓ deadlines.test.ts (5 tests) 229ms
+ ✓ restart-redraft/restart.test.ts (4 tests) 10339ms
+   ✓ #319: the hub stopped across a batch time (4)
+     ✓ a hub that waits for the next batch fails, naming each such ask, with room in the day's cap 5079ms
+     ✓ a hub that waits for the next batch fails, naming each such ask, with the day's cap reached 5094ms
+ ✓ timing.test.ts (2 tests) 103ms
+ ✓ fold.test.ts (2 tests) 114ms
+stdout | budgets.test.ts > #319.43d13eb3 budgets on the reference Mac > #319.43d13eb3 creating or answering an ask takes under 5 ms in the hub
+warm-up: create 1.518 ms, answer 3.545 ms at p50 (discarded)
+
+stdout | budgets.test.ts > #319.43d13eb3 budgets on the reference Mac > #319.43d13eb3 creating or answering an ask takes under 5 ms in the hub
+#319 create an ask, p50 (ms): 1.580, 1.808, 1.789, 1.563, 1.797 against 5 (margin 16%)
+#319 answer an ask, p50 (ms): 3.565, 4.131, 3.825, 3.475, 3.669 against 5 (margin 19%)
+
+stdout | budgets.test.ts > #319.43d13eb3 budgets on the reference Mac > #319.43d13eb3 the inbox projection with 10,000 asks loads in under 100 ms
+warm-up: 1.6 ms (discarded)
+
+stdout | budgets.test.ts > #319.43d13eb3 budgets on the reference Mac > #319.43d13eb3 the inbox projection with 10,000 asks loads in under 100 ms
+#319 inbox with 10,000 asks (ms): 0.927, 0.685, 0.645, 0.513, 0.470 against 100 (margin 97%)
+
+ ✓ budgets.test.ts (2 tests) 7836ms
+   ✓ #319.43d13eb3 budgets on the reference Mac (2)
+     ✓ #319.43d13eb3 creating or answering an ask takes under 5 ms in the hub 6648ms
+     ✓ #319.43d13eb3 the inbox projection with 10,000 asks loads in under 100 ms 1187ms
+ ✓ settings.test.ts (2 tests) 115ms
+ ✓ plants.test.ts (3 tests) 5204ms
+   ✓ #319.1ad1ab09 fails on a hub that waits for the next batch after its start, naming the ask 5112ms
+
+ Test Files  7 passed (7)
+      Tests  20 passed (20)
+   Start at  01:44:08
+   Duration  24.65s (tests 99%, import 1%)
+

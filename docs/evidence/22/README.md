@@ -136,4 +136,26 @@ durable. Answer p50 here: 3.8, 3.9, 3.8 ms (create 0.9 to 1.6).
   appended 307), which fails the same way with the record change taken out. #318, #320 and #321 pass. #26's and #27's
   failures (8 in #27's desktop, outcomes, waits and repeat files) are the same with both changes taken out. The hub
   package's 11 failures are in files that also failed in the earlier `affected.mjs` run, before this change.
-- Still to prove: the budgets on the Mac at this commit, and the app's screenshots with the display awake.
+- The budgets at the final commit: see the next section. The app's screenshots were not retaken.
+
+## The Mac, at 25f35437: the budgets pass at nominal
+
+Two runs at 25f35437, on the same Mac15,12 (Apple M3, 16 GB):
+
+- **22c** (`mac-25f35437/`): it passed, with answer p50 at 3.732, 3.513, 3.971, 3.632 and 3.645 ms. It doesn't count.
+  `pmset -g therm` showed no warning, but the thermal state wasn't recorded and was likely "fair", and load averages
+  were 3.85 / 12.21 / 14.10. The design counts a budget only with "the thermal state nominal".
+- **22d** (`mac-25f35437-nominal/`): this is the run that counts. It ran on AC power (100%, charged), with Low Power Mode
+  0 and `thermalState 0` at the budgets' start and end. Load averages were 2.33 → 2.35 (`machine.txt`).
+
+| Budget (22d, `budgets.txt`) | Five runs after a warm-up | Limit | Result |
+|---|---|---|---|
+| create an ask, p50 | 1.806, 1.813, 1.817, 1.809, 1.855 ms | 5 ms | PASS |
+| answer an ask, p50 | 4.170, 4.139, 4.156, 4.115, 4.075 ms | 5 ms | PASS |
+| inbox of 10,000 asks | 1.070, 0.761, 0.666, 0.545, 0.486 ms | 100 ms | PASS |
+
+#319's whole suite passed right after, 20 of 20 in 7 files (`suite-319.txt`). Its own budget readings were: create
+1.56–1.81 ms, answer 3.475–4.131 ms, inbox 0.470–0.927 ms.
+
+The answer margin is thin. At about 4.1 ms the answer sits 5% under its 5 ms limit on a cool, quiet Mac. One FULL sync
+(F_FULLFSYNC) is most of that cost, and the design requires that sync.
