@@ -20,6 +20,9 @@ use serde_json::{json, Map, Value};
 
 use crate::graph::Kind;
 
+mod points;
+pub use points::{points, POINT_WORDS};
+
 /// A shipped operator as the library lists it: its stage graphs run in order as one pass (a
 /// multi-pass chain), or its one graph.
 #[derive(Clone, Debug)]
@@ -1286,6 +1289,14 @@ pub fn library(karis: bool) -> Vec<Shipped> {
             kind: Kind::Compute,
             noise: true,
             stages: vec![particles()],
+        },
+        // #503: a depth video's frame as a 3D point set's records.
+        Shipped {
+            name: "points.video@1",
+            effect: None,
+            kind: Kind::Compute,
+            noise: false,
+            stages: vec![points()],
         },
         Shipped {
             name: "pixel_hash@1",
