@@ -1178,7 +1178,9 @@ impl<'a> Hub<'a> {
             display_only: BTreeSet::new(),
             mode_ids: BTreeMap::new(),
             session_state: BTreeMap::new(),
-            renderer: Renderer::new(),
+            renderer: Renderer::new().turning_about_corner(
+                scenario.module_planted.as_deref() == Some("turns_about_corner"),
+            ),
             sched,
             sessions: BTreeMap::new(),
             background: Vec::new(),
@@ -2178,14 +2180,7 @@ impl<'a> Hub<'a> {
         // Mark set columns that read a column source, resolved and narrowed by the core's
         // column view at the frame's step (#397).
         if let Some(form) = drawn_form.as_mut() {
-            let entries = self
-                .startup
-                .sealed
-                .registry(deep_canvas::columns::REGISTRY)
-                .map_or(&[][..], |r| r.entries.as_slice());
-            // A step is a 60 fps frame: 11,760,000 flicks.
-            let step = show.t.max(0) as u64 / 11_760_000;
-            issues.extend(deep_canvas::columns::view(form, entries, step));
+            issues.extend(self.column_view(form, show.t));
         }
         if let Some(doc) = stamped
             .as_ref()

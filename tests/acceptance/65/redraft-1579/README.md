@@ -99,7 +99,7 @@ fields (`signature`, `device`, `hub`, `at`, `card_hash`), and the refusal's nami
 | ID | Test | Wrong program it fails on |
 |----|------|---------------------------|
 | `#65.82812f3b` AC1 | `answers.test.ts`: "a choice answered on the paired phone is closed on chat, email and text, and in Needs you, within 10 s"; `proof.test.ts` | none named |
-| `#65.19700b29` AC3 | `answers.test.ts`: "the phone's signed approve of a held permission request reaches the session as allow and is saved as a decision"; `proof.test.ts` | none named |
+| `#65.19700b29` AC3 | `../redraft-1580/answers.test.ts`: "the phone's signed approve of a held permission request reaches the session as allow and is saved as a decision" (moved there after #1580: its phone signs the plan's hash); `proof.test.ts` | none named |
 | `#65.bd21c26c` AC5 | `proofs.test.ts`: "an answer marked as signed by the paired phone with another key's signature is refused naming the phone's device, and counts as nothing" | `trusts-channel-proof` (hub) |
 | `#65.05709fd8` AC10 | `answers.test.ts`: "B on the phone, then C in the app 2 s later: B is the one answer, and C is refused naming B and the paseo channel" | `last-writer-wins` (hub) |
 | `#65.fdfea15b` AC15 | `proofs.test.ts`: "unpaired on the trusted path, the phone is told so, and its signed answer is refused naming its device" | `keeps-unpaired-key` (hub) |

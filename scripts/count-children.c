@@ -9,9 +9,13 @@
 // reaped, to the tick. scripts/benchmark.mjs adds the log up.
 //
 //   start <parent> <child> <path>
-//   reap <parent> <child> <instructions> <elapsed> <children's elapsed>
+//   reap <parent> <child> <instructions> <elapsed> <children's elapsed> <QoS>
 //   unread <parent> <child> <child time>      a child reaped whose count is denied, as a setuid one's is
-//   exit <process> <instructions> <children's elapsed>      its own count, for a child nothing waits for
+//   exit <process> <instructions> <children's elapsed> <QoS>      its own count, for a child nothing waits for
+//
+// <QoS> is the process's CPU time at each QoS class, in this order: default, maintenance, background,
+// utility, legacy, user-initiated, user-interactive. Code that waits by spinning or on a lock counts its
+// waiting, so a count run at another QoS doesn't compare.
 #include <errno.h>
 #include <fcntl.h>
 #include <libproc.h>
@@ -27,6 +31,9 @@
 
 #define LOG "DEEP_COUNT_LOG"
 #define LIBRARY "DYLD_INSERT_LIBRARIES"
+#define QOS " %llu %llu %llu %llu %llu %llu %llu"
+#define QOS_OF(usage) (usage).ri_cpu_time_qos_default, (usage).ri_cpu_time_qos_maintenance, (usage).ri_cpu_time_qos_background, \
+  (usage).ri_cpu_time_qos_utility, (usage).ri_cpu_time_qos_legacy, (usage).ri_cpu_time_qos_user_initiated, (usage).ri_cpu_time_qos_user_interactive
 
 // One write to an O_APPEND file, so the lines of processes running at once don't mix. A log that's gone,
 // as for a daemon that outlives its run, is left gone.
@@ -41,10 +48,10 @@ static void put(const char *line, int length) {
 // Reads a process that has exited and not yet been reaped. It answers 0 when the kernel denies the read.
 static int reaping(pid_t child) {
   struct rusage_info_v4 usage;
-  char line[128];
+  char line[320];
   if (proc_pid_rusage(child, RUSAGE_INFO_V4, (rusage_info_t *)&usage)) return 0;
-  put(line, snprintf(line, sizeof line, "reap %d %d %llu %llu %llu\n", getpid(), child, usage.ri_instructions,
-    usage.ri_proc_exit_abstime - usage.ri_proc_start_abstime, usage.ri_child_elapsed_abstime));
+  put(line, snprintf(line, sizeof line, "reap %d %d %llu %llu %llu" QOS "\n", getpid(), child, usage.ri_instructions,
+    usage.ri_proc_exit_abstime - usage.ri_proc_start_abstime, usage.ri_child_elapsed_abstime, QOS_OF(usage)));
   return 1;
 }
 
@@ -120,9 +127,9 @@ static pid_t counted_fork(void) {
 // A child nothing waits for has no one to read it, so it reports itself as it exits normally.
 __attribute__((destructor)) static void exiting(void) {
   struct rusage_info_v4 usage;
-  char line[128];
+  char line[320];
   if (proc_pid_rusage(getpid(), RUSAGE_INFO_V4, (rusage_info_t *)&usage)) return;
-  put(line, snprintf(line, sizeof line, "exit %d %llu %llu\n", getpid(), usage.ri_instructions, usage.ri_child_elapsed_abstime));
+  put(line, snprintf(line, sizeof line, "exit %d %llu %llu" QOS "\n", getpid(), usage.ri_instructions, usage.ri_child_elapsed_abstime, QOS_OF(usage)));
 }
 
 // This process's own two settings, whole, as a child's environment holds them. A bench or the hub may hand

@@ -1,0 +1,6 @@
+{
+  "id": "test/channel-watch",
+  "version": "1.0.0",
+  "digest": "d1:0000000000000000000000000000000000000000000000000000000000000000",
+  "requires": { "preview": ["deep.registerChannel", "deep.channel.fetch"] }
+}
