@@ -202,6 +202,50 @@ impl Record {
         }
         .occurrences(piece)
     }
+    /// Each array as the core's column view reads it (Mark set: logic columns), by
+    /// `<item>.<write>`: its type, count, step length and interpolation, and each step that
+    /// changed it, ascending, with the index ranges the logic module hands the view (at most
+    /// [`HANDED`], [`handed`]) and the runs it wrote, `[start, [values]]`. Before step 0 every
+    /// element is zero.
+    pub fn arrays(&self, piece: &Piece) -> Map<String, Value> {
+        let mut out = Map::new();
+        for item in &piece.items {
+            let mut steps: BTreeMap<(&str, i64), Runs> = BTreeMap::new();
+            for r in self
+                .ranges
+                .get(&item.id)
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+            {
+                let (Some(array), Some(k), Some(s), Some(e)) = (
+                    r["array"].as_str(),
+                    r["step"].as_i64(),
+                    r["start"].as_u64(),
+                    r["end"].as_u64(),
+                ) else {
+                    continue;
+                };
+                let step = steps.entry((array, k)).or_default();
+                step.0.push([s, e]);
+                step.1.push(json!([s, r["values"]]));
+            }
+            for w in &item.writes {
+                let list: Vec<Value> = steps
+                    .range((w.name.as_str(), i64::MIN)..=(w.name.as_str(), i64::MAX))
+                    .map(|((_, k), (runs, values))| {
+                        json!({"step": k, "changed": handed(runs), "values": values})
+                    })
+                    .collect();
+                out.insert(
+                    format!("{}.{}", item.id, w.name),
+                    json!({"type": w.ty.name(), "count": w.count, "every": item.step,
+                           "linear": w.linear, "steps": list}),
+                );
+            }
+        }
+        out
+    }
     fn checkpoint(&mut self, id: &str, step: i64, deep: u64) {
         let list = self
             .checkpoints
@@ -1107,6 +1151,23 @@ fn changed(item: &Item, arrays: &mut [u8]) {
     }
 }
 
+/// A step's changed runs of one array: their `[start, end)` and their `[start, [values]]`.
+type Runs = (Vec<[u64; 2]>, Vec<Value>);
+
+/// The most index ranges a step hands the column view per array.
+pub const HANDED: usize = 64;
+
+/// A step's changed runs `[start, end)`, ascending, as the column view takes them: the first
+/// [`HANDED`] − 1 as they are and any more merged into their span, so at most [`HANDED`].
+pub fn handed(runs: &[[u64; 2]]) -> Vec<[u64; 2]> {
+    if runs.len() <= HANDED {
+        return runs.to_vec();
+    }
+    let mut out = runs[..HANDED - 1].to_vec();
+    out.push([runs[HANDED - 1][0], runs[runs.len() - 1][1]]);
+    out
+}
+
 /// The element ranges of each write that step k changed, from `old` to `new` (both the write
 /// region): each run of changed elements `[start, end)` with its new values.
 fn ranges(item: &Item, k: i64, old: &[u8], new: &[u8]) -> Vec<Value> {
@@ -1296,4 +1357,21 @@ pub fn drawn<'a>(
         }
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// #535: a step's 100 changed runs reach the column view as 64 ranges, the last the span of
+    /// the 37 past the 63rd; 64 or fewer reach it as they are.
+    #[test]
+    fn a_step_hands_over_at_most_64_ranges() {
+        let runs: Vec<[u64; 2]> = (0..100).map(|i| [3 * i, 3 * i + 1]).collect();
+        let out = handed(&runs);
+        assert_eq!(out.len(), HANDED);
+        assert_eq!(out[..63], runs[..63]);
+        assert_eq!(out[63], [189, 298]);
+        assert_eq!(handed(&runs[..64]), runs[..64].to_vec());
+    }
 }
