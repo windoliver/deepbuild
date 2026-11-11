@@ -1,0 +1,34 @@
+#1056 acceptance suite at the base, before any implementation: this worktree's HEAD 3962d5281 (Merge pull request
+#2235), which is the asked-for base 3c36f9180 (Merge pull request #2232) plus #485's merge (README: first paragraph).
+
+Run once, the whole suite, on an Apple M5 Max (Metal family apple10), deep-gpu built by the files (debug,
+CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0, cargo build --locked --bin deep-gpu):
+
+  CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 node node_modules/vitest/vitest.mjs run --root tests/acceptance/1056 --no-file-parallelism --testTimeout=600000
+
+ ❯ records.test.ts (4 tests | 4 failed)
+     × AC1 #1056.77c08347 index_record writes, for each of #464's pixel fixtures, the file its two-GPU criterion reads, with this GPU's fingerprint, this checkout's tree hash and every frame's index hash beside it; a record of another family with equal hashes passes cross_index and #464's two-GPU test
+       AssertionError: index_record for grid was answered, not refused: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+     × AC1 #1056.77c08347 a planted index differing in one pixel of one frame fails, naming the frame and the pixel
+       AssertionError: index_record for puff was answered, not refused: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+     × AC1 #1056.77c08347 a record for another tree hash is refused, naming both hashes
+       AssertionError: index_record for puff was answered, not refused: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+     × AC1 #1056.77c08347 on a second Apple GPU: the records a Mac of another GPU family made of #464's fixtures at this tree (DEEPBUILD_SECOND_GPU_1056) have this GPU's index hashes on every frame and pass #464's two-GPU tests; without them this is BLOCKED, never PASS
+       AssertionError: index_record for grid was answered, not refused: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+ ❯ no-record.test.ts (1 test | 1 failed)
+     × AC2 #1056.c717b851 with only this GPU's records of #464's three pixel fixtures, cross_index is BLOCKED with exactly one unblock ask naming the machine, each fixture alone asks that same question, and none is PASS
+       AssertionError: index_record for grid was answered, not refused: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+ Test Files  2 failed (2)
+      Tests  5 failed (5)
+
+So at the base deep-gpu has no index_record call (and no cross_index): every test fails on its first index_record,
+refused bad_input "unknown call". The second-GPU test fails there too, before it reaches its BLOCKED ask; once
+index_record exists it stays BLOCKED on this one-GPU Mac until DEEPBUILD_SECOND_GPU_1056 names a second Mac's records.
+
+The harness was checked once at this HEAD with two temporary files, not kept: each of #464's three fixtures as
+helpers.ts builds it gives, through film2d, a frame 0 index hash that makes #464's own two-GPU test pass when written
+into a hand-made record (grid 6c6eac98…, tables e33020dd…, puff 830c65e0…) and fail when replaced by zeros; #464's keyed
+flash holds hero-body's index 1 on frames 0, 99 and 105 and 2 on 100 and 104; and twin() moves exactly pixel (61, 50) of
+the puff's frame 12 (index 1 to 2) and that frame's hash alone.
+
+node node_modules/typescript/bin/tsc -p tests/acceptance/1056/tsconfig.json exits 0.
