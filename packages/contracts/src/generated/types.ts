@@ -6802,6 +6802,72 @@ export interface ResourceCreated {
   evidence?: Array<string>;
 }
 
+/** review.read@1 */
+export interface ReviewRead {
+  v: 1;
+  id: string;
+  kind: "review.read";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    pr: string;
+    claim: string;
+    commit: string;
+    sent: Array<{
+      rule: string;
+      sites: Array<{
+        file: string;
+        line: number;
+        quote: string;
+      }>;
+    }>;
+    open: Array<{
+      rule: string;
+      sites: Array<{
+        file: string;
+        line: number;
+        quote: string;
+      }>;
+    }>;
+  };
+  evidence?: Array<string>;
+}
+
+/** review.settled@1 */
+export interface ReviewSettled {
+  v: 1;
+  id: string;
+  kind: "review.settled";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    pr: string;
+    claim: string;
+    commit: string;
+    outcomes: Array<{
+      rule: string;
+      sites: Array<{
+        file: string;
+        line: number;
+        quote: string;
+      }>;
+      ended: "fixed" | "left";
+      commit: string;
+    }>;
+  };
+  evidence?: Array<string>;
+}
+
 /** row.set@1 */
 export interface RowSet {
   v: 1;
