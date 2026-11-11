@@ -96,6 +96,12 @@
     "called_by": "deep inbox undo"
   },
   {
+    "method": "ask.take_over",
+    "since": "R2",
+    "stability": "preview",
+    "tracking": "#1580"
+  },
+  {
     "method": "device.pair",
     "since": "R1",
     "stability": "preview",

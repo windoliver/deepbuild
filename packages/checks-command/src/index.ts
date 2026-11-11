@@ -62,7 +62,7 @@ export interface ContractCount { output: string; size: number; compared: number 
 export interface TimedRepeat { repeat: number; flushed: boolean }
 export interface CommandRun extends CheckResult {
   run: string;
-  exit: { code: number | null; signal: NodeJS.Signals | null; cause: 'exit' | 'deadline' | 'stop' } | null;
+  exit: { code: number | null; signal: NodeJS.Signals | null; cause: 'exit' | 'deadline' | 'stop' | 'limit' } | null;
   /** Scrubbed by value, then digested. */
   output: { stdout: string; stderr: string; sha256: { stdout: string; stderr: string } };
   /** The name of every variable the run's process got, never a value. */
@@ -297,7 +297,7 @@ async function runOnce(check: CommandCheck, clock: number): Promise<{ run: Comma
       DEEP_RUN_TOKEN: token,
     };
     const chunks = { stdout: [] as Buffer[], stderr: [] as Buffer[] };
-    let cause = 'exit' as 'exit' | 'deadline' | 'stop';
+    let cause = 'exit' as 'exit' | 'deadline' | 'stop' | 'limit';
     // A run that names its tests runs only those, so a control it never selects proves nothing either way (#1099 adds theirs).
     if (!filters.length) controls = await plantControls(checkout);
     const started = host.start({
@@ -326,6 +326,8 @@ async function runOnce(check: CommandCheck, clock: number): Promise<{ run: Comma
         // The deadline counts from the process's start, not from the wait for its sandbox or a lease.
         disarm = after(check.deadline, () => halt('deadline'));
         exit = await host.wait(run);
+        // Stopped at a limit its host held it to (#1409): what it measured says nothing of the product.
+        if (exit.limit && cause === 'exit') cause = 'limit';
         // Nothing the run started outlives it: what it left running is stopped through host@1 too, while the output,
         // whole once the process closed, is scrubbed; the evidence files are read only once that stop is done.
         stopping = host.signal(run, 'SIGKILL').catch(() => undefined);
@@ -358,7 +360,8 @@ async function runOnce(check: CommandCheck, clock: number): Promise<{ run: Comma
     const stdout = scrub(Buffer.concat(chunks.stdout).toString('utf8'));
     const stderr = scrub(Buffer.concat(chunks.stderr).toString('utf8'));
     const output = { stdout, stderr, sha256: { stdout: sha256(stdout), stderr: sha256(stderr) } };
-    const ended = { output, env: Object.keys(env).sort(), exit: exit ? { code: exit.code, signal: exit.signal, cause } : null, evidence: [`stdout ${output.sha256.stdout}`, `stderr ${output.sha256.stderr}`] };
+    const limited = exit?.limit ? [`stopped at its ${exit.limit.limit} of ${exit.limit.max} MiB${exit.limit.reading === undefined ? '' : `, reading ${exit.limit.reading.toFixed(1)} MiB`}`] : [];
+    const ended = { output, env: Object.keys(env).sort(), exit: exit ? { code: exit.code, signal: exit.signal, cause } : null, evidence: [`stdout ${output.sha256.stdout}`, `stderr ${output.sha256.stderr}`, ...limited] };
     await stopping;
     if (failed !== null) return done('missing', { ...ended, failures: [{ test: '(run)', file: spec.inputs[0] ?? '.', line: 1, stack: null, assertion: false, message: failed }] }, []);
 
@@ -410,7 +413,7 @@ async function runOnce(check: CommandCheck, clock: number): Promise<{ run: Comma
         const unended = (vitestRun?.started ?? []).filter((s) => !ran.some((t) => t.test === s.test && t.file === s.file));
         return done('overran', { ...rest, failures: [...failures, ...unended.map((s) => ({ test: s.test, file: s.file ?? '.', line: 1, stack: null, assertion: false, unended: true, message: `${s.test} was still running at the deadline` }))] }, ran);
       }
-      if (cause === 'stop') return done('stopped', rest, ran);
+      if (cause === 'stop' || cause === 'limit') return done('stopped', rest, ran);
       if (plant === 'exit-code-only') return done(code === 0 ? 'passed' : 'failed', { ...rest, mask }, ran);
       // A program the run started that the tracer can't see into, or a child outside its group, leaves it uncounted.
       for (const spawned of check.outside ? [] : spawns?.lines ?? []) {

@@ -82,6 +82,7 @@
             "ask",
             "revision",
             "card_hash",
+            "plan_hash",
             "hub",
             "at",
             "signature",
