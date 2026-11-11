@@ -615,39 +615,8 @@ pub enum ImageSampling {
     Cubic,
 }
 
-/// #1653: the atlas cell an image draws in place of its whole asset (Mark set: atlas tiles): cell
-/// `index` in row-major order of `cell`-px cells laid from `margin`, `separation` apart, turned by
-/// `flip`'s bits (h 1, v 2, transpose 4; transpose first). Whoever decodes the atlas resolves it
-/// against its width, so a sample never leaves the cell.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct AtlasCell {
-    pub index: u64,
-    pub cell: [f64; 2],
-    pub margin: [f64; 2],
-    pub separation: [f64; 2],
-    pub flip: u8,
-}
-
-impl AtlasCell {
-    /// The cell's `[x, y, w, h]` in an atlas of `[width, height]` px, or `None` for a cell the
-    /// atlas doesn't hold.
-    pub fn rect(&self, [width, height]: [u32; 2]) -> Option<[f64; 4]> {
-        let [cw, ch] = self.cell;
-        if cw < 1.0 || ch < 1.0 {
-            return None;
-        }
-        let step = [cw + self.separation[0], ch + self.separation[1]];
-        let columns = ((f64::from(width) - self.margin[0] + self.separation[0]) / step[0]).floor();
-        if columns < 1.0 {
-            return None;
-        }
-        let columns = columns as u64;
-        let (col, row) = (self.index % columns, self.index / columns);
-        let x = self.margin[0] + col as f64 * step[0];
-        let y = self.margin[1] + row as f64 * step[1];
-        (y + ch <= f64::from(height)).then_some([x, y, cw, ch])
-    }
-}
+/// #1653: the atlas cell an image draws, laid out where atlas sets are.
+pub use crate::atlas::AtlasCell;
 
 /// A styled span of a text's one shaped run (`runs: [{from, to, role}]`): graphemes `[from, to)`
 /// painted in `role`. It changes no glyph, so the run is shaped once and kerns across it.
@@ -948,41 +917,6 @@ pub enum Mark {
     },
 }
 
-/// The sine and cosine of `deg` degrees, exact at quarter turns.
-pub fn sin_cos(deg: f64) -> (f64, f64) {
-    let quarter = deg / 90.0;
-    if quarter.fract() == 0.0 {
-        return [(0.0, 1.0), (1.0, 0.0), (0.0, -1.0), (-1.0, 0.0)]
-            [quarter.rem_euclid(4.0) as usize];
-    }
-    let r = deep_canvas::ops::rad(deg);
-    (deep_canvas::ops::sin(r), deep_canvas::ops::cos(r))
-}
-
-/// The affine `[a, b, c, d, e, f]` (x′ = a x + c y + e, y′ = b x + d y + f) that turns `deg`
-/// degrees about the centre of `bounds`.
-pub fn turn_of([x, y, w, h]: [f64; 4], deg: f64) -> [f64; 6] {
-    let (s, c) = sin_cos(deg);
-    let (cx, cy) = (x + w / 2.0, y + h / 2.0);
-    [c, s, -s, c, cx - c * cx + s * cy, cy - s * cx - c * cy]
-}
-
-/// A box holding `bounds` turned `deg` degrees about its centre: `bounds` itself unturned.
-pub fn turned_box(bounds: [f64; 4], deg: f64) -> [f64; 4] {
-    if deg == 0.0 {
-        return bounds;
-    }
-    let [x, y, w, h] = bounds;
-    let [a, b, c, d, e, f] = turn_of(bounds, deg);
-    let corners = [[x, y], [x + w, y], [x, y + h], [x + w, y + h]]
-        .map(|[px, py]| [a * px + c * py + e, b * px + d * py + f]);
-    let (lo, hi) = corners.iter().fold(
-        ([f64::INFINITY; 2], [f64::NEG_INFINITY; 2]),
-        |(lo, hi), p| ([lo[0].min(p[0]), lo[1].min(p[1])], [hi[0].max(p[0]), hi[1].max(p[1])]),
-    );
-    [lo[0], lo[1], hi[0] - lo[0], hi[1] - lo[1]]
-}
-
 /// A stroke as drawn (Paint: stroke): its width in u, its paint, its opacity (the paint's times the
 /// stroke's), and the dashes each sub-path holds (`dash: {count}`), equal dashes and gaps from
 /// the sub-path's start.
@@ -1013,7 +947,7 @@ impl Drawn {
         let grown = |b: [f64; 4], m: f64| [b[0] - m, b[1] - m, b[2] + 2.0 * m, b[3] + 2.0 * m];
         let b = match &self.mark {
             Mark::Rect { bounds, .. } => *bounds,
-            Mark::Image { bounds, turn, .. } => turned_box(*bounds, *turn),
+            Mark::Image { bounds, turn, .. } => crate::turn::turned_box(*bounds, *turn),
             Mark::Circle { center, r, .. } => [center[0] - r, center[1] - r, 2.0 * r, 2.0 * r],
             Mark::Path {
                 geometry, offset, ..
@@ -2687,7 +2621,7 @@ fn boxes_of(frame: &Frame, items: &Map<String, Value>) -> BTreeMap<String, [f64;
     for drawn in frame.layers.iter().flat_map(|l| &l.marks) {
         let b = match &drawn.mark {
             Mark::Rect { bounds, .. } => *bounds,
-            Mark::Image { bounds, turn, .. } => turned_box(*bounds, *turn),
+            Mark::Image { bounds, turn, .. } => crate::turn::turned_box(*bounds, *turn),
             Mark::Circle { center, r, .. } => [center[0] - r, center[1] - r, 2.0 * r, 2.0 * r],
             Mark::Path {
                 geometry, offset, ..
@@ -4205,19 +4139,6 @@ pub enum Planted {
     /// drawn in row order rather than by centre.
     AtlasSquareLayout,
     AtlasRowOrder,
-    /// #535 AC6's twin: a free atlas row turned about its quad's corner, not its centre.
-    AtlasTurnsAboutCorner,
-}
-
-impl Planted {
-    /// The planted program a canvas module's proof surface names, reaching the marks a frame
-    /// builds (#535's `turns_about_corner`); any other name plants nothing here.
-    pub fn named(name: Option<&str>) -> Planted {
-        match name {
-            Some("turns_about_corner") => Planted::AtlasTurnsAboutCorner,
-            _ => Planted::None,
-        }
-    }
 }
 
 /// The draw list for evaluated `items` of `doc`, in `palette`, at `zoom` (which picks each path's
@@ -4276,7 +4197,6 @@ pub fn frame_with(
     zoom: f64,
     bound: &BTreeMap<String, Shown>,
     record: &Record,
-    planted: Planted,
 ) -> Result<Frame, Refused> {
     let row_readings = bound_rows(doc, record);
     frame_shown(
@@ -4284,7 +4204,7 @@ pub fn frame_with(
         items,
         (palette, &Type::default()),
         zoom,
-        planted,
+        Planted::None,
         bound,
         &row_readings,
     )
@@ -5015,20 +4935,13 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
                 Some(Value::String(s)) if s == "cubic" => ImageSampling::Cubic,
                 Some(_) => return refuse("bad_doc", format!("{path}/params/sampling")),
             };
-            // #535: an image turned by `at.rot`'s z (degrees) turns about its origin, as a free
-            // atlas row turns about its centre.
+            // #535: `at.rot`'s z (degrees) turns the image about its origin.
             let turn = num(item.pointer("/at/rot/2")).unwrap_or(0.0);
-            let mut bounds = place.rect(bounds);
-            if turn != 0.0 {
-                let ([s, c], o) = (<[f64; 2]>::from(sin_cos(turn)), place.at([0.0, 0.0]));
-                let d = [bounds[0] + bounds[2] / 2.0 - o[0], bounds[1] + bounds[3] / 2.0 - o[1]];
-                let centre = [o[0] + c * d[0] - s * d[1], o[1] + s * d[0] + c * d[1]];
-                bounds = [centre[0] - bounds[2] / 2.0, centre[1] - bounds[3] / 2.0, bounds[2], bounds[3]];
-            }
+            let origin = place.at([0.0, 0.0]);
             vec![Mark::Image {
                 item: id.clone(),
                 asset: asset.to_ascii_lowercase(),
-                bounds,
+                bounds: crate::turn::about(place.rect(bounds), origin, turn),
                 fit,
                 sampling,
                 crop: four(params.get("crop")),
@@ -5590,7 +5503,6 @@ pub fn frame_prebuilt(
     bound: &BTreeMap<String, Shown>,
     record: &Record,
     prebuilt: &[(&str, &Placed)],
-    planted: Planted,
 ) -> Result<Option<(Frame, Places)>, Refused> {
     let row_readings = bound_rows(doc, record);
     let (frame, wants_boxes, places) = build(
@@ -5599,7 +5511,7 @@ pub fn frame_prebuilt(
         (palette, &Type::default()),
         (bound, &row_readings),
         zoom,
-        planted,
+        Planted::None,
         None,
     )?;
     Ok((!wants_boxes).then_some((frame, places)))

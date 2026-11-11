@@ -1029,17 +1029,8 @@ pub fn base_rows(id: &str, item: &Value, bound: &BoundRows) -> Result<Rows, Refu
                 .map(|c| (k, c))?,
         ),
     };
-    // #535: on an atlas grid with `size`, a row without a key column is keyed by its cell.
-    let size = crate::atlas::size_of(p);
     let keys: Vec<String> = (0..n)
-        .map(|i| {
-            key_column
-                .and_then(|(_, k)| k.text(i))
-                .unwrap_or_else(|| match size {
-                    Some([cols, _]) => format!("{},{}", i % cols, i / cols),
-                    None => i.to_string(),
-                })
-        })
+        .map(|i| crate::atlas::key(key_column.and_then(|(_, k)| k.text(i)), p, i))
         .collect();
     let transforms = story::listed(p, &path)?;
     // A key is unique and stable (Mark set: `key`), so a row can be picked and patched by it;

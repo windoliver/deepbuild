@@ -149,7 +149,9 @@ impl Drawn {
         for drawn in self.frame.layers.iter().flat_map(|l| &l.marks) {
             let b = match &drawn.mark {
                 Mark::Rect { bounds, .. } => *bounds,
-                Mark::Image { bounds, turn, .. } => deep_canvas_marks::scene::turned_box(*bounds, *turn),
+                Mark::Image { bounds, turn, .. } => {
+                    deep_canvas_marks::turn::turned_box(*bounds, *turn)
+                }
                 Mark::Circle { center, r, .. } => [center[0] - r, center[1] - r, 2.0 * r, 2.0 * r],
                 Mark::Text { spec, origin, .. } => [
                     origin[0],
@@ -251,6 +253,8 @@ pub struct Renderer {
     pub raster_2d: (RenderSettings, RasterizerSettings),
     /// #1485: each image asset the last frame drew, decoded, so the next frame decodes only what's new.
     kept: std::collections::HashMap<deep_images::Key, Arc<Pixmap>>,
+    /// #535 AC6's planted renderer: an atlas row turns about its quad's corner.
+    corner: bool,
 }
 
 fn color(c: Rgb) -> AlphaColor<Srgb> {
@@ -276,7 +280,11 @@ pub struct Batch {
 /// stacking order that share it draw as one instanced batch.
 fn atlas_of(d: &scene::Drawn) -> Option<&str> {
     match &d.mark {
-        Mark::Image { asset, tile: Some(_), .. } if d.clip.is_none() => Some(asset),
+        Mark::Image {
+            asset,
+            tile: Some(_),
+            ..
+        } if d.clip.is_none() => Some(asset),
         _ => None,
     }
 }
@@ -474,7 +482,13 @@ impl Renderer {
             videos: BTreeMap::new(),
             raster_2d: (deep_marks_vello::settings(), deep_marks_vello::rasterizer()),
             kept: std::collections::HashMap::new(),
+            corner: false,
         }
+    }
+
+    /// #535: the planted renderer that turns an atlas row about its quad's corner, when `corner`.
+    pub fn turning_about_corner(self, corner: bool) -> Self {
+        Renderer { corner, ..self }
     }
 
     /// `doc` evaluated at `t` and its draw list, with every image decoded.
@@ -619,7 +633,11 @@ impl Renderer {
                 }
                 items.sort_unstable();
                 items.dedup();
-                batches.push(Batch { key: format!("atlas:{atlas}"), items, instances: Some(end - i) });
+                batches.push(Batch {
+                    key: format!("atlas:{atlas}"),
+                    items,
+                    instances: Some(end - i),
+                });
                 i = end;
                 continue;
             }
@@ -907,9 +925,17 @@ impl Renderer {
                 // #499: a crop (image px) is the part of the picture the box shows.
                 let [cx, cy, cw, ch] = cut;
                 let [x, y, w, h] = fit.fitted(*bounds, shown);
-                // #535: a turned image draws turned about its box's centre.
+                // #535: a turned image draws turned about its box's centre; the planted renderer
+                // turns an atlas row about its quad's top-left corner.
                 if *turn != 0.0 {
-                    ctx.set_transform(at * Affine::new(deep_canvas_marks::scene::turn_of(*bounds, *turn)));
+                    let corner = [bounds[0], bounds[1], 0.0, 0.0];
+                    let about = if self.corner && tile.is_some() {
+                        corner
+                    } else {
+                        *bounds
+                    };
+                    let turned = deep_canvas_marks::turn::turn_of(about, *turn);
+                    ctx.set_transform(at * Affine::new(turned));
                 }
                 ctx.set_paint(Image {
                     image: ImageSource::Pixmap(pixmap.clone()),

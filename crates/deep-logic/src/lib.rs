@@ -24,6 +24,7 @@ use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
 use deep_canvas_sandbox::rewrite;
 use serde_json::{json, Map, Value};
 
+pub use module::module;
 use piece::{History, Piece};
 use world::{track_of, Entry, Record, World};
 

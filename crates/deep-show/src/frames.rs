@@ -297,7 +297,11 @@ impl<'a> Hub<'a> {
         // #535: a logic column's row whose value goes out of range raises column.out_of_range at
         // the frame of the step its excursion begins.
         if let (Some(doc), Some(list)) = (evaluated.document(), reply["issues"].as_array_mut()) {
-            list.extend(deep_canvas::columns::raised_at(doc, t).iter().map(|i| i.to_json()));
+            list.extend(
+                deep_canvas::columns::raised_at(doc, t)
+                    .iter()
+                    .map(|i| i.to_json()),
+            );
         }
         if !e.arrays.is_empty() {
             // #497: each named array as this frame read it.
@@ -1214,7 +1218,10 @@ fn remaps(
     type Mapped = BTreeMap<String, deep_canvas::columns::Mapped>;
     let mut out = Vec::new();
     for n in session.nodes(sched) {
-        let (Some(set), true) = (&n.item, n.operator == "data.columns" && n.run == deep_canvas::schedule::Run::Ran) else {
+        let (Some(set), true) = (
+            &n.item,
+            n.operator == "data.columns" && n.run == deep_canvas::schedule::Run::Ran,
+        ) else {
             continue;
         };
         let Some(columns) = n.values.iter().find_map(|v| v.as_typed::<Mapped>()) else {
@@ -1225,7 +1232,11 @@ fn remaps(
             let e = steps.entry(*step).or_default();
             *e = (*e).max(*rows);
         }
-        out.extend(steps.into_iter().map(|(step, rows)| json!({"set": set, "step": step, "rows": rows})));
+        out.extend(
+            steps
+                .into_iter()
+                .map(|(step, rows)| json!({"set": set, "step": step, "rows": rows})),
+        );
     }
     Value::Array(out)
 }

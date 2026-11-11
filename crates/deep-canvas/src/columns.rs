@@ -103,7 +103,11 @@ impl Read {
     pub fn of(column: &Value, ty: &str) -> Option<Read> {
         let part = match column.get("part") {
             None | Some(Value::Null) => None,
-            Some(p) => Some(["x", "y", "z", "w"].iter().position(|x| Some(*x) == p.as_str())?),
+            Some(p) => Some(
+                ["x", "y", "z", "w"]
+                    .iter()
+                    .position(|x| Some(*x) == p.as_str())?,
+            ),
         };
         let w = width(ty)?;
         if (w > 1) != part.is_some() || part.is_some_and(|p| p >= w) {
@@ -114,10 +118,17 @@ impl Read {
             "bool" => "bool",
             _ => "f64",
         };
-        let as_ = column.get("as").and_then(Value::as_str).unwrap_or(from).to_string();
+        let as_ = column
+            .get("as")
+            .and_then(Value::as_str)
+            .unwrap_or(from)
+            .to_string();
         narrow(0.0, from, &as_)?;
         let bound = |i: usize, d: f64| {
-            column.pointer(&format!("/range/{i}")).and_then(Value::as_f64).unwrap_or(d)
+            column
+                .pointer(&format!("/range/{i}"))
+                .and_then(Value::as_f64)
+                .unwrap_or(d)
         };
         Some(Read {
             from,
@@ -130,7 +141,10 @@ impl Read {
 
     /// The planted narrowing that wraps an integer into `as`'s range rather than hiding its row.
     pub fn wrapping(self) -> Read {
-        Read { wraps: true, ..self }
+        Read {
+            wraps: true,
+            ..self
+        }
     }
 
     /// An element's read value, `None` where its row hides.
@@ -242,7 +256,10 @@ pub fn map(column: &Value, t: i64, last: Option<&Mapped>, wraps: bool) -> Option
         Some(l) => {
             if linear && l.step < k {
                 // The rows that blended into step l.step settle on its value.
-                rows_of(at(l.step).map_or(&Value::Null, |s| &s["changed"]), &mut rows);
+                rows_of(
+                    at(l.step).map_or(&Value::Null, |s| &s["changed"]),
+                    &mut rows,
+                );
             }
             let mut m = l.clone();
             m.remaps = (l.step + 1..=k).map(|s| (s, 0)).collect();
@@ -263,7 +280,9 @@ pub fn map(column: &Value, t: i64, last: Option<&Mapped>, wraps: bool) -> Option
         }
     };
     for s in steps {
-        let Some(step) = s["step"].as_i64().filter(|s| *s <= k && from.is_none_or(|f| *s > f))
+        let Some(step) = s["step"]
+            .as_i64()
+            .filter(|s| *s <= k && from.is_none_or(|f| *s > f))
         else {
             continue;
         };
@@ -351,7 +370,11 @@ fn excursions(column: &Value) -> Vec<(i64, usize, f64)> {
     if steps.first().and_then(|s| s["step"].as_i64()) != Some(0) {
         checks.push((0, Value::Null));
     }
-    checks.extend(steps.into_iter().map(|s| (s["step"].as_i64().unwrap_or(0), s)));
+    checks.extend(
+        steps
+            .into_iter()
+            .map(|s| (s["step"].as_i64().unwrap_or(0), s)),
+    );
     for (step, s) in checks {
         let mut touched = BTreeSet::new();
         for run in s["values"].as_array().into_iter().flatten() {
@@ -476,10 +499,17 @@ pub fn view(doc: &mut Value, entries: &[SealedEntry], t: i64) -> Vec<Issue> {
 /// raises: each row whose excursion out of range begins at the frame's step.
 pub fn raised_at(doc: &Value, t: i64) -> Vec<Issue> {
     let mut out = Vec::new();
-    for (id, item) in doc.get("items").and_then(Value::as_object).into_iter().flatten() {
+    for (id, item) in doc
+        .get("items")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten()
+    {
         let p = &item["params"];
         let columns = p["columns"].as_object().into_iter().flatten();
-        let alive = p.get("alive").map(|a| ("alive", a, format!("items/{id}/params/alive")));
+        let alive = p
+            .get("alive")
+            .map(|a| ("alive", a, format!("items/{id}/params/alive")));
         let readers = columns
             .map(|(n, c)| (n.as_str(), c, format!("items/{id}/params/columns/{n}")))
             .chain(alive)
@@ -590,7 +620,10 @@ fn arrays_of(
         counts.push((name, path, baked["count"].as_u64().unwrap_or(0)));
     }
     if counts.iter().any(|c| c.2 != counts[0].2) {
-        let named: Map<String, Value> = counts.iter().map(|(n, _, c)| (n.clone(), json!(c))).collect();
+        let named: Map<String, Value> = counts
+            .iter()
+            .map(|(n, _, c)| (n.clone(), json!(c)))
+            .collect();
         for (_, path, _) in &counts {
             issues.push(Issue::error(
                 "bad_column",
@@ -652,8 +685,17 @@ mod tests {
         let full = map(&column(changed.clone()), 10, None, false).expect("a map");
         let before = map(&column(changed.clone()), 0, None, false).expect("a map");
         let forward = map(&column(changed.clone()), 10, Some(&before), false).expect("a map");
-        assert_eq!(forward, Mapped { remaps: forward.remaps.clone(), ..full.clone() });
-        assert_eq!((full.remaps.clone(), forward.remaps.clone()), (vec![(1, 200)], vec![(1, 63 + 73)]));
+        assert_eq!(
+            forward,
+            Mapped {
+                remaps: forward.remaps.clone(),
+                ..full.clone()
+            }
+        );
+        assert_eq!(
+            (full.remaps.clone(), forward.remaps.clone()),
+            (vec![(1, 200)], vec![(1, 63 + 73)])
+        );
         changed.pop();
         let dropped = map(&column(changed), 10, Some(&before), false).expect("a map");
         assert_eq!((dropped.values[198], full.values[198]), (1.0, 7.0));

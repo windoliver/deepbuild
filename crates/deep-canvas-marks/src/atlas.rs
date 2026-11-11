@@ -13,8 +13,42 @@ use serde_json::{json, Map, Value};
 
 use crate::data::Column;
 use crate::paint::Adjust;
-use crate::scene::{num, AtlasCell, ImageFit, ImageSampling, Mark, Planted, Refused};
+use crate::scene::{num, ImageFit, ImageSampling, Mark, Planted, Refused};
 use crate::story::Rows;
+
+/// #1653: the atlas cell an image draws in place of its whole asset (Mark set: atlas tiles): cell
+/// `index` in row-major order of `cell`-px cells laid from `margin`, `separation` apart, turned by
+/// `flip`'s bits (h 1, v 2, transpose 4; transpose first). Whoever decodes the atlas resolves it
+/// against its width, so a sample never leaves the cell.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct AtlasCell {
+    pub index: u64,
+    pub cell: [f64; 2],
+    pub margin: [f64; 2],
+    pub separation: [f64; 2],
+    pub flip: u8,
+}
+
+impl AtlasCell {
+    /// The cell's `[x, y, w, h]` in an atlas of `[width, height]` px, or `None` for a cell the
+    /// atlas doesn't hold.
+    pub fn rect(&self, [width, height]: [u32; 2]) -> Option<[f64; 4]> {
+        let [cw, ch] = self.cell;
+        if cw < 1.0 || ch < 1.0 {
+            return None;
+        }
+        let step = [cw + self.separation[0], ch + self.separation[1]];
+        let columns = ((f64::from(width) - self.margin[0] + self.separation[0]) / step[0]).floor();
+        if columns < 1.0 {
+            return None;
+        }
+        let columns = columns as u64;
+        let (col, row) = (self.index % columns, self.index / columns);
+        let x = self.margin[0] + col as f64 * step[0];
+        let y = self.margin[1] + row as f64 * step[1];
+        (y + ch <= f64::from(height)).then_some([x, y, cw, ch])
+    }
+}
 
 /// Flicks a second.
 const FLICKS: i64 = 705_600_000;
@@ -120,13 +154,22 @@ fn odd_of(shape: Shape) -> bool {
 
 /// #535: `grid.size: [cols, rows]` on an atlas set, which lays row i at cell (i mod cols,
 /// ⌊i ÷ cols⌋); `None` without one or for a size that isn't two whole numbers from 1 to 65,535.
-pub fn size_of(params: &Map<String, Value>) -> Option<[usize; 2]> {
+pub fn sized(params: &Map<String, Value>) -> Option<[usize; 2]> {
     let size = params.get("grid")?.get("size")?.as_array()?;
     let side = |i: usize| {
         let v = size.get(i)?.as_u64()?;
         (1..=u64::from(u16::MAX)).contains(&v).then_some(v as usize)
     };
     (size.len() == 2 && is_atlas(params)).then_some([side(0)?, side(1)?])
+}
+
+/// Row `i`'s key: its key column's, else on a grid with `size` its cell `cx,cy` (#535), else its
+/// index.
+pub fn key(own: Option<String>, params: &Map<String, Value>, i: usize) -> String {
+    own.unwrap_or_else(|| match sized(params) {
+        Some([cols, _]) => format!("{},{}", i % cols, i / cols),
+        None => i.to_string(),
+    })
 }
 
 /// One row as it draws: its key, its grid cell (a free row's centre), its centre, the atlas cell
@@ -170,7 +213,7 @@ pub fn tiles(
         Some(_) => return Err(refused("bad_doc", format!("{path}/place"))),
     };
     let grid = Grid::read(params, &path)?;
-    let size = size_of(params);
+    let size = sized(params);
     if let Some([cols, rs]) = size {
         if rows.keys.len() != cols * rs {
             return Err(refused("out_of_range", format!("{path}/grid/size")));
@@ -201,11 +244,17 @@ pub fn tiles(
             }
             Some([cols, _]) => {
                 let c = [(i % cols) as f64, (i / cols) as f64];
-                (c, grid.centre(c[0], c[1], planted == Planted::AtlasSquareLayout))
+                (
+                    c,
+                    grid.centre(c[0], c[1], planted == Planted::AtlasSquareLayout),
+                )
             }
             None => {
                 let c = [at("cx", true)?, at("cy", true)?];
-                (c, grid.centre(c[0], c[1], planted == Planted::AtlasSquareLayout))
+                (
+                    c,
+                    grid.centre(c[0], c[1], planted == Planted::AtlasSquareLayout),
+                )
             }
         };
         let scale = or("scale", 1.0)?;
@@ -265,14 +314,7 @@ pub fn marks(
         .into_iter()
         .map(|t| {
             let [w, h] = [w * t.scale, h * t.scale];
-            let mut centre = [pos[0] + t.centre[0], pos[1] + t.centre[1]];
-            if planted == Planted::AtlasTurnsAboutCorner {
-                // The planted renderer: the quad turns about its top-left corner.
-                let corner = [centre[0] - w / 2.0, centre[1] - h / 2.0];
-                let (s, c) = crate::scene::sin_cos(t.angle);
-                let d = [w / 2.0, h / 2.0];
-                centre = [corner[0] + c * d[0] - s * d[1], corner[1] + s * d[0] + c * d[1]];
-            }
+            let centre = [pos[0] + t.centre[0], pos[1] + t.centre[1]];
             (t, [centre[0] - w / 2.0, centre[1] - h / 2.0, w, h])
         })
         .map(|(t, bounds)| Mark::Image {
@@ -459,8 +501,14 @@ mod tests {
                 .collect(),
             ..Rows::default()
         };
-        let bounds = |scale, angle| match &marks("s", params, &rows(scale, angle), [0.0, 0.0], Planted::None)
-            .expect("drawn")[0]
+        let bounds = |scale, angle| match &marks(
+            "s",
+            params,
+            &rows(scale, angle),
+            [0.0, 0.0],
+            Planted::None,
+        )
+        .expect("drawn")[0]
         {
             Mark::Image { bounds, turn, .. } => (*bounds, *turn),
             _ => unreachable!("an image"),
@@ -468,6 +516,9 @@ mod tests {
         assert_eq!(bounds(2.0, 0.0), ([6.0, 1.0, 8.0, 4.0], 0.0));
         assert_eq!(bounds(2.0, 90.0), ([6.0, 1.0, 8.0, 4.0], 90.0));
         let refused = tiles("s", params, &rows(0.0, 0.0), Planted::None).expect_err("refused");
-        assert_eq!((refused.code, refused.path.as_str()), ("out_of_range", "items/s/params/columns/scale"));
+        assert_eq!(
+            (refused.code, refused.path.as_str()),
+            ("out_of_range", "items/s/params/columns/scale")
+        );
     }
 }

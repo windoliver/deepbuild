@@ -72,8 +72,12 @@ impl Hub<'_> {
     /// from the document with every set's `alive` left out.
     pub(crate) fn row_boxes(&mut self, doc: &Value, t: i64) -> Vec<(String, [f64; 4])> {
         let mut doc = doc.clone();
-        if self.scenario.planted == Some(Planted::DeadRowsHiddenFromDrawingOnly) {
-            for item in doc["items"].as_object_mut().into_iter().flat_map(|i| i.values_mut()) {
+        if self.scenario.module_planted.as_deref() == Some("dead_rows_hidden_from_drawing_only") {
+            for item in doc["items"]
+                .as_object_mut()
+                .into_iter()
+                .flat_map(|i| i.values_mut())
+            {
                 if let Some(p) = item.get_mut("params").and_then(Value::as_object_mut) {
                     p.remove("alive");
                 }
@@ -90,9 +94,17 @@ impl Hub<'_> {
         let Ok((painted, _, _)) = self.evaluate(&doc, &view, &[t], false) else {
             return Vec::new();
         };
-        let marks = painted.drawing.iter().flat_map(|d| d.frame.layers.iter().flat_map(|l| &l.marks));
+        let marks = painted
+            .drawing
+            .iter()
+            .flat_map(|d| d.frame.layers.iter().flat_map(|l| &l.marks));
         marks
-            .filter(|d| d.mark.item().split_once('#').is_some_and(|(set, _)| sets.iter().any(|s| s == set)))
+            .filter(|d| {
+                d.mark
+                    .item()
+                    .split_once('#')
+                    .is_some_and(|(set, _)| sets.iter().any(|s| s == set))
+            })
             .map(|d| (d.mark.item().to_string(), d.extent()))
             .collect()
     }
@@ -104,12 +116,24 @@ impl Hub<'_> {
         let mut items = Map::new();
         for (row, [x, y, w, h]) in &rows {
             let set = row.split('#').next().unwrap_or_default();
-            let b = items.entry(set.to_string()).or_insert_with(|| json!([x, y, x + w, y + h]));
-            let u: Vec<f64> = b.as_array().into_iter().flatten().filter_map(Value::as_f64).collect();
+            let b = items
+                .entry(set.to_string())
+                .or_insert_with(|| json!([x, y, x + w, y + h]));
+            let u: Vec<f64> = b
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_f64)
+                .collect();
             *b = json!([u[0].min(*x), u[1].min(*y), u[2].max(x + w), u[3].max(y + h)]);
         }
         for b in items.values_mut() {
-            let u: Vec<f64> = b.as_array().into_iter().flatten().filter_map(Value::as_f64).collect();
+            let u: Vec<f64> = b
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_f64)
+                .collect();
             *b = json!({"bounds": {"min": [u[0], u[1], 0.0], "max": [u[2], u[3], 0.0]}});
         }
         let results: Vec<Value> = queries

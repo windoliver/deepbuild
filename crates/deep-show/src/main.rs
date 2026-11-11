@@ -1183,7 +1183,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
     };
     let mut placement_planted = placement::Planted::default();
     // #420's wrong programs live in scene3d's and the building module's operators, #453's in the
-    // loop module's geometry.shading.
+    // loop module's geometry.shading, #535's in the data module's mapping and deep-show.
     let module_planted = input
         .get("planted")
         .and_then(Value::as_str)
@@ -1194,8 +1194,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 // #1732's wrong programs live in the motion module's arrangement solve.
                 || deep_canvas_motion::arrange::PLANTED.contains(p)
                 || *p == deep_canvas_motion::module::UNDECLARED_KIND_ACCEPTED
-                // #535's wrong programs in the data module's mapping and marks2d's free rows.
-                || deep_canvas_marks::modules::PLANTED.contains(p)
+                || deep_canvas_marks::arrays::PLANTED.contains(p)
         })
         .map(str::to_string);
     // #433's wrong programs are twins of the familiar@1 pack.
@@ -1224,8 +1223,6 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "reply_without_digest" => Planted::ReplyWithoutDigest,
                 "reads_wasm_bytes" => Planted::ReadsWasmBytes,
                 "start_on_at_first_frame" => Planted::StartOnAtFirstFrame,
-                "hand_over_drops_last_range" => Planted::HandOverDropsLastRange,
-                "dead_rows_hidden_from_drawing_only" => Planted::DeadRowsHiddenFromDrawingOnly,
                 "rebase_counts_op_targets_only" => Planted::RebaseCountsOpTargetsOnly,
                 "diffs_whole_document" => Planted::DiffsWholeDocument,
                 "one_fifo_check_queue" => Planted::OneFifoCheckQueue,
@@ -1920,10 +1917,8 @@ fn modules(set: BuildSet) -> Vec<Module> {
         } else {
             deep_canvas_media::module::module()
         });
-        // Issue #308: controls and the input track's handling, with control@1.
-        out.push(deep_canvas_input::module::module());
-        // Issue #535: the logic module's arrays as column sources.
-        out.push(deep_logic::module::module());
+        // Issue #308: controls and the input track's handling, with control@1; #535: logic's arrays.
+        out.extend([deep_canvas_input::module::module(), deep_logic::module()]);
     }
     // Issue #238: the sandbox module, on core alone; `test-sandbox-alt` seals the test
     // implementation `sandbox.alt` in its place, and `test-sandbox-needs-logic` plants a manifest
@@ -2047,7 +2042,6 @@ fn modules(set: BuildSet) -> Vec<Module> {
     #[cfg(feature = "test-sim-c")]
     out.push(deep_canvas_test_modules::sim::c());
     out.extend(kit::modules::built());
-    // #403, #535: a build without the logic module.
     #[cfg(feature = "test-leave-out-logic")]
     out.retain(|m| m.manifest.name != "logic");
     // #443: a build without the vector module, whose scene3d@1 and marks2d@1 digests equal the

@@ -210,8 +210,14 @@ impl Record {
     pub fn arrays(&self, piece: &Piece) -> Map<String, Value> {
         let mut out = Map::new();
         for item in &piece.items {
-            let mut steps: BTreeMap<(&str, i64), (Vec<[u64; 2]>, Vec<Value>)> = BTreeMap::new();
-            for r in self.ranges.get(&item.id).and_then(Value::as_array).into_iter().flatten() {
+            let mut steps: BTreeMap<(&str, i64), Runs> = BTreeMap::new();
+            for r in self
+                .ranges
+                .get(&item.id)
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+            {
                 let (Some(array), Some(k), Some(s), Some(e)) = (
                     r["array"].as_str(),
                     r["step"].as_i64(),
@@ -1144,6 +1150,9 @@ fn changed(item: &Item, arrays: &mut [u8]) {
         }
     }
 }
+
+/// A step's changed runs of one array: their `[start, end)` and their `[start, [values]]`.
+type Runs = (Vec<[u64; 2]>, Vec<Value>);
 
 /// The most index ranges a step hands the column view per array.
 pub const HANDED: usize = 64;
