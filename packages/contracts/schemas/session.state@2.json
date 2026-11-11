@@ -1,0 +1,143 @@
+{
+  "title": "session.state@2",
+  "description": "A session's state as every surface names it, the one reading deep status lists (#992), appended by the core when it changes: the state's word and why, from a closed set. A minor of session.state@1 (#2018): the first matching row of the one ordered state table, so a claim's verdict is a state too. It is read from the record and is never evidence.",
+  "x-since": "R1",
+  "x-stability": "stable",
+  "x-feeds": [],
+  "type": "object",
+  "properties": {
+    "v": {
+      "const": 2,
+      "description": "The kind's schema version."
+    },
+    "id": {
+      "type": "string",
+      "format": "ulid",
+      "description": "The event's ULID, its identity."
+    },
+    "kind": {
+      "const": "session.state"
+    },
+    "subject": {
+      "type": "string",
+      "pattern": "^session:[0-9A-Za-z]+$",
+      "description": "The session this event is about."
+    },
+    "writer": {
+      "const": "core",
+      "description": "Only the core appends this kind."
+    },
+    "actor": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The person behind it, from the credential."
+    },
+    "scope": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Who may see it."
+    },
+    "ts": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "Milliseconds since the Unix epoch."
+    },
+    "seq": {
+      "type": "string",
+      "format": "seq",
+      "description": "Order within the session: ns since the epoch when the hook started."
+    },
+    "log_pos": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991,
+      "description": "Its position in the event log, assigned by the hub at append."
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "state": {
+          "type": "string",
+          "enum": [
+            "needs you",
+            "stuck",
+            "flagged",
+            "sent back",
+            "BLOCKED",
+            "INVALID",
+            "INCONCLUSIVE",
+            "stale",
+            "says done",
+            "working",
+            "queued",
+            "PASS",
+            "finished",
+            "quiet"
+          ],
+          "description": "The word every surface names the session's state with.",
+          "x-closure": {
+            "closed": "the states deep status lists, each a word on every surface",
+            "reopens": "a minor that adds a state deep status lists",
+            "mark": "exhaustive"
+          }
+        },
+        "cause": {
+          "type": "string",
+          "enum": [
+            "ask",
+            "gone",
+            "waiting",
+            "words",
+            "stuck",
+            "promised",
+            "failed",
+            "sent_back",
+            "blocked",
+            "invalid",
+            "inconclusive",
+            "stale",
+            "says_done",
+            "working",
+            "queued",
+            "pass",
+            "interrupted",
+            "finished",
+            "quiet"
+          ],
+          "description": "Why: an open ask, its agent's process gone mid-turn, a prompt of its agent's waiting on you, words of yours whose delivery stalled or timed out, a block only you or a service can clear, a promised check due, a turn ended failed, its newest claim sent back, judged BLOCKED, INVALID or INCONCLUSIVE, judged on a commit that has moved, or not judged yet, a turn at work, a task not started, its newest claim's PASS, a turn you interrupted, a turn stopped, or its hooks gone quiet.",
+          "x-closure": {
+            "closed": "the reasons the one reading gives a state",
+            "reopens": "a minor that adds a reason",
+            "mark": "exhaustive"
+          }
+        }
+      },
+      "required": [
+        "state",
+        "cause"
+      ],
+      "additionalProperties": false
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$",
+        "description": "A SHA-256, in lower-case hex."
+      }
+    }
+  },
+  "required": [
+    "v",
+    "id",
+    "kind",
+    "writer",
+    "actor",
+    "scope",
+    "ts",
+    "data",
+    "subject"
+  ],
+  "additionalProperties": false
+}

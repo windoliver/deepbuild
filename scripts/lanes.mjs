@@ -310,6 +310,8 @@ alone.push('tests/acceptance/1720/', 'tests/acceptance/1718-redraft-1720/');
 alone.push('tests/acceptance/1461/');
 byHand.push('tests/acceptance/1461/shell.test.ts', 'tests/acceptance/1461/shown.test.ts');
 timed.push('tests/acceptance/1461/budget.test.ts');
+// #2018's files build deep-drive plain and with env-plants, and start real hubs and many replicas.
+alone.push('tests/acceptance/2018/');
 // #1922's files each start a hub that installs sandboxed plug-ins and runs their job tools through the supervisor,
 // counting the record's process starts around each deep_job call: one file at a time.
 alone.push('tests/acceptance/1922/');
@@ -430,6 +432,15 @@ timed.push('tests/acceptance/547/ac4-keyframes.test.ts');
 alone.push('tests/acceptance/407/', 'tests/acceptance/407-oracle/');
 // #1956's files each build deep-show (r1) and install the shelf pack's versions in order.
 alone.push('tests/acceptance/1956/');
+// #154's files each start hubs that render stems through the supervisor, and build deep-show once; AC9 times a 60 s
+// six-stem render against the reference Mac.
+alone.push('tests/acceptance/154/', 'tests/acceptance/154-oracle/');
+timed.push('tests/acceptance/154/budgets.test.ts');
+// Its blind redraft runs the same way. The first draft's AC1 file is kept by hand: its harp test spreads a whole stem
+// into Math.max, which throws on a stem that starts at the film's time 0 (tests/acceptance/154-redraft/DISPUTE.md).
+alone.push('tests/acceptance/154-redraft/', 'tests/acceptance/154-oracle-redraft/');
+timed.push('tests/acceptance/154-redraft/budgets.test.ts');
+byHand.push('tests/acceptance/154/stems.test.ts');
 // #1971's files each build deep-show (refusal.test.ts deep-hook too), start a hub, and time op: field calls.
 alone.push('tests/acceptance/1971/');
 timed.push('tests/acceptance/1971/budget.test.ts');

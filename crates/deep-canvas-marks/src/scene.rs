@@ -4915,8 +4915,8 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
                 fill: Fill::Solid([255, 255, 255]),
             }]
         }
-        // A logic item (#544) steps and emits occurrences, and draws nothing.
-        "mask@1" | "matte@1" | "group@1" | "camera@1" | "graph@1" | "salience@1" | "sheet@1" | "logic@1" => {
+        // A logic item (#544) steps and emits occurrences, and a score (#154) sounds: neither draws.
+        "mask@1" | "matte@1" | "group@1" | "camera@1" | "graph@1" | "salience@1" | "sheet@1" | "logic@1" | "score.music@1" => {
             return Ok(None)
         }
         "star@1" => {
