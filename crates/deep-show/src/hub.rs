@@ -163,6 +163,8 @@ pub enum Planted {
     FlickerCountsSingleChanges,
     /// #407: the flicker check reads one region, the whole view, by its mean luminance.
     FlickerWholeViewMean,
+    /// #1399: the flicker check analyzes each rendition's first frame and serves it to every frame.
+    FlickerAnalyzesOnce,
     /// #407: the claim check takes `cites: []` as cited.
     CitesEmptyPasses,
     /// #405's and #1936's: the geometry audit's wrong programs, which its own module names.
@@ -620,11 +622,7 @@ pub enum Call {
     /// #379: the cost model's micro-benchmark.
     Costs,
     /// #140: the network seam's conformance suite.
-    NetworkSuite {
-        macos: bool,
-        messages: u64,
-        seed: u64,
-    },
+    NetworkSuite(Box<crate::seams::Suite>),
     /// #309: a test client on the network seam's macOS backend.
     RelayClient(Box<crate::seams::RelayClient>),
     /// #855: rekeys the process's content keys under a hash, once.
@@ -1775,11 +1773,7 @@ impl<'a> Hub<'a> {
                 runs,
             } => self.lookup_reply(doc, registry, name, *runs),
             Call::Costs => crate::costs::measure(self.startup),
-            Call::NetworkSuite {
-                macos,
-                messages,
-                seed,
-            } => crate::seams::network(*messages, *seed, *macos, self.startup.network),
+            Call::NetworkSuite(s) => crate::seams::suite(s, self.startup.network),
             Call::RelayClient(c) => crate::seams::relay_client(c, self.startup.network),
             Call::Migrate(to) => self.migrate(*to),
             Call::Keys { doc, runs } => self.keys(doc, *runs),

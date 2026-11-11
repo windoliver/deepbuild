@@ -255,10 +255,15 @@ impl<'a> Hub<'a> {
                     (_, Some(a), _) if !missing && !docs.is_empty() => {
                         film_row(r, &a.issues, &a.blocked, &a.not_run)
                     }
-                    (_, _, Some(f)) if !missing && !docs.is_empty() => match f {
-                        Ok(issues) => film_row(r, issues, &[], &[]),
-                        Err(b) => film_row(r, &[], std::slice::from_ref(b), &[]),
-                    },
+                    (_, _, Some((f, counters))) if !missing && !docs.is_empty() => {
+                        let mut row = match f {
+                            Ok(issues) => film_row(r, issues, &[], &[]),
+                            Err(b) => film_row(r, &[], std::slice::from_ref(b), &[]),
+                        };
+                        // #1399: the frames it judged beside those it analyzed.
+                        row["counters"] = json!(counters);
+                        row
+                    }
                     _ => self.judge(r, &docs, missing, &read, &c.session, compared),
                 };
                 // #407: an unsourced number in a film names the frame its item first shows in.

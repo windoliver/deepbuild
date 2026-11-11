@@ -1300,6 +1300,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "verdict_counts_new_issues" => Planted::VerdictCountsNewIssues,
                 "flicker_counts_single_changes" => Planted::FlickerCountsSingleChanges,
                 "flicker_whole_view_mean" => Planted::FlickerWholeViewMean,
+                "flicker_analyzes_once" => Planted::FlickerAnalyzesOnce,
                 "cites_empty_passes" => Planted::CitesEmptyPasses,
                 "seeds_by_expansion_order" => Planted::SeedsByExpansionOrder,
                 "each_seeds_by_element_count" => Planted::EachSeedsByElementCount,
