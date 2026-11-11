@@ -338,3 +338,128 @@ operator-time and storage caps' own refusals; point and `along` shapes; disk and
 
 The oracle page lists no upstream test for any criterion ("Every criterion stays with our own fixtures and formulas").
 None is ported.
+
+## Criteria 12 to 16: the surface emitter
+
+Written by a second blind job, from issue #449 (its Scope lines on `surface {of}`, `inherit`, `follow`, bounds over the
+emitter's span and the 1,048,576-triangle cap, and criteria 12 to 16), the design and base `cbd5e4f98`, starting from
+this suite's commit `e97ea3607`; it saw no implementation, and none existed. Everything above holds for these files: the
+builds, `runGpu`, the `particles` call and its reader, `view3d`'s `particles` field, `outsideBounds`, `chiSquared` and
+`chi2Bound99`, the gates (no cargo is BLOCKED; a GPU test off macOS or on `unsupported_platform` is INCONCLUSIVE) and the
+timeouts. This section adds to what's above and changes none of it; `helpers.ts` gains an appended block.
+
+### What was read for them
+
+- The issue's Scope lines and criteria 12 to 16, live. The design has no section on surface emission past the issue:
+  `docs/canvas-primitives.md`'s emit regions lists the analytic shapes alone, and `docs/technical-design.md`'s Particles,
+  closed form names none of these fields. Units and axes (Euler angles in degrees, R = Rz·Ry·Rx, right-handed, +Y up)
+  and the path grammar (`items/<id>/at/rot/1`) settle the turntable's turn.
+- At the base, only for how a mesh, a skinned item and a turning item are written: `crates/deep-canvas-scene3d/src/`
+  `fixtures.rs` (`skin`), `scene.rs` (which kinds give a mesh; `local_of`), `builders.rs` (`KINDS`);
+  `crates/deep-gpu-layer/src/effects.rs` (`sparks_of`); and `tests/acceptance/419/README.md`'s Assumed surfaces 9 and its
+  walker, the base's one skinned fixture.
+
+### What the base does
+
+No surface emission, `follow` or `inherit`, and nothing counts a surface's triangles: the base's operator reads an
+object `emit.shape` other than `along` as a point at the item. `fixture.skin@1` draws in `view3d` as a mesh pre-skinned
+at each time (#419), and a channel turns an item through `items/<id>/at/rot/<axis>`.
+
+### Surface additions
+
+No new call, request field or reply field: these tests read the `particles` call's `born`, `from`, `velocity`, `cpu` and
+`bounds`, and `view3d`'s `pixel_hash` and `particles` field, as defined above. What they add:
+
+- **`emit.shape: {"surface": {"of": "<item ID or collection ID>"}}`**, the issue's `surface {of: item ID | collection}`,
+  a one-key object as the other shapes are; a collection is the document envelope's `collections` entry. `emit.on` isn't
+  read with it. A birth point lies on the named items' evaluated triangles at the particle's birth time, in the world.
+- **`follow: bool = false`**, a field of the particles item's `params`, beside `inherit`.
+- **`inherit: {normal: f32 = 0, velocity: f32 = 0}`**, the issue's field. With a surface emitter, `velocity` scales the
+  birth point's own velocity. A particle's launch velocity is its motion's own (`motion.ballistic.velocity`, or `v0`'s
+  seeded one) plus that, and the `particles` call's `velocity` reports the sum.
+- Every particles item here sits at the world origin, unrotated, still and unanchored, so nothing decides whether a
+  surface particle's place and motion are in the item's frame or the world's.
+- **A refusal**, a row for the table above (an error, in a `refused` outcome):
+
+| Refusal | `ids` holds | `path` | `actual` |
+|---|---|---|---|
+| a mesh that `emit.shape.surface.of` names (the item, or a member of the collection) holding more than 1,048,576 triangles | the mesh item and the particles item | `items/<id>/params/emit/shape/surface/of` | `{"triangles": n, "cap": 1048576}` |
+
+  The test reads `ids`, `path` and `actual.triangles`.
+
+**Mesh items are `fixture.skin@1`**, exactly as #419's README (Assumed surfaces 9) defines it: `params: {positions,
+triangles, joints, weights, bones: [{id, parent, pos, rot}]}`, each time pre-skinned by Σ wᵢ · world(bᵢ) · bind(bᵢ)⁻¹ · p,
+channels keying `items/<id>/params/bones/<i>/rot/<axis>`; here with `paint: {fill: {role}}`. It is the one kind at the
+base whose document holds a mesh's own positions and triangles, so a test knows every triangle it judges a particle
+against (a builder's sphere tessellates as its code chooses, and 1e-5 m is far inside a coarse sphere's chords), and it
+is the base's only skinned item (skinned playback of imported assets is #526, open). A still mesh is one bone that
+nothing turns.
+
+### Planted programs (`deep-gpu run --planted <name>`)
+
+| Name | Criterion | The wrong program |
+|---|---|---|
+| `surface_triangles_uniform` | 12 | the surface emitter picks each triangle with equal chance instead of by its area (CPU and compute operator) |
+| `surface_bind_pose` | 13 | the surface emitter evaluates a skinned item in its bind pose (every bone's `rot` zero), at a particle's birth and, with `follow`, at t (CPU and compute operator) |
+| `inherit_previous_frame` | 14 | `inherit.velocity` takes the birth point's velocity as its position at the birth time less that place's position at the last frame the process drew before the birth, over their gap; where the process drew no frame before the birth (one opened at a later frame, or the `particles` call) it inherits nothing (CPU and compute operator) |
+| `bounds_bind_pose` | 15 | a surface emitter's bounds are its surface's bounds in the bind pose (every bone's `rot` zero), at its place at t and widened by the motion's reach, instead of over the emitter's span |
+
+### Fixtures (helpers.ts, as session documents)
+
+- `shapesDoc`: a unit cube centred at (−1, 0.5, 0) (12 triangles of 0.5 m²) and a sphere of radius 0.5 m centred at
+  (1, 0.5, 0), 16 segments by 8 bands with a vertex at each pole (224 triangles of 0.0071 to 0.019 m²; a sampler
+  uniform over triangles gives each pole sliver about 278 particles where its area gives 52, and each cube triangle 278
+  where its area gives 3,624), the collection `shapes`; `grit` bursts
+  its count at 0 s on the collection, holding still 10 s. A showpiece, so 65,537 checks.
+- `walkerDoc`: a character walking in place, a `fixture.skin@1` of seven bones: a still root at the hips (y = 1 m)
+  carrying a torso and a head, each thigh swinging ±25° about X through a 1 s stride, each shin bending 10° to 45° at its
+  knee, each arm swinging ±20° against its leg (64 vertices, 96 triangles, its limbs reaching from z = −0.51 to 0.37 m
+  against its bind pose's ±0.1 m). The four corners at each knee are weighted half to the thigh and half to the shin, so
+  the triangles across a knee deform and a particle that keeps its place on one stays on it only if its place is taken
+  on the triangle as it deforms. `dust` bursts its count at 0.1 s on the walker with `follow: true`.
+- `turntableDoc`: a band of radius 1 m and height 0.1 m about the Y axis (256 segments, every point within 7.6e-5 m of
+  1 m from the axis), its `at/rot/1` keyed linearly from 0° at 0 s to 720/π° at 4 s: 1 rad/s, a right-handed turn about
+  +Y. `sparks` bursts 128 particles at each of 0.5, 1, 1.5 and 2 s with `inherit.velocity: 1`, living 1.5 s.
+- `ac16`'s sheet: a 1,024 × 512 grid of unit quads and one triangle beside it, 1,048,577 triangles (a 40 MB document).
+
+### Criteria to tests
+
+| Criterion | File | What it reads and asserts | Wrong programs it fails |
+|---|---|---|---|
+| AC12 `#449.cedb9c33` surface points, per-face chi-squared, adding moves none | `ac12-surface-sampling.test.ts` | 65,536 particles at 1 s: each within 1e-5 m of the nearest of the 236 triangles; counts per triangle against n × area ÷ total area under `chi2Bound99(235)` (288.354); with a burst of 65,537, rows 0 to 65,535 bit for bit equal and row 65,536 on the surface | `surface_triangles_uniform` (fails the bound naming its worst face); points off the surface or placed by the bind pose; a sampler drawing from a stream |
+| AC13 `#449.1855dc44` follow on a skinned walker; seek equals play | `ac13-follow-skin.test.ts` | 4,096 particles: each birth point within 0.1 mm of a triangle of the walker as the test skins it at the birth time, and the particle within 0.1 mm of that triangle at 50 random times in (0.1, 2) s; `view3d` at 30 fps, frames 7, 23, 41, 58 sought equal to played by pixel hash (the four differ, 4,096 live) | `surface_bind_pose` (fails naming the particle); a follow that skins a point by its blended weights rather than keeping its place on the triangle; no follow; a frame carried between frames |
+| AC14 `#449.a386d09b` inherited velocity on a turntable | `ac14-inherit-velocity.test.ts` | 512 particles: each born within 1e-4 m of 1 m from the axis; its reported launch velocity, and its positions' (place 0.25 s after its burst − birth point) ÷ 0.25 s, 1.000 m/s within 0.001 and within 0.001 m/s of (p.z, 0, −p.x); `view3d` at 30 fps, frames 20, 40, 55, 70 sought equal to played by pixel hash and evaluated-data hash | `inherit_previous_frame` (fails at a sought frame, naming the frame); a velocity from an earlier frame or a one-sided difference; a turn's sign or rate wrong |
+| AC15 `#449.bfe8ad15` surface bounds | `ac15-surface-bounds.test.ts` | The cube and sphere and the walker at 256 particles, and the turntable: at 1,000 random times each live particle inside its item's bounds (1e-9 m); live at more than 500 of the times | `bounds_bind_pose` (fails on the walker, naming dust and the time); bounds without the turn's sweep or the inherited velocity's reach |
+| AC16 `#449.8688e46a` 1,048,577 triangles refused | `ac16-triangle-cap.test.ts` | The check alone: refused, an error naming heavy and grit at `items/grit/params/emit/shape/surface/of` with `actual.triangles` 1,048,577 | a surface whose triangles aren't counted at check; a refusal that names neither the mesh nor its count |
+
+Every one of these tests fails at the base at the missing surface (`BASE-FAILURE.txt`). None passes on a program that
+does nothing: each reads positions, velocities, bounds, hashes or issues the program must produce, and holds guards
+(counts, live rows, frames that differ) that an empty or still answer fails.
+
+### Readings where the issue leaves a choice
+
+- **A face is a triangle**, as the base's mesh holds one face per triangle of a `fixture.skin@1`, and "the surface" is
+  the meshes' triangles, not the round sphere they approximate. The cells are all 236 triangles of both meshes, so the
+  statistic tests the split between the cube and the sphere as well as within each.
+- **"Adding a particle"** to 65,536 makes 65,537, past a figure's cap, so the fixture is a showpiece.
+- **"Their triangles"** is read without a new reply field: the test skins the walker itself and takes a particle's
+  triangles to be those its birth point lies within 0.1 mm of at its birth time (one, or a few on an edge); it must stay
+  within 0.1 mm of one of them at every sampled time. A skinned character walking in place is the `fixture.skin@1`
+  walker above, its root still.
+- **Criterion 13's seek** compares pixel hashes, as it says; criterion 14's compares pixel hashes and evaluated-data
+  hashes, so a velocity carried between frames on either the CPU or the compute operator is caught.
+- **The turntable** turns by a channel on `at/rot/1`; Units and axes make a positive turn about +Y right-handed, so a
+  point at p moves at (0, 1, 0) × p. Births at 0.5 to 2 s keep the birth time ± half a step inside the channel's keys.
+  "Start at" is read twice: the `velocity` the call reports and the one the particle's own positions give, which are
+  equal when no gravity or drag acts.
+- **"Both fixtures"** (criterion 15) doesn't say which two of the three surface fixtures; every one is read. Each is a
+  case the Scope's bounds ("enclose every live particle at t") must hold.
+- **"Naming the item and the count"** (criterion 16): the issue names both the mesh and the particles item that names it
+  as a surface, as the `land.on` refusal does; the count is `actual.triangles`.
+
+### Not tested here
+
+`inherit.normal`; `inherit` on occurrence bursts or another item's particles; `follow` on a rigid or still item; a
+surface of a builder, a `mesh.asset@1` or a collection with a moving member; the content-keyed area table itself (only
+its effects); `follow`'s per-particle operator time; the compute operator's columns for surface particles (criterion 8
+reads its own fixture); a mesh of exactly 1,048,576 triangles passing.

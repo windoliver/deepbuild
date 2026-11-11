@@ -21,5 +21,17 @@
   ],
   "#449.776a76da": [
     "hides_at_span_end"
+  ],
+  "#449.cedb9c33": [
+    "surface_triangles_uniform"
+  ],
+  "#449.1855dc44": [
+    "surface_bind_pose"
+  ],
+  "#449.a386d09b": [
+    "inherit_previous_frame"
+  ],
+  "#449.bfe8ad15": [
+    "bounds_bind_pose"
   ]
 }

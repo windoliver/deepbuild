@@ -714,3 +714,317 @@ export function apng(frames: Buffer[], fps: number, what: string): Buffer {
   parts.push(chunk('IEND', Buffer.alloc(0)));
   return Buffer.concat(parts);
 }
+
+// ---------------------------------------------------------------------------------------------------
+// Criteria 12 to 16, the surface emitter (README: Criteria 12 to 16), appended by a second blind job; nothing above is
+// changed. The criteria's IDs and planted names; the surface fixtures, each mesh written as `fixture.skin@1` (#419's
+// stand-in for skinned playback, the one kind at the base whose document holds its own positions and triangles, so
+// these tests know every triangle they judge a particle against); the walker's skin evaluated by the formula #419's
+// README gives; and a point's distance to a triangle.
+
+/** Criteria 12 to 16's IDs, by scripts/proof-change.mjs's rule, as `CRITERIA` holds the others'. */
+export const SURFACE_CRITERIA = { 12: '#449.cedb9c33', 13: '#449.1855dc44', 14: '#449.a386d09b', 15: '#449.bfe8ad15', 16: '#449.8688e46a' } as const;
+/** A test title's prefix for criteria 12 to 16: `AC<n> #449.<id>`. */
+export const acSurface = (n: keyof typeof SURFACE_CRITERIA): string => `AC${n} ${SURFACE_CRITERIA[n]}`;
+
+/** The `deep-gpu --planted` names criteria 12 to 15 add (README: Criteria 12 to 16, Planted programs). */
+export type SurfacePlanted = 'surface_triangles_uniform' | 'surface_bind_pose' | 'inherit_previous_frame' | 'bounds_bind_pose';
+/** `runGpu`, under one of those names when given. */
+export function runGpuSurface(bin: string, out: string, calls: JsonObject[], s: { backend?: 'noop'; planted?: SurfacePlanted } = {}): JsonObject[] {
+  return runGpu(bin, out, calls, s as unknown as Startup);
+}
+
+export const cross = (a: V3, b: V3): V3 => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+export const norm = (a: V3): number => Math.hypot(a[0], a[1], a[2]);
+
+/** The closest point of the triangle abc to p, found by which of its regions (corner, edge, inside) p falls over. */
+export function closestOnTriangle(p: V3, a: V3, b: V3, c: V3): V3 {
+  const ab = sub(b, a); const ac = sub(c, a); const ap = sub(p, a);
+  const d1 = dot(ab, ap); const d2 = dot(ac, ap);
+  if (d1 <= 0 && d2 <= 0) return a;
+  const bp = sub(p, b); const d3 = dot(ab, bp); const d4 = dot(ac, bp);
+  if (d3 >= 0 && d4 <= d3) return b;
+  const vc = d1 * d4 - d3 * d2;
+  if (vc <= 0 && d1 >= 0 && d3 <= 0) return add(a, scale(ab, d1 / (d1 - d3)));
+  const cp = sub(p, c); const d5 = dot(ab, cp); const d6 = dot(ac, cp);
+  if (d6 >= 0 && d5 <= d6) return c;
+  const vb = d5 * d2 - d1 * d6;
+  if (vb <= 0 && d2 >= 0 && d6 <= 0) return add(a, scale(ac, d2 / (d2 - d6)));
+  const va = d3 * d6 - d5 * d4;
+  if (va <= 0 && d4 - d3 >= 0 && d5 - d6 >= 0) return add(b, scale(sub(c, b), (d4 - d3) / (d4 - d3 + (d5 - d6))));
+  const inv = 1 / (va + vb + vc);
+  return add(a, add(scale(ab, vb * inv), scale(ac, vc * inv)));
+}
+/** p's distance (m) to the triangle abc. */
+export const triangleDistance = (p: V3, a: V3, b: V3, c: V3): number => norm(sub(p, closestOnTriangle(p, a, b, c)));
+
+/** A mesh as a document writes it: positions (m) and triangles of their indices. */
+export type Tri = [number, number, number];
+export interface Mesh { positions: V3[]; triangles: Tri[] }
+/** Each triangle wound so its normal points away from `centre` (only drawing reads the winding). */
+function outward(m: Mesh, centre: V3): Mesh {
+  return {
+    positions: m.positions,
+    triangles: m.triangles.map(([a, b, c]): Tri => {
+      const [pa, pb, pc] = [m.positions[a]!, m.positions[b]!, m.positions[c]!];
+      return dot(cross(sub(pb, pa), sub(pc, pa)), sub(scale(add(add(pa, pb), pc), 1 / 3), centre)) >= 0 ? [a, b, c] : [a, c, b];
+    }),
+  };
+}
+/** An axis-aligned box from `lo` to `hi`: its 8 corners, two triangles a face. */
+export function boxMesh(lo: V3, hi: V3): Mesh {
+  const positions: V3[] = [];
+  for (let k = 0; k < 8; k++) positions.push([k & 1 ? hi[0] : lo[0], k & 2 ? hi[1] : lo[1], k & 4 ? hi[2] : lo[2]]);
+  const quads = [[0, 4, 6, 2], [1, 3, 7, 5], [0, 1, 5, 4], [2, 6, 7, 3], [0, 2, 3, 1], [4, 5, 7, 6]];
+  return outward({ positions, triangles: quads.flatMap(([a, b, c, d]) => [[a!, b!, c!], [a!, c!, d!]] as Tri[]) }, scale(add(lo, hi), 0.5));
+}
+/**
+ * A sphere of radius r about the origin in `rings` bands of latitude and `segments` of longitude: a vertex at each pole
+ * and at each band edge and segment, so its triangles shrink toward the poles.
+ */
+export function uvSphere(r: number, segments: number, rings: number): Mesh {
+  const positions: V3[] = [[0, r, 0]];
+  for (let i = 1; i < rings; i++) {
+    const th = (i * Math.PI) / rings;
+    for (let j = 0; j < segments; j++) {
+      const ph = (2 * Math.PI * j) / segments;
+      positions.push([r * Math.sin(th) * Math.cos(ph), r * Math.cos(th), r * Math.sin(th) * Math.sin(ph)]);
+    }
+  }
+  positions.push([0, -r, 0]);
+  const south = positions.length - 1;
+  const at = (i: number, j: number): number => 1 + (i - 1) * segments + (j % segments);
+  const triangles: Tri[] = [];
+  for (let j = 0; j < segments; j++) {
+    triangles.push([0, at(1, j), at(1, j + 1)]);
+    for (let i = 1; i < rings - 1; i++) triangles.push([at(i, j), at(i + 1, j), at(i + 1, j + 1)], [at(i, j), at(i + 1, j + 1), at(i, j + 1)]);
+    triangles.push([south, at(rings - 1, j + 1), at(rings - 1, j)]);
+  }
+  return outward({ positions, triangles }, [0, 0, 0]);
+}
+/** An open cylinder's wall of radius r from y = 0 to y = h about +Y, in `segments` quads. */
+export function bandMesh(r: number, h: number, segments: number): Mesh {
+  const positions: V3[] = [];
+  for (let j = 0; j < segments; j++) {
+    const ph = (2 * Math.PI * j) / segments;
+    positions.push([r * Math.cos(ph), 0, r * Math.sin(ph)], [r * Math.cos(ph), h, r * Math.sin(ph)]);
+  }
+  const triangles: Tri[] = [];
+  for (let j = 0; j < segments; j++) {
+    const [a, b, c, d] = [2 * j, 2 * j + 1, (2 * j + 3) % (2 * segments), (2 * j + 2) % (2 * segments)];
+    triangles.push([a, b, c], [a, c, d]);
+  }
+  return outward({ positions, triangles }, [0, h / 2, 0]);
+}
+
+/** A bone of `fixture.skin@1` (#419's README, Assumed surfaces 9): its parent's index and its position in its parent's frame. */
+export interface Bone { id: string; parent: number | null; pos: V3 }
+/** A skin: its mesh in the bind pose (every bone's rot zero), each vertex's bones and their weights, and the bones. */
+export interface Skin extends Mesh { joints: number[][]; weights: number[][]; bones: Bone[] }
+const four = (xs: number[]): number[] => [...xs, 0, 0, 0, 0].slice(0, 4);
+/** A `fixture.skin@1` item of `skin`, painted in the look role `role`, placed by `at`. */
+export function skinItem(skin: Skin, role: string, at: JsonObject = { pos: [0, 0, 0] }): JsonObject {
+  return {
+    kind: 'fixture.skin@1', at,
+    params: {
+      positions: skin.positions, triangles: skin.triangles, joints: skin.joints.map(four), weights: skin.weights.map(four),
+      bones: skin.bones.map((b) => ({ id: b.id, parent: b.parent, pos: b.pos, rot: [0, 0, 0] })), paint: { fill: { role } },
+    },
+  };
+}
+/** A still mesh as a skin: one bone at its origin that nothing turns, every vertex wholly its. */
+export const stillSkin = (m: Mesh): Skin => ({ ...m, joints: m.positions.map(() => [0]), weights: m.positions.map(() => [1]), bones: [{ id: 'root', parent: null, pos: [0, 0, 0] }] });
+
+type Affine = number[][];
+/** T(pos) · Rz·Ry·Rx(rot, degrees) (Units and axes). */
+function boneLocal(pos: V3, rot: V3): Affine {
+  const [x, y, z] = rot.map((d) => (d * Math.PI) / 180) as V3;
+  const [cx, sx, cy, sy, cz, sz] = [Math.cos(x), Math.sin(x), Math.cos(y), Math.sin(y), Math.cos(z), Math.sin(z)];
+  return [
+    [cz * cy, cz * sy * sx - sz * cx, cz * sy * cx + sz * sx, pos[0]],
+    [sz * cy, sz * sy * sx + cz * cx, sz * sy * cx - cz * sx, pos[1]],
+    [-sy, cy * sx, cy * cx, pos[2]],
+  ];
+}
+const affineMul = (a: Affine, b: Affine): Affine =>
+  [0, 1, 2].map((r) => [0, 1, 2, 3].map((c) => a[r]![0]! * b[0]![c]! + a[r]![1]! * b[1]![c]! + a[r]![2]! * b[2]![c]! + (c === 3 ? a[r]![3]! : 0)));
+const affineApply = (m: Affine, p: V3): V3 => [0, 1, 2].map((r) => m[r]![0]! * p[0] + m[r]![1]! * p[1] + m[r]![2]! * p[2] + m[r]![3]!) as V3;
+/**
+ * `skin`'s vertices with each bone turned by `rot(bone)` (degrees), placed at `pos`: Σ wᵢ · world(bᵢ) · bind(bᵢ)⁻¹ · p,
+ * a bone's world its parent's × T(pos) × R(rot), the bind pose every rot zero (#419's README, Assumed surfaces 9).
+ */
+export function skinned(skin: Skin, rot: (bone: number) => V3, pos: V3 = [0, 0, 0]): V3[] {
+  const world: Affine[] = []; const bind: V3[] = [];
+  skin.bones.forEach((b, i) => {
+    const local = boneLocal(b.pos, rot(i));
+    world.push(b.parent === null ? local : affineMul(world[b.parent]!, local));
+    bind.push(b.parent === null ? b.pos : add(bind[b.parent]!, b.pos));
+  });
+  return skin.positions.map((p, v) => {
+    let q: V3 = [0, 0, 0];
+    skin.joints[v]!.forEach((j, k) => {
+      const w = skin.weights[v]![k] ?? 0;
+      if (w !== 0) q = add(q, scale(affineApply(world[j]!, sub(p, bind[j]!)), w));
+    });
+    return add(q, pos);
+  });
+}
+
+/** A channel that keys the f32 at `target` linearly through `keys` ([s, value], ascending), as #419's walker keys its bones. */
+export function linearChannel(target: string, keys: readonly (readonly [number, number])[]): JsonObject {
+  const k: JsonObject = {};
+  keys.forEach(([t, value], i) => { k[`k${i}`] = { t: `${t}s`, value, interp: 'linear' }; });
+  return { target, type: 'f32', keys: k };
+}
+/** Such a channel's value at t s: linear between its keys, its first key's before them and its last's after. */
+export function keyedAt(keys: readonly (readonly [number, number])[], t: number): number {
+  if (t <= keys[0]![0]) return keys[0]![1];
+  for (let i = 0; i + 1 < keys.length; i++) {
+    const [t0, v0] = keys[i]!; const [t1, v1] = keys[i + 1]!;
+    if (t <= t1) return v0 + ((v1 - v0) * (t - t0)) / (t1 - t0);
+  }
+  return keys[keys.length - 1]![1];
+}
+
+/** Particles that hold still where they are born, or leave at their inherited velocity alone: no velocity of their own, gravity or drag. */
+export const STILL: JsonObject = { ballistic: { velocity: [0, 0, 0], gravity: [0, 0, 0], drag: 0 } };
+
+/** A placed triangle, named `<item> triangle <k>`, with its world corners and its area (m²). */
+export interface Face { name: string; a: V3; b: V3; c: V3; area: number }
+export function facesOf(item: string, positions: readonly V3[], triangles: readonly Tri[]): Face[] {
+  return triangles.map(([i, j, k], n) => {
+    const [a, b, c] = [positions[i]!, positions[j]!, positions[k]!];
+    return { name: `${item} triangle ${n}`, a, b, c, area: norm(cross(sub(b, a), sub(c, a))) / 2 };
+  });
+}
+/** The index of the face nearest to p, and p's distance to it (m). */
+export function nearestFace(faces: readonly Face[], p: V3): [number, number] {
+  let best = -1; let d = Infinity;
+  faces.forEach((f, k) => { const x = triangleDistance(p, f.a, f.b, f.c); if (x < d) { d = x; best = k; } });
+  return [best, d];
+}
+
+/**
+ * The cube and the sphere (criteria 12 and 15): a unit cube centred at (−1, 0.5, 0) (12 triangles of 0.5 m²) and a
+ * sphere of radius 0.5 m centred at (1, 0.5, 0) (16 segments by 8 bands, 224 triangles), both still, in the collection
+ * `shapes`; the particles item `grit` at the world origin bursts `count` particles at 0 s on the collection's surface,
+ * which hold still for 10 s. A showpiece, so a count past 65,536 checks.
+ */
+export const SHAPES = { cube: [-1, 0.5, 0] as V3, ball: [1, 0.5, 0] as V3, r: 0.5, segments: 16, rings: 8 } as const;
+export const cubeMesh = (): Mesh => boxMesh([-0.5, -0.5, -0.5], [0.5, 0.5, 0.5]);
+export const ballMesh = (): Mesh => uvSphere(SHAPES.r, SHAPES.segments, SHAPES.rings);
+export function shapesDoc(count: number): JsonObject {
+  return sessionDoc('Cube and sphere', {
+    cam: camera([0, 1.6, 4.5], [0, 0.5, 0], 45),
+    cube: skinItem(stillSkin(cubeMesh()), 'block', { pos: SHAPES.cube }),
+    ball: skinItem(stillSkin(ballMesh()), 'crate', { pos: SHAPES.ball }),
+    grit: particlesItem({
+      count, emit: { shape: { surface: { of: 'shapes' } }, bursts: [{ t: '0s', count }] }, life: [10, 10], motion: STILL,
+      draw: 'dot', ...SPARK_LOOK, size: 2,
+    }),
+  }, { budget: { class: 'showpiece' }, transport: { span: '2s' }, collections: { shapes: { members: ['cube', 'ball'] } } });
+}
+/** The fixture's faces in the world: the cube's 12 triangles, then the sphere's 224. */
+export function shapeFaces(): Face[] {
+  const cube = cubeMesh(); const ball = ballMesh();
+  return [
+    ...facesOf('cube', cube.positions.map((p) => add(p, SHAPES.cube)), cube.triangles),
+    ...facesOf('ball', ball.positions.map((p) => add(p, SHAPES.ball)), ball.triangles),
+  ];
+}
+
+/**
+ * The walker (criteria 13 and 15): a skinned character walking in place, a `fixture.skin@1` at the world origin of
+ * seven bones: a still root at the hips (y = 1 m) carrying a torso and a head; a thigh and a shin on each side, each
+ * thigh swinging ±25° about X through a 1 s stride and each shin bending 10° to 45° at its knee; and an arm on each
+ * side swinging ±20° against its leg. The four corners at each knee are weighted half to the thigh and half to the shin,
+ * so the triangles across a knee deform. The particles item `dust` at the world origin bursts `count` particles at
+ * 0.1 s on the walker's surface with `follow` on, still otherwise, living 10 s.
+ */
+export const WALKER = { burst: 0.1, span: 2 } as const;
+export const WALKER_BONES: readonly Bone[] = [
+  { id: 'root', parent: null, pos: [0, 1, 0] },
+  { id: 'thigh_l', parent: 0, pos: [-0.12, 0, 0] },
+  { id: 'shin_l', parent: 1, pos: [0, -0.45, 0] },
+  { id: 'thigh_r', parent: 0, pos: [0.12, 0, 0] },
+  { id: 'shin_r', parent: 3, pos: [0, -0.45, 0] },
+  { id: 'arm_l', parent: 0, pos: [-0.26, 0.5, 0] },
+  { id: 'arm_r', parent: 0, pos: [0.26, 0.5, 0] },
+];
+/** Each turning bone's angle about X (degrees) at [s, value] keys over the walker's 2 s. */
+export const WALKER_SWING: Readonly<Record<string, readonly (readonly [number, number])[]>> = {
+  thigh_l: [[0, 25], [0.5, -25], [1, 25], [1.5, -25], [2, 25]],
+  thigh_r: [[0, -25], [0.5, 25], [1, -25], [1.5, 25], [2, -25]],
+  shin_l: [[0, 10], [0.25, 45], [0.5, 10], [1, 10], [1.25, 45], [1.5, 10], [2, 10]],
+  shin_r: [[0, 10], [0.5, 10], [0.75, 45], [1, 10], [1.5, 10], [1.75, 45], [2, 10]],
+  arm_l: [[0, -20], [0.5, 20], [1, -20], [1.5, 20], [2, -20]],
+  arm_r: [[0, 20], [0.5, -20], [1, 20], [1.5, -20], [2, 20]],
+};
+export function walkerSkin(): Skin {
+  type Part = { lo: V3; hi: V3; bones: (y: number) => [number, number][] };
+  const side = (s: number, thigh: number, shin: number, arm: number): Part[] => {
+    const x = (a: number, b: number): [number, number] => (s < 0 ? [-b, -a] : [a, b]);
+    const knee: [number, number][] = [[thigh, 0.5], [shin, 0.5]];
+    const box = (xs: [number, number], y: [number, number], z: number, bones: Part['bones']): Part => ({ lo: [xs[0], y[0], -z], hi: [xs[1], y[1], z], bones });
+    return [
+      box(x(0.05, 0.19), [0.56, 0.98], 0.07, (y) => (y < 0.7 ? knee : [[thigh, 1]])),
+      box(x(0.06, 0.18), [0.08, 0.54], 0.06, (y) => (y > 0.3 ? knee : [[shin, 1]])),
+      box(x(0.21, 0.31), [0.95, 1.48], 0.05, () => [[arm, 1]]),
+    ];
+  };
+  const parts: Part[] = [
+    { lo: [-0.2, 1, -0.1], hi: [0.2, 1.55, 0.1], bones: () => [[0, 1]] },
+    { lo: [-0.09, 1.6, -0.09], hi: [0.09, 1.82, 0.09], bones: () => [[0, 1]] },
+    ...side(-1, 1, 2, 5), ...side(1, 3, 4, 6),
+  ];
+  const skin: Skin = { positions: [], triangles: [], joints: [], weights: [], bones: [...WALKER_BONES] };
+  for (const part of parts) {
+    const m = boxMesh(part.lo, part.hi);
+    const base = skin.positions.length;
+    for (const p of m.positions) {
+      const bw = part.bones(p[1]);
+      skin.positions.push(p); skin.joints.push(bw.map(([b]) => b)); skin.weights.push(bw.map(([, w]) => w));
+    }
+    for (const t of m.triangles) skin.triangles.push(t.map((i) => i + base) as Tri);
+  }
+  return skin;
+}
+/** The walker's vertices in the world at t s, its bones at their channels' angles. */
+export function walkerAt(t: number): V3[] {
+  return skinned(walkerSkin(), (i) => [keyedAt(WALKER_SWING[WALKER_BONES[i]!.id] ?? [[0, 0]], t), 0, 0]);
+}
+export function walkerDoc(count: number): JsonObject {
+  const channels: JsonObject = {};
+  WALKER_BONES.forEach((b, i) => {
+    const keys = WALKER_SWING[b.id];
+    if (keys) channels[`swing_${b.id}`] = linearChannel(`items/walker/params/bones/${i}/rot/0`, keys);
+  });
+  return sessionDoc('Walker', {
+    cam: camera([2.4, 1.3, 3.4], [0, 0.9, 0], 40),
+    walker: skinItem(walkerSkin(), 'block'),
+    dust: particlesItem({
+      count, emit: { shape: { surface: { of: 'walker' } }, bursts: [{ t: `${WALKER.burst}s`, count }] }, follow: true, life: [10, 10],
+      motion: STILL, draw: 'dot', ...SPARK_LOOK, size: 2,
+    }),
+  }, { transport: { span: `${WALKER.span}s` }, channels });
+}
+
+/**
+ * The turntable (criteria 14 and 15): a band 1 m from the Y axis and 0.1 m tall (256 segments, so every point of it lies
+ * within 7.6e-5 m of 1 m from the axis), a `fixture.skin@1` at the world origin whose `at/rot/1` a channel turns
+ * linearly at 180/π °/s, 1 rad/s, a right-handed turn about +Y (Units and axes), from 0 s to 4 s; the particles item
+ * `sparks` at the world origin bursts 128 particles on it at each of 0.5, 1, 1.5 and 2 s with `inherit.velocity: 1`,
+ * no velocity of their own, gravity or drag, each living 1.5 s.
+ */
+export const TURN = { r: 1, h: 0.1, segments: 256, bursts: [0.5, 1, 1.5, 2], each: 128, life: 1.5, span: 4 } as const;
+export function turntableDoc(): JsonObject {
+  return sessionDoc('Turntable', {
+    cam: camera([0, 3.4, 3.4], [0, 0, 0], 50),
+    turntable: skinItem(stillSkin(bandMesh(TURN.r, TURN.h, TURN.segments)), 'post', { pos: [0, 0, 0], rot: [0, 0, 0] }),
+    sparks: particlesItem({
+      count: TURN.bursts.length * TURN.each,
+      emit: { shape: { surface: { of: 'turntable' } }, bursts: TURN.bursts.map((t) => ({ t: `${t}s`, count: TURN.each })) },
+      inherit: { velocity: 1 }, life: [TURN.life, TURN.life], motion: STILL, draw: 'spark', ...SPARK_LOOK,
+    }),
+  }, { transport: { span: `${TURN.span}s` }, channels: { turn: linearChannel('items/turntable/at/rot/1', [[0, 0], [TURN.span, (TURN.span * 180) / Math.PI]]) } });
+}
