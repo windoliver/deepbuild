@@ -1,0 +1,89 @@
+{
+  "id": "shelf.bookcase",
+  "version": "1.1",
+  "title": "Bookcase",
+  "license": "MIT",
+  "author": "the #1961 acceptance suite",
+  "description": "A bookcase drawn from the front at 100 u a metre: two sides and one shelf per level 40 u apart, each a 2D rect.",
+  "inputs": {
+    "width": {
+      "type": "number",
+      "unit": "m",
+      "default": 1.2,
+      "min": 0.4,
+      "max": 3,
+      "about": "the outside width, in metres"
+    },
+    "levels": {
+      "type": "integer",
+      "default": 3,
+      "min": 1,
+      "max": 8,
+      "about": "how many levels, 0.4 m apart"
+    }
+  },
+  "steps": {
+    "sides": {
+      "op": "mark",
+      "kind": "rect@1",
+      "repeat": {
+        "count": 2,
+        "as": "i"
+      },
+      "params": {
+        "box": [
+          0,
+          0,
+          2,
+          "levels * 40"
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          "i * (width * 100 - 2)",
+          0,
+          0
+        ]
+      }
+    },
+    "shelf": {
+      "op": "mark",
+      "kind": "rect@1",
+      "repeat": {
+        "count": "levels",
+        "as": "i"
+      },
+      "params": {
+        "box": [
+          0,
+          0,
+          "width * 100",
+          2
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          0,
+          "(i + 1) * 40 - 2",
+          0
+        ]
+      }
+    }
+  },
+  "outputs": {
+    "parts": [
+      "sides",
+      "shelf"
+    ]
+  }
+}
