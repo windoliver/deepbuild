@@ -221,12 +221,12 @@ exactly this run's pictures passes. No other test reads these pictures or the ca
 
 ## Oracle
 
-The oracle page lists upstream tests for criterion 2 alone: Blender's EEVEE lighting-node tests at `0a18557098`
+The oracle page lists upstream tests for criterion 2 alone: the upstream renderer's lighting-node tests at `0a18557098`
 (`tests/files/render/lighting_nodes/light_eval.blend`, `light_info.blend`, `shadow_cast.blend`, their `eevee_renders`
 references, and `tests/python/eevee_render_tests.py:450-452`'s 6/255 threshold), which render materials built on a
-per-light accumulation zone against stored references. They need Blender to run, and nothing here runs Blender: that
+per-light accumulation zone against stored references. They need that engine to run, and nothing here runs it: that
 lane has no runner and stays BLOCKED, with one unblock ask (#136's runner). This suite's AC2 is ours (the three bands and
-the planted shadow of 1); it doesn't run or port the Blender files. The other seven criteria have no upstream test.
+the planted shadow of 1); it doesn't run or port the upstream files. The other seven criteria have no upstream test.
 
 ## Not tested, because no criterion asks
 
