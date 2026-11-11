@@ -1,0 +1,76 @@
+Base commit: de304b9ff ("Merge pull request #2192 from windoliver/feat/1820-pack-assets")
+Command: NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/1723 --no-file-parallelism --testTimeout=600000
+Run in the worktree at the base commit holding only these test files (uncommitted), after npm ci, scripts/lease npm run
+build --workspaces, and CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 scripts/lease cargo build --locked -q -p deep-hook,
+then the same for -p deep-show (default features, the full set: its registry lists building, cells, data, effects, graph,
+input, look, loop, marks2d, media, motion, record, sandbox, scene3d, sheet, text, vector, and no logic). This Mac's rustup
+proxies were missing from ~/.cargo/bin, so cargo ran from the pinned 1.99.1 toolchain's own bin folder on PATH; no lease
+was granted (no hub set up for the lease), so both builds ran unleased.
+Type check: node node_modules/typescript/bin/tsc -p tests/acceptance/1723/tsconfig.json passes.
+Date: 2026-11-10T23:54:51Z  Node v24.22.2  vitest 5.0.5  darwin-arm64 (Mac17,10, 18 cores)  cargo 1.99.1
+Load: the one-minute load average was 257 at the start and 232 at the end (other sessions share the machine).
+Exit code: 1. Paths are shown relative to the worktree.
+
+Result: 4 files, 5 tests, 5 failed, 0 passed. Duration 669 s.
+
+What the base does: `checksOf` (packages/hub/src/core.ts) keeps only spec entries with a `run` string, so the document
+check entry is dropped: no run of it starts, and the claim is judged on R1's drafted check alone, which passes. deep_run
+would refuse the name the same way. `deep show --check` with no claim reads PASS through `Hub::verdict`. Every setup step
+held in every test that reached it: the hub started in a temporary HOME, the definition locked, the session's deep mcp
+bound and deep_show presented the scene at revision 1, the Write was allowed, and the stop made a claim.
+
+ac1.test.ts (#1723.8ec20125), 2 tests, both fail at the criterion's own assertion, naming the check:
+  x control (the crate resting on the floor), 485 s:
+    Error: #1723.8ec20125 claim:01M73Y8ZARYCHHKFWSBP9HFZYX: the spec's document check scene-audit (geometry.audit on doc
+    01JB1723D00000000000000001, revision 1) has no run in the record; the claim's runs: none; its verdicts: none
+    (at ac1.test.ts:33, in claimOn.) Note: this claim got no run of any check and no verdict within the 480 s wait, while
+    every other claim of the run was judged in 40-100 s, PASS on R1 alone. So its failure is at the named-check
+    assertion, but it shows a stalled claim, not the base's usual path; the twin below shows that path. Not rerun: the
+    suite runs once at the base. Most likely the load (about 250) starved the claim's check slot; the hub's stderr wasn't
+    kept.
+  x planted twin (the crate 0.2 m above the floor), 38 s:
+    Error: #1723.8ec20125 claim:01M73YQPW7D9SV878WMB3ND92T: the spec's document check scene-audit (geometry.audit on doc
+    01JB1723D00000000000000001, revision 1) has no run in the record; the claim's runs: .deepbuild/checks/scene-saved.sh
+    passed, .deepbuild/checks/scene-saved.sh failed; its verdicts: PASS {"outcome":"PASS","verdict":"verdict:01M73YQVHH…",
+    "reasons":[".deepbuild/checks/scene-saved.sh: PASS on 1 clean run"], … "key":{… "doc_revisions":[] …}}
+    (at ac1.test.ts:33. The second scene-saved.sh run is the merge-base run that proves R1's fix by failing there. The
+    twin's floating crate is never checked, and the claim passes.)
+
+ac2.test.ts (#1723.ee7e66b6), 1 test, fails at the stale assertion, 103 s:
+  Error: #1723.ee7e66b6 the patch made revision 2 of 01JB1723D00000000000000001 after verdict:01M73Y61KFVRZWTW571VMKRJA2,
+  the PASS on claim:01M73Y5WDV9C18CQVE0050JSKA judged on revision 1 by scene-audit, so that verdict must go stale: the
+  record holds no verdict.stale naming it after the patch (none at all)
+  (at ac2.test.ts:46. Its preconditions held on the base: the claim was PASS, on R1 alone, and the session's next
+  deep_show of the twin was recorded as doc.patched revision 2. The deep_run assertion after it wasn't reached; at the
+  base deep_run refuses the name, "Name a check this repo's .deepbuild/done.yaml names: it names none".)
+
+ac3.test.ts (#1723.ee326673), 1 test, fails at the never-PASS assertion, 36 s:
+  Error: #1723.ee326673 claim:01M73YS1WEHT70T6X6Z8WGJ683: its spec names scene-determinism, logic.determinism, which this
+  build's canvas core can't run, so the claim is never PASS: PASS {"outcome":"PASS", … "reasons":
+  [".deepbuild/checks/scene-saved.sh: PASS on 1 clean run"] …}; its runs: .deepbuild/checks/scene-saved.sh passed,
+  .deepbuild/checks/scene-saved.sh failed
+  (at ac3.test.ts:31. The registry precondition held: the hub's canvas core, target/debug/deep-show, lists no logic module.)
+
+ac4.test.ts (#1723.bfd5e63a), 1 test, fails at the no-run assertion, 5 s:
+  Error: #1723.bfd5e63a deep show --check of doc 01JB1723D00000000000000002, presented at revision 1 with no run in the
+  record, must not read PASS: its result is "PASS" ({"rev":1, … "issues":[], … "outcome":"presented","result":"PASS", …})
+  (at ac4.test.ts:30. The FAIL-from-the-run half after it wasn't reached; on the base the twin's claim would have no run of
+  scene-audit, which that half's precondition reads as BLOCKED, and `--claim` of a claim outside the world file reads
+  INVALID through Hub::verdict.)
+
+Passing at the base: none.
+
+The fixture, checked once on the base's canvas core itself (a scratch `deep-show run` scenario, not kept: the scene shown
+by a session and a world-file claim naming it as its deliverable, with the two check inputs as requirements):
+  - geometry.audit {scope: scene, support: {floating: [floor]}}: PASS on the scene; FAIL on the twin with
+    {check: geometry.audit, code: geometry.floating, severity: error, ids: [crate], what: "nothing holds crate"};
+  - logic.determinism {at_times: [0s], compare: same_machine}: BLOCKED, blocked [{code: module_missing, kind:
+    logic.determinism, module: logic}];
+  - #96's patch ops on the agent's own document are refused, ref_unresolved "no shared document has this ID", which is
+    why AC2's new revision is the agent's next whole revision (README, Disputes);
+  - `deep show` with check: true and no claim of the resting scene: presented, result PASS.
+So the canvas core already has every outcome the criteria expect; the base's gap is the hub's route to it.
+
+Not observed at the base, because no implementation exists: that a fixed hub's run of scene-audit passes on the resting
+scene and fails on the twin, that its evidence holds the issues, that the patch makes the PASS stale and deep_run runs
+revision 2, the BLOCKED with module_missing, and deep show --check reading FAIL from the twin's run.

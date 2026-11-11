@@ -329,6 +329,26 @@ impl Hub<'_> {
         }
         let late = self.scenario.planted == Some(Planted::DragShowsOnRelease)
             && matches!(event, Event::Move(_));
+        // #535: a press meets the mark set rows the panel's document draws now, each a target
+        // `<set>#<key>` with its box, stacked over its set.
+        let mut doc = doc;
+        if matches!(event, Event::Down { .. }) {
+            let drawn = self
+                .panel_doc(panel)
+                .and_then(|d| self.sessions.get(&d)?.document().cloned());
+            let t = self
+                .scopes
+                .get(panel)
+                .and_then(|s| s.scope.time())
+                .unwrap_or(self.now);
+            for (row, b) in drawn.map(|d| self.row_boxes(&d, t)).unwrap_or_default() {
+                let order = &doc["items"][row.split('#').next().unwrap_or_default()]["order"];
+                let target = json!({"id": row, "order": order, "params": {"box": b}});
+                if let Some(items) = doc["items"].as_object_mut() {
+                    items.insert(row, target);
+                }
+            }
+        }
         let done = match self.scopes.get_mut(panel) {
             Some(s) => s.scope.input(&doc, now, serial, event),
             None => return refused("unknown_panel"),
