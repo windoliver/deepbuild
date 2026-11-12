@@ -517,6 +517,10 @@ byHand.push('tests/acceptance/2017/ac2-light-holds.test.ts');
 alone.push('tests/acceptance/173/');
 timed.push('tests/acceptance/173/budgets.test.ts', 'tests/acceptance/173/envelope.test.ts');
 slow.push('tests/acceptance/173/budgets.test.ts', 'tests/acceptance/173/envelope.test.ts');
+// #1606's files each start their own hubs, and device.test.ts and stolen.test.ts the real app, built with its stand-ins;
+// device.test.ts presses the real app's card, with Accessibility and Screen Recording, by hand.
+alone.push('tests/acceptance/1606/');
+byHand.push('tests/acceptance/1606/device.test.ts');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
