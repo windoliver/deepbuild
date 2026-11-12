@@ -159,20 +159,21 @@ wording is the issue's (its Acceptance criteria), not repeated here.
   alignment, and its zero-fill check (the stray byte at 8,205), which is ours. So the oracle lane is INCONCLUSIVE for
   criterion 1: its tests pass and can fail, but no planted fault is shown failing a CHECK line upstream holds. Both planted twins are named by other
   criteria (`linker_adds_linking_section` by 7, `linker_links_in_listing_order` by 9); criterion 1 names none, so
-  under the design's "Wrong programs" it would have only a mutant, as criterion 3 does. Its one ask, to the owner:
-  does the reader step alone, which accepts the honest output and rejects criterion 7's twin's, count as line 27's
-  rejection with a planted fault for criterion 1, though criterion 1 doesn't name that twin? Yes: the lane passes
-  criterion 1 on function-imports (data-layout only informs), with that evidence in the saved reader file rather than
-  a rerunnable check; no: it stays INCONCLUSIVE.
+  under the design's "Wrong programs" it has only a mutant, as criterion 3 does. One was run: a hand-made mutant of
+  9a02471b6's `link.rs` line 448 that places each library segment at alignment 1, link order unchanged, fails
+  data-layout's first test (`oracle-mutants/misaligned-segment.txt`: alpha@1 at 8,195 and beta@1 at 8,200, alpha still
+  first, so its two fixed-address checks fail on alignment, upstream's rule, and its zero-fill check on the byte at
+  8,195); every other oracle test passes on it. (LLVM's reader also tells criterion 7's twin's output from the honest
+  one, outside any test.)
   undefined.s has no planted twin, so the lane is INCONCLUSIVE for criterion 3 too. The base (`BASE-FAILURE.txt`, all
   6 fail) fails it before its import check. The design's "Wrong programs" accepts the twin a criterion names or a
   mutant, and criterion 3 names no twin; two mutants of `link.rs` line 404 were made by hand in a scratch clone and
   their runs saved. The trace lane can't make this proof today: its Rust mutation step (`scripts/proof-runs.mjs`) runs
-  cargo-mutants with cargo's own tests, never a vitest file, and says its kills prove no criterion. Its one ask, to
-  the owner: do the two saved hand-made mutant runs count as line 27's planted fault? Yes: the lane
-  passes criterion 3 on `oracle-mutants/names-no-import.txt`, a saved run rather than a rerunnable check; no: it stays
-  INCONCLUSIVE. The lane is INCONCLUSIVE rather than BLOCKED because it has a runner: the translated vitest tests run
-  our output (obj2yaml and FileCheck aren't installed, which matters only for the reader point the saved run covers). One that names no import fails upstream's CHECK (`oracle-mutants/names-no-import.txt`). Upstream's CHECK-NOT (`baz`, a symbol only `--undefined` names) isn't held:
+  cargo-mutants with cargo's own tests, never a vitest file, and says its kills prove no criterion. The lane's one ask, to the owner, for
+  criteria 1 and 3 together: do saved runs of hand-made mutants count as line 27's planted fault? Yes: the lane passes
+  criterion 1 on `oracle-mutants/misaligned-segment.txt` and criterion 3 on `oracle-mutants/names-no-import.txt`, saved
+  runs rather than rerunnable checks; no: both stay INCONCLUSIVE. The lane is INCONCLUSIVE rather than BLOCKED because it has a runner: the translated vitest tests run
+  our output (obj2yaml and FileCheck aren't installed, which matters only for the reader point the saved run covers). One of those two mutants, which names no import, fails upstream's CHECK (`oracle-mutants/names-no-import.txt`). Upstream's CHECK-NOT (`baz`, a symbol only `--undefined` names) isn't held:
   our linker has no `--undefined`. In its place the test checks something of our own, that no refusal names an import
   a listed library defines, and the mutant that names every import of the program fails it
   (`oracle-mutants/names-every-import.txt`). The blind job's first draft called that check the CHECK-NOT and put
@@ -507,14 +508,14 @@ raw files, `gen.test.ts`, the code and the issue. It also ran its own BFS over t
   tests; screenshots and `e2e-raw` checked) and two P2s and three low gaps, fixed here: the oracle bullet called
   data-layout's planted twin caught by an upstream-held check, though it fails only our own order rule (sent back to
   the blind job too, whose redraft 2ce09306c changes comments and docs only); the bullet now applies the planted-fault rule
-  by its letter to all three tests and says undefined.s, which has no planted fault, doesn't count; an unfilled
+  by its letter to all three tests and says undefined.s, which has no planted fault, doesn't count (superseded by round 39); an unfilled
   commit placeholder is filled; `name` is named as the one custom section upstream reads; and the mutant runs'
-  provenance says the test code is identical from d49221e13 to HEAD (superseded by round 39).
+  provenance says the test code is identical from d49221e13 to HEAD.
 - **Round 39** found no wrong values (oracle rerun 6 passed, type check clean, both twins probed, screenshots and
   `e2e-raw` checked) and one P2 and three low gaps. The P2: round 38's "counts by the rule's letter" overclaimed, since
   the rule's "it" is the linked upstream test and no upstream-held check rejects either planted twin; rounds 37 and 38
   had read the same facts two ways. Settled here on the strict reading: the oracle lane is INCONCLUSIVE for criteria 1
-  and 3, with an unblock ask, and the looser reading is left to the owner. The lows: the planted twin's layout is
+  and 3, with an unblock ask, and the looser reading is left to the owner (superseded by rounds 40–41). The lows: the planted twin's layout is
   stated as probed rather than shown by the test; and two oracle-file wordings went back to the blind job, whose
   redraft (89ef55002) changes comments and docs only.
 - **Round 40** found no wrong values (oracle rerun 6 passed, code identical d49221e13 to HEAD after stripping
@@ -541,3 +542,10 @@ raw files, `gen.test.ts`, the code and the issue. It also ran its own BFS over t
   three twins probed; all screenshots and `e2e-raw` values checked) and one P2 and two low gaps, fixed here:
   criterion 1's ask now says its twins are named by criteria 7 and 9, not 1, and asks the owner about that too; the
   bullet says why the lane is INCONCLUSIVE rather than BLOCKED; and round 40's ask is marked superseded.
+- **Round 44** found no wrong values (oracle rerun 6 passed; the reader file reproduced; twins probed; screenshots and
+  `e2e-raw` checked) and one P2 and four low gaps. The P2: criterion 1's ask rested on a twin it doesn't name, while
+  a mutant route existed. Fixed here: a hand-made `link.rs` mutant that misaligns library segments with link order
+  unchanged was run and fails data-layout on alignment (`oracle-mutants/misaligned-segment.txt`), so criteria 1 and 3
+  now share one owner question, whether saved hand-made mutant runs count. The lows: a dangling "One" in the oracle
+  bullet; round 38's superseded note moved to the claim round 39 replaced; round 39's ask marked superseded; and the
+  oracle README and NOTICE omit FileCheck from upstream's tools, cosmetic, left in the blind job's files.
