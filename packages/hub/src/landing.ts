@@ -15,9 +15,9 @@ import { join } from 'node:path';
 import { gitEnv } from '@deepbuild/gate';
 import { repoOf, type AppKey } from '@deepbuild/github';
 import type { Plant } from './plant.js';
+import { isRecord as isObj } from '@deepbuild/contracts';
 
 type Obj = Record<string, unknown>;
-const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 const letters = (s: string): string => s.replace(/[^0-9A-Za-z]/g, '');
 const SHA = /^[0-9a-f]{40}$/;
 /** The status context the gate's verdict goes under (#46), and the one the default branch requires (#1325). */

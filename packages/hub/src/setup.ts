@@ -23,14 +23,14 @@ import { deepHook, hubAddress, installedPrograms, installedRoot, lastingNode, ro
 import { activePlant as plant } from './plant.js';
 import { removeService, startHub, stopIfRunning } from './service.js';
 import { Devices } from './trusted.js';
+import { shellQuote as q } from './shell.js';
+import { isRecord as isObj } from '@deepbuild/contracts';
 
 type Obj = Record<string, unknown>;
-const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 const REPO = fileURLToPath(new URL('../../../', import.meta.url));
 /** Claude Code's user-scope state, where its user MCP servers live. */
 const claudeJson = (): string => join(homedir(), '.claude.json');
 const skillDir = (): string => join(dirname(claudeSettings()), 'skills', 'deepbuild');
-const q = (path: string) => `'${path.replaceAll("'", `'\\''`)}'`;
 // #1002: setup's first step writes the second, and keeps in it why it stopped and the fix; its last step writes the
 // first, with its version, and takes the second away. The app and the first `deep` command offer Set up while setup
 // hasn't finished: no folder yet, or one a setup started in and didn't finish. A folder with neither file is a home set

@@ -4,11 +4,13 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { duration } from '@deepbuild/asks';
+import { shellQuote } from './shell.js';
 import { writeThrough } from './agent-files.js';
 import { activePlant } from './plant.js';
+import { isRecord as isObj } from '@deepbuild/contracts';
 
 type Obj = Record<string, unknown>;
-const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 
 /** The longest a stop is held, and how long before the Stop hook's timeout a hold must end. */
 export const STOP_HOLD_MS = 60_000;
@@ -87,7 +89,7 @@ export const commands = (record: Installed): Set<string> => new Set(Object.value
  * runs it with `/bin/sh -c`, and `exec` makes deep-hook the agent's own child, whose parent the hub checks a hook by:
  * dash runs a lone command in a child of the shell, a new process for every hook.
  */
-export const claudeCommand = (deepHook: string, arg: string): string => `exec '${deepHook.replaceAll("'", `'\\''`)}' claude-code ${arg}`;
+export const claudeCommand = (deepHook: string, arg: string): string => `exec ${shellQuote(deepHook)} claude-code ${arg}`;
 
 /** Our groups: one entry per hook, plus the waiter under Stop and under StopFailure. Each runs deep-hook, or the deep CLI's waiter. */
 export function ourGroups(deepHook: string, waiter: string, waiterTimeoutS: number): Record<string, Obj[]> {
@@ -189,12 +191,11 @@ export function words(ms: number): string {
   }
   return `${Math.round(ms / 1000)} s`;
 }
-const UNITS: Record<string, number> = { m: 60_000, h: 3_600_000, d: 86_400_000 };
 /** The longest ask deadline in your settings (config.json's asks block, as setup drafts it), in ms. */
 export function longestDeadline(root: string): number | undefined {
   const config = readJson(join(root, 'config.json'));
   const deadlines = config && isObj(config.asks) && isObj(config.asks.deadline) ? Object.values(config.asks.deadline) : [];
-  const ms = deadlines.map((v) => (typeof v === 'string' ? /^(\d+)([mhd])$/.exec(v) : null)).filter((m) => m !== null).map((m) => Number(m![1]) * UNITS[m![2]!]!);
+  const ms = deadlines.map((v) => duration(typeof v === 'string' ? v : undefined)).filter((v): v is number => v !== undefined);
   return ms.length ? Math.max(...ms) : undefined;
 }
 const entriesOf = (settings: Obj | undefined, event: string, ours: Set<string>): Obj[] => {

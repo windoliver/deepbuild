@@ -5,9 +5,8 @@ import { join } from 'node:path';
 import { rulesets } from '@deepbuild/github';
 import { activePlant } from './plant.js';
 import { installedRoot } from './paths.js';
+import { isRecord as isObj } from '@deepbuild/contracts';
 
-type Obj = Record<string, unknown>;
-const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 const USAGE = 'Usage: deep gate rules [--json]   the rulesets your repo needs, as GitHub\'s create-a-repository-ruleset call takes them';
 
 export function gateCommand(args: readonly string[]): number {

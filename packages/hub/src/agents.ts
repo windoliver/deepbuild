@@ -30,9 +30,9 @@ import { lastingNode } from './paths.js';
 import type { Plant } from './plant.js';
 import { syncPath, type Durable } from './vfs.js';
 import { refuse } from './wire.js';
+import { isRecord as isObj } from '@deepbuild/contracts';
 
 type Obj = Record<string, unknown>;
-const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 const sha = (bytes: Buffer | string): string => createHash('sha256').update(bytes).digest('hex');
 const canonical = (v: unknown): string => JSON.stringify(v, (_, x: unknown) => (isObj(x) ? Object.fromEntries(Object.keys(x).sort().map((k) => [k, x[k]])) : x));
 /** The agents a sync knows, by their facts files' names. */

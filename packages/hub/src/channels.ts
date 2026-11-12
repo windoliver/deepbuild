@@ -6,12 +6,14 @@
 // the card it showed, which is the trusted path, or an account link you made, which counts for "I did it", a taste
 // call or a choice, answering that ask alone. Every channel runs its own passes, so one that stalls holds up no other.
 import { createHash } from 'node:crypto';
-import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { hostname } from 'node:os';
 import { join } from 'node:path';
+import { duration as askDuration } from '@deepbuild/asks';
 import { canonicalize, type JsonValue } from '@deepbuild/contracts';
 import { scrubText } from '@deepbuild/evidence';
 import type { Devices } from './trusted.js';
+import { writeSynced } from './vfs.js';
 
 type Obj = Record<string, unknown>;
 type Kind = 'device' | 'chat' | 'email' | 'text';
@@ -83,8 +85,8 @@ const cardHash = (item: Pick<Item, 'summary' | 'options'>): string => createHash
 const keyOf = (item: Item): string => new TextDecoder().decode(canonicalize(item as unknown as JsonValue));
 /** A duration as the ask settings write them: 30s, 5m, 2h, 1d. */
 function duration(text: string | undefined): number | undefined {
-  const m = /^(\d+)(s|m|h|d)$/.exec(text ?? '');
-  return m ? Number(m[1]) * { s: 1000, m: 60_000, h: 3_600_000, d: 86_400_000 }[m[2] as 's' | 'm' | 'h' | 'd'] : undefined;
+  const seconds = /^(\d+)s$/.exec(text ?? '');
+  return seconds ? Number(seconds[1]) * 1000 : askDuration(text);
 }
 /** The minute of the day of "HH:MM", or undefined. */
 const minuteOf = (text: string): number | undefined => { const m = /^(\d\d):(\d\d)$/.exec(text); return m ? Number(m[1]) * 60 + Number(m[2]) : undefined; };
@@ -131,8 +133,7 @@ export class Channels {
     const file = join(this.deps.root, 'channel-links.json');
     const links = this.links();
     links[channel] = [...new Set([...(links[channel] ?? []), account])];
-    writeFileSync(`${file}.tmp`, JSON.stringify(links), { mode: 0o600 });
-    renameSync(`${file}.tmp`, file);
+    writeSynced(file, Buffer.from(JSON.stringify(links)));
     this.linked = links;
   }
   private links(): Record<string, string[]> {

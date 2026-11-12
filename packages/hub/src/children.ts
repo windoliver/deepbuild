@@ -6,7 +6,7 @@ import { Worker } from 'node:worker_threads';
 import { YOUNG } from './settle.js';
 
 /** What execFile's callback gets, as plain data: its error's code and message, and the output as text. */
-interface Ran { error: { code?: number | string; message: string } | null; stdout: string; stderr: string }
+interface Ran { error: { code?: number | string; message: string } | null; stdout: string; stderr: string; threw?: true }
 interface RunOptions { env?: NodeJS.ProcessEnv; cwd?: string; timeout?: number; maxBuffer?: number }
 export interface ChildJob { file: string; args: string[]; options: RunOptions }
 
@@ -43,6 +43,13 @@ function ask(job: ChildJob): Promise<unknown> {
 /** execFile, run from the children's thread; a thread that can't run it reads as a failed run. */
 export const run = (file: string, args: string[], options: RunOptions = {}): Promise<Ran> =>
   (ask({ file, args, options }) as Promise<Ran>).catch((error: Error) => ({ error: { message: error.message }, stdout: '', stderr: '' }));
+
+/** execFile's synchronous argument errors still reject; ordinary child failures keep their output result. */
+export const exec = async (file: string, args: string[], options: RunOptions = {}): Promise<Ran> => {
+  const result = await run(file, args, options);
+  if (result.threw) throw Object.assign(new TypeError(result.error!.message), { code: result.error!.code });
+  return result;
+};
 
 const C = (): NodeJS.ProcessEnv => ({ ...process.env, LC_ALL: 'C' });
 /** A process's start time, as wire.ts's startOf reads it (`ps -o lstart=`), or undefined when it can't be read. */

@@ -10,7 +10,7 @@ import { existsSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, 
 import { homedir } from 'node:os';
 import { basename, delimiter, isAbsolute, join } from 'node:path';
 import type { JsonObject } from '@deepbuild/adapters';
-import { canonicalize, sha256Hex, type JsonValue } from '@deepbuild/contracts';
+import { isRecord as isObj, canonicalize, sha256Hex, type JsonValue } from '@deepbuild/contracts';
 import type { Asks } from '@deepbuild/asks';
 import { repoOf, revoke, sessionToken, type AppKey } from '@deepbuild/github';
 import { TERMINAL_PROTOCOL } from '@deepbuild/extension-host';
@@ -20,7 +20,6 @@ import { registry } from './hookmap.js';
 import { refusal, Refused, ulid, type Plant } from './wire.js';
 
 type Obj = Record<string, unknown>;
-const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 const letters = (id: string): string => id.replace(/[^0-9A-Za-z]/g, '');
 const DAY = 86_400_000;
 /** How long a started agent has to write its first event before it ends as never started. */

@@ -12,6 +12,6 @@ port.on('message', (job: ChildJob & { n: number }) => {
       port.postMessage({ n, result: { error: error ? { code: (error as { code?: number | string }).code, message: error.message } : null, stdout: String(stdout ?? ''), stderr: String(stderr ?? '') } });
     });
   } catch (error) {
-    port.postMessage({ n, result: { error: { message: error instanceof Error ? error.message : String(error) }, stdout: '', stderr: '' } });
+    port.postMessage({ n, result: { error: { code: (error as { code?: string }).code, message: error instanceof Error ? error.message : String(error) }, stdout: '', stderr: '', threw: true } });
   }
 });

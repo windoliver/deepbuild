@@ -34,7 +34,7 @@ import { readdir, readFile, realpath, stat } from 'node:fs/promises';
 import { basename, isAbsolute, join, normalize, sep } from 'node:path';
 import type { Asks, Delivery } from '@deepbuild/asks';
 import type { PaidKind } from '@deepbuild/gate';
-import { canonicalize, sha256Hex, type JsonValue } from '@deepbuild/contracts';
+import { isRecord as isObj, canonicalize, sha256Hex, type JsonValue } from '@deepbuild/contracts';
 import { RecordError, ulid, type Connection, type EventInput } from '@deepbuild/record';
 import { solveLine } from '@deepbuild/gate';
 import { renamedSince } from '@deepbuild/workspaces';
@@ -45,7 +45,6 @@ import type { Workspaces } from './workspaces.js';
 import { derivedId, type Plant } from './wire.js';
 
 type Obj = Record<string, unknown>;
-const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 const sql = (s: string) => s.replace(/'/g, "''");
 const letters = (s: string) => s.replace(/[^0-9A-Za-z]/g, '');
 

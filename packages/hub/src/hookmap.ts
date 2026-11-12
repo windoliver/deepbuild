@@ -4,7 +4,7 @@
 import { closeSync, openSync, readFileSync, readSync, readdirSync, fstatSync } from 'node:fs';
 import { join } from 'node:path';
 import { ADAPTERS, factsAdapter, readFacts, registry as emptyRegistry, shipped, type Adapter, type AdapterRegistry, type HookRequestLine, type JsonObject } from '@deepbuild/adapters';
-import { canonicalize, getSchema, sha256Hex, validate, type JsonValue } from '@deepbuild/contracts';
+import { isObject as isObj, canonicalize, getSchema, sha256Hex, validate, type JsonValue } from '@deepbuild/contracts';
 import { scrubText } from '@deepbuild/evidence';
 import { isPrCreate, prUrlIn } from './forge.js';
 import { countMcp } from './mcp-servers.js';
@@ -29,7 +29,6 @@ const CODEX_COMMAND = /^\/(compact|review|init|new|clear|undo|diff|status|model|
 const SEQ_WHY = 'seq is when the hook started, in ns since the Unix epoch, as a canonical decimal string from 0 to 9223372036854775807: digits only, no sign, no leading zero, never a JSON number.';
 const MAX_MS = 9_007_199_254_740_991n;
 
-const isObj = (v: unknown): v is JsonObject => typeof v === 'object' && v !== null && !Array.isArray(v);
 const str = (v: unknown): string => (typeof v === 'string' ? v : '');
 
 /** Whether a kind's event must name the session it is about. */
