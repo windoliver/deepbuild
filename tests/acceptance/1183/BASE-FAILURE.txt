@@ -1,0 +1,243 @@
+At base 145315636 (Mac, 18 cores), on 2026-11-11, one-minute load about 150 to 190: `deep-show` built with `--no-default-features --features full` (CARGO_INCREMENTAL=0, CARGO_PROFILE_DEV_DEBUG=0), then the suite run once through scripts/lease, which found no deep CLI and ran it unleased. All 7 tests fail. Every figure stored at revision 0 FAILs on the base's `unknown_field` for an assembly's `shown_at`, and each holding the disclosure is BLOCKED `unknown_kind` (`overlay.text@1` isn't a kind deep-show registers); no row holds a `lengths` record and no length code is raised; alpha's deep_show of the electron figure is refused on `shown_at`, so AC1's eval has no revision (the fixture's program check, run on Node's WebAssembly, passes: no failure names it); `planted: length_ratio_one_value` makes the scenario `bad_input`.
+
+scripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `node node_modules/vitest/vitest.mjs run --root tests/acceptance/1183 --no-file-parallelism --testTimeout=600000` runs unleased
+
+ RUN  v5.0.5 ~/dev/claude-worktrees/github-issue-1183-d512aa/agent-a3c32f00d09108b76/tests/acceptance/1183
+
+ ❯ ac1-exaggerated.test.ts (1 test | 1 failed) 20341ms
+   ❯ AC1 #1183.53c5a71a a length drawn 200,000 times larger than real (1)
+     × AC1 #1183.53c5a71a with exaggerate {factor: 200000} at shown_at 1 the dot's mapping passes and draws 1.76292 mm at 8.8146e-9 m; without exaggerate it is refused naming the dot, the ratio 200,000 and the expected 1 6407ms
+ ❯ ac6-two-values.test.ts (2 tests | 2 failed) 31390ms
+   ❯ AC6 #1183.285af30a the ratio is read at two values of the output (2)
+     × AC6 #1183.285af30a at shown_at 0.25 a driver drawing 0.25 × the output + 0.05 m passes, and the check's record over every fixture is the same bytes on two runs 14749ms
+     × AC6 #1183.285af30a a planted check that reads the ratio at one value refuses the offset driver and fails, naming the plug 2352ms
+ ❯ ac3-disclosure-run.test.ts (1 test | 1 failed) 37867ms
+   ❯ AC3 #1183.2a50d207 a disclosure readable whenever its item is on screen (1)
+     × AC3 #1183.2a50d207 over a run where the dot leaves the frame and comes back its disclosure reads on every frame the dot is on screen; hidden 10 frames while it is, it fails naming the overlay and frame 90 9941ms
+ ❯ ac4-bound-factor.test.ts (1 test | 1 failed) 48406ms
+   ❯ AC4 #1183.162053d0 a disclosure's factor is bound, never typed (1)
+     × AC4 #1183.162053d0 the template "drawn {factor}× larger than real" shows 200,000 from the document; typed as "200,000×" it fails honest numbers naming the overlay 11687ms
+ ❯ ac2-shown-at.test.ts (1 test | 1 failed) 60523ms
+   ❯ AC2 #1183.c8624e05 a pop-up drawn at a quarter of real size (1)
+     × AC2 #1183.c8624e05 at shown_at 0.25 a 0.4 m output drawn as 0.1 m passes with no exaggerate; drawn as 0.4 m it is refused naming the plug and the ratios 1 and 0.25 5038ms
+ ❯ ac5-unchecked.test.ts (1 test | 1 failed) 18392ms
+   ❯ AC5 #1183.b941c395 a mapping over a value with no unit is never passed (1)
+     × AC5 #1183.b941c395 a driver over a logic output with no unit is in the record as unchecked, naming drivers/sweep, and the check's verdict is INCONCLUSIVE 5456ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 7 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac1-exaggerated.test.ts > AC1 #1183.53c5a71a a length drawn 200,000 times larger than real > AC1 #1183.53c5a71a with exaggerate {factor: 200000} at shown_at 1 the dot's mapping passes and draws 1.76292 mm at 8.8146e-9 m; without exaggerate it is refused naming the dot, the ratio 200,000 and the expected 1
+AssertionError: a dot drawn 200,000× larger than real:
+  the exaggerated dot is BLOCKED, not PASS: BLOCKED [{"check":"document.validate","code":"unknown_field","severity":"error","ids":["flex"],"path":"assemblies/flex/shown_at","actual":1,"what":"not a field of an assembly","fix":"Remove the field, or require the kind's minor that defines it.","doc":"01JB1183D00000000000000001"}]
+  the exaggerated dot raises unknown_field: [{"check":"document.validate","code":"unknown_field","severity":"error","ids":["flex"],"path":"assemblies/flex/shown_at","actual":1,"what":"not a field of an assembly","fix":"Remove the field, or require the kind's minor that defines it.","doc":"01JB1183D00000000000000001"}]
+  the exaggerated dot: the honest-numbers row holds no `lengths` record: {"id":"req:01JB1183Q00000000000000001","kind":"honest_numbers","issues":[{"check":"document.validate","code":"unknown_field","severity":"error","ids":["flex"],"path":"assemblies/flex/shown_at","actual":1,"what":"not a field of an assembly","fix":"Remove the field, or require the kind's minor that defines it.","doc":"01JB1183D00000000000000001"}],"machines":"any","determinism":"exact","numbers":[],"result":"BLOCKED","blocked":[{"code":"unknown_kind","kind":"overlay.text@1","ids":["disclosure"]}]}
+  alpha's deep_show of the electron figure isn't presented: {"notices":[{"code":"unknown_kind","severity":"notice","ids":["disclosure"],"path":"items/disclosure/kind","actual":"overlay.text@1","what":"kind `overlay.text@1` is not registered in this build; the item is skipped"}],"rev":1,"expansions":[],"issues":[{"check":"document.validate","code":"unknown_field","severity":"error","ids":["flex"],"path":"assemblies/flex/shown_at","actual":1,"what":"not a field of an assembly","fix":"Remove the field, or require the kind's minor that defines it."}],"issues_evidence":"3922431cc89e5893abd2e3bc7e5b7a3ac2e173e757a6a63db718160176173e0e","snapshots":[],"outcome":"refused","backends":{"fonts":{"name":"fonts.bundled","version":"1.0.0"},"cpu":{"name":"aarch64","version":"1.0.0"}},"core":"core@0.0.0","set_digest":"bf57ee612c863284a30bdcc7b8ed4066bbba7b87664a043f363001165f6c69f7"}
+  no length.ratio_undeclared error names dot on the same driver without exaggerate: [{"check":"document.validate","code":"unknown_field","severity":"error","ids":["flex"],"path":"assemblies/flex/shown_at","actual":1,"what":"not a field of an assembly","fix":"Remove the field, or require the kind's minor that defines it.","doc":"01JB1183D00000000000000002"}]
+  the same driver without exaggerate: the honest-numbers row holds no `lengths` record: {"id":"req:01JB1183Q00000000000000002","kind":"honest_numbers","issues":[{"check":"document.validate","code":"unknown_field","severity":"error","ids":["flex"],"path":"assemblies/flex/shown_at","actual":1,"what":"not a field of an assembly","fix":"Remove the field, or require the kind's minor that defines it.","doc":"01JB1183D00000000000000002"}],"machines":"any","determinism":"exact","numbers":[],"result":"FAIL"}: expected [ …(6) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the exaggerated dot is BLOCKED, not PASS: BLOCKED [{\"check\":\"document.validate\",\"code\":\"unknown_field\",\"severity\":\"error\",\"ids\":[\"flex\"],\"path\":\"assemblies/flex/shown_at\",\"actual\":1,\"what\":\"not a field of an assembly\",\"fix\":\"Remove the field, or require the kind's minor that defines it.\",\"doc\":\"01JB1183D00000000000000001\"}]",
++   "the exaggerated dot raises unknown_field: [{\"check\":\"document.validate\",\"code\":\"unknown_field\",\"severity\":\"error\",\"ids\":[\"flex\"],\"path\":\"assemblies/flex/shown_at\",\"actual\":1,\"what\":\"not a field of an assembly\",\"fix\":\"Remove the field, or require the kind's minor that defines it.\",\"doc\":\"01JB1183D00000000000000001\"}]",
++   "the exaggerated dot: the honest-numbers row holds no `lengths` record: {\"id\":\"req:01JB1183Q00000000000000001\",\"kind\":\"honest_numbers\",\"issues\":[{\"check\":\"document.validate\",\"code\":\"unknown_field\",\"severity\":\"error\",\"ids\":[\"flex\"],\"path\":\"assemblies/flex/shown_at\",\"actual\":1,\"what\":\"not a field of an assembly\",\"fix\":\"Remove the field, or require the kind's minor that defines it.\",\"doc\":\"01JB1183D00000000000000001\"}],\"machines\":\"any\",\"determinism\":\"exact\",\"numbers\":[],\"result\":\"BLOCKED\",\"blocked\":[{\"code\":\"unknown_kind\",\"kind\":\"overlay.text@1\",\"ids\":[\"disclosure\"]}]}",
++   "alpha's deep_show of the electron figure isn't presented: {\"notices\":[{\"code\":\"unknown_kind\",\"severity\":\"notice\",\"ids\":[\"disclosure\"],\"path\":\"items/disclosure/kind\",\"actual\":\"overlay.text@1\",\"what\":\"kind `overlay.text@1` is not registered in this build; the item is skipped\"}],\"rev\":1,\"expansions\":[],\"issues\":[{\"check\":\"document.validate\",\"code\":\"unknown_field\",\"severity\":\"error\",\"ids\":[\"flex\"],\"path\":\"assemblies/flex/shown_at\",\"actual\":1,\"what\":\"not a field of an assembly\",\"fix\":\"Remove the field, or require the kind's minor that defines it.\"}],\"issues_evidence\":\"3922431cc89e5893abd2e3bc7e5b7a3ac2e173e757a6a63db718160176173e0e\",\"snapshots\":[],\"outcome\":\"refused\",\"backends\":{\"fonts\":{\"name\":\"fonts.bundled\",\"version\":\"1.0.0\"},\"cpu\":{\"name\":\"aarch64\",\"version\":\"1.0.0\"}},\"core\":\"core@0.0.0\",\"set_digest\":\"bf57ee612c863284a30bdcc7b8ed4066bbba7b87664a043f363001165f6c69f7\"}",
++   "no length.ratio_undeclared error names dot on the same driver without exaggerate: [{\"check\":\"document.validate\",\"code\":\"unknown_field\",\"severity\":\"error\",\"ids\":[\"flex\"],\"path\":\"assemblies/flex/shown_at\",\"actual\":1,\"what\":\"not a field of an assembly\",\"fix\":\"Remove the field, or require the kind's minor that defines it.\",\"doc\":\"01JB1183D00000000000000002\"}]",
++   "the same driver without exaggerate: the honest-numbers row holds no `lengths` record: {\"id\":\"req:01JB1183Q00000000000000002\",\"kind\":\"honest_numbers\",\"issues\":[{\"check\":\"document.validate\",\"code\":\"unknown_field\",\"severity\":\"error\",\"ids\":[\"flex\"],\"path\":\"assemblies/flex/shown_at\",\"actual\":1,\"what\":\"not a field of an assembly\",\"fix\":\"Remove the field, or require the kind's minor that defines it.\",\"doc\":\"01JB1183D00000000000000002\"}],\"machines\":\"any\",\"determinism\":\"exact\",\"numbers\":[],\"result\":\"FAIL\"}",
++ ]
+
+ ❯ none helpers.ts:55:73
+     53| /** No failures; the message lists them. */
+     54| export function none(failures: readonly string[], what: string): void {
+     55|   expect(failures, `${what}:\n  ${failures.slice(0, 40).join('\n  ')}`…
+       |                                                                         ^
+     56| }
+     57| /** A planted program's check: it found something wrong, and a failure…
+ ❯ ac1-exaggerated.test.ts:57:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/7]⎯
+
+ FAIL  ac2-shown-at.test.ts > AC2 #1183.c8624e05 a pop-up drawn at a quarter of real size > AC2 #1183.c8624e05 at shown_at 0.25 a 0.4 m output drawn as 0.1 m passes with no exaggerate; drawn as 0.4 m it is refused naming the plug and the ratios 1 and 0.25
+AssertionError: a pop-up drawn at a quarter of real size:
+  the plug drawn at a quarter is FAIL, not PASS: FAIL [{"check":"document.validate","code":"unknown_field","severity":"error","ids":["popup"],"path":"assemblies/popup/shown_at","actual":0.25,"what":"not a field of an assembly","fix":"Remove the field, or require the kind's minor that defines it.","doc":"01JB1183D00000000000000001"}]
+  the plug drawn at a quarter raises unknown_field: [{"check":"document.validate","code":"unknown_field","severity":"error","ids":["popup"],"path":"assemblies/popup/shown_at","actual":0.25,"what":"not a field of an assembly","fix":"Remove the field, or require the kind's minor that defines it.","doc":"01JB1183D00000000000000001"}]
+  the plug drawn at a quarter: the honest-numbers row holds no `lengths` record: {"id":"req:01JB1183Q00000000000000001","kind":"honest_numbers","issues":[{"check":"document.validate","code":"unknown_field","severity":"error","ids":["popup"],"path":"assemblies/popup/shown_at","actual":0.25,"what":"not a field of an assembly","fix":"Remove the field, or require the kind's minor that defines it.","doc":"01JB1183D00000000000000001"}],"machines":"any","determinism":"exact","numbers":[],"result":"FAIL"}
+  no length.ratio_undeclared error names plug on the plug drawn at real size: [{"check":"document.validate","code":"unknown_field","severity":"error","ids":["popup"],"path":"assemblies/popup/shown_at","actual":0.25,"what":"not a field of an assembly","fix":"Remove the field, or require the kind's minor that defines it.","doc":"01JB1183D00000000000000002"}]
+  the plug drawn at real size: the honest-numbers row holds no `lengths` record: {"id":"req:01JB1183Q00000000000000002","kind":"honest_numbers","issues":[{"check":"document.validate","code":"unknown_field","severity":"error","ids":["popup"],"path":"assemblies/popup/shown_at","actual":0.25,"what":"not a field of an assembly","fix":"Remove the field, or require the kind's minor that defines it.","doc":"01JB1183D00000000000000002"}],"machines":"any","determinism":"exact","numbers":[],"result":"FAIL"}: expected [ …(5) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the plug drawn at a quarter is FAIL, not PASS: FAIL [{\"check\":\"document.validate\",\"code\":\"unknown_field\",\"severity\":\"error\",\"ids\":[\"popup\"],\"path\":\"assemblies/popup/shown_at\",\"actual\":0.25,\"what\":\"not a field of an assembly\",\"fix\":\"Remove the field, or require the kind's minor that defines it.\",\"doc\":\"01JB1183D00000000000000001\"}]",
++   "the plug drawn at a quarter raises unknown_field: [{\"check\":\"document.validate\",\"code\":\"unknown_field\",\"severity\":\"error\",\"ids\":[\"popup\"],\"path\":\"assemblies/popup/shown_at\",\"actual\":0.25,\"what\":\"not a field of an assembly\",\"fix\":\"Remove the field, or require the kind's minor that defines it.\",\"doc\":\"01JB1183D00000000000000001\"}]",
++   "the plug drawn at a quarter: the honest-numbers row holds no `lengths` record: {\"id\":\"req:01JB1183Q00000000000000001\",\"kind\":\"honest_numbers\",\"issues\":[{\"check\":\"document.validate\",\"code\":\"unknown_field\",\"severity\":\"error\",\"ids\":[\"popup\"],\"path\":\"assemblies/popup/shown_at\",\"actual\":0.25,\"what\":\"not a field of an assembly\",\"fix\":\"Remove the field, or require the kind's minor that defines it.\",\"doc\":\"01JB1183D00000000000000001\"}],\"machines\":\"any\",\"determinism\":\"exact\",\"numbers\":[],\"result\":\"FAIL\"}",
++   "no length.ratio_undeclared error names plug on the plug drawn at real size: [{\"check\":\"document.validate\",\"code\":\"unknown_field\",\"severity\":\"error\",\"ids\":[\"popup\"],\"path\":\"assemblies/popup/shown_at\",\"actual\":0.25,\"what\":\"not a field of an assembly\",\"fix\":\"Remove the field, or require the kind's minor that defines it.\",\"doc\":\"01JB1183D00000000000000002\"}]",
++   "the plug drawn at real size: the honest-numbers row holds no `lengths` record: {\"id\":\"req:01JB1183Q00000000000000002\",\"kind\":\"honest_numbers\",\"issues\":[{\"check\":\"document.validate\",\"code\":\"unknown_field\",\"severity\":\"error\",\"ids\":[\"popup\"],\"path\":\"assemblies/popup/shown_at\",\"actual\":0.25,\"what\":\"not a field of an assembly\",\"fix\":\"Remove the field, or require the kind's minor that defines it.\",\"doc\":\"01JB1183D00000000000000002\"}],\"machines\":\"any\",\"determinism\":\"exact\",\"numbers\":[],\"result\":\"FAIL\"}",
++ ]
+
+ ❯ none helpers.ts:55:73
+     53| /** No failures; the message lists them. */
+     54| export function none(failures: readonly string[], what: string): void {
+     55|   expect(failures, `${what}:\n  ${failures.slice(0, 40).join('\n  ')}`…
+       |                                                                         ^
+     56| }
+     57| /** A planted program's check: it found something wrong, and a failure…
+ ❯ ac2-shown-at.test.ts:28:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/7]⎯
+
+ FAIL  ac3-disclosure-run.test.ts > AC3 #1183.2a50d207 a disclosure readable whenever its item is on screen > AC3 #1183.2a50d207 over a run where the dot leaves the frame and comes back its disclosure reads on every frame the dot is on screen; hidden 10 frames while it is, it fails naming the overlay and frame 90
+AssertionError: the disclosure over the run:
+  the run where the dot leaves the frame and comes back is BLOCKED, not PASS: BLOCKED [{"check":"document.validate","code":"unknown_field","severity":"error","ids":["flex"],"path":"assemblies/flex/shown_at","actual":1,"what":"not a field of an assembly","fix":"Remove the field, or require the kind's minor that defines it.","doc":"01JB1183D00000000000000001"}]
+  the run where the dot leaves the frame and comes back raises unknown_field: [{"check":"document.validate","code":"unknown_field","severity":"error","ids":["flex"],"path":"assemblies/flex/shown_at","actual":1,"what":"not a field of an assembly","fix":"Remove the field, or require the kind's minor that defines it.","doc":"01JB1183D00000000000000001"}]
+  the disclosure hidden for 10 frames while the dot is on screen is BLOCKED, not FAIL: BLOCKED [{"check":"document.validate","code":"unknown_field","severity":"error","ids":["flex"],"path":"assemblies/flex/shown_at","actual":1,"what":"not a field of an assembly","fix":"Remove the field, or require the kind's minor that defines it.","doc":"01JB1183D00000000000000002"}]
+  no length.disclosure_hidden error names the overlay disclosure on the disclosure hidden for 10 frames while the dot is on screen: [{"check":"document.validate","code":"unknown_field","severity":"error","ids":["flex"],"path":"assemblies/flex/shown_at","actual":1,"what":"not a field of an assembly","fix":"Remove the field, or require the kind's minor that defines it.","doc":"01JB1183D00000000000000002"}]: expected [ …(4) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the run where the dot leaves the frame and comes back is BLOCKED, not PASS: BLOCKED [{\"check\":\"document.validate\",\"code\":\"unknown_field\",\"severity\":\"error\",\"ids\":[\"flex\"],\"path\":\"assemblies/flex/shown_at\",\"actual\":1,\"what\":\"not a field of an assembly\",\"fix\":\"Remove the field, or require the kind's minor that defines it.\",\"doc\":\"01JB1183D00000000000000001\"}]",
++   "the run where the dot leaves the frame and comes back raises unknown_field: [{\"check\":\"document.validate\",\"code\":\"unknown_field\",\"severity\":\"error\",\"ids\":[\"flex\"],\"path\":\"assemblies/flex/shown_at\",\"actual\":1,\"what\":\"not a field of an assembly\",\"fix\":\"Remove the field, or require the kind's minor that defines it.\",\"doc\":\"01JB1183D00000000000000001\"}]",
++   "the disclosure hidden for 10 frames while the dot is on screen is BLOCKED, not FAIL: BLOCKED [{\"check\":\"document.validate\",\"code\":\"unknown_field\",\"severity\":\"error\",\"ids\":[\"flex\"],\"path\":\"assemblies/flex/shown_at\",\"actual\":1,\"what\":\"not a field of an assembly\",\"fix\":\"Remove the field, or require the kind's minor that defines it.\",\"doc\":\"01JB1183D00000000000000002\"}]",
++   "no length.disclosure_hidden error names the overlay disclosure on the disclosure hidden for 10 frames while the dot is on screen: [{\"check\":\"document.validate\",\"code\":\"unknown_field\",\"severity\":\"error\",\"ids\":[\"flex\"],\"path\":\"assemblies/flex/shown_at\",\"actual\":1,\"what\":\"not a field of an assembly\",\"fix\":\"Remove the field, or require the kind's minor that defines it.\",\"doc\":\"01JB1183D00000000000000002\"}]",
++ ]
+
+ ❯ none helpers.ts:55:73
+     53| /** No failures; the message lists them. */
+     54| export function none(failures: readonly string[], what: string): void {
+     55|   expect(failures, `${what}:\n  ${failures.slice(0, 40).join('\n  ')}`…
+       |                                                                         ^
+     56| }
+     57| /** A planted program's check: it found something wrong, and a failure…
+ ❯ ac3-disclosure-run.test.ts:33:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/7]⎯
+
+ FAIL  ac4-bound-factor.test.ts > AC4 #1183.162053d0 a disclosure's factor is bound, never typed > AC4 #1183.162053d0 the template "drawn {factor}× larger than real" shows 200,000 from the document; typed as "200,000×" it fails honest numbers naming the overlay
+AssertionError: the disclosure's factor:
+  the disclosure with a bound factor is BLOCKED, not PASS: BLOCKED [{"check":"document.validate","code":"unknown_field","severity":"error","ids":["flex"],"path":"assemblies/flex/shown_at","actual":1,"what":"not a field of an assembly","fix":"Remove the field, or require the kind's minor that defines it.","doc":"01JB1183D00000000000000001"}]
+  the disclosure with a bound factor raises unknown_field: [{"check":"document.validate","code":"unknown_field","severity":"error","ids":["flex"],"path":"assemblies/flex/shown_at","actual":1,"what":"not a field of an assembly","fix":"Remove the field, or require the kind's minor that defines it.","doc":"01JB1183D00000000000000001"}]
+  the row's numbers list no 200,000 shown by disclosure: its entries are [] (all numbers: [])
+  the disclosure with the factor typed is BLOCKED, not FAIL: BLOCKED [{"check":"document.validate","code":"unknown_field","severity":"error","ids":["flex"],"path":"assemblies/flex/shown_at","actual":1,"what":"not a field of an assembly","fix":"Remove the field, or require the kind's minor that defines it.","doc":"01JB1183D00000000000000002"}]
+  no error names the overlay disclosure on the disclosure with the factor typed: [{"check":"document.validate","code":"unknown_field","severity":"error","ids":["flex"],"path":"assemblies/flex/shown_at","actual":1,"what":"not a field of an assembly","fix":"Remove the field, or require the kind's minor that defines it.","doc":"01JB1183D00000000000000002"}]: expected [ …(5) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the disclosure with a bound factor is BLOCKED, not PASS: BLOCKED [{\"check\":\"document.validate\",\"code\":\"unknown_field\",\"severity\":\"error\",\"ids\":[\"flex\"],\"path\":\"assemblies/flex/shown_at\",\"actual\":1,\"what\":\"not a field of an assembly\",\"fix\":\"Remove the field, or require the kind's minor that defines it.\",\"doc\":\"01JB1183D00000000000000001\"}]",
++   "the disclosure with a bound factor raises unknown_field: [{\"check\":\"document.validate\",\"code\":\"unknown_field\",\"severity\":\"error\",\"ids\":[\"flex\"],\"path\":\"assemblies/flex/shown_at\",\"actual\":1,\"what\":\"not a field of an assembly\",\"fix\":\"Remove the field, or require the kind's minor that defines it.\",\"doc\":\"01JB1183D00000000000000001\"}]",
++   "the row's numbers list no 200,000 shown by disclosure: its entries are [] (all numbers: [])",
++   "the disclosure with the factor typed is BLOCKED, not FAIL: BLOCKED [{\"check\":\"document.validate\",\"code\":\"unknown_field\",\"severity\":\"error\",\"ids\":[\"flex\"],\"path\":\"assemblies/flex/shown_at\",\"actual\":1,\"what\":\"not a field of an assembly\",\"fix\":\"Remove the field, or require the kind's minor that defines it.\",\"doc\":\"01JB1183D00000000000000002\"}]",
++   "no error names the overlay disclosure on the disclosure with the factor typed: [{\"check\":\"document.validate\",\"code\":\"unknown_field\",\"severity\":\"error\",\"ids\":[\"flex\"],\"path\":\"assemblies/flex/shown_at\",\"actual\":1,\"what\":\"not a field of an assembly\",\"fix\":\"Remove the field, or require the kind's minor that defines it.\",\"doc\":\"01JB1183D00000000000000002\"}]",
++ ]
+
+ ❯ none helpers.ts:55:73
+     53| /** No failures; the message lists them. */
+     54| export function none(failures: readonly string[], what: string): void {
+     55|   expect(failures, `${what}:\n  ${failures.slice(0, 40).join('\n  ')}`…
+       |                                                                         ^
+     56| }
+     57| /** A planted program's check: it found something wrong, and a failure…
+ ❯ ac4-bound-factor.test.ts:42:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/7]⎯
+
+ FAIL  ac5-unchecked.test.ts > AC5 #1183.b941c395 a mapping over a value with no unit is never passed > AC5 #1183.b941c395 a driver over a logic output with no unit is in the record as unchecked, naming drivers/sweep, and the check's verdict is INCONCLUSIVE
+AssertionError: a mapping over a value with no unit:
+  the gauge: the honest-numbers row holds no `lengths` record: {"id":"req:01JB1183Q00000000000000001","kind":"honest_numbers","issues":[{"check":"document.validate","code":"unknown_field","severity":"error","ids":["gauge"],"path":"assemblies/gauge/shown_at","actual":1,"what":"not a field of an assembly","fix":"Remove the field, or require the kind's minor that defines it.","doc":"01JB1183D00000000000000001"}],"machines":"any","determinism":"exact","numbers":[],"result":"FAIL"}
+  the gauge's honest-numbers row is FAIL, not INCONCLUSIVE: {"id":"req:01JB1183Q00000000000000001","kind":"honest_numbers","issues":[{"check":"document.validate","code":"unknown_field","severity":"error","ids":["gauge"],"path":"assemblies/gauge/shown_at","actual":1,"what":"not a field of an assembly","fix":"Remove the field, or require the kind's minor that defines it.","doc":"01JB1183D00000000000000001"}],"machines":"any","determinism":"exact","numbers":[],"result":"FAIL"}: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the gauge: the honest-numbers row holds no `lengths` record: {\"id\":\"req:01JB1183Q00000000000000001\",\"kind\":\"honest_numbers\",\"issues\":[{\"check\":\"document.validate\",\"code\":\"unknown_field\",\"severity\":\"error\",\"ids\":[\"gauge\"],\"path\":\"assemblies/gauge/shown_at\",\"actual\":1,\"what\":\"not a field of an assembly\",\"fix\":\"Remove the field, or require the kind's minor that defines it.\",\"doc\":\"01JB1183D00000000000000001\"}],\"machines\":\"any\",\"determinism\":\"exact\",\"numbers\":[],\"result\":\"FAIL\"}",
++   "the gauge's honest-numbers row is FAIL, not INCONCLUSIVE: {\"id\":\"req:01JB1183Q00000000000000001\",\"kind\":\"honest_numbers\",\"issues\":[{\"check\":\"document.validate\",\"code\":\"unknown_field\",\"severity\":\"error\",\"ids\":[\"gauge\"],\"path\":\"assemblies/gauge/shown_at\",\"actual\":1,\"what\":\"not a field of an assembly\",\"fix\":\"Remove the field, or require the kind's minor that defines it.\",\"doc\":\"01JB1183D00000000000000001\"}],\"machines\":\"any\",\"determinism\":\"exact\",\"numbers\":[],\"result\":\"FAIL\"}",
++ ]
+
+ ❯ none helpers.ts:55:73
+     53| /** No failures; the message lists them. */
+     54| export function none(failures: readonly string[], what: string): void {
+     55|   expect(failures, `${what}:\n  ${failures.slice(0, 40).join('\n  ')}`…
+       |                                                                         ^
+     56| }
+     57| /** A planted program's check: it found something wrong, and a failure…
+ ❯ ac5-unchecked.test.ts:26:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/7]⎯
+
+ FAIL  ac6-two-values.test.ts > AC6 #1183.285af30a the ratio is read at two values of the output > AC6 #1183.285af30a at shown_at 0.25 a driver drawing 0.25 × the output + 0.05 m passes, and the check's record over every fixture is the same bytes on two runs
+AssertionError: the offset driver and the record:
+  the offset driver (a quarter plus 5 cm) is FAIL, not PASS: FAIL [{"check":"document.validate","code":"unknown_field","severity":"error","ids":["popup"],"path":"assemblies/popup/shown_at","actual":0.25,"what":"not a field of an assembly","fix":"Remove the field, or require the kind's minor that defines it.","doc":"01JB1183D00000000000000001"}]
+  the offset driver (a quarter plus 5 cm) raises unknown_field: [{"check":"document.validate","code":"unknown_field","severity":"error","ids":["popup"],"path":"assemblies/popup/shown_at","actual":0.25,"what":"not a field of an assembly","fix":"Remove the field, or require the kind's minor that defines it.","doc":"01JB1183D00000000000000001"}]
+  the offset driver (a quarter plus 5 cm): the honest-numbers row holds no `lengths` record: {"id":"req:01JB1183Q00000000000000001","kind":"honest_numbers","issues":[{"check":"document.validate","code":"unknown_field","severity":"error","ids":["popup"],"path":"assemblies/popup/shown_at","actual":0.25,"what":"not a field of an assembly","fix":"Remove the field, or require the kind's minor that defines it.","doc":"01JB1183D00000000000000001"}],"machines":"any","determinism":"exact","numbers":[],"result":"FAIL"}
+  the verdict on the socket pop-up (0.25 * d + 0.05) holds no `lengths` record with an entry: {"id":"req:01JB1183Q00000000000000001","kind":"honest_numbers","issues":[{"check":"document.validate","code":"unknown_field","severity":"error","ids":["popup"],"path":"assemblies/popup/shown_at","actual":0.25,"what":"not a field of an assembly","fix":"Remove the field, or require the kind's minor that defines it.","doc":"01JB1183D00000000000000001"}],"machines":"any","determinism":"exact","numbers":[],"result":"FAIL"}
+  the verdict on the electron figure (none) holds no `lengths` record with an entry: {"id":"req:01JB1183Q00000000000000002","kind":"honest_numbers","issues":[{"check":"document.validate","code":"unknown_field","severity":"error","ids":["flex"],"path":"assemblies/flex/shown_at","actual":1,"what":"not a field of an assembly","fix":"Remove the field, or require the kind's minor that defines it.","doc":"01JB1183D00000000000000002"}],"machines":"any","determinism":"exact","numbers":[],"result":"BLOCKED","blocked":[{"code":"unknown_kind","kind":"overlay.text@1","ids":["disclosure"]}]}
+  the verdict on the electron figure (undeclared) holds no `lengths` record with an entry: {"id":"req:01JB1183Q00000000000000003","kind":"honest_numbers","issues":[{"check":"document.validate","code":"unknown_field","severity":"error","ids":["flex"],"path":"assemblies/flex/shown_at","actual":1,"what":"not a field of an assembly","fix":"Remove the field, or require the kind's minor that defines it.","doc":"01JB1183D00000000000000003"}],"machines":"any","determinism":"exact","numbers":[],"result":"FAIL"}
+  the verdict on the socket pop-up (0.25 * d) holds no `lengths` record with an entry: {"id":"req:01JB1183Q00000000000000004","kind":"honest_numbers","issues":[{"check":"document.validate","code":"unknown_field","severity":"error","ids":["popup"],"path":"assemblies/popup/shown_at","actual":0.25,"what":"not a field of an assembly","fix":"Remove the field, or require the kind's minor that defines it.","doc":"01JB1183D00000000000000004"}],"machines":"any","determinism":"exact","numbers":[],"result":"FAIL"}
+  the verdict on the socket pop-up (d) holds no `lengths` record with an entry: {"id":"req:01JB1183Q00000000000000005","kind":"honest_numbers","issues":[{"check":"document.validate","code":"unknown_field","severity":"error","ids":["popup"],"path":"assemblies/popup/shown_at","actual":0.25,"what":"not a field of an assembly","fix":"Remove the field, or require the kind's minor that defines it.","doc":"01JB1183D00000000000000005"}],"machines":"any","determinism":"exact","numbers":[],"result":"FAIL"}
+  the verdict on the gauge (a reading with no unit) holds no `lengths` record with an entry: {"id":"req:01JB1183Q00000000000000006","kind":"honest_numbers","issues":[{"check":"document.validate","code":"unknown_field","severity":"error","ids":["gauge"],"path":"assemblies/gauge/shown_at","actual":1,"what":"not a field of an assembly","fix":"Remove the field, or require the kind's minor that defines it.","doc":"01JB1183D00000000000000006"}],"machines":"any","determinism":"exact","numbers":[],"result":"FAIL"}: expected [ …(9) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the offset driver (a quarter plus 5 cm) is FAIL, not PASS: FAIL [{\"check\":\"document.validate\",\"code\":\"unknown_field\",\"severity\":\"error\",\"ids\":[\"popup\"],\"path\":\"assemblies/popup/shown_at\",\"actual\":0.25,\"what\":\"not a field of an assembly\",\"fix\":\"Remove the field, or require the kind's minor that defines it.\",\"doc\":\"01JB1183D00000000000000001\"}]",
++   "the offset driver (a quarter plus 5 cm) raises unknown_field: [{\"check\":\"document.validate\",\"code\":\"unknown_field\",\"severity\":\"error\",\"ids\":[\"popup\"],\"path\":\"assemblies/popup/shown_at\",\"actual\":0.25,\"what\":\"not a field of an assembly\",\"fix\":\"Remove the field, or require the kind's minor that defines it.\",\"doc\":\"01JB1183D00000000000000001\"}]",
++   "the offset driver (a quarter plus 5 cm): the honest-numbers row holds no `lengths` record: {\"id\":\"req:01JB1183Q00000000000000001\",\"kind\":\"honest_numbers\",\"issues\":[{\"check\":\"document.validate\",\"code\":\"unknown_field\",\"severity\":\"error\",\"ids\":[\"popup\"],\"path\":\"assemblies/popup/shown_at\",\"actual\":0.25,\"what\":\"not a field of an assembly\",\"fix\":\"Remove the field, or require the kind's minor that defines it.\",\"doc\":\"01JB1183D00000000000000001\"}],\"machines\":\"any\",\"determinism\":\"exact\",\"numbers\":[],\"result\":\"FAIL\"}",
++   "the verdict on the socket pop-up (0.25 * d + 0.05) holds no `lengths` record with an entry: {\"id\":\"req:01JB1183Q00000000000000001\",\"kind\":\"honest_numbers\",\"issues\":[{\"check\":\"document.validate\",\"code\":\"unknown_field\",\"severity\":\"error\",\"ids\":[\"popup\"],\"path\":\"assemblies/popup/shown_at\",\"actual\":0.25,\"what\":\"not a field of an assembly\",\"fix\":\"Remove the field, or require the kind's minor that defines it.\",\"doc\":\"01JB1183D00000000000000001\"}],\"machines\":\"any\",\"determinism\":\"exact\",\"numbers\":[],\"result\":\"FAIL\"}",
++   "the verdict on the electron figure (none) holds no `lengths` record with an entry: {\"id\":\"req:01JB1183Q00000000000000002\",\"kind\":\"honest_numbers\",\"issues\":[{\"check\":\"document.validate\",\"code\":\"unknown_field\",\"severity\":\"error\",\"ids\":[\"flex\"],\"path\":\"assemblies/flex/shown_at\",\"actual\":1,\"what\":\"not a field of an assembly\",\"fix\":\"Remove the field, or require the kind's minor that defines it.\",\"doc\":\"01JB1183D00000000000000002\"}],\"machines\":\"any\",\"determinism\":\"exact\",\"numbers\":[],\"result\":\"BLOCKED\",\"blocked\":[{\"code\":\"unknown_kind\",\"kind\":\"overlay.text@1\",\"ids\":[\"disclosure\"]}]}",
++   "the verdict on the electron figure (undeclared) holds no `lengths` record with an entry: {\"id\":\"req:01JB1183Q00000000000000003\",\"kind\":\"honest_numbers\",\"issues\":[{\"check\":\"document.validate\",\"code\":\"unknown_field\",\"severity\":\"error\",\"ids\":[\"flex\"],\"path\":\"assemblies/flex/shown_at\",\"actual\":1,\"what\":\"not a field of an assembly\",\"fix\":\"Remove the field, or require the kind's minor that defines it.\",\"doc\":\"01JB1183D00000000000000003\"}],\"machines\":\"any\",\"determinism\":\"exact\",\"numbers\":[],\"result\":\"FAIL\"}",
++   "the verdict on the socket pop-up (0.25 * d) holds no `lengths` record with an entry: {\"id\":\"req:01JB1183Q00000000000000004\",\"kind\":\"honest_numbers\",\"issues\":[{\"check\":\"document.validate\",\"code\":\"unknown_field\",\"severity\":\"error\",\"ids\":[\"popup\"],\"path\":\"assemblies/popup/shown_at\",\"actual\":0.25,\"what\":\"not a field of an assembly\",\"fix\":\"Remove the field, or require the kind's minor that defines it.\",\"doc\":\"01JB1183D00000000000000004\"}],\"machines\":\"any\",\"determinism\":\"exact\",\"numbers\":[],\"result\":\"FAIL\"}",
++   "the verdict on the socket pop-up (d) holds no `lengths` record with an entry: {\"id\":\"req:01JB1183Q00000000000000005\",\"kind\":\"honest_numbers\",\"issues\":[{\"check\":\"document.validate\",\"code\":\"unknown_field\",\"severity\":\"error\",\"ids\":[\"popup\"],\"path\":\"assemblies/popup/shown_at\",\"actual\":0.25,\"what\":\"not a field of an assembly\",\"fix\":\"Remove the field, or require the kind's minor that defines it.\",\"doc\":\"01JB1183D00000000000000005\"}],\"machines\":\"any\",\"determinism\":\"exact\",\"numbers\":[],\"result\":\"FAIL\"}",
++   "the verdict on the gauge (a reading with no unit) holds no `lengths` record with an entry: {\"id\":\"req:01JB1183Q00000000000000006\",\"kind\":\"honest_numbers\",\"issues\":[{\"check\":\"document.validate\",\"code\":\"unknown_field\",\"severity\":\"error\",\"ids\":[\"gauge\"],\"path\":\"assemblies/gauge/shown_at\",\"actual\":1,\"what\":\"not a field of an assembly\",\"fix\":\"Remove the field, or require the kind's minor that defines it.\",\"doc\":\"01JB1183D00000000000000006\"}],\"machines\":\"any\",\"determinism\":\"exact\",\"numbers\":[],\"result\":\"FAIL\"}",
++ ]
+
+ ❯ none helpers.ts:55:73
+     53| /** No failures; the message lists them. */
+     54| export function none(failures: readonly string[], what: string): void {
+     55|   expect(failures, `${what}:\n  ${failures.slice(0, 40).join('\n  ')}`…
+       |                                                                         ^
+     56| }
+     57| /** A planted program's check: it found something wrong, and a failure…
+ ❯ ac6-two-values.test.ts:51:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/7]⎯
+
+ FAIL  ac6-two-values.test.ts > AC6 #1183.285af30a the ratio is read at two values of the output > AC6 #1183.285af30a a planted check that reads the ratio at one value refuses the offset driver and fails, naming the plug
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runRaw helpers.ts:142:78
+    140|   expect(lines.length, `${SHOW} run: one output line per input line`).…
+    141|   const out = obj(JSON.parse(lines[0]!) as JsonValue, `${SHOW} run: th…
+    142|   expect(out['ok'], `${SHOW} run refused the scenario: ${brief(out, 30…
+       |                                                                              ^
+    143|   const replies = arr(out['replies'], `${SHOW} run: replies`).map((x, …
+    144|   expect(replies.length, `${SHOW} run: one reply per call`).toBe(calls…
+ ❯ judge helpers.ts:211:31
+ ❯ ac6-two-values.test.ts:57:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/7]⎯
+
+
+ Test Files  6 failed (6)
+      Tests  7 failed (7)
+   Start at  19:34:56
+   Duration  230.16s (tests 98%, import 1%, transform 1%)
+

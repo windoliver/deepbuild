@@ -98,6 +98,8 @@ pub(crate) fn check(
     ) -> Vec<ItemRules<'e>>,
 ) {
     let items = member(doc, "items").and_then(Value::as_object);
+    // #1183: an assembly's `shown_at` and an `exaggerate`, which lengths drawn larger than real read.
+    crate::lengths::check(doc, issues);
     status_bindings(doc, items, issues);
     let Some(items) = items else {
         return;
@@ -139,6 +141,8 @@ struct Texts<'d> {
     /// Whether number words count as numbers (`number_words`, true unless a check input says
     /// false).
     number_words: bool,
+    /// The overlays that disclose an exaggeration, whose templates are displayed text (#1183).
+    disclosures: BTreeSet<&'d str>,
 }
 
 impl<'d> Texts<'d> {
@@ -175,6 +179,7 @@ impl<'d> Texts<'d> {
             number_words: !inputs
                 .iter()
                 .any(|c| member(c, "number_words") == Some(&Value::Bool(false))),
+            disclosures: crate::lengths::disclosures(doc).collect(),
         }
     }
 
@@ -210,7 +215,8 @@ fn numbers_of(doc: &Value, texts: &Texts<'_>, id: &String, item: &Value, issues:
         }
         return;
     }
-    if !kind_text(item).is_some_and(|k| k.starts_with("text@")) {
+    let disclosure = texts.disclosures.contains(id.as_str());
+    if !disclosure && !kind_text(item).is_some_and(|k| k.starts_with("text@")) {
         return;
     }
     let params = member(item, "params");
@@ -298,7 +304,8 @@ fn template_numbers(doc: &Value, texts: &Texts<'_>, id: &str, t: &str, issues: &
             )),
             Part::Words(_) => {}
             Part::Slot(slot)
-                if template::value(doc, slot).is_none() && !template::reads_anchor(doc, slot) =>
+                if template::value_in(doc, id, slot).is_none()
+                    && !template::reads_anchor(doc, slot) =>
             {
                 issues.push(Issue::error(
                     "ref_unresolved",

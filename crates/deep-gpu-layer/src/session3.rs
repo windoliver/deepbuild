@@ -62,6 +62,7 @@ pub(crate) fn planted3(p: Option<Planted>) -> Planted3 {
         add_writes_depth: p == Some(Planted::AddWritesDepth),
         add_without_depth_test: p == Some(Planted::AddWithoutDepthTest),
         ids_by_draw_position: p == Some(Planted::IdsByDrawPosition),
+        overlay_keeps_grid_on_seek: p == Some(Planted::OverlayKeepsGridOnSeek),
         ids_ignore_mask: p == Some(Planted::IdsIgnoreMask),
         cuts_color_only: p == Some(Planted::CutsColorOnly),
         local: deep_scene3d_render::local::Planted {

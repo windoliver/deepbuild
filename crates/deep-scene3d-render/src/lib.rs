@@ -23,12 +23,14 @@ mod motion;
 mod oit;
 mod op;
 pub mod print;
+mod set;
 pub mod shadow;
 pub mod sss;
 pub mod status;
 pub mod surface;
 mod sway;
 pub mod targets;
+mod tint;
 pub mod water;
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -52,6 +54,7 @@ use deep_gpu::surface::FORMAT;
 
 pub use crate::diag::{draw_offscreen_diag, Diag, DiagCounts};
 use crate::mesh::Mesh;
+use crate::set::Set;
 use crate::surface::{Low, Surface, Upscale, LABEL_PASS, OUTLINE_PASS, SHARPEN_PASS, UPSCALE_PASS};
 
 /// The 3D writer layers' linear target: what the output pass reads.
@@ -67,7 +70,11 @@ const IDS_MS: wgpu::TextureFormat = wgpu::TextureFormat::Rg16Uint;
 /// The planted forward-Z twin's far plane.
 pub const FORWARD_FAR: f64 = 10_000.0;
 
-const SHADER: &str = include_str!("scene3d.wgsl");
+const SHADER: &str = concat!(
+    include_str!("scene3d.wgsl"),
+    include_str!("tint.wgsl"),
+    include_str!("caps.wgsl")
+);
 const MASK_DUMP: &str = include_str!("mask_dump.wgsl");
 /// The line that plants #425's per-band mask keys.
 const MASKS_SHARED: &str = "const MASKS_INDEPENDENT: bool = false;";
@@ -226,6 +233,8 @@ pub struct Planted {
     pub uploads_every_transform: bool,
     /// #1903: the warm-up at check makes a pipeline for each item, keyed by item, not by feature set.
     pub warms_per_item: bool,
+    /// #537: a terrain overlay keeps the grid it holds when a frame seeks to another step.
+    pub overlay_keeps_grid_on_seek: bool,
 }
 
 /// What one frame's preparation did (Render worker; Object; Dirty classes).
@@ -238,6 +247,8 @@ pub struct Counts {
     pub instances_written: u32,
     /// #1921: per instancer, the element IDs whose records this frame wrote to the GPU.
     pub element_uploads: BTreeMap<String, Vec<u32>>,
+    /// #537: per line, its segments (by place) whose records this frame wrote to the GPU.
+    pub segment_uploads: BTreeMap<String, Vec<u32>>,
     /// Compute culls run this frame: one per batch and view that changed (#484).
     pub culls: u32,
     /// Whether this frame built the camera's depth pyramid (#1637).
@@ -277,6 +288,8 @@ pub struct Counts {
     pub shadow_maps: Vec<(u64, f64, [f64; 16])>,
     /// Each shadowed local light's map this frame (#446).
     pub local_maps: Vec<local::Report>,
+    /// #537: per terrain overlay (`<plate>/<layer>`), the runs of rows this frame wrote.
+    pub overlay_rows: BTreeMap<String, Vec<[u32; 2]>>,
 }
 
 /// The key light's direction, toward the light: what the solids are shaded by and what casts the
@@ -1480,175 +1493,6 @@ pub(crate) fn read_back(
     staging.slice(..).get_mapped_range().ok()
 }
 
-/// One family's instance records in a batch, in a buffer of their own. A frame gathers its
-/// records into `next` with [`Set::push`], kept from frame to frame, so a frame whose members
-/// hold allocates nothing; [`Set::finish`] writes what changed.
-#[derive(Default)]
-struct Set {
-    buffer: Option<wgpu::Buffer>,
-    /// Which allocation the buffer is: a new one is a new resource in the draw key.
-    generation: u64,
-    capacity: usize,
-    owners: Vec<String>,
-    /// The records, each `stride` bytes, end to end.
-    records: Vec<u8>,
-    stride: usize,
-    /// This frame's records and how many, and its owners once they differ from `owners`.
-    next: Vec<u8>,
-    count: usize,
-    new_owners: Option<Vec<String>>,
-    /// It holds a less detailed band's draw inside a margin (#425), which draws last.
-    lower: bool,
-    /// It holds a part whose subsurface spreads (#481), which the share pass draws again.
-    subsurface: bool,
-    /// Bumped whenever a record changes, which culls every view again (#484).
-    revision: u64,
-    /// An instancer's batch: its prototype's bounds, each record's row in the instancer, its
-    /// records' f64 models while the renderer draws from the CPU's cull, and its cull (#484).
-    bounds: [[f64; 3]; 2],
-    elements: Vec<u32>,
-    models: Vec<[[f64; 4]; 3]>,
-    cull: Option<cull::Culled>,
-    /// The records [`Set::write`] changed and hasn't uploaded: the first and one past the last.
-    run: Option<(usize, usize)>,
-    /// The records the last [`Set::finish`] wrote, by index (#1921).
-    uploaded: Vec<usize>,
-}
-
-impl Set {
-    fn begin(&mut self) {
-        self.next.clear();
-        self.count = 0;
-        self.new_owners = None;
-        self.lower = false;
-        self.subsurface = false;
-        self.elements.clear();
-        self.models.clear();
-    }
-
-    fn push(&mut self, owner: &str, record: &[u8]) {
-        self.stride = record.len();
-        if self.new_owners.is_none() && self.owners.get(self.count).is_none_or(|o| o != owner) {
-            self.new_owners = Some(self.owners[..self.count].to_vec());
-        }
-        if let Some(owners) = self.new_owners.as_mut() {
-            owners.push(owner.to_string());
-        }
-        self.next.extend_from_slice(record);
-        self.count += 1;
-    }
-
-    /// Writes the records that changed, or all of them when the set's members changed. True when
-    /// the members changed.
-    fn finish(&mut self, device: &Device, next_generation: &mut u64, written: &mut u32) -> bool {
-        if self.count != self.owners.len() && self.new_owners.is_none() {
-            self.new_owners = Some(self.owners[..self.count].to_vec());
-        }
-        let stride = self.stride.max(16);
-        let members_changed = self.new_owners.is_some() || self.buffer.is_none();
-        self.uploaded.clear();
-        if members_changed {
-            if self.buffer.is_none() || self.capacity < self.count {
-                self.capacity = self.count.max(1);
-                *next_generation += 1;
-                self.generation = *next_generation;
-                self.buffer = Some(device.device.create_buffer(&wgpu::BufferDescriptor {
-                    label: Some("scene3d instances"),
-                    size: (stride * self.capacity) as u64,
-                    // A culled batch's vertex stage reads its records from storage (#484).
-                    usage: wgpu::BufferUsages::VERTEX
-                        | wgpu::BufferUsages::STORAGE
-                        | wgpu::BufferUsages::COPY_DST,
-                    mapped_at_creation: false,
-                }));
-            }
-            let buffer = self.buffer.as_ref().expect("allocated above");
-            if self.count > 0 {
-                deep_gpu::alloc::outside(|| device.queue.write_buffer(buffer, 0, &self.next));
-            }
-            *written += self.count as u32;
-            self.uploaded.extend(0..self.count);
-            self.revision += 1;
-            if let Some(owners) = self.new_owners.take() {
-                self.owners = owners;
-            }
-        } else {
-            let buffer = self
-                .buffer
-                .as_ref()
-                .expect("a set with members has a buffer");
-            // Each run of adjacent changed records goes in one write: a write per record made
-            // a staging buffer per record, and a set that moves moves whole.
-            let n = (self.next.len() / stride).min(self.records.len() / stride);
-            let mut run: Option<usize> = None;
-            for i in 0..=n {
-                let at = i * stride..(i + 1) * stride;
-                if i < n && self.next[at.clone()] != self.records[at] {
-                    *written += 1;
-                    self.uploaded.push(i);
-                    self.revision += 1;
-                    run.get_or_insert(i);
-                } else if let Some(first) = run.take() {
-                    let bytes = &self.next[first * stride..i * stride];
-                    deep_gpu::alloc::outside(|| {
-                        device
-                            .queue
-                            .write_buffer(buffer, (first * stride) as u64, bytes)
-                    });
-                }
-            }
-        }
-        std::mem::swap(&mut self.records, &mut self.next);
-        members_changed
-    }
-
-    /// Takes record `i` when it changed, the set's members as they were. [`Set::flush`] uploads
-    /// it, with the neighbours that changed beside it in one write.
-    fn write(&mut self, device: &Device, i: usize, record: &[u8], written: &mut u32) {
-        let at = i * self.stride;
-        let Some(old) = self.records.get_mut(at..at + record.len()) else {
-            return;
-        };
-        if old != record {
-            old.copy_from_slice(record);
-            match self.run {
-                Some((first, end)) if end == i => self.run = Some((first, i + 1)),
-                _ => {
-                    self.flush(device);
-                    self.run = Some((i, i + 1));
-                }
-            }
-            *written += 1;
-            self.revision += 1;
-        }
-    }
-
-    /// Uploads the run of changed records [`Set::write`] gathered.
-    fn flush(&mut self, device: &Device) {
-        if let (Some((first, end)), Some(buffer)) = (self.run.take(), &self.buffer) {
-            let bytes = &self.records[first * self.stride..end * self.stride];
-            deep_gpu::alloc::outside(|| {
-                device
-                    .queue
-                    .write_buffer(buffer, (first * self.stride) as u64, bytes)
-            });
-        }
-    }
-
-    fn len(&self) -> u32 {
-        self.owners.len() as u32
-    }
-
-    /// The `<instancer>#<id>` owners of the records the last [`Set::finish`] wrote (#1921).
-    fn uploaded_elements(&self) -> impl Iterator<Item = (&str, u32)> {
-        let owners = self.uploaded.iter().filter_map(|i| self.owners.get(*i));
-        owners.filter_map(|o| {
-            let (item, e) = o.rsplit_once('#')?;
-            Some((item, e.parse().ok()?))
-        })
-    }
-}
-
 /// A solid's set key (shape, maps (0: none; #423), material operator (0: none; #429) and its
 /// instancer's (prototype, material) batch (0: none; #484)).
 type SetKey = (Shape, u32, u64, u32);
@@ -1904,6 +1748,8 @@ pub struct Renderer {
     shadow_mark: f32,
     /// The IES tables' atlas (#446).
     ies: local::Tables,
+    /// The terrain overlays' cells (#537).
+    tints: tint::Store,
     /// The light grid this frame, and the buffer its cells are in (#446).
     clusters: Option<clusters::Grid>,
     cluster_buffer: wgpu::Buffer,
@@ -2342,6 +2188,7 @@ fn lights_bind(
     locals: &wgpu::TextureView,
     ies: &local::Tables,
     grid: &wgpu::Buffer,
+    tints: &wgpu::Buffer,
 ) -> wgpu::BindGroup {
     let cube = env.cube.as_ref().map_or(&env.stub, |c| &c.view);
     let to = env.to.as_ref().map_or(&env.stub, |c| &c.view);
@@ -2370,6 +2217,7 @@ fn lights_bind(
             grid.as_entire_binding(),
             wgpu::BindingResource::TextureView(env.bg[0].as_ref().map_or(&env.stub, |c| &c.view)),
             wgpu::BindingResource::TextureView(env.bg[1].as_ref().map_or(&env.stub, |c| &c.view)),
+            tints.as_entire_binding(),
         ],
     )
 }
@@ -3046,6 +2894,7 @@ impl Renderer {
                     },
                     count: None,
                 },
+                tint::entry(),
             ],
         });
         let oit = oit::Oit::new(d);
@@ -3102,6 +2951,7 @@ impl Renderer {
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
+        let tints = tint::Store::new(d);
         let lights_bind = lights_bind(
             d,
             &lights_layout,
@@ -3113,6 +2963,7 @@ impl Renderer {
             &cascade_stub(d),
             &ies,
             &cluster_buffer,
+            &tints.buffer,
         );
         let ao = ao::Passes::new(device);
         let maps = maps::Store::new(d, &device.queue);
@@ -3401,6 +3252,7 @@ impl Renderer {
             locals: local::Locals::default(),
             shadow_mark,
             ies,
+            tints,
             clusters: None,
             cluster_buffer,
             env,
@@ -4041,6 +3893,7 @@ impl Renderer {
             locals,
             &self.ies,
             &self.cluster_buffer,
+            &self.tints.buffer,
         );
         self.lights_generation += 1;
     }
@@ -4705,10 +4558,16 @@ impl Renderer {
             self.compiled += 1;
             self.names.push("scene3d.cut");
         }
+        // #537: the terrain overlays' changed rows, before the batches bind the lights' group.
+        let keep = self.planted.overlay_keeps_grid_on_seek;
+        if self.tints.upload(device, &scene.tints, keep) {
+            self.rebind_lights(device);
+        }
         for layer in &scene.layers {
             self.prepare_batch(device, layer, &scene.camera);
         }
         self.sways.move_all(device, scene);
+        self.counts.overlay_rows = self.tints.table(device, &scene.tints, &self.picks);
         if !self.adjusts.is_empty() {
             deep_gpu::alloc::outside(|| {
                 device.queue.write_buffer(
@@ -6234,7 +6093,12 @@ impl Renderer {
             let set = sets.entry(slot.0).or_default();
             set.lower |= s.mask.is_some_and(|m| m.lower);
             set.subsurface |= spreads(s);
-            slot.1 = set.count as u32;
+            // #537: a fed instancer's record sits at its slot.
+            slot.1 = if layer.fed.contains_key(&s.batch) {
+                s.row
+            } else {
+                set.count as u32
+            };
             // A set's records share one mesh, so one set of bounds: an instancer's prototype's,
             // or the items' shape's (#1637).
             if set.count == 0 {
@@ -6266,11 +6130,22 @@ impl Renderer {
         }
         batch.clear.finish(device, &mut next, &mut written);
         batch.solid_slots = slots;
+        for (key, set) in batch.solids.iter_mut().chain(batch.casters.iter_mut()) {
+            if let Some(&n) = layer.fed.get(&key.3) {
+                set.lay(n as usize, std::mem::size_of::<SolidRecord>());
+            }
+        }
         batch.solids.retain(|_, set| set.count > 0);
         batch.casters.retain(|_, set| set.count > 0);
+        let mut fed_uploads: BTreeMap<String, BTreeSet<u32>> = BTreeMap::new();
         for (key, set) in batch.solids.iter_mut().chain(batch.casters.iter_mut()) {
             set.finish(device, &mut next, &mut written);
             for (item, e) in set.uploaded_elements().filter(|_| key.3 != 0) {
+                // #537: a fed slot whose parts sit in several batches is one element.
+                if layer.fed.contains_key(&key.3) {
+                    fed_uploads.entry(item.to_string()).or_default().insert(e);
+                    continue;
+                }
                 let uploads = self.counts.element_uploads.entry(item.into());
                 uploads.or_default().push(e);
             }
@@ -6316,9 +6191,16 @@ impl Renderer {
                 _ => {}
             }
         }
+        for (item, slots) in fed_uploads {
+            self.counts
+                .element_uploads
+                .entry(item)
+                .or_default()
+                .extend(slots);
+        }
         batch.lines.begin();
         for l in &layer.lines {
-            for seg in &l.segments {
+            for (k, seg) in l.segments.iter().enumerate() {
                 let record = SegmentRecord {
                     a: v4(seg.a, seg.wa),
                     b: v4(seg.b, seg.wb),
@@ -6330,13 +6212,22 @@ impl Renderer {
                         | (u32::from(l.edges.is_some()) << 1)
                         | (u32::from(l.over) << 2)
                         | (u32::from(l.joined) << 3)
-                        | (u32::from(l.dash_world) << 4),
+                        | (u32::from(l.dash_world) << 4)
+                        | (u32::from(seg.hidden) << 5)
+                        | (deep_canvas_scene3d::points::cap_bits(l, k) << 6),
                     dash: half_bits(l.dash[0]) | (half_bits(l.dash[1]) << 16),
                 };
                 batch.lines.push(&l.id, bytemuck::bytes_of(&record));
             }
         }
         batch.lines.finish(device, &mut next, &mut written);
+        for (line, s) in batch.lines.uploaded_segments() {
+            self.counts
+                .segment_uploads
+                .entry(line.into())
+                .or_default()
+                .push(s);
+        }
         batch.points.begin();
         for p in &layer.points {
             let shape = match p.shape {

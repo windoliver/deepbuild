@@ -492,6 +492,12 @@ alone.push('tests/acceptance/306-redraft-1958/');
 // budgets.test.ts reads the machine's load.
 alone.push('tests/acceptance/157/', 'tests/acceptance/157-oracle/');
 timed.push('tests/acceptance/157/budgets.test.ts');
+// #1183's files each build deep-show and judge 3D figures whose logic runs in the sandbox.
+alone.push('tests/acceptance/1183/');
+// #537's files build deep-gpu (most also deep-show, and #544's assembler), run logic programs and draw on the GPU;
+// ac4-budget times 2,000 units at 1080p against the showpiece class's GPU budget.
+alone.push('tests/acceptance/537/', 'tests/acceptance/537-oracle/');
+timed.push('tests/acceptance/537/ac4-budget.test.ts');
 // #1920's files build deep-show seven times, in the full and core sets, and read each build's published plan.
 alone.push('tests/acceptance/1920/');
 

@@ -35,6 +35,7 @@ mod jobs;
 mod kept;
 mod kinds;
 mod kit;
+mod lengths;
 mod logic;
 mod media;
 mod mixdown;
@@ -1225,6 +1226,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 || deep_canvas_motion::arrange::PLANTED.contains(p)
                 || *p == deep_canvas_motion::module::UNDECLARED_KIND_ACCEPTED
                 || deep_canvas_motion::module::PLANTED.contains(p)
+                || *p == deep_canvas_motion::lengths::ONE_VALUE
                 || deep_canvas_marks::arrays::PLANTED.contains(p)
                 // #1967's wrong programs live in the cells module's playback and conversion.
                 || deep_canvas_cells::recording::PLANTED.contains(p)
