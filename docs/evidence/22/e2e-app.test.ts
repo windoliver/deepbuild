@@ -16,7 +16,18 @@ const OUT = process.env.E2E_OUT!;
 mkdirSync(OUT, { recursive: true });
 const out: string[] = [];
 const log = (s: string) => { out.push(s); writeFileSync(join(OUT, 'app-run.txt'), `${out.join('\n')}\n`); };
-const shot = (name: string) => { execFileSync('screencapture', ['-x', join(OUT, name)]); log(`   screenshot ${name}`); };
+// The app's own window only, so nothing else on the screen is kept; the display is woken first (a sleeping one is black).
+const windowOf = (pid: number) => execFileSync('swift', ['-e', `import CoreGraphics
+let all = CGWindowListCopyWindowInfo(.optionOnScreenOnly, kCGNullWindowID) as! [[String: Any]]
+print(all.first { ($0["kCGWindowOwnerPID"] as? Int) == ${pid} && ($0["kCGWindowLayer"] as? Int) == 0 }?["kCGWindowNumber"] as? Int ?? 0)`], { encoding: 'utf8' }).trim();
+let appPid = 0;
+const shot = (name: string) => {
+  execFileSync('caffeinate', ['-u', '-t', '3']);
+  const id = windowOf(appPid);
+  if (id === '0') throw Error(`BLOCKED: no on-screen window for deep-app pid ${appPid}, so ${name} wasn't taken`);
+  execFileSync('screencapture', ['-x', '-o', '-l', id, join(OUT, name)]);
+  log(`   screenshot ${name} (window ${id})`);
+};
 
 it('app', async () => {
   const h: any = a27;
@@ -30,6 +41,7 @@ it('app', async () => {
   await h.setup(home);
   const app = await a994.startApp(home, 'allowed');
   await a994.windowUp(app);
+  appPid = app.pid;
   log(`World: home ${home}; deep-app pid ${app.pid}; machine ${execFileSync('sysctl', ['-n', 'hw.model'], { encoding: 'utf8' }).trim()}`);
   const ask = async (who: string, n: number, o: any = {}) => {
     const question = `${who}: which header colour for checkout screen ${n}?`;
