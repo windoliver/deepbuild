@@ -74,7 +74,8 @@ tactics merged 9385 bytes; imports: [] exports: init:function step:function read
 - `--planted linker_adds_linking_section`, `plain` (no links): rewritten hash
   `a320863f1afd248ac216bc044c0664ddb0531079393657e64b3ba03db7805ebb`, where the shipped linker leaves
   `342531a722a01595df4e9f2b6bc9353a536676f19c135fe056987d9f7edb74f2` (line 4 above): the twin changes an unlinked
-  program's hash; the shipped linker never runs on it (`linked: null`, `link_ns: 0`).
+  program's hash; the shipped linker leaves it unlinked (`linked: null`; `link_ns` is 0 for the twin too, so it shows nothing here),
+  and ac07 checks the rest.
 - `--planted linker_links_in_listing_order`, `tactics`: `{"ok":false,"code":"link_refused","item":"tactics",
   "refusals":[{"rule":"link","import":{"module":"lib:grid_path","name":"find_route"}}]}`: pathing@1 placed before
   grid_path@1 leaves its import unresolved, and the refusal names it.
@@ -105,7 +106,10 @@ same results (see the rerun below).
   `acceptance-linux-9a02471b6.txt`).
 - 9: `tactics` links grid_path@1 then pathing@1 (line 12); grid_path@1 with grid_path@2 is refused naming both (13);
   the listing-order twin is refused naming the import (above). The ping/pong cycle is covered by the suite (ac09).
-- 3, and 4's app-vs-headless-Chrome fixture test, pass in the acceptance suite (`acceptance-linux-9a02471b6.txt`);
+- 3, and 4's app-vs-headless-Chrome fixture test, pass in the acceptance suite (`acceptance-linux-9a02471b6.txt`).
+  That ac04 test compares only the fixture's `deep_hashes`, the state before step 0, which the honest and the
+  corner-cutting libraries share; the page's item-hash, route and moves comparison is what tells them apart, so the
+  browser half of 4 rests on the page too.
   4's merged programs on macOS arm64 and Linux x86_64 and
   all of 10 are BLOCKED here; they run on the reference Mac (the x86_64 leg in its Docker linux/amd64 image). So 4, 5 and 10 are not proven.
 - Oracle lane: BLOCKED. The issue's upstream tests for 2 of the 10 criteria were never read or run: their page in
@@ -132,8 +136,8 @@ cd target/e2e190
 ../debug/deep-logic < app-bakes.jsonl > app-bakes-replies.jsonl
 ```
 
-`e2e-raw/` holds those outputs. `web-replies.jsonl` was first written by the 0ed3de856 build; rerun from the same
-`web.jsonl` by the 9a02471b6 build it came out byte-identical, and that run's output is the file saved here. In the replies, base64 strings over 200 characters (the merged programs' bytes) are cut
+`e2e-raw/` holds those outputs. `web-replies.jsonl` is the 9a02471b6 build's output (an earlier build wrote it first, by
+the session's report; the rerun was byte-identical). In the replies, base64 strings over 200 characters (the merged programs' bytes) are cut
 short; no array here is long enough to be cut. The reply files were also re-serialized with `", "` and `": "`
   spacing, so they are equal in content, not byte for byte, to `deep-logic`'s output. `web-replies.jsonl`, `labels.json` and `grids.json` are kept whole. The
 requests themselves aren't kept: they are 0.8 MB, and `gen.test.ts` rebuilds them.
@@ -377,3 +381,7 @@ raw files, `gen.test.ts`, the code and the issue. It also ran its own BFS over t
   request lines, one of them a `pack_check` with no piece.
 - **Round 24** found no wrong values (its rerun gave byte-identical 00–06; `fixture_once` 4 passed) and one low gap,
   fixed here: the rerun's replies were called whole, though their long base64 is cut.
+- **Round 25** found no wrong values (its rerun gave byte-identical 00–06 and `web-replies.jsonl`; `fixture_once` 4
+  passed) and three low gaps, fixed here: `link_ns: 0` no longer cited as proof for the no-links twin; ac04's
+  browser test is described with its limit and the page named as the stronger proof; and the earlier build that
+  wrote `web-replies.jsonl` first is marked as a report.
