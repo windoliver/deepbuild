@@ -27,6 +27,7 @@ mod effects;
 mod envelope;
 #[cfg(feature = "test-faults")]
 mod faults;
+mod fed;
 mod fix;
 mod film;
 mod fixtures;
@@ -122,6 +123,11 @@ pub enum Planted {
     WaitsOnGpu,
     CompilesOnUiThread,
     ExposesGpuToPanels,
+    /// #537's wrong programs (tests/acceptance/537/README.md: Planted twins).
+    InstancerAddressesBySlot,
+    OverlayKeepsGridOnSeek,
+    LineReadsPreviousStep,
+    PartPoseInWorldSpace,
     /// #378's wrong programs (tests/acceptance/378/README.md: Planted programs).
     ForwardZ,
     EncodesTwice,
@@ -644,6 +650,10 @@ impl Planted {
             "times_only_scene" => Planted::TimesOnlyScene,
             "wait_clock_after_warmup" => Planted::WaitClockAfterWarmup,
             "picks_largest_gain" => Planted::PicksLargestGain,
+            "instancer_addresses_by_slot" => Planted::InstancerAddressesBySlot,
+            "overlay_keeps_grid_on_seek" => Planted::OverlayKeepsGridOnSeek,
+            "line_reads_previous_step" => Planted::LineReadsPreviousStep,
+            "part_pose_in_world_space" => Planted::PartPoseInWorldSpace,
             _ => return None,
         })
     }
