@@ -6,7 +6,7 @@
 // is the orbiting scene (helpers: `orbitDoc`, a showpiece whose camera turns 15° a second about six boxes under a
 // casting sun) as its writer's payload, full screen on this Mac's display, for the design's run of 60 s, in a look with
 // frame history on (antialias, window 8) beside the sun's shadows. The scene's row holds the envelope's totals: its frame
-// time PASS against the showpiece class's 10 ms by the five-run rule, and its GPU memory PASS against 256 MB. The
+// time PASS against the showpiece class's 10 ms by the five-run rule, and its GPU memory PASS against 512 MB. The
 // window's memory is counted in that GPU memory: the row's `gpu_memory.history_bytes` (the window's frames as the device
 // reports them inside `peak_bytes`) is at least 4 B per pixel per window frame at a quarter of the display (scale 0.5,
 // the lowest a live view takes), and within `peak_bytes`. The window is rendered again in the seek rebuild: the reply's
@@ -27,7 +27,7 @@ const bin = useGpu();
 const dir = useDir();
 const SECONDS = 60;
 const SHOWPIECE_GPU_MS = 10;
-const SHOWPIECE_BYTES = 256_000_000;
+const SHOWPIECE_BYTES = 512_000_000;
 
 describe(`${ID} the combined envelope with frame history on`, () => {
   it(`${ID} with frame history beside every other pass, the scene holds the envelope's frame time and GPU memory on this reference Mac, counting the window's memory, and its seek rebuild renders the window again`, async () => {
@@ -58,7 +58,7 @@ describe(`${ID} the combined envelope with frame history on`, () => {
 
     const time = obj(row!['frame_time'], 'the scene: frame_time');
     expect(num(time['limit_ms'], 'frame_time.limit_ms'), 'the scene is held to the showpiece class\'s 10 ms').toBe(SHOWPIECE_GPU_MS);
-    expect(num(memory['limit_bytes'], 'gpu_memory.limit_bytes'), 'and to its 256 MB').toBe(SHOWPIECE_BYTES);
+    expect(num(memory['limit_bytes'], 'gpu_memory.limit_bytes'), 'and to its 512 MB (crates/deep-canvas/src/budget.rs: 512 × MB, MB = 1,000,000 B)').toBe(SHOWPIECE_BYTES);
     const runs = arr(time['runs'], 'frame_time.runs').map((r) => shown(r, 200)).join(', ');
     console.log(`${ID}: frame time ${String(time['verdict'])} (${runs}); GPU memory ${String(memory['verdict'])}`);
     expect([time['verdict'], memory['verdict']], `the scene's frame time and GPU memory are judged: ${shown(row)}`).not.toContain('FAIL');
