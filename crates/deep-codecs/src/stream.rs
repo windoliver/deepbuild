@@ -889,7 +889,7 @@ mod tests {
 
     /// #157: the colour probe at 1080p, through a one-frame master part of each codec and the
     /// stream as BGRA, reads back with every 16 × 16 patch within 2 code values on average, and
-    /// ProRes 4444's every pixel within 2, in well under a second; the planted encoders that
+    /// ProRes 4444's every pixel within 2 (its time is AC14's budget, judged with the load); the planted encoders that
     /// stretch NV12 to full range, or tag it BT.601 full range, don't. (At standard, H.264's and
     /// HEVC's patches are off by up to 3 and 4: a chroma step is 2 code values of blue.)
     #[test]
@@ -928,7 +928,6 @@ mod tests {
                 let (colour, alpha) = worst(back, &probe);
                 assert!(colour <= 2 && alpha <= 2, "{colour} {alpha}");
             }
-            assert!(took < Duration::from_secs(1), "{codec} {planted}: {took:?}");
         }
         std::fs::remove_dir_all(dir).unwrap();
     }
