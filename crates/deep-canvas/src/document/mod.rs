@@ -370,6 +370,10 @@ impl Notice {
         if !self.close.is_empty() {
             out.insert("close".into(), json!(self.close));
         }
+        // `pack_missing {pack, version, ids}` (Pack: retired and missing).
+        if self.code == "pack_missing" {
+            packs::retired::fields(&self.actual, &mut out);
+        }
         Value::Object(out)
     }
 }

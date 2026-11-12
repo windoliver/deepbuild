@@ -1,0 +1,108 @@
+scripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `node node_modules/vitest/vitest.mjs run --root tests/acceptance/1401 --no-file-parallelism --testTimeout=600000` runs unleased
+
+ RUN  v5.0.5 ~/dev/claude-worktrees/github-issue-1401-c76487/agent-ad4be01d1e475b198/tests/acceptance/1401
+
+ ❯ analytic.test.ts (1 test | 1 failed) 11032ms
+   ❯ AC1 #1401.e76a9655 pixel probes land on the analytic hit (1)
+     × AC1 #1401.e76a9655 200 seeded pixels on a plane and sphere fixture land within 1e-5 m of the analytic hit; a planted depth reconstruction fails past 1 mm 7630ms
+ ❯ revision.test.ts (1 test | 1 failed) 4197ms
+   ❯ AC4 #1401.83ac6241 a probe reads the requested revision and time (1)
+     × AC4 #1401.83ac6241 a moving item probed at t = 2 s and at an earlier rev matches the evaluated position at that t and rev, not the current one 1899ms
+ ❯ order.test.ts (1 test | 1 failed) 4032ms
+   ❯ AC3 #1401.a6573e7a hits nearest first, ties by ID (1)
+     × AC3 #1401.a6573e7a through a glass pane over a box, one probe returns two hits, pane first, and two coplanar faces at equal distance return the same order on 100 runs 1942ms
+ ❯ sky.test.ts (1 test | 1 failed) 4031ms
+   ❯ AC2 #1401.b2d6901b a sky pixel returns no hits (1)
+     × AC2 #1401.b2d6901b a sky pixel returns hits: []; a planted nearest-item probe fails 2012ms
+ ❯ writers.test.ts (1 test | 1 failed) 4015ms
+   ❯ AC5 #1401.39142bf2 a probe on another writer's layer (1)
+     × AC5 #1401.39142bf2 a probe landing on another writer's layer returns ref_unresolved and no position 1785ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  analytic.test.ts > AC1 #1401.e76a9655 pixel probes land on the analytic hit > AC1 #1401.e76a9655 200 seeded pixels on a plane and sphere fixture land within 1e-5 m of the analytic hit; a planted depth reconstruction fails past 1 mm
+AssertionError: render-back from cam-plane-near: render-back answers its probes with `hits`, one list of {item, sub, point, normal, distance} per probe (README: The surface under test); got {"rev":0,"t":0,"outcome":"presented","snapshots":[{"sha256":"843d20ce0d5d5b0994123c9fdb3b3d409d31e19f1bb04dfbb4758ea80e96a0da","w":320,"h":240}],"backends":{"fonts":{"name":"fonts.bundled","version":"1.0.0"},"cpu":{"name":"aarch64","version":"1.0.0"},"headless":{"name":"headless.vello-cpu","version":"0.3.0"}},"core":"core@0.0.0","set_digest":"932c82ee183d8b226f33c5a137ff599209cf2c537e5cda6e877ba94b341421b9"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ hitLists helpers.ts:183:202
+
+ ❯ analytic.test.ts:179:19
+ ❯ probed analytic.test.ts:177:9
+ ❯ analytic.test.ts:220:24
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+
+ FAIL  order.test.ts > AC3 #1401.a6573e7a hits nearest first, ties by ID > AC3 #1401.a6573e7a through a glass pane over a box, one probe returns two hits, pane first, and two coplanar faces at equal distance return the same order on 100 runs
+AssertionError: run 1: render-back: render-back answers its probes with `hits`, one list of {item, sub, point, normal, distance} per probe (README: The surface under test); got {"code":"module_missing","path":"items/pane/kind: mark.box@1","core":"core@0.0.0","set_digest":"932c82ee183d8b226f33c5a137ff599209cf2c537e5cda6e877ba94b341421b9"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ hitLists helpers.ts:183:202
+
+ ❯ order.test.ts:78:38
+ ❯ order.test.ts:76:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯
+
+ FAIL  revision.test.ts > AC4 #1401.83ac6241 a probe reads the requested revision and time > AC4 #1401.83ac6241 a moving item probed at t = 2 s and at an earlier rev matches the evaluated position at that t and rev, not the current one
+AssertionError: render-back at 2 s of revision 1: render-back answers its probes with `hits`, one list of {item, sub, point, normal, distance} per probe (README: The surface under test); got {"code":"module_missing","path":"items/mover/kind: mark.box@1","core":"core@0.0.0","set_digest":"932c82ee183d8b226f33c5a137ff599209cf2c537e5cda6e877ba94b341421b9"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ hitLists helpers.ts:183:202
+
+ ❯ revision.test.ts:83:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/5]⎯
+
+ FAIL  sky.test.ts > AC2 #1401.b2d6901b a sky pixel returns no hits > AC2 #1401.b2d6901b a sky pixel returns hits: []; a planted nearest-item probe fails
+AssertionError: render-back of the block: render-back answers its probes with `hits`, one list of {item, sub, point, normal, distance} per probe (README: The surface under test); got {"code":"module_missing","path":"items/block/kind: mark.box@1","core":"core@0.0.0","set_digest":"932c82ee183d8b226f33c5a137ff599209cf2c537e5cda6e877ba94b341421b9"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ hitLists helpers.ts:183:202
+
+ ❯ probed sky.test.ts:64:10
+ ❯ sky.test.ts:78:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/5]⎯
+
+ FAIL  writers.test.ts > AC5 #1401.39142bf2 a probe on another writer's layer > AC5 #1401.39142bf2 a probe landing on another writer's layer returns ref_unresolved and no position
+AssertionError: render-back by sess-alpha: render-back answers its probes with `hits`, one list of {item, sub, point, normal, distance} per probe (README: The surface under test); got {"code":"module_missing","path":"items/alpha.block/kind: mark.box@1","core":"core@0.0.0","set_digest":"932c82ee183d8b226f33c5a137ff599209cf2c537e5cda6e877ba94b341421b9"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ hitLists helpers.ts:183:202
+
+ ❯ writers.test.ts:72:21
+ ❯ writers.test.ts:71:13
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/5]⎯
+
+
+ Test Files  5 failed (5)
+      Tests  5 failed (5)
+   Start at  01:32:36
+   Duration  28.49s (tests 98%, import 1%, transform 1%)
+

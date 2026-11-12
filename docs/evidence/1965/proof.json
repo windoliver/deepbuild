@@ -1,0 +1,106 @@
+{
+  "commit": "3962d5281ccf822af55928df2c3c77deeee159f0",
+  "path": "crates/deep-canvas-marks/src/code.rs",
+  "lines": [
+    113,
+    131
+  ],
+  "source_sha256": "76fd709c20dfd98c5ec05833a16e22d831cd9a5c6522a1b0a02117f49c0f3ac0",
+  "raw_bytes": 743,
+  "tokens": 126,
+  "looks": {
+    "clean": {
+      "check_ok": true,
+      "errors": [],
+      "quotation": 8,
+      "drawn": true,
+      "roles": [
+        "ink",
+        "term_blue",
+        "term_cyan",
+        "term_magenta",
+        "term_red"
+      ]
+    },
+    "notebook_pencil": {
+      "check_ok": true,
+      "errors": [],
+      "quotation": 8,
+      "drawn": true,
+      "roles": [
+        "code_function",
+        "code_keyword",
+        "code_number",
+        "code_type",
+        "ink"
+      ]
+    },
+    "chalk": {
+      "check_ok": true,
+      "errors": [],
+      "quotation": 8,
+      "drawn": true,
+      "roles": [
+        "code_function",
+        "code_keyword",
+        "code_number",
+        "code_type",
+        "ink"
+      ]
+    },
+    "dark_math": {
+      "check_ok": true,
+      "errors": [],
+      "quotation": 8,
+      "drawn": true,
+      "roles": [
+        "code_function",
+        "code_keyword",
+        "code_number",
+        "code_type",
+        "ink"
+      ]
+    }
+  },
+  "mismatched_quote": [
+    {
+      "code": "quote_mismatch",
+      "ids": [
+        "fn"
+      ],
+      "path": "items/fn/params/raw",
+      "actual": {
+        "line": 116,
+        "byte": 27
+      },
+      "what": "the raw bytes differ from the source's at line 116, byte 27",
+      "fix": "Quote the source's bytes exactly, line ends included, or don't quote it."
+    }
+  ],
+  "unknown_class": [
+    {
+      "code": "out_of_range",
+      "ids": [
+        "fn"
+      ],
+      "path": "items/fn/params/code/tokens/0/class: identifier",
+      "actual": {
+        "class": "identifier",
+        "classes": [
+          "keyword",
+          "type",
+          "function",
+          "variable",
+          "string",
+          "number",
+          "comment",
+          "operator",
+          "punctuation",
+          "plain"
+        ]
+      },
+      "what": "a token's class is one of keyword, type, function, variable, string, number, comment, operator, punctuation, plain; `identifier` is none of them",
+      "fix": "Give the token a class of the list."
+    }
+  ]
+}

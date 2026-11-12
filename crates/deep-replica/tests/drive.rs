@@ -218,3 +218,42 @@ fn a_line_its_clip_cuts_is_still_audited_past_its_frame() {
     }
     assert_eq!(reply["claim"], "FAIL");
 }
+
+/// A notice sits above the box, so it never covers the box's Send (#1100: Set up's long line covered it).
+#[test]
+fn a_notice_never_covers_the_boxs_send() {
+    let panel = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/fails-to-load-panel"
+    );
+    let (mut drive, _) = Drive::launch(
+        "notice-over-box",
+        json!({"from": "fixture", "panel": panel, "view": {"name": "Broken view", "pages": [], "commands": []},
+            "size": [1512, 982], "scale": 1}),
+    );
+    let t = drive.call(json!({"call": "see"}))["t"].as_i64().unwrap();
+    let waited = drive.call(
+        json!({"call": "wait_for", "wait_for": {"t": t + 705_600_000 / 2}, "timeout": 10_000}),
+    );
+    assert_eq!(waited["ok"], true, "{waited}");
+    let seen = drive.call(json!({"call": "see"}));
+    fn flat<'a>(node: &'a Value, into: &mut Vec<&'a Value>) {
+        into.push(node);
+        for child in node["children"].as_array().into_iter().flatten() {
+            flat(child, into);
+        }
+    }
+    let mut nodes = Vec::new();
+    flat(&seen["snapshot"]["tree"], &mut nodes);
+    let send = nodes
+        .iter()
+        .find(|n| n["id"] == "box-send")
+        .unwrap_or_else(|| panic!("the page draws the box's Send: {seen}"));
+    let notice = nodes
+        .iter()
+        .find(|n| n["id"].as_str().is_some_and(|id| id.starts_with("notice:")))
+        .unwrap_or_else(|| panic!("the failed view is named in a notice: {seen}"));
+    let ([sx, sy, sw, sh], [nx, ny, nw, nh]) = (boxed(&send["bounds"]), boxed(&notice["bounds"]));
+    let apart = nx + nw <= sx || sx + sw <= nx || ny + nh <= sy || sy + sh <= ny;
+    assert!(apart, "the notice {notice} covers Send {send}");
+}

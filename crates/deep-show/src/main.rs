@@ -41,9 +41,11 @@ mod mixdown;
 mod modes;
 mod narration;
 mod packs;
+mod retired;
 mod physics;
 mod placement;
 mod played;
+mod probe;
 #[cfg(feature = "test-accent")]
 mod planted;
 mod query;
@@ -578,6 +580,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
                 .filter(|t| *t >= 0)?,
                 rev: c.get("rev")?.as_u64()?,
                 size: px_size(c.get("size"), |n| *n > 0)?,
+                probes: probe::parse(c)?,
             });
         }
         "screen" => return Some(Call::Screen),
@@ -592,6 +595,12 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
                 id: c.get("id")?.as_str()?.to_string(),
                 dir: PathBuf::from(c.get("dir")?.as_str()?),
                 session: optional(c.get("session"), |s| Some(s.as_str()?.to_string()))?,
+            })
+        }
+        "uninstall_pack" => {
+            return Some(Call::UninstallPack {
+                id: c.get("id")?.as_str()?.to_string(),
+                version: c.get("version")?.as_str()?.to_string(),
             })
         }
         "registries" => return Some(Call::Registries),
@@ -1299,6 +1308,8 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "box_sends_every_id" => Planted::BoxSendsEveryId,
                 "resolver_only_ref_unresolved" => Planted::ResolverOnlyRefUnresolved,
                 "resolver_closes_task" => Planted::ResolverClosesTask,
+                "probe_from_depth" => Planted::ProbeFromDepth,
+                "probe_nearest_item" => Planted::ProbeNearestItem,
                 "verdict_keyed_by_doc" => Planted::VerdictKeyedByDoc,
                 "checks_skip_unknown_kind" => Planted::ChecksSkipUnknownKind,
                 "missing_kind_inconclusive" => Planted::MissingKindInconclusive,
@@ -1319,6 +1330,8 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 }
                 "pack_check_skips_requires_modules" => Planted::PackCheckSkipsRequiresModules,
                 "packs_keyed_by_name" => Planted::PacksKeyedByName,
+                "store_sweep_deletes_named" => Planted::StoreSweepDeletesNamed,
+                "loader_draws_missing_with_installed" => Planted::LoaderDrawsMissingWithInstalled,
                 "counts_agent_rule_as_cover" => Planted::OwnRuleCountsAsCover,
                 "recipe_rules_twice" => Planted::RulesEvaluatedTwice,
                 "kit_tests_defaults_only" => Planted::KitDefaultsOnly,
@@ -1967,7 +1980,7 @@ fn modules(set: BuildSet) -> Vec<Module> {
         });
         // Issue #308: controls and the input track's handling, with control@1; #535: logic's arrays.
         out.extend([deep_canvas_input::module::module(), deep_logic::module()]);
-        out.push(physics::module());
+        out.extend(physics::module());
     }
     // Issue #238: the sandbox module, on core alone; `test-sandbox-alt` seals the test
     // implementation `sandbox.alt` in its place, and `test-sandbox-needs-logic` plants a manifest
@@ -3032,6 +3045,8 @@ fn export_planted(name: &str) -> Option<Planted> {
         "drop_frame_every_tenth_minute" => Planted::DropFrameEveryTenthMinute,
         "timecode_track_zero" => Planted::TimecodeTrackZero,
         "png_premultiplies_straight" => Planted::PngPremultipliesStraight,
+        "video_drops_frame_300" => Planted::VideoDropsFrame300,
+        "range_starts_one_frame_late" => Planted::RangeStartsOneFrameLate,
         _ => return None,
     })
 }

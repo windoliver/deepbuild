@@ -731,6 +731,18 @@ impl Ctx {
             ..Ctx::default()
         }
     }
+
+    /// The document's timeline: its tempo map and markers, so a time read after the document's
+    /// own (a shot's, #1163) lands where a key's does.
+    pub(crate) fn timeline(
+        doc: &Map<String, Value>,
+        frame_rate: (u32, u32),
+    ) -> Result<Ctx, Refused> {
+        let mut ctx = Ctx::of(frame_rate);
+        ctx.tempo = Tempo::read(doc, &ctx.time, false)?;
+        markers_of(doc, &mut ctx)?;
+        Ok(ctx)
+    }
 }
 
 /// A time field's flicks: a bar:beat through the tempo map, anything else through the core.

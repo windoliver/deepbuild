@@ -17,6 +17,9 @@ pub struct Video<'a> {
     pub ticks: u32,
     pub samples: Vec<&'a [u8]>,
     pub keys: Option<Vec<bool>>,
+    /// A sample, by index, that lasts two frames: the planted writer's in place of the frame it
+    /// drops (#1163).
+    pub held: Option<u32>,
 }
 
 /// Interleaved 32-bit float samples, little-endian.
@@ -88,6 +91,8 @@ struct Trak {
     /// Sample count and each sample's duration in the track's ticks.
     count: u32,
     delta: u32,
+    /// A sample, by index, that lasts two deltas.
+    held: Option<u32>,
     size: [u32; 2],
     volume: u16,
     /// The media information header box.
@@ -107,7 +112,7 @@ struct Trak {
 
 impl Trak {
     fn duration(&self) -> u64 {
-        self.count as u64 * self.delta as u64
+        (self.count as u64 + u64::from(self.held.is_some())) * self.delta as u64
     }
 
     /// The presented ticks: the edit's, else the whole track's.
@@ -251,7 +256,18 @@ fn trak(brand: Brand, t: &Trak, id: u32, movie: u32, at: u64, wide: bool) -> Vec
         .concat(),
     );
     let stsd = full_box(b"stsd", 0, &[&be(1)[..], &t.entry].concat());
-    let stts = full_box(b"stts", 0, &[be(1), be(t.count), be(t.delta)].concat());
+    let runs: Vec<[u32; 2]> = match t.held.filter(|h| *h < t.count) {
+        None => vec![[t.count, t.delta]],
+        Some(h) => [[h, t.delta], [1, 2 * t.delta], [t.count - h - 1, t.delta]]
+            .into_iter()
+            .filter(|r| r[0] > 0)
+            .collect(),
+    };
+    let entries: Vec<u8> = runs
+        .iter()
+        .flat_map(|[n, d]| [be(*n), be(*d)].concat())
+        .collect();
+    let stts = full_box(b"stts", 0, &[&be(runs.len() as u32)[..], &entries].concat());
     let stss = (t.keys.as_ref())
         .map(|keys| {
             let list: Vec<u8> = keys.iter().flat_map(|k| be(*k)).collect();
@@ -312,6 +328,7 @@ pub fn write(
         timescale: video.timescale,
         count,
         delta: video.ticks,
+        held: video.held,
         size: video.size,
         volume: 0,
         header: full_box(b"vmhd", 1, &[0; 8]),
@@ -334,6 +351,7 @@ pub fn write(
             timescale,
             count,
             delta,
+            held: None,
             size: [0; 2],
             volume: 0x100,
             header: full_box(b"smhd", 0, &[0; 4]),
@@ -384,6 +402,7 @@ pub fn write(
             timescale: video.timescale,
             count: 1,
             delta: count * video.ticks,
+            held: None,
             size: [0; 2],
             volume: 0,
             header: match brand {
@@ -475,6 +494,7 @@ mod tests {
             ticks,
             samples: samples.to_vec(),
             keys: Some(vec![true, false, false]),
+            held: None,
         };
         let audio = Audio::Pcm(Pcm {
             rate: 48000,

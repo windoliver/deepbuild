@@ -30,7 +30,7 @@ use std::{
 
 use deep_app::{
     events::{inbox, Fixture, Row},
-    notify::{Notifier, NOTIFY_AFTER},
+    notify::{NotificationSetting, Notifier, NOTIFY_AFTER},
     views::{AppState, Kind, Layout, AGENTS, HOME, NEEDS_YOU, SESSION, WELCOME},
 };
 use gpui_kit::{test::TestWindowExt as _, *};
@@ -202,6 +202,8 @@ struct Replica {
     evidence: Vec<Value>,
     trace: Vec<Value>,
     notified: Vec<Value>,
+    /// Issue #1100: each request the app made of macOS to allow notifications, `{t, ask}`: the ask it was posting, or null.
+    permission_requests: Vec<Value>,
     /// Issue #1461: how the hub the app reads answers (`answering`, `stopped` or `slow`), and the app's watch of it.
     hub_state: String,
     watch: deep_app::record::HubWatch,
@@ -241,6 +243,12 @@ impl Replica {
         )?;
         // Issue #1461: a machine whose setup hasn't finished, the hub the app reads, and where a panel goes.
         let setup = word("setup", &["finished", "unfinished"], "finished")?;
+        // Issue #1100: macOS's notification setting, `not_asked` for a fresh account; the stand-in grants each request.
+        let notifications = word(
+            "notifications",
+            &["not_asked", "allowed", "denied", "alerts_none", ""],
+            "",
+        )?;
         let hub_state = word("hub", &["answering", "stopped", "slow"], "answering")?;
         let area = match &args["area"] {
             Value::Null => None,
@@ -661,6 +669,9 @@ impl Replica {
         for event in &events {
             notifier.saw(event, now);
         }
+        if let Some(setting) = NotificationSetting::parse(&notifications) {
+            notifier.set_setting(setting, now);
+        }
         let mut replica = Replica {
             id,
             cx,
@@ -689,6 +700,7 @@ impl Replica {
             evidence: Vec::new(),
             trace: Vec::new(),
             notified: Vec::new(),
+            permission_requests: Vec::new(),
             hub_state,
             watch: deep_app::record::HubWatch::default(),
             motion: None,
@@ -865,11 +877,23 @@ impl Replica {
 
     fn notify(&mut self) {
         let now = self.now + self.clock.t * 1000 / FLICKS;
+        // The Set up click asks macOS (#1100); the stand-in answers at once, as a person pressing Allow.
+        if deep_app::notify::take_ask() {
+            self.permission_requests
+                .push(json!({"t": self.clock.t, "ask": null}));
+            self.notifier.set_setting(NotificationSetting::Allowed, now);
+        }
         let notifier = &mut self.notifier;
         // Sounds off in the box's words (#1998) leave the question unsounded, as in the app.
         let sounds = deep_app::hub::sounds_on();
         let due = deep_app::record::with_view(|view| notifier.due(view, now, None, sounds));
         for posted in due.unwrap_or_default() {
+            // A post while macOS was never asked asks it then, as GPUI's center does on its first post.
+            if self.notifier.reach(false).setting == NotificationSetting::NotAsked {
+                self.permission_requests
+                    .push(json!({"t": self.clock.t, "ask": posted.ask}));
+                self.notifier.set_setting(NotificationSetting::Allowed, now);
+            }
             #[cfg(target_os = "macos")]
             if self.plant == Some(Plant::StartsSound) && posted.sound.is_some() {
                 plant::play_sound();
@@ -1616,7 +1640,8 @@ impl Replica {
         let hub = self.hub_copy.calls();
         let menus = self.see_menus();
         Ok(
-            json!({"snapshot": snapshot, "sha256": hash, "rows": rows, "log_pos": log_pos, "address": address, "hub": hub, "menus": menus}),
+            json!({"snapshot": snapshot, "sha256": hash, "rows": rows, "log_pos": log_pos, "address": address, "hub": hub, "menus": menus,
+                "notifications": {"setting": self.notifier.reach(false).setting.name()}}),
         )
     }
 
@@ -1840,7 +1865,7 @@ impl Replica {
         };
         let trace = json!({
             "format": "deep_drive.trace@1", "replica": self.id, "calls": self.trace, "notifications": self.notified,
-            "hub": self.hub_copy.calls(),
+            "hub": self.hub_copy.calls(), "permission_requests": self.permission_requests,
         });
         let path = self.out.join("trace.json");
         let bytes = trace.to_string();
