@@ -186,6 +186,99 @@ pub fn jumps(diffs: &[f64], still: &[bool]) -> Vec<bool> {
         .collect()
 }
 
+/// The pairs inside a cross-fade an export shows, cut or not by the timeline: a window of 2 × 2,
+/// 3, 5, 8 or 12 pairs, none of them `cut_like`, whose steps share the change (none over 75% of
+/// it, 10 levels in all), whose ends differ over the frame (10 levels on average, over 20 levels
+/// at a fifth of its pixels), and whose middle frames are blends of its ends: each frame's share
+/// of the first end falls by no more than 0.08 a frame from over 0.55 to under 0.45, two or more
+/// lie between 0.15 and 0.85, and what a blend leaves unexplained stays under 0.22 of the ends'
+/// difference there and 0.25 overall. Overlapping windows: the one whose ends differ most, then
+/// the one closest to a blend.
+pub fn dissolves(
+    frames: &[Vec<u8>],
+    w: usize,
+    rows: usize,
+    diffs: &[f64],
+    cut_like: &[bool],
+) -> Vec<bool> {
+    let (n, px) = (frames.len(), w * rows);
+    let mut found: Vec<(usize, usize, f64, f64)> = Vec::new();
+    for half in [2usize, 3, 5, 8, 12] {
+        for t in half..n.saturating_sub(half) {
+            let (a, b) = (t - half, t + half);
+            if cut_like[a..b].iter().any(|c| *c) {
+                continue;
+            }
+            let sum: f64 = diffs[a..b].iter().sum();
+            if diffs[a..b].iter().any(|d| *d > 0.75 * sum) || sum < 10.0 {
+                continue;
+            }
+            let (fa, fb) = (&frames[a][..px], &frames[b][..px]);
+            let ends: Vec<f64> = fa
+                .iter()
+                .zip(fb)
+                .map(|(x, y)| f64::from(*x) - f64::from(*y))
+                .collect();
+            let apart = ends.iter().map(|d| d.abs()).sum::<f64>() / px.max(1) as f64;
+            let wide = ends.iter().filter(|d| d.abs() > 20.0).count() as f64 / px.max(1) as f64;
+            if apart < 10.0 || wide < 0.20 {
+                continue;
+            }
+            let norm = ends.iter().map(|d| d * d).sum::<f64>() + 1e-6;
+            let (mut left, mut shares) = (Vec::new(), Vec::new());
+            for f in &frames[a + 1..b] {
+                let x: Vec<f64> = f[..px]
+                    .iter()
+                    .zip(fb)
+                    .map(|(x, y)| f64::from(*x) - f64::from(*y))
+                    .collect();
+                let share = x.iter().zip(&ends).map(|(x, d)| x * d).sum::<f64>() / norm;
+                let off = x
+                    .iter()
+                    .zip(&ends)
+                    .map(|(x, d)| (x - share * d).abs())
+                    .sum::<f64>()
+                    / px.max(1) as f64;
+                left.push(off / (apart + 1e-6));
+                shares.push(share);
+            }
+            let falls = shares.windows(2).all(|p| p[1] - p[0] <= 0.08);
+            let mid: Vec<f64> = shares
+                .iter()
+                .zip(&left)
+                .filter(|(s, _)| **s > 0.15 && **s < 0.85)
+                .map(|(_, l)| *l)
+                .collect();
+            let mean = |v: &[f64]| v.iter().sum::<f64>() / v.len().max(1) as f64;
+            let (first, last) = (
+                shares.first().copied().unwrap_or(0.0),
+                shares.last().copied().unwrap_or(1.0),
+            );
+            if mid.len() >= 2
+                && mean(&mid) < 0.22
+                && mean(&left) < 0.25
+                && falls
+                && first > 0.55
+                && last < 0.45
+            {
+                found.push((a, b, mean(&left), apart));
+            }
+        }
+    }
+    found.sort_by(|x, y| {
+        (-x.3.round(), x.2)
+            .partial_cmp(&(-y.3.round(), y.2))
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    let mut out = vec![false; n.saturating_sub(1)];
+    for (a, b, _, _) in found {
+        if !out[a..b].iter().any(|x| *x) {
+            out[a..b].fill(true);
+        }
+    }
+    out
+}
+
 /// Whether a gray frame (`w` px wide, its first `rows` rows read) is blank: under 0.2% of its
 /// pixels has a 3×3 Sobel gradient over 24 levels, borders reflected.
 pub fn blank(frame: &[u8], w: usize, rows: usize) -> bool {
@@ -518,6 +611,51 @@ mod tests {
         assert!(!jumps(&d, &moving)[10]);
         let frames = vec![vec![0u8; 8], vec![9u8; 8]];
         assert_eq!(diffs(&frames, 4, 2), vec![9.0]);
+    }
+
+    #[test]
+    fn a_blend_between_two_frames_reads_as_a_cross_fade_and_a_cut_does_not() {
+        // Still at 0, a 7-frame blend to 200, still at 200; then a hard cut to 0 and still.
+        let mut levels: Vec<f64> = vec![0.0; 10];
+        levels.extend((1..=7).map(|k| 200.0 * f64::from(k) / 8.0));
+        levels.extend([200.0; 10]);
+        levels.extend([0.0; 10]);
+        let frames: Vec<Vec<u8>> = levels.iter().map(|v| vec![*v as u8; 16]).collect();
+        let d = diffs(&frames, 4, 4);
+        let cut = jumps(&d, &vec![true; d.len()]);
+        let faded = dissolves(&frames, 4, 4, &d, &cut);
+        let pairs: Vec<usize> = faded
+            .iter()
+            .enumerate()
+            .filter(|(_, f)| **f)
+            .map(|(i, _)| i)
+            .collect();
+        assert!(
+            pairs.contains(&9) && pairs.contains(&16),
+            "the blend's pairs are left out: {pairs:?}"
+        );
+        assert!(!faded[26], "the hard cut isn't a cross-fade");
+        assert!(cut[26], "the hard cut reads as a cut");
+        // A film that never changes, and a bar sliding across the frame, hold no cross-fade.
+        let still = vec![vec![90u8; 16]; 30];
+        let d = diffs(&still, 4, 4);
+        assert!(!dissolves(&still, 4, 4, &d, &vec![false; d.len()]).contains(&true));
+        let slide: Vec<Vec<u8>> = (0..30)
+            .map(|k| {
+                let mut f = vec![0u8; 128];
+                for row in f.chunks_mut(32) {
+                    for x in (2 * k % 28)..(2 * k % 28 + 4) {
+                        row[x] = 255;
+                    }
+                }
+                f
+            })
+            .collect();
+        let d = diffs(&slide, 32, 4);
+        assert!(
+            !dissolves(&slide, 32, 4, &d, &vec![false; d.len()]).contains(&true),
+            "a sliding bar isn't a blend"
+        );
     }
 
     #[test]

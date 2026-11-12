@@ -32,7 +32,7 @@
     {
       "name": "look_lock",
       "defaults": {"looks": "one", "palette": "one"},
-      "description": "Every shot is finished in the film's one look, the shot's own look or else the film's, unless the brief names looks: sequence; the palette is the look's.",
+      "description": "Every shot is finished in the film's one look, the shot's own look or else the film's, unless the brief names looks: sequence, and every shot's look draws from the first shot's palette.",
       "threshold": "looks: one, unless the brief names a sequence; palette: one",
       "fix": "Finish the named shot in the film's look, or name the sequence of looks in the brief."
     },
@@ -60,7 +60,7 @@
     {
       "name": "motion_share",
       "defaults": {"min": 0.035, "warn": 0.06, "blank_max": 0.3},
-      "description": "The share of frame pairs that move, from frame differences at 12 fps, 320 px wide in gray as an export carries it, with the caption band (0.15, or 0.18 on a vertical frame) masked, a pair counted when its mean difference is at least 9 levels: under min fails and under warn is a warning. Left out are the pairs a cut or a cross-fade covers, and a jump the camera doesn't make that reads as a cut (at least 8 levels and 3 times the median of the 12 pairs around it, plus 2). A run of blank frames (under 0.2% of pixels on an edge) of blank_max or longer, outside the first and last half second, fails.",
+      "description": "The share of frame pairs that move, from frame differences at 12 fps, 320 px wide in gray as an export carries it, with the caption band (0.15, or 0.18 on a vertical frame) masked, a pair counted when its mean difference is at least 9 levels: under min fails and under warn is a warning. Left out are the pairs a cut or a cross-fade covers, a jump the camera doesn't make that reads as a cut (at least 8 levels and 3 times the median of the 12 pairs around it, plus 2), and a window of up to 24 pairs whose middle frames are blends of its two ends. A run of blank frames (under 0.2% of pixels on an edge) of blank_max or longer, outside the first and last half second, fails.",
       "threshold": "min 0.035, warn 0.06; blank_max 0.3 s; a pair moves at 9 levels",
       "fix": "Add motion inside the shots, a camera move or an animated subject, rather than more transitions; fill a blank stretch with picture."
     },

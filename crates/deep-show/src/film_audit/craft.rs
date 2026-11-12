@@ -22,6 +22,7 @@ use crate::shared::FLICKS;
 
 mod example;
 mod sound;
+mod timeline;
 
 /// craft@1's wrong programs, by the names its acceptance suite gives them.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -61,6 +62,8 @@ pub(crate) struct Analysis {
     pub h: usize,
     pub times: Vec<i64>,
     pub left_out: Vec<bool>,
+    /// The pairs a cut of the timeline falls in.
+    pub cuts: Vec<bool>,
     pub still: Vec<bool>,
 }
 
@@ -456,13 +459,14 @@ impl Hub<'_> {
             self.look = look;
             self.look_def = def;
         }
+        let cuts: Vec<bool> = times
+            .windows(2)
+            .map(|p| film.cuts.iter().any(|&(c, _, _)| p[0] < c && c <= p[1]))
+            .collect();
         let left_out = times
             .windows(2)
-            .map(|pair| {
-                let (a, b) = (pair[0], pair[1]);
-                film.cuts.iter().any(|&(c, _, _)| a < c && c <= b)
-                    || film.joins.iter().any(|&(_, s, e)| s < b && a < e)
-            })
+            .zip(&cuts)
+            .map(|(p, cut)| *cut || film.joins.iter().any(|&(_, s, e)| s < p[1] && p[0] < e))
             .collect();
         let still = cams.windows(2).map(|c| c[0] == c[1]).collect();
         ok.then_some(Analysis {
@@ -471,6 +475,7 @@ impl Hub<'_> {
             h,
             times,
             left_out,
+            cuts,
             still,
         })
     }
@@ -642,10 +647,27 @@ impl Hub<'_> {
             return blocked("the film has no timeline shots to judge".into());
         }
         match name {
-            "shot_length" => self.shot_length(fields, ctx),
-            "camera_grammar" => self.camera_grammar(fields, ctx),
+            "shot_length" => {
+                let drawn = ctx.drawn.clone();
+                self.film(ctx)
+                    .map_or_else(Found::default, |f| timeline::shot_length(f, &drawn, fields))
+            }
+            "camera_grammar" => {
+                let by_label = self.planted(flag(Planted::CameraByLabel));
+                let angle_only = self.planted(flag(Planted::JumpCutAngleOnly));
+                let drawn = ctx.drawn.clone();
+                self.film(ctx).map_or_else(Found::default, |f| {
+                    timeline::camera_grammar(f, &drawn, fields, by_label, angle_only)
+                })
+            }
             "ends" | "text_led" => self.text_led(name, fields, ctx),
-            "look_lock" => look_lock(fields, ctx),
+            "look_lock" => {
+                let drawn = ctx.drawn.clone();
+                let evidence = self.scenario.evidence.clone();
+                let palette = |id: &str| look_palette(&drawn, &evidence, id);
+                self.film(ctx)
+                    .map_or_else(Found::default, |f| look_lock(f, &drawn, fields, &palette))
+            }
             "recipes" => self.recipes(fields, ctx),
             "numbers_in_script" | "caption_band" => self.on_screen(name, fields, ctx),
             "motion_share" => self.motion_share(fields, ctx),
@@ -658,265 +680,6 @@ impl Hub<'_> {
             "sound_lock" => sound::sound_lock(fields, ctx),
             _ => blocked(format!("craft@1's {name} has no run")),
         }
-    }
-
-    fn shot_length(&mut self, fields: &Map<String, Value>, ctx: &mut Ctx) -> Found {
-        let drawn = ctx.drawn.clone();
-        let Some(film) = self.film(ctx) else {
-            return Found::default();
-        };
-        let (min, max, hard) = (
-            num(fields, "min"),
-            num(fields, "max"),
-            num(fields, "hard_max"),
-        );
-        let declared = fields.get("signature").and_then(Value::as_object);
-        let (takes, take_max) = declared.map_or((0, 0.0), |s| {
-            (
-                s.get("count").and_then(Value::as_u64).unwrap_or(1) as usize,
-                seconds(s.get("max")).unwrap_or(20.0),
-            )
-        });
-        // Montage spans: markers whose span lowers the minimum inside it, never under 0.25 s.
-        let montage: Vec<(i64, i64, f64)> = fields
-            .get("montage")
-            .and_then(Value::as_array)
-            .into_iter()
-            .flatten()
-            .filter_map(|m| {
-                let id = m["span"].as_str()?;
-                let mk = drawn.pointer(&format!("/markers/{id}"))?;
-                let t = time_of(&drawn, mk.get("t"))?;
-                let span = time_of(&drawn, mk.get("span"))?;
-                Some((t, t + span, seconds(m.get("min")).unwrap_or(min).max(0.25)))
-            })
-            .collect();
-        let mut out = Found::default();
-        let mut lengths = Map::new();
-        let mut long = 0;
-        for s in &film.shots {
-            let d = secs(s.end - s.start);
-            lengths.insert(s.id.clone(), json!(d));
-            let floor = montage
-                .iter()
-                .find(|(a, b, _)| *a <= s.start && s.end <= *b)
-                .map_or(min, |m| m.2);
-            let id = s.id.as_str();
-            if d + 1e-9 < floor {
-                out.issues.push(raise(
-                    "shot_length",
-                    "craft.shot_length",
-                    "error",
-                    &[id],
-                    s.start,
-                    format!("`{id}` lasts {d:.3} s, under the minimum of {floor} s"),
-                ));
-            } else if d > hard + 1e-9 {
-                long += 1;
-                if long > takes {
-                    out.issues.push(raise("shot_length", "craft.shot_length", "error", &[id], s.start,
-                        format!("`{id}` lasts {d:.3} s, past the hard maximum of {hard} s, and the brief declares {takes} long take(s)")));
-                } else if d > take_max + 1e-9 {
-                    out.issues.push(raise(
-                        "shot_length",
-                        "craft.shot_length",
-                        "error",
-                        &[id],
-                        s.start,
-                        format!(
-                            "the long take `{id}` lasts {d:.3} s, past its maximum of {take_max} s"
-                        ),
-                    ));
-                }
-            } else if d > max + 1e-9 {
-                out.issues.push(raise(
-                    "shot_length",
-                    "craft.shot_length",
-                    "warning",
-                    &[id],
-                    s.start,
-                    format!("`{id}` lasts {d:.3} s, past the maximum of {max} s"),
-                ));
-            }
-        }
-        out.measure = json!({"lengths": lengths});
-        out
-    }
-
-    fn camera_grammar(&mut self, fields: &Map<String, Value>, ctx: &mut Ctx) -> Found {
-        let by_label = self.planted(flag(Planted::CameraByLabel));
-        let angle_only = self.planted(flag(Planted::JumpCutAngleOnly));
-        let drawn = ctx.drawn.clone();
-        let Some(film) = self.film(ctx) else {
-            return Found::default();
-        };
-        let mut out = Found::default();
-        let moves: Vec<(Move, Option<i64>)> = (0..film.shots.len())
-            .map(|i| moved(film, &drawn, i, by_label))
-            .collect();
-        // Pushes in a row, and the share of accents.
-        let run_max = fields
-            .get("push_run_max")
-            .and_then(Value::as_u64)
-            .unwrap_or(2) as usize;
-        let mut run = 0;
-        for (s, (m, _)) in film.shots.iter().zip(&moves) {
-            run = if *m == Move::Push { run + 1 } else { 0 };
-            if run == run_max + 1 {
-                out.issues.push(raise(
-                    "camera_grammar",
-                    "craft.camera_grammar",
-                    "error",
-                    &[&s.id],
-                    s.start,
-                    format!("`{}` is the {} push in a row, past {run_max}", s.id, run),
-                ));
-            }
-        }
-        let accents = moves.iter().filter(|(_, a)| a.is_some()).count();
-        let share = accents as f64 / film.shots.len().max(1) as f64;
-        let accents_max = fields
-            .get("accents_max")
-            .and_then(Value::as_f64)
-            .unwrap_or(0.33);
-        if share > accents_max + 1e-9 {
-            if let Some((s, (_, Some(t)))) = film
-                .shots
-                .iter()
-                .zip(&moves)
-                .rev()
-                .find(|(_, (_, a))| a.is_some())
-            {
-                out.issues.push(raise(
-                    "camera_grammar",
-                    "craft.camera_grammar",
-                    "error",
-                    &[&s.id],
-                    *t,
-                    format!(
-                        "{accents} of {} shots are accents ({share:.2}), past {accents_max}",
-                        film.shots.len()
-                    ),
-                ));
-            }
-        }
-        // Cuts: neighbours that differ, and no jump cut between shots that keep one item.
-        let cut_change = fields
-            .get("cut_change")
-            .filter(|v| !v.is_null() && **v != json!(false));
-        let angle_min = cut_change
-            .and_then(|c| c["angle_min"].as_f64())
-            .unwrap_or(30.0);
-        let size_min = cut_change
-            .and_then(|c| c["size_min"].as_f64())
-            .unwrap_or(1.4);
-        let keep = |id: &str| -> Vec<String> {
-            drawn
-                .pointer(&format!("/shots/{id}/frame/keep"))
-                .and_then(Value::as_array)
-                .into_iter()
-                .flatten()
-                .filter_map(Value::as_str)
-                .map(str::to_string)
-                .collect()
-        };
-        let mut cuts = Vec::new();
-        for &(t, a, b) in &film.cuts {
-            let (sa, sb) = (&film.shots[a], &film.shots[b]);
-            let (Some((_, pa)), Some((_, pb))) = (sa.poses.last(), sb.poses.first()) else {
-                continue;
-            };
-            let common = keep(&sa.id).into_iter().find(|k| keep(&sb.id).contains(k));
-            let at = common
-                .as_deref()
-                .and_then(|k| item_at(&drawn, k))
-                .unwrap_or(pa.target);
-            let (angle, ratio) =
-                measure::cut_change(&cam(pa), &cam(pb), at, [framed(pa, at), framed(pb, at)]);
-            cuts.push(json!({"shots": [sa.id, sb.id], "t": t, "angle": angle, "size": ratio, "item": common}));
-            let shots = [sa.id.as_str(), sb.id.as_str()];
-            if let (Some(item), Some(_)) = (&common, cut_change) {
-                if angle < angle_min && (angle_only || ratio < size_min) {
-                    out.issues.push(raise("camera_grammar", "craft.camera_grammar.jump_cut", "error", &shots, t, format!(
-                        "the cut from `{}` to `{}` turns {angle:.1}° about `{item}` (under {angle_min}°) and changes its framed height {ratio:.2} times (under {size_min})",
-                        sa.id, sb.id)));
-                    continue;
-                }
-            }
-            let shift = (0..3)
-                .map(|k| (pa.target[k] - pb.target[k]).abs())
-                .fold(0.0, f64::max);
-            if moves[a].0 == moves[b].0
-                && angle < 1.0
-                && ratio < 1.01
-                && shift <= 1e-6 * pa.width().max(1.0)
-            {
-                out.issues.push(raise(
-                    "camera_grammar",
-                    "craft.camera_grammar",
-                    "error",
-                    &shots,
-                    t,
-                    format!(
-                        "`{}` and `{}` are neighbours with the same framing and move",
-                        sa.id, sb.id
-                    ),
-                ));
-            }
-        }
-        // The line through two items: every shot's camera on the side the first takes.
-        if let Some([p, q]) = fields
-            .get("line")
-            .and_then(|l| l["through"].as_array())
-            .and_then(|ids| {
-                let at: Vec<[f64; 3]> = ids
-                    .iter()
-                    .filter_map(Value::as_str)
-                    .filter_map(|i| item_at(&drawn, i))
-                    .collect();
-                <[[f64; 3]; 2]>::try_from(at).ok()
-            })
-        {
-            let mut sign = 0.0;
-            for s in &film.shots {
-                for (t, pose) in &s.poses {
-                    let side = measure::side(p, q, pose.position);
-                    if side.abs() < 1e-9 {
-                        continue;
-                    }
-                    if sign == 0.0 {
-                        sign = side.signum();
-                    } else if side.signum() != sign {
-                        out.issues.push(raise(
-                            "camera_grammar",
-                            "craft.camera_grammar.line",
-                            "error",
-                            &[&s.id],
-                            *t,
-                            format!(
-                                "`{}`'s camera crosses the line through the brief's two items",
-                                s.id
-                            ),
-                        ));
-                        break;
-                    }
-                }
-            }
-        }
-        let names: Map<String, Value> = film
-            .shots
-            .iter()
-            .zip(&moves)
-            .map(|(s, (m, _))| (s.id.clone(), json!(m.name())))
-            .collect();
-        let accented: Vec<Value> = film
-            .shots
-            .iter()
-            .zip(&moves)
-            .filter_map(|(s, (_, a))| a.map(|t| json!({"shot": s.id, "t": t})))
-            .collect();
-        out.measure = json!({"moves": names, "accents": accented, "cuts": cuts});
-        out
     }
 
     fn played_of<'c>(&mut self, ctx: &'c mut Ctx) -> Option<&'c Played> {
@@ -1231,13 +994,23 @@ impl Hub<'_> {
                 0.18
             };
             let rows = measure::kept_rows(a.h, band);
-            // A jump the camera doesn't make reads as a cut in the export: left out like one.
-            let jumps = measure::jumps(&measure::diffs(&a.frames, a.w, rows), &a.still);
-            let left_out: Vec<bool> = a
-                .left_out
+            // As the export reads: a jump the camera doesn't make is a cut, and a window of blends
+            // between two frames is a cross-fade; both are left out like the timeline's. Where the
+            // timeline marks a transition its window stands, so blends are sought outside it.
+            let d = measure::diffs(&a.frames, a.w, rows);
+            let cut_like: Vec<bool> = measure::jumps(&d, &a.still)
+                .into_iter()
+                .zip(&a.cuts)
+                .map(|(j, c)| j || *c)
+                .collect();
+            let known: Vec<bool> = cut_like
                 .iter()
-                .zip(&jumps)
-                .map(|(l, j)| *l || *j)
+                .zip(&a.left_out)
+                .map(|(c, l)| *c || *l)
+                .collect();
+            let faded = measure::dissolves(&a.frames, a.w, rows, &d, &known);
+            let left_out: Vec<bool> = (0..d.len())
+                .map(|k| a.left_out[k] || cut_like[k] || faded[k])
                 .collect();
             let m = measure::motion(&a.frames, a.w, rows, &left_out);
             let share = m.share();
@@ -1303,6 +1076,16 @@ impl Hub<'_> {
     }
 }
 
+/// The palette of the look `id` a document names among its assets, from the evidence store.
+fn look_palette(drawn: &Value, evidence: &std::path::Path, id: &str) -> Option<Value> {
+    let sha = drawn.pointer(&format!("/assets/{id}/sha256"))?.as_str()?;
+    let bytes = (sha.len() == 64)
+        .then(|| std::fs::read(evidence.join(&sha[..2]).join(&sha[2..])).ok())
+        .flatten()?;
+    let def: Value = serde_json::from_slice(&bytes).ok()?;
+    def.get("palette").cloned()
+}
+
 /// Markers of `kind` (and tagged `tag`): ID, time, span.
 fn markers(drawn: &Value, kind: &str, tag: Option<&str>) -> Vec<(String, i64, i64)> {
     let mut out: Vec<(String, i64, i64)> = drawn["markers"]
@@ -1329,31 +1112,44 @@ fn markers(drawn: &Value, kind: &str, tag: Option<&str>) -> Vec<(String, i64, i6
     out
 }
 
-/// look_lock: every shot finished in the film's one look, unless the brief names a sequence.
-fn look_lock(fields: &Map<String, Value>, ctx: &Ctx) -> Found {
-    let drawn = &ctx.drawn;
-    let Some(Some(film)) = ctx.film.as_ref() else {
-        return Found::default();
-    };
+/// look_lock: every shot finished in the film's one look, unless the brief names a sequence;
+/// either way, every shot's look draws from the first shot's palette. `palette` reads a look's
+/// palette by its asset ID.
+fn look_lock(
+    film: &Film,
+    drawn: &Value,
+    fields: &Map<String, Value>,
+    palette: &dyn Fn(&str) -> Option<Value>,
+) -> Found {
     let mut out = Found::default();
     let looks: Vec<String> = film.shots.iter().map(|s| look_of(drawn, &s.id)).collect();
-    if fields.get("looks").and_then(Value::as_str) != Some("sequence") {
-        if let Some(first) = looks.first() {
-            for (s, l) in film.shots.iter().zip(&looks).filter(|(_, l)| *l != first) {
-                let mut i = raise(
-                    "look_lock",
-                    "craft.look_lock",
-                    "error",
-                    &[&s.id],
-                    s.start,
-                    format!(
-                        "`{}` is finished in the look {l}, not the film's {first}",
-                        s.id
-                    ),
-                );
-                i["actual"] = json!({"look": l, "film": first});
-                out.issues.push(i);
-            }
+    let sequence = fields.get("looks").and_then(Value::as_str) == Some("sequence");
+    if let Some(first) = looks.first() {
+        let theirs = palette(first);
+        for (s, l) in film.shots.iter().zip(&looks).filter(|(_, l)| *l != first) {
+            let what = if !sequence {
+                format!(
+                    "`{}` is finished in the look {l}, not the film's {first}",
+                    s.id
+                )
+            } else if palette(l) != theirs {
+                format!(
+                    "`{}`'s look {l} draws from another palette than the film's {first}",
+                    s.id
+                )
+            } else {
+                continue;
+            };
+            let mut i = raise(
+                "look_lock",
+                "craft.look_lock",
+                "error",
+                &[&s.id],
+                s.start,
+                what,
+            );
+            i["actual"] = json!({"look": l, "film": first});
+            out.issues.push(i);
         }
     }
     out.measure = json!({"looks": film.shots.iter().map(|s| s.id.clone()).zip(looks).collect::<BTreeMap<_, _>>()});
