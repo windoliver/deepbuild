@@ -430,7 +430,7 @@ impl Hub<'_> {
                 .and_then(|p| crate::film::sides(p, drawn, t, false));
             let rgba = match &sides {
                 Some(s) => self
-                    .film_rgba(&painted, Some(px), s, drawn, true)
+                    .film_rgba(&painted, Some(px), s, drawn, (true, None))
                     .map(|r| r.0),
                 None => self.canonical_rgba(&painted, Some(px), true).map(|r| r.0),
             };
