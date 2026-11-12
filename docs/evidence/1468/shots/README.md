@@ -1,7 +1,12 @@
 # #1468 screenshots
 
-Each picture shows a terminal session that `script` recorded byte for byte while it ran [`../shots.sh`](../shots.sh). Each was drawn by [`../term_png.py`](../term_png.py) from the committed recording next to it, so redrawing one gives the same pixels.
-- **What's recorded.** `shots.sh` prints each command before it runs it, and its exit code after. Each picture's header prints the commit and `git status` of the tree it ran in.
+Each picture shows a terminal session that `script` recorded byte for byte while it ran [`../shots.sh`](../shots.sh), then redacted as below. Each was drawn from the committed recording next to it by [`../term_png.py`](../term_png.py), with this machine's DejaVu Sans Mono and Pillow. Redrawing one with its title below gives the same pixels:
+- `e2e-base`: `#1468 e2e on main 1abbcf086, the PR's merge base (no fix)`
+- `e2e-fix`: `#1468 e2e on 7f35ecd72 (with the fix)`
+- `acceptance-base`: `#1468 blind acceptance suite on main 1abbcf086, the PR's merge base (no fix)`
+- `acceptance-fix`: `#1468 blind acceptance suite on 7f35ecd72 (with the fix)`
+
+- **What's recorded.** `shots.sh` prints each command before it runs it, and its exit code after. Each picture's header prints the commit and `git status` of the tree it ran in. The base has no copy of these scripts, so `shots.sh` and `e2e.py` came from the fix tree for both runs, as each `$ python3` line shows.
 - **The logs.** The `.typescript.txt` next to each picture is that recording. In it, the home folder is written `~` and the scratch folder `<scratchpad>`.
 - **Load.** A wait loop outside `shots.sh` started each recording only once the one-minute load was under 6 on this 20-core Linux aarch64 machine. Each header prints the load at the start, and the recordings ran one after another.
 
@@ -25,15 +30,15 @@ The ignored test, `child`, is the suite's child process. The other tests start i
 - **The field binary.** `deep-canvas-render` doesn't build at either commit on this machine.
   - **Why.** `gpui-pre-wgpu` 0.3.9, from crates.io, doesn't cover the `PrimitiveBatch::Chrome` variant that main's vendored `gpui-pre` added. It did build at an earlier main, as [`../e2e.txt`](../e2e.txt) shows.
   - **In the pictures.** Each e2e picture shows that build failing, cut by `grep` to the error's first lines, and the field case reads `BLOCKED`.
-  - **What stands in.** The field is covered only by the suite's `ac4_a_field…` test, which fails on the base and passes on the fix. It builds the text item's animator and calls `deep_canvas_marks::animator::amounts` in a child process, then asks the same process for a shallow field. It doesn't load the document through a binary.
+  - **What stands in.** In these pictures, the field is covered only by the suite's `ac4_a_field…` test, which fails on the base and passes on the fix. It builds the text item's animator and calls `deep_canvas_marks::animator::amounts` in a child process, then asks the same process for a shallow field. It doesn't load the document through a binary. An earlier run, at an earlier main where the binary built, shows `deep-canvas-render` refusing at `items/words/params/animators/0/selectors/0/field/expr` ([`../e2e.txt`](../e2e.txt)).
 - **AC2's values.** AC2 shows only as verdicts: depth 64 and depth 65 read `ok` on the fix, and the base shows the six depth-65 constructs parsing. The pictures don't show the depth-64 values or the refusal's text. The test (`depth.rs`) runs depth 64 on a `1 << 20`-byte thread, requires `cfg!(debug_assertions)`, and requires depth 65's refusal to name the cap. The pictures do show `[unoptimized + debuginfo]`.
 - **Build warnings.** The build step shows only each diagnostic's first line, through `grep`. The warnings are main's, the same at both commits, in crates this PR doesn't touch.
 - **Cut values.**
   - Every value `e2e.py` cuts to fit the screen says so where it's cut: long strings (here the driver's `call` and the pack's `actual`), lists past 6 items, and `frames`, `texts` and `glyphs` (here only `frames`).
   - 64-hex hashes show their first 12 characters.
-  - On a crash, only the last 2 lines of stderr are kept, and the picture says so.
-  - `deep-show` itself cuts the pack refusal's `actual` to 8,192 characters, before `e2e.py` cuts it again.
-- **The refusal's hint.** The pack refusal carries `out_of_range`'s generic hint, "Give the field a value of its type inside its range". On main every recipe expression refusal carries that same hint, and this change doesn't touch it.
+  - stderr is shown only on a crash, and then only its last 2 lines; the picture says so.
+  - The core cuts an issue's `actual` to 8,192 characters before `deep-show` prints the pack refusal (`Issue::to_json` in `crates/deep-canvas/src/document/mod.rs`), and `e2e.py` cuts it again.
+- **The refusal's hint.** The pack refusal carries `out_of_range`'s generic hint, "Give the field a value of its type inside its range". On main every recipe rule refusal over `out_of_range` carries that hint, and a rule naming a missing module is refused as `module_missing`. This change doesn't touch either.
 - **Checking the hashes.** The sha256 lines hash the copies the e2e ran: each binary is copied right after its build into a fresh `mktemp` folder.
   - A later `cargo test` relinks `target/debug/deep-motion` to a build with the test's features.
   - The hashed binary stays in `target/debug/deps/` under its own name.
