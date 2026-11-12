@@ -474,10 +474,17 @@ byHand.push('tests/acceptance/154/stems.test.ts');
 // reading against the lane's rule.
 alone.push('tests/acceptance/1700/');
 timed.push('tests/acceptance/1700/budgets.test.ts');
+// #1163's files each build deep-show; exports.test.ts exports the 600-frame 1080p film six times.
+alone.push('tests/acceptance/1163/');
 // #1862's suite starts a hub of its own with a fake reviewer, as #1537's does.
 alone.push('tests/acceptance/1862/');
 // #1401's files each build deep-show and render 3D revisions back on the GPU, AC3 in ten processes.
 alone.push('tests/acceptance/1401/');
+// #1958's files each build deep-show, and its budgets build the merge base and time saves.
+alone.push('tests/acceptance/1958/');
+timed.push('tests/acceptance/1958/budgets.test.ts');
+// #306 AC3's redraft after #1958 builds deep-show, as #306's suite does.
+alone.push('tests/acceptance/306-redraft-1958/');
 // #1920's files build deep-show seven times, in the full and core sets, and read each build's published plan.
 alone.push('tests/acceptance/1920/');
 

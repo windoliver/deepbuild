@@ -818,10 +818,21 @@ impl Player {
             }
         };
         self.block = from_block;
-        while self.block < target {
+        // #1163: a jump pre-rolls its tails; the planted reverb starts it without its tail, as it
+        // restores a checkpoint without one, at the block where the first sample heard leaves
+        // the reverb (every path is held back `lead` samples after it).
+        let tailless = target > from_block && self.planted.restores_without_tail;
+        let heard = (sample - self.edges.lead).div_euclid(BLOCK).max(from_block);
+        while self.block <= target {
+            if tailless && self.block == heard {
+                for (.., unit) in &mut self.units {
+                    if let Unit::Reverb(r) = unit {
+                        r.state = r.state.without_tail();
+                    }
+                }
+            }
             self.render_block();
         }
-        self.render_block();
         self.read = 2 * (sample - target * BLOCK) as usize;
         let sought = Sought {
             restored: second.map(|s| s * FLICKS),
