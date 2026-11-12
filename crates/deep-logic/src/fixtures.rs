@@ -99,14 +99,11 @@ impl Logic {
     /// A library's fixture records, run here once per hash and fixture set: `ran` is true only
     /// at the run.
     fn verify(&mut self, piece_v: &Value, lib: &Lib) -> Result<Value, Vec<Value>> {
-        // A fixture's item also links what the library's needs reach, pinned by hash: those hashes
-        // key it too, not which packs carry them (#190: once per library hash).
+        // A fixture's item also links what the library's needs reach, pinned by hash, with the
+        // exports their packs list: those key it, not which packs carry them (#190: once per
+        // library hash).
         let packs = links::packs(piece_v).unwrap_or_default();
-        let key = format!(
-            "{} {}",
-            lib.fixtures.join(" "),
-            links::reach(&lib.label, &lib.hash, &packs).join(" ")
-        );
+        let key = json!([lib.fixtures, links::reach(&lib.label, &lib.hash, &packs)]).to_string();
         if let Some(done) = self.verified.get(&key) {
             return done.clone().map(|mut r| {
                 for f in r.as_array_mut().into_iter().flatten() {

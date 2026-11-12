@@ -142,23 +142,26 @@ fn carrier<'a>(packs: &'a [Pack], label: &str, sha: &str) -> Option<(&'a Pack, &
         .or_else(|| carrying().next())
 }
 
-/// `label` at `sha` and every library its needs reach through `packs`, as sorted `label sha`
-/// lines: what its fixtures' items link, whichever packs carry them.
-pub fn reach(label: &str, sha: &str, packs: &[Pack]) -> Vec<String> {
-    let mut seen = Vec::new();
+/// `label` at `sha` and every library its needs reach through `packs`, each with the exports its
+/// carrying pack lists (they decide what links), sorted: what its fixtures' items link, whichever
+/// packs carry them.
+pub fn reach(label: &str, sha: &str, packs: &[Pack]) -> Vec<Value> {
+    let mut seen: Vec<(String, String)> = Vec::new();
+    let mut out = Vec::new();
     let mut todo = vec![(label.to_string(), sha.to_string())];
     while let Some((label, sha)) = todo.pop() {
-        let line = format!("{label} {sha}");
-        if seen.contains(&line) {
+        if seen.contains(&(label.clone(), sha.clone())) {
             continue;
         }
-        if let Some((_, e)) = carrier(packs, &label, &sha).filter(|(_, e)| e.asset == sha) {
+        let entry = carrier(packs, &label, &sha).filter(|(_, e)| e.asset == sha);
+        if let Some((_, e)) = entry {
             todo.extend(e.needs.iter().cloned());
         }
-        seen.push(line);
+        out.push(json!([label, sha, entry.map(|(_, e)| &e.exports)]));
+        seen.push((label, sha));
     }
-    seen.sort();
-    seen
+    out.sort_by_key(Value::to_string);
+    out
 }
 
 /// The libraries `links` reach, each checked against its bytes (as `stored` reads them) and its
