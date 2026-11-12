@@ -167,7 +167,7 @@ Since 11-09, main added `pipelined` to check and bake replies, and `ranges`, `ri
 already there.
 
 **The fixes**, in `crates/deep-logic/src/fixtures.rs`, with tests in `crates/deep-logic/tests/fixture_once.rs`. Each
-test feeds pieces through `Logic::handle`: `fixture-once.jsonl`'s are the acceptance suite's own; the exports tests'
+test feeds request lines through `Logic::handle`: `fixture-once.jsonl`'s are the acceptance suite's own; the exports tests'
 are derived from them (gridcore@1.0.0/1.0.1 and kit@1.0.0/1.0.1, with grid_path@1 exporting nothing in the older one).
 
 - **0ed3de856.** The cache key was the piece's whole pack list, so the same grid_path@1, reached through kit@1.0.0
@@ -371,3 +371,6 @@ raw files, `gen.test.ts`, the code and the issue. It also ran its own BFS over t
 - **Round 22** found no wrong values (its rerun gave byte-identical 00–06, `web-replies.jsonl`, `labels.json` and
   `grids.json`) and two low gaps, fixed here: criterion 1's one-byte sentence now says what ac01 checks (rewritten
   hashes and bake keys), and 7b5d9da1f is named as the PR's head before these commits.
+- **Round 23** found no wrong values (its rerun gave byte-identical 00–06, replies equal but for timings) and two low
+  gaps, fixed here: the 9a02471b6 suite file says how the clone's `main` was set (a report), and the fixture tests feed
+  request lines, one of them a `pack_check` with no piece.

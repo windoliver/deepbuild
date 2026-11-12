@@ -1,4 +1,4 @@
-# #190 acceptance suite at commit 9a02471b6 (a clean checkout of it; merge base e7609b7b), spark-c89f (Linux arm64), 2026-11-12, vitest --reporter=verbose in a scratch clone (paths shortened to <clone>)
+# #190 acceptance suite at commit 9a02471b6 (a clean checkout of it; the clone's local `main` set to origin/main's merge base e7609b7b, which ac07's `git merge-base HEAD main` reads; the session's report, as this output doesn't print it), spark-c89f (Linux arm64), 2026-11-12, vitest --reporter=verbose in a scratch clone (paths shortened to <clone>)
 
  RUN  v5.0.5 <clone>/tests/acceptance/190
 
