@@ -1,6 +1,6 @@
 {
   "crates/deep-app/src/question.rs": 1541,
-  "crates/deep-app/src/views.rs": 3658,
+  "crates/deep-app/src/views.rs": 3606,
   "crates/deep-canvas-effects/src/check.rs": 2093,
   "crates/deep-canvas-effects/src/emit.rs": 1636,
   "crates/deep-canvas-effects/src/graph.rs": 1624,

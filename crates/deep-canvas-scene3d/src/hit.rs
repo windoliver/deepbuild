@@ -33,16 +33,7 @@ pub fn hits(scene: &Scene, at: [f64; 2], targets: &[&str]) -> Vec<Hit> {
                 continue;
             }
             let cut = scene.cutaway.as_ref().filter(|_| s.cut);
-            for t in crate::shore::triangles(s) {
-                let Some(dist) = meet(o, d, &t) else { continue };
-                if best.is_some_and(|(b, _)| b <= dist) {
-                    continue;
-                }
-                if cut.is_some_and(|c| c.hides(along(o, d, dist))) {
-                    continue;
-                }
-                best = Some((dist, unit(cross(sub(t[1], t[0]), sub(t[2], t[0])))));
-            }
+            nearest(&mut best, o, d, &crate::shore::triangles(s), cut);
         }
         if let Some((dist, n)) = best {
             found.push((id, dist, n));
@@ -51,21 +42,105 @@ pub fn hits(scene: &Scene, at: [f64; 2], targets: &[&str]) -> Vec<Hit> {
     found.sort_by(|a, b| a.1.total_cmp(&b.1).then_with(|| a.0.cmp(b.0)));
     found
         .into_iter()
-        .map(|(id, dist, n)| {
-            let (item, sub) = match id.split_once('#') {
-                Some((item, sub)) => (item.to_string(), Some(sub.to_string())),
-                None => (id.to_string(), None),
-            };
-            let normal = if dot(n, d) > 0.0 { n.map(|x| -x) } else { n };
-            Hit {
-                item,
-                sub,
-                point: along(o, d, dist),
-                normal,
-                distance: dist,
+        .map(|(id, dist, n)| hit(id, o, d, dist, n))
+        .collect()
+}
+
+/// The most hits a render-back probe answers (canvas primitives: Render-back, `probes`).
+pub const PER_PROBE: usize = 8;
+
+/// What lies under each view px of `ats` (#1401: render-back's probes): every solid the ray
+/// through it meets, at the nearest point its cutaway keeps, nearest first, ties by ID, up to
+/// the first it can't see through and any at that same distance, at most [`PER_PROBE`]. Where
+/// `drawn` is false the object-ID pass drew no surface, so only see-through ones are kept.
+pub fn through(scene: &Scene, ats: &[([f64; 2], bool)]) -> Vec<Vec<Hit>> {
+    let solids: Vec<_> = scene
+        .layers
+        .iter()
+        .flat_map(|l| &l.solids)
+        .filter(|s| !s.cast_only)
+        .map(|s| {
+            let cut = scene.cutaway.as_ref().filter(|_| s.cut);
+            (
+                s.id.as_str(),
+                see_through(s),
+                crate::shore::triangles(s),
+                cut,
+            )
+        })
+        .collect();
+    ats.iter()
+        .map(|&(at, drawn)| {
+            let (o, d) = ray(&scene.camera, at);
+            // Each ID's nearest point, whichever of its solids holds it.
+            let mut by_id: Vec<(&str, f64, V3, bool)> = Vec::new();
+            for (id, clear, tris, cut) in &solids {
+                let mut best = None;
+                nearest(&mut best, o, d, tris, *cut);
+                let Some((dist, n)) = best else { continue };
+                match by_id.iter_mut().find(|f| f.0 == *id) {
+                    Some(f) if f.1 <= dist => {}
+                    Some(f) => *f = (id, dist, n, *clear),
+                    None => by_id.push((id, dist, n, *clear)),
+                }
             }
+            by_id.sort_by(|a, b| a.1.total_cmp(&b.1).then_with(|| a.0.cmp(b.0)));
+            let stop = by_id.iter().find(|f| !f.3).map_or(f64::INFINITY, |f| f.1);
+            by_id
+                .into_iter()
+                .filter(|f| f.1 <= stop && (drawn || f.3))
+                .take(PER_PROBE)
+                .map(|(id, dist, n, _)| hit(id, o, d, dist, n))
+                .collect()
         })
         .collect()
+}
+
+/// Whether a solid draws see-through, so a ray goes on past it: below full coverage, in the
+/// per-pixel lists, blended, added or transmissive.
+fn see_through(s: &crate::scene::Solid) -> bool {
+    s.alpha < 1.0
+        || s.per_pixel
+        || s.material
+            .as_ref()
+            .is_some_and(|m| m.alpha_mode.see_through() || m.lobes.transmission > 0.0)
+}
+
+/// Lowers `best` to where the ray from `o` along `d` first meets `tris` at a point `cut` keeps,
+/// with that triangle's unit normal.
+fn nearest(
+    best: &mut Option<(f64, V3)>,
+    o: V3,
+    d: V3,
+    tris: &[[V3; 3]],
+    cut: Option<&crate::cut::Cutaway>,
+) {
+    for t in tris {
+        let Some(dist) = meet(o, d, t) else { continue };
+        if best.is_some_and(|(b, _)| b <= dist) {
+            continue;
+        }
+        if cut.is_some_and(|c| c.hides(along(o, d, dist))) {
+            continue;
+        }
+        *best = Some((dist, unit(cross(sub(t[1], t[0]), sub(t[2], t[0])))));
+    }
+}
+
+/// The hit on pick target `id` at `dist` along the ray, its normal turned toward the ray.
+fn hit(id: &str, o: V3, d: V3, dist: f64, n: V3) -> Hit {
+    let (item, sub) = match id.split_once('#') {
+        Some((item, sub)) => (item.to_string(), Some(sub.to_string())),
+        None => (id.to_string(), None),
+    };
+    let normal = if dot(n, d) > 0.0 { n.map(|x| -x) } else { n };
+    Hit {
+        item,
+        sub,
+        point: along(o, d, dist),
+        normal,
+        distance: dist,
+    }
 }
 
 /// The ray through view px `at`, with a unit direction: from the eye in perspective, from the
@@ -123,4 +198,42 @@ fn cross(a: V3, b: V3) -> V3 {
 fn unit(a: V3) -> V3 {
     let l = sqrt(dot(a, a));
     a.map(|x| x / l)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::scene::{evaluate, Labels};
+    use serde_json::json;
+
+    /// #1401: twelve see-through panes in a row along the view axis: a probe through them all
+    /// answers the eight nearest, nearest first, and nothing past its cap.
+    #[test]
+    fn a_probe_answers_at_most_eight_hits_nearest_first() {
+        let mut items = json!({
+            "cam": {"id": "cam", "kind": "camera@1", "order": "a0",
+                    "params": {"projection": "perspective", "position": [0, 0, 20], "target": [0, 0, 0], "fov": 40}},
+            "glass": {"id": "glass", "kind": "material@1", "order": "a1",
+                      "params": {"base_color": [0.8, 0.9, 1, 1], "unlit": true, "alpha_mode": "blend", "alpha": 0.3}}
+        });
+        for k in 0..12 {
+            let id = format!("pane-{k:02}");
+            items[&id] = json!({"id": id, "kind": "mark.box@1", "order": format!("b{k:02}"), "material": "glass",
+                                "params": {"size": [4, 4, 0.1]}, "at": {"pos": [0, 0, 10 - k]}});
+        }
+        let doc = json!({"format": 1, "size": [320, 240], "camera": "cam", "items": items});
+        let look = crate::look::Look3::from_roles(
+            [
+                ("ink".to_string(), [0, 0, 0]),
+                ("ground".to_string(), [255, 255, 255]),
+            ]
+            .into_iter()
+            .collect(),
+        );
+        let scene = evaluate(&doc, 0, &look, &mut Labels::new()).unwrap();
+        let answered = through(&scene, &[([160.5, 120.5], true)]);
+        let names: Vec<&str> = answered[0].iter().map(|h| h.item.as_str()).collect();
+        let nearest: Vec<String> = (0..PER_PROBE).map(|k| format!("pane-{k:02}")).collect();
+        assert_eq!(names, nearest);
+    }
 }

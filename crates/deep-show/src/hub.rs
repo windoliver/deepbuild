@@ -147,6 +147,10 @@ pub enum Planted {
     ResolverOnlyRefUnresolved,
     /// #384: the resolver closes the ask-task of a message whose item is gone.
     ResolverClosesTask,
+    /// #1401: a probe's hits placed where its ray reaches the depth target's view depth.
+    ProbeFromDepth,
+    /// #1401: a probe that meets nothing answers the item drawn nearest its pixel.
+    ProbeNearestItem,
     /// #403: a verdict's key names each deliverable by doc ID alone, with no revision.
     VerdictKeyedByDoc,
     /// #403: checks in a claim skip an `unknown_kind` item and judge the rest.
@@ -845,13 +849,15 @@ pub enum Call {
     },
     /// A session's messages as its agent reads them (#384).
     Messages(String),
-    /// A session's render-back of a document at a time as of a revision (#384).
+    /// A session's render-back of a document at a time as of a revision (#384), through a
+    /// camera, with pixel probes (#1401).
     RenderBack {
         session: String,
         doc: String,
         t: i64,
         rev: u64,
         size: Option<[u16; 2]>,
+        probes: crate::probe::Probes,
     },
     /// The parity suite's manifest (#138).
     Manifest,
@@ -1908,7 +1914,8 @@ impl<'a> Hub<'a> {
                 t,
                 rev,
                 size,
-            } => self.render_back(session, doc, *t, *rev, *size),
+                probes,
+            } => self.render_back(session, doc, *t, *rev, *size, probes),
             Call::Manifest => self.manifest_reply(),
             Call::Catalog => self.catalog_reply(),
             Call::Verdict(claim) => self.verdict_call(claim),
