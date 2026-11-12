@@ -1,18 +1,20 @@
 // The data-layout oracle (the oracle map's lld/test/wasm/data-layout.s row, criterion 1): the data of several objects
-// in one memory, in link order, each segment at its alignment; and, a check of our own, an address in one object's code
-// resolved to where its data landed.
+// in one memory, each segment at its alignment after the one before; and, checks of our own, that link order is
+// dependency order with ties broken by name, and that an address in one object's code resolves to where its data
+// landed.
 //
 // Upstream links data-layout.s's object and hello.s's and checks obj2yaml of the output: one memory of the size the
 // stack and data need (Minimum 0x2; with --initial-memory = --max-memory, Maximum = Minimum), every segment at its
 // alignment after the one before (its five globals' values, both segments' offsets, 65536 and 65552, and the first
-// segment's content are checked; foo at 65552 and .p2align 4's aligned_bar at 65568, a multiple of 16, follow from
-// them). Its live CHECKs never read the second segment's content, so `external_ref`'s value (an address of hello.s's
-// data) isn't checked upstream; its relocation appears only in the disabled XUN/RELOC block, as a record. wasm-ld's own
-// layout rules (a 64 KiB stack first, segments merged by section name, __data_end and __heap_base) aren't ours; ours is
-// ../README.md's "The linker's layout": the program's data keeps its object's offsets from address 0, and each
-// library's segments follow, in link order (dependency order, ties broken by name), each at its alignment (8, the
-// objects' segment info) after the one before; one memory, the program's, defined with its limits (maximum = minimum)
-// and exported as `memory`.
+// segment's content are checked, which puts the objects' data in the order the linker was given them, whatever that
+// order is; foo at 65552 and .p2align 4's aligned_bar at 65568, a multiple of 16, follow from them). Its live CHECKs
+// never read the second segment's content, so `external_ref`'s value (an address of hello.s's data) isn't checked
+// upstream; its relocation appears only in the disabled XUN/RELOC block, as a record. wasm-ld's own layout rules (a 64
+// KiB stack first, segments merged by section name, __data_end and __heap_base) aren't ours; ours is ../README.md's
+// "The linker's layout": the program's data keeps its object's offsets from address 0, and each library's segments
+// follow, in link order (dependency order, ties broken by name), each at its alignment (8, the objects' segment info)
+// after the one before; one memory, the program's, defined with its limits (maximum = minimum) and exported as
+// `memory`. Which object comes first is our rule, not upstream's: the check that alpha@1 precedes beta@1 is our own.
 //
 // Here a program object with 8,195 bytes of data (8,192 zeros, then "PRG") links alpha@1 (data "ALPHA") and beta@1
 // (data "BETA!!!"), listed beta first; neither needs the other, so link order is by name: alpha, then beta. The merged
@@ -28,7 +30,10 @@
 // and relocations inside data (our objects' are in code only, ../README.md: Relocatable objects).
 //
 // Wrong program shown failing: `linker_links_in_listing_order` (../README.md: Planted twins) lays out beta before
-// alpha, as the item lists them, and fails the layout naming alpha's address.
+// alpha, as the item lists them, and fails the layout naming alpha's address. It fails only our own order check: it
+// lays its data out consistently in its own order (beta@1 at 8,200, alpha@1 at 8,208, each aligned, one memory, v =
+// 65,033), as wasm-ld does given beta first, so every check held from upstream passes on it. No planted value shows
+// an upstream-held check of this file failing.
 import { describe, expect, it } from 'vitest';
 import { AC, TIMEOUT, admitted, assemble, checkCall, logicBin, none, onHost, piece, prebuild, type JsonObject, type Lib, type Planted, type Program } from '../helpers.ts';
 import { pack, vLayout } from '../libs.ts';
