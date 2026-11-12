@@ -517,6 +517,8 @@ byHand.push('tests/acceptance/2017/ac2-light-holds.test.ts');
 alone.push('tests/acceptance/173/');
 timed.push('tests/acceptance/173/budgets.test.ts', 'tests/acceptance/173/envelope.test.ts');
 slow.push('tests/acceptance/173/budgets.test.ts', 'tests/acceptance/173/envelope.test.ts');
+// #1802's ac4 and ac6 files each build deep-show with a test canvas module's features.
+alone.push('tests/acceptance/1802/');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
