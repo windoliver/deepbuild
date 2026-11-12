@@ -232,8 +232,11 @@ interface CoreLink {
   started: Promise<{ hooks: string[] }>;
   close(): Promise<void>;
 }
-/** `scrub` adds values every hook line read from now on is scrubbed of (#332: credentials env-local loaded). */
-interface Parsers { parse(chunks: Buffer[], first: boolean): Promise<Parsed>; scrub(values: string[]): void; close(): Promise<void> }
+/**
+ * `scrub` adds values every hook line read from now on is scrubbed of (#332: credentials env-local loaded); `count` is
+ * the parser workers the pool holds, for hub.health (#2043).
+ */
+interface Parsers { parse(chunks: Buffer[], first: boolean): Promise<Parsed>; scrub(values: string[]): void; count(): number; close(): Promise<void> }
 
 /** A frame from the core: its event's JSON text, or, `caught` set, the head its subscriber's replay reached (#1575). */
 type OnFrame = (sub: string, event: string, caught?: boolean) => void;
@@ -297,25 +300,41 @@ async function coreInline(options: CoreOptions, onFrame: OnFrame, onFatal: (why:
 function parserPool(given: readonly string[], plant: Plant | undefined, dir: string): Parsers {
   // The pool's own list: each scrub's values join it, so a parser started later begins with all its elder was sent.
   const held = [...given];
-  const pending = new Map<number, (parsed: Parsed) => void>();
+  // Each line a parser holds, until that parser answers it or ends.
+  const pending = new Map<number, { resolve: (parsed: Parsed) => void; worker: Worker }>();
   let n = 0;
-  const make = () => {
+  let closing = false;
+  const make = (): Worker => {
     const worker = new Worker(new URL('./parser.js', import.meta.url), { workerData: { held, dir, ...(plant ? { plant } : {}) }, resourceLimits: YOUNG });
     worker.on('message', ({ n: id, parsed }: { n: number; parsed: Parsed }) => {
-      pending.get(id)?.(parsed);
+      pending.get(id)?.resolve(parsed);
       pending.delete(id);
+    });
+    if (plant === 'parser-pool-messages-only') return worker;
+    // A parser that throws on a line ends, and takes neither the hub nor a line with it (#2043): each line it held is
+    // refused, and another parser takes its place.
+    worker.on('error', (error) => process.stderr.write(`deep hub: a parser failed: ${error.stack ?? error.message}\n`));
+    worker.on('exit', () => {
+      for (const [id, line] of pending) {
+        if (line.worker !== worker || plant === 'parser-pool-leaves-line-waiting') continue;
+        pending.delete(id);
+        line.resolve({ kind: 'refused', id: null, error: refusal('unavailable', '', 'The hub failed while it read this line, so nothing of it was recorded.') });
+      }
+      if (closing) return;
+      if (worker === small) small = make();
+      else if (worker === big) big = make();
     });
     return worker;
   };
   // One parser for small lines, and one for large ones, started at the first: an idle hub holds one thread fewer.
-  const small = make();
+  let small = make();
   let big: Worker | undefined;
   return {
     parse(chunks, first) {
       const size = chunks.reduce((sum, c) => sum + c.length, 0);
       const worker = size > BIG ? (big ??= make()) : small;
       return new Promise((resolve) => {
-        pending.set(++n, resolve);
+        pending.set(++n, { resolve, worker });
         worker.postMessage({ n, chunks, first });
       });
     },
@@ -323,7 +342,11 @@ function parserPool(given: readonly string[], plant: Plant | undefined, dir: str
       held.push(...values);
       for (const worker of [small, big]) worker?.postMessage({ scrub: values });
     },
-    close: async () => { await Promise.all([small, big].map((w) => w?.terminate())); },
+    count: () => (big ? 2 : 1),
+    close: async () => {
+      closing = true;
+      await Promise.all([small, big].map((w) => w?.terminate()));
+    },
   };
 }
 /** The parse-on-event-loop plant: every line it reads scrubbed and parsed on the event loop. */
@@ -340,6 +363,7 @@ async function parserInline(held: string[], plant: Plant, dir: string): Promise<
       return scoped ? { ...parsed, scoped } : parsed;
     },
     scrub(values) { held.push(...values); },
+    count: () => 0,
     close: async () => undefined,
   };
 }
@@ -1360,7 +1384,7 @@ class Hub {
       case 'health':
         // The process readings after the core's: its own checks start short-lived children (the secret store's) that
         // would count as the hub's.
-        return void reply(this.core.request({ op: 'health' }).then(async (health) => ({ pid: process.pid, start: this.start, off: this.off, ...(health as Obj), process: await processHealth() })));
+        return void reply(this.core.request({ op: 'health' }).then(async (health) => ({ pid: process.pid, start: this.start, off: this.off, parsers: this.parsers.count(), ...(health as Obj), process: await processHealth() })));
       case 'stream.subscribe': {
         const sub = `${conn.id}:${JSON.stringify(id)}`;
         const after = Number.isSafeInteger(params.after) && (params.after as number) >= 0 ? (params.after as number) : 0;
