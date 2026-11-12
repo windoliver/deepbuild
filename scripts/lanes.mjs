@@ -519,6 +519,10 @@ timed.push('tests/acceptance/173/budgets.test.ts', 'tests/acceptance/173/envelop
 slow.push('tests/acceptance/173/budgets.test.ts', 'tests/acceptance/173/envelope.test.ts');
 // #2070's tests each start their own hub, paseo daemon stand-in and agent stand-in.
 alone.push('tests/acceptance/2070/');
+// #55's first-draft AC13 file runs Claude Code beside paseo's host, not under it, so the plugin's token can't be checked
+// since #2070 (tests/acceptance/55-redraft-ac13/DISPUTE.md); its blind redraft runs in its place.
+alone.push('tests/acceptance/55-redraft-ac13/');
+byHand.push('tests/acceptance/55/delivery.test.ts');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
