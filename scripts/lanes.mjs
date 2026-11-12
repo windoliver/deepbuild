@@ -310,6 +310,10 @@ alone.push('tests/acceptance/1720/', 'tests/acceptance/1718-redraft-1720/');
 alone.push('tests/acceptance/1461/');
 byHand.push('tests/acceptance/1461/shell.test.ts', 'tests/acceptance/1461/shown.test.ts');
 timed.push('tests/acceptance/1461/budget.test.ts');
+// #1100's files build deep-drive plain and with env-plants and run real setups with their hubs; its AC15 file opens the
+// real app's window, with Accessibility and Screen Recording, by hand.
+alone.push('tests/acceptance/1100/');
+byHand.push('tests/acceptance/1100/shown.test.ts');
 // #2018's files build deep-drive plain and with env-plants, and start real hubs and many replicas.
 alone.push('tests/acceptance/2018/');
 // #2019's files build deep-drive plain and with env-plants, start real hubs, run deep setup and many replicas.

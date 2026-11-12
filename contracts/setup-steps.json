@@ -1,0 +1,10 @@
+{
+  "steps": [
+    { "step": "hooks", "agent": "claude-code", "name": "Claude Code", "found": "always" },
+    { "step": "hooks", "agent": "codex", "name": "Codex", "found": { "env": "CODEX_HOME", "folder": ".codex" }, "box": "remove DeepBuild from Codex" },
+    { "step": "plugin", "agent": "paseo", "name": "paseo", "found": { "program": "paseo" } },
+    { "step": "package", "agent": "pi", "name": "pi", "found": { "program": "pi", "folder": ".pi/agent" } },
+    { "step": "history", "agent": "claude-code", "found": "always" },
+    { "step": "history", "agent": "codex", "found": { "env": "CODEX_HOME", "folder": ".codex" } }
+  ]
+}

@@ -8675,6 +8675,25 @@ export interface SessionStateV2 {
   evidence?: Array<string>;
 }
 
+/** setup.step@1 */
+export interface SetupStep {
+  v: 1;
+  id: string;
+  kind: "setup.step";
+  subject?: string;
+  writer: string;
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    step: string;
+    agent: string | null;
+  };
+  evidence?: Array<string>;
+}
+
 /** source.called@1 */
 export interface SourceCalled {
   v: 1;
