@@ -15,6 +15,7 @@ import { slot } from '@deepbuild/gate';
 import type { LeaseTable } from '@deepbuild/leases';
 import { after, type Grant, type Host, type Started, type Supervisor } from '@deepbuild/supervisor';
 import type { Up } from '@deepbuild/env-local';
+import type { TimingReport } from '@deepbuild/verdicts';
 import { isRoot, type Hosts } from './hosts.js';
 import { words } from './claude-settings.js';
 import type { RunKey } from './gate-runner.js';
@@ -86,8 +87,8 @@ interface RunsOptions {
   supervisor: () => Supervisor;
   leases: () => LeaseTable;
   extensions: () => ExtensionHost | undefined;
-  /** One run of a held kind's check (#1537): its result as check.kind@1's, for the run's claim, ended by `stop`; a document check's issues as its stdout (#1723). */
-  kind(run: Run, checkout: string, deadline: number, stop: AbortSignal): Promise<CheckResult & { stdout?: string }>;
+  /** One run of a held kind's check (#1537): its result as check.kind@1's, for the run's claim, ended by `stop`; a document check's issues as its stdout (#1723); a stated speed's timing report (#1863). */
+  kind(run: Run, checkout: string, deadline: number, stop: AbortSignal): Promise<CheckResult & { stdout?: string; speed?: TimingReport }>;
   hosts: () => Hosts;
 }
 

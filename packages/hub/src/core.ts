@@ -939,7 +939,7 @@ export class Core {
       appendCore: (kind, data, extra) => this.appendCore(kind, data, extra), stored: (put, what) => this.stored(put, what),
       invalid: (claim, commit, reason, outcome) => this.invalid(claim, commit, reason, outcome), recorded: (run, record) => this.gate.recorded(run, record), keyed: (key, run, record) => this.gate.keyed(key, run, record),
       stopping: () => this.stopping, stacks: this.stacks, store: () => this.store, host: () => this.host, supervisor: () => this.supervisor, leases: () => this.leases, extensions: () => this.extensions,
-      kind: async (run, checkout, deadline) => {
+      kind: async (run, checkout, deadline, stop) => {
         const of: ReviewOf = this.kindChecks.get(run.claim)?.get(run.check)?.of ?? { claim: run.claim, task: '', agent: 'claude-code', transcript: undefined };
         const spec = run.spec as unknown as CheckSpec;
         // A document check runs through the canvas core's verdict on the document's revision (#1723).
@@ -954,12 +954,12 @@ export class Core {
           if (round && of.pr && run.commit === head) await this.reviewRounds.read(of.pr, run.claim, head, round);
           return result;
         }
-        return this.checkKinds.run(spec, { checkout, deadline, now: this.now }, of);
+        return this.checkKinds.run(spec, { checkout, deadline, now: this.now }, of, { run: run.run, worktree: this.claimScopes.get(run.claim)?.cwd ?? checkout, stop });
       },
     });
     // The check kinds the hub holds (#1537): command, review, numbers and the work kinds, each with its routes.
     this.reviewRounds = new ReviewRounds({ raw: (query, params) => this.record.raw(query, params), appendCore: (kind, data, extra) => this.appendCore(kind, data, extra), objects: join(this.root.dir, 'objects') });
-    this.checkKinds = new Kinds({ host: () => this.host, submit: (spec) => this.runner.submit(spec), wait: (job) => this.runner.wait(job), cancel: (job) => this.runner.cancel(job), plant: options.plant });
+    this.checkKinds = new Kinds({ host: () => this.host, supervisor: () => this.supervisor, checkouts: () => this.checkouts, store: join(this.root.dir, 'objects'), submit: (spec) => this.runner.submit(spec), wait: (job) => this.runner.wait(job), cancel: (job) => this.runner.cancel(job), plant: options.plant });
     this.replicas = new Replicas({ folder: join(this.root.dir, 'replicas'), now: this.now, leases: () => this.leases, plant: options.plant });
     this.numbers = new Numbers({
       raw: (query) => this.record.raw(query), now: this.now, append: (connection, input) => this.append(connection, input), core: this.connection('core'),
@@ -8124,7 +8124,7 @@ export class Core {
       }
       // The checks of the other kinds the hub holds (#1537), each run through its kind: a drafted check whose bytes name
       // a work kind; the review on every claim that opens or updates a PR, its second model through the runner under
-      // your reserve (#87); and the numbers check on every claim whose words state a number with the query behind it.
+      // your reserve (#87); the numbers check on every claim whose words state a number or a speed with the check behind it (#1863).
       const of: ReviewOf = { claim: r.claim, task: r.task, agent: this.live.get(r.session)?.agent ?? 'claude-code', transcript: this.sessions.get(r.session)?.transcript, pr: await this.prOf(r.session) };
       const kinded = new Map<string, { spec: CheckSpec; of: ReviewOf }>();
       // A document check, the spec's or a drafted check's (#1723), runs through the canvas core on the revision the
@@ -8149,8 +8149,7 @@ export class Core {
           kinded.set(check, { spec, of });
         };
         if (await this.prOf(r.session)) add('review', this.checkKinds.reviewSpec(r.base, r.commit, this.root.dir), `review ${r.base}..${r.commit}`);
-        const numbers = this.checkKinds.numbersSpec(cited);
-        if (numbers) add(`numbers: ${numbers.numbers.map((n) => n.stated).join(', ')}`, numbers, numbers.numbers.map((n) => `${n.stated}: ${n.query.sql} on ${n.query.database}`).join('; '));
+        for (const n of await this.checkKinds.claimChecks(cited, r.cwd, r.base, r.definition === 'locked' ? (await this.tasks.scopeOf(r.task)).sample : null)) { checks.push(n.check); kinded.set(n.check.check, { spec: n.spec, of }); }
       }
       if (kinded.size) this.kindChecks.set(r.claim, kinded);
       // Each told command runs once on the claim's snapshot as the agent's own check: failing, it sends the claim back

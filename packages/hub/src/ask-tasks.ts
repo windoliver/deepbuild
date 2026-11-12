@@ -129,7 +129,7 @@ interface Requirement { settled_by?: typeof BUDGET_WINDOW; expected_ms?: number;
 interface Author { handle: string; role: string; automated?: boolean }
 /** A held-out variant of a check (#1018): the files written over the claim's checkout for a run of its own, kept by digest. */
 interface HeldOut { files: Record<string, string> }
-interface Handed { ask?: string; issue?: string; requirements: Obj[]; deliverables?: string[]; budget?: JsonValue; waives?: { id: string; source_line: string }[]; kind?: unknown; plan?: unknown }
+interface Handed { ask?: string; issue?: string; requirements: Obj[]; deliverables?: string[]; budget?: JsonValue; waives?: { id: string; source_line: string }[]; kind?: unknown; plan?: unknown; sample?: unknown }
 /**
  * A task's plan (#324), handed with its definition: whether it marks the issue as large, and its scope section, the
  * files and parts it will touch and the dependencies and top-level folders it names. A part is a part of the code by
@@ -517,11 +517,15 @@ export class AskTasks {
     }
     return variants;
   }
-  /** The kind of issue and the plan a task's definition was handed with (#324), found again by the lock's digest of it. */
-  async scopeOf(task_ref: string): Promise<{ kind: string | null; plan: Plan | null }> {
+  /**
+   * The kind of issue and the plan a task's definition was handed with (#324), and the read-only sample of real data it
+   * names (#1863), a SQLite file by its path in the repo, found again by the lock's digest of it.
+   */
+  async scopeOf(task_ref: string): Promise<{ kind: string | null; plan: Plan | null; sample: string | null }> {
     const [row] = (await this.o.raw(`SELECT id FROM definitions WHERE task_ref = ? AND state IN ('locked', 'revised') LIMIT 1`, [task_ref])) as { id: string }[];
     const handed = row ? (await this.json<Handed>(this.o.drafts, 'drafts')).find((d) => sha256Hex(canonicalize(d as unknown as JsonValue)) === row.id) : undefined;
-    return { kind: typeof handed?.kind === 'string' && handed.kind ? handed.kind : null, plan: planOf(handed?.plan) };
+    const sample = typeof handed?.sample === 'string' ? normalize(handed.sample) : '';
+    return { kind: typeof handed?.kind === 'string' && handed.kind ? handed.kind : null, plan: planOf(handed?.plan), sample: sample && sample !== '.' && !isAbsolute(sample) && !sample.startsWith('..') ? sample : null };
   }
   /** The definition's hash: every field it holds, each check's approved bytes by digest and each referenced output's among them. */
   private hashOf(d: Definition): string {
