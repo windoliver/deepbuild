@@ -157,10 +157,13 @@ wording is the issue's (its Acceptance criteria), not repeated here.
   8,208, v = 65,033, by validators' probes, not saved here), so it breaks only our rule that link order is dependency
   order with ties by name; it fails data-layout's two fixed-address checks, which hold that order rule along with
   alignment, and its zero-fill check (the stray byte at 8,205), which is ours. So the oracle lane is INCONCLUSIVE for
-  criterion 1: its tests pass and can fail, but no planted fault is shown failing a CHECK line upstream holds. Its one
-  ask, to the owner: does the reader step alone, which accepts the honest output and rejects the twin's, count as
-  line 27's rejection with a planted fault? Yes: the lane passes criterion 1 on function-imports (data-layout only
-  informs), with that evidence in the saved reader file rather than a rerunnable check; no: it stays INCONCLUSIVE.
+  criterion 1: its tests pass and can fail, but no planted fault is shown failing a CHECK line upstream holds. Both planted twins are named by other
+  criteria (`linker_adds_linking_section` by 7, `linker_links_in_listing_order` by 9); criterion 1 names none, so
+  under the design's "Wrong programs" it would have only a mutant, as criterion 3 does. Its one ask, to the owner:
+  does the reader step alone, which accepts the honest output and rejects criterion 7's twin's, count as line 27's
+  rejection with a planted fault for criterion 1, though criterion 1 doesn't name that twin? Yes: the lane passes
+  criterion 1 on function-imports (data-layout only informs), with that evidence in the saved reader file rather than
+  a rerunnable check; no: it stays INCONCLUSIVE.
   undefined.s has no planted twin, so the lane is INCONCLUSIVE for criterion 3 too. The base (`BASE-FAILURE.txt`, all
   6 fail) fails it before its import check. The design's "Wrong programs" accepts the twin a criterion names or a
   mutant, and criterion 3 names no twin; two mutants of `link.rs` line 404 were made by hand in a scratch clone and
@@ -168,7 +171,8 @@ wording is the issue's (its Acceptance criteria), not repeated here.
   cargo-mutants with cargo's own tests, never a vitest file, and says its kills prove no criterion. Its one ask, to
   the owner: do the two saved hand-made mutant runs count as line 27's planted fault? Yes: the lane
   passes criterion 3 on `oracle-mutants/names-no-import.txt`, a saved run rather than a rerunnable check; no: it stays
-  INCONCLUSIVE. One that names no import fails upstream's CHECK (`oracle-mutants/names-no-import.txt`). Upstream's CHECK-NOT (`baz`, a symbol only `--undefined` names) isn't held:
+  INCONCLUSIVE. The lane is INCONCLUSIVE rather than BLOCKED because it has a runner: the translated vitest tests run
+  our output (obj2yaml and FileCheck aren't installed, which matters only for the reader point the saved run covers). One that names no import fails upstream's CHECK (`oracle-mutants/names-no-import.txt`). Upstream's CHECK-NOT (`baz`, a symbol only `--undefined` names) isn't held:
   our linker has no `--undefined`. In its place the test checks something of our own, that no refusal names an import
   a listed library defines, and the mutant that names every import of the program fails it
   (`oracle-mutants/names-every-import.txt`). The blind job's first draft called that check the CHECK-NOT and put
@@ -517,7 +521,7 @@ raw files, `gen.test.ts`, the code and the issue. It also ran its own BFS over t
   comments, twins probed, all screenshots and `e2e-raw` checked) and three P2s and five low gaps, all on the oracle
   lane, fixed here: LLVM's object reader rejects the `linking` twin's empty section, which the bullet now reports
   as unsettled and puts to the owner; the unblock example "a linker that leaves an import" can't work (the subset check
-  refuses it first) and is dropped; criterion 3 gets its own ask, the trace lane's mutation step on `link.rs`, and
+  refuses it first) and is dropped; criterion 3 gets its own ask, the trace lane's mutation step on `link.rs` (superseded by round 41), and
   the design's mutant route is cited correctly; the two asks replace the separate "looser reading" aside; rounds 30
   and 37's verdicts are marked superseded; and three oracle-file wordings went back to the blind job, whose redraft
   (8552bc983) changes comments and docs only.
@@ -533,3 +537,7 @@ raw files, `gen.test.ts`, the code and the issue. It also ran its own BFS over t
   reader file says what its stderr drops and that it is LLVM 23.1.1, not the pinned 23.1.3; each oracle ask says what
   a yes and a no lead to; round 38 is marked superseded; and the oracle README's zero-fill wording went back to the
   blind job, whose redraft (5f765d3eb) changes the README only.
+- **Round 43** found no wrong values (oracle rerun 6 passed; the reader file's sha256s and exits reproduced; all
+  three twins probed; all screenshots and `e2e-raw` values checked) and one P2 and two low gaps, fixed here:
+  criterion 1's ask now says its twins are named by criteria 7 and 9, not 1, and asks the owner about that too; the
+  bullet says why the lane is INCONCLUSIVE rather than BLOCKED; and round 40's ask is marked superseded.
