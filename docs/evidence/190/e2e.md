@@ -93,7 +93,8 @@ same results (see the rerun below).
   and ac01's first test (passing) asserts both receipts and both deep_query rows; `maze`'s bake gives the 10-move route. Changing one byte of
   the library changes both pieces' rewritten hashes and bake keys, while a third piece that doesn't link it keeps its
   own: ac01's second test, passing.
-- 2: the fixture passes and the library links (lines 1, 14); the corner-cutting twin with grid_path@1's fixture is
+- 2: the fixture passes and the library links (lines 1, 14); the fixture's 10-move route on its 5×5 grid is
+  `app-bakes-replies.jsonl` row 4 and screenshot 04, and ac02's first test (passing); the corner-cutting twin with grid_path@1's fixture is
   refused naming the fixture, `route`, element 6, expected 0 and actual 1 (line 5); no fixture is refused naming the
   library (line 6). The planted corner-cutter's 8-move route is ac02 (passing in `acceptance-linux-9a02471b6.txt`) and
   screenshot 03.
@@ -106,7 +107,8 @@ same results (see the rerun below).
   fixture is refused, and the planted pack check that skips the subset check fails, in ac08 (both tests passing in
   `acceptance-linux-9a02471b6.txt`).
 - 9: `tactics` links grid_path@1 then pathing@1 (line 12); grid_path@1 with grid_path@2 is refused naming both (13);
-  the listing-order twin is refused naming the import (above). The ping/pong cycle is covered by the suite (ac09).
+  the listing-order twin is refused naming the import (above). The ping/pong cycle is refused by ac09's second test (passing in
+  `acceptance-linux-9a02471b6.txt`).
 - 3, and 4's app-vs-headless-Chrome fixture test, pass in the acceptance suite (`acceptance-linux-9a02471b6.txt`).
   That ac04 test compares only the fixture's `deep_hashes`, the state before step 0, which the honest and the
   corner-cutting libraries share; the page's item-hash, route and moves comparison is what tells them apart, so the
@@ -389,3 +391,5 @@ raw files, `gen.test.ts`, the code and the issue. It also ran its own BFS over t
 - **Round 26** found no wrong values (its rerun gave byte-identical 00–06 and `web-replies.jsonl`) and two low gaps,
   fixed here: only fixture times are rounded in the excerpts (`link_ns` is raw); and criterion 1 now cites each
   piece's receipt and deep_query row, with ac01's first test for the ones no saved reply shows.
+- **Round 27** found no wrong values (its rerun gave byte-identical 00–06) and two low citation gaps, fixed here:
+  criterion 2's 10-move fixture route and criterion 9's cycle now cite the reply, file and passing test that show them.
