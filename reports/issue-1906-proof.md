@@ -1,62 +1,83 @@
-# #1906: helper folds — partial proof, not a closing claim
+# #1906: folds and child ownership — remaining verification blockers
 
-Part of #1906. Base: `331b68be1f25104d39a3d9800eed4e2983da9af5`. The PR is draft: the remaining scope decisions and checks below are not waived.
+Part of #1906. PR #2322 remains draft because AC4 is not proven. This report replaces the earlier partial-proof report; the liveness, atomic-write and per-child ownership implementation gaps described there have been addressed.
+
+Tested merge base: `bcd02c238`. Earlier red runs at `331b68be1` remain valid history; current-main ownership tests were independently authored on `bcd02c238`. Main was merged without changing an acceptance file. No test, golden or known-failure baseline was weakened or re-recorded.
 
 ## Requirement → change → proof
 
-| Requirement | Change | Evidence / limit |
+| Criterion | Change | Proof / status |
 |---|---|---|
-| AC1: core.ts is shorter, with one forge default and one done.yaml reader | One initialized forge URL and one reader; raw callback reuse; five session appends and three Answers forwarders folded | `core.ts`: **8666 → 8645** lines. Both source assertions fail on base and pass unchanged on work. The audit's keyOf copy was already gone. |
-| AC2: one shell quote, duration and listener probe | Hub shell quoting has one owner, including inline callers; m/h/d use asks.duration, with channel-only seconds preserved; supervisor owns the listener probe | Three source assertions fail on base and pass unchanged on work. Malformed nonempty lsof output remains insufficient proof of a free port. |
-| AC3: every core child in children.ts's table at exit; two named forks fail on base | OpenItems' Git reads and SizeScope's accepted-history read go through children.ts | Two module-level assertions and three real-hub assertions fail on base and pass unchanged on work. **The universal/exit clause is not proven**: see decisions below. |
-| AC4: unchanged covering suites and package type-checks | Existing tests are unchanged. Type guards preserve their unknown/JSON narrowing; HTTP sharing preserves redirects, caps, CONNECT behavior and refusal wording | Workspace build passes. Selected comparison: **188 pass, 1 platform skip, 1 environment-blocked assertion on both base and work**, identical outcomes across 20 unchanged files. This is not full affected-suite equivalence. |
-| Extension host folds | Work/library call lifetime, approval waits, bounded HTTP | `host.ts`: **4299 → 4269** lines. Existing host/source/asset/approval tests pass; the declined-update close race has additional regression proof. |
+| AC1: core.ts is shorter, one forge default, one done.yaml reader | Shared reader/default, raw callbacks, session appends and Answers calls | Source assertions pass unchanged after failing on base. Current `core.ts` **8818 → 8797** lines; `host.ts` **4299 → 4269**. |
+| AC2: one shell quote, duration and listener probe | Shell owner; asks' m/h/d parser with channel seconds preserved; supervisor listener probe retains raw-empty evidence | Three source assertions red on base, green on work; malformed nonempty lsof output cannot prove a free port. |
+| AC3: every core child in children.ts's table at exit | Asynchronous child objects registered at Node's diagnostics boundary; synchronous invocations registered around all three native sync APIs; worker jobs retain their pending entries, and the child worker also loads tracking | Independent async suite: **4 red on base → 4 green**, including **1,000 seeded cases** and indirect gate starts. Independent sync suite: **4 red → 4 green**, including **1,000 seeded cases**, Box, gate and service callers. Original module/real-hub routing checks also remain green. |
+| AC4: unchanged covering suites and each package type-check passes | Type/behavior-preserving folds and regression tests | Final workspace build **passes**, but the full affected comparison does **not**: immutable base has a Rust compile failure and many existing test failures. Full-run outputs below are not a PASS. |
 
-The shared helpers belong to existing owners: contract object guards, asks' duration parser, supervisor process observation, hub shell arguments and durable writes. No new core service or dependency is added. The hub's runtime import graph has no cycle. No check, golden, known-failure entry, setting or workflow was changed.
+## Closure work completed
 
-## Recorded local checks
+- **Liveness has one probe without a policy change.** `processAlive` returns true on success/EPERM, false on ESRCH and unknown on other errors. The supervisor still treats unknown as alive; terminal tabs retain their old unknown-result policy. Five cases pass before/after, and a wrong probe fails the matrix. No owner decision is invented.
+- **Atomic writes stay atomic, not newly durable.** State and channel links use one `writeAtomic` owner. Existing durable callers retain `writeSynced`. The fsync-unavailable regression fails on the earlier draft and passes on base/fix; there is no added fsync latency/error path for those two calls.
+- **Child ownership includes indirect and synchronous starts.** The asynchronous table retains actual ChildProcess objects through exit notification, then clears them; a failed E2BIG spawn leaves no phantom object. Sync wrappers retain one invocation per child through completion and call the native functions unchanged. The Node sync binding supplies actual PID without changing stdout, stderr, status or thrown errors; PID zero is never read as an owned process. The wrapper adds no signal/kill behavior and preserves kept supervisor runs. The core worker loads the owner before its other modules; the child worker loads it too.
+- **Review regressions stay covered.** Invalid child arguments still reject, unreadable listener output stays not-free, and a recorded decline wins over a concurrent host close. Tests pass on base, fail on the earlier wrong fold, and pass unchanged after correction.
+- **Real prerequisites built.** `deep-hook` and `deep-show` were built from the current base. All tracked Rust/vendor files, lockfile, toolchain and Cargo config were compared byte-for-byte before cloning only ignored binaries to work. The previously blocked #1731 canvas fetch now passes with the real binary.
+- **Size ceiling tightens.** The host ceiling was lowered from 4298 to 4269 as the design's Repo guards require. No ceiling was raised. Core's inherited ceiling violation remains: base 8818/work 8797 versus ceiling 8263.
 
-- `npm run build --workspaces`: **exit 0**, on base and work. After review corrections, the affected supervisor/env-local/hub and extension-host builds also exit 0.
-- `node scripts/affected.mjs tests/acceptance/1906/children.test.ts tests/acceptance/1906/sources.test.ts`: test block **8/8 pass**. Base: **7 expected failures, 1 guard pass**.
-- `node scripts/affected.mjs tests/acceptance/1906/ownership/forks.test.ts`: test block **3/3 pass**. The blind real-hub base run fails all three routing assertions after recording the expected placeholder items and usual change size.
-- The selected unchanged comparison uses `affected.mjs`'s `select`/`plan`, the repo's unchanged Vitest reporter and test throttle. It runs the same 20 files once on each side, sequentially; only four files initially blocked by a missing deep-hook were rerun after that prerequisite was built. Outcomes match exactly: 188 passed, one Secret Service platform skip, one canvas-dependent failure. This bounded comparison is **not** a substitute for the full affected selection.
-- Review regression proof: unreadable listener output, declined-update/host-close race, and invalid child arguments pass on base, fail against the earlier refactor for their named reason, then pass unchanged after correction. Four assertions, all green in the final targeted affected test blocks.
-- Correction checks: listener callers plus source acceptance **58/58**; approval regression plus #139 **5/5**; invalid-argument tests **2/2**; child acceptance plus scope regression **7/7**.
-- `git diff --check`: passes. Frozen acceptance files are byte-identical to the independent authors' submitted files.
+The tracking is in the hub, which owns all core-thread starts and can see the Node boundary; an extension cannot cover starts made before it loads or by other core packages. No new dependency, option or setting was added. Internal `spawn_sync` binding use is a Node portability risk requiring review; it is exercised on Node 24.22.2, including worker-thread launches, native errors and outputs. The public sync functions retain their signatures and results. Scope expanded beyond the two named forks because the owner explicitly asked to close the universal gap; it is not silently narrowed to examples.
 
-### Affected runner is not green
+## Final focused proof
 
-The final targeted affected run reports:
+- `npm run build --workspaces`: **exit 0** on current base and final work.
+- `tsc -p tests/acceptance/1906/exit/tsconfig.json`: **exit 0**.
+- Final focused Vitest run: **10 files, 29 tests pass**, including all #1906 acceptance files (both 1,000-case properties), #1731 fetch, liveness, channel atomic write, listener and decline/close regressions.
+- Final node lifecycle run: **6 tests pass**, covering direct registration, exit retention, failed E2BIG spawn, all sync APIs, missing sync executable and invalid arguments.
+- Final `affected.mjs` run over the acceptance/regression files: **33 tests pass**, but overall **FAIL** on lints:
 
 ```
-FAIL affected: 156 new, 11 already failing on main, 0 inconclusive or blocked, 0 listed skips, 4 passed
+FAIL affected: 155 new, 11 already failing on main,
+0 inconclusive or blocked, 0 listed skips, 33 passed
 ```
 
-These are repo lint findings, not four failed regression assertions. Many exist on the base (dependency allowlist, cards, slots, closures and record-reader findings), and others were unrun in the original base attempt. They are **not all classified as inherited** without a complete matching base run. Notably:
+Of the 155 lint keys, **153 exactly match findings from the current base lint sweep**. One is the inherited core size violation with its smaller work line count (8818 → 8797); one is the closures command's interleaved failure output (the base has closure-data drift too). This comparison is evidence of inheritance, not a baseline waiver. No WIDE or INCONCLUSIVE line appears in the completed focused run.
 
-- `core.ts` exceeds the inherited 8263-line ceiling, even after shrinking to 8645; this change does not silently raise it.
-- `host.ts` shrank below its recorded 4298 ceiling, so the ratchet requests 4269. No check definition was changed without approval; that update remains outstanding.
-- The server exceeds the default file-size ceiling on the base too.
+`git diff --check bcd02c238..HEAD` passes. Frozen acceptance bytes match their authors. Earlier check corrections affected only implementation; the initially invalid provider-namespace fixture and the dist-only mutation that did not reach Vitest's source import are disclosed in local logs and do not count as proof.
 
-The completed focused runs print **no WIDE or INCONCLUSIVE lines**. Earlier attempts did report no-grant INCONCLUSIVE jobs, retained in the local logs. Full changed-path selection was listed, not executed: **625 parallel Vitest files, 124 node files, 755 alone Vitest files, 92 timed files, 39 slow files, `deep-app` and `deep-logic`, and 83 hand/lane skips**. It prints no WIDE line and notes that `children-worker.ts` has no statically detected test; the real-hub test does execute it. Nothing in that unrun selection passes by implication. No full preflight was run.
+## Full affected attempt: cannot satisfy AC4
 
-### Environment and evidence provenance
+Both base and work were launched through `node scripts/affected.mjs --slow --timed`, not marked green from focused tests. The base ran for over six hours, including its timed block. It recorded, before being stopped:
 
-The missing deep-hook was built in the independent base checkout. All 24 local crate/workspace/toolchain inputs match both comparison checkouts byte-for-byte; the same binary was copied to each ignored target folder (SHA-256 `c2a09504d24d1d4e8cbcdb13609d9657f0b463a76c9dca48a493a5452df7bb1f`). It is not a stub.
+| Side | Passing test results | Failing test results | Skipped results | Files with results |
+|---|---:|---:|---:|---:|
+| Base | 5619 | 1063 | 436 | 1594 |
+| Work | 934 | 238 | 4 | 376 |
 
-The remaining #1731 fetch assertion needs `deep-show`: its saved `deep show --check --json` reply says no canvas core is built. That assertion fails identically on both sides; it is not reported PASS. The platform skip is the Linux Secret Service test on macOS.
+These are unique reported test outcomes from partial runs, **not completed suite verdicts**. They are not a before/after equivalence claim. The work parallel blocks got no grant, then ran only part of its alone block. Remaining and stopped checks are INCONCLUSIVE, not PASS. Full selection included hand/platform lanes that cannot be executed by this session; none was silently counted.
 
-Raw local logs and exact command/report hashes are retained under `/private/tmp/deep-1906-proof/`, not checked in because raw output includes local paths. Key files: `resume-build.log`, `resume-acceptance-affected.log`, `ownership-base.log`, `ownership-work-affected.log`, `regression-comparison.json`, `hook-provenance.json`, `listener-draft-red.log`, `listener-fix-tests.log`, `update-close-red-assertion.log`, `update-close-green.log`, `children-arguments-{base,red,green}.log`, and `final-targeted-affected.log`.
+Hard baseline failures include:
 
-The original acceptance author had build/grant setup failures. The supplemental author corrected a hook-fixture UUID/ULID setup error before submitting; the final base failures are on the routing assertions. The implementer's new update-close regression initially had an invalid provider namespace (also failing on base); its corrected, frozen fixture subsequently failed at the close-race assertion and passes on base/fix. These setup runs are retained and are not counted as repeated proof. Only processes started by this task were stopped, by PID. Other worktrees and their jobs were left alone.
+- `deep-app` test `acceptance_995` does not compile: `CanvasPanel::present` now requires its Context argument, absent in the unchanged test. Fixing that test requires its approved test-change process; this PR does not edit it.
+- Existing contract fixture mismatches, behavioral assertions, and timing failures. The current-base lint sweep ran all 18 existing script commands and found 167 findings.
+- Early reused shards lacked deep-hook/deep-show; binaries were installed only in this task's held shards after input checks. Those setup failures remain recorded; no retry-to-green was performed.
+- Test/grant contention delayed checks for hours. The independent sync suite's first two queued attempts executed nothing; the eventual one real base run failed all four named assertions, then the unchanged work run passed.
 
-## Decisions and work still open
+The full jobs were stopped by recorded PID/ancestry only once the immutable required baseline failures demonstrated AC4 could not pass unchanged. No other session's process or grant was stopped. All unfinished results remain INCONCLUSIVE. No test/check/baseline was altered to turn this into a PASS.
 
-1. **Liveness:** both current helpers already return alive on EPERM and gone on ESRCH. For other thrown errors the terminal helper says gone while supervisor says alive. Folding them changes a socketless terminal tab's `ended` state. The owner has been asked whether to use the supervisor's conservative rule; no answer is assumed, and the helper is not folded.
-2. **Child ownership:** the base has a private `waiting` map of jobs, not PIDs, and no child-table behavior at hub exit. “At exit” could mean the child's completion or a new hub-shutdown policy. The independent author confirms the issue/design does not decide it. Other direct core-thread starts remain (including gate.measure); the universal criterion is not narrowed to the two named forks without approval.
-3. **No-visible-change proof:** full affected coverage, timed/slow/platform checks, the canvas-binary-dependent case, and repo lint/ratchet findings remain open. Shared durable writes intentionally add fsync behavior; their I/O-failure and latency effects are not proven equivalent.
-4. **Dependency:** #1687 is open, and PR #2236 is unmerged. This draft does not claim that the seam refactor is complete.
+## Reproducibility
 
-## Size and delivery deviation
+Local raw logs are retained at `/private/tmp/deep-1906-proof/` (not committed because they contain local paths):
 
-The issue asks for small PRs by file group. This is one draft review branch at the user's request, with separate test-first and file-group commits. Production changes total about 482 changed lines, mostly deletion/replacement of copies; independent acceptance adds 540 lines including its fixture/docs/config, and review regressions add 72. It can and should be split by file group before ready-to-merge delivery if the reviewer requires it. No exception is inferred from a passing subset, and no `Closes #1906` claim is justified yet.
+- `closure-base-build-corrected.log`, `closure-final-build.log`, `exit-final-typecheck.log`.
+- `exit-base.log`, `work-exit.log`, `sync-base.log`, `sync-work.log`.
+- `closure-final-focused.log`, `closure-final-node.log`, `closure-final-affected.log`.
+- `closure-base-lints.json`, `closure-work-lints.json`.
+- `full-base-affected.log`, `full-work-affected.log`, `base-partial-results.json`, `work-partial-results.json`, `closure-stopped-jobs.json`.
+- `closure-rust-inputs.json`: exact input and binary provenance.
+
+The independent oracle reads real table entries through V8's inspector, holding real Git/ps children at exit or observing native synchronous completion. It does not assert an implementation-chosen table name. It samples generated callers, not every possible production path; the common Node interception is the mechanism covering the remaining callers. There is no added shutdown-kill policy.
+
+A few subsecond node regression probes were run under `scripts/lease` without the throttle after prolonged grant waits; these are functional assertions, not timing proof. All independent acceptance/property runs used test grants. The final full/focused runner calls use `affected.mjs`. No CI was added or dispatched.
+
+## Remaining blocker to `Closes #1906`
+
+**AC4 is not proven.** Required base checks fail, the full before/after comparison is incomplete, and inherited core/lint failures are not waived. #1687 also remains open/unmerged. The code/proof additions are pushed for review, but neither an agent's confidence nor a passing subset can close the issue under AGENTS.md.
+
+The larger-than-requested draft is split into test-first/file-group commits, but remains one PR at the owner's request. Universal process coverage and independent 2,000-case proof expanded it beyond the initial audit's small folds; it can be split for merge once the remaining proof/dependency work is decided.
