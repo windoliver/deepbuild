@@ -474,6 +474,8 @@ byHand.push('tests/acceptance/154/stems.test.ts');
 // reading against the lane's rule.
 alone.push('tests/acceptance/1700/');
 timed.push('tests/acceptance/1700/budgets.test.ts');
+// #409's files each build deep-show and export films through the GPU; 409-oracle also runs the outside film gate.
+alone.push('tests/acceptance/409/', 'tests/acceptance/409-oracle/');
 // #1163's files each build deep-show; exports.test.ts exports the 600-frame 1080p film six times.
 alone.push('tests/acceptance/1163/');
 // #1862's suite starts a hub of its own with a fake reviewer, as #1537's does.

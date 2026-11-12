@@ -3,7 +3,9 @@
 // from the Building blocks table of docs/technical-design.md (#26): every row whose "Agents, through MCP" cell names a
 // tool gives that tool's description and the skill its block and what the block never is. Only what a tool can't teach
 // goes in the skill, when to use each block and what it never does, and never a tool's parameters, which agents read
-// from its schema. tests/acceptance/26 fails when either drifts from the table.
+// from its schema. tests/acceptance/26 fails when either drifts from the table. The skill also states each craft@1
+// check in its own words, from crates/deep-canvas/src/craft.json, the table the checks read (#409);
+// tests/acceptance/409 fails when it drifts from what the checks state.
 //   node scripts/skill.mjs
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -92,6 +94,8 @@ export function blocks(design = readFileSync(join(ROOT, 'docs/technical-design.m
   return rows;
 }
 const naming = (rows, tool) => rows.filter((r) => r.mcp.includes(`\`${tool}\``));
+/** craft@1's checks as the checks read them (#409): name, description, threshold and fix. */
+const CRAFT = JSON.parse(readFileSync(join(ROOT, 'crates/deep-canvas/src/craft.json'), 'utf8'));
 
 export function generate(rows = blocks()) {
   const descriptions = {};
@@ -126,6 +130,13 @@ export function generate(rows = blocks()) {
     '## Working on a canvas document',
     '',
     'Start from a piece recipe, or from a kind deep_kinds lists. Check the document with deep_show before you render it. Then render small and read its issues. Fix by patch, changing one item at a time, and render in full only once the numbers pass; judge by numbers, never by eye. When no kind or field does what the piece needs, raise an open item with deep_open_item naming the missing kind or field, instead of approximating it. When a logic step needs more fuel than its step ceiling, which deep_kinds lists by step rate, budget class and host, split the work across steps and keep the progress in memory. For a formula, run the typeset job with deep_job: it turns LaTeX or Typst into an SVG with one id per term, which a vector@1 item imports, so a step moves the terms two formulas share; never set a formula as text.',
+    '',
+    // craft@1's checks (#409), each in its own words from the table the checks themselves read.
+    '## Craft checks a film brief names',
+    '',
+    `A film's brief names the ${CRAFT.pack} checks it wants. Each runs only when the brief names it, holds the film to the brief's thresholds and never yours, and never passes a film on its own.`,
+    '',
+    ...CRAFT.checks.map((c) => `- ${c.name}. ${c.description} Threshold — ${c.threshold}. Fix — ${c.fix}`),
     '',
   ].join('\n');
   return { descriptions, skill };

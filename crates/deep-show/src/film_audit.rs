@@ -22,6 +22,8 @@ use vello_cpu::kurbo::{Affine, Point};
 use crate::hub::{Claim, Hub, Planted};
 use crate::shared::FLICKS;
 
+pub(crate) mod craft;
+
 /// The shortest reading hold this build allows: the test build standing in for a new release's
 /// stricter rule raises it to 2 s (#407's criterion 9); a shipped build keeps the design's.
 const HOLD_FLOOR: Option<f64> = if cfg!(feature = "test-hold-min-2s") {
@@ -624,6 +626,7 @@ impl Hub<'_> {
             }
             rows.push(row("cue", &id, issues));
         }
+        rows.extend(self.craft_rows(claim, c));
         rows
     }
 
