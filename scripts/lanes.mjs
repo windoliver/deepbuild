@@ -494,6 +494,16 @@ alone.push('tests/acceptance/157/', 'tests/acceptance/157-oracle/');
 timed.push('tests/acceptance/157/budgets.test.ts');
 // #1183's files each build deep-show and judge 3D figures whose logic runs in the sandbox.
 alone.push('tests/acceptance/1183/');
+// #537's files build deep-gpu (most also deep-show, and #544's assembler), run logic programs and draw on the GPU;
+// ac4-budget times 2,000 units at 1080p against the showpiece class's GPU budget.
+alone.push('tests/acceptance/537/', 'tests/acceptance/537-oracle/');
+timed.push('tests/acceptance/537/ac4-budget.test.ts');
+// #1920's files build deep-show seven times, in the full and core sets, and read each build's published plan.
+alone.push('tests/acceptance/1920/');
+// #1863's files each start a real hub and a session through deep-hook; the speed file times five 5 s and 6 s waits a
+// side through the claim's timing check, whose verdict is a reading on a machine loaded past its cores.
+alone.push('tests/acceptance/1863/');
+timed.push('tests/acceptance/1863/speed.test.ts');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },

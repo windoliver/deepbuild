@@ -14,7 +14,7 @@ use deep_canvas_marks::look::Status;
 use deep_canvas_scene3d::label::PAGE;
 use deep_canvas_scene3d::look::Look3;
 use deep_canvas_scene3d::module::{GEOMETRY_PASS, OUTPUT_PASS};
-use deep_canvas_scene3d::scene::{evaluate_sourced, placed_at, Labels, Scene};
+use deep_canvas_scene3d::scene::{evaluate_sourced, Labels, Scene};
 use deep_gpu::device::Backend;
 use deep_scene3d_render::status::{Mode, COLORS_PASS, GUARD_PASS};
 use deep_scene3d_render::SHADOW_PASS;
@@ -579,25 +579,6 @@ fn lowered(doc: &Value, packs: &Packs) -> Result<Value, Value> {
     Ok(checked.lowered)
 }
 
-/// Each path of `paths` (`items/<id>/<field>…`) as the canvas core evaluates `doc` at `t`
-/// (#429): null where the item or field isn't there.
-fn values_at(doc: &Value, t: i64, paths: &[String]) -> Result<Value, Value> {
-    let items = placed_at(doc, t).map_err(|r| refused(r.code, r.path))?;
-    let mut out = Map::new();
-    for path in paths {
-        let rest = path.strip_prefix("items/").unwrap_or_default();
-        let (id, field) = rest.split_once('/').unwrap_or((rest, ""));
-        let value = items
-            .iter()
-            .find(|(i, _, _)| i == id)
-            .and_then(|(_, item, _)| item.pointer(&format!("/{field}")))
-            .cloned()
-            .unwrap_or(Value::Null);
-        out.insert(path.clone(), value);
-    }
-    Ok(Value::Object(out))
-}
-
 /// A patch's ops applied as `writer`, to the layer its connection stands for.
 pub(crate) fn apply_patch(
     doc: &mut Value,
@@ -975,6 +956,8 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
     }
     crate::physics::bake(&mut args.doc)?;
     crate::particles::refuse(&args.doc, app.planted)?;
+    let order = frame_order(args.from, args.frames, &args.seeks);
+    let mut baked = crate::fed::bake(&args.doc, &args.assets, (&order, args.fps), app.planted)?;
     let packed = args.doc["packs"].as_array().is_some_and(|p| !p.is_empty());
     let mut lowered_doc = if packed {
         Some(lowered(&args.doc, &packs)?)
@@ -1203,17 +1186,21 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 composed = without_layers(&composed, &args.hidden);
             }
             deep_canvas_physics::written::write(&mut composed, t);
+            baked.settle(&mut composed, t);
             let outlines = &pack_sealed()?.outlines;
             let mut scene =
                 evaluate_sourced(&composed, t, &args.look, &mut labels, &read, outlines)
                     .map_err(|r| refused(r.code, r.path))?;
+            let selected = (&mut args.selection, &mut viewer_selection);
+            let presented = crate::fed::framed(&mut scene, &composed, t, selected, app.planted);
             if build_ms.is_none() {
                 build_ms = Some(started.elapsed().saturating_sub(opening).as_secs_f64() * 1e3);
             }
             let values = if args.evaluate.is_empty() {
                 None
             } else {
-                Some(values_at(&composed, t, &args.evaluate)?)
+                let at = (&read as deep_canvas_scene3d::scene::Assets<'_>, app.planted);
+                Some(crate::fed::values(&composed, t, &args.evaluate, at)?)
             };
             // Its maps, made ready in the decode worker once per run and held to the
             // document's decoded-image cap (#423).
@@ -1276,6 +1263,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                         json!(l.segments.iter().map(|s| [s.a, s.b]).collect::<Vec<_>>()),
                     )
                 })
+                .chain(crate::fed::segments(&scene, &composed))
                 .collect();
             // A stroke binding draws its outline around the object, exact (#386).
             if let Some(status) = status.as_ref().filter(|_| bound) {
@@ -1808,6 +1796,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 frame.insert("values".into(), values);
             }
             frame.extend(particles.map(|p| ("particles".to_string(), p)));
+            frame.insert("selection".into(), presented);
             if let Some(bytes) = drawn.gpu_bytes {
                 frame.insert("gpu_bytes".into(), json!(bytes));
             }
@@ -1975,6 +1964,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 frame.insert("replayed".into(), json!(c.replayed));
                 frame.insert("instances_written".into(), json!(c.instances_written));
                 frame.insert("element_uploads".into(), json!(c.element_uploads));
+                frame.insert("row_uploads".into(), crate::fed::rows(&composed, c));
                 frame.insert("cpu_culled".into(), json!(c.cpu_culled));
                 frame.insert("counts_read_back".into(), json!(c.counts_read_back));
                 let draws: Vec<Value> = c

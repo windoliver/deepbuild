@@ -155,3 +155,17 @@ provider calls matched as frozen. `plant.ts` and `server.ts` changed on main
 alone (new plant names for #2019 and #1100; `server.ts` holds no loader site).
 `core.ts` gained the wiring of `session-flags.ts`. After the refresh the four
 structure files pass 29 of 29.
+
+## Refresh after the merge of main `651bf06d3` (2026-11-12)
+
+Under the same approval, and again by the change's own author. That merge
+(#1863) changed `core.ts` alone among the reviewed inputs: the `kind` callback
+takes the hub's stop and hands the check kinds a run's handle and worktree, and
+the check kinds take the supervisor, the checkouts and the object store. With
+the old digest the completeness case named `core.ts` and nothing else.
+
+| Input | Before | After the merge |
+|---|---|---|
+| hub/src/core.ts | `9e6e9273be33…` | `c160f8ae015a02dd681bc39ea5484dd39912380f9a9fad9bfd723eb152061cd4` |
+
+The four structure files pass 29 of 29.

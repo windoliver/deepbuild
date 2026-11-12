@@ -9,6 +9,7 @@ The canvas side behind deep_show (#393). `deep-show run` plays a scenario of dee
 - `src/main.rs`: subcommands, scenario parsing and the build set's module list (`modules`); each call family in its own module (`hub.rs`, `shared.rs`, `frames.rs`, `snapshot.rs`, `scene3d.rs`, `input.rs`, `ring.rs`, `terminal.rs`, `packs.rs`, `verdict.rs`, `capture.rs` and the rest).
 - `src/kit/`: the conformance kit's parts; its test canvas modules go in `src/kit/modules.rs`, each under its own `test-kit-*` feature.
 - Test canvas modules and planted twins that need statics or threads live here behind a `test-*` feature (`src/planted.rs`, `src/test_threads.rs`, `src/twins.rs`); others go in crates/deep-canvas-test-modules.
+- `src/physics.rs` builds the physics module on the Rapier backend this binary links, and `src/test_sim.rs` lists the modules of the `test-sim-*` builds, so neither grows `src/main.rs`.
 - Tests: `#[cfg(test)]` modules beside the code, `tests/*.rs` driving `deep-show run`, and the acceptance suites in tests/acceptance/<issue>.
 - Generated, never hand-edited: `kit-ledger.json` (by `node scripts/canvas-kit.mjs`) and `schedule/modules/*.json` (by the kit's `schedule` part under `DEEP_KIT_WRITE_SCHEDULE`, when missing). `schedule/<set>.json` are committed snapshots of the sealed plan; a test in `src/main.rs` fails and prints the plan when they drift.
 - Canvas logic (operators, checks, the scheduler's plan) belongs in the deep-canvas* crates; this crate hosts, threads and draws it.

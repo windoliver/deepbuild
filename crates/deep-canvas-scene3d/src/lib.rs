@@ -1,5 +1,6 @@
 //! The scene3d canvas module's R2 subset (issue #378): see the crate manifest.
 
+pub mod arrays;
 pub mod bevel;
 pub mod build;
 pub mod builders;
@@ -30,6 +31,7 @@ pub mod look;
 pub mod modifiers;
 pub mod module;
 pub mod overlay;
+pub mod points;
 pub mod poly;
 pub mod probe;
 pub mod rest;
@@ -39,11 +41,13 @@ pub mod sets;
 pub mod shapes;
 pub mod shore;
 pub mod sky;
+pub mod slots;
 pub mod spatial;
 pub mod spec;
 pub mod stack;
 pub mod sweep;
 pub mod terrain;
+pub mod tints;
 pub mod uv;
 pub mod water;
 

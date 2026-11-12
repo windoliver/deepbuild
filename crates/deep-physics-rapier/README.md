@@ -8,6 +8,7 @@ physics.world@1's backend (issue #2009): Rapier 0.36.1, pinned with enhanced-det
 
 - Building, stepping and reading a world, and checkpoints, go in `src/lib.rs`.
 - What the build resolved goes in `build.rs`, read by `build()` in `src/lib.rs`.
+- The physics module's manifest is deep-canvas-physics's (`module::module`), built from `build()`: deep-show's full build links this crate for it, so the plan it publishes and a golden recorded here name the same implementation and pins (issue #1920).
 - The control register's guard goes in `src/fp.rs`.
 - What a step wrote (contacts, hits, sensors, rest and wake, breaks) goes in `src/occurrences.rs`; it only reads the world, so a world's bytes and checkpoints are what they were. The `test-reverse-pairs` feature builds #1918's test backend, which reads every pair last to first from its second collider's side.
 - What a world reads of its scene (paths, the cycle check, the key's reads) goes in `src/scene.rs`.

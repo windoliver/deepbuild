@@ -1,7 +1,10 @@
 // Check execution contracts: the core consumes results, never selects a concrete check implementation.
 import type { CheckContext, CheckResult, CheckSpec } from '@deepbuild/conformance';
-import type { Host } from '@deepbuild/supervisor';
+import type { Checkouts } from '@deepbuild/gate';
+import type { Host, Supervisor } from '@deepbuild/supervisor';
 import type { JobRecord, JobSpec } from '@deepbuild/runner';
+import type { TimingReport } from '@deepbuild/verdicts';
+import type { ClaimCheck } from './gate-runner.js';
 
 export interface CommandCheck {
   host: Host;
@@ -36,8 +39,15 @@ export interface ReviewOf { claim: string; task: string; agent: string; transcri
 export interface ReviewItem { rule: string; sites: { file: string; line: number; quote: string }[] }
 /** A counted round keeps its sent items separate from earlier ones still open. */
 export interface ReviewRound { sent: ReviewItem[]; open: ReviewItem[] }
+/** What a speed's or added terms' run reads beyond its checkout (#1863): its run's handle, the session's worktree and the hub's stop. */
+export interface RepoOf { run: string; worktree: string; stop: AbortSignal }
 export interface KindsOptions {
   host(): Host;
+  /** The supervisor each side of a stated speed runs its steps through, and the checkouts its baseline side runs in (#1863). */
+  supervisor(): Supervisor;
+  checkouts(): Checkouts;
+  /** The hub's object store, a bare repo reading the repo's objects as alternates: the merge base's files are read there. */
+  store: string;
   submit(spec: JobSpec): Promise<JobRecord>;
   wait(job: string): Promise<JobRecord>;
   cancel(job: string): Promise<JobRecord>;
@@ -48,10 +58,10 @@ export interface CheckKinds {
   reaches(kind: string, route: 'spec' | 'definition' | 'pr' | 'number'): boolean;
   deadline(kind: string): number;
   definitionSpec(bytes: Uint8Array): CheckSpec | undefined;
-  numbersSpec(words: string): (CheckSpec & { numbers: { stated: string; query: { sql: string; database: string } }[] }) | undefined;
+  claimChecks(words: string, cwd: string, base: string, sample: string | null): Promise<{ check: ClaimCheck; spec: CheckSpec }[]>;
   uncited(words: string): string;
   reviewSpec(base: string, head: string, root: string): CheckSpec | undefined;
-  run(spec: CheckSpec, ctx: CheckContext, of: ReviewOf): Promise<CheckResult & { round?: ReviewRound }>;
+  run(spec: CheckSpec, ctx: CheckContext, of: ReviewOf, repo?: RepoOf): Promise<CheckResult & { round?: ReviewRound; speed?: TimingReport }>;
 }
 export interface ChecksProvider {
   command(options: CommandCheck): Promise<CommandRun>;

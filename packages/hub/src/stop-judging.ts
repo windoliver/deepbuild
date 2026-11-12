@@ -128,6 +128,8 @@ export class StopJudging {
 
   /** Each claim's task, base and folder, for its size and scope at its stop (#324). */
   private readonly claimScopes = new Map<string, { task: string; base: string; cwd: string }>();
+  /** The folder a claim was made in, which a stated speed's baseline is checked out from (#1863). */
+  claimFolder(claim: string): string | undefined { return this.claimScopes.get(claim)?.cwd; }
 
   private readonly budgetAsks = new Map<string, BudgetInput>();
 
@@ -1087,7 +1089,7 @@ export class StopJudging {
       }
       // The checks of the other kinds the hub holds (#1537), each run through its kind: a drafted check whose bytes name
       // a work kind; the review on every claim that opens or updates a PR, its second model through the runner under
-      // your reserve (#87); and the numbers check on every claim whose words state a number with the query behind it.
+      // your reserve (#87); the numbers check on every claim whose words state a number or a speed with the check behind it (#1863).
       const of: ReviewOf = { claim: r.claim, task: r.task, agent: this.options.state().live.get(r.session)?.agent ?? 'claude-code', transcript: this.options.state().sessions.get(r.session)?.transcript, pr: await this.prOf(r.session) };
       const kinded = new Map<string, { spec: CheckSpec; of: ReviewOf }>();
       const docs = this.options.services.canvasSide.docChecksOf(r.cwd);
@@ -1110,8 +1112,7 @@ export class StopJudging {
           kinded.set(check, { spec, of });
         };
         if (await this.prOf(r.session)) add('review', this.options.services.checkKinds.reviewSpec(r.base, r.commit, this.options.services.root.dir), `review ${r.base}..${r.commit}`);
-        const numbers = this.options.services.checkKinds.numbersSpec(cited);
-        if (numbers) add(`numbers: ${numbers.numbers.map((n) => n.stated).join(', ')}`, numbers, numbers.numbers.map((n) => `${n.stated}: ${n.query.sql} on ${n.query.database}`).join('; '));
+        for (const n of await this.options.services.checkKinds.claimChecks(cited, r.cwd, r.base, r.definition === 'locked' ? (await this.options.services.tasks.scopeOf(r.task)).sample : null)) { checks.push(n.check); kinded.set(n.check.check, { spec: n.spec, of }); }
       }
       if (kinded.size) this.kindChecks.set(r.claim, kinded);
       // Each told command runs once on the claim's snapshot as the agent's own check: failing, it sends the claim back
