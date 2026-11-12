@@ -55,3 +55,31 @@ TEXT Only the first command ran. ...
 # The hub was stopped by its PID. (A first run the same night was identical, but its wrapper sent deep-hook's stderr
 # only to a log, so Claude Code showed "No stderr output" for the denial; the wrapper now passes it through.)
 # On the Mac the same check stopped at Claude Code's folder-trust prompt for a new work folder; no hook ran there.
+
+## E. The same check in an interactive Claude Code session, recorded as screenshots (Linux, 2026-11-11, load ~5-7),
+## binary built from 6d4fccfb. Two tmux windows rendered to PNG; home paths were replaced with <home>, and Claude
+## Code's U+23F5 arrow (no installed font has it) with a similar arrow, after capture.
+# shots/6-binary-and-settings.png: crates unchanged at HEAD 6d4fccfb, cargo rebuilds nothing (the binary is current
+#   for these sources), and the whole --settings file: the wrapper for the five events, nothing else.
+# shots/1-setup-and-live-session-checks.png: the settings file maps all five events to the wrapper, which runs
+#   deep-hook with HOME=/tmp/dh17-e2e/home; the spool is empty. With the session open, both before its prompt and
+#   after its turn: its process (claude --settings /tmp/dh17-e2e/settings.json --allowedTools Bash) and cwd, no hub
+#   socket and no process with that HOME; the load; the wrapper's log: six hook calls, 6-20 ms each, the pkill's
+#   PreToolUse exiting 2.
+# shots/2-session-ls-ran-pkill-blocked.png: the prompt asks for the two calls and a report, nothing about the outcome;
+#   ls ran; the pkill was not run, with DeepBuild's reason (guard no-kill-by-name, which holds while the hub doesn't
+#   answer). The agent's reply calls this "the e2e": the session runs in this repo, so it has the project's context.
+#   The grey text in the input box is Claude Code's own suggestion; it was never sent (the spool has one prompt).
+# shots/3-session-expanded.png: the same turn in the detailed view: the raw ls output and the hook's full denial.
+# shots/4-spool-hub-stopped.png: after the session, hub still stopped: the spool folder holds one file of six lines,
+#   with their matched entries (listing-noted for ls, no-kill-by-name for the pkill); no ledger row for the session.
+# shots/5-hub-replay-ledger.png: the CLI entry (node packages/cli/dist/main.js hub run; this branch changes no hub or
+#   CLI code) replays the spool, which empties; the ledger holds the six hook events (writer hook) in hook order with
+#   the spool's IDs, plus three rows the hub wrote itself (writer core: session.reading, turn.usage, session.state);
+#   the hub stopped by its PID, and afterwards no socket and no process with that HOME.
+# Independent agents reviewed each capture from the images alone. Their findings were fixed in the next capture:
+# hidden commands, no proof the hub was down while the session ran, no ledger read before the replay, a filtered
+# ledger query, no load or hook timings, the hub not shown gone, and a missing glyph. The last review is cited in the PR.
+# In an earlier capture at load ~10 Claude Code also showed "spooled <id>, but its sync didn't finish within the
+# hook's 50 ms" beside the denial. That note (from 1d65b7d1f, not this change) means the line was written to the spool
+# file but its fsync to disk hadn't returned within the budget; the line was in the spool and reached the ledger.
