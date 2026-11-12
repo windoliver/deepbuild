@@ -862,6 +862,15 @@ pub fn list_focused(window: &Window) -> Option<String> {
         .flatten()
 }
 
+/// Whether the list holds the keyboard, its ring drawn yet or not.
+pub(crate) fn list_has_keys(window: &Window) -> bool {
+    LIST_KEYS.with(|keys| {
+        keys.borrow()
+            .as_ref()
+            .is_some_and(|(keys, _)| keys.is_focused(window))
+    })
+}
+
 /// The open asks in the order Needs you draws them, each with its question: open ones oldest first, then those put
 /// off till later (#1462).
 pub fn open_asks() -> Vec<(String, String)> {
