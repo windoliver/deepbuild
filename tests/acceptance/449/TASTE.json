@@ -1,0 +1,17 @@
+{
+  "issue": 449,
+  "criterion": "#449.3f28ed99",
+  "verdict": "looks_right",
+  "who": "Claude (claude-opus-5-5), on the owner's delegation in session on 2026-11-11 (\"validate screenshot and fix whever you think is approporiate\")",
+  "when": "2026-11-12T01:13:25Z",
+  "screenshots": {
+    "sparks-on-impact.png": "e5fbe8a37c8825798fa01b71d575345faa8ddf3315c7f6c3675bccb88e8d7b48",
+    "six-plane-box.png": "7eae8f32fb8881f3c64bc995068ad306f5e6735dc6a40b5972ccb40050d8a3b6",
+    "landing.png": "f75977138c1eb1f0817558b67eb0ef19f8e6ce4828a782903c7279830c0c5311"
+  },
+  "recordings": {
+    "sparks.apng": "2e86b0504d343c5aad4280f44027186ae0dc9119a2bfe59a13916814edb47980",
+    "landing.apng": "e841e8c6aa2832ef6b754e7fe059c5c53636089c540aed0119f878bc61f79f5b"
+  },
+  "note": "Sparks on impact: each ball's hit throws a fan of sparks up a cone from its contact point on the plate; they skip once off the plate and die, and later hits burst again under each ball. Six-plane box: the bead glows inside the box at (-0.4, 0.4, 0.4) m, against the back, left and floor walls. Landing: the rain falls as a 2 x 2 m column and rests on the cube's top and on the floor square around it. The first run's landing showed drops resting in mid-air beside the cube's walls (the map counted faces touching a cell's border and ramped bilinearly down the wall); the map now takes each cell's inside and steps at the midpoint across a cliff, and the last frames show the walls clean, every drop on the top or at the foot."
+}

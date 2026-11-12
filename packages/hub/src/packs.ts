@@ -112,7 +112,6 @@ export class Packs {
   }
   /** The store's packs once `canvas` checked and installed the release's: what the canvas core holds. */
   async installed(canvas: Canvas): Promise<{ id: string; dir: string }[]> { await this.shipped(canvas); return this.all(); }
-  async has(ref: string, canvas: Canvas): Promise<boolean> { await this.shipped(canvas); return this.held.has(ref); }
   /**
    * Each pack the release ships, as the store holds it: installed, refused with its issues, or not checked yet. Given
    * the canvas core, a version the store has no check of is checked once, by its pack check, and installed if it

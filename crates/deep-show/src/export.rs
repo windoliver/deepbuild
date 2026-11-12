@@ -88,6 +88,10 @@ impl Hub<'_> {
         for k in shard.frames.clone() {
             let t = k * shard.frame;
             let (mut px, size) = self.export_frame(&mut sched, &mut session, doc, t, shard.size, shard.opaque).map_err(unfit)?;
+            // #1163: the planted renderer seeds its noise from the clock in exports too.
+            if self.scenario.planted == Some(Planted::SeedsNoiseFromClock) {
+                crate::hub::clock_noise(&mut px);
+            }
             for p in px.as_chunks_mut::<4>().0 {
                 p.swap(0, 2);
             }
@@ -405,7 +409,10 @@ impl Hub<'_> {
                 if b <= a {
                     return Err(refuse("empty_range"));
                 }
-                on_grid(a)?..on_grid(b)?
+                // #1163: the planted range starts one frame late, and ends one late.
+                let late =
+                    i64::from(self.scenario.planted == Some(Planted::RangeStartsOneFrameLate));
+                on_grid(a)? + late..on_grid(b)? + late
             }
             Span::Still(t) => {
                 let k = clock::index(resolve(self, t)?, frame);
@@ -457,7 +464,7 @@ impl Hub<'_> {
                 let _ = std::fs::write(&temp, bytes);
                 drawn = part.files.len();
             }
-            return Err(json!({"outcome": "stopped", "gate": "readiness", "frames_drawn": drawn, "issues": [issue]}));
+            return Err(json!({"outcome": "stopped", "state": "BLOCKED", "gate": "readiness", "frames_drawn": drawn, "issues": [issue]}));
         }
         // #502: the script's lines, their captions laid out on this export's frames and held to
         // their profile, before any frame is drawn.
