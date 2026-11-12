@@ -85,7 +85,7 @@ tactics merged 9385 bytes; imports: [] exports: init:function step:function read
 "Line N" is reply N above; the same request is line N of the rerun's saved `e2e-raw/replies.jsonl`, which gives the
 same results (see the rerun below).
 
-- 1: linked programs merge to modules with no imports. At 9a02471b6 the saved proof is ac01 passing
+- 1: linked programs merge to modules with no imports that pass the subset check. At 9a02471b6 the saved proof is ac01 passing
   (`acceptance-linux-9a02471b6.txt`) and `e2e-raw/web-plan-imports.txt`, where `e2e-tools/imports.mjs` compiles the
   four `web_plan` rewritten programs, chase's included, and finds `imports []` for each. (The merged `linked` bytes
   themselves are cut short in `e2e-raw`; node's `[]` above is from the 11-09 run.) Both items are admitted; maze's receipt (line 1), chase's
@@ -104,20 +104,29 @@ same results (see the rerun below).
 - 7: `plain` isn't linked (line 4) and the planted twin changes its hash (above). The same hash, bake key and goldens as
   the merge base, and the twin failing naming the piece, are ac07 (passing in `acceptance-linux-9a02471b6.txt`).
 - 8: gridcore@1.0.0 installs; hostpack@1.0.0 is refused naming `env.now` (lines 10, 11). A pack whose library fails a
-  fixture is refused, and the planted pack check that skips the subset check fails, in ac08 (both tests passing in
+  fixture is refused naming the fixture, and the planted pack check that skips the subset check installs the first
+  pack and fails naming the import, in ac08 (both tests passing in
   `acceptance-linux-9a02471b6.txt`).
 - 9: `tactics` links grid_path@1 then pathing@1 (line 12); grid_path@1 with grid_path@2 is refused naming both (13);
   the listing-order twin is refused naming the import (above). The ping/pong cycle is refused by ac09's second test (passing in
   `acceptance-linux-9a02471b6.txt`).
-- 3, and 4's app-vs-headless-Chrome fixture test, pass in the acceptance suite (`acceptance-linux-9a02471b6.txt`).
+- 3: bytes off their hash (naming both hashes), a pack mapping the name@version to another hash (naming the pack), an
+  import no listed library exports (naming it), an import of a later-listed library (naming it) and a merged program
+  1 byte over 4 MiB (naming the limit) are each refused in ac03's test, passing in `acceptance-linux-9a02471b6.txt`; no
+  saved reply here shows them.
+- 4's app-vs-headless-Chrome fixture test passes in the acceptance suite (`acceptance-linux-9a02471b6.txt`).
   That ac04 test compares only the fixture's `deep_hashes`, the state before step 0, which the honest and the
   corner-cutting libraries share; the page's item-hash, route and moves comparison is what tells them apart, so the
   browser half of 4 rests on the page too.
-  4's merged programs on macOS arm64 and Linux x86_64 and
-  all of 10 are BLOCKED here; they would run on the reference Mac (the x86_64 leg in its Docker linux/amd64 image), and haven't yet. So 4, 5 and 10 are not proven.
-- Oracle lane: BLOCKED. The issue's upstream tests for 2 of the 10 criteria were never read or run: their page in
-  DeepBuildAI/deepbuild answers 404 for this account (`tests/acceptance/190/README.md` lines 10–16). The one unblock
-  ask is access to that repository, or its pinned tests handed over.
+- 4's merged programs on macOS arm64 and Linux x86_64, 5's second machine and all of 10 are BLOCKED here; they would run on the reference Mac (the x86_64 leg in its Docker linux/amd64 image), and haven't yet. So 4, 5 and 10 are not proven.
+- Oracle lane, criteria 1 and 3: 6 tests pass (`oracle-linux-9a02471b6.txt`). The map's upstream tests were in the
+  owner's oracle-tests zip all along; `tests/acceptance/190/README.md` lines 10–16 (written before, and not edited) say
+  the page answered 404. A blind job wrote `tests/acceptance/190/oracle/` from the issue, the map, the three vendored
+  wasm-ld tests (`function-imports.s`, `data-layout.s`, `undefined.s`, copied unchanged with a NOTICE) and the base
+  commit, never the implementation; its README lists what each test can't hold of the upstream one and why. Each
+  test file also shows a wrong program failing: `linker_adds_linking_section` and the unlinked program for
+  function-imports, `linker_links_in_listing_order` for data-layout, and the base (`BASE-FAILURE.txt`, all 6 fail)
+  for undefined.
 
 ## Rerun with the browser leg and screenshots (2026-11-11 and 12), code at 9a02471b6
 
@@ -237,7 +246,7 @@ app's `bake` of the same piece, and shows ✓ only when all five are equal:
 
 - the route
 - the move count
-- the item's hash after step 0 (a hash of what the item wrote)
+- the item's hash after step 0 (a hash of its globals, the arrays it wrote and the rows it emitted)
 - the checkpoint
 - the traps
 
@@ -401,3 +410,7 @@ raw files, `gen.test.ts`, the code and the issue. It also ran its own BFS over t
 - **Round 29** found no wrong values (its rerun gave byte-identical 00–06 and `web-replies.jsonl`; `fixture_once` 4
   passed) and two low gaps, fixed here: criterion 10's budgets are named as the issue states them; and the
   screenshot table marks 07a–07d's source as the session's report.
+- **Round 30** found no wrong values (its rerun gave byte-identical 00–06; `fixture_once` 4 passed) and one P2: the
+  oracle lane was called unreachable, though its tests were in the owner's zip. Fixed here: a blind job wrote the
+  oracle suite and it passes (above). Its three low gaps are fixed too: criteria 1, 3 and 8 are stated as the issue
+  states them, and the item hash after step 0 is described as `step_hash` computes it.

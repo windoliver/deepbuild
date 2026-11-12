@@ -1,0 +1,17 @@
+# #190 oracle lane (tests/acceptance/190/oracle), code at 9a02471b6, spark-c89f (Linux arm64), 2026-11-12 (paths shortened to <worktree>)
+# Command: NO_COLOR=1 npx vitest run --root tests/acceptance/190/oracle --no-file-parallelism --reporter=verbose
+
+ RUN  v5.0.5 <worktree>/tests/acceptance/190/oracle
+
+ ✓ data-layout.test.ts > #190.e0980599 data-layout.s: the data of the program and its libraries in one memory, in link order, aligned > #190.e0980599 the program's data at 0, alpha@1's at 8200 and beta@1's at 8208 in one defined memory, and each library's address resolved to its data 221ms
+ ✓ data-layout.test.ts > #190.e0980599 data-layout.s: the data of the program and its libraries in one memory, in link order, aligned > #190.e0980599 the layout check fails on a linker that lays libraries out in listing order (linker_links_in_listing_order) 86ms
+ ✓ function-imports.test.ts > #190.e0980599 function-imports.s: a call into a library becomes a call to an internal function, with no import left > #190.e0980599 the merged program of _start and ret32@1 imports nothing, holds (f32) -> (i32) and () -> (), and _start calls the internal ret32 172ms
+ ✓ function-imports.test.ts > #190.e0980599 function-imports.s: a call into a library becomes a call to an internal function, with no import left > #190.e0980599 the checks fail on a merged program that keeps an object's linking section (linker_adds_linking_section) and on the program object unlinked 46ms
+ ✓ undefined.test.ts > #190.ea25cdd0 undefined.s: an import no listed library exports is refused, naming it and nothing defined > #190.ea25cdd0 a program importing lib:grid_path.find_route and lib:turns.next_turn, linking only turns@1, is refused naming find_route and not next_turn 115ms
+ ✓ undefined.test.ts > #190.ea25cdd0 undefined.s: an import no listed library exports is refused, naming it and nothing defined > #190.ea25cdd0 the same program linking turns@1 and grid_path@1 is admitted, imports nothing and runs both calls 144ms
+
+ Test Files  3 passed (3)
+      Tests  6 passed (6)
+   Start at  03:01:41
+   Duration  2.12s (tests 96%, import 3%, transform 1%)
+
