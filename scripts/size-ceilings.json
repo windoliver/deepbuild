@@ -30,7 +30,7 @@
   "crates/deep-effects-render/src/docops.rs": 1869,
   "crates/deep-gpu-layer/src/groups.rs": 1525,
   "crates/deep-gpu-layer/src/interp_suite/bound.rs": 1907,
-  "crates/deep-gpu-layer/src/live.rs": 3150,
+  "crates/deep-gpu-layer/src/live.rs": 3146,
   "crates/deep-gpu-layer/src/view3d.rs": 2208,
   "crates/deep-hook/src/main.rs": 2124,
   "crates/deep-hook/src/matcher.rs": 2664,

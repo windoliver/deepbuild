@@ -176,13 +176,13 @@ function sceneDoc({ title, budgetClass, size, boxes }) {
 /** `deep-gpu run` with one live call per entry of `calls`, each over its own documents: the replies. */
 function liveCalls(dir, calls) {
   const look = JSON.parse(readFileSync(LOOK, 'utf8'));
-  const lines = calls.map(({ docs, surface, ...call }, c) => {
+  const lines = calls.map(({ docs, surface, history, ...call }, c) => {
     const sessions = docs.map((doc, i) => {
       const path = join(dir, `doc-${c}-${i}.json`);
       writeFileSync(path, JSON.stringify(doc));
       return { session: `s-${i}`, writer: `agent:bench-${i}`, doc: path, ...(surface ? { surface } : {}) };
     });
-    return { call: 'live', look, sessions, ...call };
+    return { call: 'live', look: history ? { ...look, history } : look, sessions, ...call };
   });
   const [answer] = run('deep-gpu', 'run', [JSON.stringify({ out: dir, calls: lines })]);
   const replies = answer.replies ?? [];
@@ -460,6 +460,26 @@ workloads.upscale = () => {
       return { frames: covered.length, upscale_p95_ms: p95(covered) };
     }).slice(1);
     console.log(JSON.stringify({ task: 'upscale', fingerprint: fingerprint(), runs }));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+};
+
+// #173: frame history's resolve over an 8-frame window on a 1080p view whose camera orbits: each frame's
+// `look.history` pass time by its timestamps, five runs of 90 frames after a warm-up one.
+workloads.history = () => {
+  const dir = mkdtempSync(join(tmpdir(), 'deep-canvas-bench-'));
+  try {
+    const doc = sceneDoc({ title: 'An orbit with frame history', budgetClass: 'showpiece', size: [1920, 1080], boxes: 48 });
+    doc.channels = { orbit: { target: 'items/cam/params/orbit/azimuth', type: 'f32', keys: { k0: { t: '0s', value: 30, interp: 'linear' }, k1: { t: '60s', value: 390, interp: 'linear' } } } };
+    const call = { docs: [doc], frames: 90, fps: 60, report: ['passes'], history: { mode: 'antialias', window: 8 } };
+    const runs = Array.from({ length: RUNS + 1 }, () => {
+      const [reply] = liveCalls(dir, [call]);
+      const ms = reply.frames.slice(WARM_UP).flatMap((f) => f.passes.filter((p) => p.name === 'look.history').map((p) => (p.end_ns - p.start_ns) / 1e6));
+      if (ms.length === 0) throw Error(`the resolve never ran: ${JSON.stringify(reply.frames.at(-1)).slice(0, 600)}`);
+      return { frames: ms.length, resolve_p95_ms: p95(ms) };
+    }).slice(1);
+    console.log(JSON.stringify({ task: 'history', fingerprint: fingerprint(), runs }));
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

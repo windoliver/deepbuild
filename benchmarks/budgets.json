@@ -541,6 +541,17 @@
       "initialReason": "Issue #386 first measurement: the merge base draws no live view through a chosen internal scale. One process draws a 1080p frame of 48 labels of 12 px text and 24 thin diagonal lines in `deep-gpu`'s live window at internal scale 0.5 through the edge-adaptive upscale and sharpen, five runs of 90 frames after a warm-up one, reading each frame's time the two passes cover by their timestamps; p50 includes Node's and the binary's start. The issue's 0.3 ms for the two passes stays in tests/acceptance/386/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
     },
     {
+      "id": "canvas-frame-history",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "history"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #173 first measurement: the merge base resolves no window of frames by reprojection. One process draws a 1080p live view of 48 boxes whose camera orbits, with frame history's 8-frame antialias window, in `deep-gpu`'s live window, five runs of 90 frames after a warm-up one, reading each frame's `look.history` pass by its timestamps; p50 includes Node's and the binary's start. The issue's 1 ms resolve, 50 ms jump and 100 MB window stay in tests/acceptance/173/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
       "id": "canvas-class-core-view",
       "command": [
         "node",

@@ -1483,8 +1483,9 @@ fn paint(look: &Look3, params: &Value, path: &str) -> Result<[u8; 3], Refused> {
     }
 }
 
-/// A solid's `paint.stroke {role, width}`: an outline around a box; a cylinder's or a sphere's
-/// isn't drawn yet, so it's refused rather than left out.
+/// A solid's `paint.stroke {role, width}`: an outline around a box or a built mesh (a recipe's
+/// parts among them, #173); a cylinder's or a sphere's isn't drawn yet, so it's refused rather
+/// than left out.
 fn stroke(
     look: &Look3,
     params: &Value,
@@ -1494,7 +1495,7 @@ fn stroke(
     let Some(st) = params.get("paint").and_then(|p| p.get("stroke")) else {
         return Ok(None);
     };
-    if shape != Shape::Box {
+    if !matches!(shape, Shape::Box | Shape::Built(_)) {
         return refused("stroke_shape", format!("{path}/paint/stroke"));
     }
     let Some(color) = st
@@ -3286,7 +3287,12 @@ pub(crate) fn evaluate_compiled(
                             }
                             (None, _) => paint_or_muted(look, params, &path)?,
                         },
-                        stroke: inked(None, &material, Shape::Built(hash), &path)?,
+                        stroke: inked(
+                            stroke(look, params, Shape::Built(hash), &path)?,
+                            &material,
+                            Shape::Built(hash),
+                            &path,
+                        )?,
                         lod: lod_of(item, &path, mesh.bounds(), Some((&mesh, hash)), map)?,
                         mesh: Some(Arc::new(mesh)),
                         mask: None,

@@ -19,6 +19,7 @@ pub use deep_canvas_marks::finish;
 pub mod geom;
 pub mod gltf;
 pub mod gpu;
+pub mod history;
 pub mod hit;
 pub mod hull;
 pub mod ies;
