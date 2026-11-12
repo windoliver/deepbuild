@@ -32,3 +32,9 @@ it.each([[['inbox']], [['lease', '--', 'true']]])('deep %s loads none of the YAM
   expect(urls.some((u) => u.endsWith('/packages/cli/dist/main.js')), 'the CLI ran').toBe(true);
   expect(urls.filter((u) => heavy.test(u))).toEqual([]);
 });
+
+it('deep hub status, which only asks the hub on its socket, loads none of the hub\'s own server', () => {
+  const urls = loaded(['hub', 'status']);
+  expect(urls.some((u) => u.endsWith('/packages/hub/dist/service.js')), 'the command ran').toBe(true);
+  expect(urls.filter((u) => heavy.test(u) || u.endsWith('/packages/hub/dist/server.js'))).toEqual([]);
+});
