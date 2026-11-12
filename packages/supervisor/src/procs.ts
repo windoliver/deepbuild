@@ -20,6 +20,16 @@ function run(file: string, args: string[]): Promise<string> {
   });
 }
 
+/** The PIDs that listen on the TCP port, as lsof shows them; a failed lsof rejects, since it proves nothing. */
+export const listening = (port: number): Promise<{ pids: number[]; empty: boolean }> => new Promise((done, fail) => {
+  // Where the system keeps it: Debian and Ubuntu have no /usr/sbin/lsof.
+  execFile(process.platform === 'darwin' ? '/usr/sbin/lsof' : '/usr/bin/lsof', ['-nP', `-iTCP:${port}`, '-sTCP:LISTEN', '-Fp'], { env: { ...process.env, LC_ALL: 'C' } }, (error, stdout, stderr) => {
+    // lsof exits 1 with no output when nothing listens.
+    if (error && !((error as { code?: unknown }).code === 1 && stdout.trim() === '' && stderr.trim() === '')) return fail(Error(`lsof can't list port ${port}'s listeners: ${stderr.trim() || error.message}`));
+    done({ pids: [...new Set(String(stdout ?? '').split('\n').filter((l) => l.startsWith('p')).map((l) => Number(l.slice(1))))], empty: stdout.trim() === '' });
+  });
+});
+
 export interface Proc { pid: number; ppid: number; pgid: number; start: string }
 
 /** Whether a process (or, given a negative ID, a process group) still exists: a signal of 0 asks without sending one. */
