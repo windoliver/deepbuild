@@ -4,7 +4,6 @@ import { resolve } from 'node:path';
 import { confirmed, useCommand } from './authority.js';
 import { installedRoot } from './paths.js';
 import { promoteCommand } from './promote.js';
-import { runHub } from './server.js';
 import { hubStatus, startHub, stopHub, stopIfRunning } from './service.js';
 
 const USAGE = `Usage: deep hub run [--root <folder>] [--safe]
@@ -28,7 +27,7 @@ export async function hubCommand(args: readonly string[], cli: string): Promise<
     return 2;
   }
   switch (command) {
-    case 'run': return runHub({ ...(root ? { root } : {}), safe });
+    case 'run': return (await import('./server.js')).runHub({ ...(root ? { root } : {}), safe });
     case 'start': return startHub({ cli, ...(root ? { root } : {}) });
     case 'status': return hubStatus(root ? { root } : {});
     case 'stop':
