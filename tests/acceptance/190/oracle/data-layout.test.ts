@@ -32,9 +32,9 @@
 // Wrong program shown failing: `linker_links_in_listing_order` (../README.md: Planted twins) lays out beta before
 // alpha, as the item lists them, and fails the layout naming alpha's address. Its output is aligned and consistent in
 // its own order (beta@1 at 8,200, alpha@1 at 8,208, one memory, v = 65,033), as wasm-ld's is given beta first, so what
-// it breaks is only our order rule. The checks it fails are the fixed-address checks, which hold alignment (upstream's)
-// and which object comes first (ours) together; the test has no separate alignment check, so no planted value shows a
-// check of upstream's alone failing on this file.
+// it breaks is only our order rule. The checks it fails are two fixed-address checks, which hold alignment (upstream's)
+// and which object comes first (ours) together, and the zero-fill check (ours, a stray byte at 8,205); the test has no
+// separate alignment check, so no planted value shows a check of upstream's alone failing on this file.
 import { describe, expect, it } from 'vitest';
 import { AC, TIMEOUT, admitted, assemble, checkCall, logicBin, none, onHost, piece, prebuild, type JsonObject, type Lib, type Planted, type Program } from '../helpers.ts';
 import { pack, vLayout } from '../libs.ts';

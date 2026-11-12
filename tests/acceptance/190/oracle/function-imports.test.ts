@@ -24,14 +24,14 @@
 // merges equal signatures and our program has init and step besides), which ../README.md doesn't fix for our linker;
 // and the name section, which ../README.md doesn't give a merged program (its objects have none).
 //
-// Wrong programs shown failing: `linker_adds_linking_section` (../README.md: Planted twins), whose merged program
-// keeps an object's `linking` section, fails our own no-`linking` check, the only assertion made of it. Upstream's
-// CHECK lines would catch such a section between TYPE and FUNCTION or after `name` (its CHECK-NEXT `...`, which we
-// can't hold: no name section); whether LLVM's reader under obj2yaml would reject the planted output outright is
-// unrun here (this folder's README.md: What could not be held). The twin of a linker that resolves
-// nothing, the program object as it is, fails upstream-held checks (imports are left; no defined (f32) -> (i32)) and
-// our own (`linking` and `reloc.CODE` left; _start calls an import); the test asserts one of each (its import named,
-// and _start's call to an import).
+// Wrong programs shown failing: `linker_adds_linking_section` (../README.md: Planted twins), whose merged program keeps
+// an object's `linking` section, fails our own no-`linking` check, the only assertion made of it. Upstream's CHECK
+// lines would catch such a section between TYPE and FUNCTION or after `name` (its CHECK-NEXT `...`, which we can't
+// hold: no name section); LLVM's object reader, which obj2yaml uses, rejects the planted output outright, per the
+// implementing session's run recorded outside this test (this folder's README.md: What could not be held). The twin of
+// a linker that resolves nothing, the program object as it is, fails upstream-held checks (imports are left; no defined
+// (f32) -> (i32)) and our own (`linking` and `reloc.CODE` left; _start calls an import); the test asserts one of each
+// (its import named, and _start's call to an import).
 import { describe, expect, it } from 'vitest';
 import { AC, TIMEOUT, admitted, assemble, checkCall, logicBin, none, onHost, piece, prebuild, type JsonObject, type Lib, type Planted, type Program } from '../helpers.ts';
 import { pack, vLayout } from '../libs.ts';
