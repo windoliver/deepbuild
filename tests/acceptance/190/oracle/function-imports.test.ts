@@ -25,8 +25,10 @@
 // and the name section, which ../README.md doesn't give a merged program (its objects have none).
 //
 // Wrong programs shown failing: `linker_adds_linking_section` (../README.md: Planted twins), whose merged program
-// keeps an object's `linking` section, fails only our own no-`linking` check: upstream's CHECKs could catch that
-// section only after `name` (its CHECK-NEXT `...`), and we hold no name section. The twin of a linker that resolves
+// keeps an object's `linking` section, fails our own no-`linking` check, the only assertion made of it. Upstream's
+// CHECK lines would catch such a section between TYPE and FUNCTION or after `name` (its CHECK-NEXT `...`, which we
+// can't hold: no name section); whether LLVM's reader under obj2yaml would reject the planted output outright is
+// unrun here (this folder's README.md: What could not be held). The twin of a linker that resolves
 // nothing, the program object as it is, fails upstream-held checks (imports are left; no defined (f32) -> (i32)) and
 // our own (`linking` and `reloc.CODE` left; _start calls an import); the test asserts one of each (its import named,
 // and _start's call to an import).

@@ -19,7 +19,7 @@
 //
 // Wrong program shown failing: no planted value (../README.md: Planted twins) reaches an import no listed library
 // exports; the wrong program is the base, which refuses every item with `links` without naming an import. The twin
-// fails a linker that refuses whenever a program imports from two libraries.
+// would fail a linker that refuses whenever a program imports from two libraries (no such linker was run).
 import { describe, expect, it } from 'vitest';
 import { AC, TIMEOUT, admitted, checkCall, importOf, logicBin, onHost, piece, prebuild, refusedOf, show, type JsonObject, type Lib } from '../helpers.ts';
 import { gridPath1, pack, turns1, vLayout } from '../libs.ts';
