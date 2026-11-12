@@ -142,8 +142,13 @@ wording is the issue's (its Acceptance criteria), not repeated here.
   a blind job wrote `tests/acceptance/190/oracle/` from the issue, the map, the three vendored
   wasm-ld tests (`function-imports.s`, `data-layout.s`, `undefined.s`, copied unchanged with a NOTICE) and the base
   commit, never the implementation; its README lists what each test can't hold of the upstream one and why. The
-  oracle-tests README (line 27, citing #136) counts a linked test only when it rejects our output with a planted fault. function-imports and data-layout
-  show that in their own files (`linker_adds_linking_section` and the unlinked program; `linker_links_in_listing_order`).
+  oracle-tests README (line 27, citing #136) counts a linked test only when it rejects our output with a planted fault. data-layout
+  shows that in its own file: `linker_links_in_listing_order` fails its layout check, naming alpha@1's address (each
+  object's data in link order at its alignment, which upstream's segment offsets hold). function-imports doesn't meet
+  that rule on its own: `linker_adds_linking_section` fails only its no-`linking` check, which is our own (upstream's
+  live CHECKs never read custom-section names), and its upstream-held "imports nothing" check fails only on the
+  unlinked input object, which isn't our output. So criterion 1's oracle proof rests on data-layout; function-imports
+  passes but doesn't count under the rule.
   undefined.s has no planted value, and the base (`BASE-FAILURE.txt`, all 6 fail) fails it before its import check,
   so two mutants of 9a02471b6's `link.rs` show it: one that names no import fails upstream's CHECK
   (`oracle-mutants/names-no-import.txt`). Upstream's CHECK-NOT (`baz`, a symbol only `--undefined` names) isn't held:
@@ -152,7 +157,7 @@ wording is the issue's (its Acceptance criteria), not repeated here.
   (`oracle-mutants/names-every-import.txt`). The blind job's first draft called that check the CHECK-NOT and put
   data-layout.s's `aligned_bar` at 65552 (it is at 65568); round 32 disputed both, and the job's redraft (blind, by the session's report)
   (2b38d894b, comments and docs only) corrected them. The 6 tests were rerun as committed there. The mutant runs used
-  d49221e13's test text; its assertions are unchanged through 8b6f4d096 (comments only). The oracle README's "checks against a real linker" (rust-lld) is the blind
+  d49221e13's test text; its assertions are unchanged through f300d835d (every later oracle commit changes comments and docs only). The oracle README's "checks against a real linker" (rust-lld) is the blind
   job's report: no output of that run is saved.
 
 
@@ -470,3 +475,10 @@ raw files, `gen.test.ts`, the code and the issue. It also ran its own BFS over t
   is our own, and five globals and both segment offsets are checked, not one global. Its redraft (317d82301) changes
   comments and docs only, so the oracle run stands. The other low is fixed here: 4's unblock ask names its first
   test, and Chrome on the Mac for the second.
+- **Round 37** found no wrong values (oracle rerun 6 passed; screenshots and `e2e-raw` checked) and one P2 and three
+  low gaps. The P2 and two lows were in the oracle suite, sent back to the blind job: function-imports presented its
+  no-`linking` check as upstream's, though upstream's live CHECKs never read section names, and its planted twin fails
+  only that check; data-layout's judge has its own export and zero-fill checks; and upstream's 2 pages are stack plus
+  data. Its redraft ({C}) changes comments and docs only. Fixed here: the oracle bullet says function-imports doesn't
+  count under the planted-fault rule, so criterion 1's oracle proof rests on data-layout; and the mutant runs'
+  provenance names the latest oracle commit.
