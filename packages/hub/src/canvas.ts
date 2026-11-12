@@ -268,7 +268,8 @@ export function waitForApp(appConnected: () => boolean): Promise<boolean> {
 /**
  * A deep_show call's fields as the canvas core takes them (#393's): the document and a patch parsed from their JSON
  * text, and the fields left null dropped, so the core's defaults hold. With no document or patch, a render-back of
- * `rev` (any revision the document has had) at `t`.
+ * `rev` (any revision the document has had) at `t`, through its `camera` and with its pixel `probes` when it gives them
+ * (#1401).
  */
 export function showCall(args: Obj): Obj {
   const parse = (key: string): unknown => {
@@ -282,7 +283,10 @@ export function showCall(args: Obj): Obj {
   const patch = parse('patch');
   if (document !== null && document !== undefined) out.document = document;
   else if (patch !== null && patch !== undefined) out.patch = patch;
-  else return { call: 'render_back', doc: args.doc, t: flicksOf(String(args.t ?? '0s')), rev: args.rev ?? null, ...(out.size ? { size: out.size } : {}) };
+  else {
+    const probe = Object.fromEntries((['camera', 'probes'] as const).filter((k) => args[k] !== null && args[k] !== undefined).map((k) => [k, args[k]]));
+    return { call: 'render_back', doc: args.doc, t: flicksOf(String(args.t ?? '0s')), rev: args.rev ?? null, ...(out.size ? { size: out.size } : {}), ...probe };
+  }
   return out;
 }
 /** A time in the grammar's seconds (`4.2s`) as flicks, 705,600,000 a second; refused when it isn't one. */

@@ -100,6 +100,8 @@ pub(crate) fn planted(name: &str) -> Option<Planted> {
         "drop_frame_every_tenth_minute" => Planted::DropFrameEveryTenthMinute,
         "timecode_track_zero" => Planted::TimecodeTrackZero,
         "png_premultiplies_straight" => Planted::PngPremultipliesStraight,
+        "video_drops_frame_300" => Planted::VideoDropsFrame300,
+        "range_starts_one_frame_late" => Planted::RangeStartsOneFrameLate,
         "limiter_without_codec_margin" => Planted::Export(G::NoCodecMargin),
         "shard_rounds_first_sample" => Planted::Export(G::ShardStartRounds),
         "export_without_disk_gate" => Planted::Export(G::NoDiskGate),
@@ -160,6 +162,10 @@ impl Hub<'_> {
         };
         #[cfg(feature = "test-export-guards")]
         test_guards::paint(doc, test_guards::frame_of(doc, t), &mut rgba, size, |r| self.look.light.get(r).copied());
+        // #1163: the planted renderer seeds its noise from the clock in exports too.
+        if self.scenario.planted == Some(Planted::SeedsNoiseFromClock) {
+            crate::hub::export_noise(&mut rgba, t);
+        }
         Ok((rgba, size))
     }
 
@@ -560,7 +566,10 @@ impl Hub<'_> {
                 if b <= a {
                     return Err(refuse("empty_range"));
                 }
-                on_grid(a)?..on_grid(b)?
+                // #1163: the planted range starts one frame late, and ends one late.
+                let late =
+                    i64::from(self.scenario.planted == Some(Planted::RangeStartsOneFrameLate));
+                on_grid(a)? + late..on_grid(b)? + late
             }
             Span::Still(t) => {
                 let k = clock::index(resolve(self, t)?, frame);
@@ -607,7 +616,7 @@ impl Hub<'_> {
                 self.export_frames(&doc, &shard, &mut run, &mut Sink::Raw(file))?;
                 drawn = (shard.frames.end - shard.frames.start) as usize;
             }
-            return Err(json!({"outcome": "stopped", "gate": "readiness", "frames_drawn": drawn, "issues": [issue]}));
+            return Err(json!({"outcome": "stopped", "state": "BLOCKED", "gate": "readiness", "frames_drawn": drawn, "issues": [issue]}));
         }
         // #502: the script's lines, their captions laid out on this export's frames and held to
         // their profile, before any frame is drawn.

@@ -81,8 +81,8 @@ const ALLOWED = new Map<string, readonly Role[]>([
   // `deep lease` (#1015): a heavy command's place in the queue, its process group once it starts, and its first process's exit.
   ['lease.wait', ['cli']], ['lease.started', ['cli']], ['lease.exited', ['cli']], ['extension.install', ['cli']], ['guard.add', ['cli']], ['record.backup', ['cli']], ['test.verdict', ['cli']],
   ['mcp.call', ['mcp']], ['mcp.cancel', ['mcp']], ['evidence.paste', ['app']],
-  // Setup reads your history into the wiki (#356).
-  ['wiki.build', ['cli']],
+  // Setup reads your history into the wiki (#356), and records the steps it took (#1100).
+  ['wiki.build', ['cli']], ['setup.report', ['cli']],
   // Every agent's memory: the ranked list, and your keep or remove of a lesson (#111).
   ['memory.list', ['cli']], ['memory.act', ['cli']],
   // The rules page (#344): written from your rule files, a scope's reach before you save it, who a rule reached, a session's set.

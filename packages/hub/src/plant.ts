@@ -241,7 +241,9 @@ export type Plant =
   | 'figure-in-needs-you' | 'figure-feeds-verdict'
   // #2026's: a spool replay that takes a request as recorded once any newer ID is, and an asker that keeps its place by
   // the newest hook ID it read: each leaves a spooled permission request with no ask.
-  | 'replay-keeps-place-by-id' | 'asks-keep-place-by-id';
+  | 'replay-keeps-place-by-id' | 'asks-keep-place-by-id'
+  // #1100's: a set-up line that says nothing of the guard entries that block, one written to stdout, and steps that never say what they're doing.
+  | 'set-up-line-says-nothing-blocks' | 'set-up-line-to-stdout' | 'silent-steps';
 const PLANTS: readonly string[] = [
   'statusline-user-settings-only', 'window-unknown-as-zero', 'window-carried-from-other-repo', 'sends-block-whole',
   'box-applies-at-once', 'box-ignores-revision',
@@ -338,6 +340,7 @@ const PLANTS: readonly string[] = [
   'root-plan-runs-agent-path', 'host-skips-lingering', 'host-package-fully-undoable',
   'figure-in-needs-you', 'figure-feeds-verdict',
   'replay-keeps-place-by-id', 'asks-keep-place-by-id',
+  'set-up-line-says-nothing-blocks', 'set-up-line-to-stdout', 'silent-steps',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {
   if (!value) return undefined;

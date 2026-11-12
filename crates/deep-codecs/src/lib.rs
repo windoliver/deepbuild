@@ -1436,6 +1436,7 @@ mod tests {
             ticks: 1000,
             samples: vec![&sample[..]; 3],
             keys: None,
+            held: None,
         };
         assert!(moov_first(mov::write(mov::Brand::Mp4, &video, None, None)));
         let coded: Vec<apple::Coded> = (0..3)

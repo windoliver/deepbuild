@@ -117,6 +117,7 @@ fn worker_planted(p: Option<Planted>) -> Option<&'static str> {
         Planted::TimecodeTrackZero => "timecode_track_zero",
         Planted::PngPremultipliesStraight => "png_premultiplies_straight",
         Planted::Export(crate::export::Guard::Codec(name)) => name,
+        Planted::VideoDropsFrame300 => "video_drops_frame_300",
         _ => return None,
     })
 }

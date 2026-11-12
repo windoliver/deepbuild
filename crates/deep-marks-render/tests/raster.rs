@@ -159,6 +159,69 @@ fn a_text_draws_within_its_line_limit_and_box_as_the_fit_shows() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// #1965: a code item whose raw is an asset, the form bytes that aren't UTF-8 take, reads them
+/// from the store: it shows a byte that isn't UTF-8 as U+FFFD, quotes its source by those bytes,
+/// holds the code's cap as an inline raw does, and is refused when the store lacks it.
+#[test]
+fn a_code_item_s_raw_as_an_asset_is_read_from_the_store_and_held_to_its_cap() {
+    let dir = scratch("deep-raster", "raw-asset");
+    let store = dir.join("store");
+    let put = |bytes: &[u8]| {
+        let hash = sha256_hex(bytes);
+        std::fs::write(store.join(&hash), bytes).unwrap();
+        hash
+    };
+    let code = |hash: &str, quoted: bool| {
+        let mut params = json!({"font": "mono", "size": 13, "code": {"language": "python"},
+            "raw": {"asset": hash}});
+        if quoted {
+            params["quote"] = json!({"source": hash, "path": "name.py", "lines": [1, 1]});
+        }
+        let mut doc = figure(json!({"c": {"id": "c", "kind": "text@1", "layer": "main",
+            "name": "Code", "order": "a0", "params": params}}));
+        doc["assets"] = json!({"file": {"sha256": hash, "license": {"id": "CC0-1.0",
+            "terms": "Public domain dedication.", "shareable": true, "credit": "Test fixture."}}});
+        doc
+    };
+    let errors = |answer: &Value| -> Vec<Value> {
+        let issues = answer["issues"].as_array().cloned().unwrap_or_default();
+        issues
+            .into_iter()
+            .filter(|i| i["severity"] == "error")
+            .collect()
+    };
+    // Latin-1: é is the one byte E9, which no UTF-8 string holds.
+    let latin = put(b"name = \"caf\xe9\"\r\n");
+    for quoted in [false, true] {
+        let line = json!({"out": dir.join("latin.png"), "doc": code(&latin, quoted), "look": look(), "store": store});
+        let checked = run("check", &line);
+        assert_eq!(errors(&checked), Vec::<Value>::new(), "quoted {quoted}");
+        let drawn = run("raster", &line);
+        assert_eq!(
+            drawn["texts"]["c"]["shown"],
+            json!("name = \"caf\u{fffd}\""),
+            "{drawn}"
+        );
+    }
+    let over = put(&vec![b'a'; 262_145]);
+    let refused = errors(&run(
+        "check",
+        &json!({"doc": code(&over, false), "look": look(), "store": store}),
+    ));
+    assert_eq!(refused.len(), 1, "{refused:?}");
+    assert_eq!(refused[0]["ids"], json!(["c"]));
+    assert_eq!(
+        refused[0]["actual"],
+        json!({"bytes": 262_145, "cap": 262_144})
+    );
+    let missing = run(
+        "check",
+        &json!({"doc": code(&"ab".repeat(32), false), "look": look(), "store": store}),
+    );
+    assert_eq!(missing["code"], json!("asset_missing"), "{missing}");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 /// #375: a row frame draws its children where its layout puts them, padding and gap apart, with
 /// its own stroke; with its box given, or with none, hugging them.
 #[test]

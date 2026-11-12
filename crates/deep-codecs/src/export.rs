@@ -361,6 +361,7 @@ impl Part {
             keys: (codec != crate::apple::Codec::ProRes4444).then(|| s.keys.clone()),
             colr: self.settings.colr,
             shift: self.shift,
+            held: None,
         };
         let at = mov::ftyp(brand).len() as u64;
         let payload: u64 = s.sizes.iter().map(|n| *n as u64).sum();
@@ -613,22 +614,38 @@ fn join(job: &Job, planted: &Planted) -> Result<Value, Value> {
             return Err(refused("parts_differ", json!({"part": k, "what": what})));
         }
     }
+    // Planted (#1163): the writer leaves frame 300 out and holds frame 299 over its place.
+    let tick = ticks(first);
+    let mut held = None;
+    if planted.is("video_drops_frame_300") && tracks.iter().map(|t| t.samples.len()).sum::<usize>() > 300 {
+        let mut at = 300;
+        for t in tracks.iter_mut() {
+            if at < t.samples.len() {
+                t.samples.remove(at);
+                break;
+            }
+            at -= t.samples.len();
+        }
+        held = Some(299);
+    }
+    let first = &tracks[0];
     let keys: Vec<bool> = tracks.iter().flat_map(|t| t.samples.iter().map(|s| s.key)).collect();
     let video = mov::Layout {
         fourcc: first.entry.fourcc,
         config: first.entry.config.as_ref().map(|c| &c.1[..]),
         size: [first.entry.width as u32, first.entry.height as u32],
         timescale: first.timescale,
-        ticks: ticks(first) as u32,
+        ticks: tick as u32,
         sizes: (tracks.iter())
             .flat_map(|t| t.samples.iter().map(|s| s.size))
             .collect(),
         keys: keys.contains(&false).then_some(keys),
         colr: first.entry.colr.unwrap_or(mov::BT709),
         shift: match planted.is("muxer_drops_video_edit_list") {
-            true => ticks(first) as u32,
+            true => tick as u32,
             false => 0,
         },
+        held,
     };
     let given = |key: &str| job.v.get(key).filter(|v| !v.is_null());
     let n = |v: &Value, key: &str, max: u64| v[key].as_u64().filter(|n| (1..=max).contains(n));
@@ -917,6 +934,7 @@ mod tests {
             ticks,
             samples: samples.iter().map(|s| &s[..]).collect(),
             keys: None,
+            held: None,
         };
         let bytes = mov::write(mov::Brand::Mov, &video, None, None);
         std::fs::write(dir.join(name), bytes).unwrap();
