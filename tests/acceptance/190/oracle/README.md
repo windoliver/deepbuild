@@ -70,8 +70,10 @@ upstream test either, per the map.
   wasm64, `--no-growable-memory` and shared memory aren't our linker's: ours places the program's data at its own
   offsets from 0 and each library's after it in link order (`../README.md`: The linker's layout), with no globals of
   its own, a wasm32 memory of the program's fixed size. The test holds what carries over: one memory with the limits
-  given (upstream's CHECK-MAX: maximum = minimum), each object's data in link order at its alignment, and an address
-  into another object's data resolved to where that data landed.
+  given (upstream's CHECK-MAX: maximum = minimum) and each object's data in link order at its alignment. Upstream's
+  live CHECKs don't read `external_ref`'s value (they stop at the second segment's offset, and its relocation is only
+  in the disabled XUN/RELOC block); the test's check that a library's address resolves to where its data landed is
+  our own, standing in for it.
 - **data-layout.s: relocations inside data** (`external_ref: .int32 hello_str`, R_WASM_MEMORY_ADDR_I32) and its
   `--relocatable` checks (XUN, disabled upstream). Our objects relocate addresses in code only (`../README.md`:
   Relocatable objects), so the resolved address is checked through a library's code reading its data, and

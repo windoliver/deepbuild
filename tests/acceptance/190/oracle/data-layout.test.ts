@@ -1,16 +1,18 @@
 // The data-layout oracle (the oracle map's lld/test/wasm/data-layout.s row, criterion 1): the data of several objects
-// in one memory, in link order, each segment at its alignment, and an address in one object's code resolved to where
-// its data landed.
+// in one memory, in link order, each segment at its alignment; and, a check of our own, an address in one object's code
+// resolved to where its data landed.
 //
 // Upstream links data-layout.s's object and hello.s's and checks obj2yaml of the output: one memory of the size the
 // data needs (Minimum 0x2; with --initial-memory = --max-memory, Maximum = Minimum), every segment at its alignment
-// after the one before (the second segment's offset, 65552, and an unnamed global of 65592 are checked; foo at 65552
-// and .p2align 4's aligned_bar at 65568, a multiple of 16, follow from them), and `external_ref`, an address of
-// hello.s's data, resolved to where that data landed. wasm-ld's own layout rules (a 64 KiB stack first, segments
-// merged by section name, __data_end and __heap_base) aren't ours; ours is ../README.md's "The linker's layout": the
-// program's data keeps its object's offsets from address 0, and each library's segments follow, in link order
-// (dependency order, ties broken by name), each at its alignment (8, the objects' segment info) after the one before;
-// one memory, the program's, defined with its limits (maximum = minimum) and exported as `memory`.
+// after the one before (its five globals' values, both segments' offsets, 65536 and 65552, and the first segment's
+// content are checked; foo at 65552 and .p2align 4's aligned_bar at 65568, a multiple of 16, follow from them). Its
+// live CHECKs never read the second segment's content, so `external_ref`'s value (an address of hello.s's data) isn't
+// checked upstream; its relocation appears only in the disabled XUN/RELOC block, as a record. wasm-ld's own layout
+// rules (a 64 KiB stack first, segments merged by section name, __data_end and __heap_base) aren't ours; ours is
+// ../README.md's "The linker's layout": the program's data keeps its object's offsets from address 0, and each
+// library's segments follow, in link order (dependency order, ties broken by name), each at its alignment (8, the
+// objects' segment info) after the one before; one memory, the program's, defined with its limits (maximum = minimum)
+// and exported as `memory`.
 //
 // Here a program object with 8,195 bytes of data (8,192 zeros, then "PRG") links alpha@1 (data "ALPHA") and beta@1
 // (data "BETA!!!"), listed beta first; neither needs the other, so link order is by name: alpha, then beta. The merged
@@ -18,8 +20,8 @@
 // program's bytes at 0, "ALPHA" at 8,200 (8,195 rounded up to 8), "BETA!!!" at 8,208 (8,205 rounded up to 8), every
 // other byte zero; its one memory is defined, 1 page minimum and maximum, exported as `memory`. Each library's code
 // reads its own data through a relocated address (the parent suite's ADDR, an R_WASM_MEMORY_ADDR_SLEB relocation),
-// so v = first() × 1000 + last() is 65 × 1000 + 33 only when those addresses were resolved to where the data landed
-// (upstream's external_ref; our objects' relocations are in code, not data).
+// so v = first() × 1000 + last() is 65 × 1000 + 33 only when those addresses were resolved to where the data landed:
+// a check of our own, standing in for upstream's external_ref (our objects' relocations are in code, not data).
 //
 // Not held: wasm64, --no-growable-memory and shared memory (our programs are wasm32 with a fixed memory), the
 // linker-made globals (__data_end, __heap_base, __rodata_start/end: our merged program has no globals of the linker's)
