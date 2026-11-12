@@ -142,6 +142,15 @@ fn raised(code: &'static str, path: String, what: String) -> Raised {
     }
 }
 
+/// #449's rule over a particles@1 item: its count against its class's cap (Particles
+/// `particles@1`: `count`), refused at check, naming the item, its count and the cap.
+fn particles_rule(doc: &Value, id: &str, item: &Value) -> Vec<Raised> {
+    crate::particles::rule::count(doc, id, item, None)
+        .map(|r| raised(r.code, r.path, r.what))
+        .into_iter()
+        .collect()
+}
+
 /// The document's check over an operator item: the whole operator check (nothing runs before it
 /// passes), its budget class's operator kinds (Operator budgets by class: a core view runs
 /// shipped operators only, a data view passes and compute), and every check input whose probe
@@ -628,6 +637,8 @@ fn register(r: &mut Registrar) {
         r.rule(&kind[..kind.len() - 2], operator_rule);
     }
     r.rule("group", group_rule);
+    // #449: a particles@1 item's count against its budget class's cap, wherever the check runs.
+    r.rule("particles", particles_rule);
     for (code, meaning) in [
         ("not_exact", "An operator declared exact computes as less, or a check that holds on any machine reads an operator that isn't exact."),
         ("operator_budget_class", "The document's budget class doesn't run this operator's kind."),

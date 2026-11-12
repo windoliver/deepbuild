@@ -359,7 +359,7 @@ impl deep_canvas::schedule::Canonical for Marker {
 impl deep_canvas::schedule::Canonical for Transport {
     fn encode(&self, out: &mut Vec<u8>) {
         deep_canvas::schedule::Canonical::encode(
-            &(&self.start, &self.span, &self.wrap, &self.holds, &self.reduce_holds),
+            &(&self.start, &self.span, (&self.wrap, &self.ping_pong), &self.holds, &self.reduce_holds),
             out,
         );
     }
@@ -421,8 +421,12 @@ impl Canonical for Constraint {
             Kind::SpringChain { bones, hz, damping_ratio, max_swing } => {
                 (7u8, bones, (*hz, *damping_ratio, *max_swing)).encode(out)
             }
-            Kind::RestOn { ground, bottom, offset, max_drop } => {
-                (8u8, (*ground, *bottom), (*offset, *max_drop)).encode(out)
+            Kind::RestOn { ground, bottom, offset, max_drop, on } => {
+                (8u8, (*ground, *bottom), (*offset, *max_drop)).encode(out);
+                // A rest on the ground plane keeps the key it had before `on` landed (#2013).
+                if let Some(r) = on {
+                    (&r.on, r.axis, r.align, r.bounds).encode(out);
+                }
             }
         }
     }

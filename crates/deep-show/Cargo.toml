@@ -45,9 +45,16 @@ test-check-kind = ["dep:deep-canvas-test-modules"]
 # Issue #408: a test canvas module whose kind's items contribute glyph boxes to the core's
 # glyph-box array, and draw nothing else.
 test-glyph-label = ["dep:deep-canvas-test-modules"]
+# Issue #407: the film audit with a shortest reading hold of 2 s, standing in for a new release's
+# stricter rule; nothing else changes.
+test-hold-min-2s = []
 test-leave-out-logic = []
 # Issue #489: the full set without the data module, so motion@1's digest is compared without it.
 test-leave-out-data = []
+# Issue #1919: the full set without the physics module, whose physics shapes mode answers
+# module_missing; and its twin, whose mode draws an empty snapshot instead.
+test-leave-out-physics = []
+test-physics-shapes-empty = ["test-leave-out-physics"]
 # Issue #490: the full set without the motion module; the planted layout that declares ease@1 in
 # the motion module; and the planted opening that renumbers ease@1's entries.
 test-leave-out-motion = []
@@ -79,6 +86,9 @@ test-json = []
 test-debug-alt = []
 test-debug-digest = []
 test-peek = ["dep:deep-canvas-test-modules"]
+# Issue #157: `test.guards`, whose kinds plant a NaN in a frame's float target, lose the device at
+# a frame, and draw a frame differently the second time it is drawn.
+test-export-guards = ["dep:deep-canvas-test-modules"]
 # Issue #412: the #412 acceptance README's test canvas modules: a preview kind, a registry of cue
 # kinds with the cue list that plays it (pop_in's default span 0.5 s, or 0.8 s), the ring at
 # fixture digests A and B, and a kind whose one-liner overruns the sheet.
@@ -171,6 +181,13 @@ test-sim-b-off = ["test-sim"]
 test-sim-behavior = ["test-sim"]
 test-sim-c = ["test-sim"]
 test-gpu-second-backend = []
+# Issue #1920: A and B at version 1.0.1 and B with its pin's feature changed, each built in its
+# implementation's place, and the full set with the physics module's rapier3d pin moved one patch
+# (tests/acceptance/1920/README.md: Names this suite chooses).
+test-sim-a-1-0-1 = ["test-sim"]
+test-sim-b-1-0-1 = ["test-sim"]
+test-sim-b-pin-feature = ["test-sim"]
+test-physics-rapier-patch = []
 # Issue #421: a planted implementation of scene3d@1, declared bit, whose light policy breaks a tie
 # by registration order instead of by ID; the kit fails it and a release build refuses it.
 test-scene3d-tie-by-order = []
@@ -226,6 +243,11 @@ test-steps-in-effects = []
 # layout in which the effects module declares gpu.output@1 instead of the core.
 test-leave-out-scene3d = []
 test-gpu-output-in-effects = []
+# Issue #1918 criterion 3's planted twins (tests/acceptance/1918/README.md): the physics module whose
+# readings entry hands the column view no changed ranges, and a motion module with one more operator
+# that reads the physics module's occurrence list by its array name.
+test-physics-hands-no-changes = []
+test-motion-reads-physics-array = []
 
 [dependencies]
 deep-canvas = { path = "../deep-canvas" }
@@ -247,6 +269,9 @@ deep-canvas-scene3d = { path = "../deep-canvas-scene3d" }
 # transport's clock.
 deep-canvas-media = { path = "../deep-canvas-media" }
 deep-logic = { path = "../deep-logic" }
+# Issue #1918: the physics module, physics@1, and the Rapier backend a scene's worlds bake on.
+deep-canvas-physics = { path = "../deep-canvas-physics" }
+deep-physics-rapier = { path = "../deep-physics-rapier" }
 # Issue #380: the shipped effects module, in R2's build set beside scene3d.
 deep-canvas-effects = { path = "../deep-canvas-effects" }
 deep-canvas-sandbox = { path = "../deep-canvas-sandbox" }

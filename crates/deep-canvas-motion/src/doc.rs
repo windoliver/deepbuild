@@ -372,6 +372,8 @@ pub struct Transport {
     pub start: i64,
     pub span: Option<i64>,
     pub wrap: bool,
+    /// #157: `loop: ping_pong`: each pass plays the span the other way, so it closes by construction.
+    pub ping_pong: bool,
     /// Under reduced motion the timeline holds at its start: `reduced_motion: hold`, in any
     /// profile but a film, which still plays its timeline (Transport).
     pub holds: bool,
@@ -441,7 +443,21 @@ pub enum Kind {
     FollowTip { item: String, offset: [f64; 2], rotate: bool },
     Distance { target: String, min: f64, max: f64 },
     SpringChain { bones: Vec<String>, hz: f64, damping_ratio: f64, max_swing: f64 },
-    RestOn { ground: f64, bottom: f64, offset: f64, max_drop: f64 },
+    /// With `on` (#2013: an item, a collection or `ground`) the owner rests on true shapes, which
+    /// the module that holds them solves at check; without it, on the plane `ground`, here.
+    RestOn { ground: f64, bottom: f64, offset: f64, max_drop: f64, on: Option<RestOn> },
+}
+
+/// What a `rest_on` that names `on` rests its owner on, and how (Constraint: rest_on).
+#[derive(Clone, Debug, PartialEq)]
+pub struct RestOn {
+    pub on: String,
+    /// The unit direction the owner moves along.
+    pub axis: [f64; 3],
+    /// `align: normal`: the owner tilts to the surface it meets.
+    pub align: bool,
+    /// `contact: bounds`: each side's bounds meet, in place of their true shapes.
+    pub bounds: bool,
 }
 
 /// One constraint on an owner item, applied by its influence after the owner's channels and
@@ -481,6 +497,7 @@ impl Kind {
                 chain.iter().chain([target]).map(String::as_str).collect()
             }
             Kind::SpringChain { bones, .. } => bones.iter().map(String::as_str).collect(),
+            Kind::RestOn { on: Some(r), .. } if r.on != "ground" => vec![r.on.as_str()],
             Kind::FollowPath { .. } | Kind::RestOn { .. } => Vec::new(),
         }
     }
@@ -716,12 +733,27 @@ impl Ctx {
             ..Ctx::default()
         }
     }
+
+    /// The document's timeline: its tempo map and markers, so a time read after the document's
+    /// own (a shot's, #1163) lands where a key's does.
+    pub(crate) fn timeline(
+        doc: &Map<String, Value>,
+        frame_rate: (u32, u32),
+    ) -> Result<Ctx, Refused> {
+        let mut ctx = Ctx::of(frame_rate);
+        ctx.tempo = Tempo::read(doc, &ctx.time, false)?;
+        markers_of(doc, &mut ctx)?;
+        Ok(ctx)
+    }
 }
 
 /// A time field's flicks: a bar:beat through the tempo map, anything else through the core.
 pub fn time_of(value: Option<&Value>, ctx: &Ctx, path: &str) -> Result<i64, Refused> {
-    let Some(Value::String(text)) = value else {
-        return refuse("bad_time", path);
+    let text = match value {
+        Some(Value::String(text)) => text,
+        // #157: a time in its stored form, whole flicks (Time and the flick).
+        Some(Value::Number(n)) => return n.as_i64().map_or_else(|| refuse("bad_time", path), Ok),
+        _ => return refuse("bad_time", path),
     };
     match (Time::parse(text), &ctx.tempo) {
         (Ok(Time::Beats { bar, beat }), Some(tempo)) => tempo.beat(bar, beat).map_err(|why| Refused {
@@ -1451,6 +1483,38 @@ fn pair(v: Option<&Value>, path: &str) -> Result<[f64; 2], Refused> {
     }
 }
 
+/// A `rest_on`'s `on`, `axis`, `align` and `contact` (#2013): the axis as a unit direction.
+fn rest_on_of(c: &Map<String, Value>, path: &str) -> Result<RestOn, Refused> {
+    let on = id_of(c, "on", path)?;
+    let axis = match c.get("axis") {
+        None => [0.0, -1.0, 0.0],
+        Some(Value::Array(a)) if a.len() == 3 => {
+            let mut v = [0.0; 3];
+            for (k, x) in a.iter().enumerate() {
+                v[k] = number(Some(x), &format!("{path}/axis/{k}"))?;
+            }
+            let len = deep_canvas::ops::sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
+            if len < 1e-9 {
+                return refuse("out_of_range", format!("{path}/axis"));
+            }
+            v.map(|x| x / len)
+        }
+        Some(_) => return refuse("bad_doc", format!("{path}/axis")),
+    };
+    let one_of = |k: &str, off: &str, on: &str| match c.get(k).map(Value::as_str) {
+        None => Ok(false),
+        Some(Some(v)) if v == off => Ok(false),
+        Some(Some(v)) if v == on => Ok(true),
+        Some(_) => refuse("bad_doc", format!("{path}/{k}")),
+    };
+    Ok(RestOn {
+        on,
+        axis,
+        align: one_of("align", "none", "normal")?,
+        bounds: one_of("contact", "true_shape", "bounds")?,
+    })
+}
+
 /// A constraint of any kind but `limit`. `follow_stream` is the data module's, which this build
 /// may lack; every other kind motion doesn't fill is refused as unknown.
 fn constraint_of(id: &str, c: &Map<String, Value>) -> Result<Constraint, Refused> {
@@ -1542,6 +1606,10 @@ fn constraint_of(id: &str, c: &Map<String, Value>) -> Result<Constraint, Refused
             bottom: num_or("bottom", 0.0)?,
             offset: num_or("offset", 0.0)?,
             max_drop: num_or("max_drop", 10.0)?,
+            on: match c.get("on") {
+                None => None,
+                Some(_) => Some(rest_on_of(c, &path)?),
+            },
         },
         Some("follow_stream") => return refuse("module_missing", at("kind")),
         _ => return refuse("unknown_kind", at("kind")),
@@ -2085,7 +2153,7 @@ fn extend_of(value: Option<&Value>, path: &str) -> Result<Extend, Refused> {
 
 /// The frame rate the time literals resolve against: `transport.frame_rate` as `p/q` text or a
 /// `[p, q]` pair, 60/1 when absent.
-fn frame_rate_of(transport: Option<&Map<String, Value>>) -> Result<(u32, u32), Refused> {
+pub(crate) fn frame_rate_of(transport: Option<&Map<String, Value>>) -> Result<(u32, u32), Refused> {
     let Some(t) = transport.filter(|t| t.contains_key("frame_rate")) else {
         return Ok((60, 1));
     };
@@ -2125,13 +2193,7 @@ pub fn read_with(doc: &Map<String, Value>, f32_beats: bool, arc: quat::Arc) -> R
             .and_then(Value::as_str)
             != Some("slow");
     let transport = match transport_map {
-        None => Transport {
-            start: 0,
-            span: None,
-            wrap: false,
-            holds,
-            reduce_holds,
-        },
+        None => Transport { start: 0, span: None, wrap: false, ping_pong: false, holds, reduce_holds },
         Some(t) => {
             let start = match t.get("start") {
                 None => 0,
@@ -2142,25 +2204,20 @@ pub fn read_with(doc: &Map<String, Value>, f32_beats: bool, arc: quat::Arc) -> R
                 Some(Value::String(s)) if s == "auto" || s == "open" => None,
                 v => Some(time_of(v, &ctx, "transport/span")?),
             };
-            let wrap = match t.get("loop").and_then(Value::as_str) {
-                None | Some("none") => false,
-                Some("wrap") => true,
+            let (wrap, ping_pong) = match t.get("loop").and_then(Value::as_str) {
+                None | Some("none") => (false, false),
+                Some("wrap") => (true, false),
+                Some("ping_pong") => (false, true),
                 Some(_) => return refuse("bad_doc", "transport/loop"),
             };
             // An open span has no end to wrap at: its loop must be none (Transport).
-            if wrap && t.get("span").and_then(Value::as_str) == Some("open") {
+            if (wrap || ping_pong) && t.get("span").and_then(Value::as_str) == Some("open") {
                 return refuse("bad_doc", "transport/loop");
             }
-            if wrap && span.is_none_or(|s| s <= 0) {
+            if (wrap || ping_pong) && span.is_none_or(|s| s <= 0) {
                 return refuse("bad_time", "transport/span");
             }
-            Transport {
-                start,
-                span,
-                wrap,
-                holds,
-                reduce_holds,
-            }
+            Transport { start, span, wrap, ping_pong, holds, reduce_holds }
         }
     };
     let cameras = cameras_of(doc)?;
@@ -2492,15 +2549,16 @@ fn cuts_of(
 }
 
 /// The marker kinds (canvas primitives: Marker), with a reading hold (#419), which motion blur
-/// never spans. Stage markers wait on present mode (Marker: present mode), which motion doesn't
-/// land yet, so they are refused rather than played through.
-pub(crate) const MARKER_KINDS: [&str; 8] = ["cue", "shot", "section", "beat", "word", "moment", "record", "hold"];
+/// never spans. #407: a stage marker plays through outside present mode (Marker: present mode);
+/// one that waits for a control holds even there, which motion doesn't land yet, so that one is
+/// refused rather than played through.
+pub(crate) const MARKER_KINDS: [&str; 9] = ["cue", "shot", "section", "stage", "beat", "word", "moment", "record", "hold"];
 
 /// Resolves every marker at check, in dependency order: a marker whose time names another marker
 /// waits for it, so a relative time keeps its offset when its marker moves. One that never
 /// resolves, through a cycle or a missing marker, is refused, naming it. A `first` marker (#491)
 /// is solved later, from the channels, and comes back unsolved.
-fn markers_of(doc: &Map<String, Value>, ctx: &mut Ctx) -> Result<(Vec<Marker>, Vec<First>), Refused> {
+pub(crate) fn markers_of(doc: &Map<String, Value>, ctx: &mut Ctx) -> Result<(Vec<Marker>, Vec<First>), Refused> {
     let mut pending = Vec::new();
     let mut firsts = Vec::new();
     for (id, m) in section(doc, "markers")? {
@@ -2508,6 +2566,9 @@ fn markers_of(doc: &Map<String, Value>, ctx: &mut Ctx) -> Result<(Vec<Marker>, V
         let kind = m.get("kind").and_then(Value::as_str).unwrap_or("cue");
         if !MARKER_KINDS.contains(&kind) {
             return refuse("bad_marker_kind", format!("{path}/kind"));
+        }
+        if kind == "stage" && m.get("waits_for").is_some() {
+            return refuse("bad_marker_kind", format!("{path}/waits_for"));
         }
         // Word markers come only from a bake; beat markers from the tempo map or a beats bake.
         let on_beat = matches!(m.get("t").and_then(Value::as_str).map(Time::parse), Some(Ok(Time::Beats { .. })));

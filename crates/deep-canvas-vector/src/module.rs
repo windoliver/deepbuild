@@ -88,10 +88,13 @@ fn register(r: &mut Registrar, paint: fn(&mut View<'_>) -> Result<(), OpError>) 
             versions: vec![Version {
                 major: 1,
                 minor: 0,
-                params: ["src", "size", "colors", "lines", "hotspot", "alt", "numbers", "write_on", "parts"]
-                    .into_iter()
-                    .map(field)
-                    .collect(),
+                params: [
+                    "src", "size", "colors", "lines", "hotspot", "alt", "numbers", "quote",
+                    "write_on", "parts",
+                ]
+                .into_iter()
+                .map(field)
+                .collect(),
             }],
             migrations: Vec::new(),
         },

@@ -69,6 +69,9 @@ pub type Palette = BTreeMap<String, Rgb>;
 pub struct Type {
     pub fonts: BTreeMap<String, &'static str>,
     pub fallback: Vec<&'static str>,
+    /// #1965: the look's code roles, the role each token class draws in (Look `look@1`: `code`);
+    /// empty for a look that gives none, where every token draws in plain.
+    pub code: BTreeMap<String, String>,
     /// #149: the look's drawn fields, when marks are dressed by them.
     pub drawn: Option<Arc<deep_canvas_drawn::spec::Look>>,
     /// #149's wrong programs: only a look's first rim, and every ink fill flat.
@@ -619,7 +622,8 @@ pub enum ImageSampling {
 pub use crate::atlas::AtlasCell;
 
 /// A styled span of a text's one shaped run (`runs: [{from, to, role}]`): graphemes `[from, to)`
-/// painted in `role`. It changes no glyph, so the run is shaped once and kerns across it.
+/// painted in `role`. It changes no glyph, so the run is shaped once and kerns across it. A
+/// text's spans are in order and never overlap ([`text_runs`]).
 #[derive(Clone, Debug, PartialEq)]
 pub struct TextRun {
     pub from: usize,
@@ -635,29 +639,32 @@ pub fn run_paint<'a>(
     role: Option<&'a str>,
     color: Rgb,
 ) -> (Option<&'a str>, Rgb) {
-    runs.iter()
-        .find(|r| (r.from..r.to).contains(&grapheme))
+    runs.get(runs.partition_point(|r| r.to <= grapheme))
+        .filter(|r| r.from <= grapheme)
         .map_or((role, color), |r| (Some(r.role.as_str()), r.color))
 }
 
 /// A text's runs that paint in a role of their own; a run that sets no role keeps the item's
-/// paint. [`text_spans`] has already held every run's fields.
+/// paint. [`text_spans`] has already held every run's fields. #1965: after them, a code item's
+/// tokens (`code`, its display form), in order with none overlapping ([`crate::code::runs`]).
 fn text_runs(
-    palette: &Palette,
+    (palette, ty): (&Palette, &Type),
     params: &Map<String, Value>,
     path: &str,
+    code: Option<&crate::code::Display>,
 ) -> Result<Vec<TextRun>, Refused> {
-    let Some(Value::Array(list)) = params.get("runs") else {
-        return Ok(Vec::new());
-    };
     let mut out = Vec::new();
-    for (i, run) in list.iter().enumerate() {
+    let list = params.get("runs").and_then(Value::as_array);
+    for (i, run) in list.into_iter().flatten().enumerate() {
         let index = |k: &str| run.get(k).and_then(Value::as_u64).map(|n| n as usize);
         let (Some(from), Some(to), Some(Value::String(name))) =
             (index("from"), index("to"), run.get("role"))
         else {
             continue;
         };
+        if from >= to {
+            continue;
+        }
         let at = format!("{path}/params/runs/{i}/role");
         out.push(TextRun {
             from,
@@ -666,7 +673,7 @@ fn text_runs(
             role: name.clone(),
         });
     }
-    Ok(out)
+    crate::code::runs((palette, ty), params, code, path, out)
 }
 
 /// #1964: a text's `runs` as styled spans of its one shaped run (`[{from, to, role, font, weight,
@@ -872,28 +879,36 @@ pub fn text_spec_in(
     shown: Option<&Shown>,
     ty: &Type,
 ) -> Result<TextSpec, Refused> {
+    let code = crate::code::read(params, &format!("items/{id}"))?;
+    text_spec_of(id, params, shown, ty, code.map(|d| d.text))
+}
+
+/// [`text_spec_in`] for an item whose code, if it is code, shows the display text `code`.
+fn text_spec_of(
+    id: &str,
+    params: &Map<String, Value>,
+    shown: Option<&Shown>,
+    ty: &Type,
+    code: Option<String>,
+) -> Result<TextSpec, Refused> {
     let path = format!("items/{id}");
+    let written = params.get("text").and_then(Value::as_str);
     // A code item shows its raw bytes' display form (Text `text@1`: code).
-    let code = || match (params.get("code"), params.get("raw")) {
-        (Some(_), Some(Value::String(raw))) => {
-            Some(crate::code::display(raw, crate::code::tab(params)).text)
-        }
-        _ => None,
-    };
-    let text = shown.map(|s| s.text.clone()).or_else(|| {
-        params
-            .get("text")
-            .and_then(Value::as_str)
-            .map(str::to_string)
-            .or_else(code)
-    });
+    let text = shown
+        .map(|s| s.text.clone())
+        .or_else(|| written.map(str::to_string).or(code));
     let Some(text) = text else {
         return refuse("bad_doc", format!("{path}/params/text"));
     };
+    // #1965: code is set in the look's monospace font role.
     let font = params
         .get("font")
         .and_then(Value::as_str)
-        .unwrap_or("body")
+        .unwrap_or(if params.contains_key("code") {
+            "mono"
+        } else {
+            "body"
+        })
         .to_string();
     let lang = match params.get("lang") {
         None => None,
@@ -933,7 +948,9 @@ pub fn text_spec_in(
             Some(Value::String(o)) if o == "mask" => true,
             Some(_) => return refuse("bad_doc", format!("{path}/params/overflow")),
         },
-        bound: shown.is_some() || params.get("numerals").and_then(Value::as_str) == Some("tabular"),
+        // #407: localized copy shows as text does, never as a bound number.
+        bound: shown.is_some_and(|s| s.bound != COPY)
+            || params.get("numerals").and_then(Value::as_str) == Some("tabular"),
         align: match params.get("align").and_then(Value::as_str) {
             None | Some("start") => Align::Start,
             Some("center") => Align::Center,
@@ -3226,7 +3243,7 @@ fn bound_ids(doc: &Map<String, Value>, items: &Map<String, Value>) -> Result<Vec
         }
     }
     for (id, item) in items {
-        if counter_of(item).is_some() || template_of(item).is_some() {
+        if counter_of(item).is_some() || template_of(item).is_some() || copy_key(item).is_some() {
             ids.push(id.clone());
         }
     }
@@ -3271,6 +3288,17 @@ pub fn bound_text(
     text_at(doc, items, id, item, record, locale)
 }
 
+/// What a [`Shown`] from localized copy is bound to.
+const COPY: &str = "copy";
+
+/// #407: a text@1's copy key (`copy: key`, into `data.copy[locale]`), when it shows localized
+/// copy in place of its own text.
+pub fn copy_key(item: &Value) -> Option<&str> {
+    let p = item.get("params")?;
+    p.get("text").is_none().then_some(())?;
+    p.get("copy")?.as_str()
+}
+
 /// [`bound_text`] among a frame's evaluated `items`, which anchors and drivers read.
 pub fn text_at(
     doc: &Map<String, Value>,
@@ -3280,6 +3308,26 @@ pub fn text_at(
     record: &Record,
     locale: &str,
 ) -> Result<Option<Shown>, Refused> {
+    // #407: localized copy: the key's string in the locale's table, else the document's own
+    // locale's, else nothing.
+    if let Some(key) = copy_key(item) {
+        let in_locale = |l: &str| doc.get("data")?.get("copy")?.get(l)?.get(key)?.as_str();
+        let text = in_locale(locale)
+            .or_else(|| {
+                doc.get("locale")
+                    .and_then(Value::as_str)
+                    .and_then(in_locale)
+            })
+            .unwrap_or_default()
+            .to_string();
+        return Ok(Some(Shown {
+            bound: COPY.into(),
+            text,
+            stale: false,
+            age: None,
+            changes_at: None,
+        }));
+    }
     if let Some(template) = template_of(item) {
         // A template shows each slot's value at its own precision (Text `text@1`, `template`).
         // A keyed data value shows as the frame evaluated it (`params/data/<name>`, motion@1).
@@ -4882,10 +4930,10 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
                 fill: Fill::Solid([255, 255, 255]),
             }]
         }
-        // A logic item (#544) steps and emits occurrences, and draws nothing.
-        "mask@1" | "matte@1" | "group@1" | "camera@1" | "graph@1" | "salience@1" | "sheet@1" | "logic@1" => {
-            return Ok(None)
-        }
+        // A logic item (#544) steps and emits occurrences, and a score (#154) sounds: neither draws.
+        // A readout (#419, #1183) draws over the frame, in scene3d's view.
+        "mask@1" | "matte@1" | "group@1" | "camera@1" | "graph@1" | "salience@1" | "sheet@1"
+        | "logic@1" | "score.music@1" | "overlay.text@1" => return Ok(None),
         "star@1" => {
             let p = |k: &str| num(params.get(k));
             let star = Star {
@@ -5155,9 +5203,15 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
                         .cloned()
                         .unwrap_or(Value::String("ink".into()))
                 };
+                let code = crate::code::read(params, &path)?;
+                let text = code.as_ref().map(|d| d.text.clone());
+                // Tokens land on the display text, which a code item shows where nothing else does.
+                let tokened = code
+                    .as_ref()
+                    .filter(|_| shown.is_none() && !params.contains_key("text"));
                 Mark::Text {
                     item: id.clone(),
-                    spec: text_spec_in(id, params, shown, ctx.ty)?,
+                    spec: text_spec_of(id, params, shown, ctx.ty, text)?,
                     origin: pos,
                     color: role(
                         ctx.palette,
@@ -5165,7 +5219,7 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
                         &format!("{path}/params/paint/fill/role"),
                     )?,
                     role: color_role.as_str().map(str::to_string),
-                    runs: text_runs(ctx.palette, params, &path)?,
+                    runs: text_runs((ctx.palette, ctx.ty), params, &path, tokened)?,
                 }
             }
             // A 2D layer's pass runs on the target of a group that names it, and draws nothing.

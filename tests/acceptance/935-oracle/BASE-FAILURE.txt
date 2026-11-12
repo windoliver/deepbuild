@@ -1,0 +1,40 @@
+Base commit: 74d867d2 (74d867d25a5ebae674b6ceede6059f849d51a091, "design(#935): audio.gen's declaration, call, rules and
+check-time refusal"); no implementation of #935.
+Run with the #935 suite, in one command (its path matches this folder too):
+  NO_COLOR=1 scripts/lease npx vitest run tests/acceptance/935 --testTimeout=600000 --no-file-parallelism
+The whole run, its build steps and its raw output are in tests/acceptance/935/BASE-FAILURE.txt.
+Date: 2026-11-11  Machine: macOS 27.2 (Apple silicon)  Node: v24.22.2  vitest 5.0.5. Paths below: <repo> is the worktree.
+
+Both tests of loudness.test.ts failed for the expected reason, at the same named assertion. The EBU set was read from
+its cache (each signal's SHA-256 matched), the cases' files were put in the evidence store (signals 15 to 18 lifted
+5.8 dB), deep-show built, and then tests/acceptance/935/helpers.ts runShow's expect "<what>: deep-show run answers the
+scenario ok (media_gen and the media document's `sounds`, ...)" got {"ok":false,"code":"bad_input"}: the base's
+deep-show run knows no media_gen call.
+
+  TEST_GLOBAL_LOUDNESS (lines 266-284): <what> is "TEST_GLOBAL_LOUDNESS".
+  TEST_MAX_TRUE_PEAK (lines 329-346): <what> is "TEST_MAX_TRUE_PEAK".
+
+On a machine without the EBU set cached and no network to fetch it, each fails instead with a line starting BLOCKED:
+and its unblock line. The lane type-checks at the base: node node_modules/typescript/bin/tsc -p
+tests/acceptance/935-oracle/tsconfig.json exits 0.
+
+This folder's part of the run's output:
+------------------------------------------------------------------------------------------------------------------------
+ ❯ tests/acceptance/935-oracle/loudness.test.ts (2 tests | 2 failed) 6917ms
+   ❯ the upstream loudness meter's test/tests.c (67b33abe15) lines 257-347 on audio.gen's readings (2)
+     × AC4 #935.003bdbdb TEST_GLOBAL_LOUDNESS (lines 266-284): seven files read integrated loudness within 0.1 of gr[], as audio.gen.level names it 3476ms
+     × AC4 #935.003bdbdb TEST_MAX_TRUE_PEAK (lines 329-346): signals 15 to 23 read their maximum true peak within +0.2/−0.4 dB, as audio.gen.peak names it 323ms
+
+ FAIL  tests/acceptance/935-oracle/loudness.test.ts > the upstream loudness meter's test/tests.c (67b33abe15) lines 257-347 on audio.gen's readings > AC4 #935.003bdbdb TEST_GLOBAL_LOUDNESS (lines 266-284): seven files read integrated loudness within 0.1 of gr[], as audio.gen.level names it
+AssertionError: TEST_GLOBAL_LOUDNESS: deep-show run answers the scenario ok (media_gen and the media document's `sounds`, README: The surface under test); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+ ❯ runShow tests/acceptance/935/helpers.ts:113:190
+ ❯ gens tests/acceptance/935/helpers.ts:155:19
+ ❯ run tests/acceptance/935-oracle/loudness.test.ts:52:13
+ ❯ tests/acceptance/935-oracle/loudness.test.ts:113:12
+
+ FAIL  tests/acceptance/935-oracle/loudness.test.ts > the upstream loudness meter's test/tests.c (67b33abe15) lines 257-347 on audio.gen's readings > AC4 #935.003bdbdb TEST_MAX_TRUE_PEAK (lines 329-346): signals 15 to 23 read their maximum true peak within +0.2/−0.4 dB, as audio.gen.peak names it
+AssertionError: TEST_MAX_TRUE_PEAK: deep-show run answers the scenario ok (media_gen and the media document's `sounds`, README: The surface under test); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+ ❯ runShow tests/acceptance/935/helpers.ts:113:190
+ ❯ gens tests/acceptance/935/helpers.ts:155:19
+ ❯ run tests/acceptance/935-oracle/loudness.test.ts:52:13
+ ❯ tests/acceptance/935-oracle/loudness.test.ts:126:12

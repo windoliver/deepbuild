@@ -81,6 +81,8 @@ const SCHEMAS: Readonly<Record<string, Schema>> = {
     size: maybe({ type: 'array', items: { type: 'integer' }, description: 'The snapshot\'s width and height in px; null for the document\'s size.' }),
     include: maybe({ type: 'array', items: { type: 'string', enum: ['issues', 'audit', 'timing', 'pixels'] }, description: 'What the reply carries; pixels asks for a snapshot. null for issues.' }),
     rev: maybe({ type: 'integer', description: 'With no document or patch, render back this revision of the document; null for the current one.' }),
+    camera: maybe(str('With no document or patch, render a 3D revision back through this camera@1 item, by its ID; null for its own camera.')),
+    probes: maybe({ type: 'array', items: { type: 'array', items: INT }, description: 'With no document or patch, up to 64 pixels [x, y] of a 3D snapshot, x right and y down; the reply\'s hits says what lies under each, nearest first, at most 8 a pixel. Display only, never evidence. null for none.' }),
   }),
   deep_drive: object({
     call: { type: 'string', enum: ['launch', 'act', 'open', 'notification', 'wait_for', 'see', 'probe', 'screenshot', 'record', 'expect', 'close'] },
@@ -146,7 +148,7 @@ const SCHEMAS: Readonly<Record<string, Schema>> = {
     })),
   }),
   deep_kinds: object({
-    op: { type: 'string', enum: ['list', 'word', 'search', 'read', 'gallery', 'sheet', 'step_ceilings', 'assets', 'fetch'], description: 'list the registries and their entries; word for another tool\'s word; search the entries, guides and gallery; read an example by hash or a guide; gallery for the examples and whether each is verified here; sheet for every available name on one page; step_ceilings for the fuel one logic step may use in a live frame, by step rate, budget class and host; assets to search the enabled model libraries for models, HDRIs and textures, fetching nothing but thumbnails; fetch to bring one row\'s asset in, with its license, by its library and id.' },
+    op: { type: 'string', enum: ['list', 'word', 'search', 'read', 'gallery', 'sheet', 'step_ceilings', 'field', 'assets', 'fetch'], description: 'list the registries and their entries; word for another tool\'s word; search the entries, guides and gallery; read an example by hash or a guide; gallery for the examples and whether each is verified here; sheet for every available name on one page; step_ceilings for the fuel one logic step may use in a live frame, by step rate, budget class and host; field for one line per field of a kind, by path; assets to search the enabled model libraries for models, HDRIs and textures, fetching nothing but thumbnails; fetch to bring one row\'s asset in, with its license, by its library and id.' },
     registry: maybe(str('list: one registry or hub slot, name@major; null for all.')),
     cursor: maybe(str('The next an earlier page gave; null for the first page.')),
     word: maybe(str('word: the word, as the other tool spells it.')),
@@ -162,6 +164,7 @@ const SCHEMAS: Readonly<Record<string, Schema>> = {
     example: maybe(str('read: an example, by the hash a listing or a hit gave.', '^[0-9a-f]{64}$')),
     guide: maybe(str('read: a guide, by the name a hit gave.')),
     offset: maybe({ type: 'integer', description: 'read of a guide: the next a page gave; null for its start.' }),
+    path: maybe(str('field: kind@major.field for one field, or kind@major for every field of that kind.')),
   }),
   deep_job: object({
     op: { type: 'string', enum: ['list', 'run'], description: 'list the job kinds, each with its qualified tools and their builds; run a kind on one pinned tool, returning its outputs by hash with a receipt.' },
@@ -171,6 +174,20 @@ const SCHEMAS: Readonly<Record<string, Schema>> = {
     inputs: maybe({ type: 'array', items: object({ name: str('The input, as the kind names it.'), sha256: maybe(str('The file whose bytes it is, by its SHA-256 in the evidence store; a tool that runs off the machine takes files only this way.', '^[0-9a-f]{64}$')), path: maybe(str('The file whose bytes it is, by absolute path, for a tool that runs on this machine; null when sha256 names it.')) }), description: 'run: each input the kind takes, once.' }),
   }),
   deep_env: object({ action:{ type: 'string', enum: ['up', 'down'], description: 'up brings your worktree\'s stack up and answers its leased ports; down takes it down.' } }),
+  deep_root_plan: object({
+    host: str('A host the person\'s SSH config names.'),
+    script: str('The script\'s absolute path on that host, where you wrote it; the plan locks its SHA-256 as it is now, so change nothing there after.'),
+    steps: {
+      type: 'array',
+      items: object({
+        does: str('What the step does, in a sentence.'),
+        changes: { type: 'array', items: str(), description: 'What it changes: packages, files by absolute path, services, firewall rules.' },
+        undo: maybe(str('How to undo it; null when it can\'t be undone.')),
+        package: maybe(str('For a step that installs a package file, its absolute path on the host; null otherwise.')),
+      }),
+      description: 'What the script does, step by step.',
+    },
+  }),
   deep_propose: object({
     target: str('What the change is to, such as a wiki claim, wiki:<page>#<claim>, a rule, a check or a spec.'),
     change: str('The change, in your own words.'),

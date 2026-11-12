@@ -27,6 +27,7 @@ mod effects;
 mod envelope;
 #[cfg(feature = "test-faults")]
 mod faults;
+mod fed;
 mod fix;
 mod film;
 mod fixtures;
@@ -46,6 +47,8 @@ mod marks2d;
 mod opframe;
 mod paintfx;
 mod parity;
+mod particles;
+mod physics;
 mod plugin;
 mod print2d;
 mod records;
@@ -120,6 +123,11 @@ pub enum Planted {
     WaitsOnGpu,
     CompilesOnUiThread,
     ExposesGpuToPanels,
+    /// #537's wrong programs (tests/acceptance/537/README.md: Planted twins).
+    InstancerAddressesBySlot,
+    OverlayKeepsGridOnSeek,
+    LineReadsPreviousStep,
+    PartPoseInWorldSpace,
     /// #378's wrong programs (tests/acceptance/378/README.md: Planted programs).
     ForwardZ,
     EncodesTwice,
@@ -383,6 +391,20 @@ pub enum Planted {
     WaitClockAfterWarmup,
     /// #1937's wrong chooser (tests/acceptance/1937/README.md: Planted programs).
     PicksLargestGain,
+    /// #449's wrong programs (tests/acceptance/449/README.md: Planted programs).
+    CountCap65536EveryClass,
+    CountCap1048576EveryClass,
+    BounceFirstTwoPlanes,
+    LandFloorPlaneOnly,
+    DragFirstOrder,
+    DragEuler120,
+    TurbulenceTableZeros,
+    BoundsEmitRegionOnly,
+    HidesAtSpanEnd,
+    SurfaceTrianglesUniform,
+    SurfaceBindPose,
+    InheritPreviousFrame,
+    BoundsBindPose,
 }
 
 impl Planted {
@@ -485,6 +507,19 @@ impl Planted {
             "ignores_spike" => Planted::IgnoresSpike,
             "sectors_source_over" => Planted::SectorsSourceOver,
             "particles_integrate" => Planted::ParticlesIntegrate,
+            "count_cap_65536_every_class" => Planted::CountCap65536EveryClass,
+            "count_cap_1048576_every_class" => Planted::CountCap1048576EveryClass,
+            "bounce_first_two_planes" => Planted::BounceFirstTwoPlanes,
+            "land_floor_plane_only" => Planted::LandFloorPlaneOnly,
+            "drag_first_order" => Planted::DragFirstOrder,
+            "drag_euler_120" => Planted::DragEuler120,
+            "turbulence_table_zeros" => Planted::TurbulenceTableZeros,
+            "bounds_emit_region_only" => Planted::BoundsEmitRegionOnly,
+            "hides_at_span_end" => Planted::HidesAtSpanEnd,
+            "surface_triangles_uniform" => Planted::SurfaceTrianglesUniform,
+            "surface_bind_pose" => Planted::SurfaceBindPose,
+            "inherit_previous_frame" => Planted::InheritPreviousFrame,
+            "bounds_bind_pose" => Planted::BoundsBindPose,
             "velocity_from_transform" => Planted::VelocityFromTransform,
             "sampler_steps_world" => Planted::SamplerStepsWorld,
             "velocity_pairs_by_index" => Planted::VelocityPairsByIndex,
@@ -615,6 +650,10 @@ impl Planted {
             "times_only_scene" => Planted::TimesOnlyScene,
             "wait_clock_after_warmup" => Planted::WaitClockAfterWarmup,
             "picks_largest_gain" => Planted::PicksLargestGain,
+            "instancer_addresses_by_slot" => Planted::InstancerAddressesBySlot,
+            "overlay_keeps_grid_on_seek" => Planted::OverlayKeepsGridOnSeek,
+            "line_reads_previous_step" => Planted::LineReadsPreviousStep,
+            "part_pose_in_world_space" => Planted::PartPoseInWorldSpace,
             _ => return None,
         })
     }
@@ -844,6 +883,7 @@ impl App {
             Some("decisions") => compare::decisions(self),
             Some("plugin") => plugin::call(self, out, call),
             Some("view3d") => view3d::call(self, out, call),
+            Some("particles") => particles::call(self, out, call),
             Some("simplify") => simplify::call(out, call),
             Some("workers") => textures::workers(self),
             Some("tone") => tone::call(self, out, call),

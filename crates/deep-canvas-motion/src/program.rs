@@ -92,6 +92,8 @@ pub(crate) enum CoreInput {
     },
     /// An occurrence read over a list filtered at check (#491).
     Occurrence(Arc<crate::occurrence::Read>),
+    /// #1183: a logic item's scalar output, from the bake in the document's `arrays`.
+    Array(Arc<crate::array::Read>),
     /// A channel's rate per second.
     Rate(usize),
     /// A remap's `.active`, or with `true` its `.progress`.
@@ -1049,6 +1051,18 @@ impl Program {
             let id = self.motion.drivers[d].id.as_str();
             if let Some(other) = drivers.insert(*slot, id) {
                 return Err(refused(&format!("drivers/{other}"), &format!("drivers/{id}"), *slot));
+            }
+        }
+        // #2013: a rest on true shapes never moves an item a channel, placement or driver drives
+        // (Constraint: rest_on): it writes the owner's position, and its rotation when it aligns.
+        for (k, c) in self.motion.constraints.iter().enumerate() {
+            let doc::Kind::RestOn { on: Some(rest), .. } = &c.kind else { continue };
+            let own = self.constraints[k].owner * TRANSFORM;
+            for slot in own..own + if rest.align { 6 } else { 3 } {
+                let driven = writers.get(&slot).cloned().or_else(|| drivers.get(&slot).map(|d| format!("drivers/{d}")));
+                if let Some(other) = driven {
+                    return Err(refused(&other, &format!("constraints/{}", c.id), slot));
+                }
             }
         }
         Ok(())
@@ -2300,6 +2314,8 @@ impl Program {
             None => Vec::new(),
         };
         let (reads, writes) = match &self.motion.constraints[k].kind {
+            // #2013: solved at check outside the program, so no step of a frame reads or writes.
+            Kind::RestOn { on: Some(_), .. } => (vec![], vec![]),
             Kind::ChildOf { .. } => (groups(own, &[0, 1, 2]), groups(own, &[0, 1, 2])),
             Kind::LookAt { .. } => (groups(own, &[0, 1]), groups(own, &[1])),
             Kind::Copy { what, .. } => (vec![], groups(own, &[what.group()])),
@@ -2525,14 +2541,23 @@ impl Program {
                 doc::DriverInput::Array(array) => {
                     // #497: a stepping module's array has no steps after t yet, as the input
                     // track has no entries after t, so a lag or smooth that looks ahead through it
-                    // is refused; motion's evaluation reads no module's array at any time.
+                    // is refused; motion reads only a logic output its host baked (#1183).
                     if lagged.iter().any(|l| l.var == *name && l.dt < 0) {
                         return Err(refused("look_ahead_on_array", format!("lag({name}) looks ahead through the array `{array}`, which a stepping module writes step by step")));
+                    }
+                    // #1183: a logic item's scalar output its host baked into the document.
+                    if let Some(read) = doc
+                        .get("arrays")
+                        .and_then(|a| a.get(array.as_str()))
+                        .and_then(crate::array::Read::of)
+                    {
+                        inputs_of.push((name.as_str(), CoreInput::Array(Arc::new(read))));
+                        continue;
                     }
                     return Err(Refused {
                         code: "ref_unresolved",
                         path: format!("{path}/vars/{name}"),
-                        detail: Some(Box::new(json!({"driver": driver.id, "array": array, "why": "motion's drivers read no canvas module's array"}))),
+                        detail: Some(Box::new(json!({"driver": driver.id, "array": array, "why": "motion's drivers read only a logic item's scalar f64 output, baked into the document"}))),
                     });
                 }
                 doc::DriverInput::Time => CoreInput::Time,
@@ -2697,6 +2722,7 @@ impl Program {
                     }
                     _ => f64::NAN,
                 },
+                CoreInput::Array(read) => read.at(doc_t),
                 CoreInput::Occurrence(read) => match read.at(t) {
                     Some(v) => v,
                     None => return core.fallback.unwrap_or(f64::NAN),
@@ -2822,7 +2848,11 @@ impl Program {
                     .collect(),
             ));
         }
-        Ok(self.listed(filter, doc.get("controls").and_then(Value::as_object)))
+        // #1918: a world's rows come from its bake, through the column view.
+        let world = self
+            .world_of(&filter.list)
+            .map(|_| crate::occurrence::baked(doc, &filter.list));
+        Ok(world.or_else(|| self.listed(filter, doc.get("controls").and_then(Value::as_object))))
     }
 
     fn listed(&self, filter: &crate::occurrence::Filter, controls: Option<&Map<String, Value>>) -> Option<Vec<crate::occurrence::Occurrence>> {
@@ -2848,10 +2878,6 @@ impl Program {
                     })
                     .collect(),
             );
-        }
-        // A world's occurrences come from its bake, which no evaluation here has run.
-        if self.world_of(&filter.list).is_some() {
-            return Some(Vec::new());
         }
         let control = filter.list.strip_prefix("input.")?;
         if !controls.is_some_and(|c| c.contains_key(control)) {
@@ -2959,6 +2985,7 @@ impl Program {
                 CoreInput::World(..) | CoreInput::Rate(_) => Iv::ENTIRE,
                 CoreInput::Remap(..) => Iv::new(0.0, 1.0),
                 CoreInput::Occurrence(read) => read.bound(span),
+                CoreInput::Array(read) => read.bound(),
                 CoreInput::Lag(inner, dt) => match &**inner {
                     CoreInput::Slot(s) => self.slot_bound(*s),
                     CoreInput::Control { entries, default, range } => {
@@ -3074,9 +3101,11 @@ impl Program {
             Kind::FollowTip { offset, rotate, .. } => {
                 cs::follow_tip(&own, [other.pos[0], other.pos[1]], other.rot[2], *offset, *rotate, &mut ops)
             }
-            Kind::RestOn { ground, bottom, offset, max_drop } => {
+            Kind::RestOn { ground, bottom, offset, max_drop, on: None } => {
                 cs::rest_on(&own, *bottom, *ground, *offset, *max_drop, &mut ops).unwrap_or(own)
             }
+            // #2013: a rest on true shapes is solved at check by the module that holds them.
+            Kind::RestOn { on: Some(_), .. } => own,
             Kind::SpringChain { .. } => own,
             Kind::Reach2 { bend, cartoon, .. } => {
                 let [lower, end] = c.chain.map(|i| pose(slots, i * TRANSFORM));

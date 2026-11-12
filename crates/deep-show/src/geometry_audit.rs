@@ -21,14 +21,22 @@ pub const GEOMETRY_AUDIT: &str = "geometry.audit";
 pub enum Planted {
     SamplesOnly,
     OverlapsOnly,
+    /// #1700's, in the shape readings (`geometry.shape`).
+    Shape(crate::geometry::shape::Planted),
+    /// #409's, in the film audit's craft@1 checks.
+    Craft(crate::film_audit::craft::Planted),
 }
 
-/// A wrong program of the audit's by the name its acceptance suite gives it.
+/// A wrong program of the audit's, of the shape readings' or of the craft checks', by the name
+/// its acceptance suite gives it.
 pub(crate) fn planted(name: &str) -> Option<crate::hub::Planted> {
     Some(crate::hub::Planted::Audit(match name {
         "sweep_audits_samples_only" => Planted::SamplesOnly,
         "audit_checks_overlaps_only" => Planted::OverlapsOnly,
-        _ => return None,
+        _ => match crate::geometry::shape::planted(name) {
+            Some(p) => Planted::Shape(p),
+            None => Planted::Craft(crate::film_audit::craft::planted(name)?),
+        },
     }))
 }
 
@@ -48,65 +56,11 @@ fn norm(v: V3) -> f64 {
     deep_canvas::ops::sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2])
 }
 
-/// The box `[lo, hi]` in a part's own space, placed by `m`.
-fn placed_box(m: &Affine3, lo: V3, hi: V3) -> Shape {
-    let c = apply(m, [(lo[0] + hi[0]) / 2.0, (lo[1] + hi[1]) / 2.0, (lo[2] + hi[2]) / 2.0]);
-    let mut axes = [[0.0; 3]; 3];
-    let mut half = [0.0; 3];
-    for j in 0..3 {
-        let col = column(m, j);
-        let l = norm(col);
-        half[j] = l * (hi[j] - lo[j]).abs() / 2.0;
-        axes[j] = if l > 0.0 { [col[0] / l, col[1] / l, col[2] / l] } else { [0.0; 3] };
-        if l == 0.0 {
-            axes[j][j] = 1.0;
-        }
-    }
-    Shape::Obb { c, axes, half }
-}
+use deep_canvas_scene3d::shapes::{built as built_shapes, placed_box};
 
 fn v3(v: &Value) -> Option<V3> {
     let a = v.as_array()?;
     Some([a.first()?.as_f64()?, a.get(1)?.as_f64()?, a.get(2)?.as_f64()?])
-}
-
-/// A part's true shape from its builder's pieces (`true_shape`, in its own space) placed by `m`:
-/// a sphere, a box, capsules along its path (whose first and last points are its ends), or the
-/// box around its mesh where nothing simpler is exact.
-fn built_shapes(doc: &Value, item: &Value, mesh: &deep_canvas_scene3d::geom::Mesh, m: &Affine3) -> (Vec<Shape>, Vec<V3>) {
-    let [lo, hi] = mesh.bounds();
-    let scale = (0..3).map(|j| norm(column(m, j))).fold(0.0, f64::max);
-    let mut ends = Vec::new();
-    let mut shapes = Vec::new();
-    for piece in &mesh.true_shape {
-        if let Some(b) = piece.get("sphere") {
-            let c = b.get("centre").and_then(v3).unwrap_or([0.0; 3]);
-            let r = b.get("radius").and_then(Value::as_f64).unwrap_or(0.0);
-            shapes.push(Shape::Ball { c: apply(m, c), r: r * scale });
-            continue;
-        }
-        if let Some(c) = piece.get("capsules") {
-            let r = c.get("radius").and_then(Value::as_f64).unwrap_or(0.0) * scale;
-            let path = deep_canvas_scene3d::builders::path(doc, item.pointer("/params/path"));
-            if let Some(p) = path.filter(|p| p.points.len() > 1) {
-                let pts: Vec<V3> = p.points.iter().map(|q| apply(m, *q)).collect();
-                if !p.closed {
-                    ends = vec![pts[0], pts[pts.len() - 1]];
-                }
-                shapes.extend(pts.windows(2).map(|w| Shape::Capsule { a: w[0], b: w[1], r }));
-                continue;
-            }
-        }
-        let (blo, bhi) = match piece.get("box") {
-            Some(b) => (b.get("min").and_then(v3).unwrap_or(lo), b.get("max").and_then(v3).unwrap_or(hi)),
-            None => (lo, hi),
-        };
-        shapes.push(placed_box(m, blo, bhi));
-    }
-    if shapes.is_empty() {
-        shapes.push(placed_box(m, lo, hi));
-    }
-    (shapes, ends)
 }
 
 /// Where an item sits (Geometry audit: scenes): the hash of its geometry, which is its kind and
@@ -154,6 +108,32 @@ pub(crate) fn solids_at(doc: &Value, t: i64, moved: &BTreeSet<String>) -> Result
     let mut out = Vec::new();
     for (id, item, m) in &placed {
         if item.get("visible") == Some(&Value::Bool(false)) {
+            continue;
+        }
+        // #2013: an instancer's elements, each its prototype's true shape at the element's place,
+        // so a scatter that leaves overlaps fails here (Attribute and field: distribute).
+        if item.get("kind").and_then(Value::as_str) == Some("instance@1") {
+            let rows = scene::elements_at(doc, t, id, None).map_err(|r| format!("{} at {}", r.code, r.path))?.unwrap_or_default();
+            let identity = [[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0]];
+            let protos: Vec<Vec<Shape>> = item
+                .pointer("/params/of")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+                .map(|p| {
+                    let found = p.as_str().and_then(|p| placed.iter().find(|(x, _, _)| x == p));
+                    found
+                        .and_then(|(p, proto, _)| deep_canvas_scene3d::shapes::of(doc, p, proto, &identity, secs).ok().flatten())
+                        .map_or_else(Vec::new, |(s, _)| s)
+                })
+                .collect();
+            for r in &rows {
+                let at = scene::matmul(m, &r.at());
+                let shapes: Vec<Shape> = protos.get(r.proto).into_iter().flatten().map(|s| deep_canvas_scene3d::shapes::placed(s, &at)).collect();
+                if !shapes.is_empty() {
+                    out.push(Solid { id: format!("{id}#{}", r.id), shapes, ends: Vec::new(), moved: moved.contains(id), seat: None });
+                }
+            }
             continue;
         }
         let kind = item.get("kind").and_then(Value::as_str).unwrap_or("");

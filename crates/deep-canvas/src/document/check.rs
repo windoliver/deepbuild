@@ -131,6 +131,7 @@ fn check_by(
     check_transport(doc, &mut issues);
     let required = required_minors(doc, sealed, &mut issues);
     let resolved = packs::resolve(doc, packs, Some(sealed), &mut issues);
+    notices.extend(resolved.missing.iter().map(packs::retired::Missing::notice));
     let mut expansions = Vec::new();
     let mut rules_ran = BTreeSet::new();
     // The canvas modules the document declares, which every module kind it uses must be among.
@@ -165,11 +166,31 @@ fn check_by(
                     migrate_item(key, item, &mut notices, kinds);
                 }
             }
+            super::pack_kinds::migrate::at_load(items, &resolved, &mut notices);
             // Expansion at check, never per frame (Recipe): the derived items join the lowered
             // items before any item is checked, so they meet the item contract, the module
             // checks and the budget as any item does.
             issues.extend(packs::driven_counts(doc, items, &resolved));
             expansions = packs::expand(items, &resolved, packs.planted, &mut issues);
+            // A broken-out item its instance's version no longer derives stays the writer's
+            // own, and the load says so (Pack: migrations as data; #1961).
+            for e in &expansions {
+                for (i, orphan) in &e.orphaned {
+                    notices.push(Notice {
+                        code: "derived_orphan",
+                        ids: vec![orphan.clone(), e.instance.clone()],
+                        path: format!("items/{}/broken_out/{i}", e.instance),
+                        actual: json!(orphan),
+                        what: format!(
+                            "{} no longer derives `{orphan}`, broken out of `{}`: it stays the writer's own",
+                            e.pack, e.instance
+                        ),
+                        migration: None,
+                        replaced_by: None,
+                        close: Vec::new(),
+                    });
+                }
+            }
             // The core's `kind_rules` check: each instance's rules once, after its expansion (#202).
             let rules = kind_rules(doc, items, &expansions, &resolved, packs.planted);
             issues.extend(rules.issues);
@@ -1255,6 +1276,8 @@ struct KindFacts<'a> {
     deprecation: Option<&'a (String, String)>,
     /// The close names an unknown kind's notice names (#412).
     close: Vec<Value>,
+    /// Of a pack the document names and this build lacks: kept as written, skipped (#1958).
+    pack_missing: bool,
 }
 
 impl<'a> KindFacts<'a> {
@@ -1277,6 +1300,7 @@ impl<'a> KindFacts<'a> {
                 }
                 _ => Vec::new(),
             },
+            pack_missing: packs::retired::skipped(text, resolved),
         }
     }
 }
@@ -1324,6 +1348,11 @@ fn check_item(
     let Some(facts) = ctx.facts.get(text) else {
         return false;
     };
+    // An instance of a pack this build lacks: its pack's notice names it, and nothing of it is
+    // read past its kind (#1958).
+    if facts.pack_missing {
+        return false;
+    }
     let instance = facts.instance;
     if let Some(value) = fields.get("broken_out").filter(|_| !instance) {
         issues.push(Issue::error(
@@ -2145,7 +2174,7 @@ fn check_assemblies(doc: &Value, issues: &mut Vec<Issue>) {
         };
         for field in fields.keys() {
             match field.as_str() {
-                "parent" | "at" | "motion" | "value" | "apart" | "order" => {}
+                "parent" | "at" | "motion" | "value" | "apart" | "order" | "shown_at" => {}
                 "repeat" => bad("out_of_range", field, fields[field].clone(), "not in this build"),
                 _ => bad("unknown_field", field, fields[field].clone(), "not a field of an assembly"),
             }
@@ -2445,6 +2474,7 @@ const CHANNEL_FIELDS: &[&str] = &[
     "morph",
     // Follow: a `mode: follow` channel's source, model, outputs and stagger.
     "follow",
+    "exaggerate", // #1183: a measured length mapped at another ratio than its `shown_at`.
 ];
 
 /// A bound value's fields (Bound value).

@@ -14,11 +14,16 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde_json::{json, Map, Value};
 
-use super::packs::{At, Expansion, KindRule, Pack, PackId, Packs, Planted, Recipe, Resolved};
+use super::packs::{
+    At, Expansion, Input, KindRule, Pack, PackId, Packs, Planted, Recipe, Resolved,
+};
 use super::{member, Issue};
 use crate::budget::Class;
 use crate::interval::Iv;
 use crate::registry::Sealed;
+
+pub(super) mod migrate;
+pub use migrate::{at_load, store_migrations};
 
 /// A pack kind as its pack declares it, with its kit's result once the pack check ran it.
 #[derive(Clone, Debug, PartialEq)]
@@ -45,6 +50,47 @@ pub struct PackKind {
     /// The mesh assets its kit's expansions name, by sha256: `geometry.shading` is the loop
     /// module's, so the caller that links it reads them.
     pub meshes: BTreeSet<String>,
+    /// Its migration's steps by the major each starts from, and the corpus documents of its
+    /// earlier majors (#1956).
+    pub migrate: BTreeMap<u64, migrate::Step>,
+    pub corpus: Vec<migrate::Case>,
+    /// Its `feature.response`, when it declares one (#1399).
+    pub response: Option<Response>,
+}
+
+/// `feature.response {ablate, measure, band}` (#1399): removing the recipe's step `ablate` must
+/// move `measure`, the items an instance expands into, by an amount within `band`, inclusive.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Response {
+    pub ablate: String,
+    pub measure: String,
+    pub band: [f64; 2],
+}
+
+/// The measures a `feature.response` reads.
+const MEASURES: &[&str] = &["items"];
+
+fn read_response(v: &Value, recipe: &Recipe) -> Result<Response, String> {
+    let ablate = v.get("ablate").and_then(Value::as_str).unwrap_or_default();
+    if !recipe.steps.iter().any(|s| s.id == ablate) {
+        return Err(format!("`ablate` names no step of recipe `{}`", recipe.id));
+    }
+    let measure = v.get("measure").and_then(Value::as_str).unwrap_or_default();
+    if !MEASURES.contains(&measure) {
+        return Err(format!("`measure` is one of {}", MEASURES.join(", ")));
+    }
+    let band: Vec<f64> = list(v.get("band"))
+        .iter()
+        .filter_map(Value::as_f64)
+        .collect();
+    match band[..] {
+        [lo, hi] if lo <= hi => Ok(Response {
+            ablate: ablate.into(),
+            measure: measure.into(),
+            band: [lo, hi],
+        }),
+        _ => Err("`band` is [min, max], min at most max".into()),
+    }
 }
 
 /// A pack kind's fields (Pack: kinds in any pack).
@@ -58,6 +104,7 @@ pub(super) const KIND_KEYS: &[&str] = &[
     "migrate",
     "examples",
     "cost",
+    "feature.response",
 ];
 /// What only a kind backed by code declares: a pack kind is refused for each, naming it.
 const CODE_ONLY: &[&str] = &[
@@ -71,16 +118,21 @@ const CODE_ONLY: &[&str] = &[
 
 /// The pack's `kinds`, each checked: named `<pack>.<name>@<major>`, backed by one of its
 /// recipes, with only a recipe-backed kind's fields, its rules compiled, its examples and twins
-/// read from the pack's assets by hash, and its cost declared.
+/// read from the pack's assets by hash, its migration carrying the pack's `corpus` (#1956), and
+/// its cost declared.
 pub(super) fn check_kinds(
     id: &PackId,
-    kinds: &Value,
+    manifest: &Map<String, Value>,
     recipes: &BTreeMap<String, Recipe>,
     assets: &[Value],
-    sealed: &Sealed,
+    (sealed, planted): (&Sealed, Planted),
     issues: &mut Vec<Issue>,
 ) -> BTreeMap<String, PackKind> {
     let mut out = BTreeMap::new();
+    let corpus = migrate::corpus(manifest.get("corpus"), assets, issues);
+    let Some(kinds) = manifest.get("kinds") else {
+        return out;
+    };
     let Some(map) = kinds.as_object() else {
         issues.push(Issue::envelope(
             "out_of_range",
@@ -134,20 +186,6 @@ pub(super) fn check_kinds(
                 ok = false;
             }
         }
-        // An empty `migrate` is a kind at its first major's; migrations as data come later.
-        let migrates = fields.get("migrate").is_some_and(|m| match m {
-            Value::Object(o) => !o.is_empty(),
-            Value::Array(a) => !a.is_empty(),
-            _ => true,
-        });
-        if migrates || major > 1 {
-            issues.push(bad(
-                "migrate",
-                json!({"kind": name, "field": "migrate"}),
-                "migrations as data land with the pack versions task: a pack kind is at major 1",
-            ));
-            ok = false;
-        }
         let recipe_name = fields
             .get("recipe")
             .and_then(Value::as_str)
@@ -161,6 +199,16 @@ pub(super) fn check_kinds(
             ));
             continue;
         };
+        // Its migration, read and run over the corpus: every fault named, never only the first.
+        let mut faults = Vec::new();
+        let (spec, inputs) = (fields.get("migrate"), &recipe.inputs);
+        let steps = migrate::read(name, major, spec, inputs, sealed, &mut faults);
+        let cases = migrate::corpus_faults(name, major, &steps, inputs, &corpus, &mut faults);
+        if planted.migration_first_fault {
+            faults.truncate(1);
+        }
+        ok &= faults.is_empty();
+        issues.extend(faults);
         let rules = match fields.get("rules") {
             None => Vec::new(),
             Some(list) => super::packs::read_rule_list(
@@ -212,6 +260,17 @@ pub(super) fn check_kinds(
                 None => ok = false,
             }
         }
+        let response = match fields.get("feature.response") {
+            None => None,
+            Some(v) => match read_response(v, recipe) {
+                Ok(r) => Some(r),
+                Err(what) => {
+                    issues.push(bad("feature.response", v.clone(), &what));
+                    ok = false;
+                    None
+                }
+            },
+        };
         let cost = fields.get("cost");
         let class = cost
             .and_then(|c| c.get("class"))
@@ -255,6 +314,9 @@ pub(super) fn check_kinds(
                 kit: Value::Null,
                 at_extremes: Value::Null,
                 meshes: BTreeSet::new(),
+                migrate: steps,
+                corpus: cases,
+                response,
             },
         );
     }
@@ -276,9 +338,8 @@ fn list(value: Option<&Value>) -> Vec<Value> {
     value.and_then(Value::as_array).cloned().unwrap_or_default()
 }
 
-/// An example's params and text: the asset of `sha`, as the loader read it, is a document holding
-/// one item of the kind, whose `params` are the example's.
-fn example_params(assets: &[Value], sha: &str, kind: &str) -> Option<(Map<String, Value>, String)> {
+/// The document the asset of `sha` holds, as the loader read it, and its bytes.
+fn asset_doc(assets: &[Value], sha: &str) -> Option<(Value, Vec<u8>)> {
     let asset = assets
         .iter()
         .find(|a| a.get("sha256").and_then(Value::as_str) == Some(sha))?;
@@ -287,7 +348,13 @@ fn example_params(assets: &[Value], sha: &str, kind: &str) -> Option<(Map<String
         .step_by(2)
         .map(|i| u8::from_str_radix(hex.get(i..i + 2)?, 16).ok())
         .collect::<Option<_>>()?;
-    let doc: Value = serde_json::from_slice(&bytes).ok()?;
+    Some((serde_json::from_slice(&bytes).ok()?, bytes))
+}
+
+/// An example's params and text: the asset of `sha` is a document holding one item of the kind,
+/// whose `params` are the example's.
+fn example_params(assets: &[Value], sha: &str, kind: &str) -> Option<(Map<String, Value>, String)> {
+    let (doc, bytes) = asset_doc(assets, sha)?;
     let mut items = member(&doc, "items")?.as_object()?.values();
     let item = items.next().filter(|i| super::kind_text(i) == Some(kind))?;
     if items.next().is_some() {
@@ -455,10 +522,8 @@ fn kit_fail(
 
 /// The kind kit of each of `pack`'s kinds, run at the pack check: a failing part refuses the
 /// pack, naming the kind and the part; a passing kit is kept on the kind with its largest
-/// counts over the extremes.
-pub(super) fn kit(pack: &mut Pack, sealed: &Sealed, planted: Planted) -> Result<(), Vec<Issue>> {
-    let mut alone = Packs::new(planted);
-    alone.insert(pack.clone());
+/// counts over the extremes. `alone` holds the pack and the versions it requires (#1957).
+pub(super) fn kit(pack: &mut Pack, sealed: &Sealed, alone: Packs) -> Result<(), Vec<Issue>> {
     let mut issues = Vec::new();
     let mut results = BTreeMap::new();
     for (name, kind) in &pack.kinds {
@@ -491,6 +556,8 @@ struct Run {
     rules: Vec<String>,
     over: Option<Value>,
     bytes: Vec<u8>,
+    /// The evaluated frame: the items the instance expands into (#1399).
+    frame: Vec<u8>,
     cpu_ms: f64,
     gpu_ms: f64,
     items: f64,
@@ -565,6 +632,7 @@ fn kit_check(
             .find(|i| i.code == "over_budget")
             .map(Issue::to_json),
         bytes: serde_json::to_vec(&checked.lowered["items"]).unwrap_or_default(),
+        frame: serde_json::to_vec(&derived).unwrap_or_default(),
         cpu_ms: e.cpu_ms - base.cpu_ms,
         gpu_ms: e.gpu_ms - base.gpu_ms,
         items: derived.len() as f64,
@@ -757,17 +825,217 @@ fn kit_one(
         }
         twins.push(json!({"example": sha, "expect": expect, "raised": raised}));
     }
+    // migration: each corpus document of an earlier major, pinned to this version, migrates and
+    // expands clean, to the values its record holds (Pack: migrations as data).
+    let mut corpus = Vec::new();
+    for case in &kind.corpus {
+        let doc = migrate::opened(&case.doc, &pack.id);
+        let checked = super::check_packed(&doc, sealed, packs);
+        let errors: Vec<Value> = checked
+            .issues
+            .iter()
+            .filter(|i| i.severity == "error" && i.code != "over_budget")
+            .map(Issue::to_json)
+            .collect();
+        if !errors.is_empty() {
+            return Err(kit_fail(
+                name,
+                "migration",
+                "out_of_range",
+                json!({"corpus": case.sha, "issues": errors}),
+                &format!(
+                    "corpus document `{}`, saved at major {}, doesn't migrate and expand clean",
+                    case.sha, case.major
+                ),
+            ));
+        }
+        let derived: Map<String, Value> = checked
+            .expansions
+            .iter()
+            .flat_map(|e| e.derived.clone())
+            .collect();
+        if let Some((item, field)) = migrate::differs(&derived, &case.values) {
+            return Err(kit_fail(
+                name,
+                "migration",
+                "out_of_range",
+                json!({"corpus": case.sha, "item": item, "field": field}),
+                &format!("corpus document `{}`, saved at major {}, expands `{item}` other than recorded: {field}", case.sha, case.major),
+            ));
+        }
+        corpus.push(json!({"corpus": case.sha, "from": case.major}));
+    }
+    // A kind at major 1 has nothing to migrate from: the part has no case.
+    let migration = if kind.corpus.is_empty() {
+        json!({"rule": "migration", "verdict": "NONE", "why": "a kind at major 1 migrates from nothing"})
+    } else {
+        json!({"rule": "migration", "verdict": "PASS", "corpus": corpus})
+    };
+    let unjudged = field_effect(kind, recipe, &check)?;
+    if let Some(r) = &kind.response {
+        let mut ablated = packs.clone();
+        let mut cut = pack.clone();
+        if let Some(rc) = cut.recipes.get_mut(&kind.recipe) {
+            rc.steps.retain(|s| s.id != r.ablate);
+        }
+        ablated.insert(cut);
+        let without =
+            |p: &Map<String, Value>| kit_check((pack, kind), "kit", p, (sealed, &ablated), &base);
+        feature_response(kind, r, &check, &without)?;
+    }
     // The registries' one kit shape: each part a rule of the kit.
     let part = |p: &str| json!({"rule": p, "verdict": "PASS"});
+    let mut effect = part("field.effect");
+    if !unjudged.is_empty() {
+        effect["unjudged"] = json!(unjudged);
+    }
+    let response = match &kind.response {
+        Some(_) => part("feature.response"),
+        None => {
+            json!({"rule": "feature.response", "verdict": "NONE", "why": "the kind declares no feature.response"})
+        }
+    };
     let kit = json!({
         "verdict": "PASS",
-        "rules": [part("defaults"), part("determinism"), part("cost"), part("rules"),
-                  // A kind at major 1 has nothing to migrate from: the part has no case.
-                  {"rule": "migration", "verdict": "NONE", "why": "a kind at major 1 migrates from nothing"}],
+        "rules": [part("defaults"), part("determinism"), part("cost"), part("rules"), effect, response, migration],
         "examples": clean,
         "twins": twins,
     });
     Ok((kit, json!({"items": items, "triangles": triangles}), meshes))
+}
+
+/// The values the kit tries for a field whose value is `now`: its hard range's ends (or one more
+/// than `now` without one), the other truth value, its other options, each number of a vector
+/// or range one more, the text with one more character, or the records less their last row. An
+/// ID, a record, or empty records yield none: the kit can't make another that is valid.
+fn others(input: &Input, now: &Value) -> Vec<Value> {
+    let n = now.as_f64();
+    match input.ty.as_str() {
+        "number" | "integer" => {
+            let ends: Vec<f64> = match (input.min, input.max) {
+                (None, None) => n.map(|v| v + 1.0).into_iter().collect(),
+                (lo, hi) => lo.into_iter().chain(hi).collect(),
+            };
+            ends.into_iter()
+                .filter(|v| Some(*v) != n)
+                .map(|v| {
+                    if input.ty == "integer" {
+                        json!(v as i64)
+                    } else {
+                        json!(v)
+                    }
+                })
+                .collect()
+        }
+        "bool" => vec![json!(!now.as_bool().unwrap_or(false))],
+        "choice" => input
+            .options
+            .iter()
+            .filter(|o| now.as_str() != Some(o.as_str()))
+            .map(|o| json!(o))
+            .collect(),
+        "vec3" | "range" => now
+            .as_array()
+            .map(|a| a.iter().map(|v| json!(v.as_f64().unwrap_or(0.0) + 1.0)))
+            .map(|a| json!(a.collect::<Vec<_>>()))
+            .into_iter()
+            .collect(),
+        "text" => vec![json!(format!("{}x", now.as_str().unwrap_or_default()))],
+        "records" => now
+            .as_array()
+            .and_then(|a| a.split_last())
+            .map(|(_, rest)| json!(rest))
+            .into_iter()
+            .collect(),
+        _ => Vec::new(),
+    }
+}
+
+/// `field.effect` (#1399): each field changed from its value at defaults, or in an example, must
+/// change the evaluated frame somewhere; a field that leaves it unchanged at every value tried
+/// is inert and fails the kit, naming it. The fields no value could be tried for are returned.
+fn field_effect(
+    kind: &PackKind,
+    recipe: &Recipe,
+    check: &dyn Fn(&str, &Map<String, Value>) -> Run,
+) -> Result<Vec<String>, Box<Issue>> {
+    let bases: Vec<(Map<String, Value>, Vec<u8>)> = std::iter::once(Map::new())
+        .chain(kind.examples.iter().map(|(_, p)| p.clone()))
+        .map(|p| {
+            let frame = check("kit", &p).frame;
+            (p, frame)
+        })
+        .collect();
+    let mut unjudged = Vec::new();
+    for (field, input) in &recipe.inputs {
+        let mut tried = Vec::new();
+        let moved = bases.iter().any(|(base, frame)| {
+            let now = base.get(field).unwrap_or(&input.default);
+            others(input, now).into_iter().any(|value| {
+                let mut p = base.clone();
+                p.insert(field.clone(), value.clone());
+                let run = check("kit", &p);
+                // A value the kind refuses shows nothing about the field's effect.
+                if !run.errors.is_empty() {
+                    return false;
+                }
+                tried.push(value);
+                run.frame != *frame
+            })
+        });
+        if moved {
+            continue;
+        }
+        if tried.is_empty() {
+            unjudged.push(field.clone());
+            continue;
+        }
+        return Err(kit_fail(
+            &kind.name,
+            "field.effect",
+            "out_of_range",
+            json!({"field": field, "tried": tried}),
+            &format!("field `{field}` leaves the evaluated frame unchanged at every value tried"),
+        ));
+    }
+    Ok(unjudged)
+}
+
+/// `feature.response` (#1399): at the kind's defaults and at each example, removing the feature
+/// must move the measure by an amount within the band, inclusive, or the kit fails, naming it.
+fn feature_response(
+    kind: &PackKind,
+    r: &Response,
+    with: &dyn Fn(&str, &Map<String, Value>) -> Run,
+    without: &dyn Fn(&Map<String, Value>) -> Run,
+) -> Result<(), Box<Issue>> {
+    let cases =
+        std::iter::once(("defaults".to_string(), Map::new())).chain(kind.examples.iter().cloned());
+    for (example, p) in cases {
+        let (a, b) = (with("kit", &p), without(&p));
+        let change = a.items - b.items;
+        let fault = if !b.errors.is_empty() {
+            Some(format!("without `{}` the kind isn't valid", r.ablate))
+        } else if change < r.band[0] || change > r.band[1] {
+            Some(format!(
+                "removing `{}` moves {} by {change}, outside [{}, {}]",
+                r.ablate, r.measure, r.band[0], r.band[1]
+            ))
+        } else {
+            None
+        };
+        if let Some(what) = fault {
+            return Err(kit_fail(
+                &kind.name,
+                "feature.response",
+                "out_of_range",
+                json!({"example": example, "ablate": r.ablate, "measure": r.measure, "band": r.band,
+                       "with": a.items, "without": b.items, "change": change, "issues": b.errors}),
+                &what,
+            ));
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -797,7 +1065,7 @@ mod tests {
                        "w": {"type": "number", "default": 1.2, "min": 0.4, "max": 3.0}},
             "steps": {"bar": {"op": "mark", "kind": "test.rect@1",
                               "repeat": {"count": "n", "as": "i"},
-                              "params": {"w": 10, "h": 10}, "at": {"pos": ["24 * i", 0, 0]}}}
+                              "params": {"w": "w * 10", "h": 10}, "at": {"pos": ["24 * i", 0, 0]}}}
         });
         let mut k = json!({"minor": 0, "recipe": "row.bars",
                            "cost": {"class": "export", "at_defaults": {"cpu_ms": 100, "gpu_ms": 100, "items": 100}}});
@@ -820,7 +1088,21 @@ mod tests {
     }
 
     #[test]
-    fn a_kind_with_a_migration_or_past_major_1_is_refused_naming_the_field() {
+    fn a_text_field_no_step_reads_fails_field_effect_naming_it() {
+        let refused = admit(&pack(
+            json!({}),
+            json!({"inputs": {"n": {"type": "integer", "default": 2, "min": 1, "max": 4},
+                              "w": {"type": "number", "default": 1.2, "min": 0.4, "max": 3.0},
+                              "label": {"type": "text", "default": "row"}}}),
+            vec![],
+        ))
+        .expect_err("an inert text field");
+        assert_eq!(refused[0]["actual"]["part"], "field.effect", "{refused:?}");
+        assert_eq!(refused[0]["actual"]["field"], "label", "{refused:?}");
+    }
+
+    #[test]
+    fn a_malformed_migration_or_a_major_without_its_step_is_refused_naming_the_field() {
         let refused = admit(&pack(
             json!({"migrate": {"renames": [{"from": "w", "to": "width"}]}}),
             json!({}),

@@ -1,6 +1,6 @@
 {
   "crates/deep-app/src/question.rs": 1541,
-  "crates/deep-app/src/views.rs": 3658,
+  "crates/deep-app/src/views.rs": 3606,
   "crates/deep-canvas-effects/src/check.rs": 2093,
   "crates/deep-canvas-effects/src/emit.rs": 1636,
   "crates/deep-canvas-effects/src/graph.rs": 1624,
@@ -22,7 +22,7 @@
   "crates/deep-canvas/src/document/mod.rs": 1583,
   "crates/deep-canvas/src/document/packs.rs": 3829,
   "crates/deep-canvas/src/expr.rs": 2710,
-  "crates/deep-canvas/src/registry/mod.rs": 4829,
+  "crates/deep-canvas/src/registry/mod.rs": 4794,
   "crates/deep-canvas/src/schedule/mod.rs": 3548,
   "crates/deep-canvas/src/scope.rs": 1527,
   "crates/deep-canvas/src/session.rs": 1580,

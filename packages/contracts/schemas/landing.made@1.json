@@ -1,0 +1,214 @@
+{
+  "title": "landing.made@1",
+  "description": "A step of landing in turn (#1331; design: Landing in turn), one event per step, appended by the core alone: a change judged on its merge with the default branch's head (its verdict's commit and tree), sent back to its own attempt with the files that conflict, held for a result other than PASS, landed through the forge with the commit main took, stopped when the default branch read back holds another tree than the verdict covered, or a pull request from before the run joined as its issue's attempt.",
+  "x-since": "R1",
+  "x-stability": "stable",
+  "x-feeds": [],
+  "type": "object",
+  "properties": {
+    "v": {
+      "const": 1,
+      "description": "The kind's schema version."
+    },
+    "id": {
+      "type": "string",
+      "format": "ulid",
+      "description": "The event's ULID, its identity."
+    },
+    "kind": {
+      "const": "landing.made"
+    },
+    "subject": {
+      "type": "string",
+      "pattern": "^(task|ask|claim|verdict|run|req|decision|plan|lease|reading|notice|doc|ev|session):[0-9A-Za-z]+(#[A-Za-z0-9][A-Za-z0-9._-]*)?$",
+      "description": "The record object this event is about."
+    },
+    "writer": {
+      "const": "core",
+      "description": "Only the core appends this kind."
+    },
+    "actor": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The person behind it, from the credential."
+    },
+    "scope": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Who may see it."
+    },
+    "ts": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "Milliseconds since the Unix epoch."
+    },
+    "seq": {
+      "type": "string",
+      "format": "seq",
+      "description": "Order within the session: ns since the epoch when the hook started."
+    },
+    "log_pos": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991,
+      "description": "Its position in the event log, assigned by the hub at append."
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "step": {
+          "type": "string",
+          "enum": [
+            "judged",
+            "sent_back",
+            "held",
+            "landed",
+            "stopped",
+            "joined"
+          ],
+          "description": "Which step: judged on the merge with the head; sent back, conflicting; held, its verdict not a PASS; landed; stopped, the read-back differing; joined, an earlier pull request as the attempt.",
+          "x-closure": {
+            "closed": "each value is a step of landing in turn the design names",
+            "reopens": "a new major of this schema",
+            "mark": "exhaustive"
+          }
+        },
+        "repo": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "The forge's repository, owner/name."
+        },
+        "pr": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991,
+          "description": "The pull request kept as the change's thread."
+        },
+        "issue": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991,
+          "description": "The issue it links."
+        },
+        "head": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{40}$",
+          "maxLength": 8192,
+          "description": "The pull request's head when the step happened."
+        },
+        "main": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{40}$",
+          "maxLength": 8192,
+          "description": "The default branch's head the step read."
+        },
+        "commit": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{40}$",
+          "maxLength": 8192,
+          "description": "judged: the merge of head and main the verdict covers; landed: the commit the default branch took; stopped: the commit read back."
+        },
+        "tree": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{40}$",
+          "maxLength": 8192,
+          "description": "That commit's tree."
+        },
+        "claim": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^claim:[0-9A-Za-z]+$",
+          "maxLength": 8192,
+          "description": "The claim the change was judged as."
+        },
+        "outcome": {
+          "type": "string",
+          "enum": [
+            "PASS",
+            "FAIL",
+            "INVALID",
+            "BLOCKED",
+            "INCONCLUSIVE",
+            "none"
+          ],
+          "description": "The verdict the step read, or none for a step that reads no verdict.",
+          "x-closure": {
+            "closed": "the five verdicts, or none",
+            "reopens": "a new major of this schema",
+            "mark": "exhaustive"
+          }
+        },
+        "files": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8192,
+            "description": "A file."
+          },
+          "description": "sent_back: the files that conflict; stopped: the files whose contents differ."
+        },
+        "open": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8192,
+            "description": "A requirement."
+          },
+          "description": "landed: the requirements only the budget window can settle, which its issue names while it stays open."
+        }
+      },
+      "required": [
+        "step",
+        "repo",
+        "pr",
+        "issue",
+        "head",
+        "main",
+        "commit",
+        "tree",
+        "claim",
+        "outcome",
+        "files",
+        "open"
+      ],
+      "additionalProperties": false
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$",
+        "description": "A SHA-256, in lower-case hex."
+      }
+    }
+  },
+  "required": [
+    "v",
+    "id",
+    "kind",
+    "writer",
+    "actor",
+    "scope",
+    "ts",
+    "data"
+  ],
+  "additionalProperties": false
+}

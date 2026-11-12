@@ -377,8 +377,9 @@ function run() {
   state.last = { head, at: Date.now() };
   for (const id of listed) say(`KNOWN ${id}`);
   for (const lane of unproven) say(`INCONCLUSIVE main-watch: ${lane} on main at ${short(head)}, so this run isn't a clean one`);
-  // A held failure no longer failing is cleared; a new one runs again alone, and pauses landings only if it holds.
-  for (const id of Object.keys(state.reds)) if (!failing.has(id)) delete state.reds[id];
+  // A held failure no longer failing is cleared; a new one runs again alone, and pauses landings only if it holds. A tree
+  // the landing queue read back as other than its verdict's (#1331) is no test's: it holds until its revert lands.
+  for (const [id, red] of Object.entries(state.reds)) if (!failing.has(id) && !red.readBack) delete state.reds[id];
   for (const [id, message] of failing) {
     if (state.reds[id]) continue;
     const runs = [`FAIL on ${short(head)} in the ${LANES.join(' and ')} lanes`];

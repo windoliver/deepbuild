@@ -10,8 +10,8 @@ The logic module, `logic@1` (#531, #532, #534; design: The logic module): a logi
 - `src/checks.rs`: `logic.determinism`; `src/budget.rs`: `logic.budget` and its calibration programs; `src/judder.rs`: `logic.judder`, an issue at check (#545); `src/live.rs`: a live view with no bake, its open span and what a frame draws.
 - `src/module.rs`: the `logic` canvas module, whose one entry fills the core's `column.source@1` with each item's arrays as `<logic>.<name>` (#535); `Record::arrays` in `src/world.rs` bakes them, each step's changes with the ranges `handed` gives the column view.
 - `src/lines.rs`: source lines through a program's debug sidecar; `src/saves.rs`: save files, written whole, opened, refused and migrated.
-- `src/lib.rs`: the JSON calls, bakes and bake keys; `src/main.rs`: the command line and `--planted`.
-- The browser's runtime goes in `web/logic.mjs`; it has no turn clock yet, so `web_plan` refuses `clock: on_input` by name. The acceptance tests are in `tests/acceptance/531`, `532`, `544` and `545`.
+- `src/lib.rs`: the JSON calls, bakes and bake keys, and a golden's runtime digest, which is the seal's of the logic and sandbox modules this runner holds (#1920); `src/main.rs`: the command line and `--planted`.
+- The browser's runtime goes in `web/logic.mjs`; it has no turn clock yet, so `web_plan` refuses `clock: on_input` by name. The acceptance tests are in `tests/acceptance/531`, `532`, `534`, `544` and `545`.
 
 ## What it may import
 

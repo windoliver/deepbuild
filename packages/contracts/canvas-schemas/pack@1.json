@@ -79,6 +79,11 @@
       "type": "object",
       "additionalProperties": { "$ref": "#/$defs/kind" }
     },
+    "corpus": {
+      "$comment": "#1956: fixture documents for every major the pack's kinds shipped, by major, each an asset's sha256.",
+      "type": "object",
+      "additionalProperties": { "type": "array", "items": { "type": "string" } }
+    },
     "layouts": {
       "type": "object",
       "additionalProperties": {
@@ -143,7 +148,19 @@
             "required": ["example", "expect"]
           }
         },
-        "migrate": { "$comment": "Migrations as data land with the pack versions task; the pack check refuses this field." },
+        "migrate": {
+          "$comment": "#1956: one step a major, by the major it starts from; set expressions come from the closed function list over the old params, written old.<param>.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "rename": { "type": "object", "additionalProperties": { "type": "string" } },
+              "set": { "type": "object", "additionalProperties": { "type": "string" } },
+              "drop": { "type": "array", "items": { "type": "string" } }
+            },
+            "additionalProperties": false
+          }
+        },
         "examples": { "type": "array", "items": { "type": "string" } },
         "cost": {
           "type": "object",
@@ -160,6 +177,25 @@
             }
           },
           "required": ["class", "at_defaults"]
+        },
+        "feature.response": {
+          "$comment": "#1399: the kind kit removes the recipe step `ablate` at the kind's defaults and at each example, and the change in `measure` must lie in `band`, [min, max] inclusive.",
+          "type": "object",
+          "properties": {
+            "ablate": { "type": "string" },
+            "measure": {
+              "type": "string",
+              "enum": ["items"],
+              "x-closure": {
+                "closed": "record",
+                "reopens_if": "a feature.response that measures what an instance makes other than its item count",
+                "mark": "exhaustive"
+              }
+            },
+            "band": { "type": "array", "items": { "type": "number" }, "minItems": 2, "maxItems": 2 }
+          },
+          "required": ["ablate", "measure", "band"],
+          "additionalProperties": false
         }
       },
       "required": ["recipe", "cost"],

@@ -11,7 +11,7 @@ import tls from 'node:tls';
 import { basename, dirname, join } from 'node:path';
 import { Worker } from 'node:worker_threads';
 import type { HookRequestLine } from '@deepbuild/adapters';
-import { writerGeneration } from '@deepbuild/record';
+import { writerGeneration } from '@deepbuild/record/meta';
 import { claudeSettings, readJson, relations, HOLD_MARGIN_MS, STOP_HOLD_MS, type Relation } from './claude-settings.js';
 import { stopTimeoutS } from './codex-settings.js';
 import { contractAdapter, rpcTable, type DeprecatedNotice } from './contracts.js';
@@ -30,6 +30,7 @@ import { Waits, type HookSeen, type OpenCall, type Reply as WaitReply, type Rest
 import { People } from './people.js';
 import { identityAt, idOf, type Identity } from './identity.js';
 import { plantedStart } from './plant.js';
+import { gatesOff } from './watch.js';
 import { AUTHORITY, CONTRACT, EXTENSION_HOLD_MS, FEATURES, line, plantOf, refuse, refusal, Refused, STAGE_HOLD_MS, ulid, VERSION, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Parsed, type Plant, type Refusal, type Scope, type Scoped, SCREEN_TOOLS, type StageReach, type VfsSettings } from './wire.js';
 
 /** How often the hub checks that its lock file is still the one it holds (#909): the design says at least once a minute. */
@@ -63,7 +64,7 @@ const ALLOWED = new Map<string, readonly Role[]>([
   // The Agents page (#148): a server or a skill proposed for the agents you choose, the page's model, Codex's daemon
   // restarted through an ask, a sync undone; and `deep mcp-exec`, a synced server's command with its secrets by handle.
   ['agents.propose', ['app', 'cli']], ['agents.read', ['app', 'cli']], ['agents.restart', ['app', 'cli']], ['agents.undo', ['app', 'cli']], ['box.say', ['app', 'cli']], ['mcp.exec', ['cli']],
-  ['gates.off', ['app', 'cli']], ['gates.on', ['app', 'cli']], ['you.confirm', ['cli']], ['status.read', ['app', 'cli', 'person']], ['rows.read', ['app', 'cli', 'person']], ['row.read', ['app']], ['hub.stop', ['app', 'cli']], ['run.start', ['app', 'cli']], ['run.output', ['app', 'cli']], ['host.list', ['app', 'cli']], ['host.facts', ['app', 'cli']], ['test.load', ['app', 'cli']],
+  ['gates.off', ['app', 'cli']], ['gates.on', ['app', 'cli']], ['you.confirm', ['cli']], ['status.read', ['app', 'cli', 'person']], ['rows.read', ['app', 'cli', 'person']], ['row.read', ['app']], ['hub.stop', ['app', 'cli']], ['run.start', ['app', 'cli']], ['run.output', ['app', 'cli']], ['host.list', ['app', 'cli']], ['host.facts', ['app', 'cli']], ['host.plan', ['cli']], ['host.ran', ['cli']], ['host.changes', ['app', 'cli']], ['test.load', ['app', 'cli']],
   // A new secret, on the trusted path, and which are held; values never come back (#70).
   ['secret.enter', ['cli']], ['secret.list', ['app', 'cli']],
   // A hosted terminal the hub reattaches after a restart (#70).
@@ -80,14 +81,16 @@ const ALLOWED = new Map<string, readonly Role[]>([
   // `deep lease` (#1015): a heavy command's place in the queue, its process group once it starts, and its first process's exit.
   ['lease.wait', ['cli']], ['lease.started', ['cli']], ['lease.exited', ['cli']], ['extension.install', ['cli']], ['guard.add', ['cli']], ['record.backup', ['cli']], ['test.verdict', ['cli']],
   ['mcp.call', ['mcp']], ['mcp.cancel', ['mcp']], ['evidence.paste', ['app']],
-  // Setup reads your history into the wiki (#356).
-  ['wiki.build', ['cli']],
+  // Setup reads your history into the wiki (#356), and records the steps it took (#1100).
+  ['wiki.build', ['cli']], ['setup.report', ['cli']],
   // Every agent's memory: the ranked list, and your keep or remove of a lesson (#111).
   ['memory.list', ['cli']], ['memory.act', ['cli']],
   // The rules page (#344): written from your rule files, a scope's reach before you save it, who a rule reached, a session's set.
   ['rules.sync', ['app', 'cli']], ['rules.reach', ['app', 'cli']], ['rules.credit', ['app', 'cli']], ['session.rules', ['app', 'cli']],
   // The blind acceptance job (#1328).
   ['acceptance.start', ['cli']], ['acceptance.status', ['app', 'cli']], ['acceptance.dispute', ['cli']], ['acceptance.ended', ['cli']],
+  // Landing in turn (#1331): from your own terminal only.
+  ['land.judge', ['cli']], ['land.round', ['cli']], ['work.once', ['cli']],
   ['job.submit', ['app', 'cli']], ['job.status', ['app', 'cli']], ['job.list', ['app', 'cli']], ['checks.kinds', ['app', 'cli']], ['job.output', ['app', 'cli']],
   // A window reading comes from the app, the CLI, or deep-hook's status line forwarder, which connects as a hook does.
   ['windows.report', ['app', 'cli', 'hook']],
@@ -104,6 +107,8 @@ const ALLOWED = new Map<string, readonly Role[]>([
   ['session.wait', ['cli', 'mcp']], ['session.delivered', ['mcp']], ['session.stop_waiting', ['mcp']],
   // Your words into a session from the app, a note or a page's box, recorded from: app by their request ID (#340).
   ['session.note', ['app']], ['ask.later', ['app']], ['session.pause', ['app']],
+  // A session's name from the Session menu's Rename, and why a session reads as it does, for `deep status <session> --why` (#2018).
+  ['session.rename', ['app']], ['row.why', ['app', 'cli', 'person']],
   // A send-back planted for a session's next stop, served only to a hub a test started with DEEP_HUB_TEST_SEND_BACK=1 (#25).
   ['test.send_back', ['cli']],
   // The hub's clock stepped forward, served only to a hub a test started with DEEP_HUB_TEST_CLOCK_STEPS=1 (#965).
@@ -421,6 +426,19 @@ class Hub {
   private resend = new Set<string>();
   /** The sessions with a message typed mid-turn to acknowledge (#340): the next tool call's hook is held for it. */
   private readonly acking = new Set<string>();
+  /** Each session's last failed call as its tool.after read: a failure alike to it is held for the core's reply (#2019). */
+  private readonly lastFailed = new Map<string, string>();
+  /** Whether a hook's call failed alike to its session's last failed call, which a passing call forgets. */
+  private failedAgain(meta: HookMeta, drafts: readonly Draft[]): boolean {
+    const after = drafts.find((d) => d.kind === 'tool.after');
+    if (!after || meta.event === 'SessionEnd') { if (meta.event === 'SessionEnd') this.lastFailed.delete(meta.session); return false; }
+    const d = after.data;
+    if (d.outcome !== 'failed') { this.lastFailed.delete(meta.session); return false; }
+    const key = JSON.stringify([d.kind, d.command, d.server, d.tool, d.args, d.exit_code, d.signature]);
+    const again = this.lastFailed.get(meta.session) === key;
+    this.lastFailed.set(meta.session, key);
+    return again;
+  }
   /** `deep off` in effect (#19): every gate watch-only, while the floor (the fail_closed entries) holds. */
   private off = false;
   /** The agents whose hook entries run a program that can't run, as the core's last check found (#993): their gates are watch-only. */
@@ -449,7 +467,7 @@ class Hub {
   async open(clock: CoreOptions['clock']): Promise<void> {
     this.now = () => clock.start + (Date.now() - clock.real);
     const held = [this.token, ...testHeld()];
-    this.off = gatesOff(this.root);
+    this.off = gatesOff(this.root.dir);
     const options: CoreOptions = { root: this.root.dir, clock, held, ...(this.plant ? { plant: this.plant } : {}), ...(this.vfs ? { vfs: this.vfs } : {}),
       ...(process.env.DEEP_HUB_TEST_HOST ? { host: process.env.DEEP_HUB_TEST_HOST } : {}),
       ...(Number(process.env.DEEP_HUB_TEST_LEASE_MS) > 0 ? { leaseMs: Number(process.env.DEEP_HUB_TEST_LEASE_MS) } : {}),
@@ -827,7 +845,9 @@ class Hub {
     // its line whether or not the core's word of the turn has come back yet (#83).
     if (parsed.drafts.some((d) => d.kind === 'tool.after')) this.sawWork.add(meta.session);
     // A blocked call's reply is its block: no acknowledgement takes its place, and the next call carries the acknowledgement.
-    const held = !blocked && !before && !gated && !prompted && parsed.drafts.length ? this.holdFor(meta) : null;
+    // A call failing alike to the session's last failure is held for the core's reply, which tells a third once (#2019).
+    const again = this.failedAgain(meta, parsed.drafts);
+    const held = !blocked && !before && !gated && !prompted && parsed.drafts.length ? (again ? Date.now() + CONTEXT_HOLD_MS : this.holdFor(meta)) : null;
     if (meta.event === 'Stop' || meta.event === 'SessionEnd') this.sawWork.delete(meta.session);
     // A resumed session's calls go to the gate until the core says whether its cut-off turn left a send to match (#85, #1033).
     if (meta.event === 'SessionStart' && meta.fields?.source === 'resume') this.resend.add(meta.session);
@@ -1445,10 +1465,7 @@ function listenAt(dir: string): { host: string; port: number } {
   const m = typeof at === 'string' ? /^(.*):(\d{1,5})$/.exec(at) : null;
   return m ? { host: m[1]!.replace(/^\[|\]$/g, '') || '0.0.0.0', port: Number(m[2]) } : { host: '0.0.0.0', port: 7433 };
 }
-/** Whether `deep off` is in effect: <root>/gates.json, which only the hub writes, once the OS confirmed you. */
-function gatesOff(root: Root): boolean {
-  try { return (JSON.parse(readFileSync(join(root.dir, 'gates.json'), 'utf8')) as { off?: unknown }).off === true; } catch { return false; }
-}
+/** `deep off` set or cleared in <root>/gates.json, which only the hub writes, once the OS confirmed you (watch.ts reads it). */
 function setGatesOff(root: Root, off: boolean): void {
   const file = join(root.dir, 'gates.json');
   writeFileSync(`${file}.tmp`, `${JSON.stringify({ off, since: Date.now() })}\n`, { mode: 0o600 });

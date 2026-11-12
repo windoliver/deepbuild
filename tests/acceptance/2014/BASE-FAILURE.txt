@@ -1,0 +1,23 @@
+At base 35df4523f (an arm64 Mac, 18 cores), on 2026-11-11, no Rust was built: the one-minute load was about 238 and `cargo` isn't on this shell's PATH. The surfaces the tests read plainly don't exist at the base, so each line below marked "read" comes from the base's code. Lines marked "observed" are what running the test files here, without cargo, showed.
+
+Observed: each of the five tests ran its judges' self-checks (cellJudgesFailTheirPlants or landJudgesFailTheirPlants), which need no binary, and they passed. Each test then failed at "the binary builds: cargo build --locked --bin deep-show --no-default-features --features full", with "cargo could not run: spawnSync cargo ENOENT". With cargo on PATH, each test meets the following first.
+
+- ac1-one-surface.test.ts
+  - Both tests fail at "deep-show run refused the scenario (its calls deep_show, geometry, terrain_rays, deep_query…)", the answer being {"ok": false, "code": "bad_input"}. Read: `call()` in crates/deep-show/src/main.rs has no `terrain_rays`, and `via()` answers None for a name it doesn't know, so the scenario line is refused whole.
+  - The second test is refused for its planted name too. Read: `terrain_splits_other_diagonal` is in neither scene3d's PLANTED nor main.rs's planted match, whose last arm is `_ => return None`.
+  - Behind the call, read: plate@1's spec (crates/deep-canvas-scene3d/src/spec.rs) defines outline, grid, size, two_sided, height, shade and paint, not `terrain`. So the check refuses the show with `unknown_field` at items/ground/params/terrain (crates/deep-canvas/src/document/check.rs, `check_params`), and `geometry` answers {"code": "no_revision"}.
+  - Behind that, read: the physics module's shape reader refuses a `heightfield` shape as `physics.unsupported` ("#927 brings it", crates/deep-canvas-physics/src/doc.rs), and nothing in deep-show meets a ray with a terrain plate.
+
+- ac2-size-cap.test.ts
+  - The first test fails at "deep-show run refused the scenario (its calls deep_show, terrain_rays, deep_query…)", bad_input, as above (read).
+  - The second test fails at "the plate 122910 × 122910 m at 30 m spacing is refused at check, naming its size and spacing". Its message is "no out_of_range error names ground at items/ground/params/terrain …; the issues: [… unknown_field …]". Read: the show is refused, but by `unknown_field` at items/ground/params/terrain, whose actual is the terrain block as written. The refusal judge is checked here to fail exactly that issue (observed, in landJudgesFailTheirPlants), so a refusal for that reason can't pass.
+  - The third test fails at "deep-show run refused the scenario (its calls deep_show, its planted program terrain_cap_in_metres)", bad_input: the planted name is unknown (read).
+
+Type-check (observed): `npx tsc -p tests/acceptance/2014/tsconfig.json` exits 0, with the repo's pinned TypeScript, vitest 5.0.5 and Node 24.22.2.
+
+Numbers the self-checks computed (observed):
+- Cell [1, 0]'s centre is at 0.5 m split through its raised corner, and 0 m split the other way.
+- A ball of 0.1 m rests at y 0.6224744871 on the first split and 0.1732050808 on the second.
+- With its lowest point on the centre's surface, the ball passes 0.0183503 m into the first split and 0.0422650 m into the second.
+- On the plate's bounds (y 1.1) the ball is 0.3899 m and 0.5351 m apart.
+- The valley's place on the ridge has its centre under the drawn surface. The ridge's place over the valley is 0.2594 m apart.

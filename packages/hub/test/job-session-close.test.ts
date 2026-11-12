@@ -26,7 +26,7 @@ function world() {
   };
   const jobs = new Jobs({
     root, now: Date.now, host: () => host as never, keep: async () => '0'.repeat(64), has: async () => false,
-    read: async () => new Uint8Array(), send: async () => { throw Error('nothing is sent'); }, raise: async () => 'ask:none',
+    read: async () => new Uint8Array(), adopt: async () => {}, send: async () => { throw Error('nothing is sent'); }, raise: async () => 'ask:none',
     row: (_job, running) => { seen.rows.push(running); },
   });
   return { jobs, seen };
