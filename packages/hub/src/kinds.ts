@@ -8,16 +8,17 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { commandCheckKind } from '@deepbuild/checks-command';
 import { numbersFill, type NumbersSpec, type StatedNumber } from '@deepbuild/checks-numbers';
-import { independence, reviewFill, type ChangeSession, type ReviewerAnswer, type ReviewSpec, type SendBackItem } from '@deepbuild/checks-review';
+import { independence, reviewFill, type ChangeSession, type ReviewerAnswer, type ReviewSpec } from '@deepbuild/checks-review';
 import { workFill } from '@deepbuild/checks-work';
 import type { CheckContext, CheckResult, CheckRunnerFill, CheckSpec } from '@deepbuild/conformance';
-import { admitKind, type Checkouts } from '@deepbuild/gate';
-import type { Host, Supervisor } from '@deepbuild/supervisor';
-import type { JobRecord, JobSpec } from '@deepbuild/runner';
+import { admitKind } from '@deepbuild/gate';
+import type { JobRecord } from '@deepbuild/runner';
 import type { TimingReport } from '@deepbuild/verdicts';
 import { claimNumbers, numbersChecks, runClaimNumbers } from './claim-numbers.js';
 import type { ClaimCheck } from './gate-runner.js';
 import { uncitedSpeeds } from './speed.js';
+import type { KindsOptions, RepoOf, ReviewOf, ReviewRound } from './checks-port.js';
+export type { RepoOf, ReviewOf, ReviewRound } from './checks-port.js';
 
 /** Each route a gate run names a kind by. */
 const ROUTES = {
@@ -28,26 +29,6 @@ const ROUTES = {
 } as const;
 type Route = keyof typeof ROUTES;
 
-/** What a review run needs beyond its spec: the claim's session, to ask the second model on its agent and judge its independence. */
-export interface ReviewOf { claim: string; task: string; agent: string; transcript: string | undefined; /** The pull request the claim is on: its review rounds converge on it (#1862). */ pr?: string | undefined }
-/** A review round that counted (#1862): the items it sent back, and the earlier rounds' items its commit left open. */
-export interface ReviewRound { sent: SendBackItem[]; open: SendBackItem[] }
-/** What a speed's or added terms' run reads beyond its checkout (#1863): its run's handle, the session's worktree and the hub's stop. */
-export interface RepoOf { run: string; worktree: string; stop: AbortSignal }
-interface KindsOptions {
-  host: () => Host;
-  /** The supervisor each side of a stated speed runs its steps through, and the checkouts its baseline side runs in (#1863). */
-  supervisor: () => Supervisor;
-  checkouts: () => Checkouts;
-  /** The hub's object store, a bare repo reading the repo's objects as alternates: the merge base's files are read there. */
-  store: string;
-  /** The runner's submit, cancel and wait (#159): the review's second model runs as a `review` job. */
-  submit(spec: JobSpec): Promise<JobRecord>;
-  wait(job: string): Promise<JobRecord>;
-  cancel(job: string): Promise<JobRecord>;
-  /** The planted wrong program that holds `message` with no route into a gate run. */
-  plant?: string | undefined;
-}
 interface Held { fill: CheckRunnerFill; routes: Route[] }
 
 /** The rubric a review reads when your wiki holds none: `- <rule>: <text>`, in order. */

@@ -245,7 +245,7 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
   const agent = said && said !== 'claude-code' ? said : request.agent;
   const scrub = (text: string) => scrubText(text, { held });
   const meta: HookMeta = {
-    id: request.id, agent, event, session: str(payload.session_id), cwd: str(payload.cwd),
+    id: request.id, seq: request.seq, agent, event, session: str(payload.session_id), cwd: str(payload.cwd),
     transcript: str(payload.transcript_path), pid: request.pid, ppid: request.ppid, matched: request.matched,
   };
   if (said && said !== named) meta.caller = `deep-hook named this hook's caller ${named}, but its payload's own fields say ${said} (${said === 'cursor' ? 'cursor_version' : `transcript_path ${str(payload.transcript_path)}`}); it is recorded under ${agent}.`;
