@@ -1,5 +1,7 @@
 # #1123: run-private binaries — partial implementation
 
+**Update:** two folders now have blind-redraft and per-file parallel wrong-program proof; see [migration-update.md](migration-update.md). The original stage's results below are historical. Full unit readings and actual Spark/approval gates remain open.
+
 Base: `092754bb1` (current main when this branch was created). **Part of #1123, not Closes.**
 
 ## Requirement → change → proof
@@ -11,7 +13,7 @@ Base: `092754bb1` (current main when this branch was created). **Part of #1123, 
 | Private snapshot survives concurrent Cargo rewrites | Cargo 1.99.1 publishes final artifacts privately using `--target-dir`, with `build.build-dir` retaining fixed-path intermediates. Copies never link to mutable target executables. | Approved blind capture redraft: all three cases pass on Mac and Linux arm64; unchanged lanes case rejects current main with `RUN_PRIVATE_ORIGIN`, after real own/foreign builds ran. |
 | Scoped, once-per-run build | Discover actual environment reads/execution in each test/helper closure; ask Vitest for its selected files; don't build skipped/excluded/unrelated binaries. Each checkout/shard gets one snapshot. | Existing freshness/target-poisoning cases plus regressions for skipped lanes, excludes, root-relative Node files, mixed selections, absent workspace, and failed build. Required missing workspace/build prevents consumers from starting. Unit Node discovery now requests no application binary. |
 | Safe cleanup and existing shard ownership | A detached IPC watcher removes the creating run's private folder after exit, including SIGKILL. Released shard handles are cleared before outer cleanup. | SIGTERM/SIGKILL tests failed before, passed unchanged after. Replacement-shard-lock test failed before, then passed unchanged; no second release may remove another run's lock. |
-| Eligible folders move only after wrong-program parallel proof | No changes to alone/timed/exclusive/slow/byHand lists. | **OPEN.** Independent base-only audit in `migration-audit.md` cleared no audited small folder unchanged. Existing cargo readers need separate blind redrafts; copy-after-Cargo helpers still have a capture race. No move or speedup is claimed. |
+| Eligible folders move only after wrong-program parallel proof | #374 and #375 helpers adopted byte-for-byte from separate blind drafts, and those two folders leave alone after wrong-program evidence; all eight behavior files unchanged. | **Proof complete for these two proposed moves**: 23 clean tests pass; every file fails at an issue assertion in overlapping parallel runs. Prerequisite redraft proposals #2336/#2337 must merge first. See migration-update.md. No speedup claimed. |
 | Alone-block before/after wall time reading | No fabricated reading or threshold. | **OPEN / UNRUN.** Actual full unit before/after on one source commit has not completed. Audit gives the required recipe. |
 
 ## Independent tests and approved dispute
@@ -38,12 +40,12 @@ The redacted excerpts in this report directory retain the key check results. Ful
 
 ## Remaining gates
 
-1. Separate blind redrafts of proposed migration consumers, then each file's wrong-program failure with actual file parallelism **before** changing `alone`.
+1. Merge/approve the two separately drafted redraft proposals #2336/#2337 before the already-proven #374/#375 scheduling changes land.
 2. Actual same-source-commit unit-lane before/after alone-block wall readings.
 3. Actual Spark run (DNS/host access unavailable here); Docker is supplemental.
 4. Full affected verification, including main failures and timed/slow omissions, remains non-PASS.
 5. Human-signed approval of protected proof-tooling edits. No agent-created approval tag, allowlist edit or signature is supplied.
-6. Interruption during a still-running Cargo descendant can leave/recreate its private artifact staging files after the parent exits; the tested cleanup covers normal exit and interruption after consumer start, not that stronger process-lifetime guarantee.
-7. The initial skipped/excluded-file regression fixtures are no longer wrong-program discriminators after AST demand detection: they contain no execution call. They still check routing, while that stronger binary-demand exclusion proof remains open; the tests were not edited to hide the gap.
+6. Signal cleanup during Cargo and through the real lease path now has red/green proof; broader bay-reuse/group-identity/failed-enumeration interleavings remain unproven (migration-update.md).
+7. Genuine executed-binary consumers now prove exclusion/skipped-lane behavior against selector mutants, without editing the earlier tests. Named helper scoping has additional passing regressions.
 
 The PR is deliberately a draft and says **Part of #1123**. The implementation is about 180 meaningful added/changed lines, but independent real-process fixtures, regression proof and the retained disputed draft take the total above the approximate 400-line target. Splitting the three tightly coupled runner entry paths would leave inconsistent binary provenance; folder migrations remain separate jobs. No product/core change, dependency, public option, CI workflow, test waiver, or acceptance-criterion edit is included.

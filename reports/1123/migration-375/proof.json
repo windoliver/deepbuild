@@ -1,0 +1,98 @@
+{
+  "base": "092754bb1",
+  "mode": "fileParallelism; maxWorkers=3",
+  "wrongProgram": "375-binary-redraft/plant.mjs all-files",
+  "red": [
+    {
+      "file": "tests/acceptance/375/column.test.ts",
+      "status": "failed",
+      "overlapped": true,
+      "assertionFailures": [
+        {
+          "name": "AC1 the column hugs its three text items within 0.5 u, each measured by the shaper",
+          "message": "AssertionError: the column: title starts at the left padding: 40 is within 0.5 of 48: expected false to be true // Object.is equality\n    at near (<wrong-copy>/tests/acceptance/375/helpers.ts:69:100)\n    at expectHugs (<wrong-copy>/tests/acceptance/375/column.test.ts:53:5)\n    at <wrong-copy>/tests/acceptance/375/column.test.ts:66:5\n    at file://<checkout>/node_modules/vitest/dist/chunks/run.BPv-BBRv.js:1632:35\n    at file://<checkout>/node_modules/vitest/dist/chunks/run.BPv-BBRv.js:2801:26\n    at file://<checkout>/node_modules/vitest/dist/chunks/run.BPv-BBRv.js:3338:20"
+        },
+        {
+          "name": "AC1 when the second item's text grows by one line, the third moves down by its new height and the frame still hugs",
+          "message": "AssertionError: the column with the second text grown: title starts at the left padding: 40 is within 0.5 of 48: expected false to be true // Object.is equality\n    at near (<wrong-copy>/tests/acceptance/375/helpers.ts:69:100)\n    at expectHugs (<wrong-copy>/tests/acceptance/375/column.test.ts:53:5)\n    at <wrong-copy>/tests/acceptance/375/column.test.ts:86:5\n    at file://<checkout>/node_modules/vitest/dist/chunks/run.BPv-BBRv.js:1632:35\n    at file://<checkout>/node_modules/vitest/dist/chunks/run.BPv-BBRv.js:2801:26\n    at file://<checkout>/node_modules/vitest/dist/chunks/run.BPv-BBRv.js:3338:20"
+        }
+      ]
+    },
+    {
+      "file": "tests/acceptance/375/grid.test.ts",
+      "status": "failed",
+      "overlapped": true,
+      "assertionFailures": [
+        {
+          "name": "AC1 flow by column puts the second child in row 2, column 1, and every child in its cell",
+          "message": "AssertionError: child 2 (apple) sits in row 2, column 1, the cell [24, 108, 120, 72]; its box is [144, 40, 120, 56]: expected false to be true // Object.is equality\n    at <wrong-copy>/tests/acceptance/375/grid.test.ts:61:178\n    at file://<checkout>/node_modules/vitest/dist/chunks/run.BPv-BBRv.js:1632:35\n    at file://<checkout>/node_modules/vitest/dist/chunks/run.BPv-BBRv.js:2801:26\n    at file://<checkout>/node_modules/vitest/dist/chunks/run.BPv-BBRv.js:3338:20\n    at new Promise (<anonymous>)\n    at runWithCancel (file://<checkout>/node_modules/vitest/dist/chunks/run.BPv-BBRv.js:3333:10)"
+        },
+        {
+          "name": "AC1 column 3 is end-aligned: its children's east sides are on one line within 0.5 px, the column's east edge",
+          "message": "AssertionError: column 3's east sides are on one line within 0.5 px: {\"date\":230,\"lime\":368}: expected false to be true // Object.is equality\n    at <wrong-copy>/tests/acceptance/375/grid.test.ts:72:192\n    at file://<checkout>/node_modules/vitest/dist/chunks/run.BPv-BBRv.js:1632:35\n    at file://<checkout>/node_modules/vitest/dist/chunks/run.BPv-BBRv.js:2801:26\n    at file://<checkout>/node_modules/vitest/dist/chunks/run.BPv-BBRv.js:3338:20\n    at new Promise (<anonymous>)\n    at runWithCancel (file://<checkout>/node_modules/vitest/dist/chunks/run.BPv-BBRv.js:3333:10)"
+        }
+      ]
+    },
+    {
+      "file": "tests/acceptance/375/never.test.ts",
+      "status": "failed",
+      "overlapped": true,
+      "assertionFailures": [
+        {
+          "name": "never: a frame doesn't resize because a bound number changed; the bound text is sized by its widest (1000 cases, seed 375)",
+          "message": "Error: Property failed after 1 tests\n{ seed: 375, path: \"0:0:0:0:0:0:0\", endOnFailure: true }\nCounterexample: [{\"layout\":\"row\",\"before\":[],\"after\":[],\"size\":11,\"weight\":400,\"readings\":[0,0]}]\nShrunk 6 time(s)\n\nHint: Enable verbose mode in order to have the list of all failing values encountered during the run\n    at buildError (file://<checkout>/node_modules/fast-check/lib/fast-check.js:2469:16)"
+        }
+      ]
+    },
+    {
+      "file": "tests/acceptance/375/row.test.ts",
+      "status": "failed",
+      "overlapped": true,
+      "assertionFailures": [
+        {
+          "name": "AC1 the six share one bottom line within 0.5 px, in order with gap 24, and the row is the sum of their widths + 5 × 24 u wide",
+          "message": "AssertionError: the six bottoms are on one line within 0.5 px: {\"kiwi\":70,\"apple\":96,\"fig\":84,\"plum\":112,\"date\":64,\"lime\":100}: expected false to be true // Object.is equality\n    at <wrong-copy>/tests/acceptance/375/row.test.ts:40:194\n    at file://<checkout>/node_modules/vitest/dist/chunks/run.BPv-BBRv.js:1632:35\n    at file://<checkout>/node_modules/vitest/dist/chunks/run.BPv-BBRv.js:2801:26\n    at file://<checkout>/node_modules/vitest/dist/chunks/run.BPv-BBRv.js:3338:20\n    at new Promise (<anonymous>)\n    at runWithCancel (file://<checkout>/node_modules/vitest/dist/chunks/run.BPv-BBRv.js:3333:10)"
+        }
+      ]
+    },
+    {
+      "file": "tests/acceptance/375/scope.test.ts",
+      "status": "failed",
+      "overlapped": true,
+      "assertionFailures": [
+        {
+          "name": "Scope: the canvas module crate that builds deep-layout lays out with Taffy and measures text with the canvas's one shaper (deep-text)",
+          "message": "AssertionError: deep-motion is a canvas module crate (deep-canvas…): expected false to be true // Object.is equality\n    at <wrong-copy>/tests/acceptance/375/scope.test.ts:12:107\n    at file://<checkout>/node_modules/vitest/dist/chunks/run.BPv-BBRv.js:1632:35\n    at file://<checkout>/node_modules/vitest/dist/chunks/run.BPv-BBRv.js:2801:26\n    at file://<checkout>/node_modules/vitest/dist/chunks/run.BPv-BBRv.js:3338:20\n    at new Promise (<anonymous>)\n    at runWithCancel (file://<checkout>/node_modules/vitest/dist/chunks/run.BPv-BBRv.js:3333:10)"
+        }
+      ]
+    }
+  ],
+  "green": [
+    {
+      "file": "tests/acceptance/375/column.test.ts",
+      "status": "passed",
+      "tests": 3
+    },
+    {
+      "file": "tests/acceptance/375/grid.test.ts",
+      "status": "passed",
+      "tests": 3
+    },
+    {
+      "file": "tests/acceptance/375/never.test.ts",
+      "status": "passed",
+      "tests": 3
+    },
+    {
+      "file": "tests/acceptance/375/row.test.ts",
+      "status": "passed",
+      "tests": 2
+    },
+    {
+      "file": "tests/acceptance/375/scope.test.ts",
+      "status": "passed",
+      "tests": 1
+    }
+  ],
+  "note": "All original .test.ts bytes unchanged; helper copied byte-for-byte from independent blind draft. Wrong executions completed before removal from alone; runtime intervals prove real overlap, not only a parallel flag."
+}

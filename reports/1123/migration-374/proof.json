@@ -1,0 +1,62 @@
+{
+  "base": "092754bb1",
+  "mode": "fileParallelism; maxWorkers=3",
+  "wrongProgram": "374-binary-redraft/wrong-program.json combined",
+  "red": [
+    {
+      "file": "tests/acceptance/374/paint.test.ts",
+      "status": "failed",
+      "overlapped": true,
+      "assertionFailures": [
+        {
+          "name": "AC1 with span: parent over three squares in a row, the middle square's centre reads the stops' OKLab midpoint within 0.001 ΔEOK",
+          "message": "AssertionError: the left sample (70, 70) reads the one gradient at t = 0.148: expected 78.33541839134774 to be less than or equal to 1\n    at <wrong-copy>/tests/acceptance/374/paint.test.ts:57:156\n    at file://<checkout>/node_modules/vitest/dist/chunks/run.BPv-BBRv.js:1632:35\n    at file://<checkout>/node_modules/vitest/dist/chunks/run.BPv-BBRv.js:2801:26\n    at file://<checkout>/node_modules/vitest/dist/chunks/run.BPv-BBRv.js:3338:20\n    at new Promise (<anonymous>)\n    at runWithCancel (file://<checkout>/node_modules/vitest/dist/chunks/run.BPv-BBRv.js:3333:10)"
+        }
+      ]
+    },
+    {
+      "file": "tests/acceptance/374/steps.test.ts",
+      "status": "failed",
+      "overlapped": true,
+      "assertionFailures": [
+        {
+          "name": "AC3 steps {over: children, stops: [{at: 0, role: a}, {at: 1, role: b}], by: order} over 5 squares colors the third at the OKLab midpoint within 0.001 ΔEOK, and the first and last exactly a and b",
+          "message": "AssertionError: the last square reads exactly the last role: expected [ 192, 206, 120 ] to deeply equal [ 246, 245, 60 ]\n    at <wrong-copy>/tests/acceptance/374/steps.test.ts:34:87\n    at file://<checkout>/node_modules/vitest/dist/chunks/run.BPv-BBRv.js:1632:35\n    at file://<checkout>/node_modules/vitest/dist/chunks/run.BPv-BBRv.js:2801:26\n    at file://<checkout>/node_modules/vitest/dist/chunks/run.BPv-BBRv.js:3338:20\n    at new Promise (<anonymous>)\n    at runWithCancel (file://<checkout>/node_modules/vitest/dist/chunks/run.BPv-BBRv.js:3333:10)"
+        },
+        {
+          "name": "AC3 members take their rank from their order keys, not from their position or their ID",
+          "message": "AssertionError: every square against the ramp at its rank: expected [ …(4) ] to deeply equal []\n    at <wrong-copy>/tests/acceptance/374/steps.test.ts:57:67\n    at file://<checkout>/node_modules/vitest/dist/chunks/run.BPv-BBRv.js:1632:35\n    at file://<checkout>/node_modules/vitest/dist/chunks/run.BPv-BBRv.js:2801:26\n    at file://<checkout>/node_modules/vitest/dist/chunks/run.BPv-BBRv.js:3338:20\n    at new Promise (<anonymous>)\n    at runWithCancel (file://<checkout>/node_modules/vitest/dist/chunks/run.BPv-BBRv.js:3333:10)"
+        }
+      ]
+    },
+    {
+      "file": "tests/acceptance/374/stroke.test.ts",
+      "status": "failed",
+      "overlapped": true,
+      "assertionFailures": [
+        {
+          "name": "AC2 a circle with a 4 u stroke scaled 3× by its parent keeps a 4 ± 0.1 u stroke, and 12 ± 0.1 u with scale_stroke: true",
+          "message": "AssertionError: with scale_stroke true the stroke is 4.000 u wide, not 12 ± 0.1: expected 8 to be less than or equal to 0.1\n    at <wrong-copy>/tests/acceptance/374/stroke.test.ts:40:121\n    at file://<checkout>/node_modules/vitest/dist/chunks/run.BPv-BBRv.js:1632:35\n    at file://<checkout>/node_modules/vitest/dist/chunks/run.BPv-BBRv.js:2801:26\n    at file://<checkout>/node_modules/vitest/dist/chunks/run.BPv-BBRv.js:3338:20\n    at new Promise (<anonymous>)\n    at runWithCancel (file://<checkout>/node_modules/vitest/dist/chunks/run.BPv-BBRv.js:3333:10)"
+        }
+      ]
+    }
+  ],
+  "green": [
+    {
+      "file": "tests/acceptance/374/paint.test.ts",
+      "status": "passed",
+      "tests": 7
+    },
+    {
+      "file": "tests/acceptance/374/steps.test.ts",
+      "status": "passed",
+      "tests": 2
+    },
+    {
+      "file": "tests/acceptance/374/stroke.test.ts",
+      "status": "passed",
+      "tests": 2
+    }
+  ],
+  "note": "All original .test.ts bytes unchanged; helper copied byte-for-byte from independent blind draft. Wrong executions completed before removal from alone; runtime intervals prove real overlap, not only a parallel flag."
+}
