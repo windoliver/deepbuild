@@ -35,3 +35,9 @@ and record the answer in tests/acceptance/449/TASTE.json (README: The taste call
    Start at  13:39:36
    Duration  536.49s (tests 100%)
 exit 1
+
+After the landing map's fix, on the same tree with that fix: ac7-landing and taste, then taste again on the recorded call.
+ Test Files  1 failed | 1 passed (2)
+      Tests  1 failed | 5 passed (6)
+ Test Files  1 passed (1)
+      Tests  1 passed (1)

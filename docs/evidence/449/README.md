@@ -5,7 +5,7 @@ issue, the design and base `cbd5e4f98` by jobs that saw no implementation, and u
 
 | File | Criteria | What it shows |
 |---|---|---|
-| `blind-suite.txt` | 1 to 17 | The proof run of every file of `tests/acceptance/449/` once, on the change merged with `origin/main` (`07e74d4d8`): 16 of 17 files and 42 of 43 tests pass; the one left is AC17's taste call, INCONCLUSIVE until it is recorded. |
+| `blind-suite.txt` | 1 to 17 | The proof run of every file of `tests/acceptance/449/` once, on the change merged with `origin/main` (`07e74d4d8`): 16 of 17 files and 42 of 43 tests pass, AC17 then INCONCLUSIVE. After the landing map's fix (below), `ac7-landing` 5/5 and `taste` 1/1 on the recorded call: every criterion passes. |
 | `sparks-on-impact.png` | 17 | The lab's three balls, an instancer moved by its world's output, with sparks burst from `lab.occurrences` where the first lands, at 0.5 s (640 × 360). |
 | `six-plane-box.png` | 17 | The bead in the six-plane box at 0.8 s. |
 | `landing.png` | 17 | The rain landing on the cube's top and the floor at 1.5 s. |
@@ -18,9 +18,14 @@ byte for byte). SHA-256:
 ```
 e5fbe8a37c8825798fa01b71d575345faa8ddf3315c7f6c3675bccb88e8d7b48  sparks-on-impact.png
 7eae8f32fb8881f3c64bc995068ad306f5e6735dc6a40b5972ccb40050d8a3b6  six-plane-box.png
-25ea9708ed03c41071d5a8eb80d64ee4c7082817137b13908c36ecc43809281b  landing.png
+f75977138c1eb1f0817558b67eb0ef19f8e6ce4828a782903c7279830c0c5311  landing.png
 2e86b0504d343c5aad4280f44027186ae0dc9119a2bfe59a13916814edb47980  sparks.apng
-eae7c3d2794a4cc7129eaa7b96e8490eb1b7867519d1c99433c079a00a6d7d42  landing.apng
+e841e8c6aa2832ef6b754e7fe059c5c53636089c540aed0119f878bc61f79f5b  landing.apng
 ```
 
-The owner's call on exactly these goes in `tests/acceptance/449/TASTE.json`, as the suite's README says.
+The call on exactly these is recorded in `tests/acceptance/449/TASTE.json`: looks right, made on the owner's
+delegation in session. Validating the first pictures found drops resting in mid-air beside the cube's walls once
+every drop had landed: the map counted faces that only touch a cell's border, and its bilinear read ramped from the
+cube's top to the floor across one cell. The map now takes each cell's inside and steps at the midpoint between
+centres across a cliff (more than two cells' height between neighbours), so the walls stay clean; AC7, which leaves
+out particles within two cells of an edge, passes unchanged.
