@@ -190,7 +190,7 @@ impl Config {
     fn level(&self) -> Option<Level> {
         match self.simd {
             Simd::Scalar => Some(settings().level),
-            Simd::Neon => Level::new().as_neon().map(Level::Neon),
+            Simd::Neon => crate::neon::level(),
             Simd::Detected => Some(Level::new()),
         }
     }
