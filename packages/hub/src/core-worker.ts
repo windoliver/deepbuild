@@ -1,5 +1,6 @@
 // The core's worker thread: the core answers each request the event loop forwards, in order, and streams
 // appended events back for subscribers.
+import './children.js';
 import { parentPort, workerData } from 'node:worker_threads';
 import { Core, type CallContext } from './core.js';
 import type { Part } from './context-fit.js';
