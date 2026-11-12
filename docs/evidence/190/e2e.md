@@ -26,7 +26,8 @@ rewritten history; the object is still in the repository). No raw output of this
    `route` cut to its first 24 values and times rounded to ms; reply 10 keeps its full fixture ID and raw `ns`, and
    refusals keep their full fixture IDs. Bakes show step 0's arrays as a top-level
    `arrays`, and leave out the step items, so reply 7 doesn't show that swarm's step 0 failed (its trap does). The
-   rerun's whole replies are in `e2e-raw/replies.jsonl`. The merged bytes were read back from each receipt's `linked`
+   rerun's replies, with every field kept (only long base64 cut short, as said below), are in
+   `e2e-raw/replies.jsonl`. The merged bytes were read back from each receipt's `linked`
    and compiled with node's own WebAssembly to list their imports and exports.
 
 ## Replies
@@ -374,3 +375,5 @@ raw files, `gen.test.ts`, the code and the issue. It also ran its own BFS over t
 - **Round 23** found no wrong values (its rerun gave byte-identical 00–06, replies equal but for timings) and two low
   gaps, fixed here: the 9a02471b6 suite file says how the clone's `main` was set (a report), and the fixture tests feed
   request lines, one of them a `pack_check` with no piece.
+- **Round 24** found no wrong values (its rerun gave byte-identical 00–06; `fixture_once` 4 passed) and one low gap,
+  fixed here: the rerun's replies were called whole, though their long base64 is cut.
