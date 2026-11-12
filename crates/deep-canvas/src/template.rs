@@ -109,6 +109,19 @@ pub fn value(doc: &Value, path: &str) -> Option<Shown> {
     })
 }
 
+/// The value at `path` as `item`'s template reads it: in an overlay that discloses an
+/// exaggeration, a bare `factor` or `shown_at` is that exaggeration's (#1183); else [`value`].
+pub fn value_in(doc: &Value, item: &str, path: &str) -> Option<Shown> {
+    match crate::lengths::slot(doc, item, path) {
+        Some(v) => Some(Shown {
+            text: number(v),
+            source: None,
+            number: true,
+        }),
+        None => value(doc, path),
+    }
+}
+
 /// Whether `path` reads a mark set's read-only anchor, `items/<set>#period/by` or
 /// `items/<set>#head/<column>`, whose value the frame's rows give at t (Mark set and columns).
 pub fn reads_anchor(doc: &Value, path: &str) -> bool {
@@ -151,11 +164,20 @@ pub fn card_lines(doc: &Value) -> Vec<(&'static str, &str)> {
 /// The template with each slot replaced by what it shows; `Err` holds the first slot that
 /// resolves to nothing, or `None` when a brace is unbalanced.
 pub fn expand(doc: &Value, template: &str) -> Result<String, Option<String>> {
+    expand_in(doc, "", template)
+}
+
+/// [`expand`] for `item`'s own template, whose slots read through [`value_in`].
+pub fn expand_in(doc: &Value, item: &str, template: &str) -> Result<String, Option<String>> {
     let mut out = String::new();
     for part in parts(template).map_err(|_| None)? {
         match part {
             Part::Words(w) => out.push_str(w),
-            Part::Slot(path) => out.push_str(&value(doc, path).ok_or(Some(path.to_string()))?.text),
+            Part::Slot(path) => out.push_str(
+                &value_in(doc, item, path)
+                    .ok_or(Some(path.to_string()))?
+                    .text,
+            ),
         }
     }
     Ok(out)

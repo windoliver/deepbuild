@@ -650,6 +650,8 @@ impl<'a> Hub<'a> {
         // Honest numbers (canvas primitives: Honest numbers, the check): every number each
         // deliverable shows, with what it traces to.
         let mut numbers: Vec<Value> = Vec::new();
+        // #1183: each length mapping with the ratio it is drawn at, and whether any went unread.
+        let (mut lengths, mut unchecked) = (Vec::new(), false);
         let mut results: Vec<Value> = Vec::new();
         for (doc, cur) in docs {
             // Checked with the pack store, so a deliverable that names an installed pack resolves
@@ -759,6 +761,12 @@ impl<'a> Hub<'a> {
                     }
                     Err(b) => blocked.push(b),
                 }
+                let found = self.lengths(doc, cur.doc);
+                lengths.extend(found.record);
+                unchecked |= found.unchecked;
+                numbers.extend(found.numbers);
+                raised.extend(found.issues);
+                blocked.extend(found.blocked);
             }
             for i in &mut raised {
                 i["doc"] = json!(doc);
@@ -785,6 +793,9 @@ impl<'a> Hub<'a> {
             "BLOCKED"
         } else if errors {
             "FAIL"
+        } else if unchecked {
+            // #1183: a length mapping the check couldn't read is never passed.
+            "INCONCLUSIVE"
         } else if only_own {
             let asks: Vec<Value> = own_rules
                 .iter()
@@ -816,6 +827,9 @@ impl<'a> Hub<'a> {
         row.insert("issues".into(), Value::Array(issues));
         if honest {
             row.insert("numbers".into(), Value::Array(numbers));
+            if !lengths.is_empty() {
+                row.insert("lengths".into(), Value::Array(lengths));
+            }
         }
         if registered.is_some_and(|(_, c)| c.report.is_some()) {
             row.insert("results".into(), Value::Array(results));

@@ -92,6 +92,8 @@ pub(crate) enum CoreInput {
     },
     /// An occurrence read over a list filtered at check (#491).
     Occurrence(Arc<crate::occurrence::Read>),
+    /// #1183: a logic item's scalar output, from the bake in the document's `arrays`.
+    Array(Arc<crate::array::Read>),
     /// A channel's rate per second.
     Rate(usize),
     /// A remap's `.active`, or with `true` its `.progress`.
@@ -2539,14 +2541,23 @@ impl Program {
                 doc::DriverInput::Array(array) => {
                     // #497: a stepping module's array has no steps after t yet, as the input
                     // track has no entries after t, so a lag or smooth that looks ahead through it
-                    // is refused; motion's evaluation reads no module's array at any time.
+                    // is refused; motion reads only a logic output its host baked (#1183).
                     if lagged.iter().any(|l| l.var == *name && l.dt < 0) {
                         return Err(refused("look_ahead_on_array", format!("lag({name}) looks ahead through the array `{array}`, which a stepping module writes step by step")));
+                    }
+                    // #1183: a logic item's scalar output its host baked into the document.
+                    if let Some(read) = doc
+                        .get("arrays")
+                        .and_then(|a| a.get(array.as_str()))
+                        .and_then(crate::array::Read::of)
+                    {
+                        inputs_of.push((name.as_str(), CoreInput::Array(Arc::new(read))));
+                        continue;
                     }
                     return Err(Refused {
                         code: "ref_unresolved",
                         path: format!("{path}/vars/{name}"),
-                        detail: Some(Box::new(json!({"driver": driver.id, "array": array, "why": "motion's drivers read no canvas module's array"}))),
+                        detail: Some(Box::new(json!({"driver": driver.id, "array": array, "why": "motion's drivers read only a logic item's scalar f64 output, baked into the document"}))),
                     });
                 }
                 doc::DriverInput::Time => CoreInput::Time,
@@ -2711,6 +2722,7 @@ impl Program {
                     }
                     _ => f64::NAN,
                 },
+                CoreInput::Array(read) => read.at(doc_t),
                 CoreInput::Occurrence(read) => match read.at(t) {
                     Some(v) => v,
                     None => return core.fallback.unwrap_or(f64::NAN),
@@ -2973,6 +2985,7 @@ impl Program {
                 CoreInput::World(..) | CoreInput::Rate(_) => Iv::ENTIRE,
                 CoreInput::Remap(..) => Iv::new(0.0, 1.0),
                 CoreInput::Occurrence(read) => read.bound(span),
+                CoreInput::Array(read) => read.bound(),
                 CoreInput::Lag(inner, dt) => match &**inner {
                     CoreInput::Slot(s) => self.slot_bound(*s),
                     CoreInput::Control { entries, default, range } => {
