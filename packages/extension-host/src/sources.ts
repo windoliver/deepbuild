@@ -163,7 +163,10 @@ export function declareSource(name: unknown, declared: unknown, own: { sources: 
   };
 }
 
-/** Node's fetch, never following a redirect, an answer cut at its cap. */
+/** An answer that exceeded its byte cap; callers retain their own refusal wording. */
+export class AnswerTooLarge extends Error {}
+
+/** Source transport, including the asset reachability probe. */
 export const nodeHttp: HttpClient = async (request, signal) => {
   // Reachability before an asset ask sends no HTTP request and reads no byte. It is still a Source call,
   // under its quota and timeout, recorded/replayed like the later authorized GETs.
@@ -173,6 +176,10 @@ export const nodeHttp: HttpClient = async (request, signal) => {
     socket.once('connect', () => { socket.destroy(); resolve({ status: 200, headers: {}, body: '' }); });
     socket.once('error', reject);
   });
+  return nodeFetch(request, signal);
+};
+/** Node's HTTP fetch, never following a redirect, an answer cut at its cap. */
+export const nodeFetch: HttpClient = async (request, signal) => {
   const res = await fetch(request.url, { method: request.method, headers: request.headers, redirect: 'manual', signal, ...(request.body === undefined ? {} : { body: request.body }) });
   const chunks: Uint8Array[] = [];
   let size = 0;
@@ -186,7 +193,7 @@ export const nodeHttp: HttpClient = async (request, signal) => {
   try {
     for await (const chunk of res.body ?? []) {
       size += chunk.byteLength;
-      if (size > cap) throw Error(`the answer from ${new URL(request.url).host} is over ${cap} bytes`);
+      if (size > cap) throw new AnswerTooLarge(`the answer from ${new URL(request.url).host} is over ${cap} bytes`);
       chunks.push(chunk);
     }
   } catch (e) {
