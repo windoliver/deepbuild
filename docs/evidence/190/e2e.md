@@ -88,7 +88,8 @@ same results (see the rerun below).
   four `web_plan` rewritten programs, chase's included, and finds `imports []` for each. (The merged `linked` bytes
   themselves are cut short in `e2e-raw`; node's `[]` above is from the 11-09 run.) Both items are admitted; the receipt (line 1) and
   deep_query's row (line 3) name grid_path@1 with its hash; `maze`'s bake gives the 10-move route. Changing one byte of
-  a library changes the merged program of the pieces that link it and not a third piece's: ac01's second test, passing.
+  the library changes both pieces' rewritten hashes and bake keys, while a third piece that doesn't link it keeps its
+  own: ac01's second test, passing.
 - 2: the fixture passes and the library links (lines 1, 14); the corner-cutting twin with grid_path@1's fixture is
   refused naming the fixture, `route`, element 6, expected 0 and actual 1 (line 5); no fixture is refused naming the
   library (line 6). The planted corner-cutter's 8-move route is ac02 (passing in `acceptance-linux-9a02471b6.txt`) and
@@ -112,7 +113,7 @@ same results (see the rerun below).
 
 ## Rerun with the browser leg and screenshots (2026-11-11 and 12), code at 9a02471b6
 
-Run on spark-c89f (Linux arm64). The code is commit 9a02471b6: this PR's head 7b5d9da1f (main e7609b7b merged in),
+Run on spark-c89f (Linux arm64). The code is commit 9a02471b6: the PR's head before these commits, 7b5d9da1f (main e7609b7b merged in),
 plus fixes to the fixture cache that the separate-agent checks and the code review below found (0ed3de856, 597d83692,
 eafa3d635) and one refactor with no change in behavior (9a02471b6: one reader for a piece's assets).
 
@@ -367,3 +368,6 @@ raw files, `gen.test.ts`, the code and the issue. It also ran its own BFS over t
 - **Round 21** found no wrong values (its rerun gave byte-identical 00–06) and three low gaps, fixed here: the
   generator's outputs now include `plain.jsonl` and `tactics.jsonl`; the `deep_hashes` rows name the file they count;
   and `web-replies.jsonl`, first written by an earlier build, is now the 9a02471b6 build's output (byte-identical).
+- **Round 22** found no wrong values (its rerun gave byte-identical 00–06, `web-replies.jsonl`, `labels.json` and
+  `grids.json`) and two low gaps, fixed here: criterion 1's one-byte sentence now says what ac01 checks (rewritten
+  hashes and bake keys), and 7b5d9da1f is named as the PR's head before these commits.
