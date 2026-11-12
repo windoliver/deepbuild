@@ -25,7 +25,7 @@ This is an owner-approved packaging deviation from separate prerequisite merges,
 - Real unit-lane **before and after** commands were requested under timed grants with five-minute wait caps. Both ended `INCONCLUSIVE no grant`. Neither unit command ran and neither is an alone-block wall-time reading. AC4 remains **unrun**.
 - `affected.mjs` for the two adopted helpers completed: **23 tests passed**, overall **FAIL**, 157 repository lint findings, 11 known failures. No WIDE or INCONCLUSIVE-prefixed line. These lints concern unchanged main rules/files; no baseline was edited.
 - Earlier #375-redraft affected run: **12 tests passed**, overall FAIL, 156 lint findings / 11 known. Lifetime-path affected run: **6 tests passed**, 58 lint failures and **10 INCONCLUSIVE no-grant lint jobs**. No WIDE lines.
-- Actual Spark remains unavailable (`spark-ts` name resolution fails). Earlier Linux-arm64 container proof does not stand for it.
+- Actual Spark was unavailable (`spark-ts` name resolution failed). The owner made Spark optional on 2026-11-12, so this no longer blocks #1123. Earlier Linux-arm64 container proof remains correctly labelled as Linux, not Spark.
 
 ## Additional gaps addressed
 
@@ -34,4 +34,4 @@ This is an owner-approved packaging deviation from separate prerequisite merges,
 - Helper discovery now follows selected named helper declarations. Scope-only metadata checks request no binary; #375 row/grid request only deep-layout. Regression tests first failed on unrelated helper builds, then passed unchanged.
 - Static review still flags broader process-lifetime hardening not fully proven here: exact completion barrier before immediate bay reuse, process-group identity reuse, process enumeration failure during cleanup, and per-shard ancestor cleanup. Do not present the implemented signal cases as proof of every lifetime interleaving.
 
-**Remaining closure gates:** consolidated redraft/tooling approval in #2321, actual full unit before/after reading, actual Spark proof, affected verification free of unexplained failures, and required human-signed tooling approval. Until those exist, #2321 remains draft/Part of #1123; the issue cannot truthfully be closed.
+**Remaining closure gates:** consolidated redraft/tooling approval in #2321, actual full unit before/after Mac reading, affected verification free of unexplained failures, and required human-signed tooling approval. Spark is optional by the owner's explicit 2026-11-12 decision. Until those exist, #2321 remains draft/Part of #1123; the issue cannot truthfully be closed.

@@ -49,7 +49,7 @@ Then run the existing guard and preserve its real result. Review and land the ap
 
 ## 3. Supply proof capacity/access
 
-- Provide the actual SSH endpoint/user for Spark, or restore the documented `spark-ts` name. No alternate configured address was found. Linux-container results are supplemental only.
+- Spark is optional by the owner's explicit 2026-11-12 scope decision. No Spark endpoint is required to close #1123; Linux-container results remain supplemental and are not relabelled.
 - Arrange a quiet Mac admission interval without killing unrelated sessions. The previous complete pair request exhausted the documented 60-minute timed window with no grant. The same source/test pair and overlay recipe are ready under `/tmp/deep-1123-complete/full-pair/`; neither side executed.
 - Once capacity or access has genuinely changed, run the prepared complete pair once through the existing throttle. Do not change HOME, forge a grant, relax a load gate, or substitute a sample for the full unit lane. Record complete alone-block intervals, statuses, skips and source hashes.
 

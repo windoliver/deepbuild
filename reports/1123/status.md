@@ -1,6 +1,6 @@
 # #1123: run-private binaries — partial implementation
 
-**Update:** at the owner's explicit request, #2321 is the **single PR** for this issue; duplicate redraft PRs #2336/#2337 are superseded. Their helpers and evidence were verified byte-identical in #2321, and independent drafting/test-first history is preserved. This owner-approved packaging change does not waive proof or guard requirements. Two folders have per-file parallel wrong-program proof; see [migration-update.md](migration-update.md). The further [closure attempt](closure-attempt/README.md) records earlier blocked measurements and unsigned-tooling guard failures. The new full before/after reading began once real timed capacity became available; no completed reading is claimed until both sides finish.
+**Update:** at the owner's explicit request, #2321 is the **single PR** for this issue; duplicate redraft PRs #2336/#2337 are superseded. Their helpers and evidence were verified byte-identical in #2321, and independent drafting/test-first history is preserved. This owner-approved packaging change does not waive proof or guard requirements. Two folders have per-file parallel wrong-program proof; see [migration-update.md](migration-update.md). The further [closure attempt](closure-attempt/README.md) records earlier blocked measurements and unsigned-tooling guard failures. The new full before/after reading began once real timed capacity became available; no completed reading is claimed until both sides finish. The owner explicitly made Spark optional on 2026-11-12; it is no longer a closure prerequisite for #1123. Required Mac checks, all four criteria and the approval guard are unchanged.
 
 Base: `092754bb1` (current main when this branch was created). **Part of #1123, not Closes.**
 
@@ -42,7 +42,7 @@ The redacted excerpts in this report directory retain the key check results. Ful
 
 1. Review/approve the independent redraft adoption and tooling commits together in sole PR #2321. #2336/#2337 are superseded, not separate merge dependencies; independent drafting and per-file wrong-program requirements remain.
 2. Actual same-source-commit unit-lane before/after alone-block wall readings.
-3. Actual Spark run (DNS/host access unavailable here); Docker is supplemental.
+3. Spark is optional by the owner's 2026-11-12 scope decision, not a remaining closure gate. Existing Docker results remain labelled as supplemental Linux evidence.
 4. Full affected verification, including main failures and timed/slow omissions, remains non-PASS.
 5. Human-signed approval of protected proof-tooling edits. No agent-created approval tag, allowlist edit or signature is supplied.
 6. Signal cleanup, killed-lease ancestry, failed enumeration and cleanup-before-bay-reuse now have regression proof (closure-attempt). Integrated run still has one unchanged timeout setup failure under load; no all-green claim. Additional untested scheduling interleavings remain outside the recorded proof.
