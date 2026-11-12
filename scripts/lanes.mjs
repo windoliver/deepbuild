@@ -519,6 +519,8 @@ timed.push('tests/acceptance/173/budgets.test.ts', 'tests/acceptance/173/envelop
 slow.push('tests/acceptance/173/budgets.test.ts', 'tests/acceptance/173/envelope.test.ts');
 // #1802's ac4 and ac6 files each build deep-show with a test canvas module's features.
 alone.push('tests/acceptance/1802/');
+// #139's preview tests that publish an undated preview entry are redrafted after #1802; the redraft runs as #139's suite does.
+alone.push('tests/acceptance/139-redraft-1802/');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
