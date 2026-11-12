@@ -114,7 +114,7 @@ same results (see the rerun below).
   corner-cutting libraries share; the page's item-hash, route and moves comparison is what tells them apart, so the
   browser half of 4 rests on the page too.
   4's merged programs on macOS arm64 and Linux x86_64 and
-  all of 10 are BLOCKED here; they run on the reference Mac (the x86_64 leg in its Docker linux/amd64 image). So 4, 5 and 10 are not proven.
+  all of 10 are BLOCKED here; they would run on the reference Mac (the x86_64 leg in its Docker linux/amd64 image), and haven't yet. So 4, 5 and 10 are not proven.
 - Oracle lane: BLOCKED. The issue's upstream tests for 2 of the 10 criteria were never read or run: their page in
   DeepBuildAI/deepbuild answers 404 for this account (`tests/acceptance/190/README.md` lines 10–16). The one unblock
   ask is access to that repository, or its pinned tests handed over.
@@ -171,7 +171,8 @@ library's fixtures again. The issue says the logic module "runs them once per li
 in the issue or the design names a store that would keep results across processes, and ac10 checks a second check in
 the same process.
 
-Since 11-09, main added `pipelined` to check and bake replies, and `ranges`, `ring` and `occurrences` to bake replies. `assets_at` was
+Since 11-09, main added `pipelined` to check and bake replies, `issues` to check replies, and `ranges`, `ring` and
+`occurrences` to bake replies. `assets_at` was
 already there.
 
 **The fixes**, in `crates/deep-logic/src/fixtures.rs`, with tests in `crates/deep-logic/tests/fixture_once.rs`. Each
@@ -212,7 +213,7 @@ The needs' exports test also fails on a mutant whose key keeps only the library'
 The code review's last round of the cache fixes found nothing new; that is the implementing session's report, not a
 saved check. One finding was kept on purpose: `verify` resolves, so it decodes and
 hashes, the libraries even when the result is cached. Its cost wasn't measured in a saved run.
-Criterion 10's 500 KB budget runs on the reference Mac (ac10).
+Criterion 10's 500 KB budget is BLOCKED until ac10 runs on the reference Mac.
 
 **The suite.** #190's acceptance suite at a clean checkout of 9a02471b6 is in `acceptance-linux-9a02471b6.txt`. It ran
 verbose, so each passing test is named:
@@ -393,3 +394,6 @@ raw files, `gen.test.ts`, the code and the issue. It also ran its own BFS over t
   piece's receipt and deep_query row, with ac01's first test for the ones no saved reply shows.
 - **Round 27** found no wrong values (its rerun gave byte-identical 00–06) and two low citation gaps, fixed here:
   criterion 2's 10-move fixture route and criterion 9's cycle now cite the reply, file and passing test that show them.
+- **Round 28** found no wrong values (its rerun gave byte-identical 00–06) and two low gaps, fixed here: main's
+  `issues` in check replies is listed with what main added since 11-09; and the Mac lines say those runs haven't
+  happened.
