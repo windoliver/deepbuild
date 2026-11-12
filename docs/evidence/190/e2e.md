@@ -10,7 +10,7 @@ rewritten history; the object is still in the repository). No raw output of this
 1. The 14 request lines were written with the acceptance suite's own program builders (`tests/acceptance/190/libs.ts`,
    `programs.ts`: grid_path@1 and its fixture, the planted corner-cutting twin, pathing@1, grid_path@2, the `maze`,
    `chase`, `swarm`, `tactics` and `plain` items), by a throwaway vitest file under the ignored `target/` folder that
-   only writes `requests.jsonl` (each line a `check`, `bake`, `query`, `claim` or `pack_check` call as the README
+   writes `requests.jsonl`, plus `plain.jsonl` and `tactics.jsonl` for the planted twins (each line a `check`, `bake`, `query`, `claim` or `pack_check` call as the README
    gives it). Nothing in it judges a reply.
 2. The binary, by hand, one process for all 14 lines (so a fixture that ran once should show `ran: false` after; reply 12 below shows
    it running again, the cache bug fixed in the rerun):
@@ -130,7 +130,8 @@ cd target/e2e190
 ../debug/deep-logic < app-bakes.jsonl > app-bakes-replies.jsonl
 ```
 
-`e2e-raw/` holds those outputs. In the replies, base64 strings over 200 characters (the merged programs' bytes) are cut
+`e2e-raw/` holds those outputs. `web-replies.jsonl` was first written by the 0ed3de856 build; rerun from the same
+`web.jsonl` by the 9a02471b6 build it came out byte-identical, and that run's output is the file saved here. In the replies, base64 strings over 200 characters (the merged programs' bytes) are cut
 short; no array here is long enough to be cut. The reply files were also re-serialized with `", "` and `": "`
   spacing, so they are equal in content, not byte for byte, to `deep-logic`'s output. `web-replies.jsonl`, `labels.json` and `grids.json` are kept whole. The
 requests themselves aren't kept: they are 0.8 MB, and `gen.test.ts` rebuilds them.
@@ -230,7 +231,8 @@ app's `bake` of the same piece, and shows ✓ only when all five are equal:
 - the traps
 
 The checkpoint is labeled with the step about to run, so `0:` is the full state before step 0. grid_path@1's fixture
-records only that checkpoint too: `deep_hashes {"0": "e5d18bfb5420fd13"}`, shown in rows 1, 2, 7, 12 and 14. The
+records only that checkpoint too: `deep_hashes {"0": "e5d18bfb5420fd13"}`, in `e2e-raw/replies.jsonl` rows 1, 2, 7, 10, 12 and 14 (the page shows
+it in its rows 1, 2, 7, 12 and 14). The
 honest maze and the corner-cutter share it because they start from the same memory and differ only in code. So the
 checkpoint shows only that the browser and the app start from the same full state. The written route, moves and item
 hash show that they computed the same thing:
@@ -362,3 +364,6 @@ raw files, `gen.test.ts`, the code and the issue. It also ran its own BFS over t
   `occurrences` is added to what main changed since 11-09.
 - **Round 20** found no wrong values (its rerun gave byte-identical 00–06 and `web-replies.jsonl`) and one low gap,
   fixed here: the excerpts' note said every fixture ID was shortened; reply 10 and the refusals keep theirs whole.
+- **Round 21** found no wrong values (its rerun gave byte-identical 00–06) and three low gaps, fixed here: the
+  generator's outputs now include `plain.jsonl` and `tactics.jsonl`; the `deep_hashes` rows name the file they count;
+  and `web-replies.jsonl`, first written by an earlier build, is now the 9a02471b6 build's output (byte-identical).
