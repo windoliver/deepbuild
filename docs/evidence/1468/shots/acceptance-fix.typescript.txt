@@ -1,0 +1,64 @@
+Script started on 2026-11-12 00:32:25-08:00 [COMMAND="bash ~/deepbuild/.claude/worktrees/determined-lewin-bc0143/docs/evidence/1468/shots.sh acceptance" <not executed on terminal>]
+# 2026-11-12T08:32:25Z, Linux aarch64, 20 cores, load 5.55
+$ git rev-parse HEAD
+7f35ecd72e02ffea94d8c2315c76916633ff9e01
+[exit 0]
+$ git --no-pager log -1 --format=%s
+docs/evidence/1468: the recorded build shows each diagnostic's first line
+[exit 0]
+$ git status --short
+[exit 0]
+$ cargo test --locked -p deep-motion --test acceptance_1468 -- --test-threads=1 --nocapture
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.15s
+     Running ../../tests/acceptance/1468/depth.rs (target/debug/deps/acceptance_1468-6929e83beb00ed61)
+
+running 15 tests
+test ac1_a_million_abs_calls_are_refused_in_a_child_in_under_50_ms ... AC1 #1468.ded1c18b 1000000 repeats of `abs(`: the child `ac1:abs:real` exited 0 [Object {"bytes": Number(5000001), "refused": Bool(true), "why": String("nests past the cap of 64 levels"), "ms": Number(1.808115)}]
+ok
+test ac1_a_million_bangs_are_refused_in_a_child_in_under_50_ms ... AC1 #1468.ded1c18b 1000000 repeats of `!`: the child `ac1:not:real` exited 0 [Object {"bytes": Number(1000001), "refused": Bool(true), "why": String("nests past the cap of 64 levels"), "ms": Number(0.28808)}]
+ok
+test ac1_a_million_conditionals_are_refused_in_a_child_in_under_50_ms ... AC1 #1468.ded1c18b 1000000 repeats of `x ? y : `: the child `ac1:cond:real` exited 0 [Object {"bytes": Number(8000001), "refused": Bool(true), "why": String("nests past the cap of 64 levels"), "ms": Number(2.578548)}]
+ok
+test ac1_a_million_minus_signs_are_refused_in_a_child_in_under_50_ms ... AC1 #1468.ded1c18b 1000000 repeats of `-`: the child `ac1:minus:real` exited 0 [Object {"bytes": Number(1000001), "refused": Bool(true), "why": String("nests past the cap of 64 levels"), "ms": Number(0.27217600000000003)}]
+ok
+test ac1_a_million_opening_parens_are_refused_in_a_child_in_under_50_ms ... AC1 #1468.ded1c18b 1000000 repeats of `(`: the child `ac1:paren:real` exited 0 [Object {"bytes": Number(2000001), "refused": Bool(true), "why": String("nests past the cap of 64 levels"), "ms": Number(0.709666)}]
+ok
+test ac1_a_planted_parser_with_no_cap_dies_by_signal_and_fails ... ok
+test ac2_depth_64_parses_and_evaluates_on_a_1_mb_thread_in_a_debug_build ... ok
+test ac2_depth_65_is_refused_naming_the_cap ... ok
+test ac3_a_planted_parser_with_no_cap_dies_on_the_tower_and_fails ... ok
+test ac3_a_power_tower_of_10000_terms_is_refused_the_same_way ... AC3 #1468.ba3528c4 `2^2^2…` at 10000 terms: the child `ac3:real` exited 0 [Object {"bytes": Number(19999), "refused": Bool(true), "why": String("nests past the cap of 64 levels"), "ms": Number(0.0592)}]
+ok
+test ac4_a_driver_holding_a_million_parens_is_refused_naming_its_path_and_deep_motion_stays_up ... ok
+test ac4_a_field_holding_a_million_parens_is_refused_naming_its_path_and_the_process_stays_up ... ok
+test ac4_a_pack_rule_holding_a_million_parens_is_refused_naming_its_path_and_the_process_stays_up ... ok
+test ac4_the_same_documents_with_a_shallow_expression_evaluate ... ok
+test child ... ignored, the child process the #1468 tests run; it does nothing without DEEP_1468_CHILD
+
+test result: ok. 14 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 6.79s
+
+[exit 0]
+$ env DEEP_1468_CHILD=ac1:paren:planted cargo test --locked -q -p deep-motion --test acceptance_1468 -- --ignored --exact child
+
+running 1 test
+
+thread '<unknown>' (35442) has overflowed its stack
+fatal runtime error: stack overflow, aborting
+error: test failed, to rerun pass `-p deep-motion --test acceptance_1468`
+
+Caused by:
+  process didn't exit successfully: `~/deepbuild/.claude/worktrees/determined-lewin-bc0143/target/debug/deps/acceptance_1468-6929e83beb00ed61 --ignored --exact child --quiet` (signal: 6, SIGABRT: process abort signal)
+[exit 101]
+$ env DEEP_1468_CHILD=ac3:planted cargo test --locked -q -p deep-motion --test acceptance_1468 -- --ignored --exact child
+
+running 1 test
+
+thread '<unknown>' (35476) has overflowed its stack
+fatal runtime error: stack overflow, aborting
+error: test failed, to rerun pass `-p deep-motion --test acceptance_1468`
+
+Caused by:
+  process didn't exit successfully: `~/deepbuild/.claude/worktrees/determined-lewin-bc0143/target/debug/deps/acceptance_1468-6929e83beb00ed61 --ignored --exact child --quiet` (signal: 6, SIGABRT: process abort signal)
+[exit 101]
+
+Script done on 2026-11-12 00:32:35-08:00 [COMMAND_EXIT_CODE="101"]

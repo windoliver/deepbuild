@@ -1,0 +1,63 @@
+Script started on 2026-11-12 00:30:05-08:00 [COMMAND="bash ~/deepbuild/.claude/worktrees/determined-lewin-bc0143/docs/evidence/1468/shots.sh e2e" <not executed on terminal>]
+# 2026-11-12T08:30:05Z, Linux aarch64, 20 cores, load 4.92
+$ git rev-parse HEAD
+1abbcf086aed054d148666447cbc134a2e7ba0e3
+[exit 0]
+$ git --no-pager log -1 --format=%s
+Merge pull request #2320 from windoliver/issue-1920-physics-seal-runtime-digest
+[exit 0]
+$ git status --short
+ M crates/deep-motion/Cargo.toml
+?? target
+?? tests/acceptance/1468/
+[exit 0]
+$ bash -c 'cargo build --locked -q -p deep-motion -p deep-show --bins 2>&1 | grep -E "^(warning|error)"; exit ${PIPESTATUS[0]}'
+warning: unused import: `std::cell::RefCell`
+warning: unused import: `std::rc::Rc`
+warning: unused import: `std::collections::BTreeMap`
+warning: unused import: `track_color`
+warning: unused variable: `key`
+warning: function `quality` is never used
+warning: constant `STARVED` is never used
+warning: function `hash_file` is never used
+warning: function `flatten` is never used
+warning: function `without_sei` is never used
+warning: function `planted_timescale` is never used
+warning: fields `bgra`, `matrix`, `range`, and `blocked` are never read
+warning: method `frame` is never used
+warning: unused import: `wgpu::util::DeviceExt`
+warning: constant `TARGET` is never used
+warning: constant `CHUNK` is never used
+warning: struct `Ring` is never constructed
+warning: associated items `new`, `free`, `push`, `pull`, and `counts` are never used
+[exit 0]
+$ bash -c 'cargo build --locked -q -p deep-marks-render --bin deep-canvas-render 2>&1 | grep -A3 "^error" | head -8; exit ${PIPESTATUS[0]}'
+error[E0004]: non-exhaustive patterns: `PrimitiveBatch::Chrome(_)` not covered
+    --> ~/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/gpui-pre-wgpu-0.3.9/src/wgpu_renderer.rs:1525:23
+     |
+1525 |                 match batch {
+--
+error: could not compile `gpui-pre-wgpu` (lib) due to 1 previous error
+[exit 101]
+$ sha256sum /tmp/tmp.bGwOOnWVva/deep-motion /tmp/tmp.bGwOOnWVva/deep-show
+dc93576da0e4c85063174e587f472f9db473eccfc551ec37307f64de187ed4d3  /tmp/tmp.bGwOOnWVva/deep-motion
+bb6a96ac8c556dc71afc5a4ee4daaac60332886815eed10318fc1395e86aa0c0  /tmp/tmp.bGwOOnWVva/deep-show
+[exit 0]
+$ python3 -I ~/deepbuild/.claude/worktrees/determined-lewin-bc0143/docs/evidence/1468/e2e.py /tmp/tmp.bGwOOnWVva
+== driver: deep-motion eval
+reply 1 (1,000,000 parens): none
+reply 2 (1 paren): none
+stderr (its last 2 lines): thread 'main' (25881) has overflowed its stack
+stderr (its last 2 lines): fatal runtime error: stack overflow, aborting
+exit -6, died by signal 6
+== field: deep-canvas-render raster
+BLOCKED: deep-canvas-render isn't built here
+== pack rule: deep-show run install_pack
+reply 1 (1,000,000 parens): none
+reply 2 (1 paren): none
+stderr (its last 2 lines): thread 'main' (25929) has overflowed its stack
+stderr (its last 2 lines): fatal runtime error: stack overflow, aborting
+exit -6, died by signal 6
+[exit 1]
+
+Script done on 2026-11-12 00:30:11-08:00 [COMMAND_EXIT_CODE="1"]
