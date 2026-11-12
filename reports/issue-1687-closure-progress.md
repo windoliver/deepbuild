@@ -1,131 +1,104 @@
-# #1687 — closure-gap progress (2026-11-11)
+# #1687 — closure proof (2026-11-12)
 
-**Part of #1687; not yet proven closable.** This supersedes the post-merge
-structural status in `issue-1687-merge-conflicts.md`, not the historical receipts.
-The user requested actual gap closure, not another administrative PASS.
+**Part of #1687** until the open items at the end are settled. This replaces the
+2026-11-11 status in this file; the older reports stay as history.
 
-## Completed in this update
+Head `0f3aba98d`. Merge base with `origin/main` (`331b68be1`): `db8d9ed76`.
+Every run below is on clean builds of both, made in this update: `npm ci` from
+the unchanged lock and `npm run build --workspaces` exit 0 on each side, and
+`cargo build --locked -p deep-hook` once (crates, `Cargo.*`, `vendor/`, `.cargo`
+and the lock are byte-identical on both sides).
 
-- Merged main `46bb7a35767f5bb5af26e161e9e3ef0e20ad4f68` and retained #1862's
-  review rounds: previous-round inputs, counted-round recording, PR context and
-  settled-item recording. `ReviewRounds` consumes the mandatory
-  `ChecksProvider.reviewOutcomes`; the concrete function stays in the outer
-  runtime. The public entry and behavior of Kinds remain unchanged. This is
-  integration of upstream behavior, not a new core feature.
-- Main advanced again to `db8d9ed7684d170c21d382f846b97a43b7c3e9c0` (#2021).
-  Carried the running-call timestamp/quiet-window and `row.set@3` behavior into
-  `SessionState` and its `Live` contract, avoiding another restored Core block.
-  Three method bodies match upstream after capability substitutions; both
-  shutdown methods are unchanged. Core and all frozen loader inputs are unchanged.
-- Independently reviewed every changed loader input/guard/scope before updating
-  its frozen provenance. Classified main's new `checks-host` and `routing-replay`
-  as extensions from their documented responsibilities. No boundary, assertion,
-  caller lock, unknown-loader rejection, base review or mutant was weakened.
-  Detail: `tests/acceptance/1687/ac3-redraft/MERGE-PROVENANCE-REVIEW.md`.
-- Refreshed five stale Core/MCP twin copies with current owner wiring. All **19
-  original overlay-file fault deltas** match their earlier deltas exactly; fourteen
-  overlays remain byte-identical. These are 19 files in 18 twin groups. No
-  behavioral acceptance case, helper, manifest, fixture or expected value changed.
-- Re-ran the four existing #1687 structural/oracle files through affected under
-  a real test grant on the #1862 integration: **29/29 passed**. Its no-new-cycle
-  and absolute extension boundary assertions pass; Core's largest method body
-  remains **95 lines**. The final #2021 follow-up's graph rerun was not admitted;
-  those earlier passes are not represented as a fresh run of that follow-up.
+## Changed in this update
+
+- `bf29301f8` — the size lane. The merges from main left `core.ts` and its three
+  twin copies 31 lines over the ceiling this branch set, and `stop-judging.ts`,
+  new here, at 1,505 lines. The ceilings now name the files' sizes (2,626, under
+  the base's 8,263) and `stop-judging.ts` holds 1,482.
+- `0f3aba98d` — the `39/twins/takes-first-stamp` twin. Its move to
+  `mcp-operations.ts` had kept one of the base twin's two fault lines, so it
+  passed its criterion. The second line is back; it fails again (below).
 
 ## Requirement → change → proof
 
-| Criterion | Change | Actual proof / remaining work |
+| Criterion | Proof on this head | Open |
 | --- | --- | --- |
-| AC1: behavior and twins preserved | Carry #1862 into the owned services; exact fault refresh | 15 upstream method-body comparisons plus PR-context check pass after capability-path substitution; 19/19 fault-delta comparison passes. These are static only. Current builds, runtime twins, and broad base/candidate equality remain unrun. |
-| AC2: owned seams and Core <=100 | Keep hook/wiring Core, ReviewRounds in its existing owner | Existing structural and independently qualified ownership checks pass; max body 95. |
-| AC3: no new cycle or concrete-extension reach | Required inward review capability and independently reviewed provenance | Existing runtime/type graph checks and loader mutants pass in the 29-test run. |
+| AC1, tests pass as on the merge base | 51 behavioral files of the moved seams, 166 test rows, on both sides: 146 pass on both, 20 fail on both with the same message. Full `affected.mjs` run: see below. | The full run's second pass and its base rows; the timed files |
+| AC1, every twin over a moved method still fails its criterion | 17 of 18 twin groups fail their criterion at a framework assertion, the clean snapshot passing the same cases | #18's, #21's grant |
+| AC2, hook path and wiring only, no method over 100 lines | 29 of 29 structural and oracle cases pass; largest `Core` body 95 lines | |
+| AC3, no new cycle, core imports no extension | Same 29 cases: the cycle, type-edge and loader checks pass; `loader-boundary.test.ts` 3 of 3 | |
 
-The static parity and fault comparison ran again after the independent review;
-all scanned product-source hashes matched that review then. The later #2021
-merge changes session-state/types, hookmap, rows and upstream support, but none
-of the frozen loader input/site/caller identities; its semantic source review
-is not a new graph test pass. Neither establishes runtime equivalence, and
-historical 17/19 kills are not relabelled current kills.
+## What ran
 
-## Verification results and limits
+**Lints.** The 16 node scripts of the lint lane ran on both sides. Fourteen
+print the same findings. `repo-rules.mjs` differs only in its `NOTE size` line.
+`size-ratchet.mjs` has 35 findings on the base and 32 here, each among the
+base's; the three that go are the files this issue splits. `cargo fmt`, clippy,
+`canvas-lint` and `vendor-rebase` read only paths the change leaves unchanged
+and were not run. Of the 168 "new" lint findings the last report listed, five
+were this branch's (the size lane, now fixed); the rest are main's.
 
-The successful structural test block is recorded in
-`deep-affected-7pgcUU/node.jsonl` (SHA-256
-`d1b1a6359466f7f2ef694dc7b59808cf0a7d5aed0b038f940cfa76e27b2bfc24`);
-every one of its 29 start rows has a pass row, with no fail or skip. The full
-affected invocation is **not green**:
+**Structure.** `node --test` on the four #1687 files: 29 pass, 0 fail, 0 skip.
+The blind file as first committed (`2caed7085`), run unmodified on this head,
+passes 13 of 15, both tagged cases (`#1687.f156a5ac`, `#1687.2e07fefc`) among
+them. Its two failures are untagged name-surface cases that match a local
+variable, not a policy: `const judged = [...]` at `core.ts:2125` and
+`const runs: KitRun[] = []` at `host.ts:1181`. `acc5121c5` replaced that section
+with the blind redraft's oracle, on the owner's approval in conversation.
 
-```text
-FAIL affected: 168 new, 11 already failing on main,
-0 inconclusive or blocked, 0 listed skips, 29 passed
-```
+**Twins.** `reports/issue-1687-twin-proof.json` holds each case. Every overlay
+builds. Killed at an assertion: `349/` refusals-unrecorded,
+applied-but-never-handed, plants-ignored (both files), passed-without-results,
+routes-by-name, kit-skipped-at-install, both-adapters-deliver; `351/`
+admits-everything, plants-ignored, replaced-kind-kept; `332/`
+clone-record-under-plant; `39/` takes-first-stamp; `39-redraft/`
+job-hooks-as-session; `83/` stop-without-line, answers-any-origin,
+plant-ignored. The fault lines of the eleven hub and asks twins equal those of
+the base twins, read against the monolith each base twin was last copied from.
 
-Its failures are repository-wide lint findings (dependency inventory, vendor,
-size, canvas, conformance and related checks); “new” is relative to the committed
-known-failure table, not attribution to this PR. No fresh baseline run established
-equality. The first invocation had no Cargo executable on PATH and ran no checks;
-the corrected PATH invocation is the result above. No failure was edited away.
+- `18/unbound-reads-all`: its criterion case fails on the twin, naming the
+  leaked open item, through the test's own `throw Error`, which is not a
+  framework assertion. With the one-line form in
+  `issue-1687-binding-assertion-proposal.md`, tried in snapshot copies only,
+  the clean cases pass 2 of 2 and the twin fails at an `AssertionError` in
+  `holds()`. The repository test is unchanged.
+- `21/plant-ignored`: its test is on the timed list. Outside a timed grant the
+  criterion case passes on the clean snapshot and fails on the twin at its
+  assertion (`/in the record 2 times/`). No timed grant was held, so the lane
+  reads this INCONCLUSIVE.
 
-The latest source-path selection lists 428 parallel Vitest files, 17 Node files,
-705 alone files, 79 timed files, 36 slow files and `deep-app`. That selection was
-**not executed**. Neither the plan nor the focused execution emitted a WIDE or
-INCONCLUSIVE line. Their absence is not proof that the unrun broad selection,
-timing/live cases or inherited failures pass.
+The earlier map recorded a kill for `39/takes-first-stamp` that did not hold:
+on a quiet machine the twin passed, which is how the lost line was found.
 
-A fresh isolated base worktree was prepared at `46bb7a357` with independent
-workspace links. The five-minute request to install the unchanged lock and build
-each side's own TypeScript/native artifacts received no grant:
+**Behavior.** The 53 files of the reused inventory
+(`tests/acceptance/1687/full/README.md`), `822/hub.test.ts`, and the two hub
+unit tests this branch edits, one file at a time as `proof-runs.mjs` runs vitest,
+on the candidate and then on the base. The 20 rows that fail on both are in
+`16/hotpath-ac18-redraft`, `25/routes/held`, `25/routes/one-route`, `26/ask`,
+`26/binding`, `26/errors`, `26/tools`, `27/repeat`, `27/waits`, `567/fast` and
+`822/hub`; none is in `scripts/known-failures.json`. One row differed:
+`315/cut.test.ts` AC11 failed on the candidate at load 323 (199 of 200 hooks
+spooled, hub stopped) and passed 4 of 4 when run again at load 20, as on the
+base. Not run on either side: the five timed files of that inventory.
 
-```text
-INCONCLUSIVE no grant: no build grant came within 5 min
-```
+**Affected.** `node scripts/affected.mjs --slow --timed` on the candidate selects 456
+parallel and 709 alone vitest files, 21 node files, 36 slow and 80 timed, and
+`deep-app`. Its first full run began 2026-11-12T02:01Z and had not ended when
+this was written. Its shards began with no `deep-hook` built, so several hundred
+of its early rows read BLOCKED for that alone; a second pass over those files,
+and the merge base over the files that still fail, are queued behind it. Until
+their rows are set side by side, the full selection is INCONCLUSIVE.
 
-The install/build pair never ran. Existing node_modules predates two packages
-added on main; it must be installed from the unchanged lock before a clean full
-build. No stale dist/native artifact was passed off as a current build. Current
-runtime, #822 refresh, moved-twin proofs and #21's 1,000-call replay remain unrun.
-A guard attempt timed out before output; the later merged-scope attempt was
-bounded after over three minutes without output, stopping only its own captured
-child PIDs. No guard PASS or valid approval signature is claimed. The #2021
-follow-up requested only the affected graph checks, with a one-minute bound,
-and returned `INCONCLUSIVE no grant: no test grant came within 1 min`; no test
-executed in that attempt. Its session runtime and a base comparison against
-`db8d9ed76` are also unrun.
+**Guard.** `node scripts/proof.mjs guard`: FAIL, four findings, all in
+`acc5121c5` on `tests/acceptance/1687/full/structure.test.mjs` (the oracle swap
+above). The merge base holds no `.deepbuild/approvers`, so no signed approval
+can be read for any change today.
 
-## The #18 protected blocker
+## Open before `Closes #1687`
 
-The independent test-owner review established that the existing binding suite
-is already its blind redraft. Its positive validator throws plain `Error` on the
-expected leak, while the second test expects that leak. No existing unchanged
-framework assertion rejects this exact overlay. The design and proof runner
-correctly do not count the plain Error as an assertion kill.
-
-[The exact one-line assertion-form proposal](issue-1687-binding-assertion-proposal.md)
-is recorded but **not applied**. It retains the zero-problems predicate and all
-scenarios/diagnostics. Previous ownership/loader/#822 approval does not cover it.
-The authorized check owner needs approval for that specific change; no second
-blind redraft, production special case or classifier exemption will substitute.
-Required real signed approval of protected changes also remains a human action.
-
-## Remaining before `Closes #1687`
-
-1. Current clean builds and the same full affected results on base and candidate;
-   account for every selected test, including timing/live work and genuine base
-   failures. No blanket lint/size waiver or known-failure rewrite.
-2. Current compiling clean/twin runs for all moved overlays, including #21 under
-   its required timed grant. The exact fault plan is retained locally.
-3. Separately approve the #18 assertion-form change and obtain its unchanged-runner
-   formal kill; supply any real signed guard approval over the actual proposals.
-
-All session-owned validation/reviewer jobs have ended; no foreign process was
-stopped and the original dirty worktree was not touched. PR #2236 stays draft and
-unmerged; the existing CLOSED/NOT_PLANNED tracker disposition is not changed into
-completed verification.
-
-Local receipts: `/tmp/deep-1687-close-{structural-with-cargo,build-grant,review-parity,retention-check}.log`
-and numeric `.exit` files, `/tmp/deep-1687-close-boundary-{before,after}.json`,
-`/tmp/deep-1687-close-twins-{result.md,plan.json}`,
-`/tmp/deep-1687-close-affected-plan.log`, and
-`/tmp/deep-1687-close-guard-interrupted.json`,
-`/tmp/deep-1687-close-2021-affected.log`, and
-`/tmp/deep-1687-close-2021-parity-corrected.log`.
+1. The full affected run's rows on both sides, as above.
+2. The owner's yes or no on the #18 one-line assertion form. Its proof is above.
+3. The timed files (80 in the affected selection, `21/replay.test.ts` among
+   them) under a timed grant, which needs the machine's load under its 18 cores.
+4. The guard's four findings need the maintainer's signed tag once main holds an
+   approvers list; until then they stand as FAIL.
