@@ -1,9 +1,9 @@
 {
   "issue": 1687,
-  "note": "Each twin laid over a moved method, run against the built candidate. A snapshot per twin is the candidate with the twin laid over it and only the packages it replaces rebuilt; the criterion cases (vitest -t pattern) run there and on a clean snapshot, and each failure is classed by atAssertion as scripts/proof-runs.mjs holds it. Supersedes the earlier map, whose kill of 39--takes-first-stamp did not hold on a quiet machine.",
-  "candidate": "bf29301f8 (39--takes-first-stamp: 0f3aba98d, which changes that twin file only)",
-  "mergeBase": "db8d9ed7684d170c21d382f846b97a43b7c3e9c0",
-  "ranAt": "2026-11-11T21:19Z to 21:29Z; 39--takes-first-stamp 2026-11-12T01:16Z",
+  "note": "Each twin laid over a moved method, run against the built candidate. A snapshot per twin is the candidate with the twin laid over it and only the packages it replaces rebuilt; the criterion cases (vitest -t pattern) run there and on a clean snapshot, and each failure is classed by atAssertion as scripts/proof-runs.mjs holds it.",
+  "candidate": "39bee16ae",
+  "mergeBase": "afadc469d",
+  "ranAt": "2026-11-12T07:44Z to 07:54Z",
   "twins": {
     "349--refusals-unrecorded": {
       "criteria": [
@@ -132,7 +132,7 @@
           "status": "fail",
           "atAssertion": true,
           "cause": "AssertionError: promise resolved \"undefined\" instead of rejecting",
-          "frame": "_Assertion.__VITEST_REJECTS__ (<path>"
+          "frame": "_Assertion.__VITEST_REJECTS__ (<path>)"
         },
         {
           "test": "AC6 #349.77853dd0 two adapters see one session; the second to bind it gates it and delivers each answer once, the other only relays; a host letting both deliver, or giving the session to the first to bind, fails naming the session › AC6 the gating adapter, second to bind the session, owns it and delivers each answer once; the first to bind only relays",
@@ -143,14 +143,14 @@
           "status": "fail",
           "atAssertion": true,
           "cause": "AssertionError: promise resolved \"undefined\" instead of rejecting",
-          "frame": "_Assertion.__VITEST_REJECTS__ (<path>"
+          "frame": "_Assertion.__VITEST_REJECTS__ (<path>)"
         },
         {
           "test": "AC6 #349.77853dd0 two adapters see one session; the second to bind it gates it and delivers each answer once, the other only relays; a host letting both deliver, or giving the session to the first to bind, fails naming the session › AC6 (wrong program) a host that gives the session to the first adapter to bind it delivers through the adapter that doesn't gate it, and fails this test naming the session",
           "status": "fail",
           "atAssertion": true,
           "cause": "AssertionError: promise resolved \"undefined\" instead of rejecting",
-          "frame": "_Assertion.__VITEST_REJECTS__ (<path>"
+          "frame": "_Assertion.__VITEST_REJECTS__ (<path>)"
         }
       ]
     },
@@ -435,7 +435,7 @@
           "status": "fail",
           "atAssertion": true,
           "cause": "AssertionError: promise resolved \"undefined\" instead of rejecting",
-          "frame": "_Assertion.__VITEST_REJECTS__ (<path>"
+          "frame": "_Assertion.__VITEST_REJECTS__ (<path>)"
         },
         {
           "test": "AC4 #351.f151ca10 a package replacing the done gate, or providing a second one beside it, is refused at install naming the done gate until gate@1 opens; the installed test gate keeps judging; a host refusing only the ring's pieces fails this test › AC4 gate@1 hasn't opened; a package declaring it replaces the done gate, and one providing a second done gate beside it, are each refused at install naming the done gate, which keeps judging; without the declarations they install",
@@ -446,7 +446,7 @@
           "status": "fail",
           "atAssertion": true,
           "cause": "AssertionError: promise resolved \"undefined\" instead of rejecting",
-          "frame": "_Assertion.__VITEST_REJECTS__ (<path>"
+          "frame": "_Assertion.__VITEST_REJECTS__ (<path>)"
         }
       ]
     },
@@ -528,7 +528,7 @@
       ],
       "pattern": "#39\\.de9f23ce",
       "build": "ok",
-      "state": "KILLED: 1 of 1 criterion cases fail on the twin at their assertion",
+      "state": "SURVIVED: every criterion case passes on the twin",
       "clean": {
         "cases": 1,
         "passed": 1
@@ -536,12 +536,10 @@
       "twin": [
         {
           "test": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session › AC5 #39.de9f23ce two threads whose hooks and one deep mcp share a parent process: each deep_ask binds to the PreToolUse stamped for it, in either order",
-          "status": "fail",
-          "atAssertion": true,
-          "cause": "AssertionError: AC5 #39.de9f23ce thread A's ask under A (32827526-1ce7-4be7-b2c5-2d1067597129): session.start, session.rules_delivered, task.created, user.ask, mcp.tools_listed, mcp.tools_listed, session.start, session.rules_delivered, task",
-          "frame": "tests/acceptance/39/session.test.ts:93:116"
+          "status": "pass"
         }
-      ]
+      ],
+      "repeats": "Five runs on this head: the twin failed its criterion case at its assertion in one and passed in four. The case sends its two asks at once, and the twin binds wrongly only when the stamps and the calls arrive in different orders. Its two fault lines equal the merge base twin's."
     },
     "39-redraft--job-hooks-as-session": {
       "criteria": [
@@ -565,14 +563,14 @@
           "test": "AC6 #39.edfd0196 a Codex job the runner started leaves no session row, claim or task spend › AC6 #39.edfd0196 a job through `codex exec` whose hooks carry the thread ID it printed reads as the job's events, with no session row, claim or task spend, while a plain Codex session beside it has its row",
           "status": "fail",
           "atAssertion": true,
-          "cause": "AssertionError: session row for the job run:<id>'s thread de38e9a1-9b3f-4084-8311-15a72103df02: expected [ …(2) ] to not include 'de38e9a19b3f4084831115a72103df02'",
+          "cause": "AssertionError: session row for the job run:<id>'s thread f096dc87-6571-47de-8914-8d0977282f5f: expected [ …(2) ] to not include 'f096dc87657147de89148d0977282f5f'",
           "frame": "Proxy.<anonymous> (<path>)"
         },
         {
           "test": "AC6 #39.edfd0196 a Codex job the runner started leaves no session row, claim or task spend › AC6 #39.edfd0196 hooks that reach the hub from the job's folder before the runner has read its thread ID still read as the job's, never as a session",
           "status": "fail",
           "atAssertion": true,
-          "cause": "AssertionError: session row for the job run:<id>'s thread 2a5f5035-9897-4d0b-9dc1-79f6fe858a94: expected [ '2a5f503598974d0b9dc179f6fe858a94' ] to not include '2a5f503598974d0b9dc179f6fe858a94'",
+          "cause": "AssertionError: session row for the job run:<id>'s thread 02bd0029-d152-4270-a374-c656e27f0d5c: expected [ '02bd0029d1524270a374c656e27f0d5c' ] to not include '02bd0029d1524270a374c656e27f0d5c'",
           "frame": "Proxy.<anonymous> (<path>)"
         }
       ]
@@ -599,7 +597,7 @@
           "test": "AC1 #83.8a03aacc The line appears in the Claude Code and Codex chats at every judged stop › AC1 #83.8a03aacc Claude Code: a stop whose turn edited a file is judged, and its Stop reply carries one line the chat shows, at most 80 columns, naming a state; a stop right after startup carries none",
           "status": "fail",
           "atAssertion": true,
-          "cause": "AssertionError: a judged stop's reply carries the line (systemMessage, or a send-back's reason): {\"runs\":[{\"command\":\"exec '<tmp>' claude-code Stop\",\"code\":0,\"signal\":null,\"timedOut\":false,\"stdout\":\"\",\"stderr\":\"\"},{\"command\":\"exec '<tmp>' c",
+          "cause": "AssertionError: a judged stop's reply carries the line (systemMessage, or a send-back's reason): {\"runs\":[{\"command\":\"exec '<path> claude-code Stop\",\"code\":0,\"signal\":null,\"timedOut\":false,\"stdout\":\"\",\"stderr\":\"\"},{\"command\":\"exec '<path> c",
           "frame": "tests/acceptance/83/line.test.ts:31:123"
         },
         {
@@ -633,7 +631,7 @@
           "test": "AC4 #83.4b0836ba Only a prompt a person typed is answered from the record; one from a scheduled task, a subagent's report or another session reaches the model unchanged › AC4 #83.4b0836ba \"still going?\" from a scheduled task, a subagent's report, another session, a prompt the adapter can't place reaches the model unchanged (no block, a model call in the hook log); the same words a person typed are answered from the record",
           "status": "fail",
           "atAssertion": true,
-          "cause": "AssertionError: \"still going? (scheduled)\" from a scheduled task isn't answered from the record: {\"blocked\":\"working · next: agent (for 0s) · needs you: 0\\nwork: <tmp> · session 996473d9 (claude-code) · resume: claude --resume 996473d9-62d0",
+          "cause": "AssertionError: \"still going? (scheduled)\" from a scheduled task isn't answered from the record: {\"blocked\":\"working · next: agent (for 0s) · needs you: 0\\nwork: <path> · session ae6fbddc (claude-code) · resume: claude --resume ae6fbddc-e53",
           "frame": "tests/acceptance/83/status.test.ts:92:107"
         },
         {
@@ -685,7 +683,7 @@
       ],
       "pattern": "#18\\.7f5b2ce8",
       "build": "ok",
-      "state": "NOT AT ASSERTION: 1 criterion cases fail on the twin, none at a framework assertion",
+      "state": "KILLED: 1 of 2 criterion cases fail on the twin at their assertion",
       "clean": {
         "cases": 2,
         "passed": 2
@@ -694,9 +692,9 @@
         {
           "test": "AC9 #18.7f5b2ce8 a deep_ask from a session's deep mcp is filed under that session; a process whose parent matches no session reads the wiki but no session's items, and can't ask or claim",
           "status": "fail",
-          "atAssertion": false,
-          "cause": "Error: AC9 #18.7f5b2ce8:",
-          "frame": "holds (tests/acceptance/18/binding/binding.test.ts:149:27)"
+          "atAssertion": true,
+          "cause": "AssertionError: AC9 #18.7f5b2ce8:",
+          "frame": "holds (tests/acceptance/18/binding/binding.test.ts:149:101)"
         },
         {
           "test": "AC9 #18.7f5b2ce8 (wrong program unbound-reads-all) a hub that shows a call bound to no session another session's open items fails this test, naming the open item",
@@ -726,40 +724,8 @@
           "test": "AC2 #21.9a5768d4 Over 1,000 real tool calls, with the hub stopped for 200 and SIGSTOPped for 200, no hook takes more than 50 ms over process start, and all 400 events are in the record once after the hub resumes › AC2 #21.9a5768d4 (wrong program) a hub that appends a replayed event twice (DEEP_HUB_PLANT=replay-appends-twice) fails the same check, naming the call",
           "status": "fail",
           "atAssertion": true,
-          "cause": "AssertionError: the check names an event in the record twice: expected 'the PostToolUse hook of toolu_dh212f8…' to match /in the record 2 times/",
+          "cause": "AssertionError: the check names an event in the record twice: expected '' to match /in the record 2 times/",
           "frame": "tests/acceptance/21/replay.test.ts:161:81"
-        }
-      ]
-    },
-    "18--unbound-reads-all+proposal": {
-      "criteria": [
-        "#18.7f5b2ce8"
-      ],
-      "overlays": [
-        "packages/hub/src/mcp-operations.ts"
-      ],
-      "tests": [
-        "tests/acceptance/18/binding/binding.test.ts"
-      ],
-      "pattern": "#18\\.7f5b2ce8",
-      "note": "the proposed one-line assertion form, applied in snapshot copies only; the repository test is unchanged",
-      "build": "ok",
-      "state": "KILLED: 1 of 2 criterion cases fail on the twin at their assertion",
-      "clean": {
-        "cases": 2,
-        "passed": 2
-      },
-      "twin": [
-        {
-          "test": "AC9 #18.7f5b2ce8 a deep_ask from a session's deep mcp is filed under that session; a process whose parent matches no session reads the wiki but no session's items, and can't ask or claim",
-          "status": "fail",
-          "atAssertion": true,
-          "cause": "AssertionError: AC9 #18.7f5b2ce8:",
-          "frame": "holds (tests/acceptance/18/binding/binding.test.ts:149:101)"
-        },
-        {
-          "test": "AC9 #18.7f5b2ce8 (wrong program unbound-reads-all) a hub that shows a call bound to no session another session's open items fails this test, naming the open item",
-          "status": "pass"
         }
       ]
     }
