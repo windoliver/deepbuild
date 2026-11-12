@@ -116,6 +116,7 @@ fn worker_planted(p: Option<Planted>) -> Option<&'static str> {
         Planted::AssumesBt601 => "assumes_bt601",
         Planted::TimecodeTrackZero => "timecode_track_zero",
         Planted::PngPremultipliesStraight => "png_premultiplies_straight",
+        Planted::VideoDropsFrame300 => "video_drops_frame_300",
         _ => return None,
     })
 }

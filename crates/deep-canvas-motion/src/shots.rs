@@ -979,7 +979,7 @@ impl Plan {
             .collect();
         let planted = program.options.planted;
         let rate = program.motion.frame_rate;
-        let ctx = Ctx::of(rate);
+        let ctx = Ctx::timeline(doc, rate)?;
         let size = match doc.get("size").and_then(Value::as_array).map(Vec::as_slice) {
             Some([w, h]) => [w.as_f64().unwrap_or(1920.0), h.as_f64().unwrap_or(1080.0)],
             _ => [1920.0, 1080.0],
@@ -1048,21 +1048,18 @@ impl Plan {
         }
         raws.sort_by(|a, b| a.start.cmp(&b.start).then(a.id.cmp(&b.id)));
         // Transitions between shots.
-        let mut joined: Vec<(String, String)> = Vec::new();
         let mut trans_raw = Vec::new();
         for (id, tr) in doc.get("transitions").and_then(Value::as_object).into_iter().flatten() {
             let Some(tr) = tr.as_object() else { continue };
             let names = |f: &str| tr.get(f).and_then(Value::as_str).and_then(|n| raws.iter().position(|r| r.id == n));
             let (Some(from), Some(to)) = (names("from"), names("to")) else { continue };
-            joined.push((raws[from].id.clone(), raws[to].id.clone()));
             trans_raw.push((id.clone(), tr, from, to));
         }
-        // Two shots that overlap outside a transition joining them, on any camera (Shot).
+        // Two shots that overlap outside a transition joining them, on any camera (Shot). A
+        // transition joins shots that meet at its cut, so any time two shots share lies outside it.
         for (i, a) in raws.iter().enumerate() {
             for b in &raws[i + 1..] {
-                let overlap = a.start < b.end && b.start < a.end;
-                let join = joined.iter().any(|(x, y)| (x == &a.id && y == &b.id) || (x == &b.id && y == &a.id));
-                if overlap && !join {
+                if a.start < b.end && b.start < a.end {
                     return refused(
                         "shot_overlap",
                         format!("shots/{}", b.id),
@@ -1219,7 +1216,7 @@ impl Plan {
         let id = &r.id;
         let path = format!("shots/{id}");
         let cam = &cameras[r.camera];
-        let ctx = Ctx::of(program.motion.frame_rate);
+        let ctx = Ctx::timeline(doc, program.motion.frame_rate)?;
         let mv = match s.get("move") {
             None => Move::Hold,
             Some(Value::String(m)) => match m.as_str() {
