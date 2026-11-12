@@ -596,15 +596,54 @@ export function signInterior(n: number): { x0: number; x1: number; y0: number; y
 }
 
 // ---------------------------------------------------------------------------------------------------
-// The 1 px wire fence (AC4 and the taste call): 41 vertical and 15 horizontal grey wires 0.015 m thick (1.0 px at the
-// fence's 10 m, fov 30° over 360 px) in a 8 × 3 m plane, on a black sky; the camera's orbit turns at 10° a second.
+// The 1 px wire fence (AC4 and the taste call): a 2 × 2.4 m panel of 21 vertical and 25 horizontal wires 0.1 m apart,
+// each a flat ribbon 0.0084 m wide, light grey (unlit 0.6) on a black sky, at the orbit's target 10 m away. A camera's
+// `fov` spans the view's width (the base's camera.rs: view width 2 · distance · tan(fov ÷ 2)), so 30° over 640 px puts
+// 119.4 px on a metre there and each wire is 1.0 px wide. The orbit turns at 10° a second from −12°, so over the judged
+// frames 8–127 at 60 fps (−10.7° to 9.2°) no point of the fence moves more than 0.12 px a frame (`fenceMotion`).
 
-export const FENCE = { size: [640, 360] as [number, number], fps: 60, frames: 128, judgedFrom: 8, wire: 0.015, grey: 0.35 };
+export const FENCE = {
+  size: [640, 360] as [number, number], fps: 60, frames: 128, judgedFrom: 8, wire: 0.0084, grey: 0.6,
+  target: [0, 1.5, 0] as V3, distance: 10, elevation: 4, fov: 30, azimuthFrom: -12, degPerS: 10,
+};
+const fenceXs = Array.from({ length: 21 }, (_, i) => -1 + 0.1 * i);
+const fenceYs = Array.from({ length: 25 }, (_, j) => 0.3 + 0.1 * j);
 export function fenceDoc(): JsonObject {
-  const items: Record<string, JsonObject> = { cam: orbitCamera([0, 1.5, 0], 0, 4, 10, 30), sky: DARK_SKY, wire: unlit([FENCE.grey, FENCE.grey, FENCE.grey]) };
-  for (let i = 0; i <= 40; i++) items[`v_${String(i).padStart(2, '0')}`] = box([FENCE.wire, 3, FENCE.wire], [-4 + 0.2 * i, 1.5, 0], { material: 'wire' });
-  for (let j = 0; j < 15; j++) items[`h_${String(j).padStart(2, '0')}`] = box([8, FENCE.wire, FENCE.wire], [0, 0.1 + 0.2 * j, 0], { material: 'wire' });
-  return sessionDoc('fence-173', FENCE.size, items, { channels: { turn: channel('items/cam/params/orbit/azimuth', [[0, 0], [4, 40]]) } });
+  const items: Record<string, JsonObject> = {
+    cam: orbitCamera(FENCE.target, FENCE.azimuthFrom, FENCE.elevation, FENCE.distance, FENCE.fov), sky: DARK_SKY, wire: unlit([FENCE.grey, FENCE.grey, FENCE.grey]),
+  };
+  fenceXs.forEach((x, i) => { items[`v_${String(i).padStart(2, '0')}`] = box([FENCE.wire, 2.4, 0.001], [x, 1.5, 0], { material: 'wire' }); });
+  fenceYs.forEach((y, j) => { items[`h_${String(j).padStart(2, '0')}`] = box([2, FENCE.wire, 0.001], [0, y, 0], { material: 'wire' }); });
+  const turn: [number, number][] = [[0, FENCE.azimuthFrom], [4, FENCE.azimuthFrom + 4 * FENCE.degPerS]];
+  return sessionDoc('fence-173', FENCE.size, items, { channels: { turn: channel('items/cam/params/orbit/azimuth', turn) } });
+}
+/** The pinhole the fence is judged by: the view px of world point `p` with the orbit at `azimuth`, `fov` across the
+ * view's width (the base's camera.rs), the view's centre at 0. The azimuth's sign convention doesn't change a distance
+ * on the symmetric fence. */
+function fenceScreen(p: V3, azimuth: number): [number, number] {
+  const rad = (d: number): number => (d * Math.PI) / 180;
+  const t = FENCE.target; const ce = Math.cos(rad(FENCE.elevation));
+  const cam: V3 = [t[0] + FENCE.distance * ce * Math.sin(rad(azimuth)), t[1] + FENCE.distance * Math.sin(rad(FENCE.elevation)), t[2] + FENCE.distance * ce * Math.cos(rad(azimuth))];
+  const norm = (v: V3): V3 => { const l = Math.hypot(...v); return [v[0] / l, v[1] / l, v[2] / l]; };
+  const dot = (a: V3, b: V3): number => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  const f = norm([t[0] - cam[0], t[1] - cam[1], t[2] - cam[2]]);
+  const r = norm([-f[2], 0, f[0]]);
+  const u: V3 = [r[1] * f[2] - r[2] * f[1], r[2] * f[0] - r[0] * f[2], r[0] * f[1] - r[1] * f[0]];
+  const q: V3 = [p[0] - cam[0], p[1] - cam[1], p[2] - cam[2]];
+  const focal = FENCE.size[0] / 2 / Math.tan(rad(FENCE.fov) / 2);
+  return [(focal * dot(q, r)) / dot(q, f), (focal * dot(q, u)) / dot(q, f)];
+}
+/** The fence's px per metre at the orbit's target. */
+export const fencePxPerM = (): number => FENCE.size[0] / (2 * FENCE.distance * Math.tan((FENCE.fov * Math.PI) / 360));
+/** The most any wire crossing of the fence moves in view px from one judged frame to the next. */
+export function fenceMotion(): number {
+  let most = 0;
+  const az = (n: number): number => FENCE.azimuthFrom + (FENCE.degPerS * n) / FENCE.fps;
+  for (let n = FENCE.judgedFrom; n + 1 < FENCE.frames; n++) for (const x of fenceXs) for (const y of fenceYs) {
+    const a = fenceScreen([x, y, 0], az(n)); const b = fenceScreen([x, y, 0], az(n + 1));
+    most = Math.max(most, Math.hypot(b[0] - a[0], b[1] - a[1]));
+  }
+  return most;
 }
 
 // ---------------------------------------------------------------------------------------------------

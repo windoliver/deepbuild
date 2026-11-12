@@ -188,7 +188,8 @@ run's pictures passes. No other test reads these pictures or the call.
 
 The castle is the checkout's own (`packs/examples/castle.json`, its look and `packs/composites-1.0.0`): a flythrough
 whose camera orbits once over 24 s at 1280 × 800. Everything else is generated in `helpers.ts`: the red box and the
-grey wall (`trailDoc`, `trailLeftEdge`), the sign (`signDoc`, `signInterior`), the wire fence (`fenceDoc`), the
+grey wall (`trailDoc`, `trailLeftEdge`), the sign (`signDoc`, `signInterior`), the wire fence (`fenceDoc`, with
+`fencePxPerM` and `fenceMotion`, a pinhole with the base's horizontal field of view), the
 resolution chart (`chartDoc`, `barContrast`), the still scene (`stillDoc`, #419's), the orbiting scene (`orbitDoc`),
 the stroked castle (`strokedCastle`), and the measures: the grid in flicks (`frameT`, `gridT`, `shownStep`,
 `windowEndingAt`), sRGB decoding and relative luminance (`lumaOf`), the flicker check's change rule
@@ -218,7 +219,16 @@ the stroked castle (`strokedCastle`), and the measures: the grid in flicks (`fra
 - **"Flickers, by the flicker check's measure"** applies the check's own change rule (relative luminance moving more
   than 0.1 with the darker frame under 0.80), counted pixel by pixel over consecutive frames: a flash is two changes,
   so the count is twice the flashes. The check's verdict thresholds (3 flashes in 25% of the view) would pass any thin
-  wire, so the quantities are compared. The wires are 0.35 grey, so a pixel a wire covers or leaves changes by 0.35.
+  wire, so the quantities are compared. The fixture makes what the rule counts aliasing rather than motion: at the
+  base a camera's `fov` spans the view's width, so the wires are 0.0084 m ribbons, 1.0 px at the orbit's target
+  (119.4 px/m), and the panel is small and near the orbit's axis, so over frames 8–127 no point of it moves more than
+  0.12 px a frame. A wire resolved at its true coverage then changes a pixel by at most 0.6 × 0.12 = 0.07 a frame,
+  under 0.1, while one sample, which resolves the base's in-pass 4× multisampling, steps a pixel by a quarter of the
+  wire's 0.6 (0.15) each time a wire edge crosses one of its sample points. The test checks these numbers first.
+- **The chart under 4× multisampling**: at half resolution a frame resolved through the renderer's 4× multisampling
+  averages each bar with the gap beside it, whatever its jitter, so the 80% can come only from window frames whose
+  jittered samples are kept apart; the criterion asks for that rebuild, and the spatial upscale's frame has nothing
+  to rebuild from.
 - **"At one sample without history"** is `history: none` with #419's one live sample.
 - **"Contrast at 1 px detail"** is the mean luminance of the bars' columns less that of the columns between them, over
   rows 40–259, so the full-resolution render of 1 px bars reads about 1. "Once the window fills" is frame 16, played

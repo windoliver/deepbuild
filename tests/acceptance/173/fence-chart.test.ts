@@ -3,26 +3,36 @@
 // keeps at least 80% of the full-resolution render's contrast at 1 px detail once the window fills, against under 50%
 // for the spatial upscale.
 //
-// The fence (helpers: `fenceDoc`): grey wires 1 px thick (0.015 m at 10 m, 67 px/m) on a black sky, the camera's orbit
-// turning 10° a second, drawn by `view3d` for frames 0–127 at 60 fps with frame history on (antialias, window 8, the
-// look's default rejection) and with history off at one sample. "Flickers, by the flicker check's measure" is the
-// check's own change rule (crates/deep-canvas/src/film_audit.rs): a pixel changes from one frame to the next when its
-// relative luminance moves by more than 0.1 with the darker frame below 0.80; how much the view flickers is the count of
-// such pixel changes over the 120 moving frames 8–127. With history it is at most a quarter of the count without; the
-// count without is at least 1,000, so the fence does flicker at one sample.
+// The fence (helpers: `fenceDoc`): a 2 × 2.4 m panel of light grey (unlit 0.6) wires on a black sky, each a ribbon
+// 1.0 px wide at the orbit's target (0.0084 m at 119.4 px/m: a camera's `fov` spans the view's width at the base), the
+// camera's orbit turning 10° a second, drawn by `view3d` for frames 0–127 at 60 fps with frame history on (antialias,
+// window 8, the look's default rejection) and with history off at one sample. "Flickers, by the flicker check's
+// measure" is the check's own change rule (crates/deep-canvas/src/film_audit.rs): a pixel changes from one frame to the
+// next when its relative luminance moves by more than 0.1 with the darker frame below 0.80; how much the view flickers
+// is the count of such pixel changes over the 120 moving frames 8–127. With history it is at most a quarter of the
+// count without; the count without is at least 1,000, so the fence does flicker at one sample.
+// What the count sees is aliasing, not the wires' own motion: over frames 8–127 no point of the fence moves more than
+// 0.12 px a frame (`fenceMotion`, a pinhole with the base's horizontal field of view), so a wire resolved at its true
+// coverage changes a pixel by at most 0.6 × 0.12 = 0.07 a frame, under the rule's 0.1; one sample resolves the base's
+// in-pass 4× multisampling (crates/deep-scene3d-render: MSAA), whose coverage steps by a quarter, 0.15 of the wire's
+// 0.6, each time a wire edge crosses one of a pixel's four sample points, which the rule counts. (These fixture numbers
+// hold at the base and are checked first.)
 // The chart (helpers: `chartDoc`): 100 white bars 1 px wide on black, one on each even column, the camera panning along
 // them so the view moves and each bar keeps its column. Frame 16 at 30 fps (the window of 8 filled) is drawn three
 // ways: at full resolution with history off (scale 1); with `history: {mode: upscale}` at the look's `scale: 0.5`,
 // played from frame 0; and with history off through #386's spatial upscale at internal scale 0.5 (edge adaptive,
 // sharpen 0.2). Contrast at 1 px detail is the mean relative luminance of the bars' columns less that of the columns
 // between them, over rows 40–259. The temporal upscale keeps at least 80% of the full-resolution contrast; the spatial
-// one under 50%. The temporal leg reports drawing through `upscale: temporal` at internal scale 0.5.
+// one under 50%. The temporal leg reports drawing through `upscale: temporal` at internal scale 0.5. At half
+// resolution a frame resolved through the renderer's 4× multisampling averages each bar with the gap beside it,
+// whatever its jitter (its four sample points sit half a display px apart across the 2 px period), so the bars can be
+// rebuilt only from window frames that keep their jittered samples apart; the criterion asks for that rebuild.
 // Wrong programs: the base (no history: the fence flickers as much with it on; no temporal upscale); a resolve that
 // reads one frame; an upscale that rebuilds nothing from the window.
 import { describe, expect, it } from 'vitest';
 import {
-  AC, CHART, FENCE, HISTORY_OFF, HISTORY_ON, HISTORY_UPSCALE, barContrast, chartDoc, fenceDoc, flickerChanges, frameAt, framesOf, look, lumaOf, readPng,
-  requireMetal, runGpu, surfaceOf, useDir, useGpu, view3dCall, writeJson,
+  AC, CHART, FENCE, HISTORY_OFF, HISTORY_ON, HISTORY_UPSCALE, barContrast, chartDoc, fenceDoc, fenceMotion, fencePxPerM, flickerChanges, frameAt, framesOf,
+  look, lumaOf, readPng, requireMetal, runGpu, surfaceOf, useDir, useGpu, view3dCall, writeJson,
 } from './helpers.ts';
 
 const ID = AC[4];
@@ -32,6 +42,14 @@ const J = CHART.judged;
 
 describe(`${ID} frame history steadies a turning wire fence and rebuilds 1 px detail from half resolution`, () => {
   it(`${ID} the fence flickers at most a quarter as much with history as at one sample without, and the chart upscaled from 0.5 keeps at least 80% of full-resolution contrast against under 50% spatially`, () => {
+    // The fence's own numbers (hold at the base): 1 px wires, slow enough that a resolved wire's motion stays under
+    // the rule's 0.1 a frame, bright enough that one 4× multisample step is over it.
+    expect(FENCE.wire * fencePxPerM(), 'each wire is 1 px wide at the orbit\'s target').toBeCloseTo(1, 1);
+    const motion = fenceMotion();
+    console.log(`${ID}: the fence moves at most ${motion.toFixed(4)} px a frame over frames ${FENCE.judgedFrom}–${FENCE.frames - 1}`);
+    expect(motion, 'no point of the fence moves more than 0.12 px a frame').toBeLessThanOrEqual(0.12);
+    expect(FENCE.grey * motion, 'a wire resolved at its true coverage changes a pixel by under the rule\'s 0.1 a frame').toBeLessThan(0.1);
+    expect(FENCE.grey / 4, 'one quarter step of 4× multisampled coverage changes a pixel by over the rule\'s 0.1').toBeGreaterThan(0.1);
     requireMetal();
     const out = dir();
     // The fence.

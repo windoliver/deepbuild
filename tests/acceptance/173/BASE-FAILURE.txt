@@ -26,7 +26,9 @@
 #   reactive.test.ts       AC3   the first lit frame is found from the own render; then "frame 30 reports its frame
 #                                history" fails (and without history the unmasked leg doesn't lag). Should the base not
 #                                key a material's emission_strength, "the own render lights the sign" fails first.
-#   fence-chart.test.ts    AC4   "frame 8 reports its frame history" fails for the fence with history on.
+#   fence-chart.test.ts    AC4   the fence's own numbers hold (1.0 px wires, at most 0.112 px of motion a frame by the
+#                                same pinhole computed outside the test); then "frame 8 reports its frame history" fails
+#                                for the fence with history on.
 #   scrub.test.ts          AC5   "after a seek from 10 s: frame 120 reports its frame history" fails.
 #   rest-canonical.test.ts AC6   "frame 12, while your hand orbits the view, reports its frame history" fails (the
 #                                render-back's refusal is read only after it).
