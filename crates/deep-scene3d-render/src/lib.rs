@@ -15,6 +15,7 @@ pub mod env;
 pub mod flare;
 mod glass;
 pub mod held;
+pub mod history;
 pub mod local;
 pub mod maps;
 mod mesh;
@@ -156,6 +157,8 @@ pub struct Planted {
     pub upscale: surface::Planted,
     /// #386: outlines draw at the internal size, before the upscale.
     pub outlines_before_upscale: bool,
+    /// #173: outlines draw into each window frame, before frame history's resolve.
+    pub outlines_in_history: bool,
     /// #386: status outlines draw at the internal size, before the upscale.
     pub status_before_upscale: bool,
     /// #386: status outlines draw with no depth test.
@@ -1899,6 +1902,13 @@ pub struct Renderer {
     /// The GPU surface it draws through, and the upscale's pipelines once compiled (#386).
     pub surface: Surface,
     pub upscale: Option<Arc<Upscale>>,
+    /// Frame history resolves this frame (#173): lines 1 device px or thinner, outlines and
+    /// labels draw after it at display size, through the camera unjittered; `jitter` is its
+    /// window frame's offset, display px right and down, added to the scene's.
+    pub history: bool,
+    pub jitter: [f64; 2],
+    /// The window a view's frames draw into and what this frame does with it (#173).
+    pub frame_history: history::State,
     /// The key sun's cascade maps at this many times their size: 2 at the climb's top rung
     /// (#425), else 1.
     pub shadow_scale: u32,
@@ -2713,6 +2723,16 @@ impl Renderer {
     }
 
     pub fn new(device: &Device, planted: Planted) -> Renderer {
+        Renderer::sampled(
+            device,
+            planted,
+            if planted.single_sample { 1 } else { MSAA },
+        )
+    }
+
+    /// A renderer whose geometry pass draws `samples` samples a pixel: one under frame
+    /// history's temporal upscale, whose window rebuilds the pixels a box filter would blur (#173).
+    pub fn sampled(device: &Device, planted: Planted, samples: u32) -> Renderer {
         let d = &device.device;
         let module = d.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("scene3d"),
@@ -2982,7 +3002,6 @@ impl Renderer {
         let text_layout = layout(&[Some(&frame_layout), Some(&mask_layout)]);
         let output_pipeline_layout = layout(&[Some(&output_layout)]);
         let mesh_buffers = mesh_buffers();
-        let samples = if planted.single_sample { 1 } else { MSAA };
         let mesh = |cull| {
             opaque_pipeline(
                 d,
@@ -3370,6 +3389,9 @@ impl Renderer {
             profiler: None,
             surface: Surface::default(),
             upscale: None,
+            history: false,
+            jitter: [0.0; 2],
+            frame_history: Default::default(),
             shadow_scale: 1,
             size: [0, 0],
             low: None,
@@ -3587,7 +3609,7 @@ impl Renderer {
 
     /// The internal size a frame of `size` draws at.
     pub fn internal_size(&self, size: [u32; 2]) -> [u32; 2] {
-        if self.surface.scale != 1.0 && self.upscale.is_some() {
+        if self.surface.scale != 1.0 && (self.upscale.is_some() || self.history) {
             surface::scaled(size, self.surface.scale)
         } else {
             size
@@ -5512,8 +5534,8 @@ impl Renderer {
         // Look: samples (#423): a sub-sample's offset moves the projection by a fraction of a
         // pixel, right and down.
         let [jx, jy] = [
-            2.0 * scene.jitter[0] / f64::from(scene.size[0].max(1)),
-            -2.0 * scene.jitter[1] / f64::from(scene.size[1].max(1)),
+            2.0 * (scene.jitter[0] + self.jitter[0]) / f64::from(scene.size[0].max(1)),
+            -2.0 * (scene.jitter[1] + self.jitter[1]) / f64::from(scene.size[1].max(1)),
         ];
         let w = rows[3];
         for (c, wc) in w.iter().enumerate() {
@@ -5562,7 +5584,7 @@ impl Renderer {
                 w as f32,
             ]
         };
-        let below = internal != scene.size;
+        let below = internal != scene.size || self.history;
         let forward = if self.planted.forward_z { 1.0 } else { 0.0 };
         let perspective = if cam.perspective { 1.0 } else { 0.0 };
         let frame = FrameUniform {
@@ -5608,7 +5630,13 @@ impl Renderer {
             frame.cap = v4(c.cap.unwrap_or([0.0; 3]), 1.0);
         }
         // The outline pass over the full-size slot, and over the internal size for the planted
-        // programs that draw there.
+        // programs that draw there; after frame history's resolve, unjittered.
+        let plain = cam.clip(depth);
+        let post = FrameUniform {
+            clip: std::array::from_fn(|c| std::array::from_fn(|r| plain[r][c] as f32)),
+            ..frame
+        };
+        let post = if self.history { post } else { frame };
         let display = FrameUniform {
             viewport: [
                 scene.size[0] as f32,
@@ -5616,12 +5644,13 @@ impl Renderer {
                 cam.scale as f32,
                 perspective,
             ],
-            px: [1.0, 2.0, k as f32, forward],
-            ..frame
+            // After frame history's resolve, lines test the display-size depth it writes.
+            px: [1.0, 2.0, if self.history { 0.0 } else { k as f32 }, forward],
+            ..post
         };
         let inside = FrameUniform {
             px: [1.0, 2.0, 1.0, forward],
-            ..frame
+            ..post
         };
         deep_gpu::alloc::outside(|| {
             let q = &device.queue;
@@ -7487,9 +7516,15 @@ impl Renderer {
         // the slot from it (#382). Below scale 1 the output and the guard write the internal
         // frame, which the upscale and sharpen return to the slot's size (#386).
         let size = t.size;
-        let below = self.ensure_low(device);
+        // A frame of the window draws into its layer, and frame history's resolve returns the
+        // window to the slot in place of the upscale (#173).
+        let window = self.frame_history.jobs.take();
+        let below = window.is_none() && self.ensure_low(device);
         let low_view = self.low.as_ref().filter(|_| below).map(|l| l.view.clone());
-        let framed = low_view.clone().unwrap_or_else(|| slot.clone());
+        let framed = match &window {
+            Some(w) => w.layer.clone(),
+            None => low_view.clone().unwrap_or_else(|| slot.clone()),
+        };
         let finished = after.is_some().then(|| self.finished(device, size));
         let (target, pipeline) = match &finished {
             Some(f) => (f.clone(), self.output_f32.clone()),
@@ -7560,6 +7595,36 @@ impl Renderer {
             .unwrap_or(after_jobs.len());
         let colors = after_jobs.split_off(colors_at);
         jobs.extend(after_jobs);
+        // Line marks after frame history's resolve test the display's depth it writes.
+        let resolved = window.as_ref().and_then(|w| w.resolve.clone());
+        let after = |d: OutlineDraw| match &resolved {
+            Some(r) => r.lines(d),
+            None => d,
+        };
+        if let Some(w) = window {
+            let early = self.outline_draw(true);
+            let (profiler, slot) = (self.profiler.clone(), slot.clone());
+            let resolves = w.resolve.is_some();
+            jobs.push((
+                history::RESOLVE_PASS.into(),
+                Box::new(move |encoder| {
+                    // The planted outlines_in_history draws them into the window's frame.
+                    if let Some(early) = &early {
+                        early.record(encoder, &w.layer, None);
+                    }
+                    w.copy.record(encoder);
+                    if let Some(r) = &w.resolve {
+                        timed(&profiler, history::RESOLVE_PASS, encoder, |e, ts| {
+                            r.record(e, &slot, ts)
+                        });
+                    }
+                }),
+            ));
+            // A window frame drawn before the frame at t shows nothing of its own.
+            if !resolves {
+                return jobs;
+            }
+        }
         if let Some(low) = low_view {
             let early = self.outline_draw(true);
             let [upscale, sharpen] = self.surface_steps(device, slot).expect("below scale 1");
@@ -7587,14 +7652,17 @@ impl Renderer {
             ));
         }
         // Status outlines draw as the status colors, where the frame has them, over the labels.
-        let (outlines, statuses) = match self.outline_draw(false) {
+        let (outlines, statuses) = match self.outline_draw(false).map(after) {
             Some(draw) if !colors.is_empty() => {
                 let (draw, statuses) = draw.split();
                 (Some(draw), statuses)
             }
             draw => (draw, None),
         };
-        for (name, draw) in [(OUTLINE_PASS, outlines), (LABEL_PASS, self.label_draw())] {
+        for (name, draw) in [
+            (OUTLINE_PASS, outlines),
+            (LABEL_PASS, self.label_draw().map(after)),
+        ] {
             let Some(draw) = draw else { continue };
             let (profiler, target) = (self.profiler.clone(), slot.clone());
             jobs.push((
@@ -7676,10 +7744,12 @@ impl Renderer {
         let o = &self.outlines;
         let t = self.targets.as_ref()?;
         let binds = o.binds.as_ref()?;
-        let below = self.internal() != self.size && self.upscale.is_some();
+        let upscaled = self.internal() != self.size && self.upscale.is_some();
+        let below = upscaled || self.history;
         let p = self.planted;
-        let strokes_early = below && p.outlines_before_upscale;
-        let statuses_early = below && p.status_before_upscale;
+        let strokes_early =
+            upscaled && p.outlines_before_upscale || self.history && p.outlines_in_history;
+        let statuses_early = upscaled && p.status_before_upscale;
         let mut sets = Vec::new();
         let mut statuses = Vec::new();
         let take = |set: &Set, into: &mut Vec<(wgpu::Buffer, u32)>| {
@@ -8789,6 +8859,8 @@ pub struct Shared {
     pub post: Option<Box<dyn Post>>,
     /// Passes after the finish: the status guard and the status colors, where status can show.
     pub after: Option<Box<dyn After>>,
+    /// Samples a pixel its renderer's geometry pass draws (#173: one under temporal upscaling).
+    pub samples: u32,
 }
 
 /// scene3d as the GPU layer's render module: one view's renderer.
@@ -8804,6 +8876,7 @@ impl Module3 {
             planted,
             post: None,
             after: None,
+            samples: if planted.single_sample { 1 } else { MSAA },
         }));
         (
             Module3 {
@@ -8868,6 +8941,15 @@ impl RenderModule for Module3 {
             0.04,
             Determinism::LiveOnly,
         ));
+        // Or frame history's resolve, from the window into the slot (#173).
+        passes.push(pass(
+            history::RESOLVE_PASS,
+            1,
+            vec!["depth"],
+            vec!["slot"],
+            0.4,
+            Determinism::LiveOnly,
+        ));
         passes.push(pass(
             OUTLINE_PASS,
             2,
@@ -8908,7 +8990,7 @@ impl RenderModule for Module3 {
         let mut s = lock(&self.shared);
         let planted = s.planted;
         if !planted.builds_on_first_frame {
-            s.renderer = Some(Renderer::new(device, planted));
+            s.renderer = Some(Renderer::sampled(device, planted, s.samples));
         }
         Ok(())
     }
@@ -8924,7 +9006,7 @@ impl RenderModule for Module3 {
         };
         // The planted renderer compiles everything it draws with here, in the frame.
         if s.renderer.is_none() && s.planted.builds_on_first_frame {
-            s.renderer = Some(Renderer::new(device, s.planted));
+            s.renderer = Some(Renderer::sampled(device, s.planted, s.samples));
         }
         let Shared {
             renderer,
@@ -8940,6 +9022,7 @@ impl RenderModule for Module3 {
             renderer.feed(p.sources(device));
         }
         renderer.prepare(device, &scene, &look);
+        renderer.stage_window(device, &scene);
         renderer.jobs(
             device,
             &target.view,

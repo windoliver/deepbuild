@@ -227,6 +227,13 @@ pub enum Planted {
     VelocityPairsByIndex,
     SettleResetsEachFrame,
     SamplerHoldsCamera,
+    /// #173's wrong programs (tests/acceptance/173/README.md: Planted programs): a resolve that
+    /// keeps the grid frame before its window; a determinism check that hashes the live view's
+    /// resolved frames; a window grid at the display's refresh; outlines drawn into the window.
+    KeepsFramePastWindow,
+    DeterminismHashesLiveView,
+    GridAtRefresh,
+    OutlinesInHistory,
     EdgesUnwelded,
     EdgesSkipDepth,
     /// #1640's: crease lines keep the edges below their angle, derive their set every frame, or
@@ -530,6 +537,10 @@ impl Planted {
             "velocity_pairs_by_index" => Planted::VelocityPairsByIndex,
             "settle_resets_each_frame" => Planted::SettleResetsEachFrame,
             "sampler_holds_camera" => Planted::SamplerHoldsCamera,
+            "keeps_frame_past_window" => Planted::KeepsFramePastWindow,
+            "determinism_hashes_live_view" => Planted::DeterminismHashesLiveView,
+            "grid_at_refresh" => Planted::GridAtRefresh,
+            "outlines_in_history" => Planted::OutlinesInHistory,
             "edges_unwelded" => Planted::EdgesUnwelded,
             "edges_skip_depth" => Planted::EdgesSkipDepth,
             "crease_below_angle" => Planted::CreaseBelowAngle,

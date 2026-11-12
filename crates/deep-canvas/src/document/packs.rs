@@ -1950,8 +1950,21 @@ fn expand_one(
             return None;
         }
     };
+    // The instance's own stroke slot beside its inputs: each part it builds draws it (#173).
+    let stroke = params
+        .get("paint")
+        .filter(|_| !recipe.inputs.contains_key("paint"))
+        .filter(|p| {
+            p.as_object()
+                .is_some_and(|o| o.keys().all(|k| k == "stroke"))
+        })
+        .and_then(|p| p.get("stroke"))
+        .cloned();
     let mut ok = true;
     for (name, value) in &params {
+        if name == "paint" && stroke.is_some() {
+            continue;
+        }
         let Some(input) = recipe.inputs.get(name) else {
             issues.push(Issue::error(
                 "unknown_field",
@@ -2071,13 +2084,15 @@ fn expand_one(
     if let Some(fields) = items.get_mut(id).and_then(Value::as_object_mut) {
         fields.insert("params".into(), Value::Object(inputs.clone()));
     }
-    let key = Hasher::v1("recipe.key")
-        .text(&pack.id.text())
+    let mut key = Hasher::v1("recipe.key");
+    key.text(&pack.id.text())
         .text(&format!("{}@{}.{}", recipe.id, recipe.major, recipe.minor))
         .bytes(&canonical(&Value::Object(inputs.clone())))
-        .bytes(&canonical(&json!(broken_out)))
-        .finish()
-        .hex();
+        .bytes(&canonical(&json!(broken_out)));
+    if let Some(s) = &stroke {
+        key.bytes(&canonical(s));
+    }
+    let key = key.finish().hex();
     let mut env: Vec<(String, Value)> =
         inputs.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
     for (name, expr) in &recipe.lets {
@@ -2366,6 +2381,16 @@ fn expand_one(
             for key in ["visible", "pickable", "parent", "adjust", "material"] {
                 if let Some(v) = member(&item, key) {
                     fields.insert(key.into(), v.clone());
+                }
+            }
+            let mut params = params;
+            if let Some(s) = &stroke {
+                if let Some(p) = params
+                    .entry("paint")
+                    .or_insert_with(|| json!({}))
+                    .as_object_mut()
+                {
+                    p.insert("stroke".into(), s.clone());
                 }
             }
             fields.insert("params".into(), Value::Object(params));

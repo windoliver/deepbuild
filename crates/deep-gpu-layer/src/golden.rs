@@ -183,6 +183,13 @@ fn state_path(store: &str, fixture: &str) -> PathBuf {
     Path::new(store).join(format!("{fixture}.state"))
 }
 
+/// A golden's snapshot is a canonical render: it never draws through frame history (#173).
+fn canonical(view3d: &mut Value) {
+    if view3d["look"].is_object() {
+        view3d["look"]["history"] = json!({"mode": "none"});
+    }
+}
+
 /// #252: the snapshot is an operator output's bytes as the view3d's first frame reads them,
 /// compared byte for byte under the class its writer computes: a same-machine output compares
 /// only under the fingerprint its golden was blessed under, and reads INCONCLUSIVE under another,
@@ -194,6 +201,7 @@ fn state_golden(app: &mut App, out: &str, call: &Value, store: &str, fixture: &s
     v["capture"] = json!([from]);
     v["frames"] = json!(1);
     v["read"] = json!([key]);
+    canonical(&mut v);
     let reply = view3d::call(app, out, &v);
     let read = &reply["frames"][0]["read"][key];
     let class = read["class"].as_str().unwrap_or("same_machine");
@@ -277,6 +285,7 @@ pub fn golden(app: &mut App, out: &str, call: &Value) -> Value {
         v["targets"] = json!(["final"]);
         v["capture"] = json!([0]);
         v["frames"] = json!(1);
+        canonical(&mut v);
         let reply = view3d::call(app, out, &v);
         reply["frames"][0]["final"]
             .as_str()
