@@ -17,6 +17,11 @@ fn bad(what: &str) -> Value {
     json!({"ok": false, "code": "bad_input", "what": what})
 }
 
+/// The bytes a piece carries as asset `sha`.
+fn stored(piece_v: &Value, sha: &str) -> Option<Vec<u8>> {
+    B64.decode(piece_v.get("assets")?.get(sha)?.as_str()?).ok()
+}
+
 /// Two array elements equal by value: numbers by their f64, so an expected `1` matches an f64
 /// write's `1.0`, and vectors element by element.
 fn same(a: Option<&Value>, b: Option<&Value>) -> bool {
@@ -103,11 +108,10 @@ impl Logic {
         // hash with the exports its pack lists. Those key it, not which packs carry them (#190:
         // once per library hash).
         let packs = links::packs(piece_v).ok_or_else(|| vec![bad("packs")])?;
-        let assets = piece_v.get("assets").cloned().unwrap_or(json!({}));
         let linked = links::resolve(
             &[(lib.label.clone(), lib.hash.clone())],
             &packs,
-            &|sha| B64.decode(assets.get(sha)?.as_str()?).ok(),
+            &|sha| stored(piece_v, sha),
             &self.planted,
         )?;
         let key = json!([
@@ -285,7 +289,7 @@ impl Logic {
             let lib = links::resolve(
                 &[(label.clone(), e.asset.clone())],
                 std::slice::from_ref(&pack),
-                &|sha| B64.decode(assets.get(sha)?.as_str()?).ok(),
+                &|sha| stored(&piece_v, sha),
                 &self.planted,
             )
             .map_err(refused)?
@@ -316,15 +320,10 @@ impl Logic {
             .min_by_key(|(agent, _)| *agent)
             .map(|(_, asset)| asset)
             .ok_or_else(|| bad("library"))?;
-        let assets = piece_v
-            .get("assets")
-            .and_then(Value::as_object)
-            .cloned()
-            .unwrap_or_default();
         let lib = links::resolve(
             &[(label.into(), entry)],
             &packs,
-            &|sha| B64.decode(assets.get(sha)?.as_str()?).ok(),
+            &|sha| stored(piece_v, sha),
             &self.planted,
         )
         .map_err(|r| json!({"ok": false, "code": "link_refused", "refusals": r}))?
