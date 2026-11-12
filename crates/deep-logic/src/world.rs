@@ -1077,10 +1077,15 @@ impl World {
             e.t = next(true).or_else(|| next(false)).unwrap_or(0);
             e.seq = self.track.get(&e.control).map_or(0, Vec::len) as u32;
         }
-        let read = steps
-            .map(|(i, l)| (l.next - 1) * i.step)
-            .max()
-            .unwrap_or(-1);
+        // The last step run by the entry's readers, or by every item when none reads it.
+        let ran = |only: bool| {
+            steps
+                .clone()
+                .filter(|(i, _)| !only || i.reads.contains(&e.control))
+                .map(|(i, l)| (l.next - 1) * i.step)
+                .max()
+        };
+        let read = ran(true).or_else(|| ran(false)).unwrap_or(-1);
         if e.t <= read {
             return Err(
                 json!({"ok": false, "code": "bad_input", "what": format!("an entry at {} is before the first step not yet run", e.t)}),
@@ -1159,6 +1164,19 @@ impl World {
             let memory = unhex(&s["memory"]).ok_or_else(bad)?;
             let mut live = World::load(&item.bytes, item, &memory, &globals)?;
             live.next = s["next"].as_i64().ok_or_else(bad)?;
+            // Its place on this track: past every entry the steps it ran took.
+            let ran = (live.next - 1) * item.step;
+            for r in item
+                .layout
+                .entries
+                .iter()
+                .filter(|r| matches!(r.read, Read::Control | Read::Reading { .. }))
+            {
+                let n = track
+                    .get(&r.name)
+                    .map_or(0, |l| l.partition_point(|e| e.t <= ran));
+                live.cursor.insert(r.name.clone(), n);
+            }
             live.failed = s["failed"].as_bool().ok_or_else(bad)?;
             live.arrays = unhex(&s["arrays"]).ok_or_else(bad)?;
             for (k, q) in s["pending"].as_object().into_iter().flatten() {

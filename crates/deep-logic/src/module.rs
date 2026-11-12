@@ -1,7 +1,7 @@
 //! The logic canvas module (canvas primitives: Canvas module, Logic `logic@1`; #533): `logic@1`'s
 //! implementation, bit and canonical, its engine sandbox@1's pinned wasmtime. It registers the
-//! logic item's kind, a check that refuses what only the physics module fills, and one operator
-//! in simulate that steps a document's logic items at their rates, carrying each item's memory,
+//! logic item's kind, in a build without physics a check that refuses what only the physics
+//! module fills, and one operator in simulate that steps a document's logic items at their rates, carrying each item's memory,
 //! globals and arrays from step to step as plain data, so a seek restores a checkpoint and steps
 //! on. Its kit runs every part of the canvas kit on its own fixture. Its arrays also fill the
 //! core's `column.source@1` as `<logic>.<name>` (Mark set: logic columns; #535), so a mark set
@@ -9,9 +9,10 @@
 //!
 //! A step loads the carried state into a fresh instance of the item's rewritten program; the
 //! checked piece behind it is cached per thread by the document's logic content, which a step
-//! only reads. A document's control and reading entries don't reach its items here yet: a logic
+//! only reads. Its items read the played form's input track, the entries of the controls they
+//! read; a trapped item fails the step (`logic.trap`). Readings don't reach them here yet: an
 //! item that reads one is refused by the logic module's own check, as a piece without the
-//! control is.
+//! source is.
 
 use std::cell::RefCell;
 use std::collections::BTreeMap;
@@ -54,6 +55,18 @@ const PARAMS: [&str; 10] = [
 /// The shipped module.
 pub fn module() -> Module {
     implementation(Semver::parse("1.0.0").expect("a version"))
+}
+
+/// `m` in a build without the physics module: it also refuses the logic items that need physics
+/// (Logic before physics).
+pub fn without_physics(m: Module) -> Module {
+    Module {
+        register: |r| {
+            register(r);
+            r.rule("logic", needs_physics);
+        },
+        ..m
+    }
 }
 
 /// The shipped implementation at `version`: a test build's patch release of it (#533).
@@ -117,7 +130,6 @@ fn kind() -> KindEntry {
 fn register(r: &mut Registrar) {
     // The kind keeps the module's name, as the design writes it.
     r.kind(kind(), &[], "");
-    r.rule("logic", needs_physics);
     r.array(STATE, "logic.state", "document", "time", "simulate");
     r.carried("checkpoint", STATE, 4 << 20);
     r.operator("step", "simulate", &["refs"], &[STATE])
@@ -320,25 +332,39 @@ fn step(v: &mut View<'_>) -> Result<(), OpError> {
     let doc = v.document()?;
     let t = v.t()?;
     let piece = piece_of(doc)?;
+    // The played form's input track (Input track): the entries of the controls its items read.
+    let read = |c: &str| piece.items.iter().any(|i| i.reads.iter().any(|r| r == c));
+    let mut entries = Vec::new();
+    for e in doc
+        .get("track")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+    {
+        if e.get("control").and_then(Value::as_str).is_some_and(read) {
+            entries.push(Entry::parse(e).ok_or_else(|| OpError::new("bad_input", e.to_string()))?);
+        }
+    }
+    let track = track_of(&entries);
     let mut rec = Record::default();
     let mut world = match v.carried(STATE).and_then(|s| s.as_typed::<State>()) {
         None => World::new(
             piece.clone(),
-            Default::default(),
+            track,
             false,
             Planted::default(),
             &mut rec,
             None,
         ),
-        Some(s) => World::from_saved(
-            piece.clone(),
-            Default::default(),
-            &s.saved,
-            Planted::default(),
-        ),
+        Some(s) => World::from_saved(piece.clone(), track, &s.saved, Planted::default()),
     }
     .map_err(failed)?;
     world.run_through(t, &mut rec);
+    // A trapped item never draws its last arrays as if it ran on (Logic: `logic.trap`).
+    let trapped = world.failed();
+    if !trapped.is_empty() {
+        return Err(OpError::new("logic.trap", trapped.join(", ")));
+    }
     let mut arrays = BTreeMap::new();
     for (i, item) in piece.items.iter().enumerate() {
         for w in &item.writes {

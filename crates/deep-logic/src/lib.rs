@@ -1207,6 +1207,29 @@ mod tests {
         assert_eq!(got, Ok(vec![(-F, 1.0)]));
     }
 
+    #[test]
+    fn a_reading_waits_for_its_readers_alone() {
+        // `r` reads the feed at 60 Hz and `s` reads nothing at 15 Hz, so after step 3 `s` has run
+        // to 12/60 s while `r` next runs step 4: the reading is stamped at 4/60 s, and taken.
+        let bytes = wat::parse_str(include_str!("fixture.wat")).expect("the fixture assembles");
+        let sha = rewrite::hash(&bytes);
+        let item = |hz: i64, reads: Value| {
+            json!({"kind": "logic@1", "params": {"program": sha, "step_rate": hz, "reads": reads,
+                "writes": {"steps": {"type": "i32"}, "presses": {"type": "i32"}}}})
+        };
+        let mut assets = Map::new();
+        assets.insert(sha.clone(), json!(B64.encode(&bytes)));
+        let piece = json!({"seed": 533, "sources": {"feed": {"shape": "scalar", "delivery": "each"}},
+            "items": {"r": item(60, json!(["reading:feed"])), "s": item(15, json!([]))}, "assets": assets});
+        let mut logic = Logic::new(Planted::default());
+        let opened = logic.handle(&json!({"call": "open", "piece": piece}));
+        let session = opened["session"].as_str().expect("a session").to_string();
+        logic.handle(&json!({"call": "step", "session": session, "to": 3}));
+        let entry = json!({"reading": "reading:feed", "value": 7, "as_of": 1});
+        let got = logic.handle(&json!({"call": "append", "session": session, "entry": entry}));
+        assert_eq!(got["entry"]["t"], json!(4 * F / 60), "{got}");
+    }
+
     /// #1920: a golden carries the seal's runtime digest in place of the logic module's own. The
     /// set this runner holds, logic and sandbox, has no measured or backend_bytes implementation,
     /// so it is the d1 digest of no entry: the SHA-256 of `[]`.

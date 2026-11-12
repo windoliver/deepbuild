@@ -2009,12 +2009,17 @@ fn modules(set: BuildSet) -> Vec<Module> {
     // shipped implementation in its place, and `test-logic-needs-physics` plants a manifest that
     // requires physics.
     if set >= BuildSet::Full {
-        out.push(if cfg!(feature = "test-logic-patch") {
+        let logic = if cfg!(feature = "test-logic-patch") {
             deep_logic::module::implementation(deep_canvas::registry::Semver::parse("1.0.1").expect("a version"))
         } else if cfg!(feature = "test-logic-needs-physics") {
             logic_needs_physics()
         } else {
             deep_logic::module::module()
+        };
+        // A build without physics refuses the logic items that need it (#533).
+        out.push(match physics::module() {
+            Some(_) => logic,
+            None => deep_logic::module::without_physics(logic),
         });
     }
     // The logic module runs on sandbox, so a build without sandbox holds no logic either (#533).
