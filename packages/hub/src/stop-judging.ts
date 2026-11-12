@@ -2,78 +2,55 @@ import type { HubEvents, HubRuntime, HookSchedule } from './hub-capabilities.js'
 import { StopReply } from './stop-reply.js';
 import type { AnswerDeliveryPort, TranscriptsPort, SessionStatePort, McpOperationsPort, HubControlPort } from './hub-ports.js';
 import { backgrounded } from './hub-shared.js';
-
 import type { Questions } from './questions.js';
 import { STOP_HOLD_MS } from './claude-settings.js';
-
 import { execFile } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { liveFetch, readIssue, recordedFetch } from './github-source.js';
 import type { Outcome } from './landing.js';
-
 import { homedir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
-
 import { duration, type Asks, type Delivery } from '@deepbuild/asks';
 import { type BudgetInput, type Ledger } from '@deepbuild/budget';
 import { canonicalize, sha256Hex, type JsonValue } from '@deepbuild/contracts';
 import { type EvidenceStore } from '@deepbuild/evidence';
 import { type ExtensionHost, type ProjectTrust } from '@deepbuild/extension-host';
 import { type RecordStore } from '@deepbuild/record';
-
 import { endsEmpty, freshCount, gitEnv, judgeStop, leftOpen, priceDefinition, toldToRun, unitless, validityGate, type PaidKind, type SessionLog, type StallCount, type StallRule } from '@deepbuild/gate';
-
 import { type LeaseTable } from '@deepbuild/leases';
-
 import { type Runner, type WindowReport } from '@deepbuild/runner';
 import { type Grant, type Host } from '@deepbuild/supervisor';
 import { recordVerdict, verdictHash, verdictLine, type Result } from '@deepbuild/verdicts';
 import { parse as parseYaml } from 'yaml';
 import { words } from './claude-settings.js';
-
 import { holdsFor, stopTimeoutS } from './codex-settings.js';
 import { codexReadings, heartbeatsGone, loopsCovered, standingReadings, stands, uncoveredLoops } from './codex-loops.js';
-
 import { AskTasks } from './ask-tasks.js';
 import { SizeScope } from './scope.js';
 import { codexTrusted } from './codex-settings.js';
 import { Holds } from './holds.js';
-
 import { countMcp } from './mcp-servers.js';
-
 import { reachOf, type Reach, type ReachTool } from './could-do.js';
-
 import { coveredBy } from './hookmap.js';
-
 import { mergedWithMain, releaseSpec, switchesOff } from './release.js';
 import { headOf } from './session-facts.js';
-
 import { GateRunner, type ClaimCheck, type DefinitionState, type RunKey, type StatePin } from './gate-runner.js';
-
 import { type Root } from './paths.js';
-
 import { Agents } from './agents.js';
 import { Box } from './box.js';
-
 import { closesIssue, partOfIssue, prUrlIn } from './forge.js';
-
 import { OpenItems } from './open-items.js';
 import { claimState, newestClaim, type ClaimState } from './verdict-chat.js';
-
 import { RUN_AS_YOU, Runs } from './runs.js';
 import type { CheckKinds, ReviewOf } from './checks-port.js';
 import type { ReviewRounds } from './review-rounds.js';
 import type { CheckSpec } from '@deepbuild/conformance';
-
 import { Stacks, type StackWant } from './stacks.js';
-
 import { HeavyQueue } from './heavy.js';
 import { HubCanvas } from './hub-canvas.js';
 import { docCheckIn, docCommand, docSpec } from './doc-checks.js';
-
 import { refuse, Refused, refusal, ulid, type CoreOptions, type HookMeta } from './wire.js';
 import type { Live, Counter, Routes } from './session-types.js';
-
 import { DAY, sql, letters, ghToken, COMPLETION_PROMPTS, unseenTools, type Obj, isObj, misjudged, watching, waitingOn, READS, OWN_TURN } from "./hub-shared.js";
 
 /** How long a landing's judgement waits for its verdict (#1331). */
