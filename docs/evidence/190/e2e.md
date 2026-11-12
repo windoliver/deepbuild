@@ -22,9 +22,10 @@ rewritten history; the object is still in the repository). No raw output of this
    ./target/debug/deep-logic --planted linker_links_in_listing_order < tactics.jsonl
    ```
 
-3. The replies below are cut down for reading: `what` texts, layouts, base64 bytes, `program`, `assets_at`, `issues`,
-   `keys`, `checkpoints` and (except in reply 10) `deep_hashes` left out, step 0's arrays shown as a top-level
-   `arrays` in bakes, fixture IDs shortened, `route` to its first 24 values, times rounded to ms. The merged bytes were read back from each receipt's `linked`
+3. The replies below are excerpts: each keeps only the fields it shows, with fixture IDs shortened, `route` cut to its
+   first 24 values and times rounded to ms (reply 10 keeps its raw `ns`). Bakes show step 0's arrays as a top-level
+   `arrays`, and leave out the step items, so reply 7 doesn't show that swarm's step 0 failed (its trap does). The
+   rerun's whole replies are in `e2e-raw/replies.jsonl`. The merged bytes were read back from each receipt's `linked`
    and compiled with node's own WebAssembly to list their imports and exports.
 
 ## Replies
@@ -159,7 +160,7 @@ library's fixtures again. The issue says the logic module "runs them once per li
 in the issue or the design names a store that would keep results across processes, and ac10 checks a second check in
 the same process.
 
-Since 11-09, main added `pipelined` to check and bake replies, and `ranges` and `ring` to bake replies. `assets_at` was
+Since 11-09, main added `pipelined` to check and bake replies, and `ranges`, `ring` and `occurrences` to bake replies. `assets_at` was
 already there.
 
 **The fixes**, in `crates/deep-logic/src/fixtures.rs`, with tests in `crates/deep-logic/tests/fixture_once.rs`. Each
@@ -351,3 +352,10 @@ raw files, `gen.test.ts`, the code and the issue. It also ran its own BFS over t
   Chromium 152 pane ran is marked as the session's report; the reply files' re-serialization is stated; and
   `acceptance-linux.txt`'s header says the amd64 image is missing, not that the box can't run it. Criterion 1 now also
   cites ac01's one-byte test.
+- **Round 18** found no wrong values (its rerun gave byte-identical 00–06) and one low gap, fixed here: the 11-09
+  replies' list of cuts named `program`, which reply 3 keeps, and left out the bake fields cut, which hid swarm's
+  failed step 0 in reply 7.
+- **Round 19** found no wrong values (its rerun gave byte-identical 00–06) and two low gaps, fixed here: round 18's
+  field-by-field list of what the 11-09 excerpts leave out was still inexact (it named `occurrences`, which the 11-09
+  code didn't have, and missed `pages`), so the note now says each excerpt keeps only the fields it shows; and main's
+  `occurrences` is added to what main changed since 11-09.
