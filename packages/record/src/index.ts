@@ -11,7 +11,7 @@ import { canonicalize, listSchemas, registry, sha256Hex } from '@deepbuild/contr
 import type { JsonValue, Registry, SchemaEntry } from '@deepbuild/contracts';
 import { scrubText } from '@deepbuild/evidence';
 import type { EvidenceStore, Writer as EvidenceWriter } from '@deepbuild/evidence';
-import { findMessages, foldText, refreshIndex, touched, type FoundMessage } from './archive.js';
+import { findMessages, foldText, holdsWords, indexTerms, queryWords, refreshIndex, spaceless, touched, type FoundMessage } from './archive.js';
 import { CHECKED, copyMessages, loadLearned, parseClaimLine, readEvidence, replayCheck, resolveHandle, ROLLERS, placingTranscript, YOURS, sessionTranscript, startSlice, toRollBack, dependsOn, type ClaimLine, type Entry as Resolved, type HeldAtLoad, type LearnedChange, type LearnedLoad, type Message, type Placing, type SliceEntry, type Transcripts } from './learned.js';
 import { compareReplay, planHash } from './replay.js';
 import { movable, type Refusal } from './lifecycle.js';
@@ -20,7 +20,7 @@ import type { Statement } from 'better-sqlite3';
 import { fileStorage, isBackend, openReadOnly, testStorage, type Backend, type Db, type Durability, type Storage, type SyncCall, type TestStorage } from './storage.js';
 import { metaOf, RecordError } from './meta.js';
 
-export { compareReplay, foldText, parseClaimLine, planHash, PROJECTIONS, testStorage, ulid };
+export { compareReplay, foldText, holdsWords, indexTerms, parseClaimLine, planHash, PROJECTIONS, queryWords, spaceless, testStorage, ulid };
 export type { FoundMessage };
 export { openTrust, type ProjectTrust } from './trust.js';
 export { RecordError, writerGeneration, type RecordErrorCode } from './meta.js';
@@ -936,6 +936,10 @@ export interface RecordReader {
   /** As RecordStore's: through the index the hub keeps, and each session it doesn't hold from its transcript (#1515). */
   findMessages(terms: readonly (readonly string[])[], sessions?: readonly string[]): Promise<FoundMessage[]>;
   touched(file: string, cwd?: string): Promise<{ session: string; path: string }[]>;
+  /** SQL over the record, read only: the connection can't write (#2024's lookup). */
+  raw(sql: string, params?: readonly (string | number | null)[]): Promise<unknown[]>;
+  /** A consistent copy of the whole database at `path`, taken through SQLite's backup while the hub writes (#2024). */
+  copyTo(path: string): Promise<void>;
   close(): void;
 }
 export function openRecordReader(options: { path: string; evidence?: EvidenceStore }): RecordReader {
@@ -952,6 +956,8 @@ export function openRecordReader(options: { path: string; evidence?: EvidenceSto
     ],
     findMessages: (terms, sessions) => findMessages(db, terms, sessions, (session) => sessionTranscript(db, options.evidence, transcripts, session)),
     touched: async (file, cwd) => touched(db, file, cwd),
+    raw: async (sql, params = []) => db.prepare(sql).all(...params),
+    copyTo: async (path) => { await db.backup(path); },
     close: () => db.close(),
   };
 }

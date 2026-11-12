@@ -23,7 +23,7 @@ import { availableParallelism, loadavg, tmpdir } from 'node:os';
 import { dirname, join, posix, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
-import { alone, byHand, cargoResults, changedPaths, checks, exclusive, listed, ownLane, readSkips, reportResults, slow, timed, worst } from './lanes.mjs';
+import { ALONE_TIMEOUT_MS, alone, byHand, cargoResults, changedPaths, checks, exclusive, listed, ownLane, readSkips, reportResults, slow, timed, worst } from './lanes.mjs';
 import { isTestFile, listFiles, named, underTestPaths } from './proof-change.mjs';
 import { childEnv } from './proof-runs.mjs';
 import { claimShards, roomy } from './shards.mjs';
@@ -362,7 +362,7 @@ async function runGroups(groups, places, files, vitest, node, label, env = {}, m
     while (queue.length && more()) {
       const group = queue.shift(), name = `${label}-${at++}`;
       const by = { vitest: group.filter((file) => files.vitest.includes(file)), node: group.filter((file) => files.node.includes(file)) };
-      if (by.vitest.length) jobs.push({ ...await vitest(by.vitest, ['--no-file-parallelism'], `vitest-${name}`, cwd, env), files: by.vitest, cwd });
+      if (by.vitest.length) jobs.push({ ...await vitest(by.vitest, ['--no-file-parallelism', `--testTimeout=${ALONE_TIMEOUT_MS}`], `vitest-${name}`, cwd, env), files: by.vitest, cwd });
       if (by.node.length) jobs.push({ ...await node(by.node, ['--test-concurrency=1'], `node-${name}`, cwd, env), files: by.node, cwd });
     }
   };
@@ -442,7 +442,7 @@ async function main(args) {
   // Without shards the block runs in the worktree after the rest, one group at a time; the exclusive groups always do.
   jobs.push(...(await runGroups([...left, ...groups.exclusive], [root], blocks.alone, vitest, node, 'alone-worktree', held)).jobs);
   release(grant);
-  if (runTimed && timedFiles.vitest.length) jobs.push(await vitest(timedFiles.vitest, ['--no-file-parallelism'], 'vitest-timed'));
+  if (runTimed && timedFiles.vitest.length) jobs.push(await vitest(timedFiles.vitest, ['--no-file-parallelism', `--testTimeout=${ALONE_TIMEOUT_MS}`], 'vitest-timed'));
   if (runTimed && timedFiles.node.length) jobs.push(await node(timedFiles.node, ['--test-concurrency=1'], 'node-timed'));
 
   const failures = [], passed = [], findings = [], skips = [];

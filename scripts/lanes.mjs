@@ -469,6 +469,14 @@ alone.push('tests/acceptance/1700/');
 timed.push('tests/acceptance/1700/budgets.test.ts');
 // #1862's suite starts a hub of its own with a fake reviewer, as #1537's does.
 alone.push('tests/acceptance/1862/');
+// #2024's files build deep-drive twice and start real hubs and replicas; budget.test.ts times ⌘K's first hit over 1,000
+// archived sessions against the reference Mac.
+alone.push('tests/acceptance/2024/');
+timed.push('tests/acceptance/2024/budget.test.ts');
+
+// A file run alone starts hubs, replicas and builds, so a test of it takes the time each acceptance suite's README
+// runs it with (#2024), not vitest's 5 s, which a spawn under load overruns.
+export const ALONE_TIMEOUT_MS = 600_000;
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
@@ -484,7 +492,7 @@ export const checks = [
     // supervisor's files (#236) too: they read the system's one sandbox log stream. And deep-hook's
     // files (#315), and #666's checkpoint through it: they build it and time it to 50 ms.
     [process.execPath, 'node_modules/vitest/vitest.mjs', 'run', ...[...alone, ...ownLane, ...byHand].flatMap((path) => ['--exclude', path.endsWith('.ts') ? path : `${path}**`])],
-    [process.execPath, 'node_modules/vitest/vitest.mjs', 'run', '--no-file-parallelism', ...alone],
+    [process.execPath, 'node_modules/vitest/vitest.mjs', 'run', '--no-file-parallelism', `--testTimeout=${ALONE_TIMEOUT_MS}`, ...alone],
     ['cargo', 'test', '--workspace', '--locked'],
     // Node's acceptance suites under tests/acceptance/ run by hand, as their READMEs say: #48's live
     // tests spend plan usage, and #246's check that change against its own base.

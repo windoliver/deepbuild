@@ -7,6 +7,7 @@ import { appendFileSync, constants, existsSync, mkdirSync, readdirSync, readFile
 import { access, chmod, copyFile, mkdir, open, readFile, realpath, stat, type FileHandle } from 'node:fs/promises';
 import { writtenOf as wikiWritten } from '@deepbuild/wiki';
 import { UsageTail } from '@deepbuild/readings';
+import { lookup } from '@deepbuild/reading';
 import { Numbers } from './numbers.js';
 import { availableParallelism, homedir, loadavg, networkInterfaces } from 'node:os';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
@@ -6087,6 +6088,10 @@ export class Core {
         if (context.role !== 'app') throw refuse('role', '/method', 'Only the app says a row was seen.', method);
         if (typeof params.id !== 'string') throw refuse('type', '/params/id', 'Name the row by its id.', method);
         return this.statesSettled().then(() => this.queue(() => this.seeRow(String(params.id))));
+      // ⌘K's lookup (#2024): what a pasted reference names and the words found in the archive, for you; never an agent's.
+      case 'find.read':
+        if (typeof params.query !== 'string') throw refuse('type', '/params/query', 'Give the words or the reference to look up.', method);
+        return lookup({ raw: (sql, p) => this.record.raw(sql, p), findMessages: (terms, sessions) => this.record.findMessages(terms, sessions) }, params.query);
       case 'guard.add': return this.addGuard(params, context);
       case 'evidence.paste': return this.paste(params);
       case 'run.start': return this.runs.start(params);

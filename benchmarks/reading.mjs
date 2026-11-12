@@ -5,6 +5,9 @@
 // `find` (issue #1515): the same archive of 300 sessions, indexed as the hub indexes it, then `deep find` queries for
 // part of a word, a Greek and a Chinese word, failing unless each finds its seeded message. The issue's 100 ms per
 // search stays in tests/acceptance/1515/budgets.test.ts.
+// `lookup` (issue #2024): an archive of 1,000 sessions, indexed so, then ⌘K's lookup of a whole word, a Greek and a
+// Chinese word, failing unless each finds its seeded message. The issue's 200 ms to ⌘K's first hit stays in
+// tests/acceptance/2024/budget.test.ts.
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -12,8 +15,8 @@ import { shipped } from '../packages/adapters/dist/index.js';
 import { openArchive } from '../packages/archive/dist/index.js';
 import { openAsks } from '../packages/asks/dist/index.js';
 import { openEvidenceStore } from '../packages/evidence/dist/index.js';
-import { CAP, openSlicer } from '../packages/reading/dist/index.js';
-import { openRecord } from '../packages/record/dist/index.js';
+import { CAP, lookup, openSlicer } from '../packages/reading/dist/index.js';
+import { openRecord, openRecordReader } from '../packages/record/dist/index.js';
 
 const T0 = 1_760_013_451_000;
 
@@ -36,17 +39,18 @@ function session(seed, count, size) {
 const task = process.argv[2];
 const root = mkdtempSync(join(tmpdir(), 'deep-reading-bench-'));
 try {
-  if (task !== 'slice' && task !== 'find') throw Error(`Unknown task ${task}; one of: slice, find`);
+  if (!['slice', 'find', 'lookup'].includes(task)) throw Error(`Unknown task ${task}; one of: slice, find, lookup`);
+  const searches = task !== 'slice';
   const now = () => T0;
   const env = { HOME: root, CLAUDE_CONFIG_DIR: join(root, 'claude') };
   const folder = join(env.CLAUDE_CONFIG_DIR, 'projects', '-tmp-shop');
   mkdirSync(folder, { recursive: true });
-  const sessions = task === 'find'
-    ? Array.from({ length: 300 }, (_, i) => session(0x1515 + i, 40, 400))
+  const sessions = searches
+    ? Array.from({ length: task === 'find' ? 300 : 1000 }, (_, i) => session(0x1515 + i, 40, 400))
     : [...Array.from({ length: 50 }, (_, i) => session(0x6300 + i, 60, 1000)), session(0x63ff, 1000, 300)];
   // The words `find` looks for, each in one message of one session.
   const seeded = { thBackoffJit: 'retryWithBackoffJitter', 'ανασύνδ': 'επανασύνδεση', '重试': '连接重试失败' };
-  if (task === 'find') Object.values(seeded).forEach((word, i) => { const s = sessions[100 * i + 7]; s.text = s.text.replace('"content":"', `"content":"${word} `); });
+  if (searches) Object.values(seeded).forEach((word, i) => { const s = sessions[100 * i + 7]; s.text = s.text.replace('"content":"', `"content":"${word} `); });
   for (const s of sessions) writeFileSync(join(folder, `${s.id}.jsonl`), s.text);
   const hub = join(root, 'hub');
   const store = await openEvidenceStore({ root: join(hub, 'evidence'), now });
@@ -54,11 +58,23 @@ try {
   const asks = await openAsks({ record, now, deliver: () => undefined });
   const archive = await openArchive({ record, evidence: store, asks, adapters: shipped(), env, connection: { writer: 'ext:deepbuild/archive', actor: 'you', scope: 'you' }, now });
   await archive.pass();
-  if (task === 'find') await record.indexTranscripts();
+  if (searches) await record.indexTranscripts();
   await record.sync();
   const slicer = await openSlicer(hub);
   try {
-    if (task === 'find') {
+    if (task === 'lookup') {
+      const reader = openRecordReader({ path: join(hub, 'ledger.db'), evidence: store });
+      try {
+        for (let n = 0; n < 10; n++) {
+          for (const [i, word] of Object.values(seeded).entries()) {
+            const want = `${sessions[100 * i + 7].handle}#m1`;
+            if (!(await lookup(reader, word)).hits.some((h) => h.handle === want)) throw Error(`⌘K's lookup of ${word} didn't find ${want}`);
+          }
+        }
+      } finally {
+        reader.close();
+      }
+    } else if (task === 'find') {
       for (let n = 0; n < 10; n++) {
         for (const query of Object.keys(seeded)) if (!(await slicer.find(query)).hits.length) throw Error(`deep find ${query} found nothing`);
       }

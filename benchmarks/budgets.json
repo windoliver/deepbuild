@@ -721,6 +721,17 @@
       "initialReason": "Issue #1515 first measurement: at the merge base deep find reads every archived transcript on every call, with no index. One process archives three hundred 40-message sessions, indexes them as the hub does after an archive pass, then runs deep find ten times each for part of a word, a Greek and a Chinese word, failing unless each finds its seeded message; p50 includes Node's start, the archive pass and the indexing. The issue's 100 ms per search stays in tests/acceptance/1515/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
     },
     {
+      "id": "commandk-lookup",
+      "command": [
+        "node",
+        "benchmarks/reading.mjs",
+        "lookup"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #2024 first measurement: at the merge base nothing looks up what ⌘K is given, so the task fails there. One process archives a thousand 40-message sessions, indexes them as the hub does after an archive pass, then runs ⌘K's lookup ten times each for a whole word, a Greek and a Chinese word, failing unless each finds its seeded message; p50 includes Node's start, the archive pass and the indexing. The issue's 200 ms to ⌘K's first hit stays in tests/acceptance/2024/budget.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
       "id": "wiki-build",
       "command": [
         "node",

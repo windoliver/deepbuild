@@ -75,8 +75,8 @@ pub fn opener(runtime: Rc<ShellRuntime>) -> Open {
             run_command(name, action, cx);
             None
         }
-        // ⌘K runs an action of the table and opens an address itself.
-        Entry::Open { .. } | Entry::Action { .. } => None,
+        // ⌘K runs an action of the table and opens an address, or what a lookup found, itself.
+        Entry::Open { .. } | Entry::Action { .. } | Entry::Hit(_) => None,
         Entry::Preference { name, .. } => {
             crate::words::open_preference(name, window, cx);
             None

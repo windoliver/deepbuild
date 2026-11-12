@@ -10,7 +10,8 @@ import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { validate } from '@deepbuild/contracts';
-import { ulid, type Connection, type RecordStore } from '@deepbuild/record';
+import { openRecordReader, ulid, type Connection, type RecordReader, type RecordStore } from '@deepbuild/record';
+import { lookup, nothingNames } from './lookup.js';
 import type { Agent, JobRecord, Runner } from '@deepbuild/runner';
 import { knownOf, withoutQueries, type Candidate, type Known, type Wiki } from '@deepbuild/wiki';
 import { claimId } from './claims.js';
@@ -19,6 +20,22 @@ import { CAP, NotFound, openSlicer, type Found, type Slice, type Slicer } from '
 
 export { CAP, NotFound, claimId, openSlicer };
 export type { Found, Slice, Slicer };
+export { KINDS, lookup, nothingNames, type Lookup, type LookupHit, type LookupRecord } from './lookup.js';
+
+/**
+ * `deep open <ref>` (#2024): the address of the newest thing a pasted reference names, read from the hub's root read
+ * only, with the hub running or not; else the line saying nothing names it, with the kinds a reference may be.
+ */
+export async function referenceAddress(ref: string, root = join(homedir(), '.deepbuild')): Promise<{ address: string } | { none: string }> {
+  let record: RecordReader;
+  try { record = openRecordReader({ path: join(root, 'ledger.db') }); } catch { return { none: nothingNames(ref) }; }
+  try {
+    const hit = (await lookup(record, ref, { references: true })).hits.find((h) => h.address);
+    return hit ? { address: hit.address! } : { none: nothingNames(ref) };
+  } finally {
+    record.close();
+  }
+}
 
 export type ReadingKind = 'install' | 'replay' | 'premise' | 'summary';
 export interface ReadingOptions {

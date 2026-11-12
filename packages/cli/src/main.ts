@@ -201,7 +201,7 @@ const usage = [
   'deep export --document <file> --still <frame | marker> --out <file.png>   one still of a document, drawn headless with no hub',
   'deep kinds --dump <folder> | --diff <a> <b>   the canvas core\'s whole listing as canonical JSON named by its module-set digest, or two such dumps diffed',
   'deep inbox [--json]   your open asks, each question first and its handle last',
-  'deep open <address>   ask/<id>, session/<id>, project/<id> or page/<name> opened in the app, which opens and changes nothing',
+  'deep open <address>   ask/<id>, session/<id>, project/<id> or page/<name> opened in the app, which opens and changes nothing; or a PR or issue URL, #n, a commit SHA, a branch, a session ID, an agent app link or an ask handle',
   'deep inbox answer <ask> <option>   answer one, once the OS confirms you',
   'deep race <issue>   its sessions race: they settle on the first PASS and raise no "keep which?" ask',
   'deep inbox undo <ask>   open a defaulted ask again, once the OS confirms you',
@@ -373,13 +373,21 @@ if (help) {
   const { mcpExecCommand } = await import('@deepbuild/hub/mcp-exec');
   process.exitCode = await mcpExecCommand(args.slice(1));
 } else if (args[0] === 'open' && args.length === 2) {
-  // Issue #1460: the address goes to the running app over its own socket, so the hub records nothing.
+  // Issue #1460: the address goes to the running app over its own socket, so the hub records nothing. Anything else is
+  // a pasted reference (#2024), read from the record as `deep find` reads it, whose newest match's address goes instead.
+  let address: string | undefined = args[1]!;
+  if (!/^(deepbuild:\/\/)?(ask|session|project|page)\//.test(address)) {
+    const { referenceAddress } = await import('@deepbuild/reading');
+    const named = await referenceAddress(address);
+    if ('none' in named) console.error(`deep open: ${named.none}`);
+    address = 'none' in named ? undefined : named.address;
+  }
   const { connect } = await import('node:net');
-  process.exitCode = await new Promise<number>((done) => {
+  process.exitCode = address === undefined ? 1 : await new Promise<number>((done) => {
     const app = connect(join(homedir(), '.deepbuild', 'app.sock'));
     let reply = '';
     app.setTimeout(5000, () => app.destroy(Error('timed out')));
-    app.on('connect', () => app.write(`${args[1]}\n`));
+    app.on('connect', () => app.write(`${address}\n`));
     app.on('data', (data) => { reply += data; });
     app.on('error', () => { console.error('deep open: the app is not running'); done(1); });
     app.on('close', (failed) => {
