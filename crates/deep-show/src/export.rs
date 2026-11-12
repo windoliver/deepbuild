@@ -152,7 +152,8 @@ impl Hub<'_> {
         } else {
             let sides = crate::film::program_of(sched, session).and_then(|p| crate::film::sides(&p, doc, t, false));
             let (rgba, _, size) = match sides {
-                Some(sides) => self.film_rgba(&drawing, size, &sides, doc, opaque)?,
+                Some(sides) => self.film_rgba(&drawing, size, &sides, doc, (opaque, Some(t)))?,
+                None if opaque => self.printed_frame(doc, t, &drawing, size)?,
                 None => self.canonical_rgba(&drawing, size, opaque)?,
             };
             (rgba, size)
@@ -160,6 +161,24 @@ impl Hub<'_> {
         #[cfg(feature = "test-export-guards")]
         test_guards::paint(doc, test_guards::frame_of(doc, t), &mut rgba, size, |r| self.look.light.get(r).copied());
         Ok((rgba, size))
+    }
+
+    /// #157: an opaque 2D frame as the canvas shows it: when the document's look prints (its
+    /// grain), its items through the print finish on the GPU, then the caption and the status
+    /// marks over them; otherwise the canonical raster.
+    fn printed_frame(&mut self, doc: &Value, t: i64, drawing: &crate::frames::Painted, size: Option<[u16; 2]>) -> Result<(Vec<u8>, crate::snapshot::Drawn, [u16; 2]), Unfit> {
+        let Some(def) = self.print_look(doc, None) else {
+            return self.canonical_rgba(drawing, size, true);
+        };
+        let drawn = self.renderer.prepare_drawing(drawing, &self.scenario.evidence)?;
+        let px = size.unwrap_or_else(|| crate::snapshot::px(drawn.frame.size));
+        let Some(mut rgba) = self.print_part(&def, doc, &drawn.part(drawn.view, true, false), px, t)? else {
+            return self.canonical_rgba(drawing, size, true);
+        };
+        self.caption_over(&mut rgba, px);
+        let status = self.renderer.raster(&drawn.part(drawn.view, false, true), px, None);
+        crate::snapshot::over(&mut rgba, &status);
+        Ok((rgba, drawn, px))
     }
 
     /// One shard's sound: the mix's samples over each of its frames' spans (frame k's span starts
