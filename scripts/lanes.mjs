@@ -485,6 +485,11 @@ alone.push('tests/acceptance/1958/');
 timed.push('tests/acceptance/1958/budgets.test.ts');
 // #306 AC3's redraft after #1958 builds deep-show, as #306's suite does.
 alone.push('tests/acceptance/306-redraft-1958/');
+// #157's files each build deep-show (finite.test.ts with test-export-guards), export films through the GPU, the encode tool
+// and a fresh decode worker; lease.test.ts runs two exports at once, disk.test.ts attaches disk images with hdiutil, and
+// budgets.test.ts reads the machine's load.
+alone.push('tests/acceptance/157/', 'tests/acceptance/157-oracle/');
+timed.push('tests/acceptance/157/budgets.test.ts');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },

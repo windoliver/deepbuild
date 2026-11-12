@@ -1390,6 +1390,20 @@
       "margin": 0.5,
       "limits": {},
       "initialReason": "Issue #154 first measurement: the merge base has no score renderer. Six 60 s stems of one score (two sampled, two plucked, two synth) render at once, each in its own score-render@1.0.0 process given its params on stdin as the hub gives them; p50 is the wall time from the first start to the last exit, Node's starts included. The issue's 60 s limit on the reference Mac and the cached stems that start no process stay in tests/acceptance/154/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "export-fidelity",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "export-fidelity"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #157 first measurement (#157.d2250c69): the merge base reads no delivery back. One `deep-show run` exports a 10 s 1920 × 1080 film at 60 fps (600 frames, a bar moving a pixel a frame) as H.264 with AAC, which now checks the delivery from its own bytes in a fresh decode worker and encodes the colour probe; it prints the receipt's fidelity.decode_seconds (at most 1.25 s, 8x real time) and color_probe.seconds (under 1 s), which tests/acceptance/157/budgets.test.ts judges on a reference Mac. p50 and peak memory get a 50% margin against the merge base once main has this task.",
+      "criteria": [
+        "#157.d2250c69"
+      ]
     }
   ]
 }

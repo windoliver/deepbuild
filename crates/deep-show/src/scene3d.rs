@@ -29,12 +29,20 @@ pub struct Gpu3 {
     device: Arc<Device>,
     renderer: Renderer,
     labels: Labels,
+    /// The print pass, built on first use and kept: an export prints every frame (#157).
+    printer: Option<deep_scene3d_render::print::Printer>,
 }
 
 impl Gpu3 {
     /// The device it draws on, for the export's frame hashes (#501).
     pub fn device(&self) -> &Arc<Device> {
         &self.device
+    }
+
+    /// #157's planted lost device: the device is lost now, as the platform would lose it.
+    #[cfg(feature = "test-export-guards")]
+    pub fn force_loss(&self) {
+        self.device.force_loss();
     }
 
     /// The app's GPU, or `None` where there is none to draw 3D on.
@@ -47,6 +55,7 @@ impl Gpu3 {
             device,
             renderer,
             labels: Labels::new(),
+            printer: None,
         })
     }
 
@@ -209,7 +218,7 @@ impl Gpu3 {
         });
         let view = out.create_view(&Default::default());
         let mut encoder = d.create_command_encoder(&Default::default());
-        Printer::new(d).record(
+        self.printer.get_or_insert_with(|| Printer::new(d)).record(
             d,
             &mut encoder,
             params,
