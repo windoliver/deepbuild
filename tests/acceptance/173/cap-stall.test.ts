@@ -12,7 +12,8 @@
 // the first frame (the open) rendered that whole window; every later frame rendered exactly the grid steps after the one
 // the frame before it showed, up to the one it shows, in order: one when it shows a new grid frame, none when it shows
 // the same one, and after the stall the one it missed and the one it shows, never the window. Over each run the
-// renders after the open equal the new frames shown.
+// renders after the open equal the new frames shown plus the grid frames the stall made it miss (one a run here), each
+// rendered once: one render per shown frame, and only the missed grid frames besides.
 // Wrong programs: the base (no cap, no stall, no history report); a view that renders every display refresh, renders
 // the window after a stall, or renders a grid frame twice; `--planted grid_at_refresh` (the window's grid at the
 // display's refresh, 1/60 s on the 60 Hz display, instead of the cap) renders more than one frame per shown frame and
@@ -41,7 +42,7 @@ function renderProblems(d: Display, frames: ViewFrame[]): string[] {
   const drawn = clock.filter((n) => !d.missed.includes(n));
   const got = frames.map((f) => f.frame);
   if (JSON.stringify(got) !== JSON.stringify(drawn)) problems.push(`${at}: frames drawn ${got.slice(0, 12).join(', ')}…, not the display's ${d.from}–${d.from + d.frames - 1} less the ${d.missed.length} the stall missed (${d.missed.join(', ')})`);
-  let previous: number | null = null; let renders = 0; let shown = 0;
+  let previous: number | null = null; let renders = 0; let shown = 0; let missed = 0;
   const seen = new Set<number>();
   for (const f of frames) {
     const h = f.history;
@@ -53,13 +54,15 @@ function renderProblems(d: Display, frames: ViewFrame[]): string[] {
     const want = previous === null ? windowEndingAt(step, CAP) : Array.from({ length: Math.max(0, step - previous) }, (_, i) => gridT(previous! + 1 + i, CAP));
     if (JSON.stringify(h.rendered) !== JSON.stringify(want)) problems.push(`${at}: frame ${f.frame} rendered ${h.rendered.length} grid frames (${h.rendered.map(secs).join(', ') || 'none'}), not the ${want.length} it lacks (${want.map(secs).join(', ') || 'none'})`);
     for (const t of h.rendered) { if (seen.has(t)) problems.push(`${at}: frame ${f.frame} rendered ${secs(t)} again`); seen.add(t); }
-    if (previous !== null) { renders += h.rendered.length; if (step !== previous) shown++; }
+    if (previous !== null) { renders += h.rendered.length; if (step !== previous) shown++; missed += Math.max(0, step - previous - 1); }
     previous = step;
   }
   const after = frames.find((f) => f.frame === d.afterStall)?.history?.rendered.length;
   if (after !== 2) problems.push(`${at}: frame ${d.afterStall}, after the stall, rendered ${after ?? 'no'} grid frames, not the 2 it lacked (the one it missed and the one it shows)`);
-  problems.push(...(renders === shown ? [] : [`${at}: rendered ${renders} grid frames for ${shown} new frames shown after the open`]));
-  console.log(`${ID}: ${at}: ${renders} grid frames rendered for ${shown} new frames shown after the open`);
+  if (missed !== 1) problems.push(`${at}: the run skipped ${missed} grid frames between frames shown, not the 1 the stall missed`);
+  const count = `${at}: rendered ${renders} grid frames for ${shown} new frames shown and ${missed} grid frames the stall missed, after the open`;
+  if (renders !== shown + missed) problems.push(count);
+  console.log(`${ID}: ${count}`);
   return problems;
 }
 
@@ -80,9 +83,9 @@ describe(`${ID} one render per shown frame at a 30 fps cap, and only the missed 
 
   it(`${ID} a planted resolve on a 1/60 s grid (grid_at_refresh) renders more than one grid frame per shown frame and fails, counting renders`, () => {
     const problems = check([DISPLAYS[0]!], 'grid_at_refresh');
-    const count = problems.find((p) => /^60 Hz: rendered \d+ grid frames for \d+ new frames shown/.test(p));
+    const count = problems.find((p) => /^60 Hz: rendered \d+ grid frames for \d+ new frames shown and \d+ grid frames the stall missed/.test(p));
     expect(count, `--planted grid_at_refresh fails counting renders; the problems were:\n  ${problems.slice(0, 40).join('\n  ')}`).toBeDefined();
-    const [, renders, shown] = /rendered (\d+) grid frames for (\d+)/.exec(count!)!;
-    expect(Number(renders), `--planted grid_at_refresh renders more grid frames than it shows (${count})`).toBeGreaterThan(Number(shown));
+    const [, renders, shown, missed] = /rendered (\d+) grid frames for (\d+) new frames shown and (\d+)/.exec(count!)!;
+    expect(Number(renders), `--planted grid_at_refresh renders more grid frames than it shows and the stall missed (${count})`).toBeGreaterThan(Number(shown) + Number(missed));
   }, 3_600_000);
 });

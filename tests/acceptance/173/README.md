@@ -80,7 +80,7 @@ states its fixture, numbers and wrong programs in full.
 | AC7 `#173.5e002fc0` | `envelope.test.ts` (1) | On a reference Mac's GPU, the envelope of the orbiting scene full screen with history on: frame time and GPU memory PASS against the showpiece class, the window's bytes counted inside the peak, its seek rebuild rendering the whole window |
 | AC8 `#173.67e2e72d` | `determinism.test.ts` (2) | The castle's check at 1, 2.5 and 4 s: PASS, play = seek, one hash per time across history off, on, and on after an orbit by hand. `determinism_hashes_live_view`: FAIL, play ≠ seek at 2.5 s |
 | AC9 `#173.f5914d9c` | `budgets.test.ts` (1) | `canvas-frame-history` valid against the merge base; a still scene with history settles and draws nothing (the moving control draws); on a reference Mac the 1080p window under 100 MB, the 1080p resolve under 1 ms and the castle's 8-frame jump at 0.67 under 50 ms by the five-run rule; the perf task exits 0 |
-| AC10 `#173.11b2d1f1` | `cap-stall.test.ts` (2) | The castle at a 30 fps cap on 60 Hz and 144 Hz: every frame renders exactly the grid steps since the last one shown (one per new frame shown, none otherwise); after a 50 ms stall the missed step and the shown one, once. `grid_at_refresh`: more renders than frames shown, counted |
+| AC10 `#173.11b2d1f1` | `cap-stall.test.ts` (2) | The castle at a 30 fps cap on 60 Hz and 144 Hz: every frame renders exactly the grid steps since the last one shown (one per new frame shown, none otherwise); after a 50 ms stall the missed step and the shown one, once; renders after the open = new frames shown + the grid frame the stall missed. `grid_at_refresh`: more renders than that, counted |
 | AC11 `#173.77c9b0e7` | `outline.test.ts` (2) | The castle's towers stroked 1 px, upscale at 0.67, frames 0–47: the outline with history within 2 px of the outline without and 0.67–1.5× its pixels. `outlines_in_history`: pixels left behind, naming a tower |
 | AC12 `#173.7c84d072` | `taste.test.ts` (1) | Writes the three screenshots and two recordings (The taste call) and reads `TASTE.json`: absent or on other SHA-256s INCONCLUSIVE, `looks_wrong` fails, `looks_right` on exactly these passes |
 
@@ -154,7 +154,7 @@ Each reachable only through `deep-gpu run --planted <name>`, added to `Planted` 
 |---|---|---|
 | `keeps_frame_past_window` | The resolve also reads the grid frame just before the window whenever it still holds it, so a played frame mixes in one frame more than a sought one | AC1, `seek-play.test.ts`: played and sought hashes differ at 2.5 s |
 | `determinism_hashes_live_view` | The determinism check hashes the frames the call's live view resolves (play: the frame it showed at t; seek: the view jumped to t as it now stands, your hand's camera included) instead of canonical renders | AC8, `determinism.test.ts`: FAIL, play ≠ seek at 2.5 s |
-| `grid_at_refresh` | The window's grid steps at the display's refresh (1/60 s on a 60 Hz display) instead of the frame cap, while frames still show at the cap | AC10, `cap-stall.test.ts`: more grid frames rendered than frames shown, counted |
+| `grid_at_refresh` | The window's grid steps at the display's refresh (1/60 s on a 60 Hz display) instead of the frame cap, while frames still show at the cap | AC10, `cap-stall.test.ts`: more grid frames rendered than frames shown and grid frames the stall missed, counted |
 | `outlines_in_history` | Outlines draw into each window frame at the render scale before the resolve, so the window keeps them and the resolve reprojects and upscales them | AC11, `outline.test.ts`: outline pixels left behind, naming a tower |
 
 The issue's "planted 50 ms stall" (AC10) is a condition the test plants with `stalls`, not a wrong program. "The same
@@ -246,7 +246,9 @@ the stroked castle (`strokedCastle`), and the measures: the grid in flicks (`fra
   200 MB); "a still scene draws nothing" is #421's: no frame drawn and no GPU work submitted once settled, within 40
   frames. "Compared with the merge base" is the perf lane's task.
 - **"Renders one frame per shown frame"** is each display frame rendering exactly the grid steps after the one shown
-  before it, up to its own: one when a new grid frame shows, none otherwise. The 50 ms stalls start at or past the
+  before it, up to its own: one when a new grid frame shows, none otherwise. Over a run the renders after the open are
+  the new frames shown plus the grid frames a stall made the view miss: "only the grid frames it missed" adds one render
+  per missed grid frame, apart from the one per shown frame. The 50 ms stalls start at or past the
   middle of a grid step, so they miss a grid frame other than the one shown next.
 - **"Stays 1 device px wide … nothing of it left behind the moving edge"** compares the outline with history to the
   outline drawn without history at scale 1 in the same frame, so where and how wide an outline sits stays the
