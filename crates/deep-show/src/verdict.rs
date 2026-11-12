@@ -324,9 +324,13 @@ impl<'a> Hub<'a> {
         }
         // A deliverable the hub doesn't hold is INVALID; a definition with no requirement checks
         // nothing, so it never passes.
+        // #409: craft checks never pass a film on their own.
+        let craft_passes = rows
+            .iter()
+            .all(|r| r["from"]["craft"].is_string() && r["result"] == "PASS");
         let result = if missing {
             "INVALID"
-        } else if none {
+        } else if none || craft_passes {
             "INCONCLUSIVE"
         } else {
             WORST_FIRST

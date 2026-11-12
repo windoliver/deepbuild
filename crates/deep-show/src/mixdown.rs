@@ -134,7 +134,8 @@ pub fn planted_of(p: Option<Planted>, live: bool) -> MixPlanted {
         // #1818's live in the media module's list, planted for the whole run.
         limiter_sample_peaks: deep_canvas_media::planted("limiter_holds_sample_peaks"),
         hard_knee: deep_canvas_media::planted("compressor_hard_knee"),
-        no_latency_compensation: deep_canvas_media::planted("mix_without_latency_compensation"),
+        no_latency_compensation: deep_canvas_media::planted("mix_without_latency_compensation")
+            || deep_canvas_media::planted("limiter_lookahead_uncompensated"),
         pitch_ignores_semitones: deep_canvas_media::planted("pitch_ignores_semitones"),
         sends_tap_post: deep_canvas_media::planted("send_always_post"),
         delay_empties_at_seek: deep_canvas_media::planted("delay_empties_line_at_seek"),
@@ -217,12 +218,6 @@ impl Hub<'_> {
         }
         let path = self.scenario.evidence.join(&sha[..2]).join(&sha[2..]);
         self.decoded_at(&path, sha)
-    }
-
-    /// The sound of the file at `path`, decoded in the decode worker, as [`Hub::pcm`] gives an
-    /// asset's; `sha` names it in a refusal.
-    pub(crate) fn pcm_at(&mut self, path: &std::path::Path, sha: &str) -> Result<(i64, usize, Vec<f32>), Value> {
-        self.decoded_at(path, sha).map(|(r, c, s, _)| (r, c, s))
     }
 
     fn decoded_at(&mut self, path: &std::path::Path, sha: &str) -> Result<(i64, usize, Vec<f32>, Option<(i64, i64)>), Value> {

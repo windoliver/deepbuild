@@ -205,9 +205,11 @@ impl Hub<'_> {
                     [u32::from(size[0]), u32::from(size[1])],
                 )
             });
-            out.extend(f.push(&px));
+            out.extend(f.push(&px).map_err(|_| json!({"code": "device_lost"}))?);
         }
-        out.extend(frames.as_mut().and_then(deep_gpu::blake3::Frames::finish));
+        if let Some(f) = frames.as_mut() {
+            out.extend(f.finish().map_err(|_| json!({"code": "device_lost"}))?);
+        }
         Ok(out.iter().map(hex).collect())
     }
 

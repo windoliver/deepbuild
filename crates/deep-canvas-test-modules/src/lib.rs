@@ -886,3 +886,23 @@ pub fn label() -> Module {
         register: register_label,
     }
 }
+
+fn register_guards(r: &mut Registrar) {
+    r.kind(kind("test", "nonfinite", vec![json_param("frame"), json_param("pixel")]), &[], "");
+    r.kind(kind("test", "device_loss", vec![json_param("frame")]), &[], "");
+    let redraw = ["box", "fill", "again", "frame"].map(json_param).to_vec();
+    r.kind(kind("test", "redraw", redraw), &[], "");
+}
+
+/// `test.guards` (#157's `test-export-guards`): three kinds, each a fault a film carries into its
+/// export, which the build that holds this module plants as the export draws: `test.nonfinite@1
+/// {frame, pixel}` (one NaN in that pixel of the frame's float target), `test.device_loss@1
+/// {frame}` (the device lost as that frame is drawn) and `test.redraw@1 {box, fill, again,
+/// frame}` (a rect in `fill`, and in `again` the second time the process draws that frame). The
+/// kinds draw nothing themselves.
+pub fn guards() -> Module {
+    Module {
+        manifest: manifest("test.guards", &[]),
+        register: register_guards,
+    }
+}
