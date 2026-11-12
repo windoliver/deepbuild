@@ -136,6 +136,86 @@ fn swaying_shape(mesh: u64, id: &str) -> u64 {
     ])
 }
 
+/// #2017: a swaying solid's rest mesh and its shape, where its sway's weights are each vertex's
+/// height (0 at its lowest point, 1 at its highest), so the sway is a shear of its place; none
+/// for weights read from an attribute or a part.
+fn rest_of(s: &Solid, h: u64) -> Option<(Arc<crate::geom::Mesh>, u64)> {
+    let mesh = s.mesh.as_ref()?;
+    let sway = mesh.sway.as_ref()?;
+    let [lo, hi] = mesh.bounds();
+    let span = hi[1] - lo[1];
+    let height = |p: &Vec3| (p[1] - lo[1]) / span;
+    let linear = span > 0.0
+        && sway.weights.len() == mesh.positions.len()
+        && (mesh.positions.iter().zip(&sway.weights)).all(|(p, w)| (height(p) - w).abs() <= 1e-9);
+    linear.then(|| {
+        let rest = crate::geom::Mesh {
+            sway: None,
+            ..(**mesh).clone()
+        };
+        (Arc::new(rest), swaying_shape(h, "#rest"))
+    })
+}
+
+/// #2017: the shear that folds a height-weighted sway (#2016) into a solid placed by `model` at
+/// its time: each point moves along the wind by amount × its height share × the lean at the
+/// place, as the GPU sway moves each vertex, which for weights by height is p + s (p.y − lo) ÷
+/// span, s the lean's move in the mesh's own space. It applies before `model`.
+fn shear_of(model: &Affine3, sway: &crate::stack::Sway, rest: &crate::geom::Mesh, at: Swaying) -> Affine3 {
+    let [lo, hi] = rest.bounds();
+    let span = hi[1] - lo[1];
+    let (dx, dz) = (cos(rad(sway.direction)), sin(rad(sway.direction)));
+    let lean = sway_lean(sway, [model[0][3], model[2][3]], [dx, dz], at);
+    let world = [dx * sway.amount * lean, 0.0, dz * sway.amount * lean];
+    let inv = crate::cut::inverse(model);
+    let s = [0, 1, 2].map(|r| (0..3).map(|c| inv[r][c] * world[c]).sum::<f64>());
+    // The shear's matrix: identity plus s times the height share's gradient (0, 1 ÷ span, 0),
+    // its move s × (−lo ÷ span).
+    let shear: Affine3 = [0, 1, 2].map(|r| {
+        let mut row = [0.0; 4];
+        row[r] = 1.0;
+        row[1] += s[r] / span;
+        row[3] = -s[r] * lo[1] / span;
+        row
+    });
+    shear
+}
+
+/// The sway's lean at world place `place` (x, z) and its time (sway.wgsl's `lean`, in f64): a
+/// slow sway at hz phased by the modifier, and gusts of B-spline noise over the place less the
+/// wind's travel, seeded by the document.
+fn sway_lean(sway: &crate::stack::Sway, place: [f64; 2], d: [f64; 2], at: Swaying) -> f64 {
+    let (lo, hi) = (at.seed as u32, (at.seed >> 32) as u32);
+    let lattice = |x: i32, z: i32| -> f64 {
+        let mut h = (x as u32).wrapping_mul(0x8da6_b343) ^ (z as u32).wrapping_mul(0xd816_3841);
+        h ^= lo.wrapping_mul(0xcb1a_b31f) ^ hi.wrapping_mul(0x9e37_79b9);
+        h = (h ^ (h >> 16)).wrapping_mul(0x7feb_352d);
+        h = (h ^ (h >> 15)).wrapping_mul(0x846c_a68b);
+        h ^= h >> 16;
+        f64::from(h >> 8) / 8_388_607.5 - 1.0
+    };
+    let spline = |f: f64| {
+        let g = 1.0 - f;
+        [
+            g * g * g,
+            3.0 * f * f * f - 6.0 * f * f + 4.0,
+            -3.0 * f * f * f + 3.0 * f * f + 3.0 * f + 1.0,
+            f * f * f,
+        ]
+        .map(|w| w / 6.0)
+    };
+    let t = at.t;
+    let q = [0, 1].map(|k| (place[k] - d[k] * sway.speed * t) / sway.scale);
+    let c = q.map(f64::floor);
+    let (wx, wz) = (spline(q[0] - c[0]), spline(q[1] - c[1]));
+    let (ix, iz) = (c[0] as i32 - 1, c[1] as i32 - 1);
+    let gust: f64 = (0..4)
+        .map(|a| wz[a] * (0..4).map(|b| wx[b] * lattice(ix + b as i32, iz + a as i32)).sum::<f64>())
+        .sum();
+    let slow = sin(std::f64::consts::TAU * (sway.hz * t).fract() + sway.phase);
+    ((1.0 - sway.strength) * slow + sway.strength * gust).clamp(-1.0, 1.0)
+}
+
 /// A swaying solid's time and noise (#2016): the document's seconds and its seed, which with its
 /// mesh's [`crate::stack::Sway`] and its place give each vertex's move on the GPU.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -212,6 +292,8 @@ pub struct Segment {
     pub b: Vec3,
     pub wa: f64,
     pub wb: f64,
+    /// #537: it draws nothing and isn't hit, a point it meets being out of range.
+    pub hidden: bool,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -232,6 +314,8 @@ pub struct Line {
     pub dash: [f64; 2],
     /// The dash is in m: as `world`, but for #1640's planted `edges_dash_other_space`.
     pub dash_world: bool,
+    /// How its free ends end (#537; Marks in 3D: lines `cap`).
+    pub cap: crate::points::Cap,
 }
 
 /// A mesh-edge line's mesh, its kind, the matrix that places the mesh, and the edges it draws.
@@ -264,6 +348,7 @@ impl EdgesOf {
                 b: apply(&self.model, b),
                 wa: self.width,
                 wb: self.width,
+                hidden: false,
             })
             .collect()
     }
@@ -325,6 +410,8 @@ pub struct Layer3 {
     pub labels: Vec<Label>,
     /// Its soft cloud sprites (#422; Puff `puff@1`).
     pub puffs: Vec<Puff>,
+    /// #537: each batch of an instancer fed by logic, laid out by slot, with its slot count.
+    pub fed: std::collections::BTreeMap<u32, u32>,
 }
 
 /// A soft cloud sprite at t (#422; Puff `puff@1`): where it is in world m, its size, and how the
@@ -728,6 +815,8 @@ pub struct Scene {
     /// Its light probes (#427; Light probe `light.probe@1`), each with its own capture or bake,
     /// in item order. They draw nothing in the look.
     pub probes: Vec<crate::probe::Probe>,
+    /// Each terrain plate's overlays at t (#537), which tint its cover's base color.
+    pub tints: Vec<crate::tints::Tint>,
 }
 
 impl Scene {
@@ -848,6 +937,21 @@ pub fn matmul(a: &Affine3, b: &Affine3) -> Affine3 {
         }
     }
     out
+}
+
+/// Whether `m` turns and scales alike on every axis, with no mirror: what a terrain tile's
+/// normals turn by in its pixels (#2017).
+fn uniform(m: &Affine3) -> bool {
+    let col = |c: usize| [m[0][c], m[1][c], m[2][c]];
+    let (x, y, z) = (col(0), col(1), col(2));
+    let k = dot(x, x);
+    let near = |a: f64, b: f64| (a - b).abs() <= 1e-9 * k.max(1e-300);
+    near(dot(y, y), k)
+        && near(dot(z, z), k)
+        && near(dot(x, y), 0.0)
+        && near(dot(y, z), 0.0)
+        && near(dot(x, z), 0.0)
+        && dot(crate::geom::cross(x, y), z) > 0.0
 }
 
 pub(crate) fn apply(m: &Affine3, p: Vec3) -> Vec3 {
@@ -1379,8 +1483,9 @@ fn paint(look: &Look3, params: &Value, path: &str) -> Result<[u8; 3], Refused> {
     }
 }
 
-/// A solid's `paint.stroke {role, width}`: an outline around a box; a cylinder's or a sphere's
-/// isn't drawn yet, so it's refused rather than left out.
+/// A solid's `paint.stroke {role, width}`: an outline around a box or a built mesh (a recipe's
+/// parts among them, #173); a cylinder's or a sphere's isn't drawn yet, so it's refused rather
+/// than left out.
 fn stroke(
     look: &Look3,
     params: &Value,
@@ -1390,7 +1495,7 @@ fn stroke(
     let Some(st) = params.get("paint").and_then(|p| p.get("stroke")) else {
         return Ok(None);
     };
-    if shape != Shape::Box {
+    if !matches!(shape, Shape::Box | Shape::Built(_)) {
         return refused("stroke_shape", format!("{path}/paint/stroke"));
     }
     let Some(color) = st
@@ -1433,30 +1538,30 @@ fn point_of(items: &Items<'_>, v: &Value, path: &str) -> Result<Vec3, Refused> {
     Ok(origin(&world(items, id)))
 }
 
-/// The segments a mode draws over `n` points, as index pairs (Marks in 3D: lines).
-pub fn segments(mode: &str, n: usize) -> Option<Vec<(usize, usize)>> {
-    if n < 2 {
-        return Some(Vec::new());
-    }
-    match mode {
-        "strip" => Some((0..n - 1).map(|k| (k, k + 1)).collect()),
-        "segments" => Some((0..n / 2).map(|k| (2 * k, 2 * k + 1)).collect()),
-        "loop" => Some((0..n).map(|k| (k, (k + 1) % n)).collect()),
-        _ => None,
-    }
-}
-
-fn line(items: &Items<'_>, id: &str, params: &Value, look: &Look3) -> Result<Line, Refused> {
+fn line(
+    items: &Items<'_>,
+    id: &str,
+    params: &Value,
+    look: &Look3,
+    (map, t): (&Map<String, Value>, i64),
+) -> Result<Line, Refused> {
     let path = format!("items/{id}/params");
-    let points = params
-        .get("points")
-        .and_then(Value::as_array)
-        .map_or(Ok(Vec::new()), |list| {
-            list.iter()
-                .enumerate()
-                .map(|(i, v)| point_of(items, v, &format!("{path}/points/{i}")))
-                .collect::<Result<Vec<_>, _>>()
-        })?;
+    // #537: points that read a logic array, each with whether it hides.
+    let (points, hidden) = match crate::points::of(map, id, params, t)? {
+        Some(read) => read,
+        None => (
+            params
+                .get("points")
+                .and_then(Value::as_array)
+                .map_or(Ok(Vec::new()), |list| {
+                    list.iter()
+                        .enumerate()
+                        .map(|(i, v)| point_of(items, v, &format!("{path}/points/{i}")))
+                        .collect::<Result<Vec<_>, _>>()
+                })?,
+            Vec::new(),
+        ),
+    };
     // #149: a named line's width and its profile along the line.
     let named = params.pointer("/paint/stroke/line").and_then(Value::as_str);
     let drawn_line = match (named, look.drawn.as_ref()) {
@@ -1497,10 +1602,12 @@ fn line(items: &Items<'_>, id: &str, params: &Value, look: &Look3) -> Result<Lin
         .get("mode")
         .and_then(Value::as_str)
         .unwrap_or("strip");
-    let Some(pairs) = segments(mode, n) else {
+    let Some(pairs) = crate::points::segments(mode, n) else {
         return refused("out_of_range", format!("{path}/mode"));
     };
     let model = world(items, id);
+    // A point that can't narrow hides each segment that meets it, which keeps its record.
+    let hides = |i: usize| n == written && hidden.get(i) == Some(&true);
     let segments = pairs
         .into_iter()
         .map(|(a, b)| Segment {
@@ -1508,6 +1615,7 @@ fn line(items: &Items<'_>, id: &str, params: &Value, look: &Look3) -> Result<Lin
             b: apply(&model, points[b]),
             wa: widths[a],
             wb: widths[b],
+            hidden: hides(a) || hides(b),
         })
         .collect();
     Ok(Line {
@@ -1520,6 +1628,7 @@ fn line(items: &Items<'_>, id: &str, params: &Value, look: &Look3) -> Result<Lin
         joined: drawn_line.is_some(),
         dash: [0.0; 2],
         dash_world: false,
+        cap: crate::points::cap(params, &path)?,
     })
 }
 
@@ -1701,6 +1810,7 @@ fn cut(segments: &[Segment], s0: f64, s1: f64) -> Vec<Segment> {
                 b: lerp(seg.a, seg.b, fb),
                 wa: seg.wa + (seg.wb - seg.wa) * fa,
                 wb: seg.wa + (seg.wb - seg.wa) * fb,
+                hidden: seg.hidden,
             });
         }
         at += len;
@@ -1823,6 +1933,7 @@ fn edge_line(
         joined: false,
         dash,
         dash_world: world,
+        cap: Default::default(),
     })
 }
 
@@ -2602,6 +2713,7 @@ fn lod_of(
         lod_px: crate::lod::lod_px(doc),
         proxy,
         proxy_mesh,
+        tile: None,
     })))
 }
 
@@ -3175,7 +3287,12 @@ pub(crate) fn evaluate_compiled(
                             }
                             (None, _) => paint_or_muted(look, params, &path)?,
                         },
-                        stroke: inked(None, &material, Shape::Built(hash), &path)?,
+                        stroke: inked(
+                            stroke(look, params, Shape::Built(hash), &path)?,
+                            &material,
+                            Shape::Built(hash),
+                            &path,
+                        )?,
                         lod: lod_of(item, &path, mesh.bounds(), Some((&mesh, hash)), map)?,
                         mesh: Some(Arc::new(mesh)),
                         mask: None,
@@ -3197,6 +3314,33 @@ pub(crate) fn evaluate_compiled(
                         row: 0,
                         sway,
                     });
+                    // #2017: a plate with levels draws as its tiles, each at the level its error
+                    // projected at the view chooses.
+                    if k == "plate@1" && uniform(&model) {
+                        let plate = layer.solids.last().expect("just pushed");
+                        let built = plate.mesh.as_ref().expect("a built mesh");
+                        if let Some(tiles) = crate::terrain::tiles(params, built, hash) {
+                            let plate = layer.solids.pop().expect("just pushed");
+                            let lod_px = crate::lod::lod_px(map);
+                            for t in tiles.iter() {
+                                let mut s = plate.clone();
+                                s.mesh = Some(t.levels[0].mesh.clone());
+                                s.shape = Shape::Built(t.levels[0].hash);
+                                s.lod = Some(Arc::new(crate::lod::Lod {
+                                    bands: Vec::new(),
+                                    margin: 0.0,
+                                    bounds: t.bounds,
+                                    levels: t.levels.clone(),
+                                    extent: 1.0,
+                                    lod_px,
+                                    proxy: None,
+                                    proxy_mesh: None,
+                                    tile: Some(t.at),
+                                }));
+                                layer.solids.push(s);
+                            }
+                        }
+                    }
                 }
                 // A curve draws nothing; what follows it (particles along it, #420) reads it
                 // sampled, in world metres.
@@ -3212,9 +3356,9 @@ pub(crate) fn evaluate_compiled(
                     }
                 }
                 "mark.line@1" => {
-                    let mut l = line(&items, id, params, look)?;
+                    let mut l = line(&items, id, params, look, (map, t))?;
                     let under = strokes(map, id, item, &mut l, look, seconds)?;
-                    bounds.extend(l.segments.iter().flat_map(|s| [s.a, s.b]));
+                    bounds.extend(crate::points::ends(&l));
                     layer.lines.extend(under);
                     layer.lines.push(l);
                 }
@@ -3283,6 +3427,8 @@ pub(crate) fn evaluate_compiled(
                     });
                 }
                 OVERLAY => overlay_items.push((layer_id.to_string(), id.clone())),
+                // #1183: an overlay whose `show` is false at t draws nothing.
+                "overlay.text@1" if params.get("show") == Some(&Value::Bool(false)) => {}
                 "overlay.text@1" => readout_items.push((id.clone(), params.clone())),
                 "puff@1" => {
                     let m = world(&items, id);
@@ -3444,6 +3590,11 @@ pub(crate) fn evaluate_compiled(
             .iter()
             .map(|p| crate::cut::inverse(&world(&items, p)))
             .collect();
+        if crate::slots::fed(params) {
+            let sink = (&mut batches, &mut layers[*l], &mut bounds);
+            crate::slots::place(map, id, params, t, (&at, &of, &from, assets), &protos, sink)?;
+            continue;
+        }
         // Above the line, or drawn from an instances output, the GPU culls each (prototype,
         // material) batch (#484); inside a batch elements upload by stable ID, so survivors in
         // index order are in stable-ID order.
@@ -3452,6 +3603,10 @@ pub(crate) fn evaluate_compiled(
         if gpu {
             elements.sort_by_key(|e| e.id);
         }
+        // #2017: a prototype whose sway weighs each vertex by its height, batched on the GPU,
+        // sways as a shear of each element's place, so every element keeps the one rest mesh.
+        let mut sheared: HashMap<(usize, usize), Option<(Arc<crate::geom::Mesh>, u64)>> =
+            HashMap::new();
         for e in elements {
             let Some(solids) = protos.get(&of[e.proto]) else {
                 return refused("ref_unresolved", format!("{path}/of"));
@@ -3464,6 +3619,21 @@ pub(crate) fn evaluate_compiled(
                 } else {
                     format!("{id}#{}#{k}", e.id)
                 };
+                let shear = match (gpu, s.sway, s.shape) {
+                    (true, Some(_), Shape::Built(h)) => sheared
+                        .entry((e.proto, k))
+                        .or_insert_with(|| rest_of(&s, h))
+                        .clone(),
+                    _ => None,
+                };
+                if let (Some((rest, h)), Some(at)) = (shear, s.sway) {
+                    let sway = s.mesh.as_ref().and_then(|m| m.sway.as_ref()).expect("swaying");
+                    let shear = shear_of(&matmul(&place, &s.model), sway, &rest, at);
+                    s.model = matmul(&s.model, &shear);
+                    s.mesh = Some(rest);
+                    s.shape = Shape::Built(h);
+                    s.sway = None;
+                }
                 // A swaying element moves by its own place on the GPU (#2016): it draws its own
                 // copy.
                 if let (Some(_), Shape::Built(h)) = (s.sway, s.shape) {
@@ -3548,7 +3718,9 @@ pub(crate) fn evaluate_compiled(
     let mut top = 12.0;
     for (id, params) in readout_items.iter().chain(card.iter()) {
         let template = params.get("template").and_then(Value::as_str).unwrap_or("");
-        let filled = shown.as_ref().and_then(|s| deep_canvas::template::expand(s, template).ok());
+        let filled = shown
+            .as_ref()
+            .and_then(|s| deep_canvas::template::expand_in(s, id, template).ok());
         let text = filled.as_deref().unwrap_or(template);
         let size = num(params.get("size")).unwrap_or(13.0);
         let (run_box, glyphs) = labels.run(text, Role::Body, size as f32);
@@ -3657,6 +3829,7 @@ pub(crate) fn evaluate_compiled(
         read_reflection: false,
         read_foam: false,
         probes,
+        tints: crate::tints::tints(map, look, t)?,
     };
     scene.set_cutaway(cutaway);
     scene.mirror = crate::mirror::find(&scene.layers, scene.camera.eye, |id| items.get(id))?;
@@ -4045,7 +4218,7 @@ impl Scene {
             }
             for l in &layer.lines {
                 let mut pts = Vec::new();
-                for seg in &l.segments {
+                for seg in l.segments.iter().filter(|s| !s.hidden) {
                     for (p, w) in [(seg.a, seg.wa), (seg.b, seg.wb)] {
                         if let Some(q) = cam.project(p) {
                             let r = if l.world { w * cam.px_per_m(q[2]) } else { w }.max(1.0) / 2.0;

@@ -8,8 +8,7 @@
 import { execFile } from 'node:child_process';
 import { readdirSync, readFileSync } from 'node:fs';
 import { isAbsolute, join, relative } from 'node:path';
-import { pathToFileURL } from 'node:url';
-import { CAP } from '@deepbuild/reading';
+import { CAP } from '@deepbuild/reading/slices';
 import { foldText, parseClaimLine, type FoundMessage } from '@deepbuild/record';
 
 interface Hit {
@@ -120,14 +119,6 @@ export function pageClaims(wiki: string): Claim[] {
   };
   walk(wiki);
   return claims;
-}
-
-/** The test's index when DEEP_HUB_TEST_INDEX names one, rebuilt from the pages; undefined for the ledger's own. */
-export async function openIndex(wiki: string, module?: string): Promise<IndexFill | undefined> {
-  if (!module) return undefined;
-  const fill = ((await import(pathToFileURL(module).href)) as { default: () => IndexFill }).default();
-  await fill.rebuild(pageClaims(wiki));
-  return fill;
 }
 
 /** One `?` per value, for an IN list whose values are bound. */

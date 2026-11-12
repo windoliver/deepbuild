@@ -131,6 +131,7 @@ fn check_by(
     check_transport(doc, &mut issues);
     let required = required_minors(doc, sealed, &mut issues);
     let resolved = packs::resolve(doc, packs, Some(sealed), &mut issues);
+    notices.extend(resolved.missing.iter().map(packs::retired::Missing::notice));
     let mut expansions = Vec::new();
     let mut rules_ran = BTreeSet::new();
     // The canvas modules the document declares, which every module kind it uses must be among.
@@ -1275,6 +1276,8 @@ struct KindFacts<'a> {
     deprecation: Option<&'a (String, String)>,
     /// The close names an unknown kind's notice names (#412).
     close: Vec<Value>,
+    /// Of a pack the document names and this build lacks: kept as written, skipped (#1958).
+    pack_missing: bool,
 }
 
 impl<'a> KindFacts<'a> {
@@ -1297,6 +1300,7 @@ impl<'a> KindFacts<'a> {
                 }
                 _ => Vec::new(),
             },
+            pack_missing: packs::retired::skipped(text, resolved),
         }
     }
 }
@@ -1344,6 +1348,11 @@ fn check_item(
     let Some(facts) = ctx.facts.get(text) else {
         return false;
     };
+    // An instance of a pack this build lacks: its pack's notice names it, and nothing of it is
+    // read past its kind (#1958).
+    if facts.pack_missing {
+        return false;
+    }
     let instance = facts.instance;
     if let Some(value) = fields.get("broken_out").filter(|_| !instance) {
         issues.push(Issue::error(
@@ -2165,7 +2174,7 @@ fn check_assemblies(doc: &Value, issues: &mut Vec<Issue>) {
         };
         for field in fields.keys() {
             match field.as_str() {
-                "parent" | "at" | "motion" | "value" | "apart" | "order" => {}
+                "parent" | "at" | "motion" | "value" | "apart" | "order" | "shown_at" => {}
                 "repeat" => bad("out_of_range", field, fields[field].clone(), "not in this build"),
                 _ => bad("unknown_field", field, fields[field].clone(), "not a field of an assembly"),
             }
@@ -2465,6 +2474,7 @@ const CHANNEL_FIELDS: &[&str] = &[
     "morph",
     // Follow: a `mode: follow` channel's source, model, outputs and stagger.
     "follow",
+    "exaggerate", // #1183: a measured length mapped at another ratio than its `shown_at`.
 ];
 
 /// A bound value's fields (Bound value).

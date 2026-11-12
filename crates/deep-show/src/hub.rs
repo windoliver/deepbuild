@@ -86,8 +86,7 @@ pub enum Planted {
     UndoReorderMintsKey,
     /// #138: order keys are drawn when a patch applies, not from its base.
     ApplyTimeOrderKeys,
-    /// #379: the check estimates with coefficients for the machine it runs on, not the
-    /// reference Mac's.
+    /// #379: the check estimates with coefficients for the machine it runs on, not the reference Mac's.
     EstimatesOnThisMachine,
     /// #138: the incremental check after a patch skips the items that refer to what it touched.
     IncrementalCheckSkipsReferrers,
@@ -147,6 +146,10 @@ pub enum Planted {
     ResolverOnlyRefUnresolved,
     /// #384: the resolver closes the ask-task of a message whose item is gone.
     ResolverClosesTask,
+    /// #1401: a probe's hits placed where its ray reaches the depth target's view depth.
+    ProbeFromDepth,
+    /// #1401: a probe that meets nothing answers the item drawn nearest its pixel.
+    ProbeNearestItem,
     /// #403: a verdict's key names each deliverable by doc ID alone, with no revision.
     VerdictKeyedByDoc,
     /// #403: checks in a claim skip an `unknown_kind` item and judge the rest.
@@ -199,6 +202,10 @@ pub enum Planted {
     PackCheckSkipsRequiresModules,
     /// #306: the store and a document's `packs` are keyed by the name half alone.
     PacksKeyedByName,
+    /// #1958: the store's sweep after `uninstall_pack` deletes a retired version, named or not.
+    StoreSweepDeletesNamed,
+    /// #1958: a version the store lacks resolves through the installed one of the same pack.
+    LoaderDrawsMissingWithInstalled,
     /// #488: a seek restores the checkpoint nearest to t by distance, not the last at or before.
     CheckpointNearestInDistance,
     /// #857: results of nodes run on several threads merge in the order they finished.
@@ -317,6 +324,11 @@ pub enum Planted {
     TimecodeTrackZero,
     /// #501: the png writer stores premultiplied color under `alpha: straight`.
     PngPremultipliesStraight,
+    Export(crate::export::Guard), // #157: the export guards' wrong programs.
+    /// #1163: the video writer leaves frame 300 out, frame 299 held over its place.
+    VideoDropsFrame300,
+    /// #1163: a range export starts, and ends, one frame late.
+    RangeStartsOneFrameLate,
     /// #501: each frame's sample count rounded on its own, each span starting where the last ended.
     SpanRoundsEachFrame,
     /// #501: a frame's first sample rounded to the nearest instead of floored.
@@ -677,6 +689,11 @@ pub enum Call {
         dir: PathBuf,
         session: Option<String>,
     },
+    /// #1958: one pack version uninstalled: retired, then the store's sweep.
+    UninstallPack {
+        id: String,
+        version: String,
+    },
     /// #200: `deep://registries/<core version>`.
     Registries,
     /// #490: `fn`, one expression of the closed function list.
@@ -845,13 +862,15 @@ pub enum Call {
     },
     /// A session's messages as its agent reads them (#384).
     Messages(String),
-    /// A session's render-back of a document at a time as of a revision (#384).
+    /// A session's render-back of a document at a time as of a revision (#384), through a
+    /// camera, with pixel probes (#1401).
     RenderBack {
         session: String,
         doc: String,
         t: i64,
         rev: u64,
         size: Option<[u16; 2]>,
+        probes: crate::probe::Probes,
     },
     /// The parity suite's manifest (#138).
     Manifest,
@@ -1224,7 +1243,10 @@ impl<'a> Hub<'a> {
             seed_by_order: scenario.planted == Some(Planted::SeedsByExpansionOrder),
             overwrite_broken_out: scenario.planted == Some(Planted::ReexpansionOverwritesBrokenOut),
             skip_requires_modules: scenario.planted == Some(Planted::PackCheckSkipsRequiresModules),
-            key_by_name: scenario.planted == Some(Planted::PacksKeyedByName),
+            key_by_name: matches!(
+                scenario.planted,
+                Some(Planted::PacksKeyedByName | Planted::LoaderDrawsMissingWithInstalled)
+            ),
             each_by_count: scenario.planted == Some(Planted::EachSeedsByElementCount),
             each_per_triangle: scenario.planted == Some(Planted::EachFacePerTriangle),
             orphan_drops: scenario.planted == Some(Planted::OrphanLoadDropsBrokenOut),
@@ -1757,10 +1779,11 @@ impl<'a> Hub<'a> {
             Call::Spatial(s) => self.spatial(s),
             Call::TerrainRays(r) => self.terrain_rays(r),
             Call::SceneQuery(q) => self.scene_query(q),
-            Call::Packs => crate::packs::rows_reply(&self.pack_rows, &self.packs),
+            Call::Packs => self.packs_reply(),
             Call::InstallPack { id, dir, session } => {
                 self.install_pack(id, dir, session.as_deref())
             }
+            Call::UninstallPack { id, version } => self.uninstall_pack(id, version),
             Call::Registries => self.registries_reply(),
             Call::Fn(c) => crate::function::reply(c),
             Call::Path { doc, item } => match self.current(doc) {
@@ -1908,7 +1931,8 @@ impl<'a> Hub<'a> {
                 t,
                 rev,
                 size,
-            } => self.render_back(session, doc, *t, *rev, *size),
+                probes,
+            } => self.render_back(session, doc, *t, *rev, *size, probes),
             Call::Manifest => self.manifest_reply(),
             Call::Catalog => self.catalog_reply(),
             Call::Verdict(claim) => self.verdict_call(claim),
@@ -2176,7 +2200,7 @@ impl<'a> Hub<'a> {
                 let check_ms = started.elapsed().as_secs_f64() * 1000.0;
                 let timing = show.include.iter().any(|i| matches!(i, Include::Timing));
                 let rules_ms = timing.then(|| {
-                    crate::packs::kind_rules_ms(&doc, &result, &self.startup.sealed, &self.packs)
+                    crate::packs::timings(&doc, &result, &self.startup.sealed, &self.packs)
                 });
                 fresh = Some((result.expansions, (check_ms, rules_ms)));
                 notices = self.notices_reply(&show.doc, &result.notices);
@@ -2240,6 +2264,27 @@ impl<'a> Hub<'a> {
         // A number past f64's range is refused at its path (#387).
         if let Some(doc) = &stamped {
             issues.extend(overflows(doc));
+            // #1163: a literal time in a film with a tempo map raises motion's notice, carried
+            // as a warning on the item it times, with the bar:beat form it lands on.
+            if let Some(motion) = doc
+                .as_object()
+                .and_then(|d| deep_canvas_motion::doc::read(d).ok())
+            {
+                let literal = motion
+                    .notices
+                    .iter()
+                    .filter(|n| n["code"] == "literal_time_with_tempo_map");
+                issues.extend(literal.map(|n| Issue {
+                    severity: "warning",
+                    ..Issue::error(
+                        "literal_time_with_tempo_map",
+                        n["id"].as_str().unwrap_or_default(),
+                        n["path"].as_str().unwrap_or_default().to_string(),
+                        n.clone(),
+                        "a literal time in a film with a tempo map; write it as the bar:beat it lands on",
+                    )
+                }));
+            }
         }
         // The revision's check phases and, for a session on screen, its frame at `t`, run clean
         // before it becomes current: what an operator can't evaluate is an issue of the revision
@@ -2314,7 +2359,7 @@ impl<'a> Hub<'a> {
             let timing = show.include.iter().any(|i| matches!(i, Include::Timing));
             crate::packs::reply(
                 fresh.as_ref().map_or(&[][..], |(e, _)| e.as_slice()),
-                fresh.as_ref().map(|(_, ms)| *ms),
+                fresh.as_ref().map(|(_, ms)| ms.clone()),
                 timing,
                 &mut reply,
             );
@@ -2388,7 +2433,7 @@ impl<'a> Hub<'a> {
             None
         };
         if three {
-            let shown = self.shown_at(&show.doc, &doc, show.t);
+            let shown = self.shown_at(&show.doc, &self.with_outputs(&show.doc, &doc), show.t);
             let placed = self.arranged(&show.doc, &shown);
             self.pending3d = Some(self.draw3d(&placed, show.t, show.size));
         }
@@ -2667,71 +2712,6 @@ impl<'a> Hub<'a> {
     /// passes a claim only when the claim's definition names the document among its deliverables,
     /// since a picture explains and never proves; a snapshot it asked for and couldn't take is
     /// BLOCKED.
-    /// #464: a 2D frame under a print look through the look's finish on this machine's GPU (the
-    /// print pass, as the canvas's live frame runs it), kept as evidence and labelled
-    /// `display_only`: an agent sees the grain and the halftone, and no check reads it.
-    fn print_snapshot(
-        &mut self,
-        show: &Show,
-        drawn: &Drawn,
-        size: [u16; 2],
-        instanced: &BTreeMap<String, (String, String)>,
-    ) -> Option<Value> {
-        let def = self.look_def.clone()?;
-        let print = deep_canvas_marks::print::read(&def, &self.look.light, f64::from(size[0])).ok()?;
-        if print.is_identity() {
-            return None;
-        }
-        let items = show.document.get("items").and_then(Value::as_object)?;
-        let role = |i: &Value| {
-            i.pointer("/params/paint/fill/role")
-                .or_else(|| i.pointer("/params/paint/stroke/role"))
-                .and_then(Value::as_str)
-                .map(str::to_string)
-        };
-        let inks: Vec<BTreeSet<String>> = print
-            .separations
-            .iter()
-            .map(|s| {
-                items
-                    .iter()
-                    .filter(|(_, i)| role(i).as_deref() == Some(s.role.as_str()))
-                    .map(|(id, _)| id.clone())
-                    .collect()
-            })
-            .collect();
-        let inked: BTreeSet<&String> = inks.iter().flatten().collect();
-        let ground = self.look.light.get("ground").copied().unwrap_or([255; 3]);
-        let base = drawn.only(|i| !inked.iter().any(|k| k.as_str() == i));
-        let (base, _) = self.renderer.raster_batched(&base, size, Some(ground), instanced);
-        let covs: Vec<Vec<u8>> = inks
-            .iter()
-            .map(|set| {
-                let only = drawn.only(|i| set.contains(i));
-                self.renderer.raster_batched(&only, size, None, instanced).0
-            })
-            .collect();
-        let seed = show.document.get("seed").and_then(Value::as_u64).unwrap_or(0) as u32;
-        let frame = deep_canvas_marks::print::frame(&print, seed, show.t, false);
-        let px = [u32::from(size[0]), u32::from(size[1])];
-        let params = deep_scene3d_render::print::params(
-            &print,
-            &frame,
-            px,
-            deep_scene3d_render::print::Placed {
-                scale: 1.0 / drawn.scale(size),
-                offset: [0.0, 0.0],
-            },
-            ground,
-            false,
-            Default::default(),
-        );
-        let rgba = self.gpu3()?.print(&params, &base, &covs, px)?;
-        let sha = evidence::put(&self.scenario.evidence, &snapshot::png(rgba, size)).ok()?;
-        self.display_only.insert(sha.clone());
-        Some(json!({"sha256": sha, "w": size[0], "h": size[1], "display_only": true}))
-    }
-
     fn verdict(&self, show: &Show, snapshot_taken: bool) -> &'static str {
         if !snapshot_taken {
             return "BLOCKED";
@@ -2750,11 +2730,24 @@ impl<'a> Hub<'a> {
 /// The planted renderer's grain: a few pixels' red nudged by a xorshift seeded from the clock's
 /// nanoseconds, what an honest render-back never reads (Channel and key: it can never read the
 /// clock), so two runs draw two pictures (#670).
-fn clock_noise(rgba: &mut [u8]) {
-    let nanos = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |d| d.as_nanos() as u64);
-    let mut x = nanos | 1;
+pub(crate) fn clock_noise(rgba: &mut [u8]) {
+    seeded_noise(rgba, now_nanos());
+}
+
+/// #1163's [`clock_noise`] in an export, seeded from the clock once per process and by the
+/// frame's time: another process draws another picture, and a frame drawn again in the same
+/// export draws the same one, as #157's redraw holds every frame to.
+pub(crate) fn export_noise(rgba: &mut [u8], t: i64) {
+    static SEED: std::sync::OnceLock<u64> = std::sync::OnceLock::new();
+    seeded_noise(rgba, *SEED.get_or_init(now_nanos) ^ t as u64);
+}
+
+fn now_nanos() -> u64 {
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_nanos() as u64)
+}
+
+fn seeded_noise(rgba: &mut [u8], seed: u64) {
+    let mut x = seed | 1;
     let pixels = (rgba.len() / 4) as u64;
     for _ in 0..64 {
         x ^= x << 13;
@@ -2812,7 +2805,7 @@ impl BandRow {
 }
 
 /// A revision's check time and its `kind_rules` check's own time, when asked for (#202), in ms.
-type CheckTimes = (f64, Option<f64>);
+type CheckTimes = (f64, Option<Map<String, Value>>);
 
 /// #202's planted expander: an instance's inputs walked through a std hash map, whose order a
 /// fresh random state picks, so two expansions of one example differ in their bytes. It redraws

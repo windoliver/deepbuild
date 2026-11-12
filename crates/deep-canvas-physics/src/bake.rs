@@ -4,7 +4,8 @@
 
 use std::collections::BTreeMap;
 
-use deep_canvas::canon::{revision_hash, sha256_hex, NoShape};
+use deep_canvas::canon::sha256_hex;
+use deep_canvas::registry::{BuildSet, Registry};
 use deep_canvas::schedule::canonical;
 use serde_json::{json, Map, Value};
 
@@ -36,22 +37,15 @@ pub struct Build {
 }
 
 impl Build {
-    /// The runtime digest: a d1 digest over `[{interface, implementation, version, pins}]`, its
-    /// pins every resolved crate with its version and features, so a moved pin moves it. The
-    /// seal computes it once #1920 lands; until then the backend's crate does, in its shape.
+    /// The runtime digest a golden carries: the seal's, of the set that holds the physics module
+    /// on this build alone, its pins every resolved crate with its version and features, so a
+    /// moved pin moves it (#1920).
     pub fn runtime_digest(&self) -> String {
-        let pins: Map<String, Value> = std::iter::once(&self.backend)
-            .chain(&self.pins)
-            .map(|p| {
-                (
-                    format!("{}@{}", p.name, p.version),
-                    json!({"version": p.version, "features": p.features}),
-                )
-            })
-            .collect();
-        let entry = json!([{"interface": "physics@1", "implementation": self.implementation,
-                            "version": self.version, "pins": pins}]);
-        revision_hash(&entry, &NoShape).expect("a digest entry holds no float")
+        Registry::new(BuildSet::Full)
+            .with(crate::module::module(self))
+            .seal()
+            .expect("the physics module seals alone")
+            .runtime_digest
     }
 }
 

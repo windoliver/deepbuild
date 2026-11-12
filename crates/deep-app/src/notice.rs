@@ -2,7 +2,7 @@
 //! that failed to load each end in one line in the window, never only on the error stream. Each notice is one
 //! accessibility node named by its words, keyed `notice:<n>`; the same words twice are one notice.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 
 use gpui_kit::*;
 
@@ -13,6 +13,8 @@ const KEPT: usize = 3;
 
 thread_local! {
     static SHOWN: RefCell<(u64, Vec<(u64, String)>)> = const { RefCell::new((0, Vec::new())) };
+    /// How far above the window's foot the box's top was last drawn, so notices never cover the box's Send.
+    static ABOVE_BOX: Cell<Option<Pixels>> = const { Cell::new(None) };
 }
 
 /// Shows `words` in the window's notices.
@@ -33,18 +35,29 @@ pub fn shown() -> Vec<String> {
     SHOWN.with(|shown| shown.borrow().1.iter().map(|(_, w)| w.clone()).collect())
 }
 
+/// The box was drawn at `bounds`: from the next frame the notices sit above it.
+pub fn box_drawn(bounds: Bounds<Pixels>, window: &mut Window) {
+    let above = window.viewport_size().height - bounds.origin.y;
+    if ABOVE_BOX.with(|a| a.replace(Some(above))) != Some(above) {
+        window.on_next_frame(|window, _| window.refresh());
+    }
+}
+
 fn dismiss(id: u64, cx: &mut App) {
     SHOWN.with(|shown| shown.borrow_mut().1.retain(|(at, _)| *at != id));
     cx.refresh_windows();
 }
 
-/// The notices, drawn at the window's foot over the views.
+/// The notices, drawn at the window's foot over the views, above the box where the page has one.
 pub fn notices(window: &Window) -> impl IntoElement {
     let chrome = chrome::of(window);
     let notices = SHOWN.with(|shown| shown.borrow().1.clone());
+    let foot = ABOVE_BOX
+        .with(Cell::get)
+        .map_or(sizes().space(8), |above| above + sizes().space(1));
     div()
         .absolute()
-        .bottom(sizes().space(8))
+        .bottom(foot)
         .right(sizes().space(2))
         .flex()
         .flex_col()

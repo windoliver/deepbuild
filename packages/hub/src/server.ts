@@ -30,6 +30,7 @@ import { Waits, type HookSeen, type OpenCall, type Reply as WaitReply, type Rest
 import { People } from './people.js';
 import { identityAt, idOf, type Identity } from './identity.js';
 import { plantedStart } from './plant.js';
+import { gatesOff } from './watch.js';
 import { AUTHORITY, CONTRACT, EXTENSION_HOLD_MS, FEATURES, line, plantOf, refuse, refusal, Refused, STAGE_HOLD_MS, ulid, VERSION, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Parsed, type Plant, type Refusal, type Scope, type Scoped, SCREEN_TOOLS, type StageReach, type VfsSettings } from './wire.js';
 
 /** How often the hub checks that its lock file is still the one it holds (#909): the design says at least once a minute. */
@@ -80,8 +81,8 @@ const ALLOWED = new Map<string, readonly Role[]>([
   // `deep lease` (#1015): a heavy command's place in the queue, its process group once it starts, and its first process's exit.
   ['lease.wait', ['cli']], ['lease.started', ['cli']], ['lease.exited', ['cli']], ['extension.install', ['cli']], ['guard.add', ['cli']], ['record.backup', ['cli']], ['test.verdict', ['cli']],
   ['mcp.call', ['mcp']], ['mcp.cancel', ['mcp']], ['evidence.paste', ['app']],
-  // Setup reads your history into the wiki (#356).
-  ['wiki.build', ['cli']],
+  // Setup reads your history into the wiki (#356), and records the steps it took (#1100).
+  ['wiki.build', ['cli']], ['setup.report', ['cli']],
   // Every agent's memory: the ranked list, and your keep or remove of a lesson (#111).
   ['memory.list', ['cli']], ['memory.act', ['cli']],
   // The rules page (#344): written from your rule files, a scope's reach before you save it, who a rule reached, a session's set.
@@ -268,9 +269,9 @@ function coreWorker(options: CoreOptions, onFrame: OnFrame, onFatal: (why: strin
 }
 /** The commit-on-event-loop plant: the core on the event loop, committing through the synchronous binding there. */
 async function coreInline(options: CoreOptions, onFrame: OnFrame, onFatal: (why: string) => void, onAsking: (sessions: string[], judged: string[], resend: string[], cantRun: string[]) => void, onAcking: (session: string) => void, onScrub: (values: string[]) => void): Promise<CoreLink> {
-  const { Core } = await import('./core.js');
+  const { createCore } = await import('./hub-runtime.js');
   const { answer, asRefusal } = await import('./core-worker.js');
-  const core = new Core(options, onFrame, onAsking, onAcking, onScrub);
+  const core = createCore(options, onFrame, onAsking, onAcking, onScrub);
   const started = core.started().then(() => ({ hooks: core.hooks() }));
   started.catch((error: unknown) => onFatal(error instanceof Error ? error.stack ?? error.message : String(error)));
   return {
@@ -425,6 +426,19 @@ class Hub {
   private resend = new Set<string>();
   /** The sessions with a message typed mid-turn to acknowledge (#340): the next tool call's hook is held for it. */
   private readonly acking = new Set<string>();
+  /** Each session's last failed call as its tool.after read: a failure alike to it is held for the core's reply (#2019). */
+  private readonly lastFailed = new Map<string, string>();
+  /** Whether a hook's call failed alike to its session's last failed call, which a passing call forgets. */
+  private failedAgain(meta: HookMeta, drafts: readonly Draft[]): boolean {
+    const after = drafts.find((d) => d.kind === 'tool.after');
+    if (!after || meta.event === 'SessionEnd') { if (meta.event === 'SessionEnd') this.lastFailed.delete(meta.session); return false; }
+    const d = after.data;
+    if (d.outcome !== 'failed') { this.lastFailed.delete(meta.session); return false; }
+    const key = JSON.stringify([d.kind, d.command, d.server, d.tool, d.args, d.exit_code, d.signature]);
+    const again = this.lastFailed.get(meta.session) === key;
+    this.lastFailed.set(meta.session, key);
+    return again;
+  }
   /** `deep off` in effect (#19): every gate watch-only, while the floor (the fail_closed entries) holds. */
   private off = false;
   /** The agents whose hook entries run a program that can't run, as the core's last check found (#993): their gates are watch-only. */
@@ -453,7 +467,7 @@ class Hub {
   async open(clock: CoreOptions['clock']): Promise<void> {
     this.now = () => clock.start + (Date.now() - clock.real);
     const held = [this.token, ...testHeld()];
-    this.off = gatesOff(this.root);
+    this.off = gatesOff(this.root.dir);
     const options: CoreOptions = { root: this.root.dir, clock, held, ...(this.plant ? { plant: this.plant } : {}), ...(this.vfs ? { vfs: this.vfs } : {}),
       ...(process.env.DEEP_HUB_TEST_HOST ? { host: process.env.DEEP_HUB_TEST_HOST } : {}),
       ...(Number(process.env.DEEP_HUB_TEST_LEASE_MS) > 0 ? { leaseMs: Number(process.env.DEEP_HUB_TEST_LEASE_MS) } : {}),
@@ -831,7 +845,9 @@ class Hub {
     // its line whether or not the core's word of the turn has come back yet (#83).
     if (parsed.drafts.some((d) => d.kind === 'tool.after')) this.sawWork.add(meta.session);
     // A blocked call's reply is its block: no acknowledgement takes its place, and the next call carries the acknowledgement.
-    const held = !blocked && !before && !gated && !prompted && parsed.drafts.length ? this.holdFor(meta) : null;
+    // A call failing alike to the session's last failure is held for the core's reply, which tells a third once (#2019).
+    const again = this.failedAgain(meta, parsed.drafts);
+    const held = !blocked && !before && !gated && !prompted && parsed.drafts.length ? (again ? Date.now() + CONTEXT_HOLD_MS : this.holdFor(meta)) : null;
     if (meta.event === 'Stop' || meta.event === 'SessionEnd') this.sawWork.delete(meta.session);
     // A resumed session's calls go to the gate until the core says whether its cut-off turn left a send to match (#85, #1033).
     if (meta.event === 'SessionStart' && meta.fields?.source === 'resume') this.resend.add(meta.session);
@@ -1449,10 +1465,7 @@ function listenAt(dir: string): { host: string; port: number } {
   const m = typeof at === 'string' ? /^(.*):(\d{1,5})$/.exec(at) : null;
   return m ? { host: m[1]!.replace(/^\[|\]$/g, '') || '0.0.0.0', port: Number(m[2]) } : { host: '0.0.0.0', port: 7433 };
 }
-/** Whether `deep off` is in effect: <root>/gates.json, which only the hub writes, once the OS confirmed you. */
-function gatesOff(root: Root): boolean {
-  try { return (JSON.parse(readFileSync(join(root.dir, 'gates.json'), 'utf8')) as { off?: unknown }).off === true; } catch { return false; }
-}
+/** `deep off` set or cleared in <root>/gates.json, which only the hub writes, once the OS confirmed you (watch.ts reads it). */
 function setGatesOff(root: Root, off: boolean): void {
   const file = join(root.dir, 'gates.json');
   writeFileSync(`${file}.tmp`, `${JSON.stringify({ off, since: Date.now() })}\n`, { mode: 0o600 });

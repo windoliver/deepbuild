@@ -4,14 +4,20 @@
 //! driver, a spawn or a logic item reads them by form and depends on no physics crate. Its one
 //! array, `physics.occurrences`, is the list a step writes: a module that names it instead of the
 //! form reads physics by name, which the seal refuses unless it declares the dependency. The host
-//! bakes the lists and readings at check, as the logic module's are; the seal's runtime digest
-//! and the measured, backend-bytes declaration are #1920's.
+//! bakes the lists and readings at check, as the logic module's are. Its implementation is the
+//! backend's crate, declared measured with backend_bytes state (World and backend; #1920), its
+//! pins the backend and the crates under it as the build resolved them, so the seal's runtime
+//! digest names them.
 
 use std::collections::BTreeMap;
 
 use deep_canvas::columns::REGISTRY;
-use deep_canvas::registry::{Implementation, Manifest, Module, Range, Registrar, Semver};
+use deep_canvas::registry::{
+    Equivalence, Implementation, Manifest, Module, Pin, Range, Registrar, Semver, StateClass,
+};
 use serde_json::{json, Value};
+
+use crate::bake::Build;
 
 /// The interface this module implements.
 pub const INTERFACE: &str = "physics@1";
@@ -38,7 +44,17 @@ pub fn changed(prev: &[Value], next: &[Value]) -> Vec<[u64; 2]> {
     runs
 }
 
-fn manifest() -> Manifest {
+fn manifest(build: &Build) -> Manifest {
+    let pins = std::iter::once(&build.backend)
+        .chain(&build.pins)
+        .map(|p| {
+            let pin = Pin {
+                version: p.version.clone(),
+                features: p.features.clone(),
+            };
+            (p.name.clone(), pin)
+        })
+        .collect();
     Manifest {
         name: "physics".into(),
         version: Semver::parse("1.0.0").expect("a version"),
@@ -47,17 +63,20 @@ fn manifest() -> Manifest {
         feature: "physics".into(),
         license: "Apache-2.0".into(),
         implements: INTERFACE.into(),
-        implementation: Implementation::reference(
-            "physics",
-            Semver::parse("1.0.0").expect("a version"),
-        ),
+        implementation: Implementation {
+            name: build.implementation.clone(),
+            version: Semver::parse(&build.version).expect("a crate's version"),
+            pins,
+            equivalence: Equivalence::Measured,
+            state: StateClass::BackendBytes,
+        },
     }
 }
 
-/// The shipped module.
-pub fn module() -> Module {
+/// The shipped module, on the backend `build` names.
+pub fn module(build: &Build) -> Module {
     Module {
-        manifest: manifest(),
+        manifest: manifest(build),
         register,
     }
 }
@@ -65,9 +84,9 @@ pub fn module() -> Module {
 /// The planted module (#1918, criterion 3): its readings entry hands the view no changed ranges
 /// while the ball moves, so the registry's kit fails clean-rebuild equality at the seal, naming
 /// the frame.
-pub fn hands_no_changes() -> Module {
+pub fn hands_no_changes(build: &Build) -> Module {
     Module {
-        manifest: manifest(),
+        manifest: manifest(build),
         register: |r| entries(r, |_, _| Vec::new()),
     }
 }

@@ -1,0 +1,65 @@
+Base commit: eeb45a10a ("Merge pull request #2272 from windoliver/worktree-github-issue-1100-e546cb")
+Machine: macOS on Apple silicon (Mac17,10), the Metal device; the shared Mac this job ran on, one-minute load 140 to
+         360 on 18 cores throughout, so no timing could be judged here.
+Builds: cargo build --locked --bin deep-gpu (2,424 s under that load) and cargo build --locked --bin deep-show
+        --no-default-features --features full (929 s), CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0, the pinned
+        1.99.1 toolchain; both exit 0. npm ci once (node_modules was missing).
+Command: node node_modules/vitest/vitest.mjs run --root tests/acceptance/2017 --no-file-parallelism --testTimeout=600000
+Type-check: node node_modules/typescript/bin/tsc -p tests/acceptance/2017/tsconfig.json passes (exit 0, no output).
+
+Result (observed, one run of the final files; AC2 run once more after the EPIPE line in runGpu, below):
+Test Files 4 failed (4), Tests 7 failed (7), 312 s. Every test fails at an assertion; none at a load error.
+
+ac1-levels-by-error.test.ts
+  AC1 #2017.3e1437ba at 1080p and at 4K from one pose each tile draws the coarsest level ...
+    AssertionError: the plate at 1920 × 1080: the frame's `lod` has a row for the terrain plate ground, with its tiles
+    (README: Assumed surfaces 1): expected undefined to be defined
+    (view3d drew the plate at full detail and answered; its `lod` is [], and no frame has `ground_points`)
+  AC1 #2017.3e1437ba the planted terrain_lod_by_distance ...
+    AssertionError: deep-gpu run --planted terrain_lod_by_distance exits 0 (no signal); stdout:
+    {"ok":false,"code":"bad_input"}: expected 2 to be +0
+    (the base doesn't know the planted name)
+
+ac2-light-holds.test.ts
+  AC2 #2017.e778fe83 under a sun 10° up, every pixel of a tile that changes level keeps its lit color ...
+    AssertionError: the shaded plate: the frame's `lod` has a row for the terrain plate ground, with its tiles
+    (README: Assumed surfaces 1): expected undefined to be defined
+  AC2 #2017.e778fe83 the planted terrain_shades_own_level_normals ...
+    AssertionError: deep-gpu run --planted terrain_shades_own_level_normals exits 0 (no signal); stdout:
+    {"ok":false,"code":"bad_input"}
+    (in the full run this test first met `spawnSync … EPIPE`, the binary exiting before it read its input, which
+    runGpu threw as an error; runGpu now judges that exit as above, and the file's second run failed here)
+
+ac3-budgets.test.ts
+  AC3 #2017.751f674c nothing in this task runs per frame while still ...
+    AssertionError: frame 0: counts' terrain_tiles_selected (README: Assumed surfaces 5) is a finite number, got
+    undefined: expected false to be true
+    (before it, deep-show's frames held: the still scene ran more operators than the bare scene at frame 0 and no
+    more at frames 1 to 5; the base's view3d answered with counts, and its existing counters were 0 after frame 0)
+  AC3 #2017.751f674c the budgets, recorded against the merge base and judged on the reference Mac ...
+    AssertionError: benchmarks/budgets.json has the task canvas-ground: expected undefined to be defined
+
+ac4-taste.test.ts
+  AC4 #2017.44d27f48 the run writes the scattered field, the vase on the table, the plate at 1080p and 4K, the trees
+  in wind and the wind rolling across them ...
+    AssertionError: INCONCLUSIVE: no taste call is recorded: show the owner ... ; this is not a pass
+    (the base drew all six from its final targets; they were deleted after the run, since this job commits nothing
+    outside its folder. Their SHA-256s at the base: scattered-field.png 7bb40b46…, vase-on-table.png 39f275f4…,
+    terrain-1080p.png 3d581d00…, terrain-4k.png 545da273…, trees-in-wind.png fab70ae5…, wind-rolling.apng c977b41a…)
+
+Observed at the base while choosing the fixtures (scratch files, not kept):
+- view3d draws the plate (full detail), the shaded plate, the still scene, the garden, the vase (rested on the
+  tilted table by rest_on), the wind field and the plate in the filmic look, with no refusal and no notice.
+- The still scene in view3d with counts: frame 0 built 6 meshes, wrote 152 instance records and encoded one batch;
+  frames 1 to 5 built 0, wrote 0, uploaded no element and encoded nothing (one batch replayed).
+- deep-show frames: a scene of one box ran 22, 1, 1, 1 operators; the still scene 83, 1, 1, 1, 1, 1.
+- The shaded plate at 960 × 540 (as committed): green from 88 to 201, median 157, none at 0 or 255; the same with
+  lod_px lowered is byte-identical (the base draws every tile at full detail either way).
+- geometry on the budget scene: the prop's builder mesh 20,020 vertices (10 bands × 1,001 rings × 2), 22,000 welded
+  faces after its bevel; the mesh's builder mesh 2,020 vertices, 15,200 faces after two levels; the scatter keeps
+  54,485 elements; the curve's length 1,000.05 m; the forest's tree estimates 2,000 vertices. Showing the still, budget
+  and forest scenes is presented with no issue.
+
+Not run here: the timings of ac3-budgets (this machine can't judge one under its load, and the base has no timing
+fields to read) and the planted programs' failures (the base has neither plant). The 200-point margins for criterion
+1 come from the scratch model in README: Readings, not from a binary.

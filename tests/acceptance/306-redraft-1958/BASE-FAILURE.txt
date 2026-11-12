@@ -1,0 +1,89 @@
+Base commit: eeb45a10a ("Merge pull request #2272 from windoliver/worktree-github-issue-1100-e546cb"), holding only these test
+files (untracked at the run)
+Command: CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/306-redraft-1958 --no-file-parallelism --testTimeout=600000
+Run with node_modules from npm ci and cargo build --locked --bin deep-show --no-default-features --features r1 done beforehand
+in the checkout's target/ (the file builds it again through #306's useBuilds, warm). The suite type-checks:
+node node_modules/typescript/bin/tsc -p tests/acceptance/306-redraft-1958/tsconfig.json (exit 0).
+Date: 2026-11-12T01:37:58Z  Node v24.22.2  vitest 5.0.5  darwin-arm64 (Mac17,10)  cargo 1.99.1
+Exit code: 1. Paths below have the checkout's absolute path replaced by <worktree>.
+
+Result: 2 tests, 2 failed, 0 passed. Both fail at their first assertion, "opens (presented)", on the open: the base refuses a
+document naming a pack version the store lacks whole (crates/deep-canvas/src/document/packs.rs, `resolve`: an error
+`pack_missing` at packs/0, actual {pack, version}, ids [c1], "the document is refused whole"; crates/deep-show/src/hub.rs,
+`refused_reply`), which is the half #1958 replaces.
+
+- AC3 with 1.0.0 installed, test/chart@2.0.0 (redraft 1958): fails at "the board naming test/chart@2.0.0 opens (presented),
+  not refused whole": outcome refused, the one issue pack_missing (error, ids [c1], actual {pack: test/chart, version:
+  2.0.0}), no snapshot.
+- AC3 with no pack installed, test/chart@1.0.0 (redraft 1958): fails at the same assertion: refused, pack_missing (error,
+  ids [c1], actual {pack: test/chart, version: 1.0.0}).
+
+Checked by hand at the base, outside the suite, with target/debug/deep-show run and this suite's scenario (a scratch script,
+not kept):
+- The same board without c1 (no items, `packs: []`) is presented with one snapshot (ca6880d01595…), while the board naming
+  the installed test/chart@1.0.0 is presented with c1 expanded through test/chart@1.0.0 and another snapshot
+  (17671757d3aa…). So the snapshot comparison tells a board that draws c1 from one that skips it.
+- With test/chart@1.0.0 installed and the board naming it presented, `read` of DOC.a gives c1 as sent plus the `layer` the
+  hub stamps (crates/deep-canvas/src/show.rs, `stamp`): less `layer`, its canonical JSON is the sent item's, so the
+  "kept byte for byte" reading holds on a document the base does open.
+- The board naming test/chart@2.0.0 with 1.0.0 installed: the open is refused as above, with an `unknown_kind` notice on
+  c1 beside the error; `read` of DOC.a answers {outcome: refused, code: ref_unresolved} (no current revision); the
+  board's `deep show --check` on DOC.b is refused with result BLOCKED and the same pack_missing error. So the check half
+  already holds at the base; the base fails only the open.
+
+Not run: the frozen tests/acceptance/306/ suite at this base, and any implementation of #1958 (none exists in this
+checkout; none was looked for).
+
+==== The run
+
+
+ RUN  v5.0.5 <worktree>/tests/acceptance/306-redraft-1958
+
+ ❯ missing.test.ts (2 tests | 2 failed) 2784ms
+   ❯ AC3 a document naming a pack version this build lacks opens with that pack's instances kept and skipped with pack_missing, and its check is BLOCKED (redraft 1958) (2)
+     × AC3 with 1.0.0 installed, a board naming test/chart@2.0.0 opens, c1 kept and skipped with pack_missing naming the pack and 2.0.0, never drawn with 1.0.0, its check BLOCKED (redraft 1958) 1625ms
+     × AC3 with no pack installed, a board naming test/chart@1.0.0 opens, c1 kept and skipped with pack_missing naming the pack and 1.0.0, and its check is BLOCKED (redraft 1958) 63ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  missing.test.ts > AC3 a document naming a pack version this build lacks opens with that pack's instances kept and skipped with pack_missing, and its check is BLOCKED (redraft 1958) > AC3 with 1.0.0 installed, a board naming test/chart@2.0.0 opens, c1 kept and skipped with pack_missing naming the pack and 2.0.0, never drawn with 1.0.0, its check BLOCKED (redraft 1958)
+AssertionError: the board naming test/chart@2.0.0 opens (presented), not refused whole: [{"check":"document.validate","code":"pack_missing","severity":"error","ids":["c1"],"path":"packs/0","actual":{"pack":"test/chart","version":"2.0.0"},"what":"pack `test/chart` at version 2.0.0 is not in this build; the document is refused whole, and never drawn with another version","fix":"Install the pack at that version, or open the document where it is installed; never draw it with another version."}]: expected 'refused' to be 'presented' // Object.is equality
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ opensSkipped missing.test.ts:38:132
+     36| /** The board naming `pack@version` opened: presented, c1 skipped with…
+     37| function opensSkipped(shown: JsonObject, others: JsonObject, kept: Jso…
+     38|   expect(outcome(shown), `${what} opens (presented), not refused whole…
+       |                                                                                                                                    ^
+     39|   expect(errors(issues(shown, what)).map((i) => i.raw), `${what} opens…
+     40|   const missing = packMissing(shown, what).filter((m) => mentions(m.ra…
+ ❯ missing.test.ts:59:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  missing.test.ts > AC3 a document naming a pack version this build lacks opens with that pack's instances kept and skipped with pack_missing, and its check is BLOCKED (redraft 1958) > AC3 with no pack installed, a board naming test/chart@1.0.0 opens, c1 kept and skipped with pack_missing naming the pack and 1.0.0, and its check is BLOCKED (redraft 1958)
+AssertionError: the board naming test/chart@1.0.0 in a store without it opens (presented), not refused whole: [{"check":"document.validate","code":"pack_missing","severity":"error","ids":["c1"],"path":"packs/0","actual":{"pack":"test/chart","version":"1.0.0"},"what":"pack `test/chart` at version 1.0.0 is not in this build; the document is refused whole, and never drawn with another version","fix":"Install the pack at that version, or open the document where it is installed; never draw it with another version."}]: expected 'refused' to be 'presented' // Object.is equality
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ opensSkipped missing.test.ts:38:132
+     36| /** The board naming `pack@version` opened: presented, c1 skipped with…
+     37| function opensSkipped(shown: JsonObject, others: JsonObject, kept: Jso…
+     38|   expect(outcome(shown), `${what} opens (presented), not refused whole…
+       |                                                                                                                                    ^
+     39|   expect(errors(issues(shown, what)).map((i) => i.raw), `${what} opens…
+     40|   const missing = packMissing(shown, what).filter((m) => mentions(m.ra…
+ ❯ missing.test.ts:74:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  17:37:58
+   Duration  2.92s (tests 98%, transform 2%, import 1%)
+
+Exit code: 1  wall 3 s
