@@ -74,8 +74,9 @@ tactics merged 9385 bytes; imports: [] exports: init:function step:function read
 - `--planted linker_adds_linking_section`, `plain` (no links): rewritten hash
   `a320863f1afd248ac216bc044c0664ddb0531079393657e64b3ba03db7805ebb`, where the shipped linker leaves
   `342531a722a01595df4e9f2b6bc9353a536676f19c135fe056987d9f7edb74f2` (line 4 above): the twin changes an unlinked
-  program's hash; the shipped linker leaves it unlinked (`linked: null`; `link_ns` is 0 for the twin too, so it shows nothing here),
-  and ac07 checks the rest.
+  program's hash; the shipped linker leaves it unlinked (`linked: null`), while the twin's reply carries a `linked`
+  program (sha256 `226acef4…`, 172 bytes, `e2e-raw/planted-plain.jsonl`): it ran on a program without links. (`link_ns`
+  is 0 for the twin too, so it shows nothing.) ac07 checks the rest.
 - `--planted linker_links_in_listing_order`, `tactics`: `{"ok":false,"code":"link_refused","item":"tactics",
   "refusals":[{"rule":"link","import":{"module":"lib:grid_path","name":"find_route"}}]}`: pathing@1 placed before
   grid_path@1 leaves its import unresolved, and the refusal names it.
@@ -105,16 +106,19 @@ wording is the issue's (its Acceptance criteria), not repeated here.
   import no listed library exports (naming it), an import of a later-listed library (naming it) and a merged program
   1 byte over 4 MiB (naming the limit) are each refused in ac03's test, passing in `acceptance-linux-9a02471b6.txt`; no
   saved reply here shows them.
-- 4's app-vs-headless-Chrome fixture test passes in the acceptance suite (`acceptance-linux-9a02471b6.txt`).
-  That ac04 test compares only the fixture's `deep_hashes`, the state before step 0, which the honest and the
+- 4: the app-vs-headless-Chrome fixture test (ac04's second) passes in the acceptance suite
+  (`acceptance-linux-9a02471b6.txt`). That test compares only the fixture's `deep_hashes`, the state before step 0, which the honest and the
   corner-cutting libraries share; the page's item-hash, route and moves comparison is what tells them apart, so the
-  browser half of 4 rests on the page too.
-- 4's merged programs on macOS arm64 and Linux x86_64 are BLOCKED here (ac04's first test); they would run on the
-  reference Mac, and haven't yet. So 4 is not proven.
+  browser half of 4 rests on the page too. The merged programs on macOS arm64 and Linux x86_64 are BLOCKED here
+  (ac04's first test). Its unblock ask: run ac04 on the reference Mac with Docker, the linux/amd64 image pulled
+  (`docker pull --platform linux/amd64 rust:1.99.1-slim-bookworm`) and amd64 emulation on (`helpers.ts`'
+  `linuxLogic` blocks on each). It hasn't run yet. So 4 is not proven.
 - 5: `swarm`'s fuel trap at step 0 names grid_path@1, its hash and `find_route` (line 7). The same offset on a second
   machine is BLOCKED (ac05 in `acceptance-linux-9a02471b6.txt`): its
-  second machine is a linux/amd64 container on this host, and its unblock ask is that image, `docker pull --platform
-  linux/amd64 rust:1.99.1-slim-bookworm`, which the suite doesn't pull. So 5 is not proven.
+  second machine is a linux/amd64 container, and its unblock ask has two steps: the image, `docker pull --platform
+  linux/amd64 rust:1.99.1-slim-bookworm`, which the suite doesn't pull; then amd64 emulation (binfmt), which this
+  host doesn't have registered (`/proc/sys/fs/binfmt_misc` lists only python3.12), or an x86_64 host or the reference
+  Mac's Docker. So 5 is not proven.
 - 6: INCONCLUSIVE with one approval ask from the agent's own pack, PASS from an installed one (lines 8, 9), and ac06's test, which holds both,
   passes (`acceptance-linux-9a02471b6.txt`).
 - 7: `plain` isn't linked (line 4) and the planted twin changes its hash (above). The same hash, bake key and goldens as
@@ -143,7 +147,8 @@ wording is the issue's (its Acceptance criteria), not repeated here.
   a listed library defines, and the mutant that names every import of the program fails it
   (`oracle-mutants/names-every-import.txt`). The blind job's first draft called that check the CHECK-NOT and put
   data-layout.s's `aligned_bar` at 65552 (it is at 65568); round 32 disputed both, and the job's redraft (blind, by the session's report)
-  (2b38d894b, comments and docs only) corrected them. The 6 tests were rerun as committed there. The oracle README's "checks against a real linker" (rust-lld) is the blind
+  (2b38d894b, comments and docs only) corrected them. The 6 tests were rerun as committed there. The mutant runs used
+  d49221e13's test text; its assertions are unchanged through 8b6f4d096 (comments only). The oracle README's "checks against a real linker" (rust-lld) is the blind
   job's report: no output of that run is saved.
 
 
@@ -447,3 +452,7 @@ raw files, `gen.test.ts`, the code and the issue. It also ran its own BFS over t
   tests stands; 5's unblock ask is named apart from the Mac runs; the blind job's inputs and the README's
   timing are marked as the session's report; the planted-fault rule is cited to the oracle-tests README; and the
   per-criterion bullets run 1 to 10, with ac06 cited under 6.
+- **Round 34** found no wrong values (it reran the oracle lane, 6 passed, matched the vendored files to the owner's
+  zip and checked all 11 screenshots against `e2e-raw`) and two P2s and three low gaps, fixed here: 4's unblock ask
+  now names Docker, the amd64 image and emulation on the Mac; 5's names emulation after the pull; 4 is one bullet; the
+  mutant runs' test text is named; and the no-links twin's `linked` program is cited.
