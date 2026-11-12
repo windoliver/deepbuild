@@ -23,7 +23,7 @@ rewritten history; the object is still in the repository). No raw output of this
    ```
 
 3. The replies below are excerpts: each keeps only the fields it shows, with fixture IDs in fixture records shortened,
-   `route` cut to its first 24 values and times rounded to ms; reply 10 keeps its full fixture ID and raw `ns`, and
+   `route` cut to its first 24 values and fixture times rounded to ms (`link_ns` stays raw); reply 10 keeps its full fixture ID and raw `ns`, and
    refusals keep their full fixture IDs. Bakes show step 0's arrays as a top-level
    `arrays`, and leave out the step items, so reply 7 doesn't show that swarm's step 0 failed (its trap does). The
    rerun's replies, with every field kept (only long base64 cut short, as said below), are in
@@ -88,8 +88,9 @@ same results (see the rerun below).
 - 1: linked programs merge to modules with no imports. At 9a02471b6 the saved proof is ac01 passing
   (`acceptance-linux-9a02471b6.txt`) and `e2e-raw/web-plan-imports.txt`, where `e2e-tools/imports.mjs` compiles the
   four `web_plan` rewritten programs, chase's included, and finds `imports []` for each. (The merged `linked` bytes
-  themselves are cut short in `e2e-raw`; node's `[]` above is from the 11-09 run.) Both items are admitted; the receipt (line 1) and
-  deep_query's row (line 3) name grid_path@1 with its hash; `maze`'s bake gives the 10-move route. Changing one byte of
+  themselves are cut short in `e2e-raw`; node's `[]` above is from the 11-09 run.) Both items are admitted; maze's receipt (line 1), chase's
+  receipt (`e2e-raw/app-bakes-replies.jsonl` row 2) and chase's deep_query row (line 3) name grid_path@1 with its hash,
+  and ac01's first test (passing) asserts both receipts and both deep_query rows; `maze`'s bake gives the 10-move route. Changing one byte of
   the library changes both pieces' rewritten hashes and bake keys, while a third piece that doesn't link it keeps its
   own: ac01's second test, passing.
 - 2: the fixture passes and the library links (lines 1, 14); the corner-cutting twin with grid_path@1's fixture is
@@ -385,3 +386,6 @@ raw files, `gen.test.ts`, the code and the issue. It also ran its own BFS over t
   passed) and three low gaps, fixed here: `link_ns: 0` no longer cited as proof for the no-links twin; ac04's
   browser test is described with its limit and the page named as the stronger proof; and the earlier build that
   wrote `web-replies.jsonl` first is marked as a report.
+- **Round 26** found no wrong values (its rerun gave byte-identical 00–06 and `web-replies.jsonl`) and two low gaps,
+  fixed here: only fixture times are rounded in the excerpts (`link_ns` is raw); and criterion 1 now cites each
+  piece's receipt and deep_query row, with ac01's first test for the ones no saved reply shows.
