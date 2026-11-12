@@ -1,0 +1,40 @@
+Base commit: 108fea237 ("tests(#2017): blind acceptance suite, written from the issue, its oracle page, the design and
+             base eeb45a10a"): eeb45a10a plus the first draft of this issue's suite, no implementation.
+Machine: macOS on Apple silicon, the Metal device; the shared Mac this job ran on, one-minute load 60 to 310 on 18 cores.
+Build: cargo build --locked --bin deep-gpu, CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0, the pinned 1.99.1 toolchain,
+       cold, about 14 minutes; exit 0. npm ci once (node_modules was missing).
+Command: CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 node node_modules/vitest/vitest.mjs run --root tests/acceptance/2017-redraft-ac2 --no-file-parallelism --testTimeout=600000
+Type-check: node node_modules/typescript/bin/tsc -p tests/acceptance/2017-redraft-ac2/tsconfig.json passes (exit 0, no
+            output).
+
+Result (observed, one run of the committed files): Test Files 1 failed (1), Tests 2 failed (2), 14.6 s. Both fail at an
+assertion of their own; none at a load error.
+
+ac2-light-holds.test.ts
+  AC2 #2017.e778fe83 under a sun 10° up, every pixel of a tile that changes level keeps its lit color within one code value
+    AssertionError: the plate as written: the frame's `lod` has a row for the terrain plate ground, with its tiles
+    (tests/acceptance/2017/README.md, Assumed surfaces 1): expected undefined to be defined
+    (levelsOf, helpers.ts:233; view3d drew the plate at full detail and wrote its final and depth targets, which
+    decoded at 960 × 540; its `lod` is [])
+  AC2 #2017.e778fe83 the planted terrain_shades_own_level_normals changes a pixel's lit color by more than one code
+  value and fails, naming the tile
+    AssertionError: deep-gpu run --planted terrain_shades_own_level_normals exits 0 (no signal); stdout:
+    {"ok":false,"code":"bad_input"}: expected 2 to be +0
+    (runGpu, helpers.ts:115; the base doesn't know the planted name)
+
+Observed at the base with the same fixture (scratch scripts, not kept), the base drawing every tile at full detail with
+smooth vertex normals at both lod_px:
+- Both draws: green from 115 to 193, median 159, no pixel at 0 or 255; byte-identical finals.
+- The ripple in the light: mean green 179.1 where its slope faces the sun (cos(k x) ≤ −0.7), 133.1 where it faces away
+  (≥ 0.7), so 46 code values apart; the test asks 10.
+- The depth target: 100 − depth from 98.43 to 101.57 m deep, matching the field to within 4 mm at the frame's corners
+  and centre (the drawn 1 m triangles against the field between samples).
+- The pixel mapping: a plate rising 0.05 m a metre toward +z reads higher at the bottom rows, one rising toward +x higher
+  at the right, so screen right is +X and screen down +Z, as the tile names assume.
+- The judge on a twin: the plate drawn with the ripple left out of its field (the light normals from level 2 and up's own
+  triangles would give, since those levels hold none of it) against the full plate, its levels set to 3 and 0 by hand:
+  each of the four tiles failed, about 122,800 of its 129,600 pixels over one code value, the worst by 33, its depth
+  moved 0.079 m, none clipped; the full plate against itself gave no failure. One pass over the 518,400 pixels took
+  about 0.1 s.
+
+Not run here: the shipped and planted programs (the base has neither the terrain rows nor the plant).
