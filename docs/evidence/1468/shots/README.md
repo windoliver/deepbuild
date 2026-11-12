@@ -2,26 +2,26 @@
 
 Each picture shows a terminal session that `script` recorded byte for byte while it ran [`../shots.sh`](../shots.sh), then redacted as below. Each was drawn from the committed recording next to it by [`../term_png.py`](../term_png.py), with this machine's DejaVu Sans Mono and Pillow. Redrawing one with its title below gives the same pixels:
 - `e2e-base`: `#1468 e2e on main 1abbcf086, the PR's merge base (no fix)`
-- `e2e-fix`: `#1468 e2e on 7f35ecd72 (with the fix)`
+- `e2e-fix`: `#1468 e2e on 2d831aa2e (with the fix)`
 - `acceptance-base`: `#1468 blind acceptance suite on main 1abbcf086, the PR's merge base (no fix)`
-- `acceptance-fix`: `#1468 blind acceptance suite on 7f35ecd72 (with the fix)`
+- `acceptance-fix`: `#1468 blind acceptance suite on 2d831aa2e (with the fix)`
 
-- **What's recorded.** `shots.sh` prints each command before it runs it, and its exit code after. Each picture's header prints the commit and `git status` of the tree it ran in. The base has no copy of these scripts, so `shots.sh` and `e2e.py` came from the fix tree for both runs, as each e2e picture's `$ python3` line shows for `e2e.py`.
+- **What's recorded.** `shots.sh` prints each command before it runs it, and its exit code after. Each picture's header prints the commit and `git status` of the tree it ran in. The base has no copy of these scripts, so `shots.sh` and `e2e.py` came from the fix tree for both runs, as each e2e picture's `$ python3` line shows for `e2e.py`. The base runs, earlier, used the fix tree's `e2e.py` as of `7f35ecd72`, which differs from `2d831aa2e`'s only in its line-3 comment.
 - **The logs.** The `.typescript.txt` next to each picture is that recording. In it, the home folder is written `~` and the scratch folder `<scratchpad>`.
-- **Load.** A wait loop outside `shots.sh` started each recording only once the one-minute load was under 6 on this 20-core Linux aarch64 machine. Each header prints the load at the start, and the recordings ran one after another.
+- **Load.** A wait loop outside `shots.sh` started each recording only once the one-minute load was under 6 on this 20-core Linux aarch64 machine. Each header prints the load at the start, and the recordings ran one after another: the base pair first, then the fix pair later at the head.
 
 **The two trees:**
 - **Base:** main `1abbcf086`, the PR's merge base, in a separate clone.
   - The suite needs `tests/acceptance/1468/` and its `[[test]]` entry in `crates/deep-motion/Cargo.toml`. They are the only source changes there, and each base picture's `git status` lists them.
   - `target` is a link to that clone's build folder. Each tree runs its own build: the test binary has the same name in both, but they are different files in different folders.
-- **Fix:** commit `7f35ecd72`, as printed, with a clean `git status`. Later commits change `docs/evidence/1468/` (these pictures, their recordings and captions, and one comment in `e2e.py`). One also moves the two parsers' unit tests, unchanged but for indentation, rustfmt reflow, a module doc line and one `include_str!` path, into `expr/tests.rs` and `document/packs/tests.rs`, and lowers their files' size ceilings; the code under test is the same.
+- **Fix:** commit `2d831aa2e`, as printed, with a clean `git status`. It is the PR head these pictures were taken for. The commit that adds them changes only `docs/evidence/1468/shots/`.
 
 | Picture | What it shows |
 |---|---|
 | [`e2e-base.png`](e2e-base.png) | **Requests.** `deep-motion` and `deep-show` each get two documents written to one process (`deep-canvas-render` isn't built; see below): one holding 1,000,000 parens, then one holding a single paren. **Result.** `deep-motion eval` (driver) and `deep-show run` (pack rule) both die by signal 6 (stack overflow), and neither reply comes. `e2e.py` then exits 1. |
-| [`e2e-fix.png`](e2e-fix.png) | **Requests.** The same requests, on binaries built at `7f35ecd72`. **Refusals.** The driver is refused at `drivers/deep/expr`, and the pack rule at `recipes/deeprule.probe@1/rules/0/expr`; each "nests past the cap of 64 levels". **After.** The same process then answers the second document: the driver with `"ok": true`, the pack, a second one named `shallowrule` so its reply reads apart from the first, with `"outcome": "installed"`. `deep-motion` and `deep-show` each exit 0. `e2e.py` exits 2, because the field binary isn't built (below). `deep-show run` puts each call's outcome inside an envelope whose own `"ok": true` means the line was read. |
+| [`e2e-fix.png`](e2e-fix.png) | **Requests.** The same requests, on binaries built at `2d831aa2e`. **Refusals.** The driver is refused at `drivers/deep/expr`, and the pack rule at `recipes/deeprule.probe@1/rules/0/expr`; each "nests past the cap of 64 levels". **After.** The same process then answers the second document: the driver with `"ok": true`, the pack, a second one named `shallowrule` so its reply reads apart from the first, with `"outcome": "installed"`. `deep-motion` and `deep-show` each exit 0. `e2e.py` exits 2, because the field binary isn't built (below). `deep-show run` puts each call's outcome inside an envelope whose own `"ok": true` means the line was read. |
 | [`acceptance-base.png`](acceptance-base.png) | **The suite.** The blind suite (`tests/acceptance/1468/`) on the base: 4 pass, 10 fail, 1 ignored. **Failures.** In every failing AC1, AC3 and AC4 test the process under test dies by signal 6: the suite's child, or `deep-motion eval` for the driver. AC2's depth-65 cases all parse. Each AC1 and AC3 failure prints its line twice: once as the test prints it, once as its panic message. **Passes.** The 4 that pass are the two planted parsers, depth 64, and the shallow control. **Planted runs.** Two more commands run the planted parser (no cap) alone in the suite's child, on 1,000,000 `(` and on the 10,000-term tower; each dies by signal 6. |
-| [`acceptance-fix.png`](acceptance-fix.png) | **The suite.** 14 pass, 1 ignored. **Times.** Each AC1 and AC3 line shows the child's refusal, "nests past the cap of 64 levels", and its `ms`: 0.06 to 2.6 ms. That figure is timed inside the child, from the parser call to the dropped result. It leaves out starting the process and building the string. **Planted runs.** The planted parser still dies by signal 6. That death is what the planted tests check, and the red `[exit 101]` under each of those runs is the expected result. |
+| [`acceptance-fix.png`](acceptance-fix.png) | **The suite.** 14 pass, 1 ignored. **Times.** Each AC1 and AC3 line shows the child's refusal, "nests past the cap of 64 levels", and its `ms`: 0.10 to 2.3 ms. That figure is timed inside the child, from the parser call to the dropped result. It leaves out starting the process and building the string. **Planted runs.** The planted parser still dies by signal 6. That death is what the planted tests check, and the red `[exit 101]` under each of those runs is the expected result. |
 
 The ignored test, `child`, is the suite's child process. The other tests start it themselves with `DEEP_1468_CHILD` set (`depth.rs`), and alone it does nothing.
 
@@ -42,5 +42,6 @@ The ignored test, `child`, is the suite's child process. The other tests start i
 - **Checking the hashes.** The sha256 lines hash the copies the e2e ran: each binary is copied right after its build into a fresh `mktemp` folder.
   - A later `cargo test` relinks `target/debug/deep-motion` to a build with the test's features.
   - The hashed binary stays in `target/debug/deps/` under its own name.
-  - The hashes can be checked only on this machine.
+  - The hashes can be checked only on this machine, and only the fix's: the base build was deleted afterwards to free disk.
+  - `deep-show` embeds `DEEP_SOURCE_DIGEST`, a hash over the source files of every crate it depends on (`crates/deep-show/build.rs`), so even a change to test files gives it a new hash.
 - **Colours.** `term_png.py` colours each line by matching words in it, not by the test's verdict.

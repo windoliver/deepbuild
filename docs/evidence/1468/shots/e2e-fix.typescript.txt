@@ -1,10 +1,10 @@
-Script started on 2026-11-12 00:30:11-08:00 [COMMAND="bash ~/deepbuild/.claude/worktrees/determined-lewin-bc0143/docs/evidence/1468/shots.sh e2e" <not executed on terminal>]
-# 2026-11-12T08:30:11Z, Linux aarch64, 20 cores, load 4.77
+Script started on 2026-11-12 01:08:31-08:00 [COMMAND="bash ~/deepbuild/.claude/worktrees/determined-lewin-bc0143/docs/evidence/1468/shots.sh e2e" <not executed on terminal>]
+# 2026-11-12T09:08:31Z, Linux aarch64, 20 cores, load 2.63
 $ git rev-parse HEAD
-7f35ecd72e02ffea94d8c2315c76916633ff9e01
+2d831aa2e705bd57db8e3df5b0e07f5317846dda
 [exit 0]
 $ git --no-pager log -1 --format=%s
-docs/evidence/1468: the recorded build shows each diagnostic's first line
+docs/evidence/1468/shots: the test move's wording names every change
 [exit 0]
 $ git status --short
 [exit 0]
@@ -36,11 +36,11 @@ error[E0004]: non-exhaustive patterns: `PrimitiveBatch::Chrome(_)` not covered
 --
 error: could not compile `gpui-pre-wgpu` (lib) due to 1 previous error
 [exit 101]
-$ sha256sum /tmp/tmp.bn4jsAV2vL/deep-motion /tmp/tmp.bn4jsAV2vL/deep-show
-adbe4e75233a9310f0fbbf9cfa15f3e36bde670812c5eb4d7f126ea49ad6ae77  /tmp/tmp.bn4jsAV2vL/deep-motion
-4552cc264878664a5382c011352bb48cef6297f226ab21baf69c25e5f66e6697  /tmp/tmp.bn4jsAV2vL/deep-show
+$ sha256sum /tmp/tmp.ZZYbW8ElCx/deep-motion /tmp/tmp.ZZYbW8ElCx/deep-show
+adbe4e75233a9310f0fbbf9cfa15f3e36bde670812c5eb4d7f126ea49ad6ae77  /tmp/tmp.ZZYbW8ElCx/deep-motion
+db0f8cc6cbb4175d123ddb463f3909acb4fc29200c07f31d347e03ceef06fa10  /tmp/tmp.ZZYbW8ElCx/deep-show
 [exit 0]
-$ python3 -I ~/deepbuild/.claude/worktrees/determined-lewin-bc0143/docs/evidence/1468/e2e.py /tmp/tmp.bn4jsAV2vL
+$ python3 -I ~/deepbuild/.claude/worktrees/determined-lewin-bc0143/docs/evidence/1468/e2e.py /tmp/tmp.ZZYbW8ElCx
 == driver: deep-motion eval
 reply 1 (1,000,000 parens): {"ok": false, "code": "bad_doc", "path": "drivers/deep/expr", "call": "((((((((((((((((((((((((((((((((((((((((…[a 2,000,001-char value, cut here by e2e.py]", "why": "nests past the cap of 64 levels"}
 reply 2 (1 paren): {"ok": true, "order": ["dot.driver", "dot.transform"], "frames": "[cut here by e2e.py]", "markers": {}, "cuts": [], "hash": "afdf36a4a303…"}
@@ -53,4 +53,4 @@ reply 2 (1 paren): {"ok": true, "replies": [{"outcome": "installed", "pack": "te
 exit 0
 [exit 2]
 
-Script done on 2026-11-12 00:30:23-08:00 [COMMAND_EXIT_CODE="2"]
+Script done on 2026-11-12 01:08:58-08:00 [COMMAND_EXIT_CODE="2"]
