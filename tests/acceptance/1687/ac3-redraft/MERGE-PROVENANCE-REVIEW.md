@@ -135,3 +135,23 @@ new/changed/unknown loaders, changed inputs/callers, core-to-runtime reach and
 unclassified packages retain their fail-closed checks. The existing mutant
 checks are unchanged and unrun here. Any required signed guard approval still
 needs a real person's signature over the actual change; none is fabricated.
+
+## Refresh after the merge of main `afadc469d` (2026-11-12)
+
+The owner approved, in conversation, re-recording the three whole-file input
+digests that merge changed. It was done by the change's own author, not by an
+independent reviewer, and no signed approval exists.
+
+| Input | Reviewed above | After the merge |
+|---|---|---|
+| hub/src/plant.ts | `43dd5c3e8485…` | `1a82106b562df4a509d56d491ccbcc406227089d97a8c98ba3b637564dcbba8e` |
+| hub/src/core.ts | `6315da929fa0…` | `9e6e9273be332ab9b7ffb02e0d7ccab5864ff87f7fbcc757fc06ac648a7736fd` |
+| hub/src/server.ts | `17c626a3d8f0…` | `189d26d521d4cb0ceff88832a0a1fcf89fc3a6573f77bd5fec016c715bc77ad2` |
+
+Only those three lines of `reviewed-loaders.json` changed. With the old digests
+the completeness case named exactly these three inputs and nothing else: the
+nine loader sites, their scopes, the `extensionSide` callers and the four
+provider calls matched as frozen. `plant.ts` and `server.ts` changed on main
+alone (new plant names for #2019 and #1100; `server.ts` holds no loader site).
+`core.ts` gained the wiring of `session-flags.ts`. After the refresh the four
+structure files pass 29 of 29.
