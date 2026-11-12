@@ -504,6 +504,10 @@ alone.push('tests/acceptance/1920/');
 // side through the claim's timing check, whose verdict is a reading on a machine loaded past its cores.
 alone.push('tests/acceptance/1863/');
 timed.push('tests/acceptance/1863/speed.test.ts');
+// #2017's files each build deep-gpu (ac3-budgets also deep-show, for release where it times) and draw on the Metal GPU;
+// ac3-budgets judges the task's budgets on the reference Mac.
+alone.push('tests/acceptance/2017/');
+timed.push('tests/acceptance/2017/ac3-budgets.test.ts');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
