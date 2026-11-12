@@ -25,6 +25,7 @@ use std::collections::BTreeMap;
 use std::rc::Rc;
 
 use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
+use deep_canvas::registry::{BuildSet, Registry};
 use deep_canvas_sandbox::rewrite;
 use serde_json::{json, Map, Value};
 
@@ -279,6 +280,18 @@ fn track(piece: &Piece, line: &Value, steps: i64) -> Option<Vec<Entry>> {
     }
     entries.sort_by_key(|e| (e.t, e.player, e.seq));
     Some(entries)
+}
+
+/// The runtime digest a golden carries: the seal's, of the set this crate's runner holds, the
+/// logic and sandbox modules (Registry and seal: runtime digest; #1920). Both are bit and
+/// canonical, so a new patch of the sandbox's engine leaves it as it was.
+fn runtime_digest() -> String {
+    Registry::new(BuildSet::Full)
+        .with(module())
+        .with(deep_canvas_sandbox::module::module())
+        .seal()
+        .expect("the logic and sandbox modules seal together")
+        .runtime_digest
 }
 
 /// The logic module in this process: its planted twin, the layouts each item ID has had, and
@@ -698,10 +711,6 @@ impl Logic {
         )?
         .run(steps, &mut rec, &mut |_, _| {});
         let keys = keys(&piece, &entries);
-        let mut digest = format!("{VERSION}\nwasmtime {}\n", deep_sandbox_wasmtime::WASMTIME);
-        for i in &piece.items {
-            digest += &format!("{} {}\n", i.id, i.hash);
-        }
         // The occurrence lists' hash, when an item emits.
         let occurrences = rec.occurrences(&piece);
         let occurrences_hash = (!occurrences.is_empty()).then(|| {
@@ -717,7 +726,7 @@ impl Logic {
             "linux-x86_64"
         };
         let golden = json!({
-            "bake_key": keys, "runtime_digest": format!("{:016x}", piece::h64(digest.as_bytes())),
+            "bake_key": keys, "runtime_digest": runtime_digest(),
             "machine": {"os": std::env::consts::OS, "arch": std::env::consts::ARCH, "cpu": cpu()},
             "step_hashes": hashes(&piece, &rec), "checkpoint_hashes": rec.checkpoints.clone(), "occurrences_hash": occurrences_hash,
             "record_on": host, "verify_on": [other, "web"],
@@ -1157,5 +1166,16 @@ mod tests {
         });
         let got = rx.recv_timeout(std::time::Duration::from_secs(1));
         assert_eq!(got, Ok(vec![(-F, 1.0)]));
+    }
+
+    /// #1920: a golden carries the seal's runtime digest in place of the logic module's own. The
+    /// set this runner holds, logic and sandbox, has no measured or backend_bytes implementation,
+    /// so it is the d1 digest of no entry: the SHA-256 of `[]`.
+    #[test]
+    fn a_golden_carries_the_seals_runtime_digest() {
+        let line = json!({"call": "golden", "piece": {"seed": 0, "items": {}}, "steps": 1});
+        let golden = Logic::default().handle(&line)["golden"].clone();
+        let none = "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945";
+        assert_eq!(golden["runtime_digest"], json!(none));
     }
 }
