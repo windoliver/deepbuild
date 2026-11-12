@@ -206,7 +206,7 @@ the criterion says; the scenario itself must run, so a plant that doesn't start 
 
 | ID | Criterion (short) | Tests | At this base |
 |---|---|---|---|
-| AC1 `#236.5dec450f` | a sandboxed piece's children get no devices | `devices.test.ts` (2): the piece and a helper it spawns, each device denied by the sandbox and not opened; the same with the app holding the permissions | the first fails (no package); the second is skipped INCONCLUSIVE where the app can't open every device outside the sandbox |
+| AC1 `#236.5dec450f` | a sandboxed piece's children get no devices | `devices.test.ts` (2): the piece and a helper it spawns, each device denied by the sandbox and not opened; the same with the app holding the permissions | the first fails (no package); the second is skipped BLOCKED where the app can't open every device outside the sandbox |
 | AC2 `#236.0c11913d` | no hub socket, no inbox socket, no turn | `hub.test.ts` AC2 (1), through the hub's `run.start` | fails: the probe connects to the hub's socket |
 | AC3 `#236.c43ad465` | undeclared read, write, network denied; digests by the parent | `contain.test.ts` AC3 (1) | fails (no package) |
 | AC4 `#236.cc0de139` | a read-only job's undeclared write refused by the sandbox, recorded | `contain.test.ts` AC4 (1): a job's child writing outside what the job declared; `dependents.test.ts` AC4 (1): the runner's job (#159), now tested through `openRunner` | both fail (no package; no runner at this base) |
@@ -232,7 +232,7 @@ the criterion says; the scenario itself must run, so a plant that doesn't start 
   needed: outside the sandbox it opens, inside it fails), and a screen capture only when the OS already allows
   it: through CoreGraphics where `cc` builds for a macOS before 15, and through ScreenCaptureKit from 15 on,
   where CoreGraphics' call is gone. The first test runs on any Mac; the second, "with DeepBuild holding the
-  permissions", runs only where the helper opens all four outside the sandbox, and is skipped INCONCLUSIVE
+  permissions", runs only where the helper opens all four outside the sandbox, and is skipped BLOCKED
   elsewhere, naming what the app couldn't open. The piece is the started process; the helper is its child,
   spawned by the probe.
 - **AC2.** The process is run by the hub's own supervisor (`run.start`), with the session's inbox socket (a
