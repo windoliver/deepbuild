@@ -136,21 +136,25 @@ wording is the issue's (its Acceptance criteria), not repeated here.
   the reference Mac, where they haven't run yet. Its unblock ask: run ac10 on the reference Mac in the local preflight,
   with local `main` set so `git merge-base HEAD main` names the merge base it builds and compares against
   (`helpers.ts`' `baseBin`). So 10 is not proven.
-- Oracle lane, criteria 1 and 3: 6 tests pass (`oracle-linux-9a02471b6.txt`). The map's upstream tests were in the
+- Oracle lane, criteria 1 and 3: INCONCLUSIVE for both; its 6 tests pass (`oracle-linux-9a02471b6.txt`). The map's upstream tests were in the
   owner's oracle-tests zip all along; `tests/acceptance/190/README.md` lines 10–16 (not edited; by the session's report written
   before the code, though it landed in the same commit, 85169f887) say the page answered 404. By the session's report,
   a blind job wrote `tests/acceptance/190/oracle/` from the issue, the map, the three vendored
   wasm-ld tests (`function-imports.s`, `data-layout.s`, `undefined.s`, copied unchanged with a NOTICE) and the base
   commit, never the implementation; its README lists what each test can't hold of the upstream one and why. The
   oracle-tests README (line 27, citing #136) counts a linked test as evidence only when it rejects our output with a
-  planted fault. By that rule's letter, function-imports and data-layout count, but each rejects its planted twin only
-  through a check of our own, not one upstream's live CHECKs hold. `linker_adds_linking_section` fails only
-  function-imports' no-`linking` check (upstream's CHECKs read no custom section's name but `name`); its upstream-held
-  "imports nothing" check fails only on the unlinked input object, which isn't our output. `linker_links_in_listing_order`
-  lays its data out consistently in its own order, and fails only data-layout's check that link order is dependency
-  order with ties by name, which is ours (upstream's CHECKs fix the memory, its limits and each segment's offset at its
-  alignment, not which of our objects comes first). So criterion 1's oracle lane counts by the rule's letter, with no
-  upstream-held check rejecting a planted fault. undefined.s has no planted fault, so it doesn't count for criterion 3:
+  planted fault, and "it" is the linked upstream test: so here only checks upstream's live CHECKs hold can count.
+  Neither planted twin reaches one. `linker_adds_linking_section` fails only function-imports' no-`linking` check,
+  which is ours (upstream's CHECKs read no custom section's name but `name`); its upstream-held "imports nothing" check
+  fails only on the unlinked input object, which isn't our output. `linker_links_in_listing_order`'s output is aligned
+  and consistent in its own order (beta@1 at 8,200, alpha@1 at 8,208, v = 65,033, by validators' probes, not saved
+  here), so it breaks only our rule that link order is dependency order with ties by name; data-layout's three
+  failing checks are fixed addresses that hold that order rule along with alignment. So the oracle lane is
+  INCONCLUSIVE for criterion 1: its tests pass and can fail, but no planted fault is shown failing an upstream-held
+  check. Its unblock ask: a planted wrong program whose output an upstream-held check rejects (for example a linker
+  that leaves an import, or one that misaligns a segment), added behind the build feature with the other twins and
+  tested by the blind job. (A looser reading, that the linked test file counts when any of its checks rejects a planted
+  fault, would count both; that reading is the owner's to choose, not this report's.) undefined.s has no planted fault, so it doesn't count and the lane is INCONCLUSIVE for criterion 3 too:
   the base (`BASE-FAILURE.txt`, all 6 fail) fails it before its import check, and two mutants of 9a02471b6's `link.rs`
   (scratch edits, saved only as output; the design puts a planted program in test code or behind a build feature) only
   show its assertions can fail. One that names no import fails upstream's CHECK (`oracle-mutants/names-no-import.txt`). Upstream's CHECK-NOT (`baz`, a symbol only `--undefined` names) isn't held:
@@ -491,3 +495,10 @@ raw files, `gen.test.ts`, the code and the issue. It also ran its own BFS over t
   by its letter to all three tests and says undefined.s, which has no planted fault, doesn't count; an unfilled
   commit placeholder is filled; `name` is named as the one custom section upstream reads; and the mutant runs'
   provenance says the test code is identical from d49221e13 to HEAD.
+- **Round 39** found no wrong values (oracle rerun 6 passed, type check clean, both twins probed, screenshots and
+  `e2e-raw` checked) and one P2 and three low gaps. The P2: round 38's "counts by the rule's letter" overclaimed, since
+  the rule's "it" is the linked upstream test and no upstream-held check rejects either planted twin; rounds 37 and 38
+  had read the same facts two ways. Settled here on the strict reading: the oracle lane is INCONCLUSIVE for criteria 1
+  and 3, with an unblock ask, and the looser reading is left to the owner. The lows: the planted twin's layout is
+  stated as probed rather than shown by the test; and two oracle-file wordings went back to the blind job, whose
+  redraft (89ef55002) changes comments and docs only.
