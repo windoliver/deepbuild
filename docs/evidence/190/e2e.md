@@ -79,7 +79,8 @@ tactics merged 9385 bytes; imports: [] exports: init:function step:function read
   is 0 for the twin too, so it shows nothing.) ac07 checks the rest.
 - `--planted linker_links_in_listing_order`, `tactics`: `{"ok":false,"code":"link_refused","item":"tactics",
   "refusals":[{"rule":"link","import":{"module":"lib:grid_path","name":"find_route"}}]}`: pathing@1 placed before
-  grid_path@1 leaves its import unresolved, and the refusal names it.
+  grid_path@1 is refused by the listed-before rule, naming the import (the saved reply's `what`: "library pathing@1
+  imports lib:grid_path.find_route from grid_path@1, which isn't listed before it", `e2e-raw/planted-tactics.jsonl`).
 
 ## What this shows, per criterion
 
@@ -117,8 +118,8 @@ wording is the issue's (its Acceptance criteria), not repeated here.
   machine is BLOCKED (ac05 in `acceptance-linux-9a02471b6.txt`): its
   second machine is a linux/amd64 container, and its unblock ask has two steps: the image, `docker pull --platform
   linux/amd64 rust:1.99.1-slim-bookworm`, which the suite doesn't pull; then amd64 emulation (binfmt), which this
-  host doesn't have registered (`/proc/sys/fs/binfmt_misc` lists only python3.12), or an x86_64 host or the reference
-  Mac's Docker. So 5 is not proven.
+  host doesn't have registered (`/proc/sys/fs/binfmt_misc` lists only python3.12), or the reference Mac's Docker. (helpers.ts's
+  message also offers an x86_64 host, but ac05 then fails its check that the two machines differ in CPU architecture.) So 5 is not proven.
 - 6: INCONCLUSIVE with one approval ask from the agent's own pack, PASS from an installed one (lines 8, 9), and ac06's test, which holds both,
   passes (`acceptance-linux-9a02471b6.txt`).
 - 7: `plain` isn't linked (line 4) and the planted twin changes its hash (above). The same hash, bake key and goldens as
@@ -131,7 +132,9 @@ wording is the issue's (its Acceptance criteria), not repeated here.
   the listing-order twin is refused naming the import (above). The ping/pong cycle is refused by ac09's second test (passing in
   `acceptance-linux-9a02471b6.txt`).
 - 10: both budget tests are BLOCKED here (ac10 in `acceptance-linux-9a02471b6.txt`): the budgets' reference machine is
-  the reference Mac, where they haven't run yet. So 10 is not proven.
+  the reference Mac, where they haven't run yet. Its unblock ask: run ac10 on the reference Mac in the local preflight,
+  with local `main` set so `git merge-base HEAD main` names the merge base it builds and compares against
+  (`helpers.ts`' `baseBin`). So 10 is not proven.
 - Oracle lane, criteria 1 and 3: 6 tests pass (`oracle-linux-9a02471b6.txt`). The map's upstream tests were in the
   owner's oracle-tests zip all along; `tests/acceptance/190/README.md` lines 10–16 (not edited; by the session's report written
   before the code, though it landed in the same commit, 85169f887) say the page answered 404. By the session's report,
@@ -456,3 +459,7 @@ raw files, `gen.test.ts`, the code and the issue. It also ran its own BFS over t
   zip and checked all 11 screenshots against `e2e-raw`) and two P2s and three low gaps, fixed here: 4's unblock ask
   now names Docker, the amd64 image and emulation on the Mac; 5's names emulation after the pull; 4 is one bullet; the
   mutant runs' test text is named; and the no-links twin's `linked` program is cited.
+- **Round 35** found no wrong values (oracle rerun 6 passed; `imports.mjs` output byte-identical; all 11 screenshots
+  checked against `e2e-raw`) and one P2 and two low gaps, fixed here: 5's unblock ask no longer offers an x86_64 host,
+  where ac05's different-architecture check fails; 10 names its unblock ask; and the listing-order twin's refusal is
+  quoted as the listed-before rule it is.
