@@ -1,11 +1,13 @@
 import { spawnSync } from 'node:child_process';
+import { createRequire } from 'node:module';
 import { closeSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import { homedir, hostname, tmpdir } from 'node:os';
 import { join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { inputs as configInputs } from './config-eval.mjs';
 import { inputs as verdictInputs } from './verdict-proofs.mjs';
-import { binaryNames, buildBinaries, commandFiles, watchBinaries } from './proof-binaries.mjs';
+// Lane definitions are imported without the build tooling by runner configs and minimal fixture repositories.
+const require = createRequire(import.meta.url);
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 // The repo's declared test paths. The unit lane's runners take their file patterns from them, and perf
@@ -951,8 +953,9 @@ export function runLanes(lanes, { cwd = root } = {}) {
           const reported = reporting([command, ...args], report);
           if (reported && !binaries && !binaryError) {
             binaries = mkdtempSync(join(tmpdir(), 'deep-lane-binaries-'));
-            watchBinaries(binaries);
             try {
+              const { binaryNames, buildBinaries, commandFiles, watchBinaries } = require('./proof-binaries.mjs');
+              watchBinaries(binaries);
               const files = selected.flatMap((lane) => lane.commands).flatMap((command) => commandFiles(cwd, command));
               buildBinaries(cwd, join(binaries, 'bin'), binaryNames(cwd, files));
             } catch (error) { binaryError = error; }
