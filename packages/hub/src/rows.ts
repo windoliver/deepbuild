@@ -2,8 +2,9 @@
 // one state reading (status.ts: sessionStates) and the record's asks, and appends it as row.set when it changes; the
 // app and the replica fold those events, and deep, deep status and deep inbox read the `rows` table they project, from
 // the hub or, with it down, from its database. So every reader holds the same rows, words and order at one log_pos.
+import { basename } from 'node:path';
 import { SECTION } from './list.js';
-import { repoOf, sessionStates, WORDS, type Fact, type Reading } from './status.js';
+import { repoOf, sessionStates, WORDS, type Fact, type Flag, type Reading } from './status.js';
 
 /** A row as every reader shows it (row.set's data, less `listed` and `order`): @1 for a session or an ask, @2 for a running job (#1925). */
 export interface Row {
@@ -25,7 +26,15 @@ export interface Row {
   default_at?: number;
   /** A running job's count from its tool's own counter, and its time left once it has one (#1925). */
   progress?: string;
+  /** What a working session's turn is doing now, from its latest tool event (#2021). */
+  doing?: Doing;
+  /** A session row's one flag beside its word (#2019): row.set@4. */
+  flag?: RowFlag;
 }
+/** A flag as a row carries it: the reading's, less the facts it read. */
+export type RowFlag = Omit<Flag, 'facts'>;
+/** The row.set version a session's or an ask's row needs: @4 with a flag, @3 with what its turn is doing, else @1. */
+export const rowVersion = (row: Row): number => (row.flag ? 4 : row.doing ? 3 : 1);
 /** A row with its place in the list: every reader sorts by `order`'s bytes. */
 export interface Placed { order: string; row: Row }
 
@@ -148,6 +157,7 @@ const parsed = <T>(v: unknown, fallback: T): T => {
  */
 export async function buildRows(query: Query, readings: readonly Reading[], open: readonly string[]): Promise<Row[]> {
   const titles = await sessionNames(query, readings.map((r) => r.id));
+  const doing = await doings(query, readings);
   const projects = new Map<string, string | null>();
   const projectOf = (worktree: string | null, project: string | null): string | null => {
     const key = `${worktree ?? ''}\n${project ?? ''}`;
@@ -160,7 +170,9 @@ export async function buildRows(query: Query, readings: readonly Reading[], open
       id: `session:${r.id}`, address: `session/${r.id}`, title: titles.get(r.id) ?? AGENTS[r.agent ?? ''] ?? r.agent ?? 'agent', project, session: r.id, agent: r.agent,
       entry: ENTRY[r.state], word: r.state, why: r.plain, waits_on: r.waits_on,
       since: r.since, actions: [], unread: FIRST_UNREAD.has(r.cause) || FIRST_UNREAD.has(r.state),
+      ...(doing.has(r.id) ? { doing: doing.get(r.id)! } : {}),
     };
+    if (r.flag) { const { facts: _facts, ...flag } = r.flag; row.flag = flag; }
     return row;
   });
   const wanted = open.map((handle) => quote(handle.slice('ask:'.length))).join(', ');
@@ -184,7 +196,7 @@ export async function buildRows(query: Query, readings: readonly Reading[], open
  * record fact that row read (event kind, time and log_pos) and, for each word above its own in the table's order, the
  * fact that word's rows lacked.
  */
-export interface Why { id: string; title: string; project: string | null; word: string; why: string; rule: string; facts: Fact[]; lacked: { row: string; fact: string }[] }
+export interface Why { id: string; title: string; project: string | null; word: string; why: string; rule: string; facts: Fact[]; lacked: { row: string; fact: string }[]; flag?: Flag }
 
 /**
  * Why the session `session` names reads as it does, among the list's `rows`: by its ID, its row's ID, or the start of
@@ -203,7 +215,87 @@ export async function whyOf(query: Query, now: number, session: string, rows: re
   // Each word above its own, once, with what every row of that word lacked.
   const above = WORDS.slice(0, WORDS.indexOf(reading.state));
   const lacked = above.map((word) => ({ row: word as string, fact: reading.lacked.filter((l) => l.state === word).map((l) => l.fact).join('; ') }));
-  return { id: row.id, title: row.title, project: row.project, word: reading.state, why: reading.plain, rule: reading.rule, facts: reading.facts, lacked };
+  return { id: row.id, title: row.title, project: row.project, word: reading.state, why: reading.plain, rule: reading.rule, facts: reading.facts, lacked, ...(reading.flag ? { flag: reading.flag } : {}) };
+}
+
+/**
+ * What a working session's turn is doing now (#2021): the words of its latest tool event of the turn, a verb in the
+ * step's tense and its object, and when that event came. `ago` says the step is over, so a reader writes "2 min ago"
+ * after it rather than how long it has run.
+ */
+export interface Doing { words: string; at: number; ago: boolean }
+/** Each tool kind's verb: running, done, failed, and as a permission prompt names it. */
+const VERBS: Record<string, readonly [string, string, string, string]> = {
+  shell: ['Running', 'Ran', "Couldn't run", 'run'],
+  edit: ['Editing', 'Edited', "Couldn't edit", 'edit'],
+  write: ['Writing', 'Wrote', "Couldn't write", 'write'],
+  read: ['Reading', 'Read', "Couldn't read", 'read'],
+  search: ['Searching', 'Searched', "Couldn't search", 'search'],
+  fetch: ['Fetching', 'Fetched', "Couldn't fetch", 'fetch'],
+  mcp: ['Calling', 'Called', "Couldn't call", 'call'],
+  unknown: ['Using a tool', 'Used a tool', "Couldn't use a tool", 'use a tool'],
+};
+/** A tool event as the line reads it: its kind and its data, with the time it came. */
+interface ToolEvent { kind: string; data: Obj; ts: number }
+type Obj = Record<string, unknown>;
+
+/**
+ * The object of a call (#2021): a file's short path, a command's first word, a fetch's host or an MCP tool's name,
+ * never more of what it carries. A command's first word is its program's name, past any `NAME=value` it sets, so a
+ * value the hub scrubbed never shows, and nor does the rest of the line.
+ */
+function objectOf(call: Obj, worktree: string | null): string {
+  const paths = Array.isArray(call.paths) ? call.paths.filter((p): p is string => typeof p === 'string' && p !== '') : [];
+  if (call.kind === 'shell' || (typeof call.command === 'string' && !paths.length)) {
+    const word = String(call.command ?? '').trim().split(/\s+/).find((w) => !/^[A-Za-z_][A-Za-z0-9_]*=/.test(w)) ?? '';
+    return word.split('/').filter(Boolean).at(-1) ?? '';
+  }
+  if (call.kind === 'fetch' && typeof call.host === 'string') return call.host;
+  if (call.kind === 'mcp' && typeof call.tool === 'string') return call.tool;
+  const [path] = paths;
+  if (!path) return '';
+  return worktree && path.startsWith(`${worktree}/`) ? path.slice(worktree.length + 1) : basename(path);
+}
+
+/**
+ * The line of a turn whose latest tool event is `last` (#2021): built only from the hook's facts, never from what the
+ * agent wrote. A call under way reads in the present ("Running npm"), one that ended in the past ("Edited
+ * cart/total.ts") or as failed ("Couldn't run npm"), and a call held at the agent's own permission prompt reads
+ * "Waiting for you to allow: run npm". `call` is the call's start: for a prompt the tool event before it, for an ended
+ * call the start with its ID.
+ */
+export function doingOf(last: ToolEvent, call: ToolEvent | undefined, worktree: string | null): Doing {
+  // A prompt's own kind is `tool`: the call's kind and object are the call's. An ended call's object is its own, and
+  // its fetch's host its start's.
+  const of = last.kind === 'permission.request' ? { ...last.data, ...(call?.data ?? {}) } : { ...(call?.data ?? {}), ...last.data };
+  const verbs = VERBS[String(of.kind)] ?? VERBS.unknown!;
+  const object = objectOf(of, worktree);
+  const said = (verb: string) => (object ? `${verb} ${object}` : verb);
+  if (last.kind === 'permission.request') return { words: `Waiting for you to allow: ${said(verbs[3])}`, at: last.ts, ago: false };
+  if (last.kind === 'tool.before') return { words: said(verbs[0]), at: last.ts, ago: false };
+  return { words: said(last.data.outcome === 'failed' ? verbs[2] : verbs[1]), at: last.ts, ago: true };
+}
+
+/**
+ * Each working session's line (#2021), and that of one held at its agent's permission prompt: from its latest tool
+ * event since its latest prompt of its own, so a turn with no tool call yet has none. The newest two such events are
+ * read, so a prompt's line names the call before it.
+ */
+async function doings(query: Query, readings: readonly Reading[]): Promise<Map<string, Doing>> {
+  const out = new Map<string, Doing>();
+  for (const r of readings) {
+    if (r.state !== 'working' && r.cause !== 'waiting') continue;
+    const [last, before] = (await query(`SELECT kind, data, ts FROM events INDEXED BY events_session WHERE session_id = ${quote(r.id)} AND (kind IN ('tool.before', 'tool.after') OR (kind = 'permission.request' AND json_extract(data, '$.kind') = 'tool') OR (kind = 'user.ask' AND json_extract(data, '$.from') <> 'subagent')) ORDER BY log_pos DESC LIMIT 2`)).map((e) => {
+      const { kind, data, ts } = e as { kind: string; data: unknown; ts: number };
+      return { kind, data: parsed<Obj>(data, {}), ts };
+    });
+    if (!last || last.kind === 'user.ask') continue;
+    const id = last.kind === 'tool.after' && typeof last.data.call === 'string' ? last.data.call : undefined;
+    const [start] = id === undefined ? [] : (await query(`SELECT data FROM events INDEXED BY events_session WHERE session_id = ${quote(r.id)} AND kind = 'tool.before' AND json_extract(data, '$.call') = ${quote(id)} ORDER BY log_pos DESC LIMIT 1`)) as { data: unknown }[];
+    const call = start ? { kind: 'tool.before', data: parsed<Obj>(start.data, {}), ts: last.ts } : before?.kind === 'tool.before' && last.kind === 'permission.request' ? before : undefined;
+    out.set(r.id, doingOf(last, call, r.worktree));
+  }
+  return out;
 }
 
 /** A row's content but its unread and since, which a change of state alone moves. */

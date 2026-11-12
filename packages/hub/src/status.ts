@@ -17,6 +17,7 @@ import { activePlant } from './plant.js';
 import { clockTime, elapsed } from './promises.js';
 import { startOf } from './wire.js';
 import { claimState, newestClaim } from './verdict-chat.js';
+import { watched, watchWords, type Watch } from './watch.js';
 import { ROUNDS, verdictLine } from '@deepbuild/verdicts';
 
 /** The words a session's state reads as (design: States people see); the table below gives their order. */
@@ -56,10 +57,21 @@ export interface Lacked { rule: string; state: State; fact: string }
  * `rule` is the row of the state table that matched, `facts` each record fact that row read, `lacked` each higher row
  * with the fact it lacked, and `waits_on` whom the session waits for (#2018): one function picks the state and says why.
  */
-export interface Reading { id: string; project_id: string | null; agent: string | null; worktree: string | null; state: State; cause: Cause; rule: string; why: string; plain: string; since: number | null; waits_on: string | null; facts: Fact[]; lacked: Lacked[]; note?: string }
+export interface Reading { id: string; project_id: string | null; agent: string | null; worktree: string | null; state: State; cause: Cause; rule: string; why: string; plain: string; since: number | null; waits_on: string | null; facts: Fact[]; lacked: Lacked[]; note?: string; flag?: Flag }
+
+/** The one flag a row shows beside its word (#2019), never a state: the first of FLAGS that applies. */
+export type FlagCode = 'interrupted' | 'retrying' | 'repeating' | 'watch-only' | 'unpushed';
+/**
+ * A flag from record facts: `text`, the one line its slot shows, with no age in it (a reader says how long from
+ * since), its fix and the facts it read; and what each flag names: an interrupted session's last call and when it can
+ * pick up (`doing`, `until`), a retry's cause and count, a repeat's command and count.
+ */
+export interface Flag { code: FlagCode; text: string; since: number | null; fix?: string; doing?: string; until?: number; cause?: string; count?: number; command?: string; facts: Fact[] }
+/** One tool call's end as its tool.after recorded it: what ran, how it ended, and its error's signature (#2019). */
+export interface Call { kind: string; command: string | null; server: string | null; tool: string | null; args: string | null; outcome: string; exit_code: number | null; signature: string | null; at: Fact }
 
 /** A session's newest claim as the record holds it: its verdict in force, or the stale one, and what it leaves open. */
-interface Claim { made: Fact; outcome: string | null; judged?: Fact; stale?: Fact; round: number | null; owner: string | null; evidence: string | null }
+interface Claim { made: Fact; outcome: string | null; judged?: Fact; stale?: Fact; sent?: Fact; round: number | null; owner: string | null; evidence: string | null }
 /**
  * What the record holds of one session, each value with the event it was read from: everything `decide` reads, so a
  * state and its why come from the same facts (#2018).
@@ -82,11 +94,21 @@ export interface SessionFacts {
   /** It waits on its monitor (#997); a turn of it you interrupted, with no prompt since (#39). */
   watching?: { text: string; at?: Fact };
   interrupted?: Fact;
-  /** Its newest stop of its own. */
-  stopped?: Fact;
+  /** Its newest stop of its own, and when the limit that stopped it resets, where its stop names that (#2019). */
+  stopped?: Fact; resets?: number;
   claim?: Claim;
   /** A task of its thread it hasn't started. */
   queued?: Fact;
+  /** What its turn last ran, from its newest tool call since its prompt: read for a session stopped or gone (#2019). */
+  doing?: { call: Call; at: Fact };
+  /** Its model call's retries since the turn's newest reply, call, prompt or stop (#2019). */
+  retries?: { cause: string; attempt: number; max: number | null; first: number; at: Fact[] };
+  /** Its turn's tool calls, newest first, while it works (#2019). */
+  calls?: Call[];
+  /** Why its holds only watch, `deep off` first (#2019). */
+  watch?: Watch;
+  /** Its commits no remote branch holds (#2019). */
+  unpushed?: { commits: number; branch: string | null; at: Fact };
 }
 
 /** What a row of the table gives a session it matches. */
@@ -133,7 +155,10 @@ const TABLE: readonly Rule[] = [
     match: (f) => (f.promised ? { why: `a promised check is due since ${clockTime(f.promised.due)}, waiting for its next prompt or stop: "${f.promised.quote}"`, plain: `a promised check is due, waiting for its next prompt or stop: "${f.promised.quote}"`, since: f.promised.due, waits_on: 'agent', facts: [f.promised.at] } : undefined) },
   { rule: 'failed', state: 'flagged', cause: 'failed', lacks: 'no turn ended failed',
     match: (f) => (f.status === 'failed' ? { why: `its turn ended failed, with no claim${causeOf(f)}`, since: f.last_seen, waits_on: 'you', facts: [f.statusBy] } : undefined) },
-  judged('sent_back', 'sent back', 'sent_back', 'FAIL', (c) => ({ why: `its checks sent its claim back, round ${Math.max(1, c.round ?? 1)} of ${ROUNDS}`, waits_on: 'agent' })),
+  // A watch-only session's stop wasn't held, so a FAIL sent nothing back: it reads sent back only once a send-back
+  // reached it (#2019). The planted wrong program reads sent back from the verdict alone.
+  ((r: Rule): Rule => ({ ...r, lacks: `${r.lacks}, sent back to it`, match: (f, now) => (f.watch && !f.claim?.sent && activePlant() !== 'sent-back-without-hold' ? undefined : r.match(f, now)) }))(
+    judged('sent_back', 'sent back', 'sent_back', 'FAIL', (c) => ({ why: `its checks sent its claim back, round ${Math.max(1, c.round ?? 1)} of ${ROUNDS}`, waits_on: 'agent' }))),
   judged('blocked', 'BLOCKED', 'blocked', 'BLOCKED', waitsFor),
   judged('invalid', 'INVALID', 'invalid', 'INVALID', waitsFor),
   judged('inconclusive', 'INCONCLUSIVE', 'inconclusive', 'INCONCLUSIVE', waitsFor),
@@ -164,6 +189,83 @@ const TABLE: readonly Rule[] = [
 /** The words in the table's order (#2018): every surface and `--why` name the rows above a state by these. */
 export const WORDS: readonly State[] = [...new Set(TABLE.map((r) => r.state))];
 
+/** How many alike failures in a row read repeating (#2019). */
+export const REPEATS = 3;
+/** The stop causes a usage limit gives (#85). */
+const LIMITS = new Set(['rate_limited', 'plan_window_spent']);
+/** The statuses of a session at work, whose turn hasn't stopped. */
+const AT_WORK = new Set(['working', 'waiting', 'running']);
+/** A retry's cause in a few words. */
+const REFUSED: Record<string, string> = { overloaded: 'overloaded', rate_limited: 'rate-limited', server_error: 'a server error', connection: 'a lost connection' };
+/** What a call ran: its shell command, or its MCP server and tool; quoted for a line. */
+const what = (c: Pick<Call, 'kind' | 'command' | 'server' | 'tool'>): string => c.command ?? (c.server && c.tool ? `${c.server} ${c.tool}` : `a ${c.kind} call`);
+const ran = (c: Pick<Call, 'kind' | 'command' | 'server' | 'tool'>): string => (c.command || (c.server && c.tool) ? `\`${what(c)}\`` : what(c));
+
+/**
+ * The run of alike failed calls that ends a turn's calls (newest first), #2019: the same shell command, or the same MCP
+ * tool with arguments of the same hash, each failed with the same exit code and error signature. A call of another
+ * kind, one that differs or one that passed ends the run. The planted wrong program keys the run on the command alone.
+ */
+export function repeatOf(calls: readonly Call[]): { what: string; key: string; count: number; since: number; facts: Fact[]; first: Call } | undefined {
+  const keyOf = (c: Call): string | undefined => (c.outcome !== 'failed' ? undefined : c.kind === 'shell' && c.command ? `shell\0${c.command}` : c.server && c.tool && c.args ? `mcp\0${c.server}\0${c.tool}\0${c.args}` : undefined);
+  const [last] = calls;
+  const key = last && keyOf(last);
+  if (!last || !key) return undefined;
+  const alone = activePlant() === 'repeat-by-command';
+  const same = (c: Call): boolean => (alone ? c.command === last.command && c.kind === last.kind : keyOf(c) === key && c.exit_code === last.exit_code && c.signature === last.signature);
+  let n = 0;
+  while (n < calls.length && same(calls[n]!)) n += 1;
+  const run = calls.slice(0, n);
+  return { what: what(last), key: `${key}\0${last.exit_code}\0${last.signature}`, count: n, since: run.at(-1)!.at.ts, facts: run.map((c) => c.at).reverse(), first: run.at(-1)! };
+}
+
+/**
+ * The flags a row can carry beside its word (#2019), in the order the first that applies is shown: a session a usage
+ * limit stopped or whose process exited mid-turn, one whose agent retries a model call, one whose turn repeats a
+ * failing call, one whose holds only watch, and one that stopped with commits no remote branch holds. None is a
+ * state: the word stays the table's, so a repeating session reads working, and none raises an ask or a notice.
+ */
+const FLAGS: readonly { code: FlagCode; match(f: SessionFacts, state: State): Omit<Flag, 'code' | 'facts'> & { facts: (Fact | undefined)[] } | undefined }[] = [
+  { code: 'interrupted', match: (f) => {
+    const doing = f.doing ? { doing: what(f.doing.call) } : {};
+    const during = f.doing ? ` while it ran ${ran(f.doing.call)}` : '';
+    // A usage limit is its newest stop's cause, whatever the stop's outcome, until it works again.
+    if (f.stopped && LIMITS.has(f.stopCause ?? '') && !AT_WORK.has(f.status)) {
+      return f.resets
+        ? { text: `a usage limit stopped it${during}; it can pick up at ${clockTime(f.resets)}`, since: f.stopped.ts, fix: `Prompt it again at ${clockTime(f.resets)}, when the limit resets.`, ...doing, until: f.resets, facts: [f.stopped, f.doing?.at] }
+        : { text: `a usage limit stopped it${during}; the limit names no time it resets`, since: f.stopped.ts, fix: 'Prompt it again once the limit resets.', ...doing, facts: [f.stopped, f.doing?.at] };
+    }
+    return goneMidTurn(f) ? { text: `its process exited mid-turn${during}`, since: f.gone!.ts, fix: 'Resume it to pick up where it stopped.', ...doing, facts: [f.gone, f.doing?.at] } : undefined;
+  } },
+  // The planted wrong program never reads a retry, so the row reads working through them.
+  { code: 'retrying', match: (f) => {
+    const cause = f.retries && (REFUSED[f.retries.cause] ?? 'with an error');
+    return f.retries && cause && activePlant() !== 'retry-reads-working'
+      ? { text: `its model call was refused, ${cause}: retry ${f.retries.attempt}${f.retries.max ? ` of ${f.retries.max}` : ''}`, since: f.retries.first, cause, count: f.retries.attempt, facts: f.retries.at }
+      : undefined;
+  } },
+  { code: 'repeating', match: (f, state) => {
+    const run = state === 'working' ? repeatOf(f.calls ?? []) : undefined;
+    return run && run.count >= REPEATS ? { text: `${ran(run.first)} failed ${run.count} times in a row with the same error${run.first.exit_code !== null ? ` (exit ${run.first.exit_code})` : ''}`, since: run.since, fix: 'Read the error before it runs it again.', command: run.what, count: run.count, facts: run.facts } : undefined;
+  } },
+  { code: 'watch-only', match: (f, state) => {
+    if (!f.watch || state === 'quiet') return undefined;
+    const { why, fix } = watchWords(f.watch, f.agent);
+    return { text: why, since: f.watch.at.ts, fix, facts: [f.watch.at] };
+  } },
+  { code: 'unpushed', match: (f) => (f.unpushed && f.unpushed.commits > 0 && !AT_WORK.has(f.status)
+    ? { text: `${f.unpushed.commits} commit${f.unpushed.commits === 1 ? '' : 's'}${f.unpushed.branch ? ` on ${f.unpushed.branch}` : ''} on no remote branch`, since: f.unpushed.at.ts, fix: 'Push the branch, or say why it stays here.', facts: [f.unpushed.at] }
+    : undefined) },
+];
+/** A session's one flag, the first that applies, from the same facts as its state. */
+function flagOf(f: SessionFacts, state: State): Flag | undefined {
+  for (const rule of FLAGS) {
+    const hit = rule.match(f, state);
+    if (hit) return { ...hit, code: rule.code, facts: hit.facts.filter((x): x is Fact => x !== undefined) };
+  }
+  return undefined;
+}
+
 /**
  * The state of one session, from its facts alone: the first row of the table that matches, with each fact that row
  * read and, for each row above it, the fact it lacked (#2018). The same call gives the word and the why, so no
@@ -175,7 +277,8 @@ export function decide(f: SessionFacts, now: number): Reading {
     const hit = row.match(f, now);
     if (!hit) { lacked.push({ rule: row.rule, state: row.state, fact: row.lacks }); continue; }
     const facts = hit.facts.filter((x): x is Fact => x !== undefined).filter((x, i, all) => all.findIndex((y) => y.log_pos === x.log_pos) === i);
-    return { id: f.id, project_id: f.project_id, agent: f.agent, worktree: f.worktree, state: row.state, cause: row.cause, rule: row.rule, why: hit.why, plain: hit.plain ?? hit.why, since: hit.since, waits_on: hit.waits_on, facts, lacked, ...(f.note ? { note: f.note } : {}) };
+    const flag = flagOf(f, row.state);
+    return { id: f.id, project_id: f.project_id, agent: f.agent, worktree: f.worktree, state: row.state, cause: row.cause, rule: row.rule, why: hit.why, plain: hit.plain ?? hit.why, since: hit.since, waits_on: hit.waits_on, facts, lacked, ...(f.note ? { note: f.note } : {}), ...(flag ? { flag } : {}) };
   }
   throw new Error(`no row of the state table matched session ${f.id}`);
 }
@@ -237,8 +340,12 @@ export async function sessionFacts(query: Query, only?: ReadonlySet<string>): Pr
   const interrupted = new Map(((await query(`SELECT e.session_id, e.ts, e.log_pos FROM ${events('e')} WHERE e.kind = 'session.reading'${of('e.session_id')} AND json_extract(e.data, '$.reading') LIKE 'Interrupt:%' AND NOT EXISTS (SELECT 1 FROM events a WHERE a.session_id = e.session_id AND a.kind = 'user.ask' AND a.log_pos > e.log_pos) ORDER BY e.log_pos`)) as { session_id: string; ts: number; log_pos: number }[]).map((r) => [r.session_id, { kind: 'session.reading', ts: r.ts, log_pos: r.log_pos }]));
   // Each session's newest stop of its own: a hook after it, such as Claude Code's idle-prompt notification, is no later
   // stop, and nor is a subagent's.
-  const stops = new Map(((await query(`SELECT session_id, MAX(ts) AS ts, log_pos FROM ${events()} WHERE kind = 'agent.stop' AND json_extract(data, '$.child') IS NULL AND session_id IS NOT NULL${of('session_id')} GROUP BY session_id`)) as { session_id: string; ts: number; log_pos: number }[]).map((r) => [r.session_id, { kind: 'agent.stop', ts: r.ts, log_pos: r.log_pos }]));
+  // With when the limit that stopped it resets, where the stop names that (#2019).
+  const stopRows = (await query(`SELECT session_id, MAX(ts) AS ts, log_pos, json_extract(data, '$.plan_resets') AS resets FROM ${events()} WHERE kind = 'agent.stop' AND json_extract(data, '$.child') IS NULL AND session_id IS NOT NULL${of('session_id')} GROUP BY session_id`)) as { session_id: string; ts: number; log_pos: number; resets: number | null }[];
+  const stops = new Map(stopRows.map((r) => [r.session_id, { kind: 'agent.stop', ts: r.ts, log_pos: r.log_pos }]));
+  const resets = new Map(stopRows.filter((r) => typeof r.resets === 'number').map((r) => [r.session_id, r.resets!]));
   const claims = await newestClaims(query, of);
+  const flags = await flagFacts(query, sessions, gone, of, events);
   // An answer of yours whose delivery stalled or timed out (#2018), as the newest outcome its delivery recorded. A
   // database older than the deliveries table has none.
   const words = new Map<string, { outcome: string; at?: Fact }>();
@@ -261,9 +368,50 @@ export async function sessionFacts(query: Query, only?: ReadonlySet<string>): Pr
       ...(statusBy ? { statusBy } : {}), ...(seenBy ? { seenBy } : {}), ...(asks.has(s.id) ? { asks: asks.get(s.id)! } : {}), ...(gone.has(s.id) ? { gone: gone.get(s.id)! } : {}),
       ...(words.has(s.id) ? { words: words.get(s.id)! } : {}), ...(note ? { note: note.text, ...(note.text.startsWith(CANT_RUN) ? { cantRun: note.at } : {}) } : {}),
       ...(due.has(s.id) ? { promised: due.get(s.id)! } : {}), ...(watching.has(s.id) ? { watching: watching.get(s.id)! } : {}), ...(interrupted.has(s.id) ? { interrupted: interrupted.get(s.id)! } : {}),
-      ...(stops.has(s.id) ? { stopped: stops.get(s.id)! } : {}), ...(claims.has(s.id) ? { claim: claims.get(s.id)! } : {}), ...(queued.has(s.id) ? { queued: queued.get(s.id)! } : {}),
+      ...(stops.has(s.id) ? { stopped: stops.get(s.id)! } : {}), ...(resets.has(s.id) ? { resets: resets.get(s.id)! } : {}), ...(claims.has(s.id) ? { claim: claims.get(s.id)! } : {}), ...(queued.has(s.id) ? { queued: queued.get(s.id)! } : {}),
+      ...(flags.doing.has(s.id) ? { doing: flags.doing.get(s.id)! } : {}), ...(flags.retries.has(s.id) ? { retries: flags.retries.get(s.id)! } : {}), ...(flags.calls.has(s.id) ? { calls: flags.calls.get(s.id)! } : {}),
+      ...(flags.watch.off ?? flags.watch.sessions.get(s.id) ? { watch: flags.watch.off ?? flags.watch.sessions.get(s.id)! } : {}), ...(flags.unpushed.has(s.id) ? { unpushed: flags.unpushed.get(s.id)! } : {}),
     };
   });
+}
+
+/** A tool.after's data as one call, with the event it was read from. */
+export function callFrom(r: { data: string | Record<string, unknown>; ts: number; log_pos: number }): Call {
+  const d = (typeof r.data === 'string' ? JSON.parse(r.data) : r.data) as Record<string, unknown>;
+  const s = (v: unknown): string | null => (typeof v === 'string' && v ? v : null);
+  return { kind: String(d.kind), command: s(d.command), server: s(d.server), tool: s(d.tool), args: s(d.args), outcome: String(d.outcome), exit_code: typeof d.exit_code === 'number' ? d.exit_code : null, signature: s(d.signature), at: { kind: 'tool.after', ts: r.ts, log_pos: r.log_pos } };
+}
+
+/**
+ * What the record holds for the flags (#2019): what a stopped or gone session last ran; each session's model-call
+ * retries no reply, call, prompt or stop has followed (by the agent's own time, so a record read late after a later
+ * one changes nothing); a working session's calls since its prompt; why holds only watch; and unpushed commits.
+ */
+async function flagFacts(query: Query, sessions: readonly { id: string; status: string; cause: string | null }[], gone: ReadonlyMap<string, Fact>, of: (column: string) => string, events: (alias?: string) => string) {
+  // Since the session's newest prompt of its own.
+  const sincePrompt = (alias: string) => `${alias}.log_pos > COALESCE((SELECT MAX(u.log_pos) FROM events u WHERE u.session_id = ${alias}.session_id AND u.kind = 'user.ask' AND json_extract(u.data, '$.from') IS NOT 'subagent'), 0)`;
+  const doing = new Map<string, { call: Call; at: Fact }>();
+  for (const s of sessions.filter((x) => gone.has(x.id) || (LIMITS.has(x.cause ?? '') && !AT_WORK.has(x.status)))) {
+    const [b] = (await query(`SELECT b.data, b.ts, b.log_pos FROM ${events('b')} WHERE b.session_id = ${quoted(s.id)} AND b.kind = 'tool.before' AND ${sincePrompt('b')} ORDER BY b.log_pos DESC LIMIT 1`)) as { data: string; ts: number; log_pos: number }[];
+    if (b) doing.set(s.id, { call: callFrom(b), at: { kind: 'tool.before', ts: b.ts, log_pos: b.log_pos } });
+  }
+  const retries = new Map<string, { cause: string; attempt: number; max: number | null; first: number; at: Fact[] }>();
+  for (const r of (await query(`SELECT r.session_id, json_extract(r.data, '$.attempt') AS attempt, json_extract(r.data, '$.max') AS max, json_extract(r.data, '$.cause') AS cause, json_extract(r.data, '$.at') AS at, r.ts, r.log_pos FROM ${events('r')} WHERE r.kind = 'model.call' AND json_extract(r.data, '$.outcome') = 'retry' AND r.session_id IS NOT NULL${of('r.session_id')}
+    AND NOT EXISTS (SELECT 1 FROM events b WHERE b.session_id = r.session_id AND ((b.kind = 'model.call' AND json_extract(b.data, '$.outcome') = 'reply' AND json_extract(b.data, '$.at') >= json_extract(r.data, '$.at')) OR (b.writer = 'hook' AND b.kind IN ('user.ask', 'tool.before', 'tool.after', 'agent.stop', 'session.start', 'session.end') AND b.ts > json_extract(r.data, '$.at'))))
+    ORDER BY json_extract(r.data, '$.at'), r.log_pos`)) as { session_id: string; attempt: number | null; max: number | null; cause: string | null; at: number; ts: number; log_pos: number }[]) {
+    const open = retries.get(r.session_id) ?? { cause: 'unknown', attempt: 0, max: null, first: r.at, at: [] };
+    retries.set(r.session_id, { cause: r.cause ?? 'unknown', attempt: Math.max(open.attempt, r.attempt ?? open.at.length + 1), max: r.max ?? open.max, first: open.first, at: [...open.at, { kind: 'model.call', ts: r.ts, log_pos: r.log_pos }] });
+  }
+  // A working session's calls since its prompt, newest first: the run that repeats ends them.
+  const calls = new Map<string, Call[]>();
+  for (const s of sessions.filter((x) => x.status === 'working')) {
+    const rows = (await query(`SELECT a.data, a.ts, a.log_pos FROM ${events('a')} WHERE a.session_id = ${quoted(s.id)} AND a.kind = 'tool.after' AND ${sincePrompt('a')} ORDER BY a.log_pos DESC LIMIT 64`)) as { data: string; ts: number; log_pos: number }[];
+    if (rows.length) calls.set(s.id, rows.map(callFrom));
+  }
+  const watch = await watched(query, of('w.session_id'));
+  const unpushed = new Map(((await query(`SELECT session_id, MAX(log_pos) AS log_pos, ts, json_extract(data, '$.commits') AS commits, json_extract(data, '$.branch') AS branch FROM ${events()} WHERE kind = 'commits.unpushed' AND session_id IS NOT NULL${of('session_id')} GROUP BY session_id`)) as { session_id: string; log_pos: number; ts: number; commits: number; branch: string | null }[])
+    .map((r) => [r.session_id, { commits: r.commits, branch: r.branch, at: { kind: 'commits.unpushed', ts: r.ts, log_pos: r.log_pos } }]));
+  return { doing, retries, calls, watch, unpushed };
 }
 
 /**
@@ -284,6 +432,11 @@ async function newestClaims(query: Query, of: (column: string) => string): Promi
     const own = verdicts.filter((v) => v.claim_id === c.id);
     const verdict = own.filter((v) => !v.stale).at(-1) ?? own.at(-1);
     const claim: Claim = { made: c.made, outcome: verdict?.outcome ?? null, round: c.round, owner: null, evidence: null, ...(verdict ? { judged: { kind: 'verdict.made', ts: verdict.ts, log_pos: verdict.log_pos } } : {}) };
+    // A FAIL sent back to it (#2019): a watch-only session's FAIL never was.
+    if (verdict?.outcome === 'FAIL') {
+      const [sent] = (await query(`SELECT ts, log_pos FROM events WHERE kind = 'claim.sent_back' AND subject = ${quoted(`claim:${c.id}`)} ORDER BY log_pos DESC LIMIT 1`)) as { ts: number; log_pos: number }[];
+      if (sent) claim.sent = { kind: 'claim.sent_back', ts: sent.ts, log_pos: sent.log_pos };
+    }
     if (verdict?.stale) {
       const [stale] = (await query(`SELECT ts, log_pos FROM events WHERE kind = 'verdict.stale' AND json_extract(data, '$.verdict') = ${quoted(verdict.handle ?? '')} ORDER BY log_pos DESC LIMIT 1`)) as { ts: number; log_pos: number }[];
       claim.stale = stale ? { kind: 'verdict.stale', ts: stale.ts, log_pos: stale.log_pos } : claim.judged!;

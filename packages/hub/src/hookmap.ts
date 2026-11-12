@@ -174,8 +174,32 @@ export function adapterOf(agent: string | undefined): Adapter | undefined {
   const name = agent === undefined ? undefined : ADAPTERS[agent];
   return name === undefined ? undefined : registry().get(name);
 }
+/** A model call as the agent's own transcript records it (#2019): a retry, with its attempt, most and cause, or the reply that ends the retries. */
+export interface ModelCall { outcome: 'retry' | 'reply'; attempt?: number; max?: number; cause?: string; at: number; record: string }
+/**
+ * A transcript entry the agent's facts (`retries`) mark as its retry of a model call, or as the model's reply that
+ * ends retries; read by the facts alone, never the agent's name or text. Undefined for any other entry.
+ */
+export function modelCallOf(agent: string | undefined, entry: Record<string, unknown>): ModelCall | undefined {
+  const r = (adapterOf(agent)?.facts as JsonObject | undefined)?.retries as JsonObject | undefined;
+  if (!r) return undefined;
+  const at = (path: unknown): unknown => String(path).split('.').reduce<unknown>((inner, key) => (inner && typeof inner === 'object' && Object.hasOwn(inner, key) ? (inner as JsonObject)[key] : undefined), entry);
+  const holds = (match: unknown): boolean => Object.entries((match ?? {}) as JsonObject).every(([path, value]) => at(path) === value);
+  const when = Date.parse(String(at(r.at)));
+  const record = at(r.id);
+  if (!Number.isFinite(when) || typeof record !== 'string' || !record) return undefined;
+  if (holds(r.match)) {
+    const cause = r.cause as { fields: string[]; values: Record<string, string>; otherwise: string };
+    const named = cause.fields.map((f) => at(f)).find((v) => (typeof v === 'string' || typeof v === 'number') && Object.hasOwn(cause.values, String(v)));
+    const n = (path: unknown): number | undefined => (Number.isSafeInteger(at(path)) && (at(path) as number) >= 1 ? (at(path) as number) : undefined);
+    const attempt = n(r.attempt);
+    const max = n(r.max);
+    return { outcome: 'retry', ...(attempt ? { attempt } : {}), ...(max ? { max } : {}), cause: named === undefined ? cause.otherwise : cause.values[String(named)]!, at: when, record };
+  }
+  return holds(r.reply) ? { outcome: 'reply', at: when, record } : undefined;
+}
 /** Whether the facts of the adapter an agent's hooks map through cover a version. */
-export const coveredBy = (agent: string, version: string): boolean => ((registry().get(ADAPTERS[agent] ?? agent).facts as JsonObject).versions as string[]).includes(version);
+export const coveredBy =(agent: string, version: string): boolean => ((registry().get(ADAPTERS[agent] ?? agent).facts as JsonObject).versions as string[]).includes(version);
 
 /** Loads the adapters' facts ahead of the first request. */
 export function warm(): void {
@@ -332,7 +356,12 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
         // through because the hub was late is marked late.
         if (request.late === true) Object.assign(data, { late: true, matched: request.matched });
         else if (request.matched.length) data.matched = request.matched;
-        v = 3;
+        // A fetch names the host its URL names, never its path or query, for the line that says what a turn does (#2021).
+        const url = callKind === 'fetch' ? str(at(payload, 'tool_input.url')) : '';
+        const host = url && URL.canParse(url) ? scrub(new URL(url).hostname) : '';
+        if (host) data.host = host.slice(0, 253);
+        // Only a fetch that names its host needs the version that has the field.
+        v = host ? 4 : 3;
       } else {
         Object.assign(data, failure(mapped.outcome === 'failed', payload, callKind, meta.cwd));
         v = 2;
@@ -346,6 +375,11 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
         if (said.length) {
           data.error = said.length > ERROR_LINE ? `${said.slice(0, ERROR_LINE - 1).join('')}…` : said.join('');
           v = 4;
+        }
+        // An MCP call's arguments as a hash, never the arguments, so a repeat is read by its tool and arguments (#2019).
+        if (callKind === 'mcp' && isObj(payload.tool_input)) {
+          data.args = sha256Hex(canonicalize(payload.tool_input as JsonValue));
+          v = 5;
         }
         // The pull request a `gh pr create` call opened, from the call's own response (#83): only a call that is that
         // one command counts, so an echoed URL never passes for the one gh printed. Read here for both agents, since a

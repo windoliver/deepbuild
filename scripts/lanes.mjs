@@ -312,6 +312,8 @@ byHand.push('tests/acceptance/1461/shell.test.ts', 'tests/acceptance/1461/shown.
 timed.push('tests/acceptance/1461/budget.test.ts');
 // #2018's files build deep-drive plain and with env-plants, and start real hubs and many replicas.
 alone.push('tests/acceptance/2018/');
+// #2019's files build deep-drive plain and with env-plants, start real hubs, run deep setup and many replicas.
+alone.push('tests/acceptance/2019/');
 // #1922's files each start a hub that installs sandboxed plug-ins and runs their job tools through the supervisor,
 // counting the record's process starts around each deep_job call: one file at a time.
 alone.push('tests/acceptance/1922/');
@@ -376,6 +378,9 @@ alone.push('tests/acceptance/544/');
 // the kind kit.
 alone.push('tests/acceptance/202/');
 timed.push('tests/acceptance/202/budgets.test.ts');
+// #1971's files each build deep-show (refusal.test.ts deep-hook too), start a hub, and time op: field calls.
+alone.push('tests/acceptance/1971/');
+timed.push('tests/acceptance/1971/budget.test.ts');
 // #1957's file builds deep-show and offers it pack graphs.
 alone.push('tests/acceptance/1957/');
 // #1961's files build deep-show and patch an open document to another version of its pack.
@@ -419,6 +424,9 @@ byHand.push('tests/acceptance/2026/replay.test.ts');
 // #2028's files build deep-drive plain and with env-plants, start real hubs and run three replicas each over three hours
 // of the virtual clock, a frame each second while you're away.
 alone.push('tests/acceptance/2028/');
+// #2021's files build deep-drive plain and with env-plants and drive replicas over real hubs on a stepped clock, with
+// agents' hooks and transcripts written as the run goes.
+alone.push('tests/acceptance/2021/');
 // #2029's files build the replica and deep-drive plain and planted, start real hubs and draw the answered asks' pages.
 alone.push('tests/acceptance/2029/');
 // #1056's files build deep-gpu and draw #464's pixel fixtures; records.test.ts runs #464's two-GPU tests.
@@ -459,6 +467,8 @@ byHand.push('tests/acceptance/154/stems.test.ts');
 // reading against the lane's rule.
 alone.push('tests/acceptance/1700/');
 timed.push('tests/acceptance/1700/budgets.test.ts');
+// #1862's suite starts a hub of its own with a fake reviewer, as #1537's does.
+alone.push('tests/acceptance/1862/');
 // #1920's files build deep-show seven times, in the full and core sets, and read each build's published plan.
 alone.push('tests/acceptance/1920/');
 
