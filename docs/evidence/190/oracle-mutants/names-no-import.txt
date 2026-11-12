@@ -3,7 +3,7 @@
 #   _ => refusals.push(import_refused(module, name, format!("{} imports lib:{lib}.{name}, which no listed library exports", who(&objects[oi])))),
 # replaced with
 #   _ => refusals.push(refused(format!("{} imports a function no listed library exports", who(&objects[oi])))),
-# built and run in a scratch clone at 9a02471b6 (link.rs restored with git checkout afterwards), spark-c89f (Linux arm64), 2026-11-12.
+# built and run in a scratch clone at 9a02471b6, with tests/acceptance/190/oracle as committed in d49221e13 copied in (the parent suite is identical between them; link.rs restored with git checkout afterwards), spark-c89f (Linux arm64), 2026-11-12.
 # NO_COLOR=1 npx vitest run --root tests/acceptance/190/oracle undefined.test.ts --reporter=verbose
  × undefined.test.ts > #190.ea25cdd0 undefined.s: an import no listed library exports is refused, naming it and nothing defined > #190.ea25cdd0 a program importing lib:grid_path.find_route and lib:turns.next_turn, linking only turns@1, is refused naming find_route and not next_turn 118ms
    → a refusal names the undefined import: [{"rule":"link","what":"the program imports a function no listed library exports"}]: expected [ null ] to include 'lib:grid_path.find_route'

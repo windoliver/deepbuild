@@ -138,7 +138,8 @@ wording is the issue's (its Acceptance criteria), not repeated here.
   (`helpers.ts`' `baseBin`). So 10 is not proven.
 - Oracle lane, criteria 1 and 3: INCONCLUSIVE for both; its 6 tests pass (`oracle-linux-9a02471b6.txt`). The map's upstream tests were in the
   owner's oracle-tests zip all along; `tests/acceptance/190/README.md` lines 10–16 (not edited; by the session's report written
-  before the code, though it landed in the same commit, 85169f887) say the page answered 404. By the session's report,
+  before the code, though it landed in the same commit, 85169f887) say the page answered 404 (its unblock ask, access for this account, is superseded: the tests came from the owner's
+  zip). By the session's report,
   a blind job wrote `tests/acceptance/190/oracle/` from the issue, the map, the three vendored
   wasm-ld tests (`function-imports.s`, `data-layout.s`, `undefined.s`, copied unchanged with a NOTICE) and the base
   commit, never the implementation; its README lists what each test can't hold of the upstream one and why. The
@@ -182,8 +183,10 @@ wording is the issue's (its Acceptance criteria), not repeated here.
   criteria 1 and 3 together: do saved runs of hand-made mutants count as line 27's planted fault? Yes: data-layout counts
   for criterion 1 on `oracle-mutants/misaligned-segment.txt` (function-imports stays inventory) and undefined.s for
   criterion 3 on `oracle-mutants/names-no-import.txt`, saved
-  runs rather than rerunnable checks; no: both stay INCONCLUSIVE. The lane is INCONCLUSIVE rather than BLOCKED because it has a runner: the translated vitest tests run
-  our output (obj2yaml and FileCheck aren't installed, which matters only for the reader point the saved run covers). One of those two mutants, which names no import, fails upstream's CHECK (`oracle-mutants/names-no-import.txt`). Upstream's CHECK-NOT (`baz`, a symbol only `--undefined` names) isn't held:
+  runs rather than rerunnable checks; no: both stay INCONCLUSIVE. The lane is INCONCLUSIVE rather than BLOCKED: the oracle-tests README (line 30) asks for the
+  tool installed and a runner, and the issue's Oracle line for a runner; the translated vitest tests are that runner,
+  run on our output. Installing obj2yaml and FileCheck would unblock nothing, since our honest program can't pass
+  upstream's RUN line as written (above). One of those two mutants, which names no import, fails upstream's CHECK (`oracle-mutants/names-no-import.txt`). Upstream's CHECK-NOT (`baz`, a symbol only `--undefined` names) isn't held:
   our linker has no `--undefined`. In its place the test checks something of our own, that no refusal names an import
   a listed library defines, and the mutant that names every import of the program fails it
   (`oracle-mutants/names-every-import.txt`). The blind job's first draft called that check the CHECK-NOT and put
@@ -192,6 +195,22 @@ wording is the issue's (its Acceptance criteria), not repeated here.
   d49221e13's test code (misaligned-segment's run used d90302d72's commit, code identical); the oracle test code is identical from d49221e13 to HEAD (every later oracle commit changes comments and docs only). The oracle README's "checks against a real linker" (rust-lld) is the blind
   job's report: no output of that run is saved.
 
+
+## `node scripts/affected.mjs` at c26b91146 (2026-11-12, spark-c89f)
+
+Code identical to 9a02471b6 (later commits change only docs and the oracle folder's comments), against the merge base
+with origin/main, e7609b7b. Summary line: `FAIL affected: 1987 new, 181 already failing on main, 120 inconclusive or
+blocked, 0 listed skips, 749 passed, in 946 s at load 2`. No WIDE line. Its 36 INCONCLUSIVE lines are other issues'
+reference-Mac, GPU and platform gates and the 28 timed and 9 slow files it doesn't run; none is #190's. #190's own
+tests in that run: 20 pass (the 14 of `acceptance-linux-9a02471b6.txt` and the oracle lane's 6) and the same 4
+BLOCKED (ac04's first test, ac05, ac10's two). Its "new" failures in files this change touches are the four lint
+lines known from main here: rustfmt on `crates/deep-canvas-sandbox/src/lib.rs` (main's copy fails the same way),
+the `deps` lines for `tests/acceptance/190/wat/Cargo.toml` (#544's and #545's wat crates fail the same way), and the
+`cards` line on `crates/deep-canvas-sandbox/README.md`'s `lib.interface@1` (main's line names it too). The rest are in
+files this change doesn't touch: rustfmt over untouched sandbox files and other crates, #140.12's wasm32 build
+(meshopt's C sources don't build here), #1114's timed list, vendored gpui patches, and the deep-logic suites #544
+AC1, #545 AC4 and #546 AC1, which failed the same way at 7b5d9da1f and 1a9ad440d (no video encoder here; this box's
+fuel ceiling above #546's budget).
 
 ## Rerun with the browser leg and screenshots (2026-11-11 and 12), code at 9a02471b6
 
@@ -579,3 +598,8 @@ raw files, `gen.test.ts`, the code and the issue. It also ran its own BFS over t
   sections reproduced; twins probed; mutants reasoned; screenshots, `e2e-raw`, unblock asks and `proof-runs.mjs`
   claims checked) and one low gap, fixed here: the honest program's function count is cited to a section parse, not
   to `WebAssembly.Module`.
+- **Round 49** found no wrong values and no P1 or P2 (oracle rerun 6 passed; the reader file, the honest program's
+  sections and the listing-order twin reproduced; mutants reasoned; screenshots and `e2e-raw` checked) and three low
+  gaps, fixed here: the two import mutants' headers say the oracle folder was copied into the clone; the INCONCLUSIVE
+  reading cites the oracle-tests README's tool-and-runner rule; and the parent README's old access ask is marked
+  superseded.
