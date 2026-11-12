@@ -111,7 +111,8 @@ wording is the issue's (its Acceptance criteria), not repeated here.
   (`acceptance-linux-9a02471b6.txt`). That test compares only the fixture's `deep_hashes`, the state before step 0, which the honest and the
   corner-cutting libraries share; the page's item-hash, route and moves comparison is what tells them apart, so the
   browser half of 4 rests on the page too. The merged programs on macOS arm64 and Linux x86_64 are BLOCKED here
-  (ac04's first test). Its unblock ask: run ac04 on the reference Mac with Docker, the linux/amd64 image pulled
+  (ac04's first test). Its unblock ask: run ac04's first test on the reference Mac (the whole file also needs Chrome there, or `CHROME_BIN`,
+  for its second test) with Docker, the linux/amd64 image pulled
   (`docker pull --platform linux/amd64 rust:1.99.1-slim-bookworm`) and amd64 emulation on (`helpers.ts`'
   `linuxLogic` blocks on each). It hasn't run yet. So 4 is not proven.
 - 5: `swarm`'s fuel trap at step 0 names grid_path@1, its hash and `find_route` (line 7). The same offset on a second
@@ -463,3 +464,9 @@ raw files, `gen.test.ts`, the code and the issue. It also ran its own BFS over t
   checked against `e2e-raw`) and one P2 and two low gaps, fixed here: 5's unblock ask no longer offers an x86_64 host,
   where ac05's different-architecture check fails; 10 names its unblock ask; and the listing-order twin's refusal is
   quoted as the listed-before rule it is.
+- **Round 36** found no wrong values (oracle rerun 6 passed; vendored files byte-identical to the owner's zip; all
+  11 screenshots and every `e2e-raw` value checked) and one P2 and two low gaps. The P2 and one low were in the oracle
+  suite, sent back to the blind job: upstream's live CHECKs never read `external_ref`'s resolved address, so that check
+  is our own, and five globals and both segment offsets are checked, not one global. Its redraft (317d82301) changes
+  comments and docs only, so the oracle run stands. The other low is fixed here: 4's unblock ask names its first
+  test, and Chrome on the Mac for the second.
