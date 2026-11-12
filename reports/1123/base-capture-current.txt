@@ -38,10 +38,10 @@ test at tests/acceptance/1123/consumer.test.mjs:10:1
 ✖ #9001.12345678 own build reaches the consumer (17.401709ms)
   AssertionError [ERR_ASSERTION]: RUN_PRIVATE_ORIGIN: consumer did not get its own build
   + actual - expected
-  
+
   + '9.9.1123'
   - '1.0.1123'
-  
+
       at TestContext.<anonymous> (file://<scratch>/repo/tests/acceptance/1123/consumer.test.mjs:29:10)
       at Test.runInAsyncScope (node:async_hooks:227:14)
       at Test.run (node:internal/test_runner/test:1402:25)
@@ -75,10 +75,10 @@ test at tests/acceptance/1123/capture-redraft/origin.test.mjs:128:1
 ✖ lanes.mjs hands its own executable to the consumer after a competing Cargo rewrite (51612.158667ms)
   AssertionError [ERR_ASSERTION]: RUN_PRIVATE_ORIGIN: consumer used a foreign build
   + actual - expected
-  
+
   + '9.9.1123'
   - '1.0.1123'
-  
+
       at assertOrigin (file:///private<base>/tests/acceptance/1123/capture-redraft/origin.test.mjs:116:10)
       at TestContext.<anonymous> (file:///private<base>/tests/acceptance/1123/capture-redraft/origin.test.mjs:140:3)
       at Test.runInAsyncScope (node:async_hooks:227:14)

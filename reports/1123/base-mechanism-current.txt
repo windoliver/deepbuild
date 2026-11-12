@@ -37,13 +37,13 @@ test at tests/acceptance/1123/binaries.test.mjs:8:1
 ✖ #1123.07de86fd before runs the base binary as the wrong program and never shares it with the change (5824.495958ms)
   AssertionError [ERR_ASSERTION]: base and change must execute their own compiler-built binaries
   + actual - expected
-  
+
     [
   -   'base-wrong',
       'change-right',
   +   'change-right'
     ]
-  
+
       at TestContext.<anonymous> (file:///private<base>/tests/acceptance/1123/binaries.test.mjs:27:10)
       at Test.runInAsyncScope (node:async_hooks:227:14)
       at Test.run (node:internal/test_runner/test:1402:25)
@@ -61,10 +61,10 @@ test at tests/acceptance/1123/binaries.test.mjs:35:3
 ✖ #1123.cd6b3dd8 lanes.mjs uses its own run-private build, not the shell or mutable target (3727.777959ms)
   AssertionError [ERR_ASSERTION]: parallel binary: shell/stale binary, not this run's build
   + actual - expected
-  
+
   + 'shell-wrong'
   - 'change-right'
-  
+
       at assertOwnBinaries (file:///private<base>/tests/acceptance/1123/helpers.mjs:100:12)
       at TestContext.<anonymous> (file:///private<base>/tests/acceptance/1123/binaries.test.mjs:56:22)
       at Test.runInAsyncScope (node:async_hooks:227:14)
@@ -85,10 +85,10 @@ test at tests/acceptance/1123/binaries.test.mjs:35:3
 ✖ #1123.cd6b3dd8 affected.mjs uses its own run-private build, not the shell or mutable target (3711.500125ms)
   AssertionError [ERR_ASSERTION]: node binary: shell/stale binary, not this run's build
   + actual - expected
-  
+
   + 'shell-wrong'
   - 'change-right'
-  
+
       at assertOwnBinaries (file:///private<base>/tests/acceptance/1123/helpers.mjs:100:12)
       at TestContext.<anonymous> (file:///private<base>/tests/acceptance/1123/binaries.test.mjs:56:22)
       at Test.runInAsyncScope (node:async_hooks:227:14)
@@ -109,10 +109,10 @@ test at tests/acceptance/1123/environment.test.mjs:14:1
 ✖ #1123.cd6b3dd8 childEnv discards a shell binary directory (220.370583ms)
   AssertionError [ERR_ASSERTION]: inherited DEEP_BIN_DIR must be discarded before merging extra
   + actual - expected
-  
+
   + '/fixture/shell/bin'
   - null
-  
+
       at TestContext.<anonymous> (file:///private<base>/tests/acceptance/1123/environment.test.mjs:21:10)
       at Test.runInAsyncScope (node:async_hooks:227:14)
       at Test.run (node:internal/test_runner/test:1402:25)

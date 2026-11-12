@@ -18,11 +18,11 @@ test at tests/proof-binaries-demand.test.mjs:12:1
   BLOCKED selected: test binaries: cargo build failed: scripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `cargo build --bin deep-hook --bin deep-app --locked --target-dir <scratch>/tmp/deep-lane-binaries-Fazs9A/bin/.artifacts --config build.build-dir="<scratch>/repo/target" --message-format=json-render-diagnostics` runs unleased
     Fix: none
     Elapsed: 1.56 s
-  
-  
-  
+
+
+
   1 !== 0
-  
+
       at TestContext.<anonymous> (file://<checkout>/tests/proof-binaries-demand.test.mjs:22:10)
       at Test.runInAsyncScope (node:async_hooks:227:14)
       at Test.run (node:internal/test_runner/test:1402:25)
@@ -39,7 +39,7 @@ test at tests/proof-binaries-demand.test.mjs:12:1
 test at tests/proof-binaries-demand.test.mjs:26:1
 ✖ a binary consumer without a Cargo workspace is blocked before it executes (748.062208ms)
   AssertionError [ERR_ASSERTION]: The input did not match the regular expression /BLOCKED selected:/. Input:
-  
+
   'RUN selected\n' +
     'scripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node --test --test-reporter=file://<scratch>/repo/scripts/proof-reporter.mjs --test-reporter-destination=<scratch>/tmp/deep-preflight-output-99wdNc/report --test-reporter=spec --test-reporter-destination=stdout tests/binary.test.mjs` runs unleased\n' +
     '✖ missing workspace (2.836375ms)\n' +
@@ -75,7 +75,7 @@ test at tests/proof-binaries-demand.test.mjs:26:1
     'FAIL selected: ℹ fail 1\n' +
     '  Fix: none\n' +
     '  Elapsed: 0.65 s\n'
-  
+
       at TestContext.<anonymous> (file://<checkout>/tests/proof-binaries-demand.test.mjs:31:10)
       at Test.runInAsyncScope (node:async_hooks:227:14)
       at Test.run (node:internal/test_runner/test:1402:25)

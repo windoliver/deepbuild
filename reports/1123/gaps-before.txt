@@ -21,11 +21,11 @@ test at tests/proof-binaries-gaps.test.mjs:25:1
   BLOCKED selected: test binaries: cargo build failed: scripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `cargo build --bin deep-hook --locked --target-dir <scratch>/tmp/deep-lane-binaries-gDcbZh/bin/.artifacts --config build.build-dir="<scratch>/repo/target" --message-format=json-render-diagnostics` runs unleased
     Fix: none
     Elapsed: 5.06 s
-  
-  
-  
+
+
+
   1 !== 0
-  
+
       at TestContext.<anonymous> (file:///private<scratch>/gap-root/tests/proof-binaries-gaps.test.mjs:30:10)
       at Test.runInAsyncScope (node:async_hooks:227:14)
       at Test.run (node:internal/test_runner/test:1402:25)
@@ -46,11 +46,11 @@ test at tests/proof-binaries-gaps.test.mjs:35:1
   BLOCKED selected: test binaries: cargo build failed: scripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `cargo build --bin deep-hook --locked --target-dir <scratch>/tmp/deep-lane-binaries-5kQ5N3/bin/.artifacts --config build.build-dir="<scratch>/repo/target" --message-format=json-render-diagnostics` runs unleased
     Fix: none
     Elapsed: 1.55 s
-  
-  
-  
+
+
+
   1 !== 0
-  
+
       at TestContext.<anonymous> (file:///private<scratch>/gap-root/tests/proof-binaries-gaps.test.mjs:41:10)
       at Test.runInAsyncScope (node:async_hooks:227:14)
       at Test.run (node:internal/test_runner/test:1402:25)
@@ -69,9 +69,9 @@ test at tests/proof-binaries-gaps.test.mjs:35:1
 test at tests/proof-binaries-gaps.test.mjs:47:3
 ✖ run-private directories disappear after the creating lane receives SIGTERM (8260.816583ms)
   AssertionError [ERR_ASSERTION]: a killed run must not leave its binary directory
-  
+
   true !== false
-  
+
       at TestContext.<anonymous> (file:///private<scratch>/gap-root/tests/proof-binaries-gaps.test.mjs:62:12)
       at async Test.run (node:internal/test_runner/test:1409:7)
       at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
@@ -86,9 +86,9 @@ test at tests/proof-binaries-gaps.test.mjs:47:3
 test at tests/proof-binaries-gaps.test.mjs:47:3
 ✖ run-private directories disappear after the creating lane receives SIGKILL (5971.009166ms)
   AssertionError [ERR_ASSERTION]: a killed run must not leave its binary directory
-  
+
   true !== false
-  
+
       at TestContext.<anonymous> (file:///private<scratch>/gap-root/tests/proof-binaries-gaps.test.mjs:62:12)
       at async Test.run (node:internal/test_runner/test:1409:7)
       at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {

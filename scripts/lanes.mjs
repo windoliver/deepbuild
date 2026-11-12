@@ -5,6 +5,7 @@ import { join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { inputs as configInputs } from './config-eval.mjs';
 import { inputs as verdictInputs } from './verdict-proofs.mjs';
+import { binaryNames, buildBinaries, commandFiles, watchBinaries } from './proof-binaries.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 // The repo's declared test paths. The unit lane's runners take their file patterns from them, and perf
@@ -913,86 +914,106 @@ export function runLanes(lanes, { cwd = root } = {}) {
   // copies name theirs.
   const issues = process.env.DEEP_OPEN_ISSUES ? undefined : mkdtempSync(join(tmpdir(), 'deep-open-issues-'));
   if (issues) process.env.DEEP_OPEN_ISSUES = join(issues, 'open-issues.json');
-  let changed;
-  for (const lane of lanes) {
-    if (lane.paths && !release) {
-      changed ??= changedPaths(cwd);
-      // A lane skips only when its script reads none of the change either.
-      if (changed && !changed.some((file) => covers(lane.paths, file))) {
-        const misses = missed(lane, changed, cwd);
-        if (misses?.files.length) {
-          failures.push(`FAIL ${lane.name}: its paths miss ${misses.files.join(', ')}, which ${misses.script} reads\n  Fix: Take the lane's paths from the inputs ${misses.script} exports.`);
-          continue;
-        }
-        if (misses) {
-          console.log(`SKIP ${lane.name}: the change touches no file it reads`);
-          continue;
+  // Never forward a shell's binary directory, even to a lane that starts its own proof.
+  const environment = { ...process.env };
+  delete environment.DEEP_BIN_DIR;
+  let changed, binaries, binaryError;
+  try {
+    const selected = [];
+    for (const lane of lanes) {
+      if (lane.paths && !release) {
+        changed ??= changedPaths(cwd);
+        // A lane skips only when its script reads none of the change either.
+        if (changed && !changed.some((file) => covers(lane.paths, file))) {
+          const misses = missed(lane, changed, cwd);
+          if (misses?.files.length) {
+            failures.push(`FAIL ${lane.name}: its paths miss ${misses.files.join(', ')}, which ${misses.script} reads\n  Fix: Take the lane's paths from the inputs ${misses.script} exports.`);
+            continue;
+          }
+          if (misses) {
+            console.log(`SKIP ${lane.name}: the change touches no file it reads`);
+            continue;
+          }
         }
       }
+      selected.push(lane);
     }
-    const started = performance.now();
-    console.log(`RUN ${lane.name}`);
-    let failure = lane.commands.length ? undefined : { state: 'BLOCKED', error: 'No check was run' };
-    const tree = exactTree(cwd), tests = [], unproven = [], listedSkips = [];
-    for (const [command, ...args] of lane.commands) {
-      let directory, descriptor, result, results, output = '';
-      try {
-        directory = mkdtempSync(join(tmpdir(), 'deep-preflight-output-'));
-        const log = join(directory, 'output'), report = join(directory, 'report');
-        const reported = reporting([command, ...args], report);
-        descriptor = openSync(log, 'w', 0o600);
-        // One shared descriptor preserves the child's stdout/stderr write order.
-        // Through the machine's throttle table, by its class (docs/parallel-proof.md, section 6), and under a cpu.slot
-        // of the calling session's through scripts/lease (#1015).
-        result = spawnSync(process.execPath, [throttle, throttleClass([command, ...args]), '--wait', '30', '--', leaseScript, ...reported?.command ?? [command, ...args]], { cwd, env: { ...process.env, ...reported?.env }, stdio: ['ignore', descriptor, descriptor] });
-        output = readFileSync(log, 'utf8').trim();
-        results = testsOf([command, ...args], cwd, { report, output, status: result.status });
-      } catch (error) {
-        result = { status: null, error };
-      } finally {
+    for (const lane of selected) {
+      const started = performance.now();
+      console.log(`RUN ${lane.name}`);
+      let failure = lane.commands.length ? undefined : { state: 'BLOCKED', error: 'No check was run' };
+      const tree = exactTree(cwd), tests = [], unproven = [], listedSkips = [];
+      for (const [command, ...args] of lane.commands) {
+        let directory, descriptor, result, results, output = '';
         try {
-          if (descriptor !== undefined) closeSync(descriptor);
-          if (directory) rmSync(directory, { recursive: true, force: true });
+          directory = mkdtempSync(join(tmpdir(), 'deep-preflight-output-'));
+          const log = join(directory, 'output'), report = join(directory, 'report');
+          const reported = reporting([command, ...args], report);
+          if (reported && !binaries && !binaryError) {
+            binaries = mkdtempSync(join(tmpdir(), 'deep-lane-binaries-'));
+            watchBinaries(binaries);
+            try {
+              const files = selected.flatMap((lane) => lane.commands).flatMap((command) => commandFiles(cwd, command));
+              buildBinaries(cwd, join(binaries, 'bin'), binaryNames(cwd, files));
+            } catch (error) { binaryError = error; }
+          }
+          if (reported && binaryError) throw binaryError;
+          descriptor = openSync(log, 'w', 0o600);
+          // One shared descriptor preserves the child's stdout/stderr write order.
+          // Through the machine's throttle table, by its class (docs/parallel-proof.md, section 6), and under a cpu.slot
+          // of the calling session's through scripts/lease (#1015).
+          result = spawnSync(process.execPath, [throttle, throttleClass([command, ...args]), '--wait', '30', '--', leaseScript, ...reported?.command ?? [command, ...args]], { cwd, env: { ...environment, ...reported?.env, ...reported && binaries ? { DEEP_BIN_DIR: join(binaries, 'bin') } : {} }, stdio: ['ignore', descriptor, descriptor] });
+          output = readFileSync(log, 'utf8').trim();
+          results = testsOf([command, ...args], cwd, { report, output, status: result.status });
         } catch (error) {
           result = { status: null, error };
+        } finally {
+          try {
+            if (descriptor !== undefined) closeSync(descriptor);
+            if (directory) rmSync(directory, { recursive: true, force: true });
+          } catch (error) {
+            result = { status: null, error };
+          }
         }
+        if (output) console.log(output);
+        const run = readRun(results, result.status, cwd, timed);
+        tests.push(...run.tests);
+        unproven.push(...run.unsure);
+        listedSkips.push(...run.covered);
+        let found = run.found;
+        if (result.status !== 0 && !run.explained) {
+          const lines = output.split('\n').map((line) => line.trim()).filter(Boolean);
+          const error = result.error?.message
+            ?? lines.find((line) => /\b(?:[a-z]*error(?:\[[^\]]+\])?|fatal):|\berror TS\d+:|panicked at/i.test(line))
+            ?? lines.find((line) => /\berror\b|AssertionError|panicked|\bFAIL\b|\bBLOCKED\b|\bINVALID\b|\bINCONCLUSIVE\b/i.test(line))
+            ?? lines[0] ?? `${command} exited ${result.signal ?? result.status}`;
+          // A diagnostic that names its own state keeps it: a check that couldn't run reads BLOCKED, not
+          // FAIL, and one that couldn't read all it checks reads INCONCLUSIVE.
+          const [, state, rest] = error.match(/^(FAIL|INVALID|BLOCKED|INCONCLUSIVE)\s+(.+)/) ?? [];
+          found = { state: state ?? (result.error ? 'BLOCKED' : 'FAIL'), error: rest ?? error };
+        }
+        if (stands(found, failure)) failure = found;
       }
-      if (output) console.log(output);
-      const run = readRun(results, result.status, cwd, timed);
-      tests.push(...run.tests);
-      unproven.push(...run.unsure);
-      listedSkips.push(...run.covered);
-      let found = run.found;
-      if (result.status !== 0 && !run.explained) {
-        const lines = output.split('\n').map((line) => line.trim()).filter(Boolean);
-        const error = result.error?.message
-          ?? lines.find((line) => /\b(?:[a-z]*error(?:\[[^\]]+\])?|fatal):|\berror TS\d+:|panicked at/i.test(line))
-          ?? lines.find((line) => /\berror\b|AssertionError|panicked|\bFAIL\b|\bBLOCKED\b|\bINVALID\b|\bINCONCLUSIVE\b/i.test(line))
-          ?? lines[0] ?? `${command} exited ${result.signal ?? result.status}`;
-        // A diagnostic that names its own state keeps it: a check that couldn't run reads BLOCKED, not
-        // FAIL, and one that couldn't read all it checks reads INCONCLUSIVE.
-        const [, state, rest] = error.match(/^(FAIL|INVALID|BLOCKED|INCONCLUSIVE)\s+(.+)/) ?? [];
-        found = { state: result.error ? 'BLOCKED' : state ?? 'FAIL', error: rest ?? error };
+      const elapsed = ((performance.now() - started) / 1000).toFixed(2);
+      for (const { id, note, reason } of listedSkips) console.log(`LISTED ${id}${note ? `: ${note}` : ''} (${reason})`);
+      const platform = failure?.state === 'INCONCLUSIVE' && unproven.some(({ message }) => isPlatform(message)) ? ' (platform)' : '';
+      const lines = unproven.map(({ id, state, message }) => `  ${state} ${id}${message ? `: ${message}` : ''}\n`).join('');
+      if (failure) failures.push(`${failure.state} ${lane.name}${platform}: ${failure.error}\n${lines}  Fix: ${lane.fix}\n  Elapsed: ${elapsed} s`);
+      else console.log(`PASS ${lane.name} (${elapsed} s)`);
+      try {
+        if (tree !== null) writeRecord(lane.name, failure?.state ?? 'PASS', tree, tests);
+      } catch (error) {
+        // A lane that FAILed, or read INVALID or BLOCKED, keeps its one verdict: the missing record outranks only less.
+        if (failure && failure.state !== 'INCONCLUSIVE') console.log(`NOTE ${lane.name}: no evidence record: ${error.message}`);
+        else failures.push(`BLOCKED ${lane.name}: no evidence record: ${error.message}\n  Fix: Clear what that names, then run the lane again.`);
       }
-      if (stands(found, failure)) failure = found;
     }
-    const elapsed = ((performance.now() - started) / 1000).toFixed(2);
-    for (const { id, note, reason } of listedSkips) console.log(`LISTED ${id}${note ? `: ${note}` : ''} (${reason})`);
-    const platform = failure?.state === 'INCONCLUSIVE' && unproven.some(({ message }) => isPlatform(message)) ? ' (platform)' : '';
-    const lines = unproven.map(({ id, state, message }) => `  ${state} ${id}${message ? `: ${message}` : ''}\n`).join('');
-    if (failure) failures.push(`${failure.state} ${lane.name}${platform}: ${failure.error}\n${lines}  Fix: ${lane.fix}\n  Elapsed: ${elapsed} s`);
-    else console.log(`PASS ${lane.name} (${elapsed} s)`);
-    try {
-      if (tree !== null) writeRecord(lane.name, failure?.state ?? 'PASS', tree, tests);
-    } catch (error) {
-      // A lane that FAILed, or read INVALID or BLOCKED, keeps its one verdict: the missing record outranks only less.
-      if (failure && failure.state !== 'INCONCLUSIVE') console.log(`NOTE ${lane.name}: no evidence record: ${error.message}`);
-      else failures.push(`BLOCKED ${lane.name}: no evidence record: ${error.message}\n  Fix: Clear what that names, then run the lane again.`);
+  } finally {
+    if (binaries) rmSync(binaries, { recursive: true, force: true });
+    if (issues) {
+      delete process.env.DEEP_OPEN_ISSUES;
+      rmSync(issues, { recursive: true, force: true });
     }
-  }
-  if (issues) {
-    delete process.env.DEEP_OPEN_ISSUES;
-    rmSync(issues, { recursive: true, force: true });
   }
   for (const failure of failures) console.log(failure);
   return failures.length ? 1 : 0;
