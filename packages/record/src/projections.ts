@@ -34,7 +34,7 @@ type Obj = { [key: string]: JsonValue };
 const T = (name: string, pk: string[], columns: string, indexes?: string[]): TableDef => ({ name, pk, columns, ...(indexes ? { indexes } : {}) });
 /** Every projection, with the columns the design's data model names (and the ones the record adds). */
 const TABLES: readonly TableDef[] = [
-  T('sessions', ['id'], 'id TEXT, thread_id TEXT, parent_id TEXT, agent TEXT, project_id TEXT, worktree TEXT, branch TEXT, pid INTEGER, status TEXT NOT NULL DEFAULT \'running\', last_seen INTEGER, ended_log_pos INTEGER, transcript TEXT, cause TEXT'),
+  T('sessions', ['id'], 'id TEXT, thread_id TEXT, parent_id TEXT, agent TEXT, project_id TEXT, worktree TEXT, branch TEXT, pid INTEGER, status TEXT NOT NULL DEFAULT \'running\', last_seen INTEGER, ended_log_pos INTEGER, transcript TEXT, cause TEXT, status_at INTEGER, seen_at INTEGER'),
   T('claims', ['id'], 'id TEXT, session_id TEXT, kind TEXT, subject_ref TEXT, text TEXT, created INTEGER, verdict_id TEXT, attempt INTEGER, commit_sha TEXT, round INTEGER, stalled_rule TEXT, state TEXT'),
   T('definitions', ['task_ref'], 'task_ref TEXT, id TEXT, thread_id TEXT, issue_rev TEXT, base_commit TEXT, requirements TEXT, deliverables TEXT, budget TEXT, hash TEXT, locked_at INTEGER, state TEXT, dispute_ask TEXT'),
   T('attempts', ['task_ref', 'attempt'], 'task_ref TEXT, attempt INTEGER, session_id TEXT, child_id TEXT, worktree TEXT, base TEXT'),
@@ -212,10 +212,12 @@ export class Projector {
   apply(e: Projected, gated = true): Refusal[] {
     const d: Obj = isObj(e.data) ? e.data : {};
     // The core's reading of a session's state, and its finding the agent's process gone (#992), are no sign of the
-    // session: they move neither when it was last seen nor its turn.
-    if (e.session && e.kind !== 'session.state' && e.kind !== 'session.gone') {
-      // The newest stamp seen: a late or spooled event never moves a session back.
-      this.stmt('INSERT INTO sessions (id, last_seen) VALUES (?, ?) ON CONFLICT (id) DO UPDATE SET last_seen = MAX(COALESCE(sessions.last_seen, excluded.last_seen), excluded.last_seen)').run(e.session, e.ts);
+    // session: they move neither when it was last seen nor its turn. Nor is a name given to it (#2018), nor the core's
+    // reading of its unpushed commits or of holds that only watch (#2019).
+    if (e.session && e.kind !== 'session.state' && e.kind !== 'session.gone' && e.kind !== 'session.named' && e.kind !== 'commits.unpushed' && e.kind !== 'holds.watch') {
+      // The newest stamp seen: a late or spooled event never moves a session back. `seen_at` is that event's place in
+      // the log, and `status_at` below the place of the event that set its status: the facts its state is read from (#2018).
+      this.stmt('INSERT INTO sessions (id, last_seen, seen_at) VALUES (?, ?, ?) ON CONFLICT (id) DO UPDATE SET seen_at = CASE WHEN excluded.last_seen >= COALESCE(sessions.last_seen, excluded.last_seen) THEN excluded.seen_at ELSE sessions.seen_at END, last_seen = MAX(COALESCE(sessions.last_seen, excluded.last_seen), excluded.last_seen)').run(e.session, e.ts, e.log_pos);
       // What its own hooks say of a session's attention (#18): a prompt starts work, a permission prompt waits on you,
       // a call is work again unless its turn already stopped, and a stop ends the turn finished, failed, or stuck on a
       // block only you or a service can clear. The core and the app say the rest with session.attention.
@@ -223,9 +225,9 @@ export class Projector {
         const state = e.kind === 'user.ask' || e.kind === 'tool.before' || e.kind === 'tool.after' ? 'working' : e.kind === 'permission.request' ? 'waiting'
           : e.kind === 'agent.stop' ? (d.outcome !== 'failed' ? 'finished' : d.owner === 'you' || d.owner === 'service' ? 'stuck' : 'failed') : undefined;
         const late = e.kind === 'tool.before' || e.kind === 'tool.after' ? " AND status NOT IN ('finished', 'failed', 'stuck')" : '';
-        if (state) this.stmt(`UPDATE sessions SET status = ?, ended_log_pos = ? WHERE id = ?${late}`).run(state, ENDED.has(state) ? e.log_pos : null, e.session);
+        if (state) this.stmt(`UPDATE sessions SET status = ?, ended_log_pos = ?, status_at = ? WHERE id = ?${late}`).run(state, ENDED.has(state) ? e.log_pos : null, e.log_pos, e.session);
         // A session that ends while a prompt of its agent's showed waits on no one (#992).
-        if (e.kind === 'session.end') this.stmt("UPDATE sessions SET status = 'finished', ended_log_pos = ? WHERE id = ? AND status = 'waiting'").run(e.log_pos, e.session);
+        if (e.kind === 'session.end') this.stmt("UPDATE sessions SET status = 'finished', ended_log_pos = ?, status_at = ? WHERE id = ? AND status = 'waiting'").run(e.log_pos, e.log_pos, e.session);
         // The session's row shows its newest stop's cause, from the closed set (#85); NULL before any stop.
         if (e.kind === 'agent.stop') this.up('sessions', { id: e.session, cause: str(d.cause) });
       }
@@ -253,7 +255,7 @@ export class Projector {
         const state = str(d.state);
         // A hook's idle prompt after a stop that failed or got stuck leaves the stop's state (#992).
         const stopped = e.writer === 'hook' && state === 'finished' && id ? (this.stmt('SELECT status FROM sessions WHERE id = ?').get(id) as { status: string | null } | undefined)?.status : undefined;
-        if (id && stopped !== 'failed' && stopped !== 'stuck') this.up('sessions', { id, status: state, ended_log_pos: state && ENDED.has(state) ? e.log_pos : null });
+        if (id && stopped !== 'failed' && stopped !== 'stuck') this.up('sessions', { id, status: state, ended_log_pos: state && ENDED.has(state) ? e.log_pos : null, status_at: e.log_pos });
         // The core's end of its own session ends a turn no stop will: the prompt it answered in the model's place (#83).
         if (id && id === e.session && e.writer === 'core' && state && ENDED.has(state)) {
           const turns = this.turnsOf(id);

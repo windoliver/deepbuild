@@ -160,6 +160,23 @@
     "glyph": "⚠"
   },
   "legend": "auto",
+  "code": {
+    "keyword": "term_magenta",
+    "type": "term_cyan",
+    "function": "term_blue",
+    "variable": "ink",
+    "string": "term_green",
+    "number": "term_red",
+    "comment": "term_bright_black",
+    "operator": "ink",
+    "punctuation": "term_bright_black",
+    "plain": "ink"
+  },
+  "diff": {
+    "added": "term_green",
+    "removed": "term_red",
+    "changed": "term_yellow"
+  },
   "lines": {
     "line": {
       "kind": "exact",
@@ -245,6 +262,9 @@
   "shell": {
     "sidebar": 260,
     "band": 120,
+    "list_min": 208,
+    "page_min": 640,
+    "lane": 720,
     "placed": 160,
     "window_width": 960,
     "window_height": 640

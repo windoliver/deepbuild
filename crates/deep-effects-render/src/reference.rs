@@ -91,7 +91,7 @@ pub fn f32_to_f16(x: f32) -> u16 {
 }
 
 fn texture(
-    device: &wgpu::Device,
+    device: &deep_gpu::counted::Wgpu,
     label: &str,
     size: [u32; 2],
     format: wgpu::TextureFormat,

@@ -221,6 +221,18 @@
       "note": "INCONCLUSIVE: a manual run on the reference Mac; a person sets DEEP_880_TOUCH_ID=1",
       "reason": "gated on the opt-in variable DEEP_880_TOUCH_ID: a person records the screen and touches or cancels",
       "approval": "#1115, Skips: known today"
+    },
+    {
+      "id": "tests/acceptance/306/missing.test.ts › AC3 a document naming a pack version this build lacks is refused whole with pack_missing, and its check is BLOCKED › AC3 with 1.0.0 installed, a board naming test/chart@2.0.0 is refused naming the pack and 2.0.0, never drawn with 1.0.0, no revision current, its check BLOCKED",
+      "note": "",
+      "reason": "retired by #1958, whose Scope replaces the whole-document refusal #306 describes: 306-redraft-1958/missing.test.ts is AC3's test",
+      "approval": "#1958 Scope (the owner's touch-key tag on this commit)"
+    },
+    {
+      "id": "tests/acceptance/306/missing.test.ts › AC3 a document naming a pack version this build lacks is refused whole with pack_missing, and its check is BLOCKED › AC3 with no pack installed, a board naming test/chart@1.0.0 is refused naming the pack and 1.0.0, and its check is BLOCKED",
+      "note": "",
+      "reason": "retired by #1958, whose Scope replaces the whole-document refusal #306 describes: 306-redraft-1958/missing.test.ts is AC3's test",
+      "approval": "#1958 Scope (the owner's touch-key tag on this commit)"
     }
   ]
 }

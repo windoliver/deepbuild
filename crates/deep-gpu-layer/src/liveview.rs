@@ -20,6 +20,7 @@ use deep_effects_render::docops::{item_of_mark, DocOps, Fusing, Pool, Rec, Row, 
 use deep_scene3d_render::created::Created;
 use deep_effects_render::runner::Frame;
 use deep_gpu::alloc::outside;
+use deep_gpu::counted::Written;
 use deep_gpu::device::Device;
 use deep_gpu::memory;
 use deep_gpu::meter::{Rung, MAX_PASSES};
@@ -455,6 +456,8 @@ struct History {
     window: u32,
     texture: wgpu::Texture,
     uniform: wgpu::Buffer,
+    /// What the uniform holds: a full window writes it no more.
+    written: Written,
     bind: wgpu::BindGroup,
     frames: u64,
     bytes: Option<u64>,
@@ -503,6 +506,7 @@ impl History {
             window,
             texture,
             uniform,
+            written: Written::default(),
             bind,
             frames: 0,
             bytes,
@@ -659,13 +663,15 @@ impl View {
     }
 
     /// The warm-up at check (#432): prepares each scene a revision can reach, so every pipeline
-    /// they draw with is compiled before its first frame; none of them is a frame's.
+    /// they draw with is compiled before its first frame; none of them is a frame's, so the
+    /// first frame after it encodes each batch (#1903).
     pub fn warm(&mut self, device: &Device, look: &Look3, scenes: &[deep_canvas_scene3d::scene::Scene]) {
         self.renderer.log.warming = true;
         for scene in scenes {
             self.renderer.prepare(device, scene, look);
         }
         self.renderer.log.warming = false;
+        self.renderer.forget_encodings();
         self.prepared = false;
     }
 
@@ -1062,9 +1068,11 @@ impl View {
         h.frames += 1;
         let filled = h.frames.min(u64::from(h.window)) as u32;
         outside(|| {
-            device
-                .queue
-                .write_buffer(&h.uniform, 0, bytemuck::bytes_of(&[filled, 0, 0, 0]));
+            device.queue.write_changed(
+                &h.uniform,
+                &h.written,
+                bytemuck::bytes_of(&[filled, 0, 0, 0]),
+            );
             encoder.copy_texture_to_texture(
                 wgpu::TexelCopyTextureInfo {
                     texture: linear_texture,

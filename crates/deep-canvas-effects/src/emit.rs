@@ -1062,6 +1062,9 @@ impl W<'_> {
                 "g.normal_{}",
                 s.fields.get("space").and_then(Value::as_str).unwrap_or("object")
             ),
+            "position" => "g.position_world".into(),
+            "tangent" => "g.tangent".into(),
+            "uv0" => "g.uv0".into(),
             "count_ones" => un(self, "countOneBits"),
             "first_leading_bit" => un(self, "firstLeadingBit"),
             "first_trailing_bit" => un(self, "firstTrailingBit"),
@@ -1250,7 +1253,7 @@ pub struct Options {
 fn bindings(c: &Checked, options: Options, m: &mut String) {
     m.push_str(FRAME);
     m.push_str(HASH);
-    if uses_noise(&c.op.steps) {
+    if uses_noise(&c.op.steps) || c.responses.values().any(|r| uses_noise(&r.op.steps)) {
         m.push_str(NOISE);
     }
     if c.op.steps.values().any(|s| s.op == "sample3d@1") {
@@ -1343,6 +1346,8 @@ fn prologue(w: &mut W<'_>) {
         let e = match i.from {
             From::Time => "frame.time.x".to_string(),
             From::Seed => "frame.seed.x".to_string(),
+            // A light response's port, from what the light loop hands it (#485).
+            From::Port => format!("a.{n}"),
             // Textures and storage bind as they are, and arrays are read in place.
             _ if matches!(i.ty, Ty::Tex(_) | Ty::Tex3(_) | Ty::Arr(..) | Ty::Storage(..)) => continue,
             _ => unslot(&format!("inputs.{n}"), &i.ty),
@@ -1423,35 +1428,85 @@ fn fs(in: VOut) -> @location(0) vec4<f32> {
 }
 
 /// What a material operator's function reads of the surface it shades: its fragment position
-/// (as a pass's `pos`), and its normal in object, world and view space.
+/// (as a pass's `pos`), its normal in object, world and view space, and (#486) its first texture
+/// coordinates, its world position and its world tangent with the frame's handedness in w.
 pub const MAT_GEOM: &str = "struct MatGeom {
     pos: vec4<f32>,
     normal_object: vec3<f32>,
     normal_world: vec3<f32>,
     normal_view: vec3<f32>,
+    uv0: vec2<f32>,
+    position_world: vec3<f32>,
+    tangent: vec4<f32>,
 };
 ";
 
-/// What a material operator's function gives: `base` (rgb, alpha), `emission` (rgb),
-/// `mr` (metallic, roughness) and `wrote`, bit flags of the outputs it wrote: 1 base color,
-/// 2 alpha, 4 emission, 8 metallic, 16 roughness (not `set`, a WGSL reserved word). The
-/// renderer keeps the material's own value for every output not set.
+/// What a material operator's function gives, with `wrote` the bit flags of the outputs it wrote
+/// (not `set`, a WGSL reserved word): see [`MAT_OUTPUTS`]. The renderer keeps the material's own
+/// value for every output not set.
 pub const MAT_OUT: &str = "struct MatOut {
     base: vec4<f32>,
     emission: vec4<f32>,
     mr: vec4<f32>,
     wrote: vec4<u32>,
+    normal: vec4<f32>,
+    coat_normal: vec4<f32>,
+    coat: vec4<f32>,
+    specular: vec4<f32>,
+    sheen: vec4<f32>,
+    lobes: vec4<f32>,
+    aniso: vec4<f32>,
 };
 ";
 
-/// The bit each material output sets in `MatOut.wrote`.
-pub const MAT_OUTPUTS: &[(&str, u32)] = &[
-    ("base_color", 1),
-    ("alpha", 2),
-    ("emission", 4),
-    ("metallic", 8),
-    ("roughness", 16),
+/// Each material output: the bit it sets in `MatOut.wrote` and the line that stores its value
+/// `{v}` in `MatOut`. `base` is (base color, alpha); `mr` (metallic, roughness, specular level,
+/// occlusion); `coat` (coat, coat roughness, sheen, sheen roughness); `specular` (specular color,
+/// diffuse roughness); `sheen` (sheen color, iridescence thickness in nm); `lobes`
+/// (translucency, transmission, subsurface); `aniso` (anisotropy's strength and rotation in deg);
+/// `normal` and `coat_normal` in tangent space (#486).
+pub const MAT_OUTPUTS: &[(&str, u32, &str)] = &[
+    ("base_color", 1, "o.base = vec4<f32>({v}, o.base.w);"),
+    ("alpha", 2, "o.base.w = {v};"),
+    ("emission", 4, "o.emission = vec4<f32>({v}, 0.0);"),
+    ("metallic", 8, "o.mr.x = {v};"),
+    ("roughness", 16, "o.mr.y = {v};"),
+    ("specular_level", 32, "o.mr.z = {v};"),
+    ("occlusion", 64, "o.mr.w = {v};"),
+    ("normal", 128, "o.normal = vec4<f32>({v}, 0.0);"),
+    ("coat_normal", 256, "o.coat_normal = vec4<f32>({v}, 0.0);"),
+    ("coat", 512, "o.coat.x = {v};"),
+    ("coat_roughness", 1024, "o.coat.y = {v};"),
+    ("sheen", 2048, "o.coat.z = {v};"),
+    ("sheen_roughness", 4096, "o.coat.w = {v};"),
+    (
+        "specular_color",
+        8192,
+        "o.specular = vec4<f32>({v}, o.specular.w);",
+    ),
+    ("diffuse_roughness", 16384, "o.specular.w = {v};"),
+    ("sheen_color", 32768, "o.sheen = vec4<f32>({v}, o.sheen.w);"),
+    ("iridescence_thickness", 65536, "o.sheen.w = {v};"),
+    ("translucency", 131_072, "o.lobes.x = {v};"),
+    ("transmission", 262_144, "o.lobes.y = {v};"),
+    ("subsurface", 524_288, "o.lobes.z = {v};"),
+    (
+        "anisotropy",
+        1_048_576,
+        "o.aniso = vec4<f32>({v}, 0.0, 0.0);",
+    ),
 ];
+
+/// The type a material output is stored as: the core's or scene3d's entry of `gpu.output@1`.
+fn mat_output_ty(name: &str) -> Ty {
+    let ty = deep_canvas::registry::core_lists::output_type("material", name)
+        .or_else(|| deep_canvas_scene3d::gpu::output_type(name));
+    match ty {
+        Some("vec3<f32>") => Ty::V(Sc::F32, 3),
+        Some("vec2<f32>") => Ty::V(Sc::F32, 2),
+        _ => Ty::F32,
+    }
+}
 
 /// Renames whole identifiers in WGSL text: `map` is (from, to).
 fn rename(text: &str, map: &[(&str, &str)]) -> String {
@@ -1486,20 +1541,13 @@ pub fn material(c: &Checked, options: Options, groups: [u32; 2]) -> String {
     let mut w = writer(c, options);
     w.line("let pos = g.pos;");
     prologue(&mut w);
-    w.line("var o = MatOut(vec4<f32>(0.0), vec4<f32>(0.0), vec4<f32>(0.0), vec4<u32>(0u));");
-    for (name, bit) in MAT_OUTPUTS {
+    w.line("var o: MatOut;");
+    for (name, bit, store) in MAT_OUTPUTS {
         let Some(a) = c.op.outputs.get(*name) else {
             continue;
         };
         let (e, t) = w.arg(a);
-        let line = match *name {
-            "base_color" => format!("o.base = vec4<f32>({}, o.base.w);", cast(&e, &t, &Ty::V(Sc::F32, 3))),
-            "alpha" => format!("o.base.w = {};", cast(&e, &t, &Ty::F32)),
-            "emission" => format!("o.emission = vec4<f32>({}, 0.0);", cast(&e, &t, &Ty::V(Sc::F32, 3))),
-            "metallic" => format!("o.mr.x = {};", cast(&e, &t, &Ty::F32)),
-            _ => format!("o.mr.y = {};", cast(&e, &t, &Ty::F32)),
-        };
-        w.line(&line);
+        w.line(&store.replace("{v}", &cast(&e, &t, &mat_output_ty(name))));
         w.line(&format!("o.wrote.x = o.wrote.x | {bit}u;"));
     }
     w.line("return o;");
@@ -1515,21 +1563,49 @@ pub fn material(c: &Checked, options: Options, groups: [u32; 2]) -> String {
         .replace("@group(0)", &format!("@group({})", groups[0]))
         .replace("@group(1)", &format!("@group({})", groups[1]));
     let header = format!("// {}: written by the core from its checked steps.\n", c.op.id);
-    header
-        + &rename(
-            &m,
-            &[
-                ("Frame", "OpFrame"),
-                ("frame", "op_frame"),
-                ("Inputs", "OpInputs"),
-                ("inputs", "op_inputs"),
-                ("smp", "op_smp"),
-                ("deep_hash1", "op_hash1"),
-                ("deep_corner2", "op_corner2"),
-                ("deep_noise2", "op_noise2"),
-                ("material", "op_material"),
-            ],
-        )
+    header + &rename(&m, RENAMES)
+}
+
+/// What a material's WGSL renames so none of its globals meets the renderer's: each `op_`.
+const RENAMES: &[(&str, &str)] = &[
+    ("Frame", "OpFrame"),
+    ("frame", "op_frame"),
+    ("Inputs", "OpInputs"),
+    ("inputs", "op_inputs"),
+    ("smp", "op_smp"),
+    ("deep_hash1", "op_hash1"),
+    ("deep_corner2", "op_corner2"),
+    ("deep_noise2", "op_noise2"),
+    ("material", "op_material"),
+];
+
+/// A checked material's light responses (#485), to follow its [`material`] text `beside` in the
+/// renderer's module: `fn op_light(a: LightIn) -> vec3<f32>` and `fn op_ambient(a: AmbientIn) ->
+/// vec3<f32>` for those it has, each reading its ports from `a` (the renderer's structs) and its
+/// value inputs from the operator's uniform, with any helper its steps need that `beside` lacks.
+pub fn responses(c: &Checked, options: Options, beside: &str) -> String {
+    let mut m = String::new();
+    for (name, r) in &c.responses {
+        let mut w = writer(r, options);
+        prologue(&mut w);
+        let (e, t) = w.arg(&r.op.outputs[name]);
+        w.line(&format!("return {};", cast(&e, &t, &Ty::V(Sc::F32, 3))));
+        for helper in [CELLS, HOMOGRAPHY, COLOR, deep_canvas::blend::WGSL] {
+            if w.globals.contains(helper) && !beside.contains(helper) && !m.contains(helper) {
+                m.push_str(helper);
+            }
+        }
+        let port = if name == "light" { "LightIn" } else { "AmbientIn" };
+        let _ = writeln!(m, "fn {name}(a: {port}) -> vec3<f32> {{");
+        m.push_str(&w.out);
+        m.push_str("}\n");
+    }
+    let names: Vec<(&str, &str)> = RENAMES
+        .iter()
+        .copied()
+        .chain([("light", "op_light"), ("ambient", "op_ambient")])
+        .collect();
+    rename(&m, &names)
 }
 
 /// A material operator as a runnable module: its function at groups 0 and 1, called by a
@@ -1549,7 +1625,7 @@ fn vs(@builtin(vertex_index) vi: u32) -> HOut {
 fn fs(in: HOut) -> @location(0) vec4<f32> {
     let uv = in.pos.xy * op_frame.size.zw;
     let n = normalize(vec3<f32>(uv * 2.0 - 1.0, 1.0));
-    let o = op_material(MatGeom(in.pos, n, n, n));
+    let o = op_material(MatGeom(in.pos, n, n, n, uv, vec3<f32>(uv * 2.0 - 1.0, 0.0), vec4<f32>(1.0, 0.0, 0.0, 1.0)));
     return vec4<f32>(o.base.xyz + o.emission.xyz, 1.0);
 }
 ",

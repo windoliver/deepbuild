@@ -1,0 +1,168 @@
+{
+  "failures": [
+    "the submission key d2965947e505848fc47d915efa3cb1ba932d3c959b9580091e3fe8f9d27c9af1 wasn't recorded before the request left the machine: when the provider got the request, no file under /private/tmp/dh1923-SFgw6C/h/.deepbuild/jobs held {\"key\":\"d2965947e505848fc47d915efa3cb1ba932d3c959b9580091e3fe8f9d27c9af1\",\"provider\":\"127.0.0.1:50837\"}",
+    "the submission key 5e5d00f3a8aabc573e22cbe72db51dc2ea94bad911b88cf85b195772b07087c0 wasn't recorded before the request left the machine: when the provider got the request, no file under /private/tmp/dh1923-SFgw6C/h/.deepbuild/jobs held {\"key\":\"5e5d00f3a8aabc573e22cbe72db51dc2ea94bad911b88cf85b195772b07087c0\",\"provider\":\"127.0.0.1:50837\"}",
+    "a retry after the hub was killed made a second call to the provider for the key 5e5d00f3a8aabc573e22cbe72db51dc2ea94bad911b88cf85b195772b07087c0: 2 submissions of \"xyz\" arrived, where the one recorded before the kill must stay the only one",
+    "retry 1 with the key 5e5d00f3a8aabc573e22cbe72db51dc2ea94bad911b88cf85b195772b07087c0, after the hub was killed between the submission and the provider's answer, isn't BLOCKED with no output: {\"status\":\"done\",\"outputs\":{\"text\":{\"sha256\":\"ade099751d2ea9f3393f0f32d20c6b980dd5d3b0989dea599b966ae0d3cd5a1e\"}},\"receipt\":{\"kind\":\"test.hosted\",\"tool\":\"hosted-resubmit@1.0.0\",\"key\":\"5e5d00f3a8aabc573e22cbe72db51dc2ea94bad911b88cf85b195772b07087c0\",\"build\":\"d1:b9e1ad84482bc476f7dfb8e546605c54edcfd15931313da9b854d4a187bce437\",\"cache\":\"miss\",\"inputs\":{\"text\":\"3608bca1e44ea6c4d268eb6db02260269892c0b42b86bbf1e77a6fa16c3c9282\"}}}",
+    "retry 2 with the key 5e5d00f3a8aabc573e22cbe72db51dc2ea94bad911b88cf85b195772b07087c0, after the hub was killed between the submission and the provider's answer, isn't BLOCKED with no output: {\"status\":\"done\",\"outputs\":{\"text\":{\"sha256\":\"ade099751d2ea9f3393f0f32d20c6b980dd5d3b0989dea599b966ae0d3cd5a1e\"}},\"receipt\":{\"kind\":\"test.hosted\",\"tool\":\"hosted-resubmit@1.0.0\",\"key\":\"5e5d00f3a8aabc573e22cbe72db51dc2ea94bad911b88cf85b195772b07087c0\",\"build\":\"d1:b9e1ad84482bc476f7dfb8e546605c54edcfd15931313da9b854d4a187bce437\",\"cache\":\"hit\",\"inputs\":{\"text\":\"3608bca1e44ea6c4d268eb6db02260269892c0b42b86bbf1e77a6fa16c3c9282\"}}}",
+    "the record holds 0 unblock asks from the kill through the two retries, where the BLOCKED job has exactly one: []"
+  ],
+  "seen": {
+    "tool": "hosted-resubmit@1.0.0",
+    "provider": "127.0.0.1:50837",
+    "answered": {
+      "reply": {
+        "status": "done",
+        "outputs": {
+          "text": {
+            "sha256": "b5d4045c3f466fa91fe2cc6abe79232a1a57cdf104f7a26e716e0a1e2789df78"
+          }
+        },
+        "receipt": {
+          "kind": "test.hosted",
+          "tool": "hosted-resubmit@1.0.0",
+          "key": "d2965947e505848fc47d915efa3cb1ba932d3c959b9580091e3fe8f9d27c9af1",
+          "build": "d1:b9e1ad84482bc476f7dfb8e546605c54edcfd15931313da9b854d4a187bce437",
+          "cache": "miss",
+          "inputs": {
+            "text": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+          }
+        }
+      },
+      "calls": [
+        {
+          "n": 2,
+          "key": "d2965947e505848fc47d915efa3cb1ba932d3c959b9580091e3fe8f9d27c9af1",
+          "text": "abc",
+          "task": "task-2",
+          "journaled": false,
+          "answered": true,
+          "dropped": false
+        }
+      ],
+      "journal": [
+        {
+          "key": "d2965947e505848fc47d915efa3cb1ba932d3c959b9580091e3fe8f9d27c9af1",
+          "provider": "127.0.0.1:50837",
+          "file": "/private/tmp/dh1923-SFgw6C/h/.deepbuild/jobs/calls/d2965947e505848fc47d915efa3cb1ba932d3c959b9580091e3fe8f9d27c9af1/journal.jsonl"
+        },
+        {
+          "key": "d2965947e505848fc47d915efa3cb1ba932d3c959b9580091e3fe8f9d27c9af1",
+          "provider": "127.0.0.1:50837",
+          "task": "task-2",
+          "file": "/private/tmp/dh1923-SFgw6C/h/.deepbuild/jobs/calls/d2965947e505848fc47d915efa3cb1ba932d3c959b9580091e3fe8f9d27c9af1/journal.jsonl"
+        }
+      ]
+    },
+    "killed": {
+      "key": "5e5d00f3a8aabc573e22cbe72db51dc2ea94bad911b88cf85b195772b07087c0",
+      "journal": [
+        {
+          "key": "d2965947e505848fc47d915efa3cb1ba932d3c959b9580091e3fe8f9d27c9af1",
+          "provider": "127.0.0.1:50837",
+          "file": "/private/tmp/dh1923-SFgw6C/h/.deepbuild/jobs/calls/d2965947e505848fc47d915efa3cb1ba932d3c959b9580091e3fe8f9d27c9af1/journal.jsonl"
+        },
+        {
+          "key": "d2965947e505848fc47d915efa3cb1ba932d3c959b9580091e3fe8f9d27c9af1",
+          "provider": "127.0.0.1:50837",
+          "task": "task-2",
+          "file": "/private/tmp/dh1923-SFgw6C/h/.deepbuild/jobs/calls/d2965947e505848fc47d915efa3cb1ba932d3c959b9580091e3fe8f9d27c9af1/journal.jsonl"
+        }
+      ],
+      "lost": {
+        "code": "unavailable",
+        "retryable": true,
+        "remediation": "The DeepBuild hub is unreachable (it closed the connection); nothing was recorded. Call again once it is back.",
+        "path": "",
+        "actual": "",
+        "evidence": []
+      }
+    },
+    "retry": {
+      "key": "5e5d00f3a8aabc573e22cbe72db51dc2ea94bad911b88cf85b195772b07087c0",
+      "calls": [
+        {
+          "n": 3,
+          "key": "5e5d00f3a8aabc573e22cbe72db51dc2ea94bad911b88cf85b195772b07087c0",
+          "text": "xyz",
+          "task": "task-3",
+          "journaled": false,
+          "answered": false,
+          "dropped": true
+        },
+        {
+          "n": 4,
+          "key": "5e5d00f3a8aabc573e22cbe72db51dc2ea94bad911b88cf85b195772b07087c0",
+          "text": "xyz",
+          "task": "task-4",
+          "journaled": false,
+          "answered": true,
+          "dropped": false
+        }
+      ],
+      "replies": [
+        {
+          "status": "done",
+          "outputs": {
+            "text": {
+              "sha256": "ade099751d2ea9f3393f0f32d20c6b980dd5d3b0989dea599b966ae0d3cd5a1e"
+            }
+          },
+          "receipt": {
+            "kind": "test.hosted",
+            "tool": "hosted-resubmit@1.0.0",
+            "key": "5e5d00f3a8aabc573e22cbe72db51dc2ea94bad911b88cf85b195772b07087c0",
+            "build": "d1:b9e1ad84482bc476f7dfb8e546605c54edcfd15931313da9b854d4a187bce437",
+            "cache": "miss",
+            "inputs": {
+              "text": "3608bca1e44ea6c4d268eb6db02260269892c0b42b86bbf1e77a6fa16c3c9282"
+            }
+          }
+        },
+        {
+          "status": "done",
+          "outputs": {
+            "text": {
+              "sha256": "ade099751d2ea9f3393f0f32d20c6b980dd5d3b0989dea599b966ae0d3cd5a1e"
+            }
+          },
+          "receipt": {
+            "kind": "test.hosted",
+            "tool": "hosted-resubmit@1.0.0",
+            "key": "5e5d00f3a8aabc573e22cbe72db51dc2ea94bad911b88cf85b195772b07087c0",
+            "build": "d1:b9e1ad84482bc476f7dfb8e546605c54edcfd15931313da9b854d4a187bce437",
+            "cache": "hit",
+            "inputs": {
+              "text": "3608bca1e44ea6c4d268eb6db02260269892c0b42b86bbf1e77a6fa16c3c9282"
+            }
+          }
+        }
+      ],
+      "asks": [],
+      "journal": [
+        {
+          "key": "5e5d00f3a8aabc573e22cbe72db51dc2ea94bad911b88cf85b195772b07087c0",
+          "provider": "127.0.0.1:50837",
+          "file": "/private/tmp/dh1923-SFgw6C/h/.deepbuild/jobs/calls/5e5d00f3a8aabc573e22cbe72db51dc2ea94bad911b88cf85b195772b07087c0/journal.jsonl"
+        },
+        {
+          "key": "5e5d00f3a8aabc573e22cbe72db51dc2ea94bad911b88cf85b195772b07087c0",
+          "provider": "127.0.0.1:50837",
+          "task": "task-4",
+          "file": "/private/tmp/dh1923-SFgw6C/h/.deepbuild/jobs/calls/5e5d00f3a8aabc573e22cbe72db51dc2ea94bad911b88cf85b195772b07087c0/journal.jsonl"
+        },
+        {
+          "key": "d2965947e505848fc47d915efa3cb1ba932d3c959b9580091e3fe8f9d27c9af1",
+          "provider": "127.0.0.1:50837",
+          "file": "/private/tmp/dh1923-SFgw6C/h/.deepbuild/jobs/calls/d2965947e505848fc47d915efa3cb1ba932d3c959b9580091e3fe8f9d27c9af1/journal.jsonl"
+        },
+        {
+          "key": "d2965947e505848fc47d915efa3cb1ba932d3c959b9580091e3fe8f9d27c9af1",
+          "provider": "127.0.0.1:50837",
+          "task": "task-2",
+          "file": "/private/tmp/dh1923-SFgw6C/h/.deepbuild/jobs/calls/d2965947e505848fc47d915efa3cb1ba932d3c959b9580091e3fe8f9d27c9af1/journal.jsonl"
+        }
+      ]
+    }
+  }
+}

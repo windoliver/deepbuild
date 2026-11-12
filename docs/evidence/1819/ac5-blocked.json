@@ -1,0 +1,68 @@
+{
+  "failures": [],
+  "seen": {
+    "pcm": "c7f3595d578890cc07dcc4a615fe210d19b02156104f9e0219cfa0615cf20cd4",
+    "first": {
+      "status": "BLOCKED",
+      "cause": "silero-vad@6.2.3 can't start: its host 127.0.0.1:8719 gave no report of its weights and capabilities (fetch failed); nothing was sent",
+      "ask": "ask:01M73K2R7YQHDJYPBRD8AFEFJM"
+    },
+    "second": {
+      "status": "BLOCKED",
+      "cause": "silero-vad@6.2.3 can't start: its host 127.0.0.1:8719 gave no report of its weights and capabilities (fetch failed); nothing was sent",
+      "ask": "ask:01M73K2R7YQHDJYPBRD8AFEFJM"
+    },
+    "yeses": [
+      "ask:01M73K2QXP8JH18Y4JS5Z3BA2M: {\"kind\":\"authority\",\"question\":\"Send the file c7f3595d578890cc07dcc4a615fe210d19b02156104f9e0219cfa0615cf20cd4, which an agent put in the evidence store, to 127.0.0.1:8719 for silero-vad@6.2.3 (bake.activity)?\",\"options\":[{\"id\":\"send\",\"label\":\"Send it\",\"decision\":\"allow\"},{\"id\":\"decline\",\"label\":\"Do -> 0"
+    ],
+    "unblocks": [
+      {
+        "handle": "ask:01M73K2R7YQHDJYPBRD8AFEFJM",
+        "kind": "unblock",
+        "question": "silero-vad@6.2.3 can't start for bake.activity: its host 127.0.0.1:8719 doesn't answer. Start the host?",
+        "options": [
+          {
+            "id": "done",
+            "label": "I did it",
+            "decision": "none"
+          },
+          {
+            "id": "agent",
+            "label": "The agent can do it",
+            "decision": "none"
+          }
+        ],
+        "recommended": "done",
+        "default": "done",
+        "deadline": 1794429664510,
+        "steps": [
+          "Start silero-vad@6.2.3's host on 127.0.0.1:8719",
+          "Run the job on silero-vad@6.2.3 again"
+        ],
+        "where": "127.0.0.1:8719",
+        "why": "silero-vad@6.2.3 runs only on its host, after the host reports its weights",
+        "unblocks": [
+          "req:5420b4cbd439c960"
+        ],
+        "proves": "127.0.0.1:8719 answering /report",
+        "fallback": "you",
+        "provisional": false,
+        "owner": "you",
+        "key": "5420b4cbd439c96054e55036ccc043490c822faaf05b93cae39222353632b381",
+        "pinned_to": {
+          "kind": "evidence",
+          "ref": "5420b4cbd439c96054e55036ccc043490c822faaf05b93cae39222353632b381"
+        }
+      }
+    ],
+    "bake": {
+      "state": "BLOCKED",
+      "analyzer": "silero-vad@6.2.3",
+      "pcm_sha256": "c7f3595d578890cc07dcc4a615fe210d19b02156104f9e0219cfa0615cf20cd4",
+      "job": "bake.activity",
+      "reason": "no record of silero-vad@6.2.3 for the PCM c7f3595d578890cc07dcc4a615fe210d19b02156104f9e0219cfa0615cf20cd4: run bake.activity on silero-vad@6.2.3 with the input pcm c7f3595d578890cc07dcc4a615fe210d19b02156104f9e0219cfa0615cf20cd4, sample_rate 16000 and channels 1",
+      "core": "core@0.0.0",
+      "set_digest": "90de4d0ff0c955c8dc05ed40062c110ec7215b6b6bf91f78473fa73fe468e7b8"
+    }
+  }
+}

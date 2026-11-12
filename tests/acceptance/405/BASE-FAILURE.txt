@@ -1,0 +1,20 @@
+At base 903a1c07 (Mac17,10, M5 Max, 18 cores), on 2026-11-10, the suite was not run. The one-minute load was 31 to 49, so deep-show was not built, and the surfaces the tests enter plainly don't exist there. What each test would meet first was read from the base's code, not observed:
+
+- broken-fixture.test.ts (builds `full`, which exists). geometry.audit is in CORE_CHECK_KINDS (crates/deep-canvas/src/registry). But verdict.rs's `judge` runs only document.validate, document.determinism, film.layout and honest_numbers of the core's kinds, and returns every other one BLOCKED with `{code: "not_run", kind: "geometry.audit"}`. So the broken figure's row is BLOCKED, and the test fails at "the geometry audit of the broken figure is BLOCKED, not FAIL". If the base refuses to show a scene first, it fails at "is presented" instead.
+
+- floating-exception.test.ts:
+  - The first test fails at "the first verdict on A: the requirement covered only by the agent's own exception is INCONCLUSIVE". A's row is BLOCKED `not_run`. The base's only approval asks are #200's, for a pack entry under `binds: author`, never for an exception a document declares.
+  - The second test's scenario holds the `answer` call, which the base doesn't parse. So `deep-show run` answers `{"ok": false, "code": "bad_input"}`, and the test fails at "refused the scenario".
+
+- lid-sweep.test.ts:
+  - The first test fails at "the sweep of the lid is BLOCKED, not FAIL", since the row is BLOCKED `not_run`. Its planted run would never parse: the base has no planted name `sweep_audits_samples_only`, so that scenario is `bad_input` too.
+  - The second test shows a scene holding a `fixture.world@1`. scene3d draws that kind, but `deep-show`'s `knows` doesn't list it. So it fails at "no item skipped as a kind the build doesn't know" if the show reports the `unknown_kind` notice. Otherwise it fails at "refused at check, INVALID", since the row is BLOCKED `not_run`, with no `sweep_unbounded` refusal and no `estimates`.
+
+- budgets.test.ts fails before any timing. On the debug build, the 1,000-part figure's audit row is BLOCKED `not_run`, so it fails at "the geometry audit of the 1000-part figure is BLOCKED, not FAIL". Were it past that, the base reports no `timing.check_ms` on the audit's row, and no `timing.render_ms` or `timing.hash_ms` on document.determinism's.
+
+Run: `npx tsc -p tests/acceptance/405/tsconfig.json` passes (TypeScript 5.9.3, vitest 5.0.5, @types/node 24.19.2, the repo's pins, after `npm ci --ignore-scripts`).
+
+A scratch vitest file (not kept) ran the generators and checked the fixtures:
+- Criterion 1: the broken bracket's bounds pass 0.02 m into the housing's. The knob's bounds pass 0.004 m into the housing's while its sphere clears the housing's edge by 0.00263 m. The cable's bounds meet the sockets only by its 0.0015 m radius. No other pair of bounds overlaps.
+- Criterion 3: the lift at the five samples is 1.4e-64, 2.6e-23, 9.16e-4, 6.2e-6 and 8.0e-30 m. The lid passes into the shelf for s in (0.56426, 0.63574), and past 2 mm for s in (0.56660, 0.63340).
+- Criterion 4: the figure has 1,000 parts. Exactly nine pairs of bounds overlap, each by 0.01 m: part-039/040, 154/155, 269/270, 384/385, 499/500, 614/615, 729/730, 844/845 and 959/960, mixing boxes, cylinders and spheres. Every part lies on the 1.95 × 1.45 m plate.

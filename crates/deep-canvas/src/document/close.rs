@@ -3,7 +3,7 @@
 //! that renamed it (`renamed_in`), ahead of any name close by spelling; spelling ranks the rest by
 //! edit distance, then by name.
 
-use serde_json::{json, Value};
+use serde_json::{json, Map, Value};
 
 use crate::kinds::{Entry, Registry, Version};
 use crate::registry::Fault;
@@ -48,9 +48,43 @@ fn by_spelling<'n>(wrong: &str, candidates: impl Iterator<Item = &'n str>) -> Ve
     near.into_iter().map(|(_, c)| c).collect()
 }
 
+/// The names among `candidates` a writer may have meant by `wrong`, by spelling: at most three,
+/// nearest first.
+fn close_names<'n>(wrong: &str, candidates: impl Iterator<Item = &'n str>) -> Vec<&'n str> {
+    let mut near = by_spelling(wrong, candidates);
+    near.truncate(MOST);
+    near
+}
+
+/// The first name a reader of an occurrence list names that the list doesn't declare, and the
+/// declared names close to it: a kind outside `declared` (each kind's `{fields: {name: type}}`,
+/// as a logic item's `emits` gives them), or a field none of the kinds it reads declares. A row's
+/// own columns (step, t, kind, a, b) are always declared (#544).
+pub fn undeclared(declared: &Map<String, Value>, kinds: Option<&[String]>, fields: &[&str]) -> Option<(String, Vec<String>)> {
+    let close = |name: &str, candidates: Vec<&str>| {
+        Some((name.to_string(), close_names(name, candidates.into_iter()).into_iter().map(str::to_string).collect()))
+    };
+    let kinds: Vec<&str> = match kinds {
+        Some(kinds) => {
+            if let Some(k) = kinds.iter().find(|k| !declared.contains_key(k.as_str())) {
+                return close(k, declared.keys().map(String::as_str).collect());
+            }
+            kinds.iter().map(String::as_str).collect()
+        }
+        None => declared.keys().map(String::as_str).collect(),
+    };
+    let names: Vec<&str> = kinds
+        .iter()
+        .filter_map(|k| declared.get(*k)?.get("fields")?.as_object())
+        .flat_map(|f| f.keys().map(String::as_str))
+        .collect();
+    let f = fields.iter().find(|f| !names.contains(f) && !["step", "t", "kind", "a", "b"].contains(f))?;
+    close(f, names)
+}
+
 /// The close names for a kind text no registry in this build holds: every kind at its build
 /// major, by spelling.
-pub(super) fn kind_names(text: &str, kinds: &Registry, fault: Option<Fault>) -> Vec<Value> {
+pub fn kind_names(text: &str, kinds: &Registry, fault: Option<Fault>) -> Vec<Value> {
     if fault == Some(Fault::NoCloseNames) {
         return Vec::new();
     }
@@ -66,12 +100,36 @@ pub(super) fn kind_names(text: &str, kinds: &Registry, fault: Option<Fault>) -> 
         .collect()
 }
 
+/// Every other kind whose build major defines a field of exactly `name`, as `family.name@major`,
+/// by name (#1970).
+pub fn owners(
+    name: &str,
+    entry: &Entry,
+    kinds: &Registry,
+    fault: Option<Fault>,
+) -> Vec<String> {
+    if matches!(fault, Some(Fault::NoCloseNames | Fault::CloseBySpelling)) {
+        return Vec::new();
+    }
+    let own = entry.full_name();
+    let mut out: Vec<String> = kinds
+        .entries()
+        .iter()
+        .filter(|e| e.current().param(name).is_some() && e.full_name() != own)
+        .map(|e| format!("{}@{}", e.full_name(), e.current().major))
+        .collect();
+    out.sort();
+    out
+}
+
 /// The close names for a field `name` the kind's `version` doesn't define: the name a rename
-/// record up to that version gives it, then its params by spelling.
-pub(super) fn field_names(
+/// record up to that version gives it, then each kind in `owners` that defines it, then its
+/// params by spelling.
+pub fn field_names(
     name: &str,
     entry: &Entry,
     version: &Version,
+    owners: &[String],
     fault: Option<Fault>,
 ) -> Vec<Value> {
     if fault == Some(Fault::NoCloseNames) {
@@ -87,6 +145,7 @@ pub(super) fn field_names(
             }
         }
     }
+    out.extend(owners.iter().map(|k| json!({"name": k, "defines": name})));
     for n in by_spelling(name, version.params.iter().map(|p| p.name)) {
         if !out.iter().any(|c| c["name"] == n) {
             out.push(json!({"name": n}));

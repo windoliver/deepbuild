@@ -164,6 +164,25 @@ pub struct Element {
     pub at: Affine3,
 }
 
+/// An instancer's prototypes (`of`): 1 to 64 item IDs.
+pub fn prototypes(params: &Value, path: &str) -> Result<Vec<String>, Refused> {
+    let bad = || Refused {
+        code: "out_of_range",
+        path: format!("{path}/of"),
+    };
+    let of: Vec<String> = params
+        .get("of")
+        .and_then(Value::as_array)
+        .ok_or_else(bad)?
+        .iter()
+        .map(|v| v.as_str().map(str::to_string).ok_or_else(bad))
+        .collect::<Result<_, _>>()?;
+    if of.is_empty() || of.len() > 64 {
+        return Err(bad());
+    }
+    Ok(of)
+}
+
 /// An instancer's prototypes (`of`) and its shown elements: its rows less those its `hidden`
 /// column names, in row order.
 pub fn elements(params: &Value, path: &str) -> Result<(Vec<String>, Vec<Element>), Refused> {
@@ -171,16 +190,7 @@ pub fn elements(params: &Value, path: &str) -> Result<(Vec<String>, Vec<Element>
         code: "out_of_range",
         path: format!("{path}/{k}"),
     };
-    let of: Vec<String> = params
-        .get("of")
-        .and_then(Value::as_array)
-        .ok_or_else(|| bad("of"))?
-        .iter()
-        .map(|v| v.as_str().map(str::to_string).ok_or_else(|| bad("of")))
-        .collect::<Result<_, _>>()?;
-    if of.is_empty() || of.len() > 64 {
-        return Err(bad("of"));
-    }
+    let of = prototypes(params, path)?;
     let column = |k: &str| params.get(k).and_then(Value::as_array);
     let ids: Vec<u64> = match column("ids") {
         Some(a) => a
@@ -268,7 +278,7 @@ pub fn elements(params: &Value, path: &str) -> Result<(Vec<String>, Vec<Element>
 }
 
 /// A unit quaternion `[x, y, z, w]` as a rotation matrix.
-fn quat(q: [f64; 4]) -> [[f64; 3]; 3] {
+pub(crate) fn quat(q: [f64; 4]) -> [[f64; 3]; 3] {
     let l = (q[0] * q[0] + q[1] * q[1] + q[2] * q[2] + q[3] * q[3])
         .sqrt()
         .max(1e-12);
@@ -293,7 +303,7 @@ fn quat(q: [f64; 4]) -> [[f64; 3]; 3] {
 }
 
 /// `m` (T·S) with `r` between: T·R·S.
-fn rotated(m: Affine3, r: [[f64; 3]; 3]) -> Affine3 {
+pub(crate) fn rotated(m: Affine3, r: [[f64; 3]; 3]) -> Affine3 {
     let mut out = m;
     for i in 0..3 {
         for j in 0..3 {

@@ -6,6 +6,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
+use crate::counted::{Counts, Queue, Wgpu};
 use crate::seam::{self, Choice, Refusal, Startup};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -235,8 +236,9 @@ impl Drop for Gpu {
 }
 
 pub struct Device {
-    pub device: wgpu::Device,
-    pub queue: wgpu::Queue,
+    /// wgpu's device and queue, counting what they create and upload (#1903).
+    pub device: Wgpu,
+    pub queue: Queue,
     pub backend: Backend,
     /// The adapter's name and driver, for a run's environment fingerprint (#380); `None` on the
     /// noop backend.
@@ -251,13 +253,27 @@ pub struct Device {
     failures: Failures,
 }
 
+/// wgpu's noop device, as `wgpu::Device::noop` opens it but with indirect-call validation off:
+/// that validation is a compute pass, nothing on a device that runs none, and on the noop
+/// adapter's limits its setup asserts as soon as a pass draws indirect (#1903's 4,000 items).
+fn noop(desc: &wgpu::DeviceDescriptor<'_>) -> (wgpu::Device, wgpu::Queue) {
+    let mut instance = wgpu::InstanceDescriptor::new_without_display_handle();
+    instance.backends = wgpu::Backends::NOOP;
+    instance.backend_options.noop = wgpu::NoopBackendOptions::enabled();
+    instance.flags.remove(wgpu::InstanceFlags::VALIDATION_INDIRECT_CALL);
+    let instance = wgpu::Instance::new(instance);
+    let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default()))
+        .expect("the noop backend has an adapter");
+    pollster::block_on(adapter.request_device(desc)).expect("the noop adapter opens a device")
+}
+
 impl Device {
     fn open(backend: Backend, choice: Option<&Choice>) -> Result<Arc<Device>, String> {
         let mut features = wgpu::Features::empty();
         let mut name = String::from("noop");
         let mut info = None;
         let (device, queue) = match backend {
-            Backend::Noop => wgpu::Device::noop(&wgpu::DeviceDescriptor {
+            Backend::Noop => noop(&wgpu::DeviceDescriptor {
                 required_limits: wgpu::Limits {
                     max_bind_groups: 5,
                     ..Default::default()
@@ -334,9 +350,10 @@ impl Device {
             inside_passes: features.contains(wgpu::Features::TIMESTAMP_QUERY_INSIDE_PASSES),
             period_ns: query.then(|| queue.get_timestamp_period()),
         };
+        let counts = Arc::new(Counts::default());
         Ok(Arc::new(Device {
-            device,
-            queue,
+            device: Wgpu::new(device, counts.clone()),
+            queue: Queue::new(queue, counts),
             backend,
             adapter: info,
             epoch,

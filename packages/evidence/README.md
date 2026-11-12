@@ -6,7 +6,7 @@ The evidence store (#15): files kept by hash, intake checks on media, redaction,
 
 ## Where new code goes
 
-- `src/index.ts`: the store (`openEvidenceStore`) and the public entry.
+- `src/index.ts`: the store (`openEvidenceStore`) and the public entry. A job's `writer.file` intake (#1820) hashes a private disk copy, optionally against its listed sha256, before atomically keeping it; `verify` checks cached binary bytes without holding the entire file in memory. These are store operations, not extensions: only the store owns its hash paths and journal.
 - `src/scrub.ts`: the scrub pass; `src/patterns.ts`: reading the gitleaks rules; `src/fields.ts`: field-name, header and auth-scheme rules; `src/intake.ts`: media type and whole-file checks.
 - Tests: `test/`; the acceptance suites are `tests/acceptance/15/` and `tests/acceptance/761/`.
 

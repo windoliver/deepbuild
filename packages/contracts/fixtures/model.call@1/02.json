@@ -1,0 +1,15 @@
+{
+  "v": 1,
+  "id": "01K9QZ6V2T8M4R1N5P7W3X9Z02",
+  "kind": "model.call",
+  "subject": "session:8d3c2f1e0b4a4c6e9f2d1a2b3c4d5e6f",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013442000,
+  "data": {
+    "outcome": "reply",
+    "at": 1760013449000,
+    "record": "6c1d8b8f-3a2e-4d9f-8b4c-7e6f5a4b3c2d"
+  }
+}

@@ -28,6 +28,11 @@ pub fn position(motion: &Motion, t: i64) -> (i64, i64) {
             let d = t - tr.start;
             (tr.start + d.rem_euclid(span), d.div_euclid(span))
         }
+        // #157: each odd pass plays the span backwards.
+        Some(span) if tr.ping_pong => {
+            let (d, pass) = ((t - tr.start).rem_euclid(span), (t - tr.start).div_euclid(span));
+            (tr.start + if pass % 2 == 0 { d } else { span - d }, pass)
+        }
         _ => (t, 0),
     }
 }
@@ -450,6 +455,8 @@ pub(crate) fn valid_until(
                 None => Some(wrap_at + offset),
             }
         }
+        // #157: a backwards pass may change at every flick.
+        Some(_) if tr.ping_pong && !(none_counted && next.is_none()) => Some(t + 1),
         _ => next,
     }
 }
@@ -459,6 +466,27 @@ pub(crate) fn valid_until(
 pub fn items(doc: &Map<String, Value>, program: &Program, state: &State) -> Map<String, Value> {
     let items = match doc.get("items") {
         Some(Value::Object(items)) => items.clone(),
+        _ => Map::new(),
+    };
+    let mut items = evaluated(items, program, state);
+    crate::held::apply(doc, program, state, &mut items);
+    items
+}
+
+/// [`items`] of only the items `keep` takes, each as [`items`] gives it: a view that leaves out
+/// what it can't see copies and evaluates none of it (#1486).
+pub fn items_where(
+    doc: &Map<String, Value>,
+    program: &Program,
+    state: &State,
+    keep: impl Fn(&str) -> bool,
+) -> Map<String, Value> {
+    let items = match doc.get("items") {
+        Some(Value::Object(items)) => items
+            .iter()
+            .filter(|(id, _)| keep(id))
+            .map(|(id, item)| (id.clone(), item.clone()))
+            .collect(),
         _ => Map::new(),
     };
     let mut items = evaluated(items, program, state);
@@ -558,6 +586,64 @@ pub(crate) fn evaluated(
         }
     }
     items
+}
+
+/// #504: the values a figure's readouts show at the state's time, the one source a card's and a
+/// text's template slots read: `{data: {name: value}, assemblies: {id: value}, controls: {id:
+/// value}}`, each data value something writes, each assembly's value held to its range, and each
+/// control's value at t, its last input-track entry at or before t, else its default (a slider's
+/// range's low end where it names none).
+pub fn shown_values(doc: &Map<String, Value>, program: &Program, state: &State) -> Value {
+    let data: Map<String, Value> = program
+        .fields
+        .iter()
+        .filter(|f| f.written)
+        .filter_map(|f| Some((f.data.clone()?, json!(state.slots[f.slot]))))
+        .collect();
+    let assemblies: Map<String, Value> =
+        program.assemblies.iter().map(|a| (a.id.clone(), json!(a.held(state.slots[a.slot])))).collect();
+    let mut entries: Vec<&crate::input::Entry> = program.options.input.iter().filter(|e| e.t <= state.t).collect();
+    entries.sort_by_key(|e| e.key());
+    let controls: Map<String, Value> = doc
+        .get("controls")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten()
+        .map(|(id, c)| {
+            let last = entries.iter().rev().find(|e| e.control == *id).map(|e| e.value.clone());
+            let default = || c.get("default").or_else(|| c.pointer("/range/0")).cloned();
+            (id.clone(), last.or_else(default).unwrap_or(Value::Null))
+        })
+        .collect();
+    json!({"data": data, "assemblies": assemblies, "controls": controls})
+}
+
+/// `doc` with [`shown_values`] written where a template's slots read them (`data/<name>`,
+/// `assemblies/<id>/value`, `controls/<id>/value`): what a readout fills from, the same for the
+/// card the frame draws and the readout `see` hears (#504).
+pub fn shown_doc(doc: &Map<String, Value>, program: &Program, state: &State) -> Value {
+    if program.options.planted == crate::program::Planted::ReadoutReadsDocument {
+        return Value::Object(doc.clone());
+    }
+    let shown = shown_values(doc, program, state);
+    let mut out = Value::Object(doc.clone());
+    for (name, v) in shown["data"].as_object().into_iter().flatten() {
+        match out.pointer_mut(&format!("/data/{name}")) {
+            Some(Value::Object(entry)) => {
+                entry.insert("value".into(), v.clone());
+            }
+            Some(bare) => *bare = v.clone(),
+            None => {}
+        }
+    }
+    for section in ["assemblies", "controls"] {
+        for (id, v) in shown[section].as_object().into_iter().flatten() {
+            if let Some(Value::Object(entry)) = out.get_mut(section).and_then(|s| s.get_mut(id)) {
+                entry.insert("value".into(), v.clone());
+            }
+        }
+    }
+    out
 }
 
 /// Whether an item shows a counter, which may read a driver's data value.

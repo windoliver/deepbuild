@@ -1,0 +1,15 @@
+{
+  "name": "shelf",
+  "version": "1.0.0",
+  "license": "MIT",
+  "description": "The #202 suite's shelf recipe with shelf.span as a recipe-level rule and no kinds: what the merge base can install, for the budgets.",
+  "requires": {
+    "core": ">=0.0.0",
+    "modules": {
+      "marks2d": ">=0.0.0"
+    }
+  },
+  "recipes": {
+    "shelf.bookcase@1": "shelf.bookcase@1.json"
+  }
+}

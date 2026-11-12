@@ -62,6 +62,7 @@ pub(crate) fn planted3(p: Option<Planted>) -> Planted3 {
         add_writes_depth: p == Some(Planted::AddWritesDepth),
         add_without_depth_test: p == Some(Planted::AddWithoutDepthTest),
         ids_by_draw_position: p == Some(Planted::IdsByDrawPosition),
+        overlay_keeps_grid_on_seek: p == Some(Planted::OverlayKeepsGridOnSeek),
         ids_ignore_mask: p == Some(Planted::IdsIgnoreMask),
         cuts_color_only: p == Some(Planted::CutsColorOnly),
         local: deep_scene3d_render::local::Planted {
@@ -100,6 +101,18 @@ pub(crate) fn planted3(p: Option<Planted>) -> Planted3 {
             // #481's.
             Planted::SubsurfaceAcrossParts,
             Planted::SubsurfaceAddsToDiffuse,
+            // #486's.
+            Planted::LobeOutputScalesField,
+            Planted::OcclusionScalesDirect,
+            Planted::BumpIgnoresHandedness,
+            Planted::CoatNormalBendsBase,
+            // #485's.
+            Planted::LightDropsFresnel,
+            Planted::AmbientAddsNz,
+            Planted::LoopShadowOne,
+            Planted::LoopCallsCutLights,
+            Planted::LoopWorldNormal,
+            Planted::LoopViewAway,
         ]
         .iter()
         .position(|q| p == Some(*q))
@@ -117,6 +130,10 @@ pub(crate) fn msaa_planted(p: Option<Planted>) -> Planted3 {
             Some(Planted::SingleSampleTargets | Planted::ClaimsMsaaOverSingleSample)
         ),
         resolve_accumulates: p == Some(Planted::ResolveAccumulatesFrames),
+        missing_lobe_turned_on: p == Some(Planted::MissingLobeTurnedOn),
+        bind_group_per_item: p == Some(Planted::BindGroupPerItem),
+        uploads_every_transform: p == Some(Planted::UploadsEveryTransform),
+        warms_per_item: p == Some(Planted::WarmsPerItem),
         ..Default::default()
     }
 }
@@ -382,6 +399,37 @@ pub fn kept(app: &mut App) -> Vec<deep_scene3d_render::KeptRow> {
     })
 }
 
+/// What the GPU drew for each of `ids` in the frame just drawn (#2016): the gust its sway used,
+/// with one, and its mesh's vertices in world m; none for an item with no solid.
+pub fn sway(
+    app: &mut App,
+    scene: Arc<Scene>,
+    ids: Vec<String>,
+) -> Vec<(String, Option<f32>, Vec<[f64; 3]>)> {
+    app.worker.call(move |state| {
+        let Some(s) = state.scene3d.as_ref() else {
+            return Vec::new();
+        };
+        let device = s.view.device().clone();
+        let shared = lock(&s.shared);
+        let Some(r) = shared.renderer.as_ref() else {
+            return Vec::new();
+        };
+        let solids: Vec<&deep_canvas_scene3d::scene::Solid> =
+            scene.layers.iter().flat_map(|l| &l.solids).collect();
+        ids.into_iter()
+            .map(|id| {
+                let read = solids
+                    .iter()
+                    .find(|s| s.id == id)
+                    .and_then(|s| r.read_sway(&device, s));
+                let (gust, positions) = read.unwrap_or_default();
+                (id, gust, positions)
+            })
+            .collect()
+    })
+}
+
 /// The pipelines the session's renderer compiled so far, by name (#854).
 pub fn pipelines(app: &mut App) -> Vec<&'static str> {
     app.worker.call(|state| {
@@ -550,6 +598,12 @@ pub fn draw_on(
                     s.view.wait_free();
                 };
                 s.view.wait_done(drawn.slot);
+            }
+            // #485: the light responses that returned a negative or non-finite value.
+            if !noop {
+                if let Some(r) = lock(&s.shared).renderer.as_mut() {
+                    r.check_responses(&device);
+                }
             }
             // The frame's GPU time, as its passes' timestamp queries measured it.
             let timing = profiler2.as_ref().map(|p| {

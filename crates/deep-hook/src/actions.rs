@@ -19,7 +19,7 @@ use std::time::{Duration, Instant};
 
 use deep_contracts::{jcs, parse, Value};
 
-use super::{address, home, member, quoted, read_line, worktree_hub, Got, CWD};
+use super::{address, home, member, quoted, read_line, setting, worktree_hub, Got, CWD};
 
 /// The two tools and the codes' pages, as the hub lists them.
 const DATA: &str = include_str!("actions.json");
@@ -134,7 +134,7 @@ impl Hub {
     fn connect(&self) -> Option<(mpsc::Sender<String>, Waiting)> {
         // As `deep mcp` reads the address setting: a worktree sent to a dev hub reaches it; otherwise a config.json
         // that isn't JSON, or a hub.address that isn't unix:<absolute path>, reaches no hub rather than the default.
-        let path = match worktree_hub() {
+        let path = match worktree_hub(setting("hub", "use").as_ref()) {
             Some(path) => path,
             None => {
                 if let Ok(text) = fs::read_to_string(home().join("config.json")) {

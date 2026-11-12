@@ -41,7 +41,7 @@ pub fn os() -> String {
 }
 
 /// This run's fingerprint: the OS, the GPU, its driver and the wgpu this binary is built with.
-fn fingerprint(app: &App) -> Value {
+pub(crate) fn fingerprint(app: &App) -> Value {
     let info = app.worker.call(|state| state.gpu.device().adapter.clone());
     let (gpu, driver) = match info {
         Some(i) => {
@@ -72,7 +72,16 @@ fn rgba(bytes: &[u8]) -> Option<image::RgbaImage> {
     image::load_from_memory(bytes).ok().map(|i| i.to_rgba8())
 }
 
+/// Distinct colors a frame must hold before a similarity counts (#1399).
+const COLORS: usize = 32;
+/// The share of a frame's pixels that must differ from its modal color (#1399).
+const OFF_MODAL: f64 = 0.05;
+
+/// A frame no comparison counts on: dark (98% of its pixels at luma 0.06 or under), or flat
+/// (#1399: under 32 distinct colors, or under 5% of its pixels off its modal color), so two
+/// matching blank frames never pass.
 fn blank(img: &image::RgbaImage) -> bool {
+    let total = f64::from(img.width() * img.height());
     let dark = img
         .pixels()
         .filter(|p| {
@@ -80,7 +89,14 @@ fn blank(img: &image::RgbaImage) -> bool {
                 <= 0.06
         })
         .count();
-    dark as f64 >= 0.98 * f64::from(img.width() * img.height())
+    let mut colors = std::collections::HashMap::<[u8; 4], u32>::new();
+    for p in img.pixels() {
+        *colors.entry(p.0).or_default() += 1;
+    }
+    let modal = colors.values().copied().max().unwrap_or(0);
+    dark as f64 >= 0.98 * total
+        || colors.len() < COLORS
+        || total - f64::from(modal) < OFF_MODAL * total
 }
 
 /// `decide`: your blessing records the PNG as the fixture's golden under this run's fingerprint;
@@ -88,6 +104,10 @@ fn blank(img: &image::RgbaImage) -> bool {
 pub fn decide(app: &mut App, call: &Value) -> Value {
     if call["via"] != "you" {
         return json!({"outcome": "refused", "code": "not_your_decision", "reason": "only your decision blesses a golden"});
+    }
+    // #1903: your limits for the envelope's calibration metrics.
+    if call["decision"].get("limits").is_some() {
+        return crate::envelope::decide_limits(call);
     }
     // A bless names a PNG, or an operator output's bytes (`state`, #252).
     let bless = &call["decision"]["bless"];

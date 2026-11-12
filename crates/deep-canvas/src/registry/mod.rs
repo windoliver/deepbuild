@@ -6,14 +6,15 @@
 //! then checks the whole set: dependency ranges (the readers of a missing optional dependency
 //! left out), one owner per array, every read resolved, no read of a later phase, no cycle,
 //! legal places, check machine classes and tool entries, one implementation per interface; it
-//! computes each module's digest and the module-set digest. Any failure is a [`SealError`] with
-//! its reason, naming the modules and arrays involved: there is no warning level and no accept
-//! list. A [`Sealed`] registry never changes, and nothing here runs per frame.
+//! computes each module's digest, the module-set digest and the runtime digest. Any failure is a
+//! [`SealError`] with its reason, naming the modules and arrays involved: there is no warning
+//! level and no accept list. A [`Sealed`] registry never changes, and nothing here runs per frame.
 //!
 //! Everything is ordinary data over `BTreeMap`s and sorted `Vec`s: no static, no hash-map order,
 //! nothing read from the machine, as the canvas lint requires.
 
 pub mod core_lists;
+mod implementation;
 pub mod lists;
 mod semver;
 
@@ -23,6 +24,7 @@ use crate::canon::{self, CanonError, NoShape};
 use crate::kinds::Entry;
 use serde_json::{json, Value};
 
+pub use implementation::{Equivalence, Implementation, Pin, StateClass};
 pub use semver::{Range, Semver};
 
 /// The core's version, as `core@<version>` names it in every reply; it is the `deep-canvas`
@@ -231,65 +233,6 @@ pub struct Manifest {
     pub implementation: Implementation,
 }
 
-/// How an implementation's results compare with its interface's reference.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Equivalence {
-    /// Every kit fixture gives the reference implementation's hashes.
-    Bit,
-    /// Every behavior fixture lands within the interface's tolerances.
-    Measured,
-}
-
-/// What an implementation's carried state is.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum StateClass {
-    /// A documented layout any implementation of the interface reads.
-    Canonical,
-    /// Its crate's own bytes, which no other implementation or version loads.
-    BackendBytes,
-}
-
-/// One library an implementation pins.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Pin {
-    pub version: String,
-    pub features: Vec<String>,
-}
-
-/// The implementation a canvas module is of its interface.
-#[derive(Clone, Debug)]
-pub struct Implementation {
-    pub name: String,
-    pub version: Semver,
-    /// crate → its version and features.
-    pub pins: BTreeMap<String, Pin>,
-    pub equivalence: Equivalence,
-    pub state: StateClass,
-}
-
-impl Implementation {
-    /// A bit, canonical implementation pinning nothing, as every shipped module but physics is.
-    pub fn reference(name: &str, version: Semver) -> Implementation {
-        Implementation {
-            name: name.into(),
-            version,
-            pins: BTreeMap::new(),
-            equivalence: Equivalence::Bit,
-            state: StateClass::Canonical,
-        }
-    }
-
-    pub fn to_json(&self) -> Value {
-        json!({
-            "name": self.name,
-            "version": self.version.to_string(),
-            "pins": self.pins.iter().map(|(k, p)| (k.clone(), json!({"version": p.version, "features": p.features}))).collect::<serde_json::Map<_, _>>(),
-            "equivalence": match self.equivalence { Equivalence::Bit => "bit", Equivalence::Measured => "measured" },
-            "state": match self.state { StateClass::Canonical => "canonical", StateClass::BackendBytes => "backend_bytes" },
-        })
-    }
-}
-
 /// A canvas interface: what documents, checks and other canvas modules see of an implementation.
 /// Its digest is its reference implementation's, so the seal registers the reference's shapes
 /// beside any other implementation's and names the first that differs. The interface, never the
@@ -490,6 +433,13 @@ pub type Rule = fn(&Value, &str, &Value) -> Vec<Raised>;
 /// One item's CPU time per frame, in ms, for the budget estimate (`document.budget`).
 pub type Cost = fn(&Value) -> f64;
 
+/// The elements of a built item's named part in one domain, in index order, each an object of
+/// `i`, `center`, `normal`, `area`, `size` and the part's attributes, for a recipe's repeat over
+/// elements (Recipe: repeat over elements; #2015): `(document, item ID, item, part, domain,
+/// planted wrong program)`, or why there are none to count.
+pub type Elements =
+    fn(&Value, &str, &Value, &str, &str, Option<&str>) -> Result<Vec<Value>, String>;
+
 /// One code a canvas module's check can emit, in the check catalog: what it means, its fix, and
 /// whether that fix is given as patch ops.
 #[derive(Clone, Debug)]
@@ -669,15 +619,15 @@ pub struct Report {
 
 pub type ReportRun = fn(&Value, &Value) -> Report;
 
-/// The core's own document check kinds (canvas primitives: Check input). Each reads only the
-/// core's arrays, which canvas modules fill through `contributes_to`, and names no module's kind.
-pub const CORE_CHECK_KINDS: [&str; 11] = [
+/// The core's own document check kinds (canvas primitives: Check input), each reading only the core's arrays and naming no module's kind.
+pub const CORE_CHECK_KINDS: [&str; 12] = [
     "document.validate",
     "document.budget",
     "document.frame_time",
     "document.layout",
     "document.determinism",
     "geometry.audit",
+    "geometry.shape",
     "film.audit",
     "film.flicker",
     "film.layout",
@@ -729,6 +679,8 @@ pub struct Registrar {
     pub rules: Vec<(String, Rule)>,
     /// Its kinds' CPU cost per item, by kind (`family.name`).
     pub costs: Vec<(String, Cost)>,
+    /// Its builders' elements by part and domain, by kind (`family.name`; #2015).
+    pub elements: Vec<(String, Elements)>,
     /// Its carried state with checkpoints.
     pub steppers: Vec<Stepper>,
     /// The registries it declares (#200).
@@ -737,6 +689,8 @@ pub struct Registrar {
     pub entries: Vec<lists::EntryDef>,
     /// Its Rust for the entries it fills in the core's `outline.source@1`, by entry name (#443).
     pub outline_fills: Vec<(String, crate::outline::Fill)>,
+    /// The pack fields it reads, each with its check at the pack check (#1720).
+    pub pack_fields: Vec<(String, crate::document::packs::module_fields::PackField)>,
 }
 
 impl Registrar {
@@ -831,6 +785,12 @@ impl Registrar {
     /// The CPU cost of an item of the kind `family.name`.
     pub fn cost(&mut self, kind: &str, cost: Cost) -> &mut Self {
         self.costs.push((kind.into(), cost));
+        self
+    }
+
+    /// The elements of an item of the builder kind `family.name`, by part and domain (#2015).
+    pub fn elements(&mut self, kind: &str, elements: Elements) -> &mut Self {
+        self.elements.push((kind.into(), elements));
         self
     }
 
@@ -1027,19 +987,6 @@ impl Registrar {
         self
     }
 
-    /// Fills an entry of the core's `outline.source@1` (#443): its value, which the registry's kit
-    /// holds to its item's 2D fill, and its own Rust, which `extrude` reads outlines through.
-    pub fn outline_source(
-        &mut self,
-        name: &str,
-        value: Value,
-        fill: crate::outline::Fill,
-    ) -> &mut Self {
-        self.entry(crate::outline::REGISTRY, name, value, "R6");
-        self.outline_fills.push((name.into(), fill));
-        self
-    }
-
     /// A GPU pass that fills the items of `kind` with its WGSL fragment shader.
     pub fn gpu_pass(
         &mut self,
@@ -1142,6 +1089,15 @@ pub enum Fault {
     /// Declares `export.target@1` in the media module instead of the core (#501): the core
     /// declares none, so a build without media refuses every other module's target.
     ExportTargetInMedia,
+    /// Declares `gpu.output@1` in the effects module instead of the core, which fills today's
+    /// outputs there too (#485): a build without effects leaves scene3d's outputs with no
+    /// registry.
+    GpuOutputInEffects,
+    /// Leaves the physics implementation out of the runtime digest (#1920).
+    RuntimeOmitsPhysics,
+    /// Hashes each interface's registered shapes into the runtime digest in place of its
+    /// implementation's version and pins (#1920).
+    RuntimeOnlyShapes,
 }
 
 /// The module that declares `ease@1` in the planted layout that moves it out of the core, which
@@ -1302,6 +1258,8 @@ pub struct Sealed {
     kinds: crate::kinds::Registry,
     /// A d1 digest over the sorted modules' names, versions and digests.
     pub set_digest: String,
+    /// A d1 digest over each measured or backend_bytes implementation, with its pins (#1920).
+    pub runtime_digest: String,
     /// Each canvas interface, by name, with its digest and the implementation the build chose.
     pub interfaces: Vec<SealedInterface>,
     /// The time the seal's interface checks took, in nanoseconds of the registry's clock; 0
@@ -1371,6 +1329,7 @@ impl Sealed {
             "core": core_name(),
             "build_set": self.build_set.name(),
             "set_digest": self.set_digest,
+            "runtime_digest": self.runtime_digest,
             "interfaces": self.interfaces.iter().map(|i| (i.name.clone(), i.to_json())).collect::<serde_json::Map<_, _>>(),
             "phases": phases,
             "contributions": self.contributions,
@@ -1519,6 +1478,15 @@ impl Sealed {
             .filter(|(k, _)| k == full)
             .map(|(_, c)| *c)
             .collect()
+    }
+
+    /// The elements function of the kind `family.name`, from the first module that registers one.
+    pub fn elements_for(&self, full: &str) -> Option<Elements> {
+        self.modules
+            .iter()
+            .flat_map(|m| m.shapes.elements.iter())
+            .find(|(k, _)| k == full)
+            .map(|(_, e)| *e)
     }
 
     /// Whether any module registered a cost: the budget estimate then sums the whole document.
@@ -2914,6 +2882,10 @@ impl Registry {
         if self.fault == Some(Fault::ExportTargetInMedia) {
             core_registries.retain(|d| d.name != "export.target@1");
         }
+        let outputs_elsewhere = self.fault == Some(Fault::GpuOutputInEffects);
+        if outputs_elsewhere {
+            core_registries.retain(|d| d.name != "gpu.output@1");
+        }
         core_registries.extend(self.declared.iter().cloned());
         let mut core_entries: Vec<lists::EntryDef> =
             core_lists::entries(self.fault == Some(Fault::BaseStepsElsewhere))
@@ -2922,6 +2894,9 @@ impl Registry {
                 .collect();
         if eases {
             core_entries.extend(core_lists::ease_entries(self.fault == Some(Fault::EaseRenumbered)));
+        }
+        if outputs_elsewhere {
+            core_entries.retain(|e| e.registry != "gpu.output@1");
         }
         let (registries, parts) = lists::seal(
             core_registries,
@@ -2991,6 +2966,8 @@ impl Registry {
             self.implementation_of(&m.name, m, &shapes, None, private, &mut interface_ns)?;
         }
         interfaces.sort_by(|a, b| a.name.cmp(&b.name));
+        let runtime_digest = implementation::runtime_digest(&interfaces, self.fault)
+            .map_err(|e| SealError::new("bad_shape", &[], &[], e.to_string()))?;
         let set_digest = d1(&Value::Array(
             modules
                 .iter()
@@ -3017,6 +2994,7 @@ impl Registry {
             left_out_kinds,
             kinds,
             set_digest,
+            runtime_digest,
             interfaces,
             interface_ns,
             registries,

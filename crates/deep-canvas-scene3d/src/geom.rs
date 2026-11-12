@@ -57,6 +57,8 @@ pub struct Mesh {
     /// The quads the mesh had before its stack's first `subdivide`, as a `cage` mesh-edge line
     /// draws them, each edge by its two ends.
     pub cage: Option<Vec<[V3; 2]>>,
+    /// Its GPU sway (#2016): the params and weights the vertex move reads at each frame.
+    pub sway: Option<crate::stack::Sway>,
 }
 
 /// What a mesh-edge line draws.
@@ -128,6 +130,7 @@ impl Canonical for Mesh {
         let faces: Vec<(&String, &Vec<f64>)> = self.face_attributes.iter().collect();
         faces.encode(out);
         self.cage.encode(out);
+        self.sway.encode(out);
     }
 }
 
@@ -416,6 +419,13 @@ impl Mesh {
         b
     }
 
+    /// Its bounds with room for its sway (#2016): a swaying vertex moves up to `amount` m.
+    pub fn reach(&self) -> [V3; 2] {
+        let [lo, hi] = self.bounds();
+        let a = self.sway.as_ref().map_or(0.0, |s| s.amount.abs());
+        [lo.map(|x| x - a), hi.map(|x| x + a)]
+    }
+
     /// The mesh's edges as a mesh-edge line draws them (Marks in 3D: mesh edges), each by its
     /// two ends: on positions welded to 1e-6 m, so an edge split for its normals draws once;
     /// `all` draws every triangle edge, `quads` leaves out an edge both of whose triangles are one
@@ -701,6 +711,17 @@ fn inside(p: V2, a: V2, b: V2, c: V2) -> bool {
     cross2(a, b, p) > 1e-12 && cross2(b, c, p) > 1e-12 && cross2(c, a, p) > 1e-12
 }
 
+/// Whether the direction from corner `b` to `m` lies inside the polygon's angle at `b`, which
+/// turns counter-clockwise from its edge to the next corner `c` to its edge to the previous `a`.
+fn opens_to(a: V2, b: V2, c: V2, m: V2) -> bool {
+    let x = |p: V2, q: V2| (p[0] - b[0]) * (q[1] - b[1]) - (p[1] - b[1]) * (q[0] - b[0]);
+    if x(c, a) > 0.0 {
+        x(c, m) > 0.0 && x(m, a) > 0.0
+    } else {
+        x(c, m) > 0.0 || x(m, a) > 0.0
+    }
+}
+
 /// Ear clipping of `outer` with `holes` bridged in, each triangle counter-clockwise, its
 /// corners indexing `outer` then each hole in turn: a polygon of n corners and h holes makes
 /// n + 2h − 2 triangles, fewer where corners lie in a line.
@@ -780,6 +801,15 @@ pub fn triangulate(outer: &[V2], holes: &[Vec<V2>]) -> Vec<[u32; 3]> {
                     pick = k;
                 }
             }
+        }
+        // A corner an earlier bridge doubled is in the ring twice: the bridge leaves from the copy
+        // whose angle opens toward m, or the ring crosses itself and the clipping stops short.
+        let (at, n) = (points[ring[pick] as usize], ring.len());
+        let corner = |k: usize| points[ring[k] as usize];
+        if let Some(k) = (0..n).find(|&k| {
+            corner(k) == at && opens_to(corner((k + n - 1) % n), at, corner((k + 1) % n), m)
+        }) {
+            pick = k;
         }
         let mut merged = ring[..=pick].to_vec();
         merged.extend(hring[mi..].iter().chain(&hring[..mi]));

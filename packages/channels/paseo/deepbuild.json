@@ -1,7 +1,7 @@
 {
   "id": "deepbuild/channel-paseo",
   "version": "1.0.0",
-  "digest": "d1:4e80536b52a4d4e6799e5c70cc33f0477265fd3103fc64c11bf807297a122843",
+  "digest": "d1:dc6063adc099cb9c716d89770a3f3a23f924b76c0af9ed565043b731d8ab5f55",
   "requires": {
     "preview": [
       "deep.registerChannel",

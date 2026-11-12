@@ -186,7 +186,7 @@ fn register_compiling(
     r.array("motion.next", "i64", "document", "time", "items");
     r.operator("clock", "items", &["motion.program", "t"], &["motion.next"])
         .document()
-        .applies(has_motion)
+        .applies(has_clock)
         .run(clock);
     r.operator(
         "channels",
@@ -197,6 +197,7 @@ fn register_compiling(
     .applies(is_target)
     .run(channels);
     register_arrange(r);
+    register_score(r);
     r.code(
         "bad_doc",
         "A motion section, or a field of one, that isn't the shape motion reads.",
@@ -240,6 +241,12 @@ fn register_compiling(
         false,
     );
     r.code(
+        "occurrence.undeclared",
+        "A start_on, a mark set's rows or a driver reads a logic item's occurrences by a kind or field the item doesn't declare in emits.",
+        "Name a kind the item's emits declares and a field that kind declares, or declare it in emits.",
+        false,
+    );
+    r.code(
         "transition_kind",
         "A transition of a kind motion doesn't land.",
         "Use a cut.",
@@ -280,6 +287,21 @@ fn has_motion(doc: &Value, _: &str, _: &Value) -> bool {
     })
 }
 
+/// A `rest_on` that names `on` (#2013): it rests its owner on true shapes at check.
+pub fn rests_at_check(constraint: &Value) -> bool {
+    constraint.get("kind").and_then(Value::as_str) == Some("rest_on") && constraint.get("on").is_some()
+}
+
+/// A document with motion a frame's time can change: any section's entry but a rest solved at
+/// check, which alone gives a frame nothing to evaluate (Constraint: rest_on).
+fn has_clock(doc: &Value, _: &str, _: &Value) -> bool {
+    SECTIONS.iter().any(|s| {
+        doc.get(*s)
+            .and_then(Value::as_object)
+            .is_some_and(|m| m.values().any(|entry| *s != "constraints" || !rests_at_check(entry)))
+    })
+}
+
 /// An item a document channel or driver targets, a limit constraint holds or a placement binds.
 fn is_target(doc: &Value, id: &str, item: &Value) -> bool {
     // #493: a parallax group moves with the camera's pose and its drift.
@@ -304,7 +326,8 @@ fn is_target(doc: &Value, id: &str, item: &Value) -> bool {
     let channel = targets("channels")
         || targets("drivers")
         || !keyed_data(doc, item).is_empty()
-        || counter_data(doc, item).is_some();
+        || counter_data(doc, item).is_some()
+        || reads_moving(doc, item);
     let held = doc
         .get("constraints")
         .and_then(Value::as_object)
@@ -331,6 +354,26 @@ fn is_target(doc: &Value, id: &str, item: &Value) -> bool {
             _ => false,
         });
     channel || held || bound
+}
+
+/// #504: whether a text's template reads a value that moves at t: a control's, an assembly's, or
+/// a data value a driver or a stage's `set` writes (Overlay: a readout and the parts it describes
+/// come from one model).
+fn reads_moving(doc: &Value, item: &Value) -> bool {
+    let Some(template) = item.pointer("/params/template").and_then(Value::as_str) else {
+        return false;
+    };
+    let written = |slot: &str| {
+        let drivers = doc.get("drivers").and_then(Value::as_object).into_iter().flatten();
+        let set = doc.get("controls").and_then(Value::as_object).into_iter().flatten().flat_map(|(_, c)| {
+            c.get("stages").and_then(Value::as_object).into_iter().flatten().filter_map(|(_, s)| s.get("set")?.as_object())
+        });
+        drivers.into_iter().any(|(_, d)| d.get("target").and_then(Value::as_str) == Some(slot)) || set.into_iter().any(|s| s.contains_key(slot))
+    };
+    deep_canvas::template::parts(template).unwrap_or_default().into_iter().any(|p| match p {
+        deep_canvas::template::Part::Slot(s) => s.starts_with("controls/") || s.starts_with("assemblies/") || (s.starts_with("data/") && written(s)),
+        deep_canvas::template::Part::Words(_) => false,
+    })
 }
 
 /// The data value a counter's driver writes (`data/<name>`), which its text shows at t.
@@ -379,6 +422,13 @@ fn keyed_data(doc: &Value, item: &Value) -> Vec<(String, String)> {
     out
 }
 
+/// #544's wrong program (scenario `planted`): a check that passes a reader of a logic item's
+/// occurrences naming a kind or field the item doesn't declare.
+pub const UNDECLARED_KIND_ACCEPTED: &str = "undeclared_kind_accepted";
+
+/// #504's wrong programs a scenario names, each compiled into the program.
+pub const PLANTED: [&str; 3] = ["slider_entries_ignored", "stage_sets_nothing", "stage_shot_cuts"];
+
 /// The revision's motion, compiled once at check.
 fn compile(v: &mut View<'_>) -> Result<(), OpError> {
     // Compiled from the canonical form, members in name order, so a program's layout (its items'
@@ -388,7 +438,17 @@ fn compile(v: &mut View<'_>) -> Result<(), OpError> {
     let Value::Object(doc) = &canonical else {
         return Err(OpError::new("bad_doc", ""));
     };
-    let program = Program::compile(doc).map_err(|r| OpError::new(r.code, r.path))?;
+    // #544's planted check passes a reader naming what a logic item doesn't emit.
+    let planted = match v.planted() {
+        Some(UNDECLARED_KIND_ACCEPTED) => crate::program::Planted::AcceptsUndeclaredOccurrence,
+        Some("slider_entries_ignored") => crate::program::Planted::SliderEntriesIgnored,
+        Some("stage_sets_nothing") => crate::program::Planted::StageSetIgnored,
+        Some("stage_shot_cuts") => crate::program::Planted::StageShotCuts,
+        _ => Default::default(),
+    };
+    let options = crate::program::Options { planted, ..Default::default() };
+    // What a refusal names past its path (#544: the reader, the undeclared name, close names).
+    let program = Program::compile_with(doc, options).map_err(|r| OpError { actual: r.detail, ..OpError::new(r.code, r.path) })?;
     v.write("motion.program", Val::typed(Arc::new(program)))
 }
 
@@ -419,6 +479,10 @@ fn channels(v: &mut View<'_>) -> Result<(), OpError> {
     let Some((mut transform, mut fields)) = program.item_values(&state, &id) else {
         return Ok(());
     };
+    // #504: a part whose parent names an assembly rides it; the core composes item parents only.
+    if let Some(a) = program.assembly_of(&id) {
+        crate::assembly::placed(&program.assembly_world(&state.slots, a), &mut transform);
+    }
     // #493: a parallax group's offset (Frame and group: parallax).
     if let Some(plan) = program.shots.as_deref() {
         if let Some(o) = plan.parallax(&program, &id, t, v.reduced_motion()?) {
@@ -438,6 +502,29 @@ fn channels(v: &mut View<'_>) -> Result<(), OpError> {
         let keyed = program.motion.channels.iter().find(|c| c.target.owner == owner);
         if let Some(x) = keyed.and_then(|c| program.channel_value(&state, &c.id)) {
             fields.push((vec!["params".into(), "data".into(), name], Datum::Num(x)));
+        }
+    }
+    // #504: a slot on a data value a driver or a stage writes, on a control's value or on an
+    // assembly's shows it at t too: data rides as `params/data/<name>`, a control's or an
+    // assembly's as `params/shown/<section>/<id>/value`, which the template reads first.
+    for slot in template.iter().flat_map(|t| deep_canvas::template::parts(t).unwrap_or_default()) {
+        let deep_canvas::template::Part::Slot(slot) = slot else { continue };
+        if let Some(name) = slot.strip_prefix("data/") {
+            let field = program.fields.iter().find(|f| f.written && f.data.as_deref() == Some(name));
+            if let Some(f) = field.filter(|_| !fields.iter().any(|(p, _)| p.last().map(String::as_str) == Some(name))) {
+                fields.push((vec!["params".into(), "data".into(), name.to_string()], Datum::Num(state.slots[f.slot])));
+            }
+        } else if let Some(id) = slot.strip_prefix("assemblies/").and_then(|r| r.strip_suffix("/value")) {
+            if let Some(a) = program.assemblies.iter().find(|a| a.id == id) {
+                let path = ["params", "shown", "assemblies", id, "value"].map(String::from).to_vec();
+                fields.push((path, Datum::Num(a.held(state.slots[a.slot]))));
+            }
+        } else if let Some(id) = slot.strip_prefix("controls/").and_then(|r| r.strip_suffix("/value")) {
+            let last = program.options.input.iter().filter(|e| e.control == id && e.t <= t).max_by_key(|e| e.key());
+            if let Some(x) = last.and_then(|e| e.value.as_f64()) {
+                let path = ["params", "shown", "controls", id, "value"].map(String::from).to_vec();
+                fields.push((path, Datum::Num(x)));
+            }
         }
     }
     // A counter on a driver of a data value shows it at t the same way.
@@ -528,7 +615,10 @@ fn register_arrange(r: &mut Registrar) {
         "",
     );
     // One solve per revision of every arrangement in the document, at check: the frames read
-    // its places and never solve.
+    // its places and never solve. #504: only a document that holds an arrangement has the node,
+    // so a revision of any other one leaves every solid's place, and what reads it, kept (a
+    // saved file reloads in place); a revision that adds one gains the node, and the readers it
+    // binds run again.
     r.array(
         "motion.arranged",
         "arranged",
@@ -536,10 +626,9 @@ fn register_arrange(r: &mut Registrar) {
         "transform",
         "plan",
     );
-    // It runs on every document, so the readers on each solid always have their writer: the
-    // core keeps an unchanged item's nodes, and their bindings, across revisions.
     r.operator("arrange", "plan", &["refs"], &["motion.arranged"])
         .document()
+        .applies(has_arrangement)
         .run(arrange_op);
     r.contribution(
         "motion.placed",
@@ -578,6 +667,11 @@ fn register_arrange(r: &mut Registrar) {
 /// A solid: what an arrangement can place. It reads only the item, since the core keeps an
 /// unchanged item's nodes from one revision to the next; the node writes only for the items an
 /// arrangement places.
+/// Whether the document holds an arrangement (asked once per document).
+fn has_arrangement(doc: &Value, _: &str, _: &Value) -> bool {
+    doc.get("items").and_then(Value::as_object).is_some_and(|items| items.values().any(crate::arrange::is_arrangement))
+}
+
 fn is_arranged(_: &Value, _: &str, item: &Value) -> bool {
     crate::arrange::is_solid(item)
 }
@@ -639,4 +733,94 @@ fn placed_op(v: &mut View<'_>) -> Result<(), OpError> {
         "motion.placed",
         Val::typed(Edits(vec![set("pos", pos), set("rot", rot)])),
     )
+}
+
+/// #154: the check of `score.music@1`, music as data, here because its onsets resolve through the
+/// tempo map and markers; and the `samples` a library pack lists its presets in.
+fn register_score(r: &mut Registrar) {
+    // The kind is the core's (`score.music@1`), its fields this module's: the rule here checks it.
+    r.rule("score.music", crate::score::rule);
+    r.pack_field("samples", samples_field);
+    r.check(
+        "sound_lock",
+        "any",
+        &["sound_lock.off_palette", "score.check_unread"],
+        |l, i| {
+            let out = crate::score::sound_lock(l, i);
+            out.raised.into_iter().map(|(id, r, _)| (id, r)).collect()
+        },
+    )
+    .check_report(crate::score::sound_lock);
+    r.check("mix.balance", "any", &["score.check_unread"], |_, _| {
+        Vec::new()
+    })
+    .check_report(crate::score::mix_balance);
+    for (code, meaning, fix) in [
+        ("score.pad_too_low", "A note on a sustained pad below MIDI 48, on an instrument not marked bass.", "Raise the note to MIDI 48 or above, or mark the instrument bass."),
+        ("score.note_too_long", "A note held over 60 s.", "Shorten the note to 60 s or less, or write it as notes that follow one another."),
+        ("score.far_from_sample", "A sampled note more than 4 semitones from its zone's root.", "Use a preset with a zone nearer the note, or move the note."),
+        ("score.unknown_source", "An instrument whose source isn't sampled, pluck or synth.", "Write the source as sampled {library, preset}, pluck {preset} or synth {preset}."),
+        ("score.unknown_preset", "An instrument naming a preset its source doesn't have.", "Name a pluck preset (nylon, steel, harp), a synth preset (sine, triangle, saw, square, pad) or a preset of the library's samples."),
+        ("score.unknown_instrument", "An event naming an instrument the score doesn't hold.", "Name one of the score's instruments."),
+        ("score.bad_pitch", "An event whose pitch is neither a MIDI number nor a name.", "Write the pitch as a MIDI number or a name such as C4."),
+        ("score.time_unresolved", "An event whose onset doesn't resolve through the tempo map or markers.", "Write the onset as bar:beat on the tempo map, a time, or @marker."),
+        ("score.bad_duration", "An event whose length isn't a positive number of beats or seconds.", "Write the length in beats, or in seconds as \"1.5s\"."),
+        ("sound_lock.off_palette", "A score instrument the brief's sound palette doesn't list.", "Use an instrument the palette names, or change the brief's palette."),
+        ("score.check_unread", "A score check that couldn't read what it measures.", "Give the check its input: the brief's palette, or the export's power bake."),
+        ("score.bad_loop", "A loop region that isn't two bar:beat positions on the tempo map, in order.", "Write the loop as {from, to}, each a bar:beat, with to after from."),
+    ] {
+        r.code(code, meaning, fix, false);
+    }
+}
+
+/// A library pack's `samples`: `{preset → {sustained, zones: [{lo, hi, root, takes: [asset path]}]}}`,
+/// each take one of the pack's `assets`.
+fn samples_field(manifest: &Value) -> Vec<(String, String)> {
+    let mut bad = Vec::new();
+    let assets: Vec<&str> = manifest["assets"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|a| a["path"].as_str())
+        .collect();
+    let Some(presets) = manifest["samples"].as_object() else {
+        return vec![(
+            String::new(),
+            "samples is {preset: {sustained, zones}}".into(),
+        )];
+    };
+    for (name, p) in presets {
+        if !matches!(p.get("sustained"), None | Some(Value::Bool(_))) {
+            bad.push((format!("{name}/sustained"), "true or false".into()));
+        }
+        let Some(zones) = p["zones"].as_array().filter(|z| !z.is_empty()) else {
+            bad.push((format!("{name}/zones"), "a preset lists its zones".into()));
+            continue;
+        };
+        for (i, z) in zones.iter().enumerate() {
+            let at = format!("{name}/zones/{i}");
+            let midi = |k: &str| z[k].as_f64().filter(|v| (0.0..=127.0).contains(v));
+            if midi("lo").zip(midi("hi")).is_none_or(|(lo, hi)| lo > hi) || midi("root").is_none() {
+                bad.push((at.clone(), "a zone is {lo, hi, root}, MIDI numbers with lo at most hi and its measured root".into()));
+            }
+            let takes = z["takes"].as_array().filter(|t| !t.is_empty());
+            match takes {
+                None => bad.push((
+                    format!("{at}/takes"),
+                    "a zone lists its takes, each one of the pack's assets".into(),
+                )),
+                Some(t) => {
+                    for (k, take) in t.iter().enumerate() {
+                        if !take.as_str().is_some_and(|p| assets.contains(&p)) {
+                            bad.push((
+                                format!("{at}/takes/{k}"),
+                                "not a path of the pack's assets".into(),
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    bad
 }

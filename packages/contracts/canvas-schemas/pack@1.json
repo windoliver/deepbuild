@@ -74,6 +74,16 @@
         "required": ["program", "out"]
       }
     },
+    "kinds": {
+      "$comment": "#202: kinds backed by a recipe, by <pack>.<name>@<major>; the recipe's inputs are the kind's schema.",
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/kind" }
+    },
+    "corpus": {
+      "$comment": "#1956: fixture documents for every major the pack's kinds shipped, by major, each an asset's sha256.",
+      "type": "object",
+      "additionalProperties": { "type": "array", "items": { "type": "string" } }
+    },
     "layouts": {
       "type": "object",
       "additionalProperties": {
@@ -91,6 +101,106 @@
   "required": ["id", "name", "version", "license", "description"],
   "additionalProperties": false,
   "$defs": {
+    "kind": {
+      "type": "object",
+      "properties": {
+        "minor": { "type": "integer", "minimum": 0 },
+        "recipe": { "type": "string" },
+        "children": { "type": "array", "items": { "type": "string" } },
+        "capabilities": {
+          "type": "object",
+          "properties": { "pickable": { "type": "boolean" }, "snap": { "type": "boolean" } },
+          "additionalProperties": false
+        },
+        "rules": {
+          "$comment": "#202: a pack kind's rules, read by the core's kind_rules check at rest, at each of a list of times (flicks, or seconds such as 1.5s) or bounded over a sweep.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "code": { "type": "string" },
+              "expr": { "type": "string" },
+              "at": {
+                "oneOf": [
+                  {
+                    "type": "string",
+                    "enum": ["rest", "sweep"],
+                    "x-closure": {
+                      "closed": "record",
+                      "reopens_if": "a kind rule that reads its instance some other way than at rest, at times or over a sweep",
+                      "mark": "exhaustive"
+                    }
+                  },
+                  { "type": "array", "minItems": 1, "items": { "type": ["integer", "string"] } }
+                ]
+              },
+              "fix": { "type": "string" }
+            },
+            "required": ["code", "expr", "at"]
+          }
+        },
+        "twins": {
+          "$comment": "#202: the kind kit's planted twin per rule: an example by hash that must fail the rule its expect names.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": { "example": { "type": "string" }, "expect": { "type": "string" } },
+            "required": ["example", "expect"]
+          }
+        },
+        "migrate": {
+          "$comment": "#1956: one step a major, by the major it starts from; set expressions come from the closed function list over the old params, written old.<param>.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "rename": { "type": "object", "additionalProperties": { "type": "string" } },
+              "set": { "type": "object", "additionalProperties": { "type": "string" } },
+              "drop": { "type": "array", "items": { "type": "string" } }
+            },
+            "additionalProperties": false
+          }
+        },
+        "examples": { "type": "array", "items": { "type": "string" } },
+        "cost": {
+          "type": "object",
+          "properties": {
+            "class": { "type": "string" },
+            "at_defaults": {
+              "type": "object",
+              "properties": {
+                "cpu_ms": { "type": "number", "minimum": 0 },
+                "gpu_ms": { "type": "number", "minimum": 0 },
+                "items": { "type": "number", "minimum": 0 }
+              },
+              "required": ["cpu_ms", "gpu_ms", "items"]
+            }
+          },
+          "required": ["class", "at_defaults"]
+        },
+        "feature.response": {
+          "$comment": "#1399: the kind kit removes the recipe step `ablate` at the kind's defaults and at each example, and the change in `measure` must lie in `band`, [min, max] inclusive.",
+          "type": "object",
+          "properties": {
+            "ablate": { "type": "string" },
+            "measure": {
+              "type": "string",
+              "enum": ["items"],
+              "x-closure": {
+                "closed": "record",
+                "reopens_if": "a feature.response that measures what an instance makes other than its item count",
+                "mark": "exhaustive"
+              }
+            },
+            "band": { "type": "array", "items": { "type": "number" }, "minItems": 2, "maxItems": 2 }
+          },
+          "required": ["ablate", "measure", "band"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["recipe", "cost"],
+      "additionalProperties": false
+    },
     "recipe": {
       "type": "object",
       "properties": {

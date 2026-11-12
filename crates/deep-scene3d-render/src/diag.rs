@@ -16,7 +16,6 @@ use deep_canvas_scene3d::look::Look3;
 use deep_canvas_scene3d::scene::{Depth, Scene, Shape, Solid};
 use deep_gpu::device::Device;
 use deep_gpu::surface::FORMAT;
-use wgpu::util::DeviceExt as _;
 
 use crate::{bind_group, buffer_entry, read_texture, target, texture2d, Renderer};
 
@@ -136,7 +135,7 @@ fn attrs(formats: &[(u32, wgpu::VertexFormat)]) -> Vec<wgpu::VertexAttribute> {
 }
 
 impl Pipes {
-    fn new(d: &wgpu::Device) -> Pipes {
+    fn new(d: &deep_gpu::counted::Wgpu) -> Pipes {
         let module = d.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("scene3d diag"),
             source: wgpu::ShaderSource::Wgsl(SHADER.into()),

@@ -34,6 +34,7 @@ import { createServer, type AddressInfo, type Socket } from 'node:net';
 import { homedir } from 'node:os';
 import { stripTypeScriptTypes } from 'node:module';
 import { basename, dirname, isAbsolute, join } from 'node:path';
+import { StringDecoder } from 'node:string_decoder';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import type { AdapterCaps, HookRequestLine } from '@deepbuild/adapters';
 import type { Asks, Delivery, ResolverAnswer } from '@deepbuild/asks';
@@ -48,7 +49,7 @@ import { after, badDeadline, type Cleanup, type Host as RunHost, type Supervisor
 import { API, extensionSide, peer } from '../runtime/deep.mjs';
 import { cycleThrough, dependents, graph, refusal, resolve, servedAt, type Piece, type ProvideRow, type UseRow } from './compose.js';
 import { packageDigest } from './digest.js';
-import { buildOf, kindOf, paramsOf, toolOf, urlOf, type BuildPlant, type HeldJobs, type JobKind, type JobTool, type Weight } from './job-kinds.js';
+import { buildOf, counterOf, encodedInputs, fixtureInputs, kindOf, paramsOf, toolOf, urlOf, type BuildPlant, type HeldJobs, type JobBytes, type JobCall, type JobCounter, type JobKind, type JobTool, type Weight } from './job-kinds.js';
 import { answered, jobPrompt, jobRequest, type Answer } from './jobs.js';
 import { checkReply, join as joinReplies, type JoinPlant, type Template } from './replies.js';
 import { cadenceOf, declareSchedule, Schedules, type Ended, type RunEvent, type ScheduleDecl, type ScheduleRow, type ScheduleRun, type Settings, type Verdict } from './schedules.js';
@@ -228,8 +229,8 @@ export interface RuntimeEnvironment {
 
 export interface ExtensionHost {
   install(from: InstallFrom): Promise<Installed>;
-  /** The channels of the packages loaded and started (#65), each by name with what it reaches. */
-  channels(): { name: string; kind: 'device' | 'chat' | 'email' | 'text'; extension: string }[];
+  /** The channels of the packages loaded and started (#65), each by name with what it reaches and whether it draws a plan's steps (#1580). */
+  channels(): { name: string; kind: 'device' | 'chat' | 'email' | 'text'; steps: boolean; extension: string }[];
   /** A live state source by its registered name (#67): what a workspace's touch reads through. */
   stateSource(name: string): Promise<Omit<StateSource, 'fixture'>>;
   /** You are in this project (#67): its packs, as `.deepbuild/packs.json` names them, install and load if you trust it; an untrusted project's stay out, none installed, none run. */
@@ -338,14 +339,24 @@ export interface ExtensionHost {
   jobs(): JobListing[];
   /** A kind's params made canonical, every default written out (#1922); an Error names what doesn't hold. */
   jobParams(kind: string, value: unknown): Record<string, JsonValue>;
-  /** One run of a qualified tool as a process of its own outside the hub (#1922): its outputs' bytes by name. */
-  runJobTool(tool: string, kind: string, params: Record<string, JsonValue>, inputs: Record<string, Uint8Array>): Promise<Record<string, Uint8Array>>;
+  /**
+   * One run of a qualified tool as a process of its own outside the hub (#1922): its outputs' bytes by name. A tool
+   * that calls a provider is given `call`, its submission key and journal, and may reach that provider; `stop` ends its run (#1923).
+   * `watch` hears each counter the tool reports as it runs (#1925).
+   */
+  runJobTool(tool: string, kind: string, params: Record<string, JsonValue>, inputs: JobBytes, call?: Omit<JobCall, 'provider'>, stop?: AbortSignal, watch?: (counter: JobCounter) => void): Promise<Record<string, Uint8Array>>;
   /** What a tool off the machine's host reports before a call (#1924): the weight files it holds, by hash, and its capabilities. */
   jobHostReport(tool: string, kind: string): Promise<{ weights: Weight[]; capabilities: string[] }>;
   /** One search or fetch of a loaded library source (#1731), its calls the hub's; `noAnswer` when one got none. */
   libraryCall(name: string, op: 'search' | 'fetch', arg: unknown): Promise<{ value: unknown; noAnswer: boolean }>;
   /** A file a library's fetch named, downloaded through its source by the hub (#1731); `status` null when its host gave no answer. */
   libraryFile(name: string, path: string): Promise<{ status: number; bytes: Uint8Array } | { status: null; why: string }>;
+  /** Pack and library assets use the same resumable Source download, never a package's network client. */
+  assetFile(source: { pack: string; url: string } | { library: string; path: string }, spec: { file: string; sha256: string; size: number; kept: string }): Promise<string>;
+  /** Reachability without requesting any asset byte, before the networked job's authority ask. */
+  assetOnline(pack: string, url: string): Promise<boolean>;
+  /** A pack's license file, read through the Source block after the job is authorized. */
+  assetTerms(pack: string, url: string): Promise<string>;
   /** Every source call this host made, with its secrets stripped. */
   recording(): Recording;
   /** The readings the record holds of a source with an as-of time in the window, both ends in, in as-of order. */
@@ -437,7 +448,9 @@ const LOAD_MS = 10_000;
 const CALL_MS = 10_000;
 /** How long one run of a job tool may take (#1922), and the most it may write on stdout. */
 const JOB_MS = 120_000;
-const JOB_OUT = 16 * 1024 * 1024;
+const JOB_OUT = 64 * 1024 * 1024; // #154: a 60 s stereo 24-bit stem, as base64, passes 16 MiB
+/** The longest stderr line read for a counter (#1925); a counter's line is far shorter. */
+const COUNTER_LINE = 4096;
 /** A tool's answer, `{outputs}` with each output's bytes in base64, as bytes by name. */
 function outputsOf(tool: string, answer: unknown): Record<string, Uint8Array> {
   const outputs = (typeof answer === 'object' && answer !== null ? answer as { outputs?: unknown } : {}).outputs;
@@ -544,10 +557,10 @@ interface Manifest {
   state_sources?: string[];
   /** The job kinds it registers and the tools it adds to a kind (#1922), each tool pinned by name@version. */
   jobs?: string[];
-  job_tools?: { kind: string; tool: string; host?: string }[];
+  job_tools?: { kind: string; tool: string; host?: string; provider?: string }[];
 }
 /** A job kind as an install holds it (#1922), with the tools that joined it. */
-export interface JobListing { kind: string; plugin: string; descriptor: JobKind; tools: { tool: string; plugin: string; build: string | null; host?: string; descriptor: JobTool }[] }
+export interface JobListing { kind: string; plugin: string; descriptor: JobKind; tools: { tool: string; plugin: string; build: string | null; host?: string; descriptor: JobTool; provider?: string }[] }
 /** An install: also the check kinds it holds, its own until a package that replaces one installs. */
 interface Entry extends Installed { grant: { record: string[]; text?: boolean; projects?: string[]; hosts?: HostGrant[]; docs?: string[] }; holds: string[]; jobs?: HeldJobs }
 /** A session adapters bound: who bound it in order, who gates it, whether a turn runs, and the answers waiting for a route. */
@@ -596,8 +609,8 @@ interface Ext {
   routes: Set<string>;
   /** The adapter names it registered. */
   adapters: Set<string>;
-  /** The channels it registered (#65), by name, with what each reaches; their deliver and receive stay with the package. */
-  channels: Map<string, ChannelKind>;
+  /** The channels it registered (#65), by name, with what each reaches and whether it draws a plan's steps (#1580); their deliver and receive stay with the package. */
+  channels: Map<string, { kind: ChannelKind; steps: boolean }>;
   /** The state sources it registered (#67), by name; their read, compare, undo and fixture stay with the package. */
   stateSources: string[];
   /** The index it registered, by name, with the kit revision it declares, and how the host reaches it once loaded. */
@@ -1037,7 +1050,7 @@ class Host implements ExtensionHost {
     const entries = Object.values(this.entries);
     return entries.flatMap((e) => Object.entries(e.jobs?.kinds ?? {}).map(([kind, descriptor]) => ({
       kind, plugin: e.id, descriptor,
-      tools: entries.flatMap((t) => (t.jobs?.tools ?? []).filter((x) => x.kind === kind).map((x) => ({ tool: x.tool, plugin: t.id, build: x.build, ...(x.host && { host: x.host }), descriptor: x.descriptor }))),
+      tools: entries.flatMap((t) => (t.jobs?.tools ?? []).filter((x) => x.kind === kind).map((x) => ({ tool: x.tool, plugin: t.id, build: x.build, ...(x.host && { host: x.host }), descriptor: x.descriptor, ...(x.provider ? { provider: x.provider } : {}) }))),
     })));
   }
   jobParams(kind: string, value: unknown): Record<string, JsonValue> {
@@ -1045,9 +1058,10 @@ class Host implements ExtensionHost {
     if (!held) throw Error(`no installed package registers the job kind ${kind}`);
     return paramsOf(held.descriptor.schema.params, value);
   }
-  async runJobTool(tool: string, kind: string, params: Record<string, JsonValue>, inputs: Record<string, Uint8Array>): Promise<Record<string, Uint8Array>> {
+  async runJobTool(tool: string, kind: string, params: Record<string, JsonValue>, inputs: JobBytes, call?: Omit<JobCall, 'provider'>, stop?: AbortSignal, watch?: (counter: JobCounter) => void): Promise<Record<string, Uint8Array>> {
     const { folder, held } = this.jobTool(tool, kind);
-    return this.runTool(folder, held.descriptor, params, inputs);
+    if (held.provider && !call) throw Error(`${tool} calls ${held.provider}, so its run needs its submission key and call journal`);
+    return this.runTool(folder, held.descriptor, params, inputs, held.provider && call ? { provider: held.provider, ...call } : undefined, stop, watch);
   }
   async jobHostReport(tool: string, kind: string): Promise<{ weights: Weight[]; capabilities: string[] }> {
     const url = urlOf(this.jobTool(tool, kind).held.descriptor);
@@ -1122,6 +1136,35 @@ class Host implements ExtensionHost {
       if (e instanceof NoAnswer) return { status: null, why: e.message };
       throw e;
     }
+  }
+  private packSource(pack: string, value: string): { name: string; path: string; source: LibraryDecl } {
+    const url = new URL(value);
+    if (url.protocol !== 'https:' || url.username || url.password || url.hash) throw Error(`${pack}: an asset URL must be https with no credentials or fragment`);
+    return { name: `ext.pack_${sha256Hex(new TextEncoder().encode(`${pack}\n${url.host}`))}.assets`, path: `${url.pathname}${url.search}`, source: { host: url.host, secret: null, auth: null, quota: { per_minute: 600, per_day: 100_000 }, timeout: WORK_CALL_MS } };
+  }
+  async assetFile(source: { pack: string; url: string } | { library: string; path: string }, spec: { file: string; sha256: string; size: number; kept: string }): Promise<string> {
+    if ('library' in source) {
+      const { ext, library } = this.libraryOf(source.library);
+      return this.sources.download(ext.entry.id, source.library, library, source.path, spec);
+    }
+    const p = this.packSource(source.pack, source.url);
+    return this.sources.download(source.pack, p.name, p.source, p.path, spec);
+  }
+  async assetOnline(pack: string, value: string): Promise<boolean> {
+    const p = this.packSource(pack, value);
+    try {
+      await this.sources.workFetch(pack, p.name, p.source, { method: 'CONNECT', path: '/' }, { timeout: 2000 });
+      return true;
+    } catch (e) {
+      if (e instanceof NoAnswer) return false;
+      throw e;
+    }
+  }
+  async assetTerms(pack: string, url: string): Promise<string> {
+    const p = this.packSource(pack, url);
+    const answer = await this.sources.workFetch(pack, p.name, p.source, { method: 'GET', path: p.path }, { timeout: p.source.timeout });
+    if (answer.status !== 200) throw Error(`${pack}: license ${url} answered ${answer.status}`);
+    return answer.body;
   }
   /** A work source's run is BLOCKED while its package isn't loaded or the secret it needs isn't held. */
   private async blockedWork(decl: ScheduleDecl): Promise<string | null> {
@@ -1748,9 +1791,9 @@ class Host implements ExtensionHost {
     return this.packsOf(project).filter((e) => e.live).flatMap((e) => [...e.views.keys()].map((name) => ({ name, extension: e.entry.id, commands: e.commands.get(name) ?? [] })));
   }
 
-  /** The channels of the packages loaded and started (#65): each by name, with what it reaches. */
-  channels(): { name: string; kind: ChannelKind; extension: string }[] {
-    return [...this.exts.values()].filter((e) => e.live && e.ask).flatMap((e) => [...e.channels].map(([name, kind]) => ({ name, kind, extension: e.entry.id })));
+  /** The channels of the packages loaded and started (#65): each by name, with what it reaches and whether it draws a plan's steps (#1580). */
+  channels(): { name: string; kind: ChannelKind; steps: boolean; extension: string }[] {
+    return [...this.exts.values()].filter((e) => e.live && e.ask).flatMap((e) => [...e.channels].map(([name, c]) => ({ name, ...c, extension: e.entry.id })));
   }
   /** One send or read of a loaded channel, its context's fetch the caller's; bounded, and never unloading it. */
   async channel(name: string, op: 'deliver', item: ChannelItem, ctx: ChannelCtx): Promise<ChannelDelivered>;
@@ -2179,7 +2222,7 @@ class Host implements ExtensionHost {
       try { kinds[kind] = kindOf(kind, ext.jobKinds.get(kind)); } catch (e) { refuse(message(e)); }
     }
     const tools: HeldJobs['tools'] = [];
-    for (const { kind, tool, host } of manifest.job_tools ?? []) {
+    for (const { kind, tool, host, provider } of manifest.job_tools ?? []) {
       const raw = ext.jobTools.find((t) => t.kind === kind && (t.tool as { tool?: unknown } | null)?.tool === tool);
       if (!raw) return refuse(`${entry.id}'s manifest declares the tool ${tool} of ${kind}, which its code doesn't register`);
       let descriptor: JobTool;
@@ -2192,27 +2235,34 @@ class Host implements ExtensionHost {
       if (build !== null && before !== undefined && before !== build) refuse(`${entry.id}'s tool ${tool} qualified on ${TRIPLE} as build ${before}, and these files are build ${build}: one name@version is one build, so the changed tool takes a new version`);
       for (const f of held.qualification.fixtures) {
         let wrote: Record<string, Uint8Array>;
+        // A tool that calls a provider calls it here too (#1923), with a journal of its own that outlives nothing.
+        const scratch = provider ? join(this.options.home, 'jobs', 'qualify', ulid(this.options.now())) : undefined;
         try {
-          wrote = await this.runTool(entry.folder, descriptor, paramsOf(held.schema.params, f.params), Object.fromEntries(Object.entries(f.inputs).map(([n, t]) => [n, Buffer.from(t, 'utf8')])));
+          const call = provider && scratch ? { provider, key: sha256Hex(canonicalize({ qualification: f.name, kind, tool })), journal: join(scratch, 'journal.jsonl') } : undefined;
+          wrote = await this.runTool(entry.folder, descriptor, paramsOf(held.schema.params, f.params), fixtureInputs(held.schema.inputs, f.inputs), call);
         } catch (e) {
           return refuse(`${entry.id}'s tool ${tool} fails ${kind}'s qualification at the fixture ${f.name}: ${message(e)}`);
+        } finally {
+          if (scratch) rmSync(scratch, { recursive: true, force: true });
         }
         for (const [name, text] of Object.entries(f.expect)) {
           const got = wrote[name];
           if (!got || !Buffer.from(got).equals(Buffer.from(text, 'utf8'))) refuse(`${entry.id}'s tool ${tool} fails ${kind}'s qualification at the fixture ${f.name}: it wrote ${got ? JSON.stringify(Buffer.from(got).toString('utf8')) : 'nothing'} for ${name}, where the fixture expects ${JSON.stringify(text)}, and it doesn't join ${kind}`);
         }
       }
-      tools.push({ kind, tool, build, ...(host && { host }), descriptor });
+      tools.push({ kind, tool, build, ...(host && { host }), descriptor, ...(provider ? { provider } : {}) });
     }
     return { kinds, tools };
   }
   /**
    * One run of a job tool (#1922): `node <its dir>/<its entry>` through the supervisor, in the platform sandbox with only
    * its own files and Node to read, given `{params, inputs}` (each input's bytes in base64) on stdin and writing
-   * `{outputs}` the same way on stdout. It reads no path, name or time of an input: only the bytes it is given.
+   * `{outputs}` the same way on stdout. It reads no path, name or time of an input: only the bytes it is given. A tool
+   * that calls a provider is also given `call` (#1923), and may reach that one host and write its call journal's folder.
+   * Its counters come as lines on stderr while it runs (`counterOf`), each handed to `watch` (#1925); its other text is its own.
    */
-  private async runTool(folder: string, tool: JobTool, params: Record<string, JsonValue>, inputs: Record<string, Uint8Array>): Promise<Record<string, Uint8Array>> {
-    const input = Buffer.from(JSON.stringify({ params, inputs: Object.fromEntries(Object.entries(inputs).map(([n, b]) => [n, Buffer.from(b).toString('base64')])) }));
+  private async runTool(folder: string, tool: JobTool, params: Record<string, JsonValue>, inputs: JobBytes, call?: JobCall, stop?: AbortSignal, watch?: (counter: JobCounter) => void): Promise<Record<string, Uint8Array>> {
+    const input = Buffer.from(JSON.stringify({ params, inputs: encodedInputs(inputs), ...(call ? { call } : {}) }));
     // A tool off the machine (#1924): one POST of the same object to its URL, answered the same way.
     if ('url' in tool.run) return outputsOf(tool.tool, await this.hostCall(tool.tool, new URL(tool.run.url), 'POST', input.toString('utf8')));
     const { supervisor } = this.options;
@@ -2220,17 +2270,35 @@ class Host implements ExtensionHost {
     const run = `run:${ulid(this.options.now())}`;
     const out: Buffer[] = [];
     let size = 0;
+    const text = new StringDecoder('utf8');
+    let line = '';
+    const counters = (chunk: Buffer) => {
+      const lines = (line + text.write(chunk)).split('\n');
+      line = lines.pop()!;
+      // A line longer than any counter's is the tool's own text, so it isn't kept to the end.
+      if (line.length > COUNTER_LINE) line = '';
+      for (const l of lines) {
+        const counter = counterOf(l);
+        if (counter) watch!(counter);
+      }
+    };
+    if (call) mkdirSync(dirname(call.journal), { recursive: true });
     const started = await supervisor.start({
       run, argv: [process.execPath, join(dir, tool.run.entry)], cwd: dir, inherit: false, input,
       env: { PATH: '/usr/bin:/bin', HOME: dir, ...(NODE_LIBS.length ? { OPENSSL_CONF: '/dev/null' } : {}) },
-      grant: { read: [NODE_HOME, ...NODE_LIBS, dir] },
-      output: { stdout: (chunk: Buffer) => { size += chunk.length; if (size <= JOB_OUT) out.push(chunk); }, stderr: () => undefined },
+      grant: { read: [NODE_HOME, ...NODE_LIBS, dir], ...(call ? { write: [dirname(call.journal)], hosts: [call.provider] } : {}) },
+      output: { stdout: (chunk: Buffer) => { size += chunk.length; if (size <= JOB_OUT) out.push(chunk); }, stderr: watch ? counters : () => undefined },
     });
     if (started.status !== 'started') throw Error(`the sandbox held ${tool.tool}: BLOCKED on ${started.kind}`);
+    const end = () => void supervisor.signal(run, 'SIGTERM').catch(() => undefined);
+    if (stop?.aborted) end();
+    stop?.addEventListener('abort', end, { once: true });
     try {
       const exit = await within(JOB_MS, `${tool.tool}'s run`, supervisor.wait(run));
+      if (stop?.aborted) throw Error(`${tool.tool}'s run was stopped: every request for it was cancelled`);
       if (exit.code !== 0) throw Error(`${tool.tool} exited ${exit.code ?? exit.signal}`);
     } finally {
+      stop?.removeEventListener('abort', end);
       await supervisor.cleanup(run).catch(() => undefined);
     }
     if (size > JOB_OUT) throw Error(`${tool.tool} wrote more than ${JOB_OUT} bytes`);
@@ -2252,7 +2320,7 @@ class Host implements ExtensionHost {
     // Each channel it registers is held to channel@1's kit (#65), its code running where conformance runs it.
     const kitted: string[] = [];
     try {
-      for (const [name, kind] of ext.channels) {
+      for (const [name, { kind }] of ext.channels) {
         const { runKit, slotKits } = await import('@deepbuild/conformance');
         const kit = slotKits().find((k) => k.slot === CHANNEL) as SlotKit<ChannelFill> | undefined;
         if (!kit) { kitted.push(`the conformance package ships no ${CHANNEL} kit, so its channel ${name} is unkitted`); continue; }
@@ -2457,20 +2525,18 @@ class Host implements ExtensionHost {
     const dir = mkdtempSync(join(this.options.home, 'ext-'));
     const path = join(dir, 's');
     const server = createServer();
-    const output: string[] = [];
-    const keep = (chunk: Buffer): void => { if (output.length < 64) output.push(chunk.toString('utf8')); };
     try {
       await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(path, resolve); });
       const connected = new Promise<Socket>((resolve) => server.once('connection', resolve));
       const started = await supervisor.start({
         run, argv: [process.execPath, RUNNER, path, folder, entry], cwd: folder, inherit: false, env: { PATH: '/usr/bin:/bin', HOME: folder, ...(NODE_LIBS.length ? { OPENSSL_CONF: '/dev/null' } : {}) },
-        grant: { read: [NODE_HOME, ...NODE_LIBS, RUNTIME, ...(entry === 'main' ? interpreter(folder) : [])], sockets: [path] }, output: { stdout: keep, stderr: keep },
+        grant: { read: [NODE_HOME, ...NODE_LIBS, RUNTIME, ...(entry === 'main' ? interpreter(folder) : [])], sockets: [path] },
       });
       if (started.status !== 'started') throw Error(`the sandbox held it: BLOCKED on ${started.kind}`);
       // Stoppable from here on: an unload while it connects, at close or a revoke, ends its process.
       ext.stop = async () => { ext.cleaned = await supervisor.cleanup(run).catch(() => undefined); };
-      // What it printed is the package's own words: only a release package's reach the refusal, and the hub's log.
-      const early = supervisor.wait(run).then((exit) => Promise.reject(Error(`it exited (${exit.code ?? exit.signal}) before it connected${ext.released ? `: ${output.join('').trim()}` : ''}`)));
+      // What it printed is the package's own words, and only a release package's reach a refusal: none loads here as one.
+      const early = supervisor.wait(run).then((exit) => Promise.reject(Error(`it exited (${exit.code ?? exit.signal}) before it connected`)));
       early.catch(() => undefined);
       let socket: Socket;
       try {
@@ -2795,13 +2861,14 @@ class Host implements ExtensionHost {
         return null;
       }
       case 'deep.registerChannel': {
-        const [name, channel] = args as [unknown, { slot?: unknown; revision?: unknown; kind?: unknown } | null | undefined];
+        const [name, channel] = args as [unknown, { slot?: unknown; revision?: unknown; kind?: unknown; steps?: unknown } | null | undefined];
         if (typeof name !== 'string' || !ADAPTER_NAME.test(name)) throw Error(`deep.registerChannel takes the channel's name first, one lower-case word, not ${JSON.stringify(name)}`);
         if (channel?.slot !== CHANNEL || !Number.isSafeInteger(channel.revision) || (channel.revision as number) < 1) throw Error(`deep.registerChannel: ${name} declares itself a ${CHANNEL} fill, with the kit revision it was built against`);
         if (!CHANNEL_KINDS.includes(channel.kind as ChannelKind)) throw Error(`deep.registerChannel: ${name}'s kind is one of ${CHANNEL_KINDS.join(', ')}`);
         const owner = conformance ? undefined : [...this.exts.values()].find((e) => e !== ext && e.channels.has(name));
         if (owner) throw Error(`the channel ${name} is already registered by ${owner.entry.id}`);
-        ext.channels.set(name, channel.kind as ChannelKind);
+        // Only a channel that says it draws a plan's steps gets a card with a plan to answer (#1580).
+        ext.channels.set(name, { kind: channel.kind as ChannelKind, steps: channel.steps === true });
         return null;
       }
       case 'deep.registerStateSource': {

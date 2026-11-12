@@ -930,6 +930,10 @@ const EFFICIENCY = {
   'canvas-patch-dirty': { cpu_growth: cpuGrowth, upload_bytes_per_item: uploadPerItem },
   'canvas-scene-read': { summary_ms: (r) => r.summary.ms, summary_tokens: (r) => r.summary.tokens, page_ms: (r) => r.page.ms, page_rows: (r) => r.page.rows },
   'canvas-idle': { frames: (r) => r.frames, wakeups: (r) => r.wakeups, cpu_fraction: (r) => r.cpu_fraction },
+  'canvas-look-frames': {
+    frame_gpu_p95_ms: (r) => Math.max(...Object.values(r.looks).map((look) => p95(look.frames.map((f) => f.gpu_ms)))),
+    frame_cpu_p95_ms: (r) => Math.max(...Object.values(r.looks).map((look) => p95(look.frames.map((f) => f.cpu_ms)))),
+  },
   'replica-cold-start': { first_settled_ms: (r) => r.ms },
   'canvas-flares-mirrors': { finish_gpu_ms: (r) => r.finish_gpu_ms, flare_gpu_ms: (r) => r.flare_gpu_ms, mirror_share: (r) => r.mirror_share, indexed_target_bytes: (r) => r.indexed_target_bytes },
   'canvas-water': { lake_gpu_ms: (r) => r.lake_gpu_ms, waves_vertex_ms: (r) => r.waves_vertex_ms },
@@ -1273,6 +1277,9 @@ workloads.occlusion = () => {
     console.log(JSON.stringify({ task: 'canvas-occlusion', fingerprint, runs: measured }));
   } finally {
     rmSync(dir, { recursive: true, force: true });
+  }
+};
+
 // #501: 32 looping voices, each a 2 s stereo tone at 0.02 at its own pitch, played live through the device gate on the
 // default output for 5 s of the real clock by `deep-show run`'s soak; fails unless it played, and prints its stats.
 workloads['media-soak'] = () => {
@@ -1295,6 +1302,47 @@ workloads['media-soak'] = () => {
     const reply = answer.replies?.[0];
     if (reply?.outcome !== 'played') throw Error(`the soak didn't play: ${JSON.stringify(answer).slice(0, 2000)}`);
     console.log(JSON.stringify({ task: 'media-soak', stats: reply.stats }));
+  } finally {
+    rmSync(evidence, { recursive: true, force: true });
+  }
+};
+
+// #157: a 10 s 1920 × 1080 film at 60 fps (a ground and a bar moving a pixel a frame, a stereo tone) exported as H.264
+// with AAC by `deep-show run`; fails unless it was delivered, and prints the receipt's fidelity decode and colour probe
+// times.
+workloads['export-fidelity'] = () => {
+  const evidence = mkdtempSync(join(tmpdir(), 'deep-canvas-bench-'));
+  try {
+    const sr = 48_000, frames = 600, frame = SEC / 60;
+    const b = Buffer.alloc(44 + 10 * sr * 8);
+    b.write('RIFF', 0, 'ascii'); b.writeUInt32LE(36 + 10 * sr * 8, 4); b.write('WAVEfmt ', 8, 'ascii'); b.writeUInt32LE(16, 16);
+    b.writeUInt16LE(3, 20); b.writeUInt16LE(2, 22); b.writeUInt32LE(sr, 24); b.writeUInt32LE(sr * 8, 28); b.writeUInt16LE(8, 32);
+    b.writeUInt16LE(32, 34); b.write('data', 36, 'ascii'); b.writeUInt32LE(10 * sr * 8, 40);
+    for (let i = 0; i < 10 * sr; i++) for (const c of [0, 1]) b.writeFloatLE(0.2 * Math.sin((2 * Math.PI * (440 + 220 * c) * i) / sr), 44 + 8 * i + 4 * c);
+    const sha = createHash('sha256').update(b).digest('hex');
+    mkdirSync(join(evidence, sha.slice(0, 2)), { recursive: true });
+    writeFileSync(join(evidence, sha.slice(0, 2), sha.slice(2)), b);
+    const rect = (id, box, role, order) => ({ id, kind: 'rect@1', name: id, order, params: { box, paint: { fill: { role } } } });
+    const document = {
+      format: 1, id: 'bench-157', profile: 'film', title: 'Export fidelity bench', description: 'A bar crossing a 1080p60 frame.', size: [1920, 1080], camera: 'cam',
+      transport: { span: frames * frame, frame_rate: [60, 1], sample_rate: sr },
+      items: {
+        cam: { id: 'cam', kind: 'camera@1', name: 'cam', order: 'a0', params: { projection: 'orthographic', target: [960, 540, 0], view_width: 1920 } },
+        back: rect('back', [0, 0, 1920, 1080], 'muted', 'a1'), bar: rect('bar', [100, 0, 48, 1080], 'accent', 'a2'),
+      },
+      channels: { bar: { target: 'items/bar/params/box/0', type: 'f32', keys: { k0: { t: 0, value: 100, interp: 'linear' }, k1: { t: frames * frame, value: 100 + frames, interp: 'linear' } } } },
+      assets: { sound: { sha256: sha, license: { id: 'CC0-1.0', shareable: true, credit: 'Bench tone.' } } },
+      strips: { sound: { track: 1, src: sha, start: 0, in: 0, out: 10 * SEC, rate: 1 } },
+    };
+    const out = join(evidence, 'film.mp4');
+    const peer = { pid: 3002, start: 3_000 };
+    const processes = [{ pid: 1, ppid: 0, start: 0 }, { pid: 3000, ppid: 1, start: 100 }, { pid: 3001, ppid: 3000, start: 110 }, { pid: 3002, ppid: 3001, start: 3_000 }];
+    const calls = [{ call: 'deep show', peer, doc: DOC, document }, { call: 'export', doc: DOC, out, video: { codec: 'h264' }, audio: { codec: 'aac' } }];
+    const sc = { evidence, sessions: {}, processes, panels: { main: { rect: [0, 0, 1280, 720] } }, docs: { [DOC]: { panel: 'main' } }, calls };
+    const [answer] = run('deep-show', 'run', [JSON.stringify(sc)]);
+    const reply = answer.replies?.[1];
+    if (reply?.outcome !== 'exported') throw Error(`the export wasn't delivered: ${JSON.stringify(answer).slice(0, 2000)}`);
+    console.log(JSON.stringify({ task: 'export-fidelity', decode_seconds: reply.receipt.fidelity?.decode_seconds, probe_seconds: reply.receipt.color_probe?.seconds }));
   } finally {
     rmSync(evidence, { recursive: true, force: true });
   }

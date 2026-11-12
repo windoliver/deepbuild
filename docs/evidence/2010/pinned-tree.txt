@@ -1,0 +1,146 @@
+0deep-physics-rapier v0.0.0 []
+1base64 v0.22.1 [alloc,default,std]
+1bincode v1.3.3 []
+2serde v1.0.229 [alloc,default,derive,rc,serde_derive,std]
+3serde_core v1.0.229 [alloc,rc,result,std]
+3serde_derive v1.0.229 (proc-macro) [default]
+4proc-macro2 v1.0.107 [default,proc-macro]
+5unicode-ident v1.0.27 []
+4quote v1.0.47 [default,proc-macro]
+5proc-macro2 v1.0.107 [default,proc-macro] (*)
+4syn v3.0.9 [clone-impls,default,derive,parsing,printing,proc-macro]
+5proc-macro2 v1.0.107 [default,proc-macro] (*)
+5quote v1.0.47 [default,proc-macro] (*)
+5unicode-ident v1.0.27 []
+1deep-canvas-physics v0.0.0 []
+2deep-canvas v0.0.0 []
+3blake3 v1.5.5 [std]
+4arrayref v0.3.9 []
+4arrayvec v0.7.8 [serde,std]
+5serde v1.0.229 [alloc,default,derive,rc,serde_derive,std] (*)
+4cfg-if v1.0.5 []
+4constant_time_eq v0.3.1 []
+3libm v0.2.16 [arch,default]
+3serde_json v1.0.154 [alloc,default,float_roundtrip,indexmap,preserve_order,std]
+4foldhash v0.2.0 []
+4indexmap v2.14.2 [default,serde,std]
+5equivalent v1.0.3 []
+5hashbrown v0.17.1 [default-hasher,serde]
+6foldhash v0.2.0 []
+6serde_core v1.0.229 [alloc,rc,result,std]
+5serde_core v1.0.229 [alloc,rc,result,std]
+4itoa v1.0.18 []
+4memchr v2.8.3 [alloc,std]
+4serde_core v1.0.229 [alloc,rc,result,std]
+4zmij v1.0.23 []
+3sha2 v0.10.9 [default,std]
+4cfg-if v1.0.5 []
+4cpufeatures v0.2.17 []
+5libc v0.2.191 []
+4digest v0.10.7 [alloc,block-buffer,core-api,default,std]
+5block-buffer v0.10.4 []
+6generic-array v0.14.7 [more_lengths]
+7typenum v1.20.1 []
+5crypto-common v0.1.7 [std]
+6generic-array v0.14.7 [more_lengths] (*)
+6typenum v1.20.1 []
+3unicode-normalization v0.1.26 [default,std]
+4tinyvec v1.13.3 [alloc,default]
+2serde_json v1.0.154 [alloc,default,float_roundtrip,indexmap,preserve_order,std] (*)
+1rapier3d v0.36.1 [alloc,dim3,enhanced-determinism,f32,serde-serialize,std]
+2approx v0.5.1 [std]
+3num-traits v0.2.19 [i128,libm,std]
+4libm v0.2.16 [arch,default]
+2arrayvec v0.7.8 [serde,std] (*)
+2bitflags v2.13.2 [serde,serde_core]
+3serde_core v1.0.229 [alloc,rc,result,std]
+2glamx v0.3.1 [approx,glamx-serde,i32,libm,nalgebra,nostd-libm,scalar-math,serde,std]
+3approx v0.5.1 [std] (*)
+3glam v0.33.12 [approx,approx-05,f64,i32,libm,nostd-libm,scalar-math,serde,std,u32]
+4approx v0.5.1 [std] (*)
+4libm v0.2.16 [arch,default]
+4serde_core v1.0.229 [alloc,rc,result,std]
+3nalgebra v0.35.0 [alloc,convert-glam033,glam033,macros,matrixmultiply,nalgebra-macros,serde,serde-serialize,serde-serialize-no-std,std]
+4approx v0.5.1 [std] (*)
+4glam v0.33.12 [approx,approx-05,f64,i32,libm,nostd-libm,scalar-math,serde,std,u32] (*)
+4matrixmultiply v0.3.11 [avx512,default,std]
+5rawpointer v0.2.1 []
+4nalgebra-macros v0.3.0 (proc-macro) []
+5proc-macro2 v1.0.107 [default,proc-macro] (*)
+5quote v1.0.47 [default,proc-macro] (*)
+5syn v2.0.119 [clone-impls,default,derive,full,parsing,printing,proc-macro]
+6proc-macro2 v1.0.107 [default,proc-macro] (*)
+6quote v1.0.47 [default,proc-macro] (*)
+6unicode-ident v1.0.27 []
+4num-complex v0.4.6 [serde,std]
+5num-traits v0.2.19 [i128,libm,std] (*)
+5serde v1.0.229 [alloc,default,derive,rc,serde_derive,std] (*)
+4num-rational v0.4.2 [std]
+5num-integer v0.1.47 [i128,std]
+6num-traits v0.2.19 [i128,libm,std] (*)
+5num-traits v0.2.19 [i128,libm,std] (*)
+4num-traits v0.2.19 [i128,libm,std] (*)
+4serde v1.0.229 [alloc,default,derive,rc,serde_derive,std] (*)
+4simba v0.10.2 [libm,libm_force,std,wide]
+5approx v0.5.1 [std] (*)
+5libm v0.2.16 [arch,default]
+5num-complex v0.4.6 [serde,std] (*)
+5num-traits v0.2.19 [i128,libm,std] (*)
+5wide v1.7.1 [std]
+6bytemuck v1.25.2 []
+4typenum v1.20.1 []
+3num-traits v0.2.19 [i128,libm,std] (*)
+3serde v1.0.229 [alloc,default,derive,rc,serde_derive,std] (*)
+3simba v0.10.2 [libm,libm_force,std,wide] (*)
+2log v0.4.34 []
+2nalgebra v0.35.0 [alloc,convert-glam033,glam033,macros,matrixmultiply,nalgebra-macros,serde,serde-serialize,serde-serialize-no-std,std] (*)
+2num-traits v0.2.19 [i128,libm,std] (*)
+2parry3d v0.31.1 [alloc,dim3,downcast-rs,ena,enhanced-determinism,f32,hashbrown,indexmap,required-features,rstar,serde,serde-serialize,serde_arrays,slab,smallvec,std]
+3approx v0.5.1 [std] (*)
+3arrayvec v0.7.8 [serde,std] (*)
+3bitflags v2.13.2 [serde,serde_core] (*)
+3downcast-rs v2.0.2 [sync]
+3either v1.19.0 []
+3ena v0.14.4 []
+4log v0.4.34 []
+3foldhash v0.2.0 []
+3glamx v0.3.1 [approx,glamx-serde,i32,libm,nalgebra,nostd-libm,scalar-math,serde,std] (*)
+3hashbrown v0.17.1 [default-hasher,serde] (*)
+3indexmap v2.14.2 [default,serde,std] (*)
+3log v0.4.34 []
+3num-derive v0.5.1 (proc-macro) []
+4proc-macro2 v1.0.107 [default,proc-macro] (*)
+4quote v1.0.47 [default,proc-macro] (*)
+4syn v3.0.9 [clone-impls,default,derive,parsing,printing,proc-macro] (*)
+3num-traits v0.2.19 [i128,libm,std] (*)
+3ordered-float v5.5.0 []
+4num-traits v0.2.19 [i128,libm,std] (*)
+3rstar v0.13.1 [default]
+4heapless v0.8.0 []
+5hash32 v0.3.1 []
+6byteorder v1.5.0 []
+5stable_deref_trait v1.2.1 []
+4num-traits v0.2.19 [i128,libm,std] (*)
+4smallvec v1.16.3 []
+3serde v1.0.229 [alloc,default,derive,rc,serde_derive,std] (*)
+3serde_arrays v0.2.0 [default]
+4serde v1.0.229 [alloc,default,derive,rc,serde_derive,std] (*)
+3simba v0.10.2 [libm,libm_force,std,wide] (*)
+3slab v0.4.12 [default,std]
+3smallvec v1.16.3 []
+3static_assertions v1.1.0 []
+3thiserror v2.0.21 [std]
+4thiserror-impl v2.0.21 (proc-macro) []
+5proc-macro2 v1.0.107 [default,proc-macro] (*)
+5quote v1.0.47 [default,proc-macro] (*)
+5syn v3.0.9 [clone-impls,default,derive,parsing,printing,proc-macro] (*)
+2profiling v1.0.18 [default,procmacros,profiling-procmacros]
+3profiling-procmacros v1.0.18 (proc-macro) []
+4quote v1.0.47 [default,proc-macro] (*)
+4syn v2.0.119 [clone-impls,default,derive,full,parsing,printing,proc-macro] (*)
+2serde v1.0.229 [alloc,default,derive,rc,serde_derive,std] (*)
+2simba v0.10.2 [libm,libm_force,std,wide] (*)
+2static_assertions v1.1.0 []
+2thiserror v2.0.21 [std] (*)
+2wide v1.7.1 [std] (*)
+1serde_json v1.0.154 [alloc,default,float_roundtrip,indexmap,preserve_order,std] (*)

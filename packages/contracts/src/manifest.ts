@@ -97,6 +97,8 @@ function checkSecrets(secrets: unknown): ContractIssue[] {
  */
 const JOB_KIND = /^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*$/;
 const JOB_TOOL = /^[a-z0-9][a-z0-9_-]*@\d+\.\d+\.\d+$/;
+/** The one host a job tool that calls a provider reaches (#1923), with its port. */
+const JOB_PROVIDER = /^[a-z0-9.-]+:\d{1,5}$/;
 function checkJobs(jobs: unknown, tools: unknown): ContractIssue[] {
   const found: ContractIssue[] = [];
   if (jobs !== undefined) {
@@ -106,11 +108,12 @@ function checkJobs(jobs: unknown, tools: unknown): ContractIssue[] {
   if (tools !== undefined) {
     if (!Array.isArray(tools)) found.push(issue('type', '/job_tools', tools));
     else tools.forEach((t, i) => {
-      const { kind, tool, host, ...rest } = (typeof t === 'object' && t !== null ? t : {}) as Record<string, unknown>;
+      const { kind, tool, host, provider, ...rest } = (typeof t === 'object' && t !== null ? t : {}) as Record<string, unknown>;
       if (typeof t !== 'object' || t === null || Object.keys(rest).length) return void found.push(issue('type', `/job_tools/${i}`, t));
       if (typeof kind !== 'string' || !JOB_KIND.test(kind)) found.push(issue('pattern', `/job_tools/${i}/kind`, kind));
       if (typeof tool !== 'string' || !JOB_TOOL.test(tool)) found.push(issue('pattern', `/job_tools/${i}/tool`, tool));
       if (host !== undefined && (typeof host !== 'string' || !host)) found.push(issue('type', `/job_tools/${i}/host`, host));
+      if (provider !== undefined && (typeof provider !== 'string' || !JOB_PROVIDER.test(provider))) found.push(issue('pattern', `/job_tools/${i}/provider`, provider));
     });
   }
   return found;

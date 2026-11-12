@@ -36,6 +36,18 @@
     "tracking": "#1454"
   },
   {
+    "method": "ask.later",
+    "since": "R1",
+    "stability": "preview",
+    "tracking": "#1462"
+  },
+  {
+    "method": "session.pause",
+    "since": "R1",
+    "stability": "preview",
+    "tracking": "#1462"
+  },
+  {
     "method": "ask.confirm",
     "since": "R1",
     "stability": "preview",
@@ -82,6 +94,12 @@
     "since": "R1",
     "stability": "stable",
     "called_by": "deep inbox undo"
+  },
+  {
+    "method": "ask.take_over",
+    "since": "R2",
+    "stability": "preview",
+    "tracking": "#1580"
   },
   {
     "method": "device.pair",
@@ -150,6 +168,24 @@
     "called_by": "deep, deep status, deep inbox"
   },
   {
+    "method": "row.read",
+    "since": "R1",
+    "stability": "stable",
+    "called_by": "the app"
+  },
+  {
+    "method": "row.why",
+    "since": "R1",
+    "stability": "preview",
+    "tracking": "#2018"
+  },
+  {
+    "method": "session.rename",
+    "since": "R1",
+    "stability": "preview",
+    "tracking": "#2018"
+  },
+  {
     "method": "hub.stop",
     "since": "R1",
     "stability": "stable",
@@ -204,6 +240,19 @@
     "called_by": "deep install"
   },
   {
+    "method": "pack.rule",
+    "since": "R6",
+    "stability": "preview",
+    "tracking": "#1820",
+    "called_by": "deep pack rule"
+  },
+  {
+    "method": "canvas.export",
+    "since": "R6",
+    "stability": "preview",
+    "tracking": "#1820"
+  },
+  {
     "method": "guard.add",
     "since": "R1",
     "stability": "stable",
@@ -228,6 +277,12 @@
     "called_by": "deep mcp"
   },
   {
+    "method": "mcp.cancel",
+    "since": "R6",
+    "stability": "preview",
+    "tracking": "#1923"
+  },
+  {
     "method": "evidence.paste",
     "since": "R1",
     "stability": "preview",
@@ -235,6 +290,12 @@
   },
   {
     "method": "wiki.build",
+    "since": "R1",
+    "stability": "stable",
+    "called_by": "deep setup"
+  },
+  {
+    "method": "setup.report",
     "since": "R1",
     "stability": "stable",
     "called_by": "deep setup"
@@ -262,6 +323,24 @@
     "since": "R1",
     "stability": "preview",
     "tracking": "#1328"
+  },
+  {
+    "method": "land.judge",
+    "since": "R1",
+    "stability": "preview",
+    "tracking": "#1331"
+  },
+  {
+    "method": "land.round",
+    "since": "R1",
+    "stability": "preview",
+    "tracking": "#1331"
+  },
+  {
+    "method": "work.once",
+    "since": "R1",
+    "stability": "preview",
+    "tracking": "#1331"
   },
   {
     "method": "job.submit",

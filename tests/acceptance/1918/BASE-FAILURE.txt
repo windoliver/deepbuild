@@ -1,0 +1,303 @@
+The #1918 suite run once at base commit f0405959a ("Merge pull request #2226 …"; no implementation of #1918; #2009's,
+#2010's, #2012's, #397's and #200's merges are there), on macOS arm64 (rustup 1.99.1, Node 24.22.2, vitest 5.0.5), with
+`PATH=/opt/homebrew/opt/rustup/bin:$PATH NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 npx vitest run --root
+tests/acceptance/1918 --testTimeout=600000 --no-file-parallelism ac1-channel-targets.test.ts ac2-rigid-fixtures.test.ts
+ac5-reverse-pairs.test.ts` (the checkout's path redacted to `<checkout>`; the base's deep-physics was built just before,
+2 min 37 s cold, so the run's own cargo build was a no-op).
+
+Run: the three files whose binary builds cheaply. 11 of 11 tests fail, each at an assertion because the surface is
+absent, none in the harness and none BLOCKED:
+- ac1's three tests: `check` and `bake` of a scene's world (`scene` with `world: "rig"`) aren't taken: the base reads
+  the string "rig" as the world document and refuses it ("the world must be an object", capacity missing), and its bake
+  answers no `bodies`.
+- ac2's six tests: five bakes answer no `occurrences`; the breaking joint's world is refused at check (`breaks_at isn't
+  run by this backend interface yet; #523 brings it`).
+- ac5's two tests: the bake answers no `occurrences`; `--planted occurrences_in_engine_order` is `bad_input`, exit 2.
+  Its test backend doesn't build either (checked apart from the run, the same command the file's beforeAll runs):
+  `cargo build --locked -p deep-physics-rapier --bin deep-physics --features test-reverse-pairs` answers
+  "error: the package 'deep-physics-rapier' does not contain this feature: test-reverse-pairs".
+
+Not run at the base, by the job's brief (a cold deep-show build takes many minutes): ac3-column-view.test.ts (4 tests)
+and ac4-scene-lab.test.ts (2 tests), which build deep-show. Their surface is absent at the base, so each would fail
+there at an assertion: no build registers the physics module, so `column.source@1` holds no entry with `module:
+"physics"` (ac3 entries and the no-changes twin, which reads that entry first); deep-show has no cargo features
+`test-physics-hands-no-changes` or `test-motion-reads-physics-array` (cargo refuses them, so those builds fail); `eval`
+takes no `paths` and answers no `values` (ac3 driver, ac4), and the motion module reads a world's occurrence list as
+empty (crates/deep-canvas-motion/src/program.rs), so a hit count could never rise; and ac4's `deep-physics` bake of the
+rally is refused before any of that, as ac1's is (`world: "lab"` read as the world document).
+
+The type-check, `npx tsc -p tests/acceptance/1918/tsconfig.json`, exits 0.
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/1918
+
+ ❯ ac2-rigid-fixtures.test.ts (6 tests | 6 failed) 942ms
+   ❯ #1918.ea47680a rigid-world fixtures pass with the occurrence lists written in each before the module runs (6)
+     × #1918.ea47680a (a stack that sleeps and wakes) the world's occurrence list is the fixture's: its kinds, IDs, order and count 134ms
+     × #1918.ea47680a (a sealed box with continuous collision) the world's occurrence list is the fixture's: its kinds, IDs, order and count 5ms
+     × #1918.ea47680a (friction on an incline) the world's occurrence list is the fixture's: its kinds, IDs, order and count 9ms
+     × #1918.ea47680a (a collision-group matrix) the world's occurrence list is the fixture's: its kinds, IDs, order and count 5ms
+     × #1918.ea47680a (a sensor) the world's occurrence list is the fixture's: its kinds, IDs, order and count 6ms
+     × #1918.ea47680a (a joint that breaks at its threshold) the world's occurrence list is the fixture's: its kinds, IDs, order and count 4ms
+ ❯ ac1-channel-targets.test.ts (3 tests | 3 failed) 558ms
+   ❯ #1918.adfa6a63 channels physics reads are read at each step's time, inside the step; a seek reproduces every pose; a channel that depends on a physics pose is refused as a cycle (3)
+     × #1918.adfa6a63 (steps) the paddle's position at every step is its channel's at that step's time, the wheel's motor first turns it in the step that ends at its key, and the solve holds the slider on its channel at every step 134ms
+     × #1918.adfa6a63 (seek) a seek reproduces every pose: each world restored from each of its checkpoints and stepped to 2 s gives the straight bake's pose at every step 4ms
+     × #1918.adfa6a63 (cycle) a channel physics reads that depends on a physics pose is refused as a cycle: the motor's target written by a driver that reads the wheel's own output 4ms
+ ❯ ac5-reverse-pairs.test.ts (2 tests | 2 failed) 582ms
+   ❯ #1918.4bdfb685 a test backend iterating contact pairs in reverse gives Rapier's occurrence list byte for byte (2)
+     × #1918.4bdfb685 (equal) for a four-legged table landing and a ball hitting a floor, the reversed backend's list is Rapier's byte for byte: a the lower ID, normals from a to b, ties by shape-use index 146ms
+     × #1918.4bdfb685 (twin) occurrences_in_engine_order, which keeps the pairs in the order and orientation the backend reads them, gives the reversed backend another list than Rapier's 8ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 11 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac1-channel-targets.test.ts > #1918.adfa6a63 channels physics reads are read at each step's time, inside the step; a seek reproduces every pose; a channel that depends on a physics pose is refused as a cycle > #1918.adfa6a63 (steps) the paddle's position at every step is its channel's at that step's time, the wheel's motor first turns it in the step that ends at its key, and the solve holds the slider on its channel at every step
+AssertionError: the fixture's rig world checks with no error:
+  {"check":"document.validate","code":"out_of_range","severity":"error","ids":[],"path":"","actual":"rig","t":null,"what":"the world must be an object","fix":"Give the field a value of its type inside its range."}
+  {"check":"document.validate","code":"physics.missing_field","severity":"error","ids":[],"path":"capacity","actual":null,"t":null,"what":"capacity is required: {bodies, shapes, joints, contacts, particles}","fix":"Add the field."}: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "{\"check\":\"document.validate\",\"code\":\"out_of_range\",\"severity\":\"error\",\"ids\":[],\"path\":\"\",\"actual\":\"rig\",\"t\":null,\"what\":\"the world must be an object\",\"fix\":\"Give the field a value of its type inside its range.\"}",
++   "{\"check\":\"document.validate\",\"code\":\"physics.missing_field\",\"severity\":\"error\",\"ids\":[],\"path\":\"capacity\",\"actual\":null,\"t\":null,\"what\":\"capacity is required: {bodies, shapes, joints, contacts, particles}\",\"fix\":\"Add the field.\"}",
++ ]
+
+ ❯ none ../2009/helpers.ts:66:73
+     64| /** No failures; the message lists them. */
+     65| export function none(failures: readonly string[], what: string): void {
+     66|   expect(failures, `${what}:\n  ${failures.slice(0, 30).join('\n  ')}`…
+       |                                                                         ^
+     67| }
+     68| /** A planted twin is caught: the judge that passes the real program f…
+ ❯ ac1-channel-targets.test.ts:37:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/11]⎯
+
+ FAIL  ac1-channel-targets.test.ts > #1918.adfa6a63 channels physics reads are read at each step's time, inside the step; a seek reproduces every pose; a channel that depends on a physics pose is refused as a cycle > #1918.adfa6a63 (seek) a seek reproduces every pose: each world restored from each of its checkpoints and stepped to 2 s gives the straight bake's pose at every step
+AssertionError: the rig bake: bodies is an object, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ obj ../2009/helpers.ts:48:63
+     46| export const show = (v: JsonValue | undefined): string => JSON.stringi…
+     47| export function obj(v: JsonValue | undefined, what: string): JsonObjec…
+     48|   expect(isObject(v), `${what} is an object, got ${show(v)}`).toBe(tru…
+       |                                                               ^
+     49|   return v as JsonObject;
+     50| }
+ ❯ ac1-channel-targets.test.ts:77:31
+ ❯ ac1-channel-targets.test.ts:75:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/11]⎯
+
+ FAIL  ac1-channel-targets.test.ts > #1918.adfa6a63 channels physics reads are read at each step's time, inside the step; a seek reproduces every pose; a channel that depends on a physics pose is refused as a cycle > #1918.adfa6a63 (cycle) a channel physics reads that depends on a physics pose is refused as a cycle: the motor's target written by a driver that reads the wheel's own output
+AssertionError: the fixture itself checks with no error:
+  {"check":"document.validate","code":"out_of_range","severity":"error","ids":[],"path":"","actual":"rig","t":null,"what":"the world must be an object","fix":"Give the field a value of its type inside its range."}
+  {"check":"document.validate","code":"physics.missing_field","severity":"error","ids":[],"path":"capacity","actual":null,"t":null,"what":"capacity is required: {bodies, shapes, joints, contacts, particles}","fix":"Add the field."}: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "{\"check\":\"document.validate\",\"code\":\"out_of_range\",\"severity\":\"error\",\"ids\":[],\"path\":\"\",\"actual\":\"rig\",\"t\":null,\"what\":\"the world must be an object\",\"fix\":\"Give the field a value of its type inside its range.\"}",
++   "{\"check\":\"document.validate\",\"code\":\"physics.missing_field\",\"severity\":\"error\",\"ids\":[],\"path\":\"capacity\",\"actual\":null,\"t\":null,\"what\":\"capacity is required: {bodies, shapes, joints, contacts, particles}\",\"fix\":\"Add the field.\"}",
++ ]
+
+ ❯ none ../2009/helpers.ts:66:73
+     64| /** No failures; the message lists them. */
+     65| export function none(failures: readonly string[], what: string): void {
+     66|   expect(failures, `${what}:\n  ${failures.slice(0, 30).join('\n  ')}`…
+       |                                                                         ^
+     67| }
+     68| /** A planted twin is caught: the judge that passes the real program f…
+ ❯ ac1-channel-targets.test.ts:102:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/11]⎯
+
+ FAIL  ac2-rigid-fixtures.test.ts > #1918.ea47680a rigid-world fixtures pass with the occurrence lists written in each before the module runs > #1918.ea47680a (a stack that sleeps and wakes) the world's occurrence list is the fixture's: its kinds, IDs, order and count
+AssertionError: a stack that sleeps and wakes: the bake: occurrences (the world's occurrence list) is an array, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ arr ../2009/helpers.ts:52:67
+     50| }
+     51| export function arr(v: JsonValue | undefined, what: string): JsonValue…
+     52|   expect(Array.isArray(v), `${what} is an array, got ${show(v)}`).toBe…
+       |                                                                   ^
+     53|   return v as JsonValue[];
+     54| }
+ ❯ rowsOf helpers.ts:175:10
+ ❯ ac2-rigid-fixtures.test.ts:168:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/11]⎯
+
+ FAIL  ac2-rigid-fixtures.test.ts > #1918.ea47680a rigid-world fixtures pass with the occurrence lists written in each before the module runs > #1918.ea47680a (a sealed box with continuous collision) the world's occurrence list is the fixture's: its kinds, IDs, order and count
+AssertionError: a sealed box with continuous collision: the bake: occurrences (the world's occurrence list) is an array, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ arr ../2009/helpers.ts:52:67
+     50| }
+     51| export function arr(v: JsonValue | undefined, what: string): JsonValue…
+     52|   expect(Array.isArray(v), `${what} is an array, got ${show(v)}`).toBe…
+       |                                                                   ^
+     53|   return v as JsonValue[];
+     54| }
+ ❯ rowsOf helpers.ts:175:10
+ ❯ ac2-rigid-fixtures.test.ts:168:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/11]⎯
+
+ FAIL  ac2-rigid-fixtures.test.ts > #1918.ea47680a rigid-world fixtures pass with the occurrence lists written in each before the module runs > #1918.ea47680a (friction on an incline) the world's occurrence list is the fixture's: its kinds, IDs, order and count
+AssertionError: friction on an incline: the bake: occurrences (the world's occurrence list) is an array, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ arr ../2009/helpers.ts:52:67
+     50| }
+     51| export function arr(v: JsonValue | undefined, what: string): JsonValue…
+     52|   expect(Array.isArray(v), `${what} is an array, got ${show(v)}`).toBe…
+       |                                                                   ^
+     53|   return v as JsonValue[];
+     54| }
+ ❯ rowsOf helpers.ts:175:10
+ ❯ ac2-rigid-fixtures.test.ts:168:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/11]⎯
+
+ FAIL  ac2-rigid-fixtures.test.ts > #1918.ea47680a rigid-world fixtures pass with the occurrence lists written in each before the module runs > #1918.ea47680a (a collision-group matrix) the world's occurrence list is the fixture's: its kinds, IDs, order and count
+AssertionError: a collision-group matrix: the bake: occurrences (the world's occurrence list) is an array, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ arr ../2009/helpers.ts:52:67
+     50| }
+     51| export function arr(v: JsonValue | undefined, what: string): JsonValue…
+     52|   expect(Array.isArray(v), `${what} is an array, got ${show(v)}`).toBe…
+       |                                                                   ^
+     53|   return v as JsonValue[];
+     54| }
+ ❯ rowsOf helpers.ts:175:10
+ ❯ ac2-rigid-fixtures.test.ts:168:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/11]⎯
+
+ FAIL  ac2-rigid-fixtures.test.ts > #1918.ea47680a rigid-world fixtures pass with the occurrence lists written in each before the module runs > #1918.ea47680a (a sensor) the world's occurrence list is the fixture's: its kinds, IDs, order and count
+AssertionError: a sensor: the bake: occurrences (the world's occurrence list) is an array, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ arr ../2009/helpers.ts:52:67
+     50| }
+     51| export function arr(v: JsonValue | undefined, what: string): JsonValue…
+     52|   expect(Array.isArray(v), `${what} is an array, got ${show(v)}`).toBe…
+       |                                                                   ^
+     53|   return v as JsonValue[];
+     54| }
+ ❯ rowsOf helpers.ts:175:10
+ ❯ ac2-rigid-fixtures.test.ts:168:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/11]⎯
+
+ FAIL  ac2-rigid-fixtures.test.ts > #1918.ea47680a rigid-world fixtures pass with the occurrence lists written in each before the module runs > #1918.ea47680a (a joint that breaks at its threshold) the world's occurrence list is the fixture's: its kinds, IDs, order and count
+AssertionError: a joint that breaks at its threshold: the bake is baked: {"ok":false,"issues":[{"check":"document.validate","code":"physics.unsupported","severity":"error","ids":["snap"],"path":"joints/snap/breaks_at","actual":{"force":15,"over_steps":3},"t":null,"what":"breaks_at isn't run by this backend interface yet; #523 brings it","fix":"Remove the field until that issue lands."},{"check":"document.validate","code":"physics.unsupported","severity":"error","ids":["hold"],"path":"joints/hold/breaks_at","actual":{"force":15,"over_steps":3},"t":null,"what":"breaks_at isn't run by this backend interface yet; #523 brings it","fix":"Remove the field until that issue lands."}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ rowsOf helpers.ts:174:61
+    172| /** A bake's occurrence list (`occurrences`), row by row, as the list …
+    173| export function rowsOf(reply: JsonObject | undefined, what: string): R…
+    174|   expect(reply?.['ok'], `${what} is baked: ${show(reply)}`).toBe(true);
+       |                                                             ^
+    175|   return arr(reply!['occurrences'], `${what}: occurrences (the world's…
+    176|     const o = obj(v, `${what}: occurrences[${i}]`);
+ ❯ ac2-rigid-fixtures.test.ts:168:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/11]⎯
+
+ FAIL  ac5-reverse-pairs.test.ts > #1918.4bdfb685 a test backend iterating contact pairs in reverse gives Rapier's occurrence list byte for byte > #1918.4bdfb685 (equal) for a four-legged table landing and a ball hitting a floor, the reversed backend's list is Rapier's byte for byte: a the lower ID, normals from a to b, ties by shape-use index
+AssertionError: the table on Rapier: occurrences (the world's occurrence list) is an array, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ arr ../2009/helpers.ts:52:67
+     50| }
+     51| export function arr(v: JsonValue | undefined, what: string): JsonValue…
+     52|   expect(Array.isArray(v), `${what} is an array, got ${show(v)}`).toBe…
+       |                                                                   ^
+     53|   return v as JsonValue[];
+     54| }
+ ❯ rowsOf helpers.ts:175:10
+ ❯ one ac5-reverse-pairs.test.ts:50:18
+ ❯ bakeBoth ac5-reverse-pairs.test.ts:53:20
+ ❯ ac5-reverse-pairs.test.ts:65:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/11]⎯
+
+ FAIL  ac5-reverse-pairs.test.ts > #1918.4bdfb685 a test backend iterating contact pairs in reverse gives Rapier's occurrence list byte for byte > #1918.4bdfb685 (twin) occurrences_in_engine_order, which keeps the pairs in the order and orientation the backend reads them, gives the reversed backend another list than Rapier's
+AssertionError: deep-physics --planted occurrences_in_engine_order (Rapier) exits 0; stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ physics helpers.ts:115:119
+    113|   if (run.error && code !== 'EPIPE') throw Error(`${what}: ${run.error…
+    114|   const stdout = run.stdout ?? '';
+    115|   expect(run.status, `${what} exits 0; stdout: ${stdout.slice(0, 1000)…
+       |                                                                                                                       ^
+    116|   const lines = stdout.split('\n').filter((l) => l !== '');
+    117|   expect(lines.length, `${what}: one reply per call`).toBe(calls.lengt…
+ ❯ one ac5-reverse-pairs.test.ts:49:17
+ ❯ bakeBoth ac5-reverse-pairs.test.ts:53:20
+ ❯ ac5-reverse-pairs.test.ts:81:25
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/11]⎯
+
+
+ Test Files  3 failed (3)
+      Tests  11 failed (11)
+   Start at  19:50:26
+   Duration  2.39s (tests 97%, transform 2%, import 1%)
+
+
+[exited with code 1]

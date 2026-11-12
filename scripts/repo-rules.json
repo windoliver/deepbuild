@@ -614,6 +614,30 @@
         }
       }
     },
+    "packages/checks-host/package.json": {
+      "dependencies": {
+        "@deepbuild/conformance": {
+          "spec": "0.0.0",
+          "why": "Issue #1943: the check.kind@1 slot's fill, context and result types, the probe runner that ends a run at its deadline, and the kit types and Finding each host kind's own kit is judged with by the one kit runner."
+        }
+      }
+    },
+    "packages/routing-replay/package.json": {
+      "dependencies": {
+        "@deepbuild/asks": {
+          "spec": "0.0.0",
+          "why": "Issue #1980: the asks core the router raises one ask per cause through, and whose deadline takes each ask's default."
+        },
+        "@deepbuild/evidence": {
+          "spec": "0.0.0",
+          "why": "Issue #1980: the evidence store the replay keeps its snapshot in, by the snapshot's hash."
+        },
+        "@deepbuild/record": {
+          "spec": "0.0.0",
+          "why": "Issue #1980: the record the replay's asks, withdrawals and fix tasks are appended to, and read back for its report."
+        }
+      }
+    },
     "packages/proof/package.json": {
       "dependencies": {
         "@deepbuild/conformance": {
@@ -1073,6 +1097,12 @@
       }
     },
     "crates/deep-show/Cargo.toml": {
+      "build-dependencies": {
+        "sha2": {
+          "spec": "^0.10",
+          "why": "Issue #1901: the build script's digest of the sources the binary is built from, which the machine fingerprint names. Already in the workspace tree."
+        }
+      },
       "dependencies": {
         "deep-canvas-cells": {
           "spec": "* path=../deep-canvas-cells",
@@ -1197,6 +1227,14 @@
         "deep-logic": {
           "spec": "* path=../deep-logic",
           "why": "Issue #499: the logic module's world, which a live play steps on the transport's clock."
+        },
+        "deep-canvas-physics": {
+          "spec": "* path=../deep-canvas-physics",
+          "why": "Issue #1918: the physics module, physics@1, whose column.source@1 entries the full set seals."
+        },
+        "deep-physics-rapier": {
+          "spec": "* path=../deep-physics-rapier",
+          "why": "Issue #1918: the Rapier backend each world a scene lists bakes on, so its occurrence lists and outputs reach the column view."
         }
       },
       "target.'cfg(target_os = \"macos\")'.dependencies": {
@@ -1582,6 +1620,10 @@
           "spec": "* path=../deep-canvas",
           "why": "Issue #380: the registry the effects module registers its passes and fixture through, and the core's ops for its constants."
         },
+        "deep-canvas-scene3d": {
+          "spec": "* path=../deep-canvas-scene3d",
+          "why": "Issue #486: scene3d's entries of gpu.output@1 and gpu.function@1 (the lobe outputs, occlusion, normal, core.bump@1) and which lobe each output needs, which the operator check types, inlines and refuses by; effects already depends on scene3d as a canvas module."
+        },
         "serde_json": {
           "spec": "^1",
           "why": "Issue #380: GPU operators are JSON documents (gpu.step@1); the check reads them and the shipped library writes them."
@@ -1953,6 +1995,10 @@
         "deep-canvas-physics": {
           "spec": "* path=../deep-canvas-physics",
           "why": "Issue #2009: the world reader, the caps and the backend interface this backend implements, with no copy of its own."
+        },
+        "deep-canvas-motion": {
+          "spec": "* path=../deep-canvas-motion",
+          "why": "Issue #1918: a world inside a scene reads the paths the scene's channels and drivers write, evaluated by the motion module at each step's time."
         },
         "rapier3d": {
           "spec": "=0.36.1",

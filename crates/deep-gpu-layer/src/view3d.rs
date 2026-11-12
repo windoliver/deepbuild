@@ -14,7 +14,7 @@ use deep_canvas_marks::look::Status;
 use deep_canvas_scene3d::label::PAGE;
 use deep_canvas_scene3d::look::Look3;
 use deep_canvas_scene3d::module::{GEOMETRY_PASS, OUTPUT_PASS};
-use deep_canvas_scene3d::scene::{evaluate_sourced, placed_at, Labels, Scene};
+use deep_canvas_scene3d::scene::{evaluate_sourced, Labels, Scene};
 use deep_gpu::device::Backend;
 use deep_scene3d_render::status::{Mode, COLORS_PASS, GUARD_PASS};
 use deep_scene3d_render::SHADOW_PASS;
@@ -112,6 +112,9 @@ struct Args {
     packs: Vec<(Option<String>, std::path::PathBuf)>,
     /// The paths whose evaluated values each frame reports (#429).
     evaluate: Vec<String>,
+    /// The items whose drawn vertices and sway gust each frame reports, read back from the GPU
+    /// (#2016).
+    sway: Vec<String>,
     /// Writer layers not visible in this session, which draw, light and cast nothing (#422).
     hidden: BTreeSet<String>,
     /// Each frame reports the key sun's cascade splits (#422).
@@ -399,9 +402,17 @@ fn parse(call: &Value) -> Result<Args, Value> {
             _ => return Err(bad("evaluate lists paths items/<id>/…")),
         }
     }
+    let mut sway = Vec::new();
+    for id in call["sway"].as_array().into_iter().flatten() {
+        match id.as_str() {
+            Some(id) => sway.push(id.to_string()),
+            None => return Err(bad("sway lists item IDs")),
+        }
+    }
     Ok(Args {
         packs,
         evaluate,
+        sway,
         docs,
         doc,
         look,
@@ -568,25 +579,6 @@ fn lowered(doc: &Value, packs: &Packs) -> Result<Value, Value> {
     Ok(checked.lowered)
 }
 
-/// Each path of `paths` (`items/<id>/<field>…`) as the canvas core evaluates `doc` at `t`
-/// (#429): null where the item or field isn't there.
-fn values_at(doc: &Value, t: i64, paths: &[String]) -> Result<Value, Value> {
-    let items = placed_at(doc, t).map_err(|r| refused(r.code, r.path))?;
-    let mut out = Map::new();
-    for path in paths {
-        let rest = path.strip_prefix("items/").unwrap_or_default();
-        let (id, field) = rest.split_once('/').unwrap_or((rest, ""));
-        let value = items
-            .iter()
-            .find(|(i, _, _)| i == id)
-            .and_then(|(_, item, _)| item.pointer(&format!("/{field}")))
-            .cloned()
-            .unwrap_or(Value::Null);
-        out.insert(path.clone(), value);
-    }
-    Ok(Value::Object(out))
-}
-
 /// A patch's ops applied as `writer`, to the layer its connection stands for.
 pub(crate) fn apply_patch(
     doc: &mut Value,
@@ -696,6 +688,35 @@ fn pick(
         .iter()
         .find(|(_, v)| *v == p)
         .map(|(id, _)| id.clone())
+}
+
+/// #1976's planted depth reader: each hit's point put back from the depth target, the view-axis
+/// depth at the pointer's pixel unprojected through the pointer, as a hit must never be.
+fn depth_hits(
+    hits: &mut [deep_canvas_scene3d::hit::Hit],
+    cam: &deep_canvas_scene3d::scene::Camera,
+    depth: Option<&[u8]>,
+    size: [u32; 2],
+    at: [f64; 2],
+) {
+    let i = at[1].floor() as usize * size[0] as usize + at[0].floor() as usize;
+    let Some(z) = depth.and_then(|d| d.get(i * 4..i * 4 + 4)) else {
+        return;
+    };
+    let p = cam.unproject(
+        at[0],
+        at[1],
+        f64::from(f32::from_le_bytes([z[0], z[1], z[2], z[3]])),
+    );
+    let o = if cam.perspective {
+        cam.eye
+    } else {
+        cam.unproject(at[0], at[1], 0.0)
+    };
+    for h in hits {
+        h.point = p;
+        h.distance = (0..3).map(|k| (p[k] - o[k]).powi(2)).sum::<f64>().sqrt();
+    }
 }
 
 fn srgb_decode(c: u8) -> f64 {
@@ -933,6 +954,10 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
     if !broken.is_empty() {
         return Err(json!({"code": "refused", "issues": broken}));
     }
+    crate::physics::bake(&mut args.doc)?;
+    crate::particles::refuse(&args.doc, app.planted)?;
+    let order = frame_order(args.from, args.frames, &args.seeks);
+    let mut baked = crate::fed::bake(&args.doc, &args.assets, (&order, args.fps), app.planted)?;
     let packed = args.doc["packs"].as_array().is_some_and(|p| !p.is_empty());
     let mut lowered_doc = if packed {
         Some(lowered(&args.doc, &packs)?)
@@ -1160,17 +1185,22 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             if !args.hidden.is_empty() {
                 composed = without_layers(&composed, &args.hidden);
             }
+            deep_canvas_physics::written::write(&mut composed, t);
+            baked.settle(&mut composed, t);
             let outlines = &pack_sealed()?.outlines;
             let mut scene =
                 evaluate_sourced(&composed, t, &args.look, &mut labels, &read, outlines)
                     .map_err(|r| refused(r.code, r.path))?;
+            let selected = (&mut args.selection, &mut viewer_selection);
+            let presented = crate::fed::framed(&mut scene, &composed, t, selected, app.planted);
             if build_ms.is_none() {
                 build_ms = Some(started.elapsed().saturating_sub(opening).as_secs_f64() * 1e3);
             }
             let values = if args.evaluate.is_empty() {
                 None
             } else {
-                Some(values_at(&composed, t, &args.evaluate)?)
+                let at = (&read as deep_canvas_scene3d::scene::Assets<'_>, app.planted);
+                Some(crate::fed::values(&composed, t, &args.evaluate, at)?)
             };
             // Its maps, made ready in the decode worker once per run and held to the
             // document's decoded-image cap (#423).
@@ -1200,11 +1230,6 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             }
             if n == args.from {
                 receipt = made;
-            }
-            // A particles@1 count past its class's limit is refused, never clamped (#420).
-            let class = args.doc.pointer("/budget/class").and_then(Value::as_str);
-            if let Some(path) = effects::count_refusal(&scene, class) {
-                return Err(refused("out_of_range", path));
             }
             // #420 AC6's wrong programs: mesh edges unwelded, or drawn over their faces.
             scene.plant_edges(
@@ -1238,6 +1263,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                         json!(l.segments.iter().map(|s| [s.a, s.b]).collect::<Vec<_>>()),
                     )
                 })
+                .chain(crate::fed::segments(&scene, &composed))
                 .collect();
             // A stroke binding draws its outline around the object, exact (#386).
             if let Some(status) = status.as_ref().filter(|_| bound) {
@@ -1293,6 +1319,8 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 seeding,
             );
             let mut settings = settings;
+            let particles =
+                crate::particles::frame(&mut settings, &args.doc, &scene, fx_t, call, app.planted)?;
             if dirt.is_some() {
                 settings.dirt = dirt.clone();
             }
@@ -1754,9 +1782,21 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 frame.insert("notices".into(), json!(notices));
             }
             frame.insert("resident".into(), json!(resident));
+            if !args.sway.is_empty() {
+                let rows: Map<String, Value> =
+                    session3::sway(app, scene.clone(), args.sway.clone())
+                        .into_iter()
+                        .map(|(id, gust, positions)| {
+                            (id, json!({"gust": gust, "positions": positions}))
+                        })
+                        .collect();
+                frame.insert("sway".into(), Value::Object(rows));
+            }
             if let Some(values) = values {
                 frame.insert("values".into(), values);
             }
+            frame.extend(particles.map(|p| ("particles".to_string(), p)));
+            frame.insert("selection".into(), presented);
             if let Some(bytes) = drawn.gpu_bytes {
                 frame.insert("gpu_bytes".into(), json!(bytes));
             }
@@ -1890,6 +1930,15 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                     .expect("a list")
                     .push(json!({"code": "fragments_capped", "fragments": drawn.counts.fragments}));
             }
+            // A light response's negative or non-finite return, once per operator and time (#485).
+            for (op, t) in &drawn.counts.light_response_range {
+                frame
+                    .entry("notices")
+                    .or_insert_with(|| json!([]))
+                    .as_array_mut()
+                    .expect("a list")
+                    .push(json!({"code": "light_response.range", "op": op, "t": t}));
+            }
             // Lights the budget left out, and shadows it dropped, reported once per change.
             let c = &drawn.counts;
             if c.lights_left_out != left_out || c.shadows_dropped != dropped {
@@ -1914,6 +1963,8 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 frame.insert("encoded".into(), json!(encoded));
                 frame.insert("replayed".into(), json!(c.replayed));
                 frame.insert("instances_written".into(), json!(c.instances_written));
+                frame.insert("element_uploads".into(), json!(c.element_uploads));
+                frame.insert("row_uploads".into(), crate::fed::rows(&composed, c));
                 frame.insert("cpu_culled".into(), json!(c.cpu_culled));
                 frame.insert("counts_read_back".into(), json!(c.counts_read_back));
                 let draws: Vec<Value> = c
@@ -2033,7 +2084,20 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                                 margin,
                             )
                         });
-                        json!({"at": at, "pick": p})
+                        // #1976: where the ray through the pointer meets the picked item.
+                        let mut hit = p.as_deref().map_or_else(Vec::new, |p| {
+                            deep_canvas_scene3d::hit::hits(&evaluated, *at, &[p])
+                        });
+                        if app.planted == Some(Planted::HitFromDepth) {
+                            depth_hits(&mut hit, &evaluated.camera, drawn.view_depth.as_deref(), size, *at);
+                        }
+                        let hit: Vec<Value> = hit
+                            .iter()
+                            .map(|h| {
+                                json!({"item": h.item, "sub": h.sub, "point": h.point, "normal": h.normal, "distance": h.distance})
+                            })
+                            .collect();
+                        json!({"at": at, "pick": p, "hit": hit})
                     })
                     .collect();
                 frame.insert("clicks".into(), json!(answered));

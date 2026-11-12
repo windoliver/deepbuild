@@ -1,0 +1,66 @@
+{
+  "wrong": {
+    "rev": 1,
+    "expansions": [],
+    "issues": [
+      {
+        "check": "document.validate",
+        "code": "formula.alt_mismatch",
+        "severity": "error",
+        "ids": [
+          "eq"
+        ],
+        "path": "items/eq/params/alt",
+        "actual": {
+          "item": "eq",
+          "alt": "a^2+b^2=c^3",
+          "source": "a^2 + b^2 = c^2"
+        },
+        "what": "The vector names a typeset job's output, and its alt isn't the job's source.",
+        "fix": "Set alt to the job's source, or leave it out to take the source as the accessible name."
+      }
+    ],
+    "issues_evidence": "caf8e020e22f5b68a59c97f9d6e9c041aa49eedcdda0cd9ccdb841fdda025481",
+    "snapshots": [],
+    "outcome": "refused",
+    "backends": {
+      "fonts": {
+        "name": "fonts.bundled",
+        "version": "1.0.0"
+      },
+      "cpu": {
+        "name": "aarch64",
+        "version": "1.0.0"
+      }
+    },
+    "core": "core@0.0.0",
+    "set_digest": "d3a88904ca29b49b542628f6f924cd551240c4c962bf80c03b6cc8ef8e5bf8f7"
+  },
+  "right": {
+    "rev": 1,
+    "expansions": [],
+    "issues": [],
+    "issues_evidence": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "snapshots": [],
+    "changed": [],
+    "unchanged": [],
+    "created": [
+      "cam",
+      "eq"
+    ],
+    "removed": [],
+    "outcome": "presented",
+    "backends": {
+      "fonts": {
+        "name": "fonts.bundled",
+        "version": "1.0.0"
+      },
+      "cpu": {
+        "name": "aarch64",
+        "version": "1.0.0"
+      }
+    },
+    "core": "core@0.0.0",
+    "set_digest": "d3a88904ca29b49b542628f6f924cd551240c4c962bf80c03b6cc8ef8e5bf8f7"
+  }
+}

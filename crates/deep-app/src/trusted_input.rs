@@ -25,6 +25,12 @@ pub fn delivered(_: PressEdge) -> Option<(f64, bool)> {
     None
 }
 
+/// No platform here names a key's source yet: every key is one the OS must confirm.
+#[cfg(not(target_os = "macos"))]
+pub fn key_from_hardware() -> bool {
+    false
+}
+
 #[cfg(target_os = "macos")]
 mod macos {
     use objc2::MainThreadMarker;
@@ -72,6 +78,23 @@ mod macos {
                 && field(CGEventField::EventSourceStateID) == Some(hid.0 as i64)
                 && field(CGEventField::EventSourceUnixProcessID) == Some(0),
         ))
+    }
+
+    /// Whether the key AppKit is delivering came from the keyboard, as the HID system says (#1462): a key another process
+    /// posts, or one a screen reader or Switch Control sends, is not.
+    pub fn key_from_hardware() -> bool {
+        let Some(event) = NSApplication::sharedApplication(main_thread()).currentEvent() else {
+            return false;
+        };
+        if event.r#type() != NSEventType::KeyDown {
+            return false;
+        }
+        let Some(cg) = event.CGEvent() else {
+            return false;
+        };
+        let field = |field| CGEvent::integer_value_field(Some(&cg), field);
+        field(CGEventField::EventSourceStateID) == CGEventSourceStateID::HIDSystemState.0 as i64
+            && field(CGEventField::EventSourceUnixProcessID) == 0
     }
 
     /// Whether this process may capture the screen, as the OS reports it: the first call of

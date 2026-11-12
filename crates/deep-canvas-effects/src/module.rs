@@ -39,7 +39,9 @@ fn manifest() -> Manifest {
             "scene3d".to_string(),
             Dependency {
                 range: Range::parse("^1").expect("a range"),
-                optional: false,
+                // Its operators reach scene3d's GPU registry entries through the core's
+                // registries, so a build without scene3d holds effects (#485).
+                optional: true,
             },
         )]
         .into_iter()
@@ -138,6 +140,15 @@ fn raised(code: &'static str, path: String, what: String) -> Raised {
         what,
         fix_ops: None,
     }
+}
+
+/// #449's rule over a particles@1 item: its count against its class's cap (Particles
+/// `particles@1`: `count`), refused at check, naming the item, its count and the cap.
+fn particles_rule(doc: &Value, id: &str, item: &Value) -> Vec<Raised> {
+    crate::particles::rule::count(doc, id, item, None)
+        .map(|r| raised(r.code, r.path, r.what))
+        .into_iter()
+        .collect()
 }
 
 /// The document's check over an operator item: the whole operator check (nothing runs before it
@@ -242,8 +253,9 @@ fn operator_rule(doc: &Value, id: &str, item: &Value) -> Vec<Raised> {
 
 /// #431: `backdrop` reads the opaque scene's copy, which only a see-through part's material
 /// (alpha_mode blend or transmission above 0) has, and `shadow_filter` runs only in a see-through
-/// part's shadow passes under `shadow: colored`; each material that names the operator elsewhere
-/// is refused, naming the step or the output and the material.
+/// part's shadow passes under `shadow: colored`; #486: a lobe output only on a material that has
+/// its lobe. Each material that names the operator elsewhere is refused, naming the step or the
+/// output and the material.
 fn binding_rules(doc: &Value, id: &str, op: &graph::Operator) -> Vec<Raised> {
     let mut out = Vec::new();
     if op.kind != Kind::Material {
@@ -272,6 +284,21 @@ fn binding_rules(doc: &Value, id: &str, op: &graph::Operator) -> Vec<Raised> {
                 at("outputs/shadow_filter"),
                 format!("{id}'s output shadow_filter runs only in a see-through part's shadow passes under shadow: colored, and material {mid} isn't one"),
             ));
+        }
+        // #486: a lobe output replaces a lobe the material has; it never turns one on.
+        for name in op.outputs.keys() {
+            if let Some(field) = deep_canvas_scene3d::gpu::lacks(doc, mid, name) {
+                let off = if field == "specular_color" {
+                    "white"
+                } else {
+                    "0"
+                };
+                out.push(raised(
+                    "operator_kind_rule",
+                    at(&format!("outputs/{name}")),
+                    format!("{id}'s output {name} replaces a lobe material {mid} lacks: its {field} is {off}, and no channel, driver, control or variant moves it"),
+                ));
+            }
         }
     }
     out
@@ -531,10 +558,74 @@ fn group_rule(doc: &Value, id: &str, item: &Value) -> Vec<Raised> {
     out
 }
 
+/// The pack check of a pack's `operators` (#1720; Pack: fx@1 named operators): each, as a graph with
+/// its `grow` (fx@1) or as an entry around its graph (chrome-fx@1), passes the whole operator check
+/// with the pack's step functions inlined.
+fn pack_operators(manifest: &Value) -> Vec<(String, String)> {
+    let Some(operators) = manifest["operators"].as_object() else {
+        return vec![(
+            String::new(),
+            "operators names each operator's graph".into(),
+        )];
+    };
+    let functions = crate::chrome_fx::functions(manifest);
+    let text = |issues: Vec<graph::Issue>| {
+        issues
+            .iter()
+            .map(|i| i.to_json().to_string())
+            .collect::<Vec<_>>()
+            .join("; ")
+    };
+    operators
+        .iter()
+        .filter_map(|(name, entry)| {
+            let refused = if entry.get("graph").is_some() {
+                crate::chrome_fx::read_entry(name, entry, &functions)
+                    .err()
+                    .map(|r| r["detail"].as_str().unwrap_or_default().to_string())
+            } else {
+                let mut op = entry.clone();
+                if let Some(o) = op.as_object_mut() {
+                    o.remove("grow");
+                }
+                graph::inline_functions(&op, &functions, true)
+                    .and_then(|op| check::read_and_check(&op).map(|_| ()))
+                    .err()
+                    .map(text)
+            };
+            refused.map(|why| (name.clone(), why))
+        })
+        .collect()
+}
+
+/// A pack's `functions` (#1720): step functions, each with its ports and steps; the operator check
+/// reads a body as each operator that uses it inlines it.
+fn pack_functions(manifest: &Value) -> Vec<(String, String)> {
+    let Some(functions) = manifest["functions"].as_object() else {
+        return vec![(String::new(), "functions names each step function".into())];
+    };
+    functions
+        .iter()
+        .filter(|(_, f)| {
+            !(f["ports"]["in"].is_object()
+                && f["ports"]["out"].is_object()
+                && f["steps"].is_object())
+        })
+        .map(|(name, _)| {
+            (
+                name.clone(),
+                format!("{name} is a step function: ports in, ports out and steps"),
+            )
+        })
+        .collect()
+}
+
 fn register(r: &mut Registrar) {
     for (name, place) in PASSES {
         r.pass(name, place);
     }
+    r.pack_field("operators", pack_operators)
+        .pack_field("functions", pack_functions);
     // #483: the structural steps, entries of the core's gpu.step@1, each with its exactness
     // fixture and planted twin.
     for (name, value) in crate::table::structural_entries() {
@@ -546,6 +637,8 @@ fn register(r: &mut Registrar) {
         r.rule(&kind[..kind.len() - 2], operator_rule);
     }
     r.rule("group", group_rule);
+    // #449: a particles@1 item's count against its budget class's cap, wherever the check runs.
+    r.rule("particles", particles_rule);
     for (code, meaning) in [
         ("not_exact", "An operator declared exact computes as less, or a check that holds on any machine reads an operator that isn't exact."),
         ("operator_budget_class", "The document's budget class doesn't run this operator's kind."),

@@ -58,6 +58,9 @@ use deep_app::{commands::Palette, init, menu_bar_line, mount_panel, show::Canvas
 use gpui_kit::*;
 
 // The probes that stay (#1457): each a flag the suites run as `target/debug/deep-app --flag`, in a file of its own.
+#[cfg(all(feature = "canvas-fixture", target_os = "macos"))]
+#[path = "probes/canvas.rs"]
+mod canvas;
 #[cfg(target_os = "macos")]
 #[path = "probes/capture_bug.rs"]
 mod capture_bug;
@@ -103,6 +106,12 @@ fn main() {
     #[cfg(all(feature = "chrome-fixture", target_os = "macos"))]
     if std::env::args().nth(1).as_deref() == Some("--chrome") {
         chrome::run(std::env::args().skip(2).collect());
+        return;
+    }
+    // Issue #1485: `--canvas <scenario.json>`, in a canvas-fixture build.
+    #[cfg(all(feature = "canvas-fixture", target_os = "macos"))]
+    if std::env::args().nth(1).as_deref() == Some("--canvas") {
+        canvas::run(std::env::args().nth(2));
         return;
     }
     #[cfg(feature = "panel-check")]
@@ -159,8 +168,17 @@ fn main() {
     if mode == Mode::SetUp {
         match deep_app::setup::set_up() {
             Ok(line) => println!("{line}"),
-            Err(error) => {
-                eprintln!("deep-app: {error}");
+            Err(stopped) => {
+                deep_app::setup::refresh();
+                let line = stopped
+                    .line
+                    .or_else(deep_app::setup::reason)
+                    .unwrap_or_default();
+                eprintln!("deep-app: {line}");
+                // A terminal shows what setup printed too; the window keeps it one press away (#1100).
+                if !stopped.output.trim().is_empty() {
+                    eprintln!("{}", stopped.output.trim());
+                }
                 std::process::exit(1);
             }
         }
@@ -321,6 +339,13 @@ fn main() {
         if opens {
             load_installed(window, palette, mounts, cx);
         }
+        // An assistive client asks the window what is focused; gpui's view knows, so the window asks it (#1462).
+        #[cfg(target_os = "macos")]
+        // SAFETY: gpui registered its window class when it opened the window above, and this executable is never
+        // unloaded, so the method added to the class stays valid.
+        unsafe {
+            accesskit_macos::add_focus_forwarder_to_window_class("GPUIWindow")
+        };
         cx.activate(true);
     });
 }
@@ -504,12 +529,23 @@ mod notifications {
             let mut watch = HubWatch::default();
             let (mut begun, mut active) = (false, false);
             let notifies = held.is_some();
+            let answered = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
             let mut shown = deep_app::menu_bar_line();
+            // The status item's menu: a line per session with its state's word and mark (#1462).
+            let mut listed: Vec<String> = Vec::new();
             if notifies {
                 read_setting(&mut notifier);
             }
             loop {
                 cx.background_executor().timer(TICK).await;
+                // macOS's Reduce Motion as it is now, not only at launch: the working marks hold still under it (#2021).
+                #[cfg(target_os = "macos")]
+                cx.update(|cx| {
+                    cx.set_reduce_motion(
+                        objc2_app_kit::NSWorkspace::sharedWorkspace()
+                            .accessibilityDisplayShouldReduceMotion(),
+                    )
+                });
                 // A later launch brings the app forward; `deep open` and a link open their address (#1460).
                 for call in held.as_ref().map(Held::calls).unwrap_or_default() {
                     eprintln!("deep-app: brought forward");
@@ -533,6 +569,25 @@ mod notifications {
                 if notifies && active && !was_active {
                     read_setting(&mut notifier);
                 }
+                // macOS asks whether DeepBuild may notify you at the Set up click (#1100), or, set up from a terminal,
+                // the first time the app comes forward; never when an ask comes due. Once you've answered, it's read.
+                let not_asked = notifier.reach(false).setting == NotificationSetting::NotAsked;
+                if notify::take_ask()
+                    || (notifies
+                        && active
+                        && !was_active
+                        && not_asked
+                        && !deep_app::setup::needed())
+                {
+                    eprintln!("deep-app: asked macOS to allow notifications");
+                    let answered = answered.clone();
+                    super::notification_center::request(move || {
+                        answered.store(true, std::sync::atomic::Ordering::SeqCst);
+                    });
+                }
+                if answered.swap(false, std::sync::atomic::Ordering::SeqCst) {
+                    read_setting(&mut notifier);
+                }
                 let now = now();
                 if deep_app::setup::refresh() {
                     cx.update(|cx| cx.refresh_windows());
@@ -548,7 +603,10 @@ mod notifications {
                     begun = true;
                     post(&mut notifier, now, cx);
                 }
-                let reach = notifier.reach(watch.down());
+                let reach = notify::Reach {
+                    since: watch.since(),
+                    ..notifier.reach(watch.down())
+                };
                 let reached = reach != notify::reach();
                 if reached {
                     notify::publish(reach);
@@ -563,7 +621,15 @@ mod notifications {
                         super::menu_bar::show_title(&line);
                         shown = line;
                     }
-                    deep_app::card::tick(now, cx);
+                    let lines = record::with_view(|view| {
+                        deep_app::states::menu(&view.table(), deep_app::views::now())
+                    })
+                    .unwrap_or_default();
+                    if lines != listed {
+                        super::menu_bar::show_menu(&lines);
+                        listed = lines;
+                    }
+                    deep_app::views::tick(now, cx);
                 });
             }
         })
@@ -639,8 +705,8 @@ mod menu_bar {
     use deep_app::brand;
     use objc2::{rc::Retained, AllocAnyThread as _, MainThreadMarker};
     use objc2_app_kit::{
-        NSApplication, NSBitmapImageRep, NSCellImagePosition, NSImage, NSSound, NSStatusBar,
-        NSStatusItem, NSVariableStatusItemLength,
+        NSApplication, NSBitmapImageRep, NSCellImagePosition, NSImage, NSMenu, NSMenuItem, NSSound,
+        NSStatusBar, NSStatusItem, NSVariableStatusItemLength,
     };
     use objc2_foundation::{NSData, NSSize, NSString};
 
@@ -693,6 +759,26 @@ mod menu_bar {
         });
     }
 
+    /// The status item's menu under the count (#1462): a line per session, its task's title, its state's word and
+    /// its mark, as `states::menu` writes them and the replica reports them.
+    pub fn show_menu(lines: &[String]) {
+        let mtm = MainThreadMarker::new().expect("the menu bar is set from the main thread");
+        let menu = NSMenu::new(mtm);
+        for line in lines {
+            // SAFETY: a plain item with no action, made and added on the main thread.
+            let item = unsafe {
+                NSMenuItem::initWithTitle_action_keyEquivalent(
+                    mtm.alloc::<NSMenuItem>(),
+                    &NSString::from_str(line),
+                    None,
+                    &NSString::from_str(""),
+                )
+            };
+            menu.addItem(&item);
+        }
+        ITEM.with(|item| item.setMenu(Some(&menu)));
+    }
+
     /// Whether the app is the active one.
     pub fn app_active() -> bool {
         let mtm = MainThreadMarker::new().expect("read from the main thread");
@@ -711,6 +797,7 @@ mod menu_bar {
 mod menu_bar {
     pub fn set_dock_icon() {}
     pub fn show_title(_: &str) {}
+    pub fn show_menu(_: &[String]) {}
     pub fn app_active() -> bool {
         false
     }

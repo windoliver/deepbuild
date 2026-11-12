@@ -262,6 +262,53 @@ Linux sandbox helper was tested inside two Linux virtual machines (Ubuntu and Fe
 crate code (the 14 sites in blind tests 1141, 995 and 327 remain); `cargo fmt --check` at 1,258 hunks, main's
 1,259; PR #2051's patch still applies on this tree for the 11 files both change.
 
+## Issues filed for what is left
+
+After the third pass, seven readers checked every finding again against the merged code, each trying to refute
+it. Of 304 entries in the area files: 138 held, 84 were already fixed, 37 turn on intent, 10 are covered by an open
+issue, 14 are a second copy of a finding in the same file, 17 are true with no effect, and 4 were wrong.
+
+The ones that held are filed in groups a single change can close. They were read from the code, not reproduced,
+unless the issue says so.
+
+| Issue | Title | Holds |
+|---|---|---|
+| #2118 | Claims and checks in the hub: a check that never started, a carried failure and a Closes check each end in the right verdict | 8 findings |
+| #2119 | Setup and doctor keep what a running session wrote, and name the home and program they really use | 4 findings |
+| #2120 | Push holds, starts and runs: a forced push, an armed merge with no number and two starts at once are each held to their rule | 8 findings |
+| #2121 | Agents sync, skill updates and their undo leave your files as the plan said | 9 findings |
+| #2122 | Products, heavy leases, the canvas core and waits: five cases the hub gets wrong after a restart or a failure | 5 findings |
+| #2123 | Wiki builds, channel sends, library fetches, review threads and disputes each finish or say why not | 6 findings |
+| #2124 | No package takes another plug-in's names through replaces, and the published API, the help text and the facts reader match the code | 4 findings |
+| #2125 | The extension host: series windows, schedules, work deliveries and project enters behave after a restart, a failure or a second registration | 8 findings |
+| #2126 | A child that exits before it reads its input fails its call and never takes the hub or an eval down | 3 findings |
+| #2127 | The Linux sandbox: what it checked is what runs, an x32 call meets the filter, a run listens only where granted, and git steps are not granted `/` | 4 findings |
+| #2128 | GitHub delivery: a verdict after a restart finds its commit, one failing compare does not block a repo, and a failed read never refuses a status | 3 findings |
+| #2129 | Asks targets, the runner, env-local, budget, the session plug-in, the Lean comparator and evidence: eight defects in the small packages | 8 findings |
+| #2130 | Document check and registry: a patch to a budgeted document takes the whole check, and the seal refuses what it can't digest or sees twice | 7 findings |
+| #2131 | Recipes: a step that names a recipe, a false condition, a break-out and an `at` with no `pos` each expand or refuse as the design says | 8 findings |
+| #2132 | Logic items: determinism never passes a time it did not seek to, and a tour with a period under a step does not hang the bake | 3 findings |
+| #2133 | deep-show: a terminal whose host ended, a pack file outside its folder, the GPU lease and a video item's frame | 6 findings |
+| #2134 | deep-hook: a standing rule for one cloud account covers only that account, and an option's value is never read as the subcommand | 2 findings |
+| #2135 | The app and the relay: an ask whose Later ended is back in Needs you, two packages' views keep their own panels, and a relay check that never ran is not passed | 3 findings |
+| #2136 | Proof lanes: the unit lane runs no by-hand or fixture test, and a runner that exits non-zero is never passed | 6 findings |
+| #2137 | The interface lane, the closure lint, the loop facts and planted programs in shipped TypeScript | 4 findings |
+| #2138 | Mark sets: the numbers check holds text marks to the row limit, a too-wide series is refused before it is sized, and a dashed line keeps the dash limit | 8 findings |
+| #2139 | A seek in a mix with no processors, the effects reference interpreter's mip chain and deep-motion's README | 3 findings |
+| #2140 | Codecs and video: sums over a movie file's numbers never overflow, the encode job reads one frame at a time, and a failed AAC decode is an error | 5 findings |
+| #2141 | The structural steps' test never passes with nothing run, a table hash that is not 64 hex digits is refused, and the glyph atlas keys a variable font's coordinates | 3 findings |
+| #2142 | 3D scenes: the frame fast path moves everything that reads t, a proxy's hash reads its ratio and error, and tangents give one bitangent sign | 7 findings |
+| #2143 | Owner calls from the Nov 9 audit: 37 questions where the design is silent or says two things | 37 questions |
+| #2144 | The canvas lint passes on main: 30 findings no known-failures entry records | a lane red on main |
+| #2145 | The carried-patch check passes on main: 18 hunks in the vendored UI crates have no row, no mark or pass their budget | a lane red on main |
+| #2146 | Every verdict and doctor code maps to a verdict, and doctor.item@1's frozen digest matches its schema: the conformance lint passes on main | a lane red on main |
+| #2147 | The slot check passes on main: the library source slot has a kit, and the channel kit's reference fill is judged with its answers awaited | a lane red on main |
+| #2148 | The closure drift check and the record reader guard pass on main: Map projections has its closure list, and the app reads the record through its one reader | a lane red on main |
+| #2149 | cargo fmt --all --check passes on main | a lane red on main |
+
+Covered by issues that were already open: #2075, #1853, #281, #1823, #2044, and with a comment adding the
+missing case, #1847, #1624, #47 and #230. #2086 (clippy) has a comment saying what this change leaves.
+
 ## Left alone on purpose
 
 - **`cargo fmt`.** 1,258 hunks across the crates. One command fixes it (`cargo fmt --all`), and it will conflict

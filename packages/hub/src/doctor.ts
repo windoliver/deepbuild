@@ -123,6 +123,14 @@ export async function doctorItems(env: NodeJS.ProcessEnv, options: { prompt: boo
       });
       for (const f of failing) add('hub.jobs', 'deepbuild', 'job_failing', 'warn', `the hub's job ${f.name} failed ${f.failures} times in a row since ${new Date(f.since).toISOString()}: ${f.error}`, 'Read the error; the job runs again on its own, and its next clean run clears this.');
       if (!failing.length) add('hub.jobs', 'deepbuild', 'healthy', 'ok', `none of the hub's ${Object.keys(jobs).length} jobs has failed ${JOB_FAILURES} times in a row`, 'Nothing to do.');
+      // The release's packs (#1720): one that failed the canvas core's pack check isn't installed, and is named here.
+      const packs = Array.isArray(reply.result.packs) ? reply.result.packs.filter(isObj) : [];
+      const named = (p: Obj) => `${typeof p.pack === 'string' ? `${p.pack}@${String(p.version)}` : 'a pack'} (packs/${String(p.folder)})`;
+      const refused = packs.filter((p) => p.state === 'refused');
+      const unchecked = packs.filter((p) => p.state === 'not_checked');
+      for (const p of refused) add('canvas.packs', 'deepbuild', 'pack_refused', 'fail', `the release's pack ${named(p)} failed the pack check, so it isn't installed: ${JSON.stringify(p.issues).slice(0, 600)}`, `Fix packs/${String(p.folder)} so it passes the pack check, or reinstall DeepBuild; then restart the hub.`);
+      if (!refused.length && unchecked.length) add('canvas.packs', 'deepbuild', 'not_checked', 'skip', `the canvas core hasn't checked ${unchecked.map(named).join(', ')} since the hub started`, 'Show a document or run deep_kinds once, then `deep doctor` again.');
+      if (!refused.length && !unchecked.length) add('canvas.packs', 'deepbuild', 'healthy', 'ok', `the release's ${packs.length} packs passed the pack check and are installed`, 'Nothing to do.');
       // What macOS says of the app's notifications (#994): only the app can read it, so with no reading it isn't checked.
       const setting = reply.result.notifications;
       if (setting === 'allowed') add('app.notifications', 'deepbuild', 'healthy', 'ok', 'macOS shows the app\'s notifications', 'Nothing to do.');
@@ -155,19 +163,7 @@ export async function doctorItems(env: NodeJS.ProcessEnv, options: { prompt: boo
   const file = claudeSettings();
   const settings = readJson(file);
   const record = installed(root);
-  const cantRun = unrunnable(root);
-  const hooks = isObj(settings?.hooks) ? settings.hooks : {};
-  const present = (event: string, command: string) => Array.isArray(hooks[event]) && (hooks[event] as unknown[]).some((g) => isObj(g) && Array.isArray(g.hooks) && g.hooks.some((h) => isObj(h) && h.command === command));
-  if (!record) add('claude.hooks', 'claude-code', 'hooks_missing', 'fail', `DeepBuild's hooks aren't installed: no setup has written them to ${file}`, 'Run `deep setup`, which adds them beside yours.');
-  else {
-    // The planted wrong program takes setup's record as the installation and never reads your settings file.
-    const missing = plant() === 'doctor-misses-hooks' ? [] : Object.entries(record.hooks).filter(([event, groups]) => groups.some((g) => (g.hooks as Obj[]).some((h) => !present(event, String(h.command))))).map(([event]) => event);
-    const gone = cantRun.filter((u) => u.agent === 'claude-code');
-    if (missing.length) add('claude.hooks', 'claude-code', 'hooks_missing', 'fail', `DeepBuild's ${missing.join(', ')} hook entr${missing.length === 1 ? 'y is' : 'ies are'} missing from ${file}, so those hooks don't reach the hub`, 'Run `deep setup`, which writes them back beside yours.');
-    else if (gone.length) for (const u of gone) add('claude.hooks', 'claude-code', 'hook_program_missing', 'fail', `${describe(u)}, so those hooks can't run`, 'Run `deep setup`, which builds deep-hook and points the entries at it.');
-    else add('claude.hooks', 'claude-code', 'healthy', 'ok', `DeepBuild's entries for ${Object.keys(record.hooks).join(', ')} are in ${file}`, 'Nothing to do.');
-  }
-  for (const where of hooksOff(file, settings, options.cwd, env)) add('claude.hooks_enabled', 'claude-code', 'hooks_disabled', 'fail', where.evidence, where.fix);
+  items.push(...hookItems(env, options.cwd).filter((i) => i.agent === 'claude-code'));
   if (record) for (const order of hookOrders(settings, commands(record))) add('claude.hook_order', 'claude-code', 'healthy', 'ok', order, 'Nothing to do: Claude Code starts a hook\'s entries together, so none waits on another; this is the order it reads them in.');
   items.push(...relationItems());
   items.push(...deprecatedItems(root));
@@ -225,6 +221,50 @@ function serviceItem(root: string): Item {
   }
   if (programs.some((p) => p.startsWith(versions))) return item('healthy', 'ok', `the hub's login service runs a promoted build: ${programs.join(' ')}`, 'Nothing to do.');
   return item('service_unpromoted', 'warn', `the hub's login service runs ${programs.join(' ') || 'no program'}, not a promoted build under ${versions}`, 'Promote a build main watch passed with `deep hub promote <build folder>`.');
+}
+
+/**
+ * Whether each agent's hooks reach DeepBuild (#2019): installed, able to run, on, as setup wrote them and trusted, each
+ * an item with its fix. `deep doctor` lists them in its order, and the Agents page names an agent whose sessions can't
+ * reach DeepBuild by them.
+ */
+export function hookItems(env: NodeJS.ProcessEnv, cwd: string): Item[] {
+  const root = installedRoot();
+  const items: Item[] = [];
+  const add = (item: string, agent: string, code: string, level: Item['level'], evidence: string, fix: string) => items.push({ item, agent, code, level, evidence, fix });
+  const file = claudeSettings();
+  const settings = readJson(file);
+  const record = installed(root);
+  const cantRun = unrunnable(root);
+  const hooks = isObj(settings?.hooks) ? settings.hooks : {};
+  const present = (event: string, command: string) => Array.isArray(hooks[event]) && (hooks[event] as unknown[]).some((g) => isObj(g) && Array.isArray(g.hooks) && g.hooks.some((h) => isObj(h) && h.command === command));
+  if (!record) add('claude.hooks', 'claude-code', 'hooks_missing', 'fail', `DeepBuild's hooks aren't installed: no setup has written them to ${file}`, 'Run `deep setup`, which adds them beside yours.');
+  else {
+    // The planted wrong program takes setup's record as the installation and never reads your settings file.
+    const missing = plant() === 'doctor-misses-hooks' ? [] : Object.entries(record.hooks).filter(([event, groups]) => groups.some((g) => (g.hooks as Obj[]).some((h) => !present(event, String(h.command))))).map(([event]) => event);
+    const gone = cantRun.filter((u) => u.agent === 'claude-code');
+    if (missing.length) add('claude.hooks', 'claude-code', 'hooks_missing', 'fail', `DeepBuild's ${missing.join(', ')} hook entr${missing.length === 1 ? 'y is' : 'ies are'} missing from ${file}, so those hooks don't reach the hub`, 'Run `deep setup`, which writes them back beside yours.');
+    else if (gone.length) for (const u of gone) add('claude.hooks', 'claude-code', 'hook_program_missing', 'fail', `${describe(u)}, so those hooks can't run`, 'Run `deep setup`, which builds deep-hook and points the entries at it.');
+    else add('claude.hooks', 'claude-code', 'healthy', 'ok', `DeepBuild's entries for ${Object.keys(record.hooks).join(', ')} are in ${file}`, 'Nothing to do.');
+  }
+  for (const where of hooksOff(file, settings, cwd, env)) add('claude.hooks_enabled', 'claude-code', 'hooks_disabled', 'fail', where.evidence, where.fix);
+  const agent = 'codex';
+  if (hooksDisabled(root)) add('codex.hooks_enabled', agent, 'hooks_disabled', 'fail', `${join(recordedHome(root), 'config.toml')} has hooks = false under [features], so DeepBuild's hooks won't run there; setup never flips your setting`, 'Take hooks = false out of [features] if you want DeepBuild to hear Codex sessions.');
+  if (installedCodex(root)) {
+    const changed = modified(root);
+    const gone = unrunnable(root).filter((u) => u.agent === 'codex');
+    for (const text of changed) add('codex.hooks', agent, 'hooks_modified', 'fail', text, `Put the entry back as ${root}/codex-hooks.json has it, then approve it once in /hooks if Codex asks.`);
+    for (const u of changed.length ? [] : gone) add('codex.hooks', agent, 'hook_program_missing', 'fail', `${describe(u)}, so those hooks can't run`, 'Run `deep setup`, which builds deep-hook and points the entries at it.');
+    if (!changed.length && !gone.length) add('codex.hooks', agent, 'healthy', 'ok', `DeepBuild's entries are in ${codexHooks()} as setup wrote them`, 'Nothing to do.');
+  }
+  // Trust is Codex's to say, by its own hook list, as the hub read it at a Codex session's start: doctor starts no Codex.
+  const ours = readTrust(root);
+  if (ours) {
+    const problems = trustProblems(root);
+    if (problems.length) add('codex.hooks_trust', agent, 'hooks_untrusted', 'warn', `Codex's hook list reports ${problems.join(', ')}: those hooks don't run until you approve them`, 'Approve or enable them once in /hooks in a Codex session.');
+    else add('codex.hooks_trust', agent, 'healthy', 'ok', `Codex's hook list reports DeepBuild's ${ours.length} entries trusted`, 'Nothing to do.');
+  }
+  return items;
 }
 
 async function claudeItems(claude: string | undefined, loginPath: string | undefined, env: NodeJS.ProcessEnv, prompt: boolean, add: (...a: [string, string, string, Item['level'], string, string]) => void): Promise<void> {
@@ -298,23 +338,8 @@ async function modItems(claude: string, env: NodeJS.ProcessEnv, plan: unknown, a
 }
 async function codexItems(codex: string | undefined, env: NodeJS.ProcessEnv, add: (...a: [string, string, string, Item['level'], string, string]) => void): Promise<void> {
   const agent = 'codex';
-  const root = installedRoot();
-  if (hooksDisabled(root)) add('codex.hooks_enabled', agent, 'hooks_disabled', 'fail', `${join(recordedHome(root), 'config.toml')} has hooks = false under [features], so DeepBuild's hooks won't run there; setup never flips your setting`, 'Take hooks = false out of [features] if you want DeepBuild to hear Codex sessions.');
-  if (installedCodex(root)) {
-    const changed = modified(root);
-    const gone = unrunnable(root).filter((u) => u.agent === 'codex');
-    for (const text of changed) add('codex.hooks', agent, 'hooks_modified', 'fail', text, `Put the entry back as ${root}/codex-hooks.json has it, then approve it once in /hooks if Codex asks.`);
-    for (const u of changed.length ? [] : gone) add('codex.hooks', agent, 'hook_program_missing', 'fail', `${describe(u)}, so those hooks can't run`, 'Run `deep setup`, which builds deep-hook and points the entries at it.');
-    if (!changed.length && !gone.length) add('codex.hooks', agent, 'healthy', 'ok', `DeepBuild's entries are in ${codexHooks()} as setup wrote them`, 'Nothing to do.');
-  }
+  for (const i of hookItems(env, '').filter((h) => h.agent === agent)) add(i.item, agent, i.code, i.level, i.evidence, i.fix);
   if (!codex) return;
-  // Trust is Codex's to say, by its own hook list, as the hub read it at a Codex session's start: doctor starts no Codex.
-  const ours = readTrust(root);
-  if (ours) {
-    const problems = trustProblems(root);
-    if (problems.length) add('codex.hooks_trust', agent, 'hooks_untrusted', 'warn', `Codex's hook list reports ${problems.join(', ')}: those hooks don't run until you approve them`, 'Approve or enable them once in /hooks in a Codex session.');
-    else add('codex.hooks_trust', agent, 'healthy', 'ok', `Codex's hook list reports DeepBuild's ${ours.length} entries trusted`, 'Nothing to do.');
-  }
   const [version, login] = await Promise.all([ran(codex, ['--version']), ran(codex, ['login', 'status'])]);
   const v = /(\d+\.\d+\.\d+[\w.-]*)/.exec(version?.out ?? '')?.[1];
   const range = facts(agent).versions;

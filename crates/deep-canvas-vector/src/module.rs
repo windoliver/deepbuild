@@ -88,17 +88,34 @@ fn register(r: &mut Registrar, paint: fn(&mut View<'_>) -> Result<(), OpError>) 
             versions: vec![Version {
                 major: 1,
                 minor: 0,
-                params: ["src", "size", "colors", "lines", "hotspot", "alt", "numbers", "write_on", "parts"]
-                    .into_iter()
-                    .map(field)
-                    .collect(),
+                params: [
+                    "src", "size", "colors", "lines", "hotspot", "alt", "numbers", "quote",
+                    "write_on", "parts",
+                ]
+                .into_iter()
+                .map(field)
+                .collect(),
             }],
             migrations: Vec::new(),
         },
         &[],
         "path@1",
     )
-    .drawn(drawn);
+    .drawn(drawn)
+    .draws(&["glyphs"]);
+    // #408: each part's box in the item's own units, the formula's glyph boxes, contributed to
+    // the core's glyph-box array, which film.layout reads its text from.
+    r.contribution(
+        "vector.glyphs",
+        "list",
+        "item",
+        "geometry",
+        "items",
+        "core.glyphs",
+    );
+    r.operator("glyphs", "items", &["core.fields"], &["vector.glyphs"])
+        .applies(is_vector)
+        .run(glyphs);
     // #399: each vector item's paint mapping, the role `currentColor` and each `colors` key
     // draws in, resolved as the lowering resolves it.
     r.array("vector.paint", "paint", "item", "shading", "items");
@@ -135,6 +152,31 @@ fn drawn(params: &Value) -> Value {
         json!({"fill": {"role": outline["role"].as_str().unwrap_or("ink")}}),
     );
     Value::Object(out)
+}
+
+/// Each part's box `[x, y, w, h]` in the item's own units, from its inlined outline; the whole
+/// outline's when it has no parts, and none when it isn't inlined.
+fn glyphs(v: &mut View<'_>) -> Result<(), OpError> {
+    let fields = v
+        .typed::<Fields>("core.fields")?
+        .ok_or_else(|| OpError::new("input_missing", v.path()))?
+        .to_json();
+    let outline = &fields["params"]["outline"];
+    let box_of = |d: &Value| {
+        d.as_str()
+            .and_then(deep_canvas_marks::path::parse)
+            .and_then(|verbs| deep_canvas_marks::relations::tight(&verbs))
+    };
+    let mut boxes: Vec<[f64; 4]> = outline["parts"]
+        .as_object()
+        .into_iter()
+        .flatten()
+        .filter_map(|(_, d)| box_of(d))
+        .collect();
+    if boxes.is_empty() {
+        boxes.extend(box_of(&outline["d"]));
+    }
+    v.write("vector.glyphs", Val::typed(boxes))
 }
 
 fn is_vector(_: &Value, _: &str, item: &Value) -> bool {
