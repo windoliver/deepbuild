@@ -70,7 +70,11 @@ const IDS_MS: wgpu::TextureFormat = wgpu::TextureFormat::Rg16Uint;
 /// The planted forward-Z twin's far plane.
 pub const FORWARD_FAR: f64 = 10_000.0;
 
-const SHADER: &str = concat!(include_str!("scene3d.wgsl"), include_str!("tint.wgsl"));
+const SHADER: &str = concat!(
+    include_str!("scene3d.wgsl"),
+    include_str!("tint.wgsl"),
+    include_str!("caps.wgsl")
+);
 const MASK_DUMP: &str = include_str!("mask_dump.wgsl");
 /// The line that plants #425's per-band mask keys.
 const MASKS_SHARED: &str = "const MASKS_INDEPENDENT: bool = false;";
@@ -6196,7 +6200,7 @@ impl Renderer {
         }
         batch.lines.begin();
         for l in &layer.lines {
-            for seg in &l.segments {
+            for (k, seg) in l.segments.iter().enumerate() {
                 let record = SegmentRecord {
                     a: v4(seg.a, seg.wa),
                     b: v4(seg.b, seg.wb),
@@ -6209,7 +6213,8 @@ impl Renderer {
                         | (u32::from(l.over) << 2)
                         | (u32::from(l.joined) << 3)
                         | (u32::from(l.dash_world) << 4)
-                        | (u32::from(seg.hidden) << 5),
+                        | (u32::from(seg.hidden) << 5)
+                        | (deep_canvas_scene3d::points::cap_bits(l, k) << 6),
                     dash: half_bits(l.dash[0]) | (half_bits(l.dash[1]) << 16),
                 };
                 batch.lines.push(&l.id, bytemuck::bytes_of(&record));

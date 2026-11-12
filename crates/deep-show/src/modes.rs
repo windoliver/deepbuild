@@ -415,6 +415,7 @@ impl Hub<'_> {
                     joined: false,
                     dash: [0.0; 2],
                     dash_world: false,
+                    cap: Default::default(),
                 }],
                 ..Default::default()
             });

@@ -234,6 +234,8 @@ pub struct Line {
     pub dash: [f64; 2],
     /// The dash is in m: as `world`, but for #1640's planted `edges_dash_other_space`.
     pub dash_world: bool,
+    /// How its free ends end (#537; Marks in 3D: lines `cap`).
+    pub cap: crate::points::Cap,
 }
 
 /// A mesh-edge line's mesh, its kind, the matrix that places the mesh, and the edges it draws.
@@ -1530,6 +1532,7 @@ fn line(
         joined: drawn_line.is_some(),
         dash: [0.0; 2],
         dash_world: false,
+        cap: crate::points::cap(params, &path)?,
     })
 }
 
@@ -1834,6 +1837,7 @@ fn edge_line(
         joined: false,
         dash,
         dash_world: world,
+        cap: Default::default(),
     })
 }
 

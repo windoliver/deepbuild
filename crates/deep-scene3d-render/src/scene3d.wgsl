@@ -2898,6 +2898,7 @@ struct LineOut {
     // the segment's length in m and its ends' clip w, so the dash follows the segment in depth.
     @location(7) @interpolate(flat) dash: vec2<f32>,
     @location(8) @interpolate(flat) metres: vec3<f32>,
+    @location(9) @interpolate(flat) caps: u32,
 };
 
 @vertex
@@ -2916,6 +2917,7 @@ fn line_vs(
     out.color = color;
     out.pick = pick;
     out.joined = (flags >> 3u) & 1u;
+    out.caps = flags >> 6u;
     out.dash = unpack2x16float(dash);
     out.metres = vec3<f32>(0.0);
     if (flags & 16u) != 0u {
@@ -2978,7 +2980,7 @@ fn line_fs(in: LineOut) -> Targets {
         t = clamp(dot(p - in.a, d) / l2, 0.0, 1.0);
     }
     let dist = length(p - (in.a + d * t));
-    let cov = clamp(mix(in.r.x, in.r.y, t) + 0.5 - dist, 0.0, 1.0);
+    let cov = capped(in, p, t, clamp(mix(in.r.x, in.r.y, t) + 0.5 - dist, 0.0, 1.0));
     if cov <= 0.0 {
         discard;
     }

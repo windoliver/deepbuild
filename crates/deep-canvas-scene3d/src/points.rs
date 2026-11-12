@@ -65,6 +65,50 @@ pub(crate) fn ends(line: &crate::scene::Line) -> impl Iterator<Item = Vec3> + '_
         .flat_map(|s| [s.a, s.b])
 }
 
+/// How a line's free ends end (Marks in 3D: lines `cap`): flush at the point (`butt`), half the
+/// width past it (`square`), or round. A line that writes no cap draws round ends, as lines drew
+/// before #537.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub enum Cap {
+    #[default]
+    Round,
+    Butt,
+    Square,
+}
+
+/// The `cap` a line's `params` write.
+pub(crate) fn cap(params: &Value, path: &str) -> Result<Cap, Refused> {
+    match params.get("cap") {
+        None | Some(Value::Null) => Ok(Cap::Round),
+        Some(v) => match v.as_str() {
+            Some("round") => Ok(Cap::Round),
+            Some("butt") => Ok(Cap::Butt),
+            Some("square") => Ok(Cap::Square),
+            _ => Err(Refused {
+                code: "out_of_range",
+                path: format!("{path}/cap"),
+            }),
+        },
+    }
+}
+
+/// Segment `k` of `line`'s cap bits for its record: 1 where its start is a free end of the line,
+/// 2 where its end is, each only for a butt or square cap; 4 for square. A segment's end is free
+/// where no other segment of the line meets it there (a strip's or a loop's joints aren't).
+pub fn cap_bits(line: &crate::scene::Line, k: usize) -> u32 {
+    if line.cap == Cap::Round {
+        return 0;
+    }
+    let s = &line.segments;
+    let meets = |p: Vec3, j: usize| s.get(j).is_some_and(|o| o.a == p || o.b == p);
+    let last = s.len().saturating_sub(1);
+    let prev = if k == 0 { last } else { k - 1 };
+    let next = if k == last { 0 } else { k + 1 };
+    let start = prev != k && meets(s[k].a, prev);
+    let end = next != k && meets(s[k].b, next);
+    u32::from(!start) | (u32::from(!end) << 1) | (u32::from(line.cap == Cap::Square) << 2)
+}
+
 /// The rows a line's `points` read of an array of `count` elements: `[from, to)`, or every one.
 fn rows(points: &Value, count: usize) -> Option<std::ops::Range<usize>> {
     match points.get("rows") {
@@ -186,6 +230,51 @@ pub fn plant_previous_step(doc: &mut Value) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A line's free ends take its cap: both ends of each disjoint segment, a strip's first start
+    /// and last end alone, none of a loop's; a round cap marks nothing; an unknown cap is refused.
+    #[test]
+    fn cap_bits_mark_a_lines_free_ends_alone() {
+        let seg = |a: Vec3, b: Vec3| crate::scene::Segment {
+            a,
+            b,
+            wa: 1.0,
+            wb: 1.0,
+            hidden: false,
+        };
+        let line = |segments, cap| crate::scene::Line {
+            id: "l".into(),
+            segments,
+            world: false,
+            color: [0; 3],
+            edges: None,
+            over: false,
+            joined: false,
+            dash: [0.0; 2],
+            dash_world: false,
+            cap,
+        };
+        let (p, q) = (|x: f64| [x, 0.0, 0.0], |x: f64| [x, 1.0, 0.0]);
+        let pairs = line(vec![seg(p(0.0), p(1.0)), seg(q(0.0), q(1.0))], Cap::Butt);
+        assert_eq!([0, 1].map(|k| cap_bits(&pairs, k)), [3, 3]);
+        let strip = vec![
+            seg(p(0.0), p(1.0)),
+            seg(p(1.0), p(2.0)),
+            seg(p(2.0), p(3.0)),
+        ];
+        let strip = line(strip, Cap::Square);
+        assert_eq!([0, 1, 2].map(|k| cap_bits(&strip, k)), [5, 4, 6]);
+        let ring = vec![
+            seg(p(0.0), p(1.0)),
+            seg(p(1.0), q(1.0)),
+            seg(q(1.0), p(0.0)),
+        ];
+        let ring = line(ring, Cap::Butt);
+        assert_eq!([0, 1, 2].map(|k| cap_bits(&ring, k)), [0, 0, 0]);
+        assert_eq!(cap_bits(&line(vec![seg(p(0.0), p(1.0))], Cap::Round), 0), 0);
+        let refused = cap(&json!({"cap": "wedge"}), "items/l/params").expect_err("refused");
+        assert_eq!(refused.path, "items/l/params/cap");
+    }
 
     /// A 64-element vec3 array in segments mode: 32 segments' ends; a NaN at element 7 hides
     /// element 7 alone, so only segment 3 (elements 6 and 7) hides; and the planted reader draws
