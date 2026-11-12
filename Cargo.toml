@@ -46,6 +46,9 @@ opt-level = 3
 # three times.
 [profile.dev.package.deep-canvas-media]
 opt-level = 3
+# Issue #157: export.fidelity's decode and the encode tool's frame feed run at 8x real time at 1080p60, read off the dev binary.
+[profile.dev.package.deep-codecs]
+opt-level = 3
 [profile.dev.package.serde_json]
 opt-level = 3
 [profile.dev.package.indexmap]

@@ -281,8 +281,9 @@ impl Issue {
         if self.code == "bad_unit" {
             out.insert("forms".into(), json!(self.forms));
         }
-        // The column view's issue names its reader, column, row, value and step (#397).
-        if self.code == "column.out_of_range" {
+        // The column view's issue names its reader, column, row, value and step (#397); a terrain
+        // overlay's its array, cell, value and step (#537).
+        if matches!(self.code, "column.out_of_range" | "terrain.overlay_range") {
             if let Value::Object(fields) = &self.actual {
                 for (k, v) in fields {
                     out.entry(k.clone()).or_insert_with(|| v.clone());

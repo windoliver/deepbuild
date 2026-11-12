@@ -230,6 +230,8 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
                 json_param("join"),
                 // A line of a mesh's edges in place of points (Marks in 3D: mesh edges; #420).
                 json_param("edges"),
+                // Marks in 3D: whether the sky's fog applies to it (#537's live lines set false).
+                json_param("fog"),
             ]),
         ),
         &[],

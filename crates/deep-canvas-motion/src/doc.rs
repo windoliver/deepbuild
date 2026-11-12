@@ -372,6 +372,8 @@ pub struct Transport {
     pub start: i64,
     pub span: Option<i64>,
     pub wrap: bool,
+    /// #157: `loop: ping_pong`: each pass plays the span the other way, so it closes by construction.
+    pub ping_pong: bool,
     /// Under reduced motion the timeline holds at its start: `reduced_motion: hold`, in any
     /// profile but a film, which still plays its timeline (Transport).
     pub holds: bool,
@@ -747,8 +749,11 @@ impl Ctx {
 
 /// A time field's flicks: a bar:beat through the tempo map, anything else through the core.
 pub fn time_of(value: Option<&Value>, ctx: &Ctx, path: &str) -> Result<i64, Refused> {
-    let Some(Value::String(text)) = value else {
-        return refuse("bad_time", path);
+    let text = match value {
+        Some(Value::String(text)) => text,
+        // #157: a time in its stored form, whole flicks (Time and the flick).
+        Some(Value::Number(n)) => return n.as_i64().map_or_else(|| refuse("bad_time", path), Ok),
+        _ => return refuse("bad_time", path),
     };
     match (Time::parse(text), &ctx.tempo) {
         (Ok(Time::Beats { bar, beat }), Some(tempo)) => tempo.beat(bar, beat).map_err(|why| Refused {
@@ -2188,13 +2193,7 @@ pub fn read_with(doc: &Map<String, Value>, f32_beats: bool, arc: quat::Arc) -> R
             .and_then(Value::as_str)
             != Some("slow");
     let transport = match transport_map {
-        None => Transport {
-            start: 0,
-            span: None,
-            wrap: false,
-            holds,
-            reduce_holds,
-        },
+        None => Transport { start: 0, span: None, wrap: false, ping_pong: false, holds, reduce_holds },
         Some(t) => {
             let start = match t.get("start") {
                 None => 0,
@@ -2205,25 +2204,20 @@ pub fn read_with(doc: &Map<String, Value>, f32_beats: bool, arc: quat::Arc) -> R
                 Some(Value::String(s)) if s == "auto" || s == "open" => None,
                 v => Some(time_of(v, &ctx, "transport/span")?),
             };
-            let wrap = match t.get("loop").and_then(Value::as_str) {
-                None | Some("none") => false,
-                Some("wrap") => true,
+            let (wrap, ping_pong) = match t.get("loop").and_then(Value::as_str) {
+                None | Some("none") => (false, false),
+                Some("wrap") => (true, false),
+                Some("ping_pong") => (false, true),
                 Some(_) => return refuse("bad_doc", "transport/loop"),
             };
             // An open span has no end to wrap at: its loop must be none (Transport).
-            if wrap && t.get("span").and_then(Value::as_str) == Some("open") {
+            if (wrap || ping_pong) && t.get("span").and_then(Value::as_str) == Some("open") {
                 return refuse("bad_doc", "transport/loop");
             }
-            if wrap && span.is_none_or(|s| s <= 0) {
+            if (wrap || ping_pong) && span.is_none_or(|s| s <= 0) {
                 return refuse("bad_time", "transport/span");
             }
-            Transport {
-                start,
-                span,
-                wrap,
-                holds,
-                reduce_holds,
-            }
+            Transport { start, span, wrap, ping_pong, holds, reduce_holds }
         }
     };
     let cameras = cameras_of(doc)?;

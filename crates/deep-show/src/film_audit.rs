@@ -22,6 +22,8 @@ use vello_cpu::kurbo::{Affine, Point};
 use crate::hub::{Claim, Hub, Planted};
 use crate::shared::FLICKS;
 
+pub(crate) mod craft;
+
 /// The shortest reading hold this build allows: the test build standing in for a new release's
 /// stricter rule raises it to 2 s (#407's criterion 9); a shipped build keeps the design's.
 const HOLD_FLOOR: Option<f64> = if cfg!(feature = "test-hold-min-2s") {
@@ -49,19 +51,19 @@ const CODES: [&str; 10] = [
 
 /// One text at one frame of a rendition.
 #[derive(Clone, Debug)]
-struct TextAt {
+pub(crate) struct TextAt {
     /// The item that draws it.
-    item: String,
-    text: String,
+    pub(crate) item: String,
+    pub(crate) text: String,
     /// Each glyph's box in the frame's pixels, `[x0, y0, x1, y1]`, and its opacity.
-    boxes: Vec<[f64; 4]>,
-    opacity: Vec<f64>,
-    color: [u8; 3],
+    pub(crate) boxes: Vec<[f64; 4]>,
+    pub(crate) opacity: Vec<f64>,
+    pub(crate) color: [u8; 3],
     /// The color it sits on: the topmost solid fill drawn before it under its glyphs' centre,
     /// else the frame's ground.
-    ground: [u8; 3],
+    pub(crate) ground: [u8; 3],
     /// Its size in the frame's pixels.
-    size: f64,
+    pub(crate) size: f64,
 }
 
 /// One frame of a rendition: its texts, and every item's extent in the frame's pixels.
@@ -624,6 +626,7 @@ impl Hub<'_> {
             }
             rows.push(row("cue", &id, issues));
         }
+        rows.extend(self.craft_rows(claim, c));
         rows
     }
 
@@ -740,7 +743,7 @@ impl Hub<'_> {
                 .and_then(|p| crate::film::sides(p, drawn, t, reduced));
             let rgba = match &sides {
                 Some(s) => self
-                    .film_rgba(&painted, Some(px), s, drawn, true)
+                    .film_rgba(&painted, Some(px), s, drawn, (true, None))
                     .map(|r| r.0),
                 None => self.canonical_rgba(&painted, Some(px), true).map(|r| r.0),
             };
@@ -1044,7 +1047,7 @@ fn frame_of(
 
 /// Whether `text` reads at this frame, given where its glyphs were the frame before: every glyph
 /// still, opaque, in contrast, big enough and wholly inside the safe area.
-fn readable(
+pub(crate) fn readable(
     text: &TextAt,
     before: Option<&TextAt>,
     limits: &Readable,

@@ -86,8 +86,7 @@ pub enum Planted {
     UndoReorderMintsKey,
     /// #138: order keys are drawn when a patch applies, not from its base.
     ApplyTimeOrderKeys,
-    /// #379: the check estimates with coefficients for the machine it runs on, not the
-    /// reference Mac's.
+    /// #379: the check estimates with coefficients for the machine it runs on, not the reference Mac's.
     EstimatesOnThisMachine,
     /// #138: the incremental check after a patch skips the items that refer to what it touched.
     IncrementalCheckSkipsReferrers,
@@ -325,6 +324,7 @@ pub enum Planted {
     TimecodeTrackZero,
     /// #501: the png writer stores premultiplied color under `alpha: straight`.
     PngPremultipliesStraight,
+    Export(crate::export::Guard), // #157: the export guards' wrong programs.
     /// #1163: the video writer leaves frame 300 out, frame 299 held over its place.
     VideoDropsFrame300,
     /// #1163: a range export starts, and ends, one frame late.
@@ -2712,71 +2712,6 @@ impl<'a> Hub<'a> {
     /// passes a claim only when the claim's definition names the document among its deliverables,
     /// since a picture explains and never proves; a snapshot it asked for and couldn't take is
     /// BLOCKED.
-    /// #464: a 2D frame under a print look through the look's finish on this machine's GPU (the
-    /// print pass, as the canvas's live frame runs it), kept as evidence and labelled
-    /// `display_only`: an agent sees the grain and the halftone, and no check reads it.
-    fn print_snapshot(
-        &mut self,
-        show: &Show,
-        drawn: &Drawn,
-        size: [u16; 2],
-        instanced: &BTreeMap<String, (String, String)>,
-    ) -> Option<Value> {
-        let def = self.look_def.clone()?;
-        let print = deep_canvas_marks::print::read(&def, &self.look.light, f64::from(size[0])).ok()?;
-        if print.is_identity() {
-            return None;
-        }
-        let items = show.document.get("items").and_then(Value::as_object)?;
-        let role = |i: &Value| {
-            i.pointer("/params/paint/fill/role")
-                .or_else(|| i.pointer("/params/paint/stroke/role"))
-                .and_then(Value::as_str)
-                .map(str::to_string)
-        };
-        let inks: Vec<BTreeSet<String>> = print
-            .separations
-            .iter()
-            .map(|s| {
-                items
-                    .iter()
-                    .filter(|(_, i)| role(i).as_deref() == Some(s.role.as_str()))
-                    .map(|(id, _)| id.clone())
-                    .collect()
-            })
-            .collect();
-        let inked: BTreeSet<&String> = inks.iter().flatten().collect();
-        let ground = self.look.light.get("ground").copied().unwrap_or([255; 3]);
-        let base = drawn.only(|i| !inked.iter().any(|k| k.as_str() == i));
-        let (base, _) = self.renderer.raster_batched(&base, size, Some(ground), instanced);
-        let covs: Vec<Vec<u8>> = inks
-            .iter()
-            .map(|set| {
-                let only = drawn.only(|i| set.contains(i));
-                self.renderer.raster_batched(&only, size, None, instanced).0
-            })
-            .collect();
-        let seed = show.document.get("seed").and_then(Value::as_u64).unwrap_or(0) as u32;
-        let frame = deep_canvas_marks::print::frame(&print, seed, show.t, false);
-        let px = [u32::from(size[0]), u32::from(size[1])];
-        let params = deep_scene3d_render::print::params(
-            &print,
-            &frame,
-            px,
-            deep_scene3d_render::print::Placed {
-                scale: 1.0 / drawn.scale(size),
-                offset: [0.0, 0.0],
-            },
-            ground,
-            false,
-            Default::default(),
-        );
-        let rgba = self.gpu3()?.print(&params, &base, &covs, px)?;
-        let sha = evidence::put(&self.scenario.evidence, &snapshot::png(rgba, size)).ok()?;
-        self.display_only.insert(sha.clone());
-        Some(json!({"sha256": sha, "w": size[0], "h": size[1], "display_only": true}))
-    }
-
     fn verdict(&self, show: &Show, snapshot_taken: bool) -> &'static str {
         if !snapshot_taken {
             return "BLOCKED";
@@ -2796,10 +2731,23 @@ impl<'a> Hub<'a> {
 /// nanoseconds, what an honest render-back never reads (Channel and key: it can never read the
 /// clock), so two runs draw two pictures (#670).
 pub(crate) fn clock_noise(rgba: &mut [u8]) {
-    let nanos = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |d| d.as_nanos() as u64);
-    let mut x = nanos | 1;
+    seeded_noise(rgba, now_nanos());
+}
+
+/// #1163's [`clock_noise`] in an export, seeded from the clock once per process and by the
+/// frame's time: another process draws another picture, and a frame drawn again in the same
+/// export draws the same one, as #157's redraw holds every frame to.
+pub(crate) fn export_noise(rgba: &mut [u8], t: i64) {
+    static SEED: std::sync::OnceLock<u64> = std::sync::OnceLock::new();
+    seeded_noise(rgba, *SEED.get_or_init(now_nanos) ^ t as u64);
+}
+
+fn now_nanos() -> u64 {
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_nanos() as u64)
+}
+
+fn seeded_noise(rgba: &mut [u8], seed: u64) {
+    let mut x = seed | 1;
     let pixels = (rgba.len() / 4) as u64;
     for _ in 0..64 {
         x ^= x << 13;
