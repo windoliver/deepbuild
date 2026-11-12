@@ -1240,6 +1240,8 @@ pub(crate) fn frames(
             )));
         }
         let mut list = Vec::new();
+        // The last step's arrays, rebuilt once for the frames that fall in it.
+        let mut at: Option<(i64, Option<Map<String, Value>>)> = None;
         for j in 0..count {
             let t = j
                 .checked_mul(F / 60)
@@ -1247,11 +1249,14 @@ pub(crate) fn frames(
                 .ok_or_else(|| bad("frames"))?;
             let k = t.div_euclid(len);
             // The arrays as step k left them, rebuilt from the bake (#547), at a step this run ran.
-            let row = match opened {
-                Some((s, arrays)) if k == s - 1 => Some(arrays.clone()),
-                _ => rec.rows().contains_key(&k).then(|| rec.arrays_at(piece, k)),
-            };
-            let row = row.as_ref();
+            if at.as_ref().is_none_or(|(s, _)| *s != k) {
+                let row = match opened {
+                    Some((s, arrays)) if k == s - 1 => Some(arrays.clone()),
+                    _ => rec.rows().contains_key(&k).then(|| rec.arrays_at(piece, k)),
+                };
+                at = Some((k, row));
+            }
+            let row = at.as_ref().and_then(|(_, r)| r.as_ref());
             let arrays: Map<String, Value> = names
                 .iter()
                 .map(|n| Some((n.to_string(), row?.get(*n)?.clone())))

@@ -58,7 +58,9 @@ say(`checkpoints: ${JSON.stringify(nq.checkpoints)}`);
 say('# 2. A new process opens slot 1 and plays on to step 30: its checkpoints should equal the never-quit run\'s from 20.');
 const o = call({ call: 'open_save', piece: p, saves_dir: dir, slot: 1, track: [], steps: 30 });
 say(short(o));
-const same = JSON.stringify(o.checkpoints.game) === JSON.stringify(nq.checkpoints.game.filter((c) => c.step >= 20));
+// Steps and full-state hashes only: `ns` is each run's own timing.
+const hashes = (list) => JSON.stringify(list.map((c) => [c.step, c.deep_hash]));
+const same = hashes(o.checkpoints.game) === hashes(nq.checkpoints.game.filter((c) => c.step >= 20));
 say(`opened run's checkpoints equal the never-quit run's from step 20: ${same}`);
 say('# 3. Cut the newest save short by one byte and open the slot again: it should be named damaged, and the save at step 10 opens.');
 const file = join(dir, `${newest.hash}.save`);
