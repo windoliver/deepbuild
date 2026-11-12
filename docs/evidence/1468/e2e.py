@@ -1,6 +1,6 @@
 # The #1468 e2e: each real binary gets a document holding a 1,000,000-paren string, then, in the
 # same process, the same document with one paren, so a reply to the second shows the process stayed up.
-# The pack rule's second document is a second pack, `shallowrule`, as one id installs once.
+# The pack rule's second document is a second pack, `shallowrule`, so its reply reads apart from the first.
 # Usage: python3 -I e2e.py <bin_dir>
 import json, os, re, subprocess, sys, tempfile
 bin_dir = sys.argv[1]
