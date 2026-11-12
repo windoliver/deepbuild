@@ -44,7 +44,7 @@ IDs are the parent suite's (`../helpers.ts`: AC). 6 tests.
 
 | ID (map) | Upstream | Tests | Wrong program shown failing |
 |---|---|---|---|
-| 1 `#190.e0980599` (1) | llvm-project `lld/test/wasm/function-imports.s` (run on our code) | `function-imports.test.ts` (2): ret32@1 (ret32: (f32) -> (i32)) linked into a program whose internal `$start: () -> ()` has _start's body; our merged program imports nothing, keeps no `linking` or `reloc.*` section, its types hold (f32) -> (i32) and () -> (), exactly one () -> () function has _start's body and its call goes to the one defined (f32) -> (i32) function; run in node, the call returns ret32's 32 | `linker_adds_linking_section`: its merged program keeps a `linking` section, and the checks fail naming it; the twin of a linker that resolves nothing (the program object as written) fails naming its import `lib:ret32.ret32` and _start's call to an import |
+| 1 `#190.e0980599` (1) | llvm-project `lld/test/wasm/function-imports.s` (run on our code) | `function-imports.test.ts` (2): ret32@1 (ret32: (f32) -> (i32)) linked into a program whose internal `$start: () -> ()` has _start's body; held from upstream's CHECKs: our merged program imports nothing (FUNCTION directly after TYPE), its types hold (f32) -> (i32) and () -> (), exactly one defined function has type (f32) -> (i32); our own: it keeps no `linking` or `reloc.*` section, exactly one () -> () function has _start's body and its call goes to that function, and run in node the call returns ret32's 32 | `linker_adds_linking_section`: its merged program keeps a `linking` section, which only our own no-`linking` check catches (no upstream-held check does; see below); the twin of a linker that resolves nothing (the program object as written) fails the upstream-held "imports nothing", naming `lib:ret32.ret32`, and our own check that _start calls an internal function |
 | 1 `#190.e0980599` (1) | llvm-project `lld/test/wasm/data-layout.s` (run on our code) | `data-layout.test.ts` (2): a program with 8,195 data bytes linking alpha@1 ("ALPHA") and beta@1 ("BETA!!!"), listed beta first; the receipt names alpha@1 then beta@1; the merged program has one defined memory, 1 page minimum and maximum, exported as `memory`; instantiated, its memory holds the program's bytes at 0, "ALPHA" at 8,200 and "BETA!!!" at 8,208 (each at alignment 8 after the one before) and zeros elsewhere; run, each library reads its own data through its relocated address (v = 65,033) | `linker_links_in_listing_order`: it lays beta@1 out first, and the layout check fails naming alpha@1's address, 8,200 |
 | 3 `#190.ea25cdd0` (3) | llvm-project `lld/test/wasm/undefined.s` (run on our code) | `undefined.test.ts` (2): a program importing `lib:turns.next_turn` and `lib:grid_path.find_route`, linking only turns@1, is `link_refused` naming the item, a refusal naming `lib:grid_path.find_route` (CHECK) and, a check of our own in place of the CHECK-NOT (not held), none naming `lib:turns.next_turn`, which turns@1 defines; the twin linking turns@1 and grid_path@1 is admitted, imports nothing and, run, returns next_turn(0, 3) + the open grid's 4 moves | none: no planted value reaches an import no listed library exports; the wrong program is the base, which refuses every item with `links` without naming an import (`BASE-FAILURE.txt`). The twin fails a linker that refuses any program importing from two libraries |
 
@@ -53,6 +53,14 @@ Criterion 3's other refusals (hash mismatch, a pack's other hash, a library impo
 upstream test either, per the map.
 
 ## What could not be held to our output, and why
+
+- **function-imports.s against the planted linker.** Upstream's CHECKs read no custom section's name but `name`: a
+  `linking` section before `name` passes them, and one after it fails only their final CHECK-NEXT `...` (nothing
+  after the name section's function names). Our merged program has no name section (`../README.md` gives it none),
+  so that line can't be held, and `linker_adds_linking_section`'s empty `linking` section is caught only by the
+  test's own check that no `linking` or `reloc.*` section is left. Every upstream-held check (no imports, both
+  types, one defined (f32) -> (i32)) passes on the planted output; for function-imports.s, the planted value shows
+  only our own check failing, and the upstream-held ones are shown failing only on the unlinked-object twin.
 
 - **function-imports.s: function order and type count.** Upstream expects `FunctionTypes: [ 0, 1 ]` (ret32 first,
   the input order) and exactly two signatures (wasm-ld merges equal ones). Our program must also define logic@1's

@@ -7,14 +7,17 @@
 // through our linker: ret32@1, a library exporting ret32 (f32) -> (i32) (returning 32), and a program object whose
 // internal $start: () -> () has exactly _start's body, called from its step, which also writes v = ret32(0). The
 // merged program our receipt carries (`linked.bytes`, the module before the rewrite, ../README.md: Checked) is read
-// by this lane's reader (wasm.ts) as upstream reads its output with obj2yaml:
+// by this lane's reader (wasm.ts) as upstream reads its output with obj2yaml. Held from upstream's CHECK lines:
 //
-// - no import is left (upstream's output has no IMPORT section: _start's call resolved);
-// - it is a final module, not an object: no `linking` or `reloc.*` section is left (upstream's yaml of a linked
-//   module shows none; an object's would);
+// - no import is left (upstream's CHECK-NEXT puts FUNCTION directly after TYPE, so there is no IMPORT section);
 // - its types hold (f32) -> (i32) and () -> ();
-// - exactly one defined function has _start's body, `f32.const 0; call X; drop; end`, with type () -> (), and X is a
-//   defined function of type (f32) -> (i32), the one such function (ret32);
+// - exactly one defined function has type (f32) -> (i32) (upstream's FunctionTypes [0, 1]: ret32 defined, of type 0).
+//
+// Our own, not upstream's (its CHECKs read no custom section's name but `name`, and no instruction):
+//
+// - it is a final module, not an object: no `linking` or `reloc.*` section is left;
+// - exactly one defined function has _start's body, `f32.const 0; call X; drop; end`, with type () -> (), and X is
+//   that (f32) -> (i32) function (ret32);
 // - and, run in node, v is 32: the call reaches ret32's code.
 //
 // Not held: upstream's function order ([0, 1]: ret32 before _start, the input order) and its exactly two types (wasm-ld
@@ -22,8 +25,11 @@
 // and the name section, which ../README.md doesn't give a merged program (its objects have none).
 //
 // Wrong programs shown failing: `linker_adds_linking_section` (../README.md: Planted twins), whose merged program
-// keeps an object's `linking` section; and the twin of a linker that resolves nothing, the program object as it is,
-// which keeps its imports and calls an import.
+// keeps an object's `linking` section, fails only our own no-`linking` check: upstream's CHECKs could catch that
+// section only after `name` (its CHECK-NEXT `...`), and we hold no name section. The twin of a linker that resolves
+// nothing, the program object as it is, fails upstream-held checks (imports are left; no defined (f32) -> (i32)) and
+// our own (`linking` and `reloc.CODE` left; _start calls an import); the test asserts one of each (its import named,
+// and _start's call to an import).
 import { describe, expect, it } from 'vitest';
 import { AC, TIMEOUT, admitted, assemble, checkCall, logicBin, none, onHost, piece, prebuild, type JsonObject, type Lib, type Planted, type Program } from '../helpers.ts';
 import { pack, vLayout } from '../libs.ts';
@@ -70,7 +76,8 @@ function startCallee(body: Buffer): number | null {
   } catch { return null; }
 }
 
-/** What upstream's CHECK lines hold, of a module: each failure, or none. */
+/** What upstream's CHECK lines hold of a module (no imports, both types, one defined ret32), plus our own checks (no
+ * `linking` or `reloc.*` section; _start's body and callee): each failure, or none. */
 function judge(bytes: Buffer): string[] {
   const failures: string[] = [];
   const m = parse(bytes);
