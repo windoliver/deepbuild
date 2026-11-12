@@ -312,11 +312,12 @@ impl<'a> Hub<'a> {
         // #535: a logic column's row whose value goes out of range raises column.out_of_range at
         // the frame of the step its excursion begins.
         if let (Some(doc), Some(list)) = (evaluated.document(), reply["issues"].as_array_mut()) {
-            list.extend(
-                deep_canvas::columns::raised_at(doc, t)
-                    .iter()
-                    .map(|i| i.to_json()),
-            );
+            // #537: and scene3d's readers', an instancer's columns and a line's points.
+            let raised = [
+                deep_canvas::columns::raised_at(doc, t),
+                deep_canvas_scene3d::arrays::raised_at(doc, t),
+            ];
+            list.extend(raised.iter().flatten().map(|i| i.to_json()));
         }
         if !e.arrays.is_empty() {
             // #497: each named array as this frame read it.

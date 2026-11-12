@@ -212,6 +212,8 @@ pub struct Segment {
     pub b: Vec3,
     pub wa: f64,
     pub wb: f64,
+    /// #537: it draws nothing and isn't hit, a point it meets being out of range.
+    pub hidden: bool,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -232,6 +234,8 @@ pub struct Line {
     pub dash: [f64; 2],
     /// The dash is in m: as `world`, but for #1640's planted `edges_dash_other_space`.
     pub dash_world: bool,
+    /// How its free ends end (#537; Marks in 3D: lines `cap`).
+    pub cap: crate::points::Cap,
 }
 
 /// A mesh-edge line's mesh, its kind, the matrix that places the mesh, and the edges it draws.
@@ -264,6 +268,7 @@ impl EdgesOf {
                 b: apply(&self.model, b),
                 wa: self.width,
                 wb: self.width,
+                hidden: false,
             })
             .collect()
     }
@@ -325,6 +330,8 @@ pub struct Layer3 {
     pub labels: Vec<Label>,
     /// Its soft cloud sprites (#422; Puff `puff@1`).
     pub puffs: Vec<Puff>,
+    /// #537: each batch of an instancer fed by logic, laid out by slot, with its slot count.
+    pub fed: std::collections::BTreeMap<u32, u32>,
 }
 
 /// A soft cloud sprite at t (#422; Puff `puff@1`): where it is in world m, its size, and how the
@@ -728,6 +735,8 @@ pub struct Scene {
     /// Its light probes (#427; Light probe `light.probe@1`), each with its own capture or bake,
     /// in item order. They draw nothing in the look.
     pub probes: Vec<crate::probe::Probe>,
+    /// Each terrain plate's overlays at t (#537), which tint its cover's base color.
+    pub tints: Vec<crate::tints::Tint>,
 }
 
 impl Scene {
@@ -1433,30 +1442,30 @@ fn point_of(items: &Items<'_>, v: &Value, path: &str) -> Result<Vec3, Refused> {
     Ok(origin(&world(items, id)))
 }
 
-/// The segments a mode draws over `n` points, as index pairs (Marks in 3D: lines).
-pub fn segments(mode: &str, n: usize) -> Option<Vec<(usize, usize)>> {
-    if n < 2 {
-        return Some(Vec::new());
-    }
-    match mode {
-        "strip" => Some((0..n - 1).map(|k| (k, k + 1)).collect()),
-        "segments" => Some((0..n / 2).map(|k| (2 * k, 2 * k + 1)).collect()),
-        "loop" => Some((0..n).map(|k| (k, (k + 1) % n)).collect()),
-        _ => None,
-    }
-}
-
-fn line(items: &Items<'_>, id: &str, params: &Value, look: &Look3) -> Result<Line, Refused> {
+fn line(
+    items: &Items<'_>,
+    id: &str,
+    params: &Value,
+    look: &Look3,
+    (map, t): (&Map<String, Value>, i64),
+) -> Result<Line, Refused> {
     let path = format!("items/{id}/params");
-    let points = params
-        .get("points")
-        .and_then(Value::as_array)
-        .map_or(Ok(Vec::new()), |list| {
-            list.iter()
-                .enumerate()
-                .map(|(i, v)| point_of(items, v, &format!("{path}/points/{i}")))
-                .collect::<Result<Vec<_>, _>>()
-        })?;
+    // #537: points that read a logic array, each with whether it hides.
+    let (points, hidden) = match crate::points::of(map, id, params, t)? {
+        Some(read) => read,
+        None => (
+            params
+                .get("points")
+                .and_then(Value::as_array)
+                .map_or(Ok(Vec::new()), |list| {
+                    list.iter()
+                        .enumerate()
+                        .map(|(i, v)| point_of(items, v, &format!("{path}/points/{i}")))
+                        .collect::<Result<Vec<_>, _>>()
+                })?,
+            Vec::new(),
+        ),
+    };
     // #149: a named line's width and its profile along the line.
     let named = params.pointer("/paint/stroke/line").and_then(Value::as_str);
     let drawn_line = match (named, look.drawn.as_ref()) {
@@ -1497,10 +1506,12 @@ fn line(items: &Items<'_>, id: &str, params: &Value, look: &Look3) -> Result<Lin
         .get("mode")
         .and_then(Value::as_str)
         .unwrap_or("strip");
-    let Some(pairs) = segments(mode, n) else {
+    let Some(pairs) = crate::points::segments(mode, n) else {
         return refused("out_of_range", format!("{path}/mode"));
     };
     let model = world(items, id);
+    // A point that can't narrow hides each segment that meets it, which keeps its record.
+    let hides = |i: usize| n == written && hidden.get(i) == Some(&true);
     let segments = pairs
         .into_iter()
         .map(|(a, b)| Segment {
@@ -1508,6 +1519,7 @@ fn line(items: &Items<'_>, id: &str, params: &Value, look: &Look3) -> Result<Lin
             b: apply(&model, points[b]),
             wa: widths[a],
             wb: widths[b],
+            hidden: hides(a) || hides(b),
         })
         .collect();
     Ok(Line {
@@ -1520,6 +1532,7 @@ fn line(items: &Items<'_>, id: &str, params: &Value, look: &Look3) -> Result<Lin
         joined: drawn_line.is_some(),
         dash: [0.0; 2],
         dash_world: false,
+        cap: crate::points::cap(params, &path)?,
     })
 }
 
@@ -1701,6 +1714,7 @@ fn cut(segments: &[Segment], s0: f64, s1: f64) -> Vec<Segment> {
                 b: lerp(seg.a, seg.b, fb),
                 wa: seg.wa + (seg.wb - seg.wa) * fa,
                 wb: seg.wa + (seg.wb - seg.wa) * fb,
+                hidden: seg.hidden,
             });
         }
         at += len;
@@ -1823,6 +1837,7 @@ fn edge_line(
         joined: false,
         dash,
         dash_world: world,
+        cap: Default::default(),
     })
 }
 
@@ -3212,9 +3227,9 @@ pub(crate) fn evaluate_compiled(
                     }
                 }
                 "mark.line@1" => {
-                    let mut l = line(&items, id, params, look)?;
+                    let mut l = line(&items, id, params, look, (map, t))?;
                     let under = strokes(map, id, item, &mut l, look, seconds)?;
-                    bounds.extend(l.segments.iter().flat_map(|s| [s.a, s.b]));
+                    bounds.extend(crate::points::ends(&l));
                     layer.lines.extend(under);
                     layer.lines.push(l);
                 }
@@ -3283,6 +3298,8 @@ pub(crate) fn evaluate_compiled(
                     });
                 }
                 OVERLAY => overlay_items.push((layer_id.to_string(), id.clone())),
+                // #1183: an overlay whose `show` is false at t draws nothing.
+                "overlay.text@1" if params.get("show") == Some(&Value::Bool(false)) => {}
                 "overlay.text@1" => readout_items.push((id.clone(), params.clone())),
                 "puff@1" => {
                     let m = world(&items, id);
@@ -3444,6 +3461,11 @@ pub(crate) fn evaluate_compiled(
             .iter()
             .map(|p| crate::cut::inverse(&world(&items, p)))
             .collect();
+        if crate::slots::fed(params) {
+            let sink = (&mut batches, &mut layers[*l], &mut bounds);
+            crate::slots::place(map, id, params, t, (&at, &of, &from, assets), &protos, sink)?;
+            continue;
+        }
         // Above the line, or drawn from an instances output, the GPU culls each (prototype,
         // material) batch (#484); inside a batch elements upload by stable ID, so survivors in
         // index order are in stable-ID order.
@@ -3548,7 +3570,9 @@ pub(crate) fn evaluate_compiled(
     let mut top = 12.0;
     for (id, params) in readout_items.iter().chain(card.iter()) {
         let template = params.get("template").and_then(Value::as_str).unwrap_or("");
-        let filled = shown.as_ref().and_then(|s| deep_canvas::template::expand(s, template).ok());
+        let filled = shown
+            .as_ref()
+            .and_then(|s| deep_canvas::template::expand_in(s, id, template).ok());
         let text = filled.as_deref().unwrap_or(template);
         let size = num(params.get("size")).unwrap_or(13.0);
         let (run_box, glyphs) = labels.run(text, Role::Body, size as f32);
@@ -3657,6 +3681,7 @@ pub(crate) fn evaluate_compiled(
         read_reflection: false,
         read_foam: false,
         probes,
+        tints: crate::tints::tints(map, look, t)?,
     };
     scene.set_cutaway(cutaway);
     scene.mirror = crate::mirror::find(&scene.layers, scene.camera.eye, |id| items.get(id))?;
@@ -4045,7 +4070,7 @@ impl Scene {
             }
             for l in &layer.lines {
                 let mut pts = Vec::new();
-                for seg in &l.segments {
+                for seg in l.segments.iter().filter(|s| !s.hidden) {
                     for (p, w) in [(seg.a, seg.wa), (seg.b, seg.wb)] {
                         if let Some(q) = cam.project(p) {
                             let r = if l.world { w * cam.px_per_m(q[2]) } else { w }.max(1.0) / 2.0;

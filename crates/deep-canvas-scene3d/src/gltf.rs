@@ -3,6 +3,8 @@
 //! read to one node's mesh in the node's own space: every triangle primitive's positions,
 //! normals (made from its faces where it has none) and indices. Only what a mesh needs is read.
 
+use std::collections::BTreeMap;
+
 use serde_json::{json, Value};
 
 use crate::geom::{add, cross, sub, unit, Mesh, V2, V3};
@@ -705,6 +707,50 @@ pub fn node_materials(bytes: &[u8], node: &Value) -> bool {
         .and_then(|m| doc.pointer(&format!("/meshes/{m}/primitives")))
         .and_then(Value::as_array)
         .is_some_and(|ps| ps.iter().any(|p| p.get("material").is_some()))
+}
+
+/// #537: every node of a file's scene `scene` by name (or its index where it has none), with its
+/// parent's name and its local matrix, so rigid part poses turn a node relative to its parent
+/// (Instance `instance@1`: logic columns).
+pub fn rig(
+    bytes: &[u8],
+    scene: usize,
+) -> Result<BTreeMap<String, (Option<String>, [[f64; 4]; 3])>, Fault> {
+    let (doc, _) = split(bytes)?;
+    let nodes = doc.get("nodes").and_then(Value::as_array);
+    let name = |i: usize| -> String {
+        nodes
+            .and_then(|n| n.get(i)?.get("name")?.as_str())
+            .map_or_else(|| i.to_string(), str::to_string)
+    };
+    let mut stack: Vec<(usize, Option<String>)> = doc
+        .pointer(&format!("/scenes/{scene}/nodes"))
+        .and_then(Value::as_array)
+        .ok_or_else(|| "params/node/scene".to_string())?
+        .iter()
+        .filter_map(|r| Some((r.as_u64()? as usize, None)))
+        .collect();
+    let mut out = BTreeMap::new();
+    while let Some((i, parent)) = stack.pop() {
+        let n = nodes
+            .and_then(|l| l.get(i))
+            .ok_or_else(|| bad("a missing node"))?;
+        if out.len() > 4096 {
+            return Err(bad("a node tree past 4,096 nodes"));
+        }
+        for c in n
+            .get("children")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+        {
+            if let Some(c) = c.as_u64() {
+                stack.push((c as usize, Some(name(i))));
+            }
+        }
+        out.insert(name(i), (parent, local(n)));
+    }
+    Ok(out)
 }
 
 /// Reads a file's scene `scene` (0 for the first): `sha` is the file's hash, and `read` answers

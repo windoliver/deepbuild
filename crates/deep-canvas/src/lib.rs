@@ -26,6 +26,7 @@ pub mod grammar;
 pub mod heights;
 pub mod interval;
 pub mod kinds;
+pub mod lengths;
 pub mod ops;
 pub mod outline;
 pub mod registry;

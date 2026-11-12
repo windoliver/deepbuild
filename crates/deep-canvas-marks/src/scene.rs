@@ -4931,9 +4931,9 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
             }]
         }
         // A logic item (#544) steps and emits occurrences, and a score (#154) sounds: neither draws.
-        "mask@1" | "matte@1" | "group@1" | "camera@1" | "graph@1" | "salience@1" | "sheet@1" | "logic@1" | "score.music@1" => {
-            return Ok(None)
-        }
+        // A readout (#419, #1183) draws over the frame, in scene3d's view.
+        "mask@1" | "matte@1" | "group@1" | "camera@1" | "graph@1" | "salience@1" | "sheet@1"
+        | "logic@1" | "score.music@1" | "overlay.text@1" => return Ok(None),
         "star@1" => {
             let p = |k: &str| num(params.get(k));
             let star = Star {
