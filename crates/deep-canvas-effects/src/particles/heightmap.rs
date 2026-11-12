@@ -1,7 +1,8 @@
 //! Landing on a height map baked at check (Particles `particles@1`: bounce and kill, `land`). The
 //! core bakes, on the CPU in f64, the highest point of a collection's static items' meshes in
 //! each cell of a grid over their bounds in x and z. A particle lands at the first time its arc
-//! meets the map, read bilinearly between cell centres: a fixed march of 16 steps along the arc,
+//! meets the map, read bilinearly between cell centres (and stepping at the midpoint across a
+//! cliff, so a wall's edge stays sharp): a fixed march of 16 steps along the arc,
 //! from where it falls below the map's highest point (or its start) to where it would pass the
 //! map's lowest, brackets the first crossing those samples see, and eight Newton steps refine it.
 //! It never lands outside the map's bounds.
@@ -80,8 +81,17 @@ pub fn bake(triangles: &[[V3; 3]], cell: f64, path: &str, id: &str) -> Result<Ma
         let (j0, j1) = (cell_of(tz0, lo[1], nz), cell_of(tz1, lo[1], nz));
         for j in j0..=j1 {
             for i in i0..=i1 {
-                let cx = [lo[0] + i as f64 * cell, lo[0] + (i + 1) as f64 * cell];
-                let cz = [lo[1] + j as f64 * cell, lo[1] + (j + 1) as f64 * cell];
+                // The cell's inside: a face that only touches its border (a wall standing on the
+                // line between two cells) belongs to neither.
+                let e = cell * 1e-9;
+                let cx = [
+                    lo[0] + i as f64 * cell + e,
+                    lo[0] + (i + 1) as f64 * cell - e,
+                ];
+                let cz = [
+                    lo[1] + j as f64 * cell + e,
+                    lo[1] + (j + 1) as f64 * cell - e,
+                ];
                 if let Some(y) = highest_in(t, cx, cz) {
                     raise(&mut heights[j * nx + i], y);
                 }
@@ -103,7 +113,7 @@ pub fn bake(triangles: &[[V3; 3]], cell: f64, path: &str, id: &str) -> Result<Ma
     })
 }
 
-/// The highest point of triangle `t` over the closed cell `[cx] × [cz]`: the triangle clipped to
+/// The highest point of triangle `t` over the cell `[cx] × [cz]`: the triangle clipped to
 /// the cell is a polygon whose highest point is a vertex, a triangle corner inside the cell, a
 /// cell corner inside the triangle, or an edge's crossing of the cell's border.
 fn highest_in(t: &[V3; 3], cx: [f64; 2], cz: [f64; 2]) -> Option<f64> {
@@ -167,8 +177,9 @@ impl Map {
         self.heights[j * self.nx + i]
     }
 
-    /// The map's height at (x, z), bilinear between cell centres, and its slope (∂h/∂x, ∂h/∂z);
-    /// none outside the map's bounds or where a cell it reads holds no mesh.
+    /// The map's height at (x, z), bilinear between cell centres (stepping across a cliff), and
+    /// its slope (∂h/∂x, ∂h/∂z); none outside the map's bounds or where a cell it reads holds no
+    /// mesh.
     pub fn height(&self, x: f64, z: f64) -> Option<(f64, [f64; 2])> {
         let (w, d) = (self.nx as f64 * self.cell, self.nz as f64 * self.cell);
         if !(x >= self.x0 && x <= self.x0 + w && z >= self.z0 && z <= self.z0 + d) {
@@ -186,6 +197,20 @@ impl Map {
         let h10 = self.cell_height(i1, j0)?;
         let h01 = self.cell_height(i0, j1)?;
         let h11 = self.cell_height(i1, j1)?;
+        // Across a cliff, corners further apart in height than two cells, the read steps at the
+        // midpoint between the centres instead of ramping, so nothing rests in the air beside a
+        // wall: it lands on the wall's top or at its foot.
+        let low = h00.min(h10).min(h01).min(h11);
+        let high = h00.max(h10).max(h01).max(h11);
+        if high - low > 2.0 * self.cell {
+            let h = match (fx < 0.5, fz < 0.5) {
+                (true, true) => h00,
+                (false, true) => h10,
+                (true, false) => h01,
+                (false, false) => h11,
+            };
+            return Some((h, [0.0, 0.0]));
+        }
         let lerp = |a: f64, b: f64, t: f64| a + (b - a) * t;
         let h = lerp(lerp(h00, h10, fx), lerp(h01, h11, fx), fz);
         let span_x = if i1 > i0 { self.cell } else { f64::INFINITY };

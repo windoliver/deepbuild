@@ -172,6 +172,15 @@ fn map_height(x: f32, z: f32) -> Height {
     let h01 = map_cell(i0, j1);
     let h11 = map_cell(i1, j1);
     if (h00 < EMPTY || h10 < EMPTY || h01 < EMPTY || h11 < EMPTY) { return out; }
+    // Across a cliff the read steps at the midpoint between centres (heightmap.rs).
+    let low = min(min(h00, h10), min(h01, h11));
+    let high = max(max(h00, h10), max(h01, h11));
+    if (high - low > 2.0 * cell) {
+        let near_x = fx < 0.5;
+        out.h = select(select(h11, h01, near_x), select(h10, h00, near_x), fz < 0.5);
+        out.ok = true;
+        return out;
+    }
     let a = mix(h00, h10, fx);
     let b = mix(h01, h11, fx);
     out.h = mix(a, b, fz);
