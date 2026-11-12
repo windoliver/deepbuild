@@ -3,10 +3,10 @@
   "criterion": "#1100.616f99b5",
   "verdict": "looks_right",
   "who": "Claude (claude-opus-5-5), on the owner's delegation in the session (\"you can help me on behalf of the taste\"); not the owner's own call, and the owner may overturn it",
-  "when": "2026-11-11T20:41:14Z",
+  "when": "2026-11-12T00:48:20Z",
   "files": {
     "first-launch-1512x982-light.png": "e153502c7f1e8d63bdd46d483ff0974560f5b100097af56eb16aba36f26e3355",
-    "run.json": "17577fea59da609c94845188ef24f199a7480eaef303a8531cb5e1242c361dfd"
+    "run.json": "a3e5ea017af9f5c70d4e3e9916ab4d76246ed7ae06a958ffd7926b5045ba8937"
   },
-  "note": "Read the whole picture at 3024 x 1964. Before the click the page names Claude Code and Codex and nothing else; the agents' names line up on the left and their step rings on the right. The three lines read in order (what it adds with the hook's meaning beside the word, what it never does, how to take it back) and wrap inside the lane with nothing cut. Set up is the one control and is clearly the main one. A first pass failed this: the step dots sat at different places per row and read as stray marks, and Show output's text was centred; both were fixed in 0c2a4cee6 before this picture. Also checked outside this file: 960 x 640, dark, Setting up, a stopped Set up with its output shown, and the box page after Set up with its notice above Send."
+  "note": "Read the whole picture at 3024 x 1964. Before the click the page names Claude Code and Codex and nothing else; the agents' names line up on the left and their step rings on the right. The three lines read in order (what it adds with the hook's meaning beside the word, what it never does, how to take it back) and wrap inside the lane with nothing cut. Set up is the one control and is clearly the main one. A first pass failed this: the step dots sat at different places per row and read as stray marks, and Show output's text was centred; both were fixed in 0c2a4cee6 before this picture. Also checked outside this file: 960 x 640, dark, Setting up, a stopped Set up with its output shown, and the box page after Set up with its notice above Send. Re-recorded on the third merge's build (6795a06b2): its picture is byte for byte the one judged on e549c8553's build, and only run.json, which names the app binary, changed."
 }
