@@ -1,0 +1,55 @@
+✔ #1123.07de86fd before runs the base binary as the wrong program and never shares it with the change (59882.474334ms)
+ℹ BAY claim {"index":1,"role":"base","use":"before","bay":"<scratch>/home/deepbuild-bays/1/base","base":"e1529c981f27ebf2a1133cd866e0b604e4ab5551","tree":"fb87e50b1d7e22c0a7fb4f1c03734e7e774f4e09","bundle":null,"untracked":null,"overlay":{"files":1,"hash":"3f692a5c2dc7db819066fab05321c55195d486ef260c2505a62841cf8fb59b0c"},"sealedTree":null,"seal":"none","cold":true,"stopped":false,"installed":true,"written":107,"deleted":0,"crates":["deep-hook"]}
+BAY claim {"index":1,"role":"change","use":"before","bay":"<scratch>/home/deepbuild-bays/1/change","tree":"f69732fbc93ffcabe99da5f9abae09bf6b5dcb3d","bundle":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","untracked":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","untrackedFiles":[],"overlay":null,"sealedTree":null,"seal":"none","cold":true,"stopped":false,"installed":true,"written":108,"deleted":0,"crates":["deep-hook"]}
+PASS before: tests/acceptance/1123/binary.test.mjs › #1123.07de86fd binary result: failed on the merge base at its assertion
+BAY release {"index":1,"role":"base","bay":"<scratch>/home/deepbuild-bays/1/base","status":null,"targetBytes":1060857,"touched":0}
+BAY release {"index":1,"role":"change","bay":"<scratch>/home/deepbuild-bays/1/change","status":null,"targetBytes":1060907,"touched":0}
+proof: wall time 45.2 s
+
+✔ #1123.cd6b3dd8 lanes.mjs uses its own run-private build, not the shell or mutable target (98148.851208ms)
+✔ #1123.cd6b3dd8 affected.mjs uses its own run-private build, not the shell or mutable target (78062.129291ms)
+ℹ INCONCLUSIVE known-failures.json: cargo -p deep-replica --test acceptance_326_panels_planted › base_loader_reaches_the_network: could not read issue #1620: To get started with GitHub CLI, please run:  gh auth login
+INCONCLUSIVE known-failures.json: cargo -p deep-replica --test acceptance_327_card: could not read issue #1620: To get started with GitHub CLI, please run:  gh auth login
+INCONCLUSIVE known-failures.json: packages/hub/test/memory-overrule.test.ts › deep memory overrule › stays overruled across a re-read of the transcript, and a new prompt rejects it again: could not read issue #1621: To get started with GitHub CLI, please run:  gh auth login
+INCONCLUSIVE known-failures.json: tests/acceptance/350/staged.test.ts › AC4 #350.43f82359 a package that registers a handler and an action and then fails to start exposes neither; enabling and disabling one 20 times leaves no listener or callback it owned; a call from a removed version finishing after its replacement is active changes no state and delivers nothing through it › AC4 a hub package enabled and disabled 20 times leaves no handler or action of an earlier load: each hook calls one handler once, each action call runs once: could not read issue #1621: To get started with GitHub CLI, please run:  gh auth login
+INCONCLUSIVE known-failures.json: tests/acceptance/56/decision.test.mjs › #56 scope import("effect/Effect") is timed on Node 22, and the command that times it measures this Node: could not read issue #1622: To get started with GitHub CLI, please run:  gh auth login
+INCONCLUSIVE known-failures.json: tests/acceptance/56/decision.test.mjs › #56.31f12028 [effect] the bench holds 50 sessions' hooks and prints the variant's hold latency, memory and leaked handles: could not read issue #1622: To get started with GitHub CLI, please run:  gh auth login
+INCONCLUSIVE known-failures.json: tests/acceptance/882/lint.test.mjs › #882.f3bc7068 crates/deep-app/src holds no color literal: no rgb(0x, rgba(0x, hsla(, hex inside rgb(...) or "#rrggbb" line: could not read issue #1623: To get started with GitHub CLI, please run:  gh auth login
+INCONCLUSIVE known-failures.json: tests/preflight.test.mjs › the unit lane runs each reference-Mac budget file alone, after the parallel block: could not read issue #1624: To get started with GitHub CLI, please run:  gh auth login
+FAIL affected: 569 new, 0 already failing on main, 13 inconclusive or blocked, 0 listed skips, 3 passed, in 37 s at load 120; logs in <scratch>/tmp/deep-affected-9rX4kM
+✔ #1123.cd6b3dd8 childEnv discards a shell binary directory (3718.740875ms)
+✔ #1123.cd6b3dd8 childEnv preserves the explicit per-side binary directory (3646.517792ms)
+✔ wrong-program proof: deleting DEEP_BIN_DIR after the merge fails the same per-side assertion (4295.332375ms)
+ℹ planted delete-after-merge rejected: AssertionError [ERR_ASSERTION]: per-side DEEP_BIN_DIR survives
+✔ a SIGTERM during Cargo ends owned builders and removes late staging writes (8136.485333ms)
+✔ a SIGKILL during Cargo ends owned builders and removes late staging writes (10399.060375ms)
+✔ SIGKILL of the real lease while the owner lives ends its Cargo group and releases captured output (5395.225458ms)
+✔ real deep lease cancels all binary builders after SIGTERM, with no recreated run root (13131.455834ms)
+✔ real deep lease cancels all binary builders after SIGKILL, with no recreated run root (13623.304334ms)
+✔ failed process scan returns BLOCKED promptly and kills its recorded worker instead of relying on caller timeout (3960.512125ms)
+✔ a supplied owner that is not an ancestor cannot authorize a detached build (1483.969416ms)
+✖ a spawn timeout through real lease returns nonzero and leaves no compiler descendants (3475.029333ms)
+ℹ tests 14
+ℹ suites 0
+ℹ pass 13
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 313370.963875
+
+✖ failing tests:
+
+test at tests/proof-binaries-timeout.test.mjs:10:1
+✖ a spawn timeout through real lease returns nonzero and leaves no compiler descendants (3475.029333ms)
+  AssertionError [ERR_ASSERTION]: real work starts before timeout
+      at TestContext.<anonymous> (file://<checkout>/tests/proof-binaries-timeout.test.mjs:19:10)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }

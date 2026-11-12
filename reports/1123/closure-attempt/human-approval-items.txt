@@ -1,0 +1,28 @@
+Base: 092754bb14a75cd07157e623e21b0d9e7a51677a
+First establish .deepbuild/approvers on main by a person’s own push, using a presence-requiring key. Rebase onto that trust root before signing.
+
+Commit 76ddd340bd040f0f295d350d38444dbf2c8305e3 fix(proof): build per-run binary snapshots for each checkout
+Approves: reports/1123/base-capture-current.txt
+Approves: reports/1123/base-mechanism-current.txt
+Approves: reports/1123/capture-first-draft.txt
+Approves: reports/1123/demand-before.txt
+Approves: reports/1123/gaps-before.txt
+Approves: reports/1123/shard-release-before.txt
+Approves: scripts/affected.mjs
+Approves: scripts/lanes.mjs
+Approves: scripts/proof-binaries.mjs
+Approves: scripts/proof-runs.mjs
+
+Commit 33a859a1ff430d48c9ad299e1224e808822bd89b fix(proof): keep lane definitions independent of binary build tooling
+Approves: reports/1123/import-compatibility.txt
+Approves: reports/1123/status.md
+Approves: scripts/lanes.mjs
+
+Commit 57d96a3f2bfc1fb88c2934165c48071c27c390dc test(1123): adopt independently drafted binary consumers
+Approves: tests/acceptance/374/helpers.ts
+Approves: tests/acceptance/375/helpers.ts
+
+Commit 63e11e81a883c0fdaa8d54788114ff400e08e191 fix(proof): supervise builds and parallelize two proven binary suites
+Approves: scripts/lanes.mjs
+Approves: scripts/proof-bin-build.mjs
+Approves: scripts/proof-binaries.mjs

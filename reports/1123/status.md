@@ -1,6 +1,6 @@
 # #1123: run-private binaries — partial implementation
 
-**Update:** two folders now have blind-redraft and per-file parallel wrong-program proof; see [migration-update.md](migration-update.md). The original stage's results below are historical. Full unit readings and actual Spark/approval gates remain open.
+**Update:** two folders now have blind-redraft and per-file parallel wrong-program proof; see [migration-update.md](migration-update.md). The further [closure attempt](closure-attempt/README.md) fixed lease-loss/scan/reuse failures, compared actual main lint results, and waited the full 60-minute timed admission window: **no grant**, so neither unit command ran. The original stage's results below are historical. Actual Spark, human trust/approval, redraft merges and full unit readings remain required; the guard has now explicitly returned FAIL for unsigned tooling edits.
 
 Base: `092754bb1` (current main when this branch was created). **Part of #1123, not Closes.**
 
@@ -45,7 +45,7 @@ The redacted excerpts in this report directory retain the key check results. Ful
 3. Actual Spark run (DNS/host access unavailable here); Docker is supplemental.
 4. Full affected verification, including main failures and timed/slow omissions, remains non-PASS.
 5. Human-signed approval of protected proof-tooling edits. No agent-created approval tag, allowlist edit or signature is supplied.
-6. Signal cleanup during Cargo and through the real lease path now has red/green proof; broader bay-reuse/group-identity/failed-enumeration interleavings remain unproven (migration-update.md).
+6. Signal cleanup, killed-lease ancestry, failed enumeration and cleanup-before-bay-reuse now have regression proof (closure-attempt). Integrated run still has one unchanged timeout setup failure under load; no all-green claim. Additional untested scheduling interleavings remain outside the recorded proof.
 7. Genuine executed-binary consumers now prove exclusion/skipped-lane behavior against selector mutants, without editing the earlier tests. Named helper scoping has additional passing regressions.
 
 The PR is deliberately a draft and says **Part of #1123**. The implementation is about 180 meaningful added/changed lines, but independent real-process fixtures, regression proof and the retained disputed draft take the total above the approximate 400-line target. Splitting the three tightly coupled runner entry paths would leave inconsistent binary provenance; folder migrations remain separate jobs. No product/core change, dependency, public option, CI workflow, test waiver, or acceptance-criterion edit is included.
