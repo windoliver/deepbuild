@@ -11,10 +11,11 @@
 // refusal names lib:turns.next_turn, which turns@1 defines. Upstream's passing runs become the twin: the same
 // program linking turns@1 and grid_path@1 is admitted, imports nothing, and runs both calls.
 //
-// Not held: the CHECK-NOT (our linker has no --undefined, so no symbol can be required that nothing references),
-// --allow-undefined and --allow-undefined-file (our linker never leaves an import: the issue's "It can never: Leave an
-// import in the running program"), --export of a missing symbol, and foo reached through its address
-// in data (our objects take no function's address: no table or element segment, ../README.md: Relocatable objects).
+// Not held: the CHECK-NOT (our linker has no --undefined, so no symbol can arise that only --undefined names and
+// nothing references), --allow-undefined and --allow-undefined-file (our linker never leaves an import: the issue's
+// "It can never: Leave an import in the running program"), --export of a missing symbol, and foo reached through its
+// address in data (our objects take no function's address: no table or element segment, ../README.md: Relocatable
+// objects).
 //
 // Wrong program shown failing: no planted value (../README.md: Planted twins) reaches an import no listed library
 // exports; the wrong program is the base, which refuses every item with `links` without naming an import. The twin

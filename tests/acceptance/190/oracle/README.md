@@ -78,7 +78,7 @@ upstream test either, per the map.
   `Inputs/hello.s` (not vendored) isn't needed.
 - **undefined.s: `--allow-undefined`, `--allow-undefined-file`, `--export=xxx` and `--undefined=baz`.** Our linker
   has no such options and must never leave an import (the issue: "It can never: Leave an import in the running
-  program"). So the CHECK-NOT, that a symbol `--undefined` requires but nothing references (`baz`) isn't reported,
+  program"). So the CHECK-NOT, that a symbol only `--undefined` names, which nothing references (`baz`), isn't reported,
   isn't held: no such symbol can arise in our links. In its place the test checks something of our own, that no
   refusal names an import a listed library defines (`lib:turns.next_turn`). Upstream's passing runs are held as the
   twin that links once the symbol is defined.

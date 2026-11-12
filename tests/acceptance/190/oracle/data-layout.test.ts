@@ -4,8 +4,8 @@
 //
 // Upstream links data-layout.s's object and hello.s's and checks obj2yaml of the output: one memory of the size the
 // data needs (Minimum 0x2; with --initial-memory = --max-memory, Maximum = Minimum), every segment at its alignment
-// after the one before (the .data segment at 65552, its foo there and .p2align 4's aligned_bar at 65568, a multiple
-// of 16, up to __data_end 65592), and `external_ref`, an address of
+// after the one before (the second segment's offset, 65552, and an unnamed global of 65592 are checked; foo at 65552
+// and .p2align 4's aligned_bar at 65568, a multiple of 16, follow from them), and `external_ref`, an address of
 // hello.s's data, resolved to where that data landed. wasm-ld's own layout rules (a 64 KiB stack first, segments
 // merged by section name, __data_end and __heap_base) aren't ours; ours is ../README.md's "The linker's layout": the
 // program's data keeps its object's offsets from address 0, and each library's segments follow, in link order
