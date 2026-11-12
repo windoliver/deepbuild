@@ -1,6 +1,6 @@
 # #190 blind suite (tests/acceptance/190), on spark-c89f (Linux aarch64), 2026-11-09, worktree at base 6042ef5a plus this change
 # Command: NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 npx vitest run --root tests/acceptance/190 --testTimeout=600000 --no-file-parallelism
-# Result: 14 passed, 4 BLOCKED (failed with BLOCKED:, never passed): criterion 4's Mac+Linux x86_64 test and both of 10's need macOS arm64; criterion 5's second machine needs Docker's linux/amd64 image, which this box can't run.
+# Result: 14 passed, 4 BLOCKED (failed with BLOCKED:, never passed): criterion 4's Mac+Linux x86_64 test and both of 10's need macOS arm64; criterion 5's second machine needs Docker's linux/amd64 image, which isn't on this box (the suite pulls nothing).
 
 
  RUN  v5.0.5 <worktree>/tests/acceptance/190

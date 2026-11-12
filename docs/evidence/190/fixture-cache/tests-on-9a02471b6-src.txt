@@ -1,0 +1,6 @@
+# crates/deep-logic/tests/fixture_once.rs as committed in 9a02471b6, run against crates/deep-logic/src at 9a02471b6 (the rest of the tree at 9a02471b6): cargo test --locked -p deep-logic --test fixture_once
+test a_missing_fixture_s_refusal_doesn_t_refuse_a_piece_that_carries_it ... ok
+test a_fixture_refused_under_one_pack_s_exports_doesn_t_refuse_another ... ok
+test a_library_s_fixtures_run_once_per_hash_whatever_packs_carry_it ... ok
+test a_need_s_exports_decide_a_fixture_result_s_reuse ... ok
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.22s

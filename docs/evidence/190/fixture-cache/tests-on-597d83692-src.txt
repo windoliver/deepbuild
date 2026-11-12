@@ -1,0 +1,10 @@
+# crates/deep-logic/tests/fixture_once.rs as committed in 9a02471b6, run against crates/deep-logic/src at 597d83692 (the rest of the tree at 9a02471b6): cargo test --locked -p deep-logic --test fixture_once
+test a_missing_fixture_s_refusal_doesn_t_refuse_a_piece_that_carries_it ... FAILED
+test a_fixture_refused_under_one_pack_s_exports_doesn_t_refuse_another ... ok
+test a_library_s_fixtures_run_once_per_hash_whatever_packs_carry_it ... ok
+test a_need_s_exports_decide_a_fixture_result_s_reuse ... ok
+thread 'a_missing_fixture_s_refusal_doesn_t_refuse_a_piece_that_carries_it' (4155445) panicked at crates/deep-logic/tests/fixture_once.rs:113:5:
+assertion `left == right` failed: the piece carrying the fixture links: {"ok":false,"code":"link_refused","item":"maze","refusals":[{"rule":"fixture","what":"grid_path@1's fixture 0b8d9f8abe45b5238ebfcecb100acb965f44ef7fff8e6440f9312e96cafeb6d1 isn't a fixture the piece carries","library":"grid_path@1","fixture":"0b8d9f8abe45b5238ebfcecb100acb965f44ef7fff8e6440f9312e96cafeb6d1"}]}
+  left: Bool(false)
+ right: true
+test result: FAILED. 3 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.21s
