@@ -51,6 +51,10 @@ test-hold-min-2s = []
 test-leave-out-logic = []
 # Issue #489: the full set without the data module, so motion@1's digest is compared without it.
 test-leave-out-data = []
+# Issue #1919: the full set without the physics module, whose physics shapes mode answers
+# module_missing; and its twin, whose mode draws an empty snapshot instead.
+test-leave-out-physics = []
+test-physics-shapes-empty = ["test-leave-out-physics"]
 # Issue #490: the full set without the motion module; the planted layout that declares ease@1 in
 # the motion module; and the planted opening that renumbers ease@1's entries.
 test-leave-out-motion = []

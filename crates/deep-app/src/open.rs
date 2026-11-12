@@ -465,6 +465,9 @@ fn show(address: &Address, window: &mut Window, cx: &mut App) -> Result<Address,
         }
         Target::Gone(words) => return say(words, window, cx),
     };
+    if selection(cx).shown.region != Some(region) {
+        hand_keys(region, window, cx);
+    }
     let changed = selection(cx).shown.address.as_ref() != Some(&full);
     selection(cx).shown = Shown {
         region: Some(region),
@@ -477,6 +480,26 @@ fn show(address: &Address, window: &mut Window, cx: &mut App) -> Result<Address,
     window.refresh();
     cx.refresh_windows();
     Ok(full)
+}
+
+/// The page region now draws `region`: what had the keyboard on the page it left, such as that ask's card, is drawn no
+/// more, so a shipped page takes it, as F6 gives it the page, and ⌘[ and ⌘] reach it (#1460). The list and the box
+/// keep it, since every page draws them, and an ask's card takes it at its next frame (#1462).
+fn hand_keys(region: Region, window: &mut Window, cx: &mut App) {
+    let Region::Shipped(kind) = region else {
+        return;
+    };
+    if views::list_has_keys(window) || crate::words::focused(window) {
+        return;
+    }
+    let Some(dock) = dock(cx) else {
+        return;
+    };
+    let keys = panel_named(&dock, kind.name(), cx)
+        .and_then(|id| dock.read(cx).panel(id).map(|panel| panel.focus_handle(cx)));
+    if let Some(keys) = keys {
+        window.focus(&keys, cx);
+    }
 }
 
 /// Makes `address` the last address you opened, with nothing forward of it.
@@ -651,7 +674,8 @@ pub fn open_first(window: &mut Window, cx: &mut App) {
         return;
     }
     // First launch is its own page until Set up finishes; before the record is read, the home page says so.
-    if crate::setup::needed() {
+    // #1100's planted app stays on the first-launch page after a Set up that works.
+    if crate::setup::needed() || crate::plain::planted("stays-on-first-launch") {
         return show_page(Kind::Welcome, "welcome", window, cx);
     }
     if !record::read_yet() {

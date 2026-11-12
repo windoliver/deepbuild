@@ -47,6 +47,19 @@ pub struct Session {
     pub doing: Option<Doing>,
     /// How many events its hooks have sent, and when the newest came (#2021).
     pub hooks: (u64, Option<u64>),
+    /// Its one flag beside its word, as the hub's row carries it (#2019).
+    pub flag: Option<Flag>,
+}
+
+/// A session row's flag (#2019): never a state, at most one, in the right slot beside its word.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Flag {
+    /// interrupted, retrying, repeating, watch-only or unpushed.
+    pub code: String,
+    /// The one line its slot shows, from record facts.
+    pub text: String,
+    /// What clears it, where something you can do does; empty otherwise.
+    pub fix: String,
 }
 
 /// What a working session's turn is doing now (#2021): its latest tool event's words, when that event came, and
@@ -163,6 +176,8 @@ pub struct Row {
     /// How many events a session's hooks have sent and when the newest came (#2021): its working mark's step, and its
     /// time under reduce motion.
     pub hooks: (u64, Option<u64>),
+    /// A session's flag beside its word (#2019).
+    pub flag: Option<Flag>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -263,6 +278,7 @@ pub fn build(asks: &[Ask], sessions: &[Session]) -> Vec<Item> {
             why: String::new(),
             doing: None,
             hooks: (0, None),
+            flag: None,
         }));
     }
     let mut projects: Vec<Option<&str>> = Vec::new();
@@ -296,6 +312,7 @@ pub fn build(asks: &[Ask], sessions: &[Session]) -> Vec<Item> {
                 why: s.why.clone(),
                 doing: s.doing.clone(),
                 hooks: s.hooks,
+                flag: s.flag.clone(),
             }));
         }
         if !quiet.is_empty() {
@@ -316,6 +333,7 @@ pub fn build(asks: &[Ask], sessions: &[Session]) -> Vec<Item> {
                 why: String::new(),
                 doing: None,
                 hooks: (0, None),
+                flag: None,
             }));
         }
     }
@@ -468,6 +486,11 @@ pub fn read(view: &crate::record::View, now: u64) -> (Vec<Ask>, Vec<Session>) {
                     since: row["since"].as_u64(),
                     unread: row["unread"].as_bool().unwrap_or(false) || spoke || whole_day,
                     why: crate::question::visible(&text(row, "why")),
+                    flag: row["flag"]["code"].as_str().map(|code| Flag {
+                        code: code.to_owned(),
+                        text: crate::question::visible(&text(&row["flag"], "text")),
+                        fix: crate::question::visible(&text(&row["flag"], "fix")),
+                    }),
                 }
             })
             .collect();
@@ -496,6 +519,7 @@ pub fn read(view: &crate::record::View, now: u64) -> (Vec<Ask>, Vec<Session>) {
                 unread: false,
                 why: String::new(),
                 doing: None,
+                flag: None,
             }
         })
         .collect();
@@ -694,6 +718,7 @@ mod tests {
             why: String::new(),
             doing: None,
             hooks: (0, None),
+            flag: None,
         }
     }
 

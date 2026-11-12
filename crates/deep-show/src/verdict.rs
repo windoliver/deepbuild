@@ -60,13 +60,28 @@ fn unknown_by_kind(notices: &[Notice], into: &mut BTreeMap<String, Vec<String>>)
     }
 }
 
-/// The items of a kind this build doesn't know, which the check skipped (sorted).
+/// The items of a kind this build doesn't know, and the instances of a pack it lacks (#1958),
+/// which the check skipped (sorted).
 pub fn unknown_items(notices: &[Notice]) -> Vec<String> {
     let mut by_kind = BTreeMap::new();
     unknown_by_kind(notices, &mut by_kind);
     let mut ids: Vec<String> = by_kind.into_values().flatten().collect();
+    ids.extend(missing_packs(notices).flat_map(|n| n.ids.iter().cloned()));
     ids.sort();
+    ids.dedup();
     ids
+}
+
+/// The check's `pack_missing` notices: a pack version the document names and this build lacks.
+fn missing_packs(notices: &[Notice]) -> impl Iterator<Item = &Notice> {
+    notices.iter().filter(|n| n.code == "pack_missing")
+}
+
+/// Why checks are BLOCKED, one row per missing pack version with its instances (#1958).
+fn missing_rows(notices: &[Notice]) -> Vec<Value> {
+    missing_packs(notices)
+        .map(|n| json!({"code": "pack_missing", "pack": n.actual["pack"], "version": n.actual["version"], "ids": n.ids}))
+        .collect()
 }
 
 /// `doc` without the items `skipped`: what the frame evaluates and draws, so the rest of a
@@ -110,6 +125,13 @@ impl<'a> Hub<'a> {
     /// build doesn't know, when the claim names the document among its deliverables. Outside a
     /// claim they stay notices (#389).
     pub fn blocked_in_claim(&self, show: &Show, notices: &[Notice]) -> Vec<Value> {
+        // A check of a document touches every item, so a pack version it lacks blocks it, claim
+        // or not (#1958).
+        let mut rows = if show.check {
+            missing_rows(notices)
+        } else {
+            Vec::new()
+        };
         let in_claim = show.check
             && show
                 .claim
@@ -117,11 +139,12 @@ impl<'a> Hub<'a> {
                 .and_then(|h| self.scenario.claims.get(h))
                 .is_some_and(|c| c.deliverables.contains(&show.doc));
         if !in_claim || self.planted(Planted::ChecksSkipUnknownKind) {
-            return Vec::new();
+            return rows;
         }
         let mut by_kind = BTreeMap::new();
         unknown_by_kind(notices, &mut by_kind);
-        blocked_rows(by_kind)
+        rows.extend(blocked_rows(by_kind));
+        rows
     }
 
     /// What a canvas module this build lacks blocks in a `deep show --check` whose claim names
@@ -634,6 +657,7 @@ impl<'a> Hub<'a> {
             let checked = check_packed(cur.doc, sealed, &self.packs);
             if !self.planted(Planted::ChecksSkipUnknownKind) {
                 unknown_by_kind(&checked.notices, &mut by_kind);
+                blocked.extend(missing_rows(&checked.notices));
             }
             // A document that requires a canvas module the build lacks is BLOCKED, never a
             // FAIL (#305), naming the module where the `requires/modules/<module>` path does.

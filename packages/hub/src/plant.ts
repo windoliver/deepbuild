@@ -92,6 +92,9 @@ export type Plant =
   // #2018's: a `--why` built from a reading of its own, a BLOCKED row that names no one and no evidence, and a
   // reading that tries the stale row before needs you.
   | 'why-second-reading' | 'blocked-bare' | 'stale-before-ask'
+  // #2019's: a reading that never reads a model-call retry, a FAIL read as sent back with no hold delivered, and a repeat
+  // detector keyed on the command alone, one that notifies at every repeat, and one that raises an ask.
+  | 'retry-reads-working' | 'sent-back-without-hold' | 'repeat-by-command' | 'repeat-notifies-each' | 'repeat-raises-ask'
   // #1455's: a doctor that prints a fix under a healthy item.
   | 'doctor-healthy-fix'
   // #303's: a task for every first prompt or mid-turn message, hashes blind to text or check bytes, a role read from
@@ -238,7 +241,9 @@ export type Plant =
   | 'figure-in-needs-you' | 'figure-feeds-verdict'
   // #2026's: a spool replay that takes a request as recorded once any newer ID is, and an asker that keeps its place by
   // the newest hook ID it read: each leaves a spooled permission request with no ask.
-  | 'replay-keeps-place-by-id' | 'asks-keep-place-by-id';
+  | 'replay-keeps-place-by-id' | 'asks-keep-place-by-id'
+  // #1100's: a set-up line that says nothing of the guard entries that block, one written to stdout, and steps that never say what they're doing.
+  | 'set-up-line-says-nothing-blocks' | 'set-up-line-to-stdout' | 'silent-steps';
 const PLANTS: readonly string[] = [
   'statusline-user-settings-only', 'window-unknown-as-zero', 'window-carried-from-other-repo', 'sends-block-whole',
   'box-applies-at-once', 'box-ignores-revision',
@@ -271,6 +276,7 @@ const PLANTS: readonly string[] = [
   'status-omits-commit', 'doctor-misses-hooks', 'on-stays-off',
   'status-second-order', 'status-own-word', 'status-unread-flipped', 'deep-second-count', 'inbox-no-default', 'inbox-adds-unread', 'status-row-leak',
   'why-second-reading', 'blocked-bare', 'stale-before-ask',
+  'retry-reads-working', 'sent-back-without-hold', 'repeat-by-command', 'repeat-notifies-each', 'repeat-raises-ask',
   'doctor-healthy-fix',
   'first-prompt-always-task', 'midturn-always-task', 'hash-ids-only', 'hash-check-paths', 'role-from-text', 'claim-on-tool-calls',
   'runs-disk-bytes',
@@ -334,6 +340,7 @@ const PLANTS: readonly string[] = [
   'root-plan-runs-agent-path', 'host-skips-lingering', 'host-package-fully-undoable',
   'figure-in-needs-you', 'figure-feeds-verdict',
   'replay-keeps-place-by-id', 'asks-keep-place-by-id',
+  'set-up-line-says-nothing-blocks', 'set-up-line-to-stdout', 'silent-steps',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {
   if (!value) return undefined;
