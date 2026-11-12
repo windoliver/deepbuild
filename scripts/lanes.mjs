@@ -500,6 +500,8 @@ alone.push('tests/acceptance/1183/');
 // ac4-budget times 2,000 units at 1080p against the showpiece class's GPU budget.
 alone.push('tests/acceptance/537/', 'tests/acceptance/537-oracle/');
 timed.push('tests/acceptance/537/ac4-budget.test.ts');
+// #1920's files build deep-show seven times, in the full and core sets, and read each build's published plan.
+alone.push('tests/acceptance/1920/');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },

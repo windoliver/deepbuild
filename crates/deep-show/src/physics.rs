@@ -19,16 +19,22 @@ use serde_json::{json, Map, Value};
 
 use crate::hub::Hub;
 
-/// The physics module the full set seals; `test-physics-hands-no-changes` seals #1918's planted
-/// one, whose readings entry hands the column view no changed ranges; #1919's
+/// The physics module the full set seals, on the Rapier backend this build links, its pins as
+/// cargo resolved them (#1920); `test-physics-hands-no-changes` seals #1918's planted one, whose
+/// readings entry hands the column view no changed ranges; `test-physics-rapier-patch` the same
+/// module with rapier3d's pin moved one patch and nothing else changed; #1919's
 /// `test-leave-out-physics` seals none.
 pub(crate) fn module() -> Option<Module> {
+    let mut build = deep_physics_rapier::build();
+    if cfg!(feature = "test-physics-rapier-patch") {
+        build.backend.version = "0.36.2".into();
+    }
     if cfg!(feature = "test-leave-out-physics") {
         None
     } else if cfg!(feature = "test-physics-hands-no-changes") {
-        Some(deep_canvas_physics::module::hands_no_changes())
+        Some(deep_canvas_physics::module::hands_no_changes(&build))
     } else {
-        Some(deep_canvas_physics::module::module())
+        Some(deep_canvas_physics::module::module(&build))
     }
 }
 

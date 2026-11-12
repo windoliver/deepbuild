@@ -112,7 +112,7 @@ pub fn behavior(hub: &mut Hub<'_>, ctx: &mut Ctx<'_>) -> Option<PartRun> {
     let iface = sealed.interface_of(module)?;
     let measured = iface.implementation.equivalence == Equivalence::Measured;
     let Some(part) = iface.behavior.as_ref().filter(|b| !b.fixtures.is_empty()) else {
-        if !measured {
+        if !measured || iface.implementation.name == iface.reference {
             return None;
         }
         // Without a behavior part an interface admits only its reference and bit ones.
