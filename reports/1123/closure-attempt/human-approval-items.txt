@@ -26,3 +26,7 @@ Commit 63e11e81a883c0fdaa8d54788114ff400e08e191 fix(proof): supervise builds and
 Approves: scripts/lanes.mjs
 Approves: scripts/proof-bin-build.mjs
 Approves: scripts/proof-binaries.mjs
+
+Commit 2edfcdbbe8adc5abc5291c8963637530772e2a54 fix(proof): await recorded build cleanup before reclaiming bays
+Approves: scripts/bays.mjs
+Approves: scripts/proof-bin-build.mjs
