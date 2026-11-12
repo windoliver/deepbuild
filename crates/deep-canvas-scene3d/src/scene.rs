@@ -3283,6 +3283,8 @@ pub(crate) fn evaluate_compiled(
                     });
                 }
                 OVERLAY => overlay_items.push((layer_id.to_string(), id.clone())),
+                // #1183: an overlay whose `show` is false at t draws nothing.
+                "overlay.text@1" if params.get("show") == Some(&Value::Bool(false)) => {}
                 "overlay.text@1" => readout_items.push((id.clone(), params.clone())),
                 "puff@1" => {
                     let m = world(&items, id);
@@ -3548,7 +3550,9 @@ pub(crate) fn evaluate_compiled(
     let mut top = 12.0;
     for (id, params) in readout_items.iter().chain(card.iter()) {
         let template = params.get("template").and_then(Value::as_str).unwrap_or("");
-        let filled = shown.as_ref().and_then(|s| deep_canvas::template::expand(s, template).ok());
+        let filled = shown
+            .as_ref()
+            .and_then(|s| deep_canvas::template::expand_in(s, id, template).ok());
         let text = filled.as_deref().unwrap_or(template);
         let size = num(params.get("size")).unwrap_or(13.0);
         let (run_box, glyphs) = labels.run(text, Role::Body, size as f32);

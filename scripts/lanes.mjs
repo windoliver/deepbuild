@@ -492,6 +492,8 @@ alone.push('tests/acceptance/306-redraft-1958/');
 // budgets.test.ts reads the machine's load.
 alone.push('tests/acceptance/157/', 'tests/acceptance/157-oracle/');
 timed.push('tests/acceptance/157/budgets.test.ts');
+// #1183's files each build deep-show and judge 3D figures whose logic runs in the sandbox.
+alone.push('tests/acceptance/1183/');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
