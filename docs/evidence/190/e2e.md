@@ -153,7 +153,9 @@ wording is the issue's (its Acceptance criteria), not repeated here.
   `parseLinkingSection`; obj2yaml itself isn't installed). Upstream's whole RUN line would reject the honest program
   too: it has no name section, which upstream's `Name: name` CHECK needs, and it defines `init` and `step` besides
   `ret32` and `_start` (4 functions and a third signature, where upstream's CHECK-NEXTs want exactly two), by
-  `WebAssembly.Module` on the honest program rebuilt as the reader file's header says (sha256 `6afd1f32…`); only the
+  `WebAssembly.Module` (no name section; `init` and `step` exported) and a parse of its type and function sections
+  (4 functions over (f32) -> (i32), (i64) -> () and () -> ()) on the honest program rebuilt as the reader file's header
+  says (sha256 `6afd1f32…`); only the
   reader step tells the two apart.
   `linker_links_in_listing_order`'s output is aligned and consistent in its own order (beta@1 at 8,200, alpha@1 at
   8,208, v = 65,033, by validators' probes, not saved here), so it breaks only our rule that link order is dependency
@@ -573,3 +575,7 @@ raw files, `gen.test.ts`, the code and the issue. It also ran its own BFS over t
   skip is cited to `prepareRuns`, not `runTests`; the honest program fails upstream's RUN line for its extra functions
   and signature as well as its missing name section; and "no planted twin" replaces "no planted fault", since the
   hand-made mutant does fail an upstream-held check.
+- **Round 48** found no wrong values and no P1 or P2 (oracle rerun 6 passed; the reader file and the honest program's
+  sections reproduced; twins probed; mutants reasoned; screenshots, `e2e-raw`, unblock asks and `proof-runs.mjs`
+  claims checked) and one low gap, fixed here: the honest program's function count is cited to a section parse, not
+  to `WebAssembly.Module`.
