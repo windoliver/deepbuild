@@ -1856,6 +1856,8 @@ fn build_set() -> BuildSet {
 const TEST_BUILD: bool = cfg!(any(
     feature = "test-a",
     feature = "test-preview",
+    feature = "test-preview-removed",
+    feature = "test-preview-removed-bare",
     feature = "test-cue",
     feature = "test-cue-span",
     feature = "test-ring-a",

@@ -150,6 +150,24 @@ fn check_by(
             // Whether a kind text migrates is looked up once per text, not once per item.
             let mut migrates: BTreeMap<String, bool> = BTreeMap::new();
             for (key, item) in items.iter_mut() {
+                // A preview kind its module removed opens through its migration (#1802).
+                if let Some(moved) = sealed.unremoved(item) {
+                    let text = kind_text(item).unwrap_or_default();
+                    notices.push(Notice {
+                        code: "migrated",
+                        ids: vec![key.clone()],
+                        path: format!("items/{key}/kind"),
+                        actual: json!(text),
+                        what: format!(
+                            "migrated {text}, a preview kind its module removed, to {}",
+                            kind_text(&moved).unwrap_or_default()
+                        ),
+                        migration: None,
+                        replaced_by: None,
+                        close: Vec::new(),
+                    });
+                    *item = moved;
+                }
                 let Some(text) = kind_text(item) else {
                     continue;
                 };

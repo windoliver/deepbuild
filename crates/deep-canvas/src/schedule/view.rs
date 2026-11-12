@@ -192,6 +192,11 @@ impl<'a> View<'a> {
         self.sealed.migrated(item)
     }
 
+    /// An item of a preview kind its module removed, as the kind its migration gives.
+    pub fn unremoved(&self, item: &Value) -> Option<Value> {
+        self.sealed.unremoved(item)
+    }
+
     /// Whether a sealed canvas module registered this kind: the build's kinds again.
     pub fn is_module_kind(&self, kind: &str) -> bool {
         crate::kinds::parse_kind(kind)
