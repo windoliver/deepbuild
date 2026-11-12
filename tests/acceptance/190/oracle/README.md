@@ -45,7 +45,7 @@ IDs are the parent suite's (`../helpers.ts`: AC). 6 tests.
 | ID (map) | Upstream | Tests | Wrong program shown failing |
 |---|---|---|---|
 | 1 `#190.e0980599` (1) | llvm-project `lld/test/wasm/function-imports.s` (run on our code) | `function-imports.test.ts` (2): ret32@1 (ret32: (f32) -> (i32)) linked into a program whose internal `$start: () -> ()` has _start's body; held from upstream's CHECKs: our merged program imports nothing (FUNCTION directly after TYPE), its types hold (f32) -> (i32) and () -> (), exactly one defined function has type (f32) -> (i32); our own: it keeps no `linking` or `reloc.*` section, exactly one () -> () function has _start's body and its call goes to that function, and run in node the call returns ret32's 32 | `linker_adds_linking_section`: its merged program keeps a `linking` section, which only our own no-`linking` check catches (no upstream-held check does; see below); the twin of a linker that resolves nothing (the program object as written) fails the upstream-held "imports nothing", naming `lib:ret32.ret32`, and our own check that _start calls an internal function |
-| 1 `#190.e0980599` (1) | llvm-project `lld/test/wasm/data-layout.s` (run on our code) | `data-layout.test.ts` (2): a program with 8,195 data bytes linking alpha@1 ("ALPHA") and beta@1 ("BETA!!!"), listed beta first; the receipt names alpha@1 then beta@1; the merged program has one defined memory, 1 page minimum and maximum, exported as `memory`; instantiated, its memory holds the program's bytes at 0, "ALPHA" at 8,200 and "BETA!!!" at 8,208 (each at alignment 8 after the one before) and zeros elsewhere; run, each library reads its own data through its relocated address (v = 65,033) | `linker_links_in_listing_order`: it lays beta@1 out first, and the layout check fails naming alpha@1's address, 8,200. It fails only our own order check: its layout is consistent in its own order (beta@1 at 8,200, alpha@1 at 8,208, each aligned, one memory, v = 65,033), as wasm-ld's is given beta first, so no upstream-held check fails on it |
+| 1 `#190.e0980599` (1) | llvm-project `lld/test/wasm/data-layout.s` (run on our code) | `data-layout.test.ts` (2): a program with 8,195 data bytes linking alpha@1 ("ALPHA") and beta@1 ("BETA!!!"), listed beta first; the receipt names alpha@1 then beta@1; the merged program has one defined memory, 1 page minimum and maximum, exported as `memory`; instantiated, its memory holds the program's bytes at 0, "ALPHA" at 8,200 and "BETA!!!" at 8,208 (each at alignment 8 after the one before) and zeros elsewhere; run, each library reads its own data through its relocated address (v = 65,033) | `linker_links_in_listing_order`: it lays beta@1 out first, and the layout check fails naming alpha@1's address, 8,200. Its output is aligned and consistent in its own order (beta@1 at 8,200, alpha@1 at 8,208, one memory, v = 65,033), as wasm-ld's is given beta first, so it breaks only our order rule; the checks it fails are fixed-address checks that hold alignment (upstream's) and which object comes first (ours) together, so no check of upstream's alone is shown failing |
 | 3 `#190.ea25cdd0` (3) | llvm-project `lld/test/wasm/undefined.s` (run on our code) | `undefined.test.ts` (2): a program importing `lib:turns.next_turn` and `lib:grid_path.find_route`, linking only turns@1, is `link_refused` naming the item, a refusal naming `lib:grid_path.find_route` (CHECK) and, a check of our own in place of the CHECK-NOT (not held), none naming `lib:turns.next_turn`, which turns@1 defines; the twin linking turns@1 and grid_path@1 is admitted, imports nothing and, run, returns next_turn(0, 3) + the open grid's 4 moves | none: no planted value reaches an import no listed library exports; the wrong program is the base, which refuses every item with `links` without naming an import (`BASE-FAILURE.txt`). The twin fails a linker that refuses any program importing from two libraries |
 
 Criteria 2 and 4–10 have no upstream test in the map (its "No upstream test" table); the parent suite proves them.
@@ -116,17 +116,18 @@ upstream test either, per the map.
 
 ## The checks against a real linker
 
-Before the base run, each check was held to LLVM's own linker on the same objects (a temporary test outside the repo,
-deleted): rust-lld 1.99.1's `wasm-ld` with `--no-entry --global-base=0 --stack-first -z stack-size=0
+Before the base run, each check was held to LLVM's own linker on the same objects (a temporary test outside the
+repo, deleted): rust-lld 1.99.1's `wasm-ld` with `--no-entry --global-base=0 --stack-first -z stack-size=0
 --no-gc-sections --initial-memory=65536 --max-memory=65536` (the parent README's flags, which place the program's
-data at 0 and each library's after it, in input order). Its merged ret32 program passes every function-imports
-check and runs to 32; the program object unlinked fails four (imports left, `linking` and `reloc.CODE` left, no
-defined (f32) -> (i32), _start calling an import). Its alpha-then-beta program passes every data-layout check and
-runs to 65,033; linked beta first it fails three (alpha@1's and beta@1's data at the wrong addresses, a stray byte
-at 8,205) and still runs to 65,033, so the layout, not the run, is what tells link order; wasm-ld's beta-first output passing every upstream-held
-check and failing only those three shows the order check is ours. The undefined program
-with only turns@1 is refused by wasm-ld as "undefined symbol: find_route" and nothing else; with grid_path@1 too it
-links and runs to 5. Not checked: anything through our own linker (this job may not see it).
+data at 0 and each library's after it, in input order). Its merged ret32 program passes every function-imports check
+and runs to 32; the program object unlinked fails four (imports left, `linking` and `reloc.CODE` left, no defined
+(f32) -> (i32), _start calling an import). Its alpha-then-beta program passes every data-layout check and runs to
+65,033; linked beta first it fails three (alpha@1's and beta@1's data at the wrong addresses, a stray byte at 8,205)
+and still runs to 65,033, so the layout, not the run, is what tells link order. That beta-first output is aligned
+and consistent in its own order: it breaks only our order rule, which the three fixed-address checks hold together
+with upstream's alignment. The undefined program with only turns@1 is refused by wasm-ld as "undefined symbol:
+find_route" and nothing else; with grid_path@1 too it links and runs to 5. Not checked: anything through our own
+linker (this job may not see it).
 
 ## Base failure
 

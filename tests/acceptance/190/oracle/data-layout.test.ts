@@ -30,10 +30,11 @@
 // and relocations inside data (our objects' are in code only, ../README.md: Relocatable objects).
 //
 // Wrong program shown failing: `linker_links_in_listing_order` (../README.md: Planted twins) lays out beta before
-// alpha, as the item lists them, and fails the layout naming alpha's address. It fails only our own order check: it
-// lays its data out consistently in its own order (beta@1 at 8,200, alpha@1 at 8,208, each aligned, one memory, v =
-// 65,033), as wasm-ld does given beta first, so every check held from upstream passes on it. No planted value shows
-// an upstream-held check of this file failing.
+// alpha, as the item lists them, and fails the layout naming alpha's address. Its output is aligned and consistent in
+// its own order (beta@1 at 8,200, alpha@1 at 8,208, one memory, v = 65,033), as wasm-ld's is given beta first, so what
+// it breaks is only our order rule. The checks it fails are the fixed-address checks, which hold alignment (upstream's)
+// and which object comes first (ours) together; the test has no separate alignment check, so no planted value shows a
+// check of upstream's alone failing on this file.
 import { describe, expect, it } from 'vitest';
 import { AC, TIMEOUT, admitted, assemble, checkCall, logicBin, none, onHost, piece, prebuild, type JsonObject, type Lib, type Planted, type Program } from '../helpers.ts';
 import { pack, vLayout } from '../libs.ts';
@@ -81,8 +82,9 @@ const layoutPiece = (a: Lib, b: Lib): JsonObject =>
 const ALPHA_AT = alignUp(PROGRAM_DATA.length);
 const BETA_AT = alignUp(ALPHA_AT + ALPHA.length);
 
-/** What upstream's CHECK lines hold, in our layout, of a merged program, plus our own export and zero-fill checks:
- * each failure, or none. */
+/** What upstream's CHECK lines hold, in our layout, of a merged program, plus our own order, export and zero-fill
+ * checks: the fixed addresses hold both alignment (upstream's) and which object comes first (ours). Each failure, or
+ * none. */
 function judge(bytes: Buffer): string[] {
   const failures: string[] = [];
   const m = parse(bytes);
