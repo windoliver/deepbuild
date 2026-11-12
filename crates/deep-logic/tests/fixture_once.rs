@@ -81,3 +81,52 @@ fn a_fixture_refused_under_one_pack_s_exports_doesn_t_refuse_another() {
         "{second}"
     );
 }
+
+/// A refusal that turns on what a piece carries isn't kept for the next piece: `maze` without
+/// grid_path@1's fixture asset is refused, and the same piece carrying it then links.
+#[test]
+fn a_missing_fixture_s_refusal_doesn_t_refuse_a_piece_that_carries_it() {
+    let full: Value = serde_json::from_str(
+        include_str!("fixtures/fixture-once.jsonl")
+            .lines()
+            .next()
+            .expect("a line"),
+    )
+    .expect("a request line");
+    let fixture = full["piece"]["packs"][0]["libs"]["grid_path@1"]["fixtures"][0]
+        .as_str()
+        .expect("grid_path@1's fixture")
+        .to_string();
+    let mut without = full.clone();
+    without["piece"]["assets"]
+        .as_object_mut()
+        .expect("assets")
+        .remove(&fixture);
+    let mut logic = Logic::new(Planted::default());
+    let first = logic.handle(&without);
+    assert_eq!(
+        [&first["code"], &first["refusals"][0]["fixture"]],
+        [&json!("link_refused"), &json!(fixture)],
+        "{first}"
+    );
+    let second = logic.handle(&full);
+    assert_eq!(
+        second["ok"], true,
+        "the piece carrying the fixture links: {second}"
+    );
+}
+
+/// The exports a library's needs list are part of what its fixture links: pathing@1's claim
+/// passes under kit@1.0.1, whose grid_path@1 exports find_route, and that pass isn't reused under
+/// kit@1.0.0, whose same grid_path@1 exports nothing, in one process.
+#[test]
+fn a_need_s_exports_decide_a_fixture_result_s_reuse() {
+    let lines: Vec<&str> = include_str!("fixtures/fixture-needs-exports.jsonl")
+        .lines()
+        .collect();
+    let mut logic = Logic::new(Planted::default());
+    let first = logic.handle(&serde_json::from_str::<Value>(lines[0]).expect("a request line"));
+    assert_eq!(first["verdict"], "PASS", "{first}");
+    let second = logic.handle(&serde_json::from_str::<Value>(lines[1]).expect("a request line"));
+    assert_eq!(second["verdict"], "FAIL", "{second}");
+}

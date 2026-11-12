@@ -128,42 +128,6 @@ fn refusal(rule: &str, what: String, extra: Value) -> Value {
     out
 }
 
-/// The pack that carries `label`: an installed one that carries these bytes first, so its fixtures
-/// count for every claim.
-fn carrier<'a>(packs: &'a [Pack], label: &str, sha: &str) -> Option<(&'a Pack, &'a Entry)> {
-    let carrying = || {
-        packs
-            .iter()
-            .filter_map(|p| p.libs.get(label).map(|e| (p, e)))
-    };
-    carrying()
-        .filter(|(_, e)| e.asset == sha)
-        .min_by_key(|(p, _)| p.agent)
-        .or_else(|| carrying().next())
-}
-
-/// `label` at `sha` and every library its needs reach through `packs`, each with the exports its
-/// carrying pack lists (they decide what links), sorted: what its fixtures' items link, whichever
-/// packs carry them.
-pub fn reach(label: &str, sha: &str, packs: &[Pack]) -> Vec<Value> {
-    let mut seen: Vec<(String, String)> = Vec::new();
-    let mut out = Vec::new();
-    let mut todo = vec![(label.to_string(), sha.to_string())];
-    while let Some((label, sha)) = todo.pop() {
-        if seen.contains(&(label.clone(), sha.clone())) {
-            continue;
-        }
-        let entry = carrier(packs, &label, &sha).filter(|(_, e)| e.asset == sha);
-        if let Some((_, e)) = entry {
-            todo.extend(e.needs.iter().cloned());
-        }
-        out.push(json!([label, sha, entry.map(|(_, e)| &e.exports)]));
-        seen.push((label, sha));
-    }
-    out.sort_by_key(Value::to_string);
-    out
-}
-
 /// The libraries `links` reach, each checked against its bytes (as `stored` reads them) and its
 /// pack, in dependency order (ties by name), or every refusal.
 pub fn resolve(
@@ -210,7 +174,17 @@ pub fn resolve(
             ));
             continue;
         }
-        let Some((pack, entry)) = carrier(packs, &label, &sha) else {
+        // An installed pack that carries these bytes first, so its fixtures count for every claim.
+        let carrying = || {
+            packs
+                .iter()
+                .filter_map(|p| p.libs.get(&label).map(|e| (p, e)))
+        };
+        let carried = carrying()
+            .filter(|(_, e)| e.asset == sha)
+            .min_by_key(|(p, _)| p.agent)
+            .or_else(|| carrying().next());
+        let Some((pack, entry)) = carried else {
             refused.push(refusal(
                 "link",
                 format!("no installed pack carries {label}"),

@@ -99,11 +99,25 @@ impl Logic {
     /// A library's fixture records, run here once per hash and fixture set: `ran` is true only
     /// at the run.
     fn verify(&mut self, piece_v: &Value, lib: &Lib) -> Result<Value, Vec<Value>> {
-        // A fixture's item also links what the library's needs reach, pinned by hash, with the
-        // exports their packs list: those key it, not which packs carry them (#190: once per
-        // library hash).
-        let packs = links::packs(piece_v).unwrap_or_default();
-        let key = json!([lib.fixtures, links::reach(&lib.label, &lib.hash, &packs)]).to_string();
+        // A fixture's item links what `lib` links: the library and what its needs reach, each by
+        // hash with the exports its pack lists. Those key it, not which packs carry them (#190:
+        // once per library hash).
+        let packs = links::packs(piece_v).ok_or_else(|| vec![bad("packs")])?;
+        let assets = piece_v.get("assets").cloned().unwrap_or(json!({}));
+        let linked = links::resolve(
+            &[(lib.label.clone(), lib.hash.clone())],
+            &packs,
+            &|sha| B64.decode(assets.get(sha)?.as_str()?).ok(),
+            &self.planted,
+        )?;
+        let key = json!([
+            lib.fixtures,
+            linked
+                .iter()
+                .map(|l| json!([l.label, l.hash, l.exports]))
+                .collect::<Vec<_>>()
+        ])
+        .to_string();
         if let Some(done) = self.verified.get(&key) {
             return done.clone().map(|mut r| {
                 for f in r.as_array_mut().into_iter().flatten() {
@@ -124,11 +138,25 @@ impl Logic {
         self.verifying.insert(key.clone());
         let out = self.run_fixtures(piece_v, lib);
         self.verifying.remove(&key);
-        self.verified.insert(key, out.clone());
-        out
+        match out {
+            Ok(records) => {
+                self.verified.insert(key, Ok(records.clone()));
+                Ok(records)
+            }
+            // A refusal that turns on what the piece carries (a missing fixture, a fixture item
+            // the check refuses) isn't the fixtures' verdict, so it isn't kept.
+            Err((refusals, verdict)) => {
+                if verdict {
+                    self.verified.insert(key, Err(refusals.clone()));
+                }
+                Err(refusals)
+            }
+        }
     }
 
-    fn run_fixtures(&mut self, piece_v: &Value, lib: &Lib) -> Result<Value, Vec<Value>> {
+    /// Runs `lib`'s fixtures, or refuses: with `true` when a fixture's own run failed, `false`
+    /// when the piece didn't let it run.
+    fn run_fixtures(&mut self, piece_v: &Value, lib: &Lib) -> Result<Value, (Vec<Value>, bool)> {
         let assets = piece_v.get("assets").cloned().unwrap_or(json!({}));
         let mut records = Vec::new();
         for id in &lib.fixtures {
@@ -143,21 +171,22 @@ impl Logic {
                 .and_then(|b| B64.decode(b).ok())
                 .filter(|b| deep_canvas_sandbox::rewrite::hash(b) == *id)
                 .and_then(|b| serde_json::from_slice(&b).ok())
-                .ok_or_else(missing)?;
+                .ok_or_else(|| (missing(), false))?;
             let piece = json!({"seed": 0, "packs": piece_v.get("packs").cloned().unwrap_or(json!([])),
                 "items": {"fixture": fixture.get("item").cloned().unwrap_or(Value::Null)}, "assets": assets});
             let started = std::time::Instant::now();
             let line = json!({"call": "bake", "piece": piece, "track": fixture.get("track").cloned().unwrap_or(json!([])),
                 "steps": fixture.get("steps").cloned().unwrap_or(json!(1))});
             let bake = self.bake(&line).map_err(|r| {
-                r["refusals"]
+                let refusals = r["refusals"]
                     .as_array()
                     .cloned()
-                    .unwrap_or_else(|| vec![r.clone()])
+                    .unwrap_or_else(|| vec![r.clone()]);
+                (refusals, false)
             })?;
             let mut line = line;
             line["at_times"] = json!([0.0]);
-            let det = self.determinism(&line).map_err(|r| vec![r])?;
+            let det = self.determinism(&line).map_err(|r| (vec![r], false))?;
             let ns = started.elapsed().as_nanos() as u64;
             if let Some(r) = differs(
                 lib,
@@ -165,12 +194,15 @@ impl Logic {
                 fixture.get("expect").unwrap_or(&Value::Null),
                 &bake,
             ) {
-                return Err(vec![r]);
+                return Err((vec![r], true));
             }
             if det["verdict"] != json!("PASS") {
-                return Err(vec![
-                    json!({"rule": "fixture", "what": format!("{}'s fixture {id} fails logic.determinism", lib.label), "library": lib.label, "fixture": id, "failures": det["failures"]}),
-                ]);
+                return Err((
+                    vec![
+                        json!({"rule": "fixture", "what": format!("{}'s fixture {id} fails logic.determinism", lib.label), "library": lib.label, "fixture": id, "failures": det["failures"]}),
+                    ],
+                    true,
+                ));
             }
             let deep: Map<String, Value> = bake["checkpoints"]["fixture"]
                 .as_array()
