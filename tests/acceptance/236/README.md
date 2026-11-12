@@ -30,7 +30,8 @@ node node_modules/typescript/bin/tsc -p tests/acceptance/236/tsconfig.json   # n
 - Nothing needs the network: every "host" is a listener the test runs on 127.0.0.1, every "hub's socket" and
   "inbox socket" a Unix socket listener the test runs, or a dev hub (`deep hub run --root`) the test starts.
 - The probes are compiled once per test process from `fixtures/` with `cc` into `/tmp/dh236-bin-*`. A machine
-  without `cc` fails every test that needs them as BLOCKED, naming the compile.
+  without `cc` fails every test that needs them as BLOCKED, naming the compile. `devices` is compiled at its
+  first use, so a file that never runs it doesn't depend on its build.
 - Every test makes its folders under `/tmp/dh236-*` (real paths, short enough for a socket path; Seatbelt
   matches real paths), sets `HOME` to a temp folder for itself and every child, removes the agent's own
   `CLAUDE_*` and `DEEP_*` variables from its environment first (so no sandbox failure can ever reach a real
@@ -228,10 +229,12 @@ the criterion says; the scenario itself must run, so a plant that doesn't start 
   sandbox and "allow" outside it on any Mac, whatever the OS's permissions say, so a TCC refusal can't pass for a
   sandbox denial. It also tries each device for real: the camera and the microphone through AVFoundation only
   when the OS already records permission (never a prompt), the audio output through an AudioQueue (no permission
-  needed: outside the sandbox it opens, inside it fails), and a screen capture through CoreGraphics only when the
-  OS already allows it. The first test runs on any Mac; the second, "with DeepBuild holding the permissions",
-  runs only where the helper opens all four outside the sandbox, and is skipped INCONCLUSIVE elsewhere, naming
-  what the app couldn't open. The piece is the started process; the helper is its child, spawned by the probe.
+  needed: outside the sandbox it opens, inside it fails), and a screen capture only when the OS already allows
+  it: through CoreGraphics where `cc` builds for a macOS before 15, and through ScreenCaptureKit from 15 on,
+  where CoreGraphics' call is gone. The first test runs on any Mac; the second, "with DeepBuild holding the
+  permissions", runs only where the helper opens all four outside the sandbox, and is skipped INCONCLUSIVE
+  elsewhere, naming what the app couldn't open. The piece is the started process; the helper is its child,
+  spawned by the probe.
 - **AC2.** The process is run by the hub's own supervisor (`run.start`), with the session's inbox socket (a
   listener of the test's) in `CLAUDE_CODE_MESSAGING_SOCKET`. "Never starts a turn": the inbox listener gets no
   connection and no byte, and the hub appends no `hook`-written event from it.
