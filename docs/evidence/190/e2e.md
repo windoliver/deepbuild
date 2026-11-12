@@ -127,9 +127,13 @@ same results (see the rerun below).
   map counts a linked test only when it rejects our output with a planted fault. function-imports and data-layout
   show that in their own files (`linker_adds_linking_section` and the unlinked program; `linker_links_in_listing_order`).
   undefined.s has no planted value, and the base (`BASE-FAILURE.txt`, all 6 fail) fails it before its import check,
-  so two mutants of 9a02471b6's `link.rs` show it: one that names every import of the program fails its CHECK-NOT
-  (`oracle-mutants/names-every-import.txt`), and one that names no import fails its CHECK
-  (`oracle-mutants/names-no-import.txt`). The oracle README's "checks against a real linker" (rust-lld) is the blind
+  so two mutants of 9a02471b6's `link.rs` show it: one that names no import fails upstream's CHECK
+  (`oracle-mutants/names-no-import.txt`). Upstream's CHECK-NOT (`baz`, a symbol only `--undefined` names) isn't held:
+  our linker has no `--undefined`. In its place the test checks something of our own, that no refusal names an import
+  a listed library defines, and the mutant that names every import of the program fails it
+  (`oracle-mutants/names-every-import.txt`). The blind job's first draft called that check the CHECK-NOT and put
+  data-layout.s's `aligned_bar` at 65552 (it is at 65568); round 32 disputed both, and the job's blind redraft
+  (2b38d894b, comments and docs only) corrected them. The 6 tests were rerun as committed there. The oracle README's "checks against a real linker" (rust-lld) is the blind
   job's report: no output of that run is saved.
 
 ## Rerun with the browser leg and screenshots (2026-11-11 and 12), code at 9a02471b6
@@ -421,3 +425,7 @@ raw files, `gen.test.ts`, the code and the issue. It also ran its own BFS over t
 - **Round 31** reproduced the oracle run (6 passed) and found one P2 and two low gaps, fixed here: undefined.s had
   no wrong program reaching its import check (now two saved mutant runs); the README's rust-lld run is marked as a
   report; and only two test files show their own wrong program.
+- **Round 32** found no wrong values and one P2 and three low gaps, fixed here: the oracle suite called its own
+  defined-import check undefined.s's CHECK-NOT (sent back to the blind job, which redrafted its comments and README);
+  its data-layout comment put `aligned_bar` at 65552 (redrafted to 65568); the mutant files now carry the exact code
+  change, host and date; and the oracle run is redone on the tests as committed.
