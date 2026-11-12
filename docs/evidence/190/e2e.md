@@ -213,7 +213,8 @@ The needs' exports test also fails on a mutant whose key keeps only the library'
 The code review's last round of the cache fixes found nothing new; that is the implementing session's report, not a
 saved check. One finding was kept on purpose: `verify` resolves, so it decodes and
 hashes, the libraries even when the result is cached. Its cost wasn't measured in a saved run.
-Criterion 10's 500 KB budget is BLOCKED until ac10 runs on the reference Mac.
+Criterion 10's budgets (linking a 1 MB program with two 500 KB libraries under 300 ms, fixtures once per hash under
+5 s, no added work for an item without links) are BLOCKED until ac10 runs on the reference Mac.
 
 **The suite.** #190's acceptance suite at a clean checkout of 9a02471b6 is in `acceptance-linux-9a02471b6.txt`. It ran
 verbose, so each passing test is named:
@@ -279,7 +280,7 @@ The two reply files are byte for byte the same. In both browsers, all four progr
 | `screenshots/04-grid-path-fixture.png` | grid_path@1's fixture piece, browser = app |
 | `screenshots/05-deep-logic-replies.png` | the 14 replies and what each one names, including whether each fixture ran in that call or had already run in the process. A reply that answered but whose step failed (row 7), or whose verdict is INCONCLUSIVE (row 8), is shown in amber, not green. |
 | `screenshots/06-planted-twins.png` | the two planted linker twins. One answers ok with a changed hash for an unlinked program, and ac07 is the test that fails on it. The other is refused naming `lib:grid_path.find_route`. |
-| `screenshots/07a`–`07d` | the same page in the app's browser pane, Chromium 152 |
+| `screenshots/07a`–`07d` | the same page in Chromium 152, the app's browser pane by the session's report |
 
 **Checked by separate agents.** These are the agents' reports, not proof: where a round says it reproduced
 something, its outputs weren't saved here, and the saved files named elsewhere in this document are the proof. Each round, a new agent that hadn't written the page read every screenshot against the
@@ -397,3 +398,6 @@ raw files, `gen.test.ts`, the code and the issue. It also ran its own BFS over t
 - **Round 28** found no wrong values (its rerun gave byte-identical 00–06) and two low gaps, fixed here: main's
   `issues` in check replies is listed with what main added since 11-09; and the Mac lines say those runs haven't
   happened.
+- **Round 29** found no wrong values (its rerun gave byte-identical 00–06 and `web-replies.jsonl`; `fixture_once` 4
+  passed) and two low gaps, fixed here: criterion 10's budgets are named as the issue states them; and the
+  screenshot table marks 07a–07d's source as the session's report.
