@@ -821,7 +821,7 @@ export class SessionState {
   async mcpHello(fd: number | undefined, claimed: { pid: number; start: string } | undefined, paseo?: string): Promise<{ session: string | null; parent?: { pid: number; start: string } }> {
     let hook: string | undefined;
     try { hook = deepHook(); } catch { /* no deep-hook here to ask the OS: no peer */ }
-    const peer = hook && fd !== undefined ? await peerOf(hook, fd) : undefined;
+    const peer = hook && fd !== undefined && fd >= 0 ? await peerOf(hook, fd) : undefined;
     const at = async (pid: number | undefined) => { const start = pid === undefined ? undefined : await this.startOf(pid, true); return start ? { pid: pid!, start } : undefined; };
     const serves = (p: { pid: number; start: string } | undefined) => p !== undefined && [...this.sessions.values()].some((s) => s.pid === p.pid && s.start === p.start && !s.ended);
     const own = peer !== undefined && [...this.sessions.values()].some((s) => s.pid === peer) ? await at(peer) : undefined;

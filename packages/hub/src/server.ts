@@ -1320,17 +1320,14 @@ class Hub {
     if (value.hello === 'mcp') {
       const parent = value.parent;
       const proved = isObj(parent) && Number.isSafeInteger(parent.pid) && typeof parent.start === 'string' ? { pid: parent.pid as number, start: parent.start } : undefined;
-      // A DeepBuild MCP server paseo's plugin added binds by the token it was opened with (#55).
+      // One paseo's plugin added binds by its token (#55); any other by the socket's peer process, as the OS reports it (#2070).
       const paseo = typeof value.paseo === 'string' && value.paseo ? value.paseo : undefined;
-      // The parent it binds by is that of the process at the socket's other end, as the OS reports it (#2070).
-      const fd = (conn.sock as unknown as { _handle?: { fd?: number } })._handle?.fd;
-      const hello = (await this.core.request({ op: 'mcp-hello', ...(fd !== undefined && fd >= 0 ? { fd } : {}), parent: proved, ...(paseo ? { paseo } : {}) }).catch(() => undefined)) as { session: string | null; parent?: { pid: number; start: string } } | undefined;
-      const session = hello?.session ?? null;
+      const hello = (await this.core.request({ op: 'mcp-hello', fd: (conn.sock as unknown as { _handle?: { fd?: number } })._handle?.fd, parent: proved, ...(paseo ? { paseo } : {}) }).catch(() => undefined)) as { session: string | null; parent?: { pid: number; start: string } } | undefined;
       conn.role = 'mcp';
-      conn.session = session;
+      conn.session = hello?.session ?? null;
       conn.parent = hello?.parent;
       if (typeof value.cwd === 'string') conn.cwd = value.cwd;
-      conn.name = session ? `mcp:${session}` : 'mcp';
+      conn.name = conn.session ? `mcp:${conn.session}` : 'mcp';
       return conn.write({ role: conn.name });
     }
     conn.write({ id: null, error: refusal('enum', '/hello', 'Say hello as app, cli or mcp.', value.hello) });

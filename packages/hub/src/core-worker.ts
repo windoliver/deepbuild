@@ -10,7 +10,7 @@ import { Refused, refusal, type CoreOptions, type Draft, type Gated, type HookMe
 
 export type CoreRequest =
   | { op: 'call'; method: string; params: unknown; context: CallContext }
-  | { op: 'mcp-hello'; fd?: number; parent: { pid: number; start: string } | undefined; paseo?: string }
+  | { op: 'mcp-hello'; fd?: number | undefined; parent: { pid: number; start: string } | undefined; paseo?: string }
   | { op: 'health' }
   | { op: 'extension-hook'; data: unknown }
   | { op: 'hook-reply'; meta: HookMeta; until: number }

@@ -1083,6 +1083,26 @@ export class AnswerDelivery {
   /** Tokens, sessions and processes a line named whose session's agent doesn't run under that process. */
   private readonly notUnder = new Set<string>();
 
+  /**
+   * Whether a paseo line names a bind token another session holds (#2070): the token stays with that session, and the
+   * line is recorded unverified, with one reading per pair naming both sessions.
+   */
+  async tokenTaken(meta: HookMeta): Promise<boolean> {
+    const holder = meta.agent === 'paseo' && meta.session && meta.paseo?.bind ? this.binds.get(meta.paseo.bind) : undefined;
+    if (holder === undefined || holder === meta.session) return false;
+    if (!this.takenRead.has(`${meta.session}\0${holder}`)) {
+      this.takenRead.add(`${meta.session}\0${holder}`);
+      await this.options.events.appendReading(meta.session, meta.agent, `A paseo line for session ${meta.session} named the bind token session ${holder} holds: the token stays with ${holder}, binds nothing to ${meta.session}, and the line is recorded unverified.`).catch(() => undefined);
+    }
+    return true;
+  }
+  private readonly takenRead = new Set<string>();
+  /** A paseo line the core checked against its session maps the bind token it carries there, once (#2070); `verified` passes through. */
+  checked(meta: HookMeta, verified: boolean): boolean {
+    if (verified && meta.agent === 'paseo' && meta.session && meta.paseo?.bind && !this.binds.has(meta.paseo.bind)) this.binds.set(meta.paseo.bind, meta.session);
+    return verified;
+  }
+
   /** Whether a session's agent process, by PID and start time, runs under process `pid`; undefined when `ps` can't say. */
   private async runsUnder(session: Session, pid: number): Promise<boolean | undefined> {
     const start = await this.options.state().startOf(session.pid, true);
