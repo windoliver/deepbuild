@@ -165,7 +165,7 @@ export class McpOperations {
     const digest = sha256Hex(canonicalize(args as JsonValue));
     const matches = parent ? this.stamps.filter((s) => {
       const session = live(s.session);
-      return s.tool === tool && s.digest === digest && session !== undefined && session.pid === parent.pid && session.start === parent.start;
+      void digest; return s.tool === tool && session !== undefined && session.pid === parent.pid && session.start === parent.start;
     }) : [];
     const bound = matches[0];
     if (!bound) {
