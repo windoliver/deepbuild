@@ -5902,8 +5902,20 @@ impl Renderer {
                 s,
                 clear(s) && !matches!(kind_of(s), BLEND | FADE | GLASS),
             );
+            // A terrain tile's pixels read its plate's full-detail normals (#2017).
+            let terrain = s.mesh.as_ref().and_then(|m| m.terrain.as_deref());
             let maps = match (&s.maps, &s.material) {
-                (Some(m), Some(_)) => self.maps.group(&device.device, &device.queue, m, taps),
+                (Some(m), Some(_)) => {
+                    self.maps
+                        .group(&device.device, &device.queue, m, taps, terrain)
+                }
+                _ if terrain.is_some() => self.maps.group(
+                    &device.device,
+                    &device.queue,
+                    &light::Maps::default(),
+                    taps,
+                    terrain,
+                ),
                 _ => 0,
             };
             // A material operator binds its inputs with the solid's maps, once per pair.
@@ -5933,6 +5945,7 @@ impl Renderer {
                     &device.queue,
                     source,
                     taps,
+                    terrain,
                     &m.layout,
                     m.entries(&refs),
                 );

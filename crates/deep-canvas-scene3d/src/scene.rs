@@ -136,6 +136,86 @@ fn swaying_shape(mesh: u64, id: &str) -> u64 {
     ])
 }
 
+/// #2017: a swaying solid's rest mesh and its shape, where its sway's weights are each vertex's
+/// height (0 at its lowest point, 1 at its highest), so the sway is a shear of its place; none
+/// for weights read from an attribute or a part.
+fn rest_of(s: &Solid, h: u64) -> Option<(Arc<crate::geom::Mesh>, u64)> {
+    let mesh = s.mesh.as_ref()?;
+    let sway = mesh.sway.as_ref()?;
+    let [lo, hi] = mesh.bounds();
+    let span = hi[1] - lo[1];
+    let height = |p: &Vec3| (p[1] - lo[1]) / span;
+    let linear = span > 0.0
+        && sway.weights.len() == mesh.positions.len()
+        && (mesh.positions.iter().zip(&sway.weights)).all(|(p, w)| (height(p) - w).abs() <= 1e-9);
+    linear.then(|| {
+        let rest = crate::geom::Mesh {
+            sway: None,
+            ..(**mesh).clone()
+        };
+        (Arc::new(rest), swaying_shape(h, "#rest"))
+    })
+}
+
+/// #2017: the shear that folds a height-weighted sway (#2016) into a solid placed by `model` at
+/// its time: each point moves along the wind by amount × its height share × the lean at the
+/// place, as the GPU sway moves each vertex, which for weights by height is p + s (p.y − lo) ÷
+/// span, s the lean's move in the mesh's own space. It applies before `model`.
+fn shear_of(model: &Affine3, sway: &crate::stack::Sway, rest: &crate::geom::Mesh, at: Swaying) -> Affine3 {
+    let [lo, hi] = rest.bounds();
+    let span = hi[1] - lo[1];
+    let (dx, dz) = (cos(rad(sway.direction)), sin(rad(sway.direction)));
+    let lean = sway_lean(sway, [model[0][3], model[2][3]], [dx, dz], at);
+    let world = [dx * sway.amount * lean, 0.0, dz * sway.amount * lean];
+    let inv = crate::cut::inverse(model);
+    let s = [0, 1, 2].map(|r| (0..3).map(|c| inv[r][c] * world[c]).sum::<f64>());
+    // The shear's matrix: identity plus s times the height share's gradient (0, 1 ÷ span, 0),
+    // its move s × (−lo ÷ span).
+    let shear: Affine3 = [0, 1, 2].map(|r| {
+        let mut row = [0.0; 4];
+        row[r] = 1.0;
+        row[1] += s[r] / span;
+        row[3] = -s[r] * lo[1] / span;
+        row
+    });
+    shear
+}
+
+/// The sway's lean at world place `place` (x, z) and its time (sway.wgsl's `lean`, in f64): a
+/// slow sway at hz phased by the modifier, and gusts of B-spline noise over the place less the
+/// wind's travel, seeded by the document.
+fn sway_lean(sway: &crate::stack::Sway, place: [f64; 2], d: [f64; 2], at: Swaying) -> f64 {
+    let (lo, hi) = (at.seed as u32, (at.seed >> 32) as u32);
+    let lattice = |x: i32, z: i32| -> f64 {
+        let mut h = (x as u32).wrapping_mul(0x8da6_b343) ^ (z as u32).wrapping_mul(0xd816_3841);
+        h ^= lo.wrapping_mul(0xcb1a_b31f) ^ hi.wrapping_mul(0x9e37_79b9);
+        h = (h ^ (h >> 16)).wrapping_mul(0x7feb_352d);
+        h = (h ^ (h >> 15)).wrapping_mul(0x846c_a68b);
+        h ^= h >> 16;
+        f64::from(h >> 8) / 8_388_607.5 - 1.0
+    };
+    let spline = |f: f64| {
+        let g = 1.0 - f;
+        [
+            g * g * g,
+            3.0 * f * f * f - 6.0 * f * f + 4.0,
+            -3.0 * f * f * f + 3.0 * f * f + 3.0 * f + 1.0,
+            f * f * f,
+        ]
+        .map(|w| w / 6.0)
+    };
+    let t = at.t;
+    let q = [0, 1].map(|k| (place[k] - d[k] * sway.speed * t) / sway.scale);
+    let c = q.map(f64::floor);
+    let (wx, wz) = (spline(q[0] - c[0]), spline(q[1] - c[1]));
+    let (ix, iz) = (c[0] as i32 - 1, c[1] as i32 - 1);
+    let gust: f64 = (0..4)
+        .map(|a| wz[a] * (0..4).map(|b| wx[b] * lattice(ix + b as i32, iz + a as i32)).sum::<f64>())
+        .sum();
+    let slow = sin(std::f64::consts::TAU * (sway.hz * t).fract() + sway.phase);
+    ((1.0 - sway.strength) * slow + sway.strength * gust).clamp(-1.0, 1.0)
+}
+
 /// A swaying solid's time and noise (#2016): the document's seconds and its seed, which with its
 /// mesh's [`crate::stack::Sway`] and its place give each vertex's move on the GPU.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -857,6 +937,21 @@ pub fn matmul(a: &Affine3, b: &Affine3) -> Affine3 {
         }
     }
     out
+}
+
+/// Whether `m` turns and scales alike on every axis, with no mirror: what a terrain tile's
+/// normals turn by in its pixels (#2017).
+fn uniform(m: &Affine3) -> bool {
+    let col = |c: usize| [m[0][c], m[1][c], m[2][c]];
+    let (x, y, z) = (col(0), col(1), col(2));
+    let k = dot(x, x);
+    let near = |a: f64, b: f64| (a - b).abs() <= 1e-9 * k.max(1e-300);
+    near(dot(y, y), k)
+        && near(dot(z, z), k)
+        && near(dot(x, y), 0.0)
+        && near(dot(y, z), 0.0)
+        && near(dot(x, z), 0.0)
+        && dot(crate::geom::cross(x, y), z) > 0.0
 }
 
 pub(crate) fn apply(m: &Affine3, p: Vec3) -> Vec3 {
@@ -2617,6 +2712,7 @@ fn lod_of(
         lod_px: crate::lod::lod_px(doc),
         proxy,
         proxy_mesh,
+        tile: None,
     })))
 }
 
@@ -3212,6 +3308,33 @@ pub(crate) fn evaluate_compiled(
                         row: 0,
                         sway,
                     });
+                    // #2017: a plate with levels draws as its tiles, each at the level its error
+                    // projected at the view chooses.
+                    if k == "plate@1" && uniform(&model) {
+                        let plate = layer.solids.last().expect("just pushed");
+                        let built = plate.mesh.as_ref().expect("a built mesh");
+                        if let Some(tiles) = crate::terrain::tiles(params, built, hash) {
+                            let plate = layer.solids.pop().expect("just pushed");
+                            let lod_px = crate::lod::lod_px(map);
+                            for t in tiles.iter() {
+                                let mut s = plate.clone();
+                                s.mesh = Some(t.levels[0].mesh.clone());
+                                s.shape = Shape::Built(t.levels[0].hash);
+                                s.lod = Some(Arc::new(crate::lod::Lod {
+                                    bands: Vec::new(),
+                                    margin: 0.0,
+                                    bounds: t.bounds,
+                                    levels: t.levels.clone(),
+                                    extent: 1.0,
+                                    lod_px,
+                                    proxy: None,
+                                    proxy_mesh: None,
+                                    tile: Some(t.at),
+                                }));
+                                layer.solids.push(s);
+                            }
+                        }
+                    }
                 }
                 // A curve draws nothing; what follows it (particles along it, #420) reads it
                 // sampled, in world metres.
@@ -3474,6 +3597,10 @@ pub(crate) fn evaluate_compiled(
         if gpu {
             elements.sort_by_key(|e| e.id);
         }
+        // #2017: a prototype whose sway weighs each vertex by its height, batched on the GPU,
+        // sways as a shear of each element's place, so every element keeps the one rest mesh.
+        let mut sheared: HashMap<(usize, usize), Option<(Arc<crate::geom::Mesh>, u64)>> =
+            HashMap::new();
         for e in elements {
             let Some(solids) = protos.get(&of[e.proto]) else {
                 return refused("ref_unresolved", format!("{path}/of"));
@@ -3486,6 +3613,21 @@ pub(crate) fn evaluate_compiled(
                 } else {
                     format!("{id}#{}#{k}", e.id)
                 };
+                let shear = match (gpu, s.sway, s.shape) {
+                    (true, Some(_), Shape::Built(h)) => sheared
+                        .entry((e.proto, k))
+                        .or_insert_with(|| rest_of(&s, h))
+                        .clone(),
+                    _ => None,
+                };
+                if let (Some((rest, h)), Some(at)) = (shear, s.sway) {
+                    let sway = s.mesh.as_ref().and_then(|m| m.sway.as_ref()).expect("swaying");
+                    let shear = shear_of(&matmul(&place, &s.model), sway, &rest, at);
+                    s.model = matmul(&s.model, &shear);
+                    s.mesh = Some(rest);
+                    s.shape = Shape::Built(h);
+                    s.sway = None;
+                }
                 // A swaying element moves by its own place on the GPU (#2016): it draws its own
                 // copy.
                 if let (Some(_), Shape::Built(h)) = (s.sway, s.shape) {

@@ -74,6 +74,9 @@ struct Args {
     window: Option<Window3>,
     latency: Vec<u64>,
     counts: bool,
+    /// `ground_points: {item, at: [[x, z]]}`: each frame reports the height a terrain plate draws
+    /// at each point, with its tile and level (#2017).
+    ground_points: Option<(String, Vec<[f64; 2]>)>,
     /// The glTF files `mesh.asset@1` items name, by sha256 (#420), and the images a material's
     /// maps or a glTF name (#423).
     assets: std::collections::BTreeMap<String, std::path::PathBuf>,
@@ -462,6 +465,21 @@ fn parse(call: &Value) -> Result<Args, Value> {
         window,
         latency,
         counts: call["counts"].as_bool().unwrap_or(false),
+        ground_points: match &call["ground_points"] {
+            Value::Null => None,
+            g => {
+                let item = g["item"].as_str();
+                let at: Option<Vec<[f64; 2]>> = g["at"].as_array().and_then(|a| {
+                    a.iter()
+                        .map(|p| Some([p.get(0)?.as_f64()?, p.get(1)?.as_f64()?]))
+                        .collect()
+                });
+                match (item, at) {
+                    (Some(item), Some(at)) => Some((item.to_string(), at)),
+                    _ => return Err(bad("ground_points is {item, at: [[x, z]]}")),
+                }
+            }
+        },
         assets: call["assets"]
             .as_object()
             .into_iter()
@@ -1243,6 +1261,14 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                     .plant_shore_from_centre(&composed)
                     .map_err(|r| refused(r.code, r.path))?;
             }
+            // #2017's planted plate: each tile shades from its level's own vertex normals.
+            if app.planted == Some(Planted::TerrainShadesOwnLevelNormals) {
+                deep_canvas_scene3d::terrain::plant_level_normals(&mut scene);
+            }
+            let tiles = args
+                .ground_points
+                .as_ref()
+                .map(|(item, _)| crate::lod::tiles_of(&scene, item));
             let (choices, cut) = selection.apply(&mut scene, drawn_scale, noop);
             // How many times this frame derived each mesh-edge line's edge set (#1640).
             let edge_sets_derived: Map<String, Value> = scene
@@ -1974,12 +2000,22 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                     .collect();
                 frame.insert("indirect_draws".into(), json!(draws));
                 frame.insert("meshes_built".into(), json!(c.meshes_built));
+                frame.insert(
+                    "terrain_tiles_selected".into(),
+                    json!(selection.tiles_selected),
+                );
                 frame.insert("compiled".into(), json!(compiled));
                 frame.insert("segments".into(), Value::Object(edge_segments));
                 frame.insert("edge_sets_derived".into(), Value::Object(edge_sets_derived));
             }
             if args.lod {
                 frame.insert("lod".into(), crate::lod::rows(&choices));
+            }
+            if let (Some((item, at)), Some(tiles)) = (&args.ground_points, &tiles) {
+                frame.insert(
+                    "ground_points".into(),
+                    crate::lod::ground_points(item, at, tiles, &choices),
+                );
             }
             if args.cull_report && capture && !noop {
                 let mut rows = Vec::new();

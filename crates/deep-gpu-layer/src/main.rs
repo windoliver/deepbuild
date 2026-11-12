@@ -320,6 +320,11 @@ pub enum Planted {
     ClimbNeverStepsDown,
     CanonicalClimbs,
     ReclimbsWithoutViewChange,
+    /// #2017's wrong programs (tests/acceptance/2017/README.md: Assumed surfaces 8): a terrain
+    /// tile's level by its distance alone, as a 1920 × 1080 view would choose it at every size;
+    /// each tile shaded from its level's own vertex normals.
+    TerrainLodByDistance,
+    TerrainShadesOwnLevelNormals,
     /// #428's wrong programs (tests/acceptance/428/README.md: Planted programs).
     DropsDispersion,
     AbsorptionIgnoresThickness,
@@ -595,6 +600,8 @@ impl Planted {
             "climb_never_steps_down" => Planted::ClimbNeverStepsDown,
             "canonical_climbs" => Planted::CanonicalClimbs,
             "reclimbs_without_view_change" => Planted::ReclimbsWithoutViewChange,
+            "terrain_lod_by_distance" => Planted::TerrainLodByDistance,
+            "terrain_shades_own_level_normals" => Planted::TerrainShadesOwnLevelNormals,
             "drops_dispersion" => Planted::DropsDispersion,
             "absorption_ignores_thickness" => Planted::AbsorptionIgnoresThickness,
             "transmission_ignores_roughness" => Planted::TransmissionIgnoresRoughness,
