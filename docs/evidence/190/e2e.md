@@ -148,7 +148,8 @@ wording is the issue's (its Acceptance criteria), not repeated here.
   which is ours (upstream's CHECKs read no custom section's name but `name`); its upstream-held "imports nothing"
   check fails only on the unlinked input object, which isn't our output. LLVM's object reader, which obj2yaml uses in
   upstream's RUN line, accepts our honest merged program and aborts on the twin's, whose `linking` section is empty
-  (`oracle-reader-function-imports.txt`: rust-objcopy 1.99.1, LLVM 23.1.1, exit 0 against exit 134 in
+  (`oracle-reader-function-imports.txt`: rust-objcopy 1.99.1, LLVM 23.1.1 rather than the vendored
+  tests' pinned 23.1.3, exit 0 against exit 134 in
   `parseLinkingSection`; obj2yaml itself isn't installed). Upstream's whole RUN line would reject the honest program
   too, by round 41's reading (it has no name section, and its functions aren't `[ 0, 1 ]`), so only the reader step
   tells the two apart.
@@ -158,13 +159,16 @@ wording is the issue's (its Acceptance criteria), not repeated here.
   alignment, and its zero-fill check (the stray byte at 8,205), which is ours. So the oracle lane is INCONCLUSIVE for
   criterion 1: its tests pass and can fail, but no planted fault is shown failing a CHECK line upstream holds. Its one
   ask, to the owner: does the reader step alone, which accepts the honest output and rejects the twin's, count as
-  line 27's rejection with a planted fault?
+  line 27's rejection with a planted fault? Yes: the lane passes criterion 1 on function-imports (data-layout only
+  informs), with that evidence in the saved reader file rather than a rerunnable check; no: it stays INCONCLUSIVE.
   undefined.s has no planted twin, so the lane is INCONCLUSIVE for criterion 3 too. The base (`BASE-FAILURE.txt`, all
   6 fail) fails it before its import check. The design's "Wrong programs" accepts the twin a criterion names or a
   mutant, and criterion 3 names no twin; two mutants of `link.rs` line 404 were made by hand in a scratch clone and
   their runs saved. The trace lane can't make this proof today: its Rust mutation step (`scripts/proof-runs.mjs`) runs
   cargo-mutants with cargo's own tests, never a vitest file, and says its kills prove no criterion. Its one ask, to
-  the owner: do the two saved hand-made mutant runs count as line 27's planted fault? One that names no import fails upstream's CHECK (`oracle-mutants/names-no-import.txt`). Upstream's CHECK-NOT (`baz`, a symbol only `--undefined` names) isn't held:
+  the owner: do the two saved hand-made mutant runs count as line 27's planted fault? Yes: the lane
+  passes criterion 3 on `oracle-mutants/names-no-import.txt`, a saved run rather than a rerunnable check; no: it stays
+  INCONCLUSIVE. One that names no import fails upstream's CHECK (`oracle-mutants/names-no-import.txt`). Upstream's CHECK-NOT (`baz`, a symbol only `--undefined` names) isn't held:
   our linker has no `--undefined`. In its place the test checks something of our own, that no refusal names an import
   a listed library defines, and the mutant that names every import of the program fails it
   (`oracle-mutants/names-every-import.txt`). The blind job's first draft called that check the CHECK-NOT and put
@@ -501,7 +505,7 @@ raw files, `gen.test.ts`, the code and the issue. It also ran its own BFS over t
   the blind job too, whose redraft 2ce09306c changes comments and docs only); the bullet now applies the planted-fault rule
   by its letter to all three tests and says undefined.s, which has no planted fault, doesn't count; an unfilled
   commit placeholder is filled; `name` is named as the one custom section upstream reads; and the mutant runs'
-  provenance says the test code is identical from d49221e13 to HEAD.
+  provenance says the test code is identical from d49221e13 to HEAD (superseded by round 39).
 - **Round 39** found no wrong values (oracle rerun 6 passed, type check clean, both twins probed, screenshots and
   `e2e-raw` checked) and one P2 and three low gaps. The P2: round 38's "counts by the rule's letter" overclaimed, since
   the rule's "it" is the linked upstream test and no upstream-held check rejects either planted twin; rounds 37 and 38
@@ -524,3 +528,8 @@ raw files, `gen.test.ts`, the code and the issue. It also ran its own BFS over t
   as the twin's; data-layout's third failing check is named as the zero-fill check; 5's Mac route names the same
   pull; rounds 11 and 31 are marked superseded; and two oracle-file wordings went back to the blind job, whose
   redraft (06f5950da) changes comments and docs only and cites the saved reader result.
+- **Round 42** found no wrong values and no P1 or P2 (oracle rerun 6 passed; it reproduced the reader file's two
+  sha256s and exits; all screenshots, `e2e-raw` values and unblock asks checked) and five low gaps, fixed here: the
+  reader file says what its stderr drops and that it is LLVM 23.1.1, not the pinned 23.1.3; each oracle ask says what
+  a yes and a no lead to; round 38 is marked superseded; and the oracle README's zero-fill wording went back to the
+  blind job, whose redraft (5f765d3eb) changes the README only.
