@@ -144,20 +144,27 @@ wording is the issue's (its Acceptance criteria), not repeated here.
   commit, never the implementation; its README lists what each test can't hold of the upstream one and why. The
   oracle-tests README (line 27, citing #136) counts a linked test as evidence only when it rejects our output with a
   planted fault, and "it" is the linked upstream test: so here only checks upstream's live CHECKs hold can count.
-  Neither planted twin reaches one. `linker_adds_linking_section` fails only function-imports' no-`linking` check,
-  which is ours (upstream's CHECKs read no custom section's name but `name`); its upstream-held "imports nothing" check
-  fails only on the unlinked input object, which isn't our output. `linker_links_in_listing_order`'s output is aligned
-  and consistent in its own order (beta@1 at 8,200, alpha@1 at 8,208, v = 65,033, by validators' probes, not saved
-  here), so it breaks only our rule that link order is dependency order with ties by name; data-layout's three
-  failing checks are fixed addresses that hold that order rule along with alignment. So the oracle lane is
-  INCONCLUSIVE for criterion 1: its tests pass and can fail, but no planted fault is shown failing an upstream-held
-  check. Its unblock ask: a planted wrong program whose output an upstream-held check rejects (for example a linker
-  that leaves an import, or one that misaligns a segment), added behind the build feature with the other twins and
-  tested by the blind job. (A looser reading, that the linked test file counts when any of its checks rejects a planted
-  fault, would count both; that reading is the owner's to choose, not this report's.) undefined.s has no planted fault, so it doesn't count and the lane is INCONCLUSIVE for criterion 3 too:
-  the base (`BASE-FAILURE.txt`, all 6 fail) fails it before its import check, and two mutants of 9a02471b6's `link.rs`
-  (scratch edits, saved only as output; the design puts a planted program in test code or behind a build feature) only
-  show its assertions can fail. One that names no import fails upstream's CHECK (`oracle-mutants/names-no-import.txt`). Upstream's CHECK-NOT (`baz`, a symbol only `--undefined` names) isn't held:
+  No planted twin is shown failing one. `linker_adds_linking_section` fails only function-imports' no-`linking` check,
+  which is ours (upstream's CHECKs read no custom section's name but `name`); its upstream-held "imports nothing"
+  check fails only on the unlinked input object, which isn't our output. By round 40's report (rust-objcopy 1.99.1,
+  not saved here; obj2yaml itself not installed), the twin's `linking` section is empty and LLVM's object reader, the
+  one obj2yaml uses, aborts on it, so upstream's RUN line would likely reject the twin's output; whether that counts as
+  upstream-held is not settled here. `linker_links_in_listing_order`'s output is aligned and consistent in its own
+  order (beta@1 at 8,200, alpha@1 at 8,208, v = 65,033, by validators' probes, not saved here), so it breaks only our
+  rule that link order is dependency order with ties by name; data-layout's three failing checks are fixed addresses
+  that hold that order rule along with alignment. So the oracle lane is INCONCLUSIVE for criterion 1: its tests pass
+  and can fail, but no planted fault is shown failing an upstream-held check. Its one ask, to the owner: does the
+  function-imports twin's rejection by LLVM's object reader count (then run obj2yaml on the twin's output and save it)?
+  If not, the unblock is a wrong program an upstream-held check rejects, such as a linker that misaligns a segment: a
+  new planted twin (which needs the blind job to redraft the parent README's planted table) or a mutant of the linker's
+  layout lines that data-layout kills. (A linker that leaves an import can't serve: the subset check on the merged
+  program refuses it before any oracle check runs.)
+  undefined.s has no planted twin, so the lane is INCONCLUSIVE for criterion 3 too. The base (`BASE-FAILURE.txt`, all
+  6 fail) fails it before its import check. The design's "Wrong programs" accepts a mutant of the lines a change adds
+  (`docs/technical-design.md`, Wrong programs), and link.rs line 404 is one (link.rs is new in 85169f887), but the two
+  mutants here were made by hand in a scratch clone and saved only as output, not run by the trace lane's mutation
+  step. Its one ask: run the trace lane's mutation step (cargo-mutants on `link.rs`) against the tagged
+  `undefined.test.ts` and save the output. One that names no import fails upstream's CHECK (`oracle-mutants/names-no-import.txt`). Upstream's CHECK-NOT (`baz`, a symbol only `--undefined` names) isn't held:
   our linker has no `--undefined`. In its place the test checks something of our own, that no refusal names an import
   a listed library defines, and the mutant that names every import of the program fails it
   (`oracle-mutants/names-every-import.txt`). The blind job's first draft called that check the CHECK-NOT and put
@@ -451,7 +458,7 @@ raw files, `gen.test.ts`, the code and the issue. It also ran its own BFS over t
   screenshot table marks 07a–07d's source as the session's report.
 - **Round 30** found no wrong values (its rerun gave byte-identical 00–06; `fixture_once` 4 passed) and one P2: the
   oracle lane was called unreachable, though its tests were in the owner's zip. Fixed here: a blind job wrote the
-  oracle suite and it passes (above). Its three low gaps are fixed too: criteria 1, 3 and 8 are stated as the issue
+  oracle suite and it passes (above; its verdict is INCONCLUSIVE since round 39). Its three low gaps are fixed too: criteria 1, 3 and 8 are stated as the issue
   states them, and the item hash after step 0 is described as `step_hash` computes it.
 - **Round 31** reproduced the oracle run (6 passed) and found one P2 and two low gaps, fixed here: undefined.s had
   no wrong program reaching its import check (now two saved mutant runs); the README's rust-lld run is marked as a
@@ -486,7 +493,7 @@ raw files, `gen.test.ts`, the code and the issue. It also ran its own BFS over t
   no-`linking` check as upstream's, though upstream's live CHECKs never read section names, and its planted twin fails
   only that check; data-layout's judge has its own export and zero-fill checks; and upstream's 2 pages are stack plus
   data. Its redraft (f300d835d) changes comments and docs only. Fixed here: the oracle bullet says function-imports doesn't
-  count under the planted-fault rule, so criterion 1's oracle proof rests on data-layout; and the mutant runs'
+  count under the planted-fault rule, so criterion 1's oracle proof rests on data-layout (superseded by round 39); and the mutant runs'
   provenance names the latest oracle commit.
 - **Round 38** found no wrong values (oracle rerun 6 passed; it probed both planted twins in a scratch copy of the
   tests; screenshots and `e2e-raw` checked) and two P2s and three low gaps, fixed here: the oracle bullet called
@@ -502,3 +509,11 @@ raw files, `gen.test.ts`, the code and the issue. It also ran its own BFS over t
   and 3, with an unblock ask, and the looser reading is left to the owner. The lows: the planted twin's layout is
   stated as probed rather than shown by the test; and two oracle-file wordings went back to the blind job, whose
   redraft (89ef55002) changes comments and docs only.
+- **Round 40** found no wrong values (oracle rerun 6 passed, code identical d49221e13 to HEAD after stripping
+  comments, twins probed, all screenshots and `e2e-raw` checked) and three P2s and five low gaps, all on the oracle
+  lane, fixed here: LLVM's object reader rejects the `linking` twin's empty section, which the bullet now reports
+  as unsettled and puts to the owner; the unblock example "a linker that leaves an import" can't work (the subset check
+  refuses it first) and is dropped; criterion 3 gets its own ask, the trace lane's mutation step on `link.rs`, and
+  the design's mutant route is cited correctly; the two asks replace the separate "looser reading" aside; rounds 30
+  and 37's verdicts are marked superseded; and three oracle-file wordings went back to the blind job, whose redraft
+  (8552bc983) changes comments and docs only.
