@@ -22,8 +22,9 @@ rewritten history; the object is still in the repository). No raw output of this
    ./target/debug/deep-logic --planted linker_links_in_listing_order < tactics.jsonl
    ```
 
-3. The replies below are excerpts: each keeps only the fields it shows, with fixture IDs shortened, `route` cut to its
-   first 24 values and times rounded to ms (reply 10 keeps its raw `ns`). Bakes show step 0's arrays as a top-level
+3. The replies below are excerpts: each keeps only the fields it shows, with fixture IDs in fixture records shortened,
+   `route` cut to its first 24 values and times rounded to ms; reply 10 keeps its full fixture ID and raw `ns`, and
+   refusals keep their full fixture IDs. Bakes show step 0's arrays as a top-level
    `arrays`, and leave out the step items, so reply 7 doesn't show that swarm's step 0 failed (its trap does). The
    rerun's whole replies are in `e2e-raw/replies.jsonl`. The merged bytes were read back from each receipt's `linked`
    and compiled with node's own WebAssembly to list their imports and exports.
@@ -359,3 +360,5 @@ raw files, `gen.test.ts`, the code and the issue. It also ran its own BFS over t
   field-by-field list of what the 11-09 excerpts leave out was still inexact (it named `occurrences`, which the 11-09
   code didn't have, and missed `pages`), so the note now says each excerpt keeps only the fields it shows; and main's
   `occurrences` is added to what main changed since 11-09.
+- **Round 20** found no wrong values (its rerun gave byte-identical 00–06 and `web-replies.jsonl`) and one low gap,
+  fixed here: the excerpts' note said every fixture ID was shortened; reply 10 and the refusals keep theirs whole.
