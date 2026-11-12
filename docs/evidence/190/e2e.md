@@ -151,8 +151,9 @@ wording is the issue's (its Acceptance criteria), not repeated here.
   (`oracle-reader-function-imports.txt`: rust-objcopy 1.99.1, LLVM 23.1.1 rather than the vendored
   tests' pinned 23.1.3, exit 0 against exit 134 in
   `parseLinkingSection`; obj2yaml itself isn't installed). Upstream's whole RUN line would reject the honest program
-  too, by round 41's reading (it has no name section, and its functions aren't `[ 0, 1 ]`), so only the reader step
-  tells the two apart.
+  too: it has no name section, which upstream's `Name: name` CHECK needs, and it exports `init` and `step` beside the
+  program's own functions (`WebAssembly.Module` on the saved run's honest program); only the reader step tells the two
+  apart.
   `linker_links_in_listing_order`'s output is aligned and consistent in its own order (beta@1 at 8,200, alpha@1 at
   8,208, v = 65,033, by validators' probes, not saved here), so it breaks only our rule that link order is dependency
   order with ties by name; it fails data-layout's two fixed-address checks, which hold that order rule along with
@@ -171,8 +172,8 @@ wording is the issue's (its Acceptance criteria), not repeated here.
   their runs saved. The trace lane can't make this proof today: its Rust mutation step (`scripts/proof-runs.mjs`) runs
   cargo-mutants with cargo's own tests, never a vitest file, and says its kills prove no criterion. Its twins route
   (`tests/acceptance/<issue>/twins.json`, folders that replace code under test, as #1113 uses) could run the two
-  mutants as rerunnable twins, but the blind job would have to add them, and the lane skips a criterion's twins once
-  a tagged test fails on the merge base at its assertion, as all 6 oracle tests do (`BASE-FAILURE.txt`), so it
+  mutants as rerunnable twins, but the blind job would have to add them, and the lane skips a test's twins once that
+  test fails on the merge base at its assertion (`runTests`' twin loop), as all 6 oracle tests do (`BASE-FAILURE.txt`), so it
   would report "failed on the merge base", which the design's "Wrong programs" doesn't accept for new code. The lane's one ask, to the owner, for
   criteria 1 and 3 together: do saved runs of hand-made mutants count as line 27's planted fault? Yes: data-layout counts
   for criterion 1 on `oracle-mutants/misaligned-segment.txt` (function-imports stays inventory) and undefined.s for
@@ -526,7 +527,7 @@ raw files, `gen.test.ts`, the code and the issue. It also ran its own BFS over t
 - **Round 40** found no wrong values (oracle rerun 6 passed, code identical d49221e13 to HEAD after stripping
   comments, twins probed, all screenshots and `e2e-raw` checked) and three P2s and five low gaps, all on the oracle
   lane, fixed here: LLVM's object reader rejects the `linking` twin's empty section, which the bullet now reports
-  as unsettled and puts to the owner; the unblock example "a linker that leaves an import" can't work (the subset check
+  as unsettled and puts to the owner (superseded by round 44); the unblock example "a linker that leaves an import" can't work (the subset check
   refuses it first) and is dropped; criterion 3 gets its own ask, the trace lane's mutation step on `link.rs` (superseded by round 41), and
   the design's mutant route is cited correctly; the two asks replace the separate "looser reading" aside; rounds 30
   and 37's verdicts are marked superseded; and three oracle-file wordings went back to the blind job, whose redraft
@@ -559,3 +560,9 @@ raw files, `gen.test.ts`, the code and the issue. It also ran its own BFS over t
   now names the trace lane's twins route and why it wouldn't settle the question (the merge base fails first); a yes
   makes data-layout, not function-imports, count for criterion 1; rounds 41 to 43's asks are marked superseded by
   round 44; and the misaligned mutant's test commit is named.
+- **Round 46** found no wrong values and no P1 or P2 (oracle rerun 6 passed; the reader file reproduced; all three
+  twins probed; the three mutants' outputs reasoned from `link.rs`; the `proof-runs.mjs` claims checked against its
+  code) and five low gaps, fixed here: round 40's ask is marked superseded; the twin skip is per test, not per
+  criterion; the honest program's sections are stated, not cited to a round; and two oracle-file wordings (ac05's
+  BLOCKED state, FileCheck among upstream's tools) went back to the blind job, whose redraft (34fd7469c) changes
+  docs only.
