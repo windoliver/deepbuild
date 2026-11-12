@@ -155,6 +155,9 @@ struct Lights {
     grid: vec4<f32>,
     locals: array<Local, 12>,
     items: array<Light, 32>,
+    // Each shaded light's x: the policy's weight near the cut (in its color too); y: a hash of
+    // its ID (u32 bits), for a light response (#485).
+    answers: array<vec4<f32>, 32>,
 };
 
 @group(1) @binding(0) var<uniform> lights: Lights;
@@ -392,7 +395,7 @@ struct MapSlot {
 struct Maps {
     slots: array<MapSlot, 5>,
     // x: which maps it has (bit k for map k); y: which read uv1 (bit k); z: 1 to rebuild a
-    // normal map's z and skip its stored one.
+    // normal map's z and skip its stored one; w: 1 for a terrain tile's normals (#2017).
     has: vec4<u32>,
     // x: the normal map's scale; y: the occlusion strength; z: the alpha cutoff (mask);
     // w: the alpha mode's coverage from the base color factor alone.
@@ -410,6 +413,8 @@ struct Maps {
 @group(3) @binding(8) var sampler_normal: sampler;
 @group(3) @binding(9) var sampler_occlusion: sampler;
 @group(3) @binding(10) var sampler_emission: sampler;
+// A terrain tile's plate's full-detail normals (#2017): x and z per sample, row by row.
+@group(3) @binding(40) var terrain_n: texture_2d<f32>;
 
 fn map_uv(k: u32, uv: vec4<f32>) -> vec2<f32> {
     let t = select(uv.xy, uv.zw, (maps.has.y & (1u << k)) != 0u);
@@ -742,7 +747,7 @@ fn ggx(nh: f32, a2: f32) -> f32 {
 // One specular lobe from F0 to F90, with the energy single scattering loses restored
 // (Kulla-Conty's and Fdez-Agüera's compensation), and what it reflects at this view.
 fn spec_lobe(f0: vec3<f32>, f90: f32, d_vis: f32, fc5: f32, dfg_v: vec2<f32>) -> vec3<f32> {
-    let f = f0 + (f90 - f0) * fc5;
+    let f = select(f0 + (f90 - f0) * fc5, vec3<f32>(1.0), planted(P_NO_FRESNEL));
     return d_vis * f * compensation(f0, dfg_v, (lights.count.z & (NO_COMP | ENV_COMP_ONLY)) != 0u);
 }
 
@@ -1065,6 +1070,15 @@ const P_LOBE_SCALES: u32 = 32768u;
 const P_OCC_DIRECT: u32 = 65536u;
 const P_BUMP_HAND: u32 = 131072u;
 const P_COAT_BASE: u32 = 262144u;
+// #485's: core.light@1 with its Fresnel taken as 1; core.ambient@1 adding 0.01 × n.z (view
+// space); the loop handing `light` a shadow of 1, calling it for the lights the policy cut too,
+// handing `ambient` the world's normal, and handing both `v` away from the eye.
+const P_NO_FRESNEL: u32 = 524288u;
+const P_AMBIENT_NZ: u32 = 1048576u;
+const P_SHADOW_ONE: u32 = 2097152u;
+const P_CALLS_CUT: u32 = 4194304u;
+const P_WORLD_N: u32 = 8388608u;
+const P_VIEW_AWAY: u32 = 16777216u;
 
 fn planted(bit: u32) -> bool {
     return (lights.count.z & bit) != 0u;
@@ -1281,6 +1295,36 @@ fn onb(n: vec3<f32>) -> array<vec3<f32>, 2> {
 fn rotate_q(q: vec4<f32>, v: vec3<f32>) -> vec3<f32> {
     let t = 2.0 * cross(q.xyz, v);
     return v + q.w * t + cross(q.xyz, t);
+}
+
+// A terrain tile's normal at a pixel (#2017): its plate's full-detail normals at the sample cell
+// under the pixel's place on the plate's grid (uv1), mixed across that cell's triangle as the
+// full-detail mesh mixes its vertex normals, so a tile's light holds when its level changes;
+// turned by the part's rotation (a tile's model turns and scales alike on every axis).
+fn terrain_normal(in: MeshOut) -> vec3<f32> {
+    let size = vec2<i32>(textureDimensions(terrain_n));
+    let g = in.uv.zw * vec2<f32>(size - vec2<i32>(1));
+    let c = clamp(vec2<i32>(floor(g)), vec2<i32>(0), max(size - vec2<i32>(2), vec2<i32>(0)));
+    let f = clamp(g - vec2<f32>(c), vec2<f32>(0.0), vec2<f32>(1.0));
+    let n00 = terrain_at(c);
+    let n10 = terrain_at(c + vec2<i32>(1, 0));
+    let n01 = terrain_at(c + vec2<i32>(0, 1));
+    let n11 = terrain_at(c + vec2<i32>(1, 1));
+    // Split as a full-detail cell is, along its (c, r + 1)–(c + 1, r) diagonal.
+    var n: vec3<f32>;
+    if f.x + f.y <= 1.0 {
+        n = n00 + f.x * (n10 - n00) + f.y * (n01 - n00);
+    } else {
+        n = n11 + (1.0 - f.x) * (n01 - n11) + (1.0 - f.y) * (n10 - n11);
+    }
+    let qv = vec3<f32>(unpack2x16snorm(in.mask.y), unpack2x16snorm(in.mask.z).x);
+    return rotate_q(vec4<f32>(qv, sqrt(max(1.0 - dot(qv, qv), 0.0))), n);
+}
+
+// A terrain normal stored as its x and z, its y ≥ 0 rebuilt.
+fn terrain_at(c: vec2<i32>) -> vec3<f32> {
+    let xz = textureLoad(terrain_n, c, 0).xy;
+    return vec3<f32>(xz.x, sqrt(max(1.0 - dot(xz, xz), 0.0)), xz.y);
 }
 
 // A part's anisotropy direction and flake normal at a pixel (#428): the tangent along uv0's u,
@@ -1914,6 +1958,148 @@ struct Direct {
     removed: f32,
 };
 
+// A sun's, a point's or a spot's light at `p`: the direction to it, and its illuminance facing
+// it after its range's window, the inverse square, its IES table and its cone.
+struct Arriving {
+    l: vec3<f32>,
+    e: vec3<f32>,
+};
+
+fn arriving(li: Light, p: vec3<f32>, table: u32) -> Arriving {
+    var l = -li.dir.xyz;
+    var e = li.color.rgb;
+    if li.pos.w > 0.5 {
+        let d = li.pos.xyz - p;
+        let d2 = dot(d, d);
+        l = d * inverseSqrt(d2);
+        let fade = clamp(1.0 - pow(d2 / (li.dir.w * li.dir.w), 2.0), 0.0, 1.0);
+        e = e * fade * fade / max(d2, li.color.w * li.color.w);
+        if table > 0u {
+            // A spot clips its table at its cone, whose values keep its flux inside it.
+            e = e * ies_at(table - 1u, li.dir.xyz, li.right.xyz, li.up.xyz, -l);
+            if li.pos.w > 1.5 && dot(-l, li.dir.xyz) < li.cone.x {
+                e = vec3<f32>(0.0);
+            }
+        } else if li.pos.w > 1.5 {
+            let t = clamp((dot(-l, li.dir.xyz) - li.cone.x) / max(li.cone.y - li.cone.x, 1e-4), 0.0, 1.0);
+            e = e * t * t;
+        }
+    }
+    return Arriving(l, e);
+}
+
+// ---- Light responses (#485; Operator output: light response): what the light loop hands a
+// material operator's `light` once per shaded light and its `ambient` once per pixel, vectors in
+// view space (x right, y up, z to the eye): gpu.rs's LIGHT_IN and AMBIENT_IN, then the part's own
+// values.
+struct LightIn {
+    n: vec3<f32>,
+    v: vec3<f32>,
+    l: vec3<f32>,
+    radiance: vec3<f32>,
+    shadow: f32,
+    light_hash: u32,
+    base_color: vec3<f32>,
+    alpha: f32,
+    metallic: f32,
+    roughness: f32,
+    specular_level: f32,
+};
+
+struct AmbientIn {
+    irradiance: vec3<f32>,
+    env: vec3<f32>,
+    n: vec3<f32>,
+    v: vec3<f32>,
+    base_color: vec3<f32>,
+    alpha: f32,
+    metallic: f32,
+    roughness: f32,
+    specular_level: f32,
+};
+
+// RESPONSES: a part with no response of its own shades by the core's own lobes (core.light@1 and
+// core.ambient@1); op.rs puts a material operator's responses in place of these lines.
+const HAS_LIGHT: bool = false;
+const HAS_AMBIENT: bool = false;
+fn response_light(a: LightIn) -> vec3<f32> {
+    return vec3<f32>(0.0);
+}
+fn response_ambient(a: AmbientIn) -> vec3<f32> {
+    return vec3<f32>(0.0);
+}
+// END RESPONSES
+
+// A world direction in view space, as a material operator's `normal_view` (op.wgsl's run_op).
+fn to_view(d: vec3<f32>) -> vec3<f32> {
+    let toward = cross(frame.right.xyz, frame.up.xyz);
+    return vec3<f32>(dot(d, frame.right.xyz), dot(d, frame.up.xyz), dot(d, toward));
+}
+
+// One shaded light through the part's own `light` (#485): its direction, its radiance before the
+// policy's weight near the cut, and its shadow, each as the core's loop finds them; what the
+// response returns, times that weight.
+fn answer_light(in: MeshOut, n: vec3<f32>, v: vec3<f32>, s: Surface, i: u32, curved: bool) -> vec3<f32> {
+    let li = lights.items[i];
+    let table = u32(li.up.w);
+    var a: Arriving;
+    if li.pos.w > 2.5 {
+        // An area light as a lamp at its face's centre: Φ ÷ π along its normal (`color` holds
+        // Φ ÷ 4π), by the cosine and the inverse square, on its face's side alone.
+        let d = li.pos.xyz - in.world;
+        let d2 = max(dot(d, d), 1e-8);
+        a.l = d * inverseSqrt(d2);
+        a.e = li.color.rgb * 4.0 * max(dot(-a.l, li.dir.xyz), 0.0) / d2;
+        if table > 0u {
+            a.e = a.e * ies_at(table - 1u, li.dir.xyz, normalize(li.right.xyz), normalize(li.up.xyz), -a.l);
+        }
+    } else {
+        a = arriving(li, in.world, table);
+    }
+    var shadow = 1.0;
+    if (in.flags & NO_RECEIVE) == 0u {
+        if lights.count.y == i + 1u {
+            shadow = lit_share(in.world, n, curved, in.pos.xy) * contact_at(in.pos.xy);
+        }
+        let local = u32(li.cone.z);
+        if local > 0u {
+            shadow = local_lit(lights.locals[local - 1u], in.world, n, in.pos.xy);
+        }
+    }
+    if planted(P_SHADOW_ONE) {
+        shadow = 1.0;
+    }
+    let w = lights.answers[i].x;
+    let radiance = select(vec3<f32>(0.0), a.e / w, w > 0.0);
+    let hash = bitcast<u32>(lights.answers[i].y);
+    let eye = select(v, -v, planted(P_VIEW_AWAY));
+    return response_light(LightIn(to_view(n), to_view(eye), to_view(a.l), radiance, shadow, hash,
+        s.base, in.emission.w, s.metallic, s.rough, s.level)) * w;
+}
+
+// The part's own `ambient` (#485): the environment's or the sky's irradiance on the normal after
+// ambient occlusion and the part's own occlusion `occ`, and one sample along the mirror ray at its
+// roughness, as env_light and sky_light read them.
+fn answer_ambient(in: MeshOut, n: vec3<f32>, s: Surface, occ: f32) -> vec3<f32> {
+    let v = select(normalize(lights.view.xyz), normalize(lights.view.xyz - in.world), lights.view.w > 0.5);
+    let rough = clamp(s.rough, 0.045, 1.0);
+    let r = reflect(-v, n);
+    var irradiance = vec3<f32>(0.0);
+    var along = vec3<f32>(0.0);
+    if env.k.x > 0.0 {
+        irradiance = env_irradiance(n) * env.k.z;
+        along = env_radiance(r, rough * env.k.y) * env.k.z;
+    } else if frame.sky_top.w > 0.0 {
+        irradiance = sky_at(n);
+        along = mix(sky_at(r), sky_at(n), rough * rough);
+    }
+    irradiance = irradiance * occlusion(in.pos.xy, s.base) * occ;
+    let normal = select(to_view(n), n, planted(P_WORLD_N));
+    let eye = select(v, -v, planted(P_VIEW_AWAY));
+    return response_ambient(AmbientIn(irradiance, along, normal, to_view(eye),
+        s.base, in.emission.w, s.metallic, s.rough, s.level));
+}
+
 fn direct(in: MeshOut, n: vec3<f32>, s: Surface, spread: f32, curved: bool) -> Direct {
     let v = select(normalize(lights.view.xyz), normalize(lights.view.xyz - in.world), lights.view.w > 0.5);
     let rough = clamp(s.rough, 0.045, 1.0);
@@ -1945,6 +2131,11 @@ fn direct(in: MeshOut, n: vec3<f32>, s: Surface, spread: f32, curved: bool) -> D
         if only != 0u && (in.color & only) == 0u {
             continue;
         }
+        // A part whose operator has its own light response answers each light itself (#485).
+        if HAS_LIGHT && !catches {
+            out += answer_light(in, n, v, s, i, curved);
+            continue;
+        }
         var add = vec3<f32>(0.0);
         let table = u32(li.up.w);
         if li.pos.w > 2.5 {
@@ -1954,25 +2145,9 @@ fn direct(in: MeshOut, n: vec3<f32>, s: Surface, spread: f32, curved: bool) -> D
                 add = add * ies_at(table - 1u, li.dir.xyz, normalize(li.right.xyz), normalize(li.up.xyz), w);
             }
         } else {
-            var l = -li.dir.xyz;
-            var e = li.color.rgb;
-            if li.pos.w > 0.5 {
-                let d = li.pos.xyz - in.world;
-                let d2 = dot(d, d);
-                l = d * inverseSqrt(d2);
-                let fade = clamp(1.0 - pow(d2 / (li.dir.w * li.dir.w), 2.0), 0.0, 1.0);
-                e = e * fade * fade / max(d2, li.color.w * li.color.w);
-                if table > 0u {
-                    // A spot clips its table at its cone, whose values keep its flux inside it.
-                    e = e * ies_at(table - 1u, li.dir.xyz, li.right.xyz, li.up.xyz, -l);
-                    if li.pos.w > 1.5 && dot(-l, li.dir.xyz) < li.cone.x {
-                        e = vec3<f32>(0.0);
-                    }
-                } else if li.pos.w > 1.5 {
-                    let t = clamp((dot(-l, li.dir.xyz) - li.cone.x) / max(li.cone.y - li.cone.x, 1e-4), 0.0, 1.0);
-                    e = e * t * t;
-                }
-            }
+            let arrived = arriving(li, in.world, table);
+            let l = arrived.l;
+            let e = arrived.e;
             let nl = dot(n, l);
             if s.k != 0u {
                 add = extra_lobes(n, v, l, s, a2, dfg_v) * e;
@@ -2010,6 +2185,13 @@ fn direct(in: MeshOut, n: vec3<f32>, s: Surface, spread: f32, curved: bool) -> D
             }
         }
         out += add;
+    }
+    // The planted loop that calls `light` for the lights the policy cut too, at weight 1.
+    if HAS_LIGHT && !catches && planted(P_CALLS_CUT) {
+        for (var k = 0u; k < u32(lights.answers[0].z); k++) {
+            out += response_light(LightIn(to_view(n), to_view(v), to_view(n), vec3<f32>(0.0), 1.0, 0u,
+                s.base, in.emission.w, s.metallic, s.rough, s.level));
+        }
     }
     return Direct(out, select(0.0, removed / total, total > 0.0));
 }
@@ -2164,6 +2346,10 @@ fn share(in: MeshOut, front: bool, keyed: bool) -> Share {
 // a solid without a material does; only a material operator's solid asks for it (#429).
 fn shade(in0: MeshOut, front: bool, local_n: vec3<f32>, g: array<vec4<f32>, 2>, keyed: bool) -> Targets {
     var in = in0;
+    // A terrain tile shades from its plate's full-detail normals at every level (#2017).
+    if maps.has.w != 0u {
+        in.normal = terrain_normal(in);
+    }
     // A cutaway hides what lies past its planes (#424); with a cap, a back face seen through the
     // cut shades as the cut face: a matte surface of the cap's role on its plane, facing along
     // its normal, or the role itself under cap_light: flat.
@@ -2203,6 +2389,7 @@ fn shade(in0: MeshOut, front: bool, local_n: vec3<f32>, g: array<vec4<f32>, 2>, 
             m = mapped(in, geometric, m.s, g);
             cutoff = maps.values.z;
         }
+        m.s.base = tinted(m.s.base, in.pick, in.local);
         // A material operator's normal replaces the mapped one, its coat's bends the coat alone,
         // and its occlusion scales only what the map's does: the ambient light (#486).
         if op_normal.w > 0.0 {
@@ -2246,16 +2433,25 @@ fn shade(in0: MeshOut, front: bool, local_n: vec3<f32>, g: array<vec4<f32>, 2>, 
         if (in.flags & CATCH) != 0u {
             return targets(vec4<f32>(0.0, 0.0, 0.0, d.removed * alpha * in.base.w), in.pick);
         }
-        if keyed && lights.count.x == 0u && frame.sky_top.w <= 0.0 && env.k.x <= 0.0 {
+        // A part with a light response takes no key light: its responses answer for its light.
+        if keyed && lights.count.x == 0u && frame.sky_top.w <= 0.0 && env.k.x <= 0.0 && !HAS_LIGHT && !HAS_AMBIENT {
             let key = 0.45 * occlusion(in.pos.xy, s.base) + 0.55 * max(dot(facing, frame.light.xyz), 0.0);
             let unlit = fogged(adjusted(s.base * key + in.emission.rgb, in.op.w), in.world);
             return targets(see_through(unlit, alpha, mode), in.pick);
         }
         var ambient: vec3<f32>;
-        if env.k.x > 0.0 {
+        // Its own ambient response takes the occlusion in its irradiance (#485).
+        var occ = m.occlusion;
+        if HAS_AMBIENT {
+            ambient = answer_ambient(in, facing, s, m.occlusion);
+            occ = 1.0;
+        } else if env.k.x > 0.0 {
             ambient = env_light(in, facing, s);
         } else {
             ambient = sky_light(in, facing, s);
+        }
+        if !HAS_AMBIENT && planted(P_AMBIENT_NZ) {
+            ambient += vec3<f32>(0.01 * to_view(facing).z);
         }
         // A map's occlusion scales the ambient term alone (#423).
         var through = vec3<f32>(0.0);
@@ -2263,9 +2459,9 @@ fn shade(in0: MeshOut, front: bool, local_n: vec3<f32>, g: array<vec4<f32>, 2>, 
             let v = select(normalize(lights.view.xyz), normalize(lights.view.xyz - in.world), lights.view.w > 0.5);
             through = transmitted(in, facing, v, s);
         }
-        var raw = d.color + ambient * m.occlusion + m.emission + through;
+        var raw = d.color + ambient * occ + m.emission + through;
         if planted(P_OCC_DIRECT) {
-            raw = (d.color + m.emission) * op_occlusion + ambient * m.occlusion + through;
+            raw = (d.color + m.emission) * op_occlusion + ambient * occ + through;
         }
         let lit = fogged(adjusted(raw, in.op.w), in.world);
         if sss_pass && sw > 0.0 {
@@ -2288,7 +2484,7 @@ fn shade(in0: MeshOut, front: bool, local_n: vec3<f32>, g: array<vec4<f32>, 2>, 
     if lights.count.w > 0u && (in.flags & NO_RECEIVE) == 0u {
         direct = direct * lit_share(in.world, n, curved, in.pos.xy) * contact_at(in.pos.xy);
     }
-    let albedo = paint(in.color);
+    let albedo = tinted(paint(in.color), in.pick, in.local);
     let lit = ambient * occlusion(in.pos.xy, albedo) + vec3<f32>(direct);
     let a = in.emission.w;
     return targets(vec4<f32>(fogged(adjusted(albedo * lit + in.emission.rgb, in.op.w), in.world) * a, a), in.pick);
@@ -2738,6 +2934,7 @@ struct LineOut {
     // the segment's length in m and its ends' clip w, so the dash follows the segment in depth.
     @location(7) @interpolate(flat) dash: vec2<f32>,
     @location(8) @interpolate(flat) metres: vec3<f32>,
+    @location(9) @interpolate(flat) caps: u32,
 };
 
 @vertex
@@ -2756,6 +2953,7 @@ fn line_vs(
     out.color = color;
     out.pick = pick;
     out.joined = (flags >> 3u) & 1u;
+    out.caps = flags >> 6u;
     out.dash = unpack2x16float(dash);
     out.metres = vec3<f32>(0.0);
     if (flags & 16u) != 0u {
@@ -2763,7 +2961,7 @@ fn line_vs(
     } else {
         out.dash = out.dash * frame.px.x;
     }
-    if ca.w <= 0.0 || cb.w <= 0.0 {
+    if ca.w <= 0.0 || cb.w <= 0.0 || (flags & 32u) != 0u {
         out.pos = OFF;
         return out;
     }
@@ -2818,7 +3016,7 @@ fn line_fs(in: LineOut) -> Targets {
         t = clamp(dot(p - in.a, d) / l2, 0.0, 1.0);
     }
     let dist = length(p - (in.a + d * t));
-    let cov = clamp(mix(in.r.x, in.r.y, t) + 0.5 - dist, 0.0, 1.0);
+    let cov = capped(in, p, t, clamp(mix(in.r.x, in.r.y, t) + 0.5 - dist, 0.0, 1.0));
     if cov <= 0.0 {
         discard;
     }

@@ -1,0 +1,49 @@
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/2011
+
+ ❯ ac2-step-budget.test.ts (4 tests | 2 failed) 57742ms
+   ❯ #2011.a8a76103 budget.step_p95 is held in the app and in the wasm32 build in headless Chrome on the reference Mac (4)
+     × #2011.a8a76103 50 capsules on the 20,000-triangle level built as a compound of convex pieces keep step_p95 under 2 ms in the app and in headless Chrome 29920ms
+     × #2011.a8a76103 the same level as one mesh shape, under 2 ms in the app and over it in headless Chrome, fails on the web host, naming web, the step and the shape pair 18800ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac2-step-budget.test.ts > #2011.a8a76103 budget.step_p95 is held in the app and in the wasm32 build in headless Chrome on the reference Mac > #2011.a8a76103 50 capsules on the 20,000-triangle level built as a compound of convex pieces keep step_p95 under 2 ms in the app and in headless Chrome
+Error: INCONCLUSIVE: the compound level on both hosts: a reading, not a budget result:
+  app (wanted PASS): runs [0.06183400000000001,0.048333,0.044583000000000005,0.043125,0.044541]; a reading, not a budget result: off the reference Macs (Mac15,7 (M3 Pro, 36 GB) or Mac15,12 (M3, 16 GB) or Mac17,10 (M5 Max, 64 GB); mains power, Low Power Mode off, thermal state nominal): load 21.431640625 at a run's start or end is above the 18 cores
+  web (wanted PASS): runs [0.09000003337860107,0.09000003337860107,0.09000003337860107,0.09000003337860107,0.0899999737739563]; a reading, not a budget result: off the reference Macs (Mac15,7 (M3 Pro, 36 GB) or Mac15,12 (M3, 16 GB) or Mac17,10 (M5 Max, 64 GB); mains power, Low Power Mode off, thermal state nominal): load 21.15673828125 at a run's start or end is above the 18 cores
+ ❯ inconclusive helpers.ts:235:30
+    233| /** Fails the test as INCONCLUSIVE: the five-run rule read a loaded ma…
+    234| export function inconclusive(what: string, readings: string[]): void {
+    235|   if (readings.length) throw Error(`INCONCLUSIVE: ${what}: a reading, …
+       |                              ^
+    236| }
+    237|
+ ❯ ac2-step-budget.test.ts:49:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  ac2-step-budget.test.ts > #2011.a8a76103 budget.step_p95 is held in the app and in the wasm32 build in headless Chrome on the reference Mac > #2011.a8a76103 the same level as one mesh shape, under 2 ms in the app and over it in headless Chrome, fails on the web host, naming web, the step and the shape pair
+Error: INCONCLUSIVE: the mesh level on both hosts: a reading, not a budget result:
+  app (wanted PASS): runs [1.756084,1.759542,1.881208,1.9356250000000002,1.862625]; a reading, not a budget result: off the reference Macs (Mac15,7 (M3 Pro, 36 GB) or Mac15,12 (M3, 16 GB) or Mac17,10 (M5 Max, 64 GB); mains power, Low Power Mode off, thermal state nominal): load 21.15673828125 at a run's start or end is above the 18 cores
+  web (wanted FAIL): runs [2.6800000071525574,2.64000004529953,2.659999966621399,2.6050000190734863,2.6049999594688416]; a reading, not a budget result: off the reference Macs (Mac15,7 (M3 Pro, 36 GB) or Mac15,12 (M3, 16 GB) or Mac17,10 (M5 Max, 64 GB); mains power, Low Power Mode off, thermal state nominal): load 19.447265625 at a run's start or end is above the 18 cores
+ ❯ inconclusive helpers.ts:235:30
+    233| /** Fails the test as INCONCLUSIVE: the five-run rule read a loaded ma…
+    234| export function inconclusive(what: string, readings: string[]): void {
+    235|   if (readings.length) throw Error(`INCONCLUSIVE: ${what}: a reading, …
+       |                              ^
+    236| }
+    237|
+ ❯ ac2-step-budget.test.ts:60:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 2 passed (4)
+   Start at  18:53:45
+   Duration  57.82s (tests 100%)
+
+18:54  up 4 days,  3:31, 8 users, load averages: 17.42 68.97 111.61
+
+[exited with code 0]

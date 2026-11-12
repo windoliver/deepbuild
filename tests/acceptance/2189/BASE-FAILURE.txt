@@ -1,0 +1,46 @@
+Base commit: 24c9efe45 ("docs(#1903): the envelope's run on a Mac17,10, its readings and the run that makes them", the tip of PR #2185)
+Command: npx vitest run --root tests/acceptance/2189 --no-file-parallelism
+
+NOT RUN. This file is reasoned from the base's code and #1903's evidence, not from a run: the Mac is shared and
+heavily loaded, so the job that wrote these tests was told not to build or run them. What was run: `npx tsc -p
+tests/acceptance/2189/tsconfig.json`, which passes, and `npx vitest list --root tests/acceptance/2189`, which collects
+all 3 tests.
+
+Expected at the base, on a Mac with Metal (such as the Mac17,10 the evidence ran on): all 3 tests fail for the
+expected reason, at a named assertion. Off macOS, or with no Metal device, all 3 are skipped as INCONCLUSIVE at the
+base as after it.
+
+- The build. Each file runs `cargo build --locked --release --bin deep-gpu`, as docs/evidence/1903/README.md built the
+  evidence's binary from this commit, so the build is expected to succeed and no test should fail at "the binary
+  builds"; if it did, that is the line each test would fail at instead.
+
+- full-screen.test.ts, one `envelope` call of the every-pass scene at 3456 × 2234 on Metal, shared by its two tests.
+  At the base, `admit` (live.rs) fits the view with `meter::fit` at the showpiece's moving scale 0.5 and the
+  envelope's 0-frame window: `meter::estimate` counts slots 3 × 3456 × 2234 × 4 = 92,648,448, targets 1728 × 1117 × 16
+  = 30,882,816 and the upscale 1,930,176 × 4 + 7,720,704 × 4 = 38,603,520, in all 162,134,784 B, within the fit's room
+  of 0.95 × 256,000,000 = 243,200,000. So the scene is admitted, no `over_budget` issue is raised, and the envelope
+  plays it on the device; its row's `gpu_memory` is {limit_bytes: 256000000, verdict, peak_bytes: about 659 MB}
+  (docs/evidence/1903/envelope.json read 659,161,088 on the Mac17,10). The reply has no `code`.
+
+    #2189.41928b7b on Metal the every-pass scene at 3456 × 2234 is refused at check … or plays with every fixture's peak …
+      takes the "plays" branch, and fails at
+      "the every-pass scene at 3456 × 2234 was admitted, so every fixture's peak is at most 256000000":
+      expected [ 'fixture "scene"\'s gpu_memory.peak_bytes is 659161088, over 256000000' ] to deeply equal []
+      (the bytes are this run's reading, about 659 MB)
+
+    #2189.9104323e the bytes the over_budget refusal names for the every-pass scene at 3456 × 2234 are within 10% …
+      fails at "the every-pass scene at 3456 × 2234 is refused at check: {"verdict":…}":
+      expected undefined to be 'refused'
+
+- estimate.test.ts, one `envelope` call at 1280 × 800 on Metal with the every-pass scene and `separate-items` with its
+  instanced twin. At the base each fixture's estimate is 12,288,000 + 640 × 400 × 16 + (256,000 × 4 + 1,024,000 × 4)
+  = 21,504,000 B, so all three are admitted and played, and each row's `gpu_memory` is {limit_bytes, verdict,
+  peak_bytes} with no `estimate_bytes`.
+
+    #2189.39fdadfa on Metal the every-pass scene and separate-items at 1280 × 800 each report gpu_memory.estimate_bytes …
+      fails at "each fixture's estimate is within 10% of what the device held at its peak":
+      expected [ 'scene\'s gpu_memory.estimate_bytes is a number of bytes, got undefined',
+                 'separate-items\'s gpu_memory.estimate_bytes is a number of bytes, got undefined' ] to deeply equal []
+      (were the field the base's estimate, 21,504,000 B, it would still fail: the issue puts it at about a tenth of the scene's peak)
+
+No test reads this machine's model, power, thermal state or load, or a timing.

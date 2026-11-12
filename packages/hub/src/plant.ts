@@ -5,7 +5,6 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import { openSync } from 'node:fs';
-import { close as closeInspector } from 'node:inspector';
 import { createServer, type Server } from 'node:net';
 
 /** The planted wrong programs a test selects with DEEP_HUB_PLANT; only tests set it. */
@@ -21,6 +20,12 @@ export type Plant =
   | 'posts-on-head' | 'unguarded-marks-every-push' | 'unguarded-marks-none'
   // #1537's: the hub holds the shipped message kind with no route into a gate run.
   | 'kind-without-route'
+  // #1331's: a lander that merges the head as it stands though an older one was judged, one that runs every check again on
+  // a moved head, one that closes the issue before its change lands, a run that starts a second attempt beside an
+  // earlier pull request, and a lander that takes the forge's word for what merged.
+  | 'lands-unjudged-commit' | 'lander-reruns-all' | 'closes-on-open' | 'second-attempt-beside-pr' | 'trusts-forge-merged'
+  // #1331's Scope: a lander that merges with your login though the gate's app is named, landing through the admin's bypass.
+  | 'lands-as-person'
   // #33's gate@1 corpus: a gate that counts a check whose own files the claim edited as approved, reads a command check's
   // result from its exit status alone, judges a retry's run alone, or counts only files under the test folders as a check's own.
   | 'edited-check-approved' | 'verdict-from-exit-status' | 'empty-commit-run-alone' | 'own-files-test-folders-only'
@@ -83,7 +88,13 @@ export type Plant =
   // #1463's: deep status listing the rows in reverse, naming needs you "need you", flipping every row's unread; deep
   // counting the open asks a second time itself; deep inbox leaving out each ask's default; and the hub leaking every
   // session's asks into an agent's deep_status.
-  | 'status-second-order' | 'status-own-word' | 'status-unread-flipped' | 'deep-second-count' | 'inbox-no-default' | 'status-row-leak'
+  | 'status-second-order' | 'status-own-word' | 'status-unread-flipped' | 'deep-second-count' | 'inbox-no-default' | 'inbox-adds-unread' | 'status-row-leak'
+  // #2018's: a `--why` built from a reading of its own, a BLOCKED row that names no one and no evidence, and a
+  // reading that tries the stale row before needs you.
+  | 'why-second-reading' | 'blocked-bare' | 'stale-before-ask'
+  // #2019's: a reading that never reads a model-call retry, a FAIL read as sent back with no hold delivered, and a repeat
+  // detector keyed on the command alone, one that notifies at every repeat, and one that raises an ask.
+  | 'retry-reads-working' | 'sent-back-without-hold' | 'repeat-by-command' | 'repeat-notifies-each' | 'repeat-raises-ask'
   // #1455's: a doctor that prints a fix under a healthy item.
   | 'doctor-healthy-fix'
   // #303's: a task for every first prompt or mid-turn message, hashes blind to text or check bytes, a role read from
@@ -207,6 +218,9 @@ export type Plant =
   | 'statusline-user-settings-only' | 'window-unknown-as-zero' | 'window-carried-from-other-repo' | 'sends-block-whole'
   // #1998's: a box that applies a change in words as it drafts it, and one whose approval applies whatever moved since.
   | 'box-applies-at-once' | 'box-ignores-revision'
+  // #1999's: a change whose sentence is the agent's last message, sentences a headless agent call writes, and an open
+  // item listed with no sentence.
+  | 'sentence-from-agent-text' | 'sentence-from-model' | 'open-item-no-sentence'
   // #1922's: a job key over the params' text as written, one without the tool's version, and a host whose tool build
   // hashes only the entry file, or adds where the files are, or when they were modified.
   | 'job-key-params-text' | 'job-key-no-version' | 'job-build-entry-only' | 'job-build-hashes-paths' | 'job-build-hashes-mtimes'
@@ -215,10 +229,25 @@ export type Plant =
   // without the weight hashes.
   | 'job-host-asks-again' | 'job-host-sends-early' | 'job-weights-call-anyway' | 'job-weights-not-keyed'
   // #1923's: a runner that runs a job's tool again while a job with its key runs, and one that stops the job when a joiner cancels.
-  | 'job-second-call' | 'job-joiner-cancels-job';
+  | 'job-second-call' | 'job-joiner-cancels-job'
+  // #1819's: a runner whose job is done, each output an empty record, when its tool's host doesn't answer.
+  | 'job-host-down-done'
+  // #1942's: a host link that drops every connection to a host when one stalls, and one that sends an unknown start again.
+  | 'host-link-drops-every-connection' | 'host-link-resends-on-reconnect'
+  // #1945's: a `deep host run` that runs the script where the agent wrote it, a host's first run with no lingering, and a
+  // root plan that lists a package with install scripts as fully undoable.
+  | 'root-plan-runs-agent-path' | 'host-skips-lingering' | 'host-package-fully-undoable'
+  // #504's: a hub that puts an agent's figure or film in Needs you, and one that takes it as proof of the claim.
+  | 'figure-in-needs-you' | 'figure-feeds-verdict'
+  // #2026's: a spool replay that takes a request as recorded once any newer ID is, and an asker that keeps its place by
+  // the newest hook ID it read: each leaves a spooled permission request with no ask.
+  | 'replay-keeps-place-by-id' | 'asks-keep-place-by-id'
+  // #1100's: a set-up line that says nothing of the guard entries that block, one written to stdout, and steps that never say what they're doing.
+  | 'set-up-line-says-nothing-blocks' | 'set-up-line-to-stdout' | 'silent-steps';
 const PLANTS: readonly string[] = [
   'statusline-user-settings-only', 'window-unknown-as-zero', 'window-carried-from-other-repo', 'sends-block-whole',
   'box-applies-at-once', 'box-ignores-revision',
+  'sentence-from-agent-text', 'sentence-from-model', 'open-item-no-sentence',
   'posts-on-head', 'unguarded-marks-every-push', 'unguarded-marks-none',
   'writer-from-payload', 'unlink-before-lock', 'accept-stops-at-emfile', 'ends-binding', 'git-in-hook-handler', 'commit-on-event-loop',
   'parse-on-event-loop', 'origin-from-payload', 'no-run-values', 'empty-cited', 'ignores-unknown-field', 'run-spawns-itself',
@@ -245,7 +274,9 @@ const PLANTS: readonly string[] = [
   'permission-always-allow', 'typed-saves-decision', 'decision-over-mode', 'decision-before-guard',
   'rule-without-reason', 'copies-no-standing-rules',
   'status-omits-commit', 'doctor-misses-hooks', 'on-stays-off',
-  'status-second-order', 'status-own-word', 'status-unread-flipped', 'deep-second-count', 'inbox-no-default', 'status-row-leak',
+  'status-second-order', 'status-own-word', 'status-unread-flipped', 'deep-second-count', 'inbox-no-default', 'inbox-adds-unread', 'status-row-leak',
+  'why-second-reading', 'blocked-bare', 'stale-before-ask',
+  'retry-reads-working', 'sent-back-without-hold', 'repeat-by-command', 'repeat-notifies-each', 'repeat-raises-ask',
   'doctor-healthy-fix',
   'first-prompt-always-task', 'midturn-always-task', 'hash-ids-only', 'hash-check-paths', 'role-from-text', 'claim-on-tool-calls',
   'runs-disk-bytes',
@@ -298,12 +329,18 @@ const PLANTS: readonly string[] = [
   'rule-reads-context-alone', 'agent-credential-merges', 'agent-credential-pushes-default-branch', 'agent-credential-pushes-approved-tags',
   'agent-credential-posts-statuses', 'passes-gate-credential',
   'kind-without-route',
+  'lands-unjudged-commit', 'lander-reruns-all', 'closes-on-open', 'second-attempt-beside-pr', 'trusts-forge-merged', 'lands-as-person',
   'drafted-spec-only', 'bootstrap-commands-only', 'failures-as-fail',
   'edited-check-approved', 'verdict-from-exit-status', 'empty-commit-run-alone', 'own-files-test-folders-only',
   'actor-from-payload', 'reads-unfiltered', 'listen-without-members',
   'job-key-params-text', 'job-key-no-version', 'job-build-entry-only', 'job-build-hashes-paths', 'job-build-hashes-mtimes',
   'job-host-asks-again', 'job-host-sends-early', 'job-weights-call-anyway', 'job-weights-not-keyed',
-  'job-second-call', 'job-joiner-cancels-job',
+  'job-second-call', 'job-joiner-cancels-job', 'job-host-down-done',
+  'host-link-drops-every-connection', 'host-link-resends-on-reconnect',
+  'root-plan-runs-agent-path', 'host-skips-lingering', 'host-package-fully-undoable',
+  'figure-in-needs-you', 'figure-feeds-verdict',
+  'replay-keeps-place-by-id', 'asks-keep-place-by-id',
+  'set-up-line-says-nothing-blocks', 'set-up-line-to-stdout', 'silent-steps',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {
   if (!value) return undefined;
@@ -340,7 +377,7 @@ export function plantedReload(plant: Plant | undefined): void {
 }
 /** What a planted hub takes away at its start: the inspector that forces a collection, or its resident memory. */
 export function plantedStart(plant: Plant | undefined): void {
-  if (plant === 'churn-no-full-collection') closeInspector();
+  if (plant === 'churn-no-full-collection') process.getBuiltinModule('node:inspector').close();
   if (plant === 'churn-no-resident-read') process.memoryUsage = (() => { throw Error('this platform reads no resident memory'); }) as unknown as typeof process.memoryUsage;
 }
 /** The hub stops: nothing a planted run left outlives it. */

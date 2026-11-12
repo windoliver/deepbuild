@@ -20,5 +20,6 @@ A canvas module crate. It reaches the core only through the `deep-canvas` crate 
 
 ## Deviations
 
-- A `start_on` reads markers and the input track, not a logic item's occurrences: no logic bake reaches motion yet.
+- A `start_on`, a mark set's rows and a driver read a logic item's occurrences (#544) from the rows its host baked into the document's `occurrences`, keyed `<logic ID>.occurrences`, not through the core's column view, which serves only mark-set columns.
+- A world's occurrence list (#1918), keyed `<world ID>.occurrences`, is read the same way, from the rows its host wrote into `occurrences` once the core's column view resolved the form (`deep_canvas::columns::lists`); a document no host baked reads it empty.
 - A placement places a clip, not a recipe; a time remap reaches a recipe instance through its target.

@@ -325,7 +325,7 @@ export function peer(stream, serve) {
       // A line no message needs: the other side is cut off rather than held in memory.
       if (size + at - start > FRAME) return void stream.destroy();
       held.push(chunk.subarray(start, at));
-      const line = Buffer.concat(held).toString('utf8');
+      const line = (held.length === 1 ? held[0] : Buffer.concat(held)).toString('utf8');
       held = [];
       size = 0;
       start = at + 1;

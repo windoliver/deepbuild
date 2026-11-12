@@ -187,7 +187,6 @@ impl Bound {
         compiled: deep_effects_render::compile::Compiled,
         sources: &BTreeMap<String, Source>,
     ) -> Result<Bound, String> {
-        use wgpu::util::DeviceExt as _;
         let d = &device.device;
         let mut read = Vec::new();
         for name in &compiled.checked.storage_inputs {

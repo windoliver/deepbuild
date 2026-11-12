@@ -314,6 +314,8 @@ pub struct Bus {
     /// Index of the bus it feeds, or `None` for the master.
     pub out: Option<usize>,
     pub sends: Vec<BusSend>,
+    /// #502: the ducking entry that targets it (Ducking), multiplied into its gain per sample.
+    pub duck: Option<crate::duck::Duck>,
 }
 
 impl Bus {
@@ -672,6 +674,8 @@ pub struct Player {
     edges: Edges,
     lines: Vec<Line>,
     end: Limiter,
+    /// #157: the end limiter's spec: its defaults, or an export's ceiling.
+    end_spec: LimiterSpec,
     own: Ring<Own>,
     /// The next block to render.
     block: i64,
@@ -685,6 +689,8 @@ pub struct Player {
     edge: Vec<f32>,
     planted: Planted,
     taps: Vec<sha2::Sha256>,
+    /// #502: an export's delivery gain, as an amplitude, on the master ahead of its end limiter.
+    pub delivery: f64,
 }
 
 impl Player {
@@ -704,6 +710,7 @@ impl Player {
             buses: vec![vec![0.0; n]; mix.buses.len()],
             lines: edges.lengths.iter().map(|l| Line::new(*l)).collect(),
             end: Limiter::new(LimiterSpec::default(), mix.rate, planted.limiter_sample_peaks),
+            end_spec: LimiterSpec::default(),
             own: Ring::new(RING_BUDGET, planted.ring_drops_oldest),
             edges,
             mix,
@@ -715,9 +722,11 @@ impl Player {
             edge: vec![0.0; n],
             read: n,
             planted,
+            delivery: 1.0,
         };
         p.seek_graph(lead);
         p.take_taps();
+        p.end.cut = false;
         p
     }
 
@@ -742,6 +751,19 @@ impl Player {
         }
     }
 
+    /// #157: sets the master's end limiter to an export's ceiling, dBTP (a profile's
+    /// `limiter_ceiling`), in place of the limiter's default; like `delivery`, before the export
+    /// seeks.
+    pub fn set_ceiling(&mut self, dbtp: f64) {
+        self.end_spec.ceiling = dbtp;
+        self.end = Limiter::new(self.end_spec, self.mix.rate, self.planted.limiter_sample_peaks);
+    }
+
+    /// #502: whether the master's end limiter has cut since the last seek.
+    pub fn limited(&self) -> bool {
+        self.end.cut
+    }
+
     /// Each processor's ID and the SHA-256 of its output read since the last call.
     pub fn take_taps(&mut self) -> Vec<(String, String)> {
         use sha2::Digest;
@@ -756,7 +778,9 @@ impl Player {
     /// Moves to `sample`: restores the latest checkpoint at or before it that every processor's
     /// ring holds, renders forward from there and returns what each processor did.
     pub fn seek(&mut self, sample: i64) -> Vec<(String, Sought)> {
-        self.seek_graph(sample + self.edges.lead)
+        let sought = self.seek_graph(sample + self.edges.lead);
+        self.end.cut = false;
+        sought
     }
 
     /// Moves the graph, which runs `lead` samples ahead of what is heard, to `sample`.
@@ -800,15 +824,26 @@ impl Player {
                     u.3 = Unit::new(&p.kind, rate, &self.planted);
                 }
                 self.lines = self.edges.lengths.iter().map(|l| Line::new(*l)).collect();
-                self.end = Limiter::new(LimiterSpec::default(), rate, self.planted.limiter_sample_peaks);
+                self.end = Limiter::new(self.end_spec, rate, self.planted.limiter_sample_peaks);
                 0
             }
         };
         self.block = from_block;
-        while self.block < target {
+        // #1163: a jump pre-rolls its tails; the planted reverb starts it without its tail, as it
+        // restores a checkpoint without one, at the block where the first sample heard leaves
+        // the reverb (every path is held back `lead` samples after it).
+        let tailless = target > from_block && self.planted.restores_without_tail;
+        let heard = (sample - self.edges.lead).div_euclid(BLOCK).max(from_block);
+        while self.block <= target {
+            if tailless && self.block == heard {
+                for (.., unit) in &mut self.units {
+                    if let Unit::Reverb(r) = unit {
+                        r.state = r.state.without_tail();
+                    }
+                }
+            }
             self.render_block();
         }
-        self.render_block();
         self.read = 2 * (sample - target * BLOCK) as usize;
         let sought = Sought {
             restored: second.map(|s| s * FLICKS),
@@ -932,8 +967,15 @@ impl Player {
                 self.pre.copy_from_slice(&block);
             }
             let g = if bus.mute { 0.0 } else { amp(bus.gain_db) };
-            for f in block.as_chunks_mut::<2>().0 {
+            // A sample's duck is read at the time of the sound it scales: its place in the
+            // graph less the bus's latency.
+            let t0 = (k * BLOCK - mix.latency[b]) * step;
+            for (i, f) in block.as_chunks_mut::<2>().0.iter_mut().enumerate() {
                 let (l, r) = balance(f[0], f[1], bus.pan);
+                let g = match &bus.duck {
+                    Some(d) => g * d.at(t0 + i as i64 * step),
+                    None => g,
+                };
                 f[0] = (l as f64 * g) as f32;
                 f[1] = (r as f64 * g) as f32;
             }
@@ -968,6 +1010,11 @@ impl Player {
         }
         // The master ends in its true-peak limiter, after its gain and pan.
         self.buf.copy_from_slice(&self.buses[mix.master]);
+        if self.delivery != 1.0 {
+            for x in &mut self.buf {
+                *x = (f64::from(*x) * self.delivery) as f32;
+            }
+        }
         self.end.process(&mut self.buf);
         self.read = 0;
         self.block = k + 1;
@@ -1009,5 +1056,60 @@ fn balance(l: f32, r: f32, pan: f64) -> (f32, f32) {
     } else {
         let x = pan * ops::PI / 2.0;
         ((l as f64 * ops::cos(x)) as f32, (r as f64 + l as f64 * ops::sin(x)) as f32)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::analysis::loudness::measure;
+
+    /// #157: the true peak (8×) of 2 s of a 997 Hz stereo tone at 0 dBFS through a bare master,
+    /// with the export's ceiling set or not.
+    fn master_true_peak(ceiling: Option<f64>) -> f64 {
+        let rate = 48_000;
+        let n = 2 * rate as usize;
+        let samples: Vec<f32> = (0..n)
+            .flat_map(|i| {
+                let v = ops::sin(ops::TAU * 997.0 * i as f64 / rate as f64) as f32;
+                [v, v]
+            })
+            .collect();
+        let source = Arc::new(Source { rate, channels: 2, samples, loop_region: None });
+        let span = source.duration();
+        let strip = Strip {
+            id: "tone".into(),
+            source,
+            start: 0,
+            r#in: 0,
+            out: span,
+            rate: (1, 1),
+            gain: Gain::Db(0.0),
+            pan: 0.0,
+            fade_in: None,
+            fade_out: None,
+            looped: false,
+            span,
+            bus: 0,
+            disabled: Vec::new(),
+            emitter: None,
+        };
+        let master = Bus { id: "master".into(), gain_db: 0.0, pan: 0.0, mute: false, processors: Vec::new(), out: None, sends: Vec::new(), duck: None };
+        let mut player = Player::new(Arc::new(Mix::new(rate, vec![strip], vec![master]).unwrap()), Planted::default());
+        if let Some(c) = ceiling {
+            player.set_ceiling(c);
+        }
+        player.seek(0);
+        let mut out = vec![0f32; 2 * n];
+        player.read(&mut out);
+        measure(&out, &[1.0, 1.0], rate, 8).true_peak
+    }
+
+    #[test]
+    fn an_exports_ceiling_holds_the_masters_true_peak_under_it() {
+        let set = master_true_peak(Some(-1.67));
+        assert!(set <= -1.67 + 0.05, "with the export's ceiling of −1.67 dBTP the master reads {set} dBTP");
+        let default = master_true_peak(None);
+        assert!(default <= -1.0 + 0.05 && default > -1.67 + 0.05, "without it the master reads {default} dBTP");
     }
 }

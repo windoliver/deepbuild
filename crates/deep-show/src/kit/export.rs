@@ -8,7 +8,7 @@ use std::path::Path;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
-use crate::export::{Job, Span};
+use crate::export::Job;
 use crate::hub::Hub;
 
 /// The kit's document ID: a revision the kit's own exports could write lands here.
@@ -90,9 +90,9 @@ impl Hub<'_> {
                 .unwrap_or_default();
             let mut entries = Vec::new();
             for (target, value) in targets {
-                let failures = self.target_case(&target, &value);
+                let (failures, parts) = self.target_case(&target, &value);
                 entries.push(json!({"name": target, "verdict": if failures.is_empty() { "PASS" } else { "FAIL" },
-                    "failures": failures}));
+                    "failures": failures, "parts": parts}));
             }
             let pass = entries.iter().all(|e| e["verdict"] == "PASS");
             reports.push(json!({"registry": REGISTRY, "verdict": if pass { "PASS" } else { "FAIL" }, "entries": entries}));
@@ -100,8 +100,9 @@ impl Hub<'_> {
         json!({"registries": reports})
     }
 
-    /// One target's case; each failure names the target.
-    fn target_case(&mut self, target: &str, entry: &Value) -> Vec<String> {
+    /// One target's case; each failure names the target. #157: its parts, the fidelity part when
+    /// the entry names export.fidelity: its fixture film's export through that check.
+    fn target_case(&mut self, target: &str, entry: &Value) -> (Vec<String>, Vec<Value>) {
         let dir = std::env::temp_dir().join(format!("deep-kit-export-{}-{target}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let codec = match target {
@@ -111,19 +112,9 @@ impl Hub<'_> {
         };
         let job = |out: &Path| Job {
             doc: KIT_DOC.into(),
-            range: Span::Whole,
-            size: None,
-            frame_rate: None,
             codec: codec.into(),
-            alpha: false,
-            sample_rate: None,
-            audio_codec: "pcm".into(),
-            shards: 1,
-            timecode: "00:00:00:00".into(),
-            drop_frame: false,
             out: out.to_string_lossy().into_owned(),
-            software: false,
-            readback: false,
+            ..Default::default()
         };
         let revisions = |hub: &Hub| -> Vec<(u64, String, &'static str)> {
             hub.revisions.get(KIT_DOC).map_or_else(Vec::new, |rows| {
@@ -131,11 +122,14 @@ impl Hub<'_> {
             })
         };
         let mut failures = Vec::new();
+        let mut fidelity: Vec<String> = Vec::new();
         let mut export = |hub: &mut Hub, doc: Value, name: &str| -> Option<(Vec<(String, String)>, Value)> {
             let at = dir.join(name);
             let _ = std::fs::create_dir_all(&at);
             let reply = hub.export_doc(&job(&at.join("out")), doc);
             if reply["outcome"] != "exported" {
+                let found = reply["issues"].as_array().into_iter().flatten().filter(|i| i["check"] == "export.fidelity");
+                fidelity.extend(found.map(|i| format!("{target}: export.fidelity: {}", i["what"].as_str().unwrap_or_default())));
                 failures.push(format!("{target}: the export {name} isn't delivered: {reply}"));
                 return None;
             }
@@ -179,6 +173,17 @@ impl Hub<'_> {
                 other => failures.push(format!("{target}: it declares hidden: {other:?}")),
             }
         }
-        failures
+        // #157: the fidelity part: the fixture film's delivery through export.fidelity, when the
+        // entry names it; any undelivered export fails the part, naming what stopped it.
+        let mut parts = Vec::new();
+        if entry["fidelity"].as_array().is_some_and(|f| f.contains(&json!("export.fidelity"))) {
+            let delivered = with.is_some() && without.is_some() && no_ghost.is_some();
+            if !delivered && fidelity.is_empty() {
+                fidelity.extend(failures.iter().filter(|f| f.contains("isn't delivered")).cloned());
+            }
+            let verdict = if delivered && fidelity.is_empty() { "PASS" } else { "FAIL" };
+            parts.push(json!({"part": "fidelity", "check": "export.fidelity", "verdict": verdict, "failures": fidelity}));
+        }
+        (failures, parts)
     }
 }

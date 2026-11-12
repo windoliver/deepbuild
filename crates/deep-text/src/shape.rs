@@ -6,9 +6,11 @@ use std::sync::Arc;
 
 use parley::fontique::{Collection, CollectionOptions, SourceCache};
 use parley::{
-    Alignment, AlignmentOptions, FontContext, FontData, FontFamily, FontFamilyName, FontWeight,
-    Language, Layout, LayoutContext, LineHeight, PositionedLayoutItem, StyleProperty,
+    Alignment, AlignmentOptions, FontContext, FontData, FontFamily, FontFamilyName, FontStyle,
+    FontWeight, Language, Layout, LayoutContext, LineHeight, PositionedLayoutItem, StyleProperty,
+    VerticalAlign,
 };
+use skrifa::raw::TableProvider;
 
 use crate::cache::{self, Key, Planted};
 use crate::fonts::{self, Role, FACES};
@@ -52,6 +54,76 @@ pub struct Spec<'a> {
     pub bound: bool,
     pub tabular: bool,
     pub mask: bool,
+    /// #1964: styled spans of the one run, shaped with it.
+    pub spans: &'a [Span],
+}
+
+/// #1964: a styled span's shift off the baseline (`shift: sub | super | u`).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Shift {
+    /// The face's subscript size and offset (OS/2 `ySubscriptYSize`, `ySubscriptYOffset`).
+    Sub,
+    /// The face's superscript size and offset (OS/2 `ySuperscriptYSize`, `ySuperscriptYOffset`).
+    Super,
+    /// Raised by this many logical pixels; lowered when negative.
+    By(f32),
+}
+
+/// #1964: a styled span of one shaped run (`runs[i]`): graphemes `[from, to)` of the text. A field
+/// left `None` (or `false`) stays the item's.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Span {
+    pub from: usize,
+    pub to: usize,
+    /// The bundled family its font role names.
+    pub family: Option<&'static str>,
+    pub weight: Option<u16>,
+    pub italic: Option<bool>,
+    pub size: Option<f32>,
+    /// Extra advance after each character, in logical pixels.
+    pub tracking: Option<f32>,
+    pub shift: Option<Shift>,
+    pub underline: bool,
+    pub strike: bool,
+}
+
+// A span's numbers are finite (the document's reader refuses others), so equality is total and
+// each hashes by its bits: a run's key holds its spans.
+impl Eq for Span {}
+
+impl std::hash::Hash for Span {
+    fn hash<H: std::hash::Hasher>(&self, h: &mut H) {
+        let bits = |v: Option<f32>| v.map(f32::to_bits);
+        (self.from, self.to, self.family, self.weight, self.italic).hash(h);
+        (
+            bits(self.size),
+            bits(self.tracking),
+            self.underline,
+            self.strike,
+        )
+            .hash(h);
+        match self.shift {
+            None => 0u32.hash(h),
+            Some(Shift::Sub) => 1u32.hash(h),
+            Some(Shift::Super) => 2u32.hash(h),
+            Some(Shift::By(u)) => (3u32, u.to_bits()).hash(h),
+        }
+    }
+}
+
+/// The `[size, rise]` ratios of an em a face sets its subscripts or superscripts at, from its
+/// OS/2 table; `None` for a face without one.
+fn script_metrics(family: &str, shift: Shift) -> Option<[f32; 2]> {
+    let face = FACES.iter().find(|f| f.family == family)?;
+    let font = skrifa::FontRef::new(face.bytes).ok()?;
+    let em = f32::from(font.head().ok()?.units_per_em().max(1));
+    let os2 = font.os2().ok()?;
+    let [size, offset] = match shift {
+        Shift::Sub => [os2.y_subscript_y_size(), -os2.y_subscript_y_offset()],
+        Shift::Super => [os2.y_superscript_y_size(), os2.y_superscript_y_offset()],
+        Shift::By(_) => return None,
+    };
+    (size > 0).then(|| [f32::from(size) / em, f32::from(offset) / em])
 }
 
 impl<'a> Spec<'a> {
@@ -71,6 +143,7 @@ impl<'a> Spec<'a> {
             bound: false,
             tabular: false,
             mask: false,
+            spans: &[],
         }
     }
 
@@ -95,12 +168,25 @@ pub struct Glyph {
     /// #496: the face's normalized variation coordinates (F2Dot14 bits) the glyph was shaped at,
     /// empty for a static face; outlines and rasters read the glyph at them.
     pub coords: Arc<[i16]>,
+    /// #1964: the slant in degrees an italic span is drawn at where its face has no italic (0:
+    /// upright), leaning forward as y rises.
+    pub skew: f32,
+}
+
+/// #1964: an underline or a strike of a styled span: `[x, y, w, h]` in logical pixels from the
+/// run's origin (y down), at its face's own offset and thickness, painted as its first grapheme.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Decoration {
+    pub rect: [f32; 4],
+    pub grapheme: usize,
 }
 
 /// A shaped text: its glyphs and the box they take.
 #[derive(Clone, Debug, Default)]
 pub struct Shaped {
     pub glyphs: Vec<Glyph>,
+    /// #1964: its spans' underlines and strikes, drawn over its glyphs.
+    pub decorations: Vec<Decoration>,
     /// The widest line's advance, in logical pixels.
     pub width: f32,
     /// The lines' heights summed.
@@ -194,6 +280,67 @@ impl Shaper {
         if spec.tabular {
             builder.push_default(StyleProperty::FontFeatures("\"tnum\" 1".into()));
         }
+        // #1964: each span restyles its graphemes' byte range of the one run, so the layout shapes
+        // and breaks it with the rest. A span's box adds no height: the item's line height alone
+        // spaces the lines, so a shift or a size never moves a baseline.
+        let starts = grapheme_starts(text);
+        let byte = |g: usize| starts.get(g).copied().unwrap_or(text.len());
+        for span in spec.spans {
+            let range = byte(span.from)..byte(span.to);
+            if range.is_empty() {
+                continue;
+            }
+            let family = span.family.unwrap_or(spec.family);
+            if span.family.is_some() {
+                let families: Vec<FontFamilyName<'_>> = std::iter::once(family)
+                    .chain(spec.fallback.iter().copied())
+                    .map(FontFamilyName::named)
+                    .collect();
+                builder.push(
+                    StyleProperty::FontFamily(FontFamily::List(families.into())),
+                    range.clone(),
+                );
+            }
+            if let Some(weight) = span.weight {
+                builder.push(FontWeight::new(f32::from(weight)), range.clone());
+            }
+            if let Some(italic) = span.italic {
+                let style = if italic {
+                    FontStyle::Italic
+                } else {
+                    FontStyle::Normal
+                };
+                builder.push(StyleProperty::FontStyle(style), range.clone());
+            }
+            let size = span.size.unwrap_or(spec.size);
+            let (size, rise) = match span.shift {
+                None => (size, 0.),
+                Some(Shift::By(u)) => (size, u),
+                Some(shift) => script_metrics(family, shift)
+                    .map_or((size, 0.), |[k, rise]| (size * k, size * rise)),
+            };
+            if size != spec.size {
+                builder.push(StyleProperty::FontSize(size), range.clone());
+            }
+            if rise != 0. {
+                builder.push(VerticalAlign::length(rise), range.clone());
+            }
+            if span.size.is_some() || span.shift.is_some() {
+                builder.push(
+                    StyleProperty::LineHeight(LineHeight::Absolute(0.)),
+                    range.clone(),
+                );
+            }
+            if let Some(tracking) = span.tracking {
+                builder.push(StyleProperty::LetterSpacing(tracking), range.clone());
+            }
+            if span.underline {
+                builder.push(StyleProperty::Underline(true), range.clone());
+            }
+            if span.strike {
+                builder.push(StyleProperty::Strikethrough(true), range);
+            }
+        }
         let mut layout = builder.build(text);
         // A bound value is never wrapped: it stays on one line, past its box if it must.
         layout.break_all_lines(if spec.bound { None } else { spec.width });
@@ -233,6 +380,32 @@ impl Shaper {
                     .iter()
                     .map(|c| c.to_bits())
                     .collect();
+                let skew = run.run().synthesis().skew().unwrap_or(0.);
+                // #1964: a span's underline and strike, across its glyph run at its baseline.
+                let style = run.style();
+                let metrics = run.run().font_metrics();
+                let first = grapheme(run.run().text_range().start);
+                let lines = [
+                    style.underline.as_ref().map(|d| {
+                        let at = d.offset.unwrap_or(metrics.underline_offset);
+                        (at, d.size.unwrap_or(metrics.underline_size))
+                    }),
+                    style.strikethrough.as_ref().map(|d| {
+                        let at = d.offset.unwrap_or(metrics.strikethrough_offset);
+                        (at, d.size.unwrap_or(metrics.strikethrough_size))
+                    }),
+                ];
+                for (offset, thickness) in lines.into_iter().flatten() {
+                    shaped.decorations.push(Decoration {
+                        rect: [
+                            run.offset(),
+                            run.baseline() - offset,
+                            run.advance(),
+                            thickness,
+                        ],
+                        grapheme: first,
+                    });
+                }
                 // The run's clusters in the order its glyphs are drawn, each with its glyphs.
                 let clusters = run.run().visual_clusters().flat_map(|c| {
                     let first = c.text_range().start;
@@ -248,6 +421,7 @@ impl Shaper {
                         advance: glyph.advance,
                         grapheme: grapheme(byte),
                         coords: coords.clone(),
+                        skew,
                     });
                 }
             }
@@ -342,15 +516,26 @@ impl Shaper {
     pub fn missing(&mut self, spec: &Spec<'_>, text: &str) -> Vec<String> {
         let run = self.run(spec, text);
         let starts = grapheme_starts(text);
+        // #1965: one pass over the run's glyphs, so a code item's 256 KiB isn't read once a
+        // grapheme.
+        let mut notdef: Vec<usize> = run
+            .glyphs
+            .iter()
+            .filter(|g| g.id == 0)
+            .map(|g| g.grapheme)
+            .collect();
+        notdef.sort_unstable();
+        notdef.dedup();
+        let mut seen = std::collections::BTreeSet::new();
         let mut out: Vec<String> = Vec::new();
-        for (i, start) in starts.iter().enumerate() {
+        for i in notdef {
+            let Some(start) = starts.get(i) else { continue };
             let end = starts.get(i + 1).copied().unwrap_or(text.len());
             let grapheme = &text[*start..end];
             let needs_glyph = grapheme
                 .chars()
                 .any(|c| !c.is_whitespace() && !is_default_ignorable(c));
-            let notdef = run.glyphs.iter().any(|g| g.grapheme == i && g.id == 0);
-            if needs_glyph && notdef && !out.iter().any(|g| g == grapheme) {
+            if needs_glyph && seen.insert(grapheme) {
                 out.push(grapheme.to_string());
             }
         }

@@ -58,6 +58,9 @@ use deep_app::{commands::Palette, init, menu_bar_line, mount_panel, show::Canvas
 use gpui_kit::*;
 
 // The probes that stay (#1457): each a flag the suites run as `target/debug/deep-app --flag`, in a file of its own.
+#[cfg(all(feature = "canvas-fixture", target_os = "macos"))]
+#[path = "probes/canvas.rs"]
+mod canvas;
 #[cfg(target_os = "macos")]
 #[path = "probes/capture_bug.rs"]
 mod capture_bug;
@@ -103,6 +106,12 @@ fn main() {
     #[cfg(all(feature = "chrome-fixture", target_os = "macos"))]
     if std::env::args().nth(1).as_deref() == Some("--chrome") {
         chrome::run(std::env::args().skip(2).collect());
+        return;
+    }
+    // Issue #1485: `--canvas <scenario.json>`, in a canvas-fixture build.
+    #[cfg(all(feature = "canvas-fixture", target_os = "macos"))]
+    if std::env::args().nth(1).as_deref() == Some("--canvas") {
+        canvas::run(std::env::args().nth(2));
         return;
     }
     #[cfg(feature = "panel-check")]
@@ -159,8 +168,17 @@ fn main() {
     if mode == Mode::SetUp {
         match deep_app::setup::set_up() {
             Ok(line) => println!("{line}"),
-            Err(error) => {
-                eprintln!("deep-app: {error}");
+            Err(stopped) => {
+                deep_app::setup::refresh();
+                let line = stopped
+                    .line
+                    .or_else(deep_app::setup::reason)
+                    .unwrap_or_default();
+                eprintln!("deep-app: {line}");
+                // A terminal shows what setup printed too; the window keeps it one press away (#1100).
+                if !stopped.output.trim().is_empty() {
+                    eprintln!("{}", stopped.output.trim());
+                }
                 std::process::exit(1);
             }
         }
@@ -511,6 +529,7 @@ mod notifications {
             let mut watch = HubWatch::default();
             let (mut begun, mut active) = (false, false);
             let notifies = held.is_some();
+            let answered = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
             let mut shown = deep_app::menu_bar_line();
             // The status item's menu: a line per session with its state's word and mark (#1462).
             let mut listed: Vec<String> = Vec::new();
@@ -519,6 +538,14 @@ mod notifications {
             }
             loop {
                 cx.background_executor().timer(TICK).await;
+                // macOS's Reduce Motion as it is now, not only at launch: the working marks hold still under it (#2021).
+                #[cfg(target_os = "macos")]
+                cx.update(|cx| {
+                    cx.set_reduce_motion(
+                        objc2_app_kit::NSWorkspace::sharedWorkspace()
+                            .accessibilityDisplayShouldReduceMotion(),
+                    )
+                });
                 // A later launch brings the app forward; `deep open` and a link open their address (#1460).
                 for call in held.as_ref().map(Held::calls).unwrap_or_default() {
                     eprintln!("deep-app: brought forward");
@@ -542,6 +569,25 @@ mod notifications {
                 if notifies && active && !was_active {
                     read_setting(&mut notifier);
                 }
+                // macOS asks whether DeepBuild may notify you at the Set up click (#1100), or, set up from a terminal,
+                // the first time the app comes forward; never when an ask comes due. Once you've answered, it's read.
+                let not_asked = notifier.reach(false).setting == NotificationSetting::NotAsked;
+                if notify::take_ask()
+                    || (notifies
+                        && active
+                        && !was_active
+                        && not_asked
+                        && !deep_app::setup::needed())
+                {
+                    eprintln!("deep-app: asked macOS to allow notifications");
+                    let answered = answered.clone();
+                    super::notification_center::request(move || {
+                        answered.store(true, std::sync::atomic::Ordering::SeqCst);
+                    });
+                }
+                if answered.swap(false, std::sync::atomic::Ordering::SeqCst) {
+                    read_setting(&mut notifier);
+                }
                 let now = now();
                 if deep_app::setup::refresh() {
                     cx.update(|cx| cx.refresh_windows());
@@ -557,7 +603,10 @@ mod notifications {
                     begun = true;
                     post(&mut notifier, now, cx);
                 }
-                let reach = notifier.reach(watch.down());
+                let reach = notify::Reach {
+                    since: watch.since(),
+                    ..notifier.reach(watch.down())
+                };
                 let reached = reach != notify::reach();
                 if reached {
                     notify::publish(reach);
@@ -580,7 +629,7 @@ mod notifications {
                         super::menu_bar::show_menu(&lines);
                         listed = lines;
                     }
-                    deep_app::card::tick(now, cx);
+                    deep_app::views::tick(now, cx);
                 });
             }
         })

@@ -1,0 +1,46 @@
+# tests/acceptance/1918, each file run once with:
+# NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 npx vitest run --root tests/acceptance/1918 --testTimeout=600000 --no-file-parallelism <file>
+
+## Before merging main (change at dbfa62762)
+### ac1
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+   Start at  20:01:00
+### ac2
+ Test Files  1 passed (1)
+      Tests  6 passed (6)
+   Start at  20:00:17
+### ac3
+ Test Files  1 passed (1)
+      Tests  4 passed (4)
+   Start at  20:05:42
+### ac4
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  20:07:17
+### ac5
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  20:00:25
+
+## After merging main at 04f44a4ba (#2011 among it), every file again
+### ac1-channel-targets
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+   Start at  21:28:19
+### ac2-rigid-fixtures
+ Test Files  1 passed (1)
+      Tests  6 passed (6)
+   Start at  21:29:20
+### ac5-reverse-pairs
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  21:29:25
+### ac3-column-view
+ Test Files  1 passed (1)
+      Tests  4 passed (4)
+   Start at  21:59:57
+### ac4-scene-lab
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  22:03:13

@@ -47,13 +47,27 @@ pub struct Notification {
     pub sound: Option<Sound>,
 }
 
-/// What macOS says of the app's notifications. "Not asked yet" reads allowed: the first post asks.
+/// What macOS says of the app's notifications. Not asked yet holds every post (#1100): macOS asks at the Set up click,
+/// while you're at the Mac, never when an ask comes due.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum NotificationSetting {
     #[default]
     Allowed,
     Denied,
     AlertsNone,
+    NotAsked,
+}
+
+static ASK: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Set up was pressed (#1100): the app's notifier has macOS ask whether DeepBuild may notify you, now.
+pub fn ask() {
+    ASK.store(true, std::sync::atomic::Ordering::SeqCst);
+}
+
+/// Whether Set up asked for notifications since this was last called.
+pub fn take_ask() -> bool {
+    ASK.swap(false, std::sync::atomic::Ordering::SeqCst)
 }
 
 impl NotificationSetting {
@@ -63,6 +77,7 @@ impl NotificationSetting {
             NotificationSetting::Allowed => "allowed",
             NotificationSetting::Denied => "denied",
             NotificationSetting::AlertsNone => "alerts_none",
+            NotificationSetting::NotAsked => "not_asked",
         }
     }
 
@@ -71,12 +86,17 @@ impl NotificationSetting {
             "allowed" => Some(NotificationSetting::Allowed),
             "denied" => Some(NotificationSetting::Denied),
             "alerts_none" => Some(NotificationSetting::AlertsNone),
+            "not_asked" => Some(NotificationSetting::NotAsked),
             _ => None,
         }
     }
 
+    /// Whether posts wait: off, or not asked yet, since a post would have macOS ask when an ask comes due (#1100).
+    /// #1100's planted app posts while not asked yet, as the merge base did, and macOS asks then.
     fn off(self) -> bool {
         self != NotificationSetting::Allowed
+            && !(self == NotificationSetting::NotAsked
+                && crate::plain::planted("notifications-asked-at-first-post"))
     }
 }
 
@@ -84,6 +104,8 @@ impl NotificationSetting {
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Reach {
     pub hub_down: bool,
+    /// Since when the hub it says isn't answering went down (#1461).
+    pub since: Option<u64>,
     pub setting: NotificationSetting,
     /// The asks Notification Center holds.
     pub delivered: Vec<String>,
@@ -103,7 +125,7 @@ impl Reach {
     /// What you should know beside the count, a row of its own (#1455): notifications are off, and the fix.
     pub fn notice(&self) -> Option<&'static str> {
         match self.setting {
-            NotificationSetting::Allowed => None,
+            NotificationSetting::Allowed | NotificationSetting::NotAsked => None,
             NotificationSetting::Denied => Some(
                 "Notifications are off: turn on Allow notifications for DeepBuild in System Settings",
             ),
@@ -118,7 +140,11 @@ impl Reach {
         if self.hub_down {
             return Some(HUB_DOWN);
         }
-        self.setting.off().then_some("Notifications off")
+        matches!(
+            self.setting,
+            NotificationSetting::Denied | NotificationSetting::AlertsNone
+        )
+        .then_some("Notifications off")
     }
 
     /// Whether `ask`'s row says it wasn't notified.
@@ -201,6 +227,7 @@ impl Notifier {
     pub fn reach(&self, hub_down: bool) -> Reach {
         Reach {
             hub_down,
+            since: None,
             setting: self.setting,
             delivered: self
                 .delivered

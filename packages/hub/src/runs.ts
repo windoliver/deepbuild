@@ -6,7 +6,7 @@ import { randomBytes } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { readFileSync, realpathSync } from 'node:fs';
 import { basename, isAbsolute, relative } from 'node:path';
-import { runCommandCheck, type CommandRun } from '@deepbuild/checks-command';
+import type { ChecksProvider, CommandRun } from './checks-port.js';
 import { sha256Hex, type JsonValue } from '@deepbuild/contracts';
 import { scrubText, type Evidence, type EvidenceStore, type PutResult } from '@deepbuild/evidence';
 import type { CheckResult } from '@deepbuild/conformance';
@@ -14,7 +14,9 @@ import type { ExtensionHost } from '@deepbuild/extension-host';
 import { slot } from '@deepbuild/gate';
 import type { LeaseTable } from '@deepbuild/leases';
 import { after, type Grant, type Host, type Started, type Supervisor } from '@deepbuild/supervisor';
-import type { Up } from '@deepbuild/env-local';
+import type { Up } from './environment-port.js';
+import type { TimingReport } from '@deepbuild/verdicts';
+import { isRoot, type Hosts } from './hosts.js';
 import { words } from './claude-settings.js';
 import type { RunKey } from './gate-runner.js';
 import { FINDINGS, findingOf, type KeyFacts } from './shared-runs.js';
@@ -38,7 +40,9 @@ interface Run { run: string; check: string; claim: string; commit: string; argv:
   /** A claim's check of a kind other than command (#1537): check@1's spec, run through the kinds the hub holds. */
   spec?: Obj;
   /** It outlives the hub (#70): a hub's stop leaves it running, and the next hub adopts it rather than running it again. */
-  keep?: boolean }
+  keep?: boolean;
+  /** A host your SSH config names, where it runs as the user service named by its run token (#1942), which the journal keeps so a later hub follows it again. */
+  host?: string; token?: string }
 /**
  * How long a claim's check runs when its definition names no deadline: a day, so a run no tool ends is still stopped and
  * recorded overran. Spec-draft sets a check's own deadline from the time it took when drafted (#30); until it does, this stands.
@@ -58,6 +62,7 @@ const isUnder = (path: string, dir: string) => {
 };
 
 interface RunsOptions {
+  command: ChecksProvider['command'];
   /** The journal file: each run started and not yet durably finished. */
   journalFile: string;
   point(): void;
@@ -83,8 +88,9 @@ interface RunsOptions {
   supervisor: () => Supervisor;
   leases: () => LeaseTable;
   extensions: () => ExtensionHost | undefined;
-  /** One run of a held kind's check (#1537): its result as check.kind@1's, for the run's claim, ended by `stop`. */
-  kind(run: Run, checkout: string, deadline: number, stop: AbortSignal): Promise<CheckResult>;
+  /** One run of a held kind's check (#1537): its result as check.kind@1's, for the run's claim, ended by `stop`; a document check's issues as its stdout (#1723); a stated speed's timing report (#1863). */
+  kind(run: Run, checkout: string, deadline: number, stop: AbortSignal): Promise<CheckResult & { stdout?: string; speed?: TimingReport }>;
+  hosts: () => Hosts;
 }
 
 /**
@@ -133,6 +139,8 @@ export class Runs {
   private readonly live = new Map<string, { run: Run; done: Promise<void>; stop(): void }>();
   /** The held-out variants' runs still to finish (#1018), whose findings their finish withholds, keyed or not. */
   private readonly heldOut = new Set<string>();
+  /** Each run on a host's stdout as it came, for `deep run follow` (#1942), kept a minute past its end; and who waits for more. */
+  private readonly tails = new Map<string, { chunks: Buffer[]; size: number; ended: boolean; wake: (() => void)[] }>();
   constructor(private readonly o: RunsOptions) {}
 
   /** How many runs are in flight. */
@@ -141,11 +149,12 @@ export class Runs {
   async ended(run: string): Promise<void> { await this.live.get(run)?.done.catch(() => undefined); }
   /** Asks every run in flight to stop. */
   stopAll(): void {
-    for (const { run, stop } of this.live.values()) if (!run.keep) stop();
+    // A run on a host outlives the hub as a kept one does: a later hub follows it again by its token.
+    for (const { run, stop } of this.live.values()) if (!run.keep && !run.host) stop();
   }
   /** Waits up to five seconds for every run in flight but the kept ones to record its finish. */
   async settled(): Promise<void> {
-    await Promise.race([Promise.allSettled([...this.live.values()].filter((r) => !r.run.keep).map((r) => r.done)), new Promise((done) => setTimeout(done, 5000))]);
+    await Promise.race([Promise.allSettled([...this.live.values()].filter((r) => !r.run.keep && !r.run.host).map((r) => r.done)), new Promise((done) => setTimeout(done, 5000))]);
   }
 
   /**
@@ -171,8 +180,8 @@ export class Runs {
     }
     const aside = keepAside(this.o.journalFile, bytes, this.o.now());
     // The core's run.started@3 carries what a run runs; an earlier one can't be run again from the record, and no
-    // other writer's start or finish counts.
-    const rows = (await this.o.raw(`SELECT s.data FROM events s WHERE s.kind = 'run.started' AND s.writer = 'core' AND s.v >= 3 AND NOT EXISTS
+    // other writer's start or finish counts. A root plan's run (#1945) is never the hub's to run.
+    const rows = (await this.o.raw(`SELECT s.data FROM events s WHERE s.kind = 'run.started' AND s.writer = 'core' AND s.v >= 3 AND json_extract(s.data, '$.ask') IS NULL AND NOT EXISTS
       (SELECT 1 FROM events f WHERE f.kind = 'run.finished' AND f.writer = 'core' AND json_extract(f.data, '$.run') = json_extract(s.data, '$.run')) ORDER BY s.log_pos`)) as { data: string }[];
     // The reading first, then the journal written again: a cut in between finds it damaged and rebuilds it again.
     const now = this.o.now();
@@ -203,14 +212,14 @@ export class Runs {
 
   /** run.start, and deep_run's runs with the deadline their spec gives, in ms; a gate run's with its key, and whether it's a held-out variant's (#1018); a claim's check that needs the app with its stack (#580). */
   async start(params: Obj, deadline?: number, id?: string, key?: RunKey, heldOut = false, stack?: StackWant): Promise<Obj> {
-    const { check, claim, commit, argv, env = {}, cwd = process.cwd(), grant = RUN_AS_YOU, environment = false, lane, expected_ms, deadline_ms, command, stand_ins, spec, outside, keep = false } = params;
+    const { check, claim, commit, argv, env = {}, host, cwd = host === undefined ? process.cwd() : '', grant = RUN_AS_YOU, environment = false, lane, expected_ms, deadline_ms, command, stand_ins, spec, outside, keep = false } = params;
     const limit = deadline ?? (typeof deadline_ms === 'number' ? deadline_ms : undefined);
     if (typeof check !== 'string' || !check) throw new Refused(refusal('required', '/params/check', 'Name the check the run is for.', check));
     if (typeof claim !== 'string' || !/^claim:[0-9A-Za-z]+$/.test(claim)) throw new Refused(refusal('pattern', '/params/claim', 'Name the claim as claim:<id>.', claim));
     if (typeof commit !== 'string' || !/^[0-9a-f]{40}$/.test(commit)) throw new Refused(refusal('pattern', '/params/commit', 'Name the commit by its 40-character SHA.', commit));
     if (!Array.isArray(argv) || !argv.length || argv.some((a) => typeof a !== 'string')) throw new Refused(refusal('type', '/params/argv', 'Give the run its program and arguments as strings.', argv));
     if (!isObj(env) || Object.values(env).some((v) => typeof v !== 'string')) throw new Refused(refusal('type', '/params/env', 'Give env as names to string values.', env));
-    if (typeof cwd !== 'string' || !isAbsolute(cwd)) throw new Refused(refusal('type', '/params/cwd', 'Give the run its folder as an absolute path.', cwd));
+    if (typeof cwd !== 'string' || (!isAbsolute(cwd) && !(host !== undefined && cwd === ''))) throw new Refused(refusal('type', '/params/cwd', 'Give the run its folder as an absolute path.', cwd));
     if (!isObj(grant) || Object.keys(grant).some((k) => k !== 'run_as_you' && !(GRANT_LISTS as readonly string[]).includes(k))) {
       throw new Refused(refusal('type', '/params/grant', 'Give the grant as read, write, hosts and sockets lists, or run_as_you.', grant));
     }
@@ -223,11 +232,17 @@ export class Runs {
     if (grant.run_as_you !== undefined && typeof grant.run_as_you !== 'boolean') throw new Refused(refusal('type', '/params/grant/run_as_you', 'Give run_as_you as true or false.', grant.run_as_you));
     if (typeof keep !== 'boolean') throw new Refused(refusal('type', '/params/keep', 'Give keep as true when the run should outlive the hub.', keep));
     if (typeof environment !== 'boolean') throw new Refused(refusal('type', '/params/environment', 'Give environment as true when the run needs its folder\'s stack running.', environment));
+    // A run on a host (#1942): one your SSH config names, never as root, once you let runs change things as you there.
+    if (host !== undefined) {
+      this.o.hosts().named(host);
+      if (isRoot(argv as string[])) throw new Refused(refusal('denied', '/params/argv', `Root on ${String(host)} is never a run's: it comes only as a root plan you approve.`, argv));
+      await this.o.hosts().granted(host as string);
+    }
     const handle = id ?? `run:${ulid(this.o.now())}`;
     if (heldOut) this.heldOut.add(handle);
     const run = await this.launch({
       run: handle, check, claim, commit, argv: argv as string[], env: env as Record<string, string>, cwd, grant: grant as Grant, ...(environment || stack ? { environment: true } : {}), ...(stack ? { stack } : {}),
-      ...(keep ? { keep } : {}),
+      ...(keep ? { keep } : {}), ...(host !== undefined ? { host: host as string } : {}),
       ...(lane === 'fast' || lane === 'slow' ? { lane } : {}), ...(typeof expected_ms === 'number' ? { expected_ms } : {}),
       ...(limit ? { deadline: limit } : {}), ...(typeof command === 'string' ? { command } : {}),
       ...(Array.isArray(stand_ins) && stand_ins.every((n) => typeof n === 'string') ? { stand_ins: stand_ins as string[] } : {}),
@@ -241,44 +256,61 @@ export class Runs {
     const [row] = (await this.o.raw(`SELECT session_id FROM events WHERE kind = 'claim.made' AND id = ? LIMIT 1`, [claim.slice(6)])) as { session_id: string | null }[];
     return row?.session_id ? `session:${letters(row.session_id)}` : 'core';
   }
-  /** Starts a run through the host, sandboxed, with the hub's run token injected; its output becomes scrubbed evidence. */
-  private async launch(run: Run): Promise<string> {
-    this.writeJournal((runs) => { runs[run.run] = run; });
+  /**
+   * Starts a run through the host, sandboxed, with the hub's run token injected; its output becomes scrubbed evidence.
+   * `adopt`: a run on a host a hub before this one started, followed again by its token, never started again.
+   */
+  private async launch(run: Run, adopt = false): Promise<string> {
+    if (run.host) run.token ??= randomBytes(24).toString('base64url');
+    if (!adopt) this.writeJournal((runs) => { runs[run.run] = run; });
     // Every check run takes a `cpu.slot` from the kernel's lease table first, held for the claim's session (#29):
     // at most half the cores run checks, and the slot shows in the lease table under that session. A fast-lane run
-    // may take the slot the pool keeps for a held stop's quick checks (#907).
+    // may take the slot the pool keeps for a held stop's quick checks (#907). A run on a host takes none of this machine's.
     const holder = await this.claimSession(run.claim);
-    const lease = await slot(this.o.leases(), holder, run.run, run.lane === 'fast' ? 'fast' : 'slow');
+    const lease = run.host ? undefined : await slot(this.o.leases(), holder, run.run, run.lane === 'fast' ? 'fast' : 'slow');
     // Where it runs and what it needs (#29), so a later placement can pick any host from the same record.
     const ts = this.o.now();
     const { spec, withheld } = recordable(run, this.o.held);
-    await this.o.appendAsCore({
+    if (!adopt) await this.o.appendAsCore({
       v: 3, id: ulid(ts), kind: 'run.started', ts, subject: run.run,
       data: {
-        run: run.run, check: run.check, claim: run.claim, commit: run.commit, host: 'local', needs: { cores: 1, memory_mb: 0, stack_slot: run.environment ? 1 : 0, gpus: 0, expected_ms: run.expected_ms ?? null }, lane: run.lane ?? 'slow',
+        run: run.run, check: run.check, claim: run.claim, commit: run.commit, host: run.host ?? 'local', needs: { cores: 1, memory_mb: 0, stack_slot: run.environment ? 1 : 0, gpus: 0, expected_ms: run.expected_ms ?? null }, lane: run.lane ?? 'slow',
         // What it runs (#996): a journal that can't be read is rebuilt from it.
         ...spec, withheld, ...(run.environment ? { environment: true } : {}),
       },
     }).catch(async (error: unknown) => {
       // A start the record refused never ran: it leaves neither its slot nor the journal, and the refusal is what's thrown.
-      await this.o.leases().release(lease.id, []).catch(() => undefined);
+      if (lease) await this.o.leases().release(lease.id, []).catch(() => undefined);
       try { this.writeJournal((runs) => { delete runs[run.run]; }); } catch { /* the restart's recovery finds no start for it */ }
       throw error;
     });
-    const token = randomBytes(24).toString('base64url');
+    const token = run.token ?? randomBytes(24).toString('base64url');
     const env = { ...run.env, DEEP_RUN_TOKEN: token };
     const values = this.o.plant === 'no-run-values' ? undefined : { env, held: [token, ...this.o.held] };
     const writer = this.o.store().connect({ role: 'deepbuild', via: 'job' });
     const label = { source: run.run, redaction: 'complete' as const, license: { name: 'local', allows: [] }, ...(values ? { run: values } : {}) };
     const sinks = [writer.text({ kind: 'run.stdout', ...label }), writer.text({ kind: 'run.stderr', ...label })];
     let writes = Promise.resolve();
+    const tail = run.host ? { chunks: [] as Buffer[], size: 0, ended: false, wake: [] as (() => void)[] } : undefined;
+    if (tail) this.tails.set(run.run, tail);
     const output = {
-      stdout: (chunk: Buffer) => { writes = writes.then(() => sinks[0]!.write(chunk)); },
+      stdout: (chunk: Buffer) => {
+        writes = writes.then(() => sinks[0]!.write(chunk));
+        if (!tail) return;
+        tail.chunks.push(chunk);
+        tail.size += chunk.length;
+        for (const wake of tail.wake.splice(0)) wake();
+      },
       stderr: (chunk: Buffer) => { writes = writes.then(() => sinks[1]!.write(chunk)); },
     };
     let stop: () => void;
     let ended: Promise<{ code: number | null; failed?: string; missing?: string; record?: CommandRun }>;
-    if (run.command !== undefined) {
+    if (run.host) {
+      // On a host your SSH config names (#1942): a user service there named by its token, followed to its end.
+      const remote = this.o.hosts().run({ host: run.host, token, argv: run.argv, ...(run.cwd ? { cwd: run.cwd } : {}), env: run.env, output, ...(adopt ? { adopt } : {}) });
+      ended = remote.ended;
+      stop = remote.stop;
+    } else if (run.command !== undefined) {
       // A claim's check runs through the command check kind (#30): hermetic, through host@1, with its deadline and the
       // hub going down stopping it; its output, counts, failures, attempts and stand-ins come back as one closed record.
       // A kind a loaded package installed in place of the shipped one (`replaces`, #349) runs it instead, through the
@@ -293,7 +325,7 @@ export class Runs {
       // is check.kind@1's, with no exit, output, attempts or stand-ins, as a replacing package's is.
       if (run.spec) {
         ended = this.o.kind(run, run.cwd, deadline, controller.signal)
-          .then((result) => ({ code: null, record: { run: run.run, ...result, exit: null, output: empty, env: [], attempts: [], retries: null, seeded: [], contract: null, timing: null, clock: 0 } as CommandRun }))
+          .then(({ stdout = '', ...result }) => ({ code: null, record: { run: run.run, ...result, exit: null, output: { ...empty, stdout }, env: [], attempts: [], retries: null, seeded: [], contract: null, timing: null, clock: 0 } as CommandRun }))
           .catch((error: Error) => ({ code: null, failed: error.message }));
       } else ended = replaced().then(async (byPackage): Promise<{ code: number | null; record: CommandRun } | { code: null; missing: string }> => {
         if (!byPackage) {
@@ -312,7 +344,7 @@ export class Runs {
           const hosts = [...(run.grant.hosts ?? []), ...(serving?.hosts ?? [])];
           let record: CommandRun;
           try {
-            record = await runCommandCheck({ host: this.o.host(), run: run.run, spec, checkout: run.cwd, deadline, env: { ...env, ...serving?.env }, ...(hosts.length ? { hosts } : {}), ...(run.stand_ins ? { standIns: run.stand_ins } : {}), stop: controller.signal, ...exitOnly, ...(run.outside ? { outside: true } : {}) });
+            record = await this.o.command({ host: this.o.host(), run: run.run, spec, checkout: run.cwd, deadline, env: { ...env, ...serving?.env }, ...(hosts.length ? { hosts } : {}), ...(run.stand_ins ? { standIns: run.stand_ins } : {}), stop: controller.signal, ...exitOnly, ...(run.outside ? { outside: true } : {}) });
           } catch (error) {
             await this.o.stacks.finish(run.run);
             throw error;
@@ -375,7 +407,7 @@ export class Runs {
     const done = ended.then(async ({ code, failed, missing, record }) => {
       disarm?.();
       // What the run left behind is stopped and its leases released before its finish is recorded.
-      if (this.o.plant !== 'run-spawns-itself') await this.o.supervisor().cleanup(run.run).catch(() => undefined);
+      if (this.o.plant !== 'run-spawns-itself' && !run.host) await this.o.supervisor().cleanup(run.run).catch(() => undefined);
       // The kind's record holds the run's output, scrubbed by value: it goes to the store as the sinks' would.
       if (record) { output.stdout(Buffer.from(record.output.stdout)); output.stderr(Buffer.from(record.output.stderr)); }
       await writes;
@@ -411,10 +443,34 @@ export class Runs {
       await this.finish(run, outcome, findings, evidence);
     });
     this.live.set(run.run, { run, done, stop });
-    void done.finally(() => this.o.leases().release(lease.id, []).catch(() => undefined)).finally(() => this.live.delete(run.run))
+    void done.finally(() => lease && this.o.leases().release(lease.id, []).catch(() => undefined)).finally(() => {
+      this.live.delete(run.run);
+      if (!tail) return;
+      tail.ended = true;
+      for (const wake of tail.wake.splice(0)) wake();
+      setTimeout(() => this.tails.delete(run.run), 60_000).unref();
+    })
       // The journal still holds the run, so the next start recovers it.
       .catch((error: unknown) => process.stderr.write(`deep hub: ${run.run}'s finish wasn't recorded: ${error instanceof Error ? error.message : String(error)}\n`));
     return run.run;
+  }
+  /** run.output (#1942): a run's stdout from byte `from`, once there is some or it has ended, base64; `deep run follow` reads it. */
+  async output(params: Obj): Promise<Obj> {
+    const run = String(params.run);
+    const from = Number.isSafeInteger(params.from) && (params.from as number) >= 0 ? (params.from as number) : 0;
+    const tail = this.tails.get(run);
+    if (!tail) {
+      // One this hub no longer holds: its stdout evidence, whole, once it has ended.
+      const [row] = (await this.o.raw(`SELECT data FROM events WHERE kind = 'run.finished' AND subject = ? LIMIT 1`, [run])) as { data: string }[];
+      if (!row) throw new Refused(refusal('not_found', '/params/run', this.live.has(run) ? `${run} runs on this machine: its output is in its evidence once it ends; deep run follow follows runs on hosts.` : `${run} isn't a run this hub holds.`, run));
+      const sha = (JSON.parse(row.data) as { evidence: string[] }).evidence[0];
+      const bytes = sha ? Buffer.from(await this.o.store().read(sha).catch(() => new Uint8Array())) : Buffer.alloc(0);
+      return { text: bytes.subarray(from).toString('base64'), next: Math.max(from, bytes.length), ended: true };
+    }
+    if (tail.size <= from && !tail.ended) await new Promise<void>((done) => { tail.wake.push(done); setTimeout(done, 10_000).unref(); });
+    if (tail.chunks.length > 1) tail.chunks = [Buffer.concat(tail.chunks)];
+    const bytes = (tail.chunks[0] ?? Buffer.alloc(0)).subarray(from);
+    return { text: bytes.toString('base64'), next: from + bytes.length, ended: tail.ended && from + bytes.length >= tail.size };
   }
   private async finish(run: Run, outcome: string, findings: string[], evidence: string[], counts: { tests_run: number; passed: number; assertion: string | null; points_to: string | null } = { tests_run: 0, passed: 0, assertion: null, points_to: null }, key?: KeyFacts): Promise<void> {
     await this.o.appendCore('run.finished', {
@@ -446,6 +502,11 @@ export class Runs {
     for (const run of Object.values({ ...this.journal })) {
       if (await recorded('run.finished', run.run)) {
         this.writeJournal((runs) => { delete runs[run.run]; });
+        continue;
+      }
+      // A run on a host runs on there: it is followed again by its token.
+      if (run.host && run.token) {
+        await this.launch(run, true);
         continue;
       }
       // A kept run is never run again: it runs on, or it ended between the hubs.

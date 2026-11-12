@@ -1,0 +1,51 @@
+Base commit: a04378eb2 ("Merge pull request #2190 from windoliver/worktree-hungry-booth-587310")
+Run: SKIPPED. The surfaces plainly don't exist at the base, so no run was made: the drafting worktree had no target
+folder (a cold deep-show build of r1 on the shared Mac) and no node_modules. The suite type-checks
+(tsc -p tests/acceptance/202/tsconfig.json, exit 0, against the main checkout's node_modules in a scratch mirror).
+Date: 2026-11-10  darwin-arm64
+
+Why each test fails at the base, read from the base's code:
+
+- The pack check refuses every pack with a `kinds` field: `kinds` is not in PACK_KEYS
+  (crates/deep-canvas/src/document/packs.rs, PACK_KEYS and the loop over `fields.keys()` in check_pack), so it raises
+  `unknown_field` at the path `kinds` and the pack is refused. Every fixture pack of this suite has `kinds`, except
+  shelf-1.0.0-recipe-only, which only the merge-base side of the budgets installs.
+- The `planted` values expander_hash_map_order, counts_agent_rule_as_cover, kit_tests_defaults_only and
+  recipe_rules_twice are not planted names (crates/deep-show/src/main.rs, the `planted` match ends `_ => return None`),
+  so the scenario answers {"ok": false, "code": "bad_input"}.
+- crates/deep-show/Cargo.toml has no `test-weight` feature, so cargo refuses the r1,test-weight build.
+- A requirement whose check input is {kind: "kind_rules"} is BLOCKED with `not_run` (crates/deep-show/src/verdict.rs,
+  "The core's other kinds land with R6").
+- `deep_kinds` op list lists in kind@1 only the sealed set's kinds (crates/deep-show/src/kinds.rs, kind_rows).
+- `timing` holds only `check_ms` (crates/deep-show/src/packs.rs, reply).
+
+Expected failure per test:
+
+kind.test.ts
+  × #202.5ad3e3f5 …  at "acme/shelf@1.0.0 installs": the packs row is refused (unknown_field at kinds)
+refusals.test.ts
+  × #202.84e9c56a …  at "the control: acme/shelf@1.0.0 installs beside them": refused (unknown_field at kinds)
+rules.test.ts
+  × #202.9f697217 …  at "acme/shelf@1.0.0 installs": refused (unknown_field at kinds)
+cost.test.ts
+  × #202.ee304566 … cost_understated …        at "the binary builds": no feature test-weight
+  × #202.ee304566 … planted expander …         at "the binary builds": no feature test-weight
+binding.test.ts
+  × #202.4661a547 … INCONCLUSIVE …             at "the agent's pack installs through its session": refused (unknown_field at kinds)
+  × #202.4661a547 … planted resolver …         at "deep-show run refused the scenario": bad_input (unknown planted)
+budgets.test.ts
+  × #202.ed799b46 budgets …                    at "the 1,000 bookcases are presented": the board names acme/shelf@1.0.0,
+                                               which was refused, so it is refused with pack_missing
+  × #202.ed799b46 no work per frame …          at "shelf, a pack with kinds, is installed in the store here": refused
+resolve.test.ts
+  × #202.e054c7a0 …  at "acme/shelf@1.0.0 installs after the seal": refused (unknown_field at kinds)
+boundary.test.ts
+  × #202.22a0fc71 …  at "deep_kinds lists shelf.bookcase@1 in kind@1": no pack kind is listed
+extremes.test.ts
+  × #202.b0fcc31e … stays in class …           at "the binary builds": no feature test-weight
+  × #202.b0fcc31e … planted kit …              at "the binary builds": no feature test-weight
+once.test.ts
+  × #202.76f0edd8 … once per instance          at "acme/rack@1.0.0 installs": refused (unknown_field at kinds)
+  × #202.76f0edd8 … planted check …            at "deep-show run refused the scenario": bad_input (unknown planted)
+
+No merge-base build is reached at the base: budgets.test.ts fails on its structure first.

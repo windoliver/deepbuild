@@ -1,0 +1,30 @@
+#1964 acceptance suite at the base, 64b4bf56 (Merge pull request #2194), before any implementation.
+
+The suite was run once there, with `deep-canvas-render` built by the suite (`cargo build --locked`, toolchain 1.99.1):
+
+  CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 scripts/lease npx vitest run --root tests/acceptance/1964 --no-file-parallelism --testTimeout=600000
+
+  Test Files  2 failed (2)
+       Tests  5 failed (5)
+
+All 5 tests fail, each because the behaviour is missing, not because of the test: the base refuses any run field
+but `from`, `to` and `role` with `module_missing`. `npx tsc --noEmit -p tests/acceptance/1964` exits 0.
+
+After the run, the same binary was probed once with this suite's documents to confirm what the tests rest on: the plain
+cards draw (the `honest_numbers` names input clears "H2O"; without it the base refuses `number_unsourced` at
+`items/formula/params/text`); the plain 2 reports `crates/deep-text/fonts/Inter-Regular.ttf` (body) and
+`crates/deep-text/fonts/STIXTwoMath-Regular.ttf` (math), size 96, on H's baseline (y 97.421875 and 87.652, local to
+the item's origin [40, 40]); H at x 0, the 2 at x 71.34375 (Inter) and 74.592 (STIX).
+
+subscript.test.ts (4 failed of 4)
+- body, offset and size; body, glyphs before it; math, offset and size; math, glyphs before it: each fails at
+  "raster "H2O is water" in <body|math> with the run that makes the 2 a subscript was drawn, not refused:
+  {"ok":false,"code":"module_missing","issues":[{"check":"document.validate","code":"module_missing",
+  "path":"items/formula/params/runs/0/shift", …}]}". The plain card in the same process draws; the run with `shift`
+  is refused, since nothing reads `shift`.
+
+refusal.test.ts (1 failed of 1)
+- The status part passes at the base: the text whose run 1 names `status.fail` is refused at check with
+  `status_color_unbound` at `items/formula/params/runs/1/role` (#374's status-role rule already reaches a run's role).
+  The control fails: "the same runs with run 1 in wine, an ordinary role of the look, pass the check: module_missing
+  [formula] items/formula/params/runs/0/shift: expected false to be true". Run 0's `shift` is refused.

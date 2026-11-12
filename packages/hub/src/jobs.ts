@@ -21,7 +21,7 @@
 // writes it. A key whose journal holds a call and whose outputs aren't kept made a call the hub can't know the fate
 // of: a retry makes no call and is BLOCKED with one unblock ask naming the provider and the key. While a job runs, a
 // second request with its key joins it, starting nothing, and a request that is cancelled leaves it; the job stops
-// only once no request waits on it.
+// only once no request waits on it. A request whose session closed leaves it too, but the job runs on (#1925).
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
@@ -30,12 +30,16 @@ import type { PlanInput } from '@deepbuild/asks';
 import { canonicalize, sha256Hex, type JsonValue } from '@deepbuild/contracts';
 import type { SendBoundary, SendRequest, Receipt } from '@deepbuild/evidence';
 import type { ExtensionHost } from '@deepbuild/extension-host';
+import type { RunningJob } from './rows.js';
 
 type Obj = Record<string, unknown>;
 type Host = Pick<ExtensionHost, 'jobs' | 'jobParams' | 'runJobTool' | 'jobHostReport' | 'runCheck'>;
 type CheckSpec = Parameters<Host['runCheck']>[1];
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 const sha256 = (b: Uint8Array): string => createHash('sha256').update(b).digest('hex');
+/** Each input's hash by name, a list input's as a list in its order (#154). */
+const hashes = (bytes: Record<string, Uint8Array | Uint8Array[]>): Record<string, string | string[]> =>
+  Object.fromEntries(Object.entries(bytes).map(([n, b]) => [n, Array.isArray(b) ? b.map(sha256) : sha256(b)]));
 const message = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 /** A tool pinned by name@version: no range, tag or bare name. */
 const PINNED = /^[a-z0-9][a-z0-9_-]*@\d+\.\d+\.\d+$/;
@@ -55,10 +59,14 @@ export interface JobDeps {
   has(sha: string): Promise<boolean>;
   /** A file's bytes from the evidence store, by hash, checked against it. */
   read(sha: string): Promise<Uint8Array>;
+  /** Records in the evidence store, as an agent's, a file it holds with no record: its origin is unknown. */
+  adopt(bytes: Uint8Array): Promise<void>;
   /** The evidence store's send: files by hash only, each under its origin rule, its yes kept per file and destination. */
   send(request: SendRequest, boundary: SendBoundary): Promise<Receipt>;
   /** Raises an ask from one of the job API's sources: its handle. */
   raise(source: 'job.paid' | 'job.send' | 'job.unblock', ask: Obj, plan?: PlanInput): Promise<string>;
+  /** Shows a running job's row as it now reads (#1925), or takes it off the list once its tool's run has ended. */
+  row(job: RunningJob, running: boolean): void;
   plant?: string | undefined;
 }
 interface Cached { outputs: Record<string, string>; build: string | null }
@@ -125,13 +133,14 @@ export class Jobs {
   }
 
   /**
-   * A request's caller gone (#1923): it leaves the job it waits on. The job stops only once no request waits on it, so
-   * a joiner's cancel never stops the job for the request that started it.
+   * A request's caller gone (#1923): it leaves the job it waits on. A cancelled request's job stops only once no
+   * request waits on it, so a joiner's cancel never stops the job for the request that started it. A request whose
+   * connection `closed`, its session gone, stops nothing: the job runs on and its row keeps counting (#1925).
    */
-  gone(caller: string): void {
+  gone(caller: string, closed = false): void {
     this.leaving.get(caller)?.();
     for (const job of this.running.values()) {
-      if (!job.callers.delete(caller)) continue;
+      if (!job.callers.delete(caller) || closed) continue;
       if (job.callers.size === 0 || this.d.plant === 'job-joiner-cancels-job') job.stop.abort();
     }
   }
@@ -155,30 +164,38 @@ export class Jobs {
       return refused(`${kind}'s params: ${message(e)}`);
     }
     const declared = Object.keys(held.descriptor.schema.inputs);
+    // An input declared `many` (#154) takes its name once per file, in order, and none at all for an empty list.
+    const many = (name: string): boolean => held.descriptor.schema.inputs[name]?.many === true;
     const given = Array.isArray(inputs) ? inputs.filter(isObj) : [];
     const url = 'url' in pinned.descriptor.run ? pinned.descriptor.run.url : undefined;
     const where = pinned.host ?? '';
     // Off the machine a file goes only by hash: an input naming a path is refused before any file is read.
     if (url && given.some((i) => i.path !== undefined && i.path !== null)) return refused(`${tool} runs off the machine on ${where}, so it takes files only by hash from the evidence store, as inputs [{name, sha256}], never by path; nothing was read or sent`);
-    const bytes: Record<string, Uint8Array> = {};
+    const bytes: Record<string, Uint8Array | Uint8Array[]> = Object.fromEntries(declared.filter(many).map((n) => [n, []]));
     for (const i of given) {
       const name = String(i.name);
-      if (!declared.includes(name) || bytes[name]) return refused(`${kind} takes the inputs ${declared.join(', ')}, each once; ${JSON.stringify(i.name)} isn't one of them, or comes twice`);
+      if (!declared.includes(name) || (bytes[name] && !many(name))) return refused(`${kind} takes the inputs ${declared.join(', ')}, each once; ${JSON.stringify(i.name)} isn't one of them, or comes twice`);
+      let file: Uint8Array;
       if (typeof i.sha256 === 'string') {
         if (!HASH.test(i.sha256)) return refused(`the input ${name} names a file by its SHA-256, 64 hex digits`);
-        try { bytes[name] = await this.d.read(i.sha256); } catch (e) { return refused(`the input ${name}: ${message(e)}`); }
-        continue;
+        try { file = await this.d.read(i.sha256); } catch (e) { return refused(`the input ${name}: ${message(e)}`); }
+        // A file in the store's folder with no record of who put it there, such as the PCM a bake keeps (#1819), is of
+        // unknown origin, so the store takes it as an agent's: off the machine it goes only after your yes.
+        if (url && !(await this.d.has(i.sha256))) await this.d.adopt(file);
+      } else {
+        if (typeof i.path !== 'string' || !isAbsolute(i.path)) return refused(`the input ${name} is a file, by its SHA-256 in the evidence store or its absolute path`);
+        try { file = new Uint8Array(await readFile(i.path)); } catch (e) { return refused(`the input ${name} can't be read: ${message(e)}`); }
       }
-      if (typeof i.path !== 'string' || !isAbsolute(i.path)) return refused(`the input ${name} is a file, by its SHA-256 in the evidence store or its absolute path`);
-      try { bytes[name] = new Uint8Array(await readFile(i.path)); } catch (e) { return refused(`the input ${name} can't be read: ${message(e)}`); }
+      if (many(name)) (bytes[name] as Uint8Array[]).push(file);
+      else bytes[name] = file;
     }
     const missing = declared.filter((n) => !bytes[n]);
-    if (missing.length || given.length !== declared.length) return refused(`${kind} takes the inputs ${declared.join(', ')}; give ${missing.join(', ') || 'each once'}`);
+    if (missing.length) return refused(`${kind} takes the inputs ${declared.join(', ')}; give ${missing.join(', ')}`);
     const weights = pinned.descriptor.weights;
     const key = this.keyOf(kind, tool, String(text ?? ''), params, bytes, weights);
     let sent: { sha256: string; host: string }[] = [];
     const receipt = (build: string | null, cache: 'hit' | 'miss'): Obj => ({
-      kind, tool, key, build, cache, inputs: Object.fromEntries(Object.entries(bytes).map(([n, b]) => [n, sha256(b)])),
+      kind, tool, key, build, cache, inputs: hashes(bytes),
       ...(url && { sent: cache === 'hit' ? [] : sent }), ...(weights && { weights }),
     });
     const done = (outputs: Record<string, string>, build: string | null, cache: 'hit' | 'miss'): Obj => ({ status: 'done', outputs: Object.fromEntries(Object.entries(outputs).map(([n, sha]) => [n, { sha256: sha }])), receipt: receipt(build, cache) });
@@ -205,7 +222,7 @@ export class Jobs {
     if (url) {
       // The planted hub sends the files before any answer of yours.
       if (this.d.plant === 'job-host-sends-early') await host.runJobTool(tool, kind, params, bytes).catch(() => undefined);
-      const gate = await this.gate([...new Set(Object.values(bytes).map(sha256))], where, tool, kind, key);
+      const gate = await this.gate([...new Set(Object.values(bytes).flat().map(sha256))], where, tool, kind, key);
       if ('reply' in gate) return gate.reply;
       sent = gate.sent;
     }
@@ -221,7 +238,19 @@ export class Jobs {
       try {
         report = await host.jobHostReport(tool, kind);
       } catch (e) {
-        return { status: 'failed', reason: `${tool}'s host ${where} gave no report of its weights and capabilities: ${message(e)}; nothing was sent` };
+        // A host that can't be reached can't start the job (#1819): BLOCKED, naming the tool, never a result. The
+        // planted runner calls it done, each output an empty record.
+        if (this.d.plant === 'job-host-down-done') {
+          const kept: Record<string, string> = {};
+          for (const n of Object.keys(held.descriptor.outputs)) kept[n] = await this.d.keep(new TextEncoder().encode('{}'), `job:${kind}/${tool}#${n}`);
+          return done(kept, pinned.build, 'miss');
+        }
+        return this.blocked(`report ${tool} ${where}`, {
+          cause: `${tool} can't start: its host ${where} gave no report of its weights and capabilities (${message(e)})`,
+          question: `${tool} can't start for ${kind}: its host ${where} doesn't answer. Start the host?`,
+          steps: [`Start ${tool}'s host on ${where}`, `Run the job on ${tool} again`],
+          where, why: `${tool} runs only on its host, after the host reports its weights`, proves: `${where} answering /report`,
+        });
       }
       const wrong = (weights ?? []).find((w) => !report.weights.some((r) => r.name === w.name && r.sha256 === w.sha256));
       if (wrong) {
@@ -275,14 +304,24 @@ export class Jobs {
     return made;
   }
   /** The tool's one run for a key, its outputs held until the kind's output checks pass, then kept and cached. */
-  private async call(host: Host, held: ReturnType<Host['jobs']>[number], pinned: ReturnType<Host['jobs']>[number]['tools'][number], key: string, params: Record<string, JsonValue>, bytes: Record<string, Uint8Array>, receipt: (build: string | null, cache: 'hit' | 'miss') => Obj, done: (outputs: Record<string, string>, build: string | null, cache: 'hit' | 'miss') => Obj, stop: AbortSignal): Promise<Obj> {
+  private async call(host: Host, held: ReturnType<Host['jobs']>[number], pinned: ReturnType<Host['jobs']>[number]['tools'][number], key: string, params: Record<string, JsonValue>, bytes: Record<string, Uint8Array | Uint8Array[]>, receipt: (build: string | null, cache: 'hit' | 'miss') => Obj, done: (outputs: Record<string, string>, build: string | null, cache: 'hit' | 'miss') => Obj, stop: AbortSignal): Promise<Obj> {
     const { kind } = held;
     const { tool } = pinned;
+    // While its tool runs, the job has a row that counts from the tool's own counters (#1925). Nothing here waits on
+    // the caller, so the job runs on when the app or the session that asked for it closes.
+    const job: RunningJob = { key, kind, tool, started: this.d.now() };
+    this.d.row(job, true);
     let wrote: Record<string, Uint8Array>;
     try {
-      wrote = await host.runJobTool(tool, kind, params, bytes, pinned.provider ? { key, journal: this.journal(key) } : undefined, stop);
+      wrote = await host.runJobTool(tool, kind, params, bytes, pinned.provider ? { key, journal: this.journal(key) } : undefined, stop, (counter) => {
+        job.counter = counter;
+        job.at = this.d.now();
+        this.d.row(job, true);
+      });
     } catch (e) {
       return { status: 'failed', reason: `${tool} failed: ${message(e)}; nothing was kept`, receipt: receipt(pinned.build, 'miss') };
+    } finally {
+      this.d.row(job, false);
     }
     const outputs = Object.keys(held.descriptor.outputs);
     const absent = outputs.filter((n) => !wrote[n]);
@@ -307,12 +346,12 @@ export class Jobs {
    * The key: the tool's name@version, the canonical params and each input's hash, and an open model's weight files by
    * hash, so new weights under the same name and version never hit an earlier result; the planted keys break one part each.
    */
-  private keyOf(kind: string, tool: string, text: string, params: Record<string, JsonValue>, bytes: Record<string, Uint8Array>, weights?: { name: string; sha256: string }[]): string {
+  private keyOf(kind: string, tool: string, text: string, params: Record<string, JsonValue>, bytes: Record<string, Uint8Array | Uint8Array[]>, weights?: { name: string; sha256: string }[]): string {
     const key = {
       kind,
       tool: this.d.plant === 'job-key-no-version' ? tool.slice(0, tool.indexOf('@')) : tool,
       params: this.d.plant === 'job-key-params-text' ? text : params,
-      inputs: Object.fromEntries(Object.entries(bytes).map(([n, b]) => [n, sha256(b)])),
+      inputs: hashes(bytes),
       ...(weights && this.d.plant !== 'job-weights-not-keyed' && { weights: Object.fromEntries(weights.map((w) => [w.name, w.sha256])) }),
     };
     return sha256Hex(canonicalize(key as JsonValue));

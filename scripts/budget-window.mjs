@@ -2,6 +2,7 @@
 // measures each commit merged on origin/main since the last window against its own merge base, writes one evidence
 // record per commit, and settles the commit's issue by that record. It runs only inside a window; agents never run it.
 import { execFileSync, spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { cpus, homedir, loadavg } from 'node:os';
 import { join } from 'node:path';
@@ -14,8 +15,9 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 const manifest = 'benchmarks/budgets.json';
 const folder = join(homedir(), '.deepbuild', 'budget-window');
 const mark = join(folder, 'mark');
-// Section 12a's reading rule: these criteria are the window's own to prove.
-const budgetCriterion = /budget|reference Mac|in the local preflight/i;
+// A criterion's ID, as the trace lane's criterionId reads it: the first eight hex digits of the SHA-256 of its text,
+// trimmed, white space collapsed. A task of the budgets names the criteria it proves by these (#1874).
+const criterionId = (number, text) => `#${number}.${createHash('sha256').update(text.trim().replace(/\s+/g, ' ')).digest('hex').slice(0, 8)}`;
 const git = (...args) => execFileSync('git', args, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 1 << 28 }).trim();
 function gh(...args) {
   const result = spawnSync('gh', args, { cwd: root, encoding: 'utf8' });
@@ -76,17 +78,19 @@ function judged(task, established, cwd, baseCwd) {
 
 function measured(commit) {
   const { change, base } = sides(commit);
-  let tests;
+  let tests, named = new Set();
   try {
     const current = budgetsAt(change), established = budgetsAt(base);
     // Budget numbers stay as the merge base has them: a commit's own edit of one is no pass.
     validateBudgets(current, established);
     const here = copyOf('change', change), there = established ? copyOf('base', base) : null;
     tests = current.tasks.map((task) => judged(task, established?.tasks.find(({ id }) => id === task.id), here, there));
+    // What the commit's tasks prove (#1874): each names its criteria by ID, and only its numbers stay the merge base's.
+    named = new Set(current.tasks.flatMap(({ criteria }) => criteria ?? []));
   } catch (error) {
     tests = [{ id: manifest, state: 'BLOCKED', note: error.message }];
   }
-  return { commit, change, base, tests, state: worst(tests.map(({ state }) => state)) ?? 'PASS' };
+  return { commit, change, base, tests, named, state: worst(tests.map(({ state }) => state)) ?? 'PASS' };
 }
 
 /** The issues a commit's messages name, as GitHub reads them, in this repository. */
@@ -96,10 +100,10 @@ function issuesOf(commit) {
   return [...new Set([...messages.matchAll(/\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?|part of):?\s+#(\d+)\b/gi)].map(([, number]) => number))];
 }
 
-/** Every criterion is ticked but the window's own: a `Part of #n` merge ticks those it proved (section 12a). */
-function otherCriteriaProven(body) {
-  const section = body.split(/^###\s+Acceptance criteria\s*$/m)[1]?.split(/^#{1,6}\s/m)[0] ?? '';
-  return [...section.matchAll(/^\s*- \[ \] (.+)$/gm)].every(([, text]) => budgetCriterion.test(text));
+/** An issue's unticked criteria, by ID; null when it has no `### Acceptance criteria` section to hold any. */
+function unticked({ number, body }) {
+  const section = body.split(/^###\s+Acceptance criteria\s*$/m)[1]?.split(/^#{1,6}\s/m)[0];
+  return section === undefined ? null : [...section.matchAll(/^\s*- \[ \] (.+)$/gm)].map(([, text]) => criterionId(number, text));
 }
 
 // A miss files its follow-up first, so a failed call leaves the commit for the next window with nothing half said.
@@ -109,9 +113,12 @@ function miss({ commit, base, tests }, issues) {
   gh('issue', 'create', '--title', `Budget regression in ${commit.slice(0, 12)} (${names})`, '--body', `The budget window measured ${commit}, of ${names}, against its merge base ${base}, and it missed its budget:\n\n${missed}`);
   for (const number of issues) gh('issue', 'comment', number, '--body', `The budget window measured ${commit} against its merge base ${base} and it missed:\n\n${missed}`);
 }
-function close(record, number) {
-  const { state, body } = JSON.parse(gh('issue', 'view', number, '--json', 'state,body'));
-  if (state === 'OPEN' && otherCriteriaProven(body)) gh('issue', 'close', number, '--comment', `The budget window measured ${record.commit} against its merge base ${record.base}: every budget passed.`);
+// A pass closes an issue only on criteria it measured: the issue holds one still unticked, and a task names each such
+// one (the record passes only when every task did); a `Part of #n` merge ticks the others. An issue with no criteria
+// section, or none left unticked, holds nothing the window measured, so the window never closes it.
+function close(record, issue) {
+  const open = unticked(issue);
+  if (issue.state === 'OPEN' && open?.length && open.every((id) => record.named.has(id))) gh('issue', 'close', issue.number, '--comment', `The budget window measured ${record.commit} against its merge base ${record.base}: every budget passed, and a task names each criterion left open.`);
 }
 
 if (!inWindow()) blocked('outside a budget window', outside);
@@ -135,13 +142,21 @@ for (const [at, commit] of commits.entries()) {
   const record = measured(commit);
   // A holder that died took the window with it, so what ran after is no measurement. The mark stays.
   if (!inWindow()) blocked(`the window closed while measuring ${commit}`, outside);
-  writeRecord(`budget-window ${commit}`, record.state, git('rev-parse', `${record.change}^{tree}`), record.tests, { commit, base: record.base });
+  // Its issues are read before its record is written, which names each criterion they leave unticked that no task names.
+  let read;
+  try {
+    read = issues.get(commit).map((number) => ({ number, ...JSON.parse(gh('issue', 'view', number, '--json', 'state,body')) }));
+  } catch (error) {
+    blocked(`${commit}'s issues weren't read: ${error.message}`, 'Sign in to gh; the next window measures this commit again.');
+  }
+  const unmeasured = read.flatMap((issue) => (unticked(issue) ?? []).filter((id) => !record.named.has(id)));
+  writeRecord(`budget-window ${commit}`, record.state, git('rev-parse', `${record.change}^{tree}`), record.tests, { commit, base: record.base, unmeasured });
   console.log(`${record.state} budget-window: ${commit} against ${record.base}`);
   try {
     if (record.state === 'FAIL') miss(record, issues.get(commit));
     if (record.state !== 'PASS') for (const number of issues.get(commit)) held.add(number);
     // An issue another commit still has to answer for stays open, in this window or by its record.
-    else for (const number of issues.get(commit)) if (!held.has(number) && !commits.slice(at + 1).some((later) => issues.get(later).includes(number))) close(record, number);
+    else for (const issue of read) if (!held.has(issue.number) && !commits.slice(at + 1).some((later) => issues.get(later).includes(issue.number))) close(record, issue);
   } catch (error) {
     blocked(`${commit}'s issue wasn't settled: ${error.message}`, 'Sign in to gh; the next window measures this commit again.');
   }

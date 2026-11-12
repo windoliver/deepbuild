@@ -182,6 +182,20 @@ pub fn rasterizer() -> RasterizerSettings {
     }
 }
 
+/// A level by its name: `scalar`, `neon`, or the x86 level detected (#385, #1897), on every
+/// architecture.
+pub fn level_name(level: Level) -> String {
+    if level.is_fallback() {
+        "scalar".into()
+    } else {
+        format!("{level:?}")
+            .split('(')
+            .next()
+            .unwrap_or("detected")
+            .to_lowercase()
+    }
+}
+
 fn rgba(c: [f64; 3], alpha: f64) -> AlphaColor<Srgb> {
     AlphaColor::new([c[0] as f32, c[1] as f32, c[2] as f32, alpha as f32])
 }
@@ -764,6 +778,33 @@ pub fn resample(rgba: Vec<u8>, size: [u16; 2], sampling: ImageSampling, to: [u16
     let mut out = Pixmap::new(to[0], to[1]);
     ctx.render_with(&mut out, &mut Resources::new(), rasterizer());
     out.take_rgba8(ImageAlphaType::Alpha)
+}
+
+/// An image's straight RGBA pixels of `size` px drawn as a canonical render draws them: fitted to
+/// `to` and cut at `clip` (device px from the picture's corner), with partial coverage at a
+/// fractional edge, into an `out` px picture of straight RGBA. A path that draws only on whole
+/// pixels draws this 1:1 and gets the canonical pixels (#1486).
+pub fn placed(
+    rgba: Vec<u8>,
+    size: [u16; 2],
+    sampling: ImageSampling,
+    (to, clip): ([f64; 4], [f64; 4]),
+    out: [u16; 2],
+) -> Vec<u8> {
+    let source = image(rgba, size, 1.0, &Adjust::default());
+    let mut ctx = RenderContext::new_with(out[0], out[1], settings());
+    ctx.set_paint(Image {
+        image: ImageSource::Pixmap(Arc::new(source)),
+        sampler: sampler(sampling),
+    });
+    ctx.set_paint_transform(
+        Affine::translate((to[0], to[1]))
+            * Affine::scale_non_uniform(to[2] / f64::from(size[0]), to[3] / f64::from(size[1])),
+    );
+    ctx.fill_rect(&Rect::new(clip[0], clip[1], clip[0] + clip[2], clip[1] + clip[3]));
+    let mut pixmap = Pixmap::new(out[0], out[1]);
+    ctx.render_with(&mut pixmap, &mut Resources::new(), rasterizer());
+    pixmap.take_rgba8(ImageAlphaType::Alpha)
 }
 
 /// An image's straight RGBA pixels, adjusted and at `opacity`, as Vello's premultiplied pixmap.

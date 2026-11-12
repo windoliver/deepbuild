@@ -1,0 +1,16 @@
+{
+  "name": "study",
+  "version": "1.1.0",
+  "license": "MIT",
+  "description": "A test pack of the #1957 acceptance suite: a reading room that also takes a step from a pack its requires.packs leaves out.",
+  "requires": {
+    "core": ">=0.0.0",
+    "modules": {},
+    "packs": [
+      "shelf@1.2.0"
+    ]
+  },
+  "recipes": {
+    "study.room@1": "study.room@1.json"
+  }
+}

@@ -17,7 +17,6 @@ use deep_canvas_motion::eval::Validity;
 use deep_canvas_motion::program::Program;
 use deep_gpu::device::Device;
 use serde_json::{json, Value};
-use wgpu::util::DeviceExt as _;
 
 use crate::compile::{compile_planted, compile_with, Compiled};
 use deep_scene3d_render::created::{key128, Created, Log};
@@ -88,7 +87,7 @@ impl Pool {
     /// for `items`.
     pub fn runner(
         &mut self,
-        device: &wgpu::Device,
+        device: &deep_gpu::counted::Wgpu,
         compiled: Compiled,
         format: wgpu::TextureFormat,
         items: &[String],

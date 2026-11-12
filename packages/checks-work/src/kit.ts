@@ -5,7 +5,7 @@
 // part draws the work's values. Each rule has one planted runner that breaks it alone: the reference with one fault.
 import { spawnSync } from 'node:child_process';
 import { closeSync, constants, mkdirSync, mkdtempSync, openSync, rmSync, writeFileSync } from 'node:fs';
-import { createServer, type Server } from 'node:http';
+import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -180,7 +180,8 @@ function build(w: Work): Made {
 }
 
 /** The case's endpoint on a port of its own, or a port nothing listens on; closed by the case's cleanup. */
-function listen(serve: Serve): Promise<{ port: number; close(): void }> {
+async function listen(serve: Serve): Promise<{ port: number; close(): void }> {
+  const { createServer } = await import('node:http');
   const server: Server = createServer((_req, res) => {
     if (serve === 'refused') return;
     setTimeout(() => res.writeHead(serve.status, { 'content-type': 'application/json' }).end(serve.body), serve.delay_ms);

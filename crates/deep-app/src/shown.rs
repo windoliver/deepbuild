@@ -130,9 +130,32 @@ fn connect(socket: &Path, token_file: &Path) -> Result<HubClient, HubError> {
     Ok(client)
 }
 
+#[cfg(feature = "fixtures")]
+thread_local! {
+    /// The window's state a replica sets, since a headless window has none (#1461). In no shipped build (#1457).
+    static FORCED: std::cell::Cell<Option<Seen>> = const { std::cell::Cell::new(None) };
+}
+
+/// Draws as if the window's state were `seen`, for the replica; `None` reads the window again.
+#[cfg(feature = "fixtures")]
+pub fn force_seen(seen: Option<Seen>) {
+    FORCED.with(|forced| forced.set(seen));
+}
+
+/// The state a replica set, if it set one.
+pub fn forced() -> Option<Seen> {
+    #[cfg(feature = "fixtures")]
+    return FORCED.with(std::cell::Cell::get);
+    #[cfg(not(feature = "fixtures"))]
+    None
+}
+
 /// The window's state: AppKit's occlusion and miniaturized state, its display's sleep, and the session's lock.
 #[cfg(target_os = "macos")]
 pub fn seen(window: &Window) -> Seen {
+    if let Some(seen) = forced() {
+        return seen;
+    }
     use objc2::runtime::AnyObject;
     use objc2_app_kit::{NSView, NSWindowOcclusionState};
     use objc2_core_foundation::CFRetained;

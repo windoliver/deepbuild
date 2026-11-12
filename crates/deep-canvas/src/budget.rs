@@ -87,7 +87,7 @@ impl Class {
             Class::DataView => (Some(2.0), Some(2.0), 128, 1.0),
             Class::Figure => (Some(2.0), Some(4.0), 256, 1.0),
             Class::WorkProduct => (Some(2.0), Some(4.0), 256, 0.75),
-            Class::Showpiece => (Some(10.0), Some(4.0), 256, 0.5),
+            Class::Showpiece => (Some(10.0), Some(4.0), 512, 0.5),
             Class::Export => (None, None, 300, 1.0),
         };
         Limits {

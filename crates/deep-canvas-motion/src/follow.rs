@@ -4,6 +4,7 @@
 //! closed form however the playhead got there: nothing steps from an earlier frame.
 
 use deep_canvas::grammar::FLICKS_PER_SECOND;
+use deep_canvas::interval::Iv;
 
 use crate::curve::Bezier;
 use deep_canvas::ease::Named;
@@ -141,6 +142,57 @@ impl Follow {
 impl Follow {
     fn owner(&self, t: i64) -> usize {
         self.segments.partition_point(|s| s.t <= t).saturating_sub(1)
+    }
+
+    /// #504: the earliest time after `t` at which the value may differ: the next flick while a
+    /// segment moves, the next change otherwise, `None` once nothing changes again.
+    pub fn next_change(&self, t: i64) -> Option<i64> {
+        let i = self.owner(t);
+        let s = &self.segments[i];
+        let moving = s.t != i64::MIN
+            && match self.model {
+                Model::Transition { span, .. } => t - s.t < span && s.start.value != s.target,
+                Model::RateLimit { max } => seconds(t - s.t) < (s.start.value - s.target).abs() / max,
+                _ => s.start.value != s.target || s.start.rate != 0.0,
+            };
+        if moving {
+            return Some(t + 1);
+        }
+        self.segments.get(i + 1).map(|s| s.t)
+    }
+
+    /// #504: the value's bound over the flicks `[a, b]`, given its values there: the hull of the
+    /// two where the model moves monotonely inside one segment (a transition by its ease's
+    /// interval form); `None` where a change falls inside, or a spring may turn.
+    pub fn window(&self, a: i64, b: i64, at_a: f64, at_b: f64) -> Option<Iv> {
+        let i = self.owner(a);
+        if self.segments.get(i + 1).is_some_and(|n| n.t <= b) {
+            return None;
+        }
+        let s = &self.segments[i];
+        let ends = Iv::new(at_a.min(at_b), at_a.max(at_b));
+        if s.t == i64::MIN {
+            return Some(ends);
+        }
+        match self.model {
+            Model::FirstOrder { .. } | Model::RateLimit { .. } => Some(ends),
+            Model::Spring(_) => None,
+            Model::Transition { span, along } => {
+                if span <= 0 {
+                    return Some(ends);
+                }
+                let u = Iv::new(((a - s.t) as f64 / span as f64).clamp(0.0, 1.0), ((b - s.t) as f64 / span as f64).clamp(0.0, 1.0));
+                let w = match along {
+                    Along::Linear => u,
+                    Along::Ease(e) => e.bound(u),
+                    Along::Bezier(z) => Iv::new(0f64.min(z.y1).min(z.y2), 1f64.max(z.y1).max(z.y2)),
+                };
+                let (x0, x1) = (s.start.value, s.target);
+                let (p, q) = (x0 + (x1 - x0) * w.lo, x0 + (x1 - x0) * w.hi);
+                let e = 4.0 * f64::EPSILON * x0.abs().max(x1.abs()).max(1.0);
+                Some(Iv::new(p.min(q) - e, p.max(q) + e).hull(ends))
+            }
+        }
     }
 
     /// The planted stepper: from the previous frame's state toward the target now, as if

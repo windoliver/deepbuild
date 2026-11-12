@@ -833,12 +833,14 @@ pub fn head_place(
 }
 
 /// What `geometry` answers of a mark set at t: each row by key, after the transforms, with its
-/// columns, opacity, place in document u and, through a colormap, its color unrounded.
+/// columns, opacity, place in document u (an atlas row's, its cell's centre) and, through a
+/// colormap, its color unrounded. `planted`: #1653's square layout of an isometric grid.
 pub fn rows_report(
     id: &str,
     item: &Value,
     items: &Map<String, Value>,
     palette: &Palette,
+    planted: crate::scene::Planted,
 ) -> Result<Value, Refused> {
     let path = format!("items/{id}/params");
     let p = object_or_empty(item.get("params"));
@@ -846,6 +848,15 @@ pub fn rows_report(
     let props = encoded(p, &rows, items, &path)?;
     let pos = crate::scene::item_pos(item);
     let bar = p.get("mark").and_then(Value::as_str) == Some("bar");
+    // #1653: an atlas row's place is its cell's centre.
+    let centres: std::collections::BTreeMap<String, [f64; 2]> = if crate::atlas::is_atlas(p) {
+        crate::atlas::tiles(id, p, &rows, planted)?
+            .into_iter()
+            .map(|t| (t.key, t.centre))
+            .collect()
+    } else {
+        Default::default()
+    };
     let mut out = Map::new();
     for (i, key) in rows.keys.iter().enumerate() {
         let columns: Map<String, Value> = rows
@@ -863,6 +874,10 @@ pub fn rows_report(
             if let Some(v) = at(k).or(base) {
                 place.insert(k.to_string(), json!(v + pos[axis]));
             }
+        }
+        if let Some(c) = centres.get(key) {
+            place.insert("x".into(), json!(c[0] + pos[0]));
+            place.insert("y".into(), json!(c[1] + pos[1]));
         }
         let mut row = json!({"columns": columns, "opacity": rows.opacity_of(i), "place": place});
         // #505: a role column's index into the set's roles.
@@ -979,10 +994,10 @@ pub fn base_rows(id: &str, item: &Value, bound: &BoundRows) -> Result<Rows, Refu
     // nothing measured.
     let mut hidden = std::collections::BTreeSet::new();
     // The rows the column view hid: a value its reader can't narrow to (Array and table: column
-    // view) doesn't draw for as long as it lasts.
-    for c in columns.values() {
+    // view) doesn't draw for as long as it lasts, nor does a row whose `alive` is false (#535).
+    for c in columns.values().chain(p.get("alive")) {
         if let Some(Value::Array(rows)) = c.get("hide") {
-            hidden.extend(rows.iter().filter_map(Value::as_u64).map(|r| r as usize));
+            hidden.extend(rows.iter().filter_map(Value::as_f64).map(|r| r as usize));
         }
     }
     for ((key, column), value) in bound {
@@ -1015,11 +1030,7 @@ pub fn base_rows(id: &str, item: &Value, bound: &BoundRows) -> Result<Rows, Refu
         ),
     };
     let keys: Vec<String> = (0..n)
-        .map(|i| {
-            key_column
-                .and_then(|(_, k)| k.text(i))
-                .unwrap_or_else(|| i.to_string())
-        })
+        .map(|i| crate::atlas::key(key_column.and_then(|(_, k)| k.text(i)), p, i))
         .collect();
     let transforms = story::listed(p, &path)?;
     // A key is unique and stable (Mark set: `key`), so a row can be picked and patched by it;
@@ -1272,6 +1283,8 @@ pub fn mark_set(
                     crop: None,
                     opacity: 1.0,
                     adjust: crate::paint::Adjust::default(),
+                    tile: None,
+                    turn: 0.0,
                 });
             }
             "text" => out.push(Mark::Text {
@@ -1289,6 +1302,7 @@ pub fn mark_set(
                     mask: false,
                     align: Align::Start,
                     bound: false,
+                    spans: Vec::new(),
                 },
                 origin: at,
                 role: None,
@@ -1849,13 +1863,16 @@ fn cross_zero(id: &str, items: &Map<String, Value>, path: &str) -> Result<(bool,
 }
 
 /// One axis, generated from its scale: the line along the scale's range, a tick per step and its
-/// label; labels that would crowd thin by parity, keeping the first and the last.
+/// label; labels that would crowd thin by parity, keeping the first and the last. With `grid`, a
+/// grid line per tick under them, from the line across the plot to the frame's far edge
+/// (`frame`, the document's size in u).
 pub fn axis(
     id: &str,
     item: &Value,
     items: &Map<String, Value>,
     palette: &Palette,
     pos: [f64; 2],
+    frame: [f64; 2],
 ) -> Result<Drawing, Refused> {
     let path = format!("items/{id}/params");
     let p = object_or_empty(item.get("params"));
@@ -1893,17 +1910,43 @@ pub fn axis(
     } else {
         -1.0
     };
-    let mut marks = vec![rule(
+    let mut faded = scale.faded_ticks();
+    faded.retain(|t| t.2 > 0.0);
+    let mut marks = Vec::new();
+    let mut fades = std::collections::BTreeMap::new();
+    // Grid lines first, under the line, the ticks and the labels: each from the line to the
+    // frame's edge on the side away from the labels.
+    if p.get("grid").and_then(Value::as_bool) == Some(true) {
+        let at = if horizontal { cross + pos[1] } else { cross + pos[0] };
+        let far = if out_dir > 0.0 {
+            0.0
+        } else if horizontal {
+            frame[1]
+        } else {
+            frame[0]
+        };
+        for (k, (v, _, alpha)) in faded.iter().enumerate() {
+            let along = scale.map(*v);
+            if *alpha < 1.0 {
+                fades.insert(format!("{id}#grid{k}"), *alpha);
+            }
+            marks.push(rule(
+                format!("{id}#grid{k}"),
+                point(along, 0.0),
+                point(along, far - at),
+                1.0,
+                color,
+            ));
+        }
+    }
+    marks.push(rule(
         format!("{id}#line"),
         point(scale.range[0], 0.0),
         point(scale.range[1], 0.0),
         1.0,
         color,
-    )];
-    let mut faded = scale.faded_ticks();
-    faded.retain(|t| t.2 > 0.0);
+    ));
     let ticks: Vec<(f64, String)> = faded.iter().map(|(v, l, _)| (*v, l.clone())).collect();
-    let mut fades = std::collections::BTreeMap::new();
     // Thin by parity until labels clear each other: every 2nd, then every 4th, first and last kept.
     let est = |l: &str| 0.6 * LABEL_SIZE * l.chars().count() as f64 + 4.0;
     let spacing = |k: usize| -> f64 {
@@ -1976,6 +2019,7 @@ pub fn axis(
                 mask: false,
                 align,
                 bound: false,
+                spans: Vec::new(),
             },
             origin,
             role: None,
@@ -2019,6 +2063,7 @@ pub fn axis(
                 mask: false,
                 align,
                 bound: false,
+                spans: Vec::new(),
             },
             origin,
             role: None,
@@ -2152,6 +2197,7 @@ pub fn legend(
                 mask: false,
                 align: Align::Start,
                 bound: false,
+                spans: Vec::new(),
             },
             origin: [x, mid - line / 2.0],
             role: None,
@@ -2210,7 +2256,14 @@ mod tests {
             let all = items(domain);
             let axis = json!({"params": {"scale": "xs", "side": "zero", "role": "ink"}});
             let palette = Palette::from([("ink".to_string(), [0, 0, 0])]);
-            let drawn = super::axis("a", &axis, all.as_object().unwrap(), &palette, [0.0, 0.0]);
+            let drawn = super::axis(
+                "a",
+                &axis,
+                all.as_object().unwrap(),
+                &palette,
+                [0.0, 0.0],
+                [640.0, 480.0],
+            );
             match drawn.unwrap().marks[0] {
                 Mark::Rect { bounds, .. } => bounds[1] + bounds[3] / 2.0,
                 _ => panic!("an axis line along x is a rect"),
@@ -2302,6 +2355,7 @@ mod tests {
             items,
             &palette,
             [0.0, 0.0],
+            [640.0, 480.0],
         )
         .unwrap()
         .marks;
@@ -2320,6 +2374,7 @@ mod tests {
             items.as_object().unwrap(),
             &palette,
             [0.0, 0.0],
+            [640.0, 480.0],
         )
         .unwrap()
         .marks;
@@ -2347,6 +2402,7 @@ mod tests {
             items.as_object().unwrap(),
             &palette,
             [0.0, 0.0],
+            [640.0, 480.0],
         )
         .unwrap()
         .marks;

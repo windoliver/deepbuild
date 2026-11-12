@@ -24,6 +24,10 @@
         "text"
       ],
       "description": "What the channel reaches: a device that signs, a chat app, email or a text message."
+    },
+    "steps": {
+      "type": "boolean",
+      "description": "Whether the channel can draw a plan's steps (#1580). Only one that says true gets a card with a plan as its steps, its hash and buttons; any other gets that card as the item view, saying where to answer."
     }
   },
   "required": [

@@ -1,0 +1,15 @@
+{
+  "name": "shelf",
+  "version": "1.0.0",
+  "license": "MIT",
+  "description": "A test pack of the #1961 acceptance suite: the recipe shelf.bookcase@1, at 1.0, whose step board makes one board per level.",
+  "requires": {
+    "core": ">=0.0.0",
+    "modules": {
+      "marks2d": ">=0.0.0"
+    }
+  },
+  "recipes": {
+    "shelf.bookcase@1": "shelf.bookcase@1.json"
+  }
+}

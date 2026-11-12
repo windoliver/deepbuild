@@ -13,7 +13,8 @@ import { join } from 'node:path';
 import type { AdapterRegistry } from '@deepbuild/adapters';
 import type { Asks } from '@deepbuild/asks';
 import { patternMatches, scrubText, type EvidenceStore, type Writer } from '@deepbuild/evidence';
-import { ulid, type Connection, type Event, type EventInput, type RecordStore } from '@deepbuild/record';
+import type { Connection, Event, EventInput, RecordStore } from '@deepbuild/record';
+import { ulid } from '@deepbuild/record/ids';
 
 export interface ArchiveOptions {
   record: RecordStore;
@@ -247,7 +248,7 @@ export async function openArchive(options: ArchiveOptions): Promise<Archive> {
     seen.set(source.path, mark);
     // Only what the transcript gained since its last copy is searched for pasted keys, so a key asks once.
     const grew = before && before.size <= raw.length && sha256(raw.subarray(0, before.size)) === before.sha256;
-    await rotateAsks(source, text.slice(grew ? Buffer.from(raw.subarray(0, before.size)).toString('utf8').length : 0), evidence);
+    await rotateAsks(source, text.slice(grew ? raw.subarray(0, before.size).toString('utf8').length : 0), evidence);
   }
 
   async function rotateAsks(source: Source, added: string, evidence: string): Promise<void> {
@@ -274,7 +275,7 @@ export async function openArchive(options: ArchiveOptions): Promise<Archive> {
 
   /** An agent whose hooks kept landing for a day after its last capture: capture went quiet. */
   async function quiet(): Promise<void> {
-    const rows = (await record.raw(`SELECT agent, max(ts) AS ts FROM events WHERE log_pos > ${cursor} AND writer = 'hook' AND agent IS NOT NULL GROUP BY agent`)) as { agent: string; ts: number }[];
+    const rows = (await record.raw("SELECT agent, max(ts) AS ts FROM events WHERE log_pos > ? AND writer = 'hook' AND agent IS NOT NULL GROUP BY agent", [cursor])) as { agent: string; ts: number }[];
     for (const { agent, ts } of rows) hooked.set(agent, Math.max(hooked.get(agent) ?? 0, ts));
     cursor = Number(((await record.raw('SELECT coalesce(max(log_pos), 0) AS pos FROM events')) as { pos: number }[])[0]!.pos);
     for (const [agent, last] of captured) {
@@ -334,7 +335,8 @@ export async function openArchive(options: ArchiveOptions): Promise<Archive> {
       if (failed.length) throw new AggregateError(failed, `the archive pass left ${failed.length} cop${failed.length === 1 ? 'y' : 'ies'} undone`);
     },
     async session(id) {
-      for (const source of await sources(options)) if (letters(source.session) === letters(id)) await copy(source);
+      const wanted = letters(id);
+      for (const source of await sources(options)) if (letters(source.session) === wanted) await copy(source);
     },
     async archived() {
       return new Set((await sources(options, true)).map((source) => letters(source.session)));

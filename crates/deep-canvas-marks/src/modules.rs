@@ -224,6 +224,10 @@ impl Canonical for TextSpec {
         self.mask.encode(out);
         (self.align as u8).encode(out);
         self.bound.encode(out);
+        // #1964: a run with styled spans; one without encodes as it did before them.
+        if !self.spans.is_empty() {
+            format!("{:?}", self.spans).encode(out);
+        }
     }
 }
 
@@ -393,7 +397,8 @@ fn is_bound_text(doc: &Value, id: &str, item: &Value) -> bool {
         .get("params")
         .and_then(|p| p.get("text"))
         .and_then(|t| t.get("counter"))
-        .is_some();
+        .is_some()
+        || scene::copy_key(item).is_some();
     let template = scene::template_of(item).is_some();
     bound || counter || template
 }
@@ -1061,9 +1066,8 @@ pub fn data_m4_drops_last() -> Module {
 }
 
 fn register_data(r: &mut Registrar, decimate: fn(&mut View<'_>) -> Result<(), OpError>) {
-    // #397: the data module's columns as the first entries of the core's column view (Array and
-    // table: column view): data, const and table columns, each pure in t, so a seek equals a
-    // clean evaluation and no rows change between steps.
+    // #397: data, const and table columns, the data module's entries of the core's column view,
+    // each pure in t, so a seek equals a clean evaluation and no rows change between steps.
     let rows = json!([1.5, 2.5]);
     let fixture = json!({"frames": [rows, rows], "changed": [[], []],
                          "seeks": [{"from": 1, "to": 0, "rows": rows}]});
@@ -1096,6 +1100,7 @@ fn register_data(r: &mut Registrar, decimate: fn(&mut View<'_>) -> Result<(), Op
     r.operator("decimate", "items", &["core.fields"], &["data.decimated"])
         .applies(is_line_series)
         .run(decimate);
+    crate::arrays::register(r);
     // A scale it can't read raises marks2d's `scale_type` or `bad_scale`, which mark sets and
     // axes raise through the same scale.
     r.fixture("points", points_board(), None).sidecar(json!({

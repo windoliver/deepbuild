@@ -4,14 +4,15 @@
 use deep_canvas::schedule::Canonical;
 
 use crate::curve::{Curve, Ease, Interp, Key};
+use crate::assembly::Assembly;
 use crate::doc::{
     AddFrom, Along, Binding, Blending, Channel, Clip, Constraint, Control, Cut, Driver, DriverInput, Extend, Follow,
-    Influence, Kind, Limit, Marker, Motion, Placement, Shot, Target, Timing, Transport, ValueType,
+    Influence, Kind, Limit, Marker, Motion, Placement, Shot, Stagger, Target, Timing, Transport, ValueType,
 };
 use crate::remap::{Piece, Remap};
 use crate::follow;
 use crate::modifier::{Kind as ModKind, Modifier, Rate, Shape};
-use crate::input::{Change, Inputs, Moves};
+use crate::input::{Change, Inputs, Moves, Staged};
 use crate::program::{Field, Op, Program, Write};
 
 impl Canonical for Interp {
@@ -125,7 +126,28 @@ impl Canonical for Ease {
 impl Canonical for Control {
     fn encode(&self, out: &mut Vec<u8>) {
         (&self.id, self.kind, &self.options, &self.default).encode(out);
-        self.shots.encode(out);
+        // #504: a stage without a shot as usize::MAX, so every stage with one keys as it did.
+        self.shots.iter().map(|s| s.unwrap_or(usize::MAX)).collect::<Vec<usize>>().encode(out);
+    }
+}
+impl Canonical for Stagger {
+    fn encode(&self, out: &mut Vec<u8>) {
+        (&self.id, &self.spec, &self.targets).encode(out);
+        (self.lag, self.reverse_on_close).encode(out);
+    }
+}
+impl Canonical for Assembly {
+    fn encode(&self, out: &mut Vec<u8>) {
+        (&self.id, &self.parent, &self.at, (self.value, &self.apart, self.order, self.slot)).encode(out);
+        if let Some(j) = &self.joint {
+            (j.kind as u8, j.axis, j.pivot, j.range.map(|r| [r.0, r.1])).encode(out);
+        }
+    }
+}
+impl Canonical for Staged {
+    fn encode(&self, out: &mut Vec<u8>) {
+        (&self.t, &self.shot, &self.span).encode(out);
+        self.ease.encode(out);
     }
 }
 impl Canonical for Follow {
@@ -154,6 +176,10 @@ impl Canonical for Moves {
 impl Canonical for Inputs {
     fn encode(&self, out: &mut Vec<u8>) {
         (&self.follows, &self.cameras).encode(out);
+        // #504's stage shots, only where a camera has one, so every earlier program keys as it did.
+        if self.staged.iter().any(|s| !s.is_empty()) {
+            self.staged.encode(out);
+        }
     }
 }
 
@@ -333,7 +359,7 @@ impl deep_canvas::schedule::Canonical for Marker {
 impl deep_canvas::schedule::Canonical for Transport {
     fn encode(&self, out: &mut Vec<u8>) {
         deep_canvas::schedule::Canonical::encode(
-            &(&self.start, &self.span, &self.wrap, &self.holds, &self.reduce_holds),
+            &(&self.start, &self.span, (&self.wrap, &self.ping_pong), &self.holds, &self.reduce_holds),
             out,
         );
     }
@@ -395,8 +421,12 @@ impl Canonical for Constraint {
             Kind::SpringChain { bones, hz, damping_ratio, max_swing } => {
                 (7u8, bones, (*hz, *damping_ratio, *max_swing)).encode(out)
             }
-            Kind::RestOn { ground, bottom, offset, max_drop } => {
-                (8u8, (*ground, *bottom), (*offset, *max_drop)).encode(out)
+            Kind::RestOn { ground, bottom, offset, max_drop, on } => {
+                (8u8, (*ground, *bottom), (*offset, *max_drop)).encode(out);
+                // A rest on the ground plane keeps the key it had before `on` landed (#2013).
+                if let Some(r) = on {
+                    (&r.on, r.axis, r.align, r.bounds).encode(out);
+                }
             }
         }
     }
@@ -435,6 +465,10 @@ impl deep_canvas::schedule::Canonical for Motion {
         }
         for (id, inputs) in &self.worlds {
             (id, *inputs).encode(out);
+        }
+        // #504's take-aparts, only where a document has one.
+        if !self.staggers.is_empty() {
+            self.staggers.encode(out);
         }
     }
 }
@@ -521,5 +555,9 @@ impl deep_canvas::schedule::Canonical for Program {
         );
         deep_canvas::schedule::Canonical::encode(&(&self.drivers, &self.limits), out);
         deep_canvas::schedule::Canonical::encode(&(&self.follows, &self.inputs), out);
+        // #504's assemblies and their parts, only where a document has them.
+        if !self.assemblies.is_empty() {
+            (&self.assemblies, &self.members).encode(out);
+        }
     }
 }
