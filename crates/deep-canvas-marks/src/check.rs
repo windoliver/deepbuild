@@ -205,7 +205,8 @@ fn text_numbers(doc: &Map<String, Value>, id: &str, item: &Value) -> Vec<Value> 
             .chain(anchors)
             .collect();
     }
-    let (Some(quote), Some(Value::String(raw))) = (p.get("quote"), p.get("raw")) else {
+    let raw = crate::code::raw(p).filter(|r| r.len() <= crate::code::RAW_CAP);
+    let (Some(quote), Some(raw)) = (p.get("quote"), raw) else {
         return Vec::new();
     };
     crate::code::digits(&crate::code::display(raw, crate::code::tab(p)))
@@ -233,7 +234,14 @@ pub fn quotes(doc: &Map<String, Value>, bytes: impl Fn(&str) -> Option<Vec<u8>>)
             Some("vector@1") => "alt",
             _ => "raw",
         };
-        let raw = p.get(field).and_then(Value::as_str).unwrap_or("");
+        let raw = match field {
+            "raw" => crate::code::raw(p),
+            _ => p
+                .get(field)
+                .and_then(Value::as_str)
+                .map(|alt| alt.as_bytes().into()),
+        }
+        .unwrap_or_default();
         let source = quote.get("source").and_then(Value::as_str).unwrap_or("");
         let Some(found) = bytes(source.strip_prefix("ev:").unwrap_or(source)) else {
             issues.push(Issue::error(
@@ -252,9 +260,7 @@ pub fn quotes(doc: &Map<String, Value>, bytes: impl Fn(&str) -> Option<Vec<u8>>)
                 .and_then(Value::as_u64)
                 .map_or(1, |n| n as usize)
         };
-        if let Some((line, byte)) =
-            crate::code::mismatch(raw.as_bytes(), &found, [line(0), line(1)])
-        {
+        if let Some((line, byte)) = crate::code::mismatch(&raw, &found, [line(0), line(1)]) {
             issues.push(Issue {
                 fix: "Quote the source's bytes exactly, line ends included, or don't quote it."
                     .into(),
@@ -461,6 +467,76 @@ fn glyph_issues(items: &Map<String, Value>, ty: &Type, issues: &mut Vec<Issue>) 
     }
 }
 
+/// The most characters a text written as text holds (Text `text@1`: `text`); a code item's
+/// display text is held to the cap on its raw bytes instead ([`crate::code::RAW_CAP`]).
+const TEXT_CAP: usize = 4_096;
+
+/// #1965: each text@1 whose own text runs past text@1's cap, named with its size and the cap.
+/// The check holds the cap and the shaper doesn't: #856 shapes one text of 10,000 glyphs.
+fn text_cap_issues(items: &Map<String, Value>) -> Vec<Issue> {
+    let mut issues = Vec::new();
+    for (id, item) in items {
+        let text = item.get("params").and_then(|p| p.get("text"));
+        let (Some("text@1"), Some(text)) = (
+            item.get("kind").and_then(Value::as_str),
+            text.and_then(Value::as_str),
+        ) else {
+            continue;
+        };
+        let chars = text.chars().count();
+        if chars > TEXT_CAP {
+            let what =
+                format!("its text runs to {chars} characters, past text@1's cap of {TEXT_CAP}");
+            let actual = json!({"chars": chars, "cap": TEXT_CAP});
+            let path = format!("items/{id}/params/text");
+            issues.push(Issue {
+                fix: "Shorten the text, or split it between items.".into(),
+                ..Issue::error("out_of_range", id, path, actual, &what)
+            });
+        }
+    }
+    issues
+}
+
+/// #1965: a code item's refusal that names what it holds to: its raw past the code's cap, with
+/// its size and the cap, and a token's class outside the list (Text `text@1`: code). `None` for
+/// any other refusal.
+fn text_refusal(items: &Map<String, Value>, id: &str, r: &scene::Refused) -> Option<Issue> {
+    let params = object_or_empty(items.get(id)?.get("params"));
+    let field = r.path.strip_prefix(&format!("items/{id}/params/"))?;
+    if r.code != "out_of_range" {
+        return None;
+    }
+    let (actual, what, fix) = match field {
+        "raw" => {
+            let (bytes, cap) = (crate::code::raw(params)?.len(), crate::code::RAW_CAP);
+            (
+                json!({"bytes": bytes, "cap": cap}),
+                format!(
+                    "its raw holds {bytes} bytes, past a code item's cap of 256 KiB ({cap} bytes)"
+                ),
+                "Quote only the lines the film shows.",
+            )
+        }
+        _ => {
+            let (_, class) = field.strip_prefix("code/tokens/")?.split_once("/class: ")?;
+            let classes = crate::code::CLASSES;
+            (
+                json!({"class": class, "classes": classes}),
+                format!(
+                    "a token's class is one of {}; `{class}` is none of them",
+                    classes.join(", ")
+                ),
+                "Give the token a class of the list.",
+            )
+        }
+    };
+    Some(Issue {
+        fix: fix.into(),
+        ..Issue::error(r.code, id, r.path.clone(), actual, &what)
+    })
+}
+
 /// Each mark set's transforms read at check, standing ranked among them, and every row a log
 /// scale can't place, each named.
 fn story_issues(items: &Map<String, Value>) -> Vec<Issue> {
@@ -508,6 +584,7 @@ pub fn check(doc: &Map<String, Value>, look: &Look, min: Option<f64>) -> Vec<Iss
     let mut issues = roles_apart(items, look);
     issues.extend(numbers(doc).1);
     issues.extend(story_issues(items));
+    issues.extend(text_cap_issues(items));
     // Status can show wherever a status binding is.
     let status_shows = doc
         .get("status_bindings")
@@ -551,6 +628,10 @@ pub fn check(doc: &Map<String, Value>, look: &Look, min: Option<f64>) -> Vec<Iss
                 .strip_prefix("items/")
                 .and_then(|rest| rest.split(['/', ':']).next())
                 .unwrap_or("");
+            if let Some(issue) = text_refusal(items, id, &r) {
+                issues.push(issue);
+                break;
+            }
             // A segment budget names the count the ops declared (#160).
             let actual = if r.code == "segment_budget" {
                 scene::declared_of(items, id).map_or(
