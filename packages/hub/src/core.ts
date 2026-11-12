@@ -1359,7 +1359,17 @@ export class Core {
   private async handleHook(drafts: Draft[], meta: HookMeta, writer: string, replayed = false, waited = false, placing = false): Promise<{ settled: Promise<void> }> {
     const early = await this.routeHook(drafts, meta, writer, replayed, waited, placing);
     if (early) return early;
-    const verified = meta.watchOnly ? false : await this.state.verify(meta);
+    // paseo's bind token maps to a session only from a line checked against it, and once (#2070): a line that names a
+    // token another session holds changes nothing and is recorded unverified, with a reading naming both sessions.
+    const bind = meta.agent === 'paseo' && meta.session ? meta.paseo?.bind : undefined;
+    const holder = bind ? this.delivery.binds.get(bind) : undefined;
+    const taken = holder !== undefined && holder !== meta.session;
+    const verified = meta.watchOnly || taken ? false : await this.state.verify(meta);
+    if (bind && verified && holder === undefined) this.delivery.binds.set(bind, meta.session);
+    if (taken && !this.state.readings.has(`${meta.session}\0bind:${holder}`)) {
+      this.state.readings.add(`${meta.session}\0bind:${holder}`);
+      await this.appendReading(meta.session, meta.agent, `A paseo line for session ${meta.session} named the bind token session ${holder} holds: the token stays with ${holder}, binds nothing to ${meta.session}, and the line is recorded unverified.`).catch(() => undefined);
+    }
     // A session's first hook from under a run DeepBuild started (#1330): its start.session first, so its first event names the run.
     if (meta.session) await this.sessionStarts.sessionOf(meta.session, meta.ppid, meta.agent).catch(() => undefined);
     const unread = Boolean(meta.watchOnly && meta.session && !this.state.versioned.has(meta.session));
@@ -2633,7 +2643,7 @@ export class Core {
 
   waiterGone(key: number): void { return this.delivery.waiterGone(key); }
 
-  mcpHello(parent: { pid: number; start: string } | undefined, paseo?: string): Promise<string | null> { return this.state.mcpHello(parent, paseo); }
+  mcpHello(fd: number | undefined, claimed: { pid: number; start: string } | undefined, paseo?: string): Promise<{ session: string | null; parent?: { pid: number; start: string } }> { return this.state.mcpHello(fd, claimed, paseo); }
 
   async notifierGone(): Promise<void> { return this.control.notifierGone(); }
 

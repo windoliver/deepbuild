@@ -1298,10 +1298,13 @@ class Hub {
       const proved = isObj(parent) && Number.isSafeInteger(parent.pid) && typeof parent.start === 'string' ? { pid: parent.pid as number, start: parent.start } : undefined;
       // A DeepBuild MCP server paseo's plugin added binds by the token it was opened with (#55).
       const paseo = typeof value.paseo === 'string' && value.paseo ? value.paseo : undefined;
-      const session = proved || paseo ? ((await this.core.request({ op: 'mcp-hello', parent: proved, ...(paseo ? { paseo } : {}) }).catch(() => null)) as string | null) : null;
+      // The parent it binds by is that of the process at the socket's other end, as the OS reports it (#2070).
+      const fd = (conn.sock as unknown as { _handle?: { fd?: number } })._handle?.fd;
+      const hello = (await this.core.request({ op: 'mcp-hello', ...(fd !== undefined && fd >= 0 ? { fd } : {}), parent: proved, ...(paseo ? { paseo } : {}) }).catch(() => undefined)) as { session: string | null; parent?: { pid: number; start: string } } | undefined;
+      const session = hello?.session ?? null;
       conn.role = 'mcp';
       conn.session = session;
-      conn.parent = proved;
+      conn.parent = hello?.parent;
       if (typeof value.cwd === 'string') conn.cwd = value.cwd;
       conn.name = session ? `mcp:${session}` : 'mcp';
       return conn.write({ role: conn.name });

@@ -39,7 +39,8 @@ import { Jobs } from './jobs.js';
 import { Libraries } from './libraries.js';
 
 import { refuse, Refused, refusal, ulid, ulidTime, type CoreOptions, type Draft, type HookMeta } from './wire.js';
-import type { CallContext, Routes, CutOff, Note } from './session-types.js';
+import type { CallContext, Routes, CutOff, Note, Session } from './session-types.js';
+import { parents } from './children.js';
 
 import { TranscriptReader } from './transcript-reader.js';
 import { letters, ghToken, WAKE_GRACE, SHOWN_SOON, said, FOREIGN, placesItself, type Obj, isObj, asRefused, effectEntries, callOf, sendKey, PULL_LOOKUP_MS, OWN_TURN, continueText } from "./hub-shared.js";
@@ -59,7 +60,7 @@ export interface AnswerDeliveryOptions {
     readonly transcriptReader: TranscriptReader;
     readonly holds: Holds;
   };
-  state: () => Pick<SessionStatePort, "acks" | "attention" | "live" | "midTurn" | "onScreen" | "projects" | "sessions" | "turnsStarted">;
+  state: () => Pick<SessionStatePort, "acks" | "attention" | "live" | "midTurn" | "onScreen" | "projects" | "sessions" | "startOf" | "turnsStarted">;
   mcp: () => Pick<McpOperationsPort, "pinOf">;
   judging: () => Pick<StopJudgingPort, "delivery" | "landedLine" | "lineStanding" | "openedPr">;
   control: () => Pick<HubControlPort, "trusted">;
@@ -1059,16 +1060,38 @@ export class AnswerDelivery {
 
   /**
    * Who gates a session paseo's plugin sends a line for (#55): the adapter that bound its session ID first, deep-hook
-   * or the pi package, or null when that is the plugin. Its MCP server's token binds to the session either way.
+   * or the pi package, or null when that is the plugin. Its MCP server's token binds to the session either way, from
+   * a line checked against that session (#2070): one the core verified for a session the plugin gates, or, for one
+   * another adapter gates, a line from its folder whose process that session's agent runs under. A token maps once.
    */
   paseoOwner(meta: HookMeta): Promise<string | null> {
     return this.options.schedule.queue(async () => {
-      if (meta.paseo?.bind && meta.session) this.binds.set(meta.paseo.bind, meta.session);
       const session = this.options.state().sessions.get(meta.session);
       const owner = session && session.agent !== 'paseo' ? session.agent : null;
       if (owner) this.inPaseo.add(meta.session);
+      const bind = owner ? meta.paseo?.bind : undefined;
+      // Each line, token and process is read once: a process the agent doesn't run under never comes to be above it.
+      const key = `${bind}\0${meta.session}\0${meta.ppid}`;
+      if (bind && !this.binds.has(bind) && !this.notUnder.has(key) && meta.cwd === session!.cwd) {
+        const under = await this.runsUnder(session!, meta.ppid);
+        if (under) this.binds.set(bind, meta.session);
+        else if (under === false) this.notUnder.add(key);
+      }
       return owner;
     });
+  }
+  /** Tokens, sessions and processes a line named whose session's agent doesn't run under that process. */
+  private readonly notUnder = new Set<string>();
+
+  /** Whether a session's agent process, by PID and start time, runs under process `pid`; undefined when `ps` can't say. */
+  private async runsUnder(session: Session, pid: number): Promise<boolean | undefined> {
+    const start = await this.options.state().startOf(session.pid, true);
+    if (start === undefined) return undefined;
+    if (start !== session.start) return false;
+    const up = await parents();
+    if (!up.size) return undefined;
+    for (let at = up.get(session.pid), n = 0; at !== undefined && at > 1 && n < 64; at = up.get(at), n++) if (at === pid) return true;
+    return false;
   }
 
   /**
