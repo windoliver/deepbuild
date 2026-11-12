@@ -1,0 +1,5 @@
+$ cargo build --locked --bin deep-logic -v   (at 4f2377e7d, just before the run)
+       Fresh deep-logic v0.0.0 (<repo>/crates/deep-logic)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.29s
+$ sha256sum target/debug/deep-logic
+1e05fd4a531e08207c197ddf994d88ce769fdc5a13e7f772f477dc0d60058aa9  target/debug/deep-logic
