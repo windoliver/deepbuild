@@ -22,4 +22,5 @@ The files, and how the tests use them:
   object's data takes).
 - `lld/test/wasm/undefined.s`
   ([upstream](https://github.com/llvm/llvm-project/blob/0d261d1ca552c95a8f007e061c787ac7132fbcbc/lld/test/wasm/undefined.s)):
-  its failing run's CHECK and CHECK-NOT, and its passing runs, translated by `undefined.test.ts`.
+  its failing run's CHECK and its passing runs, translated by `undefined.test.ts` (its CHECK-NOT, on a symbol only
+  `--undefined` names, has no counterpart in our linker).

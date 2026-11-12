@@ -1,17 +1,19 @@
 // The undefined-symbol oracle (the oracle map's lld/test/wasm/undefined.s row, criterion 3): a link with a function
-// symbol nothing defines is refused, naming that symbol and no other.
+// symbol nothing defines is refused, naming that symbol.
 //
 // Upstream: an object refers to foo, which no input defines; `wasm-ld --undefined=baz` fails with "undefined symbol:
-// foo" naming the object (CHECK), and the error doesn't name baz (CHECK-NOT); the same object links once foo is
+// foo" naming the object (CHECK), and the error doesn't name baz, a symbol --undefined adds that nothing references
+// (CHECK-NOT); the same object links once foo is
 // accounted for (--allow-undefined, --allow-undefined-file). Here: a program object `both` imports
 // lib:turns.next_turn and lib:grid_path.find_route and links only turns@1, which exports next_turn, so find_route is
 // the one undefined symbol. `check` must refuse it (`link_refused`, naming the item, as upstream names the object),
-// with a refusal naming lib:grid_path.find_route (upstream's CHECK) and none naming lib:turns.next_turn, which turns@1
-// defines (the CHECK-NOT: a refusal names only what is undefined). Upstream's passing runs become the twin: the same
+// with a refusal naming lib:grid_path.find_route (upstream's CHECK). Beside it, a check of our own, not upstream's: no
+// refusal names lib:turns.next_turn, which turns@1 defines. Upstream's passing runs become the twin: the same
 // program linking turns@1 and grid_path@1 is admitted, imports nothing, and runs both calls.
 //
-// Not held: --allow-undefined and --allow-undefined-file (our linker never leaves an import: the issue's "It can
-// never: Leave an import in the running program"), --export of a missing symbol, and foo reached through its address
+// Not held: the CHECK-NOT (our linker has no --undefined, so no symbol can be required that nothing references),
+// --allow-undefined and --allow-undefined-file (our linker never leaves an import: the issue's "It can never: Leave an
+// import in the running program"), --export of a missing symbol, and foo reached through its address
 // in data (our objects take no function's address: no table or element segment, ../README.md: Relocatable objects).
 //
 // Wrong program shown failing: no planted value (../README.md: Planted twins) reaches an import no listed library
