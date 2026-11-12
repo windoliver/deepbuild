@@ -8,7 +8,8 @@ import { join } from 'node:path';
 
 const [bin, wat, work] = process.argv.slice(2);
 const sha = (b) => createHash('sha256').update(b).digest('hex');
-const say = (s) => console.log(s);
+// The work folder is printed as <work>, so no local path reaches the evidence.
+const say = (s) => console.log(s.replaceAll(work, '<work>'));
 function assemble(name, text) {
   writeFileSync(join(work, `${name}.wat`), text);
   const r = spawnSync(wat, [work, join(work, `${name}.wat`)], { encoding: 'utf8' });
@@ -34,42 +35,49 @@ const piece = (program) => ({
   assets: { [sha(program)]: program.toString('base64') },
 });
 function call(c) {
-  say(`$ echo '${JSON.stringify({ ...c, piece: '…' })}' | deep-logic`);
+  const program = c.piece.items.game.params.program.slice(0, 12);
+  say(`deep-logic stdin ← ${JSON.stringify({ ...c, piece: `<the counter piece, program ${program}…>` })}`);
   const r = spawnSync(bin, [], { input: `${JSON.stringify(c)}\n`, encoding: 'utf8', maxBuffer: 1 << 28 });
   const reply = JSON.parse(r.stdout);
   return reply;
 }
-const short = (o) => JSON.stringify(o, (k, v) => (k === 'steps' || k === 'file' ? undefined : v));
+const short = (o) => `${JSON.stringify(o, (k, v) => (k === 'steps' || k === 'file' ? undefined : v))}   (steps and file paths left out)`;
 
 const dir = join(work, 'saves');
 mkdirSync(dir, { recursive: true });
 const p = piece(counter(false));
-say('# 1. Bake 20 steps with a saves folder: the game asks for slot 1 at the ends of steps 9 and 19; the process then exits.');
+const git = (...a) => spawnSync('git', a, { encoding: 'utf8' }).stdout.trim();
+const clean = git('status', '--porcelain', '--', 'crates', 'Cargo.lock', 'Cargo.toml', 'docs/evidence/534/manual-e2e.mjs') === '' ? 'no uncommitted changes to crates, Cargo files or this script' : 'UNCOMMITTED changes to crates, Cargo files or this script';
+say(`# Run at commit ${git('rev-parse', '--short=9', 'HEAD')} (${clean}), ${process.platform}/${process.arch}; deep-logic binary sha256 ${sha(readFileSync(bin))}`);
+say('# 1. Bake 20 steps with a saves folder: the game asks for slot 1 in steps 9 and 19, and a save is taken as its step ends, so at steps 10 and 20; the process then exits.');
 const baked = call({ call: 'bake', piece: p, track: [], steps: 20, saves_dir: dir });
-say(`saves: ${JSON.stringify(baked.saves.map((s) => ({ slot: s.slot, step: s.step, hash: s.hash, deep_hash: s.deep_hash, write_ns: s.write_ns })))}`);
-say(`checkpoints: ${JSON.stringify(baked.checkpoints)}`);
-say(`$ ls saves  →  ${readdirSync(dir).sort().join(' ')}`);
+say(`saves: ${JSON.stringify(baked.saves.map((s) => ({ slot: s.slot, step: s.step, hash: s.hash, deep_hash: s.deep_hash, write_ns: s.write_ns })))}   (only these keys of each save)`);
+say(`checkpoints: ${JSON.stringify(baked.checkpoints)}   (of the bake's reply, only saves and checkpoints are shown)`);
+say(`(node) files in saves  →  ${readdirSync(dir).sort().join(' ')}`);
 const newest = baked.saves[1];
 const header = readFileSync(join(dir, `${newest.hash}.save`)).subarray(0, readFileSync(join(dir, `${newest.hash}.save`)).indexOf(10)).toString();
-say(`$ head -1 saves/${newest.hash}.save  →  ${header}`);
+say(`(node) first line of saves/${newest.hash}.save  →  ${header}`);
+say('#    content is the sha256 of the hashes of the data assets the items name, one per line (params.assets; the program isn\'t one); this item names none, so it is the sha256 of nothing.');
 say('# The never-quit run, 30 steps:');
 const nq = call({ call: 'bake', piece: p, track: [], steps: 30 });
-say(`checkpoints: ${JSON.stringify(nq.checkpoints)}`);
+say(`checkpoints: ${JSON.stringify(nq.checkpoints)}   (only checkpoints of the reply)`);
 say('# 2. A new process opens slot 1 and plays on to step 30: its checkpoints should equal the never-quit run\'s from 20.');
 const o = call({ call: 'open_save', piece: p, saves_dir: dir, slot: 1, track: [], steps: 30 });
 say(short(o));
 // Steps and full-state hashes only: `ns` is each run's own timing.
 const hashes = (list) => JSON.stringify(list.map((c) => [c.step, c.deep_hash]));
 const same = hashes(o.checkpoints.game) === hashes(nq.checkpoints.game.filter((c) => c.step >= 20));
-say(`opened run's checkpoints equal the never-quit run's from step 20: ${same}`);
+say(`opened run's checkpoints equal the never-quit run's from step 20, by step and deep_hash (ns is each run's own timing): ${same}`);
 say('# 3. Cut the newest save short by one byte and open the slot again: it should be named damaged, and the save at step 10 opens.');
 const file = join(dir, `${newest.hash}.save`);
-truncateSync(file, readFileSync(file).length - 1);
+const before = readFileSync(file).length;
+truncateSync(file, before - 1);
+say(`(node) cut the last byte of saves/${newest.hash}.save  →  ${before} bytes, now ${readFileSync(file).length}`);
 const o2 = call({ call: 'open_save', piece: p, saves_dir: dir, slot: 1, track: [], steps: 15 });
 say(short(o2));
 say(`opened at the deep hash recorded at step 10: ${o2.deep_hash.game === baked.saves[0].deep_hash.game}`);
-say('# 4. Change the program (one nop) and open with no migration: refused, naming both program hashes.');
+say('# 4. Change the program (one nop) and open with no migration: refused, naming both layout hashes. While no program exports layout_at, a save\'s layout is the sha256 of the program bytes (the header\'s `program` field is the program after the rewrite).');
 const changed = piece(counter(true));
 const o3 = call({ call: 'open_save', piece: changed, saves_dir: dir, slot: 1, track: [], steps: 15 });
 say(short(o3));
-say(`old program ${sha(counter(false))}, new program ${sha(counter(true))}`);
+say(`sha256 of the old program bytes ${sha(counter(false))}, of the new ${sha(counter(true))}`);
