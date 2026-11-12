@@ -638,11 +638,12 @@ pub fn open(
     let deep = w.deep_hashes();
     let mut rec = Record::default();
     for (item, l) in piece.items.iter().zip(w.lives.iter_mut()) {
-        rec.checkpoint(&item.id, k, l.deep_hash());
+        let deep = l.deep_hash();
+        rec.checkpoint(&item.id, k, deep, &l.arrays);
         l.checked = Some(k);
     }
     for m in &piece.machine {
-        rec.checkpoint(m, k, w.seen_hash());
+        rec.checkpoint(m, k, w.seen_hash(), &[]);
     }
     let at_open: serde_json::Map<String, Value> = piece
         .items
