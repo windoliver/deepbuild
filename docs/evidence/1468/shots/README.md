@@ -14,7 +14,7 @@ Each picture shows a terminal session that `script` recorded byte for byte while
 - **Base:** main `1abbcf086`, the PR's merge base, in a separate clone.
   - The suite needs `tests/acceptance/1468/` and its `[[test]]` entry in `crates/deep-motion/Cargo.toml`. They are the only source changes there, and each base picture's `git status` lists them.
   - `target` is a link to that clone's build folder. Each tree runs its own build: the test binary has the same name in both, but they are different files in different folders.
-- **Fix:** commit `7f35ecd72`, as printed, with a clean `git status`. Every later commit changes only `docs/evidence/1468/`: these pictures, their recordings and captions, and one comment in `e2e.py`.
+- **Fix:** commit `7f35ecd72`, as printed, with a clean `git status`. Later commits change `docs/evidence/1468/` (these pictures, their recordings and captions, and one comment in `e2e.py`). One also moves the two parsers' unit tests, unchanged but for indentation and one `include_str!` path, into `expr/tests.rs` and `document/packs/tests.rs`, and lowers their files' size ceilings; the code under test is the same.
 
 | Picture | What it shows |
 |---|---|
