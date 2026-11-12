@@ -2,6 +2,7 @@ import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import fc from 'fast-check';
+import { open as fsOpen } from 'node:fs/promises';
 import { afterEach, describe, expect, it } from 'vitest';
 import { openEvidenceStore, scrubText, type PutRequest } from '../src/index.js';
 
@@ -661,5 +662,43 @@ describe('sync: a file counts as synced only once it and its folder are (#1410)'
     try {
       await expect(store.sync([sha]), 'the replaced file needs its sync, which this folder refuses').rejects.toThrow();
     } finally { chmodSync(folderOf(root, sha), 0o700); }
+  });
+
+  it('a file replaced while its sync runs is synced again before the sync returns', async () => {
+    const { store, writer, root } = await open();
+    const request = { kind: 'asset.pack', source: 'fixture/samples@1.0.0', redaction: 'complete', license: { name: 'CC0-1.0', allows: ['export'] } } as const;
+    const again = async () => {
+      const input = join(root, 'input.bin');
+      writeFileSync(input, 'the same bytes');
+      const result = await writer.file({ file: input, ...request });
+      if (result.status !== 'stored') throw Error(result.reason);
+      return result.evidence.sha256;
+    };
+    const sha = await again();
+    const handle = await fsOpen(root, 'r');
+    const proto = Object.getPrototypeOf(handle) as { sync(): Promise<void> };
+    await handle.close();
+    const real = proto.sync;
+    let replaced = false;
+    proto.sync = async function (this: unknown) {
+      if (!replaced) { replaced = true; await again(); }
+      return real.call(this);
+    };
+    try { await store.sync([sha]); } finally { proto.sync = real; }
+    chmodSync(folderOf(root, sha), 0o300);
+    try {
+      // A sync that returned with the replacement unsynced would have to sync it now, and this folder refuses.
+      await store.sync([sha]);
+    } finally { chmodSync(folderOf(root, sha), 0o700); }
+  });
+
+  it('a named file that cannot be looked at refuses the sync; only one that is gone has nothing to sync', async () => {
+    const { store, put, root } = await open();
+    const sha = await put('a log');
+    chmodSync(folderOf(root, sha), 0o000);
+    try {
+      await expect(store.sync([sha])).rejects.toThrow();
+    } finally { chmodSync(folderOf(root, sha), 0o700); }
+    await store.sync(['0'.repeat(64)]);
   });
 });

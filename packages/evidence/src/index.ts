@@ -389,16 +389,24 @@ export async function openEvidenceStore(options: EvidenceStoreOptions = {}): Pro
     // write, or wrote before a restart, is synced too: nothing says its writer did. A rename lasts once its folder is
     // synced, and a folder made since the last cut once the root is.
     async sync(sha256s) {
-      const unsynced = async (path: string) => stat(path, { bigint: true }).then((s) => (synced.get(path) === stampOf(s) ? [] : [path]), () => undefined);
+      // A file that is gone has nothing to sync, and reads as missing; one that can't be looked at refuses the sync.
+      const unsynced = async (path: string) => stat(path, { bigint: true }).then((s) => (synced.get(path) === stampOf(s) ? [] : [path]), (error: NodeJS.ErrnoException) => {
+        if (error.code !== 'ENOENT') throw error;
+        return undefined;
+      });
       const where = async (sha: string) => (!HASH.test(sha) ? [] : await unsynced(fileOf(sha)) ?? await unsynced(packedOf(sha)) ?? []);
-      const files = (await Promise.all([...new Set(sha256s)].map(where))).flat();
-      const stamps = await Promise.all(files.map(syncOne));
-      const folders = [...new Set(files.map((path) => dirname(path)))];
-      // The root holds the name of each folder this process hasn't synced yet, and its own parent the root's, once.
-      const above = folders.some((folder) => !synced.has(folder)) ? [root, ...(synced.has(dirname(root)) ? [] : [dirname(root)])] : [];
-      await Promise.all([...folders, ...above].map(syncOne));
-      for (const path of [...folders, ...above]) synced.set(path, '');
-      for (const [i, path] of files.entries()) synced.set(path, stamps[i]!);
+      // Again while any is unsynced: a file replaced during the pass is a new file its folder's sync made last.
+      for (;;) {
+        const files = (await Promise.all([...new Set(sha256s)].map(where))).flat();
+        if (!files.length) return;
+        const stamps = await Promise.all(files.map(syncOne));
+        const folders = [...new Set(files.map((path) => dirname(path)))];
+        // The root holds the name of each folder this process hasn't synced yet, and its own parent the root's, once.
+        const above = folders.some((folder) => !synced.has(folder)) ? [root, ...(synced.has(dirname(root)) ? [] : [dirname(root)])] : [];
+        await Promise.all([...folders, ...above].map(syncOne));
+        for (const path of [...folders, ...above]) synced.set(path, '');
+        for (const [i, path] of files.entries()) synced.set(path, stamps[i]!);
+      }
     },
 
     async send({ files, via, destination }, boundary) {

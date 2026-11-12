@@ -1118,8 +1118,11 @@ describe('a commit that waited behind an evidence sync is judged by the log as i
     const stop = r.append(hook(S), { ...event('agent.stop', T0 + 100, seqAt(T0 + 100), { turn: 1 }), subject: `session:${S}` });
     const resume = event('user.ask', T0 + 200, seqAt(T0 + 200), { msg: 2 });
     const resumed = r.append(hook(S), resume);
+    // The stop and the resume are waiting behind the verdict's sync before it is let go.
+    await new Promise((resolve) => setImmediate(resolve));
     release();
-    await Promise.all([verdict, stop, resumed]);
+    const order = (await Promise.all([verdict, stop, resumed])).map((appended) => appended.log_pos);
+    expect(order, 'the log keeps arrival order').toEqual([...order].sort((x, y) => x - y));
     storage.cutPower();
     r = await openRecord({ path: 'record.db', now: () => T0 + 300, storage });
     open.push(r);
