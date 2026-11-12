@@ -12,11 +12,11 @@
 // the delivered file. Films: the fixture film (helpers.ts `filmDoc`, 160 × 90); AC4's under a look whose finish is
 // grain at 25%, beside the same film without grain. Planted: `encoder_starves_bitrate` (the encode tool asked for
 // 64 kb/s whatever the film, its quality floor never raised), `video_writer_drops_frame`, `muxer_timescale_600`,
-// `muxer_timescale_1000`.
+// `muxer_timescale_1000`. AC4's two deliveries are also decoded by FFmpeg, to see the grain in the delivered frames.
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
-  AC, DOC, FULL, H264_AAC, TIMEOUT, arr, assetOf, decodedOf, exportCall, failsNaming, fidelityOf, filmDoc, filmRun, framesNamed, isObject, issueLines,
+  AC, DOC, FULL, H264_AAC, TIMEOUT, arr, assetOf, decodedOf, exportCall, failsNaming, ffLuma, fidelityOf, filmDoc, filmRun, framesNamed, isObject, issueLines,
   issuesOf, lookOf, mediaDecode, mediaImport, meetsFloor, none, obj, present, presented, rat, ratEq, receiptOf, runShow, scenario, show, showRat,
   useShow, useTemp, type JsonObject, type Planted,
 } from './helpers.ts';
@@ -53,6 +53,22 @@ function qualityFloor(reply: JsonObject, what: string): number {
 const GRAIN = [{ grain: { amount: '25%', size: 1, tone: 'flat', rate: 24 } }];
 const grainFilm = (evidence: string): JsonObject => filmDoc(evidence, { frames: 48, look: lookOf('grain-157', {}, GRAIN) });
 
+/** A delivery's ground as FFmpeg decodes it: the standard deviation of the 8-bit luma codes over the columns no bar
+ * reaches in 48 frames (x 128 to 159, every row), pooled over every decoded frame, so grain counts whether its pattern
+ * varies within a frame or only from one frame to the next. */
+function groundSpread(path: string): { frames: number; sd: number } {
+  const planes = ffLuma(path, 160, 90);
+  let n = 0; let s = 0; let s2 = 0;
+  for (const y of planes) for (let r = 0; r < 90; r++) for (let x = 128; x < 160; x++) { const v = y[r * 160 + x]!; n++; s += v; s2 += v * v; }
+  const mean = s / n;
+  return { frames: planes.length, sd: Math.sqrt(Math.max(0, s2 / n - mean * mean)) };
+}
+/** How far the grain film's ground spread must exceed the grainless twin's, in 8-bit luma codes. The 40 dB floor lets
+ * an encode move a frame's luma by at most 255 × 10^(−40/20) = 2.55 codes RMS, so 5 is twice what the codec alone can
+ * put on a flat ground. Grain at 25% on the ground (#e8e8e8, linear 0.81) spreads it by about 22 codes if 25% is the
+ * deviation of linear luminance, about 13 if it is a uniform ±25% peak, and about 7 if ±25% is a Gaussian's 3σ. */
+const GRAIN_SPREAD = 5;
+
 describe(`${AC[4]} a grain look raises the encoder's quality floor, and a starved encode of it fails export.fidelity`, () => {
   it(`${AC[4]} the grain film is delivered with every frame at or over the 40 dB floor, its encoder's quality floor raised above the same film's without grain`, () => {
     const evidence = temp(); const dir = temp();
@@ -66,6 +82,8 @@ describe(`${AC[4]} a grain look raises the encoder's quality floor, and a starve
     expect(fidelityOf(receiptOf(grain!, 'the grain film').raw, 'the grain film').floor, 'the grain film is held to the standard floor, 40 dB').toBe(40);
     const [g, b] = [qualityFloor(grain!, 'the grain film'), qualityFloor(bare!, 'the film without grain')];
     expect(g > b, `the grain look raises the encoder's quality floor: ${g} with grain, ${b} without`).toBe(true);
+    const [gs, bs] = [groundSpread(join(dir, 'grain.mp4')), groundSpread(join(dir, 'bare.mp4'))];
+    expect(gs.sd - bs.sd >= GRAIN_SPREAD, `the grain film's delivered frames carry its grain: the ground's luma spread in FFmpeg's decode (x 128–159, every row and frame) is ${gs.sd.toFixed(2)} codes over ${gs.frames} frames with grain and ${bs.sd.toFixed(2)} over ${bs.frames} without, not ${GRAIN_SPREAD} or more apart`).toBe(true);
   }, TIMEOUT);
 
   it(`${AC[4]} a planted starved-bitrate encode of the grain film fails export.fidelity, naming its worst frames`, () => {

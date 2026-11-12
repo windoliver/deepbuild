@@ -44,7 +44,7 @@ export CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0
 node node_modules/vitest/vitest.mjs run --root tests/acceptance/157 blank.test.ts --testTimeout=600000      # AC1, AC27
 node node_modules/vitest/vitest.mjs run --root tests/acceptance/157 finite.test.ts --testTimeout=600000     # AC2, AC26 (full,test-export-guards)
 node node_modules/vitest/vitest.mjs run --root tests/acceptance/157 color.test.ts --testTimeout=600000      # AC3, AC13 (FFmpeg)
-node node_modules/vitest/vitest.mjs run --root tests/acceptance/157 fidelity.test.ts --testTimeout=600000   # AC4, AC18, AC20, AC21
+node node_modules/vitest/vitest.mjs run --root tests/acceptance/157 fidelity.test.ts --testTimeout=600000   # AC4 (FFmpeg), AC18, AC20, AC21
 node node_modules/vitest/vitest.mjs run --root tests/acceptance/157 loudness.test.ts --testTimeout=600000   # AC5, AC11
 node node_modules/vitest/vitest.mjs run --root tests/acceptance/157 licences.test.ts --testTimeout=600000   # AC6
 node node_modules/vitest/vitest.mjs run --root tests/acceptance/157 lease.test.ts --testTimeout=600000      # AC7
@@ -96,7 +96,7 @@ fail with a line starting `BLOCKED:` or `INCONCLUSIVE:` (#501's `blocked()` and 
 | 1 | `#157.3b13ad66` | blank.test.ts | 1: 160 × 90, 24 fps, 2 s, frames 24–27 black: FAILs film.blank naming exactly 24–27, nothing written; with `except: [[24Δ, 28Δ]]` delivered |
 | 2 | `#157.e50d5c52` | finite.test.ts | 1: the clean film's receipt has `nonfinite: []` and `adapter {name, driver, backend, software: false}`; `test.nonfinite@1` at frame 30 FAILs frames.finite naming frame 30 and item `nan`; `test.device_loss@1` at frame 100 stops with `device_lost` naming frame 100, no file |
 | 3 | `#157.aad32dbe` | color.test.ts | 2: tags nclx 1-1-1 and tv on the receipt's `color_probe` (`max_error` ≤ 2), in the MP4's `colr` and by FFmpeg; planted `encode_full_range_bt601` fails `export.color` |
-| 4 | `#157.6cdc16ff` | fidelity.test.ts | 2: the grain film delivered at the 40 dB floor, `encoder.quality_floor` above the grainless twin's; planted `encoder_starves_bitrate` fails export.fidelity naming its worst frames |
+| 4 | `#157.6cdc16ff` | fidelity.test.ts | 2: the grain film delivered at the 40 dB floor, `encoder.quality_floor` above the grainless twin's, its ground's luma spread in FFmpeg's decode at least 5 codes over the twin's; planted `encoder_starves_bitrate` fails export.fidelity naming its worst frames |
 | 5 | `#157.77edcbb0` | loudness.test.ts | 2: streaming −14 ± 1 LU, true peak ≤ −1.0 (−2.0 above −14) on the receipt, its `delivery` and the bake of the decoded MP4; planted `limiter_without_codec_margin` FAILs with `true_peak`, the delivery's reading over −1 and the target −1 |
 | 6 | `#157.155f2628` | licences.test.ts | 2: CC BY library credited through a job output → `licenses`/`credits` name it; uncredited → FAIL naming `piano_lib`; a narrator of unknown licence → BLOCKED with exactly one ask naming the narrator, nothing written |
 | 7 | `#157.96eb79fd` | lease.test.ts | 2: two `deep-show run` exports started together from one session, and from two: one GPU, the leases don't overlap |
@@ -303,9 +303,9 @@ All made at test time; nothing but the README, the helpers and the tests is comm
 
 None of these is ever a pass.
 
-- AC3, AC13, AC17 (and the Oracle lane): BLOCKED without `ffmpeg` and `ffprobe` (PATH, `/opt/homebrew/bin`,
-  `/usr/local/bin`, or `DEEP_FFMPEG` and `DEEP_FFPROBE`), with the unblock line `brew install ffmpeg, or name the
-  binaries in DEEP_FFMPEG and DEEP_FFPROBE`.
+- AC3, AC4's first test, AC13, AC17 (and the Oracle lane): BLOCKED without `ffmpeg` and `ffprobe` (PATH,
+  `/opt/homebrew/bin`, `/usr/local/bin`, or `DEEP_FFMPEG` and `DEEP_FFPROBE`), with the unblock line `brew install
+  ffmpeg, or name the binaries in DEEP_FFMPEG and DEEP_FFPROBE`.
 - AC25: BLOCKED off macOS or when `hdiutil` can't make or attach an image; the 10 GB legs need that much free host disk
   for the planted run, which fills the sparse bundle.
 - AC14: INCONCLUSIVE off a reference Mac (Mac15,7, Mac15,12, Mac17,10 by `scripts/benchmark.mjs` `fingerprint`) or not
@@ -330,7 +330,11 @@ note?}`. This job writes no TASTE.json and makes no picture.
 - **"Fails with both numbers"** (AC5): the delivery's true-peak reading and the target it misses. The fixture is made to
   overshoot under the plant; the criterion's −0.7 is a reading, held here only as "over −1.0 and under 0".
 - **"The raised quality floor passes it"** (AC4): the grain film delivered, every frame at its floor, and its
-  `encoder.quality_floor` above the grainless twin's.
+  `encoder.quality_floor` above the grainless twin's; and "a grain look" is one whose delivered frames carry its grain:
+  in FFmpeg's decode of each delivery, the ground's luma (x 128–159, every row, pooled over all 48 frames, so a grain
+  that changes only from frame to frame counts) spreads at least 5 codes more with grain than without. 5 is twice the
+  2.55 codes RMS the 40 dB floor lets an encode add; grain at 25% on the ground spreads it by about 7 to 22 codes,
+  depending on whether 25% is a Gaussian's 3σ peak, a uniform peak or the deviation of linear luminance.
 - **"Naming its worst frames"** (AC4): the issue's `worst_1pct` frames (or `frames`).
 - **"From one session or two"** (AC7): two `deep-show run` processes started at the same moment whose export calls name
   the same session, or two; "the lease events" are each receipt's lease `acquired` and `released`.
