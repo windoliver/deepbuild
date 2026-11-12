@@ -119,7 +119,7 @@ wording is the issue's (its Acceptance criteria), not repeated here.
   machine is BLOCKED (ac05 in `acceptance-linux-9a02471b6.txt`): its
   second machine is a linux/amd64 container, and its unblock ask has two steps: the image, `docker pull --platform
   linux/amd64 rust:1.99.1-slim-bookworm`, which the suite doesn't pull; then amd64 emulation (binfmt), which this
-  host doesn't have registered (`/proc/sys/fs/binfmt_misc` lists only python3.12), or the reference Mac's Docker. (helpers.ts's
+  host doesn't have registered (`/proc/sys/fs/binfmt_misc` lists only python3.12), or, after the same pull, the reference Mac's Docker. (helpers.ts's
   message also offers an x86_64 host, but ac05 then fails its check that the two machines differ in CPU architecture.) So 5 is not proven.
 - 6: INCONCLUSIVE with one approval ask from the agent's own pack, PASS from an installed one (lines 8, 9), and ac06's test, which holds both,
   passes (`acceptance-linux-9a02471b6.txt`).
@@ -146,25 +146,25 @@ wording is the issue's (its Acceptance criteria), not repeated here.
   planted fault, and "it" is the linked upstream test: so here only checks upstream's live CHECKs hold can count.
   No planted twin is shown failing one. `linker_adds_linking_section` fails only function-imports' no-`linking` check,
   which is ours (upstream's CHECKs read no custom section's name but `name`); its upstream-held "imports nothing"
-  check fails only on the unlinked input object, which isn't our output. By round 40's report (rust-objcopy 1.99.1,
-  not saved here; obj2yaml itself not installed), the twin's `linking` section is empty and LLVM's object reader, the
-  one obj2yaml uses, aborts on it, so upstream's RUN line would likely reject the twin's output; whether that counts as
-  upstream-held is not settled here. `linker_links_in_listing_order`'s output is aligned and consistent in its own
-  order (beta@1 at 8,200, alpha@1 at 8,208, v = 65,033, by validators' probes, not saved here), so it breaks only our
-  rule that link order is dependency order with ties by name; data-layout's three failing checks are fixed addresses
-  that hold that order rule along with alignment. So the oracle lane is INCONCLUSIVE for criterion 1: its tests pass
-  and can fail, but no planted fault is shown failing an upstream-held check. Its one ask, to the owner: does the
-  function-imports twin's rejection by LLVM's object reader count (then run obj2yaml on the twin's output and save it)?
-  If not, the unblock is a wrong program an upstream-held check rejects, such as a linker that misaligns a segment: a
-  new planted twin (which needs the blind job to redraft the parent README's planted table) or a mutant of the linker's
-  layout lines that data-layout kills. (A linker that leaves an import can't serve: the subset check on the merged
-  program refuses it before any oracle check runs.)
+  check fails only on the unlinked input object, which isn't our output. LLVM's object reader, which obj2yaml uses in
+  upstream's RUN line, accepts our honest merged program and aborts on the twin's, whose `linking` section is empty
+  (`oracle-reader-function-imports.txt`: rust-objcopy 1.99.1, LLVM 23.1.1, exit 0 against exit 134 in
+  `parseLinkingSection`; obj2yaml itself isn't installed). Upstream's whole RUN line would reject the honest program
+  too, by round 41's reading (it has no name section, and its functions aren't `[ 0, 1 ]`), so only the reader step
+  tells the two apart.
+  `linker_links_in_listing_order`'s output is aligned and consistent in its own order (beta@1 at 8,200, alpha@1 at
+  8,208, v = 65,033, by validators' probes, not saved here), so it breaks only our rule that link order is dependency
+  order with ties by name; it fails data-layout's two fixed-address checks, which hold that order rule along with
+  alignment, and its zero-fill check (the stray byte at 8,205), which is ours. So the oracle lane is INCONCLUSIVE for
+  criterion 1: its tests pass and can fail, but no planted fault is shown failing a CHECK line upstream holds. Its one
+  ask, to the owner: does the reader step alone, which accepts the honest output and rejects the twin's, count as
+  line 27's rejection with a planted fault?
   undefined.s has no planted twin, so the lane is INCONCLUSIVE for criterion 3 too. The base (`BASE-FAILURE.txt`, all
-  6 fail) fails it before its import check. The design's "Wrong programs" accepts a mutant of the lines a change adds
-  (`docs/technical-design.md`, Wrong programs), and link.rs line 404 is one (link.rs is new in 85169f887), but the two
-  mutants here were made by hand in a scratch clone and saved only as output, not run by the trace lane's mutation
-  step. Its one ask: run the trace lane's mutation step (cargo-mutants on `link.rs`) against the tagged
-  `undefined.test.ts` and save the output. One that names no import fails upstream's CHECK (`oracle-mutants/names-no-import.txt`). Upstream's CHECK-NOT (`baz`, a symbol only `--undefined` names) isn't held:
+  6 fail) fails it before its import check. The design's "Wrong programs" accepts the twin a criterion names or a
+  mutant, and criterion 3 names no twin; two mutants of `link.rs` line 404 were made by hand in a scratch clone and
+  their runs saved. The trace lane can't make this proof today: its Rust mutation step (`scripts/proof-runs.mjs`) runs
+  cargo-mutants with cargo's own tests, never a vitest file, and says its kills prove no criterion. Its one ask, to
+  the owner: do the two saved hand-made mutant runs count as line 27's planted fault? One that names no import fails upstream's CHECK (`oracle-mutants/names-no-import.txt`). Upstream's CHECK-NOT (`baz`, a symbol only `--undefined` names) isn't held:
   our linker has no `--undefined`. In its place the test checks something of our own, that no refusal names an import
   a listed library defines, and the mutant that names every import of the program fails it
   (`oracle-mutants/names-every-import.txt`). The blind job's first draft called that check the CHECK-NOT and put
@@ -404,7 +404,7 @@ raw files, `gen.test.ts`, the code and the issue. It also ran its own BFS over t
   parts the replies don't show; "line N" now says it maps to the saved `replies.jsonl`; where the replies ran and that
   07a–07d come from the app's pane are marked as the session's report; the README citation is lines 112–113; and the
   `imports.mjs` step says to run it from `docs/evidence/190`.
-- **Round 11** found no wrong values; fixed here: the oracle lane is now called BLOCKED with its unblock ask (P2);
+- **Round 11** found no wrong values; fixed here: the oracle lane is now called BLOCKED with its unblock ask (P2; superseded by round 30);
   criterion 2 cites ac02 and screenshot 03 for the 8-move corner-cutter; and the 11-09 base names why it isn't in
   this branch's history.
 - **Round 12** found no wrong values and one low gap, fixed here: `links::reach` came in 0ed3de856, not 597d83692.
@@ -461,7 +461,7 @@ raw files, `gen.test.ts`, the code and the issue. It also ran its own BFS over t
   oracle suite and it passes (above; its verdict is INCONCLUSIVE since round 39). Its three low gaps are fixed too: criteria 1, 3 and 8 are stated as the issue
   states them, and the item hash after step 0 is described as `step_hash` computes it.
 - **Round 31** reproduced the oracle run (6 passed) and found one P2 and two low gaps, fixed here: undefined.s had
-  no wrong program reaching its import check (now two saved mutant runs); the README's rust-lld run is marked as a
+  no wrong program reaching its import check (now two saved mutant runs; not sufficient alone, see round 41); the README's rust-lld run is marked as a
   report; and only two test files show their own wrong program.
 - **Round 32** found no wrong values and one P2 and three low gaps, fixed here: the oracle suite called its own
   defined-import check undefined.s's CHECK-NOT (sent back to the blind job, which redrafted its comments and README);
@@ -517,3 +517,10 @@ raw files, `gen.test.ts`, the code and the issue. It also ran its own BFS over t
   the design's mutant route is cited correctly; the two asks replace the separate "looser reading" aside; rounds 30
   and 37's verdicts are marked superseded; and three oracle-file wordings went back to the blind job, whose redraft
   (8552bc983) changes comments and docs only.
+- **Round 41** found no wrong values (oracle rerun 6 passed, code identical after stripping comments, twins probed, all
+  screenshots and `e2e-raw` checked; it reproduced round 40's reader result) and two P2s and four low gaps, fixed here:
+  criterion 3's ask named a trace-lane step that runs no vitest test, so both asks now go to the owner as one question
+  each; the reader result is now run and saved (`oracle-reader-function-imports.txt`), on the honest program as well
+  as the twin's; data-layout's third failing check is named as the zero-fill check; 5's Mac route names the same
+  pull; rounds 11 and 31 are marked superseded; and two oracle-file wordings went back to the blind job, whose
+  redraft (06f5950da) changes comments and docs only and cites the saved reader result.
