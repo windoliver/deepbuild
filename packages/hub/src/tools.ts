@@ -81,6 +81,8 @@ const SCHEMAS: Readonly<Record<string, Schema>> = {
     size: maybe({ type: 'array', items: { type: 'integer' }, description: 'The snapshot\'s width and height in px; null for the document\'s size.' }),
     include: maybe({ type: 'array', items: { type: 'string', enum: ['issues', 'audit', 'timing', 'pixels'] }, description: 'What the reply carries; pixels asks for a snapshot. null for issues.' }),
     rev: maybe({ type: 'integer', description: 'With no document or patch, render back this revision of the document; null for the current one.' }),
+    camera: maybe(str('With no document or patch, render a 3D revision back through this camera@1 item, by its ID; null for its own camera.')),
+    probes: maybe({ type: 'array', items: { type: 'array', items: INT }, description: 'With no document or patch, up to 64 pixels [x, y] of a 3D snapshot, x right and y down; the reply\'s hits says what lies under each, nearest first, at most 8 a pixel. Display only, never evidence. null for none.' }),
   }),
   deep_drive: object({
     call: { type: 'string', enum: ['launch', 'act', 'open', 'notification', 'wait_for', 'see', 'probe', 'screenshot', 'record', 'expect', 'close'] },

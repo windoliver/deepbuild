@@ -66,6 +66,7 @@ import { deepHook, forgeOf, projectIdOf, repoOf, rootOf, type Root } from './pat
 import { inviteText, OWNER, People, scopeOf } from './people.js';
 import { identityAt } from './identity.js';
 import { MEMORY_TRANSCRIPTS, openWikiBuild, projectOf, type WikiBuilt } from './wiki-build.js';
+import { reported } from './setup-steps.js';
 import { Teardowns } from './teardowns.js';
 import { Agents, hookedAgents, type Sync } from './agents.js';
 import { hookItems } from './doctor.js';
@@ -6117,6 +6118,8 @@ export class Core {
       case 'lease.exited': return this.heavy.exited(params).catch((e: Error) => { throw new Refused(refusal('type', '/params', e.message, method)); });
       case 'env.up': return this.envUp(params, context);
       case 'env.down': return this.envDown(params, context);
+      // The steps setup took (#1100), each a `setup.step` event, only as its one list names them.
+      case 'setup.report': { let steps; try { steps = reported(params); } catch (e) { throw new Refused(refusal('type', '/params/steps', (e as Error).message, method)); } for (const data of steps) await this.appendCore('setup.step', data); return {}; }
       case 'wiki.build': {
         const built = await this.wikiBuild.build();
         await syncRejected(this.raw, this.root.dir);
@@ -7472,9 +7475,8 @@ export class Core {
   /** The same first-use gate for a shown document and its exports, for every asset-reading kind. */
   private async preparePackAssets(document: Obj): Promise<Obj | undefined> {
     if (!this.libraries) return { status: 'BLOCKED', outcome: 'refused', cause: 'The asset host is not ready.', snapshots: [] };
-    for (const pack of Array.isArray(document.packs) ? document.packs : []) if (typeof pack !== 'string' || !(await this.libraries.packs.has(pack, this.canvas()))) {
-      return { status: 'BLOCKED', outcome: 'refused', cause: `pack_missing: ${String(pack)}`, snapshots: [] };
-    }
+    // #1958: a pack version the store lacks doesn't refuse the document; the canvas core opens it, its instances kept and skipped.
+    await this.libraries.packs.shipped(this.canvas());
     for (const { pack, asset } of this.libraries.packs.used(document)) {
       const fetched = await this.libraries.fetchPack(pack, asset.path);
       if (fetched.status !== 'fetched') return { ...fetched, outcome: 'refused', code: 'asset_blocked', issues: [{ severity: 'error', code: 'asset.blocked', ids: [asset.path], message: `BLOCKED: ${JSON.stringify(fetched)}` }], snapshots: [] };

@@ -295,6 +295,12 @@
     "called_by": "deep setup"
   },
   {
+    "method": "setup.report",
+    "since": "R1",
+    "stability": "stable",
+    "called_by": "deep setup"
+  },
+  {
     "method": "acceptance.start",
     "since": "R1",
     "stability": "preview",

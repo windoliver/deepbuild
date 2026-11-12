@@ -166,6 +166,7 @@ Every table below uses these words and no others for these ideas. Where a refere
 | `at`, `t` | `at` is an item's transform. An instant is `t`; an interval is `start` and `span`. | `at` for a time | One field name, one meaning. |
 | relation | An item placed against another item's or the frame's box by `at.place`, `at.align` or `at.fit`, solved every frame from evaluated bounds (Item and kind: relations) | constraint, anchor, layout (for this) | A constraint is any entry of the `constraint@1` registry, and a relation is the marks2d module's kind of one, written under `at`, an anchor is a named point, and layout alone is a frame's auto layout or a graph's. |
 | event | A record event in the kernel's log | an entry in a baked list; a moment in a film | One meaning. |
+| hook | A command an agent runs at set points of its work, which tells DeepBuild what the agent is doing | handler, callback, trigger | The agents' own word, as the tech design's hook protocol uses it. A screen that says it, such as first launch's (#1100), says this beside it. |
 | occurrence list | A baked, sorted list of occurrences: contacts, breaks, words, beats, onsets | event list, events | Event means a record event. |
 | moment | A checked instant in a film, such as a press or a reveal | event frame | Same reason. |
 | proof | What a requirement's line rests on: an agent's statement, a static check, a test run, a real journey or your decision | layer | Layer means a writer layer. |

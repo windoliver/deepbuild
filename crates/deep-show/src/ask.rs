@@ -398,7 +398,8 @@ impl Hub<'_> {
     }
 
     /// `render_back`: a session's render-back of a document at `t` as of revision `rev`, any
-    /// revision it has had, as a PNG in the evidence store.
+    /// revision it has had, as a PNG in the evidence store; a 3D one on the GPU, through a
+    /// camera and with pixel probes (#1401).
     pub fn render_back(
         &mut self,
         session: &str,
@@ -406,6 +407,7 @@ impl Hub<'_> {
         t: i64,
         rev: u64,
         size: Option<[u16; 2]>,
+        probes: &crate::probe::Probes,
     ) -> Value {
         if !self.scenario.sessions.contains_key(session) {
             return refused("no_session");
@@ -413,7 +415,20 @@ impl Hub<'_> {
         let Some(document) = self.revision(doc, rev) else {
             return refused("unknown_revision");
         };
+        // A 3D revision is evaluated whole: its materials, cameras and meshes are items too.
+        if crate::probe::draws_3d(&document) {
+            return self.render_back_3d(session, rev, &document, t, size, probes);
+        }
         let shown = crate::shared::drawable(&document);
+        // A camera and probes ask about a 3D frame; a 2D one has neither.
+        for (asked, path) in [
+            (probes.camera.is_some(), "camera"),
+            (!probes.at.is_empty(), "probes"),
+        ] {
+            if asked {
+                return json!({"code": "out_of_range", "path": path});
+            }
+        }
         match self.snapshot(&shown, t, size) {
             Ok(snap) => json!({
                 "rev": rev, "t": t, "outcome": "presented", "snapshots": [snap],

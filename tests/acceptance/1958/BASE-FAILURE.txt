@@ -1,0 +1,51 @@
+Base commit: 145315636 ("Merge pull request #2297 from windoliver/worktree-github-issue-2201-c7d044")
+Run: CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 node node_modules/vitest/vitest.mjs run --root tests/acceptance/1958 --no-file-parallelism --testTimeout=600000
+     (vitest 5.0.5; deep-show built with --features r1 in this checkout's target/, warm from a cold build of the same command)
+Result: Test Files 3 failed (3); Tests 6 failed (6); exit 1. Duration 10.73 s.
+Type check: node node_modules/typescript/bin/tsc -p tests/acceptance/1958/tsconfig.json, exit 0.
+Date: 2026-11-11  darwin-arm64 (not a reference Mac; the budgets' timings would read INCONCLUSIVE here once their
+structure passes, and the merge base is never built on this run, since each budgets test fails first)
+
+Why the base fails: it has no `uninstall_pack` call and none of this suite's planted names, so a scenario holding either
+answers {"ok": false, "code": "bad_input"} (crates/deep-show/src/main.rs, `call` and the `planted` match); a document
+naming a pack version the store lacks is refused whole with a `pack_missing` error (crates/deep-canvas/src/document/
+packs.rs, `resolve`); and `timing` holds only `check_ms` and `kind_rules_ms` (crates/deep-show/src/packs.rs, `reply`).
+
+retired.test.ts
+  × #1958.c08c09f6 uninstalling shelf@1.2.0 while a saved document names it keeps its bytes …
+      at "deep-show run refused the scenario": {"ok":false,"code":"bad_input"} (no uninstall_pack call)
+  × #1958.c08c09f6 a planted store sweep that deletes the version fails the store's fixture …
+      at "deep-show run refused the scenario": {"ok":false,"code":"bad_input"} (no uninstall_pack call, and
+      store_sweep_deletes_named is no planted name)
+missing.test.ts
+  × #1958.4879b3fb a document from another machine naming shelf@9.9.9 opens …
+      at "the open of the document naming acme/shelf@9.9.9": "the document from another machine naming
+      acme/shelf@9.9.9 is refused, not opened": the one issue is pack_missing, severity error, ids b1 b2 b3, actual
+      {pack: acme/shelf, version: 9.9.9}, "the document is refused whole" (no snapshot; b1–b3 raise unknown_kind notices)
+  × #1958.4879b3fb a planted loader that draws the missing version's instances with the installed shelf@1.2.0 fails …
+      at "deep-show run refused the scenario": {"ok":false,"code":"bad_input"} (loader_draws_missing_with_installed is
+      no planted name)
+budgets.test.ts
+  × #1958.26ef0787 budgets on the reference Mac against the merge base …
+      at "timing.migrate_ms (applying the data migration at load) is a finite number, got undefined": the 1,000
+      shelf.bookcase@1 items were presented under acme/shelf@2.0.0 with 1,000 expansions of shelf.bookcase@2, but the
+      reply's timing has no migrate_ms
+  × #1958.26ef0787 nothing runs per frame …
+      at "deep-show run refused the scenario": {"ok":false,"code":"bad_input"} (no uninstall_pack call), before the merge
+      base is built
+
+Fixture check, outside the suite (scratch scenarios on the same base binary, with the suite's helpers):
+- The criterion 1 flow without `uninstall_pack`: the stored room naming acme/shelf@1.2.0 reads at revision 0 with b1–b3
+  expanded through acme/shelf@1.2.0 (draws b1.boards.0–2, b1.sides.0–1, b2.boards.0–3, b2.sides.0–1, b3.boards.0–1,
+  b3.sides.0–1, r01–r12); drawn twice from your shell it is presented, check PASS, the same snapshot sha256 both times;
+  deep_kinds op list's packs row is {pack: acme/shelf, version: 1.2.0, origin: pack, recipes: [shelf.bookcase@2]} with
+  no state; your patch creating a fourth bookcase applies while the version is installed.
+- The criterion 2 flow: the 12 other items alone are presented with one snapshot; the check in the working agent's
+  claim of the room naming acme/shelf@9.9.9 is refused and BLOCKED, its blocked row {code: unknown_kind, kind:
+  shelf.bookcase@2, ids: [b1, b2, b3]} naming no pack; the stored room opens at revision 0 (with the pack_missing error),
+  the working agent's patch moving r01 applies with that error carried, and read draws r01–r12.
+- eval at the base: a board of r01–r12 and one item of an unknown kind has exactly the frame-phase nodes of r01–r12
+  alone, so "nothing per frame" for skipped items matches how the base treats an unknown kind.
+- The ten-pack graph installs (g10 first) and the board listing only acme/g01@1.0.0 is presented with t1–t10 each
+  expanded through its own pack; the 1,000 shelf.bookcase@1 items are presented under acme/shelf@2.0.0 with 1,000
+  migrated notices and 1,000 expansions of shelf.bookcase@2.

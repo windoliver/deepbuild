@@ -974,6 +974,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
         return Err(json!({"code": "refused", "issues": broken}));
     }
     crate::physics::bake(&mut args.doc)?;
+    crate::particles::refuse(&args.doc, app.planted)?;
     let packed = args.doc["packs"].as_array().is_some_and(|p| !p.is_empty());
     let mut lowered_doc = if packed {
         Some(lowered(&args.doc, &packs)?)
@@ -1243,11 +1244,6 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             if n == args.from {
                 receipt = made;
             }
-            // A particles@1 count past its class's limit is refused, never clamped (#420).
-            let class = args.doc.pointer("/budget/class").and_then(Value::as_str);
-            if let Some(path) = effects::count_refusal(&scene, class) {
-                return Err(refused("out_of_range", path));
-            }
             // #420 AC6's wrong programs: mesh edges unwelded, or drawn over their faces.
             scene.plant_edges(
                 app.planted == Some(Planted::EdgesUnwelded),
@@ -1335,6 +1331,8 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 seeding,
             );
             let mut settings = settings;
+            let particles =
+                crate::particles::frame(&mut settings, &args.doc, &scene, fx_t, call, app.planted)?;
             if dirt.is_some() {
                 settings.dirt = dirt.clone();
             }
@@ -1809,6 +1807,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             if let Some(values) = values {
                 frame.insert("values".into(), values);
             }
+            frame.extend(particles.map(|p| ("particles".to_string(), p)));
             if let Some(bytes) = drawn.gpu_bytes {
                 frame.insert("gpu_bytes".into(), json!(bytes));
             }

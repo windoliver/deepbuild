@@ -312,6 +312,10 @@ alone.push('tests/acceptance/1720/', 'tests/acceptance/1718-redraft-1720/');
 alone.push('tests/acceptance/1461/');
 byHand.push('tests/acceptance/1461/shell.test.ts', 'tests/acceptance/1461/shown.test.ts');
 timed.push('tests/acceptance/1461/budget.test.ts');
+// #1100's files build deep-drive plain and with env-plants and run real setups with their hubs; its AC15 file opens the
+// real app's window, with Accessibility and Screen Recording, by hand.
+alone.push('tests/acceptance/1100/');
+byHand.push('tests/acceptance/1100/shown.test.ts');
 // #2018's files build deep-drive plain and with env-plants, and start real hubs and many replicas.
 alone.push('tests/acceptance/2018/');
 // #2019's files build deep-drive plain and with env-plants, start real hubs, run deep setup and many replicas.
@@ -407,6 +411,9 @@ alone.push('tests/acceptance/1575/', 'tests/acceptance/1575-redraft-ac1/');
 timed.push('tests/acceptance/1575/budgets.test.ts', 'tests/acceptance/1575-redraft-ac1/budgets.test.ts');
 // #1964's files build deep-canvas-render and draw styled runs with Vello CPU.
 alone.push('tests/acceptance/1964/');
+// #1965's files each build deep-canvas-render; its cap file shapes a 240,000-byte code item, and its Oracle lane runs
+// about 7,000 strings of the two Unicode files through check and raster.
+alone.push('tests/acceptance/1965/', 'tests/acceptance/1965-oracle/');
 // #1963's files each build deep-canvas-render and check quoted code and formulas against stored sources.
 alone.push('tests/acceptance/1963/');
 // #1723's files each start a real hub whose gate runs a document check through the canvas core, under a 480 s wait.
@@ -469,8 +476,24 @@ byHand.push('tests/acceptance/154/stems.test.ts');
 // reading against the lane's rule.
 alone.push('tests/acceptance/1700/');
 timed.push('tests/acceptance/1700/budgets.test.ts');
+// #409's files each build deep-show and export films through the GPU; 409-oracle also runs the outside film gate.
+alone.push('tests/acceptance/409/', 'tests/acceptance/409-oracle/');
+// #1163's files each build deep-show; exports.test.ts exports the 600-frame 1080p film six times.
+alone.push('tests/acceptance/1163/');
 // #1862's suite starts a hub of its own with a fake reviewer, as #1537's does.
 alone.push('tests/acceptance/1862/');
+// #1401's files each build deep-show and render 3D revisions back on the GPU, AC3 in ten processes.
+alone.push('tests/acceptance/1401/');
+// #1958's files each build deep-show, and its budgets build the merge base and time saves.
+alone.push('tests/acceptance/1958/');
+timed.push('tests/acceptance/1958/budgets.test.ts');
+// #306 AC3's redraft after #1958 builds deep-show, as #306's suite does.
+alone.push('tests/acceptance/306-redraft-1958/');
+// #157's files each build deep-show (finite.test.ts with test-export-guards), export films through the GPU, the encode tool
+// and a fresh decode worker; lease.test.ts runs two exports at once, disk.test.ts attaches disk images with hdiutil, and
+// budgets.test.ts reads the machine's load.
+alone.push('tests/acceptance/157/', 'tests/acceptance/157-oracle/');
+timed.push('tests/acceptance/157/budgets.test.ts');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
