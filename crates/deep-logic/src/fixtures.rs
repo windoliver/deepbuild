@@ -99,13 +99,13 @@ impl Logic {
     /// A library's fixture records, run here once per hash and fixture set: `ran` is true only
     /// at the run.
     fn verify(&mut self, piece_v: &Value, lib: &Lib) -> Result<Value, Vec<Value>> {
-        // A fixture's item resolves the library's needs through the piece's packs, so they key it too.
-        let packs = piece_v.get("packs").map_or(String::new(), Value::to_string);
+        // A fixture's item also links what the library's needs reach, pinned by hash: those hashes
+        // key it too, not which packs carry them (#190: once per library hash).
+        let packs = links::packs(piece_v).unwrap_or_default();
         let key = format!(
-            "{} {} {}",
-            lib.hash,
+            "{} {}",
             lib.fixtures.join(" "),
-            deep_canvas_sandbox::rewrite::hash(packs.as_bytes())
+            links::reach(&lib.label, &lib.hash, &packs).join(" ")
         );
         if let Some(done) = self.verified.get(&key) {
             return done.clone().map(|mut r| {

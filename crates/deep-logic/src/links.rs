@@ -128,6 +128,39 @@ fn refusal(rule: &str, what: String, extra: Value) -> Value {
     out
 }
 
+/// The pack that carries `label`: an installed one that carries these bytes first, so its fixtures
+/// count for every claim.
+fn carrier<'a>(packs: &'a [Pack], label: &str, sha: &str) -> Option<(&'a Pack, &'a Entry)> {
+    let carrying = || {
+        packs
+            .iter()
+            .filter_map(|p| p.libs.get(label).map(|e| (p, e)))
+    };
+    carrying()
+        .filter(|(_, e)| e.asset == sha)
+        .min_by_key(|(p, _)| p.agent)
+        .or_else(|| carrying().next())
+}
+
+/// `label` at `sha` and every library its needs reach through `packs`, as sorted `label sha`
+/// lines: what its fixtures' items link, whichever packs carry them.
+pub fn reach(label: &str, sha: &str, packs: &[Pack]) -> Vec<String> {
+    let mut seen = Vec::new();
+    let mut todo = vec![(label.to_string(), sha.to_string())];
+    while let Some((label, sha)) = todo.pop() {
+        let line = format!("{label} {sha}");
+        if seen.contains(&line) {
+            continue;
+        }
+        if let Some((_, e)) = carrier(packs, &label, &sha).filter(|(_, e)| e.asset == sha) {
+            todo.extend(e.needs.iter().cloned());
+        }
+        seen.push(line);
+    }
+    seen.sort();
+    seen
+}
+
 /// The libraries `links` reach, each checked against its bytes (as `stored` reads them) and its
 /// pack, in dependency order (ties by name), or every refusal.
 pub fn resolve(
@@ -174,17 +207,7 @@ pub fn resolve(
             ));
             continue;
         }
-        // An installed pack that carries these bytes first, so its fixtures count for every claim.
-        let carrying = || {
-            packs
-                .iter()
-                .filter_map(|p| p.libs.get(&label).map(|e| (p, e)))
-        };
-        let carried = carrying()
-            .filter(|(_, e)| e.asset == sha)
-            .min_by_key(|(p, _)| p.agent)
-            .or_else(|| carrying().next());
-        let Some((pack, entry)) = carried else {
+        let Some((pack, entry)) = carrier(packs, &label, &sha) else {
             refused.push(refusal(
                 "link",
                 format!("no installed pack carries {label}"),
