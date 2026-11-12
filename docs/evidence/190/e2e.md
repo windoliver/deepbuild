@@ -123,10 +123,14 @@ same results (see the rerun below).
   owner's oracle-tests zip all along; `tests/acceptance/190/README.md` lines 10–16 (written before, and not edited) say
   the page answered 404. A blind job wrote `tests/acceptance/190/oracle/` from the issue, the map, the three vendored
   wasm-ld tests (`function-imports.s`, `data-layout.s`, `undefined.s`, copied unchanged with a NOTICE) and the base
-  commit, never the implementation; its README lists what each test can't hold of the upstream one and why. Each
-  test file also shows a wrong program failing: `linker_adds_linking_section` and the unlinked program for
-  function-imports, `linker_links_in_listing_order` for data-layout, and the base (`BASE-FAILURE.txt`, all 6 fail)
-  for undefined.
+  commit, never the implementation; its README lists what each test can't hold of the upstream one and why. The
+  map counts a linked test only when it rejects our output with a planted fault. function-imports and data-layout
+  show that in their own files (`linker_adds_linking_section` and the unlinked program; `linker_links_in_listing_order`).
+  undefined.s has no planted value, and the base (`BASE-FAILURE.txt`, all 6 fail) fails it before its import check,
+  so two mutants of 9a02471b6's `link.rs` show it: one that names every import of the program fails its CHECK-NOT
+  (`oracle-mutants/names-every-import.txt`), and one that names no import fails its CHECK
+  (`oracle-mutants/names-no-import.txt`). The oracle README's "checks against a real linker" (rust-lld) is the blind
+  job's report: no output of that run is saved.
 
 ## Rerun with the browser leg and screenshots (2026-11-11 and 12), code at 9a02471b6
 
@@ -414,3 +418,6 @@ raw files, `gen.test.ts`, the code and the issue. It also ran its own BFS over t
   oracle lane was called unreachable, though its tests were in the owner's zip. Fixed here: a blind job wrote the
   oracle suite and it passes (above). Its three low gaps are fixed too: criteria 1, 3 and 8 are stated as the issue
   states them, and the item hash after step 0 is described as `step_hash` computes it.
+- **Round 31** reproduced the oracle run (6 passed) and found one P2 and two low gaps, fixed here: undefined.s had
+  no wrong program reaching its import check (now two saved mutant runs); the README's rust-lld run is marked as a
+  report; and only two test files show their own wrong program.
