@@ -13,7 +13,7 @@ import { duration as askDuration } from '@deepbuild/asks';
 import { canonicalize, type JsonValue } from '@deepbuild/contracts';
 import { scrubText } from '@deepbuild/evidence';
 import type { Devices } from './trusted.js';
-import { writeSynced } from './vfs.js';
+import { writeAtomic } from './vfs.js';
 
 type Obj = Record<string, unknown>;
 type Kind = 'device' | 'chat' | 'email' | 'text';
@@ -133,7 +133,7 @@ export class Channels {
     const file = join(this.deps.root, 'channel-links.json');
     const links = this.links();
     links[channel] = [...new Set([...(links[channel] ?? []), account])];
-    writeSynced(file, Buffer.from(JSON.stringify(links)));
+    writeAtomic(file, Buffer.from(JSON.stringify(links)));
     this.linked = links;
   }
   private links(): Record<string, string[]> {

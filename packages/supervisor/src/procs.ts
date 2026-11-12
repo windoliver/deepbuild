@@ -32,16 +32,18 @@ export const listening = (port: number): Promise<{ pids: number[]; empty: boolea
 
 export interface Proc { pid: number; ppid: number; pgid: number; start: string }
 
-/** Whether a process (or, given a negative ID, a process group) still exists: a signal of 0 asks without sending one. */
-export function alive(pid: number): boolean {
+/** The OS's liveness observation: permission proves existence, only ESRCH proves absence. */
+export function processAlive(pid: number): boolean | undefined {
   try {
     process.kill(pid, 0);
     return true;
   } catch (error) {
-    // Only ESRCH proves absence. Permission and transient observation errors keep the process live.
-    return (error as NodeJS.ErrnoException).code !== 'ESRCH';
+    const code = (error as NodeJS.ErrnoException).code;
+    return code === 'EPERM' ? true : code === 'ESRCH' ? false : undefined;
   }
 }
+/** Supervised processes/groups stay live until absence is proven. */
+export const alive = (pid: number): boolean => processAlive(pid) !== false;
 /** An unreadable process table is unknown, never evidence of an empty group or an idle run. */
 const quietPs = (args: string[]): Promise<string | null> => run('/bin/ps', args).then((text) => text.trim() ? text : null, () => null);
 /** The live members of a process group, zombies left out; none for a group that is gone. */

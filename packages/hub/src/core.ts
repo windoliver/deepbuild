@@ -109,7 +109,7 @@ import { Libraries, LibraryRefused, LIBRARY_HOST_QUOTA, LIMIT_MAX, libraryHosts,
 import { readPack } from './packs.js';
 import { excerpt, historyKey, type Restored } from './waits.js';
 import { claudeHomes, claudeOnPath, denyHolds, homeMods, homeOfTranscript, loginPlan, MODS_GONE, MODS_WATCH, overrideWords, pluginDirs, type HomeMods } from './mods.js';
-import { copySynced, disk, synced, testVfs, writeSynced, type Durable } from './vfs.js';
+import { copySynced, disk, synced, testVfs, writeAtomic, writeSynced, type Durable } from './vfs.js';
 import { AUTHORITY as EFFECTS, CHROME, derivedId, EXTENSION_HOOK_MS, refuse, Refused, refusal, signature, ulid, ulidTime, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Refusal, type Scope, SCREEN_TOOLS } from './wire.js';
 
 /** A process running Codex's own binary, by the path it was started from. */
@@ -1415,7 +1415,7 @@ export class Core {
   }
 
   private writeState(state: 'running' | 'stopped'): void {
-    writeSynced(this.root.state, Buffer.from(`${state}\n`));
+    writeAtomic(this.root.state, Buffer.from(`${state}\n`));
   }
 
   // ---- Appends.
