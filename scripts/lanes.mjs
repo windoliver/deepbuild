@@ -512,6 +512,11 @@ timed.push('tests/acceptance/2017/ac3-budgets.test.ts');
 // (tests/acceptance/2017-redraft-ac2/DISPUTE.md); its blind redraft runs in its place.
 alone.push('tests/acceptance/2017-redraft-ac2/');
 byHand.push('tests/acceptance/2017/ac2-light-holds.test.ts');
+// #173's files each build deep-gpu and draw the castle through frame history's window on the GPU; its
+// budgets and envelope read timings and play 60 s runs on the reference Mac.
+alone.push('tests/acceptance/173/');
+timed.push('tests/acceptance/173/budgets.test.ts', 'tests/acceptance/173/envelope.test.ts');
+slow.push('tests/acceptance/173/budgets.test.ts', 'tests/acceptance/173/envelope.test.ts');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
