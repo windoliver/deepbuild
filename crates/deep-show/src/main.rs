@@ -41,6 +41,7 @@ mod mixdown;
 mod modes;
 mod narration;
 mod packs;
+mod retired;
 mod physics;
 mod placement;
 mod played;
@@ -594,6 +595,12 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
                 id: c.get("id")?.as_str()?.to_string(),
                 dir: PathBuf::from(c.get("dir")?.as_str()?),
                 session: optional(c.get("session"), |s| Some(s.as_str()?.to_string()))?,
+            })
+        }
+        "uninstall_pack" => {
+            return Some(Call::UninstallPack {
+                id: c.get("id")?.as_str()?.to_string(),
+                version: c.get("version")?.as_str()?.to_string(),
             })
         }
         "registries" => return Some(Call::Registries),
@@ -1323,6 +1330,8 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 }
                 "pack_check_skips_requires_modules" => Planted::PackCheckSkipsRequiresModules,
                 "packs_keyed_by_name" => Planted::PacksKeyedByName,
+                "store_sweep_deletes_named" => Planted::StoreSweepDeletesNamed,
+                "loader_draws_missing_with_installed" => Planted::LoaderDrawsMissingWithInstalled,
                 "counts_agent_rule_as_cover" => Planted::OwnRuleCountsAsCover,
                 "recipe_rules_twice" => Planted::RulesEvaluatedTwice,
                 "kit_tests_defaults_only" => Planted::KitDefaultsOnly,

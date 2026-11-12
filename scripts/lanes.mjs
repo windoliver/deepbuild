@@ -478,6 +478,11 @@ timed.push('tests/acceptance/1700/budgets.test.ts');
 alone.push('tests/acceptance/1862/');
 // #1401's files each build deep-show and render 3D revisions back on the GPU, AC3 in ten processes.
 alone.push('tests/acceptance/1401/');
+// #1958's files each build deep-show, and its budgets build the merge base and time saves.
+alone.push('tests/acceptance/1958/');
+timed.push('tests/acceptance/1958/budgets.test.ts');
+// #306 AC3's redraft after #1958 builds deep-show, as #306's suite does.
+alone.push('tests/acceptance/306-redraft-1958/');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },

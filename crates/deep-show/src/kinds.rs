@@ -890,7 +890,9 @@ impl Hub<'_> {
                     .iter()
                     .map(|(word, a)| (word.clone(), a["target"].clone()))
                     .collect();
-                json!({"pack": p.id.id, "version": p.id.version.to_string(),
+                // #1958: a retired version stays listed, as retired.
+                let state = if self.packs.is_retired(&p.id.text()) { "retired" } else { "installed" };
+                json!({"pack": p.id.id, "version": p.id.version.to_string(), "state": state,
                        "origin": self.pack_origin(&p.id.text()), "recipes": recipes, "aliases": aliases})
             })
             .collect();
