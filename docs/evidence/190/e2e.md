@@ -85,6 +85,9 @@ tactics merged 9385 bytes; imports: [] exports: init:function step:function read
 "Line N" is reply N above; the same request is line N of the rerun's saved `e2e-raw/replies.jsonl`, which gives the
 same results (see the rerun below).
 
+Each bullet sums up the proof for the issue's criterion of that number, in the issue's order; the criteria's own
+wording is the issue's (its Acceptance criteria), not repeated here.
+
 - 1: linked programs merge to modules with no imports that pass the subset check. At 9a02471b6 the saved proof is ac01 passing
   (`acceptance-linux-9a02471b6.txt`) and `e2e-raw/web-plan-imports.txt`, where `e2e-tools/imports.mjs` compiles the
   four `web_plan` rewritten programs, chase's included, and finds `imports []` for each. (The merged `linked` bytes
@@ -98,9 +101,22 @@ same results (see the rerun below).
   refused naming the fixture, `route`, element 6, expected 0 and actual 1 (line 5); no fixture is refused naming the
   library (line 6). The planted corner-cutter's 8-move route is ac02 (passing in `acceptance-linux-9a02471b6.txt`) and
   screenshot 03.
+- 3: bytes off their hash (naming both hashes), a pack mapping the name@version to another hash (naming the pack), an
+  import no listed library exports (naming it), an import of a later-listed library (naming it) and a merged program
+  1 byte over 4 MiB (naming the limit) are each refused in ac03's test, passing in `acceptance-linux-9a02471b6.txt`; no
+  saved reply here shows them.
+- 4's app-vs-headless-Chrome fixture test passes in the acceptance suite (`acceptance-linux-9a02471b6.txt`).
+  That ac04 test compares only the fixture's `deep_hashes`, the state before step 0, which the honest and the
+  corner-cutting libraries share; the page's item-hash, route and moves comparison is what tells them apart, so the
+  browser half of 4 rests on the page too.
+- 4's merged programs on macOS arm64 and Linux x86_64 are BLOCKED here (ac04's first test); they would run on the
+  reference Mac, and haven't yet. So 4 is not proven.
 - 5: `swarm`'s fuel trap at step 0 names grid_path@1, its hash and `find_route` (line 7). The same offset on a second
-  machine is BLOCKED (ac05 in `acceptance-linux-9a02471b6.txt`).
-- 6: INCONCLUSIVE with one approval ask from the agent's own pack, PASS from an installed one (lines 8, 9).
+  machine is BLOCKED (ac05 in `acceptance-linux-9a02471b6.txt`): its
+  second machine is a linux/amd64 container on this host, and its unblock ask is that image, `docker pull --platform
+  linux/amd64 rust:1.99.1-slim-bookworm`, which the suite doesn't pull. So 5 is not proven.
+- 6: INCONCLUSIVE with one approval ask from the agent's own pack, PASS from an installed one (lines 8, 9), and ac06's test, which holds both,
+  passes (`acceptance-linux-9a02471b6.txt`).
 - 7: `plain` isn't linked (line 4) and the planted twin changes its hash (above). The same hash, bake key and goldens as
   the merge base, and the twin failing naming the piece, are ac07 (passing in `acceptance-linux-9a02471b6.txt`).
 - 8: gridcore@1.0.0 installs; hostpack@1.0.0 is refused naming `env.now` (lines 10, 11). A pack whose library fails a
@@ -110,21 +126,15 @@ same results (see the rerun below).
 - 9: `tactics` links grid_path@1 then pathing@1 (line 12); grid_path@1 with grid_path@2 is refused naming both (13);
   the listing-order twin is refused naming the import (above). The ping/pong cycle is refused by ac09's second test (passing in
   `acceptance-linux-9a02471b6.txt`).
-- 3: bytes off their hash (naming both hashes), a pack mapping the name@version to another hash (naming the pack), an
-  import no listed library exports (naming it), an import of a later-listed library (naming it) and a merged program
-  1 byte over 4 MiB (naming the limit) are each refused in ac03's test, passing in `acceptance-linux-9a02471b6.txt`; no
-  saved reply here shows them.
-- 4's app-vs-headless-Chrome fixture test passes in the acceptance suite (`acceptance-linux-9a02471b6.txt`).
-  That ac04 test compares only the fixture's `deep_hashes`, the state before step 0, which the honest and the
-  corner-cutting libraries share; the page's item-hash, route and moves comparison is what tells them apart, so the
-  browser half of 4 rests on the page too.
-- 4's merged programs on macOS arm64 and Linux x86_64, 5's second machine and all of 10 are BLOCKED here; they would run on the reference Mac (the x86_64 leg in its Docker linux/amd64 image), and haven't yet. So 4, 5 and 10 are not proven.
+- 10: both budget tests are BLOCKED here (ac10 in `acceptance-linux-9a02471b6.txt`): the budgets' reference machine is
+  the reference Mac, where they haven't run yet. So 10 is not proven.
 - Oracle lane, criteria 1 and 3: 6 tests pass (`oracle-linux-9a02471b6.txt`). The map's upstream tests were in the
-  owner's oracle-tests zip all along; `tests/acceptance/190/README.md` lines 10–16 (written before, and not edited) say
-  the page answered 404. A blind job wrote `tests/acceptance/190/oracle/` from the issue, the map, the three vendored
+  owner's oracle-tests zip all along; `tests/acceptance/190/README.md` lines 10–16 (not edited; by the session's report written
+  before the code, though it landed in the same commit, 85169f887) say the page answered 404. By the session's report,
+  a blind job wrote `tests/acceptance/190/oracle/` from the issue, the map, the three vendored
   wasm-ld tests (`function-imports.s`, `data-layout.s`, `undefined.s`, copied unchanged with a NOTICE) and the base
   commit, never the implementation; its README lists what each test can't hold of the upstream one and why. The
-  map counts a linked test only when it rejects our output with a planted fault. function-imports and data-layout
+  oracle-tests README (line 27, citing #136) counts a linked test only when it rejects our output with a planted fault. function-imports and data-layout
   show that in their own files (`linker_adds_linking_section` and the unlinked program; `linker_links_in_listing_order`).
   undefined.s has no planted value, and the base (`BASE-FAILURE.txt`, all 6 fail) fails it before its import check,
   so two mutants of 9a02471b6's `link.rs` show it: one that names no import fails upstream's CHECK
@@ -132,9 +142,10 @@ same results (see the rerun below).
   our linker has no `--undefined`. In its place the test checks something of our own, that no refusal names an import
   a listed library defines, and the mutant that names every import of the program fails it
   (`oracle-mutants/names-every-import.txt`). The blind job's first draft called that check the CHECK-NOT and put
-  data-layout.s's `aligned_bar` at 65552 (it is at 65568); round 32 disputed both, and the job's blind redraft
+  data-layout.s's `aligned_bar` at 65552 (it is at 65568); round 32 disputed both, and the job's redraft (blind, by the session's report)
   (2b38d894b, comments and docs only) corrected them. The 6 tests were rerun as committed there. The oracle README's "checks against a real linker" (rust-lld) is the blind
   job's report: no output of that run is saved.
+
 
 ## Rerun with the browser leg and screenshots (2026-11-11 and 12), code at 9a02471b6
 
@@ -429,3 +440,10 @@ raw files, `gen.test.ts`, the code and the issue. It also ran its own BFS over t
   defined-import check undefined.s's CHECK-NOT (sent back to the blind job, which redrafted its comments and README);
   its data-layout comment put `aligned_bar` at 65552 (redrafted to 65568); the mutant files now carry the exact code
   change, host and date; and the oracle run is redone on the tests as committed.
+- **Round 33** found no wrong values and no P2 (it reran the oracle lane, 6 passed, and checked every screenshot
+  against `e2e-raw`); its six low gaps are fixed here: two wordings in the oracle suite (upstream checks the segment
+  and a global, not foo's and aligned_bar's addresses; `--undefined` names a symbol rather than requiring it) went
+  back to the blind job, whose redraft (5779f0291) changes comments and docs only, so the oracle run on 2b38d894b's
+  tests stands; 5's unblock ask is named apart from the Mac runs; the blind job's inputs and the README's
+  timing are marked as the session's report; the planted-fault rule is cited to the oracle-tests README; and the
+  per-criterion bullets run 1 to 10, with ac06 cited under 6.
