@@ -110,7 +110,10 @@ struct Found {
 
 /// What a deliverable's checks share, each read once.
 struct Ctx {
+    /// The deliverable as it reads, each recipe instance kept beside its derived items.
     drawn: Value,
+    /// The form its frames draw from, as the hub's own session loads it.
+    form: Value,
     film: Option<Option<Film>>,
     played: Option<Option<Played>>,
     sounds: Option<Result<Vec<sound::Sound>, String>>,
@@ -568,8 +571,12 @@ impl Hub<'_> {
             let Some(r) = self.query_revision(doc, None) else {
                 continue;
             };
+            let (mut form, _) = self.drawing_form(&r.doc);
+            let _ = self.inline_tables(&mut form);
+            let _ = self.inline_vectors(&mut form);
             let mut ctx = Ctx {
                 drawn: r.drawn,
+                form,
                 film: None,
                 played: None,
                 sounds: None,
@@ -914,7 +921,7 @@ impl Hub<'_> {
 
     fn played_of<'c>(&mut self, ctx: &'c mut Ctx) -> Option<&'c Played> {
         if ctx.played.is_none() {
-            ctx.played = Some(self.film_played(&ctx.drawn, false));
+            ctx.played = Some(self.film_played(&ctx.form, false));
         }
         ctx.played.as_ref().and_then(Option::as_ref)
     }
@@ -1211,7 +1218,7 @@ impl Hub<'_> {
     }
 
     fn motion_share(&mut self, fields: &Map<String, Value>, ctx: &mut Ctx) -> Found {
-        let drawn = ctx.drawn.clone();
+        let drawn = ctx.form.clone();
         let Some(film) = ctx.film.take().flatten() else {
             return Found::default();
         };

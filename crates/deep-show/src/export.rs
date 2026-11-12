@@ -303,7 +303,9 @@ impl Hub<'_> {
             Some(r) => r.doc.clone(),
             None => return json!({"outcome": "refused", "code": "no_revision"}),
         };
-        self.export_doc(job, doc)
+        // #409: what the hub's own frames draw, each recipe instance's derived items in its place.
+        let (form, _) = self.drawing_form(&doc);
+        self.export_doc(job, form)
     }
 
     /// [`Hub::export_run`] of a given document, under `job.doc` as its ID.
