@@ -1,0 +1,4 @@
+TypeError: Cannot read properties of undefined (reading 'hooks')
+    at planClaudeCode (/opt/deepbuild/packages/hub/dist/setup.js:212:31)
+    at async install (/opt/deepbuild/packages/hub/dist/setup.js:96:5)
+    at async setupCommand (/opt/deepbuild/packages/hub/dist/setup.js:50:10)

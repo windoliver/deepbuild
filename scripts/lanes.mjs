@@ -310,6 +310,10 @@ alone.push('tests/acceptance/1720/', 'tests/acceptance/1718-redraft-1720/');
 alone.push('tests/acceptance/1461/');
 byHand.push('tests/acceptance/1461/shell.test.ts', 'tests/acceptance/1461/shown.test.ts');
 timed.push('tests/acceptance/1461/budget.test.ts');
+// #1100's files build deep-drive plain and with env-plants and run real setups with their hubs; its AC15 file opens the
+// real app's window, with Accessibility and Screen Recording, by hand.
+alone.push('tests/acceptance/1100/');
+byHand.push('tests/acceptance/1100/shown.test.ts');
 // #2018's files build deep-drive plain and with env-plants, and start real hubs and many replicas.
 alone.push('tests/acceptance/2018/');
 // #2019's files build deep-drive plain and with env-plants, start real hubs, run deep setup and many replicas.
@@ -405,6 +409,9 @@ alone.push('tests/acceptance/1575/', 'tests/acceptance/1575-redraft-ac1/');
 timed.push('tests/acceptance/1575/budgets.test.ts', 'tests/acceptance/1575-redraft-ac1/budgets.test.ts');
 // #1964's files build deep-canvas-render and draw styled runs with Vello CPU.
 alone.push('tests/acceptance/1964/');
+// #1965's files each build deep-canvas-render; its cap file shapes a 240,000-byte code item, and its Oracle lane runs
+// about 7,000 strings of the two Unicode files through check and raster.
+alone.push('tests/acceptance/1965/', 'tests/acceptance/1965-oracle/');
 // #1963's files each build deep-canvas-render and check quoted code and formulas against stored sources.
 alone.push('tests/acceptance/1963/');
 // #1723's files each start a real hub whose gate runs a document check through the canvas core, under a 480 s wait.

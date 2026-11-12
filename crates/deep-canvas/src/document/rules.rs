@@ -226,7 +226,16 @@ fn numbers_of(doc: &Value, texts: &Texts<'_>, id: &String, item: &Value, issues:
     // A code item's text is its raw bytes' display form. A quote's digits are quotation, listed
     // and never counted; an unquoted code item's digits count as numbers (Text `text@1`: code).
     if param("code").is_some() {
-        if let (None, Some(Value::String(raw))) = (param("quote"), param("raw")) {
+        // #1965: a raw that is an asset shows its bytes, which its host read into `base64`.
+        let raw = match param("raw") {
+            Some(Value::String(raw)) => Some(raw.clone()),
+            Some(raw) => member(raw, "base64")
+                .and_then(Value::as_str)
+                .and_then(crate::base64::decode)
+                .map(|bytes| String::from_utf8_lossy(&bytes).into_owned()),
+            None => None,
+        };
+        if let (None, Some(raw)) = (param("quote"), &raw) {
             if texts.shows_number(raw) {
                 issues.push(Issue::error(
                     "number_unsourced",
@@ -620,6 +629,17 @@ mod tests {
         assert_eq!(unsourced(&d), [vec!["c".to_string()]]);
         d["items"]["c"]["params"]["quote"] =
             json!({"source": "0".repeat(64), "path": "r.py", "lines": [1, 1]});
+        assert_eq!(unsourced(&d), Vec::<Vec<String>>::new());
+        // #1965: a raw that is an asset counts as its bytes do, once its host has read them.
+        d["items"]["c"]["params"]
+            .as_object_mut()
+            .unwrap()
+            .remove("quote");
+        let read = crate::base64::encode(b"caf\xe9 = 3\n");
+        d["items"]["c"]["params"]["raw"] = json!({"asset": "0".repeat(64), "base64": read});
+        assert_eq!(unsourced(&d), [vec!["c".to_string()]]);
+        let read = crate::base64::encode(b"caf\xe9\n");
+        d["items"]["c"]["params"]["raw"] = json!({"asset": "0".repeat(64), "base64": read});
         assert_eq!(unsourced(&d), Vec::<Vec<String>>::new());
     }
 }
