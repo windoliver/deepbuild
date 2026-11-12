@@ -508,6 +508,10 @@ timed.push('tests/acceptance/1863/speed.test.ts');
 // ac3-budgets judges the task's budgets on the reference Mac.
 alone.push('tests/acceptance/2017/');
 timed.push('tests/acceptance/2017/ac3-budgets.test.ts');
+// #2017's first-draft AC2 file spreads every pixel of a 960 × 540 frame into Math.max, which throws before its judge runs
+// (tests/acceptance/2017-redraft-ac2/DISPUTE.md); its blind redraft runs in its place.
+alone.push('tests/acceptance/2017-redraft-ac2/');
+byHand.push('tests/acceptance/2017/ac2-light-holds.test.ts');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
