@@ -4,20 +4,25 @@ import { afterAll, it } from 'vitest';
 import { CLI, FIX, FLAG, NODE, Session, answer, childEnv, cleanup, itemTask, lastPos, lockedFor, makeWorld, recordAnswers, replyText, req, run, settle, startHub, trustRepo, type Answer, type Ev } from '../../../tests/acceptance/322/helpers.ts';
 import { CRITERIA, WORK_LINK, workDraft, workIssue } from '../../../tests/acceptance/322/work.ts';
 import { testCheck } from '../../../tests/acceptance/323/helpers.ts';
-import { PR_URL, REVIEWER, prAnswers, type Thread } from '../../../tests/acceptance/323/github.ts';
+import { PR_URL, REVIEWER, YOU_GH, prAnswers, type Thread } from '../../../tests/acceptance/323/github.ts';
 
 afterAll(cleanup, 60_000);
 const OUT = process.env.E2E_OUT!;
-const say = (s: string) => appendFileSync(OUT, s + '\n');
+const OWN_OUT = process.env.E2E_OWN_OUT!;
+let into = OUT;
+const say = (s: string) => appendFileSync(into, s + '\n');
 const EXPIRED = testCheck('expired-token', 'an expired token is rejected with 401', "assert.ok(require('../../src/auth.js').rejectsExpired, 'an expired token is not rejected with 401');");
 const ISSUE = { ...workIssue(7), body: `The auth middleware still accepts expired tokens.\n\n- ${CRITERIA[0]}`, criteria: [CRITERIA[0]] };
 const DRAFT = workDraft(7, { requirements: [req('R1', CRITERIA[0], { source_line: 'item-7#L3', check: EXPIRED.check, asserts: EXPIRED.asserts })] });
 const T: Thread = { id: 'PRRT_kwDOAcmeE2E01', path: 'src/auth.js', line: 3, comment: { id: 77001, author: REVIEWER, body: 'Name the reason a token was rejected in the 401 body.' }, resolvedBy: null };
 const BODY = 'Part of #7, R1 to prove';
 const gh = (by: string | null): Answer[] => prAnswers([{ n: 21, body: BODY, threads: [{ ...T, resolvedBy: by }] }]) as unknown as Answer[];
-const items = (all: Ev[]) => all.filter((e) => e.kind.startsWith('open_item.') && JSON.stringify(e.data).includes(T.id)).map((e) => `  log_pos ${e.log_pos} ${e.kind}@${e.v} ${JSON.stringify({ item: String(e.data.item).slice(0, 12), from: e.data.from, by: e.data.by, replaces: e.data.replaces, resolved_by: e.data.resolved_by })}`).join('\n');
+const verdict = (all: Ev[], since: number) => { const d = all.filter((e) => e.kind === 'verdict.made' && e.log_pos > since).at(-1)?.data as { outcome?: string; reasons?: string[]; requirements?: { req: string; outcome: string }[] } | undefined; return d ? `${d.outcome}; reasons ${JSON.stringify(d.reasons)}; requirements ${(d.requirements ?? []).map((q) => `${q.req} ${q.outcome}`).join(', ')}` : '(none)'; };
+const items = (all: Ev[]) => all.filter((e) => e.kind.startsWith('open_item.') && JSON.stringify(e.data).includes(T.id)).map((e) => `  log_pos ${e.log_pos} id ${e.id} ${e.kind}@${e.v} ${JSON.stringify({ item: String(e.data.item).slice(0, 12), from: e.data.from, by: e.data.by, replaces: e.data.replaces, resolved_by: e.data.resolved_by, text: e.data.text === undefined ? undefined : String(e.data.text).slice(0, 52) + '…' })}`).join('\n');
+const askEvents = (all: Ev[]) => { const a = all.filter((e) => e.kind === 'ask.created' && JSON.stringify(e.data).includes(T.id)); return `${a.length}${a.length ? ': ' + a.map((e) => `ask:${e.id} at log_pos ${e.log_pos}`).join(', ') : ''}`; };
 
 it('e2e', async () => {
+  into = OUT;
   writeFileSync(OUT, '');
   const w = makeWorld({ drafts: [DRAFT], readings: [ISSUE], answers: gh(null), files: EXPIRED.files });
   await trustRepo(w, true);
@@ -42,7 +47,7 @@ it('e2e', async () => {
     const r = await s.stop(`Claim ${n}: expired tokens are rejected; PR 21 is open as Part of #7.`);
     all = await settle(hub, (a) => a.some((e) => e.kind === 'verdict.made' && e.log_pos > since), 120_000);
     all = await settle(hub, () => false, 4000);
-    say(`\n== Claim ${n}: GitHub says T is ${by ? 'resolved by ' + by : 'unresolved'}\nstop reply: ${replyText(r).slice(0, 300)}\nT's open-item events so far:\n${items(all)}`);
+    say(`\n== Claim ${n}: GitHub says T is ${by ? 'resolved by ' + by : 'unresolved'}\nstop reply: ${replyText(r)}\nverdict: ${verdict(all, since)}\nT's open-item events so far:\n${items(all)}\nask.created events for T so far: ${askEvents(all)}`);
   };
   await claim(1, null, false); await inbox('after claim 1'); await closes('T open');
   await claim(2, REVIEWER, true); await inbox('after claim 2');
@@ -53,5 +58,49 @@ it('e2e', async () => {
   all = await settle(hub, () => false, 3000);
   say(`T's open-item events:\n${items(all)}`);
   await closes('T accepted');
+  await inbox('after the answer');
   await claim(4, null, true); await inbox('after claim 4: T still unresolved, accepted');
+}, 900_000);
+
+// Rule 4: a thread the session's own account resolved holds the note open with no ask; once the thread is
+// unresolved, the item is revised to say so and its accept ask is raised, once.
+it('e2e: the session\'s own account', async () => {
+  into = OWN_OUT;
+  writeFileSync(OWN_OUT, '');
+  const w = makeWorld({ drafts: [DRAFT], readings: [ISSUE], answers: gh(YOU_GH), files: EXPIRED.files });
+  await trustRepo(w, true);
+  const hub = await startHub(w, { holdMs: 20_000 });
+  const inbox = async (label: string) => { const r = await run(NODE, [CLI, 'inbox'], { env: childEnv(w.home), cwd: w.tmp, timeoutMs: 60_000 }); say(`\n$ deep inbox   # ${label}\n${r.stdout.trim() || '(empty)'}${r.stderr.trim() ? '\nstderr: ' + r.stderr.trim() : ''}`); };
+  const s = new Session(w);
+  await s.start();
+  await s.typed(`Fix ${WORK_LINK(7)} and open a pull request`);
+  await s.read('src/auth.js');
+  let all = await settle(hub, (a) => { const ref = itemTask(a, s); return ref !== undefined && lockedFor(a, ref).length > 0; }, 60_000);
+  const ref = itemTask(all, s)!;
+  say(`hub pid ${hub.pid}; task ${ref}; definition locked; the session's GitHub account is ${YOU_GH}`);
+  await s.edit(FIX.file, FIX.from, FIX.to);
+  await s.edit(FLAG.file, FLAG.from, FLAG.to);
+  const pr = await s.call('Bash', { command: `gh pr create --title "Reject expired tokens" --body "${BODY}"`, description: 'Open the pull request' }, { response: { stdout: `${PR_URL(21)}\n`, stderr: '', interrupted: false, isImage: false } });
+  say(`gh pr create: ${pr.allowed ? 'allowed' : 'refused'}`);
+  const closes = async (label: string) => { const r = await s.bash('gh pr edit 21 --body "Closes #7"'); say(`\n$ gh pr edit 21 --body "Closes #7"   # ${label}\n  ${r.allowed ? 'ALLOWED' : 'REFUSED: ' + replyText(r.before).slice(0, 700)}`); };
+  const asks = () => all.filter((e) => e.kind === 'ask.created' && JSON.stringify(e.data).includes(T.id));
+  const claim = async (n: number, by: string | null, edit: boolean) => {
+    if (edit) await s.edit(FLAG.file, 'rejectsExpired: true,', `rejectsExpired: true,\n  // claim ${n}`);
+    recordAnswers(w, gh(by));
+    const since = await lastPos(hub);
+    const r = await s.stop(`Claim ${n}: expired tokens are rejected; PR 21 is open as Part of #7.`);
+    all = await settle(hub, (a) => a.some((e) => e.kind === 'verdict.made' && e.log_pos > since), 120_000);
+    all = await settle(hub, () => false, 4000);
+    say(`\n== Claim ${n}: GitHub says T is ${by ? 'resolved by ' + by : 'unresolved'}\nstop reply: ${replyText(r)}\nverdict: ${verdict(all, since)}\nT's open-item events so far:\n${items(all)}\nask.created events for T so far: ${askEvents(all)}`);
+  };
+  await claim(1, YOU_GH, false); await inbox(`after claim 1: T resolved by ${YOU_GH}`); await closes(`T held open by ${YOU_GH}'s resolution`);
+  await claim(2, null, true); await inbox('after claim 2: T unresolved');
+  await claim(3, null, true); await inbox('after claim 3: T still unresolved');
+  const ask = asks().at(-1)!;
+  const a = await answer(w, ask, 'accept');
+  say(`\n$ deep inbox answer ask:${ask.id} accept\n  exit ${a.code} ${a.stdout.trim()}`);
+  all = await settle(hub, () => false, 3000);
+  say(`T's open-item events:\n${items(all)}`);
+  await closes('T accepted');
+  await inbox('after the answer');
 }, 900_000);
