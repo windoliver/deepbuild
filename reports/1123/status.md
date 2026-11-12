@@ -1,6 +1,6 @@
 # #1123: run-private binaries — partial implementation
 
-**Update:** two folders now have blind-redraft and per-file parallel wrong-program proof; see [migration-update.md](migration-update.md). The further [closure attempt](closure-attempt/README.md) fixed lease-loss/scan/reuse failures, compared actual main lint results, and waited the full 60-minute timed admission window: **no grant**, so neither unit command ran. The original stage's results below are historical. Actual Spark, human trust/approval, redraft merges and full unit readings remain required; the guard has now explicitly returned FAIL for unsigned tooling edits.
+**Update:** at the owner's explicit request, #2321 is the **single PR** for this issue; duplicate redraft PRs #2336/#2337 are superseded. Their helpers and evidence were verified byte-identical in #2321, and independent drafting/test-first history is preserved. This owner-approved packaging change does not waive proof or guard requirements. Two folders have per-file parallel wrong-program proof; see [migration-update.md](migration-update.md). The further [closure attempt](closure-attempt/README.md) records earlier blocked measurements and unsigned-tooling guard failures. The new full before/after reading began once real timed capacity became available; no completed reading is claimed until both sides finish.
 
 Base: `092754bb1` (current main when this branch was created). **Part of #1123, not Closes.**
 
@@ -13,7 +13,7 @@ Base: `092754bb1` (current main when this branch was created). **Part of #1123, 
 | Private snapshot survives concurrent Cargo rewrites | Cargo 1.99.1 publishes final artifacts privately using `--target-dir`, with `build.build-dir` retaining fixed-path intermediates. Copies never link to mutable target executables. | Approved blind capture redraft: all three cases pass on Mac and Linux arm64; unchanged lanes case rejects current main with `RUN_PRIVATE_ORIGIN`, after real own/foreign builds ran. |
 | Scoped, once-per-run build | Discover actual environment reads/execution in each test/helper closure; ask Vitest for its selected files; don't build skipped/excluded/unrelated binaries. Each checkout/shard gets one snapshot. | Existing freshness/target-poisoning cases plus regressions for skipped lanes, excludes, root-relative Node files, mixed selections, absent workspace, and failed build. Required missing workspace/build prevents consumers from starting. Unit Node discovery now requests no application binary. |
 | Safe cleanup and existing shard ownership | A detached IPC watcher removes the creating run's private folder after exit, including SIGKILL. Released shard handles are cleared before outer cleanup. | SIGTERM/SIGKILL tests failed before, passed unchanged after. Replacement-shard-lock test failed before, then passed unchanged; no second release may remove another run's lock. |
-| Eligible folders move only after wrong-program parallel proof | #374 and #375 helpers adopted byte-for-byte from separate blind drafts, and those two folders leave alone after wrong-program evidence; all eight behavior files unchanged. | **Proof complete for these two proposed moves**: 23 clean tests pass; every file fails at an issue assertion in overlapping parallel runs. Prerequisite redraft proposals #2336/#2337 must merge first. See migration-update.md. No speedup claimed. |
+| Eligible folders move only after wrong-program parallel proof | #374 and #375 helpers adopted byte-for-byte from separate blind drafts, and those two folders leave alone after wrong-program evidence; all eight behavior files unchanged. | **Proof complete for these two proposed moves**: 23 clean tests pass; every file fails at an issue assertion in overlapping parallel runs. The independent redrafts are consolidated in #2321's helper-adoption commit before the scheduling commit, per the owner's single-PR instruction. See migration-update.md. No speedup claimed. |
 | Alone-block before/after wall time reading | No fabricated reading or threshold. | **OPEN / UNRUN.** Actual full unit before/after on one source commit has not completed. Audit gives the required recipe. |
 
 ## Independent tests and approved dispute
@@ -40,7 +40,7 @@ The redacted excerpts in this report directory retain the key check results. Ful
 
 ## Remaining gates
 
-1. Merge/approve the two separately drafted redraft proposals #2336/#2337 before the already-proven #374/#375 scheduling changes land.
+1. Review/approve the independent redraft adoption and tooling commits together in sole PR #2321. #2336/#2337 are superseded, not separate merge dependencies; independent drafting and per-file wrong-program requirements remain.
 2. Actual same-source-commit unit-lane before/after alone-block wall readings.
 3. Actual Spark run (DNS/host access unavailable here); Docker is supplemental.
 4. Full affected verification, including main failures and timed/slow omissions, remains non-PASS.

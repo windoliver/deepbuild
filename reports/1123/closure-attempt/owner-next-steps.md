@@ -1,6 +1,6 @@
 # Owner actions needed after conversational approval
 
-The owner explicitly approved proceeding in the session. #2336 and #2337 are now ready for review (not draft); #2321 remains draft because required proof is missing. No approval signature, signer-list change, merge or issue closure was performed by the agent.
+The owner explicitly approved proceeding and then requested **one PR**. #2321 is now the sole review surface; #2336 and #2337 are closed as superseded, with all helper/evidence bytes verified already present in #2321. #2321 remains draft because required proof is missing. No approval signature, signer-list change, merge or issue closure was performed by the agent.
 
 ## 1. Establish the repository's approval trust — owner only
 
@@ -22,10 +22,7 @@ In a separate clean owner-controlled checkout:
 
 ## 2. Sign exact proposals — owner only
 
-Review the actual diff of each protected commit. `human-approval-items.txt` lists #2321's already identified protected commits and every file each touches. Do the same for redraft commits:
-
-- #2336: `c4c10086cf56f37c655c1c18704acd101c4f06ce`
-- #2337: `b7ae6caaf71dcebf67c4f566ca0637b08c2a6e1e`
+Review the actual diff of each protected commit in **#2321 only**. `human-approval-items.txt` lists those commits and every file each touches. The independent #374/#375 redrafts are adopted together in `57d96a3f2bfc1fb88c2934165c48071c27c390dc`, before the scheduling commit. The separate #2336/#2337 commit IDs are historical provenance, not additional merge/signing dependencies.
 
 For each reviewed commit, generate its approval-message file locally and inspect it; **do not approve a generated list without reviewing the diff**:
 
@@ -48,7 +45,7 @@ git push origin "refs/tags/$tag"
 
 These commands are owner instructions, not commands the agent has executed or may execute as the owner. A tag on the branch tip alone does not approve earlier protected commits; the guard verifies each exact commit and that the approval names all its changed files. Do not change the guard or its inputs to bypass this.
 
-Then run the existing guard, preserve its real result, and merge approved #2336/#2337 before the scheduling migration lands. If the branches have new/rebased SHAs, regenerate the review list from those SHAs rather than signing stale IDs.
+Then run the existing guard and preserve its real result. Review and land the approved helper-adoption and scheduling commits together through #2321, as the owner requested. If the branch has new/rebased SHAs, regenerate the review list from those SHAs rather than signing stale IDs.
 
 ## 3. Supply proof capacity/access
 

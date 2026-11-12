@@ -6,11 +6,9 @@ This supersedes the earlier zero-qualified-folder inventory for **#374 and #375 
 
 Separate blind jobs read only issue #374 or #375, issue #1123, design and base `092754bb1`. The resulting helpers are copied byte-for-byte into their original acceptance folders; every original `.test.ts` byte, fixture, tolerance and seeded property remains unchanged. Full drafts and originals are archived under `blind-redrafts/` and `migration-374/`, `migration-375/`, outside the declared test paths, avoiding duplicate active behavior tests.
 
-Reviewable prerequisite proposals:
-- #2336: #374 renderer helper redraft.
-- #2337: #375 layout/shaper helper redraft.
+The owner explicitly requested one PR. #2336 (#374) and #2337 (#375) are therefore superseded by **#2321 as the sole review/merge surface**. All 27 helper/evidence files from the two proposals match their consolidated copies byte-for-byte (`consolidation-proof.json`). The helper-adoption commit `57d96a3f2` precedes scheduling commit `63e11e81a`; independent blind drafting, unchanged behavioral tests and wrong-program-before-removal ordering are preserved.
 
-The #2321 scheduling changes must not land ahead of those redrafts/approvals. The helpers are included here to make this branch's proposed migration executable and prove it; separate proposals preserve the required review boundary. No agent signed an approval.
+This is an owner-approved packaging deviation from separate prerequisite merges, not an agent waiver of proof/approval. Review the redraft adoption and protected tooling in the single PR. No agent signed an approval.
 
 ## Every moved file rejects a real wrong program in parallel
 
@@ -36,4 +34,4 @@ The #2321 scheduling changes must not land ahead of those redrafts/approvals. Th
 - Helper discovery now follows selected named helper declarations. Scope-only metadata checks request no binary; #375 row/grid request only deep-layout. Regression tests first failed on unrelated helper builds, then passed unchanged.
 - Static review still flags broader process-lifetime hardening not fully proven here: exact completion barrier before immediate bay reuse, process-group identity reuse, process enumeration failure during cleanup, and per-shard ancestor cleanup. Do not present the implemented signal cases as proof of every lifetime interleaving.
 
-**Remaining closure gates:** redrafts merged/approved, actual full unit before/after reading, actual Spark proof, affected verification free of unexplained failures, and required human-signed tooling approval. Until those exist, #2321 remains draft/Part of #1123; the issue cannot truthfully be closed.
+**Remaining closure gates:** consolidated redraft/tooling approval in #2321, actual full unit before/after reading, actual Spark proof, affected verification free of unexplained failures, and required human-signed tooling approval. Until those exist, #2321 remains draft/Part of #1123; the issue cannot truthfully be closed.

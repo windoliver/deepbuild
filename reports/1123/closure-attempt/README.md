@@ -32,7 +32,7 @@ Two required focused affected runs completed separately (supervisor corrections;
 
 `.deepbuild/approvers` is absent on the merge base and live main. Per the repository design, a person must first bootstrap the presence-requiring signer list on main by their own push; then the proposals need a merge base containing it and human-signed approval tags for the exact protected commits/files. `human-approval-items.txt` lists the already-committed paths; new correction commits must be included too. An agent may not create this trust root, use a software key to bypass it, sign as the owner, or merge unapproved proposals under a general instruction to close the issue.
 
-#2336 and #2337 remain unmerged independent helper-redraft proposals. The existing migration proof is unchanged. Actual Spark remains inaccessible (`spark-ts` does not resolve); no alternate configured/user-recorded route was found. Linux container proof is not relabelled Spark proof.
+At this historical run #2336/#2337 were unmerged. The owner subsequently requested a single PR; both are now superseded by #2321, which contains their byte-identical independent helpers and proof in an adoption commit before scheduling. The packaging deviation is owner-approved; no proof/signature rule is waived. Actual Spark remains inaccessible (`spark-ts` does not resolve); no alternate configured/user-recorded route was found. Linux container proof is not relabelled Spark proof.
 
 ## Full unit reading
 
@@ -40,4 +40,4 @@ A complete fixed source/test commit pair was prepared, with before restoring onl
 
 The full pair was requested under the normal **60-minute timed grant**. The request completed with exit 3: **INCONCLUSIVE no grant: no timed grant came within 60 min**. Neither unit command started, no readings directory was produced, and there is no before/after wall reading. `unit-pair-no-grant.txt`, `measurement-recipe.json`, and `measurement-plan-summary.json` retain this result and plan. The original live-checkout request was replaced before admission with the pinned pair to avoid measuring a changing tree. No check result was retried.
 
-**Unchanged closure conditions:** all four issue criteria need evidence, actual requested host coverage, merged/approved redrafts and protected tooling approval. Nothing in this attempt authorizes closing #1123 while those remain missing.
+**Unchanged proof conditions:** all four issue criteria need evidence, actual requested host coverage, approved independent redrafts and protected tooling approval. Per the owner's later packaging decision these changes share #2321 rather than separate prerequisite merges. Nothing in this attempt authorizes closing #1123 while those remain missing.
