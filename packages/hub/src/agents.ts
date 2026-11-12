@@ -20,12 +20,11 @@ import { homedir } from 'node:os';
 import { basename, dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readFacts } from '@deepbuild/adapters';
-import { keychainStore, type SecretStore } from '@deepbuild/extension-host';
 import { CANT_UNDO } from '@deepbuild/asks';
 import { ulid } from '@deepbuild/record';
 import { keepOriginal, noteWritten, saveRecord, setupRecord, strictObject, target } from './agent-files.js';
 import { tomlTables } from './codex-settings.js';
-import { ownHome } from './keychain.js';
+import { hubSecrets as secretStore } from './held.js';
 import { lastingNode } from './paths.js';
 import type { Plant } from './plant.js';
 import { syncPath, type Durable } from './vfs.js';
@@ -356,22 +355,6 @@ function readSkill(source: Obj, staged: string): SkillItem {
   return { name, repo: repo!, commit: commit!, path: path!, digest: sha(canonical(files.map((f) => [f.rel, f.sha, f.mode]))), files, license, scripts, findings };
 }
 
-// ---- The secret store: the platform's, or the file a test names.
-
-function secretStore(): SecretStore | undefined {
-  const file = process.env.DEEP_HUB_TEST_SECRETS;
-  if (file) {
-    const all = (): Obj => { try { return JSON.parse(readFileSync(file, 'utf8')) as Obj; } catch { return {}; } };
-    const save = (v: Obj) => writeFileSync(file, `${JSON.stringify(v)}\n`, { mode: 0o600 });
-    return {
-      get: (k) => Promise.resolve(typeof all()[k] === 'string' ? all()[k] as string : undefined),
-      set: (k, v) => Promise.resolve(save({ ...all(), [k]: v })),
-      delete: (k) => { const v = all(); delete v[k]; save(v); return Promise.resolve(); },
-    };
-  }
-  // A hub under a test's temp HOME never touches your Keychain.
-  return process.platform === 'darwin' && ownHome() ? keychainStore() : undefined;
-}
 const secretKey = (server: string, variable: string): string => `mcp.${server}.${variable}`;
 
 // ---- The syncs.

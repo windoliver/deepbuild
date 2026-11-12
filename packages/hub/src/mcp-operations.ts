@@ -357,7 +357,7 @@ export class McpOperations {
       const thread = args.thread as { link: string; expect: string } | null | undefined;
       if (thread) {
         if (!slackThread(thread.link)) throw refuse('format', '/params/arguments/thread/link', 'Give a Slack thread link: https://<workspace>.slack.com/archives/<channel>/p<timestamp>.', thread.link);
-        if (!slackConfig(this.options.services.root.dir)) throw refuse('required', '/params/arguments/thread', 'No Slack connector: put your bot token and user ID in the hub\'s slack.json, mode 0600, to read this thread.', null);
+        if (!slackConfig(this.options.services.root.dir)) throw refuse('required', '/params/arguments/thread', 'No Slack connector: put your Slack user ID in the hub\'s slack.json as {"you": "U…"}, mode 0600, and enter your bot token with deep secret add slack token, to read this thread.', null);
       } else {
         need('check', 'Name the check in the repo\'s spec that will prove the task done; a task without one is refused, since nobody could tell it was done.');
         if (!this.checksOf(s.cwd).has(String(args.check))) throw this.unknownCheck(s.cwd, args.check);
