@@ -1148,37 +1148,77 @@ fn normals(m: Mesh, p: &Value, run: &Run) -> Result<Mesh, String> {
         corner_angle: weight != "area",
         keep_sharp: truth(p, "keep_sharp", true)?,
     };
-    let poly = Poly::of(&m);
-    // The edges the mesh already shades sharp: its corner normals differ across them.
     let w = m.welded();
-    let mut seen: BTreeMap<(u32, u32), Vec<(u32, V3)>> = BTreeMap::new();
-    for t in 0..m.triangles() {
-        for j in 0..3 {
-            let (a, b) = (
-                m.indices[3 * t + j] as usize,
-                m.indices[3 * t + (j + 1) % 3] as usize,
-            );
-            for (v, n) in [(a, m.normals[a]), (b, m.normals[b])] {
-                seen.entry(crate::poly::key(w[a], w[b]))
-                    .or_default()
-                    .push((w[v], n));
-            }
-        }
-    }
-    let sharp: BTreeMap<(u32, u32), bool> = seen
-        .into_iter()
-        .map(|(e, list)| {
-            let split = list.iter().any(|(v, n)| {
-                list.iter()
-                    .any(|(u, q)| u == v && crate::geom::length(sub(*n, *q)) > 1e-6)
-            });
-            (e, split)
-        })
-        .collect();
-    let n = crate::bevel::normals(&poly, &opts, &poly.weak, &sharp, run.blocks());
-    let mut out = poly.mesh(&m, Some(&n));
+    let poly = Poly::of_welded(&m, &w);
+    // Only keep_sharp reads the edges the mesh already shades sharp.
+    let sharp = if opts.keep_sharp && !opts.by_angle {
+        shaded_sharp(&m, &w)
+    } else {
+        Vec::new()
+    };
+    let n = crate::bevel::normals_sorted(&poly, &opts, &poly.weak, &sharp, run.blocks());
+    let mut out = poly.mesh_flat(&m, &n);
     keep_annotations(&m, &mut out);
     Ok(out)
+}
+
+/// Each edge of `m`'s triangles on its welded points `w`, by its sorted ends in that order, and
+/// whether the mesh shades it sharp: two of its corners at one point have normals more than 1e-6
+/// apart.
+fn shaded_sharp(m: &Mesh, w: &[u32]) -> Vec<((u32, u32), bool)> {
+    // Triangle edge i's two vertices, and their welded points.
+    let ends = |i: u32| {
+        let i = i as usize;
+        (
+            m.indices[i] as usize,
+            m.indices[i - i % 3 + (i + 1) % 3] as usize,
+        )
+    };
+    let welded: Vec<(u32, u32)> = (0..3 * m.triangles() as u32)
+        .map(|i| {
+            let (a, b) = ends(i);
+            (w[a], w[b])
+        })
+        .collect();
+    let edge = |i: u32| {
+        let (a, b) = welded[i as usize];
+        crate::poly::key(a, b)
+    };
+    let points = w.iter().max().map_or(0, |x| *x as usize + 1);
+    let order = crate::poly::by_ends(welded.len(), points, |i| welded[i as usize]);
+    // Each edge's run of triangle edges in `order`, read once.
+    let mut out = Vec::new();
+    let mut start = 0;
+    while start < order.len() {
+        let e = edge(order[start]);
+        let mut end = start + 1;
+        while end < order.len() && edge(order[end]) == e {
+            end += 1;
+        }
+        // The run's corners (two per triangle edge): each one's welded point and normal.
+        let run = &order[start..end];
+        let corner = |j: usize| {
+            let i = run[j / 2];
+            let (a, b) = ends(i);
+            let (wa, wb) = welded[i as usize];
+            if j.is_multiple_of(2) {
+                (wa, m.normals[a])
+            } else {
+                (wb, m.normals[b])
+            }
+        };
+        let n = 2 * run.len();
+        let split = (0..n).any(|x| {
+            let (u, p) = corner(x);
+            (x + 1..n).any(|y| {
+                let (v, q) = corner(y);
+                u == v && crate::geom::length(sub(p, q)) > 1e-6
+            })
+        });
+        out.push((e, split));
+        start = end;
+    }
+    out
 }
 
 /// A per-face field, one value per triangle, read at each face's centroid (the mean of its
