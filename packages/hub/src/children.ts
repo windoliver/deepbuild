@@ -2,6 +2,21 @@
 // (design: Numbers version 0 has to hold, Hot path). Starting a process holds the thread that starts it until the
 // exec, 25 to 40 ms on a loaded Mac whose endpoint scanner checks each exec; on the core's thread every hook reply
 // queued behind it would wait that long.
+// Portions of exec normalization/result handling are derived from Node.js child_process.js.
+// Copyright Joyent, Inc. and other Node contributors.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
+// documentation files (the "Software"), to deal in the Software without restriction, including without limitation
+// the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and
+// to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+// The above copyright notice and this permission notice shall be included in all copies or substantial portions
+// of the Software.
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+// THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF
+// CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+// DEALINGS IN THE SOFTWARE.
+
 import type { ChildProcess, SpawnSyncReturns } from 'node:child_process';
 import { createRequire, syncBuiltinESMExports } from 'node:module';
 import { subscribe } from 'node:diagnostics_channel';
@@ -33,41 +48,72 @@ subscribe('child_process', (message: unknown) => {
 /** The actual asynchronous children this thread still owns, including during their exit notification. */
 export const trackedChildren = (): readonly ChildProcess[] => [...children];
 
-// Synchronous child APIs do not publish diagnostics. Their boundary stays synchronous: register each invocation
-// before entering Node, retain its identity through return/throw, and retire it once the caller yields.
+// Synchronous APIs do not publish diagnostics. Keep each invocation through the caller's completion turn.
 interface SyncChild { pid?: number }
 const synchronous = new Set<SyncChild>();
-// execFileSync/execSync return only stdout. The pinned Node binding is the one boundary common to all three;
-// retain its actual PID without changing the public function's result, errors, encoding or stdio behavior.
-const binding = (process as unknown as { binding(name: string): { spawn(options: unknown): { pid?: number; status?: number | null } } }).binding('spawn_sync');
-const nativeSpawn = binding.spawn;
-let current: SyncChild | undefined;
-binding.spawn = function (options) {
-  const result = nativeSpawn.call(this, options);
-  if (current && result.pid && result.pid > 0) current.pid = result.pid;
-  return result;
-};
 const processes = createRequire(import.meta.url)('node:child_process') as typeof import('node:child_process');
+const nativeSpawnSync = processes.spawnSync;
+
+// The exec normalization and error/result handling below follow Node's child_process.js (MIT license above).
+// Only public spawnSync is used: process.binding would add deprecation warnings and fail permission-mode imports.
+const executeSync = (name: 'spawnSync' | 'execFileSync' | 'execSync', original: (...args: never[]) => unknown, receiver: unknown, args: unknown[], child: SyncChild): unknown => {
+  const spawn = (...given: unknown[]): SpawnSyncReturns<Buffer> => {
+    const result = Reflect.apply(nativeSpawnSync, receiver, given) as SpawnSyncReturns<Buffer>;
+    if (result.pid > 0) child.pid = result.pid;
+    return result;
+  };
+  if (name === 'spawnSync') return spawn(...args);
+  let [file, argv, options] = args;
+  let callback: unknown;
+  if (name === 'execSync') {
+    // Let Node produce its own argument error, before any child can start.
+    if (typeof file !== 'string' || file.includes('\0')) return Reflect.apply(original, receiver, args);
+    options = { __proto__: null, ...(typeof argv === 'function' ? undefined : argv as object) };
+    (options as Record<string, unknown>).shell = typeof (options as Record<string, unknown>).shell === 'string' ? (options as Record<string, unknown>).shell : true;
+    argv = [];
+  } else {
+    if (Array.isArray(argv)) argv = argv.slice();
+    else if (argv != null && typeof argv === 'object') { callback = options; options = argv; argv = null; }
+    else if (typeof argv === 'function') { callback = argv; options = null; argv = null; }
+    argv ??= [];
+    if (typeof options === 'function') callback = options;
+    else if (options != null && (typeof options !== 'object' || Array.isArray(options))) return Reflect.apply(original, receiver, args);
+    options ??= Object.freeze({ __proto__: null });
+    const opts = options as Record<string, unknown>;
+    if (callback != null && typeof callback !== 'function') return Reflect.apply(original, receiver, args);
+    if (opts.argv0 != null) {
+      if (typeof opts.argv0 !== 'string') return Reflect.apply(original, receiver, args);
+      if ((opts.argv0 as string).includes('\0')) return Reflect.apply(original, receiver, args);
+    }
+  }
+  const opts = options as Record<string, unknown>;
+  const inheritStderr = !opts.stdio;
+  const result = spawn(file, argv, options);
+  if (inheritStderr && result.stderr) process.stderr.write(result.stderr);
+  const commandArgs = name === 'execFileSync' ? [opts.argv0 || file, ...(argv as unknown[])] : undefined;
+  if (result.error) throw Object.assign(result.error, result);
+  if (result.status !== 0) {
+    const command = name === 'execSync' ? String(file) : commandArgs!.join(' ');
+    throw Object.assign(new Error('Command failed: ' + command + (result.stderr?.length ? '\n' + result.stderr.toString() : '')), result);
+  }
+  return result.stdout;
+};
 for (const name of ['spawnSync', 'execFileSync', 'execSync'] as const) {
   const original = processes[name];
-  const wrapped = function (this: unknown, ...args: unknown[]): unknown {
+  const invoke = (receiver: unknown, args: unknown[]) => {
     const child: SyncChild = {};
     synchronous.add(child);
-    const previous = current;
-    current = child;
-    try {
-      const result: unknown = Reflect.apply(original, this, args);
-      if (name === 'spawnSync' && (result as SpawnSyncReturns<Buffer>).pid > 0) child.pid = (result as SpawnSyncReturns<Buffer>).pid;
-      return result;
-    } catch (error) {
-      const pid = (error as { pid?: number } | null)?.pid;
-      if (pid && pid > 0) child.pid = pid;
-      throw error;
-    } finally {
-      current = previous;
-      queueMicrotask(() => synchronous.delete(child));
-    }
+    try { return executeSync(name, original as (...args: never[]) => unknown, receiver, args, child); }
+    finally { queueMicrotask(() => synchronous.delete(child)); }
   };
+  const wrapped = new Proxy(original, {
+    apply: (_target, receiver, args: unknown[]) => invoke(receiver, args),
+    construct: (target, args: unknown[]) => {
+      const receiver = Object.create(target.prototype) as object;
+      const result = invoke(receiver, args);
+      return result !== null && typeof result === 'object' ? result : receiver;
+    },
+  });
   Object.defineProperty(processes, name, { ...Object.getOwnPropertyDescriptor(processes, name), value: wrapped });
 }
 syncBuiltinESMExports();
