@@ -59,6 +59,9 @@ pub struct Mesh {
     pub cage: Option<Vec<[V3; 2]>>,
     /// Its GPU sway (#2016): the params and weights the vertex move reads at each frame.
     pub sway: Option<crate::stack::Sway>,
+    /// A terrain tile's plate's full-detail normals, which its pixels read at every level
+    /// (#2017; uv1 is the place on the plate's grid), or none.
+    pub terrain: Option<std::sync::Arc<crate::terrain::Normals>>,
 }
 
 /// What a mesh-edge line draws.

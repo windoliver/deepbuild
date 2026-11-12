@@ -57,6 +57,9 @@ pub struct Run {
     pub rotate: usize,
     /// The build's outline sources an `extrude` reads (#443).
     pub outlines: Vec<deep_canvas::registry::SealedOutline>,
+    /// A monotonic clock in milliseconds that times each step into its row (#2017): the
+    /// `geometry` call's `timings` hand one in; no check runs with one.
+    pub clock: Option<fn() -> f64>,
 }
 
 impl Run {
@@ -137,6 +140,9 @@ pub struct Row {
     pub reads_time: bool,
     pub enabled: bool,
     pub gpu: bool,
+    /// The step's time in milliseconds by the run's clock (0 for a skipped one); none without
+    /// one (#2017). `to_json` leaves it out, so a build's key never reads it.
+    pub ms: Option<f64>,
 }
 
 impl Row {
@@ -407,10 +413,12 @@ pub fn apply(
             reads_time: timed || reads_time(doc, id, k),
             enabled: on,
             gpu,
+            ms: (run.clock.is_some() && !on).then_some(0.0),
         });
         if !on {
             continue;
         }
+        let started = run.clock.map(|now| now());
         let params = modifier.get("params").cloned().unwrap_or(json!({}));
         let part = modifier.get("on").and_then(Value::as_str).unwrap_or("all");
         // A generate step makes the mesh anew; only a deform moves part of it.
@@ -618,6 +626,9 @@ pub fn apply(
             }
             _ => return Err(at("kind")),
         };
+        if let (Some(now), Some(started), Some(row)) = (run.clock, started, rows.last_mut()) {
+            row.ms = Some(now() - started);
+        }
     }
     if let Some(weights) = m.attributes.remove(SWAY_WEIGHTS) {
         let k = rows.iter().position(|r| r.kind == SWAY && r.enabled);
@@ -1207,6 +1218,12 @@ fn face_field(m: &Mesh, field: &str) -> Option<Vec<f64>> {
             })
         })
         .collect()
+}
+
+/// A mesh's welded points, edges and faces: its polygon view's.
+pub fn welded(m: &Mesh) -> [u64; 3] {
+    let (p, e, f, _) = topology(&Poly::of(m));
+    [p, e, f]
 }
 
 /// The welded points, edges, faces and corners of a polygon view.

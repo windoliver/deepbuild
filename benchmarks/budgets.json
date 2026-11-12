@@ -1033,6 +1033,28 @@
       ]
     },
     {
+      "id": "canvas-ground",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "ground"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "bevel_ms": 20,
+        "subdivide_ms": 50,
+        "distribute_ms": 200,
+        "arc_length_ms": 2,
+        "still_steps": 0,
+        "sway_gpu_ms": 0.5
+      },
+      "initialReason": "Issue #2017 first measurement: the merge base times none of #442's steps and has no such task. Release deep-show's geometry call with timings reads a bevel with weighted normals on a 10,000-face prop, two levels of subdivision of a 1,000-face mesh, distributing 100,000 points with pruning and a 1,000-span curve's arc-length table, each step timed in the process; a still scene with the terrain plate and its levels counts the steps its frames after the first run (the scheduler's ran, and view3d's meshes built, instances written, element uploads, batches encoded and terrain tiles selected); and release deep-gpu draws 10,000 instanced trees of 2,000 vertices at 1080p, 300 frames with their sway on and 300 off, the cost the difference of the sides' median GPU time. Five runs after a warm-up one, each a fresh process per binary. canvas.mjs judge holds the times on a reference Mac and the count anywhere. p50 and peak memory of the whole command get a 50% margin against the merge base once main has this task.",
+      "criteria": [
+        "#2017.751f674c"
+      ]
+    },
+    {
       "id": "replica-cold-start",
       "command": [
         "node",
