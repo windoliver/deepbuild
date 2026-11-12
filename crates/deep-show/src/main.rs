@@ -44,6 +44,7 @@ mod packs;
 mod physics;
 mod placement;
 mod played;
+mod probe;
 #[cfg(feature = "test-accent")]
 mod planted;
 mod query;
@@ -578,6 +579,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
                 .filter(|t| *t >= 0)?,
                 rev: c.get("rev")?.as_u64()?,
                 size: px_size(c.get("size"), |n| *n > 0)?,
+                probes: probe::parse(c)?,
             });
         }
         "screen" => return Some(Call::Screen),
@@ -1299,6 +1301,8 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "box_sends_every_id" => Planted::BoxSendsEveryId,
                 "resolver_only_ref_unresolved" => Planted::ResolverOnlyRefUnresolved,
                 "resolver_closes_task" => Planted::ResolverClosesTask,
+                "probe_from_depth" => Planted::ProbeFromDepth,
+                "probe_nearest_item" => Planted::ProbeNearestItem,
                 "verdict_keyed_by_doc" => Planted::VerdictKeyedByDoc,
                 "checks_skip_unknown_kind" => Planted::ChecksSkipUnknownKind,
                 "missing_kind_inconclusive" => Planted::MissingKindInconclusive,
