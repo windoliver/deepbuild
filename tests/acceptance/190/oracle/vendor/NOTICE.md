@@ -2,7 +2,7 @@
 
 Copied unchanged, at the commit the oracle map pins (`pins.json`), under the paths they have upstream. Only the
 files the tests beside this folder translate are here; nothing in this folder is run (the tests don't call
-`llvm-mc`, `wasm-ld` or `obj2yaml`). The license is the project's own, as `pins.json` records it.
+`llvm-mc`, `wasm-ld`, `obj2yaml` or `FileCheck`). The license is the project's own, as `pins.json` records it.
 
 | Folder | Project | Commit | License | Upstream |
 |---|---|---|---|---|

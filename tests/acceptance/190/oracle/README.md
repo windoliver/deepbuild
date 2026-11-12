@@ -12,12 +12,12 @@ before the rewrite), its refusals' naming fields, and its planted values. They a
 value.
 
 The map's rule: a linked test counts as evidence only when a runner feeds it our output and it rejects our output
-with a planted fault. wasm-ld isn't our linker, and upstream's tests run `llvm-mc`, `wasm-ld` and `obj2yaml`, none
-of which is run here. Each test below instead builds upstream's case as our objects (a program and libraries, as
-`../README.md`: Relocatable objects lays them out), links them through our `deep-logic`, and holds what upstream's
-CHECK lines check to our output: the merged program's bytes, read by this lane's reader `wasm.ts` (upstream reads
-its output with `obj2yaml`) and run by node's own WebAssembly, or our refusal. The table says which planted value,
-or which twin, shows each test rejecting a wrong program.
+with a planted fault. wasm-ld isn't our linker, and upstream's tests run `llvm-mc`, `wasm-ld` and `obj2yaml`, piped
+into `FileCheck`, none of which is run here. Each test below instead builds upstream's case as our objects (a
+program and libraries, as `../README.md`: Relocatable objects lays them out), links them through our `deep-logic`,
+and holds what upstream's CHECK lines check to our output: the merged program's bytes, read by this lane's reader
+`wasm.ts` (upstream reads its output with `obj2yaml`) and run by node's own WebAssembly, or our refusal. The table
+says which planted value, or which twin, shows each test rejecting a wrong program.
 
 ## Run
 
@@ -74,7 +74,8 @@ upstream test either, per the map.
   their indices or the count.
 - **function-imports.s: the name section** (`FunctionNames`: ret32, _start). `../README.md` gives a merged program
   no name section (its objects have none) and no other field exposes a library function's name in a merged program
-  (a trap's `library.function` does, which the parent's criterion 5 test holds), so the names aren't checked.
+  (a trap's `library.function` does, which the parent's criterion 5 test asserts on this host; that test is BLOCKED
+  at its second machine), so the names aren't checked.
 - **function-imports.s: `Inputs/ret32.s`** isn't vendored (the map copies only function-imports.s). The test needs
   only ret32's signature, which function-imports.s declares (`.functype ret32 (f32) -> (i32)`); our ret32@1 has that
   signature and returns 32, a body of ours, so a run shows the call reaching it.
