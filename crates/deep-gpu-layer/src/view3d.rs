@@ -966,7 +966,9 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
     }
     crate::physics::bake(&mut args.doc)?;
     crate::particles::refuse(&args.doc, app.planted)?;
-    let order = frame_order(args.from, args.frames, &args.seeks);
+    // The frames the call draws and how each is reached (#173), the ones logic runs at first.
+    let reached = history::order(args.from, args.frames, &args.seeks, &args.history, args.fps);
+    let order: Vec<u64> = reached.iter().map(|(n, _)| *n).collect();
     let mut baked = crate::fed::bake(&args.doc, &args.assets, (&order, args.fps), app.planted)?;
     let packed = args.doc["packs"].as_array().is_some_and(|p| !p.is_empty());
     let mut lowered_doc = if packed {
@@ -1140,8 +1142,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             Some(Planted::EdgesDashOtherSpace) => Some("edges_dash_other_space"),
             _ => None,
         };
-        let order = history::order(args.from, args.frames, &args.seeks, &args.history, args.fps);
-        for (n, reach) in order {
+        for &(n, reach) in &reached {
             let frame_started = std::time::Instant::now();
             // A seek applies every patch up to the frame it opens at.
             let mut patched = false;
