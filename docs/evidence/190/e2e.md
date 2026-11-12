@@ -151,14 +151,16 @@ wording is the issue's (its Acceptance criteria), not repeated here.
   (`oracle-reader-function-imports.txt`: rust-objcopy 1.99.1, LLVM 23.1.1 rather than the vendored
   tests' pinned 23.1.3, exit 0 against exit 134 in
   `parseLinkingSection`; obj2yaml itself isn't installed). Upstream's whole RUN line would reject the honest program
-  too: it has no name section, which upstream's `Name: name` CHECK needs, and it exports `init` and `step` beside the
-  program's own functions (`WebAssembly.Module` on the saved run's honest program); only the reader step tells the two
-  apart.
+  too: it has no name section, which upstream's `Name: name` CHECK needs, and it defines `init` and `step` besides
+  `ret32` and `_start` (4 functions and a third signature, where upstream's CHECK-NEXTs want exactly two), by
+  `WebAssembly.Module` on the honest program rebuilt as the reader file's header says (sha256 `6afd1f32…`); only the
+  reader step tells the two apart.
   `linker_links_in_listing_order`'s output is aligned and consistent in its own order (beta@1 at 8,200, alpha@1 at
   8,208, v = 65,033, by validators' probes, not saved here), so it breaks only our rule that link order is dependency
   order with ties by name; it fails data-layout's two fixed-address checks, which hold that order rule along with
   alignment, and its zero-fill check (the stray byte at 8,205), which is ours. So the oracle lane is INCONCLUSIVE for
-  criterion 1: its tests pass and can fail, but no planted fault is shown failing a CHECK line upstream holds. Both planted twins are named by other
+  criterion 1: its tests pass and can fail, but no planted twin is shown failing a CHECK line upstream holds (a
+  hand-made mutant is, below; whether its saved run counts is the owner ask). Both planted twins are named by other
   criteria (`linker_adds_linking_section` by 7, `linker_links_in_listing_order` by 9); criterion 1 names none, so
   under the design's "Wrong programs" it has only a mutant, as criterion 3 does. One was run: a hand-made mutant of
   9a02471b6's `link.rs` line 448 that places each library segment at alignment 1, link order unchanged, fails
@@ -173,7 +175,7 @@ wording is the issue's (its Acceptance criteria), not repeated here.
   cargo-mutants with cargo's own tests, never a vitest file, and says its kills prove no criterion. Its twins route
   (`tests/acceptance/<issue>/twins.json`, folders that replace code under test, as #1113 uses) could run the two
   mutants as rerunnable twins, but the blind job would have to add them, and the lane skips a test's twins once that
-  test fails on the merge base at its assertion (`runTests`' twin loop), as all 6 oracle tests do (`BASE-FAILURE.txt`), so it
+  test fails on the merge base at its assertion (`prepareRuns`' twin loop in `scripts/proof-runs.mjs`, with `wrongProgram`), as all 6 oracle tests do (`BASE-FAILURE.txt`), so it
   would report "failed on the merge base", which the design's "Wrong programs" doesn't accept for new code. The lane's one ask, to the owner, for
   criteria 1 and 3 together: do saved runs of hand-made mutants count as line 27's planted fault? Yes: data-layout counts
   for criterion 1 on `oracle-mutants/misaligned-segment.txt` (function-imports stays inventory) and undefined.s for
@@ -566,3 +568,8 @@ raw files, `gen.test.ts`, the code and the issue. It also ran its own BFS over t
   criterion; the honest program's sections are stated, not cited to a round; and two oracle-file wordings (ac05's
   BLOCKED state, FileCheck among upstream's tools) went back to the blind job, whose redraft (34fd7469c) changes
   docs only.
+- **Round 47** found no wrong values and no P1 or P2 (oracle rerun 6 passed; the reader file and the honest program's
+  facts reproduced; mutants reasoned; screenshots and `e2e-raw` checked) and three low gaps, fixed here: the twin
+  skip is cited to `prepareRuns`, not `runTests`; the honest program fails upstream's RUN line for its extra functions
+  and signature as well as its missing name section; and "no planted twin" replaces "no planted fault", since the
+  hand-made mutant does fail an upstream-held check.
