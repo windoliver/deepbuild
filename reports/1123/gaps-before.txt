@@ -1,0 +1,101 @@
+✖ path-skipped lanes cannot add binary build prerequisites to the selected lane (7008.3375ms)
+✖ Vitest excludes apply before binary demand is collected (2961.683958ms)
+✖ run-private directories disappear after the creating lane receives SIGTERM (8260.816583ms)
+✖ run-private directories disappear after the creating lane receives SIGKILL (5971.009166ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 0
+ℹ fail 4
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 24352.033709
+
+✖ failing tests:
+
+test at tests/proof-binaries-gaps.test.mjs:25:1
+✖ path-skipped lanes cannot add binary build prerequisites to the selected lane (7008.3375ms)
+  AssertionError [ERR_ASSERTION]: exit 1
+  RUN selected
+  SKIP optional: the change touches no file it reads
+  BLOCKED selected: test binaries: cargo build failed: scripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `cargo build --bin deep-hook --locked --target-dir <scratch>/tmp/deep-lane-binaries-gDcbZh/bin/.artifacts --config build.build-dir="<scratch>/repo/target" --message-format=json-render-diagnostics` runs unleased
+    Fix: none
+    Elapsed: 5.06 s
+  
+  
+  
+  1 !== 0
+  
+      at TestContext.<anonymous> (file:///private<scratch>/gap-root/tests/proof-binaries-gaps.test.mjs:30:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 1,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/proof-binaries-gaps.test.mjs:35:1
+✖ Vitest excludes apply before binary demand is collected (2961.683958ms)
+  AssertionError [ERR_ASSERTION]: exit 1
+  RUN selected
+  BLOCKED selected: test binaries: cargo build failed: scripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `cargo build --bin deep-hook --locked --target-dir <scratch>/tmp/deep-lane-binaries-5kQ5N3/bin/.artifacts --config build.build-dir="<scratch>/repo/target" --message-format=json-render-diagnostics` runs unleased
+    Fix: none
+    Elapsed: 1.55 s
+  
+  
+  
+  1 !== 0
+  
+      at TestContext.<anonymous> (file:///private<scratch>/gap-root/tests/proof-binaries-gaps.test.mjs:41:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 1,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/proof-binaries-gaps.test.mjs:47:3
+✖ run-private directories disappear after the creating lane receives SIGTERM (8260.816583ms)
+  AssertionError [ERR_ASSERTION]: a killed run must not leave its binary directory
+  
+  true !== false
+  
+      at TestContext.<anonymous> (file:///private<scratch>/gap-root/tests/proof-binaries-gaps.test.mjs:62:12)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: true,
+    expected: false,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/proof-binaries-gaps.test.mjs:47:3
+✖ run-private directories disappear after the creating lane receives SIGKILL (5971.009166ms)
+  AssertionError [ERR_ASSERTION]: a killed run must not leave its binary directory
+  
+  true !== false
+  
+      at TestContext.<anonymous> (file:///private<scratch>/gap-root/tests/proof-binaries-gaps.test.mjs:62:12)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: true,
+    expected: false,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

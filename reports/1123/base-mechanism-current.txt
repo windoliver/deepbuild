@@ -1,0 +1,127 @@
+✖ #1123.07de86fd before runs the base binary as the wrong program and never shares it with the change (5824.495958ms)
+ℹ BAY claim {"index":1,"role":"base","use":"before","bay":"<scratch>/<fixture-home>/deepbuild-bays/1/base","base":"296299ff0aa57d1d87e1781aa18b828ba493ab07","tree":"2161d76d527c966c00a92f6b16b4fc5c1955866f","bundle":null,"untracked":null,"overlay":{"files":1,"hash":"3f692a5c2dc7db819066fab05321c55195d486ef260c2505a62841cf8fb59b0c"},"sealedTree":null,"seal":"none","cold":true,"stopped":false,"installed":true,"written":105,"deleted":0,"crates":["deep-hook"]}
+BAY claim {"index":1,"role":"change","use":"before","bay":"<scratch>/<fixture-home>/deepbuild-bays/1/change","tree":"1de3fc8cda4990dc33bde8a274b60b112f758d19","bundle":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","untracked":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","untrackedFiles":[],"overlay":null,"sealedTree":null,"seal":"none","cold":true,"stopped":false,"installed":true,"written":106,"deleted":0,"crates":["deep-hook"]}
+FAIL before: tests/acceptance/1123/binary.test.mjs › #1123.07de86fd binary result: passed on the merge base
+  Fix: Make each tagged test fail on the merge base at its assertion, or name a planted wrong program its criterion fails in tests/acceptance/<issue>/twins.json; a merge base that cannot install is repaired on main.
+BAY release {"index":1,"role":"base","bay":"<scratch>/<fixture-home>/deepbuild-bays/1/base","status":null,"targetBytes":1060857,"touched":0}
+BAY release {"index":1,"role":"change","bay":"<scratch>/<fixture-home>/deepbuild-bays/1/change","status":null,"targetBytes":1060907,"touched":0}
+proof: wall time 4.0 s
+
+✖ #1123.cd6b3dd8 lanes.mjs uses its own run-private build, not the shell or mutable target (3727.777959ms)
+✖ #1123.cd6b3dd8 affected.mjs uses its own run-private build, not the shell or mutable target (3711.500125ms)
+ℹ INCONCLUSIVE known-failures.json: cargo -p deep-replica --test acceptance_326_panels_planted › base_loader_reaches_the_network: could not read issue #1620: To get started with GitHub CLI, please run:  gh auth login
+INCONCLUSIVE known-failures.json: cargo -p deep-replica --test acceptance_327_card: could not read issue #1620: To get started with GitHub CLI, please run:  gh auth login
+INCONCLUSIVE known-failures.json: packages/hub/test/memory-overrule.test.ts › deep memory overrule › stays overruled across a re-read of the transcript, and a new prompt rejects it again: could not read issue #1621: To get started with GitHub CLI, please run:  gh auth login
+INCONCLUSIVE known-failures.json: tests/acceptance/350/staged.test.ts › AC4 #350.43f82359 a package that registers a handler and an action and then fails to start exposes neither; enabling and disabling one 20 times leaves no listener or callback it owned; a call from a removed version finishing after its replacement is active changes no state and delivers nothing through it › AC4 a hub package enabled and disabled 20 times leaves no handler or action of an earlier load: each hook calls one handler once, each action call runs once: could not read issue #1621: To get started with GitHub CLI, please run:  gh auth login
+INCONCLUSIVE known-failures.json: tests/acceptance/56/decision.test.mjs › #56 scope import("effect/Effect") is timed on Node 22, and the command that times it measures this Node: could not read issue #1622: To get started with GitHub CLI, please run:  gh auth login
+INCONCLUSIVE known-failures.json: tests/acceptance/56/decision.test.mjs › #56.31f12028 [effect] the bench holds 50 sessions' hooks and prints the variant's hold latency, memory and leaked handles: could not read issue #1622: To get started with GitHub CLI, please run:  gh auth login
+INCONCLUSIVE known-failures.json: tests/acceptance/882/lint.test.mjs › #882.f3bc7068 crates/deep-app/src holds no color literal: no rgb(0x, rgba(0x, hsla(, hex inside rgb(...) or "#rrggbb" line: could not read issue #1623: To get started with GitHub CLI, please run:  gh auth login
+INCONCLUSIVE known-failures.json: tests/preflight.test.mjs › the unit lane runs each reference-Mac budget file alone, after the parallel block: could not read issue #1624: To get started with GitHub CLI, please run:  gh auth login
+FAIL affected: 572 new, 0 already failing on main, 14 inconclusive or blocked, 0 listed skips, 0 passed, in 3 s at load 62; logs in <scratch>/tmp/deep-affected-HoygEI
+✖ #1123.cd6b3dd8 childEnv discards a shell binary directory (220.370583ms)
+✔ #1123.cd6b3dd8 childEnv preserves the explicit per-side binary directory (222.108208ms)
+✔ wrong-program proof: deleting DEEP_BIN_DIR after the merge fails the same per-side assertion (228.657333ms)
+ℹ planted delete-after-merge rejected: AssertionError [ERR_ASSERTION]: per-side DEEP_BIN_DIR survives
+ℹ tests 6
+ℹ suites 0
+ℹ pass 2
+ℹ fail 4
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 14052.81975
+
+✖ failing tests:
+
+test at tests/acceptance/1123/binaries.test.mjs:8:1
+✖ #1123.07de86fd before runs the base binary as the wrong program and never shares it with the change (5824.495958ms)
+  AssertionError [ERR_ASSERTION]: base and change must execute their own compiler-built binaries
+  + actual - expected
+  
+    [
+  -   'base-wrong',
+      'change-right',
+  +   'change-right'
+    ]
+  
+      at TestContext.<anonymous> (file:///private<base>/tests/acceptance/1123/binaries.test.mjs:27:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ 'change-right', 'change-right' ],
+    expected: [ 'base-wrong', 'change-right' ],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1123/binaries.test.mjs:35:3
+✖ #1123.cd6b3dd8 lanes.mjs uses its own run-private build, not the shell or mutable target (3727.777959ms)
+  AssertionError [ERR_ASSERTION]: parallel binary: shell/stale binary, not this run's build
+  + actual - expected
+  
+  + 'shell-wrong'
+  - 'change-right'
+  
+      at assertOwnBinaries (file:///private<base>/tests/acceptance/1123/helpers.mjs:100:12)
+      at TestContext.<anonymous> (file:///private<base>/tests/acceptance/1123/binaries.test.mjs:56:22)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'shell-wrong',
+    expected: 'change-right',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1123/binaries.test.mjs:35:3
+✖ #1123.cd6b3dd8 affected.mjs uses its own run-private build, not the shell or mutable target (3711.500125ms)
+  AssertionError [ERR_ASSERTION]: node binary: shell/stale binary, not this run's build
+  + actual - expected
+  
+  + 'shell-wrong'
+  - 'change-right'
+  
+      at assertOwnBinaries (file:///private<base>/tests/acceptance/1123/helpers.mjs:100:12)
+      at TestContext.<anonymous> (file:///private<base>/tests/acceptance/1123/binaries.test.mjs:56:22)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'shell-wrong',
+    expected: 'change-right',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1123/environment.test.mjs:14:1
+✖ #1123.cd6b3dd8 childEnv discards a shell binary directory (220.370583ms)
+  AssertionError [ERR_ASSERTION]: inherited DEEP_BIN_DIR must be discarded before merging extra
+  + actual - expected
+  
+  + '/fixture/shell/bin'
+  - null
+  
+      at TestContext.<anonymous> (file:///private<base>/tests/acceptance/1123/environment.test.mjs:21:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: '/fixture/shell/bin',
+    expected: null,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

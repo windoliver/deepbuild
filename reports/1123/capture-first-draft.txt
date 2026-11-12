@@ -1,0 +1,39 @@
+✖ failing tests:
+
+test at tests/proof-binaries-capture.test.mjs:11:60
+✖ proof-runs: capture excludes a concurrent foreign Cargo build (1915.089167ms)
+  AssertionError [ERR_ASSERTION]: <scratch>/deep-proof-checkout-i5RPRx/target/debug/deep-hook 
+  Error: spawnSync <scratch>/deep-proof-checkout-i5RPRx/target/debug/deep-hook ENOENT
+  
+  null !== 0
+  
+      at run (file://<checkout>/tests/proof-binaries-capture.test.mjs:20:12)
+      at TestContext.<anonymous> (file://<checkout>/tests/proof-binaries-capture.test.mjs:71:20)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: null,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/proof-binaries-capture.test.mjs:11:60
+✖ affected: capture excludes a concurrent foreign Cargo build (1716.847583ms)
+  AssertionError [ERR_ASSERTION]: <scratch>/repo/target/debug/deep-hook 
+  Error: spawnSync <scratch>/repo/target/debug/deep-hook ENOENT
+  
+  null !== 0
+  
+      at run (file://<checkout>/tests/proof-binaries-capture.test.mjs:20:12)
+      at TestContext.<anonymous> (file://<checkout>/tests/proof-binaries-capture.test.mjs:71:20)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: null,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

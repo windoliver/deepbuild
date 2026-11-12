@@ -1,0 +1,38 @@
+✔ #1123.07de86fd before runs the base binary as the wrong program and never shares it with the change (22286.397167ms)
+PASS before: tests/acceptance/1123/binary.test.mjs › #1123.07de86fd binary result: failed on the merge base at its assertion
+proof: wall time 16.7 s
+✔ #1123.cd6b3dd8 lanes.mjs uses its own run-private build, not the shell or mutable target (15266.155542ms)
+✔ #1123.cd6b3dd8 affected.mjs uses its own run-private build, not the shell or mutable target (13091.236042ms)
+✔ #9001.12345678 own build reaches the consumer (465.62075ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 537.275125
+PASS before: tests/acceptance/1123/consumer.test.mjs › #9001.12345678 own build reaches the consumer: failed on the merge base at its assertion
+proof: wall time 103.6 s
+✔ lanes.mjs hands its own executable to the consumer after a competing Cargo rewrite (70440.3895ms)
+✔ affected.mjs hands its own executable to the consumer after a competing Cargo rewrite (71237.084ms)
+✔ before keeps base and change origins separate during competing Cargo rewrites (135527.783334ms)
+✔ #1123.cd6b3dd8 childEnv discards a shell binary directory (272.568166ms)
+✔ #1123.cd6b3dd8 childEnv preserves the explicit per-side binary directory (259.871ms)
+✔ wrong-program proof: deleting DEEP_BIN_DIR after the merge fails the same per-side assertion (219.46325ms)
+✔ path-skipped lanes cannot add binary build prerequisites to the selected lane (1239.617ms)
+✔ Vitest excludes apply before binary demand is collected (2381.49525ms)
+✔ run-private directories disappear after the creating lane receives SIGTERM (792.6175ms)
+✔ run-private directories disappear after the creating lane receives SIGKILL (748.510708ms)
+✔ a JS-only test importing tooling does not build binaries merely mentioned in that tooling (1123.739125ms)
+✔ a lane respects a root-relative explicit Node test path (2424.471458ms)
+✔ runLanes builds no Rust for a JS-only consumer (1257.412292ms)
+✔ runLanes builds only the binary selected consumers and helpers read (2024.694708ms)
+ℹ tests 17
+ℹ suites 0
+ℹ pass 17
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 341184.593833

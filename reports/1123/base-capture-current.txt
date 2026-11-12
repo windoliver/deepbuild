@@ -1,0 +1,94 @@
+RUN unit
+scripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `cargo build --offline --locked -p deep-hook` runs unleased
+   Compiling shlex v2.0.1
+   Compiling find-msvc-tools v0.1.15
+   Compiling libc v0.2.191
+   Compiling cfg-if v1.0.5
+   Compiling untrusted v0.9.0
+   Compiling zeroize v1.9.1
+   Compiling rustls v0.23.46
+   Compiling once_cell v1.21.4
+   Compiling subtle v2.6.1
+   Compiling deep-contracts v0.0.0 (<scratch>/repo/crates/deep-contracts)
+   Compiling cc v1.11.1
+   Compiling rustls-pki-types v1.15.1
+   Compiling ring v0.17.14
+   Compiling getrandom v0.2.17
+   Compiling rustls-webpki v0.103.15
+   Compiling deep-hook v1.0.1123 (<scratch>/repo/crates/deep-hook)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 20.93s
+   Compiling deep-hook v8.8.1123 (<scratch>/opponent-a/crates/deep-hook)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.86s
+   Compiling deep-hook v9.9.1123 (<scratch>/opponent-b/crates/deep-hook)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.89s
+scripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node --test --test-reporter=file://<scratch>/repo/scripts/proof-reporter.mjs --test-reporter-destination=<scratch>/deep-preflight-output-fKagKl/report --test-reporter=spec --test-reporter-destination=stdout tests/acceptance/1123/consumer.test.mjs` runs unleased
+✖ #9001.12345678 own build reaches the consumer (17.401709ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 82.926458
+
+✖ failing tests:
+
+test at tests/acceptance/1123/consumer.test.mjs:10:1
+✖ #9001.12345678 own build reaches the consumer (17.401709ms)
+  AssertionError [ERR_ASSERTION]: RUN_PRIVATE_ORIGIN: consumer did not get its own build
+  + actual - expected
+  
+  + '9.9.1123'
+  - '1.0.1123'
+  
+      at TestContext.<anonymous> (file://<scratch>/repo/tests/acceptance/1123/consumer.test.mjs:29:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: '9.9.1123',
+    expected: '1.0.1123',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+FAIL unit: ℹ fail 1
+  Fix: Run-private executable origin
+  Elapsed: 29.06 s
+
+
+✖ lanes.mjs hands its own executable to the consumer after a competing Cargo rewrite (51612.158667ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 51685.118959
+
+✖ failing tests:
+
+test at tests/acceptance/1123/capture-redraft/origin.test.mjs:128:1
+✖ lanes.mjs hands its own executable to the consumer after a competing Cargo rewrite (51612.158667ms)
+  AssertionError [ERR_ASSERTION]: RUN_PRIVATE_ORIGIN: consumer used a foreign build
+  + actual - expected
+  
+  + '9.9.1123'
+  - '1.0.1123'
+  
+      at assertOrigin (file:///private<base>/tests/acceptance/1123/capture-redraft/origin.test.mjs:116:10)
+      at TestContext.<anonymous> (file:///private<base>/tests/acceptance/1123/capture-redraft/origin.test.mjs:140:3)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: '9.9.1123',
+    expected: '1.0.1123',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
