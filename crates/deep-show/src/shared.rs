@@ -1466,8 +1466,8 @@ impl Hub<'_> {
             reply.insert("notices".into(), Value::Array(notices));
         }
         let timing = show.include.iter().any(|i| matches!(i, Include::Timing));
-        let rules_ms = timing
-            .then(|| crate::packs::kind_rules_ms(&doc, &result, &self.startup.sealed, &self.packs));
+        let rules_ms =
+            timing.then(|| crate::packs::timings(&doc, &result, &self.startup.sealed, &self.packs));
         crate::packs::reply(
             &result.expansions,
             Some((check_ms, rules_ms)),

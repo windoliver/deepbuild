@@ -7472,9 +7472,8 @@ export class Core {
   /** The same first-use gate for a shown document and its exports, for every asset-reading kind. */
   private async preparePackAssets(document: Obj): Promise<Obj | undefined> {
     if (!this.libraries) return { status: 'BLOCKED', outcome: 'refused', cause: 'The asset host is not ready.', snapshots: [] };
-    for (const pack of Array.isArray(document.packs) ? document.packs : []) if (typeof pack !== 'string' || !(await this.libraries.packs.has(pack, this.canvas()))) {
-      return { status: 'BLOCKED', outcome: 'refused', cause: `pack_missing: ${String(pack)}`, snapshots: [] };
-    }
+    // #1958: a pack version the store lacks doesn't refuse the document; the canvas core opens it, its instances kept and skipped.
+    await this.libraries.packs.shipped(this.canvas());
     for (const { pack, asset } of this.libraries.packs.used(document)) {
       const fetched = await this.libraries.fetchPack(pack, asset.path);
       if (fetched.status !== 'fetched') return { ...fetched, outcome: 'refused', code: 'asset_blocked', issues: [{ severity: 'error', code: 'asset.blocked', ids: [asset.path], message: `BLOCKED: ${JSON.stringify(fetched)}` }], snapshots: [] };
