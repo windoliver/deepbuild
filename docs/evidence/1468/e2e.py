@@ -1,5 +1,6 @@
 # The #1468 e2e: each real binary gets a document holding a 1,000,000-paren string, then, in the
 # same process, the same document with one paren, so a reply to the second shows the process stayed up.
+# The pack rule's second document is a second pack, `shallowrule`, as one id installs once.
 # Usage: python3 -I e2e.py <bin_dir>
 import json, os, re, subprocess, sys, tempfile
 bin_dir = sys.argv[1]
@@ -10,8 +11,8 @@ def short(v):
     if isinstance(v, str):
         if re.fullmatch(r"[0-9a-f]{64}", v): return v[:12] + "…"
         return v if len(v) <= 80 else f"{v[:40]}…[a {len(v):,}-char value, cut here by e2e.py]"
-    if isinstance(v, list): return [short(x) for x in v[:6]]
-    if isinstance(v, dict): return {k: short(x) for k, x in v.items() if k not in ("frames", "texts", "glyphs")}
+    if isinstance(v, list): return [short(x) for x in v[:6]] + ([f"…[{len(v) - 6:,} more, cut here by e2e.py]"] if len(v) > 6 else [])
+    if isinstance(v, dict): return {k: "[cut here by e2e.py]" if k in ("frames", "texts", "glyphs") else short(x) for k, x in v.items()}
     return v
 def run(name, args, lines):
     print(f"== {name}")
@@ -23,16 +24,18 @@ def run(name, args, lines):
     for i, what in enumerate(w for w, _ in lines_of[name]):
         if i < len(replies):
             try: text = json.dumps(short(json.loads(replies[i])), ensure_ascii=False)
-            except ValueError: text = replies[i][:600]
+            except ValueError: text = replies[i][:600] + ("…[cut here by e2e.py]" if len(replies[i]) > 600 else "")
             print(f"reply {i + 1} ({what}): {text}")
         else:
             print(f"reply {i + 1} ({what}): none")
-    for l in (p.stderr.decode().strip().splitlines()[-2:] if p.returncode else []): print("stderr:", l)
+    for l in (p.stderr.decode().strip().splitlines()[-2:] if p.returncode else []): print("stderr (its last 2 lines):", l)
     print(f"exit {p.returncode}" + (f", died by signal {-p.returncode}" if p.returncode < 0 else ""))
+    return p.returncode
 lines_of = {}
+codes = []
 def case(name, args, make):
-    lines_of[name] = [(f"{n:,} parens", make(n)) for n in (N, 1)]
-    run(name, args, [l for _, l in lines_of[name]])
+    lines_of[name] = [(f"{n:,} paren" + ("s" if n > 1 else ""), make(n)) for n in (N, 1)]
+    codes.append(run(name, args, [l for _, l in lines_of[name]]))
 # Driver
 dot = {"id": "dot", "kind": "rect@1", "layer": "main", "name": "Rect dot", "order": "adot",
        "params": {"box": [0, 0, 20, 20], "paint": {"fill": {"role": "ink"}}}, "at": {"pos": [0, 0, 0]}}
@@ -69,3 +72,5 @@ def pack(n):
     open(os.path.join(d, "pack.json"), "w").write(json.dumps(manifest))
     return json.dumps({"evidence": tempfile.mkdtemp(), "calls": [{"call": "install_pack", "id": f"test/{name}", "dir": d}]})
 case("pack rule: deep-show run install_pack", ["deep-show", "run"], pack)
+# Exits 1 when a binary failed and 2 when one wasn't built, so neither run reads as a pass.
+sys.exit(1 if any(c not in (0, None) for c in codes) else 2 if None in codes else 0)

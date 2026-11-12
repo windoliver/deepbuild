@@ -11,12 +11,15 @@ case $1 in
 e2e)
     # Only binaries this build made run: each one whose build passed is copied to a fresh folder.
     bins=$(mktemp -d)
-    x cargo build --locked -q -p deep-motion -p deep-show --bins && cp target/debug/deep-motion target/debug/deep-show "$bins/"
+    x cargo build --locked -q --message-format short -p deep-motion -p deep-show --bins && cp target/debug/deep-motion target/debug/deep-show "$bins/"
     x bash -c "cargo build --locked -q -p deep-marks-render --bin deep-canvas-render 2>&1 | grep -A3 \"^error\" | head -8; exit \${PIPESTATUS[0]}" && cp target/debug/deep-canvas-render "$bins/"
     x sha256sum "$bins"/*
     x python3 -I "$here/e2e.py" "$bins"
     ;;
 acceptance)
-    x cargo test --locked -q -p deep-motion --test acceptance_1468 -- --test-threads=1 --nocapture
+    x cargo test --locked -p deep-motion --test acceptance_1468 -- --test-threads=1 --nocapture
+    # The planted parser, with no cap, run alone in the suite's child: it must die by signal.
+    x env DEEP_1468_CHILD=ac1:paren:planted cargo test --locked -q -p deep-motion --test acceptance_1468 -- --ignored --exact child
+    x env DEEP_1468_CHILD=ac3:planted cargo test --locked -q -p deep-motion --test acceptance_1468 -- --ignored --exact child
     ;;
 esac

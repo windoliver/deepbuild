@@ -1,3 +1,6 @@
+Superseded: these are the first runs, through an earlier e2e.py (its usage below; see this file's git history). The current
+e2e.py and its recorded runs, on the PR's merge base and its head, are in shots/ (shots/README.md).
+
 #1468 e2e, 2026-11-08, Linux aarch64, debug builds of deep-motion, deep-canvas-render and deep-show.
 Each document holds a string of N parens around its expression through a real binary: a driver (deep-motion eval),
 a text animator's field (deep-canvas-render raster) and a pack's kind rule (deep-show run, install_pack).
