@@ -23,7 +23,7 @@ use crate::interval::Iv;
 use crate::registry::Sealed;
 
 pub(super) mod migrate;
-pub use migrate::store_migrations;
+pub use migrate::{at_load, store_migrations};
 
 /// A pack kind as its pack declares it, with its kit's result once the pack check ran it.
 #[derive(Clone, Debug, PartialEq)]

@@ -1,6 +1,6 @@
 {
   "crates/deep-app/src/question.rs": 1541,
-  "crates/deep-app/src/views.rs": 3658,
+  "crates/deep-app/src/views.rs": 3606,
   "crates/deep-canvas-effects/src/check.rs": 2093,
   "crates/deep-canvas-effects/src/emit.rs": 1636,
   "crates/deep-canvas-effects/src/graph.rs": 1624,
@@ -46,14 +46,14 @@
   "crates/deep-show/src/shared.rs": 2169,
   "packages/asks/src/index.ts": 2059,
   "packages/extension-host/src/host.ts": 3225,
-  "packages/hub/src/core.ts": 2626,
+  "packages/hub/src/core.ts": 2641,
   "tests/acceptance/1407/twins/allow-noted/crates/deep-hook/src/main.rs": 1904,
   "tests/acceptance/1407/twins/denial-reworded/crates/deep-hook/src/main.rs": 1901,
   "tests/acceptance/1407/twins/no-panic-hook/crates/deep-hook/src/main.rs": 1901,
   "tests/acceptance/1407/twins/plant-inert/crates/deep-hook/src/matcher.rs": 1939,
   "tests/acceptance/21/twins/ack-waits-long/crates/deep-hook/src/main.rs": 1564,
   "tests/acceptance/21/twins/hook-lingers-hub-up/crates/deep-hook/src/main.rs": 1565,
-  "tests/acceptance/39-redraft/twins/job-hooks-as-session/packages/hub/src/core.ts": 2626,
-  "tests/acceptance/83/twins/answers-any-origin/packages/hub/src/core.ts": 2626,
-  "tests/acceptance/83/twins/plant-ignored/packages/hub/src/core.ts": 2626
+  "tests/acceptance/39-redraft/twins/job-hooks-as-session/packages/hub/src/core.ts": 2641,
+  "tests/acceptance/83/twins/answers-any-origin/packages/hub/src/core.ts": 2641,
+  "tests/acceptance/83/twins/plant-ignored/packages/hub/src/core.ts": 2641
 }

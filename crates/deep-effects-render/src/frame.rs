@@ -43,6 +43,10 @@ pub struct Sparks {
     pub draw: u32,
     /// A puff shaded at half resolution.
     pub half: bool,
+    /// #449: an item the closed-form kernel writes (closed.wgsl), its frame's uniform words, its
+    /// bake's table words, and the surface it follows as evaluated this frame; none for the
+    /// shipped graph.
+    pub closed: Option<(Vec<u32>, Arc<Vec<u32>>, Vec<f32>)>,
 }
 
 /// What the look, the document and the session turn on this frame, and each effect's values.
@@ -105,6 +109,10 @@ pub struct Effects {
     /// How many of the targets the frame being planned has asked for: the rest are released.
     used: usize,
     sparks: Option<SparkDraw>,
+    /// #449's closed-form kernel, built the first frame an item needs it, and each item's bake
+    /// tables on the device, uploaded once per bake.
+    closed: Option<Arc<crate::closed::Closed>>,
+    closed_tables: BTreeMap<String, (Arc<Vec<u32>>, wgpu::Buffer)>,
     /// The half-resolution puffs' half-size target, with the full size it was made for (#1173).
     half: Option<([u32; 2], wgpu::TextureView)>,
     /// The lens dirt on the GPU, with the image it holds; black with none.
@@ -171,6 +179,8 @@ impl Effects {
             targets: Vec::new(),
             used: 0,
             sparks: None,
+            closed: None,
+            closed_tables: BTreeMap::new(),
             half: None,
             dirt: None,
             op_doc: None,
@@ -400,14 +410,41 @@ impl Effects {
             draw.instances = instance_buffer(d, s.count);
             draw.capacity = s.count;
         }
+        let kernel = s.closed.as_ref().map(|(uniform, words, now)| {
+            let closed = self
+                .closed
+                .get_or_insert_with(|| Arc::new(crate::closed::Closed::new(device)))
+                .clone();
+            let held = self
+                .closed_tables
+                .get(&s.item)
+                .filter(|(w, _)| Arc::ptr_eq(w, words));
+            let tables = match held {
+                Some((_, b)) => b.clone(),
+                None => {
+                    let b = crate::closed::Closed::tables(device, words);
+                    self.closed_tables
+                        .insert(s.item.clone(), (words.clone(), b.clone()));
+                    b
+                }
+            };
+            let instances = &self.sparks.as_ref().expect("made above").instances;
+            let bound = closed.bind(device, uniform, &tables, now, instances, s.count);
+            (closed, bound)
+        });
         let draw = self.sparks.as_ref().expect("made above");
         let mut c = *camera;
         c.seed = s.seed;
         // One dispatch per operator's worth of particles, each from its offset (a showpiece's
-        // count runs past one).
+        // count runs past one); none when the closed-form kernel writes them.
         let chunk = shipped::MAX_PARTICLES;
         let mut dispatches = Vec::new();
-        for k in 0..s.count.div_ceil(chunk).max(1) {
+        let chunks = if kernel.is_some() {
+            0
+        } else {
+            s.count.div_ceil(chunk).max(1)
+        };
+        for k in 0..chunks {
             let mut params = s.params.clone();
             params.insert("particles.offset".into(), Value::from(k * chunk));
             let values = interp::inputs(&compute.compiled.checked, &params, &self.settings.roles);
@@ -507,6 +544,17 @@ impl Effects {
         let count = s.count;
         Box::new(move |encoder| {
             let _keep = &ub;
+            if let Some((closed, bound)) = &kernel {
+                match &profiler {
+                    Some(p) => {
+                        let p = p.lock().unwrap_or_else(|e| e.into_inner());
+                        let q = p.begin_pass_query(SPARKS, encoder);
+                        closed.dispatch(encoder, bound, q.compute_pass_timestamp_writes());
+                        p.end_query(encoder, q);
+                    }
+                    None => closed.dispatch(encoder, bound, None),
+                }
+            }
             for ((g0, g1, _buffers), n) in &dispatches {
                 let groups = (g0.clone(), g1.clone());
                 match &profiler {

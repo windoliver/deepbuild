@@ -1,5 +1,5 @@
 import type { HubEvents, HubRuntime, HookSchedule } from './hub-capabilities.js';
-import type { AnswerDeliveryPort, StopJudgingPort, SessionMemoryPort, TranscriptsPort, McpOperationsPort } from './hub-ports.js';
+import type { AnswerDeliveryPort, StopJudgingPort, SessionFlagsPort, SessionMemoryPort, TranscriptsPort, McpOperationsPort } from './hub-ports.js';
 
 import { existsSync } from 'node:fs';
 import { stat } from 'node:fs/promises';
@@ -20,7 +20,7 @@ import { alive as running } from '@deepbuild/supervisor';
 import { sessionHomes } from './codex-settings.js';
 
 import { sessionStates, statusRows, WAITING_QUIET_MS, type StatusRow } from './status.js';
-import { buildRows, distinctTitles, jobRow, listRows, orderOf, settle, whyOf, type Placed, type Row, type RunningJob } from './rows.js';
+import { buildRows, distinctTitles, jobRow, listRows, orderOf, rowVersion, settle, whyOf, type Placed, type Row, type RunningJob } from './rows.js';
 
 import { commitsBetween, headOf } from './session-facts.js';
 
@@ -74,6 +74,7 @@ export interface SessionStateOptions {
   delivery: () => Pick<AnswerDeliveryPort, "answerWaiting" | "answers" | "binds" | "typedAt" | "unread" | "waitingFor">;
   mcp: () => Pick<McpOperationsPort, "stamps">;
   memory: () => Pick<SessionMemoryPort, "firstPrompted" | "tasted">;
+  flags: () => Pick<SessionFlagsPort, "unpushed" | "modelCalled">;
   events: Pick<HubEvents, "appendReading" | "append" | "connection" | "appendSession">;
 kernel: Pick<HubRuntime, "stopping">;
 schedule: Pick<HookSchedule, "askingSoon" | "queue">;
@@ -283,7 +284,9 @@ export class SessionState {
       // commits that appear by its end the session's (#29: head trust reads them); any other new head is not.
       const after = drafts.find((d) => d.kind === 'tool.after');
       const made = after !== undefined && typeof after.data.command === 'string' && COMMITS.test(after.data.command);
-      live.reading = (live.reading ?? Promise.resolve()).then(() => this.commits(meta, live, made)).catch(() => undefined);
+      // Once its turn stops, its commits no remote branch holds (#2019).
+      const stopped = (meta.event === 'Stop' || meta.event === 'StopFailure') && !meta.fields?.agent_id;
+      live.reading = (live.reading ?? Promise.resolve()).then(() => this.commits(meta, live, made)).then(() => (stopped ? this.options.flags().unpushed(meta.session, live.agent) : undefined)).catch(() => undefined);
     }
   }
 
@@ -317,11 +320,12 @@ export class SessionState {
     live.quiet = undefined;
     const session = this.sessions.get(id);
     const read = session?.read;
-    if (session) await this.options.services.transcriptReader.readTranscript(session);
+    if (session) await this.options.services.transcriptReader.readTranscript(session, this.options.flags().modelCalled(session));
     const due = live.quietDue ?? this.options.services.now();
     // A call under way writes nothing until it ends: the session waits on it, at work, for as long as such a call runs (#2021).
     const running = [...live.calls.values()].some((c) => c.ended === undefined && c.at !== undefined && due - c.at < CALL_RUNS_MS);
-    const going = live.state === 'working' ? running || (session !== undefined && session.read !== read)
+    // Its transcript grew since the last check, whether this read or the read between hooks (#2019) took it in.
+    const going = live.state === 'working' ? running || (session !== undefined && (session.read !== read || (session.grewAt ?? 0) > due - QUIET_MS))
       : !(live.asking && session?.results?.includes(live.asking)) && due - (live.heard ?? due) < WAITING_QUIET_MS;
     if (going) {
       this.quietIn(id, live, since, due + QUIET_MS);
@@ -461,7 +465,7 @@ export class SessionState {
     const ts = this.options.services.now();
     const session = row.session;
     const connection = this.options.events.connection('core', { ...(this.projects.get(session) ? { project: this.projects.get(session)! } : {}), ...(this.sessionPeople.get(session) ? { actor: this.sessionPeople.get(session)! } : {}) });
-    await this.options.events.append(connection, { v: row.doing ? 3 : 1, id: ulid(ts), kind: 'row.set', ts, data: { listed: true, order: placed.order, ...row } as unknown as JsonValue });
+    await this.options.events.append(connection, { v: rowVersion(row), id: ulid(ts), kind: 'row.set', ts, data: { listed: true, order: placed.order, ...row } as unknown as JsonValue });
     this.rows.set(id, { order: placed.order, row });
     return { seen: true };
   }
@@ -509,7 +513,7 @@ export class SessionState {
         ...changed.map(async (p) => {
           const ts = this.options.services.now();
           // A row that says what its session's turn is doing now takes the version with the field (#2021).
-          await this.options.events.append(rowOf(p.row.session), { v: p.row.doing ? 3 : 1, id: ulid(ts), kind: 'row.set', ts, data: { listed: true, order: p.order, ...p.row } as unknown as JsonValue });
+          await this.options.events.append(rowOf(p.row.session), { v: rowVersion(p.row), id: ulid(ts), kind: 'row.set', ts, data: { listed: true, order: p.order, ...p.row } as unknown as JsonValue });
           this.rows.set(p.row.id, p);
         }),
         ...left.map(async (id) => {

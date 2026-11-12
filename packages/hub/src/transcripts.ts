@@ -1,5 +1,5 @@
 import type { HubEvents, HubRuntime, HookSchedule } from './hub-capabilities.js';
-import type { SessionStatePort } from './hub-ports.js';
+import type { SessionFlagsPort, SessionStatePort } from './hub-ports.js';
 
 import { readFile } from 'node:fs/promises';
 
@@ -20,6 +20,7 @@ export interface TranscriptsOptions {
     readonly now: () => number;
   };
   state: () => Pick<SessionStatePort, "sessions">;
+  flags: () => Pick<SessionFlagsPort, "watchOnly">;
   events: Pick<HubEvents, "appendReading" | "connection" | "append">;
 kernel: Pick<HubRuntime, "stopping">;
 schedule: Pick<HookSchedule, "replayLate" | "replaying" | "queue">;
@@ -60,7 +61,7 @@ export class Transcripts {
       turn.recording = true;
       // Settled like a hook's drafts: the next hook doesn't wait for its commit. The turn, and so where a restart
       // reads from, stays until its reading is durable; one whose append fails is judged again with the next hook.
-      void this.options.events.appendReading(session.id, session.agent, HOOKS_MISSING).then(() => {
+      void this.options.events.appendReading(session.id, session.agent, HOOKS_MISSING).then(() => this.options.flags().watchOnly(session.id, session.agent, 'hooks', true)).then(() => {
         session.closed.splice(session.closed.indexOf(turn), 1);
         this.saveCursors();
       }, () => {

@@ -40,7 +40,7 @@ pub use check::{
     check, check_costed, check_in, check_packed, check_with, duration, frame_of, frame_rate_of,
     literal_forms, recheck, recheck_skipping_referrers, recheck_with, CheckResult, Referrers,
 };
-pub use close::undeclared;
+pub use close::{field_names, kind_names, owners, undeclared};
 pub use merge::{merge, Merged};
 pub use order::key_between;
 pub use packs::{Expansion, Pack, PackId, Packs, Planted as PackPlanted};
@@ -369,6 +369,10 @@ impl Notice {
         }
         if !self.close.is_empty() {
             out.insert("close".into(), json!(self.close));
+        }
+        // `pack_missing {pack, version, ids}` (Pack: retired and missing).
+        if self.code == "pack_missing" {
+            packs::retired::fields(&self.actual, &mut out);
         }
         Value::Object(out)
     }

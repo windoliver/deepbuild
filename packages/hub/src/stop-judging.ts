@@ -1,6 +1,6 @@
 import type { HubEvents, HubRuntime, HookSchedule } from './hub-capabilities.js';
 import { StopReply } from './stop-reply.js';
-import type { AnswerDeliveryPort, TranscriptsPort, SessionStatePort, McpOperationsPort, HubControlPort } from './hub-ports.js';
+import type { AnswerDeliveryPort, TranscriptsPort, SessionFlagsPort, SessionStatePort, McpOperationsPort, HubControlPort } from './hub-ports.js';
 import { backgrounded } from './hub-shared.js';
 import type { Questions } from './questions.js';
 import { STOP_HOLD_MS } from './claude-settings.js';
@@ -91,6 +91,7 @@ export interface StopJudgingOptions {
   delivery: () => Pick<AnswerDeliveryPort, "cap" | "deliver" | "handed" | "offer" | "promiseCarried" | "releases" | "unwoken" | "waiting" | "waitingFor">;
   transcripts: () => Pick<TranscriptsPort, "cursors">;
   control: () => Pick<HubControlPort, "onSwitchedTree">;
+  flags: () => Pick<SessionFlagsPort, "watchOnly">;
   events: Pick<HubEvents, "append" | "appendReading" | "connection">;
 kernel: Pick<HubRuntime, "blocked" | "overrides" | "stopping">;
 schedule: Pick<HookSchedule, "abandoned" | "askingNow" | "askingSoon" | "queue" | "wakeable">;
@@ -1080,6 +1081,7 @@ export class StopJudging {
           if (!this.toldUntrusted.has(r.session)) {
             this.toldUntrusted.add(r.session);
             await this.options.events.appendReading(r.session, this.options.state().live.get(r.session)?.agent ?? 'claude-code', `This repo isn't trusted (neither by your answer in the app nor by Claude Code's or Codex's own trust), so its spec checks (${spec.map((c) => c.check).join(', ')}) never run here and its claims are watch-only: none passes until you trust it.`).catch(() => undefined);
+            await this.options.flags().watchOnly(r.session, this.options.state().live.get(r.session)?.agent ?? 'claude-code', 'checks', true);
           }
         }
       }

@@ -64,6 +64,7 @@ import { Libraries } from './libraries.js';
 
 import { type Durable } from './vfs.js';
 import { refuse, Refused, refusal, type CoreOptions } from './wire.js';
+import { reported } from './setup-steps.js';
 import type { CallContext } from './session-types.js';
 import { HubCanvas } from './hub-canvas.js';
 
@@ -260,6 +261,8 @@ export class HubControl {
       case 'lease.exited': return this.options.services.heavy.exited(params).catch((e: Error) => { throw new Refused(refusal('type', '/params', e.message, method)); });
       case 'env.up': return this.work.envUp(params, context);
       case 'env.down': return this.work.envDown(params, context);
+      // The steps setup took (#1100), each a `setup.step` event, only as its one list names them.
+      case 'setup.report': { let steps; try { steps = reported(params); } catch (e) { throw new Refused(refusal('type', '/params/steps', (e as Error).message, method)); } for (const data of steps) await this.options.events.appendCore('setup.step', data); return {}; }
       case 'wiki.build': {
         const built = await this.options.services.wikiBuild.build();
         await syncRejected(this.options.services.raw, this.options.services.root.dir);

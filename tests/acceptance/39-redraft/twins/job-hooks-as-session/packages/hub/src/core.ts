@@ -105,6 +105,7 @@ import { StopJudging } from './stop-judging.js';
 import { SessionMemory } from './session-memory.js';
 import { Transcripts } from './transcripts.js';
 import { SessionState } from './session-state.js';
+import { SessionFlags } from './session-flags.js';
 import { McpOperations } from './mcp-operations.js';
 import { HubControl } from './hub-control.js';
 function lazyServices<T extends Record<string, () => unknown>>(read: T): { [K in keyof T]: ReturnType<T[K]> } {
@@ -129,6 +130,7 @@ export class Core {
   private memory!: SessionMemory;
   private transcripts!: Transcripts;
   private state!: SessionState;
+  private flags!: SessionFlags;
   private mcp!: McpOperations;
   private control!: HubControl;
   private wireAnswerDelivery(): void {
@@ -142,7 +144,7 @@ export class Core {
     const readstopping = () => this.stopping;
     const readabandoned = () => this.abandoned;
     const readoverrides = () => this.overrides;
-    this.judging = new StopJudging({ settings: this.options, services: lazyServices({ tasks: () => this.tasks, openItems: () => this.openItems, now: () => this.now, asks: () => this.asks, agents: () => this.agents, box: () => this.box, ledger: () => this.ledger, record: () => this.record, gate: () => this.gate, raw: () => this.raw, leases: () => this.leases, extensions: () => this.extensions, sizing: () => this.sizing, root: () => this.root, holds: () => this.holds, questions: () => this.questions, runner: () => this.runner, checkKinds: () => this.checkKinds, reviewRounds: () => this.reviewRounds, store: () => this.store, trust: () => this.trust, heavy: () => this.heavy, host: () => this.host, runs: () => this.runs, stacks: () => this.stacks, canvasSide: () => this.canvasSide }), state: () => this.state, mcp: () => this.mcp, delivery: () => this.delivery, transcripts: () => this.transcripts, control: () => this.control, events: { appendReading: (session, agent, reading, hook) => this.appendReading(session, agent, reading, hook), connection: (writer, extra) => this.connection(writer, extra), append: (connection, input, backfill) => this.append(connection, input, backfill) }, kernel: { get stopping() { return readstopping(); }, get overrides() { return readoverrides(); }, get blocked() { return readblocked(); } }, schedule: { askingSoon: () => this.askingSoon(), queue: (work, starting) => this.queue(work, starting), get abandoned() { return readabandoned(); }, wakeable: (waits, key, ms) => this.wakeable(waits, key, ms), askingNow: () => this.askingNow() } });
+    this.judging = new StopJudging({ settings: this.options, services: lazyServices({ tasks: () => this.tasks, openItems: () => this.openItems, now: () => this.now, asks: () => this.asks, agents: () => this.agents, box: () => this.box, ledger: () => this.ledger, record: () => this.record, gate: () => this.gate, raw: () => this.raw, leases: () => this.leases, extensions: () => this.extensions, sizing: () => this.sizing, root: () => this.root, holds: () => this.holds, questions: () => this.questions, runner: () => this.runner, checkKinds: () => this.checkKinds, reviewRounds: () => this.reviewRounds, store: () => this.store, trust: () => this.trust, heavy: () => this.heavy, host: () => this.host, runs: () => this.runs, stacks: () => this.stacks, canvasSide: () => this.canvasSide }), state: () => this.state, mcp: () => this.mcp, delivery: () => this.delivery, transcripts: () => this.transcripts, control: () => this.control, flags: () => this.flags, events: { appendReading: (session, agent, reading, hook) => this.appendReading(session, agent, reading, hook), connection: (writer, extra) => this.connection(writer, extra), append: (connection, input, backfill) => this.append(connection, input, backfill) }, kernel: { get stopping() { return readstopping(); }, get overrides() { return readoverrides(); }, get blocked() { return readblocked(); } }, schedule: { askingSoon: () => this.askingSoon(), queue: (work, starting) => this.queue(work, starting), get abandoned() { return readabandoned(); }, wakeable: (waits, key, ms) => this.wakeable(waits, key, ms), askingNow: () => this.askingNow() } });
   }
   private wireSessionMemory(): void {
 
@@ -151,11 +153,11 @@ export class Core {
   private wireTranscripts(): void {
     const readreplaying = () => this.replaying;
     const readstopping = () => this.stopping;
-    this.transcripts = new Transcripts({ settings: this.options, services: lazyServices({ root: () => this.root, now: () => this.now }), state: () => this.state, events: { appendReading: (session, agent, reading, hook) => this.appendReading(session, agent, reading, hook), connection: (writer, extra) => this.connection(writer, extra), append: (connection, input, backfill) => this.append(connection, input, backfill) }, kernel: { get stopping() { return readstopping(); } }, schedule: { replayLate: (kept) => this.replayLate(kept), get replaying() { return readreplaying(); }, queue: (work, starting) => this.queue(work, starting) } });
+    this.transcripts = new Transcripts({ settings: this.options, services: lazyServices({ root: () => this.root, now: () => this.now }), state: () => this.state, flags: () => this.flags, events: { appendReading: (session, agent, reading, hook) => this.appendReading(session, agent, reading, hook), connection: (writer, extra) => this.connection(writer, extra), append: (connection, input, backfill) => this.append(connection, input, backfill) }, kernel: { get stopping() { return readstopping(); } }, schedule: { replayLate: (kept) => this.replayLate(kept), get replaying() { return readreplaying(); }, queue: (work, starting) => this.queue(work, starting) } });
   }
   private wireSessionState(): void {
     const readstopping = () => this.stopping;
-    this.state = new SessionState({ settings: this.options, services: lazyServices({ gate: () => this.gate, asks: () => this.asks, now: () => this.now, record: () => this.record, transcriptReader: () => this.transcriptReader, stacks: () => this.stacks, replicas: () => this.replicas, archivedSessions: () => this.archivedSessions, archiveSession: () => this.archiveSession, runner: () => this.runner, root: () => this.root, siblings: () => this.siblings, sessionStarts: () => this.sessionStarts, people: () => this.people }), judging: () => this.judging, transcripts: () => this.transcripts, delivery: () => this.delivery, mcp: () => this.mcp, memory: () => this.memory, events: { appendReading: (session, agent, reading, hook) => this.appendReading(session, agent, reading, hook), append: (connection, input, backfill) => this.append(connection, input, backfill), connection: (writer, extra) => this.connection(writer, extra), appendSession: (session, agent, kind, data) => this.appendSession(session, agent, kind, data) }, kernel: { get stopping() { return readstopping(); } }, schedule: { askingSoon: () => this.askingSoon(), queue: (work, starting) => this.queue(work, starting) } });
+    this.state = new SessionState({ settings: this.options, services: lazyServices({ gate: () => this.gate, asks: () => this.asks, now: () => this.now, record: () => this.record, transcriptReader: () => this.transcriptReader, stacks: () => this.stacks, replicas: () => this.replicas, archivedSessions: () => this.archivedSessions, archiveSession: () => this.archiveSession, runner: () => this.runner, root: () => this.root, siblings: () => this.siblings, sessionStarts: () => this.sessionStarts, people: () => this.people }), judging: () => this.judging, transcripts: () => this.transcripts, delivery: () => this.delivery, mcp: () => this.mcp, memory: () => this.memory, flags: () => this.flags, events: { appendReading: (session, agent, reading, hook) => this.appendReading(session, agent, reading, hook), append: (connection, input, backfill) => this.append(connection, input, backfill), connection: (writer, extra) => this.connection(writer, extra), appendSession: (session, agent, kind, data) => this.appendSession(session, agent, kind, data) }, kernel: { get stopping() { return readstopping(); } }, schedule: { askingSoon: () => this.askingSoon(), queue: (work, starting) => this.queue(work, starting) } });
   }
   private wireMcpOperations(): void {
     const readreplaying = () => this.replaying;
@@ -328,7 +330,8 @@ export class Core {
   }
   private wireHookServices(): void {
     const options = this.options;
-    this.transcriptReader = new TranscriptReader({ plant: options.plant });
+    this.transcriptReader = new TranscriptReader({ plant: options.plant, now: () => this.now() });
+    this.flags = new SessionFlags({ services: lazyServices({ record: () => this.record, now: () => this.now, asks: () => this.asks, agents: () => this.agents, root: () => this.root, siblings: () => this.siblings, transcriptReader: () => this.transcriptReader }), state: () => this.state, mcp: () => this.mcp, events: { append: (connection, input, backfill) => this.append(connection, input, backfill), connection: (writer, extra) => this.connection(writer, extra) }, schedule: { queue: (work, starting) => this.queue(work, starting) }, readCodexTrust: (cwd) => this.readCodexTrust(cwd) });
     this.canvasSide = new HubCanvas({
       root: rootOf(options.root), now: () => this.now(), plant: options.plant,
       record: () => this.record, store: () => this.store, libraries: () => this.libraries, sessions: () => this.state.sessions,
@@ -736,6 +739,12 @@ export class Core {
     this.state.stateSoon();
     // Each minute every session is read again: a state that changes with time alone (quiet) has no append to say so.
     this.every('states', 60_000, async () => { this.state.touched = 'all'; this.state.stateSoon(); });
+    this.every('unpushed', 60_000, () => this.flags.unpushedAgain());
+    void this.run('unpushed', () => this.flags.unpushedAgain());
+    this.every('gates', 1000, () => this.flags.gatesWatched());
+    this.every('agents-reach', 1000, () => this.flags.agentsReached());
+    // A live session's transcript is read between its hooks too: an agent retrying a model call fires none (#2019).
+    this.every('transcripts', 2000, () => this.flags.transcriptsRead());
     // A background command whose process group has ended no longer holds its session's slow checks (#907); one that
     // ends mid-turn leaves them to the turn's stop. A monitor's watch ends the same way, or at its timeout, and an idle
     // session's row then reads its stop again (#997). An idle session whose facts have emptied starts what they held, and
@@ -906,7 +915,7 @@ export class Core {
       this.transcripts.cursors.delete(id);
       const session: Session = { id, thread: id, agent: cursor.ended.agent, pid: 0, start: '', cwd: '', transcript: cursor.transcript, ended: true, read: cursor.read, turn: undefined, closed: [], reached: new Set(cursor.reached), pending: new Map(), prompts: new Map(), entries: [] };
       this.state.sessions.set(id, session);
-      await this.transcriptReader.readTranscript(session);
+      await this.transcriptReader.readTranscript(session, this.flags.modelCalled(session));
       this.transcriptReader.endTurn(session);
       this.transcripts.judge(session);
     }
@@ -1122,7 +1131,7 @@ export class Core {
         const [last] = (await this.record.raw(`SELECT json_extract(data, '$.reading') AS text FROM events WHERE session_id = ? AND kind = 'session.reading' AND (json_extract(data, '$.reading') LIKE ? OR json_extract(data, '$.reading') LIKE ?) ORDER BY log_pos DESC LIMIT 1`, [s.id, `${CANT_RUN}%`, `${CAN_RUN}%`])) as { text: string }[];
         if (problem && quiet && !last?.text.startsWith(CANT_RUN)) continue;
         const text = problem ? `${CANT_RUN}, so this session's holds and every block but the floor are watch-only: ${problem}. Run \`deep setup\` to point them at a deep-hook that runs.` : last?.text.startsWith(CANT_RUN) ? `${CAN_RUN}: this session's gates hold again.` : undefined;
-        if (text && text !== last?.text) await this.queue(() => this.appendReading(s.id, s.agent, text));
+        if (text && text !== last?.text) await this.queue(async () => { await this.appendReading(s.id, s.agent, text); await this.flags.watchOnly(s.id, s.agent, 'hooks', text.startsWith(CANT_RUN)); });
       }
     }
   }
@@ -1353,10 +1362,12 @@ export class Core {
     const verified = meta.watchOnly ? false : await this.state.verify(meta);
     // A session's first hook from under a run DeepBuild started (#1330): its start.session first, so its first event names the run.
     if (meta.session) await this.sessionStarts.sessionOf(meta.session, meta.ppid, meta.agent).catch(() => undefined);
-    if (meta.watchOnly && meta.session && !this.state.versioned.has(meta.session)) {
+    const unread = Boolean(meta.watchOnly && meta.session && !this.state.versioned.has(meta.session));
+    if (unread) {
       this.state.versioned.add(meta.session);
       await this.appendReading(meta.session, meta.agent, meta.paseo?.lacks ?? `This session runs ${meta.agent} ${meta.version}, past the versions its facts cover: it is recorded unverified, and its holds and every block but the floor are watch-only until the live smoke test widens the range to ${meta.version}. The floor still holds: its fail_closed guard entries deny as they do with the hub stopped.`).catch(() => undefined);
     }
+    await this.flags.versionRead(meta, unread);
     const session = this.state.sessions.get(meta.session);
     if (session && (verified || this.options.plant === 'ends-binding')) {
       // Only an event checked against its session acts on it: an unverified SessionEnd ends nothing.
@@ -1371,7 +1382,7 @@ export class Core {
     // A switch to a leased screen counts once it ran: Claude Code sends PostToolUse only for a call that succeeded (#332).
     if (session && verified && meta.event === 'PostToolUse' && meta.call && /(^|_)switch_display$/.test(meta.call.tool) && SCREEN_TOOLS.some((prefix) => meta.call!.tool.startsWith(prefix))) await this.switched(session.id, String(meta.call.input.display ?? ''));
     if (session && verified) {
-      await this.transcriptReader.readTranscript(session);
+      await this.transcriptReader.readTranscript(session, this.flags.modelCalled(session));
       if (meta.event === 'SessionEnd') this.transcriptReader.endTurn(session);
       this.transcripts.judge(session);
       // Written at once, like a session's first cursor: no later hook of the session would write it.
@@ -1453,6 +1464,9 @@ export class Core {
     }
     // The session map reads the hook before its reply is asked for (#352), once its appends are watched.
     if (verified && meta.session && !FOREIGN.has(meta.agent)) await this.siblings.hook(drafts, meta).catch(() => undefined);
+    // A third alike failure in a row hears so once, in this call's reply (#2019).
+    const failed = verified && meta.session && !FOREIGN.has(meta.agent) ? drafts.find((d) => d.kind === 'tool.after' && d.data.outcome === 'failed') : undefined;
+    if (failed) await this.flags.repeated(meta, failed).catch(() => undefined);
     // A stop that leaves the agent's question open is recorded as waiting on you once the stop is in the record (#27).
     if (meta.event === 'Stop' && drafts.some((d) => d.kind === 'agent.stop' && d.data.outcome !== 'failed')) {
       void settled.then(async () => { if (await this.state.asksYou(meta.session)) await this.state.attention(meta.session, meta.agent, 'waiting'); }).catch(() => undefined);
@@ -2357,8 +2371,9 @@ export class Core {
     const whose = await this.queue(() => this.state.whose(meta, meta.seq));
     if (whose.job || whose.wait) return {};
     const own = !FOREIGN.has(meta.agent) && meta.session;
-    // A tool call's reply carries a message typed mid-turn and the notices waiting for the session (#340, #352).
-    if (own && (meta.event === 'PreToolUse' || meta.event === 'PostToolUse')) {
+    // A tool call's reply carries a message typed mid-turn and the notices waiting for the session (#340, #352), a
+    // failed call's too, so a repeat is told in the third failure's own reply (#2019).
+    if (own && (meta.event === 'PreToolUse' || meta.event === 'PostToolUse' || meta.event === 'PostToolUseFailure')) {
       return this.queue(async () => {
         const ack = this.acknowledge(meta.session);
         const context = await this.fitted(meta, [{ name: 'acknowledgement', text: ack.context, keep: true }, { name: 'sibling sessions', text: await this.siblings.deliver(meta, until) }], '\n');

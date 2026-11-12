@@ -359,7 +359,7 @@ impl deep_canvas::schedule::Canonical for Marker {
 impl deep_canvas::schedule::Canonical for Transport {
     fn encode(&self, out: &mut Vec<u8>) {
         deep_canvas::schedule::Canonical::encode(
-            &(&self.start, &self.span, &self.wrap, &self.holds, &self.reduce_holds),
+            &(&self.start, &self.span, (&self.wrap, &self.ping_pong), &self.holds, &self.reduce_holds),
             out,
         );
     }

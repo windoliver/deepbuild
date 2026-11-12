@@ -65,6 +65,8 @@ pub(crate) struct View {
     pub draw: bool,
     /// The export's `captions.profile`.
     pub profile: Option<String>,
+    /// #157: the film's cuts, in flicks, which caption timing keeps clear of.
+    pub cuts: Vec<i64>,
 }
 
 /// A document's captions as laid out: the profile that holds them, its limits and the captions.
@@ -245,7 +247,9 @@ impl Hub<'_> {
                 timing: if l.caption { Timing::At(l.t) } else { Timing::Words(l.words.clone()) },
             })
             .collect();
-        let captions = captions::layout(&lines, &limits, frame, &graphemes).map_err(|m| {
+        // #157: an export's captions keep clear of the film's cuts.
+        let cuts = self.media.captions.as_ref().map(|v| v.cuts.clone()).unwrap_or_default();
+        let captions = captions::layout(&lines, &limits, frame, &graphemes, &cuts).map_err(|m| {
             json!({"outcome": "refused", "code": "narration.words_differ", "line": m.line, "words": m.words, "record_words": m.times})
         })?;
         Ok(Some(Laid { profile, limits, captions }))

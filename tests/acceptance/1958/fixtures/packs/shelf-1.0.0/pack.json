@@ -1,0 +1,39 @@
+{
+  "name": "shelf",
+  "version": "1.0.0",
+  "license": "MIT",
+  "description": "A test pack of the #1956 acceptance suite, copied for the #1958 budgets, by an outside owner: shelf.bookcase@1 with width and levels.",
+  "requires": {
+    "core": ">=0.0.0",
+    "modules": {
+      "marks2d": ">=0.0.0"
+    }
+  },
+  "recipes": {
+    "shelf.bookcase@1": "shelf.bookcase@1.json"
+  },
+  "kinds": {
+    "shelf.bookcase@1": {
+      "minor": 0,
+      "recipe": "shelf.bookcase@1",
+      "children": [],
+      "capabilities": {
+        "pickable": true,
+        "snap": false
+      },
+      "rules": [],
+      "twins": [],
+      "migrate": {},
+      "examples": [],
+      "cost": {
+        "class": "figure",
+        "at_defaults": {
+          "cpu_ms": 0.5,
+          "gpu_ms": 0.2,
+          "items": 7
+        }
+      }
+    }
+  },
+  "assets": []
+}

@@ -94,7 +94,7 @@
           "status": "fail",
           "atAssertion": true,
           "cause": "AssertionError: the answer reached the agent, once, as the decision says: expected [] to match object [ { option: 'approve', …(2) } ]",
-          "frame": "Proxy.<anonymous> (file:///Users/taofeng/doneright-1687-full/node_modules/vitest/dist/chunks/index.aTZaPVhf.js:2066:10)"
+          "frame": "Proxy.<anonymous> (<path>)"
         }
       ]
     },
@@ -132,7 +132,7 @@
           "status": "fail",
           "atAssertion": true,
           "cause": "AssertionError: promise resolved \"undefined\" instead of rejecting",
-          "frame": "_Assertion.__VITEST_REJECTS__ (file:///Users/taofeng/doneright-1687-full/node_modules/vitest/dist/chunks/index.aTZaPVhf."
+          "frame": "_Assertion.__VITEST_REJECTS__ (<path>"
         },
         {
           "test": "AC6 #349.77853dd0 two adapters see one session; the second to bind it gates it and delivers each answer once, the other only relays; a host letting both deliver, or giving the session to the first to bind, fails naming the session › AC6 the gating adapter, second to bind the session, owns it and delivers each answer once; the first to bind only relays",
@@ -143,14 +143,14 @@
           "status": "fail",
           "atAssertion": true,
           "cause": "AssertionError: promise resolved \"undefined\" instead of rejecting",
-          "frame": "_Assertion.__VITEST_REJECTS__ (file:///Users/taofeng/doneright-1687-full/node_modules/vitest/dist/chunks/index.aTZaPVhf."
+          "frame": "_Assertion.__VITEST_REJECTS__ (<path>"
         },
         {
           "test": "AC6 #349.77853dd0 two adapters see one session; the second to bind it gates it and delivers each answer once, the other only relays; a host letting both deliver, or giving the session to the first to bind, fails naming the session › AC6 (wrong program) a host that gives the session to the first adapter to bind it delivers through the adapter that doesn't gate it, and fails this test naming the session",
           "status": "fail",
           "atAssertion": true,
           "cause": "AssertionError: promise resolved \"undefined\" instead of rejecting",
-          "frame": "_Assertion.__VITEST_REJECTS__ (file:///Users/taofeng/doneright-1687-full/node_modules/vitest/dist/chunks/index.aTZaPVhf."
+          "frame": "_Assertion.__VITEST_REJECTS__ (<path>"
         }
       ]
     },
@@ -218,7 +218,7 @@
           "status": "fail",
           "atAssertion": true,
           "cause": "AssertionError: {\"status\":\"held\",\"session\":\"<id>\",\"adapter\":\"steerer\"}: expected { status: 'held', …(2) } to match object { status: 'delivered', …(3) }",
-          "frame": "Proxy.<anonymous> (file:///Users/taofeng/doneright-1687-full/node_modules/vitest/dist/chunks/index.aTZaPVhf.js:2066:10)"
+          "frame": "Proxy.<anonymous> (<path>)"
         }
       ]
     },
@@ -435,7 +435,7 @@
           "status": "fail",
           "atAssertion": true,
           "cause": "AssertionError: promise resolved \"undefined\" instead of rejecting",
-          "frame": "_Assertion.__VITEST_REJECTS__ (file:///Users/taofeng/doneright-1687-full/node_modules/vitest/dist/chunks/index.aTZaPVhf."
+          "frame": "_Assertion.__VITEST_REJECTS__ (<path>"
         },
         {
           "test": "AC4 #351.f151ca10 a package replacing the done gate, or providing a second one beside it, is refused at install naming the done gate until gate@1 opens; the installed test gate keeps judging; a host refusing only the ring's pieces fails this test › AC4 gate@1 hasn't opened; a package declaring it replaces the done gate, and one providing a second done gate beside it, are each refused at install naming the done gate, which keeps judging; without the declarations they install",
@@ -446,7 +446,7 @@
           "status": "fail",
           "atAssertion": true,
           "cause": "AssertionError: promise resolved \"undefined\" instead of rejecting",
-          "frame": "_Assertion.__VITEST_REJECTS__ (file:///Users/taofeng/doneright-1687-full/node_modules/vitest/dist/chunks/index.aTZaPVhf."
+          "frame": "_Assertion.__VITEST_REJECTS__ (<path>"
         }
       ]
     },
@@ -566,14 +566,14 @@
           "status": "fail",
           "atAssertion": true,
           "cause": "AssertionError: session row for the job run:<id>'s thread de38e9a1-9b3f-4084-8311-15a72103df02: expected [ …(2) ] to not include 'de38e9a19b3f4084831115a72103df02'",
-          "frame": "Proxy.<anonymous> (file:///Users/taofeng/doneright-1687-full/node_modules/vitest/dist/chunks/index.aTZaPVhf.js:2093:15)"
+          "frame": "Proxy.<anonymous> (<path>)"
         },
         {
           "test": "AC6 #39.edfd0196 a Codex job the runner started leaves no session row, claim or task spend › AC6 #39.edfd0196 hooks that reach the hub from the job's folder before the runner has read its thread ID still read as the job's, never as a session",
           "status": "fail",
           "atAssertion": true,
           "cause": "AssertionError: session row for the job run:<id>'s thread 2a5f5035-9897-4d0b-9dc1-79f6fe858a94: expected [ '2a5f503598974d0b9dc179f6fe858a94' ] to not include '2a5f503598974d0b9dc179f6fe858a94'",
-          "frame": "Proxy.<anonymous> (file:///Users/taofeng/doneright-1687-full/node_modules/vitest/dist/chunks/index.aTZaPVhf.js:2093:15)"
+          "frame": "Proxy.<anonymous> (<path>)"
         }
       ]
     },

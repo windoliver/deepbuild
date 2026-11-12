@@ -9,7 +9,7 @@ type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 const TRANSCRIPT_STEP = 64 * 1024 * 1024;
 const TURN_ENTRIES = 5_000;
-export interface TranscriptReaderOptions { plant: Plant | undefined }
+export interface TranscriptReaderOptions { plant: Plant | undefined; now: () => number }
 export class TranscriptReader {
   constructor(private readonly options: TranscriptReaderOptions) {}
 
@@ -18,7 +18,7 @@ export class TranscriptReader {
    * whose hooks reached the hub, is recorded once the next prompt shows it ended and a later hook judges it: the
    * session then reads "hooks not reaching DeepBuild", so failing open is never silent.
    */
-  async readTranscript(session: TranscriptReading): Promise<void> {
+  async readTranscript(session: TranscriptReading, modelCalled?: (line: Obj) => Promise<void>): Promise<void> {
     let handle: FileHandle;
     try {
       handle = await open(session.transcript, 'r');
@@ -43,6 +43,7 @@ export class TranscriptReader {
         }
         const base = session.read;
         session.read += end;
+        session.grewAt = this.options.now();
         for (let at = 0; at < end;) {
           const from = base + at;
           const next = text.indexOf(0x0a, at) + 1 || end;
@@ -63,6 +64,9 @@ export class TranscriptReader {
             else if (line.operation === 'dequeue' && this.options.plant !== 'counts-every-enqueue') queue.shift();
             if (queue.length > 64) queue.splice(0, queue.length - 64);
           }
+          // A model call the agent retries, by its own record, and the reply that ends the retries (#2019): one event
+          // each, a reply only after a retry, so a turn's every reply isn't one.
+          if (modelCalled && isObj(line) && line.isSidechain !== true) await modelCalled(line);
           if (!isObj(line) || line.isSidechain === true || !isObj(line.message)) continue;
           const content = line.message.content;
           const parts = Array.isArray(content) ? content.filter(isObj) : [];

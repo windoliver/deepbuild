@@ -136,6 +136,10 @@ export interface TranscriptReading {
   prompts: Map<string, Obj>;
   /** The transcript entries of its current turn, which its stop's cause and usage are read from. */
   entries: Obj[];
+  /** Whether its newest model call read so far is a retry, so the next reply is recorded as ending them (#2019). */
+  retrying?: boolean;
+  /** When its transcript last grew, as read: the quiet check reads a session whose transcript grew as at work. */
+  grewAt?: number;
   /**
    * Its transcript's queue as it stands, each message marked once a hook found it waiting there (#340); and the
    * prompts recorded from the queue, or from a UserPromptSubmit, that the other hasn't shown yet: each message is

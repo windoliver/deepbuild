@@ -2,10 +2,11 @@ use std::{ptr::NonNull, sync::mpsc, time::Duration};
 
 use block2::RcBlock;
 use deep_app::notify::{Notification, NotificationSetting};
-use objc2_foundation::{NSArray, NSBundle};
+use objc2::runtime::Bool;
+use objc2_foundation::{NSArray, NSBundle, NSError};
 use objc2_user_notifications::{
-    UNAlertStyle, UNAuthorizationStatus, UNNotification, UNNotificationSettings,
-    UNUserNotificationCenter,
+    UNAlertStyle, UNAuthorizationOptions, UNAuthorizationStatus, UNNotification,
+    UNNotificationSettings, UNUserNotificationCenter,
 };
 
 /// What macOS says of the app's notifications; `None` outside the bundle, or when the OS doesn't answer.
@@ -18,6 +19,8 @@ pub fn setting() -> Option<NotificationSetting> {
         let _ = sender.send(
             if settings.authorizationStatus() == UNAuthorizationStatus::Denied {
                 NotificationSetting::Denied
+            } else if settings.authorizationStatus() == UNAuthorizationStatus::NotDetermined {
+                NotificationSetting::NotAsked
             } else if settings.authorizationStatus() != UNAuthorizationStatus::NotDetermined
                 && settings.alertStyle() == UNAlertStyle::None
             {
@@ -30,6 +33,20 @@ pub fn setting() -> Option<NotificationSetting> {
     UNUserNotificationCenter::currentNotificationCenter()
         .getNotificationSettingsWithCompletionHandler(&read);
     receiver.recv_timeout(Duration::from_secs(2)).ok()
+}
+
+/// Has macOS ask whether the app may notify you, alerts and sounds (#1100), and calls `answered` once you have,
+/// from whatever thread the OS answers on; outside the bundle, where the center aborts the process, nothing.
+pub fn request(answered: impl Fn() + 'static) {
+    if NSBundle::mainBundle().bundleIdentifier().is_none() {
+        return;
+    }
+    let done = RcBlock::new(move |_granted: Bool, _error: *mut NSError| answered());
+    UNUserNotificationCenter::currentNotificationCenter()
+        .requestAuthorizationWithOptions_completionHandler(
+            UNAuthorizationOptions::Alert | UNAuthorizationOptions::Sound,
+            &done,
+        );
 }
 
 /// What Notification Center holds from the app's bundle, as the OS lists it: each one's tag as its session and

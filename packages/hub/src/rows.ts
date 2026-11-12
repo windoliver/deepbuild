@@ -4,7 +4,7 @@
 // the hub or, with it down, from its database. So every reader holds the same rows, words and order at one log_pos.
 import { basename } from 'node:path';
 import { SECTION } from './list.js';
-import { repoOf, sessionStates, WORDS, type Fact, type Reading } from './status.js';
+import { repoOf, sessionStates, WORDS, type Fact, type Flag, type Reading } from './status.js';
 
 /** A row as every reader shows it (row.set's data, less `listed` and `order`): @1 for a session or an ask, @2 for a running job (#1925). */
 export interface Row {
@@ -28,7 +28,13 @@ export interface Row {
   progress?: string;
   /** What a working session's turn is doing now, from its latest tool event (#2021). */
   doing?: Doing;
+  /** A session row's one flag beside its word (#2019): row.set@4. */
+  flag?: RowFlag;
 }
+/** A flag as a row carries it: the reading's, less the facts it read. */
+export type RowFlag = Omit<Flag, 'facts'>;
+/** The row.set version a session's or an ask's row needs: @4 with a flag, @3 with what its turn is doing, else @1. */
+export const rowVersion = (row: Row): number => (row.flag ? 4 : row.doing ? 3 : 1);
 /** A row with its place in the list: every reader sorts by `order`'s bytes. */
 export interface Placed { order: string; row: Row }
 
@@ -166,6 +172,7 @@ export async function buildRows(query: Query, readings: readonly Reading[], open
       since: r.since, actions: [], unread: FIRST_UNREAD.has(r.cause) || FIRST_UNREAD.has(r.state),
       ...(doing.has(r.id) ? { doing: doing.get(r.id)! } : {}),
     };
+    if (r.flag) { const { facts: _facts, ...flag } = r.flag; row.flag = flag; }
     return row;
   });
   const wanted = open.map((handle) => quote(handle.slice('ask:'.length))).join(', ');
@@ -189,7 +196,7 @@ export async function buildRows(query: Query, readings: readonly Reading[], open
  * record fact that row read (event kind, time and log_pos) and, for each word above its own in the table's order, the
  * fact that word's rows lacked.
  */
-export interface Why { id: string; title: string; project: string | null; word: string; why: string; rule: string; facts: Fact[]; lacked: { row: string; fact: string }[] }
+export interface Why { id: string; title: string; project: string | null; word: string; why: string; rule: string; facts: Fact[]; lacked: { row: string; fact: string }[]; flag?: Flag }
 
 /**
  * Why the session `session` names reads as it does, among the list's `rows`: by its ID, its row's ID, or the start of
@@ -208,7 +215,7 @@ export async function whyOf(query: Query, now: number, session: string, rows: re
   // Each word above its own, once, with what every row of that word lacked.
   const above = WORDS.slice(0, WORDS.indexOf(reading.state));
   const lacked = above.map((word) => ({ row: word as string, fact: reading.lacked.filter((l) => l.state === word).map((l) => l.fact).join('; ') }));
-  return { id: row.id, title: row.title, project: row.project, word: reading.state, why: reading.plain, rule: reading.rule, facts: reading.facts, lacked };
+  return { id: row.id, title: row.title, project: row.project, word: reading.state, why: reading.plain, rule: reading.rule, facts: reading.facts, lacked, ...(reading.flag ? { flag: reading.flag } : {}) };
 }
 
 /**

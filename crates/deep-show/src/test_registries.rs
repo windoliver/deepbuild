@@ -122,21 +122,12 @@ pub fn effects_declaring_outputs() -> Module {
     m
 }
 
-/// #501: the writer of a test module's `export.target@1` entry: the frames' BGRA8 rows, one
-/// after another, in one file at `temp`; `None` for a target no test module writes.
-pub(crate) fn write_export(
-    target: &str,
-    entry: &serde_json::Value,
-    parts: &[crate::export::Rendered],
-    temp: &std::path::Path,
-) -> Option<serde_json::Value> {
+/// #501: the writer of a test module's `export.target@1` entry, whose delivery is the frames'
+/// BGRA8 rows, one after another, in one file (#157: the export appends each as it is drawn);
+/// `None` for a target no test module writes.
+pub(crate) fn write_export(target: &str, entry: &serde_json::Value) -> Option<serde_json::Value> {
     if !entry["writer"].as_str()?.starts_with("test.") {
         return None;
     }
-    let mut bytes = Vec::new();
-    for f in parts.iter().flat_map(|p| &p.files) {
-        bytes.extend(std::fs::read(f).ok()?);
-    }
-    std::fs::write(temp, bytes).ok()?;
     Some(serde_json::json!({"name": target, "writer": entry["writer"]}))
 }

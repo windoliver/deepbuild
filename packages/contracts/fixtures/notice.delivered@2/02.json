@@ -1,0 +1,24 @@
+{
+  "v": 2,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6W",
+  "kind": "notice.delivered",
+  "subject": "session:01K74G4B6D8F0H2K4M6P8R0T2V",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "data": {
+    "notice": "notice:01K74J8F0H2K4M6P8R0T2V4Y6B",
+    "type": "dependency",
+    "source": null,
+    "target": "session:01K74G4B6D8F0H2K4M6P8R0T2V",
+    "files": [
+      "package.json"
+    ],
+    "pr": 42,
+    "key": "pr 42 dependency",
+    "version": "0123456789abcdef0123456789abcdef01234567",
+    "via": "PostToolUse",
+    "text": "DeepBuild: pull request #42 merged into main and touched package.json, a dependency change: rebase before you say done."
+  }
+}

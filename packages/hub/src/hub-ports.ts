@@ -8,6 +8,7 @@ import { type PromiseState } from './promises.js';
 import { Answers, type Answer } from './answers.js';
 
 import { type Draft, type HookMeta } from './wire.js';
+import type { WatchCause } from './watch.js';
 import type { CallContext, Routes, Note } from './session-types.js';
 
 import { type Obj } from "./hub-shared.js";
@@ -281,4 +282,11 @@ export interface HubControlPort {
   attach(session: string, args: Obj): Promise<Obj>;
   retain(): Promise<void>;
   forgeRepos(): Promise<string[]>;
+}
+
+/** The session-flag capabilities consumed by another hub domain (#2019). */
+export interface SessionFlagsPort {
+  unpushed(session: string, agent: string): Promise<void>;
+  watchOnly(session: string | undefined, agent: string, cause: WatchCause, on: boolean, version?: string): Promise<void>;
+  modelCalled(session: Session): (line: Obj) => Promise<void>;
 }

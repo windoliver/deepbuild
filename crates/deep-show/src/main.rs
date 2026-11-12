@@ -35,15 +35,19 @@ mod jobs;
 mod kept;
 mod kinds;
 mod kit;
+mod lengths;
 mod logic;
 mod media;
 mod mixdown;
 mod modes;
 mod narration;
 mod packs;
+mod retired;
 mod physics;
 mod placement;
 mod played;
+mod print;
+mod probe;
 #[cfg(feature = "test-accent")]
 mod planted;
 mod query;
@@ -578,6 +582,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
                 .filter(|t| *t >= 0)?,
                 rev: c.get("rev")?.as_u64()?,
                 size: px_size(c.get("size"), |n| *n > 0)?,
+                probes: probe::parse(c)?,
             });
         }
         "screen" => return Some(Call::Screen),
@@ -592,6 +597,12 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
                 id: c.get("id")?.as_str()?.to_string(),
                 dir: PathBuf::from(c.get("dir")?.as_str()?),
                 session: optional(c.get("session"), |s| Some(s.as_str()?.to_string()))?,
+            })
+        }
+        "uninstall_pack" => {
+            return Some(Call::UninstallPack {
+                id: c.get("id")?.as_str()?.to_string(),
+                version: c.get("version")?.as_str()?.to_string(),
             })
         }
         "registries" => return Some(Call::Registries),
@@ -1213,6 +1224,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 || deep_canvas_motion::arrange::PLANTED.contains(p)
                 || *p == deep_canvas_motion::module::UNDECLARED_KIND_ACCEPTED
                 || deep_canvas_motion::module::PLANTED.contains(p)
+                || *p == deep_canvas_motion::lengths::ONE_VALUE
                 || deep_canvas_marks::arrays::PLANTED.contains(p)
                 // #1967's wrong programs live in the cells module's playback and conversion.
                 || deep_canvas_cells::recording::PLANTED.contains(p)
@@ -1299,6 +1311,8 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "box_sends_every_id" => Planted::BoxSendsEveryId,
                 "resolver_only_ref_unresolved" => Planted::ResolverOnlyRefUnresolved,
                 "resolver_closes_task" => Planted::ResolverClosesTask,
+                "probe_from_depth" => Planted::ProbeFromDepth,
+                "probe_nearest_item" => Planted::ProbeNearestItem,
                 "verdict_keyed_by_doc" => Planted::VerdictKeyedByDoc,
                 "checks_skip_unknown_kind" => Planted::ChecksSkipUnknownKind,
                 "missing_kind_inconclusive" => Planted::MissingKindInconclusive,
@@ -1319,6 +1333,8 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 }
                 "pack_check_skips_requires_modules" => Planted::PackCheckSkipsRequiresModules,
                 "packs_keyed_by_name" => Planted::PacksKeyedByName,
+                "store_sweep_deletes_named" => Planted::StoreSweepDeletesNamed,
+                "loader_draws_missing_with_installed" => Planted::LoaderDrawsMissingWithInstalled,
                 "counts_agent_rule_as_cover" => Planted::OwnRuleCountsAsCover,
                 "recipe_rules_twice" => Planted::RulesEvaluatedTwice,
                 "kit_tests_defaults_only" => Planted::KitDefaultsOnly,
@@ -1967,7 +1983,7 @@ fn modules(set: BuildSet) -> Vec<Module> {
         });
         // Issue #308: controls and the input track's handling, with control@1; #535: logic's arrays.
         out.extend([deep_canvas_input::module::module(), deep_logic::module()]);
-        out.push(physics::module());
+        out.extend(physics::module());
     }
     // Issue #238: the sandbox module, on core alone; `test-sandbox-alt` seals the test
     // implementation `sandbox.alt` in its place, and `test-sandbox-needs-logic` plants a manifest
@@ -2103,6 +2119,8 @@ fn modules(set: BuildSet) -> Vec<Module> {
     out.push(deep_canvas_test_modules::checks());
     #[cfg(feature = "test-glyph-label")]
     out.push(deep_canvas_test_modules::label());
+    #[cfg(feature = "test-export-guards")]
+    out.push(deep_canvas_test_modules::guards());
     // Issue #185: test.sim@1's implementations, and test module c.
     #[cfg(feature = "test-sim-a")]
     out.push(deep_canvas_test_modules::sim::a());
@@ -3016,25 +3034,7 @@ fn planted_named(twin: &str) -> Result<StartPlanted, ()> {
     }
 }
 
-/// #501's wrong programs, and #1897's, by the names their acceptance suites give them.
-fn export_planted(name: &str) -> Option<Planted> {
-    Some(match name {
-        "hash_xors_without_position" => Planted::HashXorsWithoutPosition,
-        "span_rounds_each_frame" => Planted::SpanRoundsEachFrame,
-        "span_rounds_start" => Planted::SpanRoundsStart,
-        "chunk_tree_wrong_order" => Planted::ChunkTreeWrongOrder,
-        "range_restarts_timecode" => Planted::RangeRestartsTimecode,
-        "export_starts_then_stops" => Planted::ExportStartsThenStops,
-        "target_exports_selection" => Planted::TargetExportsSelection,
-        "target_writes_baked_channel" => Planted::TargetWritesBakedChannel,
-        "target_reader_is_writer" => Planted::TargetReaderIsWriter,
-        "mixer_linux_one_step" => Planted::MixerLinuxOneStep,
-        "drop_frame_every_tenth_minute" => Planted::DropFrameEveryTenthMinute,
-        "timecode_track_zero" => Planted::TimecodeTrackZero,
-        "png_premultiplies_straight" => Planted::PngPremultipliesStraight,
-        _ => return None,
-    })
-}
+use export::planted as export_planted;
 
 /// A hash version by its name: `hash@1` or `hash@2`.
 fn hash_named(name: &str) -> Option<HashVersion> {
