@@ -2830,7 +2830,7 @@ impl Program {
         use crate::occurrence::Occurrence;
         if let Some(emits) = logic_emits(doc, &filter.list) {
             if self.options.planted != Planted::AcceptsUndeclaredOccurrence {
-                undeclared(emits, filter, reader, fields)?;
+                undeclared(&emits, filter, reader, fields)?;
             }
             let rows = doc.get("occurrences").and_then(|o| o.get(&filter.list)).and_then(Value::as_array);
             let id = |r: &Value, k: &str| r.get(k).map(|v| v.as_str().map_or_else(|| v.to_string(), str::to_string));
@@ -3301,13 +3301,13 @@ enum Var {
 }
 
 /// The `emits` of the logic item `<logic ID>.occurrences` names, when `list` names one (#544).
-fn logic_emits<'d>(doc: &'d Map<String, Value>, list: &str) -> Option<&'d Map<String, Value>> {
+fn logic_emits<'d>(doc: &'d Map<String, Value>, list: &str) -> Option<std::borrow::Cow<'d, Map<String, Value>>> {
     let item = doc.get("items")?.get(list.strip_suffix(".occurrences")?)?;
     if item.get("kind").and_then(Value::as_str) != Some("logic@1") {
         return None;
     }
-    static NONE: std::sync::LazyLock<Map<String, Value>> = std::sync::LazyLock::new(Map::new);
-    Some(item.get("params").and_then(|p| p.get("emits")).and_then(Value::as_object).unwrap_or(&NONE))
+    let emits = item.get("params").and_then(|p| p.get("emits")).and_then(Value::as_object);
+    Some(emits.map_or_else(|| std::borrow::Cow::Owned(Map::new()), std::borrow::Cow::Borrowed))
 }
 
 /// Refuses a reader of a logic item's occurrences that names a kind the item doesn't declare in
