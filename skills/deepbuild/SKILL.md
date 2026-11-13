@@ -39,7 +39,7 @@ Never: Written by an agent or an extension, or a PASS resting on a model's judgm
 
 - deep_ask. Ask the person what only they can answer, a taste call or a choice, or raise a task only a person can do, naming the check that will prove it done. It waits for the answer and returns it, or says it is still waiting, with the ask's deadline and default.
 - deep_wait. Keep waiting on an ask you raised, once deep_ask says it is still waiting.
-- deep_root_plan. Propose a root plan for a host: the script you wrote there, locked by its hash, and each step with its undo or null when it has none. The person reads it, says yes or no, and runs it themselves with deep host run in their own terminal, where sudo asks for their password.
+- deep_root_plan. Propose a root plan for a host, with the script you wrote there, locked by its hash, and each step with its undo or null when it has none. The person reads it, says yes or no, and runs it themselves with deep host run in their own terminal, where sudo asks for their password.
 
 Never: Answered by an agent, or by an extension except by naming a decision, rule, budget or request of yours that the core checks.
 
