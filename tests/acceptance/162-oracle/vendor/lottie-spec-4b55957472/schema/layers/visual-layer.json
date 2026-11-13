@@ -1,0 +1,53 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "title": "Visual Layer",
+    "description": "Layer used to affect visual elements",
+    "allOf": [
+        {
+            "$ref": "#/$defs/layers/layer"
+        },
+        {
+            "type": "object",
+            "properties": {
+                "ks": {
+                    "title": "Transform",
+                    "description": "Layer transform",
+                    "$ref": "#/$defs/helpers/transform"
+                },
+                "ao": {
+                    "title": "Auto Orient",
+                    "$ref": "#/$defs/values/int-boolean",
+                    "default": 0,
+                    "description": "If 1, the layer will rotate itself to match its animated position path"
+                },
+                "tt": {
+                    "title": "Matte Mode",
+                    "$ref": "#/$defs/constants/matte-mode",
+                    "description": "Defines the track matte mode for the layer"
+                },
+                "tp": {
+                    "title": "Matte Parent",
+                    "type": "integer",
+                    "description": "Index of the layer used as matte, if omitted assume the layer above the current one"
+                },
+                "masksProperties": {
+                    "title": "Masks",
+                    "description": "Optional array of masks for the layer.",
+                    "type" : "array",
+                    "items": {
+                      "$ref": "#/$defs/helpers/mask"
+                    }
+                },
+                "bm": {
+                    "title": "Blend Mode",
+                    "$ref": "#/$defs/constants/blend-mode",
+                    "default": 0
+                }
+            },
+            "required": [
+                "ks"
+            ]
+        }
+    ]
+}

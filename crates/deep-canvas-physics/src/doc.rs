@@ -268,8 +268,9 @@ pub struct World {
     pub restitution_rule: Rule,
     pub defaults: Material,
     pub contact_materials: BTreeMap<String, Material>,
-    /// Steps between deep checkpoints (Checkpoint ring: `every`).
+    /// Steps between deep checkpoints, and the ring's bytes (Checkpoint ring: `every`, `budget`).
     pub checkpoint_every: u64,
+    pub checkpoint_budget: u64,
     /// ms: the 95th percentile of a step's time each host it ships to holds (World: `budget`).
     pub step_p95: f64,
     pub groups: Vec<String>,
@@ -278,17 +279,17 @@ pub struct World {
     pub joints: BTreeMap<String, Joint>,
     pub forces: BTreeMap<String, Force>,
     pub outputs: BTreeMap<String, Output>,
+    /// The inputs it declares (#522).
+    pub inputs: BTreeMap<String, Input>,
     /// In kinematic mode, what sets each driven joint's coordinate (#1918).
     pub solve: Option<Solve>,
-    /// #525: the inputs a control's entries derive.
-    pub inputs: BTreeMap<String, Declared>,
 }
 
 mod heightfield;
 mod inputs;
 mod reads;
 pub use heightfield::HEIGHTFIELD_SAMPLES;
-pub use inputs::{derived, Declared};
+pub use inputs::{resolved, Input, On, INPUTS_LATER};
 pub use reads::{probe_pose, probe_shape, Output, Read, Solve, READS};
 
 /// The world document's own fields; `kind` names it.
@@ -627,13 +628,7 @@ impl Reader {
                 },
             );
         }
-        let cp = &self.obj(
-            m.get("checkpoint").unwrap_or(&Value::Null),
-            "checkpoint",
-            &["every", "budget"],
-        );
-        let checkpoint_every =
-            self.num(cp, "every", "checkpoint", 60.0, 1.0, f64::from(u32::MAX)) as u64;
+        let (checkpoint_every, checkpoint_budget) = self.checkpoint(m);
         let budget = &self.obj(
             m.get("budget").unwrap_or(&Value::Null),
             "budget",
@@ -680,13 +675,13 @@ impl Reader {
             }
         }
         let solve = self.solve(m, mode == Mode::Kinematic, &joints);
+        let inputs = self.inputs(m, &bodies);
         let mut outputs = BTreeMap::new();
         for (id, v) in self.map(m, "outputs") {
             if let Some(o) = self.output(v, &format!("outputs/{id}"), &bodies, &joints) {
                 outputs.insert(id.clone(), o);
             }
         }
-        let inputs = self.inputs(m, &bodies);
         World {
             dimensions,
             step_rate,
@@ -700,6 +695,7 @@ impl Reader {
             defaults,
             contact_materials: materials,
             checkpoint_every,
+            checkpoint_budget,
             step_p95,
             groups,
             shapes,
@@ -707,8 +703,8 @@ impl Reader {
             joints,
             forces,
             outputs,
-            solve,
             inputs,
+            solve,
         }
     }
 
@@ -1464,7 +1460,7 @@ impl Reader {
             "drag" => {
                 let m = &self.obj(fields, &kp, &["linear", "quadratic", "medium"]);
                 if let Some(x) = m.get("medium").filter(|x| x.is_string()) {
-                    self.refuse("physics.unsupported", join(&kp, "medium"), x, "a drag medium read from a channel isn't run by this backend interface yet; #522 brings it".into());
+                    self.refuse("physics.unsupported", join(&kp, "medium"), x, "a drag medium read from a channel isn't run by this backend interface yet; #2371 brings it".into());
                 }
                 ForceKind::Drag {
                     linear: self.num(m, "linear", &kp, 0.0, 0.0, f64::MAX),
@@ -1479,7 +1475,7 @@ impl Reader {
             "spring_to_point" => {
                 let m = &self.obj(fields, &kp, &["point", "hz", "damping_ratio", "max_force"]);
                 if let Some(x) = m.get("point").filter(|x| x.is_string()) {
-                    self.refuse("physics.unsupported", join(&kp, "point"), x, "a spring point read from a channel isn't run by this backend interface yet; #522 brings it".into());
+                    self.refuse("physics.unsupported", join(&kp, "point"), x, "a spring point read from a channel isn't run by this backend interface yet; #2371 brings it".into());
                 }
                 ForceKind::SpringToPoint {
                     point: if m.get("point").is_some_and(Value::is_array) {
@@ -1533,7 +1529,7 @@ impl Reader {
             }
         });
         if f.get("strength").is_some_and(|s| !s.is_number()) {
-            self.refuse("physics.unsupported", join(p, "strength"), &f["strength"], "a strength set by an input isn't run by this backend interface yet; #522 brings it".into());
+            self.refuse("physics.unsupported", join(p, "strength"), &f["strength"], "a strength set by an input isn't run by this backend interface yet; #2371 brings it".into());
         }
         let mut applies_to = Vec::new();
         for (i, t) in f

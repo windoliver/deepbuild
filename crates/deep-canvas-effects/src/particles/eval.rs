@@ -67,17 +67,17 @@ impl Baked {
 /// A particle's birth: its generation (a burst's row for a burst's particle), when, its key,
 /// the point its region is about, and the velocity it inherits.
 #[derive(Clone, Copy)]
-struct Birth {
-    generation: u32,
+pub(crate) struct Birth {
+    pub(crate) generation: u32,
     born: f64,
-    h: u32,
+    pub(crate) h: u32,
     at: V3,
     push: V3,
-    age: f64,
+    pub(crate) age: f64,
 }
 
 /// Slot `e`'s latest birth at t, from the bursts or from the emitter's rate.
-fn birth(b: &Baked, e: u32, t: f64) -> Option<Birth> {
+pub(crate) fn birth(b: &Baked, e: u32, t: f64) -> Option<Birth> {
     let spec = &b.spec;
     match &b.bursts {
         Some(table) => {
@@ -277,7 +277,7 @@ fn start(b: &Baked, birth: &Birth) -> Start {
 /// A particle from its birth: at `age` while it lives, or with `None` where and when it ends
 /// (its death, its rest or its life's end), its age then. `now`: the surface it follows, as
 /// evaluated at the time read.
-fn particle(
+pub(crate) fn particle(
     b: &Baked,
     e: u32,
     birth: &Birth,

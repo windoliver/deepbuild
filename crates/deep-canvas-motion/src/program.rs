@@ -151,7 +151,7 @@ pub(crate) struct Compiled {
     pub(crate) other: Option<(usize, Option<usize>)>,
     /// reach2's lower bone and end, after the owner (its upper bone).
     pub(crate) chain: [usize; 2],
-    pub(crate) table: Option<crate::constraint::ArcTable>,
+    pub(crate) table: Option<crate::constraint::PathRead>,
 }
 
 /// A placement's write: one clip channel into one bound item's slots, after its target's delay.
@@ -385,6 +385,8 @@ pub struct Program {
     pub(crate) members: Vec<(usize, usize)>,
     /// #504: each take-apart target's share slot and its follow, in stagger then list order.
     pub(crate) staggered: Vec<Staggered>,
+    /// #450: its 2D trails' whole-window bakes, taken once and kept with it.
+    pub trails: crate::trail::Bakes,
 }
 
 /// #504: one take-apart target: its stagger (in [`Motion::staggers`]), its assembly's share slot
@@ -670,6 +672,7 @@ impl Program {
             assemblies,
             members,
             staggered: Vec::new(),
+            trails: Default::default(),
         };
         // Only a document with frames is laid out; it is refused here only when a key glides
         // its layout, since the layout is otherwise not motion's to check. A glide needs a frame
@@ -921,9 +924,14 @@ impl Program {
                 _ => [owner; 2],
             };
             let table = match &c.kind {
-                Kind::FollowPath { points, .. } => {
-                    Some(crate::constraint::ArcTable::new(points.clone()))
-                }
+                Kind::FollowPath {
+                    points, fraction, ..
+                } => Some(crate::constraint::PathRead::compile(
+                    points,
+                    fraction,
+                    &program.fields,
+                    &path,
+                )?),
                 _ => None,
             };
             program.constraints.push(Compiled {
@@ -2796,7 +2804,14 @@ impl Program {
             Kind::FollowPath { .. }
             | Kind::RestOn { .. }
             | Kind::SpringChain { .. }
-            | Kind::FollowTip { .. } => (groups(own, &[0, 1]), groups(own, &[0, 1])),
+            | Kind::FollowTip { .. } => (
+                [
+                    groups(own, &[0, 1]),
+                    c.table.iter().filter_map(|t| t.from).collect(),
+                ]
+                .concat(),
+                groups(own, &[0, 1]),
+            ),
         };
         ([other, reads].concat(), writes)
     }
@@ -3397,7 +3412,7 @@ impl Program {
     /// `occurrences` (#544), after `reader`'s kinds and payload `fields` are checked against the
     /// item's `emits`: a name it doesn't declare is refused `occurrence.undeclared`, from the
     /// document alone, so before any step runs.
-    fn occurrences(
+    pub(crate) fn occurrences(
         &self,
         filter: &crate::occurrence::Filter,
         doc: &Map<String, Value>,
@@ -3753,7 +3768,14 @@ impl Program {
                 offset,
                 ..
             } => match &c.table {
-                Some(table) => cs::follow_path(&own, table, *fraction, *orient, *offset, &mut ops),
+                Some(read) => cs::follow_path(
+                    &own,
+                    &read.table,
+                    read.fraction(fraction, slots),
+                    *orient,
+                    *offset,
+                    &mut ops,
+                ),
                 None => own,
             },
             Kind::FollowTip { offset, rotate, .. } => cs::follow_tip(

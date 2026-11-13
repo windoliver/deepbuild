@@ -13,9 +13,12 @@ struct Draw {
     view: vec4<f32>,
     // Its size at birth and at death, its opacity at birth and at death.
     life: vec4<f32>,
-    // Its draw (0 dot, 1 spark, 2 puff, 3 streak), half-resolution shading, its stop count, and
-    // the planted block copy (#1173).
+    // Its draw (0 dot, 1 spark, 2 puff, 3 streak, 4 ribbon), half-resolution shading, its stop
+    // count, and the planted block copy (#1173).
     kind: vec4<f32>,
+    // A ribbon's (#450): the item's count, its segments, its width in px, its taper and its fade.
+    ribbon: vec4<f32>,
+    ribbon_fade: vec4<f32>,
     // Each color stop's place in life, and its linear color.
     at: vec4<f32>,
     colors: array<vec4<f32>, 4>,
@@ -35,7 +38,66 @@ struct Out {
     // The sprite's centre and half extents in px, for the planted block copy.
     @location(2) centre: vec2<f32>,
     @location(3) half_px: vec2<f32>,
+    // A ribbon segment's alpha by its fade (#450); 1 for every other draw.
+    @location(4) alpha: f32,
+    // A ribbon's newest segment (#450): its far end in px (its near end, the particle, in
+    // `centre`, its radii at both ends in `half_px`), and 1, so it shades as a capsule rounded at
+    // the particle and a still particle draws a dot; 0 for every other draw.
+    @location(5) tail: vec2<f32>,
+    @location(6) head: f32,
 };
+
+// One row of the columns: its place and its age over its life.
+fn row(r: u32) -> vec4<f32> {
+    let b = r * 8u;
+    return vec4<f32>(inst[b], inst[b + 1u], inst[b + 2u], inst[b + 3u]);
+}
+
+// A ribbon's segment j of particle e (#450): the quad between its rows j and j + 1, which the
+// kernel wrote back along its length, `count` rows apart, hidden unless the particle (row j = 0)
+// is alive; its width tapers and its alpha fades with j ÷ segments.
+fn ribbon_vs(vi: u32, ii: u32, k: vec2<f32>) -> Out {
+    var out: Out;
+    let count = u32(draw.ribbon.x);
+    let segments = draw.ribbon.y;
+    let e = ii % count;
+    let j = ii / count;
+    let head = row(e);
+    let a = row(j * count + e);
+    let b = row((j + 1u) * count + e);
+    let ca = draw.clip * vec4<f32>(a.xyz, 1.0);
+    let cb = draw.clip * vec4<f32>(b.xyz, 1.0);
+    out.at = vec2<f32>(0.0, k.y);
+    out.life = head.w;
+    out.alpha = 1.0;
+    if head.w < 0.0 || a.w < 0.0 || b.w < 0.0 || ca.w <= 0.0 || cb.w <= 0.0 {
+        out.pos = vec4<f32>(2.0, 2.0, 2.0, 1.0);
+        return out;
+    }
+    let u = (f32(j) + select(0.0, 1.0, k.x > 0.0)) / segments;
+    let half_px = 0.5 * max(draw.ribbon.z * pow(1.0 - u, draw.ribbon.w), 1.0);
+    out.alpha = pow(1.0 - u, draw.ribbon_fade.x);
+    let pa = ca.xy / ca.w * 0.5 * draw.view.xy;
+    let pb = cb.xy / cb.w * 0.5 * draw.view.xy;
+    var ax = vec2<f32>(1.0, 0.0);
+    if length(pb - pa) > 1e-3 {
+        ax = normalize(pb - pa);
+    }
+    let c = select(ca, cb, k.x > 0.0);
+    // The newest segment reaches a head's radius past both ends, so its round head shows, and a
+    // particle that stands still (both ends one point) draws as a dot.
+    let first = j == 0u;
+    let r_head = 0.5 * max(draw.ribbon.z, 1.0);
+    let reach = max(half_px, select(0.0, r_head, first));
+    let along = ax * k.x * select(0.0, r_head, first);
+    let across = vec2<f32>(-ax.y, ax.x) * k.y * reach;
+    out.pos = vec4<f32>(c.xy + (across + along) * 2.0 / draw.view.xy * c.w, c.z, c.w);
+    out.centre = (vec2<f32>(0.5, -0.5) * ca.xy / ca.w + 0.5) * draw.view.xy;
+    out.tail = (vec2<f32>(0.5, -0.5) * cb.xy / cb.w + 0.5) * draw.view.xy;
+    out.half_px = vec2<f32>(r_head, 0.5 * max(draw.ribbon.z * pow(1.0 - 1.0 / segments, draw.ribbon.w), 1.0));
+    out.head = select(0.0, 1.0, first);
+    return out;
+}
 
 @vertex
 fn vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> Out {
@@ -44,6 +106,9 @@ fn vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> Out {
         vec2<f32>(-1.0, 1.0), vec2<f32>(1.0, -1.0), vec2<f32>(1.0, 1.0),
     );
     let k = corners[vi];
+    if draw.kind.x == 4.0 {
+        return ribbon_vs(vi, ii, k);
+    }
     let base = ii * 8u;
     let p = vec3<f32>(inst[base], inst[base + 1u], inst[base + 2u]);
     let life = inst[base + 3u];
@@ -51,6 +116,8 @@ fn vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> Out {
     var out: Out;
     out.at = k;
     out.life = life;
+    out.alpha = 1.0;
+    out.head = 0.0;
     let c = draw.clip * vec4<f32>(p, 1.0);
     if life < 0.0 || c.w <= 0.0 {
         out.pos = vec4<f32>(2.0, 2.0, 2.0, 1.0);
@@ -137,6 +204,22 @@ fn color_at(l: f32) -> vec3<f32> {
 @fragment
 fn fs(in: Out) -> @location(0) vec4<f32> {
     var at = in.at;
+    // A ribbon's newest segment (#450): its distance to the segment over its radius there, the
+    // end at the particle round, the far end left to the next segment.
+    if in.head > 0.5 {
+        let d = in.tail - in.centre;
+        let l2 = dot(d, d);
+        var t = 0.0;
+        if l2 > 1e-6 {
+            t = dot(in.pos.xy - in.centre, d) / l2;
+            if t > 1.0 {
+                discard;
+            }
+        }
+        let s = clamp(t, 0.0, 1.0);
+        let r = mix(in.half_px.x, in.half_px.y, s);
+        at = vec2<f32>(0.0, length(in.pos.xy - (in.centre + d * s)) / max(r, 1e-3));
+    }
     // The planted block copy (#1173): a puff shaded once per 2 × 2 px block, that value written
     // to all four.
     if draw.kind.w > 0.5 {
@@ -188,9 +271,9 @@ fn shade(in: Out, at: vec2<f32>) -> vec4<f32> {
     } else if draw.kind.x == 2.0 {
         // A puff: a wide soft gaussian, faint.
         shape = 0.35 * exp(-3.0 * r2);
-    } else if draw.kind.x == 3.0 {
-        // A streak: soft across, full along.
-        shape = 1.0 - at.y * at.y;
+    } else if draw.kind.x >= 3.0 {
+        // A streak or a ribbon: soft across, full along.
+        shape = (1.0 - at.y * at.y) * in.alpha;
     }
     let fade = mix(draw.life.z, draw.life.w, l) * (1.0 - l);
     return vec4<f32>(color_at(l) * shape * fade * draw.view.w, 0.0);

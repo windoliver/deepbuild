@@ -65,6 +65,7 @@ mod testgpu;
 mod textures;
 mod timing;
 mod tone;
+mod trails;
 mod validation;
 mod video;
 mod view3d;
@@ -424,6 +425,8 @@ pub enum Planted {
     SurfaceBindPose,
     InheritPreviousFrame,
     BoundsBindPose,
+    /// #450's: a whole trail drawn from the frames drawn so far (tests/acceptance/450/README.md).
+    TrailAppendsPerFrame,
 }
 
 impl Planted {
@@ -539,6 +542,7 @@ impl Planted {
             "surface_bind_pose" => Planted::SurfaceBindPose,
             "inherit_previous_frame" => Planted::InheritPreviousFrame,
             "bounds_bind_pose" => Planted::BoundsBindPose,
+            "trail_appends_per_frame" => Planted::TrailAppendsPerFrame,
             "velocity_from_transform" => Planted::VelocityFromTransform,
             "sampler_steps_world" => Planted::SamplerStepsWorld,
             "velocity_pairs_by_index" => Planted::VelocityPairsByIndex,
@@ -911,6 +915,7 @@ impl App {
             Some("plugin") => plugin::call(self, out, call),
             Some("view3d") => view3d::call(self, out, call),
             Some("particles") => particles::call(self, out, call),
+            Some("trail") => trails::call(self, out, call),
             Some("simplify") => simplify::call(out, call),
             Some("workers") => textures::workers(self),
             Some("tone") => tone::call(self, out, call),

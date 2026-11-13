@@ -7477,6 +7477,60 @@ For: sound that follows the picture: an engine whose pitch follows a car's speed
 
 **Semantics:** A synth makes sound live from a synth preset: a graph over the closed node list that foley's presets and the processors already use, run by our own pinned math in the audio thread, which allocates nothing, takes no locks and calls no platform sin, exp, tan or pow. Each block, every param is evaluated at the time of the block's first sample, from expressions over t, channels, drivers, logic arrays and, in a voice a Spawn starts, its occurrence's fields; it holds for the block, and a change ramps linearly across one block, so a value a logic step writes reaches the sound within one block (2.7 ms at 48 kHz). Oscillator phases are fixed point, noise draws hash(seed, synth ID, voice, sample index), and every node's state (phases, filter states, envelope stages and delay lines) checkpoints every second, as a processor's does, in the bake at check as well as while it plays, so a seek restores the nearest checkpoint and renders at most one spacing forward, a second until the ring passes its byte budget and the spacing doubles, and seeking equals playing bit for bit on one build and CPU architecture. A synth plays through its bus, the master's limiter and the device gate like any strip, and an export renders it offline with everything else, held to its loudness profile. Packs, outside packs included, carry presets as data, checked once per version: every node is in the list, the graph has no cycle except through a delay of at least one block, every param has a range, and the cost at defaults is within the preset's estimate. A score's synth instrument names a preset the same way. The node list stays closed, since its math runs in the audio thread; a new node is a first-party change with its fixtures. The list holds three chip nodes: `pulse`, a square at any duty; `lfsr`, periodic noise from a long or short register, never started at zero; and `table`, a small wavetable of up to 64 steps at a set bit depth, read step by step with no interpolation. Pulse and table edges are rounded so they never alias, and an envelope may also be drawn as points. The first-party `chip@1` pack holds instrument and sound-effect presets built on them, and its check `chip.channels` fails a score that sounds more notes at once than the channels its brief names, with `chip.too_many_voices`, naming the time.
 
+**As built (#204):** The chip nodes and `chip@1` are not built yet; the list is the eleven nodes in Fields.
+
+- **Where a synth sits.** A strip's `src: {synth: {preset, params, voices, seed, byte_budget}}` plays from the strip's `start` for its `span`, on its bus, through the master's limiter and the device gate as any strip does, and keeps rendering for its derived tail after the span ends. A Spawn's `play` template takes the same `src`; each voice's `params` expressions read its occurrence's declared fields, its span is the template's `span` (default 1 s), and `max_voices` and `steal` choose voices as for any template. `byte_budget` (default 64 MiB) is the synth's checkpoint ring's, as a processor's `byte_budget` is.
+- **Presets in a pack.** A pack carries presets in its manifest's `presets: {<name>@<major> → preset}`, and a document names one as `<pack>.<name>@<major>` from a pack it pins; each is an entry of `synth.preset@1`, which the media module declares.
+- **Preset fields.** A node's numeric field takes a number or the name of one of the preset's params. Ranges and defaults are in the field's own unit: Hz, seconds, dB for a biquad's gain and a shaper's drive, bits for crush, a plain amplitude for `gain`, a fraction for feedback and mix.
+- **Edges.** An edge `[from, to, input]` feeds `from`'s output into `to`'s `in`, which every node but osc, noise and env takes, and `mix` sums every edge into it whatever its input's name. An edge into an osc's `hz` adds its signal in Hz, and one into a gain's `gain` adds its signal to that field, so an envelope into `gain` shapes a voice. Any other input is refused, naming the edge. A node with no edge into it reads silence on `in`.
+- **Nodes.**
+  - `osc {wave, hz}` writes ±1, its phase a u64 fraction of a cycle advanced each sample by the mean of that sample's frequency and the next one's. The phase p in [0, 1) starts at 0 when the voice starts, and the waves are:
+    - sine: sin 2πp;
+    - saw: 2p − 1;
+    - square: 1 below p = ½, −1 from it;
+    - triangle: 1 − 4|p − ½|, shifted by a quarter cycle so it starts at 0 rising.
+  - `noise {color}` is white in [−1, 1) from hash(seed, synth ID, voice, sample index from the voice's start); pink is that through a fixed three-pole filter; brown is its leaky integral.
+  - `modes {ratios, t60s, hz}` is one two-pole resonator per ratio at hz × ratio, excited by `in`.
+  - `string {hz, damping}` is a delay line one period long with a two-tap lowpass, `damping` in [0, 1), excited by `in`.
+  - `env {attack, hold, decay, sustain, release}` writes a level in [0, 1]. It opens at the voice's start, runs linearly through attack, hold and decay to sustain, and falls linearly to 0 over release from its level when the span ends.
+  - `biquad {type, freq, q, gain}` has the Processor row's types and cookbook formulas, recomputed per block.
+  - `shaper {curve, drive, mix}` has the processor's curves. It is memoryless with tail 0, so its oversampling is not built. With g = 10^(drive ÷ 20) and u = g·x, it writes (1 − mix)·x + mix·c(u), unnormalized, where c is:
+    - tanh: tanh u;
+    - soft_clip: 1.5u − 0.5u³ for |u| ≤ 1, and the sign of u past it;
+    - fold: u folded back into [−1, 1] at ±1.
+  - `crush {bits, hold_hz, mix}` quantizes mid-tread to the nearest multiple of q = 2^(1 − bits), halves rounded away from 0, so silence stays 0. With `hold_hz` above 0 it holds each quantized sample for rate ÷ hold_hz samples. It writes (1 − mix)·x + mix·the held value.
+  - `delay {time, feedback, mix}` holds up to 2 s.
+  - `gain {gain}` multiplies `in` by `gain`.
+- **The block rule.** A param's expression is evaluated once per block of 128 samples, at the instant just before the block's first sample. Inside block k the value moves linearly from that block's reading to the next block's, so a value that holds stays flat and a change ramps across one block. A step that lands exactly on a block's first sample ramps inside that block and is whole from the next. Block k's first sample is the graph's sample k × 128 less its bus's latency, the same grid live, after a seek and in export.
+- **Expressions.** A param's expression reads `t` in seconds, a channel's value by its ID, a logic item's baked scalar output as `<logic ID>.<name>`, and in a spawned voice its occurrence's fields. A param with no expression takes its default. A value is clamped to its param's range.
+- **Checkpoints.** A synth's state checkpoints on the processors' grid in its own ring and restores with them, so a seek renders forward from the latest checkpoint every ring holds. Opening a document whose mix holds a synth renders the mix across its span once, so its first seek already has checkpoints.
+- **Pack check.** Admitting a pack version checks each preset, as the `synth.preset@1` kit's rules, refusing at `presets/<name>@<major>`:
+  - every node is in the list (naming the node);
+  - every edge's ends are nodes and its input is one the node takes;
+  - a cycle passes through a delay whose time, at its least, is a block or more (naming an edge of the cycle);
+  - every param has a unit, a range with low ≤ default ≤ high, and a default;
+  - the cost at defaults is within `cost` (naming the preset).
+
+  Cost counts multiply-adds per sample: osc 4, noise white 2, pink 8, brown 3, modes 3 per ratio, string 6, env 2, biquad 5, shaper 10, crush 2, delay 3, gain 1, mix 1 per input.
+
+  It then renders the preset for 2 s at 48 kHz from a fresh voice: once with every param at its default; with each param at its minimum, then at its maximum, while the others stay at their defaults; and at 16 points across all ranges drawn by hash(preset, point, param). Each render's span is 1 s, so its envelope opens and closes. It refuses the first render whose sample is not finite or whose magnitude passes 4.0, naming the preset, the param (`all` at a seeded point), the value and the first sample.
+- **Derived tail.** The tail runs from the span's end to where the output stays under −120 dBFS. An osc or noise never stops; an env stops after its release; a gain stops when its input or its gain does; a mix stops when its last input does. Every other node adds its own ring to its input's stop:
+  - modes: twice its longest t60;
+  - string: −120 dB at its loop's gain per period;
+  - biquad: its poles' decay to −120 dB;
+  - delay: whole repeats until feedback reaches −120 dB.
+
+  An out that never stops has tail 0 and ends at the span's fade.
+- **Built details.**
+  - A node is written `{kind, …fields}`, or as its kind holding its fields (`{"osc": {wave, hz}}`).
+  - `deep-show run`'s `media_mix` reports each synth strip under `mix.synths.<strip ID>`: `{preset, voices, tail, render_ms, ring}`, the ring in the processors' form. Each segment's `taps` hash every node's output as `<strip ID>/<node ID>` (a spawned voice's strip ID is `<spawn ID>.<k>`), its `seek` holds the synth's restore, and `seek_ms` times the seek.
+  - A delay breaks a cycle only when it is wet (`mix: 1`), since its dry path is not delayed. On a cycle it reads its line no nearer than a block at the mix's rate.
+  - The tail is derived at the worst of each param's range.
+  - A param's expression may read up to 16 names. A dotted name is a logic item's output or a channel ID.
+  - A document naming a preset that no pinned pack holds is refused with `synth.unknown_preset`, and a param the preset lacks with `synth.unknown_param`.
+  - A score's synth instrument may name a pack's preset. `score.render` then renders each note with this code, built to wasm32 from `crates/deep-synth-job`: the preset's param `hz` takes the note's pitch, `vel` its velocity, and the note's span closes its envelopes. The note's level scales it, and its bends and vibrato aren't read.
+  - A pack's presets are checked by the registry's rules at the pack check, and once it is installed `deep://registries` lists each as an entry of `synth.preset@1` with origin `pack`.
+
 **Cost:** Per voice per block, O(nodes × block): an osc about 4 multiply-adds a sample, a biquad 5, a mode 3 (estimates); 32 voices of 8 nodes stay under 10% of one core at 48 kHz (estimate); a checkpoint is mostly delay lines. Budget class: as the media module.
 
 **It can never:** Run plug-in code or a node outside the closed list; draw from a random stream; read the wall clock or a live meter; feed back without a delay; play outside the device gate
