@@ -7,6 +7,7 @@ pub mod builders;
 pub mod building;
 pub mod cloud;
 pub mod clusters;
+pub mod contributed;
 pub mod curve;
 pub mod cut;
 pub mod deviation;

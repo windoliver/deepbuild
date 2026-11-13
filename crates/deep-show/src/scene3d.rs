@@ -6,8 +6,9 @@
 use std::sync::Arc;
 
 use deep_canvas_marks::scene::Palette;
+use deep_canvas_scene3d::contributed::Fills;
 use deep_canvas_scene3d::look::Look3;
-use deep_canvas_scene3d::scene::{evaluate, Labels, Scene};
+use deep_canvas_scene3d::scene::{evaluate_any, Labels, Scene};
 use deep_gpu::device::{Backend, Device, Gpu};
 use deep_scene3d_render::{draw_offscreen, Planted, Renderer};
 use serde_json::{json, Value};
@@ -31,6 +32,10 @@ pub struct Gpu3 {
     labels: Labels,
     /// The print pass, built on first use and kept: an export prints every frame (#157).
     printer: Option<deep_scene3d_render::print::Printer>,
+    /// The build's outline sources and module fills (#226), and the planted module program.
+    outlines: Vec<deep_canvas::registry::SealedOutline>,
+    fills: Vec<deep_canvas::contributed::Sealed>,
+    planted: Option<String>,
 }
 
 impl Gpu3 {
@@ -45,8 +50,9 @@ impl Gpu3 {
         self.device.force_loss();
     }
 
-    /// The app's GPU, or `None` where there is none to draw 3D on.
-    pub fn open() -> Option<Gpu3> {
+    /// The app's GPU, or `None` where there is none to draw 3D on; it evaluates with the sealed
+    /// build's fills.
+    pub fn open(sealed: &deep_canvas::registry::Sealed, planted: Option<String>) -> Option<Gpu3> {
         let gpu = Gpu::open(Backend::Gpu).ok()?;
         let device = gpu.recover().ok()?;
         let renderer = Renderer::new(&device, Planted::default());
@@ -56,6 +62,9 @@ impl Gpu3 {
             renderer,
             labels: Labels::new(),
             printer: None,
+            outlines: sealed.outlines.clone(),
+            fills: sealed.fills.clone(),
+            planted,
         })
     }
 
@@ -73,10 +82,17 @@ impl Gpu3 {
             d.insert("size".into(), json!(size));
         }
         let look = Look3::from_roles(palette.clone());
-        let scene = evaluate(&doc, t, &look, &mut self.labels).map_err(|r| Unfit {
-            code: r.code,
-            path: r.path,
-        })?;
+        let fills = Fills {
+            outlines: &self.outlines,
+            module: &self.fills,
+            planted: self.planted.as_deref(),
+            memo: None,
+        };
+        let scene =
+            evaluate_any(&doc, t, &look, &mut self.labels, None, fills).map_err(|r| Unfit {
+                code: r.code,
+                path: r.path,
+            })?;
         let mut bytes = draw_offscreen(&self.device, &mut self.renderer, &scene, &look, None)
             .ok_or(Unfit {
                 code: "unsupported_platform",
@@ -103,12 +119,19 @@ impl Gpu3 {
             d.insert("size".into(), json!(size));
         }
         let look = Look3::from_roles(palette.clone());
+        let fills = Fills {
+            outlines: &self.outlines,
+            module: &self.fills,
+            planted: self.planted.as_deref(),
+            memo: None,
+        };
         let scene =
-            deep_canvas_scene3d::scene::evaluate_with(&doc, t, &look, &mut self.labels, assets)
-                .map_err(|r| Unfit {
+            evaluate_any(&doc, t, &look, &mut self.labels, Some(assets), fills).map_err(|r| {
+                Unfit {
                     code: r.code,
                     path: r.path,
-                })?;
+                }
+            })?;
         Ok((scene, look))
     }
 

@@ -3036,7 +3036,7 @@ fn line_fs(in: LineOut) -> Targets {
     if in.joined != 0u && cov < 1.0 && (t <= 0.0 || t >= 1.0) {
         discard;
     }
-    let alpha = cov * mix(in.alpha.x, in.alpha.y, t);
+    let alpha = cov * mix(in.alpha.x, in.alpha.y, t) * unpack4x8unorm(in.color).a;
     return targets(vec4<f32>(paint(in.color) * alpha, alpha), select(0u, in.pick, cov >= 0.5));
 }
 
@@ -3166,7 +3166,7 @@ fn text_fs(in: TextOut) -> Targets {
     if a <= 0.002 {
         discard;
     }
-    let shown = select(a, 0.0, in.later != 0u);
+    let shown = select(a, 0.0, in.later != 0u) * unpack4x8unorm(in.color).a;
     return targets(vec4<f32>(paint(in.color) * shown, shown), select(0u, in.pick, a >= 0.5));
 }
 

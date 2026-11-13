@@ -253,6 +253,7 @@ impl Hub<'_> {
                     blocks: g.blocks,
                     rotate: g.rotate,
                     outlines: outlines.clone(),
+                    fills: self.startup.sealed.fills.clone(),
                     clock: None,
                 };
                 let ctx = Ctx {
@@ -398,6 +399,7 @@ impl Hub<'_> {
                         blocks: g.blocks,
                         rotate: g.rotate,
                         outlines: outlines.clone(),
+                        fills: self.startup.sealed.fills.clone(),
                         clock: g.timings.then_some(now_ms as fn() -> f64),
                     };
                     let seconds = t as f64 / deep_canvas::camera::FLICKS_PER_SECOND as f64;

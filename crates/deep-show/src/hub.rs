@@ -1496,7 +1496,12 @@ impl<'a> Hub<'a> {
     /// The GPU 3D revisions draw on, opened on first use.
     pub fn gpu3(&mut self) -> Option<&mut crate::scene3d::Gpu3> {
         self.gpu3
-            .get_or_insert_with(crate::scene3d::Gpu3::open)
+            .get_or_insert_with(|| {
+                crate::scene3d::Gpu3::open(
+                    &self.startup.sealed,
+                    self.scenario.module_planted.clone(),
+                )
+            })
             .as_mut()
     }
 

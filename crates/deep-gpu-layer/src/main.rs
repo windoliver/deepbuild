@@ -15,6 +15,7 @@
 
 #[cfg(feature = "test-meter")]
 mod allocations;
+mod axes;
 mod blur;
 mod budget;
 mod calibrate;
@@ -424,6 +425,10 @@ pub enum Planted {
     SurfaceBindPose,
     InheritPreviousFrame,
     BoundsBindPose,
+    /// #226's wrong programs (tests/acceptance/226/README.md: The planted programs).
+    AxesModAppliesTransform,
+    Axes3dOwnTickRule,
+    AxesModMapsEveryFrame,
 }
 
 impl Planted {
@@ -539,6 +544,9 @@ impl Planted {
             "surface_bind_pose" => Planted::SurfaceBindPose,
             "inherit_previous_frame" => Planted::InheritPreviousFrame,
             "bounds_bind_pose" => Planted::BoundsBindPose,
+            "axes_mod_applies_transform" => Planted::AxesModAppliesTransform,
+            "axes3d_own_tick_rule" => Planted::Axes3dOwnTickRule,
+            "axes_mod_maps_every_frame" => Planted::AxesModMapsEveryFrame,
             "velocity_from_transform" => Planted::VelocityFromTransform,
             "sampler_steps_world" => Planted::SamplerStepsWorld,
             "velocity_pairs_by_index" => Planted::VelocityPairsByIndex,
