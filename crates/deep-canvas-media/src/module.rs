@@ -87,6 +87,9 @@ pub fn png_reads_itself() -> Module {
 const READER: &str = "decode_worker";
 
 fn register(r: &mut Registrar, restore: fn(&Value) -> Value, png_reader: &str) {
+    // #204: the synth presets packs fill, read from a pack's `presets`.
+    r.registry(crate::synth::registry());
+    r.pack_field("presets", crate::synth::presets_field);
     // The targets the encode job writes (Export: Targets): each held to the document by
     // export.fidelity on what a fresh decode worker reads back, hidden items left out.
     for (target, reader) in [("video", READER), ("png", png_reader)] {
@@ -335,7 +338,9 @@ mod tests {
         let def = deep_canvas::registry::core_lists::export_target_registry();
         let mut r = Registrar::default();
         (module().register)(&mut r);
-        assert!(r.registries.is_empty());
+        // #204: media declares synth.preset@1, and never export.target@1.
+        let declared: Vec<&str> = r.registries.iter().map(|d| d.name.as_str()).collect();
+        assert_eq!(declared, [crate::synth::REGISTRY]);
         let targets: Vec<_> = r
             .entries
             .iter()
@@ -351,6 +356,6 @@ mod tests {
         let mut planted = Registrar::default();
         (declaring_export_targets().register)(&mut planted);
         let declared: Vec<&str> = planted.registries.iter().map(|d| d.name.as_str()).collect();
-        assert_eq!(declared, ["export.target@1"]);
+        assert_eq!(declared, ["export.target@1", crate::synth::REGISTRY]);
     }
 }

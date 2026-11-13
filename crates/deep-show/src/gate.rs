@@ -657,10 +657,13 @@ impl Hub<'_> {
                 });
                 // #499: the media document plays from its time 0 on the live transport.
                 if let Some(mix) = o.media.clone() {
+                    let mut player =
+                        Player::new(mix.clone(), crate::mixdown::planted_of(planted, true));
+                    crate::mixdown::synth::bake(&mut player);
                     o.live = Some(Live {
                         rate: mix.rate,
                         start: sample_at(now),
-                        player: Player::new(mix, crate::mixdown::planted_of(planted, true)),
+                        player,
                         handed: Vec::new(),
                     });
                 }

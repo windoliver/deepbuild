@@ -11,16 +11,20 @@
 // issue become one ask, counted across agents and models. An issue waiting on a person gives up its slot: its session
 // stops, and its next attempt starts once you answered and a slot is free. Everything is read again from the record and
 // the forge each pass, so a restarted hub, its started sessions reconciled first, starts nothing twice. Each issue's
-// state word is recorded as `work.state`, which `deep work show` prints.
+// state word is recorded as `work.state`, which `deep work show` prints. A workspace's run (#1347) takes its tasks from
+// the record the same way, with no forge read or written: a task's change finishes on the workspace's own main once
+// its PASS covers the merge, the version before it kept a step back.
 import { execFile } from 'node:child_process';
 import { realpathSync } from 'node:fs';
 import { hostname } from 'node:os';
 import type { Asks } from '@deepbuild/asks';
 import { canonicalize, sha256Hex, type JsonValue } from '@deepbuild/contracts';
 import { gitEnv } from '@deepbuild/gate';
-import type { Landing } from './landing.js';
+import type { WorkItem } from './ask-tasks.js';
+import { mergeOf, onlyWindow, type Landing, type Outcome } from './landing.js';
 import type { Plant } from './plant.js';
 import type { Starts } from './starts.js';
+import type { WorkspaceService } from './workspaces-port.js';
 import { refusal, Refused } from './wire.js';
 
 type Obj = Record<string, unknown>;
@@ -67,6 +71,9 @@ export interface WorkOptions {
   asks(): Asks;
   now(): number;
   plant: Plant | undefined;
+  /** The workspaces a run's folder may be (#1347), and a workspace task's change judged on its merge with main. */
+  spaces(): Pick<WorkspaceService, 'idAt' | 'tasksOf' | 'finished'>;
+  judgeTask(r: { folder: string; item: WorkItem; commit: string; session: string }): Promise<{ claim: string; outcome: Outcome; requirements: { req: string; text: string; settled_by: string | null; outcome: string }[] } | undefined>;
 }
 
 const git = (cwd: string, ...args: string[]): Promise<string> =>
@@ -80,6 +87,9 @@ export class Work {
   private readonly forge = new Map<string, { at: number; issues: Map<number, Issue>; pulls: Pull[] }>();
   /** The head of each PR a run last judged, and what held it: judged again only once its head moves. */
   private readonly judged = new Map<number, { head: string; held: string | null }>();
+  /** The head of each workspace attempt's branch last judged, and what held it (#1347). */
+  private readonly heads = new Map<string, { head: string; held: string | null }>();
+  private judgements = 0;
   /** Each attempt's worktree as it started: a turn that ends with it unchanged replaced the attempt. */
   private readonly snapshots = new Map<string, string>();
   private you: string | undefined;
@@ -105,7 +115,7 @@ export class Work {
     const words = typeof params.scope === 'string' ? params.scope : '';
     const bounds = scopeOf(words, this.o.now());
     if (typeof bounds === 'string') throw new Refused(refusal('type', '/params/scope', bounds, words));
-    const { ask } = await this.o.starts().approve({ repo: params.repo, ...bounds, lands: true }, caller);
+    const { ask } = await this.o.starts().approve({ repo: params.repo, ...bounds, lands: typeof params.repo === 'string' && this.o.spaces().idAt(params.repo) ? 'workspace' : true }, caller);
     await this.o.appendCore('work.run', { ask, step: 'asked', scope: words.slice(0, 2000) }, { subject: ask });
     return { ask, bounds };
   }
@@ -174,7 +184,7 @@ export class Work {
     return out;
   }
   /** What landed for each issue of a repo: its outcome and the requirements only the budget window settles. */
-  private async landed(repo: string): Promise<Map<number, { outcome: string; open: string[]; pr: number }>> {
+  private async landed(repo: string): Promise<Map<number, { outcome: string; open: string[]; pr: number; at?: string }>> {
     const rows = (await this.o.raw(`SELECT data FROM events WHERE kind = 'landing.made' AND json_extract(data, '$.step') = 'landed' AND json_extract(data, '$.repo') = ? ORDER BY log_pos`, [repo])) as { data: string }[];
     const out = new Map<number, { outcome: string; open: string[]; pr: number }>();
     for (const row of rows) {
@@ -274,6 +284,79 @@ export class Work {
     } catch { return new Set(); }
   }
 
+  // ---- A workspace's tasks (#1347).
+
+  /** A workspace run's tasks as the record holds them, each with what it's blocked by; a workspace has no pull requests. */
+  private async readSpace(id: string, set: number[]): Promise<{ issues: Map<number, Issue>; pulls: Pull[] }> {
+    // The planted wrong program reads each task from a forge too, as a repo's run reads its issues.
+    if (this.o.plant === 'workspace-calls-forge') for (const n of set) await this.get(`/repos/${id}/tasks/issues/${n}`).catch(() => undefined);
+    const issues = new Map<number, Issue>();
+    for (const t of await this.o.spaces().tasksOf(id)) issues.set(t.task, { n: t.task, open: t.step !== 'finished', title: t.title, body: t.criteria.join('; '), blockers: t.blocked_by });
+    for (const n of set) if (!issues.has(n)) issues.set(n, { n, open: true, title: '', body: '', blockers: { unread: `#${n}, which the workspace has no task for` } });
+    return { issues, pulls: [] };
+  }
+  /** The tasks that finished in a workspace: a PASS covered each one's change on main. */
+  private async finishedIn(id: string): Promise<Map<number, { outcome: string; open: string[]; pr: number; at?: string }>> {
+    const out = new Map<number, { outcome: string; open: string[]; pr: number; at?: string }>();
+    for (const t of await this.o.spaces().tasksOf(id)) if (t.step === 'finished' && t.commit) out.set(t.task, { outcome: 'PASS', open: [], pr: 0, at: t.commit });
+    return out;
+  }
+  /**
+   * A workspace attempt settled, as a pull request's is but with no forge: once its turn ends, a branch that moved is
+   * judged on its merge with the workspace's main and finishes there on a PASS. Passes run one at a time, so tasks
+   * finish one at a time, in the order their PASSes came. Whether it ended.
+   */
+  private async settleSpace(ask: string, approval: Approval, space: string, issue: number, a: Attempt, asks: OpenAsk[]): Promise<boolean> {
+    if (this.closed) return false;
+    const starts = this.o.starts();
+    const live = starts.live(a.run);
+    const session = starts.sessionOfRun(a.run);
+    if (live && session && asks.some((x) => x.session === session)) {
+      await starts.stop(a.run);
+      return this.end(ask, issue, a, 'gave up its slot', 'its task waits on your answer');
+    }
+    if (live && (!session || !(await this.turnEnded(session)))) return false;
+    const { base } = await starts.treeOf(a.run);
+    const head = await git(approval.repo, 'rev-parse', '--verify', '--quiet', `refs/heads/${a.branch}`).catch(() => '');
+    if (head && head !== base && this.heads.get(a.branch)?.head !== head) {
+      const r = await this.finish(space, approval.repo, issue, head);
+      this.heads.set(a.branch, { head, held: 'held' in r ? r.held : null });
+      if (!('held' in r)) {
+        if (live) await starts.stop(a.run);
+        return this.end(ask, issue, a, 'PASS', `finished at ${r.commit}`);
+      }
+    }
+    const held = this.heads.get(a.branch)?.head === head ? this.heads.get(a.branch)?.held : undefined;
+    if (held) {
+      if (live) await starts.stop(a.run);
+      return this.end(ask, issue, a, 'sent back past its rounds', held);
+    }
+    if (live) {
+      if ((await this.state(a.worktree).catch(() => '')) !== (this.snapshots.get(a.run) ?? `${base}\n`)) return false;
+      await starts.stop(a.run);
+      return this.end(ask, issue, a, 'stalled', 'its turn ended with nothing changed in its worktree');
+    }
+    const ended = await starts.endOf(a.run);
+    return this.end(ask, issue, a, ended.never ? 'stalled' : 'crashed or interrupted', ended.never ? 'it wrote no first event within 60 s' : 'its session ended before its change finished');
+  }
+  /** A task's change judged on its merge with the workspace's main and, on a PASS, main moved to that merge, the version before it kept. */
+  private async finish(space: string, folder: string, n: number, head: string): Promise<{ commit: string } | { held: string }> {
+    const task = (await this.o.spaces().tasksOf(space)).find((t) => t.task === n);
+    if (!task) return { held: `the workspace has no task #${n}` };
+    const main = await git(folder, 'rev-parse', 'refs/heads/main');
+    const merged = await mergeOf(folder, main, head);
+    if ('files' in merged) return { held: `its change no longer merges with the workspace's main (${main.slice(0, 12)}): ${merged.files.join(', ')} conflict` };
+    const item: WorkItem = { source_id: task.source_id, link: task.link, title: task.title, body: task.criteria.join('\n'), criteria: task.criteria, authors: task.authors, updated: task.updated };
+    const v = await this.o.judgeTask({ folder, item, commit: merged.commit, session: `task${space}x${n}x${this.o.now()}x${++this.judgements}` }).catch(() => undefined);
+    if (!v) return { held: 'BLOCKED: no verdict was made on its merge with main: its definition did not lock or its checks did not end' };
+    if (v.outcome !== 'PASS' && !onlyWindow(v)) return { held: `${v.outcome}: ${v.requirements.filter((q) => q.outcome !== 'PASS').map((q) => `${q.req} ${q.outcome}`).join(', ') || 'not every requirement passed'}` };
+    // Main moves only here, from the merge its PASS covered; a commit made in the folder meanwhile holds it.
+    const moved = await git(folder, '-c', 'core.hooksPath=/dev/null', 'merge', '--ff-only', '-q', merged.commit).then(() => '', (error: Error) => error.message);
+    if (moved) return { held: `the workspace's main moved past ${main.slice(0, 12)}, so its PASS no longer covers it: ${moved}` };
+    await this.o.spaces().finished(space, n, merged.commit, main);
+    return { commit: merged.commit };
+  }
+
   // ---- A pass.
 
   private pass(): Promise<void> {
@@ -286,9 +369,12 @@ export class Work {
   private async passRun(run: { ask: string; paused: boolean }): Promise<void> {
     const approval = await this.o.starts().approvalOf(run.ask);
     if (!approval) return;
-    const repo = await this.slugOf(approval.repo);
+    // A workspace's run reads its tasks from the record, and never a forge.
+    const space = this.o.spaces().idAt(approval.repo);
+    const repo = space ?? await this.slugOf(approval.repo);
+    const readAll = (fresh: boolean) => (space ? this.readSpace(space, approval.issues) : this.read(repo, approval.issues, fresh));
     let attempts = await this.attempts(run.ask);
-    let { issues, pulls } = await this.read(repo, approval.issues, false);
+    let { issues, pulls } = await readAll(false);
     // An attempt whose turn ended may have just opened its PR: the forge is read again for it, at most every 5 s.
     const starts = this.o.starts();
     const opened = async (): Promise<boolean> => {
@@ -299,22 +385,22 @@ export class Work {
       }
       return false;
     };
-    if (this.o.now() - (this.forge.get(repo)?.at ?? 0) >= PR_MS && (await opened())) ({ issues, pulls } = await this.read(repo, approval.issues, true));
+    if (!space && this.o.now() - (this.forge.get(repo)?.at ?? 0) >= PR_MS && (await opened())) ({ issues, pulls } = await this.read(repo, approval.issues, true));
     let asks = await this.openAsks();
     // Each live attempt first: landed, waiting on you, replaced or ended, each with its cause.
     let changed = false;
     for (const [issue, list] of attempts) {
       const a = list.at(-1);
-      if (a && !a.ended) changed = (await this.settle(run.ask, approval, issue, a, pulls, asks)) || changed;
+      if (a && !a.ended) changed = (await (space ? this.settleSpace(run.ask, approval, space, issue, a, asks) : this.settle(run.ask, approval, issue, a, pulls, asks))) || changed;
     }
     if (changed) {
       attempts = await this.attempts(run.ask);
-      ({ issues, pulls } = await this.read(repo, approval.issues, true));
+      ({ issues, pulls } = await readAll(true));
       asks = await this.openAsks();
     }
-    const landed = await this.landed(repo);
-    const baseline = await this.baseline(approval.repo);
-    const login = await this.login();
+    const landed = space ? await this.finishedIn(space) : await this.landed(repo);
+    const baseline = space ? new Set<number>() : await this.baseline(approval.repo);
+    const login = space ? undefined : await this.login();
     /** Whether a blocker is done for its dependents, else what they wait for. */
     const done = (n: number): string | undefined => {
       const l = landed.get(n);
@@ -342,7 +428,7 @@ export class Work {
       const asked = asks.find((x) => x.session && sessions.has(x.session));
       const replaced = this.replaced(list);
       const breaker = await this.breakerOf(run.ask, n);
-      if (l?.outcome === 'PASS') { row('PASS', null, `landed through PR #${l.pr}`); continue; }
+      if (l?.outcome === 'PASS') { row('PASS', null, l.at ? `finished at ${l.at}` : `landed through PR #${l.pr}`); continue; }
       if (l?.open.length) { row(WORDS.has(l.outcome) ? l.outcome : 'INCONCLUSIVE', `the budget window: ${l.open.join('; ')}`, `landed through PR #${l.pr} with only the budget window's requirement open`); continue; }
       if (baseline.has(n)) { row('closed before the gate', null, `closed before the gate, as the baseline commit lists it; never PASS`); continue; }
       if (!i.open) { const p = pulls.find((x) => x.issue === n && !x.merged); row('closed', p ? `PR #${p.pr} to land` : null, 'closed on the forge with no change of it landed'); continue; }
@@ -384,7 +470,7 @@ export class Work {
       if (stopped || free <= 0) { rows.set(n, { ...rows.get(n)!, waits_on: stopped ?? 'a free slot' }); continue; }
       const blocked = unblocks(n);
       const order = `${blocked.length ? `it unblocks ${blocked.map((m) => `#${m}`).join(', ')}` : 'it unblocks none in the set'}, then the lowest number`;
-      const r = await this.start(run.ask, approval, n, issues.get(n)!, attempts.get(n) ?? [], order);
+      const r = await this.start(run.ask, approval, n, issues.get(n)!, attempts.get(n) ?? [], order, space !== undefined);
       if (r.started) { rows.set(n, { issue: n, word: 'working', waits_on: null, why: r.why }); free--; }
       else rows.set(n, { ...rows.get(n)!, waits_on: r.why });
     }
@@ -407,14 +493,14 @@ export class Work {
   }
 
   /** A next attempt, in the approved agent whose turn it is, in the issue's worktree when an earlier attempt made one. */
-  private async start(ask: string, approval: Approval, n: number, issue: Issue, list: Attempt[], order: string): Promise<{ started: boolean; why: string }> {
+  private async start(ask: string, approval: Approval, n: number, issue: Issue, list: Attempt[], order: string, task = false): Promise<{ started: boolean; why: string }> {
     const k = list.length;
     const agent = approval.agents[k % approval.agents.length]!;
     const turn = approval.agents.length > 1 ? `${agent}'s turn, as the approved agents take turns` : `${agent}, the approved agent`;
     const last = list.at(-1);
     const tree = last ? await this.o.starts().treeOf(last.run) : undefined;
     const before = tree ? await this.state(tree.path) : undefined;
-    const r = await this.o.starts().runStart({ ask, repo: approval.repo, issue: n, agent, prompt: this.brief(n, issue, list, tree?.branch), ...(tree ? { worktree: tree } : {}) });
+    const r = await this.o.starts().runStart({ ask, repo: approval.repo, issue: n, agent, prompt: this.brief(n, issue, list, tree?.branch, task), ...(tree ? { worktree: tree } : {}) });
     if (r.status !== 'started') return { started: false, why: `its start was refused: ${r.reason}` };
     this.snapshots.set(r.run, before ?? `${(await this.o.starts().treeOf(r.run)).base}\n`);
     const reason = `${order}; ${turn}`;
@@ -423,11 +509,14 @@ export class Work {
   }
 
   /** The brief an attempt starts from, written only from the record: the issue, the branch and each earlier attempt's verdict line. */
-  private brief(n: number, issue: Issue, list: Attempt[], branch: string | undefined): string {
-    const finish = `When your change is ready, commit it, push the branch and open a pull request whose body says Closes #${n}.`;
-    if (!list.length) return `Work issue #${n}: ${issue.title}. ${finish}`;
+  private brief(n: number, issue: Issue, list: Attempt[], branch: string | undefined, task: boolean): string {
+    // A workspace's task (#1347) has no forge: its change finishes on the workspace's main once its checks pass there.
+    const finish = task ? `When your change is ready, commit it on your branch; it finishes once its checks pass on the workspace's main. Its criteria: ${issue.body}`
+      : `When your change is ready, commit it, push the branch and open a pull request whose body says Closes #${n}.`;
+    const what = task ? 'task' : 'issue';
+    if (!list.length) return `Work ${what} #${n}: ${issue.title}. ${finish}`;
     return [
-      `Work issue #${n}: ${issue.title}. This is attempt ${list.length + 1}: you go on in the worktree and on the branch ${branch ?? 'of the earlier attempts'}, its uncommitted files kept.`,
+      `Work ${what} #${n}: ${issue.title}. This is attempt ${list.length + 1}: you go on in the worktree and on the branch ${branch ?? 'of the earlier attempts'}, its uncommitted files kept.`,
       ...list.map((a) => `Attempt ${a.attempt}: ${a.agent}${a.model ? ` on ${a.model}` : ''}, ended ${a.ended?.cause ?? 'unknown'}${a.ended?.verdict ? `: ${a.ended.verdict}` : ''}.`),
       finish,
     ].join('\n');

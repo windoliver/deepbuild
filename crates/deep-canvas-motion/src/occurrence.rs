@@ -214,6 +214,27 @@ pub fn filtered(filter: &Filter, list: Vec<Occurrence>) -> Result<Vec<Occurrence
     Ok(matched)
 }
 
+/// #450: the matches of a list `v` names (its name, or `{list, kinds, a, b, tags, where}`) as a
+/// driver var reads them, in time order: a trail's `since` starts and `until` ends. A list that
+/// names nothing the document holds is refused `ref_unresolved` at `path`.
+pub fn matches(
+    program: &crate::program::Program,
+    doc: &serde_json::Map<String, Value>,
+    v: &Value,
+    path: &str,
+) -> Result<Vec<Occurrence>, crate::doc::Refused> {
+    let refused = |code, path: &str| crate::doc::Refused {
+        code,
+        path: path.to_string(),
+        detail: None,
+    };
+    let filter = crate::doc::list_of(v, path)?;
+    let list = program
+        .occurrences(&filter, doc, path, &[])?
+        .ok_or_else(|| refused("ref_unresolved", path))?;
+    filtered(&filter, list).map_err(|r| refused(r.code, path))
+}
+
 /// A payload field's number, NaN where the occurrence lacks one.
 fn field(payload: &Value, path: &[String]) -> f64 {
     path.iter()

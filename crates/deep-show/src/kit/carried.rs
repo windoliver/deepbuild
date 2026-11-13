@@ -24,6 +24,32 @@ struct Trace {
     occurrences: BTreeMap<i64, String>,
     /// Each checkpoint the run took, by step: what a seek or a rollback restores.
     ring: BTreeMap<i64, Value>,
+    /// The occurrences the state held after each step, as rows (#522: a physics case's breaks).
+    rows: BTreeMap<i64, Vec<Value>>,
+}
+
+/// Each joint a run's `break` rows name, with its `over_steps` and its break step in each run
+/// (#522: a physics late_entry case's `breaks`).
+fn breaks(on_time: &Trace, late: &Trace) -> Vec<Value> {
+    let of = |t: &Trace| -> BTreeMap<String, (i64, Value)> {
+        let rows = t
+            .rows
+            .iter()
+            .flat_map(|(s, r)| r.iter().map(move |r| (*s, r)));
+        let broken = rows.filter(|(_, r)| r["kind"] == "break");
+        broken
+            .filter_map(|(s, r)| Some((r["a"].as_str()?.to_string(), (s, r["over_steps"].clone()))))
+            .collect()
+    };
+    let (a, b) = (of(on_time), of(late));
+    let joints: std::collections::BTreeSet<&String> = a.keys().chain(b.keys()).collect();
+    joints
+        .into_iter()
+        .map(|j| {
+            let over = a.get(j).or_else(|| b.get(j)).map_or(Value::Null, |x| x.1.clone());
+            json!({"joint": j, "over_steps": over, "on_time": a.get(j).map(|x| x.0), "late": b.get(j).map(|x| x.0)})
+        })
+        .collect()
 }
 
 /// The input entries stamped at each step.
@@ -75,9 +101,9 @@ fn play(
         };
         (stepper.step)(state, &input);
         trace.hashes.insert(step, digest(state));
-        trace
-            .occurrences
-            .insert(step, digest(&json!((stepper.occurrences)(state))));
+        let rows = (stepper.occurrences)(state);
+        trace.occurrences.insert(step, digest(&json!(rows)));
+        trace.rows.insert(step, rows);
     }
 }
 
@@ -253,6 +279,7 @@ pub fn late_entry(hub: &mut Hub<'_>, ctx: &mut Ctx<'_>) -> Option<PartRun> {
                         late.hashes.remove(&s);
                         late.occurrences.remove(&s);
                         late.checkpoints.remove(&s);
+                        late.rows.remove(&s);
                     }
                     play(
                         stepper,
@@ -263,13 +290,24 @@ pub fn late_entry(hub: &mut Hub<'_>, ctx: &mut Ctx<'_>) -> Option<PartRun> {
                         Some(from),
                         &mut late,
                     );
+                    // A physics case names the step its rollback runs first and each joint's breaks;
+                    // its failure, the joint whose break the late run moved.
+                    let joints = breaks(&on_time, &late);
+                    let moved = joints
+                        .iter()
+                        .find(|j| j["on_time"] != j["late"])
+                        .map(|j| j["joint"].clone());
+                    if module == "physics" {
+                        case.set("restored", json!(from));
+                        case.set("breaks", json!(joints));
+                    }
                     if let Some(step) = first_differing(&on_time, &late, 1) {
-                        let fl = failure(
-                            "late_entry",
-                            module,
-                            "late_entry",
-                            json!({"step": step, "arrived": arrived, "fixture": f.name}),
-                        );
+                        let mut detail =
+                            json!({"step": step, "arrived": arrived, "fixture": f.name});
+                        if let Some(j) = moved.filter(|_| module == "physics") {
+                            detail["joint"] = j;
+                        }
+                        let fl = failure("late_entry", module, "late_entry", detail);
                         case.fail(Verdict::Fail, fl.clone());
                         run.failures.push(fl);
                     }

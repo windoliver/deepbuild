@@ -489,6 +489,8 @@ pub fn items(doc: &Map<String, Value>, program: &Program, state: &State) -> Map<
     };
     let mut items = evaluated(items, program, state);
     crate::held::apply(doc, program, state, &mut items);
+    // #450: a 2D path's trail, drawn from its source evaluated at earlier times.
+    crate::trail::flat(doc, program, state, &mut items);
     items
 }
 
@@ -510,6 +512,8 @@ pub fn items_where(
     };
     let mut items = evaluated(items, program, state);
     crate::held::apply(doc, program, state, &mut items);
+    // #450: a 2D path's trail, drawn from its source evaluated at earlier times.
+    crate::trail::flat(doc, program, state, &mut items);
     items
 }
 
