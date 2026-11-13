@@ -120,12 +120,14 @@ impl Rapier {
             let (id, h) = &self.bodies[*i];
             let rb = &self.world.bodies[*h];
             let (v1, w1) = (rb.linvel().length(), rb.angvel().length());
-            // Capped: it started past the cap, or the step carried it up to the cap.
-            let at = |x: f32, cap: f32| x >= cap * (1.0 - 1e-5);
-            let capped = *v0 > most
-                || *w0 > turn
-                || (at(v1, most) && v1 > *v0)
-                || (at(w1, turn) && w1 > *w0);
+            // Capped: it started past the cap, or the step carried it up to the cap from below. A
+            // body that starts at the cap is in a cap it already wrote, so it writes no other.
+            let at = |x: f32, cap: f32| x >= cap * (1.0 - 1e-4);
+            let past = |x: f32, cap: f32| x > cap * (1.0 + 1e-4);
+            let capped = past(*v0, most)
+                || past(*w0, turn)
+                || (at(v1, most) && !at(*v0, most))
+                || (at(w1, turn) && !at(*w0, turn));
             if capped && self.twin != Twin::SpeedCapSilent {
                 out.push(fault(id, "speed_cap"));
             }

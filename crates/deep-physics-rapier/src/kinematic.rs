@@ -3,8 +3,9 @@
 //! coordinate through the joint's own frames, so a placed hinge reads the coordinate it was given.
 //! A driver's coordinate is its channel's; every other one is solved, warm-started from the
 //! world's own joint coordinates, so that each gear, pulley and closing joint holds, by
-//! Gauss–Newton with the world's fixed iteration cap. A solve that ends its cap with a residual
-//! past the tolerance jams, naming the joint whose residual is largest: it never reports a jam as
+//! Levenberg–Marquardt with the world's fixed iteration cap, never taking a step that raises the
+//! residual. A solve that ends its cap with a residual past the tolerance jams, naming the joint
+//! whose residual is largest, written on the step the jam starts: it never reports a jam as
 //! success. Nothing here is kept between steps but what the world's bytes hold, so a restored
 //! world solves as a played one.
 
@@ -434,10 +435,21 @@ impl Rapier {
             .collect();
         let mut jam = None;
         if !k.rules.is_empty() {
+            // Whether the step before ended jammed: its placement, as the world holds it, past the
+            // tolerance. A jam is written when it starts, as a cap is.
+            let mut now = at.clone();
+            for (_, h) in &self.bodies {
+                now.insert(*h, P::of(self.world.bodies[*h].position()));
+            }
+            let was =
+                self.step > 0 && max_abs(&self.residuals(&k, &self.held(&k), &now)) > k.tolerance;
+            let cost = |r: &[(f64, usize)]| r.iter().map(|x| x.0 * x.0).sum::<f64>();
             let mut r = self.residuals(&k, &q, &at);
-            let mut it = 0;
-            while max_abs(&r) > k.tolerance && it < k.iterations && !unknown.is_empty() {
-                it += 1;
+            let mut damping = 1e-3;
+            for _ in 0..k.iterations {
+                if max_abs(&r) <= k.tolerance || unknown.is_empty() {
+                    break;
+                }
                 // Each column by central differences.
                 let h = 1e-6;
                 let cols: Vec<Vec<f64>> = unknown
@@ -462,28 +474,34 @@ impl Rapier {
                         a[i][j] = cols[i].iter().zip(&cols[j]).map(|(x, y)| x * y).sum();
                     }
                     g[i] = -cols[i].iter().zip(&r).map(|(x, y)| x * y.0).sum::<f64>();
-                    a[i][i] += 1e-12 * (1.0 + a[i][i]);
                 }
-                let step = solve(a, g);
-                // Halve a step that makes it worse, at most four times.
-                let before = r.iter().map(|x| x.0 * x.0).sum::<f64>();
-                let mut scale = 1.0;
-                let mut next = q.clone();
-                for _ in 0..5 {
-                    next = q.clone();
-                    for (s, &u) in step.iter().zip(&unknown) {
-                        next[u] += scale * s;
+                // Levenberg–Marquardt: damp the step until it lowers the residual; one that raises
+                // it is never taken, so a solve past its reach settles on its nearest placement
+                // rather than flipping a branch.
+                let before = cost(&r);
+                let mut taken = None;
+                for _ in 0..10 {
+                    let mut d = a.clone();
+                    for (i, row) in d.iter_mut().enumerate() {
+                        row[i] += damping * (a[i][i] + 1e-9);
+                    }
+                    let mut next = q.clone();
+                    for (s, &u) in solve(d, g.clone()).iter().zip(&unknown) {
+                        next[u] += s;
                     }
                     let rn = self.residuals(&k, &next, &at);
-                    if rn.iter().map(|x| x.0 * x.0).sum::<f64>() <= before {
+                    if cost(&rn) < before {
+                        taken = Some((next, rn));
+                        damping = (damping * 0.1).max(1e-9);
                         break;
                     }
-                    scale *= 0.5;
+                    damping *= 10.0;
                 }
+                let Some((next, rn)) = taken else { break };
                 q = next;
-                r = self.residuals(&k, &q, &at);
+                r = rn;
             }
-            if max_abs(&r) > k.tolerance && self.twin != Twin::SolveCapSuccess {
+            if max_abs(&r) > k.tolerance && !was && self.twin != Twin::SolveCapSuccess {
                 let worst = r
                     .iter()
                     .max_by(|a, b| a.0.abs().total_cmp(&b.0.abs()))
