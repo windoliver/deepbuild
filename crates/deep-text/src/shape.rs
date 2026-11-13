@@ -111,6 +111,18 @@ impl std::hash::Hash for Span {
     }
 }
 
+/// #538: the advance of `family`'s `0` in ems: a monospace face's cell at size 1, which a cell
+/// grid spaces its rows to so each glyph sits in its own cell.
+pub fn advance_em(family: &str) -> Option<f32> {
+    use skrifa::MetadataProvider;
+    let face = FACES.iter().find(|f| f.family == family)?;
+    let font = skrifa::FontRef::new(face.bytes).ok()?;
+    let em = f32::from(font.head().ok()?.units_per_em().max(1));
+    let glyph = font.charmap().map('0')?;
+    let metrics = font.glyph_metrics(skrifa::instance::Size::unscaled(), skrifa::instance::LocationRef::default());
+    Some(metrics.advance_width(glyph)? / em)
+}
+
 /// The `[size, rise]` ratios of an em a face sets its subscripts or superscripts at, from its
 /// OS/2 table; `None` for a face without one.
 fn script_metrics(family: &str, shift: Shift) -> Option<[f32; 2]> {

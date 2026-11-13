@@ -15,6 +15,7 @@ pub mod bake;
 pub mod births;
 pub mod bounds;
 pub mod bursts;
+pub mod draws;
 pub mod eval;
 pub mod heightmap;
 pub mod pack;
@@ -97,8 +98,8 @@ pub struct Planted {
 }
 
 /// Whether an item uses a field the shipped graph can't hold, so the hand-written kernel draws
-/// it: a new emit region or source, a bounce, a landing, a kill region, turbulence, `inherit` or
-/// `follow`.
+/// it: a new emit region or source, a bounce, a landing, a kill region, turbulence, `inherit`,
+/// `follow`, or a ribbon or mesh draw (#450).
 pub fn extended(params: &Value) -> bool {
     let emit = &params["emit"];
     let new_shape = emit["shape"]
@@ -112,4 +113,5 @@ pub fn extended(params: &Value) -> bool {
         || !params["motion"]["bounce"].is_null()
         || !params["motion"]["ballistic"]["bounce"].is_null()
         || !params["motion"]["ballistic"]["velocity"].is_null()
+        || params["draw"].is_object()
 }

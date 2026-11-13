@@ -9,6 +9,7 @@
 
 pub mod emulator;
 pub mod keys;
+pub mod logic_grid;
 pub mod module;
 pub mod palette;
 pub mod recording;

@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/deep-contracts", "crates/deep-canvas-seams", "crates/deep-relay", "crates/deep-codecs", "crates/deep-hook", "crates/deep-app", "crates/deep-panel-host", "crates/deep-canvas", "crates/deep-gpu", "crates/deep-gpu-layer", "crates/deep-canvas-motion", "crates/deep-canvas-media", "crates/deep-canvas-physics", "crates/deep-physics-rapier", "crates/deep-motion", "crates/deep-canvas-input", "crates/deep-input", "crates/deep-canvas-scene3d", "crates/deep-scene3d-render", "crates/deep-canvas-effects", "crates/deep-effects-render", "crates/deep-canvas-marks", "crates/deep-canvas-drawn", "crates/deep-canvas-graph", "crates/deep-canvas-record", "crates/deep-canvas-sheet", "crates/deep-canvas-cells", "crates/deep-canvas-vector", "crates/deep-canvas-sandbox", "crates/deep-canvas-loop", "crates/deep-sandbox-wasmtime", "crates/deep-logic", "crates/deep-canvas-test-modules", "crates/deep-marks-render", "crates/deep-marks-gpui", "crates/deep-marks-vello", "crates/deep-show", "crates/deep-replica", "crates/deep-text", "crates/deep-text-gpui", "crates/deep-text-render", "crates/deep-images", "crates/deep-typeset"]
+members = ["crates/deep-contracts", "crates/deep-canvas-seams", "crates/deep-relay", "crates/deep-codecs", "crates/deep-hook", "crates/deep-app", "crates/deep-panel-host", "crates/deep-canvas", "crates/deep-gpu", "crates/deep-gpu-layer", "crates/deep-canvas-motion", "crates/deep-canvas-media", "crates/deep-canvas-export", "crates/deep-lottie-reader", "crates/deep-canvas-physics", "crates/deep-physics-rapier", "crates/deep-motion", "crates/deep-canvas-input", "crates/deep-input", "crates/deep-canvas-scene3d", "crates/deep-scene3d-render", "crates/deep-canvas-effects", "crates/deep-effects-render", "crates/deep-canvas-marks", "crates/deep-canvas-drawn", "crates/deep-canvas-graph", "crates/deep-canvas-record", "crates/deep-canvas-sheet", "crates/deep-canvas-cells", "crates/deep-canvas-vector", "crates/deep-canvas-sandbox", "crates/deep-canvas-loop", "crates/deep-sandbox-wasmtime", "crates/deep-logic", "crates/deep-canvas-test-modules", "crates/deep-marks-render", "crates/deep-marks-gpui", "crates/deep-marks-vello", "crates/deep-show", "crates/deep-replica", "crates/deep-text", "crates/deep-text-gpui", "crates/deep-text-render", "crates/deep-images", "crates/deep-typeset", "crates/deep-lottie", "crates/deep-synth-job"]
 resolver = "2"
 
 # Issue #390: the canvas's glyph rasterizer at release speed in dev builds, so the text tests
@@ -49,6 +49,13 @@ opt-level = 3
 # Issue #499: the media module's mix, read off the dev binary: AC6 renders ten minutes of reverb
 # three times.
 [profile.dev.package.deep-canvas-media]
+opt-level = 3
+# Issue #162: a 200-item title's Lottie export in under 1 s (AC13), read off the dev binary: its
+# writer evaluates every item at every export frame, and its fidelity check plays 20 frames through
+# the reference renderer, whose C++ the build script compiles at this level.
+[profile.dev.package.deep-canvas-export]
+opt-level = 3
+[profile.dev.package.thorvg-sys]
 opt-level = 3
 # Issue #157: export.fidelity's decode and the encode tool's frame feed run at 8x real time at 1080p60, read off the dev binary.
 [profile.dev.package.deep-codecs]
