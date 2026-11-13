@@ -27,7 +27,8 @@
   "requires": {
     "modules": {
       "marks2d": "^1",
-      "motion": "^1"
+      "motion": "^1",
+      "media": "^1"
     }
   },
   "items": {
@@ -334,7 +335,7 @@
       }
     },
     "chime": {
-      "sha256": "a9e449b8270343d0c9339c600295ad669fde65d5b3a967649e6d7df7c5034528",
+      "sha256": "2329da77db16e0d2c760ff3152c55c80b1b959211f259582f68105d3876e23e5",
       "license": {
         "id": "CC0-1.0",
         "terms": "Public domain dedication.",
@@ -346,7 +347,7 @@
   "strips": {
     "sound": {
       "track": 1,
-      "src": "a9e449b8270343d0c9339c600295ad669fde65d5b3a967649e6d7df7c5034528",
+      "src": "2329da77db16e0d2c760ff3152c55c80b1b959211f259582f68105d3876e23e5",
       "start": 0,
       "in": 0,
       "out": "4s",
