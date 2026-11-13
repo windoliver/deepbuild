@@ -52,6 +52,11 @@ const AGENTS_TICK: Duration = Duration::from_secs(2);
 /// The diff lines the Agents page shows of each file, and the width a line is cut to, in points.
 const DIFF_LINES: usize = 8;
 const DIFF_WIDTH: f32 = 1060.;
+/// The list as last built, with the reading of the record it was built from.
+type Built = (
+    std::rc::Rc<(Vec<crate::list::Ask>, Vec<crate::list::Session>)>,
+    Vec<crate::list::Item>,
+);
 /// In no shipped build (#1457). What a replica's fixture panels read through `deepbuild.needs_you`, and its virtual clock: the inbox projection at
 /// a log position. The replica, the live capture and the registry checks set it before opening the shell. No view
 /// reads it: every view draws the record through the one reader, with the same tree in the app and in a replica
@@ -256,10 +261,7 @@ pub struct Shipped {
     /// The row a press went down on and when: a press on a row that just moved is dropped (#1461).
     pressed: Option<(String, u64)>,
     /// The list as last built, with the reading of the record it was built from.
-    built: Option<(
-        std::rc::Rc<(Vec<crate::list::Ask>, Vec<crate::list::Session>)>,
-        Vec<crate::list::Item>,
-    )>,
+    built: Option<Built>,
     /// What you typed in the list, and when the last key came: typing moves to the first row it starts (#1462).
     typed: (String, u64),
     /// The first of the list's items drawn: the drawn rows follow the keyboard, so the row it's on is in view (#2021).
@@ -2151,7 +2153,7 @@ impl Render for Shipped {
                 }
                 // #1461's planted list draws each agent waiting for a first session as a row.
                 if crate::plain::planted("agent-as-row") && items.is_empty() {
-                    items.push(crate::list::Item::Row(crate::list::Row {
+                    items.push(crate::list::Item::Row(Box::new(crate::list::Row {
                         id: "session:claude-code".to_owned(),
                         address: Address::session("claude-code"),
                         title: "Claude Code".to_owned(),
@@ -2165,7 +2167,7 @@ impl Render for Shipped {
                         doing: None,
                         hooks: (0, None),
                         flag: None,
-                    }));
+                    })));
                 }
                 let popped = crate::open::popped(cx) == Some(Kind::NeedsYou);
                 let replaced = NEEDS_YOU_VIEW.with(|view| view.borrow().clone());

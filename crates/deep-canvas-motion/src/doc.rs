@@ -977,6 +977,9 @@ pub fn feel_of(look: &Map<String, Value>, frame_rate: (u32, u32)) -> Result<Feel
     Ok(feel)
 }
 
+/// What [`controls_of`] reads: the controls, the shots their stages name and their follows.
+type Controls = (Vec<Control>, Vec<Shot>, Vec<Follow>);
+
 /// The toggle and stages controls, in ID order, and the shots their stages name, each read once,
 /// in the order stages first name them; every other kind of control is read where it lands.
 /// #504: each path a stages control's stages `set` is a follow of that control with a span of 0,
@@ -985,7 +988,7 @@ fn controls_of(
     doc: &Map<String, Value>,
     cameras: &[(String, [f64; 3])],
     ctx: &Ctx,
-) -> Result<(Vec<Control>, Vec<Shot>, Vec<Follow>), Refused> {
+) -> Result<Controls, Refused> {
     let mut controls = Vec::new();
     let mut read: Vec<Shot> = Vec::new();
     let mut sets: Vec<Follow> = Vec::new();

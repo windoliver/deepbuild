@@ -16,6 +16,9 @@ use vello_cpu::Pixmap;
 
 use crate::refused;
 
+/// An image as [`Kept::pixmap`] draws it: its pixmap, its size in px and the rect it covers.
+type Drawn = (Arc<Pixmap>, [u32; 2], [f64; 4]);
+
 /// The most the levels a frame draws may hold, B (Image `image@1`: cost).
 pub const CAP: u64 = 64 << 20;
 
@@ -228,7 +231,7 @@ impl Kept {
         (opacity, adjust): (f64, &Adjust),
         (bounds, fit, scale): ([f64; 4], ImageFit, f64),
         item: &str,
-    ) -> Result<(Arc<Pixmap>, [u32; 2], [f64; 4]), Value> {
+    ) -> Result<Drawn, Value> {
         let store = self.store(store);
         let ask = ask(&store, asset, (crop, tile), (bounds, fit), scale, item)?;
         self.levels.insert(item.to_string(), ask.key.level);

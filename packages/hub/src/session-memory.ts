@@ -261,7 +261,7 @@ export class SessionMemory {
       let why: string | undefined;
       if (r.enforcer.kind === 'guard') why = `The guard ${r.enforcer.name} enforces it: its planted call is denied and its twin allowed, so the line in ${r.file} only repeats it.`;
       else if (r.scope !== 'all' && r.repo) {
-        const reach = await ruleReach((sql, params) => this.options.services.record.raw(sql, params), r.repo, r.scope, reachSince(this.options.services.now(), 60));
+        const reach = await ruleReach(this.options.services.raw, r.repo, r.scope, reachSince(this.options.services.now(), 60));
         if (!reach.sessions.length) why = `Its scope ${r.scope} matched ${reach.sessions.length} sessions' tool calls in the last 60 days.`;
       }
       if (!why) continue;
@@ -298,7 +298,7 @@ export class SessionMemory {
   /** `deep session rules <id>`: the set a session was given, whether a newer one is in force since, and the set a regression in it is credited to. */
   async sessionRules(params: Obj): Promise<Obj> {
     const session = String(params.session ?? '');
-    const set = await setOf((sql, p) => this.options.services.record.raw(sql, p), session);
+    const set = await setOf(this.options.services.raw, session);
     if (!set) throw new Refused(refusal('not_found', '/params/session', `No rules were recorded as given to session ${session}.`, session));
     const [row] = (await this.options.services.record.raw('SELECT worktree, agent FROM sessions WHERE id = ?', [session])) as { worktree: string | null; agent: string | null }[];
     const now = await this.startSet(session, row?.worktree ?? '', row?.agent ?? 'claude-code');
