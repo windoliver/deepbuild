@@ -380,6 +380,8 @@ pub struct Point {
     pub world: bool,
     pub shape: PointShape,
     pub color: [u8; 3],
+    /// Its set from a depth video (#503), whose points the GPU writes: the point is its item.
+    pub cloud: Option<Arc<crate::cloud::Cloud>>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1487,11 +1489,11 @@ impl Index<&str> for Items<'_> {
     }
 }
 
-fn origin(m: &Affine3) -> Vec3 {
+pub(crate) fn origin(m: &Affine3) -> Vec3 {
     [m[0][3], m[1][3], m[2][3]]
 }
 
-fn paint(look: &Look3, params: &Value, path: &str) -> Result<[u8; 3], Refused> {
+pub(crate) fn paint(look: &Look3, params: &Value, path: &str) -> Result<[u8; 3], Refused> {
     // #149: a noise fill's first stop, or a line's own role, or the ink a named fill leaves out.
     let drawn = params
         .pointer("/paint/fill/noise/stops/0/role")
@@ -3408,22 +3410,13 @@ pub(crate) fn evaluate_compiled(
                     layer.lines.push(l);
                 }
                 "mark.point@1" => {
-                    let pos = origin(&world(&items, id));
-                    bounds.push(pos);
-                    let shape = match params.get("shape").and_then(Value::as_str) {
-                        None | Some("dot") => PointShape::Dot,
-                        Some("square") => PointShape::Square,
-                        Some("diamond") => PointShape::Diamond,
-                        Some(_) => return refused("out_of_range", format!("{path}/shape")),
-                    };
-                    layer.points.push(Point {
-                        id: id.clone(),
-                        pos,
-                        size: num(params.get("size")).unwrap_or(4.0),
-                        world: params.get("size_space").and_then(Value::as_str) == Some("world"),
-                        shape,
-                        color: paint(look, params, &path)?,
-                    });
+                    let point = crate::cloud::point(id, params, &path, world(&items, id), look)?;
+                    // A set from a depth video bounds its frustum, never its points (#503).
+                    match &point.cloud {
+                        Some(c) => bounds.extend(c.corners()),
+                        None => bounds.push(point.pos),
+                    }
+                    layer.points.push(point);
                 }
                 "mark.text@1" => {
                     let text = params.get("text").and_then(Value::as_str).unwrap_or("");

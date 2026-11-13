@@ -1371,3 +1371,69 @@ mod wasm {
         (leak(reply.into_bytes()) as u64) << 32 | n as u64
     }
 }
+
+/// #525: a world its scene steps one step at a time while sound plays, each step the bake's own
+/// (its scene's targets, the inputs its track derives, its rows sorted), so a live world's list
+/// is the bake's whenever the track is the same.
+pub struct Live {
+    w: World,
+    b: Rapier,
+    scene: Option<Scene>,
+    rank: BTreeMap<String, u32>,
+    /// The entries its scene's input track derives (#522's track).
+    track: Track,
+    /// Steps run.
+    pub steps: u64,
+}
+
+impl Run {
+    /// The world a `{scene, world}` call names, built to step live.
+    pub fn live(&self, call: &Value) -> Result<Live, Value> {
+        let (world, scene) = self
+            .subject(call)
+            .unwrap_or_else(|| Err(json!({"ok": false, "code": "bad_input"})))?;
+        let (w, b) = self.build(&world)?;
+        let rank = occurrence::ranks(&w);
+        Ok(Live {
+            w,
+            b,
+            scene,
+            rank,
+            track: Track::default(),
+            steps: 0,
+        })
+    }
+}
+
+impl Live {
+    /// Its step length, in flicks.
+    pub fn step_flicks(&self) -> i64 {
+        occurrence::step_flicks(&self.w)
+    }
+
+    /// The inputs the core input track `track` derives, which the steps not yet run take.
+    pub fn track(&mut self, track: &[Value]) {
+        let derived = track::from_controls(&self.w, self.step_flicks(), track);
+        self.track = Track::of(derived.into_iter().map(|(_, e)| e).collect());
+    }
+
+    /// The next step, and its rows as a bake's scene reads them, each stamped with its `t`.
+    pub fn step(&mut self) -> Result<Vec<Value>, Value> {
+        let k = self.steps + 1;
+        let targets = self
+            .scene
+            .as_ref()
+            .map_or_else(Targets::default, |s| s.targets(k));
+        let inputs = self
+            .track
+            .by_step
+            .get(&(k - 1))
+            .map_or(&[][..], Vec::as_slice);
+        self.b
+            .step(inputs, &targets)
+            .map_err(|r| json!({"ok": false, "issues": [issue(&r)]}))?;
+        self.steps = k;
+        let rows = occurrence::sorted(k as u32, self.b.occurrences(), &self.rank);
+        Ok(occurrence::timed(&occurrence::listed(&rows), &self.w))
+    }
+}

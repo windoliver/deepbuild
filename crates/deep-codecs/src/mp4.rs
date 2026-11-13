@@ -253,7 +253,9 @@ fn track(trak: &[u8], urls: &mut Vec<String>) -> Option<Track> {
         urls.extend(external(dref));
     }
     let stbl = child(minf, b"stbl")?;
-    let mut entry = child(stbl, b"stsd").and_then(stsd).unwrap_or_default();
+    let mut entry = child(stbl, b"stsd")
+        .and_then(|b| stsd(b, kind == Kind::Audio))
+        .unwrap_or_default();
     // #501: a rate over 16 bits is left out of an MP4 sample entry; the track's timescale is it.
     if kind == Kind::Audio && entry.sample_rate == 0 {
         entry.sample_rate = timescale;
@@ -310,7 +312,7 @@ fn external(dref: &[u8]) -> Vec<String> {
         .collect()
 }
 
-fn stsd(body: &[u8]) -> Option<Entry> {
+fn stsd(body: &[u8], audio: bool) -> Option<Entry> {
     let e = atoms(body.get(8..)?).into_iter().next()?;
     let mut entry = Entry {
         fourcc: e.kind,
@@ -330,7 +332,8 @@ fn stsd(body: &[u8]) -> Option<Entry> {
             entry.tmcd = Some((drop, b.u8()?));
             return Some(entry);
         }
-        b"mp4a" | b"lpcm" | b"fpcm" | b"sowt" | b"twos" | b"alac" => {
+        // #503: every sound track's entry, whatever its codec, so the probe can name it.
+        _ if audio => {
             let mut b = Bytes(e.body, 8);
             let version = b.u16()?;
             b.take(6)?;
@@ -353,10 +356,16 @@ fn stsd(body: &[u8]) -> Option<Entry> {
     };
     for a in atoms(rest) {
         match &a.kind {
-            b"avcC" | b"hvcC" | b"esds" => entry.config = Some((a.kind, a.body.to_vec())),
+            // #503: ALAC's cookie, Opus's dOps and FLAC's dfLa too.
+            b"avcC" | b"hvcC" | b"esds" | b"alac" | b"dOps" | b"dfLa" => {
+                entry.config = Some((a.kind, a.body.to_vec()))
+            }
             b"wave" => {
-                if let Some(esds) = child(a.body, b"esds") {
-                    entry.config = Some((*b"esds", esds.to_vec()));
+                if let Some(c) = [b"esds", b"alac"]
+                    .into_iter()
+                    .find_map(|k| child(a.body, k).map(|b| (*k, b)))
+                {
+                    entry.config = Some((c.0, c.1.to_vec()));
                 }
             }
             b"colr" if a.body.len() >= 10 => {

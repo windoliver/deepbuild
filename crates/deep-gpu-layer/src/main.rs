@@ -57,6 +57,7 @@ mod scene;
 mod seam;
 mod session3;
 mod simplify;
+mod spawn;
 mod status;
 mod steps_ref;
 #[cfg(feature = "test-meter")]
@@ -65,6 +66,7 @@ mod textures;
 mod timing;
 mod tone;
 mod validation;
+mod video;
 mod view3d;
 mod warm;
 mod window;
@@ -403,6 +405,11 @@ pub enum Planted {
     WaitClockAfterWarmup,
     /// #1937's wrong chooser (tests/acceptance/1937/README.md: Planted programs).
     PicksLargestGain,
+    /// #503's wrong programs: a point set's video frame chosen at a time that advances only on a
+    /// played step, so a session opened later or a seek keeps the frame decoded before it; the
+    /// video background's frame prefiltered into the environment, keyed per frame.
+    PointVideoKeepsFrameBeforeSeek,
+    VideoBackgroundPrefiltered,
     /// #449's wrong programs (tests/acceptance/449/README.md: Planted programs).
     CountCap65536EveryClass,
     CountCap1048576EveryClass,
@@ -668,6 +675,8 @@ impl Planted {
             "times_only_scene" => Planted::TimesOnlyScene,
             "wait_clock_after_warmup" => Planted::WaitClockAfterWarmup,
             "picks_largest_gain" => Planted::PicksLargestGain,
+            "point_video_keeps_frame_before_seek" => Planted::PointVideoKeepsFrameBeforeSeek,
+            "video_background_prefiltered" => Planted::VideoBackgroundPrefiltered,
             "instancer_addresses_by_slot" => Planted::InstancerAddressesBySlot,
             "overlay_keeps_grid_on_seek" => Planted::OverlayKeepsGridOnSeek,
             "line_reads_previous_step" => Planted::LineReadsPreviousStep,

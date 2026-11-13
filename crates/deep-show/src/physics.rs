@@ -348,6 +348,14 @@ impl Hub<'_> {
             .take_while(|t| *t <= span)
             .collect();
         let run = Run::new(None).expect("the unplanted runner");
+        // The core input track: the caller's, else the one the form carries (#525: a document's
+        // recorded track, or the one a mixdown's replay sets).
+        let own: Vec<Value> = form
+            .get("track")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        let core = if track.is_empty() { &own[..] } else { track };
         let (mut lists, mut channels, mut arrays) = (Map::new(), Map::new(), Map::new());
         let whole = self.planted(crate::hub::Planted::Physics(Planted::WholeTransform));
         for (id, doc) in &worlds {
@@ -366,14 +374,15 @@ impl Hub<'_> {
             if let Some(i) = derive::missing(id, &w, held) {
                 return Err(Box::new(i));
             }
-            let kept = derive::kept(form, &w, track).map_err(|r| {
+            let kept = derive::kept(form, &w, core).map_err(|r| {
                 refused(
                     id,
                     json!([{"code": r.code, "path": r.path, "what": r.what}]),
                 )
             })?;
             let step = step_flicks(&w);
-            let steps = (span + step - 1) / step;
+            // #525: over its own span; its inputs the ones the core input track derives (#522).
+            let steps = crate::stepped::steps_of(form, doc, span, step);
             let call = json!({"call": "bake", "scene": form, "world": id, "steps": steps, "frame_rate": rate,
                               "track": derive::track_of(&kept)});
             let reply = run.answer(&call).unwrap_or(Value::Null);
@@ -438,12 +447,21 @@ impl Hub<'_> {
         if let Some(i) = derive::missing(&b.world, &w, held) {
             return json!({"ok": false, "issues": [i.to_json()]});
         }
-        let kept = match derive::kept(&doc, &w, &b.track) {
+        let own: Vec<Value> = doc
+            .get("track")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        let core = if b.track.is_empty() {
+            &own[..]
+        } else {
+            &b.track[..]
+        };
+        let kept = match derive::kept(&doc, &w, core) {
             Ok(k) => k,
             Err(r) => return json!({"ok": false, "code": r.code, "path": r.path, "what": r.what}),
         };
-        let step = step_flicks(&w);
-        let steps = (span + step - 1) / step;
+        let steps = crate::stepped::steps_of(&doc, world, span, step_flicks(&w));
         let call = json!({"call": "bake", "scene": doc, "world": b.world, "steps": steps, "frame_rate": rate,
                           "track": derive::track_of(&kept), "read": []});
         let reply = Run::new(None)

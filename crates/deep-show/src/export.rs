@@ -35,7 +35,6 @@ use sha2::{Digest, Sha256};
 
 use crate::frames::drawing_of;
 use crate::hub::{EvalTime, Hub, Planted};
-use crate::mixdown::planted_of;
 use crate::snapshot::Unfit;
 use crate::time::{context_of, sample_rate_of};
 use frames::{Lease, Run, Sink};
@@ -102,6 +101,9 @@ pub(crate) fn planted(name: &str) -> Option<Planted> {
         "png_premultiplies_straight" => Planted::PngPremultipliesStraight,
         "video_drops_frame_300" => Planted::VideoDropsFrame300,
         "range_starts_one_frame_late" => Planted::RangeStartsOneFrameLate,
+        // #525's, reached by `--planted`: a golden verifier and a receipt writer.
+        "golden_compares_across_digests" => Planted::GoldenComparesAcrossDigests,
+        "receipt_omits_runtime_digest" => Planted::ReceiptOmitsRuntimeDigest,
         "limiter_without_codec_margin" => Planted::Export(G::NoCodecMargin),
         "shard_rounds_first_sample" => Planted::Export(G::ShardStartRounds),
         "export_without_disk_gate" => Planted::Export(G::NoDiskGate),
@@ -219,7 +221,10 @@ impl Hub<'_> {
     ) -> (Vec<String>, bool) {
         let hz = mix.rate as u32;
         let span = |k: i64| self.span_start(k, shard.frame, hz);
-        let mut player = Player::new(mix.clone(), planted_of(self.scenario.planted, false));
+        let mut player = Player::new(
+            mix.clone(),
+            crate::mixdown::export_planted(self.scenario.planted),
+        );
         player.delivery = amp(shard.gain);
         if let Some(db) = shard.ceiling {
             player.set_ceiling(db);
@@ -532,6 +537,10 @@ impl Hub<'_> {
         }
         match result {
             Ok(mut receipt) => {
+                // #525: the receipt names the runtime digest, so two backends' evidence never mixes.
+                if self.scenario.planted != Some(Planted::ReceiptOmitsRuntimeDigest) {
+                    receipt["runtime_digest"] = json!(self.startup.sealed.runtime_digest);
+                }
                 let readback = receipt.as_object_mut().and_then(|r| r.remove("readback"));
                 let mut reply = json!({"outcome": "exported", "receipt": receipt});
                 if let Some(r) = readback {
@@ -676,6 +685,10 @@ impl Hub<'_> {
             }
         }
         doc = crate::played::with_track(&doc, &track);
+        if self.scenario.module_planted.as_deref() == Some("export_keeps_live_hover") {
+            // Planted (#539): the frames evaluate hover as the panel's live hover, not none.
+            self.hover_into(&job.doc, &mut doc);
+        }
         let _ = self.inline_tables(&mut doc);
         let _ = self.inline_vectors(&mut doc);
         self.inline_occurrences(&mut doc, &job.track)
@@ -723,6 +736,7 @@ impl Hub<'_> {
                     "reason": format!("an export carries narration only under a license that says shareable: true; this one's doesn't: {who}")}),
                 );
             }
+            crate::narration::heard_back::fits(&doc, &s)?;
         }
         // #157: the licences the export carries, through every job output to its inputs; a CC BY
         // input without its credit FAILs.
@@ -773,7 +787,7 @@ impl Hub<'_> {
                 self.span_start(frames.start, frame, hz),
                 self.span_start(frames.end, frame, hz),
             );
-            let planted = planted_of(self.scenario.planted, false);
+            let planted = crate::mixdown::export_planted(self.scenario.planted);
             let pass = |db: f64| {
                 let mut player = Player::new(mix.clone(), planted);
                 player.delivery = amp(db);
@@ -1122,6 +1136,7 @@ impl Hub<'_> {
             receipt["sample_rate"] = json!(hz);
             receipt["audio"] = json!(job.audio_codec);
             receipt["pcm_hashes"] = json!(pcm_hashes);
+            receipt["bakes"] = self.bakes_listed(&doc, hz)?;
         }
         if let Some(read) = &sound {
             for (k, v) in readings(read) {

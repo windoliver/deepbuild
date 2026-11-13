@@ -142,41 +142,6 @@ struct Args {
     history: history::Inputs,
 }
 
-/// Milliseconds from this process's spawn, as the kernel records its start, to now.
-#[cfg(target_os = "macos")]
-fn since_spawn_ms() -> Option<f64> {
-    // SAFETY: an all-zero proc_bsdinfo is valid for proc_pidinfo to fill, and the size passed is
-    // its own.
-    let mut info: libc::proc_bsdinfo = unsafe { std::mem::zeroed() };
-    let size = std::mem::size_of::<libc::proc_bsdinfo>() as i32;
-    let read = unsafe {
-        libc::proc_pidinfo(
-            libc::getpid(),
-            libc::PROC_PIDTBSDINFO,
-            0,
-            (&raw mut info).cast(),
-            size,
-        )
-    };
-    if read != size {
-        return None;
-    }
-    let started = std::time::UNIX_EPOCH
-        + std::time::Duration::new(info.pbi_start_tvsec, info.pbi_start_tvusec as u32 * 1000);
-    Some(
-        std::time::SystemTime::now()
-            .duration_since(started)
-            .ok()?
-            .as_secs_f64()
-            * 1000.0,
-    )
-}
-
-#[cfg(not(target_os = "macos"))]
-fn since_spawn_ms() -> Option<f64> {
-    None
-}
-
 pub(crate) fn pair(v: &Value) -> Option<[u32; 2]> {
     let a = v.as_array()?;
     if a.len() != 2 {
@@ -1099,6 +1064,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
         drops_dispersion,
     )?;
     let mut receipt = Value::Null;
+    let mut videos = crate::video::Session::new(map_paths.clone(), args.fps, args.export);
     // Level of detail and the light cut, chosen from each frame's view (#425).
     let mut selection = crate::lod::Selection::new(app.planted);
     let drawn_scale = if args.surface.scale < 1.0 && !noop {
@@ -1239,9 +1205,10 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 Some(crate::fed::values(&composed, t, &args.evaluate, at)?)
             };
             // Its maps, made ready in the decode worker once per run and held to the
-            // document's decoded-image cap (#423).
+            // document's decoded-image cap (#423), and its videos' frames at t there (#503).
             let (texels, made) = crate::textures::prepare(app, &scene, &map_paths)?;
-            scene.texels = texels;
+            scene.texels = videos.at(app, &composed, n, &scene, texels)?;
+            videos.clouds(app, &fx, &scene)?;
             // Over a window's flat page the view shows the page where nothing draws, so what it
             // lays over the page (a shadow catcher's alpha) composites in linear light (#424).
             if let Some(w) = &args.window {
@@ -1835,7 +1802,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 // The first frame is settled once drawn: its time from the spawn, then which
                 // pipelines it compiled.
                 if let Some((before, report)) = cold.as_mut() {
-                    let ms = since_spawn_ms();
+                    let ms = crate::spawn::since_spawn_ms();
                     let pipelines: Vec<Value> = session3::pipelines(app)
                         .into_iter()
                         .map(|p| json!({"name": p, "on_first_frame": !before.contains(&p)}))
@@ -1991,8 +1958,10 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                     );
                 }
                 if !args.read.is_empty() {
-                    // Each operator output as it stood when this frame drew (#483).
+                    // Each operator output as it stood when this frame drew (#483), and each point
+                    // set's points in its item's space (#503).
                     let (keys, fx2, dir) = (args.read.clone(), fx.clone(), out.to_string());
+                    let models = crate::video::models(&evaluated);
                     let read = app.worker.call(move |state| -> Result<Value, Value> {
                         let device = state.gpu.device();
                         let fx = lock(&fx2);
@@ -2001,9 +1970,16 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                                 "bad_input",
                                 "read names an operator output, and the document runs no operator",
                             )
-                        })?;
+                        });
+                        let points =
+                            |k: &str| crate::video::read_points(&device, &fx, k, &models, &dir);
                         let mut m = serde_json::Map::new();
                         for k in &keys {
+                            if let Some(r) = points(k) {
+                                m.insert(k.clone(), r?);
+                                continue;
+                            }
+                            let ops = ops.as_ref().map_err(Value::clone)?;
                             let mut r = crate::opframe::read_one(
                                 &device,
                                 ops,

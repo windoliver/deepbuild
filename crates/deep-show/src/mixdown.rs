@@ -29,6 +29,8 @@ use crate::spawn;
 
 #[path = "score_plan.rs"]
 pub(crate) mod score_plan;
+#[path = "synth.rs"]
+pub(crate) mod synth;
 
 /// An open span's end: far past any play, with room for sums of flicks.
 const OPEN: i64 = i64::MAX / 8;
@@ -54,10 +56,15 @@ pub enum MixCall {
     },
     /// #154: a score's render plan, `{doc, item}`.
     Score(Value),
+    /// #509: a line's words and a transcript compared after normalizer@1.
+    Heard(Map<String, Value>),
     /// #501: a media document played live on the default output for `seconds` of real time.
     Soak {
         media: Value,
         seconds: u64,
+        /// #525: scripted presses during a live play, each `(at, control, value)`: host flicks
+        /// after the play starts.
+        presses: Vec<(i64, String, Value)>,
     },
 }
 
@@ -86,6 +93,7 @@ pub fn parse_call(name: &str, c: &Map<String, Value>) -> Option<MixCall> {
             sound: c.get("sound")?.as_str()?.to_string(),
         },
         "score_plan" => MixCall::Score(Value::Object(c.clone())),
+        "media_heard" => MixCall::Heard(c.clone()),
         "handed" => MixCall::Handed {
             panel: c.get("panel")?.as_str()?.to_string(),
             from: t("from")?,
@@ -94,6 +102,18 @@ pub fn parse_call(name: &str, c: &Map<String, Value>) -> Option<MixCall> {
         "soak" => MixCall::Soak {
             media: c.get("media").filter(|d| d.is_object())?.clone(),
             seconds: c.get("seconds")?.as_u64().filter(|s| *s > 0)?,
+            presses: c.get("presses").map_or(Some(Vec::new()), |p| {
+                p.as_array()?
+                    .iter()
+                    .map(|x| {
+                        Some((
+                            x.get("at")?.as_i64()?,
+                            x.get("control")?.as_str()?.to_string(),
+                            x.get("value").cloned().unwrap_or(json!(true)),
+                        ))
+                    })
+                    .collect()
+            })?,
         },
         _ => return None,
     })
@@ -147,6 +167,19 @@ pub fn planted_of(p: Option<Planted>, live: bool) -> MixPlanted {
         pitch_ignores_semitones: deep_canvas_media::planted("pitch_ignores_semitones"),
         sends_tap_post: deep_canvas_media::planted("send_always_post"),
         delay_empties_at_seek: deep_canvas_media::planted("delay_empties_line_at_seek"),
+        synth_around_master: deep_canvas_media::planted("synth_bypasses_master"),
+        synth_grid_at_seek: deep_canvas_media::planted("synth_grid_from_seek"),
+        synth_ring_drops_oldest: deep_canvas_media::planted("synth_ring_drops_oldest"),
+        // #204's export plant is set by the export alone.
+        synth_block_64: false,
+    }
+}
+
+/// #204: an export's mix plants: the mix's, and the export that renders its synths on 64-sample blocks.
+pub fn export_planted(p: Option<Planted>) -> MixPlanted {
+    MixPlanted {
+        synth_block_64: deep_canvas_media::planted("export_synth_block_64"),
+        ..planted_of(p, false)
     }
 }
 
@@ -249,6 +282,15 @@ impl Hub<'_> {
             .and_then(|s| s.iter().find(|s| s["type"] == "audio"))
             .cloned();
         let result = (|| {
+            // #503: the worker's refusal of the file or of its sound, naming it (its codec).
+            if let Some(r) = reply
+                .get("refused")
+                .or_else(|| stream.as_ref()?.get("refused"))
+            {
+                let mut r = r.clone();
+                r["asset"] = json!(sha);
+                return Err(r);
+            }
             let s = stream.ok_or_else(|| json!({"code": "not_audio", "asset": sha}))?;
             let bytes = std::fs::read(out.join(s["file"].as_str().unwrap_or_default()))
                 .map_err(|_| refused("unreadable"))?;
@@ -274,6 +316,14 @@ impl Hub<'_> {
 
     /// A media document's mix: its strips, buses, processors and emitters.
     pub(crate) fn mix_of(&mut self, d: &Value) -> Result<Mix, Value> {
+        // #204: a synth's params read logic's baked outputs, so the live path bakes logic as
+        // media_mix and export do.
+        if synth::holds_synth(d) && d.get("arrays").is_none() {
+            let mut form = d.clone();
+            self.inline_occurrences(&mut form, &[])
+                .map_err(|i| json!({"code": i.code, "issues": [i.to_json()]}))?;
+            return self.mix_with(&form).map(|(m, _)| m);
+        }
         self.mix_with(d).map(|(m, _)| m)
     }
 
@@ -440,12 +490,21 @@ impl Hub<'_> {
                 .ok_or_else(|| bad(format!("emitter {eid}: src.strip")))?;
             emits.insert(strip.to_string(), emitter(d, eid, e).map_err(bad)?);
         }
-        let mut strips = Vec::new();
+        let (mut strips, mut runs) = (Vec::new(), Vec::new());
+        let plants = synth::Plants::now();
         for (sid, s) in obj("strips") {
-            let Some(sha) = doc::strip_asset(s) else {
-                return Err(bad(format!("strip {sid}: src.asset")));
+            // #204: a synth plays in place of an asset.
+            let sy = s.pointer("/src/synth");
+            let source = match (sy, doc::strip_asset(s)) {
+                (Some(_), _) => Arc::new(Source {
+                    rate,
+                    channels: 1,
+                    samples: Vec::new(),
+                    loop_region: None,
+                }),
+                (None, Some(sha)) => self.source(sha)?,
+                (None, None) => return Err(bad(format!("strip {sid}: src.asset"))),
             };
-            let source = self.source(sha)?;
             let start = time(d, s.get("start")).map_err(bad)?;
             let r#in = time(d, s.get("in")).map_err(bad)?;
             let out = match s.get("out") {
@@ -461,9 +520,12 @@ impl Hub<'_> {
             } else {
                 start + (out - r#in).max(0)
             });
-            let span_v = match s.get("span") {
-                None => Strip::auto_span(start, r#in, out, rate_v, looped, end),
-                v => time(d, v).map_err(bad)?,
+            let span_v = match (s.get("span"), sy) {
+                (None, Some(_)) => span
+                    .map(|e| e - start)
+                    .ok_or_else(|| bad(format!("strip {sid}: a synth strip has a span")))?,
+                (None, None) => Strip::auto_span(start, r#in, out, rate_v, looped, end),
+                (v, _) => time(d, v).map_err(bad)?,
             };
             let gain = match s.get("gain") {
                 None => Gain::Db(0.0),
@@ -535,23 +597,42 @@ impl Hub<'_> {
                 bus,
                 disabled,
                 emitter: emits.remove(sid),
+                synth: None,
             };
+            if let Some(sy) = sy {
+                let spec = synth::spec_of(d, sid, sy, strip.span, 0, None, plants)?;
+                strip.span += spec.tail;
+                strip.synth = Some(Arc::new(spec));
+            }
             if let Some(at) = spawn::aligned_start(d, sid, s, &strip).map_err(bad)? {
                 strip.start = at;
             }
-            strips.push(strip);
+            // #525: a strip with `start_on` plays once for each entry of the track it matches.
+            match s.get("start_on") {
+                Some(on) => runs.extend(crate::stepped::runs(d, &strip, on)),
+                None => strips.push(strip),
+            }
         }
         if let Some(s) = &script {
             strips.extend(
                 self.narration_strips(s, index("narration").or(index("master")).unwrap_or(0))?,
             );
         }
+        strips.extend(runs);
         let mut extra = Map::new();
         if d.get("cues").is_some() {
             extra.insert("cues".into(), Value::Object(spawn::cues(d, &mut strips)));
         }
         if d.get("spawns").is_some() {
-            let (voices, report) = self.spawned(d, index("master").unwrap_or(0))?;
+            let (mut voices, report) = self.spawned(d, index("master").unwrap_or(0))?;
+            // #204: a voice's `inherits` names a voice by its place among the spawns'.
+            let offset = strips.len();
+            for v in &mut voices {
+                if let Some(sp) = v.synth.as_mut().filter(|sp| sp.inherits.is_some()) {
+                    let sp = Arc::make_mut(sp);
+                    sp.inherits = sp.inherits.map(|i| i + offset);
+                }
+            }
             strips.extend(voices);
             extra.insert("voices".into(), Value::Array(report));
         }
@@ -568,6 +649,13 @@ impl Hub<'_> {
                 track,
             } => {
                 let mut doc = doc.clone();
+                // #525: its recipes' strips, and the track its worlds' inputs and runs read.
+                if let Err(e) = crate::stepped::expand(&mut doc, &self.scenario.packs) {
+                    return e;
+                }
+                if !track.is_empty() {
+                    doc["track"] = json!(track);
+                }
                 if let Err(i) = self.inline_occurrences(&mut doc, track) {
                     return json!({"code": i.code, "issues": [i.to_json()]});
                 }
@@ -577,10 +665,14 @@ impl Hub<'_> {
                 };
                 let rate = mix.rate;
                 let mut player = Player::new(mix, planted_of(self.scenario.planted, false));
+                // #204: a synth's report times its voices' render on the host's clock.
+                let epoch = std::time::Instant::now();
+                player.clock = Some(Arc::new(move || epoch.elapsed().as_nanos() as u64));
                 let mut at = 0i64;
                 let mut out = Vec::new();
                 for (from, to, write) in segments {
                     let (first, last) = (sample_at(*from, rate), sample_at(*to, rate));
+                    let sought_at = std::time::Instant::now();
                     let seek = if first != at {
                         let s = player.seek(first);
                         let m: Map<String, Value> = s
@@ -591,6 +683,8 @@ impl Hub<'_> {
                     } else {
                         Value::Null
                     };
+                    let seek_ms =
+                        (!seek.is_null()).then(|| sought_at.elapsed().as_secs_f64() * 1000.0);
                     player.take_taps();
                     // #501: the planted mixer whose Linux build is one 16-bit step off.
                     let step = if cfg!(target_os = "linux")
@@ -602,7 +696,7 @@ impl Hub<'_> {
                     };
                     let (sha, pcm) = read(&mut player, (last - first).max(0), *write, step);
                     let mut seg = json!({"from": from, "to": to, "first": first, "frames": (last - first).max(0),
-                        "channels": 2, "sha256": sha, "seek": seek,
+                        "channels": 2, "sha256": sha, "seek": seek, "seek_ms": seek_ms,
                         "taps": player.take_taps().into_iter().map(|(k, v)| (k, json!(v))).collect::<Map<String, Value>>()});
                     if let Some(pcm) = pcm {
                         match evidence::put(&self.scenario.evidence, &float_wav(&pcm, 2, rate)) {
@@ -622,7 +716,22 @@ impl Hub<'_> {
                                      "checkpoints": r.checkpoints.iter().map(|(t, b)| json!({"t": t, "bytes": b})).collect::<Vec<_>>()}}))
                     })
                     .collect();
-                let mut reply = json!({"sample_rate": rate, "channels": 2, "segments": out, "processors": processors});
+                let ring = |r: &deep_canvas_media::mix::Report| {
+                    json!({"budget": r.budget, "bytes": r.bytes, "peak_bytes": r.peak, "spacing": r.spacing,
+                    "checkpoints": r.checkpoints.iter().map(|(t, b)| json!({"t": t, "bytes": b})).collect::<Vec<_>>()})
+                };
+                let synths: Map<String, Value> = player
+                    .synth_reports()
+                    .into_iter()
+                    .map(|s| {
+                        (
+                            s.id.clone(),
+                            json!({"preset": s.preset, "voices": s.voices, "tail": s.tail,
+                        "render_ms": s.spent as f64 / 1e6, "ring": ring(&s.ring)}),
+                        )
+                    })
+                    .collect();
+                let mut reply = json!({"sample_rate": rate, "channels": 2, "segments": out, "processors": processors, "synths": synths});
                 reply
                     .as_object_mut()
                     .into_iter()
@@ -632,7 +741,11 @@ impl Hub<'_> {
             MixCall::Bake(b) => self.bake_call(b),
             MixCall::Gen { doc, sound } => self.gen_call(doc, sound),
             MixCall::Score(c) => self.score_plan(c),
+            MixCall::Heard(c) => crate::narration::heard_back::heard_call(c),
             MixCall::Handed { panel, from, to } => {
+                if let Some(reply) = self.audio_handed(panel, *from, *to) {
+                    return reply;
+                }
                 let now = self.now;
                 let Some(live) = self.gate.live_of(panel, now) else {
                     return refused("not_playing");
@@ -655,13 +768,41 @@ impl Hub<'_> {
                 json!({"handed": {"sample_rate": rate, "channels": 2, "first": first, "frames": last - first,
                     "sha256": sha, "wav": w}})
             }
-            MixCall::Soak { media, seconds } => match self.mix_of(media) {
-                Ok(m) => crate::device::soak(
-                    Player::new(Arc::new(m), planted_of(self.scenario.planted, true)),
-                    *seconds,
-                ),
-                Err(e) => e,
-            },
+            MixCall::Soak {
+                media,
+                seconds,
+                presses,
+            } => {
+                // #525: a document with worlds plays them live, stepped ahead of the mixer's blocks.
+                let live = match crate::stepped::opened(media, &self.scenario.packs) {
+                    Ok(d) => d,
+                    Err(e) => return e,
+                };
+                let mix = match self.mix_of(&live) {
+                    Ok(m) => Arc::new(m),
+                    Err(e) => return e,
+                };
+                let master = mix.buses.iter().position(|b| b.id == "master").unwrap_or(0);
+                let worlds = match self.live_worlds(&live, master) {
+                    Ok(w) => w,
+                    Err(e) => return e,
+                };
+                let player = Player::new(mix, planted_of(self.scenario.planted, true));
+                let planted =
+                    |p: crate::stepped::Planted| self.scenario.planted == Some(Planted::Ahead(p));
+                let late = planted(crate::stepped::Planted::LateStepMovesVoice);
+                let at_frame = planted(crate::stepped::Planted::EntryStampedAtFrame);
+                match worlds {
+                    Some(w) => crate::device::soak_live(
+                        player,
+                        w,
+                        *seconds,
+                        presses.clone(),
+                        (late, at_frame),
+                    ),
+                    None => crate::device::soak(player, *seconds),
+                }
+            }
         }
     }
 }

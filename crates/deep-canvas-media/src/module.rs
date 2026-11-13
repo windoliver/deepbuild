@@ -87,6 +87,9 @@ pub fn png_reads_itself() -> Module {
 const READER: &str = "decode_worker";
 
 fn register(r: &mut Registrar, restore: fn(&Value) -> Value, png_reader: &str) {
+    // #204: the synth presets packs fill, read from a pack's `presets`.
+    r.registry(crate::synth::registry());
+    r.pack_field("presets", crate::synth::presets_field);
     // The targets the encode job writes (Export: Targets): each held to the document by
     // export.fidelity on what a fresh decode worker reads back, hidden items left out.
     for (target, reader) in [("video", READER), ("png", png_reader)] {
@@ -98,6 +101,14 @@ fn register(r: &mut Registrar, restore: fn(&Value) -> Value, png_reader: &str) {
             "R6",
         );
     }
+    // #503: a spectrum's bands (Analysis bake) as the array `spectrum.<bake ID>`, one element per
+    // band, so a mark set's bars and rings read them as columns.
+    r.entry(
+        deep_canvas::columns::REGISTRY,
+        "media.spectrum@1",
+        json!({"form": "spectrum.<name>", "types": ["f64"], "fixture": spectrum_fixture()}),
+        "R6",
+    );
     // A bell on a box, so the kit checks a document with strips and an emitter (#427).
     r.fixture("bell", deep_canvas_scene3d::emitters::bell(), None)
         .sidecar(json!({"codes": []}));
@@ -119,6 +130,39 @@ fn register(r: &mut Registrar, restore: fn(&Value) -> Value, png_reader: &str) {
     r.kind(strip_kind(), &[], "");
     r.rule("image", av_link);
     r.rule("media.strip", av_link_strip);
+}
+
+/// The spectrum entry's kit fixture, from the bake's own math: a 1 kHz sine of amplitude 0.5 from
+/// 0.1 s to 0.2 s at 8 kHz, four log bands from 100 Hz to 3 kHz, 512-sample windows, a row every
+/// 0.1 s. Each frame is a row's levels, and each frame's changed ranges the bands its row changed.
+fn spectrum_fixture() -> Value {
+    use crate::analysis::spectrum::{edges, rows, Scale};
+    use deep_canvas::ops;
+    let tone: Vec<f32> = (0..3200)
+        .map(|i| match i {
+            800..1600 => (0.5 * ops::sin(ops::TAU * 1000.0 * f64::from(i) / 8000.0)) as f32,
+            _ => 0.0,
+        })
+        .collect();
+    let frames = rows(
+        &tone,
+        1,
+        8000,
+        10,
+        512,
+        &edges(4, Scale::Log, [100.0, 3000.0]),
+        true,
+    );
+    let changed: Vec<Vec<[usize; 2]>> = (frames.iter().enumerate())
+        .map(|(k, f)| match k {
+            0 => vec![[0, f.len()]],
+            _ => (0..f.len())
+                .filter(|&b| f[b] != frames[k - 1][b])
+                .map(|b| [b, b + 1])
+                .collect(),
+        })
+        .collect();
+    json!({"frames": frames, "changed": changed, "seeks": [{"from": 3, "to": 2, "rows": frames[2]}]})
 }
 
 /// `media.strip@1`: Strip and track's fields as params.
@@ -294,7 +338,9 @@ mod tests {
         let def = deep_canvas::registry::core_lists::export_target_registry();
         let mut r = Registrar::default();
         (module().register)(&mut r);
-        assert!(r.registries.is_empty());
+        // #204: media declares synth.preset@1, and never export.target@1.
+        let declared: Vec<&str> = r.registries.iter().map(|d| d.name.as_str()).collect();
+        assert_eq!(declared, [crate::synth::REGISTRY]);
         let targets: Vec<_> = r
             .entries
             .iter()
@@ -310,6 +356,6 @@ mod tests {
         let mut planted = Registrar::default();
         (declaring_export_targets().register)(&mut planted);
         let declared: Vec<&str> = planted.registries.iter().map(|d| d.name.as_str()).collect();
-        assert_eq!(declared, ["export.target@1"]);
+        assert_eq!(declared, ["export.target@1", crate::synth::REGISTRY]);
     }
 }

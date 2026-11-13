@@ -1,7 +1,7 @@
 {
   "core": {
     "version": "0.0.0",
-    "digest": "9ee47c18c9c5ddb86e16e4382ebb19c99ee171bc9a99541907ed977c675db91b",
+    "digest": "a27a5f20c97531350ee8c2c00e70b24c5e3117afea4cf08d949724e439b50247",
     "verdict": "FAIL",
     "parts": {
       "fixtures": "PASS",
@@ -171,7 +171,7 @@
   },
   "media": {
     "version": "1.0.0",
-    "digest": "916933ab6dffe36479ed4ede9ccdc228140199778ef1710f452134d8459abf34",
+    "digest": "ceeb27a5bf5262e2a2c5a8930f66217926d25695e3d70de2faf6acdc416ac9f4",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
@@ -183,7 +183,8 @@
       "repair_loop": "PASS",
       "carried_state": "PASS",
       "time_order": "PASS",
-      "catalog": "PASS"
+      "catalog": "PASS",
+      "registries": "PASS"
     }
   },
   "motion": {
@@ -208,17 +209,9 @@
     "digest": "8071ab44e877e00d90807062cf69c0c913d493ffcd131a1e27e50b78dd6c1242",
     "verdict": "PASS",
     "parts": {
-      "fixtures": "PASS",
       "clean_rebuild": "PASS",
       "patch_fuzz": "PASS",
-      "read_set": "PASS",
-      "order": "PASS",
-      "schedule": "PASS",
-      "repair_loop": "PASS",
-      "carried_state": "PASS",
-      "late_entry": "PASS",
-      "time_order": "PASS",
-      "catalog": "PASS"
+      "schedule": "PASS"
     }
   },
   "record": {
@@ -250,7 +243,7 @@
   },
   "scene3d": {
     "version": "1.0.0",
-    "digest": "0abe3ca95c1b76308bfdf1f2cd73178bdd2590b6396db3bbd581eef2fc04928a",
+    "digest": "61c7c1cfa53706ec4050b74561317e375f04c2d38e69668bab48bdfbad633b55",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",

@@ -117,3 +117,44 @@ pub fn join(entries: &mut Vec<Entry>, e: Entry) {
     entries.push(e);
     order(entries);
 }
+
+/// The entries a core input track `core` (the input module's control entries, `{t, seq, control,
+/// value, …}`) derives for `w`'s inputs `on` a control: each entry of that control, or with
+/// `each: change` each whose value differs from the one before, adds the input to each of its
+/// targets, stamped at the first step at or after the entry's flick (`h` flicks a step), with the
+/// input's defaults. Each comes with the index in `core` of the entry it derives from (#522, #525).
+pub fn from_controls(w: &World, h: i64, core: &[Value]) -> Vec<(usize, Entry)> {
+    let mut controls: Vec<(usize, &Value)> = core
+        .iter()
+        .enumerate()
+        .filter(|(_, e)| e["control"].is_string())
+        .collect();
+    controls.sort_by_key(|(_, e)| (e["t"].as_i64(), e["seq"].as_i64()));
+    let mut last: BTreeMap<&str, &Value> = BTreeMap::new();
+    let mut out = Vec::new();
+    for (i, e) in controls {
+        let control = e["control"].as_str().unwrap_or_default();
+        let changed = last.get(control).is_none_or(|v| **v != e["value"]);
+        last.insert(control, &e["value"]);
+        let step = ((e["t"].as_i64().unwrap_or(0).max(0) + h - 1) / h) as u64;
+        for (id, input) in &w.inputs {
+            let Some(crate::doc::On::Control { id: c, change }) = &input.on else {
+                continue;
+            };
+            if c != control || (*change && !changed) {
+                continue;
+            }
+            for target in &input.targets {
+                let entry = Entry {
+                    step,
+                    kind: input.kind.clone(),
+                    target: target.clone(),
+                    input: id.clone(),
+                    data: input.defaults.clone(),
+                };
+                out.push((i, entry));
+            }
+        }
+    }
+    out
+}

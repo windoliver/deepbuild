@@ -28,6 +28,7 @@ mod gate;
 mod generated;
 mod geometry;
 mod geometry_audit;
+mod golden;
 mod host;
 mod hub;
 mod input;
@@ -43,6 +44,7 @@ mod modes;
 mod narration;
 mod packs;
 mod physics;
+mod picks;
 mod placement;
 #[cfg(feature = "test-accent")]
 mod planted;
@@ -63,6 +65,7 @@ mod shared;
 mod snapshot;
 mod spatial;
 mod spawn;
+mod stepped;
 mod terminal;
 mod terrain;
 #[cfg(feature = "test-machines")]
@@ -466,6 +469,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
             return Some(Call::Input {
                 panel: c.get("panel")?.as_str()?.to_string(),
                 event: input::event(c.get("event")?)?,
+                t: optional(c.get("event")?.get("t"), Value::as_i64)?,
             })
         }
         "scope" => return Some(Call::Scope(c.get("panel")?.as_str()?.to_string())),
@@ -598,6 +602,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         "geometry" => return geometry::parse(c).map(|g| Call::Geometry(Box::new(g))),
         "kinds" => return Some(Call::KindSchemas),
         "spatial" => return spatial::parse(c).map(|s| Call::Spatial(Box::new(s))),
+        "logic" => return picks::parse(c).map(|l| Call::Logic(Box::new(l))),
         "terrain_rays" => return terrain::parse(c).map(|r| Call::TerrainRays(Box::new(r))),
         "physics_bake" => return physics::parse(c).map(|b| Call::PhysicsBake(Box::new(b))),
         "packs" => return Some(Call::Packs),
@@ -678,6 +683,9 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         "seam_suite" => return seams::parse(c),
         "relay_client" => return seams::parse_client(c),
         "schedule" => return Some(Call::Schedule),
+        "golden_record" | "golden_verify" => {
+            return golden::parse(name, c).map(Call::RuntimeGolden)
+        }
         "rate" | "time" | "export" | "play" | "determinism" => {
             return crate::time::parse_call(name, c)
         }
@@ -1237,6 +1245,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 || deep_canvas_marks::arrays::PLANTED.contains(p)
                 // #1967's wrong programs live in the cells module's playback and conversion.
                 || deep_canvas_cells::recording::PLANTED.contains(p)
+                || deep_canvas_input::rows::PLANTED.contains(p)
         })
         .map(str::to_string);
     // #433's wrong programs are twins of the familiar@1 pack.
@@ -1258,6 +1267,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
             None if export_planted(p).is_some() => export_planted(p),
             None if geometry_audit::planted(p).is_some() => geometry_audit::planted(p),
             None if physics::planted(p).is_some() => physics::planted(p),
+            None if stepped::planted(p).is_some() => stepped::planted(p),
             None => Some(match p {
                 "presents_unnamed_removal" => Planted::PresentsUnnamedRemoval,
                 "diffs_items_only" => Planted::DiffsItemsOnly,
@@ -1624,6 +1634,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
         devices: capture::Devices::parse(input)?,
         decode_caps: media::caps(input)?,
         audio: audio::parse(input.get("audio"))?,
+        delays: stepped::delays(input.get("delays"))?,
     })
 }
 
@@ -1866,6 +1877,8 @@ fn build_set() -> BuildSet {
 const TEST_BUILD: bool = cfg!(any(
     feature = "test-a",
     feature = "test-preview",
+    feature = "test-preview-removed",
+    feature = "test-preview-removed-bare",
     feature = "test-cue",
     feature = "test-cue-span",
     feature = "test-ring-a",

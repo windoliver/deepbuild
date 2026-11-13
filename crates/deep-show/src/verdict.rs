@@ -254,7 +254,8 @@ impl<'a> Hub<'a> {
         // and the frame each honest-numbers subject first shows in.
         let films = self.film_audit_runs(c);
         let flickers = self.film_flicker_runs(c);
-        let briefed = self.brief_rows(claim, c);
+        let mut briefed = self.brief_rows(claim, c);
+        briefed.extend(self.heard_rows(claim, c));
         let shown = self.first_shown_by_doc(c);
         let mut docs: Vec<(String, Current)> = Vec::new();
         let mut missing = false;
@@ -339,9 +340,10 @@ impl<'a> Hub<'a> {
         // A deliverable the hub doesn't hold is INVALID; a definition with no requirement checks
         // nothing, so it never passes.
         // #409: craft checks never pass a film on their own.
-        let craft_passes = rows
-            .iter()
-            .all(|r| r["from"]["craft"].is_string() && r["result"] == "PASS");
+        let craft_passes = rows.iter().all(|r| {
+            (r["from"]["craft"].is_string() || r["from"]["default"].is_string())
+                && r["result"] == "PASS"
+        });
         let result = if missing {
             "INVALID"
         } else if none || craft_passes {
