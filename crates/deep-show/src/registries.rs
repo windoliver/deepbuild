@@ -33,7 +33,11 @@ impl Hub<'_> {
     /// else `pack`.
     fn pack_entries(&self) -> Vec<SealedEntry> {
         // #415: a pack's admitted layouts are data.layout@1 entries beside its `entries`.
-        let layouts = self.sandbox.layout_entries.iter().filter(|e| self.packs.all().any(|p| p.id.text() == e.pack));
+        let layouts = self
+            .sandbox
+            .layout_entries
+            .iter()
+            .filter(|e| self.packs.all().any(|p| p.id.text() == e.pack));
         self.packs
             .all()
             .flat_map(|p| p.entries.iter())

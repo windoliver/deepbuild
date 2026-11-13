@@ -699,7 +699,9 @@ fn step(id: &str, s: &Value, issues: &mut Vec<Issue>) -> Option<Step> {
         issues.push(Issue::at_step(
             "operator_source",
             id,
-            format!("a step carries no shader text ({k}): every step is an op from the closed list"),
+            format!(
+                "a step carries no shader text ({k}): every step is an op from the closed list"
+            ),
         ));
         return None;
     }
@@ -765,7 +767,10 @@ fn iterate(id: &str, a: &Map<String, Value>, issues: &mut Vec<Issue>) -> Iterate
     let pp = a.get("ping_pong");
     let body = a.get("body");
     let mut outputs = BTreeMap::new();
-    if let Some(o) = body.and_then(|b| b.get("outputs")).and_then(Value::as_object) {
+    if let Some(o) = body
+        .and_then(|b| b.get("outputs"))
+        .and_then(Value::as_object)
+    {
         for (name, v) in o {
             outputs.insert(name.clone(), arg(v));
         }
@@ -1181,7 +1186,12 @@ pub fn read(v: &Value) -> Result<Operator, Vec<Issue>> {
                 let size: Vec<u32> = t
                     .get("size")
                     .and_then(Value::as_array)
-                    .map(|a| a.iter().filter_map(Value::as_u64).map(|n| n as u32).collect())
+                    .map(|a| {
+                        a.iter()
+                            .filter_map(Value::as_u64)
+                            .map(|n| n as u32)
+                            .collect()
+                    })
                     .unwrap_or_default();
                 let mips = t.get("mips").and_then(Value::as_bool).unwrap_or(false);
                 let dims = if dim3 { 3 } else { 2 };
@@ -1189,7 +1199,10 @@ pub fn read(v: &Value) -> Result<Operator, Vec<Issue>> {
                     issues.push(Issue::at_path(
                         "operator_type",
                         &path,
-                        format!("a texture output is {{format: {}, size: [{dims} sizes]}}", TEXTURE_FORMATS.join(" | ")),
+                        format!(
+                            "a texture output is {{format: {}, size: [{dims} sizes]}}",
+                            TEXTURE_FORMATS.join(" | ")
+                        ),
                     ));
                     continue;
                 }
@@ -1208,11 +1221,20 @@ pub fn read(v: &Value) -> Result<Operator, Vec<Issue>> {
                 instances.insert(
                     name.clone(),
                     InstancesOut {
-                        instancer: i.get("instancer").and_then(Value::as_str).unwrap_or("").into(),
+                        instancer: i
+                            .get("instancer")
+                            .and_then(Value::as_str)
+                            .unwrap_or("")
+                            .into(),
                         columns: i
                             .get("columns")
                             .and_then(Value::as_array)
-                            .map(|a| a.iter().filter_map(Value::as_str).map(String::from).collect())
+                            .map(|a| {
+                                a.iter()
+                                    .filter_map(Value::as_str)
+                                    .map(String::from)
+                                    .collect()
+                            })
                             .unwrap_or_default(),
                         count: i.get("count").and_then(Value::as_str).map(String::from),
                     },
@@ -1233,7 +1255,10 @@ pub fn read(v: &Value) -> Result<Operator, Vec<Issue>> {
                 let sc = s.get("type").and_then(Value::as_str).and_then(Ty::parse);
                 // Carried state (#252): `carry: {every: steps ≥ 1, budget: bytes}`.
                 let carry = v.get("carry").map(|c| {
-                    let every = c.get("every").and_then(Value::as_u64).and_then(|e| u32::try_from(e).ok());
+                    let every = c
+                        .get("every")
+                        .and_then(Value::as_u64)
+                        .and_then(|e| u32::try_from(e).ok());
                     match (every, c.get("budget").and_then(Value::as_u64)) {
                         (Some(every @ 1..), Some(budget)) => Some(Carry { every, budget }),
                         _ => {
@@ -1349,7 +1374,11 @@ pub fn read(v: &Value) -> Result<Operator, Vec<Issue>> {
     let elements = counted_by.map_or(o.get("elements"), |e| e.get("max"));
     let counted = counted_by.is_some();
     if let Some(e) = counted_by {
-        match e.get("from").and_then(Value::as_str).and_then(|f| f.split_once('.')) {
+        match e
+            .get("from")
+            .and_then(Value::as_str)
+            .and_then(|f| f.split_once('.'))
+        {
             Some((op, output)) => {
                 inputs.insert(
                     DISPATCH_COUNT.to_string(),
@@ -1375,10 +1404,18 @@ pub fn read(v: &Value) -> Result<Operator, Vec<Issue>> {
     // A stepped operator (#252): `stepped: {rate}`, steps a second of document time.
     let stepped = match o.get("stepped") {
         None => None,
-        Some(st) => match st.get("rate").and_then(Value::as_u64).and_then(|r| u32::try_from(r).ok()) {
+        Some(st) => match st
+            .get("rate")
+            .and_then(Value::as_u64)
+            .and_then(|r| u32::try_from(r).ok())
+        {
             Some(r @ 1..=1000) => Some(r),
             _ => {
-                issues.push(Issue::at_path("operator_type", "stepped", "stepped is {rate: steps a second, 1 to 1,000}"));
+                issues.push(Issue::at_path(
+                    "operator_type",
+                    "stepped",
+                    "stepped is {rate: steps a second, 1 to 1,000}",
+                ));
                 None
             }
         },
@@ -1550,7 +1587,10 @@ fn read_responses(
                     &format!("inputs/{n}"),
                     format!("{n} is an input of the light loop's {name}"),
                 ));
-            } else if !matches!(i.ty, Ty::Tex(_) | Ty::Tex3(_) | Ty::Storage(..) | Ty::Arr(..)) {
+            } else if !matches!(
+                i.ty,
+                Ty::Tex(_) | Ty::Tex3(_) | Ty::Storage(..) | Ty::Arr(..)
+            ) {
                 r.inputs.entry(n.clone()).or_insert_with(|| i.clone());
             }
         }

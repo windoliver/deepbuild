@@ -106,4 +106,3 @@ pub fn tables(doc: &mut Map<String, Value>, evidence: Option<&Path>) -> Result<(
     }
     Ok(())
 }
-

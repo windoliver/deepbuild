@@ -107,7 +107,11 @@ impl HubCopy {
             // A rename is the name you gave the session, and its row is set with it, as the core records them (#2018).
             "session.rename" => {
                 let session = params["session"].as_str().unwrap_or_default().to_owned();
-                let name = params["name"].as_str().unwrap_or_default().trim().to_owned();
+                let name = params["name"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .trim()
+                    .to_owned();
                 if name.is_empty() {
                     return Err(HubError::Refused(
                         json!({"code": "type", "path": "/params/name", "message": "Give the session a name."}),

@@ -1872,7 +1872,9 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             frame.insert("settled".into(), json!(settled));
             // What each stepped operator's carried output holds as this frame drew (#252).
             let fx2 = fx.clone();
-            let carried = app.worker.call(move |_| lock(&fx2).docops.as_ref().map(|o| o.carried()));
+            let carried = app
+                .worker
+                .call(move |_| lock(&fx2).docops.as_ref().map(|o| o.carried()));
             if let Some(c) = carried.filter(|c| c.as_object().is_some_and(|m| !m.is_empty())) {
                 frame.insert("carried".into(), c);
             }
@@ -2002,8 +2004,13 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                         })?;
                         let mut m = serde_json::Map::new();
                         for k in &keys {
-                            let mut r =
-                                crate::opframe::read_one(&device, ops, &Default::default(), k, &dir)?;
+                            let mut r = crate::opframe::read_one(
+                                &device,
+                                ops,
+                                &Default::default(),
+                                k,
+                                &dir,
+                            )?;
                             // The class its writer computes, which a golden compares it under (#252).
                             let item = k.split_once('.').map_or(k.as_str(), |(i, _)| i);
                             if let (Some(o), Some(c)) = (r.as_object_mut(), ops.class_of(item)) {

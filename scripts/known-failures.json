@@ -113,12 +113,7 @@
     "clippy: tests/acceptance/327/card.rs unused variable: `card`": 1,
     "clippy: tests/acceptance/327/common.rs this `map_or` can be simplified": 1,
     "clippy: tests/acceptance/327/planted.rs this `map_or` can be simplified": 1,
-    "clippy: tests/acceptance/995/app/panel.rs this method takes 2 arguments but 1 argument was supplied": 1,
-    "fmt: tests/acceptance/327/ac1_redraft.rs": 14,
-    "fmt: tests/acceptance/327/ac3_redraft.rs": 18,
-    "fmt: tests/acceptance/327/card.rs": 30,
-    "fmt: tests/acceptance/327/common.rs": 88,
-    "fmt: tests/acceptance/327/planted.rs": 17
+    "clippy: tests/acceptance/995/app/panel.rs this method takes 2 arguments but 1 argument was supplied": 1
   },
   "lintIssues": {
     "canvas-lint: crates/deep-canvas-cells/src/recording.rs the env! macro, the building machine's environment compiled into the check": "#1967's unit test reading the crate's oracle recordings (#2381, added 2026-11-12)",
