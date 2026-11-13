@@ -180,7 +180,14 @@ fn read_by_selection(scene: &Scene) -> u64 {
     let c = &scene.camera;
     let mut bits: Vec<u64> = Vec::new();
     let mut f = |v: f64| bits.push(v.to_bits());
-    for v in c.size.iter().chain(&c.eye).chain(&c.right).chain(&c.up).chain(&c.forward) {
+    for v in c
+        .size
+        .iter()
+        .chain(&c.eye)
+        .chain(&c.right)
+        .chain(&c.up)
+        .chain(&c.forward)
+    {
         f(*v);
     }
     for v in c.centre.iter().chain(&c.roll) {
@@ -245,7 +252,11 @@ pub fn rows(choices: &[Choice]) -> Value {
 
 /// A terrain plate's tiles before the selection draws them: each its tile, its place and its
 /// levels (#2017).
-pub type Tiles = Vec<([u32; 2], deep_canvas_scene3d::scene::Affine3, std::sync::Arc<lod::Lod>)>;
+pub type Tiles = Vec<(
+    [u32; 2],
+    deep_canvas_scene3d::scene::Affine3,
+    std::sync::Arc<lod::Lod>,
+)>;
 
 /// Plate `item`'s tiles in `scene`, before the selection resolves them.
 pub fn tiles_of(scene: &Scene, item: &str) -> Tiles {
@@ -275,7 +286,9 @@ pub fn ground_points(item: &str, at: &[[f64; 2]], tiles: &Tiles, choices: &[Choi
                 Some((*tile, level, y))
             });
             match hit {
-                Some((tile, level, y)) => json!({"at": [x, z], "tile": tile, "level": level, "y": y}),
+                Some((tile, level, y)) => {
+                    json!({"at": [x, z], "tile": tile, "level": level, "y": y})
+                }
                 None => json!({"at": [x, z], "tile": null, "level": null, "y": null}),
             }
         })

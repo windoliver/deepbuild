@@ -24,6 +24,7 @@ Never: Given a verdict by its own agent.
 
 ## Check
 
+- deep_status. Read where your session stands: the hub's gates; the checks the repo's spec names; your open asks, each with its state, its default and its deadline; your open items; and each of your claims with its runs, its verdict and any run that contradicts what you predicted.
 - deep_propose. Propose a change you may not make yourself, such as to a wiki page, a rule, a check or a spec, with what it rests on; it waits in the person's inbox, and nothing changes until they apply it.
 - deep_run. Run a check the repo's spec names, for your claim at its commit; it answers with the run's outcome and its evidence once the run finishes.
 
@@ -31,15 +32,16 @@ Never: Edited once protected, or the only cover for a claim when that claim's ag
 
 ## Verdict
 
-- deep_status. Read where your session stands: the hub's gates, and each of your claims with its runs, its verdict and any run that contradicts what you predicted.
+- deep_status, as under Check.
 
 Never: Written by an agent or an extension, or a PASS resting on a model's judgment alone: each assertion names its oracle, code, model or person.
 
 ## Ask
 
+- deep_status, as under Check.
 - deep_ask. Ask the person what only they can answer, a taste call or a choice, or raise a task only a person can do, naming the check that will prove it done. It waits for the answer and returns it, or says it is still waiting, with the ask's deadline and default.
 - deep_wait. Keep waiting on an ask you raised, once deep_ask says it is still waiting.
-- deep_root_plan. Propose a root plan for a host: the script you wrote there, locked by its hash, and each step with its undo or null when it has none. The person reads it, says yes or no, and runs it themselves with deep host run in their own terminal, where sudo asks for their password.
+- deep_root_plan. Propose a root plan for a host, with the script you wrote there, locked by its hash, and each step with its undo or null when it has none. The person reads it, says yes or no, and runs it themselves with deep host run in their own terminal, where sudo asks for their password.
 
 Never: Answered by an agent, or by an extension except by naming a decision, rule, budget or request of yours that the core checks.
 
@@ -51,6 +53,7 @@ Never: Applied or widened by an agent.
 
 ## Evidence and open item
 
+- deep_status, as under Check.
 - deep_open_item. Record what is still open on your task, such as a kind or a field a piece needs that does not exist, instead of working around it.
 - deep_evidence. Attach a file from your working folder as evidence, stored by its hash.
 
@@ -64,7 +67,7 @@ Never: In force before you approve it.
 
 ## Task definition of done
 
-- deep_status, as under Verdict.
+- deep_status, as under Check.
 - deep_propose, as under Check.
 
 Never: Drafted from the working session's work, or changed by it.

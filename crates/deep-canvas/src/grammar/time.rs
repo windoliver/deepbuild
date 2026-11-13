@@ -341,19 +341,38 @@ impl Time {
                 }
             }
             // #509: a word marker the speech bake placed, in the context's markers by its name.
-            Time::Word { line, text, k, end, offset } => {
+            Time::Word {
+                line,
+                text,
+                k,
+                end,
+                offset,
+            } => {
                 let prefix = format!("{}.word:{text}#", line.as_str());
                 let found: Vec<&(i64, i64)> = match k {
-                    Some(k) => ctx.markers.get(&format!("{prefix}{k}")).into_iter().collect(),
-                    None => ctx.markers.iter().filter(|(n, _)| n.starts_with(&prefix)).map(|(_, v)| v).collect(),
+                    Some(k) => ctx
+                        .markers
+                        .get(&format!("{prefix}{k}"))
+                        .into_iter()
+                        .collect(),
+                    None => ctx
+                        .markers
+                        .iter()
+                        .filter(|(n, _)| n.starts_with(&prefix))
+                        .map(|(_, v)| v)
+                        .collect(),
                 };
                 let [(start, stop)] = found.as_slice() else {
-                    return Err(unresolved("a word anchor resolves only with a speech bake, and once without `#k`"));
+                    return Err(unresolved(
+                        "a word anchor resolves only with a speech bake, and once without `#k`",
+                    ));
                 };
                 let base = if *end { *stop } else { *start };
                 match offset {
                     None => Ok(base),
-                    Some(span) => base.checked_add(span.resolve(ctx)?).ok_or_else(|| refuse(CODE, format!("`{}`: overflows", self.print()))),
+                    Some(span) => base
+                        .checked_add(span.resolve(ctx)?)
+                        .ok_or_else(|| refuse(CODE, format!("`{}`: overflows", self.print()))),
                 }
             }
         }

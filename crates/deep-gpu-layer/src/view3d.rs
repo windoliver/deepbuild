@@ -1088,12 +1088,15 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
     };
     // Each scene import's report, and every image's path by hash for the decode worker.
     let mut map_paths = args.assets.clone();
+    // #428's planted import: dispersion dropped from each report and drawn as 0.
+    let drops_dispersion = app.planted == Some(Planted::DropsDispersion);
     let import_report = crate::textures::imports(
         &args.doc,
         &read,
         &args.licenses,
         args.store.as_ref(),
         &mut map_paths,
+        drops_dispersion,
     )?;
     let mut receipt = Value::Null;
     // Level of detail and the light cut, chosen from each frame's view (#425).
@@ -1214,6 +1217,9 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             let mut scene =
                 evaluate_sourced(&composed, t, &args.look, &mut labels, &read, outlines)
                     .map_err(|r| refused(r.code, r.path))?;
+            if drops_dispersion {
+                scene.plant_drops_dispersion();
+            }
             let selected = (&mut args.selection, &mut viewer_selection);
             let presented = crate::fed::framed(&mut scene, &composed, t, selected, app.planted);
             if build_ms.is_none() {
@@ -1459,6 +1465,9 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             let at_time = |tk: i64, labels: &mut Labels| -> Result<Scene, Value> {
                 let mut sc = evaluate_sourced(&composed, tk, &args.look, labels, &read, outlines)
                     .map_err(|r| refused(r.code, r.path))?;
+                if drops_dispersion {
+                    sc.plant_drops_dispersion();
+                }
                 sc.texels.clone_from(&scene.texels);
                 sc.ground = scene.ground;
                 sc.set_cutaway(scene.cutaway.clone());
@@ -1863,7 +1872,9 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             frame.insert("settled".into(), json!(settled));
             // What each stepped operator's carried output holds as this frame drew (#252).
             let fx2 = fx.clone();
-            let carried = app.worker.call(move |_| lock(&fx2).docops.as_ref().map(|o| o.carried()));
+            let carried = app
+                .worker
+                .call(move |_| lock(&fx2).docops.as_ref().map(|o| o.carried()));
             if let Some(c) = carried.filter(|c| c.as_object().is_some_and(|m| !m.is_empty())) {
                 frame.insert("carried".into(), c);
             }
@@ -1993,8 +2004,13 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                         })?;
                         let mut m = serde_json::Map::new();
                         for k in &keys {
-                            let mut r =
-                                crate::opframe::read_one(&device, ops, &Default::default(), k, &dir)?;
+                            let mut r = crate::opframe::read_one(
+                                &device,
+                                ops,
+                                &Default::default(),
+                                k,
+                                &dir,
+                            )?;
                             // The class its writer computes, which a golden compares it under (#252).
                             let item = k.split_once('.').map_or(k.as_str(), |(i, _)| i);
                             if let (Some(o), Some(c)) = (r.as_object_mut(), ops.class_of(item)) {

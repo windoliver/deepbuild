@@ -237,7 +237,8 @@ impl Expected {
     /// A text compared as it stands, with no `say`: a polyphonic character matches any of its
     /// readings, since only a script line's `say` gives one.
     pub fn plain(text: &str, names: &[String]) -> Expected {
-        Expected::of(text, None, names, "").unwrap_or_else(|_| unreachable!("a text with no say and no locale is never refused"))
+        Expected::of(text, None, names, "")
+            .unwrap_or_else(|_| unreachable!("a text with no say and no locale is never refused"))
     }
 
     /// What `say` reads, as the issue names it.

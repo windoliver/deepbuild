@@ -9,8 +9,8 @@
 //! through its projector, so a 2D film's pushes and pans need no scene3d.
 
 use deep_canvas::camera::{
-    add, deg, dot, length, orbit_direction, rad, scale, screen_basis, sub, Offsets, Pose as CorePose,
-    Projector, Spec, Vec3,
+    add, deg, dot, length, orbit_direction, rad, scale, screen_basis, sub, Offsets,
+    Pose as CorePose, Projector, Spec, Vec3,
 };
 use deep_canvas::grammar::FLICKS_PER_SECOND;
 use deep_canvas::interval::{down, up, Iv};
@@ -78,7 +78,10 @@ impl Pose {
         }
         let d = sub(self.position, self.target);
         let n = length(d);
-        (deg(atan2(d[0], d[2])), deg(asin((d[1] / n).clamp(-1.0, 1.0))))
+        (
+            deg(atan2(d[0], d[2])),
+            deg(asin((d[1] / n).clamp(-1.0, 1.0))),
+        )
     }
 
     /// The core's pose, which its projector reads.
@@ -152,7 +155,10 @@ impl Pose {
 /// An aim's heading (0 down −Z, positive turning right) and pitch (positive up), degrees.
 fn yaw_pitch(aim: Vec3) -> (f64, f64) {
     let n = length(aim);
-    (deg(atan2(aim[0], -aim[2])), deg(asin((aim[1] / n).clamp(-1.0, 1.0))))
+    (
+        deg(atan2(aim[0], -aim[2])),
+        deg(asin((aim[1] / n).clamp(-1.0, 1.0))),
+    )
 }
 
 fn aim_of(yaw: f64, pitch: f64) -> Vec3 {
@@ -216,16 +222,34 @@ fn mixed(a: &Pose, b: &Pose, w: f64) -> Pose {
 /// share, `before` itself at `start` and `pose` from `start + g` on. Under reduced motion
 /// (`reduced`), a cut at the glide's midpoint with a 200 ms dissolve (Transport). Answers the
 /// pose, the dissolve inside its window, and whether the glide moves the camera.
-pub fn joined(before: &Pose, pose: &Pose, start: i64, g: i64, ease: Ease, t: i64, reduced: bool) -> (Pose, Option<(f64, Pose, Pose)>, bool) {
+pub fn joined(
+    before: &Pose,
+    pose: &Pose,
+    start: i64,
+    g: i64,
+    ease: Ease,
+    t: i64,
+    reduced: bool,
+) -> (Pose, Option<(f64, Pose, Pose)>, bool) {
     if g <= 0 || t < start || t >= start + g {
         return (*pose, None, false);
     }
     if reduced {
         let mid = start + g / 2;
-        let dissolve = ((t - mid).abs() < DISSOLVE / 2).then(|| ((t - (mid - DISSOLVE / 2)) as f64 / DISSOLVE as f64, *before, *pose));
+        let dissolve = ((t - mid).abs() < DISSOLVE / 2).then(|| {
+            (
+                (t - (mid - DISSOLVE / 2)) as f64 / DISSOLVE as f64,
+                *before,
+                *pose,
+            )
+        });
         return (if t < mid { *before } else { *pose }, dissolve, false);
     }
-    (mixed(before, pose, ease.at((t - start) as f64 / g as f64)), None, true)
+    (
+        mixed(before, pose, ease.at((t - start) as f64 / g as f64)),
+        None,
+        true,
+    )
 }
 
 /// An angle in (−180, 180].
@@ -257,7 +281,9 @@ fn noise(seed: u64, x: f64) -> f64 {
 }
 
 fn fnv(text: &str) -> u64 {
-    text.bytes().fold(0xcbf2_9ce4_8422_2325, |h, b| (h ^ u64::from(b)).wrapping_mul(0x100_0000_01b3))
+    text.bytes().fold(0xcbf2_9ce4_8422_2325, |h, b| {
+        (h ^ u64::from(b)).wrapping_mul(0x100_0000_01b3)
+    })
 }
 
 /// The shot moves (Shot).
@@ -362,7 +388,8 @@ impl Transition {
         if self.end <= self.start {
             return if t < self.cut { 0.0 } else { 1.0 };
         }
-        self.ease.at((t - self.start) as f64 / (self.end - self.start) as f64)
+        self.ease
+            .at((t - self.start) as f64 / (self.end - self.start) as f64)
     }
 }
 
@@ -464,7 +491,11 @@ pub(crate) fn ease_named(v: Option<&Value>, path: &str) -> Result<Ease, Refused>
             .iter()
             .find(|(n, _)| n == name)
             .map(|(_, e)| *e)
-            .ok_or_else(|| Refused { code: "bad_interp", path: path.into(), detail: None }),
+            .ok_or_else(|| Refused {
+                code: "bad_interp",
+                path: path.into(),
+                detail: None,
+            }),
         Some(other) => crate::doc::ease_of(other, path),
     }
 }
@@ -482,7 +513,11 @@ fn place_of(v: Option<&Value>, default: [f64; 2], path: &str) -> Result<[f64; 2]
     }
 }
 
-fn framing_of(v: &Map<String, Value>, base: Option<&Framing>, path: &str) -> Result<Framing, Refused> {
+fn framing_of(
+    v: &Map<String, Value>,
+    base: Option<&Framing>,
+    path: &str,
+) -> Result<Framing, Refused> {
     let keep = match v.get("keep") {
         None => base.map(|b| b.keep.clone()).unwrap_or_default(),
         Some(Value::Array(list)) => list
@@ -495,7 +530,11 @@ fn framing_of(v: &Map<String, Value>, base: Option<&Framing>, path: &str) -> Res
     Ok(Framing {
         keep,
         pad: num(v.get("pad"), &format!("{path}/pad"))?.unwrap_or(base.map_or(0.08, |b| b.pad)),
-        place: place_of(v.get("place"), base.map_or([0.5, 0.5], |b| b.place), &format!("{path}/place"))?,
+        place: place_of(
+            v.get("place"),
+            base.map_or([0.5, 0.5], |b| b.place),
+            &format!("{path}/place"),
+        )?,
         fill: num(v.get("fill"), &format!("{path}/fill"))?.unwrap_or(base.map_or(0.6, |b| b.fill)),
     })
 }
@@ -507,7 +546,9 @@ fn extent(item: &Value) -> [Vec3; 2] {
     match item.get("kind").and_then(Value::as_str) {
         Some("mark.box@1" | "mark.cylinder@1" | "mark.sphere@1") => {
             let half = match params.and_then(|p| p.get("size")) {
-                Some(Value::Array(s)) if s.len() == 3 => [0, 1, 2].map(|k| s[k].as_f64().unwrap_or(0.0) / 2.0),
+                Some(Value::Array(s)) if s.len() == 3 => {
+                    [0, 1, 2].map(|k| s[k].as_f64().unwrap_or(0.0) / 2.0)
+                }
                 Some(v) => [v.as_f64().unwrap_or(0.0) / 2.0; 3],
                 None => [0.5; 3],
             };
@@ -537,12 +578,26 @@ fn corners(b: &[Vec3; 2]) -> [Vec3; 8] {
 
 /// An item's bounds through a projector: the projection of their centre and the box of their
 /// corners, in px.
-pub fn project(projector: &Projector, b: &[Vec3; 2], size: [f64; 2]) -> Option<([f64; 2], [f64; 4])> {
+pub fn project(
+    projector: &Projector,
+    b: &[Vec3; 2],
+    size: [f64; 2],
+) -> Option<([f64; 2], [f64; 4])> {
     let c = through(projector, scale(add(b[0], b[1]), 0.5), size)?;
-    let mut bx = [f64::INFINITY, f64::INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY];
+    let mut bx = [
+        f64::INFINITY,
+        f64::INFINITY,
+        f64::NEG_INFINITY,
+        f64::NEG_INFINITY,
+    ];
     for k in corners(b) {
         let p = through(projector, k, size)?;
-        bx = [bx[0].min(p[0]), bx[1].min(p[1]), bx[2].max(p[0]), bx[3].max(p[1])];
+        bx = [
+            bx[0].min(p[0]),
+            bx[1].min(p[1]),
+            bx[2].max(p[0]),
+            bx[3].max(p[1]),
+        ];
     }
     Some((c, bx))
 }
@@ -569,19 +624,34 @@ struct Frame {
 
 impl Frame {
     fn safe_frame(&self) -> [f64; 4] {
-        [self.safe, self.safe, self.size[0] - self.safe, self.size[1] - self.safe]
+        [
+            self.safe,
+            self.safe,
+            self.size[0] - self.safe,
+            self.size[1] - self.safe,
+        ]
     }
 
     fn place_px(&self, place: [f64; 2]) -> [f64; 2] {
         let s = self.safe_frame();
-        [s[0] + place[0] * (s[2] - s[0]), s[1] + place[1] * (s[3] - s[1])]
+        [
+            s[0] + place[0] * (s[2] - s[0]),
+            s[1] + place[1] * (s[3] - s[1]),
+        ]
     }
 }
 
 /// Fits `bounds` (widened by `pad`) on `frame` from the orientation of `base`: the distance or
 /// view width that makes them span `fill` of the safe frame's shorter side, then the target that
 /// puts their centre at `place` px, in closed form.
-fn fit(base: &Pose, bounds: &[Vec3; 2], pad: f64, fill: f64, place_px: [f64; 2], frame: &Frame) -> Pose {
+fn fit(
+    base: &Pose,
+    bounds: &[Vec3; 2],
+    pad: f64,
+    fill: f64,
+    place_px: [f64; 2],
+    frame: &Frame,
+) -> Pose {
     let s = frame.safe_frame();
     let shorter = (s[2] - s[0]).min(s[3] - s[1]);
     let half = fill * shorter / 2.0;
@@ -628,7 +698,10 @@ fn fit(base: &Pose, bounds: &[Vec3; 2], pad: f64, fill: f64, place_px: [f64; 2],
             ..*base
         }
     } else {
-        let widest = coords.iter().map(|(r, u, _)| sqrt(r * r + u * u)).fold(f64::MIN_POSITIVE, f64::max);
+        let widest = coords
+            .iter()
+            .map(|(r, u, _)| sqrt(r * r + u * u))
+            .fold(f64::MIN_POSITIVE, f64::max);
         let k = half / widest;
         let target = add(centre, add(scale(right, -x / k), scale(upward, y / k)));
         Pose {
@@ -645,7 +718,9 @@ fn fit(base: &Pose, bounds: &[Vec3; 2], pad: f64, fill: f64, place_px: [f64; 2],
 fn matched(base: &Pose, to: &[Vec3; 2], centre: [f64; 2], height: f64, frame: &Frame) -> Pose {
     let mut pose = fit(base, to, 0.0, 0.6, centre, frame);
     for _ in 0..60 {
-        let Some((_, b)) = project(&pose.projector(frame.size), to, frame.size) else { break };
+        let Some((_, b)) = project(&pose.projector(frame.size), to, frame.size) else {
+            break;
+        };
         let h = b[3] - b[1];
         if h.is_nan() || h <= 0.0 || (h / height - 1.0).abs() < 1e-12 {
             break;
@@ -670,7 +745,11 @@ fn shifted(p: &Pose, d: [f64; 2], frame: &Frame) -> Pose {
     if p.flat {
         let k = frame.size[0] / p.view_width;
         let target = [p.target[0] - d[0] / k, p.target[1] - d[1] / k, p.target[2]];
-        return Pose { position: target, target, ..*p };
+        return Pose {
+            position: target,
+            target,
+            ..*p
+        };
     }
     let fwd = scale(sub(p.target, p.position), 1.0 / p.distance());
     let (right, upward) = screen_basis(fwd);
@@ -708,7 +787,10 @@ fn settle(
         // No interval form writes it: a channel's keys, where its segments turn, and the span's
         // ends and frames.
         let (mut lo, mut hi) = (f64::INFINITY, f64::NEG_INFINITY);
-        let keys = program.slot_key_times(slot).into_iter().filter(|t| (a..=b).contains(t));
+        let keys = program
+            .slot_key_times(slot)
+            .into_iter()
+            .filter(|t| (a..=b).contains(t));
         for t in frames.iter().copied().chain([a, b]).chain(keys) {
             let v = sample(t);
             if v.is_finite() {
@@ -733,7 +815,9 @@ fn settle(
     loop {
         let u = pieces.iter().fold(Iv::EMPTY, |u, p| u.hull(p.2));
         let ext = (hi - lo).max(0.0);
-        if u.is_bounded() && u.hi - u.lo <= 1.01 * ext + 0.01 * size + 1e-12 * (1.0 + u.lo.abs().max(u.hi.abs())) {
+        if u.is_bounded()
+            && u.hi - u.lo <= 1.01 * ext + 0.01 * size + 1e-12 * (1.0 + u.lo.abs().max(u.hi.abs()))
+        {
             return Ok(u);
         }
         let excess = |p: &(i64, i64, Iv)| {
@@ -748,7 +832,11 @@ fn settle(
             .enumerate()
             .fold((0, f64::NEG_INFINITY), |best, (k, p)| {
                 let e = excess(p);
-                if e > best.1 { (k, e) } else { best }
+                if e > best.1 {
+                    (k, e)
+                } else {
+                    best
+                }
             });
         let (x, y, _) = pieces.swap_remove(k);
         if y - x < 2 || pieces.len() > 4096 {
@@ -780,7 +868,8 @@ fn grid(a: i64, b: i64, step: i64) -> Vec<i64> {
 fn frames_in(a: i64, b: i64, rate: (u32, u32)) -> Vec<i64> {
     let (p, q) = (i128::from(rate.0), i128::from(rate.1));
     let fl = i128::from(FLICKS_PER_SECOND);
-    let first = (i128::from(a) * p).div_euclid(fl * q) + i128::from(i128::from(a) * p % (fl * q) != 0);
+    let first =
+        (i128::from(a) * p).div_euclid(fl * q) + i128::from(i128::from(a) * p % (fl * q) != 0);
     let mut out = Vec::new();
     let mut k = first;
     loop {
@@ -811,7 +900,11 @@ fn union_over(
     let mut out = [[f64::INFINITY; 3], [f64::NEG_INFINITY; 3]];
     for id in keep {
         let Some(i) = program.items.iter().position(|x| x == id) else {
-            return refused("ref_unresolved", format!("shots/{shot}/frame/keep"), json!({"item": id, "shot": shot}));
+            return refused(
+                "ref_unresolved",
+                format!("shots/{shot}/frame/keep"),
+                json!({"item": id, "shot": shot}),
+            );
         };
         let e = extent(items.and_then(|m| m.get(id)).unwrap_or(&Value::Null));
         // #504: an assembly's part is bounded in the assembly's space, then widened by its reach.
@@ -875,22 +968,41 @@ fn union_over(
 /// the assembly's transform at its value's and share's ends (a turn sampled every 5° at most and
 /// padded by the sagitta of a step), never by sampling time. The planted framer takes each
 /// share as `state` holds it. `None` where an assembly's value has no bound.
-fn reached(program: &Program, doc: &Map<String, Value>, a: usize, mut b: [Vec3; 2], state: &State) -> Option<[Vec3; 2]> {
+fn reached(
+    program: &Program,
+    doc: &Map<String, Value>,
+    a: usize,
+    mut b: [Vec3; 2],
+    state: &State,
+) -> Option<[Vec3; 2]> {
     let mut at = Some(a);
     while let Some(i) = at {
         let x = &program.assemblies[i];
         let (mut value, mut share) = program.assembly_reach(doc, i)?;
         if program.options.planted == Planted::FramerIgnoresApart {
-            (value, share) = (Iv::point(state.slots[x.slot]), Iv::point(state.slots[x.slot + 1]));
+            (value, share) = (
+                Iv::point(state.slots[x.slot]),
+                Iv::point(state.slots[x.slot + 1]),
+            );
         }
         let (values, pad) = match x.joint {
             Some(j) if j.kind == crate::assembly::Kind::Turn && value.hi > value.lo => {
                 let n = ((value.hi - value.lo) / 5.0).ceil().max(1.0);
                 let step = (value.hi - value.lo) / n;
-                let r = corners(&b).iter().map(|c| length(sub(*c, j.pivot))).fold(0.0, f64::max);
-                let stretch = (0..3).map(|k| length([x.at[0][k], x.at[1][k], x.at[2][k]])).fold(0.0, f64::max);
-                let values: Vec<f64> = (0..=n as usize).map(|k| value.lo + step * k as f64).collect();
-                (values, r * stretch * (1.0 - cos(rad(step) / 2.0)) * (1.0 + 1e-9) + 1e-12)
+                let r = corners(&b)
+                    .iter()
+                    .map(|c| length(sub(*c, j.pivot)))
+                    .fold(0.0, f64::max);
+                let stretch = (0..3)
+                    .map(|k| length([x.at[0][k], x.at[1][k], x.at[2][k]]))
+                    .fold(0.0, f64::max);
+                let values: Vec<f64> = (0..=n as usize)
+                    .map(|k| value.lo + step * k as f64)
+                    .collect();
+                (
+                    values,
+                    r * stretch * (1.0 - cos(rad(step) / 2.0)) * (1.0 + 1e-9) + 1e-12,
+                )
             }
             _ => (vec![value.lo, value.hi], 0.0),
         };
@@ -914,13 +1026,23 @@ fn reached(program: &Program, doc: &Map<String, Value>, a: usize, mut b: [Vec3; 
 }
 
 /// The kept items' union at one time.
-fn at_start(program: &Program, doc: &Map<String, Value>, keep: &[String], t: i64, shot: &str) -> Result<[Vec3; 2], Refused> {
+fn at_start(
+    program: &Program,
+    doc: &Map<String, Value>,
+    keep: &[String],
+    t: i64,
+    shot: &str,
+) -> Result<[Vec3; 2], Refused> {
     let mut state = program.state();
     program.evaluate(t, Validity::Full, &mut state);
     let mut out = [[f64::INFINITY; 3], [f64::NEG_INFINITY; 3]];
     for id in keep {
         let Some(b) = bounds_at(program, doc, &state, id) else {
-            return refused("ref_unresolved", format!("shots/{shot}/frame/keep"), json!({"item": id, "shot": shot}));
+            return refused(
+                "ref_unresolved",
+                format!("shots/{shot}/frame/keep"),
+                json!({"item": id, "shot": shot}),
+            );
         };
         for k in 0..3 {
             out[0][k] = out[0][k].min(b[0][k]);
@@ -931,7 +1053,12 @@ fn at_start(program: &Program, doc: &Map<String, Value>, keep: &[String], t: i64
 }
 
 /// An item's bounds at the state's time.
-pub fn bounds_at(program: &Program, doc: &Map<String, Value>, state: &State, id: &str) -> Option<[Vec3; 2]> {
+pub fn bounds_at(
+    program: &Program,
+    doc: &Map<String, Value>,
+    state: &State,
+    id: &str,
+) -> Option<[Vec3; 2]> {
     let i = program.items.iter().position(|x| x == id)?;
     let pos = [0, 1, 2].map(|k| state.slots[i * TRANSFORM + k]);
     let e = extent(doc.get("items")?.get(id)?);
@@ -965,7 +1092,15 @@ fn time(v: Option<&Value>, ctx: &Ctx, path: &str) -> Result<i64, Refused> {
 }
 
 /// The fields of a pose a channel may not write while an unkeyed shot holds its camera.
-const POSE_FIELDS: [&str; 7] = ["target", "position", "orbit", "view_width", "roll", "fov", "zoom"];
+const POSE_FIELDS: [&str; 7] = [
+    "target",
+    "position",
+    "orbit",
+    "view_width",
+    "roll",
+    "fov",
+    "zoom",
+];
 
 impl Plan {
     /// Compiles the document's shots and their transitions against its compiled program.
@@ -975,7 +1110,11 @@ impl Plan {
         let timeline: Vec<(&String, &Map<String, Value>)> = shots_json
             .into_iter()
             .flatten()
-            .filter_map(|(id, s)| s.as_object().filter(|s| s.contains_key("start")).map(|s| (id, s)))
+            .filter_map(|(id, s)| {
+                s.as_object()
+                    .filter(|s| s.contains_key("start"))
+                    .map(|s| (id, s))
+            })
             .collect();
         let planted = program.options.planted;
         let rate = program.motion.frame_rate;
@@ -987,16 +1126,33 @@ impl Plan {
         let safe = doc.get("safe").and_then(Value::as_f64).unwrap_or(24.0);
         let frame = Frame { size, safe };
         let mut cameras = Vec::new();
-        for (id, item) in doc.get("items").and_then(Value::as_object).into_iter().flatten() {
+        for (id, item) in doc
+            .get("items")
+            .and_then(Value::as_object)
+            .into_iter()
+            .flatten()
+        {
             if item.get("kind").and_then(Value::as_str) != Some("camera@1") {
                 continue;
             }
-            let params = item.get("params").and_then(Value::as_object).cloned().unwrap_or_default();
+            let params = item
+                .get("params")
+                .and_then(Value::as_object)
+                .cloned()
+                .unwrap_or_default();
             let path = format!("items/{id}/params");
             let mut kicks = Vec::new();
-            for (k, kick) in params.get("kick").and_then(Value::as_array).into_iter().flatten().enumerate() {
+            for (k, kick) in params
+                .get("kick")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+                .enumerate()
+            {
                 let kp = format!("{path}/kick/{k}");
-                let Some(kick) = kick.as_object() else { return bad(kp) };
+                let Some(kick) = kick.as_object() else {
+                    return bad(kp);
+                };
                 let by = num(kick.get("by"), &format!("{kp}/by"))?.unwrap_or(2.0);
                 let s = match kick.get("s") {
                     None => FLICKS_PER_SECOND * 18 / 100,
@@ -1006,9 +1162,20 @@ impl Plan {
                     return refused("out_of_range", format!("{kp}/s"), Value::Null);
                 }
                 let hz = num(kick.get("hz"), &format!("{kp}/hz"))?.unwrap_or(30.0);
-                for at in kick.get("at").and_then(Value::as_array).into_iter().flatten() {
+                for at in kick
+                    .get("at")
+                    .and_then(Value::as_array)
+                    .into_iter()
+                    .flatten()
+                {
                     let at = time(Some(at), &ctx, &format!("{kp}/at"))?;
-                    kicks.push(Kick { at, by, s, hz, index: kicks.len() as u64 });
+                    kicks.push(Kick {
+                        at,
+                        by,
+                        s,
+                        hz,
+                        index: kicks.len() as u64,
+                    });
                 }
             }
             let fit = match params.get("fit").and_then(Value::as_object) {
@@ -1017,8 +1184,15 @@ impl Plan {
             };
             let mut readable = params.clone();
             readable.remove("kick");
-            let spec = Spec::read(&deep_canvas::kinds::with_defaults("camera@1", &readable), &path);
-            let own = spec.ok().and_then(|s| s.rig(&path).ok().map(|r| Pose::of_core(&s.pose(&r, &Offsets::default()))));
+            let spec = Spec::read(
+                &deep_canvas::kinds::with_defaults("camera@1", &readable),
+                &path,
+            );
+            let own = spec.ok().and_then(|s| {
+                s.rig(&path)
+                    .ok()
+                    .map(|r| Pose::of_core(&s.pose(&r, &Offsets::default())))
+            });
             cameras.push(Camera {
                 id: id.clone(),
                 flat: own.is_some_and(|p| p.flat),
@@ -1035,24 +1209,51 @@ impl Plan {
         let mut raws: Vec<Raw> = Vec::new();
         for (id, s) in &timeline {
             let path = format!("shots/{id}");
-            let camera_name = s.get("camera").and_then(Value::as_str).or(doc.get("camera").and_then(Value::as_str));
-            let Some(camera) = cameras.iter().position(|c| Some(c.id.as_str()) == camera_name) else {
-                return refused("ref_unresolved", format!("{path}/camera"), json!({"shot": id}));
+            let camera_name = s
+                .get("camera")
+                .and_then(Value::as_str)
+                .or(doc.get("camera").and_then(Value::as_str));
+            let Some(camera) = cameras
+                .iter()
+                .position(|c| Some(c.id.as_str()) == camera_name)
+            else {
+                return refused(
+                    "ref_unresolved",
+                    format!("{path}/camera"),
+                    json!({"shot": id}),
+                );
             };
             let start = time(s.get("start"), &ctx, &format!("{path}/start"))?;
             let end = time(s.get("end"), &ctx, &format!("{path}/end"))?;
             if end <= start {
                 return refused("bad_time", format!("{path}/end"), json!({"shot": id}));
             }
-            raws.push(Raw { id: (*id).clone(), def: s, camera, start, end });
+            raws.push(Raw {
+                id: (*id).clone(),
+                def: s,
+                camera,
+                start,
+                end,
+            });
         }
         raws.sort_by(|a, b| a.start.cmp(&b.start).then(a.id.cmp(&b.id)));
         // Transitions between shots.
         let mut trans_raw = Vec::new();
-        for (id, tr) in doc.get("transitions").and_then(Value::as_object).into_iter().flatten() {
+        for (id, tr) in doc
+            .get("transitions")
+            .and_then(Value::as_object)
+            .into_iter()
+            .flatten()
+        {
             let Some(tr) = tr.as_object() else { continue };
-            let names = |f: &str| tr.get(f).and_then(Value::as_str).and_then(|n| raws.iter().position(|r| r.id == n));
-            let (Some(from), Some(to)) = (names("from"), names("to")) else { continue };
+            let names = |f: &str| {
+                tr.get(f)
+                    .and_then(Value::as_str)
+                    .and_then(|n| raws.iter().position(|r| r.id == n))
+            };
+            let (Some(from), Some(to)) = (names("from"), names("to")) else {
+                continue;
+            };
             trans_raw.push((id.clone(), tr, from, to));
         }
         // Two shots that overlap outside a transition joining them, on any camera (Shot). A
@@ -1074,7 +1275,13 @@ impl Plan {
             .channels
             .iter()
             .map(|c| ("channels", &c.id, &c.target))
-            .chain(program.motion.drivers.iter().map(|d| ("drivers", &d.id, &d.target)));
+            .chain(
+                program
+                    .motion
+                    .drivers
+                    .iter()
+                    .map(|d| ("drivers", &d.id, &d.target)),
+            );
         for (section, wid, target) in writers {
             let on_pose = target.field.len() >= 2
                 && target.field[0] == "params"
@@ -1110,32 +1317,51 @@ impl Plan {
                 None => 0,
                 v => time(v, &ctx, &format!("{path}/span"))?,
             };
-            let angle_of = |o: Option<&Value>, f: &str| num(o.and_then(|o| o.get(f)), &format!("{path}/{f}")).map(|v| v.unwrap_or(0.0));
+            let angle_of = |o: Option<&Value>, f: &str| {
+                num(o.and_then(|o| o.get(f)), &format!("{path}/{f}")).map(|v| v.unwrap_or(0.0))
+            };
             let kind_name = tr.get("kind").and_then(Value::as_str).unwrap_or("cut");
             let fields = tr.get(kind_name);
             let kind = match kind_name {
                 "cut" => Kind::Cut,
                 "cross_fade" => Kind::CrossFade,
                 "dip" => Kind::Dip,
-                "wipe" => Kind::Wipe { angle: angle_of(fields, "angle")?, feather: angle_of(fields, "feather")? },
-                "push" => Kind::Push { angle: angle_of(fields, "angle")? },
+                "wipe" => Kind::Wipe {
+                    angle: angle_of(fields, "angle")?,
+                    feather: angle_of(fields, "feather")?,
+                },
+                "push" => Kind::Push {
+                    angle: angle_of(fields, "angle")?,
+                },
                 "zoom_through" => {
                     let center = match fields.and_then(|f| f.get("center")) {
-                        Some(Value::Array(c)) if c.len() == 2 => [c[0].as_f64().unwrap_or(0.5), c[1].as_f64().unwrap_or(0.5)],
+                        Some(Value::Array(c)) if c.len() == 2 => {
+                            [c[0].as_f64().unwrap_or(0.5), c[1].as_f64().unwrap_or(0.5)]
+                        }
                         _ => [0.5, 0.5],
                     };
                     Kind::ZoomThrough { center }
                 }
                 "whip" => Kind::Whip {
                     angle: angle_of(fields, "angle")?,
-                    sweep: num(fields.and_then(|f| f.get("sweep")), &format!("{path}/whip/sweep"))?.unwrap_or(26.0),
+                    sweep: num(
+                        fields.and_then(|f| f.get("sweep")),
+                        &format!("{path}/whip/sweep"),
+                    )?
+                    .unwrap_or(26.0),
                 },
-                "iris" | "match_morph" | "text_diff" | "operator" => Kind::Other(kind_name.to_string()),
+                "iris" | "match_morph" | "text_diff" | "operator" => {
+                    Kind::Other(kind_name.to_string())
+                }
                 _ => return refused("transition_kind", format!("{path}/kind"), Value::Null),
             };
             let (a, b) = (&shots[from], &shots[to]);
             if span > (a.end - a.start).min(b.end - b.start) {
-                return refused("transition_span", format!("{path}/span"), json!({"transition": id}));
+                return refused(
+                    "transition_span",
+                    format!("{path}/span"),
+                    json!({"transition": id}),
+                );
             }
             let ease = match tr.get("progress") {
                 None => Ease::InOutCubic,
@@ -1144,7 +1370,10 @@ impl Plan {
             // A match cut frames the incoming shot so `to` lands where `from` was (Transition).
             if let (Kind::Cut, Some(m)) = (&kind, tr.get("match").and_then(Value::as_object)) {
                 if planted != Planted::MatchFramerIgnoresMatch {
-                    let (Some(fid), Some(tid)) = (m.get("from").and_then(Value::as_str), m.get("to").and_then(Value::as_str)) else {
+                    let (Some(fid), Some(tid)) = (
+                        m.get("from").and_then(Value::as_str),
+                        m.get("to").and_then(Value::as_str),
+                    ) else {
                         return bad(format!("{path}/match"));
                     };
                     let step = FLICKS_PER_SECOND * i64::from(rate.1) / i64::from(rate.0.max(1));
@@ -1153,31 +1382,63 @@ impl Plan {
                     program.evaluate(last, Validity::Full, &mut state);
                     let outgoing = shots[from].moved(&shots[from].u(last), last, planted);
                     let Some(fb) = bounds_at(program, doc, &state, fid) else {
-                        return refused("ref_unresolved", format!("{path}/match/from"), json!({"transition": id}));
+                        return refused(
+                            "ref_unresolved",
+                            format!("{path}/match/from"),
+                            json!({"transition": id}),
+                        );
                     };
                     program.evaluate(cut, Validity::Full, &mut state);
                     let Some(tb) = bounds_at(program, doc, &state, tid) else {
-                        return refused("ref_unresolved", format!("{path}/match/to"), json!({"transition": id}));
+                        return refused(
+                            "ref_unresolved",
+                            format!("{path}/match/to"),
+                            json!({"transition": id}),
+                        );
                     };
                     let Some((c, bx)) = project(&outgoing.projector(size), &fb, size) else {
-                        return refused("match_unseen", format!("{path}/match/from"), json!({"transition": id}));
+                        return refused(
+                            "match_unseen",
+                            format!("{path}/match/from"),
+                            json!({"transition": id}),
+                        );
                     };
                     let incoming = &mut shots[to];
                     incoming.framed = matched(&incoming.framed, &tb, c, bx[3] - bx[1], &frame);
                 }
             }
             let (start, end) = (cut - span / 2, cut + (span - span / 2));
-            transitions.push(Transition { id, from, to, kind, cut, start, end, ease });
+            transitions.push(Transition {
+                id,
+                from,
+                to,
+                kind,
+                cut,
+                start,
+                end,
+                ease,
+            });
         }
         // #504: each stage's shot, framed once (its kept items bounded over the document's span).
         let transport = program.motion.transport;
-        let (from, until) = (transport.start, transport.start + transport.span.unwrap_or(0));
+        let (from, until) = (
+            transport.start,
+            transport.start + transport.span.unwrap_or(0),
+        );
         let mut stage = Vec::with_capacity(program.motion.shots.len());
         for s in &program.motion.shots {
-            let def = shots_json.and_then(|m| m.get(&s.id)).and_then(Value::as_object);
+            let def = shots_json
+                .and_then(|m| m.get(&s.id))
+                .and_then(Value::as_object);
             stage.push(match def {
                 Some(def) if !def.contains_key("start") && cameras[s.camera].own.is_some() => {
-                    let r = Raw { id: s.id.clone(), def, camera: s.camera, start: from, end: until };
+                    let r = Raw {
+                        id: s.id.clone(),
+                        def,
+                        camera: s.camera,
+                        start: from,
+                        end: until,
+                    };
                     Some(Plan::shot_of(doc, program, &cameras, &r, &frame, planted)?)
                 }
                 _ => None,
@@ -1191,8 +1452,15 @@ impl Plan {
             frame_rate: rate,
             shots,
             transitions,
-            slow: doc.get("transport").and_then(|t| t.get("reduced_motion")).and_then(Value::as_str) == Some("slow"),
-            doc_camera: doc.get("camera").and_then(Value::as_str).and_then(|c| cameras.iter().position(|x| x.id == c)),
+            slow: doc
+                .get("transport")
+                .and_then(|t| t.get("reduced_motion"))
+                .and_then(Value::as_str)
+                == Some("slow"),
+            doc_camera: doc
+                .get("camera")
+                .and_then(Value::as_str)
+                .and_then(|c| cameras.iter().position(|x| x.id == c)),
             groups: doc
                 .get("items")
                 .and_then(Value::as_object)
@@ -1234,22 +1502,40 @@ impl Plan {
             Some(Value::Object(m)) if m.len() == 1 && m.contains_key("follow_forward") => {
                 let item = m["follow_forward"].as_str();
                 let Some(i) = program.items.iter().position(|x| Some(x.as_str()) == item) else {
-                    return refused("ref_unresolved", format!("{path}/move/follow_forward"), json!({"shot": id}));
+                    return refused(
+                        "ref_unresolved",
+                        format!("{path}/move/follow_forward"),
+                        json!({"shot": id}),
+                    );
                 };
                 Move::FollowForward(i)
             }
             Some(_) => return bad(format!("{path}/move")),
         };
         let Some(own) = cam.own else {
-            return refused("out_of_range", format!("items/{}/params", cam.id), json!({"shot": id, "why": "the camera's params aren't a pose"}));
+            return refused(
+                "out_of_range",
+                format!("items/{}/params", cam.id),
+                json!({"shot": id, "why": "the camera's params aren't a pose"}),
+            );
         };
         if cam.flat && matches!(mv, Move::Orbit | Move::LensZoom) {
-            return refused("shot_move", format!("{path}/move"), json!({"shot": id, "why": "this move turns a 3D camera; it's refused in 2D"}));
+            return refused(
+                "shot_move",
+                format!("{path}/move"),
+                json!({"shot": id, "why": "this move turns a 3D camera; it's refused in 2D"}),
+            );
         }
         let ease = ease_named(s.get("ease"), &format!("{path}/ease"))?;
         let by_default = match mv {
             Move::Push | Move::Pull | Move::LensZoom => 0.15,
-            Move::Pan => if own.perspective() { 15.0 } else { 0.25 },
+            Move::Pan => {
+                if own.perspective() {
+                    15.0
+                } else {
+                    0.25
+                }
+            }
             Move::Orbit => 30.0,
             Move::Slam => 1.7,
             Move::Shake => 0.5,
@@ -1263,7 +1549,11 @@ impl Plan {
             Some(v) => vec3(v, &format!("{path}/target"))?,
             None => own.target,
         };
-        let mut base = Pose { target, roll, ..own };
+        let mut base = Pose {
+            target,
+            roll,
+            ..own
+        };
         if !own.flat {
             let (mut az, mut el) = own.angles();
             let mut d = own.distance();
@@ -1326,16 +1616,26 @@ impl Plan {
                 .collect();
             let first = raw.first().copied().unwrap_or(0.0);
             let mut high = f64::NEG_INFINITY;
-            let maxed: Vec<f64> = raw.iter().map(|x| { high = high.max(*x); high - first }).collect();
+            let maxed: Vec<f64> = raw
+                .iter()
+                .map(|x| {
+                    high = high.max(*x);
+                    high - first
+                })
+                .collect();
             let sigma = 24.0;
             let reach = 72i64;
-            let weights: Vec<f64> = (-reach..=reach).map(|k| exp(-((k * k) as f64) / (2.0 * sigma * sigma))).collect();
+            let weights: Vec<f64> = (-reach..=reach)
+                .map(|k| exp(-((k * k) as f64) / (2.0 * sigma * sigma)))
+                .collect();
             let total: f64 = weights.iter().sum();
             let n = maxed.len() as i64;
             let smooth: Vec<f64> = (0..n)
                 .map(|i| {
                     (-reach..=reach)
-                        .map(|k| weights[(k + reach) as usize] * maxed[(i + k).clamp(0, n - 1) as usize])
+                        .map(|k| {
+                            weights[(k + reach) as usize] * maxed[(i + k).clamp(0, n - 1) as usize]
+                        })
                         .sum::<f64>()
                         / total
                 })
@@ -1345,10 +1645,12 @@ impl Plan {
         let glide = match s.get("join") {
             None | Some(Value::Null) => None,
             Some(Value::String(j)) if j == "cut" => None,
-            Some(Value::Object(j)) if j.contains_key("glide") => Some(match j["glide"].get("span") {
-                None => FLICKS_PER_SECOND * 4 / 5,
-                v => time(v, &ctx, &format!("{path}/join/glide/span"))?,
-            }),
+            Some(Value::Object(j)) if j.contains_key("glide") => {
+                Some(match j["glide"].get("span") {
+                    None => FLICKS_PER_SECOND * 4 / 5,
+                    v => time(v, &ctx, &format!("{path}/join/glide/span"))?,
+                })
+            }
             Some(_) => return bad(format!("{path}/join")),
         };
         let shake = match s.get("shake").and_then(Value::as_object) {
@@ -1369,7 +1671,10 @@ impl Plan {
                 framed.widened(by)
             } else {
                 // From a fit of the first kept item at the shot's start.
-                match framing.as_ref().and_then(|f| f.keep.first().map(|k| (f, k))) {
+                match framing
+                    .as_ref()
+                    .and_then(|f| f.keep.first().map(|k| (f, k)))
+                {
                     Some((f, k)) => {
                         let u = at_start(program, doc, std::slice::from_ref(k), r.start, id)?;
                         fit(&base, &u, f.pad, f.fill, frame.place_px(f.place), frame)
@@ -1413,17 +1718,31 @@ impl Plan {
     /// its camera's kick applied.
     pub fn side(&self, i: usize, t: i64, at: &At) -> Pose {
         let pose = self.shot_pose(i, t.min(self.shots[i].end), at).pose;
-        if at.reduced { pose } else { self.kicked(self.shots[i].camera, &pose, t, at) }
+        if at.reduced {
+            pose
+        } else {
+            self.kicked(self.shots[i].camera, &pose, t, at)
+        }
     }
 
     /// The shot that writes camera `cam` at t: the active one, else the last one that ended.
     pub fn shot_at(&self, cam: usize, t: i64) -> Option<usize> {
-        let mine = || self.shots.iter().enumerate().filter(|(_, s)| s.camera == cam);
+        let mine = || {
+            self.shots
+                .iter()
+                .enumerate()
+                .filter(|(_, s)| s.camera == cam)
+        };
         mine()
             .filter(|(_, s)| s.start <= t && t < s.end)
             .map(|(i, _)| i)
             .next_back()
-            .or_else(|| mine().filter(|(_, s)| s.end <= t).max_by_key(|(_, s)| s.end).map(|(i, _)| i))
+            .or_else(|| {
+                mine()
+                    .filter(|(_, s)| s.end <= t)
+                    .max_by_key(|(_, s)| s.end)
+                    .map(|(i, _)| i)
+            })
     }
 
     fn shown_bare(&self, cam: usize, t: i64, at: &At) -> Shown {
@@ -1439,20 +1758,38 @@ impl Plan {
         let camera = &self.cameras[cam];
         // A whip's window turns the side it shows (Transition: whip).
         for tr in &self.transitions {
-            let Kind::Whip { angle, sweep } = tr.kind else { continue };
+            let Kind::Whip { angle, sweep } = tr.kind else {
+                continue;
+            };
             if self.shots[tr.from].camera != cam || t < tr.start || t >= tr.end || at.reduced {
                 continue;
             }
             let side = if t < tr.cut { tr.from } else { tr.to };
             let pose = self.shot_pose(side, t, at).pose;
             let half = (tr.end - tr.start) as f64 / 2.0;
-            let quad_in_out = |x: f64| if x < 0.5 { 2.0 * x * x } else { 1.0 - 2.0 * (1.0 - x) * (1.0 - x) };
+            let quad_in_out = |x: f64| {
+                if x < 0.5 {
+                    2.0 * x * x
+                } else {
+                    1.0 - 2.0 * (1.0 - x) * (1.0 - x)
+                }
+            };
             let a = if t < tr.cut {
                 let x = (t - tr.start) as f64 / half;
-                sweep * if at.planted == Planted::WhipEasesHalves { quad_in_out(x) } else { x * x }
+                sweep
+                    * if at.planted == Planted::WhipEasesHalves {
+                        quad_in_out(x)
+                    } else {
+                        x * x
+                    }
             } else {
                 let x = (t - tr.cut) as f64 / half;
-                -sweep * if at.planted == Planted::WhipEasesHalves { 1.0 - quad_in_out(x) } else { (1.0 - x) * (1.0 - x) }
+                -sweep
+                    * if at.planted == Planted::WhipEasesHalves {
+                        1.0 - quad_in_out(x)
+                    } else {
+                        (1.0 - x) * (1.0 - x)
+                    }
             };
             let turned = if pose.flat {
                 pose
@@ -1460,7 +1797,13 @@ impl Plan {
                 let (y, p) = yaw_pitch(sub(pose.target, pose.position));
                 aimed(&pose, y + a * cos(rad(angle)), p - a * sin(rad(angle)))
             };
-            return Shown { pose: turned, shot: Some(side), stage: None, dissolve: None, moving: true };
+            return Shown {
+                pose: turned,
+                shot: Some(side),
+                stage: None,
+                dissolve: None,
+                moving: true,
+            };
         }
         match self.shot_at(cam, t) {
             Some(i) if t < self.shots[i].end => self.shot_pose(i, t, at),
@@ -1472,7 +1815,14 @@ impl Plan {
                 moving: false,
             },
             None => Shown {
-                pose: camera.own.unwrap_or(Pose { position: [0.0; 3], target: [0.0; 3], fov: 0.0, view_width: 1.0, roll: 0.0, flat: true }),
+                pose: camera.own.unwrap_or(Pose {
+                    position: [0.0; 3],
+                    target: [0.0; 3],
+                    fov: 0.0,
+                    view_width: 1.0,
+                    roll: 0.0,
+                    flat: true,
+                }),
                 shot: None,
                 stage: None,
                 dissolve: None,
@@ -1487,7 +1837,13 @@ impl Plan {
         let s = &self.shots[i];
         if s.keyed {
             let pose = (at.keyed)(s.camera).unwrap_or(s.framed);
-            return Shown { pose, shot: Some(i), stage: None, dissolve: None, moving: false };
+            return Shown {
+                pose,
+                shot: Some(i),
+                stage: None,
+                dissolve: None,
+                moving: false,
+            };
         }
         let reduced_cut = at.reduced && !self.slow && !s.essential;
         let span = (s.end - s.start).max(1);
@@ -1504,7 +1860,11 @@ impl Plan {
                 dissolve = Some((mix, a, b));
             }
             moving = false;
-            if t < mid { a } else { b }
+            if t < mid {
+                a
+            } else {
+                b
+            }
         } else if at.reduced && matches!(s.moves, Move::Slam) {
             s.framed
         } else {
@@ -1520,7 +1880,8 @@ impl Plan {
                 .map(|(k, p)| self.shot_pose(k, p.end, at).pose)
                 .or(self.cameras[s.camera].own);
             if let Some(before) = before {
-                let (glided, faded, glides) = joined(&before, &pose, s.start, g, s.ease, t, reduced_cut);
+                let (glided, faded, glides) =
+                    joined(&before, &pose, s.start, g, s.ease, t, reduced_cut);
                 pose = glided;
                 dissolve = faded.or(dissolve);
                 moving |= glides;
@@ -1529,7 +1890,13 @@ impl Plan {
         if let Some(k) = s.shake.filter(|_| !at.reduced) {
             pose = self.shaken(s, &pose, k, t, at);
         }
-        Shown { pose, shot: Some(i), stage: None, dissolve, moving }
+        Shown {
+            pose,
+            shot: Some(i),
+            stage: None,
+            dissolve,
+            moving,
+        }
     }
 
     /// #504: what camera `cam` shows at t from its stage shots, counting the first `n`: the
@@ -1539,20 +1906,33 @@ impl Plan {
     /// `None` where no stage shot writes the camera at t.
     fn staged(&self, cam: usize, n: usize, t: i64, at: &At) -> Option<Shown> {
         let list = self.staged.get(cam)?;
-        let k = list[..n.min(list.len())].partition_point(|s| s.t <= t).checked_sub(1)?;
+        let k = list[..n.min(list.len())]
+            .partition_point(|s| s.t <= t)
+            .checked_sub(1)?;
         let st = list[k];
         let stage = self.stage.get(st.shot)?.as_ref()?;
-        if self.shots.iter().any(|s| s.camera == cam && s.start > st.t && s.start <= t) {
+        if self
+            .shots
+            .iter()
+            .any(|s| s.camera == cam && s.start > st.t && s.start <= t)
+        {
             return None;
         }
         // The pose shown at the entry: the earlier stage shots' and the timeline's.
         let before = self.shown_upto(cam, k, st.t, at).pose;
         let reduced = at.reduced && !self.slow && !stage.essential;
-        let (mut pose, dissolve, moving) = joined(&before, &stage.framed, st.t, st.span, st.ease, t, reduced);
+        let (mut pose, dissolve, moving) =
+            joined(&before, &stage.framed, st.t, st.span, st.ease, t, reduced);
         if at.planted == Planted::StageGlideMovesTargetOnly {
             pose.position = stage.framed.position;
         }
-        Some(Shown { pose, shot: None, stage: Some(st.shot), dissolve, moving })
+        Some(Shown {
+            pose,
+            shot: None,
+            stage: Some(st.shot),
+            dissolve,
+            moving,
+        })
     }
 
     /// The pose turned by the shot's shake: lattice noise of (t × hz, the shot's ID) on yaw and
@@ -1573,8 +1953,16 @@ impl Plan {
         let er = noise(seed ^ 0x2545_f491, x);
         let mut out = if pose.flat {
             let w = pose.view_width / self.size[0];
-            let target = [pose.target[0] + ex * k.by * w, pose.target[1] - ey * k.by * w, pose.target[2]];
-            Pose { position: target, target, ..*pose }
+            let target = [
+                pose.target[0] + ex * k.by * w,
+                pose.target[1] - ey * k.by * w,
+                pose.target[2],
+            ];
+            Pose {
+                position: target,
+                target,
+                ..*pose
+            }
         } else {
             tilted(pose, ex, ey, k.by)
         };
@@ -1584,7 +1972,8 @@ impl Plan {
 
     fn frame_of(&self, t: i64) -> i64 {
         let (p, q) = self.frame_rate;
-        (i128::from(t) * i128::from(p)).div_euclid(i128::from(FLICKS_PER_SECOND) * i128::from(q)) as i64
+        (i128::from(t) * i128::from(p)).div_euclid(i128::from(FLICKS_PER_SECOND) * i128::from(q))
+            as i64
     }
 
     /// The camera's kicks at t added to `pose` (Camera `camera@1`: kick): their sum clamped to
@@ -1626,13 +2015,32 @@ impl Plan {
         };
         let d = [ox * per_px, oy * per_px];
         let target = [pose.target[0] + d[0], pose.target[1] + d[1], pose.target[2]];
-        let position = if pose.flat { target } else { [pose.position[0] + d[0], pose.position[1] + d[1], pose.position[2]] };
-        Pose { position, target, ..*pose }
+        let position = if pose.flat {
+            target
+        } else {
+            [
+                pose.position[0] + d[0],
+                pose.position[1] + d[1],
+                pose.position[2],
+            ]
+        };
+        Pose {
+            position,
+            target,
+            ..*pose
+        }
     }
 
     /// The sub-samples a frame at t averages under motion blur (Motion blur: stratified over the
     /// shutter centred on t), each with the shot whose side it draws, inside a declared move.
-    pub fn blur(&self, cam: usize, t: i64, at: &At, shutter: f64, samples: u32) -> Vec<(i64, Option<usize>, Pose)> {
+    pub fn blur(
+        &self,
+        cam: usize,
+        t: i64,
+        at: &At,
+        shutter: f64,
+        samples: u32,
+    ) -> Vec<(i64, Option<usize>, Pose)> {
         if at.reduced || samples == 0 || !self.shown(cam, t, at).moving {
             return Vec::new();
         }
@@ -1669,7 +2077,11 @@ impl Plan {
             }
         }
         let path = format!("items/{}/params", camera.id);
-        let spec = Spec::read(&deep_canvas::kinds::with_defaults("camera@1", params.as_object()?), &path).ok()?;
+        let spec = Spec::read(
+            &deep_canvas::kinds::with_defaults("camera@1", params.as_object()?),
+            &path,
+        )
+        .ok()?;
         let rig = spec.rig(&path).ok()?;
         Some(Pose::of_core(&spec.pose(&rig, &Offsets::default())))
     }
@@ -1689,7 +2101,14 @@ impl Shot {
     }
 
     fn at_u(&self, u: f64) -> (f64, f64) {
-        (u, if u == 0.0 { 0.0 } else { (self.end - self.start) as f64 / F })
+        (
+            u,
+            if u == 0.0 {
+                0.0
+            } else {
+                (self.end - self.start) as f64 / F
+            },
+        )
     }
 
     /// The move's pose at eased share `u.0`, `u.1` seconds into the shot (Shot: each move's
@@ -1708,10 +2127,17 @@ impl Shot {
             Move::Orbit => {
                 let (az, el) = f.angles();
                 let a = az - self.by / 2.0 + u * self.by;
-                Pose { position: add(f.target, scale(orbit_direction(a, el), f.distance())), ..*f }
+                Pose {
+                    position: add(f.target, scale(orbit_direction(a, el), f.distance())),
+                    ..*f
+                }
             }
             Move::Pan => {
-                let angle = if planted == Planted::PanIgnoresAngle { 0.0 } else { self.angle };
+                let angle = if planted == Planted::PanIgnoresAngle {
+                    0.0
+                } else {
+                    self.angle
+                };
                 let (c, sn) = (cos(rad(angle)), sin(rad(angle)));
                 if f.perspective() {
                     let (y0, p0) = yaw_pitch(sub(f.target, f.position));
@@ -1719,13 +2145,19 @@ impl Shot {
                     aimed(f, y0 - left * c, p0 + left * sn)
                 } else {
                     let left = self.by * (1.0 - u) * f.width();
-                    let d = if f.flat { [c, sn, 0.0] } else {
+                    let d = if f.flat {
+                        [c, sn, 0.0]
+                    } else {
                         let fwd = scale(sub(f.target, f.position), 1.0 / f.distance());
                         let (right, upward) = screen_basis(fwd);
                         add(scale(right, c), scale(upward, -sn))
                     };
                     let v = scale(d, -left);
-                    Pose { position: add(f.position, v), target: add(f.target, v), ..*f }
+                    Pose {
+                        position: add(f.position, v),
+                        target: add(f.target, v),
+                        ..*f
+                    }
                 }
             }
             Move::LogZoom => {
@@ -1745,13 +2177,22 @@ impl Shot {
                 match planted {
                     Planted::LensZoomEasesFovDegrees => {
                         let f0 = deg(2.0 * atan(t0));
-                        Pose { fov: f0 + u * (f.fov - f0), ..*f }
+                        Pose {
+                            fov: f0 + u * (f.fov - f0),
+                            ..*f
+                        }
                     }
                     Planted::LensZoomDollies => {
                         let f0 = deg(2.0 * atan(t0));
-                        Pose { fov: f0, ..f.with_distance(f.distance() * tu / t0) }
+                        Pose {
+                            fov: f0,
+                            ..f.with_distance(f.distance() * tu / t0)
+                        }
                     }
-                    _ => Pose { fov: deg(2.0 * atan(tu)), ..*f },
+                    _ => Pose {
+                        fov: deg(2.0 * atan(tu)),
+                        ..*f
+                    },
                 }
             }
             Move::FollowForward(_) => {
@@ -1796,10 +2237,19 @@ fn parallax_of(id: &str, item: &Value) -> Option<Parallax> {
         }
     };
     let repeat = match p.get("repeat").and_then(Value::as_array).map(Vec::as_slice) {
-        Some([a, b]) => [a.as_f64().filter(|w| *w > 0.0), b.as_f64().filter(|w| *w > 0.0)],
+        Some([a, b]) => [
+            a.as_f64().filter(|w| *w > 0.0),
+            b.as_f64().filter(|w| *w > 0.0),
+        ],
         _ => [None, None],
     };
-    Some(Parallax { id: id.to_string(), rate: pair("rate", 1.0), drift: pair("drift", 0.0), origin: pair("origin", 0.0), repeat })
+    Some(Parallax {
+        id: id.to_string(),
+        rate: pair("rate", 1.0),
+        drift: pair("drift", 0.0),
+        origin: pair("origin", 0.0),
+        repeat,
+    })
 }
 
 impl Plan {
@@ -1810,9 +2260,19 @@ impl Plan {
         let g = self.groups.iter().find(|g| g.id == id)?;
         let cam = self.doc_camera?;
         let keyed = |_: usize| None;
-        let at = At { reduced, planted: Planted::None, indexed: None, keyed: &keyed };
+        let at = At {
+            reduced,
+            planted: Planted::None,
+            indexed: None,
+            keyed: &keyed,
+        };
         let eye = self.shown(cam, t, &at).pose.position;
-        let secs = if reduced { program.motion.transport.start } else { t } as f64 / F;
+        let secs = if reduced {
+            program.motion.transport.start
+        } else {
+            t
+        } as f64
+            / F;
         let mut out = [0, 1].map(|k| g.origin[k] + eye[k] * (1.0 - g.rate[k]) + g.drift[k] * secs);
         for (o, w) in out.iter_mut().zip(g.repeat) {
             if let Some(w) = w {

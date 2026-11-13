@@ -28,8 +28,8 @@ mod envelope;
 #[cfg(feature = "test-faults")]
 mod faults;
 mod fed;
-mod fix;
 mod film;
+mod fix;
 mod fixtures;
 mod flat;
 mod frames;
@@ -1026,10 +1026,6 @@ fn main() {
             "--planted" => match args.next().and_then(|n| Some((Planted::parse(&n)?, n))) {
                 Some((p, name)) => {
                     planted_name = Some(name);
-                    if p == Planted::DropsDispersion {
-                        deep_canvas_scene3d::gltf::DROPS_DISPERSION
-                            .store(true, std::sync::atomic::Ordering::Relaxed);
-                    }
                     planted = Some(p)
                 }
                 None => bad_input(),

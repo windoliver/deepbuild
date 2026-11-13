@@ -31,7 +31,7 @@ import { readFile } from 'node:fs/promises';
 import { isAbsolute, join } from 'node:path';
 import type { PlanInput, PlanStep } from '@deepbuild/asks';
 import type { BudgetInput, Outcome, RunRequest } from '@deepbuild/budget';
-import { canonicalize, sha256Hex, type JsonValue } from '@deepbuild/contracts';
+import { isRecord as isObj, canonicalize, sha256Hex, type JsonValue } from '@deepbuild/contracts';
 import type { SendBoundary, SendRequest, Receipt } from '@deepbuild/evidence';
 import type { ExtensionHost } from '@deepbuild/extension-host';
 import { ulid } from '@deepbuild/record';
@@ -40,7 +40,6 @@ import type { RunningJob } from './rows.js';
 type Obj = Record<string, unknown>;
 type Host = Pick<ExtensionHost, 'jobs' | 'jobParams' | 'runJobTool' | 'jobHostReport' | 'runCheck'>;
 type CheckSpec = Parameters<Host['runCheck']>[1];
-const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 const sha256 = (b: Uint8Array): string => createHash('sha256').update(b).digest('hex');
 /** Each input's hash by name, a list input's as a list in its order (#154). */
 const hashes = (bytes: Record<string, Uint8Array | Uint8Array[]>): Record<string, string | string[]> =>

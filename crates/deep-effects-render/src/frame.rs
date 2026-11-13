@@ -19,9 +19,9 @@ use serde_json::Value;
 use crate::compile::{compile_with, Compiled};
 use crate::glow;
 use crate::reference::{target, upload, Camera};
+use crate::runner::{Runner, LINEAR};
 use deep_canvas_effects::graph::Tex;
 use deep_canvas_effects::interp::Image;
-use crate::runner::{Runner, LINEAR};
 
 /// One particles@1 item: its compute operator's params, its seed and how its dots draw.
 #[derive(Clone, Debug, Default)]
@@ -934,7 +934,13 @@ impl Post for Shared {
             (Some(ops), _) => ops
                 .ops
                 .iter()
-                .map(|o| (o.mark.to_string(), o.declared_ns, ops.early.contains(&o.item)))
+                .map(|o| {
+                    (
+                        o.mark.to_string(),
+                        o.declared_ns,
+                        ops.early.contains(&o.item),
+                    )
+                })
                 .collect(),
             (None, Some((doc, ..))) => {
                 let early = crate::docops::feeders(doc);

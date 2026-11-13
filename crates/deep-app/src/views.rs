@@ -371,7 +371,8 @@ impl Shipped {
     /// the name you gave it, through the hub, and the field going out of focus leaves the name as it was.
     fn start_rename(&mut self, session: String, window: &mut Window, cx: &mut Context<Self>) {
         use gpui_kit::base::input::{InputEvent, InputState};
-        let name = crate::record::with_view(|view| view.table().title(&session)).unwrap_or_default();
+        let name =
+            crate::record::with_view(|view| view.table().title(&session)).unwrap_or_default();
         let input = cx.new(|cx| InputState::new(window, cx).default_value(name));
         let entered = cx.subscribe_in(
             &input,
@@ -2744,30 +2745,38 @@ impl Render for Shipped {
                     Option<crate::list::Doing>,
                     Option<String>,
                 );
-                let (problem, readings, listed, doing, flagged): Read = crate::record::with_view(|view| {
-                    let table = view.table();
-                    let problem = crate::plain::problem(&table, &session)
-                        .map(|(happened, next)| vec![happened, next])
-                        .unwrap_or_default();
-                    let row = table.row_of(&format!("session:{session}"));
-                    let listed = row.map(|row| {
-                        ["word", "entry", "why"]
-                            .map(|key| row[key].as_str().unwrap_or_default().to_owned())
-                    });
-                    let doing = row.and_then(|row| crate::list::doing_of(view, row, &session, now));
-                    let flagged = row.and_then(|row| {
-                        let flag = &row["flag"];
-                        let code = flag["code"].as_str()?;
-                        let fix = flag["fix"].as_str().filter(|fix| !fix.is_empty());
-                        Some(format!(
-                            "{code}: {}{}",
-                            flag["text"].as_str().unwrap_or_default(),
-                            fix.map(|fix| format!(". {fix}")).unwrap_or_default()
-                        ))
-                    });
-                    (problem, table.readings(&session).to_vec(), listed, doing, flagged)
-                })
-                .unwrap_or_default();
+                let (problem, readings, listed, doing, flagged): Read =
+                    crate::record::with_view(|view| {
+                        let table = view.table();
+                        let problem = crate::plain::problem(&table, &session)
+                            .map(|(happened, next)| vec![happened, next])
+                            .unwrap_or_default();
+                        let row = table.row_of(&format!("session:{session}"));
+                        let listed = row.map(|row| {
+                            ["word", "entry", "why"]
+                                .map(|key| row[key].as_str().unwrap_or_default().to_owned())
+                        });
+                        let doing =
+                            row.and_then(|row| crate::list::doing_of(view, row, &session, now));
+                        let flagged = row.and_then(|row| {
+                            let flag = &row["flag"];
+                            let code = flag["code"].as_str()?;
+                            let fix = flag["fix"].as_str().filter(|fix| !fix.is_empty());
+                            Some(format!(
+                                "{code}: {}{}",
+                                flag["text"].as_str().unwrap_or_default(),
+                                fix.map(|fix| format!(". {fix}")).unwrap_or_default()
+                            ))
+                        });
+                        (
+                            problem,
+                            table.readings(&session).to_vec(),
+                            listed,
+                            doing,
+                            flagged,
+                        )
+                    })
+                    .unwrap_or_default();
                 let reads = |id: &'static str, name: &str| match &listed {
                     Some([word, entry, _]) => {
                         marked(id, states::entry_of(entry), format!("{name} · {word}"))
@@ -3308,28 +3317,31 @@ fn agents_page(
     if crate::plain::planted("agents-title-only") {
         return page;
     }
-    page.child(section("agents-reach-title", "How each agent reaches DeepBuild"))
-        .children(reach)
-        .child(label(
-            "agents-installed",
-            format!("Installed: {}", named(true)),
-        ))
-        .child(
-            label(
-                "agents-missing",
-                format!("Not installed here: {}", named(false)),
-            )
-            .text_color(chrome.ink_secondary),
+    page.child(section(
+        "agents-reach-title",
+        "How each agent reaches DeepBuild",
+    ))
+    .children(reach)
+    .child(label(
+        "agents-installed",
+        format!("Installed: {}", named(true)),
+    ))
+    .child(
+        label(
+            "agents-missing",
+            format!("Not installed here: {}", named(false)),
         )
-        .child(section("agents-servers-title", "MCP servers"))
-        .children(servers)
-        .child(section("agents-skills-title", "Skills"))
-        .children(skills)
-        .child(section("agents-yours-title", "Already in each agent"))
-        .children(yours)
-        .child(section("agents-waiting-title", "Waiting for you"))
-        .children(rows)
-        .children(review)
+        .text_color(chrome.ink_secondary),
+    )
+    .child(section("agents-servers-title", "MCP servers"))
+    .children(servers)
+    .child(section("agents-skills-title", "Skills"))
+    .children(skills)
+    .child(section("agents-yours-title", "Already in each agent"))
+    .children(yours)
+    .child(section("agents-waiting-title", "Waiting for you"))
+    .children(rows)
+    .children(review)
 }
 
 /// One sync's diff, file by file, each with the agents that read it, then Apply, which opens its ask.

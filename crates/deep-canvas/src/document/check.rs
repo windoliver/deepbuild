@@ -2106,36 +2106,71 @@ fn check_card(doc: &Value, issues: &mut Vec<Issue>) {
         return;
     };
     let Some(fields) = card.as_object() else {
-        issues.push(Issue::envelope("out_of_range", "card".into(), card.clone(), "not an object"));
+        issues.push(Issue::envelope(
+            "out_of_range",
+            "card".into(),
+            card.clone(),
+            "not an object",
+        ));
         return;
     };
     for (field, v) in fields {
         let path = format!("card/{field}");
         if field == "legend" {
             let ok = v.as_array().is_some_and(|l| {
-                l.iter().all(|e| e.as_object().is_some_and(|e| e.keys().all(|k| ["tone", "label", "role"].contains(&k.as_str()))))
+                l.iter().all(|e| {
+                    e.as_object().is_some_and(|e| {
+                        e.keys()
+                            .all(|k| ["tone", "label", "role"].contains(&k.as_str()))
+                    })
+                })
             });
             if !ok {
-                issues.push(Issue::envelope("out_of_range", path, v.clone(), "not a list of {tone, label, role}"));
+                issues.push(Issue::envelope(
+                    "out_of_range",
+                    path,
+                    v.clone(),
+                    "not a list of {tone, label, role}",
+                ));
             }
             continue;
         }
         if !crate::template::CARD_LINES.contains(&field.as_str()) {
-            issues.push(Issue::envelope("unknown_field", path, v.clone(), "not a field of a card"));
+            issues.push(Issue::envelope(
+                "unknown_field",
+                path,
+                v.clone(),
+                "not a field of a card",
+            ));
             continue;
         }
         let Some(text) = v.as_str() else {
-            issues.push(Issue::envelope("out_of_range", path, v.clone(), "not a string"));
+            issues.push(Issue::envelope(
+                "out_of_range",
+                path,
+                v.clone(),
+                "not a string",
+            ));
             continue;
         };
         match crate::template::parts(text) {
-            Err(_) => issues.push(Issue::envelope("out_of_range", path, v.clone(), "a brace that opens no slot or closes none")),
+            Err(_) => issues.push(Issue::envelope(
+                "out_of_range",
+                path,
+                v.clone(),
+                "a brace that opens no slot or closes none",
+            )),
             Ok(parts) => {
                 for part in parts {
                     if let crate::template::Part::Slot(slot) = part {
                         if crate::template::value(doc, slot).is_none() {
                             let what = "the slot's path names no value this build shows";
-                            issues.push(Issue::envelope("ref_unresolved", path.clone(), json!(slot), what));
+                            issues.push(Issue::envelope(
+                                "ref_unresolved",
+                                path.clone(),
+                                json!(slot),
+                                what,
+                            ));
                         }
                     }
                 }
@@ -2156,17 +2191,37 @@ fn check_assemblies(doc: &Value, issues: &mut Vec<Issue>) {
         return;
     };
     let items = member(doc, "items").and_then(Value::as_object);
-    let parent_of = |id: &str| entries.get(id).and_then(|a| member(a, "parent")).and_then(Value::as_str);
-    let vec3 = |v: &Value| v.as_array().is_some_and(|a| a.len() == 3 && a.iter().all(Value::is_number));
+    let parent_of = |id: &str| {
+        entries
+            .get(id)
+            .and_then(|a| member(a, "parent"))
+            .and_then(Value::as_str)
+    };
+    let vec3 = |v: &Value| {
+        v.as_array()
+            .is_some_and(|a| a.len() == 3 && a.iter().all(Value::is_number))
+    };
     for (key, entry) in entries {
         let Some(fields) = entry.as_object() else {
             let path = format!("assemblies/{key}");
-            issues.push(Issue::error("out_of_range", key, path, entry.clone(), "not an object"));
+            issues.push(Issue::error(
+                "out_of_range",
+                key,
+                path,
+                entry.clone(),
+                "not an object",
+            ));
             continue;
         };
         if items.is_some_and(|i| i.contains_key(key)) {
             let what = "an item of the document has the same ID";
-            issues.push(Issue::error("out_of_range", key, format!("assemblies/{key}"), entry.clone(), what));
+            issues.push(Issue::error(
+                "out_of_range",
+                key,
+                format!("assemblies/{key}"),
+                entry.clone(),
+                what,
+            ));
         }
         let mut bad = |code, field: &str, actual: Value, what: &str| {
             let path = format!("assemblies/{key}/{field}");
@@ -2175,8 +2230,18 @@ fn check_assemblies(doc: &Value, issues: &mut Vec<Issue>) {
         for field in fields.keys() {
             match field.as_str() {
                 "parent" | "at" | "motion" | "value" | "apart" | "order" | "shown_at" => {}
-                "repeat" => bad("out_of_range", field, fields[field].clone(), "not in this build"),
-                _ => bad("unknown_field", field, fields[field].clone(), "not a field of an assembly"),
+                "repeat" => bad(
+                    "out_of_range",
+                    field,
+                    fields[field].clone(),
+                    "not in this build",
+                ),
+                _ => bad(
+                    "unknown_field",
+                    field,
+                    fields[field].clone(),
+                    "not a field of an assembly",
+                ),
             }
         }
         match fields.get("parent") {
@@ -2186,7 +2251,12 @@ fn check_assemblies(doc: &Value, issues: &mut Vec<Issue>) {
                 let (mut at, mut depth) = (p.as_str(), 1);
                 loop {
                     if at == key {
-                        bad("cycle", "parent", json!(p), "the parents lead back to the assembly");
+                        bad(
+                            "cycle",
+                            "parent",
+                            json!(p),
+                            "the parents lead back to the assembly",
+                        );
                         break;
                     }
                     depth += 1;
@@ -2200,20 +2270,53 @@ fn check_assemblies(doc: &Value, issues: &mut Vec<Issue>) {
                     }
                 }
             }
-            Some(Value::String(p)) => bad("ref_unresolved", "parent", json!(p), "names no assembly of the document"),
-            Some(other) => bad("out_of_range", "parent", other.clone(), "not one assembly ID or null"),
+            Some(Value::String(p)) => bad(
+                "ref_unresolved",
+                "parent",
+                json!(p),
+                "names no assembly of the document",
+            ),
+            Some(other) => bad(
+                "out_of_range",
+                "parent",
+                other.clone(),
+                "not one assembly ID or null",
+            ),
         }
         if fields.get("at").is_some_and(|a| !a.is_object()) {
-            bad("out_of_range", "at", fields["at"].clone(), "not a transform");
+            bad(
+                "out_of_range",
+                "at",
+                fields["at"].clone(),
+                "not a transform",
+            );
         }
         if fields.get("value").is_some_and(|v| !v.is_number()) {
-            bad("out_of_range", "value", fields["value"].clone(), "not a number");
+            bad(
+                "out_of_range",
+                "value",
+                fields["value"].clone(),
+                "not a number",
+            );
         }
         if fields.get("apart").is_some_and(|v| !vec3(v)) {
-            bad("out_of_range", "apart", fields["apart"].clone(), "not three numbers, in m");
+            bad(
+                "out_of_range",
+                "apart",
+                fields["apart"].clone(),
+                "not three numbers, in m",
+            );
         }
-        if fields.get("order").is_some_and(|v| !v.as_u64().is_some_and(|n| n <= u64::from(u16::MAX))) {
-            bad("out_of_range", "order", fields["order"].clone(), "not a u16");
+        if fields
+            .get("order")
+            .is_some_and(|v| !v.as_u64().is_some_and(|n| n <= u64::from(u16::MAX)))
+        {
+            bad(
+                "out_of_range",
+                "order",
+                fields["order"].clone(),
+                "not a u16",
+            );
         }
         let Some(motion) = fields.get("motion") else {
             continue;
@@ -2224,12 +2327,22 @@ fn check_assemblies(doc: &Value, issues: &mut Vec<Issue>) {
         };
         for field in m.keys() {
             if !["kind", "axis", "pivot", "range", "path"].contains(&field.as_str()) {
-                bad("unknown_field", &format!("motion/{field}"), m[field].clone(), "not a field of a motion");
+                bad(
+                    "unknown_field",
+                    &format!("motion/{field}"),
+                    m[field].clone(),
+                    "not a field of a motion",
+                );
             }
         }
         match m.get("kind").and_then(Value::as_str) {
             Some("slide" | "turn") => {}
-            Some("path") => bad("out_of_range", "motion/kind", json!("path"), "not in this build"),
+            Some("path") => bad(
+                "out_of_range",
+                "motion/kind",
+                json!("path"),
+                "not in this build",
+            ),
             _ => bad(
                 "out_of_range",
                 "motion/kind",
@@ -2250,12 +2363,25 @@ fn check_assemblies(doc: &Value, issues: &mut Vec<Issue>) {
             );
         }
         if m.get("pivot").is_some_and(|p| !vec3(p)) {
-            bad("out_of_range", "motion/pivot", m["pivot"].clone(), "not three numbers, in m");
+            bad(
+                "out_of_range",
+                "motion/pivot",
+                m["pivot"].clone(),
+                "not three numbers, in m",
+            );
         }
         if let Some(range) = m.get("range") {
-            let ends = range.as_array().filter(|r| r.len() == 2).and_then(|r| Some((r[0].as_f64()?, r[1].as_f64()?)));
+            let ends = range
+                .as_array()
+                .filter(|r| r.len() == 2)
+                .and_then(|r| Some((r[0].as_f64()?, r[1].as_f64()?)));
             if !ends.is_some_and(|(lo, hi)| lo <= hi) {
-                bad("out_of_range", "motion/range", range.clone(), "not [min, max] with min ≤ max");
+                bad(
+                    "out_of_range",
+                    "motion/range",
+                    range.clone(),
+                    "not [min, max] with min ≤ max",
+                );
             }
         }
     }
@@ -2293,7 +2419,8 @@ fn check_time_remaps(doc: &Value, expansions: &[Expansion], issues: &mut Vec<Iss
         }
         let target = fields.get("target").and_then(Value::as_str);
         let placed = target.is_some_and(|t| placements.is_some_and(|p| p.contains_key(t)));
-        let known = target.is_some_and(|t| t == "document" || expansions.iter().any(|e| e.instance == t));
+        let known =
+            target.is_some_and(|t| t == "document" || expansions.iter().any(|e| e.instance == t));
         if !known && !placed {
             bad(
                 "ref_unresolved",
@@ -2366,7 +2493,8 @@ fn check_targets(
             // #504: a take-apart's target: the share of each target assembly's `apart` its
             // follow's stagger writes (Assembly: "timed by the follow's stagger").
             Some(Value::String(text))
-                if text == "assemblies/apart" && entry.pointer("/follow/stagger/targets").is_some() => {}
+                if text == "assemblies/apart"
+                    && entry.pointer("/follow/stagger/targets").is_some() => {}
             Some(Value::String(text)) => match Path::parse(text) {
                 Ok(path) => {
                     if let Err(what) = resolve(doc, &path, kinds) {

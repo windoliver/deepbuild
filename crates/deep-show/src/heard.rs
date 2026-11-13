@@ -152,6 +152,21 @@ impl Hub<'_> {
         doc["script"]["spoken"] = Value::Object(spoken);
     }
 
+    /// #509: an export's receipt `bakes`: each bus's power bake of the mix at `hz`, kept by hash,
+    /// from one pass over the whole mix.
+    pub(crate) fn bakes_listed(&mut self, doc: &Value, hz: u32) -> Result<Value, Value> {
+        let mut d = doc.clone();
+        d["transport"]["sample_rate"] = json!(hz);
+        let bakes = self.power_bakes(&d)?;
+        let mut listed = Vec::new();
+        for ((bus, _), bytes) in bakes.routes.iter().zip(&bakes.bytes) {
+            let sha = evidence::put(&self.scenario.evidence, bytes)
+                .map_err(|_| json!({"code": "store_failed"}))?;
+            listed.push(json!({"bus": bus, "channels": 2, "subblocks": bytes.len() / 16, "bytes": bytes.len(), "sha256": sha}));
+        }
+        Ok(Value::Array(listed))
+    }
+
     /// The asks the state folder's record says were asked and answered.
     pub(crate) fn heard_restore(&mut self) {
         if std::mem::replace(&mut self.media.heard_restored, true) {
@@ -562,6 +577,15 @@ impl Hub<'_> {
             }
         }
     }
+}
+
+/// #509: an export FAILs when a line runs past its section's end (`narration.fit`).
+pub(crate) fn fits(doc: &Value, s: &Script) -> Result<(), Value> {
+    let fit = fit_issues(doc, s);
+    if fit.is_empty() {
+        return Ok(());
+    }
+    Err(json!({"outcome": "failed", "code": "pace", "issues": fit}))
 }
 
 /// `narration.fit`: each line whose last word ends after the end of the section marker that holds
