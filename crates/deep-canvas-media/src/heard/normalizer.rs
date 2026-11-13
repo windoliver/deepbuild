@@ -58,7 +58,7 @@ fn is_han(c: char) -> bool {
     matches!(c as u32, 0x4E00..=0x9FFF | 0x3400..=0x4DBF | 0x3007)
 }
 fn is_kana(c: char) -> bool {
-    matches!(c as u32, 0x3041..=0x309F | 0x30A0..=0x30FF)
+    matches!(c as u32, 0x3041..=0x30FF)
 }
 fn is_hangul(c: char) -> bool {
     matches!(c as u32, 0xAC00..=0xD7A3)
@@ -386,7 +386,7 @@ impl Group {
             (Some(Class::Hundred | Class::Scale), Class::Unit | Class::Teen | Class::Tens) => true,
             (Some(Class::Unit | Class::Teen | Class::Tens), Class::Hundred) => self.current < 100,
             (Some(Class::Unit | Class::Teen | Class::Tens | Class::Hundred), Class::Scale) => {
-                self.current > 0 && self.total % (value * 1000) == 0
+                self.current > 0 && self.total.is_multiple_of(value * 1000)
             }
             _ => false,
         }
