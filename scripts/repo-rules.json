@@ -137,6 +137,10 @@
         "deep-text": {
           "spec": "* path=../deep-text",
           "why": "Issue #1458: the chrome's code face is a bundled one, so GPUI's text system is given its bytes."
+        },
+        "deep-images": {
+          "spec": "* path=../deep-images",
+          "why": "Issue #1486: chrome thumbnails through the one image service."
         }
       },
       "dev-dependencies": {
@@ -217,6 +221,10 @@
         "libc": {
           "spec": "^0.2",
           "why": "Issue #1434: the chrome fixture's idle reading (package-idle wakeups) and frame timing (thread CPU time); already in the tree."
+        },
+        "accesskit_macos": {
+          "spec": "^0.26",
+          "why": "Issue #1462: the window forwards an assistive client's question of what is focused to gpui's view, so the row or control the keys are on is what VoiceOver and Full Keyboard Access follow (the version gpui uses, vendored)."
         }
       }
     },
@@ -772,6 +780,10 @@
           "spec": "* path=../deep-canvas-seams",
           "why": "Issue #140: the fonts backend names itself with the seams' backend type."
         },
+        "deep-canvas": {
+          "spec": "* path=../deep-canvas",
+          "why": "Issue #2144: a slanted glyph's tan through the ops module on pinned libm; already beneath deep-canvas-seams."
+        },
         "skrifa": {
           "spec": "^0.44",
           "why": "Issue #443: the glyph outlines of a shaped run, read unscaled from the face the shaper set each glyph in; the reader parley and Vello CPU already use."
@@ -999,6 +1011,10 @@
         "deep-canvas-graph": {
           "spec": "* path=../deep-canvas-graph",
           "why": "Issue #399: graph@1 laid out and routed, and label@1 placed, where this crate draws."
+        },
+        "deep-images": {
+          "spec": "* path=../deep-images",
+          "why": "Issue #1486: the one image service: levels, a visible-first queue and a byte budget."
         }
       },
       "target.'cfg(target_os = \"macos\")'.dependencies": {
@@ -1239,6 +1255,10 @@
         "deep-physics-rapier": {
           "spec": "* path=../deep-physics-rapier",
           "why": "Issue #1918: the Rapier backend each world a scene lists bakes on, so its occurrence lists and outputs reach the column view."
+        },
+        "deep-images": {
+          "spec": "* path=../deep-images",
+          "why": "Issue #1486: the one image service: still pictures drawn at their levels."
         }
       },
       "target.'cfg(target_os = \"macos\")'.dependencies": {
@@ -1507,6 +1527,18 @@
         "naga": {
           "spec": "^30",
           "why": "Issue #464: the indexed operator's class, computed from its WGSL module; already in the tree."
+        },
+        "deep-canvas-physics": {
+          "spec": "* path=../deep-canvas-physics",
+          "why": "Issue #1921: a scene's physics worlds, read by the physics module, baked so their outputs write its instancers' columns."
+        },
+        "deep-logic": {
+          "spec": "* path=../deep-logic",
+          "why": "Issue #537: a scene's logic items, run so their arrays feed its instancers, plates and lines."
+        },
+        "deep-physics-rapier": {
+          "spec": "* path=../deep-physics-rapier",
+          "why": "Issue #1921: the Rapier backend a scene's physics worlds bake on, so their outputs write its instancers' columns."
         }
       },
       "target.'cfg(target_os = \"macos\")'.dependencies": {
@@ -1881,6 +1913,10 @@
         "basisu_c_sys": {
           "spec": "^0.9.1",
           "why": "Issue #423: KTX2 maps (Basis Universal ETC1S or UASTC) transcoded to BC in the decode worker."
+        },
+        "deep-canvas-cells": {
+          "spec": "* path=../deep-canvas-cells",
+          "why": "Issue #1967: terminal recordings, converted at import by the cells module's emulator."
         }
       },
       "target.'cfg(target_os = \"macos\")'.dependencies": {
@@ -2019,6 +2055,12 @@
         "serde_json": {
           "spec": "^1",
           "why": "Issue #2009: deep-physics's JSON lines. Already in the workspace tree."
+        }
+      },
+      "dev-dependencies": {
+        "simba": {
+          "spec": "=0.10.2",
+          "why": "Issue #2012: Rapier's own tests/simd_backend_parity.rs names simba's SIMD types; the version and feature are the ones rapier3d 0.36.1 resolves, so it adds nothing to the build."
         }
       }
     },
@@ -2235,6 +2277,74 @@
         "wasmparser": {
           "spec": "=0.263.0",
           "why": "Issue #532's blind suite: validates each fixture module before it is written."
+        }
+      }
+    },
+    "crates/deep-images/Cargo.toml": {
+      "dependencies": {
+        "deep-canvas": {
+          "spec": "* path=../deep-canvas",
+          "why": "Issue #1486: the pinned sRGB transfer the levels average through, in linear light."
+        },
+        "image": {
+          "spec": "^0.25",
+          "why": "Issue #1486: PNG and JPEG pictures decoded inside the decode caps; already in the tree (deep-codecs, deep-show, deep-app)."
+        },
+        "sha2": {
+          "spec": "^0.10",
+          "why": "Issue #1486: a picture's sha256 checked against the content store, and the hash that names each stored level; already in the tree."
+        }
+      }
+    },
+    "crates/deep-typeset/Cargo.toml": {
+      "dependencies": {
+        "mitex": {
+          "spec": "* git+https://github.com/mitex-rs/mitex?rev=51f7210e026ab05d037125247e92d4d023d8a80d",
+          "why": "Issue #220: LaTeX to Typst (mitex 0.2.7, pinned to one commit), the conversion typst-mitex runs before Typst sets a formula."
+        },
+        "mitex-spec-gen": {
+          "spec": "* git+https://github.com/mitex-rs/mitex?rev=51f7210e026ab05d037125247e92d4d023d8a80d",
+          "why": "Issue #220: the spec mitex converts by, from its own prebuilt file, never regenerated by a typst found on PATH."
+        },
+        "serde_json": {
+          "spec": "^1",
+          "why": "Issue #220: the job's params in and its SVG, probe or failure out, as JSON. Already in the workspace tree."
+        },
+        "ttf-parser": {
+          "spec": "^0.25",
+          "why": "Issue #220: each glyph's outline from the fonts handed in, for the outline-only SVG."
+        },
+        "typst": {
+          "spec": "=0.15.1",
+          "why": "Issue #220: Typst 0.15.1 sets every part as one formula, each part tagged by its fill, in the world the tool builds."
+        },
+        "typst-layout": {
+          "spec": "=0.15.1",
+          "why": "Issue #220: the paged document Typst 0.15.1 compiles to, whose frames the SVG and the probe are read from."
+        }
+      }
+    },
+    "tests/acceptance/544/wat/Cargo.toml": {
+      "dependencies": {
+        "wat": {
+          "spec": "=1.263.0",
+          "why": "Issue #544's blind suite: its own assembler for the fixtures, a copy of #532's, apart from the code under test."
+        },
+        "wasmparser": {
+          "spec": "=0.263.0",
+          "why": "Issue #544's blind suite: validates each fixture module before it is written."
+        }
+      }
+    },
+    "tests/acceptance/545/wat/Cargo.toml": {
+      "dependencies": {
+        "wat": {
+          "spec": "=1.263.0",
+          "why": "Issue #545's blind suite: its own assembler for the fixtures, a copy of #532's, apart from the code under test."
+        },
+        "wasmparser": {
+          "spec": "=0.263.0",
+          "why": "Issue #545's blind suite: validates each fixture module before it is written."
         }
       }
     }

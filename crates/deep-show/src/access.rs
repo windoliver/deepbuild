@@ -141,6 +141,7 @@ impl Hub<'_> {
     /// what was said, so showing it again unchanged says nothing; one that leaves the document
     /// is forgotten.
     pub fn see(&mut self, panel: &str) -> Value {
+        self.settle_focus(panel);
         let presented = self.presented(panel);
         let (Some(frames), Some(doc)) = (
             presented.get("frames").and_then(Value::as_array),
@@ -188,6 +189,14 @@ impl Hub<'_> {
             (Some(s), Some((shown, _))) => tree(&shown, &s.scope.hidden(&shown)),
             _ => Vec::new(),
         };
+        // #539: each landing of a pick control's roving focus, by its row's label, in time order.
+        announcements.extend(
+            self.scopes
+                .get(panel)
+                .map(|s| s.picks.said.clone())
+                .unwrap_or_default(),
+        );
+        announcements.sort_by_key(|a| a["t"].as_i64());
         json!({"tree": tree, "announcements": announcements})
     }
 }

@@ -4,7 +4,7 @@
 //! own array, a read of nothing declared, a write region past the end of memory and a program
 //! whose `regions_digest` isn't its item's layout digest.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
 use deep_canvas::budget::Class;
@@ -23,7 +23,35 @@ const MIB: u64 = 1024 * 1024;
 pub const PER_STEP: usize = 16;
 /// A control's slot: a u32 count and 4 zero bytes, then each entry as a u32 player, 4 zero
 /// bytes and a slider's f64 value.
-pub const SLOT: u32 = 8 + PER_STEP as u32 * 16;
+pub const SLOT: u32 = slot(8);
+
+/// The slot of a control whose value takes `value` bytes.
+pub const fn slot(value: u32) -> u32 {
+    8 + PER_STEP as u32 * (8 + value)
+}
+
+/// A read control's slot in a read region and its type there, by the form of its entries'
+/// values: a pick on rows' `{set, key}` in 24 B (Control: picks on rows and grid focus), a
+/// point's 248 B (Control: point), an action's, a stick's or a look's 16 B (Control: actions,
+/// key repeat and gamepads), else a number's f64. A text control's one commit a step reserves
+/// its `u32` length and up to `max_bytes`, rounded up to a multiple of 8 (Control: text).
+pub fn form(control: &Value) -> (u32, &'static str) {
+    let rows = control.get("verb").and_then(Value::as_str) == Some("pick")
+        && control.get("rows").is_some();
+    match control.get("kind").and_then(Value::as_str) {
+        _ if rows => (slot(24), "pick"),
+        Some("point") => (slot(248), "point"),
+        Some("actions") => (slot(16), "action"),
+        Some("text") => {
+            let max = control
+                .pointer("/text/max_bytes")
+                .and_then(Value::as_u64)
+                .unwrap_or(256);
+            (align8(4 + max.min(16_384) as u32), "text")
+        }
+        _ => (SLOT, "control"),
+    }
+}
 
 /// One field of a logic item this task doesn't build yet: refused by name, never ignored.
 const LATER: [&str; 6] = [
@@ -336,7 +364,8 @@ pub struct Piece {
     pub seed: i64,
     /// Its budget class (Budget classes): `class`, figure when it names none.
     pub class: Class,
-    pub controls: BTreeSet<String>,
+    /// Each control by ID, with its slot's size and type in a read region ([`form`]).
+    pub controls: BTreeMap<String, (u32, &'static str)>,
     pub tour: Option<Value>,
     pub items: Vec<Item>,
 }
@@ -784,10 +813,10 @@ pub fn check_in(
         None => Class::Figure,
         Some(c) => c.as_str().and_then(Class::parse).ok_or_else(bad)?,
     };
-    let controls: BTreeSet<String> = piece
+    let controls: BTreeMap<String, (u32, &'static str)> = piece
         .get("controls")
         .and_then(Value::as_object)
-        .map(|c| c.keys().cloned().collect())
+        .map(|c| c.iter().map(|(k, v)| (k.clone(), form(v))).collect())
         .unwrap_or_default();
     let asset = |sha: &str| -> Option<Vec<u8>> {
         let bytes = stored(sha)?;
@@ -901,8 +930,18 @@ pub fn check_in(
         let mut at = 0u32;
         let mut refused = Vec::new();
         for r in &d.reads {
-            let (size, ty, read) = if controls.contains(r) {
-                (SLOT, "control".to_string(), Read::Control)
+            let (size, ty, read) = if let Some((size, ty)) = controls.get(r) {
+                (*size, ty.to_string(), Read::Control)
+            } else if let Some((other, "hover")) =
+                r.split_once('.').filter(|(c, _)| controls.contains_key(*c))
+            {
+                // Control: point: hover is viewer state, never a step's read.
+                refused.push(refusal(
+                    "read",
+                    format!("{r} is the pointer's hover over {other}, viewer state a logic step never reads"),
+                    json!({"read": r}),
+                ));
+                continue;
             } else if let Some((other, name)) = r.split_once('.') {
                 match decls.iter().position(|(o, _)| o == other) {
                     Some(i) if i == idx => {
@@ -1330,6 +1369,58 @@ mod tests {
                 json!(["e", "emits"]),
                 "{emits}"
             );
+        }
+    }
+
+    /// #539: each read control's slot is its form's, and a step's read of a control's hover is
+    /// refused, naming the read.
+    #[test]
+    fn read_controls_take_their_forms_slots_and_hover_is_refused() {
+        let bytes = wat::parse_str(EMPTY).expect("a program");
+        let sha = hash(&bytes);
+        let controls = json!({
+            "place": {"kind": "choice", "verb": "pick", "rows": ["board"]},
+            "aim": {"kind": "point"}, "moves": {"kind": "actions"},
+            "name": {"kind": "text", "text": {"max_bytes": 13}}, "speed": {"kind": "slider"},
+        });
+        let piece = |reads: Value| {
+            json!({"seed": 0, "assets": {&sha: B64.encode(&bytes)}, "controls": controls,
+                   "items": {"e": {"kind": "logic@1", "params": {"program": sha, "reads": reads}}}})
+        };
+        let p = check(
+            &piece(json!(["place", "aim", "moves", "name", "speed"])),
+            &Planted::default(),
+            &mut History::new(),
+        )
+        .expect("checked");
+        let sizes: Vec<(String, u32, String)> = p.items[0]
+            .layout
+            .entries
+            .iter()
+            .filter(|e| e.read == Read::Control)
+            .map(|e| (e.name.clone(), e.size, e.ty.clone()))
+            .collect();
+        let want = [
+            ("place", 8 + 16 * 32, "pick"),
+            ("aim", 8 + 16 * 256, "point"),
+            ("moves", 8 + 16 * 24, "action"),
+            ("name", 24, "text"),
+            ("speed", SLOT, "control"),
+        ];
+        assert_eq!(
+            sizes,
+            want.map(|(n, s, t)| (n.to_string(), s, t.to_string()))
+        );
+        match check(
+            &piece(json!(["place.hover"])),
+            &Planted::default(),
+            &mut History::new(),
+        ) {
+            Err(Refused(v)) => assert_eq!(
+                (&v["refusals"][0]["rule"], &v["refusals"][0]["read"]),
+                (&json!("read"), &json!("place.hover"))
+            ),
+            Ok(_) => panic!("a hover read was taken"),
         }
     }
 

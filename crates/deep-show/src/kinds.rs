@@ -415,8 +415,10 @@ fn kind_rows(sealed: &Sealed, planted: Option<Planted>) -> Vec<KindRow> {
             "cost": Value::Null, "stability": stability, "available": stability != "retired",
             "description": description, "fields": fields,
         });
-        if let Some(t) = preview {
-            e["tracking"] = json!(t);
+        if let Some(p) = preview {
+            e["tracking"] = json!(p.tracking);
+            e["preview_since"] = json!(p.since);
+            e["decide_by"] = json!(p.decide_by);
         }
         if let Some((since, by)) = retired {
             e["deprecated_since"] = json!(since);
@@ -522,8 +524,10 @@ fn one_shape(e: &mut Value, row: &Value, sealed: &Sealed, planted: Option<Plante
         })
     });
     if o["stability"] == "preview" {
-        if let Some(t) = row.get("tracking") {
-            o.entry("tracking").or_insert_with(|| t.clone());
+        for field in ["tracking", "preview_since", "decide_by"] {
+            if let Some(t) = row.get(field) {
+                o.entry(field).or_insert_with(|| t.clone());
+            }
         }
     }
     o.entry("available").or_insert(json!(pass && !retired));

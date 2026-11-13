@@ -16,7 +16,7 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 /** When an agent uses each tool, and what its result does not prove. */
 const TOOLS = {
   deep_status: {
-    use: 'Read where your session stands: the hub\'s gates, and each of your claims with its runs, its verdict and any run that contradicts what you predicted.',
+    use: 'Read where your session stands: the hub\'s gates; the checks the repo\'s spec names; your open asks, each with its state, its default and its deadline; your open items; and each of your claims with its runs, its verdict and any run that contradicts what you predicted.',
     proves: 'Its result does not prove your work is done: only a verdict the checks reached says so, and a claim with no verdict is still open.',
   },
   deep_search: {
@@ -72,7 +72,7 @@ const TOOLS = {
     proves: 'A stack that is up does not prove any check passes, and a port leased to your worktree is never another worktree\'s: a child session in its own worktree gets its own.',
   },
   deep_root_plan: {
-    use: 'Propose a root plan for a host: the script you wrote there, locked by its hash, and each step with its undo or null when it has none. The person reads it, says yes or no, and runs it themselves with deep host run in their own terminal, where sudo asks for their password.',
+    use: 'Propose a root plan for a host, with the script you wrote there, locked by its hash, and each step with its undo or null when it has none. The person reads it, says yes or no, and runs it themselves with deep host run in their own terminal, where sudo asks for their password.',
     proves: 'A plan proposed has not run: only the run deep host run records, from a copy only root can write, shows what it did.',
   },
 };

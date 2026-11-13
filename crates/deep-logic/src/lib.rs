@@ -276,7 +276,7 @@ fn track(piece: &Piece, line: &Value, steps: i64) -> Option<Vec<Entry>> {
                             t: at + t,
                             seq,
                             control: control.clone(),
-                            value: *value,
+                            value: (*value).into(),
                             writer: "tour".into(),
                             player: 1,
                         });
@@ -977,7 +977,7 @@ impl Logic {
                             piece::Read::Seed => ("seed", Value::Null, 0),
                             piece::Read::None => ("write", Value::Null, 0),
                         };
-                        json!({"region": e.region, "name": e.name, "offset": e.offset, "size": e.size, "read": kind, "from": from, "from_offset": offset})
+                        json!({"region": e.region, "name": e.name, "offset": e.offset, "size": e.size, "type": e.ty, "read": kind, "from": from, "from_offset": offset})
                     })
                     .collect();
                 let writes: Vec<Value> = i.writes.iter().map(|w| json!({"name": w.name, "type": w.ty.name(), "count": w.count, "offset": i.write(&w.name).map(|e| e.offset)})).collect();
@@ -1195,11 +1195,11 @@ mod tests {
                 items: Vec::new(),
             };
             let entries = track(&piece, &json!({}), 0).expect("a track");
-            let played: Vec<(i64, f64)> = entries.iter().map(|e| (e.t, e.value)).collect();
+            let played: Vec<(i64, world::Given)> = entries.iter().map(|e| (e.t, e.value)).collect();
             tx.send(played).ok();
         });
         let got = rx.recv_timeout(std::time::Duration::from_secs(1));
-        assert_eq!(got, Ok(vec![(-F, 1.0)]));
+        assert_eq!(got, Ok(vec![(-F, world::Given::Number(1.0))]));
     }
 
     /// #1920: a golden carries the seal's runtime digest in place of the logic module's own. The

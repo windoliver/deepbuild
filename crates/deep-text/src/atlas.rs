@@ -405,5 +405,5 @@ impl Atlas {
 /// #1964: the glyph transform that slants a glyph `skew` degrees forward, as its face's synthesis
 /// asks for an italic it lacks. Vello applies it with y down, so a forward lean shears x by −y.
 pub fn slant(skew: f32) -> Affine {
-    Affine::skew(-f64::from(skew).to_radians().tan(), 0.)
+    Affine::skew(-deep_canvas::ops::tan(f64::from(skew).to_radians()), 0.)
 }
