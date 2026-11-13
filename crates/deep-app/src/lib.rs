@@ -40,6 +40,8 @@ pub mod hub;
 /// #1486: chrome thumbnails through the one image service.
 pub mod images;
 pub mod installed;
+/// #1606: the device key in the OS secret store.
+mod keystore;
 pub mod kinds;
 pub mod list;
 pub mod notice;

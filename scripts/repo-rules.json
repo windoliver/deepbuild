@@ -162,6 +162,10 @@
           "spec": "^0.3",
           "why": "Issue #337: NSString for the menu-bar title. Already in gpui's tree."
         },
+        "security-framework": {
+          "spec": "^3",
+          "why": "Issue #1606: the device key is a Keychain item only the app that made it reads, never a file. Already in gpui-shell's tree."
+        },
         "objc2-user-notifications": {
           "spec": "^0.3",
           "why": "Issue #883: the app reads what Notification Center still holds from it on start, so it can withdraw one whose ask closed; `--notification-center` prints it for the Proof. Already in gpui's tree."
