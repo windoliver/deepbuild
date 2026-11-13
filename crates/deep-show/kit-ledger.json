@@ -209,9 +209,17 @@
     "digest": "8071ab44e877e00d90807062cf69c0c913d493ffcd131a1e27e50b78dd6c1242",
     "verdict": "PASS",
     "parts": {
+      "fixtures": "PASS",
       "clean_rebuild": "PASS",
       "patch_fuzz": "PASS",
-      "schedule": "PASS"
+      "read_set": "PASS",
+      "order": "PASS",
+      "schedule": "PASS",
+      "repair_loop": "PASS",
+      "carried_state": "PASS",
+      "late_entry": "PASS",
+      "time_order": "PASS",
+      "catalog": "PASS"
     }
   },
   "record": {
