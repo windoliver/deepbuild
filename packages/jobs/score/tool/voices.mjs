@@ -3,6 +3,7 @@
 // into a mono buffer from its onset, through its own envelope; the stem pans and sums them. Every number comes from
 // the note, its draws and this file's math: nothing reads a clock or a shared random stream.
 import { TAU, exp2, hz, sin } from './math.mjs';
+import { note } from './synth.mjs';
 
 /** Each preset's attack and release in seconds when the event gives none. */
 export const DEFAULTS = {
@@ -131,6 +132,12 @@ export function voice(out, src, e, rate, draws, take) {
       idx = idx + 1 === N ? 0 : idx + 1;
       out[n] = x * env(n);
     }
+    return;
+  }
+  // #204: a pack's preset, its graph in the plan, rendered by the media module's own node code at the note's pitch.
+  if (src.synth.graph) {
+    const x = note({ preset: src.synth.graph, rate, gate: e.durN, length: len, hz: hz(e.pitch), vel: e.vel ?? 0.8, key: Number(draws.noise & 0xffffffffn) });
+    for (let n = 0; n < len; n++) out[n] = x[n] * level;
     return;
   }
   const preset = src.synth.preset;

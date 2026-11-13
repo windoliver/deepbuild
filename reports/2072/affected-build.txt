@@ -1,0 +1,2 @@
+INCONCLUSIVE no grant: no build grant came within 30 min
+  Fix: Wait for the other sessions' builds and proofs on this machine, then run again.

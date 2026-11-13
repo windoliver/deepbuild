@@ -123,7 +123,10 @@ fn manifest() -> Manifest {
         feature: "cells".into(),
         license: "Apache-2.0".into(),
         implements: "cells@1".into(),
-        implementation: deep_canvas::registry::Implementation::reference("cells", deep_canvas::registry::Semver::parse("1.0.0").expect("a version")),
+        implementation: deep_canvas::registry::Implementation::reference(
+            "cells",
+            deep_canvas::registry::Semver::parse("1.0.0").expect("a version"),
+        ),
     }
 }
 
@@ -136,8 +139,8 @@ pub fn module() -> Module {
 }
 
 /// The cell grid's params (Cell grid: Fields), each read by the module's own check and operator.
-const PARAMS: [&str; 10] = [
-    "size", "font", "palette", "frame", "patch", "title", "cwd", "progress", "bell", "play",
+const PARAMS: [&str; 11] = [
+    "size", "font", "palette", "frame", "patch", "title", "cwd", "progress", "bell", "play", "grid",
 ];
 
 fn kind() -> Entry {
@@ -174,10 +177,11 @@ fn register(r: &mut Registrar) {
     r.array("cells.grid", "grid", "item", "geometry", "items");
     // #1967: a grid that plays a recording reads the time and the recording as the decode
     // worker converted it, which the host holds outside the document.
+    // #538: a logic grid reads its array, baked into the document, through the core's view.
     r.operator(
         "grid",
         "items",
-        &["self", "look", "t", "reading"],
+        &["self", "look", "t", "reading", "refs"],
         &["cells.grid"],
     )
     .applies(is_grid)
@@ -222,6 +226,21 @@ fn issue(id: &str, field: &str, what: String) -> Raised {
 fn fields_rule(_: &Value, id: &str, item: &Value) -> Vec<Raised> {
     let p = &item["params"];
     let mut out = Vec::new();
+    // #538: a logic grid in place of a frame: its own size and lists, never a status role.
+    match crate::logic_grid::spec(p) {
+        Err((field, what)) => return vec![issue(id, &field, what)],
+        Ok(Some(s)) => {
+            let roles = s.roles.iter().enumerate().map(|(i, r)| (format!("grid/roles/{i}"), Some(*r)));
+            let palette = ["fg", "bg"].map(|k| (format!("palette/{k}"), p["palette"][k].as_str()));
+            for (path, role) in roles.chain(palette) {
+                if let Some(role) = role.filter(|r| STATUS_ROLES.contains(r)) {
+                    out.push(issue(id, &path, format!("the status role {role} is reachable only through a status binding; a cell can never draw it")));
+                }
+            }
+            return out;
+        }
+        Ok(None) => {}
+    }
     let size = &p["size"];
     let dim = |k: &str| {
         size[k]
@@ -356,6 +375,9 @@ fn grid(v: &mut View<'_>) -> Result<(), OpError> {
     let path = format!("items/{}/params", v.id().unwrap_or_default());
     let bad = |f: &str| OpError::new("bad_doc", format!("{path}/{f}"));
     let p = &fields["params"];
+    if let Some(s) = crate::logic_grid::spec(p).map_err(|(f, _)| bad(&f))? {
+        return logic_grid(v, fields, &s);
+    }
     let n = |v: &Value| v.as_u64().and_then(|n| usize::try_from(n).ok());
     let cols = n(&p["size"]["cols"]).ok_or_else(|| bad("size/cols"))?;
     let rows = n(&p["size"]["rows"]).ok_or_else(|| bad("size/rows"))?;
@@ -442,6 +464,63 @@ fn grid(v: &mut View<'_>) -> Result<(), OpError> {
         cells: drawn,
         cursor,
         source,
+    };
+    v.write("cells.grid", Val::typed(grid))
+}
+
+/// #538: the planted unpacking that wraps each index into its list rather than drawing blank.
+pub const GRID_WRAPS_INDEX: &str = "grid_wraps_index";
+
+/// #538: a logic grid's cells at the session's t, each value unpacked into a glyph from its list
+/// and its roles' colors; a value past its lists draws a blank cell in the grid's background.
+fn logic_grid(v: &mut View<'_>, fields: &Value, s: &crate::logic_grid::Spec<'_>) -> Result<(), OpError> {
+    let p = &fields["params"];
+    let t = v.t()?;
+    let wraps = v.planted() == Some(GRID_WRAPS_INDEX);
+    let doc = v.document()?;
+    let cells = crate::logic_grid::cells(s, doc.pointer("/arrays").and_then(|a| a.get(s.array)), t, wraps);
+    let bg = role(v, p["palette"]["bg"].as_str().unwrap_or("ground"))?.unwrap_or([0, 0, 0]);
+    let fg = role(v, p["palette"]["fg"].as_str().unwrap_or("ink"))?.unwrap_or([255, 255, 255]);
+    let mut colors = Vec::with_capacity(s.roles.len());
+    for r in &s.roles {
+        colors.push(role(v, r)?.unwrap_or(fg));
+    }
+    let mut rows = Vec::with_capacity(s.rows);
+    let mut drawn = Vec::with_capacity(s.cols * s.rows);
+    for r in 0..s.rows {
+        let mut row = Row { text: String::new(), runs: Vec::new(), fills: Vec::new() };
+        for c in 0..s.cols {
+            let cell = cells[r * s.cols + c];
+            let g = cell.map_or("", |x| s.glyphs[x.glyph]);
+            row.text.push_str(if g.is_empty() { " " } else { g });
+            let f = cell.map_or(fg, |x| colors[x.fg]);
+            let b = cell.map_or(bg, |x| colors[x.bg]);
+            match row.runs.last_mut() {
+                Some(last) if last.2 == f && last.1 == c => last.1 = c + 1,
+                _ => row.runs.push((c, c + 1, f)),
+            }
+            if b != bg {
+                row.fills.push((c, c + 1, b));
+            }
+            drawn.push(Drawn { g: g.to_string(), fg: f, bg: b, attrs: cell.map_or(0, |x| x.attrs), link: 0 });
+        }
+        rows.push(row);
+    }
+    let pos = &fields["at"]["pos"];
+    let grid = Grid {
+        origin: [pos[0].as_f64().unwrap_or(0.0), pos[1].as_f64().unwrap_or(0.0)],
+        cell: [
+            p["size"]["cell"][0].as_f64().unwrap_or(8.0),
+            p["size"]["cell"][1].as_f64().unwrap_or(16.0),
+        ],
+        font_size: p["font"]["size"].as_f64().unwrap_or(13.0),
+        bg,
+        rows,
+        cols: s.cols,
+        cells: drawn,
+        // A logic grid has no cursor.
+        cursor: Cursor { x: 0, y: 0, shape: "block".into(), visible: false, blink: false },
+        source: None,
     };
     v.write("cells.grid", Val::typed(grid))
 }

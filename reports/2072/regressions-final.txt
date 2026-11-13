@@ -1,0 +1,25 @@
+
+ RUN  v5.0.5 <worktree>
+
+ ✓ tests/acceptance/363/actions.test.ts > AC1 #363.126cded2 A plug-in action whose schema uses a keyword one model API rejects is left out at install with the reason, and every session still lists `deep_ask` and `deep_claim` > AC1 at install, the actions whose input schemas use minimum and oneOf are left out, each with a reason naming its keyword; the plug-in loads and its other action is exposed 2982ms
+ ✓ tests/acceptance/363/actions.test.ts > AC1 #363.126cded2 A plug-in action whose schema uses a keyword one model API rejects is left out at install with the reason, and every session still lists `deep_ask` and `deep_claim` > AC1 a session lists deep_ask and deep_claim from deep, while deep-actions finds the plug-in's good action and neither left-out one, and calls neither 2527ms
+ ✓ tests/acceptance/363/actions.test.ts > AC5 #363.f25b4886 A declared action reaches agents through `deep-actions`, typed from its schema: a read runs, a change without a standing rule raises an ask, and a send always asks; the `deep` server lists only the core tools > AC5 deep-actions finds each stocks action typed from its schema; a read runs; input its schema refuses is an error; a change raises an ask and a send raises an ask, neither handler running 4374ms
+ ✓ tests/acceptance/363/actions.test.ts > AC5 #363.f25b4886 A declared action reaches agents through `deep-actions`, typed from its schema: a read runs, a change without a standing rule raises an ask, and a send always asks; the `deep` server lists only the core tools > AC5 the deep server lists only the core tools: the same list as a hub with no plug-in, with no action, plug-in or deep-actions tool in it 4392ms
+ ✓ packages/hub/test/answer-after-restart.test.ts > wakes an idle session the restarted hub has not heard from 6386ms
+ ✓ packages/hub/test/answer-after-restart.test.ts > holds the stop of a session resumed after it ended, with the answer it missed (#824) 3659ms
+ ✓ tests/acceptance/363/retries.test.ts > AC7 #363.4e75de68 Retrying an identical request ID has no second effect, the same ID with different input is refused before any write or cursor move, and an action's target and authority never come from the focused window, the current folder or the last agent selected > AC7 an identical retry of a request ID has no second effect; the same ID with different input is refused before anything is written or run 1075ms
+ ✓ tests/acceptance/363/retries.test.ts > AC7 #363.4e75de68 Retrying an identical request ID has no second effect, the same ID with different input is refused before any write or cursor move, and an action's target and authority never come from the focused window, the current folder or the last agent selected > AC7 a call's target is the one it names, never the focused window, and its authority is its own caller's, never the last agent's 1167ms
+ ✓ packages/hub/test/row-actions.test.ts > records Later an hour before the ask's default and Pause on the session, from the app only 2561ms
+ ✓ packages/hub/test/answers.test.ts > offers only unanswered deliveries in the same thread, with words and images intact 207ms
+ ✓ tests/acceptance/24/confirm.test.ts > #24.71112e3b an authority answer typed by an agent through tmux send-keys, and one written to the socket with the control token, count only once the OS confirms you 6053ms
+ ✓ tests/acceptance/24/confirm.test.ts > #24.b58ac6a6 answers to an exception, a definition and a taste ask written to the socket with the control token, the OS confirmation cancelled, save no decision and leave each ask open 3458ms
+stderr | tests/acceptance/24/answer.test.ts
+vitest-setup: stopping 1 process(es) this file left running:
+  45853 (node)
+
+ ✓ tests/acceptance/24/answer.test.ts > #24.4963284a an answer given in deep inbox answer is saved as a decision with its scope 2252ms
+
+ Test Files  7 passed (7)
+      Tests  13 passed (13)
+   Start at  17:02:34
+   Duration  48.27s (tests 96%, transform 3%, import 2%)

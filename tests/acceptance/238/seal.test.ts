@@ -22,7 +22,7 @@ const counts = (reply: JsonObject, what: string): { checks: number; rewrites: nu
   ({ checks: num(reply['checks'], `${what}.checks`), rewrites: num(reply['rewrites'], `${what}.rewrites`), runs: num(reply['runs'], `${what}.runs`) });
 
 describe(`${ID} a build with the sandbox module and without the logic module seals, runs a provider and a validator at check and refuses a logic item`, () => {
-  it(`${ID} the build without the logic module seals with sandbox@1 (bit, canonical, wasmtime =49.0.2) and runs the test provider once at check, writing its one-quad mesh, never in a frame`, () => {
+  it(`${ID} the build without the logic module seals with sandbox@1 (bit, canonical, wasmtime =49.0.5) and runs the test provider once at check, writing its one-quad mesh, never in a frame`, () => {
     const quad = quadPack(temp());
     const doc = board('Quad', [meshItem('mesh-1')], { packs: ['test/quadpack@1.0.0'], requires: { modules: { 'test.mesh': '^1' } } });
     const [reg, sched, install, before, shown, after, out, frames, later] = runShow(deepShow(NO_LOGIC), scenario(temp(), [
@@ -35,7 +35,7 @@ describe(`${ID} a build with the sandbox module and without the logic module sea
     expect(iface['module'], 'sandbox@1 is implemented by the sandbox module').toBe('sandbox');
     const impl = obj(iface['implementation'], 'sandbox@1.implementation');
     expect([impl['name'], impl['equivalence'], impl['state']], 'the shipped implementation is sandbox, bit and canonical').toEqual(['sandbox', 'bit', 'canonical']);
-    expect(str(obj(obj(impl['pins'], 'pins')['wasmtime'], 'pins.wasmtime')['version'], 'pins.wasmtime.version'), 'it pins wasmtime =49.0.2').toBe('=49.0.2');
+    expect(str(obj(obj(impl['pins'], 'pins')['wasmtime'], 'pins.wasmtime')['version'], 'pins.wasmtime.version'), 'it pins wasmtime =49.0.5').toBe('=49.0.5');
     expect(install!['outcome'], `test/quadpack@1.0.0 installs: ${show(install)}`).toBe('installed');
 
     expect(shown!['outcome'], `the document with the provider's mesh is presented: ${show(shown)}`).toBe('presented');

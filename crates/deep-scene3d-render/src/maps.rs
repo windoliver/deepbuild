@@ -220,7 +220,12 @@ impl Store {
             .map_or(&self.none, |(_, g)| g)
     }
 
-    fn texture(&mut self, d: &deep_gpu::counted::Wgpu, queue: &deep_gpu::counted::Queue, sha: &str) -> Option<String> {
+    fn texture(
+        &mut self,
+        d: &deep_gpu::counted::Wgpu,
+        queue: &deep_gpu::counted::Queue,
+        sha: &str,
+    ) -> Option<String> {
         let t = self.texels.get(sha)?.clone();
         // Kept by the source's hash and its format.
         let key = format!("{sha}:{}", t.format);
@@ -393,13 +398,11 @@ impl Store {
             maps.alpha_cutoff as f32,
             0.0,
         ];
-        let buffer = d.create_buffer_init(
-            &wgpu::util::BufferInitDescriptor {
-                label: Some("scene3d maps"),
-                contents: bytemuck::bytes_of(&u),
-                usage: wgpu::BufferUsages::UNIFORM,
-            },
-        );
+        let buffer = d.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("scene3d maps"),
+            contents: bytemuck::bytes_of(&u),
+            usage: wgpu::BufferUsages::UNIFORM,
+        });
         for w in wraps {
             self.samplers
                 .entry(w)
@@ -428,7 +431,9 @@ impl Store {
         entries.push(wgpu::BindGroupEntry {
             binding: TERRAIN_NORMALS,
             resource: wgpu::BindingResource::TextureView(
-                normals.as_ref().map_or(&self.white, |k| &self.textures[k].1),
+                normals
+                    .as_ref()
+                    .map_or(&self.white, |k| &self.textures[k].1),
             ),
         });
         entries.extend(extra);

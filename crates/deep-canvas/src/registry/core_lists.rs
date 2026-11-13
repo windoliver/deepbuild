@@ -1040,7 +1040,11 @@ fn outline_source() -> RegistryDef {
 
 /// The verdicts `judged` holds, by asset, for each sha256 in `at`; a missing one is an error.
 fn verdicts<'a>(v: &'a Value, at: &str, judged: &str) -> Result<Vec<(&'a str, &'a Value)>, String> {
-    let list = v.get(judged).and_then(Value::as_array).map(Vec::as_slice).unwrap_or(&[]);
+    let list = v
+        .get(judged)
+        .and_then(Value::as_array)
+        .map(Vec::as_slice)
+        .unwrap_or(&[]);
     strings(v, at)
         .into_iter()
         .map(|sha| {

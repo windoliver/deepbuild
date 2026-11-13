@@ -66,7 +66,7 @@ import { SeriesStore, type BoundValue, type Rollup, type Span } from './series.j
 import { Sends, Notices, type SendRow, type SendRule, type NoticeRow } from './sends.js';
 export type { NoticeRow } from './sends.js';
 import { WorkSources, type Added, type DeliveryRow, type WorkEvent, type WorkKitFixture, type WorkPage, type WorkResult, type WorkTask } from './work.js';
-import { declareSource, handleOf, nodeHttp, osSecrets, Sources, HostSources, type HttpClient, type KeyTest, type Polled, type Reading, type Recording, type SecretStore, type SourceRead, type StreamRead } from './sources.js';
+import { AnswerTooLarge, declareSource, handleOf, nodeFetch, nodeHttp, osSecrets, Sources, HostSources, type HttpClient, type KeyTest, type Polled, type Reading, type Recording, type SecretStore, type SourceRead, type StreamRead } from './sources.js';
 import { TERMINAL_PLANTS, TERMINAL_PROTOCOL, Terminals, type OpenSpec, type TerminalPlant, type TerminalTab } from './terminals.js';
 import type { ProjectTrust } from './trust.js';
 
@@ -1045,30 +1045,14 @@ class Host implements ExtensionHost {
       .flatMap((e) => (manifestOf(e.folder).uses ?? []).filter((u) => dropped.includes(u.interface)).map((u) => ({ user: e.id, uses: u.interface })));
     if (!users.length) return;
     if (this.options.plant === 'rewires-to-newest') return;
-    const asks = this.options.asks;
     const named = users.map((u) => `${u.user} uses ${u.uses}`).join('; ');
-    if (!asks) throw Error(`${m.id}@${m.version} no longer provides what installed pieces use (${named}), and this host has no asks core to ask you; nothing was installed`);
-    const now = this.options.now();
-    const key = sha256Hex(canonicalize({ update: m.id, version: m.version, users } as unknown as JsonValue));
+    if (!this.options.asks) throw Error(`${m.id}@${m.version} no longer provides what installed pieces use (${named}), and this host has no asks core to ask you; nothing was installed`);
     const question = `Install ${m.id} ${m.version}? It no longer provides ${[...new Set(users.map((u) => u.uses))].join(', ')}, which ${[...new Set(users.map((u) => u.user))].join(', ')} use${users.length > 1 ? '' : 's'}, and keeps no adapter for it.`;
-    const ask = await asks.raise({ writer: 'core', actor: 'you', scope: 'you' }, 'extension.update', {
-      kind: 'authority', question,
-      options: [{ id: 'approve', label: `Install ${m.version}`, decision: 'allow' }, { id: 'decline', label: `Keep ${before.version}`, decision: 'deny' }],
-      recommended: null, deadline: now + 86_400_000, fallback: 'you', default: 'decline', provisional: false, owner: 'you', key,
-      pinned_to: { kind: 'evidence', ref: key },
-    }, { steps: users.map((u) => ({ does: `Install ${m.id} ${m.version}, leaving ${u.user}'s use of ${u.uses} with no provider`, changes: [`${u.user} uses ${u.uses}`], undo: `Install ${m.id} ${before.version} again`, public: false, cost: 0 })), diff: key });
-    // Installs nothing until you answer: the install waits on the ask's close, and goes on only on your yes on record.
-    for (;;) {
-      const row = (await asks.inbox()).find((r) => r.ask === ask);
-      if (row?.status === 'closed') {
-        const answered = await this.options.record.read({ after: 0, kinds: ['ask.answered'], limit: 100_000 });
-        const yes = row.outcome === 'answered' && answered.some((e) => e.subject === ask && (e.data as { decision?: unknown }).decision === 'allow');
-        if (yes) return;
-        throw Error(`${m.id}@${m.version} isn't installed: you kept ${before.version}, so ${named} keep${users.length > 1 ? '' : 's'} their provider`);
-      }
-      if (this.closed) throw Error(`${m.id}@${m.version} isn't installed: the host closed before you answered`);
-      await sleep(50);
-    }
+    const yes = await this.yours('extension.update', question, { update: m.id, version: m.version, users } as unknown as JsonValue, `Install ${m.version}`, `Keep ${before.version}`,
+      users.map((u) => ({ does: `Install ${m.id} ${m.version}, leaving ${u.user}'s use of ${u.uses} with no provider`, changes: [`${u.user} uses ${u.uses}`], undo: `Install ${m.id} ${before.version} again` })));
+    if (yes) return;
+    if (yes === undefined) throw Error(`${m.id}@${m.version} isn't installed: the host closed before you answered`);
+    throw Error(`${m.id}@${m.version} isn't installed: you kept ${before.version}, so ${named} keep${users.length > 1 ? '' : 's'} their provider`);
   }
   async trustKey(connection: Connection, id: string, key: string): Promise<void> {
     if (connection.writer !== 'app' && connection.writer !== 'cli') throw Error(`a publisher key is trusted only by your answer on the trusted path, the app or the CLI, not by ${connection.writer}`);
@@ -1890,9 +1874,9 @@ class Host implements ExtensionHost {
   }
   /**
    * One authority ask of yours, raised once, waiting for your answer: true on your yes on record, false on anything
-   * else; a host with no asks core can't ask, so it refuses.
+   * else; undefined if the host closed while it still waited. A host with no asks core can't ask, so it refuses.
    */
-  private async yours(source: string, question: string, about: JsonValue, allow: string, deny: string, steps: { does: string; changes: string[]; undo: string | null }[]): Promise<boolean> {
+  private async yours(source: string, question: string, about: JsonValue, allow: string, deny: string, steps: { does: string; changes: string[]; undo: string | null }[]): Promise<boolean | undefined> {
     const asks = this.options.asks;
     if (!asks) throw Error(`${question} needs your yes, and this host has no asks core to ask you`);
     const key = sha256Hex(canonicalize(about));
@@ -1906,7 +1890,7 @@ class Host implements ExtensionHost {
       const [row] = (await this.options.record.raw('SELECT status, decision FROM asks WHERE id = ?', [ask.slice(4)])) as { status: string; decision: string | null }[];
       if (row?.decision === 'allow') return true;
       if (row?.decision === 'deny' || (row && row.status !== 'open' && row.status !== 'later')) return false;
-      if (this.closed) return false;
+      if (this.closed) return undefined;
       await sleep(50);
     }
   }
@@ -2676,21 +2660,13 @@ class Host implements ExtensionHost {
     }
     this.quotas.set(key, [...times, now]);
     const headers = typeof r.headers === 'object' && r.headers !== null ? Object.fromEntries(Object.entries(r.headers).filter(([, v]) => typeof v === 'string')) as Record<string, string> : {};
-    const answer = await globalThis.fetch(url!, {
-      method: typeof r.method === 'string' ? r.method : 'GET', headers, ...(typeof r.body === 'string' ? { body: r.body } : {}),
-      // A redirect would reach a host the grant may not name.
-      redirect: 'manual', signal: AbortSignal.timeout(CALL_MS),
-    });
-    // Read up to the cap, never all of it: an answer past it fails, and the package gets none of it.
-    const chunks: Uint8Array[] = [];
-    let size = 0;
-    for await (const chunk of answer.body ?? []) {
-      size += chunk.byteLength;
-      // Leaving the loop cancels the rest of the stream.
-      if (size > ANSWER) throw Error(`deep.fetch: ${grant.host}'s answer is over ${ANSWER} bytes`);
-      chunks.push(chunk);
+    try {
+      const answer = await nodeFetch({ url: url!.href, method: typeof r.method === 'string' ? r.method : 'GET', headers, ...(typeof r.body === 'string' ? { body: r.body } : {}) }, AbortSignal.timeout(CALL_MS));
+      return { status: answer.status, body: answer.body };
+    } catch (error) {
+      if (error instanceof AnswerTooLarge) throw Error(`deep.fetch: ${grant.host}'s answer is over ${ANSWER} bytes`);
+      throw error;
     }
-    return { status: answer.status, body: Buffer.concat(chunks).toString('utf8') };
   }
 
   /**

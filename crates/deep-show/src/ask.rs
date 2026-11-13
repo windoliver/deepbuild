@@ -282,7 +282,10 @@ impl Hub<'_> {
         at: [f64; 2],
     ) -> (Option<String>, Option<String>) {
         let empty = Map::new();
-        let items = doc.get("items").and_then(Value::as_object).unwrap_or(&empty);
+        let items = doc
+            .get("items")
+            .and_then(Value::as_object)
+            .unwrap_or(&empty);
         let order = |id: &str| {
             let item = items.get(id);
             let order = item.and_then(|i| i.get("order")).and_then(Value::as_str);
@@ -367,8 +370,7 @@ impl Hub<'_> {
             sized["size"] = json!(size);
             let look = deep_canvas_scene3d::look::Look3::from_roles(self.look.light.clone());
             let mut labels = deep_canvas_scene3d::label::Labels::new();
-            if let Ok(scene) = deep_canvas_scene3d::scene::evaluate(&sized, t, &look, &mut labels)
-            {
+            if let Ok(scene) = deep_canvas_scene3d::scene::evaluate(&sized, t, &look, &mut labels) {
                 quote = scene
                     .boxes()
                     .into_iter()
@@ -379,7 +381,10 @@ impl Hub<'_> {
                     .find_map(|(id, _)| text_of(&id));
             }
         }
-        let top = hits.into_iter().max_by(|a, b| a.0.cmp(&b.0)).map(|(_, id)| id);
+        let top = hits
+            .into_iter()
+            .max_by(|a, b| a.0.cmp(&b.0))
+            .map(|(_, id)| id);
         (top, quote)
     }
 

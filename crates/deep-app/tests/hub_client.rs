@@ -126,13 +126,25 @@ fn the_hub_takes_the_views_the_app_reports_shown_and_hidden() {
         display_awake: true,
         session_locked: false,
     };
-    let calls = [shown, Seen { minimized: true, ..shown }]
-        .into_iter()
-        .flat_map(|seen| reporter.report(Some(seen)))
-        .collect::<Vec<_>>();
-    assert_eq!(calls.len(), 2, "one views.shown, then one views.hidden: {calls:?}");
+    let calls = [
+        shown,
+        Seen {
+            minimized: true,
+            ..shown
+        },
+    ]
+    .into_iter()
+    .flat_map(|seen| reporter.report(Some(seen)))
+    .collect::<Vec<_>>();
+    assert_eq!(
+        calls.len(),
+        2,
+        "one views.shown, then one views.hidden: {calls:?}"
+    );
     for (method, params) in calls {
-        let reply = app.call(method, params).unwrap_or_else(|e| panic!("{method}: {e:?}"));
+        let reply = app
+            .call(method, params)
+            .unwrap_or_else(|e| panic!("{method}: {e:?}"));
         assert_eq!(reply["reported"], true, "{method}: {reply}");
     }
 }

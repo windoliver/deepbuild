@@ -3,6 +3,9 @@
   "description": "The hub handed a channel an item to deliver, and what the channel said came of it: delivered with the provider's acknowledgement, stalled, timed out or in conflict. A delivered with no acknowledgement is recorded stalled. Only the core appends it (#65).",
   "x-since": "R2",
   "x-stability": "preview",
+  "x-tracking": "#65",
+  "x-preview_since": "R2",
+  "x-decide_by": "R5",
   "x-feeds": [],
   "type": "object",
   "properties": {

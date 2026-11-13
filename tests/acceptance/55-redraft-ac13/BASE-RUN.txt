@@ -1,0 +1,48 @@
+#55 AC13's redraft (#55.480a0e0c) on base commit 1c4d1f0e2, which holds #55's implementation (packages/paseo, the
+hub's paseo-delivers-beside-waiter plant). One run, 2026-11-12 13:52:46 to 13:54:09 PST.
+
+Machine:   macOS 27.2, Apple silicon; 1-minute load 8.4 at the start, 9.6 at the end.
+Toolchain: Node v24.22.2; cargo 1.99.1 (5f94df478 2026-08-27).
+Prepared:  npm ci; npm run build --workspaces;
+           CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 cargo build --locked -q -p deep-hook --features env-plants
+Command:   PATH="$HOME/.rustup/toolchains/1.99.1-aarch64-apple-darwin/bin:$PATH" CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 NO_COLOR=1 \
+             node node_modules/vitest/vitest.mjs run --root tests/acceptance/55-redraft-ac13 --no-file-parallelism --testTimeout=600000
+           node node_modules/typescript/bin/tsc -p tests/acceptance/55-redraft-ac13/tsconfig.json   (clean, exit 0)
+Before the run, fixtures/daemon.mjs was smoke-checked by hand with the real plugin: it loaded the plugin's hooks, ran an
+agent as its child over fd 3, and went on running that agent after the plugin's stop.
+
+After the run, only wrong-program.test.ts's header comment (same line count) and the README were reworded; no code changed.
+
+Result: Test Files 1 failed | 1 passed (2); Tests 1 failed | 3 passed (4); 83.19 s. No process of this worktree was
+left running, and no /tmp/dh55-* folder of this run was left.
+
+delivery.test.ts, 3 passed (the reporter lists a passing file only in its totals):
+  ✓ AC13 #55.480a0e0c with deep-hook's waiter live, your answer wakes the session through it, once, and the plugin sends nothing
+  ✓ AC13 #55.480a0e0c where deep-hook's wake route never fired in the session, the plugin prompts the idle session with your answer on deep-hook's behalf, once
+  ✓ AC13 #55.480a0e0c where neither route fires, the session's row reads "answer waiting"
+
+wrong-program.test.ts, 1 failed, as the wrong program must, naming the ask (59.2 s):
+  × AC13 #55.480a0e0c paseo-delivers-beside-waiter: a plugin that delivers while deep-hook's waiter also fires sends the answer twice and fails, naming the ask
+
+ FAIL  wrong-program.test.ts > AC13 #55.480a0e0c the wrong program paseo-delivers-beside-waiter > AC13 #55.480a0e0c paseo-delivers-beside-waiter: a plugin that delivers while deep-hook's waiter also fires sends the answer twice and fails, naming the ask
+AssertionError: AC13 #55.480a0e0c ask:01M78W084P8SVAVC170BZH22EJ's answer goes into 0b429d2d-c088-4d72-85e2-5499400cf1b5 once, by deep-hook's waiter, and the plugin sends nothing: 0 wake(s) by the waiter, and the plugin sent ["DeepBuild delivers your answers:\nYour answer to ask:01M78W084P8SVAVC170BZH22EJ (\"Which header colour for the checkout page (fc18c0d1)?\"): Green header fc18c0d1 (green), in place of Blue header fc18c0d1, which you went on with. Undo it, then move to Green header fc18c0d1."]: expected { wakes: +0, sends: 1 } to deeply equal { wakes: 1, sends: +0 }
+
+- Expected
++ Received
+
+  {
+-   "sends": 0,
+-   "wakes": 1,
++   "sends": 1,
++   "wakes": 0,
+  }
+
+ ❯ answeredByWake world.ts:164:268
+ ❯ wrong-program.test.ts:17:7
+
+How to read the wrong program's failure: the planted hub handed your answer to the plugin's prompt route while
+deep-hook's waiter for the session was live (the world checks it is live before you answer), and the plugin sent it into
+the idle session. In this run the waiter had not fired by the time the test read the routes (30 s for a wake, then up to
+20 s for a delivery, then 5 s), so the failure shows the plugin's send beside the live waiter rather than two arrivals;
+where the waiter fires as well, the same assertion's message reads "the answer went in twice". Either way it fails at
+the routes assertion and names the ask.

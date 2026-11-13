@@ -16,9 +16,8 @@ use serde_json::Value;
 pub(crate) fn scene3d_tie_by_order() -> deep_canvas::registry::Module {
     let mut m = deep_canvas_scene3d::module::module();
     m.manifest.implementation.name = "scene3d.tie_by_order".into();
-    m.register = |r| {
-        deep_canvas_scene3d::module::register_with(r, deep_canvas_scene3d::light::Tie::Order)
-    };
+    m.register =
+        |r| deep_canvas_scene3d::module::register_with(r, deep_canvas_scene3d::light::Tie::Order);
     m
 }
 
@@ -48,6 +47,20 @@ pub(crate) fn scene3d_reads_vector() -> deep_canvas::registry::Module {
     m
 }
 
+/// #538's planted data module: the shipped module with one more operator, whose read set names a
+/// logic item's array (`logic.cells`) itself instead of reading it through the core's column view;
+/// the seal refuses the read, naming the data module and the array.
+#[cfg(feature = "test-data-reads-logic-array")]
+pub(crate) fn data_reads_logic_array() -> deep_canvas::registry::Module {
+    let mut m = deep_canvas_marks::modules::data();
+    m.register = |r| {
+        (deep_canvas_marks::modules::data().register)(r);
+        r.array("data.direct", "values", "item", "geometry", "items");
+        r.operator("direct", "items", &["logic.cells"], &["data.direct"]).run(|_| Ok(()));
+    };
+    m
+}
+
 /// A test module's manifest: version 1.0.0, any core, under its feature.
 pub(crate) fn test_manifest(name: &str, feature: &str) -> Manifest {
     Manifest {
@@ -62,7 +75,10 @@ pub(crate) fn test_manifest(name: &str, feature: &str) -> Manifest {
         feature: feature.into(),
         license: "Apache-2.0".into(),
         implements: format!("{name}@1"),
-        implementation: deep_canvas::registry::Implementation::reference(name, Semver::parse("1.0.0").expect("a version")),
+        implementation: deep_canvas::registry::Implementation::reference(
+            name,
+            Semver::parse("1.0.0").expect("a version"),
+        ),
     }
 }
 

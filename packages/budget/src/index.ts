@@ -75,6 +75,13 @@ export interface Ledger {
    * otherwise BLOCKED, with one authority ask to raise it, whose plan shows `step` at its price.
    */
   reserveIn(connection: Connection, run: RunRequest, budget: string, usd: number, step: PlanStep): Promise<Outcome>;
+  /**
+   * A run priced by its caller against every budget that covers it (#509: a paid job's call, which its own authority
+   * ask lets run): reserved against all of them in one append, to be charged; a covering budget without room holds it
+   * BLOCKED with one ask to raise every such budget, whose plan shows `step` at its price. A run no budget covers
+   * starts with nothing reserved and nothing to charge, and raises no ask of the ledger's.
+   */
+  reserveCovering(connection: Connection, run: RunRequest, usd: number, step: PlanStep): Promise<Outcome>;
 }
 
 const DAY = 86_400_000;
@@ -369,6 +376,29 @@ class BudgetLedger implements Ledger {
     });
   }
 
+  async reserveCovering(connection: Connection, input: RunRequest, price: number, step: PlanStep): Promise<Outcome> {
+    const run = checkRun(input);
+    return this.exclusive(async () => {
+      await this.sync();
+      if (this.runs.has(run.run)) throw new BudgetRefused(`${run.run} already reserved its price`, { run: run.run });
+      if (!isPrice(price)) return { run: run.run, status: 'BLOCKED', cause: 'price', missing: `the price of ${run.run}` };
+      const now = this.options.now();
+      const cost = microUp(price);
+      const covering = this.covering(run, now);
+      const short = covering.filter((b) => !fits(b, run.run, cost));
+      if (short.length > 0) {
+        const raises = short.map((b) => `${b.scope.ref} from ${size(b.runs, b.cap)} to ${size(b.runs === undefined ? undefined : b.runs + 1, b.cap + cost)}`).join(' and ');
+        const ask = await this.wait(connection, { run, usd: cost, because: 'raise', budgets: short.map((b) => b.id) },
+          `${run.check} costs ${dollars(cost)}, more than is left, counting what's reserved and not yet charged. Raise the budget for ${raises}?`,
+          'Raise it', 'Keep it as it is', 'budget.raise', { ...step, cost: usd(cost) });
+        return { run: run.run, status: 'BLOCKED', cause: 'budget', owner: 'you', budget: short[0]!.id, ask };
+      }
+      // No budget covers it: nothing is reserved, so there is nothing to charge.
+      if (covering.length === 0) return { run: run.run, status: 'started', reserved: [] };
+      return this.reserve(connection, run, covering.map((b) => b.id), cost, null, now);
+    });
+  }
+
   /**
    * The one append that reserves a run's price against all of its budgets, or none. Callers reach it with no
    * await since their read, and it appends before its own first await.
@@ -579,5 +609,6 @@ export async function openLedger(options: LedgerOptions): Promise<Ledger> {
     charge: (connection, run, cost, evidence) => ledger.charge(connection, run, cost, evidence),
     budget: (id) => ledger.budget(id),
     reserveIn: (connection, run, budget, cost, step) => ledger.reserveIn(connection, run, budget, cost, step),
+    reserveCovering: (connection, run, cost, step) => ledger.reserveCovering(connection, run, cost, step),
   };
 }

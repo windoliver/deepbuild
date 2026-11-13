@@ -75,7 +75,13 @@ fn draw(seed: &str, id: &str, index: usize, round: u32) -> f64 {
 
 /// The template a draw `u` picks from `weights`, leaving out `skip`.
 fn weighted(weights: &[f64], u: f64, skip: Option<usize>) -> usize {
-    let w = |i: usize| if Some(i) == skip { 0.0 } else { weights[i].max(0.0) };
+    let w = |i: usize| {
+        if Some(i) == skip {
+            0.0
+        } else {
+            weights[i].max(0.0)
+        }
+    };
     let total: f64 = (0..weights.len()).map(w).sum();
     if total <= 0.0 {
         return (0..weights.len()).find(|&i| Some(i) != skip).unwrap_or(0);
@@ -97,13 +103,18 @@ pub fn plan(p: &Plan, occs: &[Occ], span: impl Fn(usize) -> i64) -> Vec<Voice> {
     let mut last: Vec<(&(String, String), i64)> = Vec::new();
     let mut prev: Option<usize> = None;
     for (i, o) in occs.iter().enumerate() {
-        if last.iter().any(|(pair, t)| *pair == &o.pair && o.t - t < p.cooldown) {
+        if last
+            .iter()
+            .any(|(pair, t)| *pair == &o.pair && o.t - t < p.cooldown)
+        {
             continue;
         }
         let template = if p.weights.is_empty() {
             0
         } else {
-            let skip = (p.pick == Pick::NoRepeat && p.weights.len() > 1).then_some(prev).flatten();
+            let skip = (p.pick == Pick::NoRepeat && p.weights.len() > 1)
+                .then_some(prev)
+                .flatten();
             weighted(&p.weights, draw(&p.seed, &p.id, i, 0), skip)
         };
         let ends = |v: &Voice| v.stop.unwrap_or(v.start + span(v.template));
@@ -117,11 +128,17 @@ pub fn plan(p: &Plan, occs: &[Occ], span: impl Fn(usize) -> i64) -> Vec<Voice> {
                 Steal::None => None,
                 Steal::Oldest => live.iter().min_by_key(|k| key(k)),
                 Steal::Furthest => live.iter().min_by(|a, b| {
-                    let (da, db) = (occs[voices[**a].occurrence].distance, occs[voices[**b].occurrence].distance);
+                    let (da, db) = (
+                        occs[voices[**a].occurrence].distance,
+                        occs[voices[**b].occurrence].distance,
+                    );
                     db.total_cmp(&da).then(key(a).cmp(&key(b)))
                 }),
                 Steal::Quietest => live.iter().min_by(|a, b| {
-                    let (ga, gb) = (occs[voices[**a].occurrence].gain, occs[voices[**b].occurrence].gain);
+                    let (ga, gb) = (
+                        occs[voices[**a].occurrence].gain,
+                        occs[voices[**b].occurrence].gain,
+                    );
                     ga.total_cmp(&gb).then(key(a).cmp(&key(b)))
                 }),
             };
@@ -134,7 +151,13 @@ pub fn plan(p: &Plan, occs: &[Occ], span: impl Fn(usize) -> i64) -> Vec<Voice> {
             None => last.push((&o.pair, o.t)),
         }
         prev = Some(template);
-        voices.push(Voice { occurrence: i, template, start: o.start, stop: None, stolen_by: None });
+        voices.push(Voice {
+            occurrence: i,
+            template,
+            start: o.start,
+            stop: None,
+            stolen_by: None,
+        });
     }
     voices
 }
@@ -146,11 +169,25 @@ mod tests {
     const MS: i64 = crate::FLICKS / 1000;
 
     fn occ(t: i64, a: &str) -> Occ {
-        Occ { t, start: t, pair: (a.into(), "floor".into()), gain: 1.0, distance: 0.0 }
+        Occ {
+            t,
+            start: t,
+            pair: (a.into(), "floor".into()),
+            gain: 1.0,
+            distance: 0.0,
+        }
     }
 
     fn spawn(weights: Vec<f64>, pick: Pick) -> Plan {
-        Plan { id: "steps".into(), seed: "7".into(), weights, pick, cooldown: 30 * MS, max_voices: 8, steal: Steal::Oldest }
+        Plan {
+            id: "steps".into(),
+            seed: "7".into(),
+            weights,
+            pick,
+            cooldown: 30 * MS,
+            max_voices: 8,
+            steal: Steal::Oldest,
+        }
     }
 
     #[test]
@@ -159,16 +196,24 @@ mod tests {
         occs.push(occ(10 * MS, "cup"));
         occs.sort_by_key(|o| o.t);
         let v = plan(&spawn(vec![1.0], Pick::Weighted), &occs, |_| 1000 * MS);
-        let pairs: Vec<&str> = v.iter().map(|v| occs[v.occurrence].pair.0.as_str()).collect();
+        let pairs: Vec<&str> = v
+            .iter()
+            .map(|v| occs[v.occurrence].pair.0.as_str())
+            .collect();
         assert_eq!(pairs, ["ball", "cup"]);
         // Past the cooldown the pair plays again.
         let occs = [occ(0, "ball"), occ(30 * MS, "ball")];
-        assert_eq!(plan(&spawn(vec![1.0], Pick::Weighted), &occs, |_| MS).len(), 2);
+        assert_eq!(
+            plan(&spawn(vec![1.0], Pick::Weighted), &occs, |_| MS).len(),
+            2
+        );
     }
 
     #[test]
     fn a_ninth_voice_steals_the_earliest_started() {
-        let occs: Vec<Occ> = (0..9).map(|k| occ(k * 100 * MS, &format!("b{k}"))).collect();
+        let occs: Vec<Occ> = (0..9)
+            .map(|k| occ(k * 100 * MS, &format!("b{k}")))
+            .collect();
         let v = plan(&spawn(vec![1.0], Pick::Weighted), &occs, |_| 10_000 * MS);
         assert_eq!(v.len(), 9);
         assert_eq!((v[0].stop, v[0].stolen_by), (Some(800 * MS), Some(8)));

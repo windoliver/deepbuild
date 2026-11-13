@@ -79,15 +79,22 @@ fn issue(check: &str, frame: Option<i64>, what: String) -> Value {
 }
 
 /// Asks the worker to stream `path` (frames `range` only, when given): its header.
-fn stream(worker: &mut Helper, path: &Path, planes: &str, range: Option<[i64; 2]>) -> Result<Value, Value> {
+fn stream(
+    worker: &mut Helper,
+    path: &Path,
+    planes: &str,
+    range: Option<[i64; 2]>,
+) -> Result<Value, Value> {
     let mut ask = json!({"op": "stream", "path": path, "planes": planes});
     if let Some(r) = range {
         ask["range"] = json!(r);
     }
     match worker.feed(&ask, &[], READ) {
         Some(r) if r.get("stream").is_some() => Ok(r["stream"].clone()),
-        Some(r) => Err(json!({"outcome": "failed", "code": "delivery_unread", "reply": r,
-            "what": format!("the decode worker couldn't read {}", path.display())})),
+        Some(r) => Err(
+            json!({"outcome": "failed", "code": "delivery_unread", "reply": r,
+            "what": format!("the decode worker couldn't read {}", path.display())}),
+        ),
         None => Err(json!({"outcome": "failed", "code": "delivery_unread",
             "what": format!("the decode worker gave no answer for {}", path.display())})),
     }
@@ -99,7 +106,9 @@ fn next_frame(worker: &mut Helper, buf: &mut Vec<u8>) -> Result<i64, String> {
     if let Some(e) = r.get("error") {
         return Err(e.to_string());
     }
-    let n = r["bytes"].as_u64().ok_or_else(|| format!("no frame in {r}"))? as usize;
+    let n = r["bytes"]
+        .as_u64()
+        .ok_or_else(|| format!("no frame in {r}"))? as usize;
     buf.resize(n, 0);
     if !worker.take(buf) {
         return Err("the decode worker ended mid-frame".into());
@@ -113,15 +122,34 @@ fn tags_issues(codec: &str, v: &Value) -> Vec<Value> {
     let colr = &v["colr"];
     let tagged = [&colr["primaries"], &colr["transfer"], &colr["matrix"]].map(|x| x.as_i64());
     let mut out = Vec::new();
-    let want_type = if codec == "prores_4444" { "nclc" } else { "nclx" };
+    let want_type = if codec == "prores_4444" {
+        "nclc"
+    } else {
+        "nclx"
+    };
     if colr["type"] != want_type || tagged != [Some(1), Some(1), Some(1)] {
-        out.push(issue("export.color", None, format!("{codec}'s colour tags read {colr}: not {want_type} 1-1-1 (BT.709)")));
+        out.push(issue(
+            "export.color",
+            None,
+            format!("{codec}'s colour tags read {colr}: not {want_type} 1-1-1 (BT.709)"),
+        ));
     }
     if codec != "prores_4444" && colr["full_range"] != json!(false) {
-        out.push(issue("export.color", None, format!("{codec}'s range tag reads full range: not tv (limited)")));
+        out.push(issue(
+            "export.color",
+            None,
+            format!("{codec}'s range tag reads full range: not tv (limited)"),
+        ));
     }
     if v["decoded_range"] != "limited" {
-        out.push(issue("export.color", None, format!("{codec} decodes as {} range: not limited", v["decoded_range"])));
+        out.push(issue(
+            "export.color",
+            None,
+            format!(
+                "{codec} decodes as {} range: not limited",
+                v["decoded_range"]
+            ),
+        ));
     }
     out
 }
@@ -130,7 +158,13 @@ impl Hub<'_> {
     /// export.color's probe: one frame of 75% bars and a grey ramp (with an alpha ramp for
     /// ProRes 4444), encoded with the delivery's settings and decoded through its own tags in a
     /// decode worker, within ±2 code values; its tags and largest error.
-    pub(crate) fn color_probe(&mut self, job: &Job, size: [u16; 2], (p, q): (u32, u32), scratch: &Path) -> Result<Value, Value> {
+    pub(crate) fn color_probe(
+        &mut self,
+        job: &Job,
+        size: [u16; 2],
+        (p, q): (u32, u32),
+        scratch: &Path,
+    ) -> Result<Value, Value> {
         let started = Instant::now();
         let alpha = job.codec == "prores_4444";
         let px = size.map(u32::from);
@@ -146,17 +180,40 @@ impl Hub<'_> {
         let mut worker = self.fresh_decoder(&Caps::default())?;
         let head = stream(&mut worker, &path, "bgra", None)?;
         let mut buf = Vec::new();
-        next_frame(&mut worker, &mut buf).map_err(|e| failed("export.color", vec![issue("export.color", None, format!("the probe doesn't decode: {e}"))]))?;
+        next_frame(&mut worker, &mut buf).map_err(|e| {
+            failed(
+                "export.color",
+                vec![issue(
+                    "export.color",
+                    None,
+                    format!("the probe doesn't decode: {e}"),
+                )],
+            )
+        })?;
         let _ = worker.hear();
-        let max = if buf.len() == bgra.len() { patch_error(&bgra, &buf, px, if alpha { 4 } else { 3 }) } else { 255.0 };
+        let max = if buf.len() == bgra.len() {
+            patch_error(&bgra, &buf, px, if alpha { 4 } else { 3 })
+        } else {
+            255.0
+        };
         let colr = &head["video"]["colr"];
         let tags = match alpha {
-            true => json!({"range": if head["video"]["decoded_range"] == "limited" { "tv" } else { "pc" }, "alpha": "full", "nclc": [&colr["primaries"], &colr["transfer"], &colr["matrix"]]}),
-            false => json!({"nclx": [&colr["primaries"], &colr["transfer"], &colr["matrix"]], "range": if colr["full_range"] == json!(false) { "tv" } else { "pc" }}),
+            true => {
+                json!({"range": if head["video"]["decoded_range"] == "limited" { "tv" } else { "pc" }, "alpha": "full", "nclc": [&colr["primaries"], &colr["transfer"], &colr["matrix"]]})
+            }
+            false => {
+                json!({"nclx": [&colr["primaries"], &colr["transfer"], &colr["matrix"]], "range": if colr["full_range"] == json!(false) { "tv" } else { "pc" }})
+            }
         };
         let mut issues = tags_issues(&job.codec, &head["video"]);
         if buf.len() != bgra.len() || max > 2.0 {
-            issues.push(issue("export.color", None, format!("the probe decodes up to {max} code values from what was encoded, more than 2")));
+            issues.push(issue(
+                "export.color",
+                None,
+                format!(
+                    "the probe decodes up to {max} code values from what was encoded, more than 2"
+                ),
+            ));
         }
         let seconds = started.elapsed().as_secs_f64();
         if !issues.is_empty() {
@@ -169,7 +226,10 @@ impl Hub<'_> {
     /// what the export drew and heard; any failure stops the export, naming what it found.
     pub(crate) fn read_delivery(&mut self, d: &Delivery) -> Result<Read, Value> {
         let bytes = std::fs::metadata(d.path).map(|m| m.len()).unwrap_or(0);
-        let caps = Caps { max_bytes: bytes.max(Caps::default().max_bytes), ..Caps::default() };
+        let caps = Caps {
+            max_bytes: bytes.max(Caps::default().max_bytes),
+            ..Caps::default()
+        };
         let mut worker = self.fresh_decoder(&caps)?;
         if d.job.target() == "png" {
             return self.read_pngs(d, &mut worker);
@@ -179,22 +239,42 @@ impl Hub<'_> {
         let a = &s["audio"];
         let mut raw_bytes = vec![0u8; a["bytes"].as_u64().unwrap_or(0) as usize];
         if !raw_bytes.is_empty() && !worker.take(&mut raw_bytes) {
-            return Err(json!({"outcome": "failed", "code": "delivery_unread", "what": "the decode worker ended in the sound"}));
+            return Err(
+                json!({"outcome": "failed", "code": "delivery_unread", "what": "the decode worker ended in the sound"}),
+            );
         }
         let _ = worker.hear();
         let mut issues = Vec::new();
         // The header first: the moov box before the first mdat byte.
-        let at = |kind: &str| s["boxes"].as_array().and_then(|b| b.iter().find(|b| b["type"] == kind)).and_then(|b| b["at"].as_u64());
+        let at = |kind: &str| {
+            s["boxes"]
+                .as_array()
+                .and_then(|b| b.iter().find(|b| b["type"] == kind))
+                .and_then(|b| b["at"].as_u64())
+        };
         if !matches!((at("moov"), at("mdat")), (Some(m), Some(d)) if m < d) {
-            issues.push(issue("export.layout", None, "the delivery's moov box doesn't come before its first mdat byte".into()));
+            issues.push(issue(
+                "export.layout",
+                None,
+                "the delivery's moov box doesn't come before its first mdat byte".into(),
+            ));
         }
         let v = &s["video"];
         // Each chapter's first frame a sync sample.
-        let sync: Vec<i64> = v["sync"].as_array().into_iter().flatten().filter_map(Value::as_i64).collect();
+        let sync: Vec<i64> = v["sync"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_i64)
+            .collect();
         let all_sync = v.get("sync").is_none_or(Value::is_null);
         for (marker, _, c) in d.chapters {
             if !all_sync && !sync.contains(&(c - d.frames.start)) {
-                let mut i = issue("export.chapters", None, format!("chapter `{marker}` starts at frame {c}, which isn't a sync sample"));
+                let mut i = issue(
+                    "export.chapters",
+                    None,
+                    format!("chapter `{marker}` starts at frame {c}, which isn't a sync sample"),
+                );
                 i["chapter"] = json!(marker);
                 i["at"] = json!(c);
                 issues.push(i);
@@ -204,18 +284,34 @@ impl Hub<'_> {
         let (p, q) = (i128::from(d.rate.0), i128::from(d.rate.1));
         let pts = v["pts"].as_array().cloned().unwrap_or_default();
         if let Some(i) = pts.iter().enumerate().position(|(i, t)| {
-            let (ticks, scale) = (t[0].as_i64().unwrap_or(-1) as i128, t[1].as_i64().unwrap_or(1) as i128);
+            let (ticks, scale) = (
+                t[0].as_i64().unwrap_or(-1) as i128,
+                t[1].as_i64().unwrap_or(1) as i128,
+            );
             ticks * p != i as i128 * q * scale
         }) {
             let k = d.frames.start + i as i64;
-            issues.push(issue("export.fidelity", Some(k), format!("frame {k} is presented at {}, not at exactly {} × {q}/{p} s", pts[i], i)));
+            issues.push(issue(
+                "export.fidelity",
+                Some(k),
+                format!(
+                    "frame {k} is presented at {}, not at exactly {} × {q}/{p} s",
+                    pts[i], i
+                ),
+            ));
         }
         // The sound: every sample, untrimmed, then the edit list applied by the check itself.
         let (mut sound, mut av_offset, mut edit_list) = (None, None, None);
         if let Some((raw, channels, hz)) = d.pcm {
-            let decoded: Vec<f32> = raw_bytes.as_chunks::<4>().0.iter().map(|b| f32::from_le_bytes(*b)).collect();
+            let decoded: Vec<f32> = raw_bytes
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .map(|b| f32::from_le_bytes(*b))
+                .collect();
             let movie = s["movie"]["timescale"].as_i64();
-            let (got, offset, start) = self.read_sound(d, a, movie, &decoded, raw, channels, &mut issues);
+            let (got, offset, start) =
+                self.read_sound(d, a, movie, &decoded, raw, channels, &mut issues);
             (av_offset, edit_list) = (offset, Some(start));
             if let Some(g) = &got {
                 issues.extend(sync_issues(d, g, channels, hz, a["codec"] == "aac"));
@@ -225,7 +321,12 @@ impl Hub<'_> {
         // The frames, decoded by two workers at once split at the sync frame nearest the middle
         // (one decoder alone falls short of 8x real time at 1080p60), each skipping the sound.
         let n = v["frames"].as_i64().unwrap_or(0);
-        let split = sync.iter().copied().filter(|&k| k > 0 && k < n).min_by_key(|&k| (k - n / 2).abs()).unwrap_or(n);
+        let split = sync
+            .iter()
+            .copied()
+            .filter(|&k| k > 0 && k < n)
+            .min_by_key(|&k| (k - n / 2).abs())
+            .unwrap_or(n);
         let mut readers = vec![(worker, 0, split.min(n))];
         if split < n {
             readers.push((self.fresh_decoder(&caps)?, split, n));
@@ -234,7 +335,9 @@ impl Hub<'_> {
             let head = stream(w, d.path, "luma", Some([*from, *to]))?;
             let mut skip = vec![0u8; head["audio"]["bytes"].as_u64().unwrap_or(0) as usize];
             if !skip.is_empty() && !w.take(&mut skip) {
-                return Err(json!({"outcome": "failed", "code": "delivery_unread", "what": "the decode worker ended in the sound"}));
+                return Err(
+                    json!({"outcome": "failed", "code": "delivery_unread", "what": "the decode worker ended in the sound"}),
+                );
             }
             // export.color: the written tags and the range the decoder gives the first frame.
             if i == 0 {
@@ -245,8 +348,15 @@ impl Hub<'_> {
         if !issues.is_empty() {
             return Err(failed("export.fidelity", issues));
         }
-        fidelity["samples"] = sound.as_ref().map_or(Value::Null, |(_, ch, g)| json!(g.len() / ch));
-        Ok(Read { fidelity, av_offset, edit_list, pcm: sound })
+        fidelity["samples"] = sound
+            .as_ref()
+            .map_or(Value::Null, |(_, ch, g)| json!(g.len() / ch));
+        Ok(Read {
+            fidelity,
+            av_offset,
+            edit_list,
+            pcm: sound,
+        })
     }
 
     /// The decoded sound held to the raw PCM: trimmed by its own edit list, exactly the raw
@@ -254,15 +364,27 @@ impl Hub<'_> {
     /// correlation of at least 0.99. The trimmed sound, the measured lag and the edit list's
     /// start.
     #[allow(clippy::too_many_arguments)]
-    fn read_sound(&self, d: &Delivery, a: &Value, movie: Option<i64>, decoded: &[f32], raw: &[f32], channels: usize, issues: &mut Vec<Value>) -> (Option<Vec<f32>>, Option<i64>, i64) {
+    fn read_sound(
+        &self,
+        d: &Delivery,
+        a: &Value,
+        movie: Option<i64>,
+        decoded: &[f32],
+        raw: &[f32],
+        channels: usize,
+        issues: &mut Vec<Value>,
+    ) -> (Option<Vec<f32>>, Option<i64>, i64) {
         let ch = a["channels"].as_u64().unwrap_or(channels as u64).max(1) as usize;
         let rate = a["sample_rate"].as_i64().unwrap_or(1).max(1);
         let movie = movie.unwrap_or(rate).max(1);
-        let edit = a["edits"].as_array().and_then(|e| e.iter().find(|e| e["media_time"].as_i64() != Some(-1)));
+        let edit = a["edits"]
+            .as_array()
+            .and_then(|e| e.iter().find(|e| e["media_time"].as_i64() != Some(-1)));
         let (media_time, duration) = match edit {
             Some(e) => (
                 e["media_time"].as_i64().unwrap_or(0),
-                (i128::from(e["duration"].as_i64().unwrap_or(0)) * i128::from(rate) / i128::from(movie)) as i64,
+                (i128::from(e["duration"].as_i64().unwrap_or(0)) * i128::from(rate)
+                    / i128::from(movie)) as i64,
             ),
             None => (0, (decoded.len() / ch) as i64),
         };
@@ -299,11 +421,24 @@ impl Hub<'_> {
             let mut i = issue("export.fidelity", None, "the delivery's channels are swapped: channel 0 holds the raw channel 1 and channel 1 the raw channel 0".into());
             i["channels"] = json!([0, 1]);
             issues.push(i);
-        } else if let Some((c, m)) = matched.iter().enumerate().find(|(_, m)| m.lag != 0 || m.correlation < 0.99) {
-            let why = if m.lag == priming && priming != 0 { format!(": the encoder's priming, {priming} samples, isn't removed") } else { String::new() };
-            let mut i = issue("export.fidelity", None, format!(
+        } else if let Some((c, m)) = matched
+            .iter()
+            .enumerate()
+            .find(|(_, m)| m.lag != 0 || m.correlation < 0.99)
+        {
+            let why = if m.lag == priming && priming != 0 {
+                format!(": the encoder's priming, {priming} samples, isn't removed")
+            } else {
+                String::new()
+            };
+            let mut i =
+                issue(
+                    "export.fidelity",
+                    None,
+                    format!(
                 "channel {c} best matches the raw PCM {} samples {}, at correlation {:.4}{why}",
-                m.lag.abs(), if m.lag >= 0 { "late" } else { "early" }, m.correlation));
+                m.lag.abs(), if m.lag >= 0 { "late" } else { "early" }, m.correlation),
+                );
             i["lag"] = json!(m.lag);
             i["priming"] = json!(priming);
             i["correlation"] = json!(m.correlation);
@@ -316,16 +451,34 @@ impl Hub<'_> {
     /// closer to its own than to a neighbour that differs, luma (and alpha) above the floor.
     /// `readers` are the decode workers streaming the delivery's frames, each from its first frame
     /// up to the next one's.
-    fn read_frames(&mut self, d: &Delivery, readers: &mut [(Helper, i64, i64)], n: i64, v: &Value, issues: &mut Vec<Value>) -> Result<Value, Value> {
+    fn read_frames(
+        &mut self,
+        d: &Delivery,
+        readers: &mut [(Helper, i64, i64)],
+        n: i64,
+        v: &Value,
+        issues: &mut Vec<Value>,
+    ) -> Result<Value, Value> {
         let want = d.frames.end - d.frames.start;
         if n != want {
-            issues.push(issue("export.fidelity", None, format!("the delivery holds {n} frames, not the receipt's {want}")));
+            issues.push(issue(
+                "export.fidelity",
+                None,
+                format!("the delivery holds {n} frames, not the receipt's {want}"),
+            ));
         }
         let px = d.size.map(u32::from);
         let plane = (px[0] * px[1]) as usize;
-        let gpu = self.gpu3().map(|g| g.device().clone()).ok_or_else(|| json!({"code": "gpu_unavailable"}))?;
+        let gpu = self
+            .gpu3()
+            .map(|g| g.device().clone())
+            .ok_or_else(|| json!({"code": "gpu_unavailable"}))?;
         let mut cmp = FrameChecks::new(&gpu.device).compare(&gpu.device, &gpu.queue, px);
-        let mut hasher = deep_gpu::blake3::Blake3::new(&gpu.device, Default::default()).frames(&gpu.device, &gpu.queue, px);
+        let mut hasher = deep_gpu::blake3::Blake3::new(&gpu.device, Default::default()).frames(
+            &gpu.device,
+            &gpu.queue,
+            px,
+        );
         let mut sched = Scheduler::new(&self.startup.sealed, self.options());
         let mut session: DocSession = self.new_session();
         session.load(&mut sched, d.doc);
@@ -338,30 +491,47 @@ impl Hub<'_> {
         let mut buf = Vec::new();
         let mut decode_seconds: Option<f64> = None;
         for i in 0..n {
-            let r = readers.iter().position(|(_, from, to)| *from <= i && i < *to).unwrap_or(0);
+            let r = readers
+                .iter()
+                .position(|(_, from, to)| *from <= i && i < *to)
+                .unwrap_or(0);
             if i > 0 && i == readers[r].1 {
                 // The worker before has sent its last frame: its decode time.
-                let took = readers[r - 1].0.hear().and_then(|e| e["decode_seconds"].as_f64());
+                let took = readers[r - 1]
+                    .0
+                    .hear()
+                    .and_then(|e| e["decode_seconds"].as_f64());
                 decode_seconds = longer(decode_seconds, took);
             }
             if let Err(e) = next_frame(&mut readers[r].0, &mut buf) {
-                issues.push(issue("export.fidelity", Some(d.frames.start + i), format!("frame {} doesn't decode: {e}", d.frames.start + i)));
+                issues.push(issue(
+                    "export.fidelity",
+                    Some(d.frames.start + i),
+                    format!("frame {} doesn't decode: {e}", d.frames.start + i),
+                ));
                 return Ok(Value::Null);
             }
             if i >= want {
                 continue;
             }
             while drawn <= (i + 1).min(want - 1) {
-                levels.insert(drawn, self.redraw(d, &mut sched, &mut session, drawn, &mut hasher, &mut cmp)?);
+                levels.insert(
+                    drawn,
+                    self.redraw(d, &mut sched, &mut session, drawn, &mut hasher, &mut cmp)?,
+                );
                 levels.retain(|j, _| *j + 2 > i);
                 drawn += 1;
             }
             let k = d.frames.start + i;
-            let got = cmp.compare(Plane::Luma, &buf[..plane.min(buf.len())], i).map_err(lost)?;
+            let got = cmp
+                .compare(Plane::Luma, &buf[..plane.min(buf.len())], i)
+                .map_err(lost)?;
             let own = got[0].1;
             let luma = (rules::psnr(own.sse, own.samples), own.ssim);
             let sums = levels.get(&i).copied().unwrap_or_default();
-            let mut ok = meets(luma.0, luma.1, floor, || level_kept(&buf[..plane.min(buf.len())], sums[0]));
+            let mut ok = meets(luma.0, luma.1, floor, || {
+                level_kept(&buf[..plane.min(buf.len())], sums[0])
+            });
             // A neighbour that differs is one the floor tells apart: a frame within the floor of
             // its own is true to it, however close a neighbour within the floor too may read.
             if !ok {
@@ -372,9 +542,14 @@ impl Hub<'_> {
                 }
             }
             if v["alpha"] == json!(true) && buf.len() >= 2 * plane {
-                let a = cmp.compare(Plane::Alpha, &buf[plane..2 * plane], i).map_err(lost)?[0].1;
+                let a = cmp
+                    .compare(Plane::Alpha, &buf[plane..2 * plane], i)
+                    .map_err(lost)?[0]
+                    .1;
                 let a = (rules::psnr(a.sse, a.samples), a.ssim);
-                ok &= meets(a.0, a.1, floor, || level_kept(&buf[plane..2 * plane], sums[1]));
+                ok &= meets(a.0, a.1, floor, || {
+                    level_kept(&buf[plane..2 * plane], sums[1])
+                });
                 alpha = Some(alpha.map_or(a, |(p, s): (f64, f64)| (p.min(a.0), s.min(a.1))));
             }
             if !ok {
@@ -384,11 +559,18 @@ impl Hub<'_> {
         }
         // The workers decode at once: the delivery's decode takes the longer of their times.
         if let Some((last, _, _)) = readers.last_mut() {
-            decode_seconds = longer(decode_seconds, last.hear().and_then(|e| e["decode_seconds"].as_f64()));
+            decode_seconds = longer(
+                decode_seconds,
+                last.hear().and_then(|e| e["decode_seconds"].as_f64()),
+            );
         }
         let worker = &mut readers[0].0;
         if let Some((k, j)) = closer {
-            issues.push(issue("export.fidelity", Some(k), format!("decoded frame {k} is closer to raw frame {j} than to its own")));
+            issues.push(issue(
+                "export.fidelity",
+                Some(k),
+                format!("decoded frame {k} is closer to raw frame {j} than to its own"),
+            ));
         }
         let mut sorted = scores.clone();
         sorted.sort_by(|a, b| a.1.total_cmp(&b.1));
@@ -398,8 +580,22 @@ impl Hub<'_> {
             .map(|(k, p, s)| json!({"frame": k, "psnr_y": finite(*p), "ssim": s}))
             .collect();
         if let Some(k) = first_bad {
-            let mut i = issue("export.fidelity", Some(k), format!("frame {k} is the first under the {floor} dB floor; the worst frames: {}",
-                worst.iter().map(|w| format!("frame {} at {:.2} dB", w["frame"], w["psnr_y"].as_f64().unwrap_or(f64::INFINITY))).collect::<Vec<_>>().join(", ")));
+            let mut i = issue(
+                "export.fidelity",
+                Some(k),
+                format!(
+                    "frame {k} is the first under the {floor} dB floor; the worst frames: {}",
+                    worst
+                        .iter()
+                        .map(|w| format!(
+                            "frame {} at {:.2} dB",
+                            w["frame"],
+                            w["psnr_y"].as_f64().unwrap_or(f64::INFINITY)
+                        ))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ),
+            );
             i["floor"] = json!(floor);
             i["frames"] = json!(worst.iter().map(|w| w["frame"].clone()).collect::<Vec<_>>());
             i["worst_1pct"] = json!(worst);
@@ -411,23 +607,38 @@ impl Hub<'_> {
         let min_p = scores.iter().map(|s| s.1).fold(f64::INFINITY, f64::min);
         let min_s = scores.iter().map(|s| s.2).fold(1.0, f64::min);
         let alpha = alpha.map_or(Value::Null, |(p, s)| json!({"psnr": finite(p), "ssim": s}));
-        Ok(json!({"frames": n, "floor": {"psnr_y": floor}, "psnr_y": finite(min_p), "ssim": min_s, "alpha": alpha, "worst_1pct": worst,
-            "decode_seconds": decode_seconds}))
+        Ok(
+            json!({"frames": n, "floor": {"psnr_y": floor}, "psnr_y": finite(min_p), "ssim": min_s, "alpha": alpha, "worst_1pct": worst,
+            "decode_seconds": decode_seconds}),
+        )
     }
 
     /// The delivery's frame `i` (in presentation order) decoded through its own tags, as a PNG in
     /// the evidence store: its SHA-256.
     fn picture(&self, worker: &mut Helper, path: &Path, i: i64, size: [u16; 2]) -> Option<String> {
         let out = std::env::temp_dir().join(format!("deep-157-picture-{}-{i}", std::process::id()));
-        let reply = worker.ask(&json!({"op": "decode", "path": path, "out": out, "frames": [i], "format": "bgra"}));
-        let streams = reply.pointer("/decoded/streams").and_then(Value::as_array).cloned().unwrap_or_default();
-        let file = streams.iter().find(|s| s["type"] == "video").and_then(|s| s["frames"][0]["file"].as_str()).map(|f| out.join(f));
-        let png = file.and_then(|f| std::fs::read(f).ok()).filter(|b| b.len() == usize::from(size[0]) * usize::from(size[1]) * 4).map(|mut b| {
-            for p in b.as_chunks_mut::<4>().0 {
-                p.swap(0, 2);
-            }
-            crate::snapshot::png(b, size)
-        });
+        let reply = worker.ask(
+            &json!({"op": "decode", "path": path, "out": out, "frames": [i], "format": "bgra"}),
+        );
+        let streams = reply
+            .pointer("/decoded/streams")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        let file = streams
+            .iter()
+            .find(|s| s["type"] == "video")
+            .and_then(|s| s["frames"][0]["file"].as_str())
+            .map(|f| out.join(f));
+        let png = file
+            .and_then(|f| std::fs::read(f).ok())
+            .filter(|b| b.len() == usize::from(size[0]) * usize::from(size[1]) * 4)
+            .map(|mut b| {
+                for p in b.as_chunks_mut::<4>().0 {
+                    p.swap(0, 2);
+                }
+                crate::snapshot::png(b, size)
+            });
         let _ = std::fs::remove_dir_all(&out);
         crate::evidence::put(&self.scenario.evidence, &png?).ok()
     }
@@ -435,32 +646,57 @@ impl Hub<'_> {
     /// Frame `j` of the delivery drawn again in the check's own session (or, planted, the first
     /// pass's copy), used only if its hash equals the receipt's, then kept on the GPU for the
     /// comparison. A frame that draws differently stops the export, naming it.
-    fn redraw(&mut self, d: &Delivery, sched: &mut Scheduler<'_>, session: &mut DocSession, j: i64, hasher: &mut deep_gpu::blake3::Frames, cmp: &mut Compare) -> Result<[u64; 2], Value> {
+    fn redraw(
+        &mut self,
+        d: &Delivery,
+        sched: &mut Scheduler<'_>,
+        session: &mut DocSession,
+        j: i64,
+        hasher: &mut deep_gpu::blake3::Frames,
+        cmp: &mut Compare,
+    ) -> Result<[u64; 2], Value> {
         let k = d.frames.start + j;
         let bgra = match d.kept {
             Some(kept) => kept[j as usize].clone(),
             None => {
                 let (mut px, _) = self
                     .export_frame(sched, session, d.doc, k * d.frame, d.job.size, !d.job.alpha)
-                    .map_err(|u| super::stopped(k, u.code, &format!("frame {k} can't be drawn again: {}", u.code)))?;
+                    .map_err(|u| {
+                        super::stopped(
+                            k,
+                            u.code,
+                            &format!("frame {k} can't be drawn again: {}", u.code),
+                        )
+                    })?;
                 for p in px.as_chunks_mut::<4>().0 {
                     p.swap(0, 2);
                 }
                 px
             }
         };
-        let lost = |_| super::stopped(k, "device_lost", &format!("the GPU device was lost at frame {k}"));
+        let lost = |_| {
+            super::stopped(
+                k,
+                "device_lost",
+                &format!("the GPU device was lost at frame {k}"),
+            )
+        };
         let mut digest = hasher.push(&bgra).map_err(lost)?;
         if digest.is_none() {
             digest = hasher.finish().map_err(lost)?;
         }
         if digest.as_ref() != d.hashes.get(j as usize) {
-            return Err(json!({"outcome": "stopped", "code": "export.fidelity", "frame": k, "issues": [{"check": "export.fidelity",
+            return Err(
+                json!({"outcome": "stopped", "code": "export.fidelity", "frame": k, "issues": [{"check": "export.fidelity",
                 "code": "export.fidelity", "frame": k, "what": format!("frame {k} draws differently the second time: its hash {} isn't the receipt's {}",
-                    digest.map(hex).unwrap_or_default(), d.hashes.get(j as usize).map(hex).unwrap_or_default())}]}));
+                    digest.map(hex).unwrap_or_default(), d.hashes.get(j as usize).map(hex).unwrap_or_default())}]}),
+            );
         }
         cmp.reference(j, &bgra, d.job.premultiplied).map_err(lost)?;
-        Ok(deep_gpu::frame_checks::plane_sums(&bgra, d.job.premultiplied))
+        Ok(deep_gpu::frame_checks::plane_sums(
+            &bgra,
+            d.job.premultiplied,
+        ))
     }
 
     /// A PNG sequence's fidelity is exact: each decoded frame's BGRA8 bytes hash equal to its raw
@@ -471,16 +707,33 @@ impl Hub<'_> {
         let mut issues = Vec::new();
         let want = d.frames.end - d.frames.start;
         if n != want {
-            issues.push(issue("export.fidelity", None, format!("the delivery holds {n} frames, not the receipt's {want}")));
+            issues.push(issue(
+                "export.fidelity",
+                None,
+                format!("the delivery holds {n} frames, not the receipt's {want}"),
+            ));
         }
-        let gpu = self.gpu3().map(|g| g.device().clone()).ok_or_else(|| json!({"code": "gpu_unavailable"}))?;
-        let mut hasher = deep_gpu::blake3::Blake3::new(&gpu.device, Default::default()).frames(&gpu.device, &gpu.queue, d.size.map(u32::from));
+        let gpu = self
+            .gpu3()
+            .map(|g| g.device().clone())
+            .ok_or_else(|| json!({"code": "gpu_unavailable"}))?;
+        let mut hasher = deep_gpu::blake3::Blake3::new(&gpu.device, Default::default()).frames(
+            &gpu.device,
+            &gpu.queue,
+            d.size.map(u32::from),
+        );
         let mut buf = Vec::new();
         for i in 0..n.min(want) {
             let k = d.frames.start + i;
             let digest = match next_frame(worker, &mut buf) {
                 Ok(_) if buf.len() as u64 == u64::from(d.size[0]) * u64::from(d.size[1]) * 4 => {
-                    let lost = |_| super::stopped(k, "device_lost", "the GPU device was lost reading the delivery");
+                    let lost = |_| {
+                        super::stopped(
+                            k,
+                            "device_lost",
+                            "the GPU device was lost reading the delivery",
+                        )
+                    };
                     match hasher.push(&buf).map_err(lost)? {
                         Some(h) => Some(h),
                         None => hasher.finish().map_err(lost)?,
@@ -489,14 +742,23 @@ impl Hub<'_> {
                 _ => None,
             };
             if digest.as_ref() != d.hashes.get(i as usize) {
-                issues.push(issue("export.fidelity", Some(k), format!("frame {k}: its decoded PNG isn't its raw frame by hash")));
+                issues.push(issue(
+                    "export.fidelity",
+                    Some(k),
+                    format!("frame {k}: its decoded PNG isn't its raw frame by hash"),
+                ));
                 break;
             }
         }
         if !issues.is_empty() {
             return Err(failed("export.fidelity", issues));
         }
-        Ok(Read { fidelity: json!({"frames": n, "exact": true}), av_offset: None, edit_list: None, pcm: None })
+        Ok(Read {
+            fidelity: json!({"frames": n, "exact": true}),
+            av_offset: None,
+            edit_list: None,
+            pcm: None,
+        })
     }
 }
 
@@ -515,22 +777,44 @@ fn sync_issues(d: &Delivery, pcm: &[f32], channels: usize, hz: u32, aac: bool) -
         let white: u64 = r.histogram[250..].iter().map(|&n| u64::from(n)).sum();
         // The frame that shows whole second s: ⌊s ÷ Δ⌋ = k.
         let s = (k * d.frame + flicks - 1) / flicks;
-        if r.pixels == 0 || (white as f64) < 0.98 * r.pixels as f64 || s < 1 || (s * flicks) / d.frame != k {
+        if r.pixels == 0
+            || (white as f64) < 0.98 * r.pixels as f64
+            || s < 1
+            || (s * flicks) / d.frame != k
+        {
             continue;
         }
         let at = super::span_at(k, d.frame, hz) - start;
-        let Some(lag) = rules::burst_lag(&left, &burst, at, MAX_LAG) else { continue };
+        let Some(lag) = rules::burst_lag(&left, &burst, at, MAX_LAG) else {
+            continue;
+        };
         // A white frame with no burst near it is no sync mark: the burst must be there, its shape
         // matching the analytic burst's (normalized correlation at least 0.9).
         let from = usize::try_from(at + lag).unwrap_or(usize::MAX);
-        let Some(window) = left.get(from..from.saturating_add(burst.len())) else { continue };
-        let dot = |a: &[f32], b: &[f32]| a.iter().zip(b).map(|(x, y)| f64::from(*x) * f64::from(*y)).sum::<f64>();
-        let shape = dot(window, &burst) / (dot(window, window) * dot(&burst, &burst)).sqrt().max(f64::MIN_POSITIVE);
+        let Some(window) = left.get(from..from.saturating_add(burst.len())) else {
+            continue;
+        };
+        let dot = |a: &[f32], b: &[f32]| {
+            a.iter()
+                .zip(b)
+                .map(|(x, y)| f64::from(*x) * f64::from(*y))
+                .sum::<f64>()
+        };
+        let shape = dot(window, &burst)
+            / (dot(window, window) * dot(&burst, &burst))
+                .sqrt()
+                .max(f64::MIN_POSITIVE);
         if shape < 0.9 {
             continue;
         }
         if lag.abs() > i64::from(aac) {
-            let mut i = issue("export.sync", Some(k), format!("second {s}: the burst is {lag} samples late against frame {k}, which shows it"));
+            let mut i = issue(
+                "export.sync",
+                Some(k),
+                format!(
+                    "second {s}: the burst is {lag} samples late against frame {k}, which shows it"
+                ),
+            );
             i["second"] = json!(s);
             i["lag"] = json!(lag);
             out.push(i);
@@ -576,5 +860,9 @@ fn longer(a: Option<f64>, b: Option<f64>) -> Option<f64> {
 
 /// A PSNR as JSON: infinite (identical) as null.
 fn finite(x: f64) -> Value {
-    if x.is_finite() { json!(x) } else { Value::Null }
+    if x.is_finite() {
+        json!(x)
+    } else {
+        Value::Null
+    }
 }

@@ -372,6 +372,8 @@
     "since": "R2",
     "stability": "preview",
     "tracking": "#200",
+    "preview_since": "R2",
+    "decide_by": "R5",
     "entry": {
       "type": "object",
       "properties": {

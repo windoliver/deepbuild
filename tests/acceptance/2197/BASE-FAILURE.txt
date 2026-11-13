@@ -1,0 +1,179 @@
+Issue: #2197 (deep_status says where a session starts: the repo's checks, its open asks and its open items)
+Base: d199a9f7dc82a7f8f2856c75d8a5a0c39305a289 (a clean worktree, no implementation)
+Acceptance tests: tests/acceptance/2197, a blind draft from the issue, the design and the base.
+Command: NO_COLOR=1 node node_modules/vitest/vitest.mjs run --no-file-parallelism tests/acceptance/2197
+When: 2026-11-13T01:19:45Z to 01:19:53Z, from <checkout>, under a throttle test grant.
+Machine: Mac17,10, Apple M5 Max, 64 GiB, macOS 27.2, on AC power; Node v24.22.2. 1-minute load average 20.47 at the
+start and 19.63 at the end, on 18 cores (other sessions' work): over half the cores, so no timing here could count,
+and none was taken.
+Built first: scripts/lease npm run build --workspaces; cargo build --locked -p deep-hook.
+Result: Test Files 3 failed | 1 passed (4); Tests 7 failed | 2 passed | 1 skipped (10); 8.32 s; exit 1.
+Paths: <checkout> is the checkout the run was made in. vitest's code-frame lines are dropped; nothing else is cut.
+The output's first and last lines and its "exit 1" are the wrapper script's; vitest's "Start at" is local time.
+
+This is the second run. The first, at 01:17:10Z, reached no assertion about deep_status: deep-hook wasn't built, so
+the seven tests that start an unplanted hub stopped at "BLOCKED: the hub didn't start: deep hub: the core stopped:
+Error: no deep-hook is built under <checkout>/target; run cargo build -p deep-hook first" (8 failed, 1 passed,
+1 skipped; the plant test failed as it does below). deep-hook was built and the suite run once more. No file of
+the suite changed in between.
+
+What the output shows. Each failure is at an expect of the test's own; the line given is that expect's.
+
+1 #2197.b904fcd1  FAIL at start.test.ts:22. The reply is {session, gates, claims}: it lists neither unit nor e2e.
+2 #2197.c8fb2936  FAIL at start.test.ts:29. The reply doesn't hold the ask's handle, so neither its state, its
+                  default nor when it takes it.
+3 #2197.b02b3f39  FAIL at start.test.ts:38. The reply doesn't hold the open item's text.
+4 #2197.def48d2c  Two tests, both FAIL.
+                  - others.test.ts:25, the first test's last assertion: the reply holds no ask, so not the session's
+                    own. The assertion before it held: the base lists no ask, so it shows none of the other
+                    session's. The test fails here for the missing list, not for a leak.
+                  - others.test.ts:37, the plant test's first assertion: the hub doesn't start, "DEEP_HUB_PLANT=
+                    status-lists-every-ask names no planted program". The plant is the implementer's to add.
+5 #2197.e42c122a  SKIPPED, which is INCONCLUSIVE and never a pass. budget.test.ts skips its first test, before it
+                  builds anything, when #1551's timingProblem finds the machine unfit to time on; the load above is
+                  over half of 18 cores. The output prints the skip as a count ("2 tests | 1 skipped"), not its
+                  note. So this run shows nothing of criterion 5 on the base, for or against.
+
+Passing at the base, and why:
+- scope.test.ts, first test (#2197.scope session, gates and claims stay as they are): a guard. It holds the issue's
+  two replies under What happens today, and that deep_status takes no parameter; the base already does both.
+- budget.test.ts, second test (#2197.rule): it feeds the timing rule planted readings and starts no hub. Its three
+  lines are in the output.
+
+Failing with no criterion's ID (#2197.scope, the Scope's lines):
+- others.test.ts:52: the reply doesn't hold the session's own open item.
+- scope.test.ts:45: deep_status's description names neither asks nor open items.
+
+Output:
+
+start 2026-11-13T01:19:45Z  load: { 20.47 20.27 17.71 }
+
+ RUN  v5.0.5 <checkout>
+
+ ❯ tests/acceptance/2197/start.test.ts (3 tests | 3 failed) 3572ms
+   × #2197.b904fcd1 in a repo whose spec names the checks unit and e2e, a new session's deep_status lists both names 1670ms
+   × #2197.c8fb2936 a session with one open taste ask: its deep_status holds the ask's handle, its state, its default and when it takes it 1079ms
+   × #2197.b02b3f39 a session that recorded an open item: its deep_status holds the item's text 781ms
+ ❯ tests/acceptance/2197/others.test.ts (3 tests | 3 failed) 2558ms
+   × #2197.def48d2c two sessions with an ask each: neither session's deep_status holds the other's ask, and each holds its own 1122ms
+   × #2197.def48d2c (wrong program) a planted status that lists every session's asks fails, naming the other session's ask 348ms
+   × #2197.scope nothing of another session is listed: a session's deep_status holds its own open item, and neither the other session's open item nor its ID 1046ms
+ ❯ tests/acceptance/2197/scope.test.ts (2 tests | 1 failed) 1530ms
+   ✓ #2197.scope session, gates and claims stay as they are, on a session's first call and after a claim with no run yet, and deep_status takes no parameter 748ms
+   × #2197.scope deep_status's description, and the Building blocks rows that name it, say what it answers: the checks, the open asks and the open items 744ms
+stdout | tests/acceptance/2197/budget.test.ts > #2197.rule the timing rule fails a status over 100 ms in all five runs, and reads runs that straddle it as INCONCLUSIVE, never a pass
+a planted slow status: 131.0, 134.0, 138.0, 140.0, 142.0 against 100 (margin 8%)
+a status at the limit: 92.0, 97.0, 101.0, 104.0, 99.0 against 100 (margin 13%)
+a fast status: 4.0, 5.0, 5.0, 6.0, 7.0 against 100 (margin 75%)
+
+ ✓ tests/acceptance/2197/budget.test.ts (2 tests | 1 skipped) 150ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 7 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/2197/others.test.ts > #2197.def48d2c two sessions with an ask each: neither session's deep_status holds the other's ask, and each holds its own
+AssertionError: session 71e4511e-8bc2-46aa-8b19-d7a393b3d047's deep_status holds its own open ask ask:01M797TK5NK8P2QTTG2T5HGTBN; a status that lists no ask can't show it lists only its own: {"session":"71e4511e-8bc2-46aa-8b19-d7a393b3d047","gates":{"watch_only":false,"reason":null},"claims":[]}: expected 0 to be greater than 0
+ ❯ tests/acceptance/2197/others.test.ts:25:218
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/7]⎯
+
+ FAIL  tests/acceptance/2197/others.test.ts > #2197.def48d2c (wrong program) a planted status that lists every session's asks fails, naming the other session's ask
+AssertionError: the hub must start with DEEP_HUB_PLANT=status-lists-every-ask (README: Wrong programs): Error: BLOCKED: the hub didn't start with DEEP_HUB_PLANT=status-lists-every-ask: file://<checkout>/packages/hub/dist/plant.js:111
+        throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
+              ^
+
+Error: DEEP_HUB_PLANT=status-lists-every-ask names no planted program
+    at plantOf (file://<checkout>/packages/hub/dist/plant.js:111:15)
+    at runHub (file://<checkout>/packages/hub/dist/server.js:1646:19)
+    at hubCommand (file://<checkout>/packages/hub/dist/hub-command.js:31:28)
+    at file://<checkout>/packages/cli/dist/main.js:341:30
+
+Node.js v24.22.2
+: expected undefined to be defined
+ ❯ tests/acceptance/2197/others.test.ts:37:99
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/7]⎯
+
+ FAIL  tests/acceptance/2197/others.test.ts > #2197.scope nothing of another session is listed: a session's deep_status holds its own open item, and neither the other session's open item nor its ID
+AssertionError: session 18cb9b5f-46e2-493c-b7d7-a9ea9ad10d66's deep_status holds its own open item, "The receipt email still has no plain-text part, batch q4ee9473a"; a status that lists no item can't show it lists only its own: {"session":"18cb9b5f-46e2-493c-b7d7-a9ea9ad10d66","gates":{"watch_only":false,"reason":null},"claims":[]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ tests/acceptance/2197/others.test.ts:52:218
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/7]⎯
+
+ FAIL  tests/acceptance/2197/scope.test.ts > #2197.scope deep_status's description, and the Building blocks rows that name it, say what it answers: the checks, the open asks and the open items
+AssertionError: deep_status's description names what it answers: "Read where your session stands: the hub's gates, and each of your claims with its runs, its verdict and any run that contradicts what you predicted. Its result does not prove your work is done: only a verdict the checks reached says so, and a claim with no verdict is still open. Verdict, never: Written by an agent or an extension, or a PASS resting on a model's judgment alone: each assertion names its oracle, code, model or person. Task definition of done, never: Drafted from the working session's work, or changed by it.": expected [ 'asks', 'open items' ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "asks",
++   "open items",
++ ]
+
+ ❯ tests/acceptance/2197/scope.test.ts:45:101
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/7]⎯
+
+ FAIL  tests/acceptance/2197/start.test.ts > #2197.b904fcd1 in a repo whose spec names the checks unit and e2e, a new session's deep_status lists both names
+AssertionError: deep_status lists the checks the repo's spec names, unit and e2e (today the reply has no such field): {"session":"f3477048-c254-4985-8b23-b23a07dc9e0f","gates":{"watch_only":false,"reason":null},"claims":[]}: expected [ 'unit', 'e2e' ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "unit",
++   "e2e",
++ ]
+
+ ❯ tests/acceptance/2197/start.test.ts:22:157
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/7]⎯
+
+ FAIL  tests/acceptance/2197/start.test.ts > #2197.c8fb2936 a session with one open taste ask: its deep_status holds the ask's handle, its state, its default and when it takes it
+AssertionError: deep_status holds the session's open taste ask: its handle, its state, its default and when it takes it (today the reply has no such field): {"session":"23fc3e64-0fa5-4ef1-8126-8a6b5592fdbd","gates":{"watch_only":false,"reason":null},"claims":[]}: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the reply doesn't hold the ask's handle ask:01M797TH6WP4KH6FMCZK0R8ZK9, so neither its state, its default (amber) nor when it takes it (1794717420000 ms, 2026-11-15T04:37:00.000Z)",
++ ]
+
+ ❯ tests/acceptance/2197/start.test.ts:29:198
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/7]⎯
+
+ FAIL  tests/acceptance/2197/start.test.ts > #2197.b02b3f39 a session that recorded an open item: its deep_status holds the item's text
+AssertionError: deep_status holds the text of the open item the session recorded, "The empty cart page still needs its copy checked, batch qa241234" (today the reply has no such field): {"session":"20ea5c2a-bf76-4639-bc12-a12d1f8a3415","gates":{"watch_only":false,"reason":null},"claims":[]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ tests/acceptance/2197/start.test.ts:38:166
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/7]⎯
+
+
+ Test Files  3 failed | 1 passed (4)
+      Tests  7 failed | 2 passed | 1 skipped (10)
+   Start at  17:19:45
+   Duration  8.32s (tests 97%, import 2%, transform 1%)
+
+exit 1
+end 2026-11-13T01:19:53Z  load: { 19.63 20.10 17.67 }

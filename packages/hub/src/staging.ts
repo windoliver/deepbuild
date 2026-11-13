@@ -19,19 +19,19 @@ import { createHash } from 'node:crypto';
 import { createReadStream, readFileSync } from 'node:fs';
 import { lstat, mkdir, open, readdir, readlink, realpath, rm, stat, symlink } from 'node:fs/promises';
 import { dirname, join, sep } from 'node:path';
+import { duration } from '@deepbuild/asks';
 import { gitEnv } from '@deepbuild/gate';
 import { ulid, type Connection, type EventInput } from '@deepbuild/record';
 import type { Holds } from './holds.js';
 import { deepHook } from './paths.js';
 import { refusal, Refused, STAGE_HOLD_MS, type Gated, type HookMeta, type Plant, type StageReach } from './wire.js';
 
-const UNITS: Record<string, number> = { m: 60_000, h: 3_600_000, d: 86_400_000 };
 /** The ceilings and the set time when config.json says nothing. */
-const DEFAULTS = { files: 10_000, seconds: 10, keepMs: 3 * UNITS.d! };
+const DEFAULTS = { files: 10_000, seconds: 10, keepMs: 3 * 86_400_000 };
 /** The seconds ceiling is held this far below the hold, leaving room to raise the ask. */
 const MAX_SECONDS = STAGE_HOLD_MS / 1000 - 5;
 /** A copy with no staging in the record (a crash between clone and append) is let go after this long. */
-const ORPHAN_MS = UNITS.h!;
+const ORPHAN_MS = 3_600_000;
 /** How many edited files are copied at once. */
 const COPIES = 8;
 /** What git is given to read a tree or a stash, inside the hold. */
@@ -46,11 +46,11 @@ function settings(root: string): Settings {
     if (typeof config.staging === 'object' && config.staging !== null) given = config.staging;
   } catch { /* none: the defaults */ }
   const positive = (v: unknown) => typeof v === 'number' && Number.isFinite(v) && v > 0;
-  const keep = typeof given.keep === 'string' ? /^(\d+)([mhd])$/.exec(given.keep) : null;
+  const keep = duration(typeof given.keep === 'string' ? given.keep : undefined);
   return {
     files: positive(given.files) ? Math.floor(given.files as number) : DEFAULTS.files,
     seconds: Math.min(positive(given.seconds) ? (given.seconds as number) : DEFAULTS.seconds, MAX_SECONDS),
-    keepMs: keep ? Number(keep[1]) * UNITS[keep[2]!]! : DEFAULTS.keepMs,
+    keepMs: keep ?? DEFAULTS.keepMs,
   };
 }
 

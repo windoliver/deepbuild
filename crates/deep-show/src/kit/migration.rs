@@ -210,6 +210,23 @@ fn migrated_field(saved: &Value, lowered: &Value) -> String {
 /// seeded param sets.
 pub fn run(hub: &mut Hub<'_>, ctx: &mut Ctx<'_>) -> Option<PartRun> {
     let module = ctx.module;
+    // The preview kinds the module removed: a document that lists one in `requires.preview` is
+    // the module's too, and must open through the removal's migration (#1802).
+    let removed: Vec<String> = hub
+        .startup
+        .sealed
+        .modules
+        .iter()
+        .filter(|m| m.name == module)
+        .flat_map(|m| m.shapes.removed.iter().map(|r| r.kind.clone()))
+        .collect();
+    let lists_removed = |doc: &Value| {
+        doc["requires"]["preview"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .any(|p| p.as_str().is_some_and(|p| removed.iter().any(|r| r == p)))
+    };
     let corpus: Vec<(String, Value)> = ctx
         .call
         .corpus
@@ -217,7 +234,7 @@ pub fn run(hub: &mut Hub<'_>, ctx: &mut Ctx<'_>) -> Option<PartRun> {
         .map(corpus_files)
         .unwrap_or_default()
         .into_iter()
-        .filter(|(_, f)| uses(hub, &f["document"], module))
+        .filter(|(_, f)| uses(hub, &f["document"], module) || lists_removed(&f["document"]))
         .collect();
     let migrated: Vec<deep_canvas::kinds::Entry> = hub
         .startup

@@ -45,5 +45,5 @@ export const doctorCommand = async (args: Args, also: () => Promise<Item[]>): Pr
 export const doctorItems = async (env: NodeJS.ProcessEnv, options: { prompt: boolean; cwd: string }): Promise<Item[]> => (await import('./doctor.js')).doctorItems(env, options);
 export { exportCommand, kindsCommand } from './canvas.js';
 export { activePlant } from './plant.js';
-export { contractAdapter, type DeprecatedNotice, type RpcEntry } from './contracts.js';
+export { contractAdapter, extendPreview, type DeprecatedNotice, type RpcEntry } from './contracts.js';
 export { rootOf } from './paths.js';

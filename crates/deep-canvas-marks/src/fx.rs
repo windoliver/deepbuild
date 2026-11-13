@@ -74,7 +74,8 @@ pub fn weights() -> [f32; 31] {
         *slot = v as f32;
         total += v;
     }
-    w.iter_mut().for_each(|v| *v = (f64::from(*v) / total) as f32);
+    w.iter_mut()
+        .for_each(|v| *v = (f64::from(*v) / total) as f32);
     w
 }
 

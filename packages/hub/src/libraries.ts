@@ -20,9 +20,9 @@ import type { ExtensionHost } from '@deepbuild/extension-host';
 import type { PlanInput } from '@deepbuild/asks';
 import { freeBytes } from './disk.js';
 import { forbiddenLicense, Packs } from './packs.js';
+import { isRecord as isObj } from '@deepbuild/contracts';
 
 type Obj = Record<string, unknown>;
-const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 const sha256 = (b: Uint8Array | string): string => createHash('sha256').update(b).digest('hex');
 const BUNDLED_TERMS: Record<string, string> = { 'https://creativecommons.org/publicdomain/zero/1.0/': 'CC0-1.0', 'https://creativecommons.org/licenses/by/4.0/': 'CC-BY-4.0' };
 

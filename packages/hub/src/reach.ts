@@ -1,10 +1,11 @@
 // Two things the hub reads from outside for a task's check (#85), each carrying nothing it doesn't need: whether the
 // host a session's API calls go to can be reached, by a bare TCP connection that sends nothing; and a Slack thread,
 // through a connector whose one method reads.
-import { readFileSync, statSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import net from 'node:net';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { enter, hold, hubSecrets, namesToken, refusedFile, valueOf, type Named } from './held.js';
 
 const TRY_MS = 1500;
 /** How often a check may look: a network task's try, and a thread's read (design: 5 s). */
@@ -65,18 +66,22 @@ export function networkCheck(): { read(): { host: string; reached: boolean; at: 
   };
 }
 
-interface Slack { token: string; you: string; api: string }
+/** slack.json as read: its token by handle (#1606), `secret:slack/token`, kept under `deepbuild/slack/token`. */
+interface Slack { file: Record<string, unknown>; you: string; api: string }
+const slackToken = (at: Record<string, unknown>): Named => ({ at, path: 'slack/token' });
 
-/** `<hub root>/slack.json`, only as your own file (mode 0600); null otherwise, and the connector is off. */
+/** `<hub root>/slack.json`, only as your own file that no one else can reach (#1606); null otherwise, and the connector is off. */
 export function slackConfig(root: string): Slack | null {
   const file = join(root, 'slack.json');
   try {
-    if ((statSync(file).mode & 0o777) !== 0o600) return null;
     const c = JSON.parse(readFileSync(file, 'utf8')) as Record<string, unknown>;
-    if (typeof c.token !== 'string' || typeof c.you !== 'string') return null;
-    return { token: c.token, you: c.you, api: typeof c.api === 'string' ? c.api.replace(/\/$/, '') : 'https://slack.com/api' };
+    if (!namesToken(c, (json) => [slackToken(json)]) || refusedFile(file) || typeof c.you !== 'string') return null;
+    return { file: c, you: c.you, api: typeof c.api === 'string' ? c.api.replace(/\/$/, '') : 'https://slack.com/api' };
   } catch { return null; }
 }
+
+/** The connector's token entered on the trusted path (#1606): its value into the store, its handle into slack.json. */
+export const enterSlackToken = (root: string, value: string): Promise<void> => enter(join(root, 'slack.json'), (json) => json, 'slack/token', value, hubSecrets(root));
 
 /** The channel and thread a Slack thread link names; null for any other link, so the token only goes to Slack's API. */
 export function slackThread(link: string): { channel: string; ts: string } | null {
@@ -97,14 +102,24 @@ export function slackThreads(root: string): { read(link: string): Promise<{ from
   type Messages = { from: string; text: string; at: number }[];
   interface Seen { at: number; busy: boolean; found: Messages; failed: string | null }
   const seen = new Map<string, Seen>();
+  const secrets = hubSecrets(root);
+  // A plain token slack.json still holds moves into the store once, as the hub starts (#1606).
+  const file = join(root, 'slack.json');
+  const moving = hold<Record<string, unknown>>(file, (c) => [slackToken(c)], secrets).then((held) => {
+    if ('refused' in held) process.stderr.write(`deep hub: the Slack connector refused: ${held.refused}\n`);
+    else if (held.moved.length) process.stderr.write(`deep hub: moved the Slack connector's token from ${file} into the OS secret store; the file now names it by handle\n`);
+  }, () => undefined);
   const fetched = async (link: string): Promise<Messages> => {
+    await moving;
     const slack = slackConfig(root);
     const thread = slackThread(link);
     if (!slack || !thread) throw new Error('no connector for this thread: check slack.json and the link');
+    const token = await valueOf(slackToken(slack.file), secrets);
+    if (token === undefined) throw new Error('no Slack token in the OS secret store: enter it with deep secret add slack token');
     const out: Messages = [];
     for (let cursor = '';;) {
       const query = new URLSearchParams({ channel: thread.channel, ts: thread.ts, limit: '200', ...(cursor ? { cursor } : {}) });
-      const reply = await fetch(`${slack.api}/conversations.replies?${query}`, { headers: { authorization: `Bearer ${slack.token}` }, redirect: 'error', signal: AbortSignal.timeout(CHECK_MS) }).catch(() => { throw new Error('Slack could not be reached with this token'); });
+      const reply = await fetch(`${slack.api}/conversations.replies?${query}`, { headers: { authorization: `Bearer ${token}` }, redirect: 'error', signal: AbortSignal.timeout(CHECK_MS) }).catch(() => { throw new Error('Slack could not be reached with this token'); });
       if (!reply.ok) throw new Error(`Slack answered HTTP ${reply.status}`);
       const body = await reply.json().catch(() => { throw new Error('Slack answered with something other than JSON'); }) as { ok?: boolean; error?: unknown; messages?: { user?: string; bot_id?: string; text?: string; ts?: string }[]; response_metadata?: { next_cursor?: string } };
       if (body.ok !== true) throw new Error(`Slack refused the read: ${typeof body.error === 'string' && /^[a-z_]{1,64}$/.test(body.error) ? body.error : 'no reason it gave can be shown'}`);

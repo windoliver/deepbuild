@@ -101,15 +101,22 @@ pub fn parse_call(name: &str, c: &Map<String, Value>) -> Option<Call> {
             doc: doc()?,
             text: c.get("text")?.as_str()?.to_string(),
         }),
-        "export" if c.contains_key("out") => crate::export::parse(c).map(Call::ExportRun),
+        "export" if c.contains_key("out") => {
+            crate::export::parse(c).map(|job| Call::ExportRun(Box::new(job)))
+        }
         "export" => {
             let frame_rate = optional(c.get("frame_rate"), pair)?;
             let sample_rate = optional(c.get("audio"), |a| whole(a.get("sample_rate")?))?;
-            let frames = optional(c.get("frames"), |f| f.as_array()?.iter().map(Value::as_i64).collect())?;
+            let frames = optional(c.get("frames"), |f| {
+                f.as_array()?.iter().map(Value::as_i64).collect()
+            })?;
             let timecode = optional(c.get("timecode"), |t| {
                 let start = optional(t.get("start"), |s| Some(s.as_str()?.to_string()))?;
                 let drop = optional(t.get("drop_frame"), Value::as_bool)?;
-                Some((start.unwrap_or_else(|| "00:00:00:00".into()), drop.unwrap_or(false)))
+                Some((
+                    start.unwrap_or_else(|| "00:00:00:00".into()),
+                    drop.unwrap_or(false),
+                ))
             })?;
             Some(Call::Export(Export {
                 doc: doc()?,
@@ -210,6 +217,20 @@ pub(crate) fn context_of(doc: &Value) -> TimeContext {
     if let Some(motion) = doc.as_object().and_then(|m| read_motion(m).ok()) {
         for m in motion.markers {
             ctx.markers.insert(m.id, (m.start, m.end));
+        }
+    }
+    // #509: the script's spoken times, as DeepBuild wrote them.
+    for (name, v) in doc
+        .pointer("/script/spoken")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten()
+    {
+        if let (Some(a), Some(b)) = (
+            v.get(0).and_then(Value::as_i64),
+            v.get(1).and_then(Value::as_i64),
+        ) {
+            ctx.markers.entry(name.clone()).or_insert((a, b));
         }
     }
     ctx
@@ -387,23 +408,31 @@ impl Hub<'_> {
     /// `time`: a literal's flicks in a document. A word anchor (#502), `@line.word:text#k`,
     /// resolves to the word marker the line's words record places.
     pub fn time_reply(&mut self, doc: &str, text: &str) -> Value {
-        if let Ok(Time::Word { line, text: word, k, offset }) = Time::parse(text) {
+        // #509: a word or line anchor resolves from the compiled script's spoken times.
+        let parsed = Time::parse(text);
+        if let Ok(Time::Word { .. } | Time::Anchor { .. }) = &parsed {
             let Some(document) = self.current(doc).map(|r| r.doc.clone()) else {
                 return refused("no_revision");
             };
-            let markers = self.script_of(&document).map(|s| s.markers.clone()).unwrap_or_default();
-            let prefix = format!("{}.word:{word}#", line.as_str());
-            let found: Vec<i64> = markers.iter().filter(|(name, _)| name.starts_with(&prefix)).map(|(_, t)| *t).collect();
-            let at = match k {
-                Some(k) => found.get(k as usize - 1).copied(),
-                None if found.len() == 1 => Some(found[0]),
-                None => None,
-            };
-            let offset = offset.map_or(Ok(0), |o| o.resolve(&context_of(&document)));
-            return match (at, offset) {
-                (Some(t), Ok(o)) => json!({"outcome": "resolved", "t": t + o}),
-                _ => refused("time_unresolved"),
-            };
+            if let Some(s) = self.script_of(&document) {
+                if let Some(problem) = &s.problem {
+                    return problem.clone();
+                }
+                let mut ctx = context_of(&document);
+                for (name, span) in &s.spoken {
+                    ctx.markers.entry(name.clone()).or_insert(*span);
+                }
+                if let Ok(t) = parsed
+                    .as_ref()
+                    .map_err(|_| ())
+                    .and_then(|p| p.resolve(&ctx).map_err(|_| ()))
+                {
+                    return json!({"outcome": "resolved", "t": t});
+                }
+                if let Ok(Time::Word { .. }) = parsed {
+                    return refused("time_unresolved");
+                }
+            }
         }
         match self.resolve_time(doc, &EvalTime::Literal(text.to_string())) {
             Ok(t) => json!({"outcome": "resolved", "t": t}),
@@ -444,12 +473,16 @@ impl Hub<'_> {
                 Some((start, drop)) => {
                     let tc = match deep_canvas::timecode::of_rate(p, q, *drop) {
                         Ok(tc) => tc,
-                        Err(why) => return json!({"outcome": "refused", "code": "drop_frame_rate",
-                            "frame_rate": format!("{p}/{q}"), "why": format!("drop_frame: {why}")}),
+                        Err(why) => {
+                            return json!({"outcome": "refused", "code": "drop_frame_rate",
+                            "frame_rate": format!("{p}/{q}"), "why": format!("drop_frame: {why}")})
+                        }
                     };
                     match tc.number(start) {
                         Ok(n) => Some((tc, n)),
-                        Err(why) => return json!({"outcome": "refused", "code": "bad_timecode", "why": why}),
+                        Err(why) => {
+                            return json!({"outcome": "refused", "code": "bad_timecode", "why": why})
+                        }
                     }
                 }
             };
@@ -544,7 +577,13 @@ impl Hub<'_> {
     /// and node results.
     pub fn determinism(&mut self, d: &Determinism) -> Value {
         let current = self.current_doc(&d.doc);
-        let document = match current.map(|doc| if d.session { self.played(&d.doc, &doc) } else { doc }) {
+        let document = match current.map(|doc| {
+            if d.session {
+                self.played(&d.doc, &doc)
+            } else {
+                doc
+            }
+        }) {
             Ok(doc) => doc,
             Err(reply) => return reply,
         };
@@ -667,7 +706,8 @@ impl Hub<'_> {
         let sha = self.put_png(rgba, size).map_err(|u| u.code.to_string())?;
         // #405: what hashing adds to the render, each in ms.
         let timing = json!({"render_ms": rendered.as_secs_f64() * 1e3, "hash_ms": hashed.as_secs_f64() * 1e3});
-        let mut side = json!({"pixels": sha, "nodes": nodes, "pixel_hash": pixel_hash, "timing": timing});
+        let mut side =
+            json!({"pixels": sha, "nodes": nodes, "pixel_hash": pixel_hash, "timing": timing});
         if !video.is_empty() {
             side["video"] = Value::Object(video);
         }

@@ -38,11 +38,19 @@ pub struct Seg {
 
 impl Seg {
     fn line(t: i64, c: i64, rate: Ratio) -> Seg {
-        Seg { t, c, piece: Piece::Line(rate), active: None }
+        Seg {
+            t,
+            c,
+            piece: Piece::Line(rate),
+            active: None,
+        }
     }
 
     fn inside(self, from: i64, to: i64) -> Seg {
-        Seg { active: Some((from, to)), ..self }
+        Seg {
+            active: Some((from, to)),
+            ..self
+        }
     }
 }
 
@@ -102,10 +110,24 @@ fn integral(ease: Named, u: f64) -> f64 {
 }
 
 fn gauss(ease: &Named, a: f64, b: f64) -> f64 {
-    const X: [f64; 4] = [0.183_434_642_495_649_8, 0.525_532_409_916_329, 0.796_666_477_413_626_7, 0.960_289_856_497_536_3];
-    const W: [f64; 4] = [0.362_683_783_378_362, 0.313_706_645_877_887_3, 0.222_381_034_453_374_5, 0.101_228_536_290_376_26];
+    const X: [f64; 4] = [
+        0.183_434_642_495_649_8,
+        0.525_532_409_916_329,
+        0.796_666_477_413_626_7,
+        0.960_289_856_497_536_3,
+    ];
+    const W: [f64; 4] = [
+        0.362_683_783_378_362,
+        0.313_706_645_877_887_3,
+        0.222_381_034_453_374_5,
+        0.101_228_536_290_376_26,
+    ];
     let (mid, half) = ((a + b) / 2.0, (b - a) / 2.0);
-    let sum: f64 = X.iter().zip(W).map(|(x, w)| w * (ease.at(mid + half * x) + ease.at(mid - half * x))).sum();
+    let sum: f64 = X
+        .iter()
+        .zip(W)
+        .map(|(x, w)| w * (ease.at(mid + half * x) + ease.at(mid - half * x)))
+        .sum();
     sum * half
 }
 
@@ -114,7 +136,12 @@ impl Seg {
         let x = t - self.t;
         match &self.piece {
             Piece::Line(rate) => self.c + floor_mul(x, *rate),
-            Piece::Ramp { from, to, over, ease } => {
+            Piece::Ramp {
+                from,
+                to,
+                over,
+                ease,
+            } => {
                 let u = (x as f64 / *over as f64).clamp(0.0, 1.0);
                 let share = from * u + (to - from) * integral(*ease, u);
                 self.c + (*over as f64 * share).floor() as i64
@@ -130,7 +157,12 @@ impl Seg {
     fn rate(&self, t: i64) -> f64 {
         match &self.piece {
             Piece::Line((num, den)) => *num as f64 / *den as f64,
-            Piece::Ramp { from, to, over, ease } => {
+            Piece::Ramp {
+                from,
+                to,
+                over,
+                ease,
+            } => {
                 let u = ((t - self.t) as f64 / *over as f64).clamp(0.0, 1.0);
                 from + (to - from) * ease.at(u)
             }
@@ -208,8 +240,18 @@ pub fn hold_at(at: i64, len: i64) -> Vec<Seg> {
 pub fn ramp(from: Ratio, to: Ratio, at: i64, over: i64, ease: Named) -> Vec<Seg> {
     let r = |(n, d): Ratio| n as f64 / d as f64;
     let start = floor_mul(at, from);
-    let piece = Piece::Ramp { from: r(from), to: r(to), over, ease };
-    let eased = Seg { t: at, c: start, piece, active: None };
+    let piece = Piece::Ramp {
+        from: r(from),
+        to: r(to),
+        over,
+        ease,
+    };
+    let eased = Seg {
+        t: at,
+        c: start,
+        piece,
+        active: None,
+    };
     let end = eased.child(at + over);
     vec![Seg::line(0, 0, from), eased, Seg::line(at + over, end, to)]
 }
@@ -298,7 +340,12 @@ pub fn replay(occurrences: &[i64], ends: &[i64], before: i64, after: i64, rate: 
         let run = i128::from(before + after) * i128::from(rate.1);
         let num = i128::from(rate.0);
         let end = tc + i64::try_from((run + num - 1).div_euclid(num)).unwrap_or(i64::MAX / 2);
-        let end = ends.iter().copied().filter(|e| *e > tc && *e < end).min().unwrap_or(end);
+        let end = ends
+            .iter()
+            .copied()
+            .filter(|e| *e > tc && *e < end)
+            .min()
+            .unwrap_or(end);
         segs.push(Seg::line(tc, tc - before, rate).inside(tc, end));
         segs.push(Seg::line(end, end, (1, 1)));
         free = end;
@@ -310,7 +357,11 @@ pub fn replay(occurrences: &[i64], ends: &[i64], before: i64, after: i64, rate: 
 pub fn scrub(entries: &[(i64, f64)], default: f64) -> Vec<Seg> {
     let flicks = |v: f64| (v * FLICKS_PER_SECOND as f64).floor() as i64;
     std::iter::once(Seg::line(i64::MIN / 2, flicks(default), (0, 1)))
-        .chain(entries.iter().map(|&(t, v)| Seg::line(t, flicks(v), (0, 1))))
+        .chain(
+            entries
+                .iter()
+                .map(|&(t, v)| Seg::line(t, flicks(v), (0, 1))),
+        )
         .collect()
 }
 
@@ -321,7 +372,13 @@ mod tests {
     const S: i64 = FLICKS_PER_SECOND;
 
     fn at(segs: Vec<Seg>) -> Remap {
-        Remap { id: "r".into(), target: "p".into(), segs, pending: None, clamp: true }
+        Remap {
+            id: "r".into(),
+            target: "p".into(),
+            segs,
+            pending: None,
+            clamp: true,
+        }
     }
 
     fn secs(s: f64) -> i64 {
@@ -331,7 +388,14 @@ mod tests {
     #[test]
     fn a_hitstop_rejoin_catches_up_and_a_match_in_the_run_starts_a_new_hold() {
         let r = at(hitstop_rejoin(&[S, 2 * S], secs(0.14)));
-        for (t, c) in [(1.07, 1.0), (1.2, 1.12), (1.5, 1.5), (2.1, 2.0), (2.21, 2.14), (3.0, 3.0)] {
+        for (t, c) in [
+            (1.07, 1.0),
+            (1.2, 1.12),
+            (1.5, 1.5),
+            (2.1, 2.0),
+            (2.21, 2.14),
+            (3.0, 3.0),
+        ] {
             assert_eq!(r.child(secs(t)), secs(c), "{t}");
         }
         // Held at 1.0 until 1.4, then twice the rate from there: a match at child 1.1 lands in
@@ -347,7 +411,13 @@ mod tests {
         let quad = Named::Penner(Family::Quad, Side::InOut);
         let r = at(ramp((12, 5), (1, 4), secs(1.2), secs(0.7), quad));
         assert!((r.child(secs(1.55)) as f64 / S as f64 - 3.594_583).abs() < 1e-6);
-        let smooth = at(ramp((12, 5), (1, 4), secs(1.2), secs(0.7), Named::Smoothstep));
+        let smooth = at(ramp(
+            (12, 5),
+            (1, 4),
+            secs(1.2),
+            secs(0.7),
+            Named::Smoothstep,
+        ));
         // Smoothstep over the whole ramp averages one half, as in_out_quad does.
         assert!((smooth.child(secs(1.9)) as f64 / S as f64 - 3.8075).abs() < 1e-6);
     }

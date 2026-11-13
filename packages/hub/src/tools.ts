@@ -4,10 +4,10 @@
 // which scripts/skill.mjs generates from the design's Building blocks table with the skill.
 import { readFileSync } from 'node:fs';
 import { refuse } from './wire.js';
+import { isRecord as isObj } from '@deepbuild/contracts';
 
 type Obj = Record<string, unknown>;
 type Schema = Obj;
-const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 
 const str = (description?: string, pattern?: string): Schema => ({ type: 'string', ...(pattern ? { pattern } : {}), ...(description ? { description } : {}) });
 const maybe = (schema: Schema): Schema => ({ ...schema, type: [schema.type as string, 'null'] });
@@ -167,7 +167,7 @@ const SCHEMAS: Readonly<Record<string, Schema>> = {
     path: maybe(str('field: kind@major.field for one field, or kind@major for every field of that kind.')),
   }),
   deep_job: object({
-    op: { type: 'string', enum: ['list', 'run'], description: 'list the job kinds, each with its qualified tools and their builds; run a kind on one pinned tool, returning its outputs by hash with a receipt.' },
+    op: { type: 'string', enum: ['list', 'run'], description: 'list the job kinds, each with its qualified tools, their builds and each one\'s cost: {usd} a run, 0 when free; run a kind on one pinned tool, returning its outputs by hash with a receipt.' },
     kind: maybe(str('run: the job kind, as the list names it.')),
     tool: maybe(str('run: the tool, pinned by name@version as the list names it.')),
     params: maybe(str('run: the kind\'s params as JSON text; null for its defaults.')),

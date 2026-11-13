@@ -160,7 +160,9 @@ fn world<'a>(scene: &Scene, members: impl Iterator<Item = &'a str>) -> (Vec<V3>,
                     }));
                     tris.extend(
                         mesh.indices
-                            .chunks_exact(3)
+                            .as_chunks::<3>()
+                            .0
+                            .iter()
                             .map(|t| [base + t[0], base + t[1], base + t[2]]),
                     );
                 }

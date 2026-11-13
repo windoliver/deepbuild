@@ -314,10 +314,7 @@ impl Hub<'_> {
                     .and_then(|n| n.values.first())
                     .and_then(Val::as_typed::<Built>)
                     .and_then(|b| b.mesh.clone());
-                let (Some(mesh), Some(kind)) = (
-                    mesh,
-                    EdgeKind::read(edges).ok(),
-                ) else {
+                let (Some(mesh), Some(kind)) = (mesh, EdgeKind::read(edges).ok()) else {
                     return json!({"code": "ref_unresolved", "path": format!("items/{id}/params/edges/of")});
                 };
                 let place = placement(items.get(target).unwrap_or(&Value::Null));

@@ -1,0 +1,96 @@
+#1816 acceptance suite on the base commit 4ab2750c0 (origin/main), 2026-11-10, before any #1816 code.
+Linux (the Spark), Node from .node-version, the base's node_modules; no build needed (the fixtures carry their own
+workspaces). Run from a mirror of the checkout (the job's session couldn't write into the worktree, see README);
+its path is shortened to <checkout>.
+
+  npx vitest run --root tests/acceptance/1816 --no-file-parallelism
+  Test Files 3 failed | 1 passed (4); Tests 4 failed | 1 passed | 1 skipped (6); about 3 s.
+
+Why each fails, as expected:
+- AC1 (first test) and AC2: the spine's checkout is a `git archive` copy with no .git, so the fixture task's test reads
+  `fatal: not a git repository` (exit 128) for `git rev-parse HEAD` and `git merge-base HEAD origin/main`, and the
+  criterion reads FAIL; #44 FAIL and reopened (in the fake gh).
+- AC4: `/bin/cp -cR` fails on Linux, the checkout gets no node_modules, the workspace build that needs
+  `dh1816-marker` fails, and #44 reads BLOCKED "the workspaces didn't build".
+- AC5: #13 judged alone says why it is BLOCKED; #12's entry for its part #13 is {"id":"#12.d379e39c","outcome":"BLOCKED"}, no why.
+Passes at the base, as it should: AC1's second test (no worktree of the user's repo, the checkout's git isn't the
+user's), since `git archive` makes no worktree; it guards the fix. It fails on a planted twin whose checkout() is
+`git worktree add --detach` (during: a second worktree listed), while AC1's first test and AC2 pass on that twin.
+Skipped: AC3's live file, `INCONCLUSIVE: by hand only`.
+
+Output:
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/1816
+
+ ❯ parts.test.ts (1 test | 1 failed) 1054ms
+   ❯ AC5 #1816.6b352974 parts() drops each part's why, so a BLOCKED part doesn't say why (1)
+     × AC5 #1816.6b352974 #12, split into parts, reads its BLOCKED part #13 with the why #13's own judgment gives 3ms
+ ❯ merge-base.test.ts (3 tests | 2 failed) 633ms
+   ❯ AC1 #1816.82cb5332 the spine judges each task in a checkout where git merge-base HEAD origin/main and git show <base>:<path> answer as they would in the repo at that commit, still never a worktree of the user's (2)
+     × AC1 #1816.82cb5332 in the spine's checkout of T, HEAD is T, git merge-base HEAD origin/main answers B as the repo does, and git show B:benchmarks/budgets.json answers B's file 5ms
+   ❯ AC2 #1816.1b37f8c3 a test shows a merge-base-reading test passing under spine.mjs (1)
+     × AC2 #1816.1b37f8c3 node scripts/spine.mjs judge --issue 44 reads the merge-base-reading criterion PASS, and #44 PASS at T 1ms
+ ❯ node-modules.test.ts (1 test | 1 failed) 541ms
+   ❯ AC4 #1816.c7e80311 spine.mjs copies node_modules with cp -cR (macOS clone); on Linux the checkout gets no node_modules, and every task reads BLOCKED "the workspaces didn't build" (1)
+     × AC4 #1816.c7e80311 on linux, the spine's checkout has the user's node_modules: the workspace that needs it builds, and the task reads PASS 2ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  merge-base.test.ts > AC1 #1816.82cb5332 the spine judges each task in a checkout where git merge-base HEAD origin/main and git show <base>:<path> answer as they would in the repo at that commit, still never a worktree of the user's > AC1 #1816.82cb5332 in the spine's checkout of T, HEAD is T, git merge-base HEAD origin/main answers B as the repo does, and git show B:benchmarks/budgets.json answers B's file
+Error: AC1 #1816.82cb5332 HEAD in the checkout is the judged commit T cf03888863c8ac58f539ce54a87e89e23bcb0f65: {"code":128,"out":"","err":"fatal: not a git repository (or any of the parent directories): .git"}
+ ❯ must helpers.ts:23:18
+     21|
+     22| export function must(ok: boolean, message: string): asserts ok {
+     23|   if (!ok) throw Error(message);
+       |                  ^
+     24| }
+     25|
+ ❯ merge-base.test.ts:73:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  merge-base.test.ts > AC2 #1816.1b37f8c3 a test shows a merge-base-reading test passing under spine.mjs > AC2 #1816.1b37f8c3 node scripts/spine.mjs judge --issue 44 reads the merge-base-reading criterion PASS, and #44 PASS at T
+Error: AC2 #1816.1b37f8c3 the merge-base-reading test's criterion #44.c3349556 reads PASS under spine.mjs: {"issue":44,"commit":"cf03888863c8ac58f539ce54a87e89e23bcb0f65","verdict":"FAIL","criteria":[{"id":"#44.c3349556","outcome":"FAIL"}],"reopen":{"criterion":"#44.c3349556"}}; exit 1; stdout "{\"issue\":44,\"commit\":\"cf03888863c8ac58f539ce54a87e89e23bcb0f65\",\"verdict\":\"FAIL\",\"criteria\":[{\"id\":\"#44.c3349556\",\"outcome\":\"FAIL\"}],\"reopen\":{\"criterion\":\"#44.c3349556\"}}\n"; stderr ""
+ ❯ must helpers.ts:23:18
+     21|
+     22| export function must(ok: boolean, message: string): asserts ok {
+     23|   if (!ok) throw Error(message);
+       |                  ^
+     24| }
+     25|
+ ❯ merge-base.test.ts:99:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  node-modules.test.ts > AC4 #1816.c7e80311 spine.mjs copies node_modules with cp -cR (macOS clone); on Linux the checkout gets no node_modules, and every task reads BLOCKED "the workspaces didn't build" > AC4 #1816.c7e80311 on linux, the spine's checkout has the user's node_modules: the workspace that needs it builds, and the task reads PASS
+Error: AC4 #1816.c7e80311 nothing reads BLOCKED: the workspaces build in the checkout with node_modules from the user's repo: {"issue":44,"commit":"bcda9a1db4672e59de651584c771a9ef126aafdd","verdict":"BLOCKED","criteria":[{"id":"#44.8a843cb3","outcome":"BLOCKED"}],"reopen":{"criterion":"#44.8a843cb3"},"why":"the workspaces didn't build at bcda9a1db467:  > w@1.0.0 build > node -e \"require('dh1816-marker')\""}
+ ❯ must helpers.ts:23:18
+     21|
+     22| export function must(ok: boolean, message: string): asserts ok {
+     23|   if (!ok) throw Error(message);
+       |                  ^
+     24| }
+     25|
+ ❯ node-modules.test.ts:45:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  parts.test.ts > AC5 #1816.6b352974 parts() drops each part's why, so a BLOCKED part doesn't say why > AC5 #1816.6b352974 #12, split into parts, reads its BLOCKED part #13 with the why #13's own judgment gives
+Error: AC5 #1816.6b352974 the BLOCKED part says why, as #13's own judgment does ("the workspaces didn't build at fa39fda3c710:  > w@1.0.0 build > node -e \"console.error('DH1816 build broke'); process.exit(3)\""): #12 reads it {"id":"#12.d379e39c","outcome":"BLOCKED"}
+ ❯ must helpers.ts:23:18
+     21|
+     22| export function must(ok: boolean, message: string): asserts ok {
+     23|   if (!ok) throw Error(message);
+       |                  ^
+     24| }
+     25|
+ ❯ parts.test.ts:48:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  3 failed | 1 passed (4)
+      Tests  4 failed | 1 passed | 1 skipped (6)
+   Start at  08:15:18
+   Duration  2.52s (tests 98%, import 1%, transform 1%)
+

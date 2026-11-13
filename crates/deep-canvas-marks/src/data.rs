@@ -67,6 +67,10 @@ pub(crate) fn column_of(c: &Value, n: usize, path: &str) -> Result<Column, Refus
     if let Some(v) = c.get("const") {
         return Ok(Column::Const(v.clone()));
     }
+    // #538: a copy column no frame has looked up yet shows nothing; a frame rewrites it.
+    if crate::copy::is_copy_column(&Value::Object(c.clone())) {
+        return Ok(Column::Texts(vec![String::new(); n]));
+    }
     // A table column reaches the module inlined by whoever holds the evidence store, and a
     // column-view source by the build's column view; one still unread names what's missing.
     if c.contains_key("from") {
@@ -1124,7 +1128,11 @@ pub fn mark_set(
             }
             let mut at = vec![0.0; n];
             for (r, i) in rank.into_iter().enumerate() {
-                at[i] = if n > 1 { r as f64 / (n - 1) as f64 } else { 0.0 };
+                at[i] = if n > 1 {
+                    r as f64 / (n - 1) as f64
+                } else {
+                    0.0
+                };
             }
             Some((stops, at))
         }
@@ -1917,7 +1925,11 @@ pub fn axis(
     // Grid lines first, under the line, the ticks and the labels: each from the line to the
     // frame's edge on the side away from the labels.
     if p.get("grid").and_then(Value::as_bool) == Some(true) {
-        let at = if horizontal { cross + pos[1] } else { cross + pos[0] };
+        let at = if horizontal {
+            cross + pos[1]
+        } else {
+            cross + pos[0]
+        };
         let far = if out_dir > 0.0 {
             0.0
         } else if horizontal {

@@ -203,15 +203,29 @@ fn memory_of(op: &Operator<'_>) -> Option<u32> {
             Some(*mem)
         }
         MemoryCopy { dst_mem, .. } => Some(*dst_mem),
-        I32Load { memarg } | I64Load { memarg } | F32Load { memarg } | F64Load { memarg }
-        | I32Load8S { memarg } | I32Load8U { memarg } | I32Load16S { memarg }
-        | I32Load16U { memarg } | I64Load8S { memarg } | I64Load8U { memarg }
-        | I64Load16S { memarg } | I64Load16U { memarg } | I64Load32S { memarg }
-        | I64Load32U { memarg } | I32Store { memarg } | I64Store { memarg } | F32Store { memarg }
-        | F64Store { memarg } | I32Store8 { memarg } | I32Store16 { memarg }
-        | I64Store8 { memarg } | I64Store16 { memarg } | I64Store32 { memarg } => {
-            Some(memarg.memory)
-        }
+        I32Load { memarg }
+        | I64Load { memarg }
+        | F32Load { memarg }
+        | F64Load { memarg }
+        | I32Load8S { memarg }
+        | I32Load8U { memarg }
+        | I32Load16S { memarg }
+        | I32Load16U { memarg }
+        | I64Load8S { memarg }
+        | I64Load8U { memarg }
+        | I64Load16S { memarg }
+        | I64Load16U { memarg }
+        | I64Load32S { memarg }
+        | I64Load32U { memarg }
+        | I32Store { memarg }
+        | I64Store { memarg }
+        | F32Store { memarg }
+        | F64Store { memarg }
+        | I32Store8 { memarg }
+        | I32Store16 { memarg }
+        | I64Store8 { memarg }
+        | I64Store16 { memarg }
+        | I64Store32 { memarg } => Some(memarg.memory),
         _ => None,
     }
 }
@@ -245,7 +259,11 @@ fn limit(name: &'static str, max: Option<u64>, actual: Option<u64>, what: String
 fn invalid(e: &wasmparser::BinaryReaderError) -> Refusal {
     Refusal::new(
         "valid",
-        format!("not a valid program under the subset: {} at offset {}", e.message(), e.offset()),
+        format!(
+            "not a valid program under the subset: {} at offset {}",
+            e.message(),
+            e.offset()
+        ),
     )
 }
 
@@ -263,7 +281,8 @@ impl Walk<'_> {
     fn value_type(&mut self, t: ValType, at: &str) -> bool {
         match t {
             ValType::V128 if !self.has(WasmFeatures::SIMD) => {
-                self.out.push(proposal("simd", format!("{at} has the vector type v128")));
+                self.out
+                    .push(proposal("simd", format!("{at} has the vector type v128")));
                 false
             }
             ValType::Ref(r) => self.ref_type(r, at),
@@ -283,7 +302,8 @@ impl Walk<'_> {
         if self.has(need) {
             return true;
         }
-        self.out.push(proposal(name, format!("{at} has the reference type {r}")));
+        self.out
+            .push(proposal(name, format!("{at} has the reference type {r}")));
         false
     }
 
@@ -311,7 +331,10 @@ impl Walk<'_> {
                 self.out.push(Refusal {
                     instruction: Some(name.clone()),
                     global,
-                    ..proposal(p, format!("{at} uses {name} from the {} proposal", proposal_name(p)))
+                    ..proposal(
+                        p,
+                        format!("{at} uses {name} from the {} proposal", proposal_name(p)),
+                    )
                 });
             }
         }
@@ -358,7 +381,10 @@ fn walk(bytes: &[u8], w: &mut Walk<'_>) -> wasmparser::Result<()> {
             Payload::Version {
                 encoding: wasmparser::Encoding::Component,
                 ..
-            } => w.out.push(proposal("component_model", "a component is not a program".into())),
+            } => w.out.push(proposal(
+                "component_model",
+                "a component is not a program".into(),
+            )),
             Payload::TypeSection(s) => {
                 for (i, group) in s.into_iter().enumerate() {
                     let group = group?;
@@ -422,7 +448,8 @@ fn walk(bytes: &[u8], w: &mut Walk<'_>) -> wasmparser::Result<()> {
                     let t = table.ty;
                     let at = format!("table {i}");
                     if t.table64 && !w.has(WasmFeatures::MEMORY64) {
-                        w.out.push(proposal("memory64", format!("{at} is a 64-bit table")));
+                        w.out
+                            .push(proposal("memory64", format!("{at} is a 64-bit table")));
                     }
                     w.ref_type(t.element_type, &at);
                     if let wasmparser::TableInit::Expr(e) = &table.init {
@@ -447,7 +474,10 @@ fn walk(bytes: &[u8], w: &mut Walk<'_>) -> wasmparser::Result<()> {
                             "table",
                             Some(t.initial),
                             t.maximum,
-                            format!("{at} can grow: its maximum must equal its minimum ({})", t.initial),
+                            format!(
+                                "{at} can grow: its maximum must equal its minimum ({})",
+                                t.initial
+                            ),
                         ));
                     }
                 }
@@ -470,17 +500,26 @@ fn walk(bytes: &[u8], w: &mut Walk<'_>) -> wasmparser::Result<()> {
                         ));
                     }
                     if m.shared && !w.has(WasmFeatures::THREADS) {
-                        w.out.push(proposal("threads", format!("{at} is shared, from the threads proposal")));
+                        w.out.push(proposal(
+                            "threads",
+                            format!("{at} is shared, from the threads proposal"),
+                        ));
                     }
                     if m.page_size_log2.is_some() && !w.has(WasmFeatures::CUSTOM_PAGE_SIZES) {
-                        w.out.push(proposal("custom_page_sizes", format!("{at} sets its page size")));
+                        w.out.push(proposal(
+                            "custom_page_sizes",
+                            format!("{at} sets its page size"),
+                        ));
                     }
                     if m.maximum != Some(m.initial) {
                         w.out.push(limit(
                             "memory",
                             Some(m.initial),
                             m.maximum,
-                            format!("{at} can grow: its maximum must equal its minimum ({} pages)", m.initial),
+                            format!(
+                                "{at} can grow: its maximum must equal its minimum ({} pages)",
+                                m.initial
+                            ),
                         ));
                     } else if m.initial.saturating_mul(PAGE) > w.limits.memory {
                         w.out.push(limit(
@@ -517,7 +556,10 @@ fn walk(bytes: &[u8], w: &mut Walk<'_>) -> wasmparser::Result<()> {
                                 global: Some(globals),
                                 ..Refusal::new(
                                     "global",
-                                    format!("{at} is a mutable global of a reference type ({})", g.ty.content_type),
+                                    format!(
+                                        "{at} is a mutable global of a reference type ({})",
+                                        g.ty.content_type
+                                    ),
                                 )
                             });
                         }
@@ -547,9 +589,14 @@ fn walk(bytes: &[u8], w: &mut Walk<'_>) -> wasmparser::Result<()> {
                     match e.kind {
                         ElementKind::Passive => w.out.push(Refusal {
                             segment: Some(("elem", i as u32)),
-                            ..Refusal::new("segment", format!("{at} is a passive segment, kept to use later"))
+                            ..Refusal::new(
+                                "segment",
+                                format!("{at} is a passive segment, kept to use later"),
+                            )
                         }),
-                        ElementKind::Active { offset_expr, .. } => w.const_expr(&offset_expr, &at, None),
+                        ElementKind::Active { offset_expr, .. } => {
+                            w.const_expr(&offset_expr, &at, None)
+                        }
                         _ => {}
                     }
                     if let wasmparser::ElementItems::Expressions(t, items) = e.items {
@@ -567,7 +614,10 @@ fn walk(bytes: &[u8], w: &mut Walk<'_>) -> wasmparser::Result<()> {
                     match d.kind {
                         wasmparser::DataKind::Passive => w.out.push(Refusal {
                             segment: Some(("data", i as u32)),
-                            ..Refusal::new("segment", format!("{at} is a passive segment, kept to use later"))
+                            ..Refusal::new(
+                                "segment",
+                                format!("{at} is a passive segment, kept to use later"),
+                            )
                         }),
                         wasmparser::DataKind::Active { offset_expr, .. } => {
                             w.const_expr(&offset_expr, &at, None)
@@ -618,7 +668,10 @@ fn code(
                 "threads" | "shared_everything_threads" => "an atomic instruction",
                 _ => "an instruction",
             };
-            let what = format!("{at} uses {kind}, {name}, from the {} proposal", proposal_name(p));
+            let what = format!(
+                "{at} uses {kind}, {name}, from the {} proposal",
+                proposal_name(p)
+            );
             named(w, proposal(p, what));
             continue;
         }
@@ -628,10 +681,12 @@ fn code(
         }
         if let Some(m) = memory_of(&op) {
             if m > 0 && !w.has(WasmFeatures::MULTI_MEMORY) {
-                let what = format!("{at} uses {name} on memory {m}, from the multi_memory proposal");
+                let what =
+                    format!("{at} uses {name} on memory {m}, from the multi_memory proposal");
                 named(w, proposal("multi_memory", what));
             } else if memories.get(m as usize) == Some(&true) && !w.has(WasmFeatures::MEMORY64) {
-                let what = format!("{at} uses {name} on a 64-bit memory, from the memory64 proposal");
+                let what =
+                    format!("{at} uses {name} on a 64-bit memory, from the memory64 proposal");
                 named(w, proposal("memory64", what));
             }
         }
@@ -703,17 +758,20 @@ pub fn check_role(bytes: &[u8], role: &str) -> Result<(), Vec<Refusal>> {
     }
     let lacking: Vec<Refusal> = needs
         .iter()
-        .filter(|(name, kind)| {
-            match exports.iter().find(|(n, k, _)| n == name && k == kind) {
+        .filter(
+            |(name, kind)| match exports.iter().find(|(n, k, _)| n == name && k == kind) {
                 Some((_, ExternalKind::Global, i)) => mutable.get(*i as usize) != Some(&false),
                 Some(_) => false,
                 None => true,
-            }
-        })
+            },
+        )
         .map(|(name, _)| Refusal {
             role: Some(role.into()),
             export: Some(name.to_string()),
-            ..Refusal::new("role", format!("a {role} exports {name}; this program lacks it"))
+            ..Refusal::new(
+                "role",
+                format!("a {role} exports {name}; this program lacks it"),
+            )
         })
         .collect();
     if lacking.is_empty() {

@@ -345,7 +345,11 @@ pub fn low_pass(x: &[f32], channels: usize, rate: u32, cutoff: f64) -> Vec<f32> 
     let mut taps: Vec<f64> = (0..TAPS)
         .map(|i| {
             let n = i as f64 - half as f64;
-            let sinc = if n == 0.0 { 2.0 * fc } else { ops::sin(ops::TAU * fc * n) / (ops::TAU / 2.0 * n) };
+            let sinc = if n == 0.0 {
+                2.0 * fc
+            } else {
+                ops::sin(ops::TAU * fc * n) / (ops::TAU / 2.0 * n)
+            };
             let a = ops::TAU * i as f64 / (TAPS - 1) as f64;
             sinc * (0.42 - 0.5 * ops::cos(a) + 0.08 * ops::cos(2.0 * a))
         })
@@ -407,12 +411,30 @@ mod tests {
     #[test]
     fn low_pass_keeps_the_band_and_cuts_above_it() {
         let rate = 48_000u32;
-        let tone = |hz: f64| -> Vec<f32> { (0..4_800).map(|i| ops::sin(ops::TAU * hz * i as f64 / f64::from(rate)) as f32).collect() };
-        let rms = |x: &[f32]| ops::sqrt(x[200..4_600].iter().map(|v| f64::from(*v) * f64::from(*v)).sum::<f64>() / 4_400.0);
+        let tone = |hz: f64| -> Vec<f32> {
+            (0..4_800)
+                .map(|i| ops::sin(ops::TAU * hz * i as f64 / f64::from(rate)) as f32)
+                .collect()
+        };
+        let rms = |x: &[f32]| {
+            ops::sqrt(
+                x[200..4_600]
+                    .iter()
+                    .map(|v| f64::from(*v) * f64::from(*v))
+                    .sum::<f64>()
+                    / 4_400.0,
+            )
+        };
         let kept = rms(&low_pass(&tone(1_000.0), 1, rate, 16_000.0));
         let cut = rms(&low_pass(&tone(21_000.0), 1, rate, 16_000.0));
-        assert!((kept - ops::sqrt(0.5)).abs() < 0.01, "1 kHz passes: rms {kept}");
-        assert!(cut < 0.01 * ops::sqrt(0.5), "21 kHz is cut by 40 dB: rms {cut}");
+        assert!(
+            (kept - ops::sqrt(0.5)).abs() < 0.01,
+            "1 kHz passes: rms {kept}"
+        );
+        assert!(
+            cut < 0.01 * ops::sqrt(0.5),
+            "21 kHz is cut by 40 dB: rms {cut}"
+        );
         // Symmetric: a click comes out centred where it went in.
         let mut click = vec![0.0f32; 400];
         click[200] = 1.0;

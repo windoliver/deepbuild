@@ -26,6 +26,8 @@ pub const CAP: u64 = 64 << 20;
 pub struct Made {
     pub decoder: Option<Helper>,
     pub ready: BTreeMap<String, (Arc<Texels>, String)>,
+    /// The videos' probes and their latest decoded frames (#503).
+    pub videos: crate::video::Cache,
 }
 
 /// The decode worker's planted program, from deep-gpu's.
@@ -79,6 +81,18 @@ fn usages(scene: &Scene) -> BTreeMap<String, BTreeSet<&'static str>> {
     out
 }
 
+/// The run's decode worker, started the first time a job needs it.
+pub fn decoder(app: &mut App) -> Result<&mut Helper, Value> {
+    if app.made.decoder.is_none() {
+        let exe = std::env::current_exe().unwrap_or_else(|_| PathBuf::from("deep-gpu"));
+        let planted = worker_planted(app.planted);
+        let h = Helper::start(&exe, DECODE_WORKER, &Caps::default(), planted)
+            .map_err(|e| refused("no_decoder", format!("the decode worker didn't start: {e}")))?;
+        app.made.decoder = Some(h);
+    }
+    Ok(app.made.decoder.as_mut().expect("started"))
+}
+
 /// The scene's maps made ready: its texels by hash and the receipt, or the cap's refusal.
 pub fn prepare(
     app: &mut App,
@@ -100,20 +114,7 @@ pub fn prepare(
             let out =
                 std::env::temp_dir().join(format!("deep-gpu-map-{}-{key}", std::process::id()));
             let job = json!({"op": "transcode", "path": path, "role": role, "bc": cfg!(target_os = "macos"), "out": out});
-            if app.made.decoder.is_none() {
-                let exe = std::env::current_exe().unwrap_or_else(|_| PathBuf::from("deep-gpu"));
-                let h = Helper::start(
-                    &exe,
-                    DECODE_WORKER,
-                    &Caps::default(),
-                    worker_planted(planted),
-                )
-                .map_err(|e| {
-                    refused("no_decoder", format!("the decode worker didn't start: {e}"))
-                })?;
-                app.made.decoder = Some(h);
-            }
-            let reply = app.made.decoder.as_mut().expect("started").ask(&job);
+            let reply = decoder(app)?.ask(&job);
             let (Some(format), Some(size), Some(mips)) = (
                 reply["format"].as_str(),
                 crate::view3d::pair(&reply["size"]),
@@ -165,6 +166,7 @@ pub fn imports(
     licenses: &BTreeMap<String, Value>,
     store: Option<&PathBuf>,
     paths: &mut BTreeMap<String, PathBuf>,
+    drops_dispersion: bool,
 ) -> Result<Vec<Value>, Value> {
     let mut out = Vec::new();
     for (id, item) in doc["items"].as_object().into_iter().flatten() {
@@ -190,11 +192,14 @@ pub fn imports(
             .pointer("/params/node/scene")
             .and_then(Value::as_u64)
             .unwrap_or(0) as usize;
-        let im = match deep_canvas_scene3d::gltf::import(&bytes, sha, scene, read) {
+        let mut im = match deep_canvas_scene3d::gltf::import(&bytes, sha, scene, read) {
             Ok(im) => im,
             Err(p) if whole => return Err(refused("out_of_range", format!("items/{id}/{p}"))),
             Err(_) => continue,
         };
+        if drops_dispersion {
+            deep_canvas_scene3d::gltf::drop_dispersion(&mut im);
+        }
         let license = licenses.get(sha).cloned().unwrap_or(Value::Null);
         let mut textures = Vec::new();
         let dir = std::env::temp_dir().join(format!("deep-gpu-images-{}", std::process::id()));

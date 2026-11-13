@@ -2,7 +2,7 @@
 
 ## What it is for
 
-First-party job plug-ins (#1922): each registers job kinds through `deep.registerJob` and their tools through `deep.registerJobTool`, and is installed with `deep install packages/jobs/<name>`. `bakes` holds the analysis bake's kinds, whose tools run on its model host (#1819); `typeset` holds the typeset job, a formula's LaTeX or Typst in and an SVG with one id per term out, whose tool `typst-mitex` runs here as WebAssembly (#220).
+First-party job plug-ins (#1922): each registers job kinds through `deep.registerJob` and their tools through `deep.registerJobTool`, and is installed with `deep install packages/jobs/<name>`. `bakes` holds the analysis bake's kinds, whose tools run on its model host (#1819); `speech` holds the speech kind, whose engines Kokoro, the macOS voices and Azure Speech are its registered tools, and narration.transcript, whose pinned whisper.cpp hears each line back, all on its own model host on 127.0.0.1:8720 (#509); `typeset` holds the typeset job, a formula's LaTeX or Typst in and an SVG with one id per term out, whose tool `typst-mitex` runs here as WebAssembly (#220).
 
 ## Where new code goes
 

@@ -20,7 +20,14 @@ pub struct Duck {
 impl Duck {
     /// Times in flicks, `depth_db` in dB. Two spans merge when the second starts less than
     /// `merge_gap` after the first ends.
-    pub fn new(spans: &[(i64, i64)], depth_db: f64, attack: i64, hold: i64, release: i64, merge_gap: i64) -> Duck {
+    pub fn new(
+        spans: &[(i64, i64)],
+        depth_db: f64,
+        attack: i64,
+        hold: i64,
+        release: i64,
+        merge_gap: i64,
+    ) -> Duck {
         let mut sorted: Vec<(i64, i64)> = spans.iter().map(|(s, e)| (*s, (*e).max(*s))).collect();
         sorted.sort_unstable();
         let mut merged: Vec<(i64, i64)> = Vec::new();
@@ -30,7 +37,13 @@ impl Duck {
                 _ => merged.push((s, e)),
             }
         }
-        Duck { spans: merged, depth: amp(depth_db), attack: attack.max(0), hold: hold.max(0), release: release.max(0) }
+        Duck {
+            spans: merged,
+            depth: amp(depth_db),
+            attack: attack.max(0),
+            hold: hold.max(0),
+            release: release.max(0),
+        }
     }
 
     /// One span's gain at `t`.
@@ -50,7 +63,9 @@ impl Duck {
     /// The gain at `t`, as an amplitude: 1 away from every span.
     pub fn at(&self, t: i64) -> f64 {
         // The spans whose ramps hold t: both edges rise with the index, since merged spans lie apart.
-        let first = self.spans.partition_point(|sp| sp.1 + self.hold + self.release <= t);
+        let first = self
+            .spans
+            .partition_point(|sp| sp.1 + self.hold + self.release <= t);
         let end = self.spans.partition_point(|sp| sp.0 - self.attack < t);
         self.spans
             .get(first..end)

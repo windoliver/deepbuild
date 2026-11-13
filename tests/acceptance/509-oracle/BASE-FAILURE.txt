@@ -1,0 +1,14 @@
+Base: 0e377fbd7. Not run there: the surfaces this lane drives don't exist at the base (read from crates/deep-show/src
+and packages/jobs, as tests/acceptance/509/BASE-FAILURE.txt says). The lane loads there (vitest collects its 5 tests
+with no test selected) and type-checks: `node node_modules/typescript/bin/tsc -p tests/acceptance/509-oracle/tsconfig.json`
+exits 0.
+
+- alignment.test.ts, normalizer.test.ts, pinyin.test.ts (its first test): deep-show run has no `media_heard` call, so
+  the scenario isn't answered ok.
+- pinyin.test.ts, second test: the base's script doesn't know a line's `locale` or `say`, and no narration.polyphonic is
+  raised, so the judge fails for 朝 and 行.
+- transcriber.test.ts: BLOCKED until the cache folder holds run-tests.sh's recordings and reference texts and ffmpeg is
+  installed (its unblock line); with them, it fails at the install of deepbuild/speech, which isn't at
+  packages/jobs/speech.
+
+Expected at the base: 5 tests, 5 failed, the transcriber's as BLOCKED or at the install.

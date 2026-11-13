@@ -109,7 +109,11 @@ impl Feed {
 /// floor from 0.70, 0.80 and 0.90 (least PSNR 36.2, 41.5, 49.2 dB); clean gradients clear 43 dB
 /// at 0.30 and 46 at 0.50, so the plain tiers keep a margin for detail.
 fn quality(tier: &str, grain: bool) -> Result<f64, Value> {
-    let tiers = [("draft", 0.50, 0.70), ("standard", 0.65, 0.80), ("master", 0.80, 0.90)];
+    let tiers = [
+        ("draft", 0.50, 0.70),
+        ("standard", 0.65, 0.80),
+        ("master", 0.80, 0.90),
+    ];
     match tiers.iter().find(|t| t.0 == tier) {
         Some((_, plain, grained)) => Ok(if grain { *grained } else { *plain }),
         None => Err(error(format!("no export quality {tier}"))),
@@ -198,11 +202,15 @@ impl Part {
         };
         let out = text(job, "out")?.to_string();
         let tmp = PathBuf::from(format!("{out}.part"));
-        let brand = if yuv { mov::Brand::Mp4 } else { mov::Brand::Mov };
+        let brand = if yuv {
+            mov::Brand::Mp4
+        } else {
+            mov::Brand::Mov
+        };
         let mut file = BufWriter::with_capacity(1 << 20, File::create(&tmp).map_err(error)?);
-        let written = file
-            .write_all(&mov::ftyp(brand))
-            .and_then(|()| file.write_all(&[0, 0, 0, 1, b'm', b'd', b'a', b't', 0, 0, 0, 0, 0, 0, 0, 0]));
+        let written = file.write_all(&mov::ftyp(brand)).and_then(|()| {
+            file.write_all(&[0, 0, 0, 1, b'm', b'd', b'a', b't', 0, 0, 0, 0, 0, 0, 0, 0])
+        });
         let samples = Rc::new(RefCell::new(Samples {
             file,
             sizes: Vec::new(),
@@ -212,7 +220,11 @@ impl Part {
         let mut part = Part {
             floor: quality,
             ticks,
-            shift: if planted.is("muxer_drops_video_edit_list") { ticks } else { 0 },
+            shift: if planted.is("muxer_drops_video_edit_list") {
+                ticks
+            } else {
+                0
+            },
             first,
             out,
             tmp,
@@ -229,7 +241,11 @@ impl Part {
         let sink = move |c: crate::apple::Coded| {
             let mut s = samples.borrow_mut();
             // The platform's encoder writes each NAL unit after a 4-byte length.
-            let bytes = if s.strip { without_sei(&c.bytes, 4) } else { c.bytes };
+            let bytes = if s.strip {
+                without_sei(&c.bytes, 4)
+            } else {
+                c.bytes
+            };
             s.file.write_all(&bytes).map_err(|e| e.to_string())?;
             s.sizes.push(bytes.len() as u32);
             s.keys.push(c.key);
@@ -242,7 +258,10 @@ impl Part {
     /// The frames it takes: their format and bytes.
     fn format(&self) -> (&'static str, usize) {
         let bgra = self.settings.codec == crate::apple::Codec::ProRes4444;
-        (if bgra { "bgra" } else { "nv12" }, self.settings.frame_bytes())
+        (
+            if bgra { "bgra" } else { "nv12" },
+            self.settings.frame_bytes(),
+        )
     }
 
     /// Frame k, a key frame when `key`, through the planted feeds.
@@ -283,7 +302,9 @@ impl Part {
         let is = |name| planted.is(name);
         // (v − lo) × 255 ÷ span, rounded and held to a byte.
         let stretch = |v: u8, lo: i32, span: i32| {
-            ((v as i32 - lo) * 255 + span / 2).div_euclid(span).clamp(0, 255) as u8
+            ((v as i32 - lo) * 255 + span / 2)
+                .div_euclid(span)
+                .clamp(0, 255) as u8
         };
         let luma = (settings.size[0] * settings.size[1]) as usize;
         match settings.codec {
@@ -318,7 +339,9 @@ impl Part {
             // The encoder keeps a floor of bits per frame that leaves a small frame almost whole
             // at any asked bit rate, so the starved encoder also loses what starving loses: each
             // 8 × 8 block of luma, and 4 × 4 of each chroma plane, flattened to its mean.
-            crate::apple::Codec::H264 | crate::apple::Codec::Hevc if is("encoder_starves_bitrate") => {
+            crate::apple::Codec::H264 | crate::apple::Codec::Hevc
+                if is("encoder_starves_bitrate") =>
+            {
                 let [w, h] = settings.size.map(|n| n as usize);
                 let mut out = frame.to_vec();
                 flatten(&mut out[..luma], w, h, 1, 8);
@@ -335,14 +358,19 @@ impl Part {
         let encoder = self.encoder.take().ok_or_else(|| error("no encoder"))?;
         let finished = encoder.finish().map_err(error)?;
         let codec = self.settings.codec;
-        let config = finished.config.filter(|_| codec != crate::apple::Codec::ProRes4444);
+        let config = finished
+            .config
+            .filter(|_| codec != crate::apple::Codec::ProRes4444);
         let mut s = self.samples.borrow_mut();
         if s.strip && config.as_ref().and_then(|c| c.get(4)).map(|b| b & 3) != Some(3) {
             return Err(error("the encoder's NAL units aren't 4-byte lengths"));
         }
         if s.sizes.len() != self.pushed {
             let given = s.sizes.len();
-            return Err(error(format!("the encoder gave {given} frames of {}", self.pushed)));
+            return Err(error(format!(
+                "the encoder gave {given} frames of {}",
+                self.pushed
+            )));
         }
         for i in &self.unkeyed {
             s.keys[*i] = false;
@@ -381,9 +409,11 @@ impl Part {
         std::fs::rename(&self.tmp, &self.out).map_err(error)?;
         self.done = true;
         let sha = hash_file(Path::new(&self.out)).map_err(error)?;
-        Ok(json!({"encoder": {"name": codec.name(), "version": crate::apple::os_version(),
+        Ok(
+            json!({"encoder": {"name": codec.name(), "version": crate::apple::os_version(),
             "hardware": finished.hardware, "quality_floor": self.floor},
-            "frames": frames, "keys": keys, "sha256": sha}))
+            "frames": frames, "keys": keys, "sha256": sha}),
+        )
     }
 }
 
@@ -400,7 +430,10 @@ impl Drop for Part {
 /// A file's SHA-256, read a megabyte at a time.
 fn hash_file(path: &Path) -> std::io::Result<String> {
     let mut sha = Hashed(std::io::sink(), Sha256::new());
-    std::io::copy(&mut File::open(path)?, &mut BufWriter::with_capacity(1 << 20, &mut sha))?;
+    std::io::copy(
+        &mut File::open(path)?,
+        &mut BufWriter::with_capacity(1 << 20, &mut sha),
+    )?;
     Ok(hex(sha.1))
 }
 
@@ -484,8 +517,10 @@ impl Pngs {
     fn finish(mut self) -> Result<Value, Value> {
         std::fs::rename(&self.tmp, &self.out).map_err(error)?;
         self.done = true;
-        Ok(json!({"encoder": {"name": "image png", "version": "0.25", "hardware": false},
-            "frames": self.keys.len(), "keys": self.keys, "sha256": null}))
+        Ok(
+            json!({"encoder": {"name": "image png", "version": "0.25", "hardware": false},
+            "frames": self.keys.len(), "keys": self.keys, "sha256": null}),
+        )
     }
 }
 
@@ -550,10 +585,16 @@ fn streamed<R: BufRead, W: Write>(
     for k in first..first + n {
         let head = pipe.next(&mut buf).ok_or(None)?;
         if head["frame"].as_u64() != Some(k) {
-            return Err(Some(error(format!("frame {k} is next, not {}", head["frame"]))));
+            return Err(Some(error(format!(
+                "frame {k} is next, not {}",
+                head["frame"]
+            ))));
         }
         if buf.len() != bytes {
-            return Err(Some(error(format!("frame {k} holds {} bytes, not {bytes}", buf.len()))));
+            return Err(Some(error(format!(
+                "frame {k} holds {} bytes, not {bytes}",
+                buf.len()
+            ))));
         }
         let key = head["key"].as_bool() == Some(true);
         match &mut sink {
@@ -617,7 +658,9 @@ fn join(job: &Job, planted: &Planted) -> Result<Value, Value> {
     // Planted (#1163): the writer leaves frame 300 out and holds frame 299 over its place.
     let tick = ticks(first);
     let mut held = None;
-    if planted.is("video_drops_frame_300") && tracks.iter().map(|t| t.samples.len()).sum::<usize>() > 300 {
+    if planted.is("video_drops_frame_300")
+        && tracks.iter().map(|t| t.samples.len()).sum::<usize>() > 300
+    {
         let mut at = 300;
         for t in tracks.iter_mut() {
             if at < t.samples.len() {
@@ -629,7 +672,10 @@ fn join(job: &Job, planted: &Planted) -> Result<Value, Value> {
         held = Some(299);
     }
     let first = &tracks[0];
-    let keys: Vec<bool> = tracks.iter().flat_map(|t| t.samples.iter().map(|s| s.key)).collect();
+    let keys: Vec<bool> = tracks
+        .iter()
+        .flat_map(|t| t.samples.iter().map(|s| s.key))
+        .collect();
     let video = mov::Layout {
         fourcc: first.entry.fourcc,
         config: first.entry.config.as_ref().map(|c| &c.1[..]),
@@ -704,7 +750,9 @@ fn join(job: &Job, planted: &Planted) -> Result<Value, Value> {
             let edit = match () {
                 _ if planted.is("muxer_strips_audio_edit_list") => None,
                 _ if planted.is("muxer_edit_list_1024") => Some((1024, n)),
-                _ if planted.is("muxer_keeps_end_padding") => Some((*priming, coded - *priming as u64)),
+                _ if planted.is("muxer_keeps_end_padding") => {
+                    Some((*priming, coded - *priming as u64))
+                }
                 _ => Some((*priming, n)),
             };
             mov::Audio::Aac(mov::Aac {
@@ -749,7 +797,11 @@ fn join(job: &Job, planted: &Planted) -> Result<Value, Value> {
         let file = File::create(tmp).map_err(error)?;
         let mut w = BufWriter::with_capacity(1 << 20, Hashed(file, Sha256::new()));
         let start = match last {
-            true => [mov::ftyp(brand), moov_last_mdat(&video, audio, timecode.is_some())].concat(),
+            true => [
+                mov::ftyp(brand),
+                moov_last_mdat(&video, audio, timecode.is_some()),
+            ]
+            .concat(),
             false => mov::head(brand, &video, audio, timecode),
         };
         w.write_all(&start).map_err(error)?;
@@ -832,17 +884,27 @@ fn flatten(plane: &mut [u8], w: usize, h: usize, parts: usize, n: usize) {
         for bx in (0..w).step_by(n) {
             for c in 0..parts {
                 let at = |x: usize, y: usize| (y * w + x) * parts + c;
-                let cells: Vec<usize> = (by..(by + n).min(h)).flat_map(|y| (bx..(bx + n).min(w)).map(move |x| (x, y))).map(|(x, y)| at(x, y)).collect();
-                let mean = (cells.iter().map(|&i| u32::from(plane[i])).sum::<u32>() + cells.len() as u32 / 2) / cells.len() as u32;
+                let cells: Vec<usize> = (by..(by + n).min(h))
+                    .flat_map(|y| (bx..(bx + n).min(w)).map(move |x| (x, y)))
+                    .map(|(x, y)| at(x, y))
+                    .collect();
+                let mean = (cells.iter().map(|&i| u32::from(plane[i])).sum::<u32>()
+                    + cells.len() as u32 / 2)
+                    / cells.len() as u32;
                 cells.iter().for_each(|&i| plane[i] = mean as u8);
             }
         }
     }
 }
 
-
 /// Frame k (BGRA8) as `{k:06}.png` in `dir`, straight alpha.
-fn png_frame(dir: &Path, k: u64, frame: &[u8], size: [u32; 2], planted: &Planted) -> Result<(), Value> {
+fn png_frame(
+    dir: &Path,
+    k: u64,
+    frame: &[u8],
+    size: [u32; 2],
+    planted: &Planted,
+) -> Result<(), Value> {
     let mut rgba = frame.to_vec();
     for p in rgba.as_chunks_mut::<4>().0 {
         p.swap(0, 2);
@@ -863,7 +925,9 @@ fn without_sei(sample: &[u8], length: usize) -> Vec<u8> {
     let mut out = Vec::with_capacity(sample.len());
     let mut o = 0;
     while o + length <= sample.len() {
-        let n = sample[o..o + length].iter().fold(0usize, |n, b| n << 8 | usize::from(*b));
+        let n = sample[o..o + length]
+            .iter()
+            .fold(0usize, |n, b| n << 8 | usize::from(*b));
         let end = (o + length + n).min(sample.len());
         if sample.get(o + length).is_some_and(|h| h & 0x1f != 6) {
             out.extend_from_slice(&sample[o..end]);
@@ -1019,7 +1083,10 @@ mod tests {
             assert_eq!(ask(job, "none")["frames"], 4);
             std::fs::read(&out).unwrap()
         };
-        assert!(part("a.mp4") == part("b.mp4"), "two encodes of the same frames differ");
+        assert!(
+            part("a.mp4") == part("b.mp4"),
+            "two encodes of the same frames differ"
+        );
         std::fs::remove_dir_all(dir).unwrap();
     }
 
@@ -1155,8 +1222,9 @@ mod tests {
     fn a_part_tags_its_colour_and_keys_the_frames_asked() {
         use crate::color;
         let dir = folder("tags");
-        let frames: Vec<(Vec<u8>, bool)> =
-            (0..8u8).map(|k| (nv12_drawn(k), k == 0 || k == 5)).collect();
+        let frames: Vec<(Vec<u8>, bool)> = (0..8u8)
+            .map(|k| (nv12_drawn(k), k == 0 || k == 5))
+            .collect();
         let part = |codec: &str, planted: &str| {
             let out = path(&dir, &format!("{codec}-{planted}"));
             piped_part(&piped_job(codec, &out, 64, 0, 8), &frames, planted)
@@ -1165,7 +1233,11 @@ mod tests {
             let (_, avcc) = t.entry.config.as_ref().unwrap();
             let s = color::h264_signal(color::avc_sps(avcc).unwrap()).unwrap();
             let c = t.entry.colr.unwrap();
-            (s.description, s.full_range, (c.primaries, c.transfer, c.matrix, c.full_range))
+            (
+                s.description,
+                s.full_range,
+                (c.primaries, c.transfer, c.matrix, c.full_range),
+            )
         };
         let bt709 = (Some((1, 1, 1)), Some(false), (1, 1, 1, Some(false)));
         let (t, reply) = part("h264", "none");
@@ -1210,11 +1282,19 @@ mod tests {
         let fed = path(&dir, "piped.mp4");
         let replies = piped(&piped_job("h264", &fed, 64, 0, 4), &frames, true, "none");
         let ready = json!({"ready": {"format": "nv12", "bytes": 64 * 64 * 3 / 2}});
-        assert_eq!([&replies[0].0, &replies[1].0], [&ready, &json!({"frame": 0})]);
+        assert_eq!(
+            [&replies[0].0, &replies[1].0],
+            [&ready, &json!({"frame": 0})]
+        );
         assert!(std::fs::read(&out).unwrap() == std::fs::read(&fed).unwrap());
         // Stdin closes after two frames of four: nothing more is said, and no file is left.
         let cut = path(&dir, "cut.mp4");
-        let replies = piped(&piped_job("h264", &cut, 64, 0, 4), &frames[..2], false, "none");
+        let replies = piped(
+            &piped_job("h264", &cut, 64, 0, 4),
+            &frames[..2],
+            false,
+            "none",
+        );
         assert_eq!(replies.len(), 3);
         assert!(!Path::new(&cut).exists() && !Path::new(&format!("{cut}.part")).exists());
         // Frames 699 to 702: a part one short without 700; a PNG of 702 that is 701's.

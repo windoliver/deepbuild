@@ -718,7 +718,9 @@ fn warm_up(
         if crate::flat::is_flat(&doc) {
             continue;
         }
-        let Ok(mut frames) = Frames::compile(&doc).and_then(|p| Frames::with_program(&doc, p, look, labels)) else {
+        let Ok(mut frames) =
+            Frames::compile(&doc).and_then(|p| Frames::with_program(&doc, p, look, labels))
+        else {
             continue;
         };
         for (j, t) in crate::warm::times(&doc).into_iter().enumerate() {
@@ -2284,7 +2286,8 @@ impl Live {
                         .and_then(|ses| ses.view.as_ref())
                         .and_then(|v| v.ops.pass_of(m.name))
                     {
-                        self.pass_ops.insert(self.passes.len(), (key, members.to_vec()));
+                        self.pass_ops
+                            .insert(self.passes.len(), (key, members.to_vec()));
                     }
                     self.passes.push(PassRow {
                         name: m.name,

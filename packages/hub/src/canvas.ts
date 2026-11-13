@@ -14,9 +14,9 @@ import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
 import { refuse } from './wire.js';
 import { callAsYou } from './client.js';
+import { isRecord as isObj } from '@deepbuild/contracts';
 
 type Obj = Record<string, unknown>;
-const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 
 /** deep_show answers within 2 s (Admission and latch): a presentation that waits for an app gives up then. */
 const PRESENT_MS = 2000;

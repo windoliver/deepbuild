@@ -22,6 +22,7 @@ import { type Checkouts } from '@deepbuild/gate';
 
 import { Acceptance } from './acceptance.js';
 import type { Landing } from './landing.js';
+import type { Work } from './work.js';
 import { type JobSpec, type Runner, type WindowReport } from '@deepbuild/runner';
 
 import { ClaudeSettings } from './claude-settings.js';
@@ -71,7 +72,7 @@ import { HubCanvas } from './hub-canvas.js';
 import { type Obj } from "./hub-shared.js";
 
 export interface HubControlOptions {
-  settings: CoreOptions;
+  settings: CoreOptions & { forge: string };
   services: {
     readonly wikiWritten: KnowledgeProvider['writtenOf'];
     readonly log: LogReads;
@@ -92,6 +93,7 @@ export interface HubControlOptions {
     readonly now: () => number;
     readonly acceptance: Acceptance;
     readonly landing: Landing;
+    readonly work: Work;
     readonly runner: Runner;
     readonly checkKinds: CheckKinds;
     readonly canvasSide: HubCanvas;
@@ -275,8 +277,8 @@ export class HubControl {
       case 'rules.sync':
         this.options.schedule.replayLate();
         return (this.options.schedule.replaying ?? Promise.resolve()).then(() => this.options.schedule.queue(() => this.options.memory().syncRules()));
-      case 'rules.reach': return ruleReach((sql, p) => this.options.services.record.raw(sql, p), realpathSync(String(params.repo)), String(params.scope), reachSince(this.options.services.now(), 30));
-      case 'rules.credit': return { sessions: await creditOf((sql, p) => this.options.services.record.raw(sql, p), String(params.rule)) };
+      case 'rules.reach': return ruleReach(this.options.services.raw, realpathSync(String(params.repo)), String(params.scope), reachSince(this.options.services.now(), 30));
+      case 'rules.credit': return { sessions: await creditOf(this.options.services.raw, String(params.rule)) };
       case 'session.rules': return this.options.memory().sessionRules(params);
       case 'acceptance.start': return this.options.services.acceptance.start(params);
       case 'acceptance.status': return this.options.services.acceptance.status(params);
@@ -285,6 +287,10 @@ export class HubControl {
       // Landing in turn (#1331): `deep land judge`, `deep land` and `deep work --once`, from your own terminal.
       case 'land.judge': return this.work.workspaceCall(() => this.options.services.landing.judgeAll(String(params.repo ?? '')));
       case 'land.round': return this.work.workspaceCall(() => this.options.services.landing.land(String(params.repo ?? '')));
+      // The work run (#1332): `deep work "<scope>"` raises its one approval, `deep work show` and `deep work pause`.
+      case 'work.approve': return this.options.services.work.approve(params, context);
+      case 'work.show': return this.options.services.work.show(params);
+      case 'work.pause': return this.options.services.work.pause(params);
       case 'work.once': return this.work.workspaceCall(() => this.options.services.landing.workOnce(String(params.repo ?? ''), Array.isArray(params.issues) ? params.issues.map(Number).filter((n) => Number.isSafeInteger(n) && n > 0) : []));
       case 'job.submit': return this.options.services.runner.submit(params.spec as JobSpec);
       case 'job.status': return this.options.services.runner.status(String(params.job));
@@ -327,7 +333,12 @@ export class HubControl {
     }
   }
 
-  async answer(params: Obj, context: CallContext, channel?: { channel: string; proof: 'device' | 'account_link'; plan_hash: string | null }): Promise<Obj> { return this.human.answer(params, context, channel); }
+  async answer(params: Obj, context: CallContext, channel?: { channel: string; proof: 'device' | 'account_link'; plan_hash: string | null }): Promise<Obj> {
+    const result = await this.human.answer(params, context, channel);
+    // Acknowledging the answer also settles its card/session rows; they must not trail into the next call's effects.
+    await this.options.state().statesSettled();
+    return result;
+  }
 
   async onSwitchedTree(claim: string): Promise<string | undefined> { return this.human.onSwitchedTree(claim); }
 

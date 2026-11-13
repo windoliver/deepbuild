@@ -10,6 +10,9 @@ use std::sync::Arc;
 use deep_images::{Key, Queue, Shown, Store};
 use gpui_kit::*;
 
+/// A thumbnail as the window takes it: its sprite, with the one it replaced, or why it failed.
+type Thumbnail = Result<(Arc<RenderImage>, Option<Arc<RenderImage>>), ImageCacheError>;
+
 /// Thumbnails of `side` px, each picture fitted inside a square of that side.
 pub struct Thumbnails {
     side: f64,
@@ -28,10 +31,7 @@ impl Thumbnails {
     /// The thumbnail of the picture at `path` as far as the service has it: its level, or the
     /// nearest held, or `None` while nothing is; with the sprite it replaced, for the window to
     /// let go of.
-    fn thumbnail(
-        &mut self,
-        path: &Arc<Path>,
-    ) -> Option<Result<(Arc<RenderImage>, Option<Arc<RenderImage>>), ImageCacheError>> {
+    fn thumbnail(&mut self, path: &Arc<Path>) -> Option<Thumbnail> {
         let fail = |why: &str| Some(Err(ImageCacheError::Asset(why.to_string().into())));
         let (Some(root), Some(hash)) = (
             path.parent(),
@@ -64,7 +64,7 @@ impl Thumbnails {
             }
         }
         let mut bgra = level.rgba.clone();
-        for px in bgra.chunks_exact_mut(4) {
+        for px in bgra.as_chunks_mut::<4>().0 {
             px.swap(0, 2);
         }
         let frame = image::RgbaImage::from_raw(level.size[0], level.size[1], bgra)?;

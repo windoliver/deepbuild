@@ -18,6 +18,7 @@ import { readSince, ulid, type Connection, type RecordStore } from '@deepbuild/r
 import type { JobInput, JobRecord, Runner } from '@deepbuild/runner';
 import type { Host, Supervisor } from '@deepbuild/supervisor';
 import { criteriaOf, ISSUE_LINK, type Reading } from './github-source.js';
+import { shellQuote as quoted } from './shell.js';
 
 const MODEL = 'opus';
 const JOB_MS = 30 * 60_000;
@@ -61,7 +62,6 @@ interface AcceptanceOptions {
 }
 
 const sha256 = (bytes: string | Uint8Array): string => createHash('sha256').update(bytes).digest('hex');
-const quoted = (text: string): string => `'${text.replaceAll("'", `'\\''`)}'`;
 function git(cwd: string, args: string[], o: { input?: Uint8Array | string; env?: NodeJS.ProcessEnv; raw?: true } = {}): Promise<string> {
   return new Promise((done, failed) => {
     const child = execFile('git', ['-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', ...args], { cwd, encoding: 'utf8', maxBuffer: 256 << 20, env: { ...gitEnv(), ...IDENTITY, ...o.env } }, (error, stdout, stderr) => {

@@ -1,0 +1,89 @@
+# Base 53c0e72a3 (origin/main, 2026-11-12), run once at a 1-minute load near 100:
+#   NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/1332 --no-file-parallelism --testTimeout=600000
+# exit 1: 8 files, 9 tests, 9 failed, 0 passed, in 177 s. Each fails at its own assertion in its own test file, on the
+# first step: `deep work "<scope>" --repo <checkout> --json` exits 2 with the usage of #1331's `deep work --once`, so
+# no approval is raised and no run starts. Each world (forge, repo, hub, played agents) set up on the base first.
+#
+# AC1 order.test.ts:33         exit 2: no work run, so no set runs to the end, no order rule, no plant starts-before-blockers-done
+# AC2 landed.test.ts:21        exit 2: no done-means-landed reading, no baseline list, no deep work show
+# AC3 next-attempt.test.ts:16  exit 2: no run to continue a killed session as its next attempt in the same worktree
+# AC4 replaced.test.ts:13      exit 2: no attempt breaker and no ask from it
+# AC5 taste.test.ts:14         exit 2: no slots for an issue to give up on a taste ask or take back after the answer
+# AC6 show.test.ts:55          exit 2: no reading of an issue's Runs on: line, no deep work show
+# AC7 show.test.ts:67          exit 2 (the same run as AC6): no state words for a run's issues in the record, no plant state-from-comment
+# AC8 breaker.test.ts:42       exit 2: no breaker across agents and models, no agents taking turns, no plant breaker-counts-per-agent
+# AC9 budget.test.ts:38        exit 2: no dependents started after a budget-only landing, no plant waits-for-budget-window
+
+ RUN  v5.0.5 <repo>/tests/acceptance/1332
+
+ ❯ show.test.ts (2 tests | 2 failed) 15765ms
+   × AC6 #1332.479b1c3f An issue whose `Runs on:` names a machine the host can't serve starts nothing and reads what it waits for 14182ms
+   × AC7 #1332.dc2b15bb `deep work show` prints the same state words as the record. A planted reader that takes a state from a comment fails, naming the issue 3ms
+ ❯ order.test.ts (1 test | 1 failed) 12793ms
+   × AC1 #1332.09a2eb02 On a fixture repo with 6 issues and 7 blocked-by links, one approval runs the set to the end with no app running, and no issue starts before its blockers are done. A planted run that starts one early fails, naming both issues 11945ms
+ ❯ breaker.test.ts (1 test | 1 failed) 24075ms
+   × AC8 #1332.6efb16d5 Three attempts on one issue, in Claude Code, then Codex, then Claude Code with another model, each replaced, raise one ask listing the three with agent, model and cause. A planted breaker that counts per agent lets a fourth start and fails, naming the attempt 15554ms
+ ❯ landed.test.ts (1 test | 1 failed) 37146ms
+   × AC2 #1332.4a073ef1 A blocker closed with its PR unmerged keeps its dependents waiting, naming the PR. One on the baseline list satisfies the link and reads closed before the gate, never PASS 33239ms
+ ❯ budget.test.ts (1 test | 1 failed) 15365ms
+   × AC9 #1332.13dcebe8 A blocker whose change landed with only a budget window's requirement open, its issue still open naming that requirement, satisfies its dependents' link, and they start. A planted run that keeps them waiting for the window fails, naming both issues 13603ms
+ ❯ taste.test.ts (1 test | 1 failed) 18142ms
+   × AC5 #1332.02e0e76f An issue raising a taste ask gives up its slot within 10 s, and takes the next free one after the answer 15364ms
+ ❯ next-attempt.test.ts (1 test | 1 failed) 25587ms
+   × AC3 #1332.0ec9d14a A session killed mid-turn continues as a next attempt in the same worktree with its uncommitted files intact. No issue ever has two live attempts, including across a hub restart 17113ms
+ ❯ replaced.test.ts (1 test | 1 failed) 8213ms
+   × AC4 #1332.59986399 A third replaced attempt raises one ask, and the other issues go on 7171ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 9 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  breaker.test.ts > AC8 #1332.6efb16d5 Three attempts on one issue, in Claude Code, then Codex, then Claude Code with another model, each replaced, raise one ask listing the three with agent, model and cause. A planted breaker that counts per agent lets a fourth start and fails, naming the attempt
+AssertionError: deep work "work through #100 with Claude Code and Codex, one at a time" raises the run's one approval and exits 0: exit 2, Usage: deep work --repo <checkout> --issues <n,...> --once [--json]   one pass of a run over a fixed set of issues
+: expected 2 to be +0 // Object.is equality
+ ❯ breaker.test.ts:42:137
+
+ FAIL  budget.test.ts > AC9 #1332.13dcebe8 A blocker whose change landed with only a budget window's requirement open, its issue still open naming that requirement, satisfies its dependents' link, and they start. A planted run that keeps them waiting for the window fails, naming both issues
+AssertionError: deep work "work through #100, #101 and #102 with Claude Code, two at a time" raises the run's one approval and exits 0: exit 2, Usage: deep work --repo <checkout> --issues <n,...> --once [--json]   one pass of a run over a fixed set of issues
+: expected 2 to be +0 // Object.is equality
+ ❯ budget.test.ts:38:137
+
+ FAIL  landed.test.ts > AC2 #1332.4a073ef1 A blocker closed with its PR unmerged keeps its dependents waiting, naming the PR. One on the baseline list satisfies the link and reads closed before the gate, never PASS
+AssertionError: deep work "work through #100, #102 and #103 with Claude Code, one at a time" raises the run's one approval and exits 0: exit 2, Usage: deep work --repo <checkout> --issues <n,...> --once [--json]   one pass of a run over a fixed set of issues
+: expected 2 to be +0 // Object.is equality
+ ❯ landed.test.ts:21:137
+
+ FAIL  next-attempt.test.ts > AC3 #1332.0ec9d14a A session killed mid-turn continues as a next attempt in the same worktree with its uncommitted files intact. No issue ever has two live attempts, including across a hub restart
+AssertionError: deep work "work through #100 with Claude Code, one at a time" raises the run's one approval and exits 0: exit 2, Usage: deep work --repo <checkout> --issues <n,...> --once [--json]   one pass of a run over a fixed set of issues
+: expected 2 to be +0 // Object.is equality
+ ❯ next-attempt.test.ts:16:137
+
+ FAIL  order.test.ts > AC1 #1332.09a2eb02 On a fixture repo with 6 issues and 7 blocked-by links, one approval runs the set to the end with no app running, and no issue starts before its blockers are done. A planted run that starts one early fails, naming both issues
+AssertionError: deep work "work through #100, #101, #102, #103, #104 and #105 with Claude Code, two at a time" raises the run's one approval and exits 0: exit 2, Usage: deep work --repo <checkout> --issues <n,...> --once [--json]   one pass of a run over a fixed set of issues
+: expected 2 to be +0 // Object.is equality
+ ❯ order.test.ts:33:137
+
+ FAIL  replaced.test.ts > AC4 #1332.59986399 A third replaced attempt raises one ask, and the other issues go on
+AssertionError: deep work "work through #100 and #101 with Claude Code, one at a time" raises the run's one approval and exits 0: exit 2, Usage: deep work --repo <checkout> --issues <n,...> --once [--json]   one pass of a run over a fixed set of issues
+: expected 2 to be +0 // Object.is equality
+ ❯ replaced.test.ts:13:137
+
+ FAIL  show.test.ts > AC6 #1332.479b1c3f An issue whose `Runs on:` names a machine the host can't serve starts nothing and reads what it waits for
+AssertionError: deep work "work through #100, #101 and #102 with Claude Code, two at a time" raises the run's one approval and exits 0: exit 2, Usage: deep work --repo <checkout> --issues <n,...> --once [--json]   one pass of a run over a fixed set of issues
+: expected 2 to be +0 // Object.is equality
+ ❯ show.test.ts:55:137
+
+ FAIL  show.test.ts > AC7 #1332.dc2b15bb `deep work show` prints the same state words as the record. A planted reader that takes a state from a comment fails, naming the issue
+AssertionError: deep work "work through #100, #101 and #102 with Claude Code, two at a time" raises the run's one approval and exits 0: exit 2, Usage: deep work --repo <checkout> --issues <n,...> --once [--json]   one pass of a run over a fixed set of issues
+: expected 2 to be +0 // Object.is equality
+ ❯ show.test.ts:67:137
+
+ FAIL  taste.test.ts > AC5 #1332.02e0e76f An issue raising a taste ask gives up its slot within 10 s, and takes the next free one after the answer
+AssertionError: deep work "work through #100 and #101 with Claude Code, one at a time" raises the run's one approval and exits 0: exit 2, Usage: deep work --repo <checkout> --issues <n,...> --once [--json]   one pass of a run over a fixed set of issues
+: expected 2 to be +0 // Object.is equality
+ ❯ taste.test.ts:14:137
+
+ Test Files  8 failed (8)
+      Tests  9 failed (9)
+   Start at  22:56:42
+   Duration  177.47s (tests 94%, import 4%, transform 2%)
+
+# (vitest's code frames and Expected/Received diffs, the same 0 against 2 in each, are left out above.)

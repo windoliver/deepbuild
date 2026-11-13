@@ -103,7 +103,7 @@ pub fn check(doc: &Value, entries: &[SealedEntry]) -> Vec<Issue> {
             let array = match columns::source((arrays, worlds), entries, id, &path, r.form()) {
                 Ok(array) => array,
                 Err(issue) => {
-                    issues.push(issue);
+                    issues.push(*issue);
                     continue;
                 }
             };

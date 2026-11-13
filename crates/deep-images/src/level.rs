@@ -137,7 +137,7 @@ pub fn reduce(rgba: &[u8], size: [u32; 2], k: u8) -> Level {
         let rows = (oy << shift)..((oy + 1) << shift).min(h);
         for y in rows {
             let row = &rgba[y * w * 4..(y + 1) * w * 4];
-            for (x, p) in row.chunks_exact(4).enumerate() {
+            for (x, p) in row.as_chunks::<4>().0.iter().enumerate() {
                 let s = &mut sums[x >> shift];
                 let a = f64::from(p[3]) / 255.0;
                 s[0] += f64::from(lut[usize::from(p[0])]) * a;
@@ -148,7 +148,13 @@ pub fn reduce(rgba: &[u8], size: [u32; 2], k: u8) -> Level {
             }
         }
         let line = &mut pixels[oy * ow * 4..(oy + 1) * ow * 4];
-        for ((o, s), n) in line.chunks_exact_mut(4).zip(&sums).zip(&counts) {
+        for ((o, s), n) in line
+            .as_chunks_mut::<4>()
+            .0
+            .iter_mut()
+            .zip(&sums)
+            .zip(&counts)
+        {
             if s[3] > 0.0 {
                 o[0] = encode((s[0] / s[3]) as f32);
                 o[1] = encode((s[1] / s[3]) as f32);
@@ -181,7 +187,7 @@ mod tests {
                     let l = reduce(&flat(size, p), size, k);
                     assert_eq!(l.size, level_size(size, k));
                     assert!(
-                        l.rgba.chunks_exact(4).all(|q| q == p),
+                        l.rgba.as_chunks::<4>().0.iter().all(|q| *q == p),
                         "{size:?} {p:?} level {k}"
                     );
                 }

@@ -45,6 +45,11 @@ plant-row-title-only = []
 # Issue #1454: a file stands in for the OS's prompt, in no shipped build: a test can't be you, and an environment variable
 # in the shipped app would let an agent answer for you.
 test-confirm = []
+# Issue #1606: the file DEEP_APP_TEST_SECRETS names stands in for the OS secret store the device key lives in, in no
+# shipped build: no test touches your Keychain. Its wrong program (tests/acceptance/1606) keeps the key in
+# ~/.deepbuild/app/device.json, as the base did, and never moves one.
+test-secrets = []
+plant-key-in-file = []
 # Issue #1455: the app draws the bound values of the file DEEP_APP_TEST_BOUND names, as `deep-replica --bound` does, in no
 # shipped build: its pictures need a bound panel from the real app.
 test-bound = ["fixtures"]
@@ -144,6 +149,8 @@ image = { version = "0.25", default-features = false, features = ["png"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
+# Issue #1606: the device key is a Keychain item only the app that made it reads (the version already in the tree).
+security-framework = { version = "3", default-features = false }
 # Issue #1462: the window forwards an assistive client's question of what is focused to gpui's view, so the row or
 # control the keys are on is what VoiceOver and Full Keyboard Access follow (the version gpui uses, vendored).
 accesskit_macos = "0.26"
@@ -238,4 +245,11 @@ harness = false
 [[test]]
 name = "acceptance_2117"
 path = "../../tests/acceptance/2117/app/panel.rs"
+harness = false
+
+# Issue #1606: AC5 and AC9 redrafted blind in tests/acceptance/1606-redraft-ac5-ac9, the app's card answered with no
+# window. card.test.ts runs it with an ask and an option; with none, as in a workspace run, it answers nothing.
+[[test]]
+name = "acceptance_1606"
+path = "../../tests/acceptance/1606-redraft-ac5-ac9/app/card.rs"
 harness = false

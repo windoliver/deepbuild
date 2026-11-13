@@ -1,0 +1,95 @@
+
+ RUN  v5.0.5 <base>
+
+ × tests/acceptance/2072/redraft/retry.test.ts > AC1 #2072 After a send is held and answered yes, the same request ID with other input is refused and runs nothing; the first input then runs once > AC1 r1 + input A held and answered yes: r1 + input B is refused with nothing run or entered; r1 + input A runs once 3338ms
+   → input {"to":"second@example.invalid"} sent with req-58280f6bb4cdb150 after the yes for input {"to":"first@example.invalid"} was entered in the record: expected 1 to be +0 // Object.is equality
+ × tests/acceptance/2072/redraft/retry.test.ts > AC2 #2072 After the same yes, the same request ID naming another change or send action is refused the same way > AC2 a send held, a change called under r1: the other action is refused, nothing runs or is entered; the held action then runs once 1058ms
+   → ext.stocks.set_alert called with req-d23d9013e7e528f2 after the yes for ext.stocks.send_digest was entered in the record: expected 1 to be +0 // Object.is equality
+ × tests/acceptance/2072/redraft/retry.test.ts > AC2 #2072 After the same yes, the same request ID naming another change or send action is refused the same way > AC2 a change held, a send called under r1: the other action is refused, nothing runs or is entered; the held action then runs once 1042ms
+   → ext.stocks.send_digest called with req-826b4ec1b2238f90 after the yes for ext.stocks.set_alert was entered in the record: expected 1 to be +0 // Object.is equality
+ × tests/acceptance/2072/redraft/retry.test.ts > AC3 #2072 An input longer than the question shows is marked as cut, with its length > AC3 the ask for a 2,000-character input states that length 1039ms
+   → the ask for a 2000-character input never states its length, so it reads as the whole input: ...xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx?: expected 'Let this session send with test/stock…' to match /(?<![\w,.])2,?000(?!\w|,\d)/
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/2072/redraft/retry.test.ts > AC1 #2072 After a send is held and answered yes, the same request ID with other input is refused and runs nothing; the first input then runs once > AC1 r1 + input A held and answered yes: r1 + input B is refused with nothing run or entered; r1 + input A runs once
+AssertionError: input {"to":"second@example.invalid"} sent with req-58280f6bb4cdb150 after the yes for input {"to":"first@example.invalid"} was entered in the record: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ tests/acceptance/2072/redraft/retry.test.ts:24:168
+     22|     const other = await callAction(w, SEND, B, r1);
+     23|     // Read the record before judging the answer: a run of B is the fa…
+     24|     expect(entered(await actionEventsFor(w, r1)), `input ${JSON.string…
+       |                                                                                                                                                                        ^
+     25|     expect((await runs(w)).send_digest, `input ${JSON.stringify(B)} se…
+     26|     expectRefused(other, `${SEND} with ${r1} and changed input ${JSON.…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  tests/acceptance/2072/redraft/retry.test.ts > AC2 #2072 After the same yes, the same request ID naming another change or send action is refused the same way > AC2 a send held, a change called under r1: the other action is refused, nothing runs or is entered; the held action then runs once
+AssertionError: ext.stocks.set_alert called with req-d23d9013e7e528f2 after the yes for ext.stocks.send_digest was entered in the record: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ tests/acceptance/2072/redraft/retry.test.ts:47:145
+     45|
+     46|     const other = await callAction(w, otherAction, otherInput, r1);
+     47|     expect(entered(await actionEventsFor(w, r1)), `${otherAction} call…
+       |                                                                                                                                                 ^
+     48|     expect(await runs(w), `${otherAction} called with ${r1} after the …
+     49|     expectRefused(other, `${otherAction} with ${r1}, after the yes for…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  tests/acceptance/2072/redraft/retry.test.ts > AC2 #2072 After the same yes, the same request ID naming another change or send action is refused the same way > AC2 a change held, a send called under r1: the other action is refused, nothing runs or is entered; the held action then runs once
+AssertionError: ext.stocks.send_digest called with req-826b4ec1b2238f90 after the yes for ext.stocks.set_alert was entered in the record: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ tests/acceptance/2072/redraft/retry.test.ts:47:145
+     45|
+     46|     const other = await callAction(w, otherAction, otherInput, r1);
+     47|     expect(entered(await actionEventsFor(w, r1)), `${otherAction} call…
+       |                                                                                                                                                 ^
+     48|     expect(await runs(w), `${otherAction} called with ${r1} after the …
+     49|     expectRefused(other, `${otherAction} with ${r1}, after the yes for…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  tests/acceptance/2072/redraft/retry.test.ts > AC3 #2072 An input longer than the question shows is marked as cut, with its length > AC3 the ask for a 2,000-character input states that length
+AssertionError: the ask for a 2000-character input never states its length, so it reads as the whole input: ...xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx?: expected 'Let this session send with test/stock…' to match /(?<![\w,.])2,?000(?!\w|,\d)/
+
+- Expected:
+/(?<![\w,.])2,?000(?!\w|,\d)/
+
++ Received:
+"Let this session send with test/stocks's ext.stocks.send_digest, given {\"to\":\"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx? \"ask\" \"ask:01M795QD5BD7X2RDB6QCBNCJEH\" \"kind\" \"authority\" \"options\" \"id\" \"approve\" \"label\" \"Send it\" \"decision\" \"allow\" \"id\" \"decline\" \"label\" \"Don't\" \"decision\" \"deny\" \"plan\" \"hash\" \"c42d4db07d7e52d09898feabdaad85e145895b6121ac52d7ea63456ca4146958\" \"steps\" \"does\" \"Send it: ext.stocks.send_digest#req-deed2f19171a2ab5\" \"changes\" \"ext.stocks.send_digest#req-deed2f19171a2ab5\" \"undo\" \"can't undo\" \"public\" \"cost\" \"words\" \"changed\" \"folded\" \"undo\" \"cost_usd\" \"suggested\" \"conflict\" \"needs_person\" \"budget\" \"missing\" \"saves\" \"scope\" \"Answering saves it for this repo (work65232747)\" \"also\" \"receipt\" \"targets\" \"question\" \"Let this session send with test/stocks's ext.stocks.send_digest, given {\\\" \":\\\" \",\" \":1,\" \":[],\""
+
+ ❯ tests/acceptance/2072/redraft/retry.test.ts:68:146
+     66|     const shown = [held.question, ...(JSON.stringify(held.card ?? {}).…
+     67|     expect(shown, `the ask shows the input's first part: ${held.questi…
+     68|     expect(shown, `the ask for a 2000-character input never states its…
+       |                                                                                                                                                  ^
+     69|     expect(held.question.includes('x'.repeat(1991)), 'the whole input …
+     70|   }, 240_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  4 failed (4)
+   Start at  16:43:01
+   Duration  9.93s (tests 97%, transform 2%)

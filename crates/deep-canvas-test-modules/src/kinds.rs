@@ -21,8 +21,42 @@ fn register_preview(r: &mut Registrar) {
         &[],
         "rect@1",
     )
-    .preview("#412")
+    .preview("#412", "R2", "R5")
     .described("A blob drawn as its box, a preview until #412 lands.");
+}
+
+/// What an item of the removed `test.preview.blob@1` opens as: `rect@1` at its box, in the
+/// look's ink, as the blob drew.
+fn blob_as_rect(params: &Value) -> Value {
+    json!({"box": params.get("box").cloned().unwrap_or(Value::Null),
+           "paint": {"fill": {"role": "ink"}}})
+}
+
+fn register_preview_removed(r: &mut Registrar) {
+    r.removed(
+        "test.preview.blob@1",
+        Some(("rect@1", blob_as_rect as fn(&Value) -> Value)),
+    );
+}
+
+fn register_preview_removed_bare(r: &mut Registrar) {
+    r.removed("test.preview.blob@1", None);
+}
+
+fn preview_1_1(register: fn(&mut Registrar)) -> Module {
+    let mut manifest = manifest("test.preview", &[]);
+    manifest.version.minor = 1;
+    Module { manifest, register }
+}
+
+/// `test.preview` 1.1.0 (#1802): it removed `test.preview.blob@1`, whose items open as `rect@1`.
+pub fn preview_removed() -> Module {
+    preview_1_1(register_preview_removed)
+}
+
+/// `test.preview` 1.1.0 planted (#1802): it removed `test.preview.blob@1` with no migration.
+pub fn preview_removed_bare() -> Module {
+    preview_1_1(register_preview_removed_bare)
 }
 
 /// `test.preview` 1.0.0: `test.preview.blob@1 {box}`, drawn as a rect, a preview tracked by #412.

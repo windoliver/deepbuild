@@ -1,8 +1,9 @@
 // The forge, read for the receipt (#83): a pull request's state (open, checks running, merged, released) and the
 // next unblocked issue in an epic. Read when the receipt is read, through the forge's REST API (GitHub's shape),
 // with the token given; a forge that doesn't answer within the receipt's budget leaves the state unknown, never a guess.
+import { isRecord as isObj } from '@deepbuild/contracts';
+
 type Obj = Record<string, unknown>;
-const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 /** How long one receipt may spend on the forge in all, in ms. */
 const BUDGET_MS = 5000;
 
