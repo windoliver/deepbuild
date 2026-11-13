@@ -7521,6 +7521,15 @@ For: sound that follows the picture: an engine whose pitch follows a car's speed
   - delay: whole repeats until feedback reaches −120 dB.
 
   An out that never stops has tail 0 and ends at the span's fade.
+- **Built details.**
+  - A node is written `{kind, …fields}`, or as its kind holding its fields (`{"osc": {wave, hz}}`).
+  - `deep-show run`'s `media_mix` reports each synth strip under `mix.synths.<strip ID>`: `{preset, voices, tail, render_ms, ring}`, the ring in the processors' form. Each segment's `taps` hash every node's output as `<strip ID>/<node ID>` (a spawned voice's strip ID is `<spawn ID>.<k>`), its `seek` holds the synth's restore, and `seek_ms` times the seek.
+  - A delay breaks a cycle only when it is wet (`mix: 1`), since its dry path is not delayed. On a cycle it reads its line no nearer than a block at the mix's rate.
+  - The tail is derived at the worst of each param's range.
+  - A param's expression may read up to 16 names. A dotted name is a logic item's output or a channel ID.
+  - A document naming a preset that no pinned pack holds is refused with `synth.unknown_preset`, and a param the preset lacks with `synth.unknown_param`.
+  - A score's synth instrument may name a pack's preset. `score.render` then renders each note with this code, built to wasm32 from `crates/deep-synth-job`: the preset's param `hz` takes the note's pitch, `vel` its velocity, and the note's span closes its envelopes. The note's level scales it, and its bends and vibrato aren't read.
+  - Pack presets are checked by the registry's rules at the pack check, but `deep://registries` doesn't list them yet.
 
 **Cost:** Per voice per block, O(nodes × block): an osc about 4 multiply-adds a sample, a biquad 5, a mode 3 (estimates); 32 voices of 8 nodes stay under 10% of one core at 48 kHz (estimate); a checkpoint is mostly delay lines. Budget class: as the media module.
 

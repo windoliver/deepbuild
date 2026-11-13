@@ -1425,6 +1425,16 @@
       "initialReason": "Issue #154 first measurement: the merge base has no score renderer. Six 60 s stems of one score (two sampled, two plucked, two synth) render at once, each in its own score-render@1.0.0 process given its params on stdin as the hub gives them; p50 is the wall time from the first start to the last exit, Node's starts included. The issue's 60 s limit on the reference Mac and the cached stems that start no process stay in tests/acceptance/154/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
     },
     {
+      "id": "synth-voices",
+      "command": [
+        "node",
+        "benchmarks/synth.mjs"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #204 first measurement (#204.0458a4e3): the merge base has no synth. One `deep-show run` installs a pack whose one preset has 8 nodes (two saws, pink noise, a mix, a lowpass, an envelope, a gain and an echo) and renders one strip of it with 32 voices for 10 s of a media document through media_mix in one segment, Node's spawn and the binary's start included; the perf lane's other tasks, which hold no synth, are the documents that must gain no work per block. The issue's 10% of one core, the 50 ms restore and no work per block without a synth stay in tests/acceptance/204/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
       "id": "export-fidelity",
       "command": [
         "node",

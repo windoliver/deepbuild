@@ -2371,6 +2371,18 @@
           "why": "Issue #545's blind suite: validates each fixture module before it is written."
         }
       }
+    },
+    "crates/deep-synth-job/Cargo.toml": {
+      "dependencies": {
+        "deep-canvas-media": {
+          "spec": "* path=../deep-canvas-media",
+          "why": "Issue #204: the media module's synth preset and voice code, which this crate builds to wasm32 so score.render renders a pack preset's notes with the live synth's code."
+        },
+        "serde_json": {
+          "spec": "^1",
+          "why": "Issue #204: reads a note's request, its preset among it, as JSON. Already in the workspace tree."
+        }
+      }
     }
   },
   "allowedFindings": [
