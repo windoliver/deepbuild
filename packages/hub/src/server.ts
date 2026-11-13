@@ -91,7 +91,7 @@ const ALLOWED = new Map<string, readonly Role[]>([
   // The blind acceptance job (#1328).
   ['acceptance.start', ['cli']], ['acceptance.status', ['app', 'cli']], ['acceptance.dispute', ['cli']], ['acceptance.ended', ['cli']],
   // Landing in turn (#1331): from your own terminal only.
-  ['land.judge', ['cli']], ['land.round', ['cli']], ['work.once', ['cli']],
+  ['land.judge', ['cli']], ['land.round', ['cli']], ['work.once', ['cli']], ['work.approve', ['cli']], ['work.show', ['cli']], ['work.pause', ['cli']],
   ['job.submit', ['app', 'cli']], ['job.status', ['app', 'cli']], ['job.list', ['app', 'cli']], ['checks.kinds', ['app', 'cli']], ['job.output', ['app', 'cli']],
   // A window reading comes from the app, the CLI, or deep-hook's status line forwarder, which connects as a hook does.
   ['windows.report', ['app', 'cli', 'hook']],

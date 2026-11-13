@@ -3,6 +3,9 @@
   "description": "Take over (#1580): a paired device moved an open ask's card to itself on the trusted path, signing the call with its own key. The card's revision rises to the one named here, so an answer from a copy at an earlier revision is refused, naming the revision, and an unrevisioned answer from another device is refused while the card is there. Only the core appends it.",
   "x-since": "R2",
   "x-stability": "preview",
+  "x-tracking": "#1580",
+  "x-preview_since": "R2",
+  "x-decide_by": "R5",
   "x-feeds": [],
   "type": "object",
   "properties": {

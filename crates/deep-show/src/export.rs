@@ -683,6 +683,10 @@ impl Hub<'_> {
             }
         }
         doc = crate::played::with_track(&doc, &track);
+        if self.scenario.module_planted.as_deref() == Some("export_keeps_live_hover") {
+            // Planted (#539): the frames evaluate hover as the panel's live hover, not none.
+            self.hover_into(&job.doc, &mut doc);
+        }
         let _ = self.inline_tables(&mut doc);
         let _ = self.inline_vectors(&mut doc);
         self.inline_occurrences(&mut doc, &job.track)
