@@ -257,7 +257,9 @@ export type Plant =
   // #2043's: a parser pool that hears its workers' messages only, and one that replaces an ended worker but leaves its lines waiting.
   | 'parser-pool-messages-only' | 'parser-pool-leaves-line-waiting'
   // #2197's: a deep_status that lists every session's open asks.
-  | 'status-lists-every-ask';
+  | 'status-lists-every-ask'
+  // #1577's: a request ID marked in progress where the mark outlives the hub, and an undo applied past a newer change.
+  | 'pending-across-restart' | 'applies-stale-undo';
 const PLANTS: readonly string[] = [
   'statusline-user-settings-only', 'window-unknown-as-zero', 'window-carried-from-other-repo', 'sends-block-whole',
   'box-applies-at-once', 'box-ignores-revision',
@@ -359,6 +361,7 @@ const PLANTS: readonly string[] = [
   'set-up-line-says-nothing-blocks', 'set-up-line-to-stdout', 'silent-steps',
   'parser-pool-messages-only', 'parser-pool-leaves-line-waiting',
   'status-lists-every-ask',
+  'pending-across-restart', 'applies-stale-undo',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {
   if (!value) return undefined;

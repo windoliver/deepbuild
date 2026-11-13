@@ -8456,6 +8456,25 @@ export interface SessionNeverStarted {
   evidence?: Array<string>;
 }
 
+/** session.note@1 */
+export interface SessionNote {
+  v: 1;
+  id: string;
+  kind: "session.note";
+  writer: "app";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    session: string;
+    text: string;
+    request: string;
+  };
+  evidence?: Array<string>;
+}
+
 /** session.paused@1 */
 export interface SessionPaused {
   v: 1;
@@ -8922,6 +8941,25 @@ export interface StackWaiting {
     check: string;
     wait_ms: number;
     expected_ms: number;
+  };
+  evidence?: Array<string>;
+}
+
+/** staged.undone@1 */
+export interface StagedUndone {
+  v: 1;
+  id: string;
+  kind: "staged.undone";
+  writer: "app" | "cli";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    staged: string;
+    folders: Array<string>;
+    files: Array<string>;
   };
   evidence?: Array<string>;
 }

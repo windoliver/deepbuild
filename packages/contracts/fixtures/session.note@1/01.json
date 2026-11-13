@@ -1,0 +1,14 @@
+{
+  "v": 1,
+  "id": "01K74FMXR4T6V8X0Z2B4D6F8H1",
+  "kind": "session.note",
+  "writer": "app",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760017111123,
+  "data": {
+    "session": "7f3c2a10-5d1e-4b9a-9c1d-2e3f4a5b6c7d",
+    "text": "Use the staging database for this one.",
+    "request": "note-01K74FMXR4"
+  }
+}
