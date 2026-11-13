@@ -57,7 +57,7 @@ describe(`${ID} logic@1: the shipped implementation, bit and canonical, and a pa
     expect(b.logic['reference'], 'the shipped implementation is logic@1\'s reference').toBe(b.impl['name']);
     expect(str(b.impl['version'], 'implementation.version'), 'its version is semver').toMatch(SEMVER);
     expect(pins(b.impl, 'logic@1.implementation'), 'its engine is sandbox@1\'s pin').toBe(pins(obj(b.sandbox['implementation'], 'sandbox@1.implementation'), 'sandbox@1.implementation'));
-    expect(pins(b.impl, 'logic@1.implementation'), 'sandbox@1 pins wasmtime =49.0.2').toBe('=49.0.2');
+    expect(pins(b.impl, 'logic@1.implementation'), 'sandbox@1 pins wasmtime =49.0.5').toBe('=49.0.5');
     expect(b.logic['behavior'], 'logic@1 has no behavior part').toBe('none');
     const kitParts = arr(b.logic['kit'], 'logic@1.kit').map(String);
     expect(kitParts, 'logic@1\'s kit is every part of the canvas kit').toEqual(expect.arrayContaining(arr(b.text['kit'], 'text@1.kit').map(String)));
