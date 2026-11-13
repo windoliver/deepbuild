@@ -2236,5 +2236,41 @@
         "decision": "none"
       }
     }
+  },
+  {
+    "source": "contract.extension",
+    "kind": "authority",
+    "fixture": {
+      "ask": {
+        "kind": "authority",
+        "question": "Extend the preview api:deep.on from R4 to R6? Its replacement lands in R6.",
+        "options": [
+          {
+            "id": "approve",
+            "label": "Extend it to R6",
+            "decision": "allow"
+          },
+          {
+            "id": "decline",
+            "label": "Keep R4",
+            "decision": "deny"
+          }
+        ],
+        "recommended": null,
+        "deadline": 1760099851123,
+        "fallback": "you",
+        "default": "decline",
+        "provisional": false,
+        "owner": "you",
+        "key": "721381b14d0e51f152e1b21caa585c12259fa853bf31eea70e706d54fca25a02",
+        "pinned_to": {
+          "kind": "evidence",
+          "ref": "721381b14d0e51f152e1b21caa585c12259fa853bf31eea70e706d54fca25a02"
+        }
+      },
+      "at_deadline": {
+        "decision": "deny"
+      }
+    }
   }
 ]

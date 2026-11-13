@@ -327,13 +327,31 @@ pub struct Kind {
     /// `(deprecated_since, replaced_by)` once the kind is replaced: it still loads, with a
     /// `deprecated` notice (Item and kind).
     pub deprecated: Option<(String, String)>,
-    /// A preview kind's tracking issue: its stability is `preview` until the issue lands (#412).
-    pub preview: Option<String>,
+    /// A preview kind's history: its stability is `preview` until it is promoted or removed
+    /// (#412, #1802).
+    pub preview: Option<Preview>,
     /// Its one-line description, as the sheet `deep_kinds` serves prints it (#412).
     pub description: Option<String>,
     /// The param naming an asset whose probe the check reads (#499): the core has the decode
     /// worker probe it, so a module reads an asset without the media module.
     pub probes: Option<String>,
+}
+
+/// A preview kind's history (#412, #1802): the issue that tracks it, the release it became a
+/// preview in, and the release by which it is promoted, removed or extended.
+#[derive(Clone, Debug)]
+pub struct Preview {
+    pub tracking: String,
+    pub since: String,
+    pub decide_by: String,
+}
+
+/// A preview kind the module removed (#1802): `family.name@major`, with the kind an item of it
+/// opens as and that kind's params from the item's, or none for a removal with no migration.
+#[derive(Clone, Debug)]
+pub struct Removed {
+    pub kind: String,
+    pub migration: Option<(String, DrawFn)>,
 }
 
 /// An array, with one writer: its owner (canvas primitives: Array and table).
@@ -691,6 +709,8 @@ pub struct Registrar {
     pub outline_fills: Vec<(String, crate::outline::Fill)>,
     /// The pack fields it reads, each with its check at the pack check (#1720).
     pub pack_fields: Vec<(String, crate::document::packs::module_fields::PackField)>,
+    /// The preview kinds it removed (#1802).
+    pub removed: Vec<Removed>,
 }
 
 impl Registrar {
@@ -717,11 +737,26 @@ impl Registrar {
         self
     }
 
-    /// The last kind registered is a preview, tracked by the issue `tracking` (#412).
-    pub fn preview(&mut self, tracking: &str) -> &mut Self {
+    /// The last kind registered is a preview, tracked by the issue `tracking` (#412), since the
+    /// release `since` and decided by the release `decide_by` (#1802).
+    pub fn preview(&mut self, tracking: &str, since: &str, decide_by: &str) -> &mut Self {
         if let Some(k) = self.kinds.last_mut() {
-            k.preview = Some(tracking.into());
+            k.preview = Some(Preview {
+                tracking: tracking.into(),
+                since: since.into(),
+                decide_by: decide_by.into(),
+            });
         }
+        self
+    }
+
+    /// The module removed the preview kind `kind` (`family.name@major`); an item of it opens as
+    /// the kind `migration` names, with the params its function gives (#1802).
+    pub fn removed(&mut self, kind: &str, migration: Option<(&str, DrawFn)>) -> &mut Self {
+        self.removed.push(Removed {
+            kind: kind.into(),
+            migration: migration.map(|(to, params)| (to.into(), params)),
+        });
         self
     }
 
@@ -1454,6 +1489,22 @@ impl Sealed {
             }
             out["kind"] = json!(format!("{full}@{}", step.to));
         }
+        Some(out)
+    }
+
+    /// An item of a preview kind its module removed, as the kind its migration gives (#1802);
+    /// `None` for any other item, and where the removal carries no migration.
+    pub fn unremoved(&self, item: &Value) -> Option<Value> {
+        let text = item.get("kind")?.as_str()?;
+        let removed = self
+            .modules
+            .iter()
+            .flat_map(|m| &m.shapes.removed)
+            .find(|r| r.kind == text)?;
+        let (to, params) = removed.migration.as_ref()?;
+        let mut out = item.clone();
+        out["params"] = params(item.get("params").unwrap_or(&Value::Null));
+        out["kind"] = json!(to);
         Some(out)
     }
 
@@ -3456,6 +3507,14 @@ fn module_shapes(
         "tables": tables,
         "tool_entries": tools,
     });
+    // A removal is a shape too; a module with none keeps the digest it had.
+    if !r.removed.is_empty() {
+        whole["removed"] = r
+            .removed
+            .iter()
+            .map(|x| json!({"kind": x.kind, "to": x.migration.as_ref().map(|m| &m.0)}))
+            .collect();
+    }
     // The registries it declares and the entries it fills at the seal (#200), only when it has
     // any, so a module with none keeps the digest it had.
     if let Some(l) = lists {
