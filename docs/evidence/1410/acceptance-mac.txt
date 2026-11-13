@@ -1,23 +1,23 @@
-# #1410 acceptance run at ff5e1634 on the owner's Mac (macOS 14.7.7 arm64, AC power) by the Mac runner, 2026-11-11; colour codes removed, home folder shown as ~
+# #1410 acceptance run at 7ca35833 on the owner's Mac (on battery, not load-gated) by the Mac runner, 2026-11-13; colour codes removed, home folder shown as ~
 
-== head ff5e1634077b0078074b7e54f810e875e8af7798
-Now drawing from 'AC Power'
-load start { 3.75 2.70 2.73 }
+== head 7ca35833db13bb47f9f28eda65aa4281d415e6c9
+Now drawing from 'Battery Power'
+load start { 4.54 4.92 4.92 }
 
- RUN  v5.0.5 ~/private/dbc-1410
+ RUN  v5.0.5 ~/private/dbc-1410b
 
- ✓ tests/acceptance/1410/record.test.ts (3 tests) 592ms
+ ✓ tests/acceptance/1410/record.test.ts (3 tests) 833ms
 stdout | tests/acceptance/1410/hook.test.ts > #1410: a hook call never waits on an evidence sync > AC3: with each evidence sync slowed to 4 s, the resuming UserPromptSubmit (a FULL commit naming its whole text) and the tool calls after it each reply within 1 s, while the sync still happens
-#1410 AC3: 191 hook calls, slowest the resuming UserPromptSubmit at 4 ms (the prompt 4 ms); each evidence sync takes 4000 ms; evidence syncs seen: 2
+#1410 AC3: 189 hook calls, slowest PreToolUse 11 at 50 ms (the prompt 4 ms); each evidence sync takes 4000 ms; evidence syncs seen: 2
 
- ✓ tests/acceptance/1410/hook.test.ts (1 test) 11579ms
+ ✓ tests/acceptance/1410/hook.test.ts (1 test) 11628ms
    ✓ #1410: a hook call never waits on an evidence sync (1)
-     ✓ AC3: with each evidence sync slowed to 4 s, the resuming UserPromptSubmit (a FULL commit naming its whole text) and the tool calls after it each reply within 1 s, while the sync still happens 11529ms
+     ✓ AC3: with each evidence sync slowed to 4 s, the resuming UserPromptSubmit (a FULL commit naming its whole text) and the tool calls after it each reply within 1 s, while the sync still happens 11579ms
 
  Test Files  2 passed (2)
       Tests  4 passed (4)
-   Start at  01:45:35
-   Duration  11.68s (tests 99%, transform 1%)
+   Start at  08:17:29
+   Duration  11.73s (tests 99%, transform 1%)
 
-load end { 3.40 2.66 2.71 }
+load end { 4.95 4.99 4.95 }
 vitest exit=0
