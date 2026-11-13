@@ -15,6 +15,7 @@ mod fidelity;
 mod frames;
 mod guards;
 mod lottie;
+mod pdf;
 #[cfg(feature = "test-export-guards")]
 mod test_guards;
 
@@ -57,6 +58,8 @@ pub enum Guard {
     BlankDarkOnly,
     /// film.wrap compares the last frame with the second.
     WrapAgainstSecond,
+    /// #507: the pdf handout's writer leaves stage 4's page out.
+    PdfSkipsStage4,
     /// A wrong encoder, muxer or reader in the helper processes, by its name there.
     Codec(&'static str),
 }
@@ -112,6 +115,7 @@ pub(crate) fn planted(name: &str) -> Option<Planted> {
         "fidelity_keeps_frames" => Planted::Export(G::FidelityKeepsFrames),
         "blank_counts_dark_only" => Planted::Export(G::BlankDarkOnly),
         "wrap_compares_second_frame" => Planted::Export(G::WrapAgainstSecond),
+        "pdf_writer_skips_stage_4" => Planted::Export(G::PdfSkipsStage4),
         other => Planted::Export(G::Codec(CODEC_PLANTS.iter().find(|p| **p == other)?)),
     })
 }
@@ -305,6 +309,8 @@ pub struct Job {
     pub session: Option<String>,
     /// #162: `lottie: {container, images}` (or `video.lottie`), the Lottie target's options.
     pub lottie: Value,
+    /// #507: `pdf {notes}`: the handout prints each stage's notes under its still.
+    pub notes: bool,
 }
 
 impl Default for Job {
@@ -333,6 +339,7 @@ impl Default for Job {
             refuse_end_cuts: false,
             session: None,
             lottie: Value::Null,
+            notes: false,
         }
     }
 }
@@ -373,6 +380,8 @@ pub enum Span {
     Between(EvalTime, EvalTime),
     Still(EvalTime),
     Marker(String),
+    /// #507: each stage's settled still, the pdf handout's pages.
+    Stages,
     /// A range form the issue lists that this build does not write, by its name.
     Unbuilt(&'static str),
 }
@@ -392,6 +401,7 @@ pub fn parse(c: &Map<String, Value>) -> Option<Job> {
     let range = match c.get("range") {
         None => Span::Whole,
         Some(Value::String(w)) if w == "whole" => Span::Whole,
+        Some(Value::String(w)) if w == "stages" => Span::Stages,
         Some(Value::Array(a)) if a.len() == 2 => Span::Between(at(&a[0])?, at(&a[1])?),
         Some(Value::Object(o)) => match (o.get("still"), o.get("ranges"), o.get("frames")) {
             (Some(Value::Object(st)), _, _) => match (st.get("t"), st.get("marker")) {
@@ -488,6 +498,11 @@ pub fn parse(c: &Map<String, Value>) -> Option<Job> {
             .or_else(|| video.and_then(|v| v.get("lottie")))
             .cloned()
             .unwrap_or(Value::Null),
+        notes: c
+            .get("pdf")
+            .and_then(|p| p.get("notes"))
+            .and_then(Value::as_bool)
+            .unwrap_or(false),
     })
 }
 
@@ -571,6 +586,9 @@ impl Hub<'_> {
         if job.software {
             return Err(no_software_adapter());
         }
+        if job.codec == "pdf" {
+            return self.export_pdf(job, &doc);
+        }
         let target = job.target().to_string();
         // The target, as this build sealed it.
         let entry = self
@@ -645,6 +663,11 @@ impl Hub<'_> {
         let resolve = |hub: &Hub, t: &EvalTime| hub.resolve_time(&job.doc, t).map_err(refuse);
         let frames = match &job.range {
             Span::Unbuilt(form) => return Err(json!({"code": "range_unbuilt", "range": form})),
+            Span::Stages => {
+                return Err(
+                    json!({"code": "range_unbuilt", "range": "stages", "why": "range: stages is the pdf handout's"}),
+                )
+            }
             Span::Whole => {
                 // An open span has no end: an export takes a finite range of its own (Transport).
                 if doc.pointer("/transport/span").and_then(Value::as_str) == Some("open") {
@@ -702,6 +725,19 @@ impl Hub<'_> {
             // Planted (#539): the frames evaluate hover as the panel's live hover, not none.
             self.hover_into(&job.doc, &mut doc);
         }
+        // #507: a film whose markers wait or branch exports one path, each hold as long as the
+        // film audit's hold rule asks for what it shows.
+        let path = match (&job.range, doc_span(&doc)) {
+            (Span::Whole, Some(end)) => self.export_path(&doc, end)?,
+            _ => None,
+        };
+        let frames = match &path {
+            Some(p) => {
+                doc = p.doc.clone();
+                0..(p.frames + frame - 1).div_euclid(frame)
+            }
+            None => frames,
+        };
         let _ = self.inline_tables(&mut doc);
         let _ = self.inline_vectors(&mut doc);
         self.inline_occurrences(&mut doc, &job.track)
@@ -1148,6 +1184,10 @@ impl Hub<'_> {
         }
         if target == "video" {
             receipt["color_probe"] = probe;
+        }
+        if let Some(p) = &path {
+            receipt["ranges"] = json!(p.ranges);
+            receipt["holds"] = json!(p.holds);
         }
         if mix.is_some() {
             receipt["sample_rate"] = json!(hz);

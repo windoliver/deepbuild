@@ -4293,13 +4293,13 @@ pub fn frame_planted(
     )
 }
 
-/// The draw list for evaluated `items`, with what each bound value and counter shows already
-/// formatted (the text module's counters, in the view's locale); `record` gives the readings
-/// bound to mark sets' rows.
+/// The draw list for evaluated `items` in a look's palette and type (#239: text set in the look's
+/// font roles), with what each bound value and counter shows already formatted (the text module's
+/// counters, in the view's locale); `record` gives the readings bound to mark sets' rows.
 pub fn frame_with(
     doc: &Map<String, Value>,
     items: &Map<String, Value>,
-    palette: &Palette,
+    (palette, ty): (&Palette, &Type),
     zoom: f64,
     bound: &BTreeMap<String, Shown>,
     record: &Record,
@@ -4308,7 +4308,7 @@ pub fn frame_with(
     frame_shown(
         doc,
         items,
-        (palette, &Type::default()),
+        (palette, ty),
         zoom,
         Planted::None,
         bound,
@@ -5563,7 +5563,7 @@ fn shaded(
 pub fn item_placed(
     id: &str,
     item: &Value,
-    palette: &Palette,
+    (palette, ty): (&Palette, &Type),
     shown: Option<&Shown>,
 ) -> Option<Placed> {
     let kind = item.get("kind").and_then(Value::as_str)?;
@@ -5600,7 +5600,7 @@ pub fn item_placed(
         items: &empty,
         size: [0.0; 2],
         palette,
-        ty: &Type::default(),
+        ty,
         paints: &paints,
         scopes: &scopes,
         bound: &bound,
@@ -5619,7 +5619,7 @@ pub fn item_placed(
 pub fn frame_prebuilt(
     doc: &Map<String, Value>,
     items: &Map<String, Value>,
-    palette: &Palette,
+    (palette, ty): (&Palette, &Type),
     zoom: f64,
     bound: &BTreeMap<String, Shown>,
     record: &Record,
@@ -5629,7 +5629,7 @@ pub fn frame_prebuilt(
     let (frame, wants_boxes, places) = build(
         doc,
         (items, prebuilt),
-        (palette, &Type::default()),
+        (palette, ty),
         (bound, &row_readings),
         zoom,
         Planted::None,

@@ -50,6 +50,7 @@ mod placement;
 #[cfg(feature = "test-accent")]
 mod planted;
 mod played;
+mod present;
 mod print;
 mod probe;
 mod query;
@@ -417,6 +418,9 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
     if let Some(g) = gate::parse_call(name, c) {
         return Some(Call::Gate(Box::new(g)));
     }
+    if let Some(p) = present::parse_call(name, c) {
+        return Some(Call::Present(p));
+    }
     let doc = || Some(c.get("doc")?.as_str()?.to_string());
     let time = |key: &str, default: i64| -> Option<i64> {
         match c.get(key) {
@@ -713,6 +717,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
                 arrays: optional(c.get("arrays"), query::names)?.unwrap_or_default(),
                 paths: optional(c.get("paths"), query::names)?.unwrap_or_default(),
                 track: optional(c.get("track"), |t| t.as_array().cloned())?,
+                texts: flag("texts")?,
             })));
         }
         "frames" => {
@@ -1202,6 +1207,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                     .map(|o| o.get("label")?.as_str().map(str::to_string))
                     .collect::<Option<_>>()?,
                 slot,
+                deadline: c.get("deadline").and_then(Value::as_i64),
             })
         }
     };

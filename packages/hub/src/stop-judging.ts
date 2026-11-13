@@ -1385,11 +1385,23 @@ export class StopJudging {
     // A reading with no revision time is revised by its text: the definition still names the issue it locked from.
     const readings = (await readIssue(fetch, owner, name, r.issue, this.options.settings.plant).catch(() => undefined))?.map((x) => (x.updated ? x : { ...x, updated: sha256Hex(new TextEncoder().encode(x.body)) }));
     if (!readings?.[0]) throw Error(`issue #${r.issue} of ${r.repo} couldn't be read, so its change can't be judged`);
-    const item = { ...readings[0], readings };
-    // A worktree of the checkout's repo at the merge commit: the claim's folder, removed once its verdict is read.
-    const tree = join(this.options.services.root.dir, 'landing', 'trees', letters(r.session));
+    return this.judgeMerge({ checkout: r.checkout, commit: r.commit, session: r.session, item: { ...readings[0], readings }, tree: join(this.options.services.root.dir, 'landing', 'trees', letters(r.session)), keep: false });
+  }
+  /**
+   * A workspace task's change judged on its merge with the workspace's main (#1347), as a pull request's is, from the
+   * task's record item and with no forge. Its checkout stays, one per task, so a drift runs its checks again there.
+   */
+  judgeTask(r: { folder: string; item: Parameters<AskTasks['landing']>[0]['item']; commit: string; session: string }): ReturnType<StopJudging['judgeLanding']> {
+    const tree = join(this.options.services.root.dir, 'landing', 'tasks', letters(r.item.source_id));
+    return this.judgeMerge({ checkout: r.folder, commit: r.commit, session: r.session, item: { ...r.item, readings: [r.item] }, tree, keep: true });
+  }
+  private async judgeMerge(r: { checkout: string; commit: string; session: string; item: Parameters<AskTasks['landing']>[0]['item']; tree: string; keep: boolean }): ReturnType<StopJudging['judgeLanding']> {
+    const { item, tree } = r;
     mkdirSync(dirname(tree), { recursive: true });
-    await new Promise<void>((done, fail) => execFile('git', ['-C', r.checkout, 'worktree', 'add', '--quiet', '--detach', '--force', tree, r.commit], { env: gitEnv() }, (error) => (error ? fail(error) : done())));
+    const worktree = (...args: string[]) => new Promise<void>((done, fail) => execFile('git', ['-C', r.checkout, 'worktree', ...args], { env: gitEnv() }, (error) => (error ? fail(error) : done())));
+    // A kept checkout from the task's last judgement gives way to this one: the same repo, so its claims' commits stay reachable.
+    if (r.keep && existsSync(tree)) await worktree('remove', '--force', tree).catch(() => rmSync(tree, { recursive: true, force: true }));
+    await worktree('add', '--quiet', '--detach', '--force', tree, r.commit);
     // The checkout's installs serve the claim's checks: a link, which the gate's checkouts clone from where it points.
     for (const dep of ['node_modules', '.venv']) if (existsSync(join(r.checkout, dep)) && !existsSync(join(tree, dep))) symlinkSync(join(r.checkout, dep), join(tree, dep));
     try {
@@ -1415,7 +1427,7 @@ export class StopJudging {
       }
     } finally {
       this.options.state().live.delete(r.session);
-      await new Promise<void>((done) => execFile('git', ['-C', r.checkout, 'worktree', 'remove', '--force', tree], { env: gitEnv() }, () => done()));
+      if (!r.keep) await worktree('remove', '--force', tree).catch(() => undefined);
     }
   }
 
