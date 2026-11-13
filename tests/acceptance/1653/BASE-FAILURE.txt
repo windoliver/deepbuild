@@ -1,0 +1,47 @@
+#1653 acceptance suite at the base, d51be2c3 (Merge pull request #2108), before any implementation.
+
+Each file was run once there, with `deep-canvas-render` built by the suite (`cargo build --locked`, toolchain 1.99.1):
+
+  CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 scripts/lease npx vitest run --root tests/acceptance/1653 <file> --no-file-parallelism
+
+All 12 tests fail, each because the behaviour is missing, not because of the test. `npx tsc --noEmit -p
+tests/acceptance/1653` exits 0. Before that run, the fixtures the controls rest on were probed once against the same
+binary: the parallax and sorting documents without a status binding, and with the status mark outside the group, pass
+`check` under STATUS_LOOK (with #467's look as it is, every document that binds status is refused `status_distance`
+at `look/roles/drop`, which is why STATUS_LOOK drops the eight roles the check names); the bare halo card, the card
+with glow and sky halos and the bare number pass `check` and draw.
+
+halo.test.ts (3 failed of 3)
+- two halos: "the narrower halo (width 4, glow) shows around the glyphs, not hidden under the wider one: expected 0 to
+  be greater than or equal to 30". The glyphs are unchanged and the glyph pixels keep the fill (those assertions pass),
+  but no halo is drawn: nothing reads `halo`.
+- fit: "with a 40 px halo the widest halo passes the box, so the number doesn't fit and isn't drawn: {"ok":true, …}:
+  expected true to be false". The halo isn't counted in the fit check.
+- contrast: "a halo in dark (1.8:1 against the text's fill, under 4.5:1) is refused at check: none: expected true to be
+  false". The check doesn't read the halo.
+
+tiles.test.ts (3 failed of 3)
+- terrain floor: "raster the terrain floor [0] was drawn, not refused: {"ok":false,"code":"module_missing","path":
+  "items/floor/kind: tiles.terrain@1"}". The check expands the floor (that assertion passes), but nothing draws it.
+- flip: "raster the flip rows [0] was drawn, not refused: {"ok":false,"code":"bad_encode", … "ids":["tiles"],"path":
+  "items/tiles/params/encode" …}". marks2d refuses a `marks@1` set with `mark: image` and `atlas`.
+- animated rows: the same `bad_encode` refusal, naming `plain`.
+
+refusals.test.ts (2 failed of 2)
+- parallax: the two controls pass; "the repeating band whose child lamp takes a status role is refused at check: none:
+  expected true to be false". No check refuses status in a repeating parallax group.
+- y sort: the two controls pass; "the sorting group holding post's status badge is refused at check: none: expected
+  true to be false". No check refuses a status badge in a `sort: y` group.
+
+isometric.test.ts (4 failed of 4)
+- centres: "geometry of the isometric set was answered, not refused: {"ok":false,"code":"bad_encode", … "ids":["iso"],
+  "path":"items/iso/params/encode" …}". No isometric layout; the image set is refused.
+- planted square layout: "geometry with isometric_as_square_grid was answered, not refused: {"ok":false,"code":
+  "bad_input"}". The planted value doesn't exist at the base, which answers bad_input as for any unknown value.
+- pixel (10, 2): "raster the isometric set [0] was drawn, not refused: {"ok":false,"code":"bad_encode", …}".
+- planted row order: "raster the isometric set in row order [0] was drawn, not refused: {"ok":false,"code":
+  "bad_input"}".
+
+Not shown at the base, since nothing is drawn: that each planted twin, once it exists, fails its check naming
+`cell (1, 0)` and `pixel (10, 2)`; the comparison code those failures come from is the same that passes the honest
+program, in isometric.test.ts `layoutProblems` and `pixelProblems`.

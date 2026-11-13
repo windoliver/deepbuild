@@ -79,7 +79,13 @@ fn look_of(app: &App, v: &Value, doc: &Map<String, Value>) -> Result<(Palette, T
 
 /// The film's marks at `t` in a look, by writer layer, its ground, its camera, its lamps and its
 /// evaluated items.
-type Marked = (Vec<Vec<Arc<Drawn>>>, Rgb, Option<View>, Vec<Lamp>, Map<String, Value>);
+type Marked = (
+    Vec<Vec<Arc<Drawn>>>,
+    Rgb,
+    Option<View>,
+    Vec<Lamp>,
+    Map<String, Value>,
+);
 
 fn marks_at(
     doc: &Map<String, Value>,
@@ -92,7 +98,9 @@ fn marks_at(
     program.evaluate(t, eval::Validity::Full, state);
     let mut items = eval::items(doc, program, state);
     let lamps = match &ty.drawn {
-        Some(look) => drawn::screen_lamps(look, &items, palette).map_err(|r| refused(r.code, r.path))?,
+        Some(look) => {
+            drawn::screen_lamps(look, &items, palette).map_err(|r| refused(r.code, r.path))?
+        }
         None => Vec::new(),
     };
     let mut view = drawn::view_of(doc, &mut items);
@@ -131,18 +139,15 @@ fn hex(c: &image::Rgba<u8>) -> String {
     format!("#{:02x}{:02x}{:02x}", c[0], c[1], c[2])
 }
 
+/// A rendered frame's encode ms and GPU ms, its hash when asked for, and its bytes when kept.
+type Rendered = (f64, f64, Option<String>, Option<Vec<u8>>);
+
 /// Frame `n` encoded and submitted on the render side and waited for there: the encode's CPU ms
 /// and the GPU layer's ms from the end of the encode to the work done.
-fn render(
-    app: &App,
-    n: u64,
-    encoded: &Encoded,
-    hash: bool,
-    keep: bool,
-) -> Result<(f64, f64, Option<String>, Option<Vec<u8>>), Value> {
+fn render(app: &App, n: u64, encoded: &Encoded, hash: bool, keep: bool) -> Result<Rendered, Value> {
     let encoded = encoded.clone();
     app.worker
-        .call(move |state| -> Result<(f64, f64, Option<String>, Option<Vec<u8>>), String> {
+        .call(move |state| -> Result<Rendered, String> {
             let view = state.view2d.as_mut().ok_or("no 2D surface")?;
             let (drawn, encode) = loop {
                 let started = Instant::now();
@@ -162,7 +167,12 @@ fn render(
             let bytes = (hash || keep).then(|| view.read(drawn.slot)).flatten();
             let pixels = bytes.as_ref().filter(|_| hash).map(|b| frames::hex(b));
             let kept = bytes.filter(|_| keep);
-            Ok((encode.as_secs_f64() * 1e3, gpu.as_secs_f64() * 1e3, pixels, kept))
+            Ok((
+                encode.as_secs_f64() * 1e3,
+                gpu.as_secs_f64() * 1e3,
+                pixels,
+                kept,
+            ))
         })
         .map_err(|e| refused("render_failed", e))
 }
@@ -218,7 +228,9 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
         .iter()
         .find(|t| !["final", "linear", "indices"].contains(t))
     {
-        return Err(bad(&format!("targets are final, linear and indices; {t} isn't one")));
+        return Err(bad(&format!(
+            "targets are final, linear and indices; {t} isn't one"
+        )));
     }
     let wants_linear = targets.contains(&"linear");
     let wants_indices = targets.contains(&"indices");
@@ -231,7 +243,10 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             .as_u64()
             .filter(|f| *f > 0 && *f < count)
             .ok_or_else(|| bad("an event names a frame after the first, within the film"))?;
-        events.push((frame, (look_of(app, &e["look"], &doc)?, def_of(&e["look"])?)));
+        events.push((
+            frame,
+            (look_of(app, &e["look"], &doc)?, def_of(&e["look"])?),
+        ));
     }
     events.sort_by_key(|(f, _)| *f);
     let mut events = events.into_iter().peekable();
@@ -315,14 +330,17 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             Arc::new(crate::indexed::frame(ix, &marks, items, "ground", planted))
         })
     };
-    let snap = |ix: &Option<deep_canvas_marks::print::Indexed>| ix.as_ref().map(|i| f64::from(i.scale));
+    let snap =
+        |ix: &Option<deep_canvas_marks::print::Indexed>| ix.as_ref().map(|i| f64::from(i.scale));
     let (first, ground, view, lamps, items) =
         marks_at(&doc, &program, &mut state, at(from), &look, snap(&ix))?;
     let first_print = printing_at(from, &def, &look, &items, view.as_ref(), ground)?;
     let first_index = index_frame(&ix, &first, &items);
     // The paper's fields hold still; only where the pixels land moves with the camera.
     let page = page_of(&look.1, view.as_ref(), &doc, &roles(&look), call)?;
-    let first_page = page.as_ref().map(|p| Arc::new(p.seen_through(view.as_ref(), lamps)));
+    let first_page = page
+        .as_ref()
+        .map(|p| Arc::new(p.seen_through(view.as_ref(), lamps)));
 
     app.window(size)?;
     {
@@ -352,11 +370,24 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             print,
         })
     };
-    let marks: Marks2 = Arc::new(Mutex::new(frame2(first, from, &look, first_page, first_print, first_index)));
+    let marks: Marks2 = Arc::new(Mutex::new(frame2(
+        first,
+        from,
+        &look,
+        first_page,
+        first_print,
+        first_index,
+    )));
     let encoded: Encoded = Arc::new(Mutex::new(None));
     let taps = crate::print2d::Taps::default();
     *taps.want_linear.lock().unwrap_or_else(|e| e.into_inner()) = wants_linear;
-    let (ui, error) = open2(app, marks.clone(), size, Some(encoded.clone()), taps.clone())?;
+    let (ui, error) = open2(
+        app,
+        marks.clone(),
+        size,
+        Some(encoded.clone()),
+        taps.clone(),
+    )?;
     app.window.as_ref().expect("opened").paint.borrow_mut().ui = Some(ui.clone());
     ui.record(false);
     ui.take_record();
@@ -391,7 +422,9 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 marks_at(&doc, &program, &mut state, at(n), &look, snap(&ix))?;
             let print = printing_at(n, &def, &look, &items, view.as_ref(), ground)?;
             let index = index_frame(&ix, &drawn, &items);
-            let page = page.as_ref().map(|p| Arc::new(p.seen_through(view.as_ref(), lamps)));
+            let page = page
+                .as_ref()
+                .map(|p| Arc::new(p.seen_through(view.as_ref(), lamps)));
             *marks.lock().unwrap_or_else(|e| e.into_inner()) =
                 frame2(drawn, n, &look, page, print, index);
             {
@@ -474,7 +507,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
     if let Some(ix) = &ix {
         let palette: Vec<&str> = ix.palette.iter().map(|(r, _)| r.as_str()).collect();
         reply["indexed"] = json!({"operator": crate::indexed::OPERATOR,
-            "class": crate::indexed::class(), "palette": palette,
+            "class": crate::indexed::class(), "palette": palette, "size": ix.size,
             "target_bytes": crate::indexed::target_bytes(ix.size)});
     }
     if checks_flicker {
@@ -509,7 +542,8 @@ fn linear_of(
             .0
             .iter()
             .flat_map(|p| {
-                let lin = |c: u8| deep_canvas_marks::finish::srgb_decode(f64::from(c) / 255.0) as f32;
+                let lin =
+                    |c: u8| deep_canvas_marks::finish::srgb_decode(f64::from(c) / 255.0) as f32;
                 [lin(p[0]), lin(p[1]), lin(p[2]), 1.0]
             })
             .flat_map(f32::to_le_bytes)
@@ -520,9 +554,17 @@ fn linear_of(
 
 /// A captured frame's index target as the operator wrote it, `<sha256>.u16`.
 fn indices_of(app: &App, out: &str, taps: &crate::print2d::Taps) -> Result<String, Value> {
-    let written = taps.indices.buffer.lock().unwrap_or_else(|e| e.into_inner()).take();
+    let written = taps
+        .indices
+        .buffer
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .take();
     let Some((buffer, size)) = written else {
-        return Err(refused("no_read_back", "the frame's index target wasn't written"));
+        return Err(refused(
+            "no_read_back",
+            "the frame's index target wasn't written",
+        ));
     };
     let bytes = app
         .worker
@@ -537,13 +579,21 @@ fn indices_of(app: &App, out: &str, taps: &crate::print2d::Taps) -> Result<Strin
 /// A frame's surface as a picture: its premultiplied BGRA over the page's ground, RGBA rows.
 fn picture(bytes: &[u8], size: [u32; 2], ground: Rgb, black: bool) -> Vec<u8> {
     let mut out = Vec::with_capacity((size[0] * size[1] * 4) as usize);
-    for p in bytes.chunks_exact(4) {
+    for p in bytes.as_chunks::<4>().0 {
         let under = |c: u8| u32::from(c) * (255 - u32::from(p[3]));
         let over = |s: u8, g: u8| (u32::from(s) + (under(g) + 127) / 255).min(255) as u8;
-        out.extend_from_slice(&[over(p[2], ground[0]), over(p[1], ground[1]), over(p[0], ground[2]), 255]);
+        out.extend_from_slice(&[
+            over(p[2], ground[0]),
+            over(p[1], ground[1]),
+            over(p[0], ground[2]),
+            255,
+        ]);
     }
     if black {
-        out.chunks_exact_mut(4).for_each(|p| p[..3].fill(0));
+        out.as_chunks_mut::<4>()
+            .0
+            .iter_mut()
+            .for_each(|p| p[..3].fill(0));
     }
     out
 }

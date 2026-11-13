@@ -95,7 +95,7 @@ Your shell is `/bin/sh` in a tmux server the test starts (`tmux -S <temp>/tmux.s
 |---|---|---|---|---|
 | 1 | `#24.4963284a` | `answer`: one | a CLI that doesn't save a decision, or saves it at another scope | FAIL: `deep inbox` unsupported (exit 2) |
 | 2 | `#24.4373d3bf` | `agents`: three | a hub without the peer check (a); a `deep mcp` with an answering tool (b); a role table that lets `mcp` answer (c) | (a) FAIL: unsupported command; (b), (c) PASS: the base has no answering tool, and #16's role table already refuses `mcp` |
-| 3 | `#24.bbe12971` | `budgets`: three | a listing without kind, session or age, or with closed asks (a); no perf-lane task (b); a slow listing (c) | (a), (c) FAIL: unsupported command; (b) FAIL: no task `deep-inbox-30d` |
+| 3 | `#24.bbe12971` | `budgets`: the perf-lane task (b); the listing (a) and the 300 ms reading (c) now `redraft-1463/listing.test.ts` (3) and `redraft-1463/timing.test.ts` (1), the blind redraft swapped in for #1463 | a listing without kind, session or age, or with closed asks (a); no perf-lane task (b); a slow listing (c) | (a), (c) FAIL: unsupported command; (b) FAIL: no task `deep-inbox-30d` |
 | 4 | `#24.71112e3b` | `confirm`: one; `plants`: two | plants `answer-on-peer-check`, `answer-on-token` (each fails naming the ask) | FAIL: unsupported command (exit 2); plants FAIL: the hub refuses the unknown plant names |
 | 5 | `#24.b58ac6a6` | `confirm`: one; `plants`: one | plant `answer-on-token` (fails naming the ask) | FAIL: the hub answers `not_found`, not `unconfirmed`; plant FAIL as above |
 

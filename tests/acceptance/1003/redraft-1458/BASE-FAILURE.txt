@@ -1,0 +1,28 @@
+# The redrafted #1003 look tests at the base 2721ca7b, macOS arm64, 2026-11-09
+# node --test tests/acceptance/1003/redraft-1458/look.test.mjs tests/acceptance/1003/redraft-1458/wrong.test.mjs
+# (through scripts/lease; cargo 1.99.1 with CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0; the control's time includes the build)
+# Every test passes at the base. README.md, "At the base", says why and names the wrong program each test fails on.
+
+scripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `node --test tests/acceptance/1003/redraft-1458/look.test.mjs tests/acceptance/1003/redraft-1458/wrong.test.mjs` runs unleased
+✔ the fixture look, which keeps every rule the README pins, passes the guard and resolves its terminal and focus roles (208405.278375ms)
+✔ #1003.5c4fd8c1 a planted look whose bright black is 2:1 on the terminal background is refused, naming the color (97.271333ms)
+✔ #1003.4b14acdc a planted look with no focus role is refused (95.8245ms)
+✔ #1003.4b14acdc (scope) a planted look whose focus is under 3:1 on a surface is refused, naming focus and that surface (96.296292ms)
+✔ the control guard passes every redrafted judge (3.70225ms)
+✔ the judgeControl judge fails a guard that wants ink_tertiary (0.357042ms)
+✔ the judgeControl judge fails a guard that refuses every look (0.169958ms)
+✔ the judgeBrightBlack judge fails a guard that has no terminal check (0.391ms)
+✔ the judgeBrightBlack judge fails a guard that names ansi_8, not the role (0.795375ms)
+✔ the judgeBrightBlack judge fails a guard that gives no ratio (0.389208ms)
+✔ the judgeNoFocus judge fails a guard that passes a look with no focus (0.447416ms)
+✔ the judgeFaintFocus judge fails a guard that names the ground whatever surface fails (0.419166ms)
+✔ the old fixture, whose ink_tertiary is 3.59:1, fails the amended rules, so each plant on it breaks more than its plant (2.289958ms)
+ℹ tests 13
+ℹ suites 0
+ℹ pass 13
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 208758.431625
+exit 0

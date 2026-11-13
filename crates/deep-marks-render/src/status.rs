@@ -52,6 +52,7 @@ pub fn label_of(spec: &scene::TextSpec) -> Option<Label> {
         max_lines: spec.max_lines,
         mask: spec.mask,
         bound: spec.bound,
+        spans: spec.spans.clone(),
         align: match spec.align {
             Align::Start => deep_text::Align::Start,
             Align::Center => deep_text::Align::Center,

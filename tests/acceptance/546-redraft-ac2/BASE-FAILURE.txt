@@ -1,0 +1,32 @@
+Base: 6e17c659 (6e17c659b1536ccd4a3054ed18577f6c56f85052), which is f38d2b39 ("Merge pull request #2155 ...") plus
+the original blind suite tests/acceptance/546/. macOS arm64, 2026-11-10.
+
+NOT RUN at the base. This worktree had no cargo target directory, and every test first builds deep-logic and deep-show
+(gpui, wasmtime, vello) from cold, which takes well past a few minutes. Test 1's Linux leg would then build deep-logic
+again under linux/amd64 emulation. The job's brief said not to spend an emulated Docker build on a base run, and to run
+vitest at the base only if it finished in a few minutes. Neither test has run against any deep-logic or deep-show, and
+the Docker leg has never run.
+
+What did run:
+  npx tsc -p tests/acceptance/546-redraft-ac2/tsconfig.json   -> exit 0
+  NO_COLOR=1 npx vitest list --root tests/acceptance/546-redraft-ac2
+    -> collects the 2 tests; both names start with #546.232a6e07
+
+Where each test fails first at the base, read from the base's code and from the 546 suite's own base run at this same
+commit (tests/acceptance/546/BASE-FAILURE.txt, whose criterion 2 tests stop at the same call):
+
+- Test 1 ("#546.232a6e07 a step between the data view class's web and app ceilings passes on the app and fails on the
+  web, ..."): setup() reads the table first. deep_kinds `step_ceilings` is refused (crates/deep-show/src/kinds.rs
+  allows only list, word, search, read, gallery and sheet):
+    {"error":{"code":"enum",...,"path":"/op","actual":"step_ceilings",...}}
+  ../546/helpers.ts answer() fails there: "deep_kinds step_ceilings answers, not refuses". It fails before any Docker
+  call.
+- Test 2 ("#546.232a6e07 budget_web_passes_from_fuel reads PASS on the piece that fits, ..."): calls setup() too, and
+  fails at the same call.
+
+Past that call, the base also lacks every other surface the tests reach:
+- A web ceiling. budget.rs reads every host but app as BLOCKED, with no ceiling failure, so `between` would read
+  BLOCKED, not FAIL.
+- A ceiling for the piece's class. Every piece is held to the figure class's 4 ms.
+- `report.items[<id>].ceiling`.
+- `--planted budget_web_passes_from_fuel`. deep-logic answers {"ok":false,"code":"bad_input"} and exits 2.

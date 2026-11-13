@@ -5,6 +5,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde_json::{json, Map, Value};
 
+use super::pack_kinds::kind_rules;
 use super::packs::{self, Expansion, Packs, Resolved};
 use super::{
     kind_text, member, sort_issues, sort_notices, Issue, Notice, ADJUST_FIELDS, AT_RELATIONS,
@@ -49,6 +50,8 @@ pub struct CheckResult {
     /// Each recipe instance's expansion (Recipe): its key and its derived items, which
     /// `lowered` holds after the instance.
     pub expansions: Vec<Expansion>,
+    /// Each pack rule the `kind_rules` check ran, with the pack it came from (#202).
+    pub rules_ran: BTreeSet<(String, String)>,
 }
 
 impl CheckResult {
@@ -128,7 +131,9 @@ fn check_by(
     check_transport(doc, &mut issues);
     let required = required_minors(doc, sealed, &mut issues);
     let resolved = packs::resolve(doc, packs, Some(sealed), &mut issues);
+    notices.extend(resolved.missing.iter().map(packs::retired::Missing::notice));
     let mut expansions = Vec::new();
+    let mut rules_ran = BTreeSet::new();
     // The canvas modules the document declares, which every module kind it uses must be among.
     let declared: BTreeSet<String> = member(doc, "requires")
         .and_then(|r| member(r, "modules"))
@@ -145,6 +150,24 @@ fn check_by(
             // Whether a kind text migrates is looked up once per text, not once per item.
             let mut migrates: BTreeMap<String, bool> = BTreeMap::new();
             for (key, item) in items.iter_mut() {
+                // A preview kind its module removed opens through its migration (#1802).
+                if let Some(moved) = sealed.unremoved(item) {
+                    let text = kind_text(item).unwrap_or_default();
+                    notices.push(Notice {
+                        code: "migrated",
+                        ids: vec![key.clone()],
+                        path: format!("items/{key}/kind"),
+                        actual: json!(text),
+                        what: format!(
+                            "migrated {text}, a preview kind its module removed, to {}",
+                            kind_text(&moved).unwrap_or_default()
+                        ),
+                        migration: None,
+                        replaced_by: None,
+                        close: Vec::new(),
+                    });
+                    *item = moved;
+                }
                 let Some(text) = kind_text(item) else {
                     continue;
                 };
@@ -161,11 +184,35 @@ fn check_by(
                     migrate_item(key, item, &mut notices, kinds);
                 }
             }
+            super::pack_kinds::migrate::at_load(items, &resolved, &mut notices);
             // Expansion at check, never per frame (Recipe): the derived items join the lowered
             // items before any item is checked, so they meet the item contract, the module
             // checks and the budget as any item does.
             issues.extend(packs::driven_counts(doc, items, &resolved));
             expansions = packs::expand(items, &resolved, packs.planted, &mut issues);
+            // A broken-out item its instance's version no longer derives stays the writer's
+            // own, and the load says so (Pack: migrations as data; #1961).
+            for e in &expansions {
+                for (i, orphan) in &e.orphaned {
+                    notices.push(Notice {
+                        code: "derived_orphan",
+                        ids: vec![orphan.clone(), e.instance.clone()],
+                        path: format!("items/{}/broken_out/{i}", e.instance),
+                        actual: json!(orphan),
+                        what: format!(
+                            "{} no longer derives `{orphan}`, broken out of `{}`: it stays the writer's own",
+                            e.pack, e.instance
+                        ),
+                        migration: None,
+                        replaced_by: None,
+                        close: Vec::new(),
+                    });
+                }
+            }
+            // The core's `kind_rules` check: each instance's rules once, after its expansion (#202).
+            let rules = kind_rules(doc, items, &expansions, &resolved, packs.planted);
+            issues.extend(rules.issues);
+            rules_ran = rules.ran;
             let derived: BTreeSet<&str> = expansions
                 .iter()
                 .flat_map(|e| e.derived.keys().map(String::as_str))
@@ -200,15 +247,23 @@ fn check_by(
                     }
                 }
             }
+            // #504: an item joins an assembly by naming it as its parent (Assembly).
+            let assembly_ids: BTreeSet<&str> = member(doc, "assemblies")
+                .and_then(Value::as_object)
+                .into_iter()
+                .flat_map(|m| m.keys().map(String::as_str))
+                .collect();
             let ctx = ItemContext {
                 layer_ids: &layer_ids,
                 item_ids: &item_ids,
+                assembly_ids: &assembly_ids,
                 parents: &parents,
                 required: &required,
                 declared: &declared,
                 pack_declared: &pack_declared,
                 derived: &derived,
                 sealed,
+                kinds,
                 facts: &facts,
             };
             // Each item checks on its own, so a big document's items check in chunks across the
@@ -268,6 +323,9 @@ fn check_by(
                 Tail::Document => {
                     check_id_maps(&lowered, &mut issues);
                     check_controls(&lowered, sealed, &mut issues);
+                    check_assemblies(&lowered, &mut issues);
+                    check_card(&lowered, &mut issues);
+                    super::variants::check(&lowered, &mut issues);
                     check_time_remaps(&lowered, &expansions, &mut issues);
                     check_targets(&lowered, "channels", false, kinds, sealed, &mut issues);
                     check_targets(&lowered, "bound_values", true, kinds, sealed, &mut issues);
@@ -297,6 +355,7 @@ fn check_by(
         core: core_name(),
         set_digest: sealed.set_digest.clone(),
         expansions,
+        rules_ran,
     }
 }
 
@@ -481,10 +540,16 @@ fn module_checks(
 /// those a recipe derived among them (Recipe: lights count in the budget; #420), and a
 /// document with more is refused, naming them.
 fn lights_check(lowered: &Value, issues: &mut Vec<Issue>) {
-    let Some(cap) = member(lowered, "budget")
-        .and_then(|b| member(b, "lights"))
-        .and_then(Value::as_u64)
-    else {
+    let Some(given) = member(lowered, "budget").and_then(|b| member(b, "lights")) else {
+        return;
+    };
+    let Some(cap) = given.as_u64() else {
+        issues.push(Issue::envelope(
+            "out_of_range",
+            "budget/lights".into(),
+            given.clone(),
+            "not a whole number at or above 0",
+        ));
         return;
     };
     let lights: Vec<String> = member(lowered, "items")
@@ -1201,6 +1266,7 @@ pub(super) fn migrate_item(
 struct ItemContext<'a> {
     layer_ids: &'a BTreeSet<String>,
     item_ids: &'a BTreeSet<&'a str>,
+    assembly_ids: &'a BTreeSet<&'a str>,
     parents: &'a BTreeMap<String, String>,
     required: &'a BTreeMap<String, u32>,
     declared: &'a BTreeSet<String>,
@@ -1209,6 +1275,7 @@ struct ItemContext<'a> {
     /// The IDs expansion wrote.
     derived: &'a BTreeSet<&'a str>,
     sealed: &'a Sealed,
+    kinds: &'a Registry,
     /// What the build says about each kind text the lowered items write.
     facts: &'a BTreeMap<String, KindFacts<'a>>,
 }
@@ -1227,6 +1294,8 @@ struct KindFacts<'a> {
     deprecation: Option<&'a (String, String)>,
     /// The close names an unknown kind's notice names (#412).
     close: Vec<Value>,
+    /// Of a pack the document names and this build lacks: kept as written, skipped (#1958).
+    pack_missing: bool,
 }
 
 impl<'a> KindFacts<'a> {
@@ -1249,6 +1318,7 @@ impl<'a> KindFacts<'a> {
                 }
                 _ => Vec::new(),
             },
+            pack_missing: packs::retired::skipped(text, resolved),
         }
     }
 }
@@ -1296,6 +1366,11 @@ fn check_item(
     let Some(facts) = ctx.facts.get(text) else {
         return false;
     };
+    // An instance of a pack this build lacks: its pack's notice names it, and nothing of it is
+    // read past its kind (#1958).
+    if facts.pack_missing {
+        return false;
+    }
     let instance = facts.instance;
     if let Some(value) = fields.get("broken_out").filter(|_| !instance) {
         issues.push(Issue::error(
@@ -1439,12 +1514,13 @@ fn check_item(
                 ));
             }
         }
+        Some(Value::String(parent)) if ctx.assembly_ids.contains(parent.as_str()) => {}
         Some(parent) => issues.push(Issue::error(
             "ref_unresolved",
             key,
             at("parent"),
             parent.clone(),
-            "names no item of the document",
+            "names no item or assembly of the document",
         )),
     }
     for field in ["name", "order"] {
@@ -1526,6 +1602,7 @@ fn check_item(
             version,
             required_minor,
             ctx.sealed,
+            ctx.kinds,
             issues,
             notices,
         );
@@ -1784,6 +1861,7 @@ fn check_params(
     version: &Version,
     required_minor: Option<u32>,
     sealed: &Sealed,
+    kinds: &Registry,
     issues: &mut Vec<Issue>,
     notices: &mut Vec<Notice>,
 ) {
@@ -1810,8 +1888,22 @@ fn check_params(
                 });
                 dropped.push(name.clone());
             } else {
+                // A field another kind defines names that kind after any rename, in the close
+                // names, and first in the fix when no rename comes before it (#1970).
+                let owners = super::close::owners(name, entry, kinds, sealed.close_fault);
+                let close =
+                    super::close::field_names(name, entry, version, &owners, sealed.close_fault);
+                let fix = if close.first().is_some_and(|c| c.get("defines").is_some()) {
+                    format!(
+                        "`{name}` is a field of {}: give the item that kind, or remove the field.",
+                        owners.join(" or ")
+                    )
+                } else {
+                    super::fix_for("unknown_field")
+                };
                 issues.push(Issue {
-                    close: super::close::field_names(name, entry, version, sealed.close_fault),
+                    close,
+                    fix,
                     ..Issue::error(
                         "unknown_field",
                         key,
@@ -1942,7 +2034,6 @@ pub fn literal_forms(unit: &str) -> Vec<String> {
         .collect()
 }
 
-/// Checks a map of `{target: path[, source: handle]}` entries against the lowered document.
 /// Every map keyed by ID takes keys in the ID grammar; a key a path can't name is `bad_id`.
 fn check_key(section: &str, key: &str, issues: &mut Vec<Issue>) {
     if let Err(r) = Id::parse(key) {
@@ -1989,6 +2080,13 @@ fn check_controls(doc: &Value, sealed: &Sealed, issues: &mut Vec<Issue>) {
     };
     for (key, entry) in entries {
         let Some(fields) = entry.as_object() else {
+            issues.push(Issue::error(
+                "out_of_range",
+                key,
+                format!("controls/{key}"),
+                entry.clone(),
+                "not an object",
+            ));
             continue;
         };
         if let Some(kind) = fields.get("kind").and_then(Value::as_str) {
@@ -2018,6 +2116,295 @@ fn check_controls(doc: &Value, sealed: &Sealed, issues: &mut Vec<Issue>) {
     }
 }
 
+/// A figure's card (Overlay: a figure's card is a fixed overlay set, #504): its fields, each text
+/// line a template whose slots resolve, so every number the card shows is a value the document
+/// computes, and its legend a list of `{tone, label, role}`.
+fn check_card(doc: &Value, issues: &mut Vec<Issue>) {
+    let Some(card) = member(doc, "card") else {
+        return;
+    };
+    let Some(fields) = card.as_object() else {
+        issues.push(Issue::envelope(
+            "out_of_range",
+            "card".into(),
+            card.clone(),
+            "not an object",
+        ));
+        return;
+    };
+    for (field, v) in fields {
+        let path = format!("card/{field}");
+        if field == "legend" {
+            let ok = v.as_array().is_some_and(|l| {
+                l.iter().all(|e| {
+                    e.as_object().is_some_and(|e| {
+                        e.keys()
+                            .all(|k| ["tone", "label", "role"].contains(&k.as_str()))
+                    })
+                })
+            });
+            if !ok {
+                issues.push(Issue::envelope(
+                    "out_of_range",
+                    path,
+                    v.clone(),
+                    "not a list of {tone, label, role}",
+                ));
+            }
+            continue;
+        }
+        if !crate::template::CARD_LINES.contains(&field.as_str()) {
+            issues.push(Issue::envelope(
+                "unknown_field",
+                path,
+                v.clone(),
+                "not a field of a card",
+            ));
+            continue;
+        }
+        let Some(text) = v.as_str() else {
+            issues.push(Issue::envelope(
+                "out_of_range",
+                path,
+                v.clone(),
+                "not a string",
+            ));
+            continue;
+        };
+        match crate::template::parts(text) {
+            Err(_) => issues.push(Issue::envelope(
+                "out_of_range",
+                path,
+                v.clone(),
+                "a brace that opens no slot or closes none",
+            )),
+            Ok(parts) => {
+                for part in parts {
+                    if let crate::template::Part::Slot(slot) = part {
+                        if crate::template::value(doc, slot).is_none() {
+                            let what = "the slot's path names no value this build shows";
+                            issues.push(Issue::envelope(
+                                "ref_unresolved",
+                                path.clone(),
+                                json!(slot),
+                                what,
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// The deepest chain of assemblies (Assembly: it can never nest more than 4 deep).
+const ASSEMBLY_DEPTH: usize = 4;
+
+/// Each assembly (Assembly, #504): its fields, its one parent another assembly with no cycle and
+/// no chain deeper than four, a slide or a turn with an axis, a pivot and an ordered range, its
+/// apart offset and its place in the take-apart. A `repeat` or a motion along a path isn't in
+/// this build, so both are refused, named.
+fn check_assemblies(doc: &Value, issues: &mut Vec<Issue>) {
+    let Some(entries) = member(doc, "assemblies").and_then(Value::as_object) else {
+        return;
+    };
+    let items = member(doc, "items").and_then(Value::as_object);
+    let parent_of = |id: &str| {
+        entries
+            .get(id)
+            .and_then(|a| member(a, "parent"))
+            .and_then(Value::as_str)
+    };
+    let vec3 = |v: &Value| {
+        v.as_array()
+            .is_some_and(|a| a.len() == 3 && a.iter().all(Value::is_number))
+    };
+    for (key, entry) in entries {
+        let Some(fields) = entry.as_object() else {
+            let path = format!("assemblies/{key}");
+            issues.push(Issue::error(
+                "out_of_range",
+                key,
+                path,
+                entry.clone(),
+                "not an object",
+            ));
+            continue;
+        };
+        if items.is_some_and(|i| i.contains_key(key)) {
+            let what = "an item of the document has the same ID";
+            issues.push(Issue::error(
+                "out_of_range",
+                key,
+                format!("assemblies/{key}"),
+                entry.clone(),
+                what,
+            ));
+        }
+        let mut bad = |code, field: &str, actual: Value, what: &str| {
+            let path = format!("assemblies/{key}/{field}");
+            issues.push(Issue::error(code, key, path, actual, what));
+        };
+        for field in fields.keys() {
+            match field.as_str() {
+                "parent" | "at" | "motion" | "value" | "apart" | "order" | "shown_at" => {}
+                "repeat" => bad(
+                    "out_of_range",
+                    field,
+                    fields[field].clone(),
+                    "not in this build",
+                ),
+                _ => bad(
+                    "unknown_field",
+                    field,
+                    fields[field].clone(),
+                    "not a field of an assembly",
+                ),
+            }
+        }
+        match fields.get("parent") {
+            None | Some(Value::Null) => {}
+            Some(Value::String(p)) if entries.contains_key(p) => {
+                // Up the chain from this assembly: back to it is a cycle, past four is too deep.
+                let (mut at, mut depth) = (p.as_str(), 1);
+                loop {
+                    if at == key {
+                        bad(
+                            "cycle",
+                            "parent",
+                            json!(p),
+                            "the parents lead back to the assembly",
+                        );
+                        break;
+                    }
+                    depth += 1;
+                    if depth > ASSEMBLY_DEPTH {
+                        bad("out_of_range", "parent", json!(p), "nests more than 4 deep");
+                        break;
+                    }
+                    match parent_of(at) {
+                        Some(next) if entries.contains_key(next) => at = next,
+                        _ => break,
+                    }
+                }
+            }
+            Some(Value::String(p)) => bad(
+                "ref_unresolved",
+                "parent",
+                json!(p),
+                "names no assembly of the document",
+            ),
+            Some(other) => bad(
+                "out_of_range",
+                "parent",
+                other.clone(),
+                "not one assembly ID or null",
+            ),
+        }
+        if fields.get("at").is_some_and(|a| !a.is_object()) {
+            bad(
+                "out_of_range",
+                "at",
+                fields["at"].clone(),
+                "not a transform",
+            );
+        }
+        if fields.get("value").is_some_and(|v| !v.is_number()) {
+            bad(
+                "out_of_range",
+                "value",
+                fields["value"].clone(),
+                "not a number",
+            );
+        }
+        if fields.get("apart").is_some_and(|v| !vec3(v)) {
+            bad(
+                "out_of_range",
+                "apart",
+                fields["apart"].clone(),
+                "not three numbers, in m",
+            );
+        }
+        if fields
+            .get("order")
+            .is_some_and(|v| !v.as_u64().is_some_and(|n| n <= u64::from(u16::MAX)))
+        {
+            bad(
+                "out_of_range",
+                "order",
+                fields["order"].clone(),
+                "not a u16",
+            );
+        }
+        let Some(motion) = fields.get("motion") else {
+            continue;
+        };
+        let Some(m) = motion.as_object() else {
+            bad("out_of_range", "motion", motion.clone(), "not an object");
+            continue;
+        };
+        for field in m.keys() {
+            if !["kind", "axis", "pivot", "range", "path"].contains(&field.as_str()) {
+                bad(
+                    "unknown_field",
+                    &format!("motion/{field}"),
+                    m[field].clone(),
+                    "not a field of a motion",
+                );
+            }
+        }
+        match m.get("kind").and_then(Value::as_str) {
+            Some("slide" | "turn") => {}
+            Some("path") => bad(
+                "out_of_range",
+                "motion/kind",
+                json!("path"),
+                "not in this build",
+            ),
+            _ => bad(
+                "out_of_range",
+                "motion/kind",
+                m.get("kind").cloned().unwrap_or(Value::Null),
+                "one of slide or turn",
+            ),
+        }
+        let axis = m.get("axis");
+        let zero = axis
+            .and_then(Value::as_array)
+            .is_some_and(|a| a.iter().all(|x| x.as_f64() == Some(0.0)));
+        if !axis.is_some_and(vec3) || zero {
+            bad(
+                "out_of_range",
+                "motion/axis",
+                axis.cloned().unwrap_or(Value::Null),
+                "three numbers, not all zero",
+            );
+        }
+        if m.get("pivot").is_some_and(|p| !vec3(p)) {
+            bad(
+                "out_of_range",
+                "motion/pivot",
+                m["pivot"].clone(),
+                "not three numbers, in m",
+            );
+        }
+        if let Some(range) = m.get("range") {
+            let ends = range
+                .as_array()
+                .filter(|r| r.len() == 2)
+                .and_then(|r| Some((r[0].as_f64()?, r[1].as_f64()?)));
+            if !ends.is_some_and(|(lo, hi)| lo <= hi) {
+                bad(
+                    "out_of_range",
+                    "motion/range",
+                    range.clone(),
+                    "not [min, max] with min ≤ max",
+                );
+            }
+        }
+    }
+}
+
 /// Each time remap (Time remap): its target a recipe instance the check expanded, a placement or
 /// the document, and its map `reverse`, a preset or a channel of keys, whose fields the motion
 /// module reads. A reverse over anything but a placement runs over the document's span.
@@ -2029,6 +2416,13 @@ fn check_time_remaps(doc: &Value, expansions: &[Expansion], issues: &mut Vec<Iss
     let placements = member(doc, "placements").and_then(Value::as_object);
     for (key, entry) in entries {
         let Some(fields) = entry.as_object() else {
+            issues.push(Issue::error(
+                "out_of_range",
+                key,
+                format!("time_remaps/{key}"),
+                entry.clone(),
+                "not an object",
+            ));
             continue;
         };
         let mut bad = |code, field: &str, what: &str| {
@@ -2043,7 +2437,8 @@ fn check_time_remaps(doc: &Value, expansions: &[Expansion], issues: &mut Vec<Iss
         }
         let target = fields.get("target").and_then(Value::as_str);
         let placed = target.is_some_and(|t| placements.is_some_and(|p| p.contains_key(t)));
-        let known = target.is_some_and(|t| t == "document" || expansions.iter().any(|e| e.instance == t));
+        let known =
+            target.is_some_and(|t| t == "document" || expansions.iter().any(|e| e.instance == t));
         if !known && !placed {
             bad(
                 "ref_unresolved",
@@ -2113,6 +2508,11 @@ fn check_targets(
         }
         let target_path = format!("{section}/{key}/target");
         match member(entry, "target") {
+            // #504: a take-apart's target: the share of each target assembly's `apart` its
+            // follow's stagger writes (Assembly: "timed by the follow's stagger").
+            Some(Value::String(text))
+                if text == "assemblies/apart"
+                    && entry.pointer("/follow/stagger/targets").is_some() => {}
             Some(Value::String(text)) => match Path::parse(text) {
                 Ok(path) => {
                     if let Err(what) = resolve(doc, &path, kinds) {
@@ -2218,6 +2618,9 @@ const CHANNEL_FIELDS: &[&str] = &[
     "modifiers",
     "range",
     "morph",
+    // Follow: a `mode: follow` channel's source, model, outputs and stagger.
+    "follow",
+    "exaggerate", // #1183: a measured length mapped at another ratio than its `shown_at`.
 ];
 
 /// A bound value's fields (Bound value).
@@ -2424,6 +2827,15 @@ pub(crate) fn resolve(
             fields.join("/")
         ))
     };
+    // #504: an assembly's `value` is what a driver or a channel moves it by, 0 when unwritten,
+    // and the only field anything may write (Assembly: it moves only through value, apart or a
+    // constraint).
+    if path.section() == Section::Assemblies {
+        return match fields.as_slice() {
+            ["value"] => Ok(()),
+            _ => unreachable(),
+        };
+    }
     if path.section() != Section::Items {
         let mut cursor = target;
         for field in &fields {

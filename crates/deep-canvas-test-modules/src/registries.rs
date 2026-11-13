@@ -542,3 +542,37 @@ pub fn columns() -> Module {
         },
     }
 }
+
+/// `test-export-target` (#501): `test.export`, which fills the core's `export.target@1` with
+/// `raw`, read back by something other than its writer, in a build without media.
+pub fn export_raw() -> Module {
+    Module {
+        manifest: manifest("test.export", &[]),
+        register: |r| {
+            r.entry(
+                "export.target@1",
+                "test.raw",
+                json!({"writer": "test.export", "fidelity": ["export.fidelity"],
+                       "reader": "test.reader", "hidden": "listed"}),
+                "R6",
+            );
+        },
+    }
+}
+
+/// `test-export-target-self-read` (#501): the planted target `self_read`, whose reader is its
+/// own writer.
+pub fn export_self_read() -> Module {
+    Module {
+        manifest: manifest("test.export.selfread", &[]),
+        register: |r| {
+            r.entry(
+                "export.target@1",
+                "self_read",
+                json!({"writer": "test.export.selfread", "fidelity": ["export.fidelity"],
+                       "reader": "test.export.selfread", "hidden": "listed"}),
+                "R6",
+            );
+        },
+    }
+}

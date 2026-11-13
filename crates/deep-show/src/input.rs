@@ -37,6 +37,12 @@ struct Seen {
 pub struct PanelScope {
     pub(crate) scope: Scope,
     seen: Vec<(i64, Seen)>,
+    /// #501: the panel's film viewer, made when a film it shows first takes a key or is read.
+    pub(crate) viewer: Option<crate::film_viewer::FilmViewer>,
+    /// #504: when the pointer last went down, the time a click's pick is stamped at.
+    pressed: i64,
+    /// #539: its pick controls' focus, hover and announcements, and the record of the play.
+    pub(crate) picks: crate::picks::Viewer,
 }
 
 pub fn point(v: &Value) -> Option<[f64; 2]> {
@@ -82,6 +88,7 @@ pub fn event(v: &Value) -> Option<Event> {
         "key" => Event::Key {
             key: v.get("key")?.as_str()?.to_string(),
             cmd: mods()?.contains(&"cmd"),
+            alt: mods()?.contains(&"alt"),
         },
         "text" => Event::Text(v.get("text")?.as_str()?.to_string()),
         "control" => Event::Control {
@@ -183,6 +190,7 @@ impl Hub<'_> {
                 pick_mid_gesture: p == Some(Planted::PickMidGesture),
                 full_screen_only_3d: p == Some(Planted::FullScreenOnly3d),
                 esc_to_root: p == Some(Planted::EscToRoot),
+                pick_selects: p == Some(Planted::PickSelectsItem),
             };
             let scope = Scope::new(&doc, rect, display, planted)
                 .map_err(|r| json!({"code": r.code, "path": r.path}))?;
@@ -191,6 +199,9 @@ impl Hub<'_> {
                 PanelScope {
                     scope,
                     seen: Vec::new(),
+                    viewer: None,
+                    pressed: 0,
+                    picks: Default::default(),
                 },
             );
             let first = self.seen(panel).ok_or_else(|| refused("not_presented"))?;
@@ -319,12 +330,95 @@ impl Hub<'_> {
         if matches!(reached, Some(ref to) if to.as_deref() != Some(panel)) {
             return json!({"serial": serial, "reached": [reached.flatten().map_or("shell".to_string(), |p| format!("panel:{p}"))]});
         }
+        // #501: a film's viewer takes its keys before the scope does.
+        if let Some(reply) = self.viewer_key(panel, event, serial) {
+            return reply;
+        }
         let late = self.scenario.planted == Some(Planted::DragShowsOnRelease)
             && matches!(event, Event::Move(_));
+        // #504: a value for one of the document's own controls goes to its input track or its
+        // session state (Control), never to the scope's view.
+        let doc_id = self.panel_doc(panel);
+        if let (Event::Control { control, value }, Some(id)) = (event, doc_id.as_deref()) {
+            if doc
+                .get("controls")
+                .and_then(|c| c.get(control.as_str()))
+                .is_some()
+            {
+                return match self.enter(id, control, value.clone(), now, serial) {
+                    Ok(entry) => json!({"serial": serial, "state": self.state(panel), "picks": 0,
+                        "commits": [{"gesture": serial}], "appended": entry.into_iter().collect::<Vec<_>>()}),
+                    Err(e) => e,
+                };
+            }
+        }
+        // #539: a pointer event on a pick control's rows picks or hovers before the scope takes
+        // it, whose press then meets none of the rows a pick control names.
+        let mut appended = match self.pick_pointer(panel, &doc, event, serial) {
+            Ok(a) => a,
+            Err(e) => return e,
+        };
+        let picked: Vec<String> = crate::picks::pickers(&doc)
+            .into_iter()
+            .flat_map(|p| p.sets)
+            .collect();
+        // #535: a press meets the mark set rows the panel's document draws now, each a target
+        // `<set>#<key>` with its box, stacked over its set.
+        let mut doc = doc;
+        if matches!(event, Event::Down { .. }) {
+            let drawn = self
+                .panel_doc(panel)
+                .and_then(|d| self.sessions.get(&d)?.document().cloned());
+            let t = self
+                .scopes
+                .get(panel)
+                .and_then(|s| s.scope.time())
+                .unwrap_or(self.now);
+            for (row, b, hull) in drawn.map(|d| self.row_boxes(&d, t)).unwrap_or_default() {
+                let set = row.split('#').next().unwrap_or_default();
+                if picked.iter().any(|s| s == set) {
+                    continue;
+                }
+                let order = &doc["items"][set]["order"];
+                let target = json!({"id": row, "order": order, "params": {"box": b, "hull": hull}});
+                if let Some(items) = doc["items"].as_object_mut() {
+                    items.insert(row, target);
+                }
+            }
+        }
         let done = match self.scopes.get_mut(panel) {
-            Some(s) => s.scope.input(&doc, now, serial, event),
+            Some(s) => {
+                if matches!(event, Event::Down { .. }) {
+                    s.pressed = now;
+                }
+                s.scope.input(&doc, now, serial, event)
+            }
             None => return refused("unknown_panel"),
         };
+        // #539: a key moves or picks on a pick control's rows once the scope has moved its stop.
+        match event {
+            Event::Key {
+                key, cmd: false, ..
+            } => match self.pick_key(panel, key, serial) {
+                Ok(a) => appended.extend(a),
+                Err(e) => return e,
+            },
+            _ => self.settle_focus(panel),
+        }
+        // #504: a click on a target, or Enter on a focused one, picks its option or stage: one
+        // entry for a document-class control, stamped when the click pressed, and never a
+        // selection.
+        if let (Some(pick), Some(id)) = (done.pick.as_ref(), doc_id.as_deref()) {
+            let at = if matches!(event, Event::Up(_)) {
+                self.scopes[panel].pressed
+            } else {
+                now
+            };
+            match self.enter(id, &pick.control, json!(pick.option), at, serial) {
+                Ok(entry) => appended.extend(entry),
+                Err(e) => return e,
+            }
+        }
         let seen = self.seen(panel);
         if let (false, Some(seen), Some(s)) = (late, seen, self.scopes.get_mut(panel)) {
             s.seen.push((now, seen));
@@ -334,6 +428,8 @@ impl Hub<'_> {
             "state": self.state(panel),
             "picks": done.picks,
             "commits": done.commits.iter().map(|g| json!({"gesture": g})).collect::<Vec<_>>(),
+            // #504: the entries this input appended to the document's input track.
+            "appended": appended,
         })
     }
 
@@ -341,8 +437,14 @@ impl Hub<'_> {
     fn state(&self, panel: &str) -> Value {
         match (self.scopes.get(panel), self.panel_document(panel)) {
             (Some(s), Some((doc, before))) => {
-                s.scope
-                    .to_json(&doc, before.as_ref(), &self.scenario.verdicts)
+                let mut state = s
+                    .scope
+                    .to_json(&doc, before.as_ref(), &self.scenario.verdicts);
+                // #539: a pick control's stop reports the row its roving focus holds.
+                if let Some(row) = s.picks.focused() {
+                    state["focus"] = json!(row);
+                }
+                state
             }
             _ => Value::Null,
         }
@@ -358,7 +460,19 @@ impl Hub<'_> {
         else {
             return refused("not_presented");
         };
-        let shown = crate::shared::drawable(&s.scope.view_document(&doc, before.as_ref()));
+        // #504: the revision played, so a view-class pick shows; never saved.
+        let mut played = match self.panel_doc(panel) {
+            // #539: the current revision as its session draws it, its logic baked, unless the
+            // view is scrubbed back to an older one.
+            Some(id) if s.scope.time().is_none() && self.forms.contains_key(&id) => {
+                self.shown_at(&id, &self.forms[&id], 0)
+            }
+            Some(id) => self.shown_at(&id, &doc, 0),
+            None => doc,
+        };
+        // #539: the live view draws the viewer state of its pick controls, hover and focus.
+        self.viewer_into(panel, &mut played);
+        let shown = crate::shared::drawable(&s.scope.view_document(&played, before.as_ref()));
         match self.snapshot(&shown, 0, None) {
             Ok(snap) => json!({"snapshot": snap}),
             Err(e) => e,
@@ -395,7 +509,10 @@ impl Hub<'_> {
     /// `scope`: a panel's scope, with no input.
     pub fn scope_reply(&mut self, panel: &str) -> Value {
         match self.panel_scope(panel) {
-            Ok(_) => json!({"state": self.state(panel)}),
+            Ok(_) => {
+                self.settle_focus(panel);
+                json!({"state": self.state(panel)})
+            }
             Err(e) => e,
         }
     }

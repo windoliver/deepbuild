@@ -103,15 +103,15 @@ struct Node {
     leaf: bool,
 }
 
-/// A bounding-volume hierarchy over a mesh's triangles, for nearest-surface queries.
-struct Bvh {
+/// A bounding-volume hierarchy over a mesh's triangles, for nearest-surface and ray queries.
+pub(crate) struct Bvh {
     tris: Vec<[V3; 3]>,
     order: Vec<usize>,
     nodes: Vec<Node>,
 }
 
 impl Bvh {
-    fn new(tris: Vec<[V3; 3]>) -> Bvh {
+    pub(crate) fn new(tris: Vec<[V3; 3]>) -> Bvh {
         let mut bvh = Bvh {
             order: (0..tris.len()).collect(),
             tris,
@@ -175,6 +175,64 @@ impl Bvh {
             .sum()
     }
 
+    /// Whether the ray from `o` along `d` meets a triangle past `near` (Möller-Trumbore, against
+    /// each box by slabs).
+    pub(crate) fn blocks(&self, o: V3, d: V3, near: f64) -> bool {
+        let mut stack = if self.nodes.is_empty() {
+            Vec::new()
+        } else {
+            vec![0usize]
+        };
+        while let Some(n) = stack.pop() {
+            let node = &self.nodes[n];
+            let (mut lo, mut hi) = (0.0f64, f64::INFINITY);
+            for k in 0..3 {
+                let inv = 1.0 / d[k];
+                let (a, b) = ((node.min[k] - o[k]) * inv, (node.max[k] - o[k]) * inv);
+                let (a, b) = if a <= b { (a, b) } else { (b, a) };
+                // A NaN slab (d[k] = 0 with o on the slab's plane) leaves the range as it was.
+                lo = if a > lo { a } else { lo };
+                hi = if b < hi { b } else { hi };
+            }
+            if lo > hi {
+                continue;
+            }
+            if !node.leaf {
+                stack.push(node.start);
+                stack.push(node.end);
+                continue;
+            }
+            for &t in &self.order[node.start..node.end] {
+                let [a, b, c] = self.tris[t];
+                let (e1, e2) = (sub(b, a), sub(c, a));
+                let p = [
+                    d[1] * e2[2] - d[2] * e2[1],
+                    d[2] * e2[0] - d[0] * e2[2],
+                    d[0] * e2[1] - d[1] * e2[0],
+                ];
+                let det = dot(e1, p);
+                if det.abs() < 1e-18 {
+                    continue;
+                }
+                let s = sub(o, a);
+                let u = dot(s, p) / det;
+                let q = [
+                    s[1] * e1[2] - s[2] * e1[1],
+                    s[2] * e1[0] - s[0] * e1[2],
+                    s[0] * e1[1] - s[1] * e1[0],
+                ];
+                let v = dot(d, q) / det;
+                if u < 0.0 || v < 0.0 || u + v > 1.0 {
+                    continue;
+                }
+                if dot(e2, q) / det > near {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
     /// The nearest triangle to `p`: its squared distance and its index, the lower on a tie.
     fn nearest(&self, p: V3) -> (f64, Option<usize>) {
         let mut best = (f64::INFINITY, None);
@@ -215,8 +273,10 @@ impl Bvh {
 }
 
 fn triangles(pos: &[V3], idx: &[u32]) -> Vec<[V3; 3]> {
-    idx.chunks_exact(3)
-        .map(|t| [pos[t[0] as usize], pos[t[1] as usize], pos[t[2] as usize]])
+    idx.as_chunks::<3>()
+        .0
+        .iter()
+        .map(|t| t.map(|i| pos[i as usize]))
         .collect()
 }
 

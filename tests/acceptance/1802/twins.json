@@ -1,0 +1,21 @@
+{
+  "#1802.cca13350": [
+    "reports-only"
+  ],
+  "#1802.b8a0e044": [
+    "test-preview-removed-bare"
+  ],
+  "#1802.c5460f6b": [
+    "listing-without-preview-since",
+    "listing-without-decide-by"
+  ],
+  "#1802.9400be12": [
+    "note-drops-one"
+  ],
+  "#1802.18e8cff0": [
+    "reports-only"
+  ],
+  "#1802.b515e798": [
+    "tree-keeps-stale-file"
+  ]
+}

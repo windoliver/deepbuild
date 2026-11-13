@@ -1,0 +1,14 @@
+{
+  "issue": 157,
+  "criterion": "#157.2b3d3587",
+  "verdict": "looks_right",
+  "who": "Claude, on the owner's standing delegation of taste calls, as #501's and #502's calls were made; the owner can overrule it on the PR",
+  "when": "2026-11-11T23:20:00Z",
+  "screenshots": {
+    "black-frames.png": "60c2bb9e9678aac79dd71cb619b396a4c2188f7c2d6c2641c9e384c58ff8bba2",
+    "grain-starved.png": "7cb258e24c68b24a2da6fed7e15c862aa11bf97f3f72b29c16801e97ae4f6f36",
+    "grain-raised.png": "e14edfb82a12d17e0f59af511ae3c961e4e0bf90f0d80a20db5a33e28975bd68",
+    "prores-alpha.png": "9f49feaa136808a97e6c7cc5fe687fae631c966f68d791931f6f323118e23e51"
+  },
+  "note": "Checked by eye and by pixel. Frames 22 to 29 of the black film: 24 to 27 read 0 to 1 on every channel, and 22, 23, 28 and 29 show the panel, bar and tick (mean about 192), the tick 6 frames lower at 28. The grain film at its raised floor (frame 24, PSNR-Y 41.17 dB against the 40 dB floor) carries its grain: the flat ground's green spreads with a standard deviation of 22.6 code values and the panel's 15.5, with the bar and tick sharp under it. The starved delivery's worst frame (frame 23, 22.34 dB), the check's own decode, has lost the grain (spread 2.3) and smears the bar and tick into blocks. The ProRes 4444 ramp at 50% straight alpha, decoded by ffmpeg over a checkerboard, matches a 50% blend of the ramp and the checks at every sampled point, and the opaque block reads the accent exactly (242, 194, 48) at frame 12's place. An earlier set of these pictures, taken before the export drew a look's grain, showed the grain film flat; that call was withdrawn and the export fixed."
+}

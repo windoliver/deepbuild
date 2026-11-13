@@ -13,10 +13,14 @@
 #[cfg(all(feature = "env-plants", not(debug_assertions)))]
 compile_error!("the env-plants feature is for test builds only, never a release build");
 
+pub mod actions;
+pub mod address;
 pub mod answer;
 pub mod arming;
 pub mod bound;
 pub mod canvas;
+#[cfg(feature = "canvas-fixture")]
+pub mod canvas_fixture;
 pub mod card;
 pub mod cells;
 pub mod chrome;
@@ -24,16 +28,25 @@ pub mod chrome;
 pub mod chrome_fixture;
 pub mod chrome_fx;
 pub mod chrome_gallery;
+pub mod codes;
 pub mod commands;
 pub mod confirm;
 pub mod device;
+pub mod empties;
 #[cfg(feature = "fixtures")]
 pub mod events;
 pub mod gpu_view;
 pub mod hub;
+/// #1486: chrome thumbnails through the one image service.
+pub mod images;
 pub mod installed;
+/// #1606: the device key in the OS secret store.
+mod keystore;
 pub mod kinds;
+pub mod list;
+pub mod notice;
 pub mod notify;
+pub mod open;
 #[cfg(feature = "panel-check")]
 pub mod panel_check;
 #[cfg(feature = "panel-check")]
@@ -55,6 +68,8 @@ pub mod states;
 pub mod table;
 pub mod text;
 pub mod views;
+pub mod welcome;
+pub mod words;
 
 use std::{path::Path, rc::Rc, sync::atomic::AtomicU64};
 
@@ -65,6 +80,7 @@ use gpui_shell::{
 };
 
 pub mod trusted_input;
+pub mod unread;
 
 pub mod capture;
 
@@ -118,13 +134,26 @@ pub fn stocks() -> Vec<Stock> {
 }
 
 /// What the menu bar shows: while setup hasn't finished, that it didn't, never a number (#1002); then what the app
-/// can't reach (#994); before the hub has answered, that (no count is known, so none is drawn); else the one count
-/// sentence (#1455).
+/// can't reach (#994), the hub with since when, as the list says it (#2026); before the hub has answered, that (no
+/// count is known, so none is drawn); else the one count sentence (#1455).
 pub fn menu_bar_line() -> String {
-    match setup::count().or_else(|| notify::reach().short()) {
+    let reach = notify::reach();
+    // #2026's planted menu bar keeps the last count it read while the hub isn't answering, as if live.
+    if reach.hub_down && setup::count().is_none() && !plain::planted("hub-down-keeps-count") {
+        return empties::Empty::Unreachable { since: reach.since }.words("", views::now());
+    }
+    match setup::count().or_else(|| reach.short().filter(|_| !reach.hub_down)) {
         Some(line) => line.to_owned(),
         None if record::older().is_some() => "Hub is older".to_owned(),
-        None if !record::connected() => "No hub".to_owned(),
+        None if !record::connected() && !reach.hub_down => "No hub".to_owned(),
+        // #2026's planted menu bar counts sessions, not asks.
+        None if plain::planted("menu-bar-counts-sessions") => views::asks_need_you(
+            record::with_view(|view| view.table().every_session().len()).unwrap_or(0),
+        ),
+        // #2028's planted menu bar adds the list's unread rows to the asks.
+        None if plain::planted("menu-bar-adds-unread") => {
+            views::asks_need_you(views::count() + list::unread_rows())
+        }
         None => views::asks_need_you(views::count()),
     }
 }
@@ -188,6 +217,13 @@ fn needs_you() -> Result<HostValue, HostError> {
         .ok_or_else(|| HostError::new("the app hasn't read the record from the hub yet"))?;
     let text =
         |row: &serde_json::Value, key: &str| row[key].as_str().unwrap_or_default().to_owned();
+    // Needs you's order (#1462): open asks oldest first, those put off with Later after them until they come back.
+    let now = views::now();
+    let later = |row: &serde_json::Value| {
+        row["status"] == "later" && row["until"].as_u64().is_none_or(|until| until > now)
+    };
+    let mut inbox = inbox;
+    inbox.sort_by_key(|row| later(row));
     let open: Vec<&serde_json::Value> = inbox
         .iter()
         .filter(|row| row["status"] != "closed")
@@ -234,19 +270,20 @@ fn needs_you() -> Result<HostValue, HostError> {
     ]))
 }
 
+/// The ask a replica's fixture holds, since the record has no event for a hold yet (#1457): none in a shipped build.
 #[cfg(feature = "fixtures")]
-fn held() -> Option<String> {
+pub(crate) fn held() -> Option<String> {
     views::current_state().and_then(|state| state.held.clone())
 }
 
 #[cfg(not(feature = "fixtures"))]
-fn held() -> Option<String> {
+pub(crate) fn held() -> Option<String> {
     None
 }
 
 /// The sessions as the sidebar lists them, in its order, for a view replacing its rows (`session.row@1`): each one's
-/// ID, which keys its row as `session:<id>`, its title, and its state's words and status-map entry, from the one record
-/// reader (#1459).
+/// ID, which keys its row as `session:<id>`, its title, its state's words and status-map entry, and `asks`, the hub's
+/// count of its open asks (#2018), from the one record reader (#1459).
 fn sidebar_sessions() -> Result<HostValue, HostError> {
     record::with_view(|view| {
         let table = view.table();
@@ -256,7 +293,9 @@ fn sidebar_sessions() -> Result<HostValue, HostError> {
                 .into_iter()
                 .map(|(id, title, _)| {
                     let (words, entry) = table.row(&id, views::now());
+                    let asks = table.asks_of(&id);
                     HostValue::Object(vec![
+                        ("asks".into(), HostValue::Number(asks as f64)),
                         ("id".into(), HostValue::Str(id)),
                         ("title".into(), HostValue::Str(title)),
                         ("words".into(), HostValue::Str(words)),
@@ -302,13 +341,27 @@ pub fn new_runtime() -> anyhow::Result<Rc<ShellRuntime>> {
 /// Registers gpui-shell's component catalog, the shipped views and DeepBuild's empty-policy
 /// default.
 pub fn init(cx: &mut App) {
+    // The chrome's code face is bundled, not the system's (#1458), so GPUI's text system is given it; a test build's
+    // planted row asks for the canvas's face, which it's given too.
+    let code = chrome::sizes().code.clone();
+    let canvas =
+        plain::planted("row-label-canvas-face").then(|| deep_text_gpui::Role::Body.family());
+    let faces = deep_text::FACES
+        .iter()
+        .filter(|face| face.family == code.as_ref() || Some(face.family) == canvas)
+        .map(|face| std::borrow::Cow::Borrowed(face.bytes))
+        .collect();
+    let _ = cx.text_system().add_fonts(faces);
     gpui_shell::components::init(cx);
     views::register_views(cx);
     card::init(cx);
     commands::init(cx);
+    actions::init(cx);
     // Chrome effects hold their still pose under macOS's Reduce Motion (#1436).
     #[cfg(target_os = "macos")]
-    cx.set_reduce_motion(objc2_app_kit::NSWorkspace::sharedWorkspace().accessibilityDisplayShouldReduceMotion());
+    cx.set_reduce_motion(
+        objc2_app_kit::NSWorkspace::sharedWorkspace().accessibilityDisplayShouldReduceMotion(),
+    );
     gpui_shell::policy::set_default(
         Policy::new()
             .with_application("deepbuild-panel")

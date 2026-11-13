@@ -50,6 +50,10 @@ impl Default for Cone {
 /// The distance gain at `d` metres (W3C Web Audio, PannerNode distance models).
 pub fn distance_gain(m: &Distance, d: f64, model: Model) -> f64 {
     let r = m.reference;
+    // W3C: with a reference distance of 0 the inverse and exponential models give 0.
+    if r == 0.0 && model != Model::Linear {
+        return 0.0;
+    }
     match model {
         Model::Linear => {
             if m.max <= r {
@@ -79,16 +83,27 @@ fn norm(a: [f64; 3]) -> f64 {
 
 /// The cone gain of a source at `source` facing `forward`, heard at `listener`. `reversed` is the
 /// planted cone that takes the angle from source minus listener.
-pub fn cone_gain(c: &Cone, forward: [f64; 3], source: [f64; 3], listener: [f64; 3], reversed: bool) -> f64 {
+pub fn cone_gain(
+    c: &Cone,
+    forward: [f64; 3],
+    source: [f64; 3],
+    listener: [f64; 3],
+    reversed: bool,
+) -> f64 {
     if c.inner >= 360.0 && c.outer >= 360.0 {
         return 1.0;
     }
-    let to = if reversed { sub(source, listener) } else { sub(listener, source) };
+    let to = if reversed {
+        sub(source, listener)
+    } else {
+        sub(listener, source)
+    };
     let (nf, nt) = (norm(forward), norm(to));
     if nf == 0.0 || nt == 0.0 {
         return 1.0;
     }
-    let cos = ((forward[0] * to[0] + forward[1] * to[1] + forward[2] * to[2]) / (nf * nt)).clamp(-1.0, 1.0);
+    let cos = ((forward[0] * to[0] + forward[1] * to[1] + forward[2] * to[2]) / (nf * nt))
+        .clamp(-1.0, 1.0);
     let angle = ops::deg(ops::acos(cos));
     let (inner, outer) = (c.inner / 2.0, c.outer / 2.0);
     if angle <= inner {
@@ -104,4 +119,26 @@ pub fn cone_gain(c: &Cone, forward: [f64; 3], source: [f64; 3], listener: [f64; 
 pub fn pan_gains(pan: f64) -> (f64, f64) {
     let x = (pan.clamp(-1.0, 1.0) + 1.0) / 2.0;
     (ops::cos(x * ops::PI / 2.0), ops::sin(x * ops::PI / 2.0))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_reference_distance_of_zero_is_silent_on_the_inverse_and_exponential_models() {
+        for rolloff in [0.0, 1.0] {
+            let m = Distance {
+                reference: 0.0,
+                rolloff,
+                ..Default::default()
+            };
+            for model in [Model::Inverse, Model::Exponential] {
+                for d in [0.0, 3.0] {
+                    let gain = distance_gain(&m, d, model);
+                    assert_eq!(gain, 0.0, "{model:?}, rolloff {rolloff}, at {d} m");
+                }
+            }
+        }
+    }
 }

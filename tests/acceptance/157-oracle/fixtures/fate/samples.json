@@ -1,0 +1,8 @@
+{
+  "commit": "24e860f6d3c4f2ebae65ed7649e2a8860d512879",
+  "suite": "https://fate-suite.ffmpeg.org/",
+  "samples": [
+    { "ref": "prores-alpha", "sample": "prores/Sequence_1-Apple_ProRes_with_Alpha.mov", "sha256": "06dd35b139f235c171e2da16f65ee2f71be8152132605c841fe7088157e37373", "bytes": 220347 },
+    { "ref": "prores-transparency", "sample": "prores/prores4444_with_transparency.mov", "sha256": "26fae0c55c1f8065224c8ece5dea84d3464e5afd9804dfb73ea08eb193177043", "bytes": 217309 }
+  ]
+}

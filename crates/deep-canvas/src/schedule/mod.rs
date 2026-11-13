@@ -355,8 +355,8 @@ pub struct OpError {
     /// The read term, for `undeclared_read`.
     pub read: Option<String>,
     /// What the operator found, for an issue that names more than its path (#1732: the
-    /// relations an arrangement still misses).
-    pub actual: Option<Value>,
+    /// relations an arrangement still misses). Boxed, so an operator's `Result` stays small.
+    pub actual: Option<Box<Value>>,
 }
 
 impl OpError {
@@ -371,7 +371,7 @@ impl OpError {
 
     /// The error with what the operator found.
     pub fn with(mut self, actual: Value) -> OpError {
-        self.actual = Some(actual);
+        self.actual = Some(Box::new(actual));
         self
     }
 }
@@ -1416,6 +1416,11 @@ impl Session {
         &self.look
     }
 
+    /// The time the session's last frame evaluated at, in flicks.
+    pub fn t(&self) -> i64 {
+        self.t
+    }
+
     pub fn outside(&self) -> &Outside {
         &self.outside
     }
@@ -1607,12 +1612,48 @@ impl Session {
                         _ => None,
                     })
                 }
+                // Whether a node's array reads bind to the same writers, by operator and item, in
+                // both revisions (#504: a writer an operator's `applies` drops or adds).
+                fn who(l: &Loaded, w: usize) -> (usize, Option<&str>) {
+                    (
+                        l.nodes[w].op,
+                        l.nodes[w].item.map(|i| l.items[i].id.as_str()),
+                    )
+                }
+                fn same_writers(a: &Loaded, an: &Node, b: &Loaded, bn: &Node) -> bool {
+                    an.reads.len() == bn.reads.len()
+                        && an.reads.iter().zip(&bn.reads).all(|(x, y)| match (x, y) {
+                            (
+                                Bound::Array {
+                                    writers: wa,
+                                    contributions: ca,
+                                    ..
+                                },
+                                Bound::Array {
+                                    writers: wb,
+                                    contributions: cb,
+                                    ..
+                                },
+                            ) => {
+                                wa.len() == wb.len()
+                                    && ca.len() == cb.len()
+                                    && wa.iter().zip(wb).all(|(&p, &q)| who(a, p) == who(b, q))
+                                    && ca
+                                        .iter()
+                                        .zip(cb)
+                                        .all(|((m, p), (n, q))| m == n && who(a, *p) == who(b, *q))
+                            }
+                            _ => true,
+                        })
+                }
                 for k in 0..next.nodes.len() {
                     let id = next.nodes[k].item.map(|i| next.items[i].id.as_str());
                     if let Some(was) = carried.get(&(next.nodes[k].op, id)) {
                         // A node whose parent read now binds to another item, or to none, as
-                        // when its parent was deleted, runs again: nothing it reads changed.
-                        let rebound = parent_of(&o, was) != parent_of(&next, &next.nodes[k]);
+                        // when its parent was deleted, runs again: nothing it reads changed. So
+                        // does one whose array reads gained or lost a writer.
+                        let rebound = parent_of(&o, was) != parent_of(&next, &next.nodes[k])
+                            || !same_writers(&o, was, &next, &next.nodes[k]);
                         let n = &mut next.nodes[k];
                         if rebound {
                             continue;
@@ -2401,7 +2442,7 @@ impl Session {
                     item: l.nodes[n].item.map(|i| l.items[i].id.clone()),
                     path: e.path.clone(),
                     read: e.read.clone(),
-                    actual: e.actual.clone(),
+                    actual: e.actual.as_deref().cloned(),
                 };
                 // A panic freezes this session alone: every other session goes on.
                 if e.code == "operator_panic" && mode == Mode::Live && self.frozen.is_none() {
@@ -2748,7 +2789,10 @@ impl Session {
             let sop = &s.sealed.ops[g.op];
             let w = sop.op.writes.iter().position(|w| w == name)?;
             let node = &l.nodes[*g.nodes.first()?];
-            node.item.is_none().then(|| node.out.get(w).cloned()).flatten()
+            node.item
+                .is_none()
+                .then(|| node.out.get(w).cloned())
+                .flatten()
         })
     }
 

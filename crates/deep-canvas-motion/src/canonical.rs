@@ -3,16 +3,18 @@
 
 use deep_canvas::schedule::Canonical;
 
+use crate::assembly::Assembly;
 use crate::curve::{Curve, Ease, Interp, Key};
 use crate::doc::{
-    AddFrom, Along, Binding, Blending, Channel, Clip, Constraint, Control, Cut, Driver, DriverInput, Extend, Follow,
-    Influence, Kind, Limit, Marker, Motion, Placement, Shot, Target, Timing, Transport, ValueType,
+    AddFrom, Along, Binding, Blending, Channel, Clip, Constraint, Control, Cut, Driver,
+    DriverInput, Extend, Follow, Influence, Kind, Limit, Marker, Motion, Placement, Shot, Stagger,
+    Target, Timing, Transport, ValueType,
 };
-use crate::remap::{Piece, Remap};
 use crate::follow;
+use crate::input::{Change, Inputs, Moves, Staged};
 use crate::modifier::{Kind as ModKind, Modifier, Rate, Shape};
-use crate::input::{Change, Inputs, Moves};
 use crate::program::{Field, Op, Program, Write};
+use crate::remap::{Piece, Remap};
 
 impl Canonical for Interp {
     fn encode(&self, out: &mut Vec<u8>) {
@@ -54,20 +56,35 @@ impl Canonical for Modifier {
         };
         self.influence.encode(out);
         match &self.kind {
-            ModKind::Wave { amplitude, rate: r, phase, offset } => {
+            ModKind::Wave {
+                amplitude,
+                rate: r,
+                phase,
+                offset,
+            } => {
                 (0u8, *amplitude, *phase, *offset).encode(out);
                 rate(r, out);
             }
-            ModKind::Noise { amplitude, rate: r, seed } => {
+            ModKind::Noise {
+                amplitude,
+                rate: r,
+                seed,
+            } => {
                 (1u8, *amplitude, *seed).encode(out);
                 rate(r, out);
             }
-            ModKind::Pulse { at, span, amount, shape, ease } => {
+            ModKind::Pulse {
+                at,
+                span,
+                amount,
+                shape,
+                ease,
+            } => {
                 (2u8, *at, *span, *amount).encode(out);
                 match *shape {
                     Shape::ThereAndBack => (0u8, 0.0).encode(out),
                     Shape::Pause(v) => (1u8, v).encode(out),
-                    // #490: the wiggle turned at twice Manim's frequency under tag 2; at its
+                    // #490: the wiggle turned at twice its intended frequency under tag 2; at its
                     // frequency now, it keys apart, so no cache serves the old frames.
                     Shape::Wiggle(v) => (3u8, v).encode(out),
                 }
@@ -125,7 +142,39 @@ impl Canonical for Ease {
 impl Canonical for Control {
     fn encode(&self, out: &mut Vec<u8>) {
         (&self.id, self.kind, &self.options, &self.default).encode(out);
-        self.shots.encode(out);
+        // #504: a stage without a shot as u64::MAX, so every stage with one keys as it did; the
+        // same 8 bytes on every target, where a usize's MAX is narrower on wasm32 (#2144).
+        self.shots
+            .iter()
+            .map(|s| s.map_or(u64::MAX, |s| s as u64))
+            .collect::<Vec<u64>>()
+            .encode(out);
+    }
+}
+impl Canonical for Stagger {
+    fn encode(&self, out: &mut Vec<u8>) {
+        (&self.id, &self.spec, &self.targets).encode(out);
+        (self.lag, self.reverse_on_close).encode(out);
+    }
+}
+impl Canonical for Assembly {
+    fn encode(&self, out: &mut Vec<u8>) {
+        (
+            &self.id,
+            &self.parent,
+            &self.at,
+            (self.value, &self.apart, self.order, self.slot),
+        )
+            .encode(out);
+        if let Some(j) = &self.joint {
+            (j.kind as u8, j.axis, j.pivot, j.range.map(|r| [r.0, r.1])).encode(out);
+        }
+    }
+}
+impl Canonical for Staged {
+    fn encode(&self, out: &mut Vec<u8>) {
+        (&self.t, &self.shot, &self.span).encode(out);
+        self.ease.encode(out);
     }
 }
 impl Canonical for Follow {
@@ -154,6 +203,10 @@ impl Canonical for Moves {
 impl Canonical for Inputs {
     fn encode(&self, out: &mut Vec<u8>) {
         (&self.follows, &self.cameras).encode(out);
+        // #504's stage shots, only where a camera has one, so every earlier program keys as it did.
+        if self.staged.iter().any(|s| !s.is_empty()) {
+            self.staged.encode(out);
+        }
     }
 }
 
@@ -212,12 +265,16 @@ impl deep_canvas::schedule::Canonical for Target {
 impl deep_canvas::schedule::Canonical for Channel {
     fn encode(&self, out: &mut Vec<u8>) {
         deep_canvas::schedule::Canonical::encode(
-            &(&self.id, &self.target, &self.ty, &self.curve, &self.modifiers),
+            &(
+                &self.id,
+                &self.target,
+                &self.ty,
+                &self.curve,
+                &self.modifiers,
+            ),
             out,
         );
-        deep_canvas::schedule::Canonical::encode(&(&self.follow, &self.range),
-            out,
-        );
+        deep_canvas::schedule::Canonical::encode(&(&self.follow, &self.range), out);
         // #491's layout glide, only on a channel that has one.
         if let Some(glide) = &self.glide {
             glide.encode(out);
@@ -260,7 +317,12 @@ impl deep_canvas::schedule::Canonical for Placement {
         let (t, b) = (&self.timing, &self.blending);
         if *t != Timing::default() || *b != Blending::default() || self.rank != Default::default() {
             (t.trim, t.span, t.rate.0, t.rate.1).encode(out);
-            (t.repeat as u8, t.hold_at, t.quantize.map(|q| (u64::from(q.0), u64::from(q.1)))).encode(out);
+            (
+                t.repeat as u8,
+                t.hold_at,
+                t.quantize.map(|q| (u64::from(q.0), u64::from(q.1))),
+            )
+                .encode(out);
             t.remap.map(|r| r as u64).encode(out);
             if let Some(s) = &t.start_on {
                 (&s.on.list, &s.on.kinds, (&s.on.a, &s.on.b)).encode(out);
@@ -281,7 +343,14 @@ impl deep_canvas::schedule::Canonical for Placement {
             self.rank.encode(out);
             if let Some(s) = &b.switch {
                 (&s.control, s.case.to_string(), s.span).encode(out);
-                (s.first.to_string(), s.changes.iter().map(|c| (c.0, c.1.to_string())).collect::<Vec<_>>()).encode(out);
+                (
+                    s.first.to_string(),
+                    s.changes
+                        .iter()
+                        .map(|c| (c.0, c.1.to_string()))
+                        .collect::<Vec<_>>(),
+                )
+                    .encode(out);
                 match s.along {
                     Along::Ease(e) => {
                         (0u8, s.sync).encode(out);
@@ -291,7 +360,11 @@ impl deep_canvas::schedule::Canonical for Placement {
                 }
             }
             if let Some(reach) = t.reach {
-                (reach, t.closes.iter().map(|c| u8::from(*c)).collect::<Vec<_>>()).encode(out);
+                (
+                    reach,
+                    t.closes.iter().map(|c| u8::from(*c)).collect::<Vec<_>>(),
+                )
+                    .encode(out);
             }
         }
     }
@@ -303,7 +376,12 @@ impl deep_canvas::schedule::Canonical for Remap {
             (s.t, s.c, s.active.map(|a| (a.0, a.1))).encode(out);
             match &s.piece {
                 Piece::Line(r) => (0u8, r.0, r.1).encode(out),
-                Piece::Ramp { from, to, over, ease } => {
+                Piece::Ramp {
+                    from,
+                    to,
+                    over,
+                    ease,
+                } => {
                     (1u8, *from, *to, *over).encode(out);
                     ease.encode(out);
                 }
@@ -333,7 +411,13 @@ impl deep_canvas::schedule::Canonical for Marker {
 impl deep_canvas::schedule::Canonical for Transport {
     fn encode(&self, out: &mut Vec<u8>) {
         deep_canvas::schedule::Canonical::encode(
-            &(&self.start, &self.span, &self.wrap, &self.holds, &self.reduce_holds),
+            &(
+                &self.start,
+                &self.span,
+                (&self.wrap, &self.ping_pong),
+                &self.holds,
+                &self.reduce_holds,
+            ),
             out,
         );
     }
@@ -355,6 +439,7 @@ impl deep_canvas::schedule::Canonical for Driver {
                     DriverInput::Rate(c) => (3u8, c).encode(out),
                     DriverInput::Remap(r, progress) => (4u8, r, *progress).encode(out),
                     DriverInput::Array(a) => (5u8, a).encode(out),
+                    DriverInput::Hover(h) => (6u8, h).encode(out),
                     DriverInput::List(f) => {
                         (2u8, &f.list, &f.kinds, (&f.a, &f.b)).encode(out);
                         (&f.tags, &f.where_).encode(out);
@@ -382,21 +467,44 @@ impl Canonical for Constraint {
         (&self.id, &self.owner, self.influence).encode(out);
         match &self.kind {
             Kind::ChildOf { parent } => (0u8, parent).encode(out),
-            Kind::FollowPath { points, fraction, orient, offset } => {
-                (1u8, points, *fraction, *orient, offset).encode(out)
-            }
+            Kind::FollowPath {
+                points,
+                fraction,
+                orient,
+                offset,
+            } => (1u8, points, *fraction, *orient, offset).encode(out),
             Kind::LookAt { target } => (2u8, target).encode(out),
             Kind::Copy { what, target } => (3u8, *what as u8, target).encode(out),
-            Kind::Reach2 { chain, target, bend, cartoon } => {
-                (4u8, chain, target, *bend, *cartoon).encode(out)
-            }
-            Kind::FollowTip { item, offset, rotate } => (5u8, item, offset, *rotate).encode(out),
+            Kind::Reach2 {
+                chain,
+                target,
+                bend,
+                cartoon,
+            } => (4u8, chain, target, *bend, *cartoon).encode(out),
+            Kind::FollowTip {
+                item,
+                offset,
+                rotate,
+            } => (5u8, item, offset, *rotate).encode(out),
             Kind::Distance { target, min, max } => (6u8, target, *min, *max).encode(out),
-            Kind::SpringChain { bones, hz, damping_ratio, max_swing } => {
-                (7u8, bones, (*hz, *damping_ratio, *max_swing)).encode(out)
-            }
-            Kind::RestOn { ground, bottom, offset, max_drop } => {
-                (8u8, (*ground, *bottom), (*offset, *max_drop)).encode(out)
+            Kind::SpringChain {
+                bones,
+                hz,
+                damping_ratio,
+                max_swing,
+            } => (7u8, bones, (*hz, *damping_ratio, *max_swing)).encode(out),
+            Kind::RestOn {
+                ground,
+                bottom,
+                offset,
+                max_drop,
+                on,
+            } => {
+                (8u8, (*ground, *bottom), (*offset, *max_drop)).encode(out);
+                // A rest on the ground plane keeps the key it had before `on` landed (#2013).
+                if let Some(r) = on {
+                    (&r.on, r.axis, r.align, r.bounds).encode(out);
+                }
             }
         }
     }
@@ -435,6 +543,10 @@ impl deep_canvas::schedule::Canonical for Motion {
         }
         for (id, inputs) in &self.worlds {
             (id, *inputs).encode(out);
+        }
+        // #504's take-aparts, only where a document has one.
+        if !self.staggers.is_empty() {
+            self.staggers.encode(out);
         }
     }
 }
@@ -521,5 +633,9 @@ impl deep_canvas::schedule::Canonical for Program {
         );
         deep_canvas::schedule::Canonical::encode(&(&self.drivers, &self.limits), out);
         deep_canvas::schedule::Canonical::encode(&(&self.follows, &self.inputs), out);
+        // #504's assemblies and their parts, only where a document has them.
+        if !self.assemblies.is_empty() {
+            (&self.assemblies, &self.members).encode(out);
+        }
     }
 }

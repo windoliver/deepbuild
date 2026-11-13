@@ -1,0 +1,20 @@
+{
+  "install": {
+    "code": 0,
+    "stdout": "Source: /private/tmp/dh1922-redzlX/heir\n  test/upper-heir@1.0.0, digest d1:dcaf810a422fd209355c8f2447ecc2ce6e06ad4e4f1d4a472ad5062563b6f6ff, unsigned\nPermissions:\n  access: none\n  notices: none\n  actions: none\n  check kinds: test.upper_rival\n  provides: none\n  uses: none\n  replaces: test.upper\n  conflicts with: none\n  runs on: none\n  hosts: none\nInstalled test/upper-heir@1.0.0\n",
+    "stderr": ""
+  },
+  "kinds": [
+    {
+      "kind": "test.upper",
+      "plugin": "test/upper-heir",
+      "tools": [
+        {
+          "tool": "upper-a@1.0.0",
+          "plugin": "test/upper-kind",
+          "build": "d1:0823158f6022952500538308f179f4db9126ea76986a1f000402731c49442876"
+        }
+      ]
+    }
+  ]
+}

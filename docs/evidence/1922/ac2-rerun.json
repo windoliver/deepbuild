@@ -1,0 +1,21 @@
+{
+  "started": 0,
+  "reply": {
+    "status": "done",
+    "outputs": {
+      "text": {
+        "sha256": "b5d4045c3f466fa91fe2cc6abe79232a1a57cdf104f7a26e716e0a1e2789df78"
+      }
+    },
+    "receipt": {
+      "kind": "test.upper",
+      "tool": "upper-a@1.0.0",
+      "key": "f4f8dc833dc12676c22858546d5d9bedd998a2e99267ec4327c073d9bdd82819",
+      "build": "d1:0823158f6022952500538308f179f4db9126ea76986a1f000402731c49442876",
+      "cache": "hit",
+      "inputs": {
+        "text": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+      }
+    }
+  }
+}

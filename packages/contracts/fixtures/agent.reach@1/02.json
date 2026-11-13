@@ -1,0 +1,17 @@
+{
+  "v": 1,
+  "id": "01K9QZ6V2T8M4R1N5P7W3X9Z08",
+  "kind": "agent.reach",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013448000,
+  "data": {
+    "agent": "codex",
+    "name": "Codex",
+    "state": "unreachable",
+    "code": "hooks_untrusted",
+    "why": "Codex's hook list reports DeepBuild's hooks untrusted: those hooks don't run until you approve them",
+    "fix": "Approve or enable them once in /hooks in a Codex session."
+  }
+}

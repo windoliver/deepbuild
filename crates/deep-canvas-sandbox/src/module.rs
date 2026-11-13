@@ -10,7 +10,7 @@ use deep_canvas::registry::{
 /// The interface this module implements.
 pub const INTERFACE: &str = "sandbox@1";
 /// The wasmtime the shipped implementation pins, and the features it builds with.
-pub const WASMTIME: &str = "=49.0.2";
+pub const WASMTIME: &str = "=49.0.5";
 pub const WASMTIME_FEATURES: [&str; 4] = ["addr2line", "cranelift", "runtime", "std"];
 
 /// The shipped module.

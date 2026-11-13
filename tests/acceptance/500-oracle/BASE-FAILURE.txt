@@ -1,0 +1,13 @@
+Base: 96b462a6 (the same tree as 0c4a4ec7). Not built or run there: the surface this lane drives doesn't exist at the
+base.
+
+- No `media_bake` call in `deep-show run` (crates/deep-show/src/main.rs): every scenario holding one answers
+  {"ok": false, "code": "bad_input"}. All 5 tests of ebur128.test.ts (TEST_GLOBAL_LOUDNESS, TEST_LRA,
+  TEST_MAX_TRUE_PEAK, TEST_MAX_MOMENTARY, TEST_MAX_SHORTTERM) fail at their one run with "deep-show run answers the
+  scenario ok ... got {"ok":false,"code":"bad_input"}".
+- Each reaches that run only once the EBU set is read; on a machine where it isn't cached and can't be fetched each
+  fails BLOCKED instead, with its unblock line.
+
+Expected at the base: 5 tests, 5 failed, each for that reason (the missing call, not a test mistake).
+The lane type-checks at the base: `node node_modules/typescript/bin/tsc -p tests/acceptance/500-oracle/tsconfig.json`
+exits 0.

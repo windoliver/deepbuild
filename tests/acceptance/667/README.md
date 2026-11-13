@@ -140,8 +140,8 @@ and ID.
 
 | # | ID | Tests | Wrong programs it fails on | On the base |
 |---|---|---|---|---|
-| AC1 | `#667.84442921` | `raised.test.ts`: one | a listing without the ask's kind, session or age, or a second late; a frame at another log position, or none; an inbox read that holds the ask before its append | FAIL: the base hub doesn't frame the asks core's appends (the listing half holds) |
-| AC2 | `#667.b25a1d05` | `raised.test.ts`: one | no decision, or one at another scope; the ask left in `deep inbox`; no answered frame; the answer not delivered, or a second one taken | FAIL: the `answer.refused` the second answer left is never framed (everything else holds) |
+| AC1 | `#667.84442921` | `redraft-1463/raised.test.ts`: one, the blind redraft swapped in for `raised.test.ts` (#1463: deep inbox puts the question first and the handle last) | a listing without the ask's kind, session or age, or a second late; a frame at another log position, or none; an inbox read that holds the ask before its append | FAIL: the base hub doesn't frame the asks core's appends (the listing half holds) |
+| AC2 | `#667.b25a1d05` | `redraft-1463/raised.test.ts`: one, the blind redraft swapped in for `raised.test.ts` (#1463: deep inbox puts the question first and the handle last) | no decision, or one at another scope; the ask left in `deep inbox`; no answered frame; the answer not delivered, or a second one taken | FAIL: the `answer.refused` the second answer left is never framed (everything else holds) |
 | AC3 | `#667.4014b343` | `authority.test.ts`: one; `plants.test.ts`: one | plant `answer-inside-session`; a hub that counts an answer without the OS confirming you | PASS (#24's checks hold); the plant test FAILs: unknown plant |
 | AC4 | `#667.ca2b4f95` | `deadlines.test.ts`: one; `plants.test.ts`: one | plant `skip-default-at-deadline`; a hub that defaults only when something reads the inbox; no `deep inbox undo` | FAIL: the choice ask still open 15 s past its deadline; the plant test FAILs: unknown plant |
 | AC5 | `#667.b1086458` | `fold.test.ts`: two; `plants.test.ts`: one | plant `skip-default-at-deadline` (names the folded ask); a bulk answer that closes only the exception | bulk PASS (#319's fold holds); deadline FAIL: the folded ask still open 15 s past its deadline; the plant test FAILs: unknown plant |
@@ -157,7 +157,7 @@ are unverified until the implementation exists.
   agent stand-in, `deep_ask`; the proof.
 - `fixtures/agent.mjs`: the agent stand-in and its hook client.
 - `scenarios.ts`: AC3, AC4 and AC5's deadline, shared with `plants.test.ts`.
-- `raised.test.ts` (AC1, AC2), `authority.test.ts` (AC3), `deadlines.test.ts` (AC4), `fold.test.ts` (AC5),
+- `redraft-1463/raised.test.ts` (AC1, AC2), `authority.test.ts` (AC3), `deadlines.test.ts` (AC4), `fold.test.ts` (AC5),
   `plants.test.ts` (AC3, AC4, AC5).
 - `tsconfig.json`: the root's strict options with `noEmit` and `allowImportingTsExtensions`.
 - `BASE-FAILURE.txt`: the base run.

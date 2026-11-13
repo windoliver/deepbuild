@@ -1,0 +1,25 @@
+Checks run once on 07e74d4d8 (the change merged with origin/main), beside the proof run in blind-suite.txt.
+
+Unit tests of the touched crates: cargo test -p deep-canvas-effects -p deep-canvas-scene3d -p deep-marks-render -p deep-effects-render
+  every crate's tests pass but one in deep-marks-render, gpu::tests::the_named_versions_are_the_locked_ones
+  (left Some("0.0.8"), right Some("0.3.0")): origin/main's Cargo.lock now lists a second vello_cpu, 0.0.8,
+  first; this branch doesn't change Cargo.lock. A main failure, not this change's.
+
+Neighbouring particle suites, whose draw path, culling and count refusal this change touches, each once:
+  tests/acceptance/420 particles.test.ts       5 passed (5)
+  tests/acceptance/1312 repro.test.ts          1 passed (1)
+  tests/acceptance/1173 puffs-redraft.test.ts  2 passed (2)
+
+Canvas lint (node scripts/canvas-lint.mjs): exit 1 with 63 findings, none in the new particles code
+  (crates/deep-canvas-effects/src/particles/); the rest are in files and dependency listings this change
+  doesn't add (chrome_fx.rs, fx.rs, graph.rs, shore.rs's existing static, lint/canvas/crates.json entries).
+
+Size ratchet (node scripts/size-ratchet.mjs): new files are all under 1,500 lines. Files over their
+  ceiling on main stay at or under their base length: crates/deep-gpu-layer/src/view3d.rs 2,219 (base 2,220),
+  crates/deep-marks-render/src/raster.rs 1,900 (base 1,900).
+
+Public text (node scripts/public-text.mjs): no studied product in the changed files or commit messages.
+
+Not run: the wide node scripts/affected.mjs sweep; clippy -D warnings on deep-gpu-layer and
+deep-effects-render (main's clippy already fails in their dependencies); the canvas kit (no module's
+kinds, arrays, tables or fixtures changed; the effects module gains a rule, which the kit's digest doesn't hold).

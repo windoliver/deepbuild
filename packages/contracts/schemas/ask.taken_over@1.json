@@ -1,0 +1,103 @@
+{
+  "title": "ask.taken_over@1",
+  "description": "Take over (#1580): a paired device moved an open ask's card to itself on the trusted path, signing the call with its own key. The card's revision rises to the one named here, so an answer from a copy at an earlier revision is refused, naming the revision, and an unrevisioned answer from another device is refused while the card is there. Only the core appends it.",
+  "x-since": "R2",
+  "x-stability": "preview",
+  "x-tracking": "#1580",
+  "x-preview_since": "R2",
+  "x-decide_by": "R5",
+  "x-feeds": [],
+  "type": "object",
+  "properties": {
+    "v": {
+      "const": 1,
+      "description": "The kind's schema version."
+    },
+    "id": {
+      "type": "string",
+      "format": "ulid",
+      "description": "The event's ULID, its identity."
+    },
+    "kind": {
+      "const": "ask.taken_over"
+    },
+    "subject": {
+      "type": "string",
+      "pattern": "^ask:[0-9A-Za-z]+$",
+      "description": "The ask whose card moved."
+    },
+    "writer": {
+      "const": "core",
+      "description": "Only the core appends this kind."
+    },
+    "actor": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The person behind it, from the credential."
+    },
+    "scope": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Who may see it."
+    },
+    "ts": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "Milliseconds since the Unix epoch."
+    },
+    "seq": {
+      "type": "string",
+      "format": "seq",
+      "description": "Order within the session: ns since the epoch when the hook started."
+    },
+    "log_pos": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991,
+      "description": "Its position in the event log, assigned by the hub at append."
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "device": {
+          "type": "string",
+          "pattern": "^device:[0-9A-Za-z]+$",
+          "maxLength": 8192,
+          "description": "The paired device the card moved to, as its signature named it."
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 9007199254740991,
+          "description": "The card's revision once it moved."
+        }
+      },
+      "required": [
+        "device",
+        "revision"
+      ],
+      "additionalProperties": false
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$",
+        "description": "A SHA-256, in lower-case hex."
+      }
+    }
+  },
+  "required": [
+    "v",
+    "id",
+    "kind",
+    "subject",
+    "writer",
+    "actor",
+    "scope",
+    "ts",
+    "data"
+  ],
+  "additionalProperties": false
+}

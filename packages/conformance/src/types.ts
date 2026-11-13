@@ -2,7 +2,7 @@
 // hands a case, and what it reports. Fills and kits are plain data whose functions are closures, so a test
 // can derive a variant by spreading one.
 import type { JsonValue } from '@deepbuild/contracts';
-import type { Adapter, AdapterCaps, AdapterEvent, HookRequestLine, Mapped, PermissionAnswer } from '@deepbuild/adapters';
+import type { Adapter, AdapterCaps, AdapterEvent, HookOutput, HookRequestLine, Mapped, PermissionAnswer } from '@deepbuild/adapters';
 
 export type Verdict = 'PASS' | 'FAIL' | 'INVALID' | 'BLOCKED' | 'INCONCLUSIVE';
 export type Flag = keyof AdapterCaps;
@@ -52,6 +52,8 @@ export interface Harness {
   permission(request: JsonValue, session: string): Delivery;
   /** The fill's adapter's reply to a permission request answered with `answer`; BLOCKED when it gives none. */
   reply(answer: PermissionAnswer, request: HookRequestLine): JsonValue;
+  /** The fill's adapter's hook output giving the model `text` at `event`, or none; BLOCKED when it has no contextReply. */
+  context(event: string, text: string): HookOutput | undefined;
   /** Geometry; a headless harness can't make it, so the case is BLOCKED naming `bounds`. */
   bounds(panel: string): Rect;
   /** The case's own finding. */

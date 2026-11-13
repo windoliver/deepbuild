@@ -186,9 +186,20 @@ pub fn bound_listing(snapshot: &snapshot::Snapshot) -> serde_json::Value {
     serde_json::json!({ "bound": listed })
 }
 
+/// The fixture record `session.row@1` runs a view over (#2018): a record whose rows the hub's own code built, with a
+/// stop that has no verdict yet, a claim that passed, a session named by its first prompt, and sessions with open asks.
+pub fn session_row_fixture() -> PathBuf {
+    repo_root().join("crates/deep-replica/fixtures/session-row.events.jsonl")
+}
+
 /// The fixture record's inbox as of its last event, on the virtual clock.
 pub fn load_state() -> AppState {
-    let fixture = Fixture::load(&fixture_path()).expect("the fixture record parses");
+    load_state_from(&fixture_path())
+}
+
+/// The record at `path`, as [`load_state`] loads the fixture record.
+pub fn load_state_from(path: &std::path::Path) -> AppState {
+    let fixture = Fixture::load(path).expect("the fixture record parses");
     let log_pos = fixture.last_log_pos();
     // Every view reads the record through the one reader; the replica's holds the fixture.
     deep_app::record::install_local(fixture.events());

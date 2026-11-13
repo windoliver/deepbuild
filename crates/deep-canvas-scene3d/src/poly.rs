@@ -8,7 +8,7 @@
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
 
-use crate::geom::{basis, cross, dot, newell, triangulate, unit, Mesh, V2, V3};
+use crate::geom::{basis, cross, dot, first_seen, newell, spread, triangulate, unit, Mesh, V2, V3};
 
 /// A mesh as welded points and polygon faces.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -34,11 +34,295 @@ pub fn key(a: u32, b: u32) -> (u32, u32) {
     (a.min(b), a.max(b))
 }
 
+/// `0..n` stably sorted by `key` (each below `keys`), by counting.
+pub(crate) fn counted(n: usize, keys: usize, key: impl Fn(u32) -> usize) -> Vec<u32> {
+    let mut place = vec![0u32; keys + 1];
+    for i in 0..n as u32 {
+        place[key(i) + 1] += 1;
+    }
+    for k in 0..keys {
+        place[k + 1] += place[k];
+    }
+    let mut out = vec![0; n];
+    for i in 0..n as u32 {
+        let k = key(i);
+        out[place[k] as usize] = i;
+        place[k] += 1;
+    }
+    out
+}
+
+/// `0..n` sorted by the sorted `ends` of each (points below `points`), then by place: one edge's
+/// items together, the edges in the order a map keyed by [`key`] gives them. Counted by the lower
+/// end, then each (short) run of one lower end sorted by the higher and the place, packed in one
+/// number so the sort reads nothing else.
+pub(crate) fn by_ends(n: usize, points: usize, ends: impl Fn(u32) -> (u32, u32)) -> Vec<u32> {
+    let mut place = vec![0u32; points + 1];
+    for i in 0..n as u32 {
+        let (a, b) = ends(i);
+        place[a.min(b) as usize + 1] += 1;
+    }
+    for k in 0..points {
+        place[k + 1] += place[k];
+    }
+    let mut packed = vec![0u64; n];
+    for i in 0..n as u32 {
+        let (a, b) = ends(i);
+        let k = a.min(b) as usize;
+        packed[place[k] as usize] = (u64::from(a.max(b)) << 32) | u64::from(i);
+        place[k] += 1;
+    }
+    // Each lower end's run now ends where `place` stands.
+    let mut start = 0;
+    for &end in &place[..points] {
+        packed[start..end as usize].sort_unstable();
+        start = end as usize;
+    }
+    packed.into_iter().map(|x| x as u32).collect()
+}
+
+/// A polygon view's corners and edges as flat arrays (#2017): corner `start[f] + k` is face `f`'s
+/// corner `k`, whose half-edge runs to the face's next corner; the edges are numbered in the order
+/// of their sorted ends, each listing the corners whose half-edges lie on it in corner order, so
+/// its faces come in the order [`Poly::edges`] gives them.
+pub(crate) struct Halves {
+    /// Each face's first corner, then the corner count.
+    pub(crate) start: Vec<u32>,
+    /// Each corner's face.
+    pub(crate) face: Vec<u32>,
+    /// Each corner's point, and the point its half-edge runs to.
+    pub(crate) from: Vec<u32>,
+    pub(crate) to: Vec<u32>,
+    /// Each corner's face's first corner at its point.
+    pub(crate) first: Vec<u32>,
+    /// Each corner's half-edge's edge.
+    pub(crate) edge: Vec<u32>,
+    /// Each edge's sorted ends.
+    pub(crate) ends: Vec<(u32, u32)>,
+    /// Each edge's first place in `list`, then the list's length.
+    at: Vec<u32>,
+    list: Vec<u32>,
+}
+
+impl Halves {
+    pub(crate) fn of(p: &Poly) -> Halves {
+        let n = p.corners();
+        let (mut start, mut face) = (Vec::with_capacity(p.faces.len() + 1), Vec::with_capacity(n));
+        let (mut from, mut to, mut first) = (
+            Vec::with_capacity(n),
+            Vec::with_capacity(n),
+            Vec::with_capacity(n),
+        );
+        // The face each point was last seen in, and its first corner there.
+        let mut seen = vec![(u32::MAX, 0u32); p.points.len()];
+        for (f, c) in p.faces.iter().enumerate() {
+            start.push(from.len() as u32);
+            for (k, &v) in c.iter().enumerate() {
+                let here = (f as u32, from.len() as u32);
+                let s = &mut seen[v as usize];
+                if s.0 != here.0 {
+                    *s = here;
+                }
+                first.push(s.1);
+                face.push(f as u32);
+                from.push(v);
+                to.push(c[(k + 1) % c.len()]);
+            }
+        }
+        start.push(n as u32);
+        let order = by_ends(n, p.points.len(), |c| (from[c as usize], to[c as usize]));
+        let (mut edge, mut ends, mut at) = (vec![0; n], Vec::new(), Vec::new());
+        for (place, &c) in order.iter().enumerate() {
+            let e = key(from[c as usize], to[c as usize]);
+            if ends.last() != Some(&e) {
+                ends.push(e);
+                at.push(place as u32);
+            }
+            edge[c as usize] = (ends.len() - 1) as u32;
+        }
+        at.push(n as u32);
+        Halves {
+            start,
+            face,
+            from,
+            to,
+            first,
+            edge,
+            ends,
+            at,
+            list: order,
+        }
+    }
+
+    /// The corners on edge `e`, in corner order.
+    pub(crate) fn on(&self, e: usize) -> &[u32] {
+        &self.list[self.at[e] as usize..self.at[e + 1] as usize]
+    }
+
+    /// The corner before `c` in its face.
+    pub(crate) fn prev(&self, c: usize) -> usize {
+        let f = self.face[c] as usize;
+        if c == self.start[f] as usize {
+            self.start[f + 1] as usize - 1
+        } else {
+            c - 1
+        }
+    }
+
+    /// The corner after `c` in its face.
+    pub(crate) fn next(&self, c: usize) -> usize {
+        let f = self.face[c] as usize;
+        if c + 1 == self.start[f + 1] as usize {
+            self.start[f] as usize
+        } else {
+            c + 1
+        }
+    }
+
+    /// The last corner whose half-edge runs `a` → `b` on edge `e`: a map from half-edges to their
+    /// faces, filled in corner order, keeps the last.
+    pub(crate) fn across(&self, e: usize, a: u32, b: u32) -> Option<usize> {
+        self.on(e)
+            .iter()
+            .rev()
+            .map(|&c| c as usize)
+            .find(|&c| self.from[c] == a && self.to[c] == b)
+    }
+}
+
+/// Lists one face's triangles reuse while [`Poly::of`] finds their boundary.
+#[derive(Default)]
+struct Scratch {
+    /// Each half-edge on welded points, with the mesh vertex at its start.
+    half: Vec<((u32, u32), u32)>,
+    /// The boundary half-edges.
+    bound: Vec<((u32, u32), u32)>,
+    /// The boundary loop: each point with the mesh vertex at its start.
+    ring: Vec<(u32, usize)>,
+}
+
+impl Scratch {
+    /// Whether the boundary of triangles `tris` on welded points `w` is one loop, left in `ring`.
+    /// As maps keyed by half-edge and by start would, a half-edge met twice keeps its later
+    /// triangle's vertex and a point that starts two boundary half-edges the one to the higher
+    /// point; the loop starts at the lowest point.
+    fn boundary(&mut self, tris: &[u32], m: &Mesh, w: &[u32]) -> bool {
+        let (half, bound, ring) = (&mut self.half, &mut self.bound, &mut self.ring);
+        if let Some(quad) = quad_loop(tris, m, w) {
+            ring.clear();
+            ring.extend(quad);
+            return true;
+        }
+        half.clear();
+        for &t in tris {
+            for j in 0..3 {
+                let a = m.indices[3 * t as usize + j];
+                let b = m.indices[3 * t as usize + (j + 1) % 3];
+                half.push(((w[a as usize], w[b as usize]), a));
+            }
+        }
+        half.sort_by_key(|h| h.0);
+        keep_last(half, |h| h.0);
+        bound.clear();
+        let has = |e: &(u32, u32)| half.binary_search_by_key(e, |h| h.0).is_ok();
+        bound.extend(half.iter().filter(|((a, b), _)| a != b && !has(&(*b, *a))));
+        let count = bound.len();
+        keep_last(bound, |h| h.0 .0);
+        ring.clear();
+        let Some(&((start, _), _)) = bound.first() else {
+            return false;
+        };
+        let mut at = start;
+        while let Ok(i) = bound.binary_search_by_key(&at, |h| h.0 .0) {
+            let ((_, next), v) = bound[i];
+            ring.push((at, v as usize));
+            at = next;
+            if at == start || ring.len() > count {
+                break;
+            }
+        }
+        ring.len() >= 3 && ring.len() == count
+    }
+}
+
+/// The loop of the two triangles a quad makes, (a, b, c) then (a, c, d) on four distinct welded
+/// points, as [`Scratch::boundary`] walks it: their six half-edges are distinct, the diagonal's two
+/// cancel, and each point starts one of the other four, so the loop runs a, b, c, d from the lowest
+/// point, each with the vertex its half-edge starts at (c's from the second triangle).
+fn quad_loop(tris: &[u32], m: &Mesh, w: &[u32]) -> Option<[(u32, usize); 4]> {
+    let &[s, t] = tris else {
+        return None;
+    };
+    let v = |tri: u32, j: usize| m.indices[3 * tri as usize + j] as usize;
+    let (a, b, c, d) = (v(s, 0), v(s, 1), v(t, 1), v(t, 2));
+    let p = [w[a], w[b], w[c], w[d]];
+    let distinct = (0..4).all(|i| (i + 1..4).all(|j| p[i] != p[j]));
+    if w[v(t, 0)] != p[0] || w[v(s, 2)] != p[2] || !distinct {
+        return None;
+    }
+    let ring = [(p[0], a), (p[1], b), (p[2], c), (p[3], d)];
+    let low = (0..4).min_by_key(|&i| p[i]).unwrap_or(0);
+    Some([0, 1, 2, 3].map(|i| ring[(low + i) % 4]))
+}
+
+/// `list`, sorted by `key`, with only the last of each run of equal keys.
+fn keep_last<T: Copy, K: PartialEq>(list: &mut Vec<T>, key: impl Fn(&T) -> K) {
+    let mut kept = 0;
+    for i in 0..list.len() {
+        if i + 1 < list.len() && key(&list[i + 1]) == key(&list[i]) {
+            continue;
+        }
+        list[kept] = list[i];
+        kept += 1;
+    }
+    list.truncate(kept);
+}
+
+/// The lists each of `n` items lies in, by the lists' places, in list order (an item a list
+/// names twice is in it twice).
+struct Members {
+    start: Vec<u32>,
+    list: Vec<u32>,
+}
+
+impl Members {
+    fn of<'a>(n: usize, lists: impl Iterator<Item = &'a Vec<u32>> + Clone) -> Members {
+        let mut start = vec![0u32; n + 1];
+        for &t in lists.clone().flatten().filter(|&&t| (t as usize) < n) {
+            start[t as usize + 1] += 1;
+        }
+        for k in 0..n {
+            start[k + 1] += start[k];
+        }
+        let (mut fill, mut list) = (start.clone(), vec![0; start[n] as usize]);
+        for (k, l) in lists.enumerate() {
+            for &t in l.iter().filter(|&&t| (t as usize) < n) {
+                list[fill[t as usize] as usize] = k as u32;
+                fill[t as usize] += 1;
+            }
+        }
+        Members { start, list }
+    }
+
+    /// The places of the lists item `t` lies in.
+    fn lists(&self, t: u32) -> &[u32] {
+        let t = t as usize;
+        if t + 1 >= self.start.len() {
+            return &[];
+        }
+        &self.list[self.start[t] as usize..self.start[t + 1] as usize]
+    }
+}
+
 impl Poly {
     /// The polygon view of `m`: each face's triangles merged into one loop where their boundary
     /// on welded points is one loop, and kept as triangles otherwise.
     pub fn of(m: &Mesh) -> Poly {
-        let w = m.welded();
+        Poly::of_welded(m, &m.welded())
+    }
+
+    /// [`Poly::of`] on `w`, `m`'s welded points.
+    pub(crate) fn of_welded(m: &Mesh, w: &[u32]) -> Poly {
         let n = w.iter().max().map_or(0, |x| *x as usize + 1);
         let mut points = vec![[0.0; 3]; n];
         let mut seen = vec![false; n];
@@ -61,59 +345,31 @@ impl Poly {
             attrs.insert(name.clone(), a);
         }
         let has_uv = m.uv0.len() == m.positions.len() && !m.positions.is_empty();
-        let mut by_face: BTreeMap<u32, Vec<usize>> = BTreeMap::new();
-        for t in 0..m.triangles() {
-            by_face.entry(m.faces[t]).or_default().push(t);
-        }
-        // Faces in the order of their first triangles.
-        let mut groups: Vec<Vec<usize>> = by_face.into_values().collect();
-        groups.sort_by_key(|g| g[0]);
+        // Each face's triangles in order, the faces in the order of their first triangles.
+        let tris = m.triangles();
+        let group = first_seen(tris, |t| m.faces[t], |f| spread(u64::from(*f)));
+        let groups = group.iter().max().map_or(0, |g| *g as usize + 1);
+        let order = counted(tris, groups, |t| group[t as usize] as usize);
         let mut out = Poly {
             points,
             attrs,
-            uv: has_uv.then(Vec::new),
+            faces: Vec::with_capacity(groups),
+            vertex: Vec::with_capacity(groups),
+            origin: Vec::with_capacity(groups),
+            uv: has_uv.then(|| Vec::with_capacity(groups)),
             ..Poly::default()
         };
-        for tris in groups {
-            // Each boundary half-edge on welded points, with the mesh vertex at its start.
-            let mut half: BTreeMap<(u32, u32), usize> = BTreeMap::new();
-            for &t in &tris {
-                for j in 0..3 {
-                    let (a, b) = (m.indices[3 * t + j], m.indices[3 * t + (j + 1) % 3]);
-                    half.insert((w[a as usize], w[b as usize]), a as usize);
-                }
-            }
-            let boundary: BTreeMap<u32, (u32, usize)> = half
-                .iter()
-                .filter(|((a, b), _)| a != b && !half.contains_key(&(*b, *a)))
-                .map(|((a, b), v)| (*a, (*b, *v)))
-                .collect();
-            let count = half
-                .keys()
-                .filter(|(a, b)| a != b && !half.contains_key(&(*b, *a)))
-                .count();
-            let mut ring = Vec::new();
-            if let Some((&start, _)) = boundary.iter().next() {
-                let mut at = start;
-                while let Some(&(next, v)) = boundary.get(&at) {
-                    ring.push((at, v));
-                    at = next;
-                    if at == start || ring.len() > count {
-                        break;
-                    }
-                }
-            }
-            if ring.len() >= 3 && ring.len() == count && tris.len() > 1 {
-                out.push(&ring, m, has_uv, tris[0] as u32);
+        let mut scratch = Scratch::default();
+        for tris in order.chunk_by(|a, b| group[*a as usize] == group[*b as usize]) {
+            if tris.len() > 1 && scratch.boundary(tris, m, w) {
+                out.push(&scratch.ring, m, has_uv, tris[0]);
             } else {
-                for &t in &tris {
-                    let ring: Vec<(u32, usize)> = (0..3)
-                        .map(|j| {
-                            let v = m.indices[3 * t + j] as usize;
-                            (w[v], v)
-                        })
-                        .collect();
-                    out.push(&ring, m, has_uv, t as u32);
+                for &t in tris {
+                    let ring = [0, 1, 2].map(|j| {
+                        let v = m.indices[3 * t as usize + j] as usize;
+                        (w[v], v)
+                    });
+                    out.push(&ring, m, has_uv, t);
                 }
             }
         }
@@ -159,27 +415,37 @@ impl Poly {
     /// never depends on where the face's list starts.
     pub fn normal(&self, f: usize) -> V3 {
         let c = &self.faces[f];
-        let mut terms: Vec<V3> = (0..c.len())
-            .map(|k| {
-                let (a, b) = (
-                    self.points[c[k] as usize],
-                    self.points[c[(k + 1) % c.len()] as usize],
-                );
-                [
-                    (a[1] - b[1]) * (a[2] + b[2]),
-                    (a[2] - b[2]) * (a[0] + b[0]),
-                    (a[0] - b[0]) * (a[1] + b[1]),
-                ]
-            })
-            .collect();
-        terms.sort_by(|a, b| {
+        let term = |k: usize| {
+            let (a, b) = (
+                self.points[c[k] as usize],
+                self.points[c[(k + 1) % c.len()] as usize],
+            );
+            [
+                (a[1] - b[1]) * (a[2] + b[2]),
+                (a[2] - b[2]) * (a[0] + b[0]),
+                (a[0] - b[0]) * (a[1] + b[1]),
+            ]
+        };
+        // A small face's terms stay on the stack.
+        let (mut small, mut large) = ([[0.0; 3]; 8], Vec::new());
+        let terms: &mut [V3] = if c.len() <= small.len() {
+            for (k, t) in small.iter_mut().enumerate().take(c.len()) {
+                *t = term(k);
+            }
+            &mut small[..c.len()]
+        } else {
+            large.extend((0..c.len()).map(term));
+            &mut large
+        };
+        // Equal terms are equal bits, so an unstable sort orders them as a stable one would.
+        terms.sort_unstable_by(|a, b| {
             (0..3)
                 .map(|k| a[k].total_cmp(&b[k]))
                 .find(|o| o.is_ne())
                 .unwrap_or(Ordering::Equal)
         });
         terms
-            .into_iter()
+            .iter()
             .fold([0.0; 3], |s, t| [s[0] + t[0], s[1] + t[1], s[2] + t[2]])
     }
 
@@ -188,46 +454,54 @@ impl Poly {
     /// `src`, and smooth normals (area-weighted on welded points) unless `normals` gives each
     /// corner's.
     pub fn mesh(&self, src: &Mesh, normals: Option<&[Vec<V3>]>) -> Mesh {
-        let smooth = normals.is_none().then(|| self.smooth_normals());
+        match normals {
+            Some(n) => self.mesh_by(src, |_, f, k| n[f][k]),
+            None => {
+                let smooth = self.smooth_normals();
+                self.mesh_by(src, |_, f, k| smooth[self.faces[f][k] as usize])
+            }
+        }
+    }
+
+    /// [`Poly::mesh`] with every corner's normal in one list, face after face.
+    pub(crate) fn mesh_flat(&self, src: &Mesh, normals: &[V3]) -> Mesh {
+        self.mesh_by(src, |corner, _, _| normals[corner])
+    }
+
+    /// [`Poly::mesh`] with the normal of each corner (its place in all, its face, its place there).
+    fn mesh_by(&self, src: &Mesh, normal: impl Fn(usize, usize, usize) -> V3) -> Mesh {
         let carry_uv1 =
             self.vertex.len() == self.faces.len() && src.uv1.len() == src.positions.len();
+        // A face of n corners makes n − 2 triangles (fewer where one has no area).
+        let (corners, tris) = (
+            self.corners(),
+            self.corners().saturating_sub(2 * self.faces.len()),
+        );
         let mut out = Mesh {
             outputs: src.outputs.clone(),
-            attributes: self.attrs.keys().map(|k| (k.clone(), Vec::new())).collect(),
-            face_attributes: src
-                .face_attributes
-                .keys()
-                .map(|k| (k.clone(), Vec::new()))
-                .collect(),
+            positions: Vec::with_capacity(corners),
+            normals: Vec::with_capacity(corners),
+            indices: Vec::with_capacity(3 * tris),
+            faces: Vec::with_capacity(tris),
+            uv0: Vec::with_capacity(if self.uv.is_some() { corners } else { 0 }),
+            uv1: Vec::with_capacity(if carry_uv1 { corners } else { 0 }),
             ..Mesh::default()
         };
-        let mut part_of: BTreeMap<u32, Vec<&String>> = BTreeMap::new();
-        for (name, tris) in &src.parts {
-            for t in tris {
-                part_of.entry(*t).or_default().push(name);
-            }
-        }
-        let mut closed_of: BTreeMap<u32, Vec<&String>> = BTreeMap::new();
-        for (name, (tris, _)) in &src.closed {
-            for t in tris {
-                closed_of.entry(*t).or_default().push(name);
-            }
-        }
+        // Each source triangle's parts and closed parts, by their places in name order.
+        let part_of = Members::of(src.triangles(), src.parts.values());
+        let closed_of = Members::of(src.triangles(), src.closed.values().map(|c| &c.0));
+        let mut parts: Vec<Vec<u32>> = vec![Vec::new(); src.parts.len()];
+        let mut closed: Vec<Vec<u32>> = vec![Vec::new(); src.closed.len()];
+        // Each vertex's point and each triangle's origin, for the attributes.
+        let mut point_of: Vec<u32> = Vec::with_capacity(corners);
+        let mut origin_of: Vec<u32> = Vec::with_capacity(tris);
         for (f, c) in self.faces.iter().enumerate() {
             let base = out.positions.len() as u32;
             for (k, &i) in c.iter().enumerate() {
-                let n = match normals {
-                    Some(n) => n[f][k],
-                    None => smooth.as_ref().expect("made above")[i as usize],
-                };
-                out.vertex(self.points[i as usize], n);
-                for (name, values) in &self.attrs {
-                    *out.attributes
-                        .get_mut(name)
-                        .expect("made above")
-                        .last_mut()
-                        .expect("pushed") = values[i as usize];
-                }
+                // The vertex; its attributes are written once all are in.
+                out.normals.push(normal(out.positions.len(), f, k));
+                out.positions.push(self.points[i as usize]);
+                point_of.push(i);
                 if let Some(uv) = &self.uv {
                     out.uv0.push(uv[f][k]);
                 }
@@ -254,23 +528,33 @@ impl Poly {
                 if !self.weak.is_empty() {
                     out.weak.push(self.weak[f]);
                 }
-                for name in part_of.get(&origin).into_iter().flatten() {
-                    out.parts.entry((*name).clone()).or_default().push(t as u32);
+                for &k in part_of.lists(origin) {
+                    parts[k as usize].push(t as u32);
                 }
-                for name in closed_of.get(&origin).into_iter().flatten() {
-                    out.closed
-                        .entry((*name).clone())
-                        .or_insert_with(|| (Vec::new(), src.closed[*name].1))
-                        .0
-                        .push(t as u32);
+                for &k in closed_of.lists(origin) {
+                    closed[k as usize].push(t as u32);
                 }
-                for (name, values) in &src.face_attributes {
-                    out.face_attributes
-                        .get_mut(name)
-                        .expect("made above")
-                        .push(values[origin as usize]);
-                }
+                origin_of.push(origin);
             }
+        }
+        // A part or closed part is kept where a triangle lies in it.
+        for (name, tris) in src.parts.keys().zip(parts) {
+            if !tris.is_empty() {
+                out.parts.insert(name.clone(), tris);
+            }
+        }
+        for ((name, (_, genus)), tris) in src.closed.iter().zip(closed) {
+            if !tris.is_empty() {
+                out.closed.insert(name.clone(), (tris, *genus));
+            }
+        }
+        for (name, values) in &self.attrs {
+            let v = point_of.iter().map(|&i| values[i as usize]).collect();
+            out.attributes.insert(name.clone(), v);
+        }
+        for (name, values) in &src.face_attributes {
+            let v = origin_of.iter().map(|&o| values[o as usize]).collect();
+            out.face_attributes.insert(name.clone(), v);
         }
         out
     }

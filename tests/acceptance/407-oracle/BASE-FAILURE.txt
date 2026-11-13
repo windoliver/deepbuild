@@ -1,0 +1,5 @@
+At base 04f44a4ba (Mac17,10, 18 cores), on 2026-11-10, the suite was not run, for the reason ../407/BASE-FAILURE.txt gives (load about 210 to 270 on 18 cores, 16 to 18 builds queued in the throttle table; deep-show not built). What each test would meet first, read from the base's code, not observed:
+
+- flash.test.ts, both tests: every requirement is {kind: film.flicker}, which crates/deep-show/src/verdict.rs answers BLOCKED with {code: "not_run", kind: "film.flicker"}. The fixture-number checks pass first (they read helpers.ts and cases.json only); then each passing case fails "… is BLOCKED, not PASS" and each failing case "… is BLOCKED, not FAIL" with "no film.flash issue names a flash", at `none(…)`.
+
+Run: `node node_modules/typescript/bin/tsc -p tests/acceptance/407-oracle/tsconfig.json` exits 0. cases.json was derived from the six vendored expected logs by a scratch script (not kept): the runs of frames at the upper level, the most transitions each log counts in a second (5, 5, 7, 0, 3, 3), the first flash fail (3Hz_6s, frame 30) and the first extended fail (2Hz_6s frame 114, 3Hz_6s frame 120).

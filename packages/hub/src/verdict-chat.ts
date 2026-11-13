@@ -3,6 +3,7 @@
 // session is answered from the same tables and the session's row, with no model call.
 import { verdictLine, type LineRequirement, type LineState, type Outcome, type Result } from '@deepbuild/verdicts';
 import { elapsed } from './promises.js';
+import { watched, watchWords } from './watch.js';
 
 type Obj = Record<string, unknown>;
 type Query = (sql: string) => Promise<unknown[]>;
@@ -72,6 +73,19 @@ export async function claimState(query: Query, id: string, expected: ReadonlyMap
     const seen = new Set(own.map((r) => r.check_id));
     const passed = new Set(checks.filter((c) => c.outcome === 'passed' && !unproved.has(c.check)).map((c) => c.check));
     state = { outcome: null, requirements: [...seen].map((check, i) => ({ req: `req:${claim.id}#R${i + 1}`, outcome: passed.has(check) ? 'PASS' : 'pending', smallest: null, points_to: null })), running, ...(held.length ? { held } : {}), ...(tests ? { tests } : {}) };
+  }
+  // The receipt is the address of the claim's page, its session's page at the claim, the session's ID cut to its first
+  // 8 as the app shortens it, so it fits the line (#1460); deep open takes it.
+  if (claim.session_id) state.receipt = `session/${claim.session_id.slice(0, 8)}/${claim.id.replace(/^claim:/, '')}`;
+  // Its session's holds only watch (#2019): the line says why, with the fix, and a FAIL no send-back reached reads FAIL.
+  if (claim.session_id) {
+    const w = await watched(query, ` AND w.session_id = '${sql(claim.session_id)}'`);
+    const held = w.off ?? w.sessions.get(claim.session_id);
+    if (held) {
+      const [s] = (await query(`SELECT agent FROM sessions WHERE id = '${sql(claim.session_id)}'`)) as { agent: string | null }[];
+      const sent = verdict?.outcome === 'FAIL' ? (await query(`SELECT 1 FROM events WHERE kind = 'claim.sent_back' AND subject = 'claim:${sql(claim.id.replace(/^claim:/, ''))}' LIMIT 1`)).length > 0 : true;
+      state.watch = { why: watchWords(held, s?.agent ?? null).short, unsent: !sent };
+    }
   }
   return { task: claim.subject_ref, session: claim.session_id, created: claim.created, state, checks, verdictAt: verdict?.created ?? null };
 }

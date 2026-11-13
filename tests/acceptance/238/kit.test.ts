@@ -1,4 +1,4 @@
-// #238.6e920ef3: sandbox@1's kit gives the same results with wasmtime 49.0.2 in the app on macOS arm64 and on
+// #238.6e920ef3: sandbox@1's kit gives the same results with wasmtime 49.0.5 in the app on macOS arm64 and on
 // Linux x86_64 and with headless Chrome's own WebAssembly engine: each refusal fixture is refused at check,
 // naming its import, its instruction and function, its segment or its limit; f32 and f64 NaNs from 0 ÷ 0,
 // sqrt(−1) and inf − inf reach memory as 0x7FC00000 and 0x7FF8000000000000; an endless loop traps with kind
@@ -77,16 +77,16 @@ function kitDiff(a: Kit, b: Kit, host: string): string[] {
 }
 const caseRun = (c: Case): ReturnType<typeof ran> => ran({ ok: true, trap: c.raw['trap'] ?? null, result: c.raw['result'] ?? null, reads: c.raw['reads'] ?? [] }, `the kit's ${c.fixture}`);
 
-describe(`${ID} sandbox@1's kit gives the same results with wasmtime 49.0.2 on macOS arm64, on Linux x86_64 and in headless Chrome`, () => {
-  it(`${ID} the implementation is wasmtime 49.0.2 in the app on both native hosts, pinned =49.0.2 in Cargo.lock`, () => {
+describe(`${ID} sandbox@1's kit gives the same results with wasmtime 49.0.5 on macOS arm64, on Linux x86_64 and in headless Chrome`, () => {
+  it(`${ID} the implementation is wasmtime 49.0.5 in the app on both native hosts, pinned =49.0.5 in Cargo.lock`, () => {
     const lock = readFileSync(join(REPO, 'Cargo.lock'), 'utf8');
     const versions = [...lock.matchAll(/\[\[package\]\]\nname = "wasmtime"\nversion = "([^"]+)"/g)].map((m) => m[1]);
-    expect(versions, 'Cargo.lock holds wasmtime once, at 49.0.2').toEqual([WASMTIME]);
+    expect(versions, 'Cargo.lock holds wasmtime once, at 49.0.5').toEqual([WASMTIME]);
     for (const [host, reply, arch, os] of [['macOS arm64', onMac([about])[0]!, 'aarch64', 'macos'], ['Linux x86_64', onLinux([about])[0]!, 'x86_64', 'linux']] as const) {
       expect(reply['interface'], `${host}: about names sandbox@1`).toBe('sandbox@1');
       expect(obj(reply['engine'], `${host}: about.engine`), `${host}: the engine is wasmtime ${WASMTIME}`).toMatchObject({ name: 'wasmtime', version: WASMTIME });
       const pins = obj(obj(reply['implementation'], `${host}: about.implementation`)['pins'], `${host}: implementation.pins`);
-      expect(str(obj(pins['wasmtime'], `${host}: pins.wasmtime`)['version'], `${host}: pins.wasmtime.version`), `${host}: the implementation pins wasmtime =49.0.2`).toBe('=49.0.2');
+      expect(str(obj(pins['wasmtime'], `${host}: pins.wasmtime`)['version'], `${host}: pins.wasmtime.version`), `${host}: the implementation pins wasmtime =49.0.5`).toBe('=49.0.5');
       expect([reply['arch'], reply['os']], `${host}: the runner reports where it ran`).toEqual([arch, os]);
     }
   }, 5_400_000);

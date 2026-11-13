@@ -29,22 +29,38 @@ fn slot_table() -> Vec<Value> {
 
 impl Hub<'_> {
     /// Every entry admitted packs fill, as each is listed: origin `agent` for a pack the working
-    /// agent installed through its session, else `pack`.
+    /// agent installed through its session, `first_party` for one the hub's release ships (#1720),
+    /// else `pack`.
     fn pack_entries(&self) -> Vec<SealedEntry> {
         // #415: a pack's admitted layouts are data.layout@1 entries beside its `entries`.
-        let layouts = self.sandbox.layout_entries.iter().filter(|e| self.packs.all().any(|p| p.id.text() == e.pack));
+        let layouts = self
+            .sandbox
+            .layout_entries
+            .iter()
+            .filter(|e| self.packs.all().any(|p| p.id.text() == e.pack));
         self.packs
             .all()
             .flat_map(|p| p.entries.iter())
             .chain(layouts)
             .map(|e| {
                 let mut e = e.clone();
-                if self.pack_authors.contains_key(&e.pack) {
-                    e.origin = "agent";
-                }
+                e.origin = self.pack_origin(&e.pack);
                 e
             })
             .collect()
+    }
+
+    /// Where an admitted pack, `owner/name@version`, came from: `agent` when the working agent
+    /// installed it through its session, `first_party` when its owner is DeepBuild's own (the
+    /// release's packs; the hub installs no other pack under that owner, #1720), else `pack`.
+    pub fn pack_origin(&self, pack: &str) -> &'static str {
+        if self.pack_authors.contains_key(pack) {
+            "agent"
+        } else if pack.starts_with("deepbuild/") {
+            "first_party"
+        } else {
+            "pack"
+        }
     }
 
     /// `{"call": "registries"}`: `deep://registries/<core version>`.
@@ -66,6 +82,13 @@ impl Hub<'_> {
                     let name = e["name"].as_str().unwrap_or_default().to_string();
                     if let Some(p) = self.sandbox.programs.get(&(r.def.name.clone(), name)) {
                         e["program"] = p.clone();
+                    }
+                    // #501: an export target's writer, reader, fidelity and hidden items, as
+                    // the entry's own fields.
+                    if r.def.name == "export.target@1" {
+                        for k in ["writer", "reader", "fidelity", "hidden"] {
+                            e[k] = e["value"][k].clone();
+                        }
                     }
                 }
                 row
@@ -124,9 +147,7 @@ impl Hub<'_> {
                 .iter()
                 .find(|e| e.registry == registry && e.name == name)?
                 .clone();
-            if self.pack_authors.contains_key(*id) {
-                e.origin = "agent";
-            }
+            e.origin = self.pack_origin(id);
             Some(e)
         })
     }

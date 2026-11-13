@@ -214,11 +214,11 @@ fn march(grid: &Grid, cells: &[Cell], g: &dyn Fn(f64, f64) -> f64) -> Vec<Vec<[f
             (l, false, i, j),
         ];
         let mut crossing: Vec<usize> = Vec::new();
-        for e in 0..4 {
+        for (e, &edge) in edges.iter().enumerate() {
             let (a, b) = (e, (e + 1) % 4);
             if (v[a] > 0.0) != (v[b] > 0.0) {
                 crossing.push(e);
-                points.entry(edges[e]).or_insert_with(|| {
+                points.entry(edge).or_insert_with(|| {
                     let pa = grid.at(l, corner[a].0, corner[a].1);
                     let pb = grid.at(l, corner[b].0, corner[b].1);
                     let t = v[a] / (v[a] - v[b]);

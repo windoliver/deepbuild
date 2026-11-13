@@ -10,7 +10,7 @@ import { claudeParts, codexParts, paseoParts, piParts } from './shipped.js';
 import type { Adapter, AdapterParts, AdapterRegistry, Drift, JsonObject } from './types.js';
 
 export type {
-  Adapter, AdapterCaps, AdapterEvent, AdapterParts, AdapterRegistry, DoctorItem, Drift, HookRequestLine, JsonObject, Mapped, PermissionAnswer, Reading,
+  Adapter, AdapterCaps, AdapterEvent, AdapterParts, AdapterRegistry, DoctorItem, Drift, HookOutput, HookRequestLine, JsonObject, Mapped, PermissionAnswer, Reading,
   SessionRoute, Skill, StopCause, StopReading, TurnUsage, Unsupported,
 } from './types.js';
 
@@ -71,6 +71,8 @@ export function factsAdapter(facts: JsonValue, parts: AdapterParts): Adapter {
   for (const operation of OPERATIONS) if (parts[operation]) (adapter as unknown as Record<string, unknown>)[operation] = parts[operation];
   if (parts.permissionReply) adapter.permissionReply = parts.permissionReply;
   if (parts.routeAtStart) adapter.routeAtStart = parts.routeAtStart;
+  const { contextReply } = parts;
+  if (contextReply) adapter.contextReply = (event, text) => contextReply(event, text, facts);
   return adapter;
 }
 
@@ -83,7 +85,7 @@ export function registry(): AdapterRegistry {
       if (name === 'deep') throw refuse('enum', '/name', name, "deep is the hub's own writer; register the adapter under its agent's name.");
       if (adapters.has(name)) throw refuse('enum', '/name', name, 'One adapter fills a name once; register the second under another name.');
       if (!isObject(adapter) || !('facts' in adapter)) throw refuse('required', '/facts', undefined, 'Give the adapter its adapter.facts@1 data.');
-      const failed = held(isObject(adapter.facts) && (adapter.facts.schema === 'adapter.facts@2' || adapter.facts.schema === 'adapter.facts@3' || adapter.facts.schema === 'adapter.facts@4' || adapter.facts.schema === 'adapter.facts@5') ? adapter.facts.schema : 'adapter.facts@1', adapter.facts, '/facts') ?? held('adapter.caps@1', adapter.caps, '/caps') ?? held('adapter.unsupported@1', adapter.unsupported, '/unsupported');
+      const failed = held(isObject(adapter.facts) && (adapter.facts.schema === 'adapter.facts@2' || adapter.facts.schema === 'adapter.facts@3' || adapter.facts.schema === 'adapter.facts@4' || adapter.facts.schema === 'adapter.facts@5' || adapter.facts.schema === 'adapter.facts@6') ? adapter.facts.schema : 'adapter.facts@1', adapter.facts, '/facts') ?? held('adapter.caps@1', adapter.caps, '/caps') ?? held('adapter.unsupported@1', adapter.unsupported, '/unsupported');
       if (failed) throw failed;
       if (typeof adapter.doctor !== 'function') throw refuse('required', '/doctor', undefined, 'Give the adapter a doctor() that lists its checks, each ok, warn, fail or skip.');
       if (typeof adapter.mapHook !== 'function') throw refuse('required', '/mapHook', undefined, 'Give the adapter a mapHook(); factsAdapter() builds one from its facts.');

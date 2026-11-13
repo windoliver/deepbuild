@@ -1,0 +1,47 @@
+{
+  "name": "costly",
+  "version": "1.0.0",
+  "license": "MIT",
+  "description": "A planted pack of the #202 acceptance suite: costly.unit@1 declares 0.10 ms of CPU at its defaults; its expansion is one test.weight@1 item, 0.20 ms.",
+  "requires": {
+    "core": ">=0.0.0",
+    "modules": {
+      "test.weight": ">=0.0.0"
+    }
+  },
+  "recipes": {
+    "costly.unit@1": "costly.unit@1.json"
+  },
+  "kinds": {
+    "costly.unit@1": {
+      "minor": 0,
+      "recipe": "costly.unit@1",
+      "children": [],
+      "capabilities": {
+        "pickable": true,
+        "snap": false
+      },
+      "rules": [],
+      "migrate": {},
+      "examples": [
+        "0889c28605d81d0ef0d3a0e87c64a2f3ea1c475cda0c4cd17f5e31d4c46a574c"
+      ],
+      "cost": {
+        "class": "figure",
+        "at_defaults": {
+          "cpu_ms": 0.1,
+          "gpu_ms": 0,
+          "items": 1
+        }
+      }
+    }
+  },
+  "assets": [
+    {
+      "path": "examples/defaults.json",
+      "sha256": "0889c28605d81d0ef0d3a0e87c64a2f3ea1c475cda0c4cd17f5e31d4c46a574c",
+      "size": 417,
+      "license": "MIT"
+    }
+  ]
+}

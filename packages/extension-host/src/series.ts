@@ -9,7 +9,7 @@
 import { createHash } from 'node:crypto';
 import { EvidenceError, type EvidenceStore, type Writer } from '@deepbuild/evidence';
 import { ulid, type Connection, type EventInput, type RecordStore } from '@deepbuild/record';
-import type { Batch } from './sources.js';
+import type { Batch } from './source-types.js';
 
 /** The most named values one call of a series source may return. */
 export const SERIES_MAX = 10_000;

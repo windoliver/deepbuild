@@ -1,0 +1,9 @@
+{
+  "id": "test/upper-kind",
+  "version": "1.0.0",
+  "digest": "d1:0000000000000000000000000000000000000000000000000000000000000000",
+  "checks": ["test.upper_only"],
+  "jobs": ["test.upper"],
+  "job_tools": [{ "kind": "test.upper", "tool": "upper-a@1.0.0" }],
+  "requires": { "preview": ["deep.registerJob", "deep.registerJobTool"] }
+}

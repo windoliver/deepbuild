@@ -22,7 +22,6 @@ use deep_gpu::device::Device;
 use deep_marks_render::gpu::{Options, Vello2d};
 use deep_scene3d_render::status::{Guard, Stage};
 use serde_json::{json, Map, Value};
-use wgpu::util::DeviceExt as _;
 
 use crate::drawn::{self, Page};
 use crate::opframe::{f32_bytes, read_texture};
@@ -172,7 +171,11 @@ fn scale_of(graph: &Value) -> f64 {
 }
 
 /// A new target of the compositor.
-fn target(device: &wgpu::Device, size: [u32; 2], format: wgpu::TextureFormat) -> wgpu::Texture {
+fn target(
+    device: &deep_gpu::counted::Wgpu,
+    size: [u32; 2],
+    format: wgpu::TextureFormat,
+) -> wgpu::Texture {
     device.create_texture(&wgpu::TextureDescriptor {
         label: Some("group target"),
         size: whole(size),
@@ -211,7 +214,9 @@ pub struct Groups {
 /// coverage; `color` keeps its own paint.
 fn target_mark(d: &Drawn, output: &str) -> Drawn {
     let press = d.scopes.iter().find_map(|s| match s {
-        Scope::Opacity { effect: Some(e), .. } => e.medium.as_ref().and_then(|m| m.pressure),
+        Scope::Opacity {
+            effect: Some(e), ..
+        } => e.medium.as_ref().and_then(|m| m.pressure),
         _ => None,
     });
     let value = match output {
@@ -219,7 +224,15 @@ fn target_mark(d: &Drawn, output: &str) -> Drawn {
         _ => 255,
     };
     let mut d = d.clone();
-    d.scopes.retain(|s| !matches!(s, Scope::Opacity { effect: Some(_), .. }));
+    d.scopes.retain(|s| {
+        !matches!(
+            s,
+            Scope::Opacity {
+                effect: Some(_),
+                ..
+            }
+        )
+    });
     if output != "color" {
         if let Mark::Shape { fill, stroke, .. } = &mut d.mark {
             let solid = Fill::Solid([value; 3]);
@@ -242,7 +255,7 @@ fn member(d: &Drawn, members: &[String]) -> bool {
 }
 
 fn pipeline(
-    device: &wgpu::Device,
+    device: &deep_gpu::counted::Wgpu,
     layout: &wgpu::PipelineLayout,
     module: &wgpu::ShaderModule,
     entry: &str,
@@ -277,7 +290,7 @@ fn pipeline(
 
 /// The composite's bind group: its uniform and its three textures.
 fn bound(
-    device: &wgpu::Device,
+    device: &deep_gpu::counted::Wgpu,
     layout: &wgpu::BindGroupLayout,
     words: &[u8],
     textures: [&wgpu::TextureView; 3],
@@ -384,7 +397,7 @@ pub struct Picture {
 }
 
 impl Groups {
-    pub fn new(device: &wgpu::Device) -> Groups {
+    pub fn new(device: &deep_gpu::counted::Wgpu) -> Groups {
         let source = format!("{}\n{}", blend::WGSL, include_str!("groups.wgsl"));
         let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("groups"),
@@ -472,7 +485,9 @@ impl Groups {
         x: &mut Run<'_>,
         read: &TargetRead,
     ) -> Result<wgpu::TextureView, Value> {
-        let page = x.page.ok_or_else(|| refused("bad_input", "a collection target needs a page"))?;
+        let page = x
+            .page
+            .ok_or_else(|| refused("bad_input", "a collection target needs a page"))?;
         let members = page
             .collections
             .get(&read.collection)
@@ -556,7 +571,9 @@ impl Groups {
         into: &wgpu::Texture,
     ) -> Result<(), Value> {
         use deep_canvas_drawn::medium::Kind;
-        let page = x.page.ok_or_else(|| refused("bad_input", "a drawn mark needs its look's page"))?;
+        let page = x
+            .page
+            .ok_or_else(|| refused("bad_input", "a drawn mark needs its look's page"))?;
         let radius = match &m.kind {
             Kind::Wash(w) => w.bleed.max(4.0),
             Kind::Hatch(h) if h.follow == 1 => 24.0,
@@ -574,7 +591,10 @@ impl Groups {
                 }],
                 ..Effect::default()
             };
-            Some(self.passes(x, &format!("{item}.soft"), &blur, bounds, children)?.0)
+            Some(
+                self.passes(x, &format!("{item}.soft"), &blur, bounds, children)?
+                    .0,
+            )
         } else {
             None
         };
@@ -825,7 +845,12 @@ impl Groups {
         let painted = match effect.as_deref().and_then(|e| e.paint.clone()) {
             Some(part) => {
                 let zoom = x.options.zoom;
-                let scaled = [bounds[0] * zoom, bounds[1] * zoom, bounds[2] * zoom, bounds[3] * zoom];
+                let scaled = [
+                    bounds[0] * zoom,
+                    bounds[1] * zoom,
+                    bounds[2] * zoom,
+                    bounds[3] * zoom,
+                ];
                 let rect = px(scaled, f64::from(part.margin()) * zoom, x.size);
                 let out = self.take(x.device, x.size, ACC);
                 let c = part.color().map(|v| f64::from(v) / 255.0);
@@ -838,7 +863,16 @@ impl Groups {
                 let opposite = x.planted == Some(Planted::BevelLitOpposite);
                 self.paintfx
                     .get_or_insert_with(|| crate::paintfx::PaintFx::new(device))
-                    .run(device, &part, zoom as f32, &view, rect, color, opposite, &out);
+                    .run(
+                        device,
+                        &part,
+                        zoom as f32,
+                        &view,
+                        rect,
+                        color,
+                        opposite,
+                        &out,
+                    );
                 Some((out, rect))
             }
             None => None,
@@ -1152,7 +1186,7 @@ impl Groups {
     /// Writes the finished layer into `view`, premultiplied and sRGB-encoded.
     fn resolve(
         &mut self,
-        device: &wgpu::Device,
+        device: &deep_gpu::counted::Wgpu,
         encoder: &mut wgpu::CommandEncoder,
         layer: &wgpu::TextureView,
         view: &wgpu::TextureView,
@@ -1166,7 +1200,7 @@ impl Groups {
     #[allow(clippy::too_many_arguments)]
     fn resolve_as(
         &mut self,
-        device: &wgpu::Device,
+        device: &deep_gpu::counted::Wgpu,
         encoder: &mut wgpu::CommandEncoder,
         layer: &wgpu::TextureView,
         view: &wgpu::TextureView,
@@ -1301,7 +1335,10 @@ impl Groups {
         let mut costs = Vec::new();
         if let (true, Some(page)) = (layer.ground, layer.page) {
             let linear = layer.base.is_some();
-            if let Some(t) = self.passes_on(device).ground(device, page, layer.size, linear) {
+            if let Some(t) = self
+                .passes_on(device)
+                .ground(device, page, layer.size, linear)
+            {
                 stack = Some(self.copied(device, &t, layer.size));
             }
         }
@@ -1351,7 +1388,8 @@ impl Groups {
         let view = out.create_view(&Default::default());
         let mut encoder = d.create_command_encoder(&Default::default());
         self.finish(d, &mut encoder, &t, &view, format, false);
-        let image = deep_marks_render::gpu::read_back(d, &device.queue, encoder, &out, size, format)?;
+        let image =
+            deep_marks_render::gpu::read_back(d, &device.queue, encoder, &out, size, format)?;
         Ok(Some(Picture {
             image,
             floats: Some(f32_bytes(&read_texture(device, &t, 0).1)),
@@ -1481,7 +1519,7 @@ impl Groups {
     /// The composed layer into `view`, premultiplied and sRGB-encoded.
     pub fn finish(
         &mut self,
-        device: &wgpu::Device,
+        device: &deep_gpu::counted::Wgpu,
         encoder: &mut wgpu::CommandEncoder,
         done: &wgpu::Texture,
         view: &wgpu::TextureView,

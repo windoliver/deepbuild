@@ -85,6 +85,8 @@ pub struct Patched {
     /// Each item it removed and where it sat then, in order, so a rollback puts it back there
     /// and leaves the bytes as they were.
     pub removed: Vec<(String, usize)>,
+    /// The document's `packs` before, when it named another pack version (#1961).
+    pub packs_before: Option<Value>,
 }
 
 impl Patched {
@@ -148,6 +150,22 @@ impl Patched {
                     }
                 }
                 _ => {}
+            }
+        }
+        // Each pack version it named in place of another, named back (#1961).
+        let now = member(doc, "packs").and_then(Value::as_array);
+        for (k, was) in self
+            .packs_before
+            .as_ref()
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .enumerate()
+        {
+            let name = was.as_str().and_then(packs::PackId::parse).map(|p| p.name);
+            if let Some(name) = name.filter(|_| now.and_then(|n| n.get(k)) != Some(was)) {
+                let path = format!("packs/{name}");
+                ops.push(json!({"op": "set", "id": name, "path": path, "value": was}));
             }
         }
         ops
@@ -339,6 +357,9 @@ pub fn apply_ops(
 /// Takes a patch applied in place back out of `doc`, leaving it as it was, its items in their
 /// places.
 pub fn rollback(doc: &mut Value, patched: &Patched) {
+    if let Some(packs) = &patched.packs_before {
+        doc["packs"] = packs.clone();
+    }
     let Some(Value::Object(items)) = doc.get_mut("items") else {
         return;
     };
@@ -849,7 +870,20 @@ fn apply_op(
     };
     check_op_fields(j, fields, name)?;
     match name {
-        "create" => create(doc, writing.layer, j, op, done),
+        "create" => {
+            // A pack missing here or retired takes no new instance (#1958).
+            let item = member(op, "item");
+            let kind = item.and_then(kind_text).unwrap_or_default();
+            if let Some(gone) = packs::retired::no_new_instance(kind, resolved, writing.packs) {
+                let id = item.and_then(|i| member(i, "id")).and_then(Value::as_str);
+                return Err(Box::new(packs::retired::refusal(
+                    id.unwrap_or_default(),
+                    kind,
+                    gone,
+                )));
+            }
+            create(doc, writing.layer, j, op, done)
+        }
         "set" => set(doc, writing, j, op, done),
         "unset" => unset(doc, writing, j, op, done),
         "move" => move_to(doc, writing, j, op, done),
@@ -924,6 +958,9 @@ fn set(
         if let Some(rest) = text.strip_prefix("strips/") {
             return set_strip(doc, &id, rest, value, op);
         }
+        if let Some(name) = text.strip_prefix("packs/") {
+            return set_pin(doc, &id, name, value, done);
+        }
     }
     let fields = op_path(&id, op)?;
     let item = writable(items_mut(doc)?, &id, writing, done)?;
@@ -989,13 +1026,69 @@ fn set(
         [field] if ITEM_OWN_FIELDS.contains(field) && !["id", "kind", "layer"].contains(field) => {
             item.insert((*field).to_string(), value);
         }
+        // #1937: an item's level of detail, whole, as the over-class fix moves a band nearer.
+        ["lod"] => {
+            item.insert("lod".to_string(), value);
+        }
         _ => return Err(unresolved(&id, op)),
     }
     Ok(())
 }
 
 /// Sets a field of the strip `id` at `rest` (`<id>/<field>[/<sub>…]`).
-fn set_strip(doc: &mut Value, id: &str, rest: &str, value: Value, op: &Value) -> Result<(), Refused> {
+/// `set {id: <name>, path: packs/<name>, value: owner/name@version}` (#1961): the document names
+/// another version of the pack it names by that name, so its instances re-expand under it at
+/// the check, and the undo names the old one again.
+fn set_pin(
+    doc: &mut Value,
+    id: &str,
+    name: &str,
+    value: Value,
+    done: &mut Patched,
+) -> Result<(), Refused> {
+    let path = format!("packs/{name}");
+    let refuse = |code: &'static str, actual: Value, what: &str| {
+        Box::new(Issue::envelope(code, path.clone(), actual, what))
+    };
+    if name != id {
+        return Err(refuse(
+            "bad_path",
+            json!(path),
+            "the path's name is not the op's id",
+        ));
+    }
+    let pin = value.as_str().and_then(packs::PackId::parse);
+    if pin.as_ref().is_none_or(|p| p.name != name) {
+        let what = format!("not a version of the pack named `{name}`, as owner/{name}@x.y.z");
+        return Err(refuse("out_of_range", value, &what));
+    }
+    let before = member(doc, "packs").cloned();
+    let entry = member(doc, "packs")
+        .and_then(Value::as_array)
+        .and_then(|list| {
+            list.iter().position(|p| {
+                p.as_str()
+                    .and_then(packs::PackId::parse)
+                    .is_some_and(|p| p.name == name)
+            })
+        });
+    let Some(k) = entry else {
+        let what = format!("the document names no pack `{name}`");
+        return Err(refuse("ref_unresolved", Value::Null, &what));
+    };
+    done.packs_before
+        .get_or_insert_with(|| before.unwrap_or(Value::Null));
+    doc["packs"][k] = value;
+    Ok(())
+}
+
+fn set_strip(
+    doc: &mut Value,
+    id: &str,
+    rest: &str,
+    value: Value,
+    op: &Value,
+) -> Result<(), Refused> {
     let mut steps = rest.split('/');
     if steps.next() != Some(id) {
         return Err(Box::new(Issue::error(
@@ -1017,7 +1110,9 @@ fn set_strip(doc: &mut Value, id: &str, rest: &str, value: Value, op: &Value) ->
         let Value::Object(m) = at else {
             return Err(unresolved(id, op));
         };
-        at = m.entry((*step).to_string()).or_insert_with(|| Value::Object(Map::new()));
+        at = m
+            .entry((*step).to_string())
+            .or_insert_with(|| Value::Object(Map::new()));
     }
     let Value::Object(m) = at else {
         return Err(unresolved(id, op));

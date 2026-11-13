@@ -11,7 +11,7 @@ this point: the bake, logic.budget and the twin have never run against a deep-lo
 
 ----
 
- RUN  v5.0.5 /Users/taofeng/dev/claude-worktrees/github-issue-531-dba4b3/agent-ae2eb03666889fc20/tests/acceptance/531-redraft-ac11
+ RUN  v5.0.5 ~/dev/claude-worktrees/github-issue-531-dba4b3/agent-ae2eb03666889fc20/tests/acceptance/531-redraft-ac11
 
  ❯ budget-lines.test.ts (2 tests | 2 failed) 4034ms
    ❯ #531 criterion 11: logic.budget names the worst step's three costliest source lines (2)

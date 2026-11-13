@@ -1,0 +1,58 @@
+Base: a098f9f9 (design(1818): the compressor, limiter, delay and pitch laws ... in the Bus and Processor rows).
+Built and run once there, Nov 10, 2026, on this Mac (toolchain 1.99.1-aarch64-apple-darwin, CARGO_INCREMENTAL=0
+CARGO_PROFILE_DEV_DEBUG=0), after `npm ci` and `npm run build --workspaces`:
+
+  npx vitest run tests/acceptance/1818 --testTimeout=600000 --no-file-parallelism
+
+ Test Files  7 failed (7)
+      Tests  7 failed (7)
+   Duration  43.04s
+
+Each test fails at a named assertion, for the missing behavior, never at its plant (the clean run fails first):
+
+- AC1 master.test.ts: the base master has no limiter, so the +6 dB tone reaches the output whole.
+    AssertionError: the master's output reads at most −1.0 dBTP true peak at 4×
+    + "bus `master`: its output reads a true peak of 6.116 dBTP at 4× oversampling, above -1.0 dBTP"
+  (The guard before it passed: the output carries the tone, true peak above −2 dBTP.)
+
+- AC2 compressor.test.ts: no compressor kind.
+    AssertionError: ... replies[0]: media_mix answers a mix; got {"code":"bad_media","what":"processor comp: kind
+    Some(\"compressor\") isn't built", ...}
+
+- AC3 latency.test.ts: no limiter kind.
+    AssertionError: ... replies[0]: media_mix answers a mix; got {"code":"bad_media","what":"processor look: kind
+    Some(\"limiter\") isn't built", ...}
+
+- AC4 delay-pitch.test.ts: no delay kind (nor pitch).
+    AssertionError: ... replies[0]: media_mix answers a mix; got {"code":"bad_media","what":"processor echo: kind
+    Some(\"delay\") isn't built", ...}
+
+- AC5 sends.test.ts: the base mix doesn't read `sends`, so nothing reaches pre_fx or post_fx (the bus's own output
+  goes to the muted sink).
+    AssertionError: each send carries the level its tap gives
+    + "send buses.voice.sends[0] (to pre_fx, tap pre): carries -Infinity dB of its bus's input, not the 0 dB its tap gives ±0.05"
+    + "send buses.voice.sends[1] (to post_fx, tap post): carries -Infinity dB of its bus's input, not the -6 dB its tap gives ±0.05"
+
+- AC6 seek.test.ts: no compressor kind (nor limiter, delay, pitch).
+    AssertionError: ... replies[0]: media_mix answers a mix; got {"code":"bad_media","what":"processor comp: kind
+    Some(\"compressor\") isn't built", ...}
+
+- AC7 loudness-target.test.ts: deep_query reads only `items/…` paths, so every `buses/<id>/loudness_target` reads null
+  (listed `ref_unresolved`).
+    AssertionError: each bus's loudness_target reads as written, and missing where none is
+    + "bus `dialog`: its loudness_target is written -16 LUFS, but deep_query reads [null]"
+    + "bus `music`: its loudness_target is written -23.5 LUFS, but deep_query reads [null]"
+    + "bus `master`: its loudness_target is written -14 LUFS, but deep_query reads [null]"
+
+None of the seven planted names (limiter_holds_sample_peaks, compressor_hard_knee, mix_without_latency_compensation,
+pitch_ignores_semitones, send_always_post, delay_empties_line_at_seek, loudness_target_defaults_to_zero) is known at
+the base; a scenario naming one answers bad_input. No test reached its plant.
+
+The suite type-checks at the base: `node node_modules/typescript/bin/tsc -p tests/acceptance/1818/tsconfig.json`
+exits 0.
+
+Outside the suite, the row's written laws were simulated in plain JS against these tests' signals (not committed):
+the compressor law reads within 0.003 dB of its static curve at all ten levels and the hard knee is off most at −24
+(3.4375 dB); the limiter law with the bake's interpolator reads −1.0496 dBTP at 4× on AC1's signal and the
+sample-peak-only plant +2.08; the pitch law at +12 semitones measures 880.000 Hz and at 0 semitones 440.000 Hz. The
+simulated input's 4× true peak, 6.116 dBTP, equals the base bake's reading above.

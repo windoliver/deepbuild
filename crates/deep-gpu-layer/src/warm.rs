@@ -23,51 +23,18 @@ const MAX_STATES: usize = 4096;
 /// The look's cap on reachable feature sets, and a session's on operator pipelines.
 pub const CAP: usize = 32;
 
-/// Sets `value` at `path` (`items/<id>/params/…`) in `doc`, making the objects on the way.
-fn set_path(doc: &mut Value, path: &str, value: Value) {
-    let mut at = doc;
-    let parts: Vec<&str> = path.split('/').filter(|p| !p.is_empty()).collect();
-    for (k, p) in parts.iter().enumerate() {
-        if !at.is_object() {
-            *at = json!({});
-        }
-        let o = at.as_object_mut().expect("made above");
-        if k + 1 == parts.len() {
-            o.insert((*p).to_string(), value);
-            return;
-        }
-        at = o.entry((*p).to_string()).or_insert_with(|| json!({}));
-    }
-}
-
-/// One op of a variant's patch on a payload: `set` a path, `create` an item, `delete` one.
-fn apply_op(doc: &mut Value, op: &Value) {
-    match op["op"].as_str() {
-        Some("set") => {
-            if let Some(path) = op["path"].as_str() {
-                set_path(doc, path, op["value"].clone());
-            }
-        }
-        Some("create") => {
-            let item = &op["item"];
-            if let (Some(id), Some(items)) = (item["id"].as_str(), doc["items"].as_object_mut()) {
-                items.insert(id.to_string(), item.clone());
-            }
-        }
-        Some("delete") => {
-            if let (Some(id), Some(items)) = (op["id"].as_str(), doc["items"].as_object_mut()) {
-                items.remove(id);
-            }
-        }
-        _ => {}
-    }
-}
-
 /// The value a toggle writes where it binds: its range's or options' entry for off and on, or the
 /// bool itself.
 fn toggle_value(control: &Value, on: bool) -> Value {
-    let pick = |k: &str| control[k].as_array().and_then(|a| a.get(usize::from(on))).cloned();
-    pick("range").or_else(|| pick("options")).unwrap_or(json!(on))
+    let pick = |k: &str| {
+        control[k]
+            .as_array()
+            .and_then(|a| a.get(usize::from(on)))
+            .cloned()
+    };
+    pick("range")
+        .or_else(|| pick("options"))
+        .unwrap_or(json!(on))
 }
 
 /// The document a session draws: `payload` with each control's value (its entry in `choices`,
@@ -82,8 +49,13 @@ pub fn applied(payload: &Value, choices: &Choices) -> Value {
             Some("toggle") => {
                 let on = value.and_then(Value::as_bool).unwrap_or(false);
                 let v = toggle_value(c, on);
-                for b in c["binds"].as_array().into_iter().flatten().filter_map(Value::as_str) {
-                    set_path(&mut doc, b, v.clone());
+                for b in c["binds"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter_map(Value::as_str)
+                {
+                    deep_canvas::document::variants::set_path(&mut doc, b, v.clone());
                 }
             }
             Some("choice") => {
@@ -94,19 +66,7 @@ pub fn applied(payload: &Value, choices: &Choices) -> Value {
             _ => {}
         }
     }
-    let sets: BTreeMap<&String, &Value> = payload["variants"].as_object().into_iter().flatten().collect();
-    for (set, spec) in sets {
-        let name = picked.get(set).cloned().or_else(|| spec["default"].as_str().map(String::from));
-        let option = spec["options"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .find(|o| o["name"].as_str() == name.as_deref());
-        for op in option.map(|o| &o["patch"]).and_then(Value::as_array).into_iter().flatten() {
-            apply_op(&mut doc, op);
-        }
-    }
-    doc
+    deep_canvas::document::variants::applied(&doc, &picked)
 }
 
 /// Every combination of the controls' values a viewer can reach: each toggle off and on, each
@@ -167,7 +127,12 @@ pub fn times(doc: &Value) -> Vec<i64> {
         }
     };
     let mut out = BTreeSet::from([0i64]);
-    for ch in doc["channels"].as_object().into_iter().flatten().map(|(_, c)| c) {
+    for ch in doc["channels"]
+        .as_object()
+        .into_iter()
+        .flatten()
+        .map(|(_, c)| c)
+    {
         for k in ch["keys"].as_object().into_iter().flatten().map(|(_, k)| k) {
             if let Some(t) = flicks(&k["t"]) {
                 out.insert(t.max(0));
@@ -186,16 +151,23 @@ pub fn feature_sets(scene: &Scene, into: &mut BTreeMap<String, BTreeSet<String>>
     let casts = scene.sun.as_ref().is_some_and(|s| s.shadow) || !scene.lights.is_empty();
     for s in scene.layers.iter().flat_map(|l| &l.solids) {
         let item = created::item_of(&s.id).to_string();
-        into.entry(created::feature_set(s)).or_default().insert(item.clone());
+        into.entry(created::feature_set(s))
+            .or_default()
+            .insert(item.clone());
         if casts && s.cast_shadow {
-            into.entry(created::caster_set(s).to_string()).or_default().insert(item);
+            into.entry(created::caster_set(s).to_string())
+                .or_default()
+                .insert(item);
         }
     }
 }
 
 /// The over_budget issue of a document whose reachable feature sets pass the look's 32, naming
 /// the items whose sets the default state at t = 0 doesn't hold: those the other states add.
-pub fn cap_issue(all: &BTreeMap<String, BTreeSet<String>>, first: &BTreeMap<String, BTreeSet<String>>) -> Option<Value> {
+pub fn cap_issue(
+    all: &BTreeMap<String, BTreeSet<String>>,
+    first: &BTreeMap<String, BTreeSet<String>>,
+) -> Option<Value> {
     if all.len() <= CAP {
         return None;
     }
@@ -222,7 +194,13 @@ fn chain(doc: &Value) -> Vec<(String, Value)> {
         .flatten()
         .filter_map(|(id, item)| {
             let g = operator_of(id, item)?;
-            (g["kind"] == "pass").then(|| (g["order"].as_str().unwrap_or("a0").to_string(), id.clone(), g))
+            (g["kind"] == "pass").then(|| {
+                (
+                    g["order"].as_str().unwrap_or("a0").to_string(),
+                    id.clone(),
+                    g,
+                )
+            })
         })
         .collect();
     out.sort_by(|a, b| (&a.0, &a.1).cmp(&(&b.0, &b.1)));
@@ -239,7 +217,10 @@ pub fn apart(states: &[Value]) -> BTreeSet<String> {
         for c in &chains {
             for run in fusion::runs(c, apart) {
                 let members: Vec<&(String, Value)> = run.iter().map(|&k| &c[k]).collect();
-                keys.insert(serde_json::to_string(&members.iter().map(|m| &m.1).collect::<Vec<_>>()).unwrap_or_default());
+                keys.insert(
+                    serde_json::to_string(&members.iter().map(|m| &m.1).collect::<Vec<_>>())
+                        .unwrap_or_default(),
+                );
             }
         }
         keys.len()
@@ -254,7 +235,9 @@ pub fn apart(states: &[Value]) -> BTreeSet<String> {
         }
     }
     seen.into_iter()
-        .filter(|(id, graphs)| graphs.len() > 1 || chains.iter().any(|c| !c.iter().any(|(i, _)| i == *id)))
+        .filter(|(id, graphs)| {
+            graphs.len() > 1 || chains.iter().any(|c| !c.iter().any(|(i, _)| i == *id))
+        })
         .map(|(id, _)| id.clone())
         .collect()
 }
@@ -281,8 +264,13 @@ mod tests {
         assert_eq!(states.len(), 4);
         let docs: Vec<Value> = states.iter().map(|s| applied(&payload, s)).collect();
         assert_eq!(docs[0]["items"]["m"]["params"]["transmission"], json!(0));
-        assert!(docs.iter().any(|d| d["items"]["m"]["params"]["transmission"] == json!(0.9)));
-        let night: Vec<&Value> = docs.iter().filter(|d| d["items"]["t"]["params"]["steps"] == "night").collect();
+        assert!(docs
+            .iter()
+            .any(|d| d["items"]["m"]["params"]["transmission"] == json!(0.9)));
+        let night: Vec<&Value> = docs
+            .iter()
+            .filter(|d| d["items"]["t"]["params"]["steps"] == "night")
+            .collect();
         assert_eq!(night.len(), 2);
         assert!(night.iter().all(|d| d["items"]["h"]["kind"] == "x"));
         assert_eq!(times(&json!({"channels": {"c": {"keys": {"a": {"t": "2.9s"}}}}, "transport": {"span": "6s"}})).len(), 3);

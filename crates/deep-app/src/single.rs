@@ -3,7 +3,7 @@
 //! only one notifier ever runs.
 
 use std::fs::{self, File, OpenOptions, TryLockError};
-use std::io;
+use std::io::{self, BufRead as _, BufReader, Write as _};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::Path;
 use std::time::Duration;
@@ -57,13 +57,37 @@ pub fn claim(root: &Path) -> io::Result<Claim> {
     }
 }
 
+/// How long a call has to say its line once it connects.
+const LINE: Duration = Duration::from_millis(100);
+
+/// A call to the first app: a later launch, which brings it forward, or `deep open`, which names an address (#1460).
+pub struct Call {
+    pub address: Option<String>,
+    stream: UnixStream,
+}
+
+impl Call {
+    /// Answers `deep open` with what the window says.
+    pub fn reply(mut self, words: &str) {
+        let _ = writeln!(self.stream, "{words}");
+    }
+}
+
 impl Held {
-    /// Whether a later launch called since this was last asked.
-    pub fn called(&self) -> bool {
-        let mut called = false;
-        while self.listener.accept().is_ok() {
-            called = true;
+    /// The calls since this was last asked.
+    pub fn calls(&self) -> Vec<Call> {
+        let mut calls = Vec::new();
+        while let Ok((stream, _)) = self.listener.accept() {
+            let _ = stream.set_nonblocking(false);
+            let _ = stream.set_read_timeout(Some(LINE));
+            let mut line = String::new();
+            let _ = BufReader::new(&stream).read_line(&mut line);
+            let line = line.trim();
+            calls.push(Call {
+                address: (!line.is_empty()).then(|| line.to_owned()),
+                stream,
+            });
         }
-        called
+        calls
     }
 }

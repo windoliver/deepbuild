@@ -1,0 +1,50 @@
+[package]
+name = "deep-physics-rapier"
+version = "0.0.0"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+
+# Issue #2009: physics.world@1's backend on Rapier 0.36.1, pinned with enhanced-determinism and
+# serde-serialize, simd8 and parallel left out, behind deep-canvas-physics's backend interface, with
+# the deep-physics JSON-lines runner. Outside the canvas lint's scope: Rapier is the engine the
+# design pins, and the module crate it implements names none of its types.
+[dependencies]
+deep-canvas-physics = { path = "../deep-canvas-physics" }
+# Issue #1918: a world inside the scene that lists it reads the paths its scene's channels and
+# drivers write, evaluated by the motion module at each step's time.
+deep-canvas-motion = { path = "../deep-canvas-motion" }
+rapier3d = { version = "=0.36.1", default-features = false, features = ["dim3", "f32", "std", "enhanced-determinism", "serde-serialize"] }
+base64 = "0.22"
+bincode = "1"
+serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
+
+[dev-dependencies]
+# Issue #2012: Rapier's own tests/simd_backend_parity.rs names simba's SIMD types; the version and
+# feature are the ones rapier3d 0.36.1 resolves, so it adds nothing to the build.
+simba = { version = "=0.10.2", default-features = false, features = ["wide"] }
+
+[features]
+# Issue #2012: Rapier's own tests in tests/ are gated, as upstream, by `#![cfg(feature = ...)]` on
+# the package they build in; these name the rapier3d features the dependency above already turns on.
+default = ["serde-serialize", "enhanced-determinism"]
+serde-serialize = ["rapier3d/serde-serialize"]
+enhanced-determinism = ["rapier3d/enhanced-determinism"]
+# The planted twin of criterion 4 (tests/acceptance/2009): a public re-export and a public function
+# that name Rapier types, which the public-API check must catch.
+test-leaks-rapier = []
+# Issue #1918 criterion 5's test backend (tests/acceptance/1918): Rapier read through its contact
+# pairs and sensor intersections last to first, each from its second collider's side.
+test-reverse-pairs = []
+# Issue #1919 criterion 1's test backend (tests/acceptance/1919): Rapier with each query() call
+# counted by kind, which `backend_calls` answers.
+test-count-calls = []
+
+# Issue #2012: Rapier's own tests gate on `not(feature = "simd8")`, a feature this crate never has
+# (scripts/physics-build.mjs refuses rapier3d's), so the name is declared for the cfg check only.
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(feature, values("simd8"))'] }
+
+[[bin]]
+name = "deep-physics"
+path = "src/main.rs"

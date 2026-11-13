@@ -3,6 +3,8 @@
 //! read to one node's mesh in the node's own space: every triangle primitive's positions,
 //! normals (made from its faces where it has none) and indices. Only what a mesh needs is read.
 
+use std::collections::BTreeMap;
+
 use serde_json::{json, Value};
 
 use crate::geom::{add, cross, sub, unit, Mesh, V2, V3};
@@ -138,6 +140,10 @@ fn accessor_rows(
         .get("byteStride")
         .and_then(Value::as_u64)
         .map_or(size * width, |s| s as usize);
+    // Rows of a stride under its element overlap, and the buffer's end never stops their count.
+    if stride < size * width {
+        return Err(bad("a byte stride under its element"));
+    }
     (0..count)
         .map(|r| {
             (0..width)
@@ -258,7 +264,8 @@ pub fn mesh(bytes: &[u8], node: &Value) -> Result<Mesh, Fault> {
                     .into_iter()
                     .map(|r| base + r[0] as u32)
                     .collect();
-                if idx.len() % 3 != 0 || idx.iter().any(|i| (*i - base) as usize >= positions.len())
+                if !idx.len().is_multiple_of(3)
+                    || idx.iter().any(|i| (*i - base) as usize >= positions.len())
                 {
                     return Err(bad("a level's index past its positions"));
                 }
@@ -606,10 +613,18 @@ fn wrap_name(v: Option<&Value>) -> &'static str {
 /// each texture).
 const READ: [&str; 2] = ["KHR_materials_emissive_strength", "KHR_materials_unlit"];
 
-/// #428's planted `drops_dispersion`: the import leaves KHR_materials_dispersion in `dropped`
-/// and draws dispersion 0. Set only by `deep-gpu --planted`.
-pub static DROPS_DISPERSION: std::sync::atomic::AtomicBool =
-    std::sync::atomic::AtomicBool::new(false);
+/// #428's planted `drops_dispersion`, reachable only through `deep-gpu --planted`: the import
+/// leaves KHR_materials_dispersion in `dropped`, and its materials draw dispersion 0
+/// ([`crate::scene::Scene::plant_drops_dispersion`]).
+pub fn drop_dispersion(im: &mut Imported) {
+    for (i, m) in im.materials.iter_mut().enumerate() {
+        if let Some(p) = m.params.as_object_mut() {
+            if p.remove("dispersion").is_some() {
+                im.dropped.push((i, "KHR_materials_dispersion".into()));
+            }
+        }
+    }
+}
 
 /// The lobe extensions whose factors the import maps to their fields (#428); a texture inside
 /// one is still listed in `dropped`.
@@ -662,9 +677,7 @@ fn lobe_params(m: &Value, p: &mut Value) {
         }
         p["absorption"] = json!({"thickness": f(e, "thicknessFactor", 0.0), "attenuation": att});
     }
-    if has("KHR_materials_dispersion")
-        && !DROPS_DISPERSION.load(std::sync::atomic::Ordering::Relaxed)
-    {
+    if has("KHR_materials_dispersion") {
         p["dispersion"] = json!(f("KHR_materials_dispersion", "dispersion", 0.0));
     }
     if has("KHR_materials_iridescence") {
@@ -700,6 +713,50 @@ pub fn node_materials(bytes: &[u8], node: &Value) -> bool {
         .and_then(|m| doc.pointer(&format!("/meshes/{m}/primitives")))
         .and_then(Value::as_array)
         .is_some_and(|ps| ps.iter().any(|p| p.get("material").is_some()))
+}
+
+/// What [`rig`] reads: each node by name, with its parent's name and its local matrix.
+type Rig = BTreeMap<String, (Option<String>, [[f64; 4]; 3])>;
+
+/// #537: every node of a file's scene `scene` by name (or its index where it has none), with its
+/// parent's name and its local matrix, so rigid part poses turn a node relative to its parent
+/// (Instance `instance@1`: logic columns).
+pub fn rig(bytes: &[u8], scene: usize) -> Result<Rig, Fault> {
+    let (doc, _) = split(bytes)?;
+    let nodes = doc.get("nodes").and_then(Value::as_array);
+    let name = |i: usize| -> String {
+        nodes
+            .and_then(|n| n.get(i)?.get("name")?.as_str())
+            .map_or_else(|| i.to_string(), str::to_string)
+    };
+    let mut stack: Vec<(usize, Option<String>)> = doc
+        .pointer(&format!("/scenes/{scene}/nodes"))
+        .and_then(Value::as_array)
+        .ok_or_else(|| "params/node/scene".to_string())?
+        .iter()
+        .filter_map(|r| Some((r.as_u64()? as usize, None)))
+        .collect();
+    let mut out = BTreeMap::new();
+    while let Some((i, parent)) = stack.pop() {
+        let n = nodes
+            .and_then(|l| l.get(i))
+            .ok_or_else(|| bad("a missing node"))?;
+        if out.len() > 4096 {
+            return Err(bad("a node tree past 4,096 nodes"));
+        }
+        for c in n
+            .get("children")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+        {
+            if let Some(c) = c.as_u64() {
+                stack.push((c as usize, Some(name(i))));
+            }
+        }
+        out.insert(name(i), (parent, local(n)));
+    }
+    Ok(out)
 }
 
 /// Reads a file's scene `scene` (0 for the first): `sha` is the file's hash, and `read` answers
@@ -852,9 +909,7 @@ pub fn import(
             if READ.contains(&name.as_str()) {
                 continue;
             }
-            let planted = name == "KHR_materials_dispersion"
-                && DROPS_DISPERSION.load(std::sync::atomic::Ordering::Relaxed);
-            if !LOBES.contains(&name.as_str()) || planted {
+            if !LOBES.contains(&name.as_str()) {
                 dropped.push((i, name.clone()));
             }
             for (k, v) in body.as_object().into_iter().flatten() {
@@ -1094,5 +1149,14 @@ mod tests {
         }
         assert!(mesh(&glb, &json!(3)).is_err());
         assert!(mesh(&glb[..40], &json!(0)).is_err());
+    }
+
+    #[test]
+    fn a_byte_stride_under_its_element_is_refused() {
+        // Every row of a zero stride reads the same bytes, so the buffer's end never stops the
+        // count.
+        let view = json!({"byteStride": 0});
+        let rows = accessor_rows(&json!({}), &view, &[0; 12], 100_000, 3, 5126, 4, false);
+        assert!(rows.is_err());
     }
 }

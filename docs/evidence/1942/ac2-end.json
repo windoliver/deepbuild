@@ -1,0 +1,32 @@
+{
+  "run": "run:01M72J7FM8CVQYA0PT7Q4QVYFK",
+  "finished": {
+    "run": "run:01M72J7FM8CVQYA0PT7Q4QVYFK",
+    "outcome": "passed",
+    "tests_run": 0,
+    "passed": 0,
+    "runs": 1,
+    "evidence": [
+      "4af170d0b57d32644a6f0c5f0f1e88edfd7c3a880502e960f2e4253a44fa8455",
+      "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    ],
+    "check": "model-download",
+    "assertion": null,
+    "expected": null,
+    "actual": null,
+    "step": null,
+    "points_to": null,
+    "findings": [],
+    "environment": "darwin-arm64"
+  },
+  "expected_stdout_sha256": "4af170d0b57d32644a6f0c5f0f1e88edfd7c3a880502e960f2e4253a44fa8455",
+  "expected_stdout": "downloaded 1 of 40 MiB\ndownloaded 2 of 40 MiB\ndownloaded 3 of 40 MiB\ndownloaded 4 of 40 MiB\ndownloaded 5 of 40 MiB\ndownloaded 6 of 40 MiB\ndownloaded 7 of 40 MiB\ndownloaded 8 of 40 MiB\ndownloaded 9 of 40 MiB\ndownloaded 10 of 40 MiB\ndownloaded 11 of 40 MiB\ndownloaded 12 of 40 MiB\ndownloaded 13 of 40 MiB\ndownloaded 14 of 40 MiB\ndownloaded 15 of 40 MiB\ndownloaded 16 of 40 MiB\ndownloaded 17 of 40 MiB\ndownloaded 18 of 40 MiB\ndownloaded 19 of 40 MiB\ndownloaded 20 of 40 MiB\ndownloaded 21 of 40 MiB\ndownloaded 22 of 40 MiB\ndownloaded 23 of 40 MiB\ndownloaded 24 of 40 MiB\ndownloaded 25 of 40 MiB\ndownloaded 26 of 40 MiB\ndownloaded 27 of 40 MiB\ndownloaded 28 of 40 MiB\ndownloaded 29 of 40 MiB\ndownloaded 30 of 40 MiB\ndownloaded 31 of 40 MiB\ndownloaded 32 of 40 MiB\ndownloaded 33 of 40 MiB\ndownloaded 34 of 40 MiB\ndownloaded 35 of 40 MiB\ndownloaded 36 of 40 MiB\ndownloaded 37 of 40 MiB\ndownloaded 38 of 40 MiB\ndownloaded 39 of 40 MiB\ndownloaded 40 of 40 MiB\nmodel.bin complete 41943040 bytes\n",
+  "answered": [
+    {
+      "ask": "ask:01M72J7EXZ3Z6A3CK0G7G277SW",
+      "kind": "authority",
+      "option": "allow",
+      "code": 0
+    }
+  ]
+}

@@ -2,7 +2,8 @@
 // which a gate run names it. The gate dispatches every claim check that isn't a command through this table, and
 // `checks.kinds` reads it back, so a kind held with no route shows as one. The review runs on every claim that opens
 // or updates a PR, its second model a runner job under your reserve (#87); the numbers check on every claim whose
-// words state a number with the query behind it (#87); a work kind where a definition's drafted check names it (#68).
+// words state a number with the query behind it or a speed with its timing check, or whose diff adds a term to a
+// query on its definition's sample (#87, #1863); a work kind where a definition's drafted check names it (#68).
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { commandCheckKind } from '@deepbuild/checks-command';
@@ -11,29 +12,23 @@ import { independence, reviewFill, type ChangeSession, type ReviewerAnswer, type
 import { workFill } from '@deepbuild/checks-work';
 import type { CheckContext, CheckResult, CheckRunnerFill, CheckSpec } from '@deepbuild/conformance';
 import { admitKind } from '@deepbuild/gate';
-import type { Host } from '@deepbuild/supervisor';
-import type { JobRecord, JobSpec } from '@deepbuild/runner';
+import type { JobRecord } from '@deepbuild/runner';
+import type { TimingReport } from '@deepbuild/verdicts';
+import { claimNumbers, numbersChecks, runClaimNumbers } from './claim-numbers.js';
+import type { ClaimCheck } from './gate-runner.js';
+import { uncitedSpeeds } from './speed.js';
+import type { KindsOptions, RepoOf, ReviewOf, ReviewRound } from './checks-port.js';
+export type { RepoOf, ReviewOf, ReviewRound } from './checks-port.js';
 
 /** Each route a gate run names a kind by. */
 const ROUTES = {
   spec: 'a check in the repo\'s .deepbuild/done.yaml',
   definition: 'a check a task\'s definition of done names',
   pr: 'every claim that opens or updates a pull request',
-  number: 'every claim that states a number with the query behind it',
+  number: 'every claim that states a number with the query behind it, or a speed with its timing check, or whose diff adds a term to a query on its definition\'s sample',
 } as const;
 type Route = keyof typeof ROUTES;
 
-/** What a review run needs beyond its spec: the claim's session, to ask the second model on its agent and judge its independence. */
-export interface ReviewOf { claim: string; task: string; agent: string; transcript: string | undefined }
-interface KindsOptions {
-  host: () => Host;
-  /** The runner's submit, cancel and wait (#159): the review's second model runs as a `review` job. */
-  submit(spec: JobSpec): Promise<JobRecord>;
-  wait(job: string): Promise<JobRecord>;
-  cancel(job: string): Promise<JobRecord>;
-  /** The planted wrong program that holds `message` with no route into a gate run. */
-  plant?: string | undefined;
-}
 interface Held { fill: CheckRunnerFill; routes: Route[] }
 
 /** The rubric a review reads when your wiki holds none: `- <rule>: <text>`, in order. */
@@ -93,15 +88,29 @@ export class Kinds {
     return typeof kind === 'string' && kind !== 'command' && this.reaches(kind, 'definition') ? spec as CheckSpec : undefined;
   }
   /** The numbers a claim's words state with the query behind each, cited as `<sql>` on `<sqlite file>`: its numbers spec, or undefined for none. */
-  numbersSpec(words: string): NumbersSpec | undefined {
-    if (!this.reaches('numbers', 'number')) return undefined;
+  private numbersSpec(words: string): NumbersSpec | undefined {
     const numbers: StatedNumber[] = [...words.matchAll(STATED)].map((m) => ({ where: `the claim's "${`${m[1]}${m[2]}`.trim()}"`, stated: m[1]!, query: { database: m[4]!, sql: m[3]! } }));
     if (!numbers.length) return undefined;
     return { kind: 'numbers', runner: 'sqlite', inputs: [...new Set(numbers.map((n) => n.query.database))], depth: 'unit', oracle: 'code', contract: null, numbers, added: [] };
   }
-  /** The words with each number's cited query as plain text: the numbers check re-runs it, so it is no run or file the session cites. */
+  /** The words with each number's cited query, and each speed's timing check, as plain text: the numbers check re-runs them, so neither is a run or file the session cites. */
   uncited(words: string): string {
-    return this.reaches('numbers', 'number') ? words.replace(STATED, (m) => m.replaceAll('`', '')) : words;
+    return this.reaches('numbers', 'number') ? uncitedSpeeds(words.replace(STATED, (m) => m.replaceAll('`', ''))) : words;
+  }
+  /**
+   * The checks a claim's numbers get (#1537, #1863): one for the numbers its words state with the query behind each,
+   * as the repo's spec runs them; and each speed its words state with its timing check, and the terms its diff adds to
+   * a query on its definition's sample, read in the session's worktree `cwd` against the definition's base. None where
+   * the numbers check isn't held with its route.
+   */
+  async claimChecks(words: string, cwd: string, base: string, sample: string | null): Promise<{ check: ClaimCheck; spec: CheckSpec }[]> {
+    if (!this.reaches('numbers', 'number')) return [];
+    const cited = this.numbersSpec(words);
+    const query = cited ? [{ spec: cited, check: {
+      check: `numbers: ${cited.numbers.map((n) => n.stated).join(', ')}`, approved: null, command: cited.numbers.map((n) => `${n.stated}: ${n.query.sql} on ${n.query.database}`).join('; '),
+      covers: [], depth: 'unit' as const, on_base: 'passes' as const, asserts: [], source: 'spec' as const,
+    } }] : [];
+    return [...query, ...await numbersChecks(words, cwd, base, sample)];
   }
   /** The review's spec for a claim on a PR: base..head against the rubric your wiki holds (`<root>/wiki/review-rubric.md`), or the shipped one written beside it. */
   reviewSpec(base: string, head: string, root: string): ReviewSpec | undefined {
@@ -114,10 +123,20 @@ export class Kinds {
     return { kind: 'review', runner: 'second-model', inputs: [], depth: 'unit', oracle: 'model', contract: null, base, head, rubric, since: null };
   }
 
-  /** One run of a held kind on `spec` in `ctx`; a review asks its second model through the runner, for `of`'s claim. */
-  async run(spec: CheckSpec, ctx: CheckContext, of: ReviewOf): Promise<CheckResult> {
+  /** One run of a held kind on `spec` in `ctx`; a review asks its second model through the runner, for `of`'s claim; a speed or added terms read the hub's store for `repo`'s run (#1863). */
+  async run(spec: CheckSpec, ctx: CheckContext, of: ReviewOf, repo?: RepoOf): Promise<CheckResult & { round?: ReviewRound; speed?: TimingReport }> {
     const held = this.held.get(spec.kind);
     if (!held) return result('missing', `${spec.kind}: run`, '', `BLOCKED: the hub holds no ${spec.kind} check kind`);
+    if (claimNumbers(spec)) {
+      if (!repo) return result('missing', `${spec.kind}: run`, '', `BLOCKED: the ${spec.runner} check has no worktree to read its claim's commits from`);
+      const checkouts = this.o.checkouts();
+      // The baseline side's checkout of its commit, from the session's worktree, held by the run's handle until it ends.
+      const checkoutOf = async (commit: string): Promise<{ dir: string; ended(): Promise<void> }> => {
+        const t = await checkouts.checkout({ worktree: repo.worktree, commit, runs: [repo.run] });
+        return { dir: t.dir, ended: () => checkouts.ended(t, repo.run) };
+      };
+      return runClaimNumbers(spec, ctx, { supervisor: this.o.supervisor(), store: this.o.store, checkoutOf }, async (s, c) => held.fill.run(s, c), repo.stop);
+    }
     if (spec.kind !== 'review') return held.fill.run(spec, ctx);
     let job: JobRecord | undefined;
     let waiting: string | undefined;
@@ -142,7 +161,7 @@ export class Kinds {
     const counted = independence(job.model ?? 'unknown', change);
     if (!counted.counted) return { ...result('uncounted', 'review: second model', '', `the review is uncounted: ${counted.reason!}`, counted.reason), read: ran.read };
     const note = counted.note ? [`${counted.note} (${counted.answered})`] : [];
-    return { outcome: ran.outcome, testsRun: ran.testsRun, failures: ran.failures, evidence: [...ran.evidence, ...note], read: ran.read, mask: null };
+    return { outcome: ran.outcome, testsRun: ran.testsRun, failures: ran.failures, evidence: [...ran.evidence, ...note], read: ran.read, mask: null, ...(ran.testsRun ? { round: { sent: ran.sendBack?.items ?? [], open: ran.open } } : {}) };
   }
 }
 const readTranscript = (path: string): string => { try { return readFileSync(path, 'utf8'); } catch { return ''; } };

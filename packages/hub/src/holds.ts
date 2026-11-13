@@ -69,7 +69,8 @@ const ARCHIVE_WAIT_MS = 2000;
  * so it reads unknown on the card.
  */
 export function pushTargets(line: string): Target[] {
-  const refs = [...line.matchAll(PUSH)].map(([, git, jj, sl, rest]) => {
+  // A backslash at a line's end carries the command on to the next line.
+  const refs = [...line.replace(/\\\n/g, ' ').matchAll(PUSH)].map(([, git, jj, sl, rest]) => {
     const words = (rest ?? '').trim().split(/\s+/).map((w) => w.replace(/^["']|["']$/g, '')).filter(Boolean);
     if (!git && !sl) {
       const at = words.findIndex((w) => w === '--remote' || w.startsWith('--remote='));
@@ -77,6 +78,9 @@ export function pushTargets(line: string): Target[] {
     }
     for (let at = 0; at < words.length; at++) {
       const word = words[at]!;
+      // A comment ends the command, and a redirection is the shell's with its file: neither names a remote.
+      if (word.startsWith('#')) break;
+      if (/^\d*[<>]/.test(word)) { if (/^\d*[<>]+$/.test(word)) at++; continue; }
       if (git && word === '--repo') return words[at + 1] ?? 'origin';
       if (git && word.startsWith('--repo=')) return word.slice('--repo='.length);
       if (VALUED[git ? 'git' : 'sl'].has(word)) at++;
@@ -196,11 +200,17 @@ export class Holds {
     const rows = (await this.o.raw(`SELECT id FROM sessions WHERE COALESCE(thread_id, id) = (SELECT COALESCE(thread_id, id) FROM sessions WHERE id = ?) ORDER BY id`, [session])) as { id: string }[];
     return rows.length ? rows.map((r) => r.id) : [session];
   }
-  /** What the prompts typed in these sessions name, read by each prompt's `from` (#303): your words alone authorize. */
+  /**
+   * What the prompts typed in these sessions name, read by each prompt's `from` (#303): your words alone authorize. A
+   * session a work run you approved started (#1332) is also named its push and its PR: that approval said each of its
+   * sessions pushes its own branch and opens a PR, which lands only on its own PASS.
+   */
   private async named(sessions: string[]): Promise<Set<Named>> {
     const everyFrom = this.o.plant === 'reads-every-from';
     const rows = (await this.o.raw(`SELECT json_extract(data, '$.text') AS text, json_extract(data, '$.from') AS origin FROM events WHERE kind = 'user.ask' AND unverified = 0 AND session_id IN (${sessions.map(() => '?').join(',')})`, sessions)) as { text: string; origin: string }[];
-    const named = new Set<Named>();
+    const [run] = (await this.o.raw(`SELECT 1 AS x FROM events s JOIN events t ON t.kind = 'start.started' AND t.subject = json_extract(s.data, '$.run')
+      JOIN events w ON w.kind = 'work.run' AND w.subject = json_extract(t.data, '$.ask') WHERE s.kind = 'start.session' AND json_extract(s.data, '$.session') IN (${sessions.map(() => '?').join(',')}) LIMIT 1`, sessions)) as unknown[];
+    const named = new Set<Named>(run ? ['push', 'pr'] : []);
     for (const row of rows) if (everyFrom || row.origin === 'person' || row.origin === 'app') for (const n of namedIn(String(row.text))) named.add(n);
     return named;
   }

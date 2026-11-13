@@ -17,7 +17,7 @@ const SONNET_4 = price(3, 15, 3.75, 0.3);
 const MYTHOS = price(10, 50, 12.5, 1);
 const MYTHOS_51 = price(10, 50, 12.5, 0.25);
 /** Anthropic's list prices, from the table ccusage reads (LiteLLM's), as it stood on 2026-10-30. */
-export const SHIPPED_RATE_CARD: RateCard = {
+const SHIPPED_RATE_CARD: RateCard = {
   name: 'anthropic-list-2026-10',
   models: {
     'claude-fable-5': MYTHOS, 'claude-fable-5-1': MYTHOS_51, 'claude-mythos-5': MYTHOS, 'claude-mythos-5-1': MYTHOS_51,

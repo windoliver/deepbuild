@@ -28,8 +28,12 @@ const MIN_CUT: usize = 4;
 struct Seen {
     /// The platform's text system, which says where in its tile each glyph's raster starts.
     text: Option<Arc<dyn PlatformTextSystem>>,
-    /// Each glyph tile the atlas handed out, by texture and tile: the glyph, and its raster's offset from the pen.
-    tiles: HashMap<(AtlasTextureId, u32), (GlyphKey, [f32; 2])>,
+    /// Each glyph tile the atlas handed out, by texture and tile: the glyph, its raster's offset from the pen, and the
+    /// size in points it was rasterized at (#1458).
+    tiles: HashMap<(AtlasTextureId, u32), (GlyphKey, [f32; 2], f32)>,
+    /// The family each font was asked for by (#1458), and its weight (#1461).
+    families: HashMap<FontId, String>,
+    weights: HashMap<FontId, f32>,
     /// Every line shaped so far, by its glyphs but its whitespace's, with the text it spells.
     lines: HashMap<Vec<GlyphKey>, String>,
     /// The glyphs shaped for whitespace, which some fonts paint as a speck and others not at all.
@@ -59,6 +63,11 @@ pub struct Run {
     pub drawn: [i64; 4],
     /// Its clip cut glyphs off its end: `text` is the whole string, and `bounds` only what was painted.
     pub cut: bool,
+    /// The size in points its glyphs were shaped at, and the font family they were asked for by (#1458).
+    pub size: f32,
+    pub face: String,
+    /// The weight its glyphs were shaped at: 400 regular, 500 medium (#1461).
+    pub weight: f32,
 }
 
 /// What the replica's platform saw, shared by the text system, the atlas and the renderer it wraps.
@@ -70,14 +79,16 @@ impl Glyphs {
     pub fn runs(&self) -> Vec<Run> {
         let seen = self.0.lock().expect("glyphs");
         let mut rows: BTreeMap<Row, Vec<(f32, GlyphKey, Sprite)>> = BTreeMap::new();
+        let mut sizes: HashMap<(AtlasTextureId, u32), f32> = HashMap::new();
         for sprite in &seen.sprites {
-            let Some((key, offset)) = seen
+            let Some((key, offset, size)) = seen
                 .tiles
                 .get(&sprite.tile)
-                .filter(|(key, _)| !seen.blank.contains(key))
+                .filter(|(key, ..)| !seen.blank.contains(key))
             else {
                 continue;
             };
+            sizes.insert(sprite.tile, *size);
             let pen = [
                 sprite.bounds.origin.x.0 - offset[0],
                 sprite.bounds.origin.y.0 - offset[1],
@@ -112,6 +123,10 @@ impl Glyphs {
                 if !text.is_empty() {
                     let mut drawn = run(text, &glyphs[at..end]);
                     drawn.cut = cut.is_some();
+                    let (key, sprite) = glyphs[at];
+                    drawn.size = sizes.get(&sprite.tile).copied().unwrap_or_default();
+                    drawn.face = seen.families.get(&key.0).cloned().unwrap_or_default();
+                    drawn.weight = seen.weights.get(&key.0).copied().unwrap_or_default();
                     runs.push(drawn);
                 }
                 at = end;
@@ -193,6 +208,9 @@ fn run(text: String, glyphs: &[(GlyphKey, Sprite)]) -> Run {
             [0; 4]
         },
         cut: false,
+        size: 0.,
+        face: String::new(),
+        weight: 0.,
     }
 }
 
@@ -235,7 +253,15 @@ impl PlatformTextSystem for TextSystem {
         self.inner.all_font_names()
     }
     fn font_id(&self, descriptor: &Font) -> Result<FontId> {
-        self.inner.font_id(descriptor)
+        let id = self.inner.font_id(descriptor)?;
+        let mut seen = self.seen.0.lock().expect("glyphs");
+        seen.families
+            .entry(id)
+            .or_insert_with(|| descriptor.family.to_string());
+        // Fonts asked for at weights the face doesn't have share one face: it draws at the lightest asked of it.
+        let weight = seen.weights.entry(id).or_insert(descriptor.weight.0);
+        *weight = weight.min(descriptor.weight.0);
+        Ok(id)
     }
     fn prewarm_fonts(&self, font_ids: &[FontId]) {
         self.inner.prewarm_fonts(font_ids)
@@ -315,8 +341,14 @@ impl PlatformAtlas for Atlas {
                     .and_then(|text| text.glyph_raster_bounds(&params).ok());
                 let offset =
                     raster.map_or([0., 0.], |b| [b.origin.x.0 as f32, b.origin.y.0 as f32]);
-                seen.tiles
-                    .insert(at, ((params.font_id, params.glyph_id), offset));
+                seen.tiles.insert(
+                    at,
+                    (
+                        (params.font_id, params.glyph_id),
+                        offset,
+                        f32::from(params.font_size),
+                    ),
+                );
             }
         }
         Ok(tile)

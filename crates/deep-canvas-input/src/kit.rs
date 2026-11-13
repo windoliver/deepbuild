@@ -62,7 +62,8 @@ fn board(name: &str, b: Behavior) -> Value {
         }
         Behavior::Stages => {
             c["default"] = json!("a");
-            c["stages"] = json!({"a": {"label": "A", "keys": ["1"]}, "b": {"label": "B", "keys": ["2"]}});
+            c["stages"] =
+                json!({"a": {"label": "A", "keys": ["1"]}, "b": {"label": "B", "keys": ["2"]}});
             c["targets"] = json!({"b": "box"});
         }
         Behavior::Press => {
@@ -78,8 +79,11 @@ fn board(name: &str, b: Behavior) -> Value {
         }
     }
     let mut map = Map::new();
-    map.insert("cam".into(), json!({"id": "cam", "kind": "camera@1", "layer": "main", "name": "Camera", "order": "a0",
-        "params": {"projection": "orthographic", "target": [320, 180, 0], "view_width": 640}}));
+    map.insert(
+        "cam".into(),
+        json!({"id": "cam", "kind": "camera@1", "layer": "main", "name": "Camera", "order": "a0",
+        "params": {"projection": "orthographic", "target": [320, 180, 0], "view_width": 640}}),
+    );
     for i in items {
         map.insert(i["id"].as_str().unwrap_or("").to_string(), i);
     }
@@ -136,20 +140,33 @@ fn gesture(b: Behavior) -> Vec<Map<String, Value>> {
             ("move", 330.0, 120.0, 1.0501, false),
             ("move", 50.0, 50.0, 1.4003, false),
         ],
-        _ => &[("down", 330.0, 120.0, 1.0123, false), ("up", 330.0, 120.0, 1.1049, false)],
+        _ => &[
+            ("down", 330.0, 120.0, 1.0123, false),
+            ("up", 330.0, 120.0, 1.1049, false),
+        ],
     };
-    steps.iter().map(|(p, x, y, t, s)| pointer(p, *x, *y, *t, *s)).collect()
+    steps
+        .iter()
+        .map(|(p, x, y, t, s)| pointer(p, *x, *y, *t, *s))
+        .collect()
 }
 
 fn keyboard_path(b: Behavior) -> (&'static str, Vec<&'static str>) {
     match b {
-        Behavior::Number | Behavior::Turn | Behavior::Path => {
-            ("arrows ± increment, Shift+arrows ± increment ÷ 10, Page Up and Down, Home and End", vec!["ArrowRight", "PageUp", "End"])
-        }
+        Behavior::Number | Behavior::Turn | Behavior::Path => (
+            "arrows ± increment, Shift+arrows ± increment ÷ 10, Page Up and Down, Home and End",
+            vec!["ArrowRight", "PageUp", "End"],
+        ),
         Behavior::Toggle => ("Space or Enter flips it", vec![" "]),
         Behavior::Choice => ("arrows move between the options", vec!["ArrowRight"]),
-        Behavior::Stages => ("each stage's keys, and arrows to the next or previous stage", vec!["2"]),
-        Behavior::Press => ("its keys press it once per press, never on repeat", vec!["Enter"]),
+        Behavior::Stages => (
+            "each stage's keys, and arrows to the next or previous stage",
+            vec!["2"],
+        ),
+        Behavior::Press => (
+            "its keys press it once per press, never on repeat",
+            vec!["Enter"],
+        ),
         Behavior::Hover => ("focus over its target, Escape to leave", vec!["Tab"]),
     }
 }
@@ -185,7 +202,13 @@ fn layout_of(fields: &Value) -> String {
 }
 
 /// Runs `ops` on a fresh session of the kit's board; the session.
-fn play(name: &str, b: Behavior, planted: Planted, fps: (u32, u32), ops: &[Map<String, Value>]) -> Option<Session> {
+fn play(
+    name: &str,
+    b: Behavior,
+    planted: Planted,
+    fps: (u32, u32),
+    ops: &[Map<String, Value>],
+) -> Option<Session> {
     let doc = board(name, b);
     let mut s = Session::new(&doc, [640.0, 360.0], fps, false, planted, &[(name, b)]).ok()?;
     for o in ops {
@@ -210,7 +233,9 @@ pub fn fixture(name: &str, b: Behavior, planted: Planted) -> Value {
     let (recorded, replayed) = match play(name, b, planted, (60, 1), &g) {
         Some(mut s) => {
             let recorded = read(&mut s, 2.0);
-            let _ = s.op(&op(json!({"op": "drag", "at": [10, 10], "delta": [-120, 40], "t": fl(3.0)})));
+            let _ = s.op(&op(
+                json!({"op": "drag", "at": [10, 10], "delta": [-120, 40], "t": fl(3.0)}),
+            ));
             let _ = s.op(&op(json!({"op": "seek", "t": fl(2.0)})));
             (recorded, read(&mut s, 2.0))
         }
@@ -231,14 +256,20 @@ pub fn fixture(name: &str, b: Behavior, planted: Planted) -> Value {
     };
     let input = match play(name, b, planted, (60, 1), &g) {
         Some(mut s) => {
-            let mine = s.track.entries().first().map(|e| json!({"writer": e.writer.name(), "serial": e.serial}));
+            let mine = s
+                .track
+                .entries()
+                .first()
+                .map(|e| json!({"writer": e.writer.name(), "serial": e.serial}));
             let n = s.track.len();
             let tool_value = match b {
                 Behavior::Number | Behavior::Turn | Behavior::Path => json!(0.25),
                 Behavior::Toggle => json!(true),
                 _ => json!("a"),
             };
-            let _ = s.op(&op(json!({"op": "tool", "control": "c", "value": tool_value, "t": fl(3.0)})));
+            let _ = s.op(&op(
+                json!({"op": "tool", "control": "c", "value": tool_value, "t": fl(3.0)}),
+            ));
             let tool = s.track.entries()[n..]
                 .first()
                 .map(|e| json!({"writer": e.writer.name(), "serial": e.serial}));
@@ -260,7 +291,9 @@ pub fn entry(name: &str, b: Behavior, planted: Planted) -> Value {
     let fields = value_fields(b);
     let classes: &[&str] = match b {
         Behavior::Hover => &["view", "viewer"],
-        Behavior::Number | Behavior::Turn | Behavior::Toggle | Behavior::Choice => &["document", "view", "viewer"],
+        Behavior::Number | Behavior::Turn | Behavior::Toggle | Behavior::Choice => {
+            &["document", "view", "viewer"]
+        }
         _ => &["document"],
     };
     let (keyboard, _) = keyboard_path(b);
@@ -278,7 +311,10 @@ pub fn entry(name: &str, b: Behavior, planted: Planted) -> Value {
 
 /// The input module's entries, each kind run with the planted program `planted` gives it.
 pub fn entries(planted: impl Fn(&str) -> Planted) -> Vec<(&'static str, Value)> {
-    KINDS.iter().map(|(n, b)| (*n, entry(n, *b, planted(n)))).collect()
+    KINDS
+        .iter()
+        .map(|(n, b)| (*n, entry(n, *b, planted(n))))
+        .collect()
 }
 
 fn field<'a>(v: &'a Value, path: &[&str]) -> Option<&'a Value> {
@@ -289,7 +325,10 @@ fn rule_replay(v: &Value) -> Result<(), String> {
     let r = field(v, &["fixture", "replay"]).ok_or("no replay fixture")?;
     let hashes = r["hashes"].as_array().ok_or("no hashes")?;
     if hashes.len() != 3 || hashes.iter().any(|h| !h.is_string() || *h != hashes[0]) {
-        return Err(format!("the recorded session replays at 30, 60 and 120 fps to more than one track hash: {}", r["hashes"]));
+        return Err(format!(
+            "the recorded session replays at 30, 60 and 120 fps to more than one track hash: {}",
+            r["hashes"]
+        ));
     }
     if r["recorded"] != r["replayed"] {
         return Err(format!("its entry is computed again at replay: it recorded {} and reads {} once the camera moved", r["recorded"], r["replayed"]));
@@ -301,7 +340,11 @@ fn rule_read_region(v: &Value) -> Result<(), String> {
     let fields = v.get("value").ok_or("no value fields")?;
     let rr = v.get("read_region").ok_or("no read region")?;
     if rr["bytes"].as_u64() != bytes_of(fields) {
-        return Err(format!("its read region holds {} bytes, its value fields {:?}", rr["bytes"], bytes_of(fields)));
+        return Err(format!(
+            "its read region holds {} bytes, its value fields {:?}",
+            rr["bytes"],
+            bytes_of(fields)
+        ));
     }
     if rr["layout"].as_str() != Some(layout_of(fields).as_str()) {
         return Err("its read region's layout digest is not its value fields'".into());
@@ -310,10 +353,16 @@ fn rule_read_region(v: &Value) -> Result<(), String> {
 }
 
 fn rule_keyboard(v: &Value) -> Result<(), String> {
-    if v.get("role").and_then(Value::as_str).is_none_or(str::is_empty) {
+    if v.get("role")
+        .and_then(Value::as_str)
+        .is_none_or(str::is_empty)
+    {
         return Err("it has no ARIA role".into());
     }
-    if v.get("keyboard").and_then(Value::as_str).is_none_or(str::is_empty) {
+    if v.get("keyboard")
+        .and_then(Value::as_str)
+        .is_none_or(str::is_empty)
+    {
         return Err("it has no keyboard path".into());
     }
     let k = field(v, &["fixture", "keyboard"]).ok_or("no keyboard fixture")?;
@@ -332,7 +381,9 @@ fn rule_input(v: &Value) -> Result<(), String> {
     }
     if let Some(t) = i.get("tool").filter(|t| !t.is_null()) {
         if t["writer"] != "agent" || !t["serial"].is_null() {
-            return Err(format!("the parameter tool's entry is stamped {t}, not the agent's with no serial"));
+            return Err(format!(
+                "the parameter tool's entry is stamped {t}, not the agent's with no serial"
+            ));
         }
     }
     if i["agent"].as_u64() != Some(0) {
@@ -356,18 +407,43 @@ pub fn registry() -> RegistryDef {
         e
     };
     RegistryDef::new(REGISTRY, schema, &["module"], "R6")
-        .rule("replay", "entries are computed once at the gesture and replay to one track hash", rule_replay)
-        .rule("read_region", "the read region is the value fields, by layout digest", rule_read_region)
-        .rule("keyboard", "a control has a role and a keyboard path", rule_keyboard)
-        .rule("input", "no entry without your gesture serial but the parameter tool's, stamped as the agent", rule_input)
-        .planted("planted.recomputed", with(&["fixture", "replay", "replayed"], json!(-1)))
-        .planted("planted.unread", with(&["read_region", "layout"], json!("0000")))
+        .rule(
+            "replay",
+            "entries are computed once at the gesture and replay to one track hash",
+            rule_replay,
+        )
+        .rule(
+            "read_region",
+            "the read region is the value fields, by layout digest",
+            rule_read_region,
+        )
+        .rule(
+            "keyboard",
+            "a control has a role and a keyboard path",
+            rule_keyboard,
+        )
+        .rule(
+            "input",
+            "no entry without your gesture serial but the parameter tool's, stamped as the agent",
+            rule_input,
+        )
+        .planted(
+            "planted.recomputed",
+            with(&["fixture", "replay", "replayed"], json!(-1)),
+        )
+        .planted(
+            "planted.unread",
+            with(&["read_region", "layout"], json!("0000")),
+        )
         .planted("planted.keyless", {
             let mut e = with(&["keyboard"], json!(""));
             e["fixture"]["keyboard"]["after"] = e["fixture"]["keyboard"]["before"].clone();
             e
         })
-        .planted("planted.agent_entry", with(&["fixture", "input", "agent"], json!(1)))
+        .planted(
+            "planted.agent_entry",
+            with(&["fixture", "input", "agent"], json!(1)),
+        )
 }
 
 #[cfg(test)]
@@ -382,17 +458,60 @@ mod tests {
             assert!(r.pass(), "{name}: {:?} {}", r.failed(), value["fixture"]);
         }
         for (p, rule) in def.planted.iter().zip(PARTS) {
-            assert_eq!(def.run_kit(&p.name, &p.value).failed(), vec![rule], "{}", p.name);
+            assert_eq!(
+                def.run_kit(&p.name, &p.value).failed(),
+                vec![rule],
+                "{}",
+                p.name
+            );
         }
-        let recompute = Planted { recompute: true, ..Planted::default() };
-        assert_eq!(def.run_kit("drag_along", &entry("drag_along", Behavior::Path, recompute)).failed(), vec!["replay"]);
-        let modifiers = Planted { reads_modifiers: true, ..Planted::default() };
-        assert_eq!(def.run_kit("slider", &entry("slider", Behavior::Number, modifiers)).failed(), vec!["replay"]);
-        let tool = Planted { tool_stamps_you: true, ..Planted::default() };
-        assert_eq!(def.run_kit("slider", &entry("slider", Behavior::Number, tool)).failed(), vec!["input"]);
-        let agent = Planted { agent_input: true, ..Planted::default() };
-        assert_eq!(def.run_kit("slider", &entry("slider", Behavior::Number, agent)).failed(), vec!["input"]);
-        let keys = Planted { no_keyboard: true, ..Planted::default() };
-        assert_eq!(def.run_kit("slider", &entry("slider", Behavior::Number, keys)).failed(), vec!["keyboard"]);
+        let recompute = Planted {
+            recompute: true,
+            ..Planted::default()
+        };
+        assert_eq!(
+            def.run_kit(
+                "drag_along",
+                &entry("drag_along", Behavior::Path, recompute)
+            )
+            .failed(),
+            vec!["replay"]
+        );
+        let modifiers = Planted {
+            reads_modifiers: true,
+            ..Planted::default()
+        };
+        assert_eq!(
+            def.run_kit("slider", &entry("slider", Behavior::Number, modifiers))
+                .failed(),
+            vec!["replay"]
+        );
+        let tool = Planted {
+            tool_stamps_you: true,
+            ..Planted::default()
+        };
+        assert_eq!(
+            def.run_kit("slider", &entry("slider", Behavior::Number, tool))
+                .failed(),
+            vec!["input"]
+        );
+        let agent = Planted {
+            agent_input: true,
+            ..Planted::default()
+        };
+        assert_eq!(
+            def.run_kit("slider", &entry("slider", Behavior::Number, agent))
+                .failed(),
+            vec!["input"]
+        );
+        let keys = Planted {
+            no_keyboard: true,
+            ..Planted::default()
+        };
+        assert_eq!(
+            def.run_kit("slider", &entry("slider", Behavior::Number, keys))
+                .failed(),
+            vec!["keyboard"]
+        );
     }
 }

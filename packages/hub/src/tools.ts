@@ -4,10 +4,10 @@
 // which scripts/skill.mjs generates from the design's Building blocks table with the skill.
 import { readFileSync } from 'node:fs';
 import { refuse } from './wire.js';
+import { isRecord as isObj } from '@deepbuild/contracts';
 
 type Obj = Record<string, unknown>;
 type Schema = Obj;
-const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 
 const str = (description?: string, pattern?: string): Schema => ({ type: 'string', ...(pattern ? { pattern } : {}), ...(description ? { description } : {}) });
 const maybe = (schema: Schema): Schema => ({ ...schema, type: [schema.type as string, 'null'] });
@@ -27,6 +27,8 @@ const LOCATOR = object({
   text: maybe(str('The innermost element whose drawn text is exactly this.')),
   label: maybe(str('The form control whose accessible name, or else visible label, is this.')),
 });
+/** The same fields where another locator goes: every session loads this schema, so they are described once, above. */
+const LOCATOR_BARE = object(Object.fromEntries(Object.keys(LOCATOR.properties as object).map((field) => [field, maybe(str())])));
 
 /** Each tool's input schema, by name, in the order deep mcp lists them. */
 const SCHEMAS: Readonly<Record<string, Schema>> = {
@@ -79,9 +81,11 @@ const SCHEMAS: Readonly<Record<string, Schema>> = {
     size: maybe({ type: 'array', items: { type: 'integer' }, description: 'The snapshot\'s width and height in px; null for the document\'s size.' }),
     include: maybe({ type: 'array', items: { type: 'string', enum: ['issues', 'audit', 'timing', 'pixels'] }, description: 'What the reply carries; pixels asks for a snapshot. null for issues.' }),
     rev: maybe({ type: 'integer', description: 'With no document or patch, render back this revision of the document; null for the current one.' }),
+    camera: maybe(str('With no document or patch, render a 3D revision back through this camera@1 item, by its ID; null for its own camera.')),
+    probes: maybe({ type: 'array', items: { type: 'array', items: INT }, description: 'With no document or patch, up to 64 pixels [x, y] of a 3D snapshot, x right and y down; the reply\'s hits says what lies under each, nearest first, at most 8 a pixel. Display only, never evidence. null for none.' }),
   }),
   deep_drive: object({
-    call: { type: 'string', enum: ['launch', 'act', 'wait_for', 'see', 'probe', 'screenshot', 'record', 'expect', 'close'] },
+    call: { type: 'string', enum: ['launch', 'act', 'open', 'notification', 'wait_for', 'see', 'probe', 'screenshot', 'record', 'expect', 'close'] },
     replica: maybe(str('The replica, as launch answered it; null only for launch.', HANDLE('replica'))),
     launch: maybe(object({
       from: oneOf(['fixture', 'record_copy', 'empty'], 'null for fixture.'),
@@ -99,18 +103,23 @@ const SCHEMAS: Readonly<Record<string, Schema>> = {
         keyboard: maybe({ ...INT, description: 'Points of on-screen keyboard over the bottom edge while a text input has focus.' }),
       })),
     })),
-    locator: maybe({ ...LOCATOR, description: 'The call\'s target: what act clicks, types into or scrolls, what expect, wait_for and see look at; null to type or press into the focused element.' }),
+    locator: maybe({ ...LOCATOR, description: 'The call\'s target: what act clicks, types into or scrolls, what expect, wait_for and see look at; null to type or press into the focused element. Every other locator in this call takes the same fields.' }),
     act: maybe(object({
       kind: { type: 'string', enum: ['click', 'double_click', 'type', 'press', 'drag', 'scroll', 'hover', 'set'] },
       text: maybe(str()),
       keys: maybe(str('Space-separated keystrokes, such as enter, tab or cmd-enter.')),
-      to: maybe({ ...LOCATOR, description: 'drag only: where it drops. The thing acted on goes in locator.' }),
+      to: maybe({ ...LOCATOR_BARE, description: 'drag only: where it drops. The thing acted on goes in locator.' }),
       to_point: { ...PAIR, description: 'drag only: where it drops, [x, y] in device pixels.' },
       dx: maybe(INT),
       dy: maybe(INT),
       control: maybe(str()),
       value: maybe(str()),
     })),
+    open: maybe(object({
+      address: maybe(str('A page\'s address, opened as a click, ⌘K or deep open opens it: ask/<id>, session/<id>[/<claim>], project/<id> or page/<name>[/<parameter>]; null with url.')),
+      url: maybe(str('A deepbuild:// link, opened as the OS hands it to the app; null with address.')),
+    })),
+    notification: maybe(object({ click: { ...INT, description: 'The index of a notification this replica posted, clicked on its body.' } })),
     wait_for: maybe(object({
       state: oneOf(['visible', 'hidden', 'enabled', 'text', 'value', 'settled']),
       value: maybe(str()),
@@ -122,12 +131,12 @@ const SCHEMAS: Readonly<Record<string, Schema>> = {
       scope: oneOf(['window', 'panel', 'locator']),
       include: maybe({ type: 'array', items: { type: 'string', enum: ['roles', 'names', 'values', 'bounds', 'items'] } }),
     })),
-    screenshot: maybe(object({ target: oneOf(['window', 'panel', 'locator']), highlight: maybe({ type: 'array', items: LOCATOR }), mask: maybe({ type: 'array', items: LOCATOR }) })),
+    screenshot: maybe(object({ target: oneOf(['window', 'panel', 'locator']), highlight: maybe({ type: 'array', items: LOCATOR_BARE }), mask: maybe({ type: 'array', items: LOCATOR_BARE }) })),
     record: maybe(object({
       action: { type: 'string', enum: ['start', 'stop'] },
       fps: maybe(INT),
       marks: oneOf(['per_action']),
-      mask: maybe({ type: 'array', items: LOCATOR }),
+      mask: maybe({ type: 'array', items: LOCATOR_BARE }),
       mask_kind: oneOf(['fill', 'blur']),
     })),
     expect: maybe(object({
@@ -139,7 +148,7 @@ const SCHEMAS: Readonly<Record<string, Schema>> = {
     })),
   }),
   deep_kinds: object({
-    op: { type: 'string', enum: ['list', 'word', 'search', 'read', 'gallery', 'sheet', 'assets', 'fetch'], description: 'list the registries and their entries; word for another tool\'s word; search the entries, guides and gallery; read an example by hash or a guide; gallery for the examples and whether each is verified here; sheet for every available name on one page; assets to search the enabled model libraries for models, HDRIs and textures, fetching nothing but thumbnails; fetch to bring one row\'s asset in, with its license, by its library and id.' },
+    op: { type: 'string', enum: ['list', 'word', 'search', 'read', 'gallery', 'sheet', 'step_ceilings', 'field', 'assets', 'fetch'], description: 'list the registries and their entries; word for another tool\'s word; search the entries, guides and gallery; read an example by hash or a guide; gallery for the examples and whether each is verified here; sheet for every available name on one page; step_ceilings for the fuel one logic step may use in a live frame, by step rate, budget class and host; field for one line per field of a kind, by path; assets to search the enabled model libraries for models, HDRIs and textures, fetching nothing but thumbnails; fetch to bring one row\'s asset in, with its license, by its library and id.' },
     registry: maybe(str('list: one registry or hub slot, name@major; null for all.')),
     cursor: maybe(str('The next an earlier page gave; null for the first page.')),
     word: maybe(str('word: the word, as the other tool spells it.')),
@@ -150,11 +159,35 @@ const SCHEMAS: Readonly<Record<string, Schema>> = {
     limit: maybe({ type: 'integer', description: 'assets: at most this many rows, up to 50; null for 50.' }),
     library: maybe(str('fetch: the library a row came from, as its from names it.')),
     id: maybe(str('fetch: the row\'s id.')),
+    pack: maybe(str('fetch: an installed pack pinned as owner/name@version, instead of library.')),
+    asset: maybe(str('fetch: one path in the pinned pack\'s assets list.')),
     example: maybe(str('read: an example, by the hash a listing or a hit gave.', '^[0-9a-f]{64}$')),
     guide: maybe(str('read: a guide, by the name a hit gave.')),
     offset: maybe({ type: 'integer', description: 'read of a guide: the next a page gave; null for its start.' }),
+    path: maybe(str('field: kind@major.field for one field, or kind@major for every field of that kind.')),
   }),
-  deep_env: object({ action: { type: 'string', enum: ['up', 'down'], description: 'up brings your worktree\'s stack up and answers its leased ports; down takes it down.' } }),
+  deep_job: object({
+    op: { type: 'string', enum: ['list', 'run'], description: 'list the job kinds, each with its qualified tools and their builds; run a kind on one pinned tool, returning its outputs by hash with a receipt.' },
+    kind: maybe(str('run: the job kind, as the list names it.')),
+    tool: maybe(str('run: the tool, pinned by name@version as the list names it.')),
+    params: maybe(str('run: the kind\'s params as JSON text; null for its defaults.')),
+    inputs: maybe({ type: 'array', items: object({ name: str('The input, as the kind names it.'), sha256: maybe(str('The file whose bytes it is, by its SHA-256 in the evidence store; a tool that runs off the machine takes files only this way.', '^[0-9a-f]{64}$')), path: maybe(str('The file whose bytes it is, by absolute path, for a tool that runs on this machine; null when sha256 names it.')) }), description: 'run: each input the kind takes, once.' }),
+  }),
+  deep_env: object({ action:{ type: 'string', enum: ['up', 'down'], description: 'up brings your worktree\'s stack up and answers its leased ports; down takes it down.' } }),
+  deep_root_plan: object({
+    host: str('A host the person\'s SSH config names.'),
+    script: str('The script\'s absolute path on that host, where you wrote it; the plan locks its SHA-256 as it is now, so change nothing there after.'),
+    steps: {
+      type: 'array',
+      items: object({
+        does: str('What the step does, in a sentence.'),
+        changes: { type: 'array', items: str(), description: 'What it changes: packages, files by absolute path, services, firewall rules.' },
+        undo: maybe(str('How to undo it; null when it can\'t be undone.')),
+        package: maybe(str('For a step that installs a package file, its absolute path on the host; null otherwise.')),
+      }),
+      description: 'What the script does, step by step.',
+    },
+  }),
   deep_propose: object({
     target: str('What the change is to, such as a wiki claim, wiki:<page>#<claim>, a rule, a check or a spec.'),
     change: str('The change, in your own words.'),
@@ -205,8 +238,37 @@ export function toolList(): { name: string; description: string; inputSchema: Sc
  */
 export function checkArguments(tool: string, args: unknown): Obj {
   const schema = SCHEMAS[tool] ?? ACTION_SCHEMAS[tool];
-  if (!schema) throw refuse('not_found', '/params/tool', `Call one of the deep_* tools: ${Object.keys(SCHEMAS).join(', ')}.`, tool);
+  if (!schema) {
+    const near = nearest(tool, Object.keys(SCHEMAS));
+    throw refuse('not_found', '/params/tool', near ? `Call ${near} in place of ${tool}.` : `Call one of the deep_* tools: ${Object.keys(SCHEMAS).join(', ')}.`, tool);
+  }
   return check(schema, args ?? {}, '/params/arguments') as Obj;
+}
+
+/** The edit distance between `a` and `b`, a swap of two neighbours counting as one edit, as the canvas's close names count it (#412). */
+function distance(a: string, b: string): number {
+  const [x, y] = [[...a], [...b]];
+  const d = Array.from({ length: x.length + 1 }, (_, i) => Array.from({ length: y.length + 1 }, (_, j) => (i === 0 ? j : j === 0 ? i : 0)));
+  for (let i = 1; i <= x.length; i++) {
+    for (let j = 1; j <= y.length; j++) {
+      d[i]![j] = Math.min(d[i - 1]![j]! + 1, d[i]![j - 1]! + 1, d[i - 1]![j - 1]! + (x[i - 1] === y[j - 1] ? 0 : 1));
+      if (i > 1 && j > 1 && x[i - 1] === y[j - 2] && x[i - 2] === y[j - 1]) d[i]![j] = Math.min(d[i]![j]!, d[i - 2]![j - 2]! + 1);
+    }
+  }
+  return d[x.length]![y.length]!;
+}
+
+/**
+ * The listed name nearest `wrong` within the canvas's close-name reach, a third of its length and at least one, ties
+ * broken by name; undefined when none is that near (#1970).
+ */
+export function nearest(wrong: string, listed: readonly string[]): string | undefined {
+  const reach = Math.max(1, Math.floor([...wrong].length / 3));
+  return listed
+    .filter((name) => name !== wrong)
+    .map((name) => [distance(wrong, name), name] as const)
+    .filter(([d]) => d <= reach)
+    .sort(([d1, a], [d2, b]) => d1 - d2 || (a < b ? -1 : a > b ? 1 : 0))[0]?.[1];
 }
 function check(schema: Schema, value: unknown, at: string): unknown {
   const types = Array.isArray(schema.type) ? (schema.type as string[]) : [schema.type as string];
@@ -221,7 +283,9 @@ function check(schema: Schema, value: unknown, at: string): unknown {
       if (!isObj(value)) throw wrong();
       const properties = schema.properties as Record<string, Schema>;
       for (const key of Object.keys(value)) {
-        if (!(key in properties)) throw refuse('unlisted_field', `${at}/${key}`, `Leave out ${key}: the schema lists only ${Object.keys(properties).join(', ') || 'no fields'}.`, key);
+        if (key in properties) continue;
+        const near = nearest(key, Object.keys(properties));
+        throw refuse('unlisted_field', `${at}/${key}`, near ? `Write ${near} in place of ${key}.` : `Leave out ${key}: the schema lists only ${Object.keys(properties).join(', ') || 'no fields'}.`, key);
       }
       return Object.fromEntries(Object.entries(properties).map(([key, s]) => [key, check(s, value[key], `${at}/${key}`)]));
     }
@@ -240,7 +304,11 @@ function check(schema: Schema, value: unknown, at: string): unknown {
     case 'string': {
       if (typeof value !== 'string') throw wrong();
       const allowed = schema.enum as (string | null)[] | undefined;
-      if (allowed && !allowed.includes(value)) throw refuse('enum', at, `Give one of ${allowed.filter((v) => v !== null).join(', ')}.`, value);
+      if (allowed && !allowed.includes(value)) {
+        const listed = allowed.filter((v) => v !== null);
+        const near = nearest(value, listed);
+        throw refuse('enum', at, near ? `Give ${near} in place of ${value}.` : `Give one of ${listed.join(', ')}.`, value);
+      }
       if (typeof schema.pattern === 'string' && !new RegExp(schema.pattern).test(value)) throw refuse('pattern', at, `Give ${at.split('/').pop()} in the form ${schema.pattern}.`, value);
       return value;
     }

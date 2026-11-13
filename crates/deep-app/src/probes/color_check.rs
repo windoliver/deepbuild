@@ -85,10 +85,10 @@ impl Render for Swatches {
                 placed.clear();
                 for (i, slot) in shown.iter().enumerate() {
                     let at = point(
-                        bounds.origin.x + px(16. + STEP * i as f32),
-                        bounds.origin.y + px(16.),
+                        bounds.origin.x + px(16. + STEP * i as f32), // size-literal-exception: the --color-check probe window (#140), no page of the app; review 2027-04-30
+                        bounds.origin.y + px(16.), // size-literal-exception: the --color-check probe window (#140), no page of the app; review 2027-04-30
                     );
-                    let swatch = Bounds::new(at, size(px(SIDE), px(SIDE)));
+                    let swatch = Bounds::new(at, size(px(SIDE), px(SIDE))); // size-literal-exception: the --color-check probe window (#140), no page of the app; review 2027-04-30
                     window.paint_surface(swatch, slot.clone());
                     placed.push(swatch);
                 }
@@ -105,7 +105,7 @@ pub fn run(wgpu_untagged: bool, cx: &mut App) {
     let placed = Rc::new(RefCell::new(Vec::new()));
     // Above every other window, so the platform reports it visible and hands out drawables.
     let options = WindowOptions {
-        window_bounds: Some(WindowBounds::centered(size(px(560.), px(160.)), cx)),
+        window_bounds: Some(WindowBounds::centered(size(px(560.), px(160.)), cx)), // size-literal-exception: the --color-check probe window (#140), no page of the app; review 2027-04-30
         kind: WindowKind::PopUp,
         ..Default::default()
     };

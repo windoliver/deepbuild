@@ -1,4 +1,4 @@
-//! sandbox@1's engine in the app (#238): wasmtime =49.0.2 runs the bytes the sandbox module
+//! sandbox@1's engine in the app (#238): wasmtime =49.0.5 runs the bytes the sandbox module
 //! rewrote. Before each call the runner sets the rewrite's counters (fuel, stack in use, the stack's
 //! cap, the trap code); after a trap it reads the code the rewrite left, or maps the engine's own
 //! trap to its kind, and names the function and the offset in the program as written, through the
@@ -15,7 +15,7 @@ use deep_canvas_sandbox::trap::{raised, Trap};
 use wasmtime::{Config, Engine, Instance, Module, Store, Val, WasmBacktrace};
 
 /// The wasmtime this engine links.
-pub const WASMTIME: &str = "49.0.2";
+pub const WASMTIME: &str = "49.0.5";
 
 /// The native stack each call gets, past any cap the rewrite charges against (at most 2 MiB, the
 /// most wasmtime allows), so the rewrite's `stack` trap comes first.
@@ -69,7 +69,12 @@ impl Runner {
 
     /// As `new`, with the program's one memory holding `pages` pages when given: the memory the
     /// role's budget gives, such as a validator's asset plus 4 MiB (#415).
-    pub fn sized(bytes: &[u8], pages: Option<u64>, faults: Faults, written: bool) -> Result<Runner, String> {
+    pub fn sized(
+        bytes: &[u8],
+        pages: Option<u64>,
+        faults: Faults,
+        written: bool,
+    ) -> Result<Runner, String> {
         let (sized, shift) = match pages {
             Some(p) => deep_canvas_sandbox::rewrite::sized(bytes, p)?,
             None => (bytes.to_vec(), 0),
@@ -146,7 +151,8 @@ impl Runner {
             .instance
             .get_memory(&mut self.store, name)
             .ok_or_else(|| format!("the program exports no memory {name}"))?;
-        m.write(&mut self.store, at, bytes).map_err(|e| e.to_string())
+        m.write(&mut self.store, at, bytes)
+            .map_err(|e| e.to_string())
     }
 
     pub fn call(&mut self, call: &Call) -> Result<Outcome, String> {
@@ -210,11 +216,21 @@ impl Runner {
             (None, Some(_)) if self.faults.every_trap_unreachable => "unreachable",
             (None, Some(t)) => kind(t),
         };
-        let frame = e
-            .downcast_ref::<WasmBacktrace>()
-            .and_then(|b| b.frames().first().map(|f| (f.func_index(), f.module_offset())));
+        let frame = e.downcast_ref::<WasmBacktrace>().and_then(|b| {
+            b.frames()
+                .first()
+                .map(|f| (f.func_index(), f.module_offset()))
+        });
         let (function, offset) = match frame {
-            Some((f, Some(o))) => (f, locate(&self.map, (o as i64 - self.shift) as u32, self.written, by_rewrite)),
+            Some((f, Some(o))) => (
+                f,
+                locate(
+                    &self.map,
+                    (o as i64 - self.shift) as u32,
+                    self.written,
+                    by_rewrite,
+                ),
+            ),
             _ => return Err(format!("the trap {kind} has no frame: {e}")),
         };
         Ok(Outcome {

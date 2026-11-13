@@ -11,8 +11,13 @@
 #[cfg(target_os = "macos")]
 mod apple;
 pub mod color;
+mod export;
+mod flac;
 pub mod maps;
+pub mod mov;
 pub mod mp4;
+mod pipe;
+mod stream;
 pub mod table;
 mod wav;
 
@@ -105,6 +110,8 @@ fn reduce(n: i64, d: i64) -> [i64; 2] {
 /// What a file is, by its first bytes.
 enum Format<'a> {
     Wav(wav::Wav),
+    /// #154: a score's stem, decoded whole, with its loop points.
+    Flac(flac::Flac),
     Png(u32, u32, bool),
     Playlist(&'a str),
     Movie(mp4::Movie),
@@ -116,6 +123,14 @@ fn format(data: &[u8]) -> Result<Format<'_>, Value> {
             refused(
                 "unreadable",
                 json!({"why": "a WAVE file without fmt and data"}),
+            )
+        });
+    }
+    if data.starts_with(b"fLaC") {
+        return flac::parse(data).map(Format::Flac).ok_or_else(|| {
+            refused(
+                "unreadable",
+                json!({"why": "a FLAC stream that doesn't decode"}),
             )
         });
     }
@@ -210,6 +225,10 @@ fn over_caps(f: &Format, caps: &Caps) -> Option<Value> {
             seconds_over(w.frames as i64, w.rate, caps.max_duration),
             0u64,
         ),
+        Format::Flac(f) => (
+            seconds_over(f.frames as i64, f.rate, caps.max_duration),
+            0u64,
+        ),
         Format::Png(w, h, _) => (false, *w as u64 * *h as u64),
         Format::Movie(m) => (
             m.tracks
@@ -284,7 +303,7 @@ fn time(ticks: i64, timescale: u32, planted: &Planted) -> Value {
     json!([ticks, timescale])
 }
 
-fn probe(f: &Format, sha: &str, planted: &Planted) -> Value {
+fn probe(f: &Format, data: &[u8], sha: &str, planted: &Planted) -> Value {
     let (kind, streams, decoder) = match f {
         Format::Wav(w) => (
             "audio",
@@ -293,6 +312,15 @@ fn probe(f: &Format, sha: &str, planted: &Planted) -> Value {
                 "sample_rate": w.rate, "channels": w.channels, "duration": [w.frames, w.rate]}),
             ],
             json!({"name": "deep-codecs wav", "version": env!("CARGO_PKG_VERSION")}),
+        ),
+        Format::Flac(f) => (
+            "audio",
+            vec![
+                json!({"index": 0, "type": "audio", "codec": "flac", "time_base": [1, f.rate],
+                "sample_rate": f.rate, "channels": f.channels, "duration": [f.frames, f.rate],
+                "loop": f.loop_region.map(|(s, e)| json!([s, e]))}),
+            ],
+            json!({"name": "deep-codecs flac", "version": env!("CARGO_PKG_VERSION")}),
         ),
         Format::Png(w, h, srgb) => {
             let mut c = json!({"primaries": "bt709", "transfer": "srgb", "matrix": "rgb", "range": "full",
@@ -311,8 +339,8 @@ fn probe(f: &Format, sha: &str, planted: &Planted) -> Value {
         }
         Format::Movie(m) => {
             let edits = !planted.is("ignores_edit_lists");
-            let streams = (m.tracks.iter().enumerate())
-                .filter(|(_, t)| t.kind != mp4::Kind::Other)
+            let mut streams = (m.tracks.iter().enumerate())
+                .filter(|(_, t)| matches!(t.kind, mp4::Kind::Video | mp4::Kind::Audio))
                 .map(|(i, t)| {
                     let mut s = json!({"index": i, "codec": codec(&t.entry.fourcc),
                         "time_base": [1, t.timescale], "duration": [t.span(m.timescale), t.timescale]});
@@ -333,10 +361,23 @@ fn probe(f: &Format, sha: &str, planted: &Planted) -> Value {
                     s["frame_rate"] = rate;
                     s["size"] = json!([t.entry.width, t.entry.height]);
                     s["color"] = track_color(t, planted);
+                    // #157: ProRes 4444's alpha is full range, its colour limited.
+                    if &t.entry.fourcc == b"ap4h" {
+                        s["alpha"] = json!({"range": "full"});
+                    }
                     s["pts"] = shown.iter().map(|(_, p)| time(*p, t.timescale, planted)).collect();
                     s
                 })
                 .collect::<Vec<_>>();
+            // #501: the timecode track, its first frame read from its sample.
+            let at = m.tracks.iter().position(|t| t.kind == mp4::Kind::Timecode);
+            if let (Some(i), Some(t)) = (at, m.timecode(data)) {
+                // #157: its track's time base, as every stream lists one.
+                streams.push(
+                    json!({"index": i, "type": "timecode", "start_frame": t.start_frame,
+                    "drop_frame": t.drop_frame, "rate": t.rate, "time_base": [1, m.tracks[i].timescale]}),
+                );
+            }
             let kind = if m.tracks.iter().any(|t| t.kind == mp4::Kind::Video) {
                 "video"
             } else {
@@ -433,10 +474,18 @@ fn decode(
                 "first": [0, w.rate], "samples": w.frames, "file": "0.f32"}),
             );
         }
+        Format::Flac(fl) => {
+            write("0.f32", &f32_bytes(&fl.samples))?;
+            streams.push(
+                json!({"index": 0, "type": "audio", "sample_rate": fl.rate, "channels": fl.channels,
+                "first": [0, fl.rate], "samples": fl.frames, "file": "0.f32",
+                "loop": fl.loop_region.map(|(s, e)| json!([s, e]))}),
+            );
+        }
         Format::Png(..) => {
             let img = image::load_from_memory(data)
                 .map_err(|e| e.to_string())?
-                .to_rgba8();
+                .into_rgba8();
             let (w, h) = img.dimensions();
             let mut px = img.into_raw();
             if bgra {
@@ -476,7 +525,12 @@ fn decode(
                                     .ok_or_else(|| format!("sample {sample} didn't decode"))?;
                                 size = [p.width, p.height];
                                 let name = format!("{i}-{k}.{}", if bgra { "bgra" } else { "yuv" });
+                                let matrix = color["matrix"].as_str().unwrap_or("bt709");
                                 let bytes = match bgra {
+                                    // #157: ProRes 4444's 12-bit planes, its alpha straight.
+                                    true if &t.entry.fourcc == b"ap4h" => {
+                                        color::yuva12_to_bgra(&p.planes, p.width, p.height, matrix)
+                                    }
                                     true => color::i420_to_bgra(
                                         &p.planes,
                                         p.width,
@@ -508,7 +562,7 @@ fn decode(
                             "channels": channels, "first": first,
                             "samples": samples.len() / channels.max(1) as usize, "file": name}));
                     }
-                    mp4::Kind::Other => {}
+                    mp4::Kind::Timecode | mp4::Kind::Other => {}
                 }
             }
         }
@@ -527,16 +581,16 @@ fn video_frames(
     data: &[u8],
     feed: &[usize],
 ) -> Result<Vec<apple::Picture>, String> {
-    let config = t
-        .entry
-        .config
-        .as_ref()
-        .ok_or("a video track without its codec configuration")?;
+    // #157: ProRes has no configuration box.
+    let config = t.entry.config.as_ref();
+    if config.is_none() && &t.entry.fourcc != b"ap4h" {
+        return Err("a video track without its codec configuration".into());
+    }
     let samples: Vec<(usize, Vec<u8>)> = feed
         .iter()
         .map(|i| {
             let s = &t.samples[*i];
-            let range = s.offset as usize..s.offset as usize + s.size as usize;
+            let range = s.offset as usize..(s.offset as usize).saturating_add(s.size as usize);
             (*i, data.get(range).unwrap_or_default().to_vec())
         })
         .collect();
@@ -561,6 +615,39 @@ struct Picture {
     planes: Vec<u8>,
 }
 
+/// #157: 16-bit integer PCM, little-endian (`sowt`) or big-endian (`twos`), as f32. QuickTime
+/// sizes each sample of uncompressed sound as one byte and stores a chunk's frames back to back,
+/// so a run of contiguous samples is read as that many whole frames from its first byte.
+fn int_pcm(t: &mp4::Track, data: &[u8], channels: u32, big: bool) -> Vec<f32> {
+    let frame = 2 * channels as usize;
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < t.samples.len() {
+        let (first, mut n, mut bytes) =
+            (t.samples[i].offset as usize, 1, t.samples[i].size as usize);
+        while i + n < t.samples.len()
+            && t.samples[i + n].offset
+                == t.samples[i + n - 1].offset + u64::from(t.samples[i + n - 1].size)
+        {
+            bytes += t.samples[i + n].size as usize;
+            n += 1;
+        }
+        let len = if bytes == n { n * frame } else { bytes };
+        let run = data
+            .get(first..first.saturating_add(len))
+            .unwrap_or_default();
+        out.extend(run.as_chunks::<2>().0.iter().map(|b| {
+            f32::from(if big {
+                i16::from_be_bytes(*b)
+            } else {
+                i16::from_le_bytes(*b)
+            }) / 32_768.0
+        }));
+        i += n;
+    }
+    out
+}
+
 /// A track's audio, decoded and trimmed by its edit list: the samples, the first kept sample's
 /// presentation time, the rate and the channel count. The encoder's priming lies before the
 /// edit's media time, so trimming to the edit removes it, as FATE's references do.
@@ -573,12 +660,21 @@ fn audio(
     let (rate, channels) = (t.entry.sample_rate.max(1), t.entry.channels.max(1) as u32);
     let packets: Vec<Vec<u8>> = (t.samples.iter())
         .map(|s| {
-            data.get(s.offset as usize..(s.offset + s.size as u64) as usize)
+            data.get(s.offset as usize..s.offset.saturating_add(s.size as u64) as usize)
                 .unwrap_or_default()
                 .to_vec()
         })
         .collect();
     let mut samples = match &t.entry.config {
+        // #502: float PCM as an export writes it (`fpcm`, or QuickTime's `lpcm`): 32-bit
+        // little-endian samples, kept as they are.
+        _ if matches!(&t.entry.fourcc, b"fpcm" | b"lpcm") => packets
+            .iter()
+            .flat_map(|p| p.as_chunks::<4>().0.iter().map(|b| f32::from_le_bytes(*b)))
+            .collect(),
+        _ if matches!(&t.entry.fourcc, b"sowt" | b"twos") && t.entry.bits == 16 => {
+            int_pcm(t, data, channels, t.entry.fourcc == *b"twos")
+        }
         #[cfg(target_os = "macos")]
         Some((k, esds)) if k == b"esds" => apple::decode_aac(esds, rate, channels, &packets)?,
         _ => return Err(format!("no decoder for {}", codec(&t.entry.fourcc))),
@@ -593,8 +689,13 @@ fn audio(
     }
     let skip = to_samples((media - first_cts).max(0)) as usize * channels as usize;
     samples.drain(..skip.min(samples.len()));
-    let span = to_samples(t.span(timescale)) as usize * channels as usize;
-    samples.truncate(span);
+    let mut span = to_samples(t.span(timescale)) as usize;
+    // #157: the planted reader rounds the edit's end up to a whole 1,024-sample packet.
+    if planted.is("reader_pads_last_packet") {
+        let start = skip / channels as usize;
+        span = (start + span).div_ceil(1024) * 1024 - start;
+    }
+    samples.truncate(span * channels as usize);
     let first = at + (first_cts - media).max(0);
     Ok((samples, json!([to_samples(first), rate]), rate, channels))
 }
@@ -889,6 +990,12 @@ pub fn run(job: &Map<String, Value>, caps: &Caps, planted: &Planted) -> (Value, 
             Err(e) => (json!({"error": e}), None),
         };
     }
+    // #501: an export's parts, their join and its PNG frames (export.rs).
+    if op.starts_with("export.") {
+        let v = export::run(op, &job, planted).unwrap_or_else(|e| e);
+        let sha = v["sha256"].as_str().map(str::to_string);
+        return (v, sha);
+    }
     let Some(path) = job.s("path") else {
         return (json!({"error": "a job names its path"}), None);
     };
@@ -909,6 +1016,24 @@ pub fn run(job: &Map<String, Value>, caps: &Caps, planted: &Planted) -> (Value, 
             sha,
         );
     }
+    // #1967: a terminal recording, converted here by the cells module's pinned emulator into a
+    // keyframe every second and row patches in flicks. A probe answers the asset; a decode the
+    // conversion too.
+    if let Some(rec) = deep_canvas_cells::recording::Recording::parse(&opened.data) {
+        let rec = match planted.is("cells_patch_times_whole_seconds") {
+            true => rec.whole_seconds(),
+            false => rec,
+        };
+        let converted = deep_canvas_cells::recording::convert(&rec);
+        let asset = json!({"sha256": opened.sha, "kind": "terminal",
+            "probe": converted["probe"], "decoder": converted["decoder"]});
+        let reply = match op {
+            "probe" => json!({"asset": asset}),
+            "decode" => json!({"asset": asset, "decoded": converted}),
+            _ => json!({"error": format!("no job {op} for a terminal recording")}),
+        };
+        return (reply, sha);
+    }
     let f = match format(&opened.data) {
         Ok(f) => f,
         Err(r) => return (r, sha),
@@ -924,7 +1049,7 @@ pub fn run(job: &Map<String, Value>, caps: &Caps, planted: &Planted) -> (Value, 
             return (r, sha);
         }
     }
-    let probed = probe(&f, &opened.sha, planted);
+    let probed = probe(&f, &opened.data, &opened.sha, planted);
     let reply = match op {
         "probe" => Ok(probed),
         "decode" => decode(&f, &opened.data, &job, planted, &probed).map(|d| json!({"decoded": d})),
@@ -992,26 +1117,41 @@ pub fn serve(role: &str, args: &[String]) -> i32 {
             return 1;
         }
     }
-    let stdin = std::io::stdin();
-    let mut stdout = std::io::stdout();
-    for line in stdin.lock().lines() {
-        let Ok(line) = line else { break };
-        let Ok(Value::Object(job)) = serde_json::from_str::<Value>(&line) else {
-            let _ = writeln!(stdout, "{}", json!({"error": "unreadable job"}));
+    // #157: messages framed by `pipe`; a piped export and the decode worker's `stream` answer
+    // more than once.
+    let mut pipe = pipe::Pipe {
+        r: std::io::stdin().lock(),
+        w: std::io::BufWriter::with_capacity(1 << 20, std::io::stdout().lock()),
+    };
+    let mut bytes = Vec::new();
+    while let Some(head) = pipe.next(&mut bytes) {
+        let Value::Object(job) = head else {
+            let _ = writeln!(pipe.w, "{}", json!({"error": "unreadable job"}));
+            let _ = pipe.w.flush();
             continue;
         };
         let op = job.get("op").and_then(Value::as_str).unwrap_or_default();
+        // #501: an export's jobs are the encode tool's too.
+        let encodes = op == "encode" || op.starts_with("export.");
         let allowed = match role {
-            ENCODE_TOOL => op == "encode",
-            _ => op != "encode" || planted.is("encodes_in_decode_worker"),
+            ENCODE_TOOL => encodes,
+            _ => !encodes || planted.is("encodes_in_decode_worker"),
         };
+        let piped = job.get("frames").is_some_and(Value::is_u64);
+        if allowed && piped && matches!(op, "export.part" | "export.png") {
+            export::stream(op, &Job { v: &job }, &planted, &mut pipe);
+            continue;
+        }
+        if allowed && op == "stream" {
+            stream::run(&Job { v: &job }, &caps, &planted, &mut pipe);
+            continue;
+        }
         let (reply, sha) = if allowed {
             run(&job, &caps, &planted)
         } else {
             (json!({"error": format!("a {role} never runs {op}")}), None)
         };
-        let _ = writeln!(stdout, "{}", json!({"reply": reply, "file": sha}));
-        let _ = stdout.flush();
+        pipe.reply(&reply, sha.as_deref());
     }
     0
 }
@@ -1148,7 +1288,7 @@ pub struct Helper {
     pub jobs: Vec<(String, Option<String>)>,
     child: Child,
     stdin: Option<ChildStdin>,
-    stdout: BufReader<ChildStdout>,
+    stdout: Option<BufReader<ChildStdout>>,
 }
 
 impl Helper {
@@ -1171,7 +1311,10 @@ impl Helper {
         }
         let mut child = cmd.stdin(Stdio::piped()).stdout(Stdio::piped()).spawn()?;
         let stdin = child.stdin.take();
-        let stdout = BufReader::new(child.stdout.take().expect("piped"));
+        let stdout = Some(BufReader::with_capacity(
+            1 << 20,
+            child.stdout.take().expect("piped"),
+        ));
         Ok(Helper {
             pid: child.id(),
             role,
@@ -1190,7 +1333,7 @@ impl Helper {
             .stdin
             .as_mut()
             .is_some_and(|s| writeln!(s, "{job}").is_ok() && s.flush().is_ok())
-            && self.stdout.read_line(&mut line).is_ok_and(|n| n > 0);
+            && (self.stdout.as_mut()).is_some_and(|o| o.read_line(&mut line).is_ok_and(|n| n > 0));
         let v: Value = match answered {
             true => serde_json::from_str(&line).unwrap_or_default(),
             false => {
@@ -1208,9 +1351,142 @@ impl Helper {
 }
 
 impl Drop for Helper {
-    /// Its stdin closes, so it ends, and it is waited for; nothing signals it.
+    /// Its stdin closes, so it ends, and it is waited for; nothing signals it. #157: its stdout's
+    /// read end closes first, so a helper still writing a stream ends too instead of waiting on a
+    /// reader that has gone.
     fn drop(&mut self) {
         drop(self.stdin.take());
+        drop(self.stdout.take());
         let _ = self.child.wait();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// What `f` returns, or `None` when it has not returned after ten seconds.
+    pub(crate) fn finished<T: Send + 'static>(f: impl FnOnce() -> T + Send + 'static) -> Option<T> {
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || tx.send(f()));
+        rx.recv_timeout(std::time::Duration::from_secs(10)).ok()
+    }
+
+    /// A track whose one sample ends past the last byte a file can have.
+    fn track_past_the_end() -> mp4::Track {
+        mp4::Track {
+            kind: mp4::Kind::Audio,
+            timescale: 1,
+            duration: 0,
+            edits: Vec::new(),
+            entry: mp4::Entry {
+                config: Some((*b"none", Vec::new())),
+                ..Default::default()
+            },
+            samples: vec![mp4::Sample {
+                offset: u64::MAX - 1,
+                size: 4,
+                dts: 0,
+                cts: 0,
+                key: true,
+            }],
+        }
+    }
+
+    /// #157: QuickTime's uncompressed sound sizes each sample as one byte, its chunk holding the
+    /// frames back to back; `sowt` is little-endian and `twos` big-endian.
+    #[test]
+    fn integer_pcm_reads_whole_frames_from_a_chunk_of_one_byte_samples() {
+        let values: [i16; 6] = [1, -1, 16_384, -16_384, 32_767, -32_768];
+        let want: Vec<f32> = values.iter().map(|&v| f32::from(v) / 32_768.0).collect();
+        for (fourcc, big) in [(*b"sowt", false), (*b"twos", true)] {
+            let data: Vec<u8> = values
+                .iter()
+                .flat_map(|v| {
+                    if big {
+                        v.to_be_bytes()
+                    } else {
+                        v.to_le_bytes()
+                    }
+                })
+                .collect();
+            let track = mp4::Track {
+                kind: mp4::Kind::Audio,
+                timescale: 48_000,
+                duration: 3,
+                edits: Vec::new(),
+                entry: mp4::Entry {
+                    fourcc,
+                    channels: 2,
+                    bits: 16,
+                    sample_rate: 48_000,
+                    ..Default::default()
+                },
+                samples: (0..3)
+                    .map(|k| mp4::Sample {
+                        offset: k,
+                        size: 1,
+                        dts: k as i64,
+                        cts: k as i64,
+                        key: true,
+                    })
+                    .collect(),
+            };
+            let (got, _, rate, channels) =
+                audio(&track, 48_000, &data, &Planted::default()).unwrap();
+            assert_eq!(
+                (got, rate, channels),
+                (want.clone(), 48_000, 2),
+                "{}",
+                String::from_utf8_lossy(&fourcc)
+            );
+        }
+    }
+
+    #[test]
+    fn an_audio_sample_past_the_end_of_the_file_reads_as_empty() {
+        let got = audio(&track_past_the_end(), 1, &[], &Planted::default());
+        assert!(got.is_err_and(|e| e.starts_with("no decoder for")));
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn a_video_sample_past_the_end_of_the_file_reads_as_empty() {
+        let got = video_frames(&track_past_the_end(), &[], &[0]);
+        assert!(got.is_err_and(|e| e.starts_with("no decoder for")));
+    }
+
+    /// #157: read from its boxes alone, a delivery's `moov` ends before its `mdat` begins; the
+    /// legacy encode op's file puts it after.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn a_delivery_has_its_moov_before_its_mdat() {
+        let moov_first = |bytes: Vec<u8>| {
+            let head = mp4::Head::read(&mut std::io::Cursor::new(bytes)).unwrap();
+            let at = |k: &[u8; 4]| *head.boxes.iter().find(|b| &b.0 == k).unwrap();
+            assert!(head.movie.is_some_and(|m| m.tracks[0].samples.len() == 3));
+            let (moov, mdat) = (at(b"moov"), at(b"mdat"));
+            moov.1 + moov.2 <= mdat.1
+        };
+        let sample = [0u8, 0, 0, 1, 0x65];
+        let video = mov::Video {
+            fourcc: *b"avc1",
+            config: Some(&[1, 2, 3]),
+            size: [64, 64],
+            timescale: 24000,
+            ticks: 1000,
+            samples: vec![&sample[..]; 3],
+            keys: None,
+            held: None,
+        };
+        assert!(moov_first(mov::write(mov::Brand::Mp4, &video, None, None)));
+        let coded: Vec<apple::Coded> = (0..3)
+            .map(|_| apple::Coded {
+                bytes: sample.to_vec(),
+                key: true,
+            })
+            .collect();
+        let legacy = mux_h264(&coded, &[1, 2, 3], 64, 64, &[0, 1000, 2000], 24000);
+        assert!(!moov_first(legacy));
     }
 }

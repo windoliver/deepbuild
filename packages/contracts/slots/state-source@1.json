@@ -3,6 +3,9 @@
   "description": "What a workspace touches (#67): read() says what a thing is now, compare(item, expected) what changed from what should hold, undo(change) gives the plan that undoes a change or says it cannot, and fixture is the source's own world, the one place the kit makes and undoes changes.",
   "x-since": "R2",
   "x-stability": "preview",
+  "x-tracking": "#67",
+  "x-preview_since": "R2",
+  "x-decide_by": "R5",
   "type": "object",
   "properties": {
     "slot": {
