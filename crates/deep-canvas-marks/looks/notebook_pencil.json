@@ -16,7 +16,19 @@
     "night_hatch": "#2d3448",
     "night_pink": "#f28cbe",
     "night_rule": "#283247",
-    "night_margin": "#4a2a33"
+    "night_margin": "#4a2a33",
+    "pencil_violet": "#4f2a80",
+    "pencil_blue": "#1f3f7d",
+    "pencil_teal": "#0a4452",
+    "pencil_green": "#1d451b",
+    "pencil_red": "#861a3c",
+    "pencil_brown": "#673410",
+    "night_violet": "#c9a8f5",
+    "night_blue": "#9dbcf2",
+    "night_teal": "#7fd6d0",
+    "night_green": "#a8d69a",
+    "night_rose": "#f2a0a8",
+    "night_tan": "#c4a878"
   },
   "roles": {
     "ground": "cream",
@@ -26,7 +38,16 @@
     "rule": "rule_blue",
     "margin": "margin_red",
     "body": "hand",
-    "math": "math"
+    "math": "math",
+    "code_keyword": "pencil_violet",
+    "code_type": "pencil_blue",
+    "code_function": "pencil_teal",
+    "code_string": "pencil_green",
+    "code_number": "pencil_red",
+    "code_comment": "pencil_brown",
+    "diff_added": "pencil_green",
+    "diff_removed": "pencil_red",
+    "diff_changed": "pencil_blue"
   },
   "themes": {
     "light": {},
@@ -37,7 +58,16 @@
         "muted": "night_hatch",
         "accent": "night_pink",
         "rule": "night_rule",
-        "margin": "night_margin"
+        "margin": "night_margin",
+        "code_keyword": "night_violet",
+        "code_type": "night_blue",
+        "code_function": "night_teal",
+        "code_string": "night_green",
+        "code_number": "night_rose",
+        "code_comment": "night_tan",
+        "diff_added": "night_green",
+        "diff_removed": "night_rose",
+        "diff_changed": "night_blue"
       }
     }
   },
@@ -73,6 +103,23 @@
     "glyph": "⚠"
   },
   "legend": "auto",
+  "code": {
+    "keyword": "code_keyword",
+    "type": "code_type",
+    "function": "code_function",
+    "variable": "ink",
+    "string": "code_string",
+    "number": "code_number",
+    "comment": "code_comment",
+    "operator": "ink",
+    "punctuation": "ink",
+    "plain": "ink"
+  },
+  "diff": {
+    "added": "diff_added",
+    "removed": "diff_removed",
+    "changed": "diff_changed"
+  },
   "lines": {
     "line": {
       "kind": "pencil",

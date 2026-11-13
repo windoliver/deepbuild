@@ -98,7 +98,7 @@ fn refused(code: &str) -> Value {
 }
 
 /// `items/<id>/<field…>` split at the item.
-fn item_path(path: &str) -> Option<(&str, &str)> {
+pub(crate) fn item_path(path: &str) -> Option<(&str, &str)> {
     path.strip_prefix("items/")?.split_once('/')
 }
 
@@ -109,6 +109,62 @@ fn at_field<'v>(value: &'v Value, field: &str) -> Option<&'v Value> {
         Value::Object(map) => map.get(part),
         _ => None,
     })
+}
+
+/// Item `id`'s evaluated `field` in `s`: its transform's `at/…`, or one of its fields, with the
+/// keys of what made it (`deep_query`'s read, and #1918's `eval` `paths`).
+pub(crate) fn item_value(
+    sched: &deep_canvas::schedule::Scheduler<'_>,
+    s: &DocSession,
+    id: &str,
+    field: &str,
+) -> Option<(Value, Vec<Key>)> {
+    let (array, rest) = match field.strip_prefix("at/") {
+        Some(rest) => ("core.transform", rest),
+        None => ("core.fields", field),
+    };
+    let (val, keys) = s.read(sched, array, Some(id))?;
+    let value = match array {
+        "core.transform" => {
+            let t = val.as_typed::<Transform>()?;
+            let at = json!({"pos": t.pos, "rot": t.rot, "scale": t.scale});
+            at_field(&at, rest)?.clone()
+        }
+        _ => at_field(&val.as_typed::<Fields>()?.to_json(), rest)?.clone(),
+    };
+    Some((value, keys))
+}
+
+/// #1918: each item path's value in `s` (`eval`'s `paths`), read as `deep_query` reads one, null
+/// for a path it can't read.
+pub(crate) fn values(
+    sched: &deep_canvas::schedule::Scheduler<'_>,
+    s: &DocSession,
+    paths: &[String],
+) -> Value {
+    let read = |p: &String| {
+        let (id, field) = item_path(p)?;
+        // #1921: a field the core's lowered form doesn't hold, such as a 3D kind's params, reads
+        // as the frame's document holds it, an instancer's columns a world writes included.
+        let drawn = || at_field(s.document()?.get("items")?.get(id)?, field).cloned();
+        item_value(sched, s, id, field)
+            .map(|(v, _)| v)
+            .or_else(drawn)
+    };
+    Value::Object(
+        paths
+            .iter()
+            .map(|p| (p.clone(), read(p).unwrap_or(Value::Null)))
+            .collect(),
+    )
+}
+
+/// A list of names (`eval`'s `arrays` and `paths`).
+pub(crate) fn names(v: &Value) -> Option<Vec<String>> {
+    v.as_array()?
+        .iter()
+        .map(|n| Some(n.as_str()?.to_string()))
+        .collect()
 }
 
 /// One key for a value several nodes made: the node's own key when one made it.
@@ -184,21 +240,33 @@ impl Hub<'_> {
             };
             (row.rev, row.doc.clone())
         };
-        let result = check_packed(&document, &self.startup.sealed, &self.packs);
-        let skipped = crate::verdict::unknown_items(&result.notices);
-        let mut drawn = crate::verdict::without(
-            &crate::packs::drawn(&document, &result.expansions),
-            &skipped,
-        );
-        self.keep_instances(&document, &result.expansions, &mut drawn);
-        let _ = self.inline_tables(&mut drawn);
-        let _ = self.inline_vectors(&mut drawn);
+        let (drawn, expansions) = self.drawn_of(&document);
         Some(Revision {
             rev,
             doc: document,
             drawn,
-            expansions: result.expansions,
+            expansions,
         })
+    }
+
+    /// What a document draws: its recipe instances expanded and kept, items of a kind this build
+    /// doesn't know left out, and its tables and vectors inlined; with its expansions.
+    pub(crate) fn drawn_of(&self, document: &Value) -> (Value, Vec<Expansion>) {
+        let (mut drawn, expansions) = self.drawing_form(document);
+        self.keep_instances(document, &expansions, &mut drawn);
+        let _ = self.inline_tables(&mut drawn);
+        let _ = self.inline_vectors(&mut drawn);
+        (drawn, expansions)
+    }
+
+    /// The form a document's frames draw from, as the hub's own session loads it: each recipe
+    /// instance's derived items in its place, less the items of a kind this build doesn't know.
+    pub(crate) fn drawing_form(&self, document: &Value) -> (Value, Vec<Expansion>) {
+        let result = check_packed(document, &self.startup.sealed, &self.packs);
+        let skipped = crate::verdict::unknown_items(&result.notices);
+        let form =
+            crate::verdict::without(&crate::packs::drawn(document, &result.expansions), &skipped);
+        (form, result.expansions)
     }
 
     /// Puts each recipe instance back beside its derived items, its params filled with its
@@ -342,7 +410,9 @@ impl Hub<'_> {
             for (s, t) in sessions.iter().zip(&times) {
                 let read = match hidden_by {
                     Some(_) => None,
-                    None => self.text_at(s, &drawn, path, *t).or_else(|| self.read_path(s, &revision.doc, path)),
+                    None => self
+                        .text_at(s, &drawn, path, *t)
+                        .or_else(|| self.read_path(s, &revision.doc, path)),
                 };
                 match read {
                     Some((v, k)) => {
@@ -508,7 +578,9 @@ impl Hub<'_> {
     /// [`deep_canvas_motion::eval::shown_doc`] the 3D card and `see` fill from).
     fn text_at(&self, s: &DocSession, drawn: &Value, path: &str, t: i64) -> Option<(Value, Key)> {
         let id = path.strip_prefix("items/")?.strip_suffix("/params/text")?;
-        let template = drawn.pointer(&format!("/items/{id}/params/template"))?.as_str()?;
+        let template = drawn
+            .pointer(&format!("/items/{id}/params/template"))?
+            .as_str()?;
         let shown = match crate::film::program_of(&self.sched, s) {
             Some(program) if self.scenario.planted != Some(Planted::ReadoutReadsDefaults) => {
                 let mut state = program.state();
@@ -518,7 +590,10 @@ impl Hub<'_> {
             _ => drawn.clone(),
         };
         let text = deep_canvas::template::expand(&shown, template).ok()?;
-        let key = Hasher::of(self.sched.hash(), "deep_query.text").text(path).text(&text).finish();
+        let key = Hasher::of(self.sched.hash(), "deep_query.text")
+            .text(path)
+            .text(&text)
+            .finish();
         Some((json!(text), key))
     }
 
@@ -531,14 +606,26 @@ impl Hub<'_> {
             let value = match held_at(doc, path) {
                 Some(v) => v,
                 None if deep_canvas_media::planted("loudness_target_defaults_to_zero")
-                    && rest.split_once('/').is_some_and(|(bus, f)| f == "loudness_target" && doc["buses"].get(bus).is_some()) =>
+                    && rest.split_once('/').is_some_and(|(bus, f)| {
+                        f == "loudness_target" && doc["buses"].get(bus).is_some()
+                    }) =>
                 {
                     json!(0)
                 }
                 None => return None,
             };
-            let key = Hasher::of(self.sched.hash(), "deep_query.bus").text(path).text(&value.to_string()).finish();
+            let key = Hasher::of(self.sched.hash(), "deep_query.bus")
+                .text(path)
+                .text(&value.to_string())
+                .finish();
             return Some((value, key));
+        }
+        if let Some(t) = self.timeline_time(s, path) {
+            let key = Hasher::of(self.sched.hash(), "deep_query.time")
+                .text(path)
+                .text(&t.to_string())
+                .finish();
+            return Some((json!(t), key));
         }
         let (id, field) = item_path(path)?;
         if field == "bounds" {
@@ -553,20 +640,32 @@ impl Hub<'_> {
         if let Some(read) = self.status_value(doc, path) {
             return read;
         }
-        let (array, rest) = match field.strip_prefix("at/") {
-            Some(rest) => ("core.transform", rest),
-            None => ("core.fields", field),
-        };
-        let (val, keys) = s.read(&self.sched, array, Some(id))?;
-        let value = match array {
-            "core.transform" => {
-                let t = val.as_typed::<Transform>()?;
-                let at = json!({"pos": t.pos, "rot": t.rot, "scale": t.scale});
-                at_field(&at, rest)?.clone()
-            }
-            _ => at_field(&val.as_typed::<Fields>()?.to_json(), rest)?.clone(),
-        };
+        let (value, keys) = item_value(&self.sched, s, id, field)?;
         Some((value, one_key(&keys, s.hash())))
+    }
+
+    /// #1163: a timeline time as the motion program resolved it, in flicks: `shots/<id>/start`
+    /// or `end`, `placements/<id>/start`, `markers/<id>/t`, whatever form the document wrote.
+    fn timeline_time(&self, s: &DocSession, path: &str) -> Option<i64> {
+        let program = crate::film::program_of(&self.sched, s)?;
+        let motion = &program.motion;
+        match path.split('/').collect::<Vec<_>>()[..] {
+            ["shots", id, field @ ("start" | "end")] => {
+                let shot = program.shots.as_ref()?.shots.iter().find(|x| x.id == id)?;
+                Some(if field == "start" {
+                    shot.start
+                } else {
+                    shot.end
+                })
+            }
+            ["placements", id, "start"] => motion
+                .placements
+                .iter()
+                .find(|p| p.id == id)
+                .map(|p| p.start),
+            ["markers", id, "t"] => motion.markers.iter().find(|m| m.id == id).map(|m| m.start),
+            _ => None,
+        }
     }
 
     /// Every 2D item's evaluated box in an evaluated session (#1162): its fields at its world
@@ -577,14 +676,27 @@ impl Hub<'_> {
             return BTreeMap::new();
         };
         let mut items = Map::new();
-        for id in doc.get("items").and_then(Value::as_object).into_iter().flatten().map(|(id, _)| id) {
-            let Some((fields, _)) = s.read(l, "core.fields", Some(id)) else { continue };
-            let Some(fields) = fields.as_typed::<Fields>() else { continue };
+        for id in doc
+            .get("items")
+            .and_then(Value::as_object)
+            .into_iter()
+            .flatten()
+            .map(|(id, _)| id)
+        {
+            let Some((fields, _)) = s.read(l, "core.fields", Some(id)) else {
+                continue;
+            };
+            let Some(fields) = fields.as_typed::<Fields>() else {
+                continue;
+            };
             let world = s
                 .read(l, "marks2d.at", Some(id))
                 .or_else(|| s.read(l, "core.world", Some(id)))
                 .and_then(|(w, _)| w.as_typed::<Transform>().map(|t| *t));
-            items.insert(id.clone(), deep_canvas_marks::modules::item_json(&fields, world.as_ref()));
+            items.insert(
+                id.clone(),
+                deep_canvas_marks::modules::item_json(&fields, world.as_ref()),
+            );
         }
         deep_canvas_marks::scene::item_boxes(doc, &items).unwrap_or_default()
     }
@@ -611,7 +723,11 @@ impl Hub<'_> {
             .into_iter()
             .flatten()
             .filter_map(|(_, i)| i.pointer("/at/place")?.as_object())
-            .flat_map(|p| ["beside", "onto"].into_iter().filter_map(|k| p.get(k)?.as_str()))
+            .flat_map(|p| {
+                ["beside", "onto"]
+                    .into_iter()
+                    .filter_map(|k| p.get(k)?.as_str())
+            })
             .map(|t| t.split('#').next().unwrap_or(t).to_string())
             .collect();
         let start = self.evaluated(drawn, 0);
@@ -620,7 +736,9 @@ impl Hub<'_> {
         for t in times {
             let mut stale = drawn.clone();
             for target in &targets {
-                let Some(b) = previous.get(target) else { continue };
+                let Some(b) = previous.get(target) else {
+                    continue;
+                };
                 let stand_in = format!("{target}-previous");
                 let layer = stale["items"][target.as_str()].get("layer").cloned();
                 let mut item = json!({"id": stand_in, "kind": "rect@1", "name": "Previous box",
@@ -629,9 +747,15 @@ impl Hub<'_> {
                     item["layer"] = layer;
                 }
                 stale["items"][stand_in.as_str()] = item;
-                for i in stale["items"].as_object_mut().into_iter().flat_map(|m| m.values_mut()) {
+                for i in stale["items"]
+                    .as_object_mut()
+                    .into_iter()
+                    .flat_map(|m| m.values_mut())
+                {
                     for k in ["beside", "onto"] {
-                        if i.pointer(&format!("/at/place/{k}")).and_then(Value::as_str) == Some(target) {
+                        if i.pointer(&format!("/at/place/{k}")).and_then(Value::as_str)
+                            == Some(target)
+                        {
                             i["at"]["place"][k] = json!(stand_in);
                         }
                     }

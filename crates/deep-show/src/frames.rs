@@ -27,7 +27,13 @@ pub fn op_issue(i: &OpIssue) -> Issue {
     let actual = i.actual.clone().unwrap_or(Value::Null);
     // #544: a read a logic item doesn't declare names its close declared names as the canvas
     // does an unknown kind's.
-    let close = actual.get("close").and_then(Value::as_array).into_iter().flatten().map(|n| json!({"name": n})).collect();
+    let close = actual
+        .get("close")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .map(|n| json!({"name": n}))
+        .collect();
     let issue = match &i.item {
         Some(id) => Issue::error(i.code, id, i.path.clone(), actual, &what),
         None => Issue::envelope(i.code, i.path.clone(), actual, &what),
@@ -247,7 +253,10 @@ impl<'a> Hub<'a> {
         }
         // Planted (#504): a document with controls runs a program through the sandbox each frame.
         if self.planted(crate::hub::Planted::BoardRunsProgramPerFrame)
-            && self.forms.get(&e.doc).is_some_and(|f| f.get("controls").is_some())
+            && self
+                .forms
+                .get(&e.doc)
+                .is_some_and(|f| f.get("controls").is_some())
         {
             self.sandbox.runs += 1;
         }
@@ -255,7 +264,9 @@ impl<'a> Hub<'a> {
             return json!({"outcome": "refused", "code": "no_revision", "issues": []});
         };
         // #544's planted start_on: a run starts at the session's first frame at or after it.
-        if self.scenario.planted == Some(crate::hub::Planted::StartOnAtFirstFrame) && !self.first_frames.contains_key(&e.doc) {
+        if self.scenario.planted == Some(crate::hub::Planted::StartOnAtFirstFrame)
+            && !self.first_frames.contains_key(&e.doc)
+        {
             self.first_frames.insert(e.doc.clone(), t);
             if let Some(mut d) = session.document().cloned() {
                 crate::logic::from_first_frame(&mut d, t);
@@ -312,11 +323,12 @@ impl<'a> Hub<'a> {
         // #535: a logic column's row whose value goes out of range raises column.out_of_range at
         // the frame of the step its excursion begins.
         if let (Some(doc), Some(list)) = (evaluated.document(), reply["issues"].as_array_mut()) {
-            list.extend(
-                deep_canvas::columns::raised_at(doc, t)
-                    .iter()
-                    .map(|i| i.to_json()),
-            );
+            // #537: and scene3d's readers', an instancer's columns and a line's points.
+            let raised = [
+                deep_canvas::columns::raised_at(doc, t),
+                deep_canvas_scene3d::arrays::raised_at(doc, t),
+            ];
+            list.extend(raised.iter().flatten().map(|i| i.to_json()));
         }
         if !e.arrays.is_empty() {
             // #497: each named array as this frame read it.
@@ -325,12 +337,21 @@ impl<'a> Hub<'a> {
                 .iter()
                 .map(|name| {
                     let v = evaluated.array(&self.sched, name);
-                    let n = v.as_ref().and_then(|v| v.as_typed::<i64>()).map(|n| json!(*n));
-                    let x = v.as_ref().and_then(|v| v.as_typed::<f64>()).map(|x| json!(*x));
+                    let n = v
+                        .as_ref()
+                        .and_then(|v| v.as_typed::<i64>())
+                        .map(|n| json!(*n));
+                    let x = v
+                        .as_ref()
+                        .and_then(|v| v.as_typed::<f64>())
+                        .map(|x| json!(*x));
                     (name.clone(), n.or(x).unwrap_or(Value::Null))
                 })
                 .collect();
             reply["arrays"] = Value::Object(read);
+        }
+        if !e.paths.is_empty() {
+            reply["values"] = crate::query::values(&self.sched, evaluated, &e.paths);
         }
         if self.startup.test_build {
             reply["access"] = json!(report
@@ -340,7 +361,11 @@ impl<'a> Hub<'a> {
                 .collect::<Vec<_>>());
         }
         // #493: a 2D film's shots: the sides its frame draws, and the film block.
-        let reduced = e.view.get("reduced_motion").and_then(Value::as_bool).unwrap_or(false);
+        let reduced = e
+            .view
+            .get("reduced_motion")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
         let program = crate::film::program_of(&self.sched, evaluated);
         let document = evaluated.document().cloned();
         let sides = match (&program, &document) {
@@ -364,7 +389,11 @@ impl<'a> Hub<'a> {
         if e.film {
             let glyphs = drawing
                 .as_ref()
-                .and_then(|d| self.renderer.prepare_drawing(d, &self.scenario.evidence).ok())
+                .and_then(|d| {
+                    self.renderer
+                        .prepare_drawing(d, &self.scenario.evidence)
+                        .ok()
+                })
                 .map(|d| d.glyphs())
                 .unwrap_or_default();
             reply["film"] = match (&program, &document) {
@@ -431,9 +460,15 @@ impl<'a> Hub<'a> {
         let size = size.unwrap_or_else(|| snapshot::px(drawn.frame.size));
         let rgba = if self.renderer.caption.is_some() {
             // #502: the caption layer draws over every item and under the status marks.
-            let mut rgba = self.renderer.raster(&drawn.part(drawn.view, true, false), size, self.ground(opaque));
+            let mut rgba = self.renderer.raster(
+                &drawn.part(drawn.view, true, false),
+                size,
+                self.ground(opaque),
+            );
             self.caption_over(&mut rgba, size);
-            let status = self.renderer.raster(&drawn.part(drawn.view, false, true), size, None);
+            let status = self
+                .renderer
+                .raster(&drawn.part(drawn.view, false, true), size, None);
             snapshot::over(&mut rgba, &status);
             rgba
         } else {
@@ -466,19 +501,20 @@ impl<'a> Hub<'a> {
         sides: &crate::film::Sides,
         doc: &Value,
     ) -> Result<(String, Drawn, [u16; 2]), Unfit> {
-        let (rgba, status, size) = self.film_rgba(drawing, size, sides, doc, true)?;
+        let (rgba, status, size) = self.film_rgba(drawing, size, sides, doc, (true, None))?;
         Ok((self.put_png(rgba, size)?, status, size))
     }
 
     /// #501: the raster [`Hub::film_png`] stores, as [`Hub::canonical_rgba`] is to
-    /// [`Hub::canonical_png`].
+    /// [`Hub::canonical_png`]; an export's (#157) opaque sides each through their look's print
+    /// finish at `print_at` (its grain), as the canvas shows them.
     pub(crate) fn film_rgba(
         &mut self,
         drawing: &Painted,
         size: Option<[u16; 2]>,
         sides: &crate::film::Sides,
         doc: &Value,
-        opaque: bool,
+        (opaque, print_at): (bool, Option<i64>),
     ) -> Result<(Vec<u8>, Drawn, [u16; 2]), Unfit> {
         let drawn = self
             .renderer
@@ -490,7 +526,14 @@ impl<'a> Hub<'a> {
         let mut pictures = Vec::with_capacity(sides.sides.len());
         for side in &sides.sides {
             let part = drawn.part(Some(crate::film::view(&side.pose, frame)), true, false);
-            let mut rgba = self.renderer.raster(&part, size, ground);
+            let printed = match print_at
+                .filter(|_| opaque)
+                .and_then(|t| Some((t, self.print_look(doc, side.look.as_deref())?)))
+            {
+                Some((t, def)) => self.print_part(&def, doc, &part, size, t)?,
+                None => None,
+            };
+            let mut rgba = printed.unwrap_or_else(|| self.renderer.raster(&part, size, ground));
             if let Some(map) = side.look.as_deref().and_then(|l| self.tone_of(doc, l)) {
                 crate::film::finish(&mut rgba, map);
             }
@@ -511,11 +554,7 @@ impl<'a> Hub<'a> {
     /// A shot's look's tone map: the look@1 the document names by asset, read from the evidence
     /// store (#1162's way).
     fn tone_of(&self, doc: &Value, name: &str) -> Option<deep_canvas_marks::finish::ToneMap> {
-        let sha = doc.pointer(&format!("/assets/{name}/sha256"))?.as_str()?;
-        let bytes = (sha.len() == 64)
-            .then(|| std::fs::read(self.scenario.evidence.join(&sha[..2]).join(&sha[2..])).ok())
-            .flatten()?;
-        let def: Value = serde_json::from_slice(&bytes).ok()?;
+        let def = self.look_named(doc, name)?;
         deep_canvas_marks::finish::read_tone_map(def.get("tone_map")).ok()
     }
 
@@ -1568,7 +1607,12 @@ mod story_tests {
             (2 * SECOND, "30", "2002", "140", "100", 140.0),
         ] {
             live.frame(&mut s, t, &default_view(&doc));
-            let refused: Vec<_> = live.report.issues.iter().map(|i| (i.code, &i.path)).collect();
+            let refused: Vec<_> = live
+                .report
+                .issues
+                .iter()
+                .map(|i| (i.code, &i.path))
+                .collect();
             assert!(refused.is_empty(), "at {t}: {refused:?}");
             let drawing = live
                 .value(&s, "marks2d.frame", None)

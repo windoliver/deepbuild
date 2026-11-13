@@ -80,6 +80,8 @@ pub struct Plants {
     pub(crate) builds_unread_targets: bool,
     /// #1173's: scene3d's sample count (session3::msaa_planted) and the claimed one.
     planted: Option<Planted>,
+    /// #173's: frames a planted window keeps past its own.
+    history_past: u32,
 }
 
 impl Plants {
@@ -112,6 +114,7 @@ impl Plants {
             settles_with_fallback: p == Some(Planted::SettlesWithFallback),
             builds_unread_targets: p == Some(Planted::BuildsUnreadTargets),
             planted: p,
+            history_past: u32::from(p == Some(Planted::KeepsFramePastWindow)),
         }
     }
 }
@@ -286,27 +289,6 @@ fn open_of(v: &Value, windows: &[String]) -> Option<Open> {
     })
 }
 
-/// The look's `history` window: 0 for none.
-fn history_of(look: &Value) -> Result<u32, String> {
-    match look.get("history") {
-        None | Some(Value::Null) => Ok(0),
-        Some(h) => match h["mode"].as_str().unwrap_or("antialias") {
-            "none" => Ok(0),
-            "antialias" | "upscale" => {
-                let w = h["window"].as_u64().unwrap_or(8);
-                if (2..=16).contains(&w) {
-                    Ok(w as u32)
-                } else {
-                    Err("look: history.window is 2 to 16".into())
-                }
-            }
-            other => Err(format!(
-                "look: history.mode {other} is none, antialias or upscale"
-            )),
-        },
-    }
-}
-
 fn parse(call: &Value, out: &str) -> Result<Args, Value> {
     let bad = |what: &str| refused("bad_input", what);
     let test_build = cfg!(feature = "test-meter");
@@ -321,7 +303,11 @@ fn parse(call: &Value, out: &str) -> Result<Args, Value> {
         .filter(|f| *f >= 1)
         .ok_or_else(|| bad("fps"))?;
     let look = Look3::read(&call["look"]).map_err(|e| bad(&format!("look: {e}")))?;
-    let history = history_of(&call["look"]).map_err(|e| bad(&e))?;
+    let history = if look.history.on() {
+        look.history.window
+    } else {
+        0
+    };
     let windows = match call.get("windows") {
         None => vec!["main".to_string()],
         Some(ws) => {
@@ -678,7 +664,7 @@ fn issue(code: &str, path: &str, actual: Value, what: &str) -> Value {
 pub(crate) struct Admitted {
     pub(crate) doc: Value,
     pub(crate) frames: Content,
-    class: Option<Class>,
+    pub(crate) class: Option<Class>,
     pub(crate) limits: Limits,
     pub(crate) fit: Estimate,
     pub(crate) size: [u32; 2],
@@ -732,7 +718,9 @@ fn warm_up(
         if crate::flat::is_flat(&doc) {
             continue;
         }
-        let Ok(mut frames) = Frames::compile(&doc).and_then(|p| Frames::with_program(&doc, p, look, labels)) else {
+        let Ok(mut frames) =
+            Frames::compile(&doc).and_then(|p| Frames::with_program(&doc, p, look, labels))
+        else {
             continue;
         };
         for (j, t) in crate::warm::times(&doc).into_iter().enumerate() {
@@ -834,7 +822,12 @@ pub(crate) fn admit(
     }
     let frames = content_with(&doc, program, look, labels)?;
     let moving = camera_moves(&doc);
-    let base_scale = if moving { limits.scale_moving } else { 1.0 };
+    // Frame history's upscale renders at the look's scale (#173).
+    let base_scale = match look.history.mode {
+        _ if !moving => 1.0,
+        deep_canvas_scene3d::history::Mode::Upscale => look.history.scale,
+        _ => limits.scale_moving,
+    };
     let effects = doc["items"]
         .as_object()
         .is_some_and(|items| items.values().any(|i| i["kind"] == "test.burn@1"));
@@ -1519,6 +1512,11 @@ impl Live {
                 v.scale = rev.fit.scale.min(ses.surface.scale);
                 v.window = rev.fit.history;
             }
+        }
+        // Frame history on the grid of the frames the view shows, one a call frame (#173).
+        if let Some(v) = ses.view.as_mut() {
+            let past = self.plants.history_past;
+            let _ = v.hold_history(&self.args.look, rev.fit.history, self.args.fps as u32, past);
         }
         #[cfg(feature = "test-meter")]
         if let Some(v) = ses.view.as_mut() {
@@ -2288,7 +2286,8 @@ impl Live {
                         .and_then(|ses| ses.view.as_ref())
                         .and_then(|v| v.ops.pass_of(m.name))
                     {
-                        self.pass_ops.insert(self.passes.len(), (key, members.to_vec()));
+                        self.pass_ops
+                            .insert(self.passes.len(), (key, members.to_vec()));
                     }
                     self.passes.push(PassRow {
                         name: m.name,

@@ -10,10 +10,7 @@
 //! accessibility tree a screen reader sees and the observed elements a replica reads back are the same set of nodes,
 //! and a named id is its author ID in both (#1459).
 
-use std::{
-    cell::Cell, cell::RefCell, collections::HashMap, sync::mpsc::TryRecvError, sync::Arc,
-    time::Duration,
-};
+use std::{cell::Cell, cell::RefCell, collections::HashMap, sync::Arc, time::Duration};
 
 use gpui_kit::base::dock::{
     register_panel, DockArea, DockAreaState, DockPlacement, DockState, Panel, PanelEvent,
@@ -50,15 +47,16 @@ const CUT_TO: usize = 24;
 const SESSION_PAGE: &str = "session-page";
 /// How often an open terminal tab reads its grid again.
 const TERMINAL_TICK: Duration = Duration::from_millis(250);
-/// How often the window looks for what setup said, while it runs (#1556).
-const SET_UP_TICK: Duration = Duration::from_millis(50);
-/// What the window says in place of Set up while setup runs.
-pub const SETTING_UP: &str = "Setting up…";
 /// How often the Agents page reads the hub's model again.
 const AGENTS_TICK: Duration = Duration::from_secs(2);
 /// The diff lines the Agents page shows of each file, and the width a line is cut to, in points.
 const DIFF_LINES: usize = 8;
 const DIFF_WIDTH: f32 = 1060.;
+/// The list as last built, with the reading of the record it was built from.
+type Built = (
+    std::rc::Rc<(Vec<crate::list::Ask>, Vec<crate::list::Session>)>,
+    Vec<crate::list::Item>,
+);
 /// In no shipped build (#1457). What a replica's fixture panels read through `deepbuild.needs_you`, and its virtual clock: the inbox projection at
 /// a log position. The replica, the live capture and the registry checks set it before opening the shell. No view
 /// reads it: every view draws the record through the one reader, with the same tree in the app and in a replica
@@ -241,10 +239,8 @@ struct TerminalTab {
 pub struct Shipped {
     kind: Kind,
     focus_handle: FocusHandle,
-    /// What Home's Set up click said, once clicked.
-    set_up: Option<String>,
-    /// The wait for what setup says, while it runs off the UI thread (#1556).
-    setting_up: Option<Task<()>>,
+    /// The first-launch page's Set up (#1100).
+    pub(crate) welcome: crate::welcome::Welcome,
     /// The sidebar's open session and the one keyboard focus is on (#1003).
     rows: SidebarRows,
     /// The rows, by index, the replica opens the sidebar with: read at its first frame, when the sidebar also
@@ -265,12 +261,20 @@ pub struct Shipped {
     /// The row a press went down on and when: a press on a row that just moved is dropped (#1461).
     pressed: Option<(String, u64)>,
     /// The list as last built, with the reading of the record it was built from.
-    built: Option<(
-        std::rc::Rc<(Vec<crate::list::Ask>, Vec<crate::list::Session>)>,
-        Vec<crate::list::Item>,
-    )>,
+    built: Option<Built>,
     /// What you typed in the list, and when the last key came: typing moves to the first row it starts (#1462).
     typed: (String, u64),
+    /// The first of the list's items drawn: the drawn rows follow the keyboard, so the row it's on is in view (#2021).
+    list_first: usize,
+    /// The session whose name is being typed in its page's title (#2018), and the field.
+    renaming: Option<Renaming>,
+}
+
+/// A session's page's title while you rename it (#2018): the field holds the name, and Return saves it.
+struct Renaming {
+    session: String,
+    input: Entity<gpui_kit::base::input::InputState>,
+    _entered: Subscription,
 }
 
 /// The sidebar's open session, drawn in the selected fill with a bar at its leading edge, and the one keyboard focus
@@ -338,11 +342,13 @@ impl Shipped {
         });
         // The record and the bound values reach the view through the entity it observes (#1546).
         crate::record::observe(cx);
+        if kind == Kind::Session {
+            SESSION_VIEW.with(|view| *view.borrow_mut() = Some(cx.entity().downgrade()));
+        }
         Self {
             kind,
             focus_handle: cx.focus_handle(),
-            set_up: None,
-            setting_up: None,
+            welcome: Default::default(),
             rows: SidebarRows::default(),
             start: (kind == Kind::Sidebar).then(|| SIDEBAR_ROWS.with(std::cell::Cell::get)),
             terminal: None,
@@ -356,7 +362,53 @@ impl Shipped {
             pressed: None,
             built: None,
             typed: (String::new(), 0),
+            list_first: 0,
+            renaming: None,
         }
+    }
+
+    /// Puts the caret in `session`'s page's title, in a field holding its name (#2018): Return saves what it holds as
+    /// the name you gave it, through the hub, and the field going out of focus leaves the name as it was.
+    fn start_rename(&mut self, session: String, window: &mut Window, cx: &mut Context<Self>) {
+        use gpui_kit::base::input::{InputEvent, InputState};
+        let name =
+            crate::record::with_view(|view| view.table().title(&session)).unwrap_or_default();
+        let input = cx.new(|cx| InputState::new(window, cx).default_value(name));
+        let entered = cx.subscribe_in(
+            &input,
+            window,
+            |this: &mut Self, input, event: &InputEvent, _, cx| match event {
+                InputEvent::PressEnter { .. } => {
+                    let name = input.read(cx).value().trim().to_owned();
+                    if let Some(renaming) = this.renaming.take() {
+                        if !name.is_empty() {
+                            crate::actions::hub_write(
+                                "session.rename",
+                                json!({ "session": renaming.session, "name": name }),
+                                "Rename".into(),
+                                cx,
+                            );
+                        }
+                    }
+                    TITLE_KEYS.with(|keys| keys.borrow_mut().take());
+                    cx.notify();
+                }
+                InputEvent::Blur => {
+                    this.renaming = None;
+                    TITLE_KEYS.with(|keys| keys.borrow_mut().take());
+                    cx.notify();
+                }
+                _ => {}
+            },
+        );
+        input.update(cx, |input, cx| input.focus(window, cx));
+        TITLE_KEYS.with(|keys| *keys.borrow_mut() = Some(input.read(cx).focus_handle(cx)));
+        self.renaming = Some(Renaming {
+            session,
+            input,
+            _entered: entered,
+        });
+        cx.notify();
     }
 
     /// A key while the list holds the keyboard (#1462): the arrows move along it, Return opens the row, and a letter
@@ -441,28 +493,6 @@ impl Shipped {
             self.agents = page;
             cx.notify();
         }
-    }
-
-    /// The Set up click: setup runs on a thread of its own (#1556), the window says it's working, and a tick on the UI
-    /// thread picks up what it said.
-    fn start_set_up(&mut self, cx: &mut Context<Self>) {
-        let heard = crate::setup::start();
-        self.setting_up = Some(cx.spawn(async move |this, cx| loop {
-            cx.background_executor().timer(SET_UP_TICK).await;
-            let said = match heard.try_recv() {
-                Ok(said) => said.unwrap_or_else(|error| error),
-                Err(TryRecvError::Empty) => continue,
-                Err(TryRecvError::Disconnected) => "deep setup stopped without a word".to_owned(),
-            };
-            let _ = this.update(cx, |this, cx| {
-                crate::setup::refresh();
-                this.set_up = Some(said);
-                this.setting_up = None;
-                cx.notify();
-            });
-            return;
-        }));
-        cx.notify();
     }
 
     /// Opens the Terminal tab of `session`'s page on what the hub's canvas core holds for it.
@@ -724,6 +754,19 @@ thread_local! {
     static TERMINAL_KEYS: RefCell<Option<FocusHandle>> = const { RefCell::new(None) };
     /// Whether the page that is the box alone gives the box the keys when it next draws (#1461).
     static FOCUS_BOX: Cell<bool> = const { Cell::new(false) };
+    /// The session's page's view, and the keys of its title's field while you rename the session (#2018).
+    static SESSION_VIEW: RefCell<Option<WeakEntity<Shipped>>> = const { RefCell::new(None) };
+    static TITLE_KEYS: RefCell<Option<FocusHandle>> = const { RefCell::new(None) };
+}
+
+/// Rename, from the Session menu (#2018): the caret goes in `session`'s page's title, and Return saves the name.
+pub fn rename(session: &str, window: &mut Window, cx: &mut App) {
+    let Some(page) = SESSION_VIEW.with(|view| view.borrow().as_ref().and_then(WeakEntity::upgrade))
+    else {
+        return;
+    };
+    let session = session.to_owned();
+    page.update(cx, |page, cx| page.start_rename(session, window, cx));
 }
 
 /// The page that is the box alone gives the box the keys when it next draws (#1461).
@@ -743,6 +786,13 @@ pub fn focus_id(window: &Window) -> Option<String> {
             .is_some_and(|keys| keys.is_focused(window))
     }) {
         return Some("terminal".to_owned());
+    }
+    if TITLE_KEYS.with(|keys| {
+        keys.borrow()
+            .as_ref()
+            .is_some_and(|keys| keys.is_focused(window))
+    }) {
+        return Some("session-title".to_owned());
     }
     if crate::words::focused(window) {
         return Some("box-draft".to_owned());
@@ -781,6 +831,15 @@ pub fn list_focused(window: &Window) -> Option<String> {
     keys.is_focused(window)
         .then(|| RING.with(|ring| ring.borrow().clone()))
         .flatten()
+}
+
+/// Whether the list holds the keyboard, its ring drawn yet or not.
+pub(crate) fn list_has_keys(window: &Window) -> bool {
+    LIST_KEYS.with(|keys| {
+        keys.borrow()
+            .as_ref()
+            .is_some_and(|(keys, _)| keys.is_focused(window))
+    })
 }
 
 /// The open asks in the order Needs you draws them, each with its question: open ones oldest first, then those put
@@ -847,6 +906,21 @@ fn keyboard_rows(items: &[crate::list::Item]) -> Vec<ListRow> {
         }
     }
     rows
+}
+
+/// Where the list's keyboard row `on` is among `items`: a row by its id, a project's heading by `project:<project>`.
+fn item_at(items: &[crate::list::Item], on: &str) -> Option<usize> {
+    items
+        .iter()
+        .position(|item| match (item, on.strip_prefix("project:")) {
+            (crate::list::Item::Heading { id, .. }, Some(project)) => {
+                id.strip_prefix("heading:").is_some_and(|name| {
+                    crate::list::project_id((name != "none").then_some(name)) == project
+                })
+            }
+            (item, None) => item.id() == on,
+            _ => false,
+        })
 }
 
 /// A project's heading (#1461) and, inside it, the row the keyboard reaches it by, `project:<project>`, which opens
@@ -1004,7 +1078,7 @@ fn context_menu(window: &Window) -> Option<AnyElement> {
 }
 
 /// A line of text that is one accessibility node: a label named by its text, in the body role (#1458).
-fn label(
+pub(crate) fn label(
     id: impl Into<ElementId>,
     text: impl Into<SharedString>,
 ) -> ObservedElement<Stateful<Div>> {
@@ -1289,6 +1363,11 @@ fn read(view: &crate::record::View, kind: Kind, opened: Option<&str>) -> Record 
                     .flat_map(str::lines)
                     .map(str::to_owned),
             );
+            // Why its turn ended failed and the reasons the core gave its verdict, in words (#2029).
+            let stopped = table.stopped(session);
+            details.extend(stopped.map(|(cause, core)| crate::codes::stopped(&cause, &core)));
+            let why = table.why(session).iter();
+            details.extend(why.map(|(code, text)| crate::codes::reason(code, text)));
             if crate::plain::planted("session-page-line-pr") {
                 details.push(crate::plain::PLANTED_PR_LINE.to_owned());
             }
@@ -1510,19 +1589,44 @@ fn row_slot(row: &str, slot: &str, name: String) -> ObservedElement<Stateful<Div
         .aria_label(name)
 }
 
+/// Where a working mark's core sits in its slot at each step, in steps of the look's smallest space: it moves one step
+/// for each event its session's hooks send, and holds still while none comes (#2021).
+const MARK_STEPS: [usize; 4] = [0, 1, 2, 1];
+
 /// One row of the list (#1461): one line, 32 tall, with fixed slots: the mark in 16 and 8 after it, the title, then
 /// the state word and a time at least 32 wide at the right edge. An unread or asking row's title is medium; a settled
-/// row's is regular in the secondary ink. Its name holds what's drawn and what's cut.
+/// row's is regular in the secondary ink. Its name holds what's drawn and what's cut, and a working session's what its
+/// turn is doing now (#2021). Under reduce motion, `still`, a working mark holds still and its time says when its
+/// session's last event came.
 fn list_row(
     row: &crate::list::Row,
     selected: bool,
     focused: bool,
+    still: bool,
     now: u64,
     chrome: &chrome::Chrome,
 ) -> ObservedElement<Stateful<Div>> {
     let s = sizes();
     let ask = row.id.starts_with("ask:");
-    let time = row.time.map(|t| time_of(t, now)).unwrap_or_default();
+    let working = row.entry == "running" && row.id.starts_with("session:");
+    let time = match row.hooks.1 {
+        Some(heard) if still && working => {
+            format!("{} ago", time_of(crate::list::Time::Since(heard), now))
+        }
+        _ => row.time.map(|t| time_of(t, now)).unwrap_or_default(),
+    };
+    // The working mark's step: one per event, or, in #2021's planted app, one each 300 ms whatever comes.
+    let step = if !working {
+        0
+    } else if crate::plain::planted("mark-on-timer") {
+        states::changes_after(300 - now % 300);
+        MARK_STEPS[(now / 300 % 4) as usize]
+    } else if still {
+        0
+    } else {
+        MARK_STEPS[(row.hooks.0 % 4) as usize]
+    };
+    let line = row.doing.as_ref().map(|doing| doing.line(now));
     let reach = crate::notify::reach();
     // An ask's row reads as its question, its handle nowhere drawn (#1172) and its id (#1459). The planted rows show
     // the handle, or are keyed by their place.
@@ -1539,8 +1643,30 @@ fn list_row(
         }
     } else if cfg!(feature = "plant-row-title-only") {
         title.clone()
+    } else if ["BLOCKED", "INVALID", "INCONCLUSIVE"].contains(&row.word.as_str())
+        && !row.why.is_empty()
+    {
+        // A verdict that isn't PASS or FAIL never reads as the bare word (#2018): the row is one line, so its name
+        // holds whom it waits for and the evidence it leaves open.
+        format!(
+            "{} {title} · {} · {}",
+            states::glyph(row.entry),
+            row.word,
+            row.why
+        )
+    } else if let Some(line) = &line {
+        format!(
+            "{} {title} · {} · {line}",
+            states::glyph(row.entry),
+            row.word
+        )
     } else {
         format!("{} {title} · {}", states::glyph(row.entry), row.word)
+    };
+    // Its one flag beside its word (#2019), with what it says: the row is one line, so its name holds the rest.
+    let name = match &row.flag {
+        Some(flag) => format!("{name} · {}: {}", flag.code, flag.text),
+        None => name,
     };
     let id = if ask && cfg!(feature = "plant-row-index-ids") {
         format!("ask-{}", row.id.len())
@@ -1548,6 +1674,15 @@ fn list_row(
         row.id.clone()
     };
     let whole: SharedString = name.clone().into();
+    // A session's name with the short ID the hub added to tell it from a twin (#2018), apart.
+    let twin = row
+        .id
+        .strip_prefix("session:")
+        .map(|session| format!(" · {}", &session[..session.len().min(8)]))
+        .and_then(|short| {
+            let name = title.strip_suffix(short.as_str())?.to_owned();
+            Some((name, short))
+        });
     let ring = if focused {
         chrome.focus
     } else {
@@ -1580,9 +1715,13 @@ fn list_row(
     } else {
         row_slot(&id, "time", time.clone()).child(time)
     };
-    // #1461's planted row is 24 tall.
+    // #1461's planted row is 24 tall; #2021's selected row takes a second line, its session's line.
+    let second = (selected && crate::plain::planted("selected-second-line") && !ask)
+        .then(|| line.clone().unwrap_or_default());
     let tall = if crate::plain::planted("row-24") {
         s.space(4)
+    } else if second.is_some() {
+        s.space(5) * 2.
     } else {
         s.space(5)
     };
@@ -1622,7 +1761,12 @@ fn list_row(
                 .mr(s.space(1))
                 .flex()
                 .items_center()
-                .child(div().size(s.space(1)).bg(rgb(states::color(row.entry)))),
+                .child(
+                    div()
+                        .size(s.space(1))
+                        .ml(s.space(0) * step as f32)
+                        .bg(rgb(states::color(row.entry))),
+                ),
         )
         .child(
             // Each slot the row's full height, so the slots read in the row's order, left to right.
@@ -1632,7 +1776,6 @@ fn list_row(
                 .h_full()
                 .flex()
                 .items_center()
-                .truncate()
                 .text_color(ink)
                 // Unread or asking stands out by weight alone: the chrome's face has no medium of its own, so it
                 // takes the next weight it has (#1461).
@@ -1641,7 +1784,14 @@ fn list_row(
                 } else {
                     FontWeight::NORMAL
                 })
-                .child(title),
+                .map(|slot| match twin {
+                    // The short ID that tells a session from its twin stays in view (#2018): a name too long for
+                    // the row is cut, its ID never.
+                    Some((name, short)) => slot
+                        .child(div().min_w_0().truncate().child(name))
+                        .child(div().flex_none().child(short)),
+                    None => slot.truncate().child(title),
+                }),
         )
         .child(
             row_slot(&id, "word", row.word.clone())
@@ -1653,6 +1803,17 @@ fn list_row(
                 .text_color(chrome.ink_secondary)
                 .child(drawn_word),
         )
+        // The flag, at most one, in the right slot beside the word (#2019): never a state, so in the word's ink.
+        .children(row.flag.as_ref().map(|flag| {
+            row_slot(&id, "flag", format!("{}: {}", flag.code, flag.text))
+                .flex_none()
+                .h_full()
+                .flex()
+                .items_center()
+                .pl(s.space(1))
+                .text_color(chrome.ink_secondary)
+                .child(flag.code.clone())
+        }))
         .child(
             time_slot
                 .flex_none()
@@ -1664,6 +1825,14 @@ fn list_row(
                 .justify_end()
                 .text_color(chrome.ink_secondary),
         )
+        .children(second.map(|line| {
+            div()
+                .absolute()
+                .bottom_0()
+                .left(s.space(4))
+                .text_color(chrome.ink_secondary)
+                .child(line)
+        }))
 }
 
 /// A heading of the list (#1461): 32 tall with 8 above it, its title in the body role at medium weight, its value the
@@ -1700,6 +1869,12 @@ fn needs_you_count(
     // #2026's planted count leaves out a decision's close: each ask a decision closed counts as open.
     let count = if crate::plain::planted("home-skips-decision-close") {
         count + crate::record::with_view(|view| view.table().decided()).unwrap_or(0)
+    } else {
+        count
+    };
+    // #2028's planted count adds the list's unread rows to the asks.
+    let count = if crate::plain::planted("list-adds-unread") {
+        count + crate::list::unread_rows()
     } else {
         count
     };
@@ -1979,7 +2154,7 @@ impl Render for Shipped {
                 }
                 // #1461's planted list draws each agent waiting for a first session as a row.
                 if crate::plain::planted("agent-as-row") && items.is_empty() {
-                    items.push(crate::list::Item::Row(crate::list::Row {
+                    items.push(crate::list::Item::Row(Box::new(crate::list::Row {
                         id: "session:claude-code".to_owned(),
                         address: Address::session("claude-code"),
                         title: "Claude Code".to_owned(),
@@ -1989,7 +2164,11 @@ impl Render for Shipped {
                         time: None,
                         loud: false,
                         left: false,
-                    }));
+                        why: String::new(),
+                        doing: None,
+                        hooks: (0, None),
+                        flag: None,
+                    })));
                 }
                 let popped = crate::open::popped(cx) == Some(Kind::NeedsYou);
                 let replaced = NEEDS_YOU_VIEW.with(|view| view.borrow().clone());
@@ -2008,23 +2187,48 @@ impl Render for Shipped {
                 };
                 items.retain(|item| !skip(item) && !hidden(item));
                 // The rows the keyboard walks, in the list's order (#1462): each ask, then each project's heading and
-                // its rows. Only what fits in the window is drawn: the list doesn't scroll yet (#1808), and a frame
-                // over 700 rows costs what it shows.
+                // its rows, every one of them. #2021's planted list lets the keyboard onto the headings alone.
+                let rows: Vec<ListRow> = keyboard_rows(&items)
+                    .into_iter()
+                    .filter(|row| {
+                        !crate::plain::planted("rows-take-no-focus")
+                            || row.id.starts_with("project:")
+                    })
+                    .collect();
+                // Only what fits in the window is drawn, so a frame over 700 rows costs what it shows, and what's
+                // drawn follows the keyboard: the row it's on is in view with the rows either side of it, so the next
+                // row an arrow goes to is in view too (#2021). The wheel's scrolling is #1808's.
                 let room = window.viewport_size().height;
-                let mut top = s.space(1);
-                let mut fits = 0;
-                for item in &items {
-                    top += match item {
-                        crate::list::Item::Heading { .. } => s.space(5) + s.space(1),
-                        crate::list::Item::Row(_) => s.space(5),
-                    };
-                    if top > room {
-                        break;
+                let fits = |first: usize| {
+                    let mut top = s.space(1);
+                    items[first..]
+                        .iter()
+                        .take_while(|item| {
+                            top += match item {
+                                crate::list::Item::Heading { .. } => s.space(5) + s.space(1),
+                                crate::list::Item::Row(_) => s.space(5),
+                            };
+                            top <= room
+                        })
+                        .count()
+                };
+                let mut first = self.list_first.min(items.len());
+                if let Some(on) = self
+                    .rows
+                    .focused
+                    .as_deref()
+                    .and_then(|on| item_at(&items, on))
+                {
+                    let shown = (on + 1).min(items.len() - 1);
+                    first = first.min(on.saturating_sub(1));
+                    while shown >= first + fits(first).max(1) && first < on {
+                        first += 1;
                     }
-                    fits += 1;
                 }
-                items.truncate(fits);
-                let rows = keyboard_rows(&items);
+                self.list_first = first;
+                let drawn_to = first + fits(first);
+                items.truncate(drawn_to);
+                items.drain(..first);
                 if let Some((selected, focused)) = self.start.take() {
                     let id = |at: Option<usize>| {
                         at.and_then(|i| {
@@ -2074,9 +2278,21 @@ impl Render for Shipped {
                     match item {
                         crate::list::Item::Heading { id, title, count } => {
                             if id == crate::list::HEADING {
+                                // #2018's planted list counts the asks that went moot with the open ones.
+                                let moot = if crate::plain::planted("group-count-moot") {
+                                    crate::record::with_view(|view| {
+                                        view.events
+                                            .iter()
+                                            .filter(|event| event["kind"] == "ask.moot")
+                                            .count()
+                                    })
+                                    .unwrap_or(0)
+                                } else {
+                                    0
+                                };
                                 drawn.push(
                                     needs_you_heading(
-                                        count.unwrap_or(0),
+                                        count.unwrap_or(0) + moot,
                                         empty,
                                         now,
                                         false,
@@ -2139,7 +2355,7 @@ impl Render for Shipped {
                             let address = row.address.clone();
                             let actions = id.starts_with("session:") || id.starts_with("ask:");
                             drawn.push(
-                                list_row(row, selected, ring, now, chrome)
+                                list_row(row, selected, ring, cx.reduce_motion(), now, chrome)
                                     // #1462's planted row draws a control only while the pointer is over it.
                                     .when(
                                         cfg!(feature = "plant-hover-only-control")
@@ -2412,6 +2628,7 @@ impl Render for Shipped {
                                     row,
                                     current.as_ref() == Some(&row.address),
                                     false,
+                                    cx.reduce_motion(),
                                     now,
                                     chrome,
                                 )
@@ -2517,25 +2734,92 @@ impl Render for Shipped {
                 // #1458's planted page draws its title at a fourth size.
                 let fourth = crate::plain::planted("fourth-text-size");
                 // Why it reads as it does, in plain words, under its title (#1348, #1461).
-                let (problem, readings): (Vec<String>, Vec<String>) =
+                // Where the hub built the session's row, its word, entry and why are that row's (#2018): the one
+                // reading, on its page as in the list.
+                // What its turn is doing now, at the top of its page (#2021): the row's line, read the one way; and its
+                // flag beside its word, in full: what it says and its fix (#2019).
+                type Read = (
+                    Vec<String>,
+                    Vec<String>,
+                    Option<[String; 3]>,
+                    Option<crate::list::Doing>,
+                    Option<String>,
+                );
+                let (problem, readings, listed, doing, flagged): Read =
                     crate::record::with_view(|view| {
                         let table = view.table();
                         let problem = crate::plain::problem(&table, &session)
                             .map(|(happened, next)| vec![happened, next])
                             .unwrap_or_default();
-                        (problem, table.readings(&session).to_vec())
+                        let row = table.row_of(&format!("session:{session}"));
+                        let listed = row.map(|row| {
+                            ["word", "entry", "why"]
+                                .map(|key| row[key].as_str().unwrap_or_default().to_owned())
+                        });
+                        let doing =
+                            row.and_then(|row| crate::list::doing_of(view, row, &session, now));
+                        let flagged = row.and_then(|row| {
+                            let flag = &row["flag"];
+                            let code = flag["code"].as_str()?;
+                            let fix = flag["fix"].as_str().filter(|fix| !fix.is_empty());
+                            Some(format!(
+                                "{code}: {}{}",
+                                flag["text"].as_str().unwrap_or_default(),
+                                fix.map(|fix| format!(". {fix}")).unwrap_or_default()
+                            ))
+                        });
+                        (
+                            problem,
+                            table.readings(&session).to_vec(),
+                            listed,
+                            doing,
+                            flagged,
+                        )
                     })
                     .unwrap_or_default();
+                let reads = |id: &'static str, name: &str| match &listed {
+                    Some([word, entry, _]) => {
+                        marked(id, states::entry_of(entry), format!("{name} · {word}"))
+                    }
+                    None => status(id, &state, format!("{name} · {}", state.text(now))),
+                };
+                let why = listed
+                    .as_ref()
+                    .filter(|[_, _, why]| !why.is_empty())
+                    .map(|[word, _, why]| format!("{word}: {why}"));
                 let content = div()
                     .flex()
                     .flex_col()
                     .when(session.is_empty(), |content| content.invisible());
+                // While you rename it (#2018), the title is a field holding the name, with the caret in it.
+                let field = self
+                    .renaming
+                    .as_ref()
+                    .filter(|renaming| renaming.session == session)
+                    .map(|renaming| renaming.input.clone());
                 let content = content
-                    .child(page_title(
-                        title("session-title", shown.clone())
+                    .child(page_title(match field {
+                        Some(input) => observed("session-title")
+                            .role(Role::TextInput)
+                            .aria_label(named)
+                            .aria_value(input.read(cx).value())
+                            .h(sizes().title.line + sizes().space(2))
+                            .child(gpui_kit::base::input::Input::new(&input)),
+                        None => title("session-title", shown.clone())
                             .aria_label(named)
                             .when(fourth, |title| title.text_size(px(17.))), // size-literal-exception: #1458's planted wrong program, in an env-plants build only; review 2027-04-30
-                    ))
+                    }))
+                    .children(doing.map(|doing| label("session-doing", doing.line(now)).h_auto()))
+                    .children(why.map(|line| {
+                        label("session-why", crate::question::visible(&line))
+                            .h_auto()
+                            .text_color(chrome.ink_secondary)
+                    }))
+                    .children(flagged.map(|line| {
+                        label("session-flag", crate::question::visible(&line))
+                            .h_auto()
+                            .text_color(chrome.ink_secondary)
+                    }))
                     .children(problem.into_iter().enumerate().map(|(n, line)| {
                         label(("session-problem", n), line)
                             .h_auto()
@@ -2550,11 +2834,7 @@ impl Render for Shipped {
                     }))
                     .children(details)
                     // The session's line, on its page (#1461): from its task to where it stands now, and what you placed there.
-                    .child(status(
-                        "line-status",
-                        &state,
-                        format!("{task} · {}", state.text(now)),
-                    ))
+                    .child(reads("line-status", &task))
                     .children(placed("line"))
                     // The return card: what came back from the session's last stop, with the
                     // values bound to its runs' assertions (#629).
@@ -2562,11 +2842,7 @@ impl Render for Shipped {
                         div()
                             .flex()
                             .flex_col()
-                            .child(status(
-                                "return-card",
-                                &state,
-                                format!("{shown} · {}", state.text(now)),
-                            ))
+                            .child(reads("return-card", &shown))
                             .children(bound_values(bound::Surface::Card, chrome, false)),
                     )
                     .children(tab)
@@ -2633,69 +2909,7 @@ impl Render for Shipped {
                     .children(bound_panel(chrome));
                 page.child(in_lane(content, true))
             }
-            Kind::Welcome => {
-                let said = self.set_up.as_deref();
-                let working = said.is_none() && self.setting_up.is_some();
-                let (ground, ink) = (chrome.ground, chrome.ink_primary);
-                let button = (said.is_none() && !working && crate::setup::needed()).then(|| {
-                    control("set-up", Control::Main, "Set up", chrome)
-                        .on_click(cx.listener(|this, _, _, cx| this.start_set_up(cx)))
-                });
-                page.child(
-                    observed("welcome")
-                        .size_full()
-                        .flex()
-                        .flex_col()
-                        .items_center()
-                        .justify_center()
-                        .gap(sizes().space(4))
-                        .bg(ground)
-                        .typed(sizes().body)
-                        .text_color(ink)
-                        .child(
-                            svg()
-                                .data(brand::WELCOME_LOCKUP)
-                                .w(px(brand::WELCOME_LOCKUP_WIDTH_PX)) // size-literal-exception: the kit's artwork at brand/surfaces.json's size (#79); review 2027-04-30
-                                .h(px(brand::WELCOME_LOCKUP_HEIGHT_PX)) // size-literal-exception: the kit's artwork at brand/surfaces.json's size (#79); review 2027-04-30
-                                .text_color(ink),
-                        )
-                        .children(button)
-                        // #1461's planted first-launch page draws the box beside Set up.
-                        .children(
-                            crate::plain::planted("box-on-first-launch")
-                                .then(words_box)
-                                .flatten(),
-                        )
-                        .children(working.then(|| {
-                            observed("set-up-working")
-                                .role(Role::Label)
-                                .aria_label(SETTING_UP)
-                                .child(SETTING_UP)
-                        }))
-                        .children(said.map(|line| {
-                            observed("set-up-said")
-                                .role(Role::Label)
-                                .aria_label(line.to_owned())
-                                .max_w(relative(0.8))
-                                .text_center()
-                                .child(line.to_owned())
-                        }))
-                        .children(
-                            (said.is_none() && !working)
-                                .then(crate::setup::reason)
-                                .flatten()
-                                .map(|line| {
-                                    observed("set-up-reason")
-                                        .role(Role::Label)
-                                        .aria_label(line.clone())
-                                        // A long path in the reason wraps inside the window, so its fix stays in view.
-                                        .max_w(relative(0.8))
-                                        .text_center()
-                                        .child(line)
-                                }),
-                        ),
-                )
-            }
+            Kind::Welcome => page.child(crate::welcome::page(self, chrome, cx)),
             Kind::Agents => {
                 let inner =
                     agents_page(div().id("agents-page").flex().flex_col(), self, chrome, cx);
@@ -3073,28 +3287,61 @@ fn agents_page(
         .as_ref()
         .and_then(|id| waiting.iter().find(|s| s["id"] == id.as_str()))
         .map(|s| review_panel(s, &name_of, chrome, cx));
-    page.overflow_y_scroll()
-        .child(page_title(title("agents-title", "Agents")))
-        .child(label(
-            "agents-installed",
-            format!("Installed: {}", named(true)),
-        ))
-        .child(
-            label(
-                "agents-missing",
-                format!("Not installed here: {}", named(false)),
+    // Whether each agent's sessions reach DeepBuild, from its newest agent.reach (#2019): one waiting for its first
+    // session says so, and one whose sessions can't reach DeepBuild says why, with its fix.
+    let reach = crate::record::with_view(|view| view.table().agents().to_vec())
+        .unwrap_or_default()
+        .into_iter()
+        .map(|(agent, r)| {
+            let text = |key: &str| r[key].as_str().unwrap_or_default().to_owned();
+            let [how, fix] = match r["state"].as_str() {
+                Some("waiting") => ["Waits for its first session".to_owned(), String::new()],
+                Some("unreachable") => [
+                    format!("Its sessions can't reach DeepBuild: {}", text("why")),
+                    text("fix"),
+                ],
+                _ => ["Its sessions reach DeepBuild".to_owned(), String::new()],
+            };
+            let name = r["name"].as_str().unwrap_or(&agent).to_owned();
+            agents_row(
+                ElementId::Name(format!("agent:{agent}").into()),
+                [name, how, fix],
+                chrome,
             )
-            .text_color(chrome.ink_secondary),
+        })
+        .collect::<Vec<_>>();
+    let page = page
+        .overflow_y_scroll()
+        .child(page_title(title("agents-title", "Agents")));
+    // The planted wrong program draws the page's title alone.
+    if crate::plain::planted("agents-title-only") {
+        return page;
+    }
+    page.child(section(
+        "agents-reach-title",
+        "How each agent reaches DeepBuild",
+    ))
+    .children(reach)
+    .child(label(
+        "agents-installed",
+        format!("Installed: {}", named(true)),
+    ))
+    .child(
+        label(
+            "agents-missing",
+            format!("Not installed here: {}", named(false)),
         )
-        .child(section("agents-servers-title", "MCP servers"))
-        .children(servers)
-        .child(section("agents-skills-title", "Skills"))
-        .children(skills)
-        .child(section("agents-yours-title", "Already in each agent"))
-        .children(yours)
-        .child(section("agents-waiting-title", "Waiting for you"))
-        .children(rows)
-        .children(review)
+        .text_color(chrome.ink_secondary),
+    )
+    .child(section("agents-servers-title", "MCP servers"))
+    .children(servers)
+    .child(section("agents-skills-title", "Skills"))
+    .children(skills)
+    .child(section("agents-yours-title", "Already in each agent"))
+    .children(yours)
+    .child(section("agents-waiting-title", "Waiting for you"))
+    .children(rows)
+    .children(review)
 }
 
 /// One sync's diff, file by file, each with the agents that read it, then Apply, which opens its ask.

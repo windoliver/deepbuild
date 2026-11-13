@@ -395,7 +395,7 @@ struct MapSlot {
 struct Maps {
     slots: array<MapSlot, 5>,
     // x: which maps it has (bit k for map k); y: which read uv1 (bit k); z: 1 to rebuild a
-    // normal map's z and skip its stored one.
+    // normal map's z and skip its stored one; w: 1 for a terrain tile's normals (#2017).
     has: vec4<u32>,
     // x: the normal map's scale; y: the occlusion strength; z: the alpha cutoff (mask);
     // w: the alpha mode's coverage from the base color factor alone.
@@ -413,6 +413,8 @@ struct Maps {
 @group(3) @binding(8) var sampler_normal: sampler;
 @group(3) @binding(9) var sampler_occlusion: sampler;
 @group(3) @binding(10) var sampler_emission: sampler;
+// A terrain tile's plate's full-detail normals (#2017): x and z per sample, row by row.
+@group(3) @binding(40) var terrain_n: texture_2d<f32>;
 
 fn map_uv(k: u32, uv: vec4<f32>) -> vec2<f32> {
     let t = select(uv.xy, uv.zw, (maps.has.y & (1u << k)) != 0u);
@@ -1293,6 +1295,36 @@ fn onb(n: vec3<f32>) -> array<vec3<f32>, 2> {
 fn rotate_q(q: vec4<f32>, v: vec3<f32>) -> vec3<f32> {
     let t = 2.0 * cross(q.xyz, v);
     return v + q.w * t + cross(q.xyz, t);
+}
+
+// A terrain tile's normal at a pixel (#2017): its plate's full-detail normals at the sample cell
+// under the pixel's place on the plate's grid (uv1), mixed across that cell's triangle as the
+// full-detail mesh mixes its vertex normals, so a tile's light holds when its level changes;
+// turned by the part's rotation (a tile's model turns and scales alike on every axis).
+fn terrain_normal(in: MeshOut) -> vec3<f32> {
+    let size = vec2<i32>(textureDimensions(terrain_n));
+    let g = in.uv.zw * vec2<f32>(size - vec2<i32>(1));
+    let c = clamp(vec2<i32>(floor(g)), vec2<i32>(0), max(size - vec2<i32>(2), vec2<i32>(0)));
+    let f = clamp(g - vec2<f32>(c), vec2<f32>(0.0), vec2<f32>(1.0));
+    let n00 = terrain_at(c);
+    let n10 = terrain_at(c + vec2<i32>(1, 0));
+    let n01 = terrain_at(c + vec2<i32>(0, 1));
+    let n11 = terrain_at(c + vec2<i32>(1, 1));
+    // Split as a full-detail cell is, along its (c, r + 1)–(c + 1, r) diagonal.
+    var n: vec3<f32>;
+    if f.x + f.y <= 1.0 {
+        n = n00 + f.x * (n10 - n00) + f.y * (n01 - n00);
+    } else {
+        n = n11 + (1.0 - f.x) * (n01 - n11) + (1.0 - f.y) * (n10 - n11);
+    }
+    let qv = vec3<f32>(unpack2x16snorm(in.mask.y), unpack2x16snorm(in.mask.z).x);
+    return rotate_q(vec4<f32>(qv, sqrt(max(1.0 - dot(qv, qv), 0.0))), n);
+}
+
+// A terrain normal stored as its x and z, its y ≥ 0 rebuilt.
+fn terrain_at(c: vec2<i32>) -> vec3<f32> {
+    let xz = textureLoad(terrain_n, c, 0).xy;
+    return vec3<f32>(xz.x, sqrt(max(1.0 - dot(xz, xz), 0.0)), xz.y);
 }
 
 // A part's anisotropy direction and flake normal at a pixel (#428): the tangent along uv0's u,
@@ -2314,6 +2346,10 @@ fn share(in: MeshOut, front: bool, keyed: bool) -> Share {
 // a solid without a material does; only a material operator's solid asks for it (#429).
 fn shade(in0: MeshOut, front: bool, local_n: vec3<f32>, g: array<vec4<f32>, 2>, keyed: bool) -> Targets {
     var in = in0;
+    // A terrain tile shades from its plate's full-detail normals at every level (#2017).
+    if maps.has.w != 0u {
+        in.normal = terrain_normal(in);
+    }
     // A cutaway hides what lies past its planes (#424); with a cap, a back face seen through the
     // cut shades as the cut face: a matte surface of the cap's role on its plane, facing along
     // its normal, or the role itself under cap_light: flat.
@@ -2353,6 +2389,7 @@ fn shade(in0: MeshOut, front: bool, local_n: vec3<f32>, g: array<vec4<f32>, 2>, 
             m = mapped(in, geometric, m.s, g);
             cutoff = maps.values.z;
         }
+        m.s.base = tinted(m.s.base, in.pick, in.local);
         // A material operator's normal replaces the mapped one, its coat's bends the coat alone,
         // and its occlusion scales only what the map's does: the ambient light (#486).
         if op_normal.w > 0.0 {
@@ -2447,7 +2484,7 @@ fn shade(in0: MeshOut, front: bool, local_n: vec3<f32>, g: array<vec4<f32>, 2>, 
     if lights.count.w > 0u && (in.flags & NO_RECEIVE) == 0u {
         direct = direct * lit_share(in.world, n, curved, in.pos.xy) * contact_at(in.pos.xy);
     }
-    let albedo = paint(in.color);
+    let albedo = tinted(paint(in.color), in.pick, in.local);
     let lit = ambient * occlusion(in.pos.xy, albedo) + vec3<f32>(direct);
     let a = in.emission.w;
     return targets(vec4<f32>(fogged(adjusted(albedo * lit + in.emission.rgb, in.op.w), in.world) * a, a), in.pick);
@@ -2897,6 +2934,7 @@ struct LineOut {
     // the segment's length in m and its ends' clip w, so the dash follows the segment in depth.
     @location(7) @interpolate(flat) dash: vec2<f32>,
     @location(8) @interpolate(flat) metres: vec3<f32>,
+    @location(9) @interpolate(flat) caps: u32,
 };
 
 @vertex
@@ -2915,6 +2953,7 @@ fn line_vs(
     out.color = color;
     out.pick = pick;
     out.joined = (flags >> 3u) & 1u;
+    out.caps = flags >> 6u;
     out.dash = unpack2x16float(dash);
     out.metres = vec3<f32>(0.0);
     if (flags & 16u) != 0u {
@@ -2922,7 +2961,7 @@ fn line_vs(
     } else {
         out.dash = out.dash * frame.px.x;
     }
-    if ca.w <= 0.0 || cb.w <= 0.0 {
+    if ca.w <= 0.0 || cb.w <= 0.0 || (flags & 32u) != 0u {
         out.pos = OFF;
         return out;
     }
@@ -2977,7 +3016,7 @@ fn line_fs(in: LineOut) -> Targets {
         t = clamp(dot(p - in.a, d) / l2, 0.0, 1.0);
     }
     let dist = length(p - (in.a + d * t));
-    let cov = clamp(mix(in.r.x, in.r.y, t) + 0.5 - dist, 0.0, 1.0);
+    let cov = capped(in, p, t, clamp(mix(in.r.x, in.r.y, t) + 0.5 - dist, 0.0, 1.0));
     if cov <= 0.0 {
         discard;
     }

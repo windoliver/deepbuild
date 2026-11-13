@@ -217,6 +217,8 @@ export interface Verdict {
   /** A check never started on it because a newer claim changed its inputs. */
   stale: boolean;
   reasons: string[];
+  /** The reasons the core gave it of its own, each by its code (verdict.reason@1) with its sentence among `reasons` (#2029). */
+  why?: { reason: string; text: string }[];
   checks: CheckResult[];
   requirements: RequirementOutcome[];
   smallest: string | null;

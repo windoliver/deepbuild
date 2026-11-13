@@ -11,7 +11,7 @@ import tls from 'node:tls';
 import { basename, dirname, join } from 'node:path';
 import { Worker } from 'node:worker_threads';
 import type { HookRequestLine } from '@deepbuild/adapters';
-import { writerGeneration } from '@deepbuild/record';
+import { writerGeneration } from '@deepbuild/record/meta';
 import { claudeSettings, readJson, relations, HOLD_MARGIN_MS, STOP_HOLD_MS, type Relation } from './claude-settings.js';
 import { stopTimeoutS } from './codex-settings.js';
 import { contractAdapter, rpcTable, type DeprecatedNotice } from './contracts.js';
@@ -30,7 +30,9 @@ import { Waits, type HookSeen, type OpenCall, type Reply as WaitReply, type Rest
 import { People } from './people.js';
 import { identityAt, idOf, type Identity } from './identity.js';
 import { plantedStart } from './plant.js';
+import { gatesOff } from './watch.js';
 import { AUTHORITY, CONTRACT, EXTENSION_HOLD_MS, FEATURES, line, plantOf, refuse, refusal, Refused, STAGE_HOLD_MS, ulid, VERSION, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Parsed, type Plant, type Refusal, type Scope, type Scoped, SCREEN_TOOLS, type StageReach, type VfsSettings } from './wire.js';
+import { isRecord as isObj } from '@deepbuild/contracts';
 
 /** How often the hub checks that its lock file is still the one it holds (#909): the design says at least once a minute. */
 const LOCK_CHECK_MS = 5000;
@@ -63,7 +65,7 @@ const ALLOWED = new Map<string, readonly Role[]>([
   // The Agents page (#148): a server or a skill proposed for the agents you choose, the page's model, Codex's daemon
   // restarted through an ask, a sync undone; and `deep mcp-exec`, a synced server's command with its secrets by handle.
   ['agents.propose', ['app', 'cli']], ['agents.read', ['app', 'cli']], ['agents.restart', ['app', 'cli']], ['agents.undo', ['app', 'cli']], ['box.say', ['app', 'cli']], ['mcp.exec', ['cli']],
-  ['gates.off', ['app', 'cli']], ['gates.on', ['app', 'cli']], ['you.confirm', ['cli']], ['status.read', ['app', 'cli', 'person']], ['rows.read', ['app', 'cli', 'person']], ['row.read', ['app']], ['hub.stop', ['app', 'cli']], ['run.start', ['app', 'cli']], ['run.output', ['app', 'cli']], ['host.list', ['app', 'cli']], ['host.facts', ['app', 'cli']], ['test.load', ['app', 'cli']],
+  ['gates.off', ['app', 'cli']], ['gates.on', ['app', 'cli']], ['you.confirm', ['cli']], ['status.read', ['app', 'cli', 'person']], ['rows.read', ['app', 'cli', 'person']], ['row.read', ['app']], ['hub.stop', ['app', 'cli']], ['run.start', ['app', 'cli']], ['run.output', ['app', 'cli']], ['host.list', ['app', 'cli']], ['host.facts', ['app', 'cli']], ['host.plan', ['cli']], ['host.ran', ['cli']], ['host.changes', ['app', 'cli']], ['test.load', ['app', 'cli']],
   // A new secret, on the trusted path, and which are held; values never come back (#70).
   ['secret.enter', ['cli']], ['secret.list', ['app', 'cli']],
   // A hosted terminal the hub reattaches after a restart (#70).
@@ -80,14 +82,16 @@ const ALLOWED = new Map<string, readonly Role[]>([
   // `deep lease` (#1015): a heavy command's place in the queue, its process group once it starts, and its first process's exit.
   ['lease.wait', ['cli']], ['lease.started', ['cli']], ['lease.exited', ['cli']], ['extension.install', ['cli']], ['guard.add', ['cli']], ['record.backup', ['cli']], ['test.verdict', ['cli']],
   ['mcp.call', ['mcp']], ['mcp.cancel', ['mcp']], ['evidence.paste', ['app']],
-  // Setup reads your history into the wiki (#356).
-  ['wiki.build', ['cli']],
+  // Setup reads your history into the wiki (#356), and records the steps it took (#1100).
+  ['wiki.build', ['cli']], ['setup.report', ['cli']],
   // Every agent's memory: the ranked list, and your keep or remove of a lesson (#111).
   ['memory.list', ['cli']], ['memory.act', ['cli']],
   // The rules page (#344): written from your rule files, a scope's reach before you save it, who a rule reached, a session's set.
   ['rules.sync', ['app', 'cli']], ['rules.reach', ['app', 'cli']], ['rules.credit', ['app', 'cli']], ['session.rules', ['app', 'cli']],
   // The blind acceptance job (#1328).
   ['acceptance.start', ['cli']], ['acceptance.status', ['app', 'cli']], ['acceptance.dispute', ['cli']], ['acceptance.ended', ['cli']],
+  // Landing in turn (#1331): from your own terminal only.
+  ['land.judge', ['cli']], ['land.round', ['cli']], ['work.once', ['cli']],
   ['job.submit', ['app', 'cli']], ['job.status', ['app', 'cli']], ['job.list', ['app', 'cli']], ['checks.kinds', ['app', 'cli']], ['job.output', ['app', 'cli']],
   // A window reading comes from the app, the CLI, or deep-hook's status line forwarder, which connects as a hook does.
   ['windows.report', ['app', 'cli', 'hook']],
@@ -104,6 +108,8 @@ const ALLOWED = new Map<string, readonly Role[]>([
   ['session.wait', ['cli', 'mcp']], ['session.delivered', ['mcp']], ['session.stop_waiting', ['mcp']],
   // Your words into a session from the app, a note or a page's box, recorded from: app by their request ID (#340).
   ['session.note', ['app']], ['ask.later', ['app']], ['session.pause', ['app']],
+  // A session's name from the Session menu's Rename, and why a session reads as it does, for `deep status <session> --why` (#2018).
+  ['session.rename', ['app']], ['row.why', ['app', 'cli', 'person']],
   // A send-back planted for a session's next stop, served only to a hub a test started with DEEP_HUB_TEST_SEND_BACK=1 (#25).
   ['test.send_back', ['cli']],
   // The hub's clock stepped forward, served only to a hub a test started with DEEP_HUB_TEST_CLOCK_STEPS=1 (#965).
@@ -136,7 +142,6 @@ const DENYING_MODES = new Set(['dontAsk', 'plan']);
 const READS = new Set(['inbox.read', 'sessions.read', 'changes.read', 'evidence.read', 'numbers.read']);
 
 type Obj = Record<string, unknown>;
-const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 /**
  * The connection as one call of a deprecated method sees it: its reply line carries the notice beside its result.
  * Every other property reads and writes through to the connection itself.
@@ -227,8 +232,11 @@ interface CoreLink {
   started: Promise<{ hooks: string[] }>;
   close(): Promise<void>;
 }
-/** `scrub` adds values every hook line read from now on is scrubbed of (#332: credentials env-local loaded). */
-interface Parsers { parse(chunks: Buffer[], first: boolean): Promise<Parsed>; scrub(values: string[]): void; close(): Promise<void> }
+/**
+ * `scrub` adds values every hook line read from now on is scrubbed of (#332: credentials env-local loaded); `count` is
+ * the parser workers the pool holds, for hub.health (#2043).
+ */
+interface Parsers { parse(chunks: Buffer[], first: boolean): Promise<Parsed>; scrub(values: string[]): void; count(): number; close(): Promise<void> }
 
 /** A frame from the core: its event's JSON text, or, `caught` set, the head its subscriber's replay reached (#1575). */
 type OnFrame = (sub: string, event: string, caught?: boolean) => void;
@@ -264,9 +272,9 @@ function coreWorker(options: CoreOptions, onFrame: OnFrame, onFatal: (why: strin
 }
 /** The commit-on-event-loop plant: the core on the event loop, committing through the synchronous binding there. */
 async function coreInline(options: CoreOptions, onFrame: OnFrame, onFatal: (why: string) => void, onAsking: (sessions: string[], judged: string[], resend: string[], cantRun: string[]) => void, onAcking: (session: string) => void, onScrub: (values: string[]) => void): Promise<CoreLink> {
-  const { Core } = await import('./core.js');
+  const { createCore } = await import('./hub-runtime.js');
   const { answer, asRefusal } = await import('./core-worker.js');
-  const core = new Core(options, onFrame, onAsking, onAcking, onScrub);
+  const core = createCore(options, onFrame, onAsking, onAcking, onScrub);
   const started = core.started().then(() => ({ hooks: core.hooks() }));
   started.catch((error: unknown) => onFatal(error instanceof Error ? error.stack ?? error.message : String(error)));
   return {
@@ -292,25 +300,41 @@ async function coreInline(options: CoreOptions, onFrame: OnFrame, onFatal: (why:
 function parserPool(given: readonly string[], plant: Plant | undefined, dir: string): Parsers {
   // The pool's own list: each scrub's values join it, so a parser started later begins with all its elder was sent.
   const held = [...given];
-  const pending = new Map<number, (parsed: Parsed) => void>();
+  // Each line a parser holds, until that parser answers it or ends.
+  const pending = new Map<number, { resolve: (parsed: Parsed) => void; worker: Worker }>();
   let n = 0;
-  const make = () => {
+  let closing = false;
+  const make = (): Worker => {
     const worker = new Worker(new URL('./parser.js', import.meta.url), { workerData: { held, dir, ...(plant ? { plant } : {}) }, resourceLimits: YOUNG });
     worker.on('message', ({ n: id, parsed }: { n: number; parsed: Parsed }) => {
-      pending.get(id)?.(parsed);
+      pending.get(id)?.resolve(parsed);
       pending.delete(id);
+    });
+    if (plant === 'parser-pool-messages-only') return worker;
+    // A parser that throws on a line ends, and takes neither the hub nor a line with it (#2043): each line it held is
+    // refused, and another parser takes its place.
+    worker.on('error', (error) => process.stderr.write(`deep hub: a parser failed: ${error.stack ?? error.message}\n`));
+    worker.on('exit', () => {
+      for (const [id, line] of pending) {
+        if (line.worker !== worker || plant === 'parser-pool-leaves-line-waiting') continue;
+        pending.delete(id);
+        line.resolve({ kind: 'refused', id: null, error: refusal('unavailable', '', 'The hub failed while it read this line, so nothing of it was recorded.') });
+      }
+      if (closing) return;
+      if (worker === small) small = make();
+      else if (worker === big) big = make();
     });
     return worker;
   };
   // One parser for small lines, and one for large ones, started at the first: an idle hub holds one thread fewer.
-  const small = make();
+  let small = make();
   let big: Worker | undefined;
   return {
     parse(chunks, first) {
       const size = chunks.reduce((sum, c) => sum + c.length, 0);
       const worker = size > BIG ? (big ??= make()) : small;
       return new Promise((resolve) => {
-        pending.set(++n, resolve);
+        pending.set(++n, { resolve, worker });
         worker.postMessage({ n, chunks, first });
       });
     },
@@ -318,7 +342,11 @@ function parserPool(given: readonly string[], plant: Plant | undefined, dir: str
       held.push(...values);
       for (const worker of [small, big]) worker?.postMessage({ scrub: values });
     },
-    close: async () => { await Promise.all([small, big].map((w) => w?.terminate())); },
+    count: () => (big ? 2 : 1),
+    close: async () => {
+      closing = true;
+      await Promise.all([small, big].map((w) => w?.terminate()));
+    },
   };
 }
 /** The parse-on-event-loop plant: every line it reads scrubbed and parsed on the event loop. */
@@ -335,6 +363,7 @@ async function parserInline(held: string[], plant: Plant, dir: string): Promise<
       return scoped ? { ...parsed, scoped } : parsed;
     },
     scrub(values) { held.push(...values); },
+    count: () => 0,
     close: async () => undefined,
   };
 }
@@ -421,6 +450,19 @@ class Hub {
   private resend = new Set<string>();
   /** The sessions with a message typed mid-turn to acknowledge (#340): the next tool call's hook is held for it. */
   private readonly acking = new Set<string>();
+  /** Each session's last failed call as its tool.after read: a failure alike to it is held for the core's reply (#2019). */
+  private readonly lastFailed = new Map<string, string>();
+  /** Whether a hook's call failed alike to its session's last failed call, which a passing call forgets. */
+  private failedAgain(meta: HookMeta, drafts: readonly Draft[]): boolean {
+    const after = drafts.find((d) => d.kind === 'tool.after');
+    if (!after || meta.event === 'SessionEnd') { if (meta.event === 'SessionEnd') this.lastFailed.delete(meta.session); return false; }
+    const d = after.data;
+    if (d.outcome !== 'failed') { this.lastFailed.delete(meta.session); return false; }
+    const key = JSON.stringify([d.kind, d.command, d.server, d.tool, d.args, d.exit_code, d.signature]);
+    const again = this.lastFailed.get(meta.session) === key;
+    this.lastFailed.set(meta.session, key);
+    return again;
+  }
   /** `deep off` in effect (#19): every gate watch-only, while the floor (the fail_closed entries) holds. */
   private off = false;
   /** The agents whose hook entries run a program that can't run, as the core's last check found (#993): their gates are watch-only. */
@@ -449,7 +491,7 @@ class Hub {
   async open(clock: CoreOptions['clock']): Promise<void> {
     this.now = () => clock.start + (Date.now() - clock.real);
     const held = [this.token, ...testHeld()];
-    this.off = gatesOff(this.root);
+    this.off = gatesOff(this.root.dir);
     const options: CoreOptions = { root: this.root.dir, clock, held, ...(this.plant ? { plant: this.plant } : {}), ...(this.vfs ? { vfs: this.vfs } : {}),
       ...(process.env.DEEP_HUB_TEST_HOST ? { host: process.env.DEEP_HUB_TEST_HOST } : {}),
       ...(Number(process.env.DEEP_HUB_TEST_LEASE_MS) > 0 ? { leaseMs: Number(process.env.DEEP_HUB_TEST_LEASE_MS) } : {}),
@@ -827,7 +869,9 @@ class Hub {
     // its line whether or not the core's word of the turn has come back yet (#83).
     if (parsed.drafts.some((d) => d.kind === 'tool.after')) this.sawWork.add(meta.session);
     // A blocked call's reply is its block: no acknowledgement takes its place, and the next call carries the acknowledgement.
-    const held = !blocked && !before && !gated && !prompted && parsed.drafts.length ? this.holdFor(meta) : null;
+    // A call failing alike to the session's last failure is held for the core's reply, which tells a third once (#2019).
+    const again = this.failedAgain(meta, parsed.drafts);
+    const held = !blocked && !before && !gated && !prompted && parsed.drafts.length ? (again ? Date.now() + CONTEXT_HOLD_MS : this.holdFor(meta)) : null;
     if (meta.event === 'Stop' || meta.event === 'SessionEnd') this.sawWork.delete(meta.session);
     // A resumed session's calls go to the gate until the core says whether its cut-off turn left a send to match (#85, #1033).
     if (meta.event === 'SessionStart' && meta.fields?.source === 'resume') this.resend.add(meta.session);
@@ -1276,14 +1320,14 @@ class Hub {
     if (value.hello === 'mcp') {
       const parent = value.parent;
       const proved = isObj(parent) && Number.isSafeInteger(parent.pid) && typeof parent.start === 'string' ? { pid: parent.pid as number, start: parent.start } : undefined;
-      // A DeepBuild MCP server paseo's plugin added binds by the token it was opened with (#55).
+      // One paseo's plugin added binds by its token (#55); any other by the socket's peer process, as the OS reports it (#2070).
       const paseo = typeof value.paseo === 'string' && value.paseo ? value.paseo : undefined;
-      const session = proved || paseo ? ((await this.core.request({ op: 'mcp-hello', parent: proved, ...(paseo ? { paseo } : {}) }).catch(() => null)) as string | null) : null;
+      const hello = (await this.core.request({ op: 'mcp-hello', fd: (conn.sock as unknown as { _handle?: { fd?: number } })._handle?.fd, parent: proved, ...(paseo ? { paseo } : {}) }).catch(() => undefined)) as { session: string | null; parent?: { pid: number; start: string } } | undefined;
       conn.role = 'mcp';
-      conn.session = session;
-      conn.parent = proved;
+      conn.session = hello?.session ?? null;
+      conn.parent = hello?.parent;
       if (typeof value.cwd === 'string') conn.cwd = value.cwd;
-      conn.name = session ? `mcp:${session}` : 'mcp';
+      conn.name = conn.session ? `mcp:${conn.session}` : 'mcp';
       return conn.write({ role: conn.name });
     }
     conn.write({ id: null, error: refusal('enum', '/hello', 'Say hello as app, cli or mcp.', value.hello) });
@@ -1337,7 +1381,7 @@ class Hub {
       case 'health':
         // The process readings after the core's: its own checks start short-lived children (the secret store's) that
         // would count as the hub's.
-        return void reply(this.core.request({ op: 'health' }).then(async (health) => ({ pid: process.pid, start: this.start, off: this.off, ...(health as Obj), process: await processHealth() })));
+        return void reply(this.core.request({ op: 'health' }).then(async (health) => ({ pid: process.pid, start: this.start, off: this.off, parsers: this.parsers.count(), ...(health as Obj), process: await processHealth() })));
       case 'stream.subscribe': {
         const sub = `${conn.id}:${JSON.stringify(id)}`;
         const after = Number.isSafeInteger(params.after) && (params.after as number) >= 0 ? (params.after as number) : 0;
@@ -1445,10 +1489,7 @@ function listenAt(dir: string): { host: string; port: number } {
   const m = typeof at === 'string' ? /^(.*):(\d{1,5})$/.exec(at) : null;
   return m ? { host: m[1]!.replace(/^\[|\]$/g, '') || '0.0.0.0', port: Number(m[2]) } : { host: '0.0.0.0', port: 7433 };
 }
-/** Whether `deep off` is in effect: <root>/gates.json, which only the hub writes, once the OS confirmed you. */
-function gatesOff(root: Root): boolean {
-  try { return (JSON.parse(readFileSync(join(root.dir, 'gates.json'), 'utf8')) as { off?: unknown }).off === true; } catch { return false; }
-}
+/** `deep off` set or cleared in <root>/gates.json, which only the hub writes, once the OS confirmed you (watch.ts reads it). */
 function setGatesOff(root: Root, off: boolean): void {
   const file = join(root.dir, 'gates.json');
   writeFileSync(`${file}.tmp`, `${JSON.stringify({ off, since: Date.now() })}\n`, { mode: 0o600 });

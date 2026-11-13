@@ -1,0 +1,52 @@
+Base commit: b726c8be8 (b726c8be8c7879e3c14d8a2c4963c69063d06255), the #154 suite's base; no implementation of #154.
+Built first as tests/acceptance/154/BASE-FAILURE.txt says.
+Command: NO_COLOR=1 node scripts/throttle.mjs test --wait 60 -- node node_modules/vitest/vitest.mjs run
+  --root tests/acceptance/154-oracle --testTimeout=600000
+Date: 2026-11-10  Machine: macOS 27.2 (Apple silicon)  Node: v24.22.2  vitest 5.0.5. <repo> is the worktree.
+Result: Test Files 1 failed (1); Tests 1 failed (1); about 4 s.
+
+The one test failed at a named assertion for the reason the surface is missing: the fixture's own check passed (each
+offset's bar:beat resolves to its sample exactly), the hub started and deep mcp answered, then
+../154/helpers.ts installScore's expect "the first-party plug-in deepbuild/score is at packages/jobs/score (Score: As
+built)" failed. Not reached: the plan, the render, upstream's ported check on our stem and on the planted per-quantum
+stem.
+
+The run's output follows.
+------------------------------------------------------------------------------------------------------------------------
+
+ RUN  v5.0.5 <repo>/tests/acceptance/154-oracle
+
+ ❯ sample-accurate.test.ts (1 test | 1 failed) 2310ms
+   ❯ AC2 #154.8b0e5b99 oracle: upstream's sample-accurate scheduling, run on score.render@1's note_on and stem (1)
+     × AC2 #154.8b0e5b99 impulses at offsets inside and across 128-sample quanta land on exactly their sample and nowhere else; a renderer that starts notes per quantum is rejected 1111ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  sample-accurate.test.ts > AC2 #154.8b0e5b99 oracle: upstream's sample-accurate scheduling, run on score.render@1's note_on and stem > AC2 #154.8b0e5b99 impulses at offsets inside and across 128-sample quanta land on exactly their sample and nowhere else; a renderer that starts notes per quantum is rejected
+AssertionError: the first-party plug-in deepbuild/score is at packages/jobs/score (Score: As built): no <repo>/packages/jobs/score/deepbuild.json: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ installScore ../154/helpers.ts:638:175
+    636| /** deepbuild/score installed from packages/jobs/score, its tool quali…
+    637| export async function installScore(w: World): Promise<Ran> {
+    638|   expect(existsSync(join(PACKAGE, 'deepbuild.json')), `the first-party…
+       |                                                                                                                                                                               ^
+    639|   const ran = await install(w, PACKAGE);
+    640|   expect(ran.code, `deep install packages/jobs/score installs ${PLUGIN…
+ ❯ openWorld ../154/helpers.ts:631:25
+ ❯ scoreWorld ../154/helpers.ts:679:13
+ ❯ sample-accurate.test.ts:87:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  22:01:58
+   Duration  3.77s (tests 64%, transform 33%, import 4%)
+

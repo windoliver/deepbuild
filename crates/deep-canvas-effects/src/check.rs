@@ -11,8 +11,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde_json::Value;
 
 use crate::graph::{
-    self, Arg, Body, Class, Count, Fallback, From, Issue, Kind, Operator, Origin, Sc, Step, Tex,
-    Ty,
+    self, Arg, Body, Class, Count, Fallback, From, Issue, Kind, Operator, Origin, Sc, Step, Tex, Ty,
 };
 use crate::table::{self, Def};
 
@@ -819,7 +818,9 @@ impl Ctx<'_> {
             "blend" => {
                 let mode = s.fields.get("mode").and_then(Value::as_str);
                 if mode.and_then(deep_canvas::blend::step_mode).is_none() {
-                    return Err(bad("blend takes a mode: a group's blend modes but dissolve".into()));
+                    return Err(bad(
+                        "blend takes a mode: a group's blend modes but dissolve".into(),
+                    ));
                 }
                 for port in ["base", "over"] {
                     if float(&need(port)?).map_err(bad)? != Ty::V(Sc::F32, 3) {
@@ -934,7 +935,12 @@ impl Ctx<'_> {
                 }
                 match need("tex")? {
                     Ty::Tex3(Tex::Float) => Ty::V(Sc::F32, 4),
-                    t => return Err(bad(format!("sample3d reads a float texture3d, not {}", t.wgsl()))),
+                    t => {
+                        return Err(bad(format!(
+                            "sample3d reads a float texture3d, not {}",
+                            t.wgsl()
+                        )))
+                    }
                 }
             }
             "with" => {
@@ -957,7 +963,11 @@ impl Ctx<'_> {
                 let storage = |p: &str| -> Result<(Sc, u32), Issue> {
                     match need(p)? {
                         Ty::Storage(sc, n) => Ok((sc, n)),
-                        t => Err(bad(format!("{} reads storage at {p}, not {}", s.op, t.wgsl()))),
+                        t => Err(bad(format!(
+                            "{} reads storage at {p}, not {}",
+                            s.op,
+                            t.wgsl()
+                        ))),
                     }
                 };
                 let count = |len: u32| -> Result<u32, Issue> {
@@ -1078,18 +1088,31 @@ impl Ctx<'_> {
             Arg::Lit(_) => true,
             Arg::Ref(n, None) => {
                 self.uniform.contains(n)
-                    || self
-                        .op
-                        .inputs
-                        .get(n)
-                        .is_some_and(|i| !matches!(i.ty, Ty::Tex(_) | Ty::Tex3(_) | Ty::Storage(..)))
+                    || self.op.inputs.get(n).is_some_and(|i| {
+                        !matches!(i.ty, Ty::Tex(_) | Ty::Tex3(_) | Ty::Storage(..))
+                    })
             }
             Arg::Ref(..) => false,
         };
         let pure = matches!(
             name,
-            "const" | "convert" | "bitcast" | "add" | "sub" | "mul" | "div" | "rem" | "min"
-                | "max" | "and" | "or" | "xor" | "shl" | "shr" | "select" | "hash"
+            "const"
+                | "convert"
+                | "bitcast"
+                | "add"
+                | "sub"
+                | "mul"
+                | "div"
+                | "rem"
+                | "min"
+                | "max"
+                | "and"
+                | "or"
+                | "xor"
+                | "shl"
+                | "shr"
+                | "select"
+                | "hash"
         );
         let is_uniform = pure && s.args.values().all(uniform);
         let of = |a: Option<&Arg>| -> Option<(u64, u64)> {
@@ -1106,7 +1129,11 @@ impl Ctx<'_> {
         };
         let got = match name {
             "element" => Some((1, 0)),
-            "const" => s.fields.get("value").and_then(Value::as_u64).map(|c| (0, c)),
+            "const" => s
+                .fields
+                .get("value")
+                .and_then(Value::as_u64)
+                .map(|c| (0, c)),
             "convert" | "bitcast" => of(s.args.get("x")),
             "add" => match (of(s.args.get("a")), of(s.args.get("b"))) {
                 (Some((a, b)), Some((c, d))) => a.checked_add(c).zip(b.checked_add(d)),
@@ -1174,10 +1201,9 @@ impl Ctx<'_> {
         }
         if !atomic && !self.options.trusts_index && self.op.elements > 1 {
             let own = match s.args.get("i") {
-                Some(Arg::Ref(n, None)) => self
-                    .affine
-                    .get(n)
-                    .is_some_and(|(k, j)| *k >= 1 && j < k),
+                Some(Arg::Ref(n, None)) => {
+                    self.affine.get(n).is_some_and(|(k, j)| *k >= 1 && j < k)
+                }
                 _ => false,
             };
             if !own {
@@ -1231,7 +1257,10 @@ impl Ctx<'_> {
             _ => return Err(bad("store names its texture output at tex".into())),
         };
         let dims = if out.dim3 { 3 } else { 2 };
-        let at = s.args.get("ixy").ok_or_else(|| bad("store needs ixy".into()))?;
+        let at = s
+            .args
+            .get("ixy")
+            .ok_or_else(|| bad("store needs ixy".into()))?;
         match lanes(&concrete(self.ty_of(scope, at, id)?)) {
             Some((sc, n)) if sc.is_int() && n == dims => {}
             _ => return Err(bad(format!("store's ixy is a vec{dims} of integers"))),
@@ -1240,7 +1269,12 @@ impl Ctx<'_> {
         let vt = self.ty_of(scope, v, id)?;
         let want = out.value();
         if concrete(unify(&want, &vt).map_err(bad)?) != want {
-            return Err(bad(format!("a {} texel holds a {}, not a {}", out.format, want.wgsl(), vt.wgsl())));
+            return Err(bad(format!(
+                "a {} texel holds a {}, not a {}",
+                out.format,
+                want.wgsl(),
+                vt.wgsl()
+            )));
         }
         if let Some(w) = &s.when {
             if self.ty_of(scope, &Arg::Ref(w.clone(), None), id)? != Ty::BOOL {
@@ -1270,12 +1304,15 @@ impl Ctx<'_> {
             )
         };
         let planted = (self.options.exact_f32_compares
-            && matches!(def.name, "eq@1" | "ne@1" | "lt@1" | "le@1" | "gt@1" | "ge@1"))
+            && matches!(
+                def.name,
+                "eq@1" | "ne@1" | "lt@1" | "le@1" | "gt@1" | "ge@1"
+            ))
             || (self.options.exact_f32_floor && def.name == "floor@1");
         // Floats travel only as bits: a bitcast or a constant moves them without an f32 operation.
         let carries_bits = matches!(def.name, "bitcast@1" | "const@1");
-        let inexact = !def.exact
-            || (!planted && !carries_bits && (floats(out) || args.values().any(floats)));
+        let inexact =
+            !def.exact || (!planted && !carries_bits && (floats(out) || args.values().any(floats)));
         if inexact && self.inexact.is_none() {
             let why = if def.exact {
                 format!("{} on f32 values", def.name)
@@ -1519,14 +1556,25 @@ fn stepped_rules(op: &Operator, issues: &mut Vec<Issue>) {
         issues.push(Issue::at_path("operator_kind_rule", path, what));
     };
     if op.stepped.is_some() && op.kind != Kind::Compute {
-        rule(issues, "stepped", format!("{} is stepped, and only compute work steps", op.id));
+        rule(
+            issues,
+            "stepped",
+            format!("{} is stepped, and only compute work steps", op.id),
+        );
     }
     if op.stepped.is_some() {
         return;
     }
     for (name, s) in &op.storage {
         if s.carry.is_some() {
-            rule(issues, &format!("outputs/{name}/carry"), format!("{} carries {name} between frames, and only a stepped operator carries state", op.id));
+            rule(
+                issues,
+                &format!("outputs/{name}/carry"),
+                format!(
+                    "{} carries {name} between frames, and only a stepped operator carries state",
+                    op.id
+                ),
+            );
         }
     }
     for (name, input) in &op.inputs {
@@ -1576,7 +1624,11 @@ fn first_iterate(steps: &BTreeMap<String, Step>) -> Option<(&String, &graph::Ite
 }
 
 /// Every name the steps (and their repeats' and outputs') arguments read.
-fn reads_of(steps: &BTreeMap<String, Step>, outputs: &BTreeMap<String, Arg>, out: &mut BTreeSet<String>) {
+fn reads_of(
+    steps: &BTreeMap<String, Step>,
+    outputs: &BTreeMap<String, Arg>,
+    out: &mut BTreeSet<String>,
+) {
     let mut push = |a: &Arg| {
         if let Arg::Ref(n, _) = a {
             out.insert(n.clone());
@@ -1608,10 +1660,16 @@ fn check_iterating(op: &Operator, options: CheckOptions) -> Result<Checked, Vec<
         };
         let refuse = |code: &'static str, m: String| Err(vec![Issue::at_step(code, id, m)]);
         if op.kind != Kind::Pass {
-            return refuse("operator_kind_rule", format!("iterate is a pass step, not a {} one", op.kind.name()));
+            return refuse(
+                "operator_kind_rule",
+                format!("iterate is a pass step, not a {} one", op.kind.name()),
+            );
         }
         if it.count == 0 || it.count > MAX_ITERATE {
-            return refuse("operator_limit", format!("iterate runs 1 to {MAX_ITERATE} times, not {}", it.count));
+            return refuse(
+                "operator_limit",
+                format!("iterate runs 1 to {MAX_ITERATE} times, not {}", it.count),
+            );
         }
         if let Some((inner, _)) = first_iterate(&it.steps) {
             return Err(vec![Issue {
@@ -1624,7 +1682,14 @@ fn check_iterating(op: &Operator, options: CheckOptions) -> Result<Checked, Vec<
             }]);
         }
         if !PING_PONG.contains(&it.format.as_str()) {
-            return refuse("operator_type", format!("a ping-pong target is {}, not {}", PING_PONG.join(" or "), it.format));
+            return refuse(
+                "operator_type",
+                format!(
+                    "a ping-pong target is {}, not {}",
+                    PING_PONG.join(" or "),
+                    it.format
+                ),
+            );
         }
         let mut read = BTreeSet::new();
         reads_of(&it.steps, &it.outputs, &mut read);
@@ -1651,14 +1716,22 @@ fn check_iterating(op: &Operator, options: CheckOptions) -> Result<Checked, Vec<
         let key = format!("{}.{id}", op.id);
         let tex = |output: &str| graph::Input {
             ty: Ty::Tex(Tex::Float),
-            from: From::Target { op: key.clone(), output: output.into() },
+            from: From::Target {
+                op: key.clone(),
+                output: output.into(),
+            },
             range: None,
             default: None,
         };
         inputs.insert("prev".into(), tex("prev"));
         inputs.insert(
             it.index.clone(),
-            graph::Input { ty: Ty::U32, from: From::Param(it.index.clone()), range: None, default: None },
+            graph::Input {
+                ty: Ty::U32,
+                from: From::Param(it.index.clone()),
+                range: None,
+                default: None,
+            },
         );
         let body = Operator {
             id: key.clone(),
@@ -1823,7 +1896,12 @@ fn check_inner(
             ));
         }
         // A 3D texture is read only in the frame that wrote it (structural steps, #483).
-        if let From::Texture3d { op: from, output, previous: true } = &input.from {
+        if let From::Texture3d {
+            op: from,
+            output,
+            previous: true,
+        } = &input.from
+        {
             issues.push(Issue::at_path(
                 "operator_kind_rule",
                 &path,
@@ -1914,14 +1992,21 @@ fn check_inner(
     for (name, t) in &op.textures {
         let path = format!("outputs/{name}");
         if op.kind != Kind::Compute {
-            issues.push(Issue::at_path("operator_type", &path, "only a compute operator writes a texture output"));
+            issues.push(Issue::at_path(
+                "operator_type",
+                &path,
+                "only a compute operator writes a texture output",
+            ));
         }
         // Integers don't average, and r32float isn't filterable on every adapter.
         if t.mips && !matches!(t.format.as_str(), "rgba16float" | "rgba8unorm") {
             issues.push(Issue::at_path(
                 "operator_type",
                 &path,
-                format!("mips: true takes rgba16float or rgba8unorm, not {}", t.format),
+                format!(
+                    "mips: true takes rgba16float or rgba8unorm, not {}",
+                    t.format
+                ),
             ));
         }
         let cap = if t.dim3 { MAX_TEXTURE3D } else { MAX_TEXTURE2D };
@@ -1929,7 +2014,10 @@ fn check_inner(
             issues.push(Issue::at_path(
                 "operator_limit",
                 &path,
-                format!("a {} output is 1 to {cap} texels a side", if t.dim3 { "texture3d" } else { "texture" }),
+                format!(
+                    "a {} output is 1 to {cap} texels a side",
+                    if t.dim3 { "texture3d" } else { "texture" }
+                ),
             ));
         }
     }
@@ -1990,7 +2078,12 @@ fn check_inner(
                 Ok(t) => issues.push(Issue::at_path(
                     "operator_type",
                     &path,
-                    format!("{name} is storage of {} {}, so it takes such storage, not {}", so.count, so.sc.wgsl(), t.wgsl()),
+                    format!(
+                        "{name} is storage of {} {}, so it takes such storage, not {}",
+                        so.count,
+                        so.sc.wgsl(),
+                        t.wgsl()
+                    ),
                 )),
                 Err(mut e) => {
                     e.step = None;

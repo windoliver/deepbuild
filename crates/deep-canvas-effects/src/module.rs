@@ -49,7 +49,10 @@ fn manifest() -> Manifest {
         feature: "effects".into(),
         license: "Apache-2.0".into(),
         implements: "effects@1".into(),
-        implementation: deep_canvas::registry::Implementation::reference("effects", deep_canvas::registry::Semver::parse("1.0.0").expect("a version")),
+        implementation: deep_canvas::registry::Implementation::reference(
+            "effects",
+            deep_canvas::registry::Semver::parse("1.0.0").expect("a version"),
+        ),
     }
 }
 
@@ -142,6 +145,15 @@ fn raised(code: &'static str, path: String, what: String) -> Raised {
     }
 }
 
+/// #449's rule over a particles@1 item: its count against its class's cap (Particles
+/// `particles@1`: `count`), refused at check, naming the item, its count and the cap.
+fn particles_rule(doc: &Value, id: &str, item: &Value) -> Vec<Raised> {
+    crate::particles::rule::count(doc, id, item, None)
+        .map(|r| raised(r.code, r.path, r.what))
+        .into_iter()
+        .collect()
+}
+
 /// The document's check over an operator item: the whole operator check (nothing runs before it
 /// passes), its budget class's operator kinds (Operator budgets by class: a core view runs
 /// shipped operators only, a data view passes and compute), and every check input whose probe
@@ -199,7 +211,10 @@ fn operator_rule(doc: &Value, id: &str, item: &Value) -> Vec<Raised> {
         _ => 128,
     };
     let held = |o: &graph::Operator| -> u64 {
-        o.storage.values().map(|s| u64::from(s.count) * 4).sum::<u64>()
+        o.storage
+            .values()
+            .map(|s| u64::from(s.count) * 4)
+            .sum::<u64>()
             + o.textures.values().map(graph::TexOut::bytes).sum::<u64>()
     };
     let own = held(&checked.op);
@@ -213,7 +228,10 @@ fn operator_rule(doc: &Value, id: &str, item: &Value) -> Vec<Raised> {
         })
         .collect();
     let total: u64 = all.iter().map(|(_, b)| b).sum();
-    let largest = all.iter().max_by_key(|(k, b)| (*b, std::cmp::Reverse(k.clone()))).map(|(k, _)| k.as_str());
+    let largest = all
+        .iter()
+        .max_by_key(|(k, b)| (*b, std::cmp::Reverse(k.clone())))
+        .map(|(k, _)| k.as_str());
     if own > cap_mb << 20 || (total > cap_mb << 20 && largest == Some(id)) {
         out.push(raised(
             "over_budget",
@@ -349,14 +367,18 @@ pub fn backdrop_step(steps: &std::collections::BTreeMap<String, graph::Step>) ->
 
 /// What a group's pass may read: its target, never another writer's layer or an earlier frame.
 fn reads_only_its_target(graph: &Value) -> bool {
-    graph["inputs"].as_object().into_iter().flatten().all(|(_, i)| {
-        let Some(t) = i["from"].get("texture") else {
-            return true;
-        };
-        t.get("target").is_some_and(|t| {
-            (t["op"] == "core" && t["output"] == "color") || t["collection"].is_string()
+    graph["inputs"]
+        .as_object()
+        .into_iter()
+        .flatten()
+        .all(|(_, i)| {
+            let Some(t) = i["from"].get("texture") else {
+                return true;
+            };
+            t.get("target").is_some_and(|t| {
+                (t["op"] == "core" && t["output"] == "color") || t["collection"].is_string()
+            })
         })
-    })
 }
 
 /// A collection target a graph reads (Effect and GPU operator: collection targets).
@@ -401,9 +423,11 @@ pub fn foreign_read(doc: &Map<String, Value>) -> Option<(String, String)> {
                 .and_then(|c| c.get(&read.collection))
                 .and_then(|c| c.get("members"))
                 .and_then(Value::as_array);
-            let foreign = members.into_iter().flatten().filter_map(Value::as_str).any(|m| {
-                items.get(m).and_then(layer_of) != layer_of(item)
-            });
+            let foreign = members
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_str)
+                .any(|m| items.get(m).and_then(layer_of) != layer_of(item));
             if foreign {
                 return Some((id.clone(), read.collection));
             }
@@ -430,7 +454,10 @@ pub fn pass_graph(
     if op == "blur@1" {
         let radius = params.get("radius").and_then(Value::as_f64).unwrap_or(8.0);
         let stages = vec![crate::shipped::blur("x"), crate::shipped::blur("y")];
-        return Ok(PassGraph { stages, grow: radius.clamp(0.0, crate::shipped::MAX_BLUR) });
+        return Ok(PassGraph {
+            stages,
+            grow: radius.clamp(0.0, crate::shipped::MAX_BLUR),
+        });
     }
     let (graph, grow) = if let Some(item) = item {
         match operator_of(op, item) {
@@ -447,7 +474,10 @@ pub fn pass_graph(
         return Err("operator_unknown_op");
     };
     if reads_only_its_target(&graph) {
-        Ok(PassGraph { stages: vec![graph], grow })
+        Ok(PassGraph {
+            stages: vec![graph],
+            grow,
+        })
     } else {
         Err("operator_kind_rule")
     }
@@ -498,13 +528,28 @@ fn group_rule(doc: &Value, id: &str, item: &Value) -> Vec<Raised> {
     let field = |f: &str| format!("items/{id}/params/{f}");
     let mut out = Vec::new();
     if passes.len() > 8 {
-        out.push(raised("operator_limit", field("passes"), format!("{id} holds {} passes, past 8", passes.len())));
+        out.push(raised(
+            "operator_limit",
+            field("passes"),
+            format!("{id} holds {} passes, past 8", passes.len()),
+        ));
     }
     if params["backdrop"] == "below" && passes.is_empty() {
-        out.push(raised("operator_kind_rule", field("backdrop"), format!("{id}: a backdrop runs its passes, and it has none")));
+        out.push(raised(
+            "operator_kind_rule",
+            field("backdrop"),
+            format!("{id}: a backdrop runs its passes, and it has none"),
+        ));
     }
-    if let Some(child) = doc["items"].as_object().and_then(|items| depth_child(items, id, item)) {
-        out.push(raised("operator_kind_rule", format!("items/{child}/parent"), format!("{child} draws in depth, so {id} can't composite it")));
+    if let Some(child) = doc["items"]
+        .as_object()
+        .and_then(|items| depth_child(items, id, item))
+    {
+        out.push(raised(
+            "operator_kind_rule",
+            format!("items/{child}/parent"),
+            format!("{child} draws in depth, so {id} can't composite it"),
+        ));
     }
     let class = doc["budget"]["class"].as_str().unwrap_or("figure");
     if !passes.is_empty() && matches!(class, "core_view" | "data_view") {
@@ -523,12 +568,20 @@ fn group_rule(doc: &Value, id: &str, item: &Value) -> Vec<Raised> {
     for (i, p) in passes.iter().enumerate() {
         let at = field(&format!("passes/{i}/op"));
         let Some(op) = p["op"].as_str() else {
-            out.push(raised("operator_type", at, format!("{id}: pass {i} names no op")));
+            out.push(raised(
+                "operator_type",
+                at,
+                format!("{id}: pass {i} names no op"),
+            ));
             continue;
         };
         let pack = op.split_once('.').map(|(pack, _)| pack);
         if pack == Some("fx") && !named("fx") {
-            out.push(raised("operator_unknown_op", at, format!("{op}: the document names no fx@1 pack")));
+            out.push(raised(
+                "operator_unknown_op",
+                at,
+                format!("{op}: the document names no fx@1 pack"),
+            ));
             continue;
         }
         if pack.is_some_and(|p| p != "fx" && named(p)) {
@@ -539,11 +592,19 @@ fn group_rule(doc: &Value, id: &str, item: &Value) -> Vec<Raised> {
             Ok(graph) => {
                 for stage in &graph.stages {
                     if let Err(issues) = graph::read(stage).and_then(|o| check::check(&o)) {
-                        out.extend(issues.into_iter().map(|e| raised(e.code, at.clone(), e.message)));
+                        out.extend(
+                            issues
+                                .into_iter()
+                                .map(|e| raised(e.code, at.clone(), e.message)),
+                        );
                     }
                 }
             }
-            Err(code) => out.push(raised(code, at, format!("{op} is no pass this group can run"))),
+            Err(code) => out.push(raised(
+                code,
+                at,
+                format!("{op} is no pass this group can run"),
+            )),
         }
     }
     out
@@ -628,6 +689,8 @@ fn register(r: &mut Registrar) {
         r.rule(&kind[..kind.len() - 2], operator_rule);
     }
     r.rule("group", group_rule);
+    // #449: a particles@1 item's count against its budget class's cap, wherever the check runs.
+    r.rule("particles", particles_rule);
     for (code, meaning) in [
         ("not_exact", "An operator declared exact computes as less, or a check that holds on any machine reads an operator that isn't exact."),
         ("operator_budget_class", "The document's budget class doesn't run this operator's kind."),
@@ -686,69 +749,85 @@ fn box_figure(title: &str, class: &str, extra: Value) -> Value {
 
 /// A check that holds on any machine reading back a compute operator with an f32 step.
 fn same_machine_check() -> Value {
-    let mut doc = box_figure("A check on a same-machine readback", "figure", json!({
-        "sum": {"id": "sum", "kind": "gpu.compute@1", "name": "Sum", "order": "b0", "params": {
-            "about": "One word, squared as an f32, for a check to read back.", "origin": "composed", "inputs": {},
-            "steps": {
-                "e": {"op": "element@1", "args": {}},
-                "x": {"op": "bitcast@1", "args": {"x": "e", "to": "f32"}},
-                "m": {"op": "mul@1", "args": {"a": "x", "b": "x"}},
-                "b": {"op": "bitcast@1", "args": {"x": "m", "to": "u32"}},
-                "w": {"op": "write@1", "args": {"buf": "total", "i": "e", "v": "b"}}
-            },
-            "outputs": {"total": {"readback": {"type": "u32", "count": 1, "bytes": 4}}},
-            "elements": 1, "workgroup": 64, "cost": {"ns_per_element": 1000}
-        }}
-    }));
+    let mut doc = box_figure(
+        "A check on a same-machine readback",
+        "figure",
+        json!({
+            "sum": {"id": "sum", "kind": "gpu.compute@1", "name": "Sum", "order": "b0", "params": {
+                "about": "One word, squared as an f32, for a check to read back.", "origin": "composed", "inputs": {},
+                "steps": {
+                    "e": {"op": "element@1", "args": {}},
+                    "x": {"op": "bitcast@1", "args": {"x": "e", "to": "f32"}},
+                    "m": {"op": "mul@1", "args": {"a": "x", "b": "x"}},
+                    "b": {"op": "bitcast@1", "args": {"x": "m", "to": "u32"}},
+                    "w": {"op": "write@1", "args": {"buf": "total", "i": "e", "v": "b"}}
+                },
+                "outputs": {"total": {"readback": {"type": "u32", "count": 1, "bytes": 4}}},
+                "elements": 1, "workgroup": 64, "cost": {"ns_per_element": 1000}
+            }}
+        }),
+    );
     doc["checks"] = json!({"total_ok": {"kind": "honest_numbers", "probe": "items/sum/outputs/total", "expect": 0, "machines": "any"}});
     doc
 }
 
 /// A material declared live only with no fallback, which canonical renders couldn't draw.
 fn live_only_material() -> Value {
-    box_figure("A live-only material with no fallback", "figure", json!({
-        "glow": {"id": "glow", "kind": "gpu.material@1", "name": "Glow", "order": "b0", "params": {
-            "about": "Emits red, live only, with no fallback.", "origin": "composed", "inputs": {},
-            "steps": {"e": {"op": "const@1", "args": {"value": [1, 0, 0], "type": "vec3"}}},
-            "outputs": {"emission": "e"}, "determinism": "live_only", "fallback": "none",
-            "cost": {"ns_per_px": 50}
-        }}
-    }))
+    box_figure(
+        "A live-only material with no fallback",
+        "figure",
+        json!({
+            "glow": {"id": "glow", "kind": "gpu.material@1", "name": "Glow", "order": "b0", "params": {
+                "about": "Emits red, live only, with no fallback.", "origin": "composed", "inputs": {},
+                "steps": {"e": {"op": "const@1", "args": {"value": [1, 0, 0], "type": "vec3"}}},
+                "outputs": {"emission": "e"}, "determinism": "live_only", "fallback": "none",
+                "cost": {"ns_per_px": 50}
+            }}
+        }),
+    )
 }
 
 /// A compute write at hash(i) % n, not the element's own index.
 fn scattered_write() -> Value {
-    box_figure("A compute write at another element's index", "figure", json!({
-        "scatter": {"id": "scatter", "kind": "gpu.compute@1", "name": "Scatter", "order": "b0", "params": {
-            "about": "Writes 1 at hash(i) % 64.", "origin": "composed", "inputs": {},
-            "steps": {
-                "e": {"op": "element@1", "args": {}},
-                "n": {"op": "const@1", "args": {"value": 64, "type": "u32"}},
-                "one": {"op": "const@1", "args": {"value": 1, "type": "u32"}},
-                "h": {"op": "hash@1", "args": {"a": "e"}},
-                "i": {"op": "rem@1", "args": {"a": "h", "b": "n"}},
-                "w": {"op": "write@1", "args": {"buf": "out", "i": "i", "v": "one"}}
-            },
-            "outputs": {"out": {"storage": {"type": "u32", "count": 64}}},
-            "elements": 64, "workgroup": 64, "cost": {"ns_per_element": 1000}
-        }}
-    }))
+    box_figure(
+        "A compute write at another element's index",
+        "figure",
+        json!({
+            "scatter": {"id": "scatter", "kind": "gpu.compute@1", "name": "Scatter", "order": "b0", "params": {
+                "about": "Writes 1 at hash(i) % 64.", "origin": "composed", "inputs": {},
+                "steps": {
+                    "e": {"op": "element@1", "args": {}},
+                    "n": {"op": "const@1", "args": {"value": 64, "type": "u32"}},
+                    "one": {"op": "const@1", "args": {"value": 1, "type": "u32"}},
+                    "h": {"op": "hash@1", "args": {"a": "e"}},
+                    "i": {"op": "rem@1", "args": {"a": "h", "b": "n"}},
+                    "w": {"op": "write@1", "args": {"buf": "out", "i": "i", "v": "one"}}
+                },
+                "outputs": {"out": {"storage": {"type": "u32", "count": 64}}},
+                "elements": 64, "workgroup": 64, "cost": {"ns_per_element": 1000}
+            }}
+        }),
+    )
 }
 
 /// A figure with one composed pass of `steps` (its output the step `out`), declared at `cost` ns
 /// a pixel.
 fn tint_figure(steps: Value, cost: f64) -> Value {
-    box_figure("A composed pass the check refuses", "figure", json!({
-        "tint": {"id": "tint", "kind": "gpu.pass@1", "name": "Tint", "order": "b0", "params": {
-            "about": "A tint with one defect.", "origin": "composed",
-            "inputs": {
-                "src": {"type": "texture", "from": {"texture": {"target": {"op": "core", "output": "color"}}}},
-                "n": {"type": "u32", "from": {"param": "params/n"}}
-            },
-            "steps": steps, "outputs": {"color": "out"}, "chain": "effects", "order": "a0",
-            "resolution": "full", "cost": {"ns_per_px": cost}, "fallback": "look"
-        }}
-    }))
+    box_figure(
+        "A composed pass the check refuses",
+        "figure",
+        json!({
+            "tint": {"id": "tint", "kind": "gpu.pass@1", "name": "Tint", "order": "b0", "params": {
+                "about": "A tint with one defect.", "origin": "composed",
+                "inputs": {
+                    "src": {"type": "texture", "from": {"texture": {"target": {"op": "core", "output": "color"}}}},
+                    "n": {"type": "u32", "from": {"param": "params/n"}}
+                },
+                "steps": steps, "outputs": {"color": "out"}, "chain": "effects", "order": "a0",
+                "resolution": "full", "cost": {"ns_per_px": cost}, "fallback": "look"
+            }}
+        }),
+    )
 }
 
 /// Each of the check's codes with a tint whose steps raise it alone, and its declared cost.
@@ -766,54 +845,86 @@ fn planted_tints() -> Vec<(&'static str, Value, f64)> {
         s
     };
     vec![
-        ("operator_status_color", base(json!({
-            "r": {"op": "role@1", "args": {"name": "fail"}},
-            "out": {"op": "add@1", "args": {"a": "c", "b": "r"}}
-        })), 50.0),
+        (
+            "operator_status_color",
+            base(json!({
+                "r": {"op": "role@1", "args": {"name": "fail"}},
+                "out": {"op": "add@1", "args": {"a": "c", "b": "r"}}
+            })),
+            50.0,
+        ),
         ("cost_understated", base(json!({})), 1e-6),
-        ("operator_cycle", base(json!({
-            "a": {"op": "add@1", "args": {"a": "b", "b": 1.0}},
-            "b": {"op": "add@1", "args": {"a": "a", "b": 1.0}},
-            "out": {"op": "add@1", "args": {"a": "c", "b": "a"}}
-        })), 50.0),
-        ("operator_limit", base(json!({
-            "w": {"op": "split@1", "args": {"x": "uv", "pick": "w"}},
-            "out": {"op": "add@1", "args": {"a": "c", "b": "w"}}
-        })), 50.0),
-        ("operator_source", base(json!({
-            "out": {"op": "add@1", "args": {"a": "c", "b": "red"}, "wgsl": "return c + red;"}
-        })), 50.0),
-        ("operator_type", base(json!({
-            "yes": {"op": "const@1", "args": {"value": true}},
-            "out": {"op": "add@1", "args": {"a": "c", "b": "yes"}}
-        })), 50.0),
-        ("operator_unbounded", base(json!({
-            "sum": {"op": "repeat@1", "args": {"count": "n", "accumulate": {"acc": [0, 0, 0, 0]},
-                    "body": {"acc": {"op": "add@1", "args": {"a": "acc", "b": "c"}}}}},
-            "out": {"op": "add@1", "args": {"a": "c", "b": "sum.acc"}}
-        })), 50.0),
-        ("operator_unknown_op", base(json!({
-            "out": {"op": "magic@1", "args": {"a": "c"}}
-        })), 50.0),
+        (
+            "operator_cycle",
+            base(json!({
+                "a": {"op": "add@1", "args": {"a": "b", "b": 1.0}},
+                "b": {"op": "add@1", "args": {"a": "a", "b": 1.0}},
+                "out": {"op": "add@1", "args": {"a": "c", "b": "a"}}
+            })),
+            50.0,
+        ),
+        (
+            "operator_limit",
+            base(json!({
+                "w": {"op": "split@1", "args": {"x": "uv", "pick": "w"}},
+                "out": {"op": "add@1", "args": {"a": "c", "b": "w"}}
+            })),
+            50.0,
+        ),
+        (
+            "operator_source",
+            base(json!({
+                "out": {"op": "add@1", "args": {"a": "c", "b": "red"}, "wgsl": "return c + red;"}
+            })),
+            50.0,
+        ),
+        (
+            "operator_type",
+            base(json!({
+                "yes": {"op": "const@1", "args": {"value": true}},
+                "out": {"op": "add@1", "args": {"a": "c", "b": "yes"}}
+            })),
+            50.0,
+        ),
+        (
+            "operator_unbounded",
+            base(json!({
+                "sum": {"op": "repeat@1", "args": {"count": "n", "accumulate": {"acc": [0, 0, 0, 0]},
+                        "body": {"acc": {"op": "add@1", "args": {"a": "acc", "b": "c"}}}}},
+                "out": {"op": "add@1", "args": {"a": "c", "b": "sum.acc"}}
+            })),
+            50.0,
+        ),
+        (
+            "operator_unknown_op",
+            base(json!({
+                "out": {"op": "magic@1", "args": {"a": "c"}}
+            })),
+            50.0,
+        ),
     ]
 }
 
 /// A composed pass in a core view, which runs shipped operators only.
 fn composed_in_core_view() -> Value {
-    box_figure("A composed pass in a core view", "core_view", json!({
-        "tint": {"id": "tint", "kind": "gpu.pass@1", "name": "Tint", "order": "b0", "params": {
-            "about": "Adds red to the frame.", "origin": "composed",
-            "inputs": {"src": {"type": "texture", "from": {"texture": {"target": {"op": "core", "output": "color"}}}}},
-            "steps": {
-                "uv": {"op": "screen_uv@1", "args": {}},
-                "c": {"op": "sample@1", "args": {"tex": "src", "uv": "uv", "lod": 0}},
-                "red": {"op": "const@1", "args": {"value": [0.6, 0, 0, 0], "type": "vec4"}},
-                "out": {"op": "add@1", "args": {"a": "c", "b": "red"}}
-            },
-            "outputs": {"color": "out"}, "chain": "effects", "order": "a0", "resolution": "full",
-            "cost": {"ns_per_px": 50}, "fallback": "look"
-        }}
-    }))
+    box_figure(
+        "A composed pass in a core view",
+        "core_view",
+        json!({
+            "tint": {"id": "tint", "kind": "gpu.pass@1", "name": "Tint", "order": "b0", "params": {
+                "about": "Adds red to the frame.", "origin": "composed",
+                "inputs": {"src": {"type": "texture", "from": {"texture": {"target": {"op": "core", "output": "color"}}}}},
+                "steps": {
+                    "uv": {"op": "screen_uv@1", "args": {}},
+                    "c": {"op": "sample@1", "args": {"tex": "src", "uv": "uv", "lod": 0}},
+                    "red": {"op": "const@1", "args": {"value": [0.6, 0, 0, 0], "type": "vec4"}},
+                    "out": {"op": "add@1", "args": {"a": "c", "b": "red"}}
+                },
+                "outputs": {"color": "out"}, "chain": "effects", "order": "a0", "resolution": "full",
+                "cost": {"ns_per_px": 50}, "fallback": "look"
+            }}
+        }),
+    )
 }
 
 /// The module's fixture: a box on a floor under a sun that casts its shadow.
@@ -851,16 +962,28 @@ mod tests {
         let fx = json!({"packs": ["deepbuild/fx@1.0.0"], "budget": {"class": "figure"}});
         let invert = json!({"op": "fx.invert@1"});
         assert!(codes(&fx, json!({"passes": [invert]})).is_empty());
-        assert_eq!(codes(&fx, json!({"passes": vec![&invert; 9]})), ["operator_limit"]);
-        assert_eq!(codes(&fx, json!({"backdrop": "below"})), ["operator_kind_rule"]);
+        assert_eq!(
+            codes(&fx, json!({"passes": vec![&invert; 9]})),
+            ["operator_limit"]
+        );
+        assert_eq!(
+            codes(&fx, json!({"backdrop": "below"})),
+            ["operator_kind_rule"]
+        );
         assert_eq!(
             codes(&fx, json!({"passes": [{"op": "fx.no_such@1"}]})),
             ["operator_unknown_op"]
         );
         // A pack's pass needs the document to name the pack.
-        assert_eq!(codes(&json!({}), json!({"passes": [invert]})), ["operator_unknown_op"]);
+        assert_eq!(
+            codes(&json!({}), json!({"passes": [invert]})),
+            ["operator_unknown_op"]
+        );
         let core_view = json!({"packs": fx["packs"], "budget": {"class": "core_view"}});
-        assert_eq!(codes(&core_view, json!({"passes": [invert]})), ["operator_budget_class"]);
+        assert_eq!(
+            codes(&core_view, json!({"passes": [invert]})),
+            ["operator_budget_class"]
+        );
     }
 
     #[test]
@@ -881,7 +1004,10 @@ mod tests {
 
     #[test]
     fn the_shipped_blur_is_two_axes_that_pass_the_operator_check_and_reach_its_radius() {
-        let params = json!({"radius": 12}).as_object().cloned().unwrap_or_default();
+        let params = json!({"radius": 12})
+            .as_object()
+            .cloned()
+            .unwrap_or_default();
         let blur = pass_graph("blur@1", None, &params, &[]).expect("a shipped pass");
         assert_eq!((blur.stages.len(), blur.grow), (2, 12.0));
         for stage in &blur.stages {
@@ -900,10 +1026,16 @@ mod tests {
         };
         let codes_of = |params: Value| {
             let d = doc(params.clone());
-            group_rule(&d, "g", &d["items"]["g"]).iter().map(|r| r.code).collect::<Vec<_>>()
+            group_rule(&d, "g", &d["items"]["g"])
+                .iter()
+                .map(|r| r.code)
+                .collect::<Vec<_>>()
         };
         assert!(codes_of(json!({"opacity": 0.5})).is_empty());
-        assert_eq!(codes_of(json!({"blend": "subtract"})), ["operator_kind_rule"]);
+        assert_eq!(
+            codes_of(json!({"blend": "subtract"})),
+            ["operator_kind_rule"]
+        );
         assert_eq!(codes_of(json!({"blend": "multiply"})), Vec::<&str>::new());
     }
 }

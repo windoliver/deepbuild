@@ -49,7 +49,7 @@ pub enum PlayPath {
 
 /// What [`Hub::evaluate`] leaves: the last frame's drawing, its nodes' results, and each video
 /// image item's frame.
-pub(crate) type Evaluated = (Painted, Vec<Value>, Map<String, Value>);
+pub(crate) type Evaluated = (Painted, Vec<Value>, Map<String, Value>, Map<String, Value>);
 
 /// A `determinism` call.
 pub struct Determinism {
@@ -101,15 +101,22 @@ pub fn parse_call(name: &str, c: &Map<String, Value>) -> Option<Call> {
             doc: doc()?,
             text: c.get("text")?.as_str()?.to_string(),
         }),
-        "export" if c.contains_key("out") => crate::export::parse(c).map(Call::ExportRun),
+        "export" if c.contains_key("out") => {
+            crate::export::parse(c).map(|job| Call::ExportRun(Box::new(job)))
+        }
         "export" => {
             let frame_rate = optional(c.get("frame_rate"), pair)?;
             let sample_rate = optional(c.get("audio"), |a| whole(a.get("sample_rate")?))?;
-            let frames = optional(c.get("frames"), |f| f.as_array()?.iter().map(Value::as_i64).collect())?;
+            let frames = optional(c.get("frames"), |f| {
+                f.as_array()?.iter().map(Value::as_i64).collect()
+            })?;
             let timecode = optional(c.get("timecode"), |t| {
                 let start = optional(t.get("start"), |s| Some(s.as_str()?.to_string()))?;
                 let drop = optional(t.get("drop_frame"), Value::as_bool)?;
-                Some((start.unwrap_or_else(|| "00:00:00:00".into()), drop.unwrap_or(false)))
+                Some((
+                    start.unwrap_or_else(|| "00:00:00:00".into()),
+                    drop.unwrap_or(false),
+                ))
             })?;
             Some(Call::Export(Export {
                 doc: doc()?,
@@ -387,13 +394,26 @@ impl Hub<'_> {
     /// `time`: a literal's flicks in a document. A word anchor (#502), `@line.word:text#k`,
     /// resolves to the word marker the line's words record places.
     pub fn time_reply(&mut self, doc: &str, text: &str) -> Value {
-        if let Ok(Time::Word { line, text: word, k, offset }) = Time::parse(text) {
+        if let Ok(Time::Word {
+            line,
+            text: word,
+            k,
+            offset,
+        }) = Time::parse(text)
+        {
             let Some(document) = self.current(doc).map(|r| r.doc.clone()) else {
                 return refused("no_revision");
             };
-            let markers = self.script_of(&document).map(|s| s.markers.clone()).unwrap_or_default();
+            let markers = self
+                .script_of(&document)
+                .map(|s| s.markers.clone())
+                .unwrap_or_default();
             let prefix = format!("{}.word:{word}#", line.as_str());
-            let found: Vec<i64> = markers.iter().filter(|(name, _)| name.starts_with(&prefix)).map(|(_, t)| *t).collect();
+            let found: Vec<i64> = markers
+                .iter()
+                .filter(|(name, _)| name.starts_with(&prefix))
+                .map(|(_, t)| *t)
+                .collect();
             let at = match k {
                 Some(k) => found.get(k as usize - 1).copied(),
                 None if found.len() == 1 => Some(found[0]),
@@ -444,12 +464,16 @@ impl Hub<'_> {
                 Some((start, drop)) => {
                     let tc = match deep_canvas::timecode::of_rate(p, q, *drop) {
                         Ok(tc) => tc,
-                        Err(why) => return json!({"outcome": "refused", "code": "drop_frame_rate",
-                            "frame_rate": format!("{p}/{q}"), "why": format!("drop_frame: {why}")}),
+                        Err(why) => {
+                            return json!({"outcome": "refused", "code": "drop_frame_rate",
+                            "frame_rate": format!("{p}/{q}"), "why": format!("drop_frame: {why}")})
+                        }
                     };
                     match tc.number(start) {
                         Ok(n) => Some((tc, n)),
-                        Err(why) => return json!({"outcome": "refused", "code": "bad_timecode", "why": why}),
+                        Err(why) => {
+                            return json!({"outcome": "refused", "code": "bad_timecode", "why": why})
+                        }
                     }
                 }
             };
@@ -544,7 +568,13 @@ impl Hub<'_> {
     /// and node results.
     pub fn determinism(&mut self, d: &Determinism) -> Value {
         let current = self.current_doc(&d.doc);
-        let document = match current.map(|doc| if d.session { self.played(&d.doc, &doc) } else { doc }) {
+        let document = match current.map(|doc| {
+            if d.session {
+                self.played(&d.doc, &doc)
+            } else {
+                doc
+            }
+        }) {
             Ok(doc) => doc,
             Err(reply) => return reply,
         };
@@ -634,7 +664,9 @@ impl Hub<'_> {
                 json!({"operator": n.operator, "module": n.module, "item": n.item, "result": n.result})
             })
             .collect();
-        Ok((drawing, nodes, video))
+        // #1967: each cell grid as the last frame shows it.
+        let cells = crate::terminal::grid_blocks(&sched, &session);
+        Ok((drawing, nodes, video, cells))
     }
 
     /// One side of a comparison: [`Hub::evaluate`]'s last frame as its canonical render (the
@@ -648,7 +680,7 @@ impl Hub<'_> {
         seek: bool,
     ) -> Result<Value, String> {
         let started = std::time::Instant::now();
-        let (drawing, nodes, video) = self.evaluate(doc, view, times, seek)?;
+        let (drawing, nodes, video, cells) = self.evaluate(doc, view, times, seek)?;
         let (rgba, size) = if deep_canvas_scene3d::scene::has_3d(doc) {
             // A 3D writer layer: its 3D frame at the last time, its 2D items drawn over it (#1162).
             self.rgba3d(doc, times.last().copied().unwrap_or(0), &drawing, None)
@@ -665,9 +697,13 @@ impl Hub<'_> {
         let sha = self.put_png(rgba, size).map_err(|u| u.code.to_string())?;
         // #405: what hashing adds to the render, each in ms.
         let timing = json!({"render_ms": rendered.as_secs_f64() * 1e3, "hash_ms": hashed.as_secs_f64() * 1e3});
-        let mut side = json!({"pixels": sha, "nodes": nodes, "pixel_hash": pixel_hash, "timing": timing});
+        let mut side =
+            json!({"pixels": sha, "nodes": nodes, "pixel_hash": pixel_hash, "timing": timing});
         if !video.is_empty() {
             side["video"] = Value::Object(video);
+        }
+        if !cells.is_empty() {
+            side["cells"] = Value::Object(cells);
         }
         Ok(side)
     }

@@ -6,14 +6,15 @@
 //! then checks the whole set: dependency ranges (the readers of a missing optional dependency
 //! left out), one owner per array, every read resolved, no read of a later phase, no cycle,
 //! legal places, check machine classes and tool entries, one implementation per interface; it
-//! computes each module's digest and the module-set digest. Any failure is a [`SealError`] with
-//! its reason, naming the modules and arrays involved: there is no warning level and no accept
-//! list. A [`Sealed`] registry never changes, and nothing here runs per frame.
+//! computes each module's digest, the module-set digest and the runtime digest. Any failure is a
+//! [`SealError`] with its reason, naming the modules and arrays involved: there is no warning
+//! level and no accept list. A [`Sealed`] registry never changes, and nothing here runs per frame.
 //!
 //! Everything is ordinary data over `BTreeMap`s and sorted `Vec`s: no static, no hash-map order,
 //! nothing read from the machine, as the canvas lint requires.
 
 pub mod core_lists;
+mod implementation;
 pub mod lists;
 mod semver;
 
@@ -23,6 +24,7 @@ use crate::canon::{self, CanonError, NoShape};
 use crate::kinds::Entry;
 use serde_json::{json, Value};
 
+pub use implementation::{Equivalence, Implementation, Pin, StateClass};
 pub use semver::{Range, Semver};
 
 /// The core's version, as `core@<version>` names it in every reply; it is the `deep-canvas`
@@ -229,65 +231,6 @@ pub struct Manifest {
     pub implements: String,
     /// The crate behind the interface (Canvas module: interface and implementation).
     pub implementation: Implementation,
-}
-
-/// How an implementation's results compare with its interface's reference.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Equivalence {
-    /// Every kit fixture gives the reference implementation's hashes.
-    Bit,
-    /// Every behavior fixture lands within the interface's tolerances.
-    Measured,
-}
-
-/// What an implementation's carried state is.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum StateClass {
-    /// A documented layout any implementation of the interface reads.
-    Canonical,
-    /// Its crate's own bytes, which no other implementation or version loads.
-    BackendBytes,
-}
-
-/// One library an implementation pins.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Pin {
-    pub version: String,
-    pub features: Vec<String>,
-}
-
-/// The implementation a canvas module is of its interface.
-#[derive(Clone, Debug)]
-pub struct Implementation {
-    pub name: String,
-    pub version: Semver,
-    /// crate → its version and features.
-    pub pins: BTreeMap<String, Pin>,
-    pub equivalence: Equivalence,
-    pub state: StateClass,
-}
-
-impl Implementation {
-    /// A bit, canonical implementation pinning nothing, as every shipped module but physics is.
-    pub fn reference(name: &str, version: Semver) -> Implementation {
-        Implementation {
-            name: name.into(),
-            version,
-            pins: BTreeMap::new(),
-            equivalence: Equivalence::Bit,
-            state: StateClass::Canonical,
-        }
-    }
-
-    pub fn to_json(&self) -> Value {
-        json!({
-            "name": self.name,
-            "version": self.version.to_string(),
-            "pins": self.pins.iter().map(|(k, p)| (k.clone(), json!({"version": p.version, "features": p.features}))).collect::<serde_json::Map<_, _>>(),
-            "equivalence": match self.equivalence { Equivalence::Bit => "bit", Equivalence::Measured => "measured" },
-            "state": match self.state { StateClass::Canonical => "canonical", StateClass::BackendBytes => "backend_bytes" },
-        })
-    }
 }
 
 /// A canvas interface: what documents, checks and other canvas modules see of an implementation.
@@ -676,15 +619,15 @@ pub struct Report {
 
 pub type ReportRun = fn(&Value, &Value) -> Report;
 
-/// The core's own document check kinds (canvas primitives: Check input). Each reads only the
-/// core's arrays, which canvas modules fill through `contributes_to`, and names no module's kind.
-pub const CORE_CHECK_KINDS: [&str; 11] = [
+/// The core's own document check kinds (canvas primitives: Check input), each reading only the core's arrays and naming no module's kind.
+pub const CORE_CHECK_KINDS: [&str; 12] = [
     "document.validate",
     "document.budget",
     "document.frame_time",
     "document.layout",
     "document.determinism",
     "geometry.audit",
+    "geometry.shape",
     "film.audit",
     "film.flicker",
     "film.layout",
@@ -1150,6 +1093,11 @@ pub enum Fault {
     /// outputs there too (#485): a build without effects leaves scene3d's outputs with no
     /// registry.
     GpuOutputInEffects,
+    /// Leaves the physics implementation out of the runtime digest (#1920).
+    RuntimeOmitsPhysics,
+    /// Hashes each interface's registered shapes into the runtime digest in place of its
+    /// implementation's version and pins (#1920).
+    RuntimeOnlyShapes,
 }
 
 /// The module that declares `ease@1` in the planted layout that moves it out of the core, which
@@ -1310,6 +1258,8 @@ pub struct Sealed {
     kinds: crate::kinds::Registry,
     /// A d1 digest over the sorted modules' names, versions and digests.
     pub set_digest: String,
+    /// A d1 digest over each measured or backend_bytes implementation, with its pins (#1920).
+    pub runtime_digest: String,
     /// Each canvas interface, by name, with its digest and the implementation the build chose.
     pub interfaces: Vec<SealedInterface>,
     /// The time the seal's interface checks took, in nanoseconds of the registry's clock; 0
@@ -1379,6 +1329,7 @@ impl Sealed {
             "core": core_name(),
             "build_set": self.build_set.name(),
             "set_digest": self.set_digest,
+            "runtime_digest": self.runtime_digest,
             "interfaces": self.interfaces.iter().map(|i| (i.name.clone(), i.to_json())).collect::<serde_json::Map<_, _>>(),
             "phases": phases,
             "contributions": self.contributions,
@@ -2942,7 +2893,9 @@ impl Registry {
                 .filter(|e| e.registry != "ease@1")
                 .collect();
         if eases {
-            core_entries.extend(core_lists::ease_entries(self.fault == Some(Fault::EaseRenumbered)));
+            core_entries.extend(core_lists::ease_entries(
+                self.fault == Some(Fault::EaseRenumbered),
+            ));
         }
         if outputs_elsewhere {
             core_entries.retain(|e| e.registry != "gpu.output@1");
@@ -3015,6 +2968,8 @@ impl Registry {
             self.implementation_of(&m.name, m, &shapes, None, private, &mut interface_ns)?;
         }
         interfaces.sort_by(|a, b| a.name.cmp(&b.name));
+        let runtime_digest = implementation::runtime_digest(&interfaces, self.fault)
+            .map_err(|e| SealError::new("bad_shape", &[], &[], e.to_string()))?;
         let set_digest = d1(&Value::Array(
             modules
                 .iter()
@@ -3041,6 +2996,7 @@ impl Registry {
             left_out_kinds,
             kinds,
             set_digest,
+            runtime_digest,
             interfaces,
             interface_ns,
             registries,
@@ -3084,7 +3040,10 @@ impl Registry {
         let digest = pinned(digest, m).map_err(bad)?;
         let covers = self.fault == Some(Fault::DigestCoversPins);
         if covers {
-            listed.insert("pins".into(), d1(&m.implementation.to_json()["pins"]).map_err(bad)?);
+            listed.insert(
+                "pins".into(),
+                d1(&m.implementation.to_json()["pins"]).map_err(bad)?,
+            );
         }
         let started = self.clock.map(|c| c());
         let declared = self.interfaces.get(&m.implements);
@@ -3098,7 +3057,8 @@ impl Registry {
             let (want, mut want_listed) = module_shapes(&r, own.as_ref(), private).map_err(bad)?;
             let want = pinned(want, &i.reference.manifest).map_err(bad)?;
             if covers {
-                let pins = d1(&i.reference.manifest.implementation.to_json()["pins"]).map_err(bad)?;
+                let pins =
+                    d1(&i.reference.manifest.implementation.to_json()["pins"]).map_err(bad)?;
                 want_listed.insert("pins".into(), pins);
             }
             if want != digest {
@@ -3163,7 +3123,8 @@ pub(crate) fn id_named(name: &str) -> bool {
         !b.is_empty()
             && b.len() <= 48
             && (b[0].is_ascii_lowercase() || b[0].is_ascii_digit())
-            && b.iter().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || *c == b'_' || *c == b'-')
+            && b.iter()
+                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || *c == b'_' || *c == b'-')
     })
 }
 
@@ -3203,7 +3164,11 @@ fn may_read(
                 owned_by.unwrap_or(owner)
             ),
         );
-        err.implementations = [reader, owned_by].into_iter().flatten().map(str::to_string).collect();
+        err.implementations = [reader, owned_by]
+            .into_iter()
+            .flatten()
+            .map(str::to_string)
+            .collect();
         err.implementations.sort();
         return Err(err);
     }
@@ -3476,7 +3441,10 @@ fn module_shapes(
         ("tool_entry", &tools, &["tool", "entry"]),
     ] {
         for v in list_of {
-            let name: Vec<String> = keys.iter().map(|k| v[*k].to_string().trim_matches('"').to_string()).collect();
+            let name: Vec<String> = keys
+                .iter()
+                .map(|k| v[*k].to_string().trim_matches('"').to_string())
+                .collect();
             list(format!("{what} {}", name.join(" ")), v)?;
         }
     }
@@ -3590,7 +3558,10 @@ mod tests {
             feature: name.into(),
             license: "Apache-2.0".into(),
             implements: format!("{name}@1"),
-            implementation: Implementation::reference(name, Semver::parse("1.0.0").expect("a version")),
+            implementation: Implementation::reference(
+                name,
+                Semver::parse("1.0.0").expect("a version"),
+            ),
         }
     }
 

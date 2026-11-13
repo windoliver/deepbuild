@@ -17,17 +17,15 @@
     "canvas-lint: crates/deep-text/src/cache.rs the pointer width (size_of), 32 on wasm32 and 64 on the reference Macs": 3,
     "canvas-lint: crates/deep-text/src/cache.rs use of a disallowed method `std::collections::HashMap::iter` (clippy::disallowed_methods)": 1,
     "canvas-lint: crates/deep-text/src/cache.rs use of a disallowed type `std::collections::HashMap` (clippy::disallowed_types)": 2,
+    "clippy: tests/acceptance/1141/app/bulk.rs manual implementation of `.is_multiple_of()`": 3,
+    "clippy: tests/acceptance/1141/app/environment.rs manual implementation of `.is_multiple_of()`": 1,
     "clippy: tests/acceptance/327/ac3_redraft.rs needlessly taken reference of both operands": 1,
     "clippy: tests/acceptance/327/card.rs this `map_or` can be simplified": 4,
     "clippy: tests/acceptance/327/card.rs unused import: `Phase`": 1,
     "clippy: tests/acceptance/327/card.rs unused variable: `card`": 1,
     "clippy: tests/acceptance/327/common.rs this `map_or` can be simplified": 1,
     "clippy: tests/acceptance/327/planted.rs this `map_or` can be simplified": 1,
-    "fmt: tests/acceptance/327/ac1_redraft.rs": 14,
-    "fmt: tests/acceptance/327/ac3_redraft.rs": 18,
-    "fmt: tests/acceptance/327/card.rs": 30,
-    "fmt: tests/acceptance/327/common.rs": 88,
-    "fmt: tests/acceptance/327/planted.rs": 17
+    "clippy: tests/acceptance/995/app/panel.rs this method takes 2 arguments but 1 argument was supplied": 1
   },
   "timing": [
     "tests/acceptance/348/budgets.test.ts › AC8 #348.b0d5cd73 loading an extension takes under 100 ms, and the host adds under 0.5 ms per event per subscribed extension, on the reference Mac, compared with the merge base › AC8 on the reference Mac, a load is under 100 ms and the host adds under 0.5 ms per event per subscribed extension, in the hub and in the sandbox (five bench runs each, by the timing rule)",
@@ -221,6 +219,18 @@
       "note": "INCONCLUSIVE: a manual run on the reference Mac; a person sets DEEP_880_TOUCH_ID=1",
       "reason": "gated on the opt-in variable DEEP_880_TOUCH_ID: a person records the screen and touches or cancels",
       "approval": "#1115, Skips: known today"
+    },
+    {
+      "id": "tests/acceptance/306/missing.test.ts › AC3 a document naming a pack version this build lacks is refused whole with pack_missing, and its check is BLOCKED › AC3 with 1.0.0 installed, a board naming test/chart@2.0.0 is refused naming the pack and 2.0.0, never drawn with 1.0.0, no revision current, its check BLOCKED",
+      "note": "",
+      "reason": "retired by #1958, whose Scope replaces the whole-document refusal #306 describes: 306-redraft-1958/missing.test.ts is AC3's test",
+      "approval": "#1958 Scope (the owner's touch-key tag on this commit)"
+    },
+    {
+      "id": "tests/acceptance/306/missing.test.ts › AC3 a document naming a pack version this build lacks is refused whole with pack_missing, and its check is BLOCKED › AC3 with no pack installed, a board naming test/chart@1.0.0 is refused naming the pack and 1.0.0, and its check is BLOCKED",
+      "note": "",
+      "reason": "retired by #1958, whose Scope replaces the whole-document refusal #306 describes: 306-redraft-1958/missing.test.ts is AC3's test",
+      "approval": "#1958 Scope (the owner's touch-key tag on this commit)"
     }
   ]
 }

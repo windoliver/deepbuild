@@ -1,0 +1,8 @@
+{
+  "code": "unknown_field",
+  "retryable": false,
+  "remediation": "test.slab@3 has no field w: did you mean width, renamed from w in test.slab@2? Give one of width, height, label, corner.",
+  "path": "/path",
+  "actual": "test.slab@3.w",
+  "evidence": []
+}

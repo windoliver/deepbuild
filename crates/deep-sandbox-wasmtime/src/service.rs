@@ -147,7 +147,13 @@ impl Sandbox {
         } else {
             SUBSET
         };
-        check::check(bytes, &Limits { features, memory: budget.memory })?;
+        check::check(
+            bytes,
+            &Limits {
+                features,
+                memory: budget.memory,
+            },
+        )?;
         check::check_role(bytes, role)
     }
 
@@ -186,7 +192,12 @@ impl Sandbox {
     ) -> Result<Ran, String> {
         // A validator's memory is its asset plus 4 MiB, whatever the program declares (#415).
         let pages = (role == "validator").then(|| budget.memory.div_ceil(PAGE));
-        let mut r = Runner::sized(rewritten, pages, self.planted.engine, at == Offsets::Written)?;
+        let mut r = Runner::sized(
+            rewritten,
+            pages,
+            self.planted.engine,
+            at == Offsets::Written,
+        )?;
         let call = |export: &str, args: Vec<Val>| Call {
             export: export.into(),
             args,
@@ -258,7 +269,10 @@ impl Sandbox {
                 .and_then(Value::as_str)
                 .and_then(|p| B64.decode(p).ok())
         };
-        let role = line.get("role").and_then(Value::as_str).unwrap_or("provider");
+        let role = line
+            .get("role")
+            .and_then(Value::as_str)
+            .unwrap_or("provider");
         let budget = Budget::of(role, line.get("budget"), 0);
         let refused = |r: Vec<Refusal>| json!({"ok": false, "code": "subset_refused", "refusals": refusals_json(&r)});
         match line.get("call").and_then(Value::as_str) {
@@ -273,7 +287,9 @@ impl Sandbox {
             Some("rewrite") => {
                 let Some(bytes) = program() else { return bad() };
                 match self.rewrite(&bytes, role, &budget) {
-                    Ok((out, ms)) => json!({"ok": true, "rewritten": B64.encode(&out.bytes), "hash": out.hash, "ms": ms}),
+                    Ok((out, ms)) => {
+                        json!({"ok": true, "rewritten": B64.encode(&out.bytes), "hash": out.hash, "ms": ms})
+                    }
                     Err(Ok(r)) => refused(r),
                     Err(Err(e)) => json!({"ok": false, "code": "rewrite_failed", "what": e}),
                 }
@@ -292,8 +308,19 @@ impl Sandbox {
                     .and_then(|i| B64.decode(i).ok())
                     .unwrap_or_default();
                 let reads = reads_of(line.get("read"));
-                match self.run(&out.bytes, role, seed, &budget, &reads, &input, RUN_DEADLINE, Offsets::Written) {
-                    Ok(r) => json!({"ok": true, "hash": out.hash, "trap": trap_json(&r.trap), "result": r.result, "reads": r.reads}),
+                match self.run(
+                    &out.bytes,
+                    role,
+                    seed,
+                    &budget,
+                    &reads,
+                    &input,
+                    RUN_DEADLINE,
+                    Offsets::Written,
+                ) {
+                    Ok(r) => {
+                        json!({"ok": true, "hash": out.hash, "trap": trap_json(&r.trap), "result": r.result, "reads": r.reads})
+                    }
                     Err(e) => json!({"ok": false, "code": "run_failed", "what": e}),
                 }
             }
@@ -344,7 +371,8 @@ impl Sandbox {
         let name = f.name.as_str();
         let mut fails = Vec::new();
         let mut fail = |field: &str, expected: Value, actual: Value, function: Option<usize>| {
-            let mut x = json!({"fixture": name, "field": field, "expected": expected, "actual": actual});
+            let mut x =
+                json!({"fixture": name, "field": field, "expected": expected, "actual": actual});
             if let Some(i) = function {
                 x["function"] = json!(i);
             }
@@ -369,7 +397,12 @@ impl Sandbox {
             Err(Err(msg)) => match e.get("refusals") {
                 // The check admitted what the reference refuses, and the rewrite couldn't take it.
                 Some(want) => fail("refusal", want.clone(), json!([]), None),
-                None => fail("hash", e.get("hash").cloned().unwrap_or(Value::Null), json!(msg), None),
+                None => fail(
+                    "hash",
+                    e.get("hash").cloned().unwrap_or(Value::Null),
+                    json!(msg),
+                    None,
+                ),
             },
             Ok((rw, _)) => {
                 if let Some(want) = e.get("refusals") {
@@ -383,16 +416,38 @@ impl Sandbox {
                     let want: Vec<String> = e
                         .get("functions")
                         .and_then(Value::as_array)
-                        .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+                        .map(|a| {
+                            a.iter()
+                                .filter_map(|v| v.as_str().map(String::from))
+                                .collect()
+                        })
                         .unwrap_or_default();
                     let differs = (0..functions.len().max(want.len()))
                         .find(|&i| functions.get(i) != want.get(i));
-                    fail("hash", e.get("hash").cloned().unwrap_or(Value::Null), json!(hash), differs);
+                    fail(
+                        "hash",
+                        e.get("hash").cloned().unwrap_or(Value::Null),
+                        json!(hash),
+                        differs,
+                    );
                 }
                 if e.get("refusals").is_none() {
-                    match self.run(&rw.bytes, &f.role, 0, &f.budget, &f.reads, &[], KIT_DEADLINE, Offsets::Rewritten) {
+                    match self.run(
+                        &rw.bytes,
+                        &f.role,
+                        0,
+                        &f.budget,
+                        &f.reads,
+                        &[],
+                        KIT_DEADLINE,
+                        Offsets::Rewritten,
+                    ) {
                         Err(msg) => fail("kind", want_kind(e), json!(msg), None),
-                        Ok(r) => {
+                        Ok(mut r) => {
+                            // The planted engine build (#2324) gives `pass.subset` another result.
+                            if cfg!(feature = "plant-engine-differs") && name == "pass.subset" {
+                                r.result = r.result.map(|v| v.wrapping_add(1));
+                            }
                             let trap = trap_json(&r.trap);
                             out["trap"] = trap.clone();
                             out["result"] = json!(r.result);
@@ -401,7 +456,12 @@ impl Sandbox {
                             for field in ["kind", "function", "offset"] {
                                 let (w, g) = (want.get(field).cloned(), trap.get(field).cloned());
                                 if w != g {
-                                    fail(field, w.unwrap_or(Value::Null), g.unwrap_or(Value::Null), None);
+                                    fail(
+                                        field,
+                                        w.unwrap_or(Value::Null),
+                                        g.unwrap_or(Value::Null),
+                                        None,
+                                    );
                                 }
                             }
                             let wr = e.get("result").cloned().unwrap_or(Value::Null);
@@ -429,7 +489,6 @@ impl Sandbox {
 fn want_kind(expect: &Value) -> Value {
     expect.pointer("/trap/kind").cloned().unwrap_or(Value::Null)
 }
-
 
 fn reads_of(v: Option<&Value>) -> Vec<(u32, u32)> {
     v.and_then(Value::as_array)
@@ -493,7 +552,9 @@ fn padded(mut bytes: Vec<u8>, total: usize) -> Vec<u8> {
     let name = b"pad";
     for size_len in 1..=5usize {
         let header = 1 + size_len + 1 + name.len();
-        let Some(payload) = total.checked_sub(bytes.len() + header) else { continue };
+        let Some(payload) = total.checked_sub(bytes.len() + header) else {
+            continue;
+        };
         let body = 1 + name.len() + payload;
         let mut size = Vec::new();
         let mut n = body;

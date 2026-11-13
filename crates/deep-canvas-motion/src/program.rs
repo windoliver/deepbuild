@@ -92,6 +92,8 @@ pub(crate) enum CoreInput {
     },
     /// An occurrence read over a list filtered at check (#491).
     Occurrence(Arc<crate::occurrence::Read>),
+    /// #1183: a logic item's scalar output, from the bake in the document's `arrays`.
+    Array(Arc<crate::array::Read>),
     /// A channel's rate per second.
     Rate(usize),
     /// A remap's `.active`, or with `true` its `.progress`.
@@ -429,7 +431,11 @@ fn number(v: Option<&Value>) -> Option<f64> {
 /// #494: each path key `{of: ID[#part]}` takes that item's evaluated path at the key's time, in
 /// its own item's space, from the document evaluated without the channels that hold such keys;
 /// then its channel's keys are matched as any path keys are.
-fn resolve_of(doc: &Map<String, Value>, motion: &mut doc::Motion, options: &Options) -> Result<(), Refused> {
+fn resolve_of(
+    doc: &Map<String, Value>,
+    motion: &mut doc::Motion,
+    options: &Options,
+) -> Result<(), Refused> {
     let holds = |c: &doc::Channel| c.path.as_ref().is_some_and(|p| !p.of.is_empty());
     if !motion.channels.iter().any(holds) {
         return Ok(());
@@ -454,7 +460,11 @@ fn resolve_of(doc: &Map<String, Value>, motion: &mut doc::Motion, options: &Opti
                 Some((id, part)) => (id, Some(part)),
                 None => (of.as_str(), None),
             };
-            let unresolved = || Refused { code: "ref_unresolved", path: at.clone(), detail: None };
+            let unresolved = || Refused {
+                code: "ref_unresolved",
+                path: at.clone(),
+                detail: None,
+            };
             let item = items.get(id).ok_or_else(unresolved)?;
             let shape = crate::morph::of_item(item, part).ok_or_else(unresolved)?;
             let world = crate::morph::placed(item, &shape);
@@ -470,18 +480,37 @@ fn resolve_of(doc: &Map<String, Value>, motion: &mut doc::Motion, options: &Opti
 }
 
 /// #504: refuses a write or a read of `assemblies/<id>/value` naming no assembly, naming the field.
-fn refuse_unknown_assemblies(motion: &Motion, assemblies: &[crate::assembly::Assembly]) -> Result<(), Refused> {
+fn refuse_unknown_assemblies(
+    motion: &Motion,
+    assemblies: &[crate::assembly::Assembly],
+) -> Result<(), Refused> {
     let named = motion
         .channels
         .iter()
         .map(|c| (format!("channels/{}/target", c.id), &c.target))
         .chain(motion.follows.iter().map(|f| (f.entry(), &f.target)))
-        .chain(motion.drivers.iter().map(|d| (format!("drivers/{}/target", d.id), &d.target)))
-        .chain(motion.drivers.iter().flat_map(|d| d.vars.iter().map(move |(n, v)| (format!("drivers/{}/vars/{n}", d.id), v))));
+        .chain(
+            motion
+                .drivers
+                .iter()
+                .map(|d| (format!("drivers/{}/target", d.id), &d.target)),
+        )
+        .chain(motion.drivers.iter().flat_map(|d| {
+            d.vars
+                .iter()
+                .map(move |(n, v)| (format!("drivers/{}/vars/{n}", d.id), v))
+        }));
     for (path, target) in named {
-        let unknown = target.owner.strip_prefix("assemblies/").is_some_and(|id| !assemblies.iter().any(|a| a.id == id));
+        let unknown = target
+            .owner
+            .strip_prefix("assemblies/")
+            .is_some_and(|id| !assemblies.iter().any(|a| a.id == id));
         if unknown {
-            return Err(Refused { code: "ref_unresolved", path, detail: None });
+            return Err(Refused {
+                code: "ref_unresolved",
+                path,
+                detail: None,
+            });
         }
     }
     Ok(())
@@ -526,7 +555,11 @@ impl Program {
         if let Some(track) = doc::track(doc)? {
             options.input = track;
         }
-        let mut motion = doc::read_with(doc, options.planted == Planted::BeatGridF32, options.planted.arc())?;
+        let mut motion = doc::read_with(
+            doc,
+            options.planted == Planted::BeatGridF32,
+            options.planted.arc(),
+        )?;
         if options.planted == Planted::StageSetIgnored {
             motion.follows.retain(|f| !f.id.starts_with("controls/"));
         }
@@ -534,7 +567,12 @@ impl Program {
             motion.shots.iter_mut().for_each(|s| s.glide = 0);
         }
         if options.planted == Planted::SliderEntriesIgnored {
-            let slider = |c: &str| doc.get("controls").and_then(|m| m.get(c)).and_then(|c| c.get("kind")) == Some(&json!("slider"));
+            let slider = |c: &str| {
+                doc.get("controls")
+                    .and_then(|m| m.get(c))
+                    .and_then(|c| c.get("kind"))
+                    == Some(&json!("slider"))
+            };
             options.input.retain(|e| !slider(&e.control));
         }
         if options.planted == Planted::SpringDropsVelocity {
@@ -586,13 +624,22 @@ impl Program {
             .values()
             .enumerate()
             .filter_map(|(i, item)| {
-                let parent = item.get("parent")?.as_str().filter(|p| !items_json.contains_key(*p))?;
+                let parent = item
+                    .get("parent")?
+                    .as_str()
+                    .filter(|p| !items_json.contains_key(*p))?;
                 Some((i, assemblies.iter().position(|a| a.id == parent)?))
             })
             .collect();
         // The toggles' and stages' entries move #417's follows and stage shots.
         let Some(inputs) = Inputs::new(&motion, Feel::default(), &options.input) else {
-            return Err(Refused { code: "ref_unresolved", path: "track".into(), detail: Some(Box::new(json!({"why": "an entry's value is none of its control's options"}))) });
+            return Err(Refused {
+                code: "ref_unresolved",
+                path: "track".into(),
+                detail: Some(Box::new(
+                    json!({"why": "an entry's value is none of its control's options"}),
+                )),
+            });
         };
         let mut program = Program {
             items,
@@ -627,15 +674,23 @@ impl Program {
         // Only a document with frames is laid out; it is refused here only when a key glides
         // its layout, since the layout is otherwise not motion's to check. A glide needs a frame
         // to lay out and a host that lays it out, or the layout would hold and the glide be lost.
-        let frames = items_json.values().any(|i| i.get("kind").and_then(Value::as_str) == Some("frame@1"));
+        let frames = items_json
+            .values()
+            .any(|i| i.get("kind").and_then(Value::as_str) == Some("frame@1"));
         let glides = motion.channels.iter().filter(|c| c.glide.is_some());
         for c in glides.clone() {
-            let frame = items_json.get(&c.target.owner).and_then(|i| i.get("kind")).and_then(Value::as_str) == Some("frame@1");
+            let frame = items_json
+                .get(&c.target.owner)
+                .and_then(|i| i.get("kind"))
+                .and_then(Value::as_str)
+                == Some("frame@1");
             if !frame || program.options.layout.is_none() {
                 return Err(Refused {
                     code: "layout_refused",
                     path: format!("channels/{}/target", c.id),
-                    detail: Some(Box::new(json!({"why": if frame { "this host has no auto layout solve to glide it" } else { "only a frame@1 is laid out" }, "item": c.target.owner}))),
+                    detail: Some(Box::new(
+                        json!({"why": if frame { "this host has no auto layout solve to glide it" } else { "only a frame@1 is laid out" }, "item": c.target.owner}),
+                    )),
                 });
             }
         }
@@ -647,18 +702,29 @@ impl Program {
                 Err(_) => {}
             }
         }
-        let on_euler = |c: &doc::Channel| c.ty == doc::ValueType::Quat && c.target.field == ["at", "rot"];
-        let rotations = motion.channels.iter().chain(motion.clips.iter().flat_map(|c| &c.channels));
+        let on_euler =
+            |c: &doc::Channel| c.ty == doc::ValueType::Quat && c.target.field == ["at", "rot"];
+        let rotations = motion
+            .channels
+            .iter()
+            .chain(motion.clips.iter().flat_map(|c| &c.channels));
         if let Some(c) = rotations.into_iter().find(|c| on_euler(c)) {
             // A transform's rot is three Euler degrees; four numbers there would draw as nonsense.
-            return Err(Refused { code: "bad_type", path: format!("channels/{}/type", c.id), detail: None });
+            return Err(Refused {
+                code: "bad_type",
+                path: format!("channels/{}/type", c.id),
+                detail: None,
+            });
         }
         let mut values = 0;
         for channel in &motion.channels {
             let width = channel.curve.keys.first().map_or(1, |k| k.value.len());
             let slot = program.slot(items_json, &channel.target.owner, &channel.target, width);
             program.mark_type(slot, channel.ty);
-            if let (Some(p), Some(f)) = (&channel.path, program.fields.iter_mut().find(|f| f.slot == slot)) {
+            if let (Some(p), Some(f)) = (
+                &channel.path,
+                program.fields.iter_mut().find(|f| f.slot == slot),
+            ) {
                 f.shape = Some(p.structure.clone());
             }
             program.mark_written(slot);
@@ -714,7 +780,11 @@ impl Program {
         program.motion.markers.sort_by(|a, b| a.id.cmp(&b.id));
         program.resolve_times(doc)?;
         program.gather_mixes();
-        program.rows = program.occurrence_rows(doc, items_json, doc.get("controls").and_then(Value::as_object))?;
+        program.rows = program.occurrence_rows(
+            doc,
+            items_json,
+            doc.get("controls").and_then(Value::as_object),
+        )?;
         for driver in &motion.drivers {
             let path = format!("drivers/{}", driver.id);
             let mut vars = Vec::new();
@@ -729,7 +799,8 @@ impl Program {
             program.mark_written(slot);
             // A driver with inputs, a hard range or a fallback compiles through the core, whose
             // interval form the range check reads and which takes the fallback.
-            let r1 = driver.inputs.is_empty() && driver.range.is_none() && driver.fallback.is_none();
+            let r1 =
+                driver.inputs.is_empty() && driver.range.is_none() && driver.fallback.is_none();
             let ops = match compile_ops(&driver.expr, &vars).filter(|_| r1) {
                 Some(ops) => ops,
                 None => {
@@ -777,7 +848,9 @@ impl Program {
             let Some(i) = program.items.iter().position(|x| *x == limit.owner) else {
                 return Err(Refused {
                     code: "ref_unresolved",
-                    path: format!("constraints/{}/owner", limit.id), detail: None });
+                    path: format!("constraints/{}/owner", limit.id),
+                    detail: None,
+                });
             };
             let group = ["pos", "rot", "scale"]
                 .iter()
@@ -790,7 +863,9 @@ impl Program {
         let index_of = |items: &[String], id: &str, path: String| {
             items.iter().position(|x| x == id).ok_or(Refused {
                 code: "ref_unresolved",
-                path, detail: None })
+                path,
+                detail: None,
+            })
         };
         for c in &motion.constraints {
             use doc::Kind;
@@ -798,17 +873,28 @@ impl Program {
             let owner = index_of(&program.items, &c.owner, format!("{path}/owner"))?;
             // An item ID reads its evaluated world pose; `items/<id>/at/<group>` reads that
             // group as its channels and drivers write it.
-            let read = |x: &str, at: String| -> Result<(usize, Option<usize>), Refused> {
-                let parts: Vec<&str> = x.split('/').collect();
-                match parts.as_slice() {
-                    ["items", id, "at", g] => {
-                        let g = ["pos", "rot", "scale"].iter().position(|n| n == g).ok_or(Refused { code: "bad_path", path: at.clone(), detail: None })?;
-                        Ok((index_of(&program.items, id, at)?, Some(g)))
+            let read =
+                |x: &str, at: String| -> Result<(usize, Option<usize>), Refused> {
+                    let parts: Vec<&str> = x.split('/').collect();
+                    match parts.as_slice() {
+                        ["items", id, "at", g] => {
+                            let g = ["pos", "rot", "scale"].iter().position(|n| n == g).ok_or(
+                                Refused {
+                                    code: "bad_path",
+                                    path: at.clone(),
+                                    detail: None,
+                                },
+                            )?;
+                            Ok((index_of(&program.items, id, at)?, Some(g)))
+                        }
+                        [id] => Ok((index_of(&program.items, id, at)?, None)),
+                        _ => Err(Refused {
+                            code: "bad_path",
+                            path: at,
+                            detail: None,
+                        }),
                     }
-                    [id] => Ok((index_of(&program.items, id, at)?, None)),
-                    _ => Err(Refused { code: "bad_path", path: at, detail: None }),
-                }
-            };
+                };
             let other = match &c.kind {
                 Kind::ChildOf { parent: x }
                 | Kind::LookAt { target: x }
@@ -821,7 +907,11 @@ impl Program {
             let chain = match &c.kind {
                 Kind::Reach2 { chain, .. } => {
                     if chain[0] != c.owner {
-                        return Err(Refused { code: "bad_doc", path: format!("{path}/chain"), detail: None });
+                        return Err(Refused {
+                            code: "bad_doc",
+                            path: format!("{path}/chain"),
+                            detail: None,
+                        });
                     }
                     [
                         index_of(&program.items, &chain[1], format!("{path}/chain/1"))?,
@@ -831,10 +921,17 @@ impl Program {
                 _ => [owner; 2],
             };
             let table = match &c.kind {
-                Kind::FollowPath { points, .. } => Some(crate::constraint::ArcTable::new(points.clone())),
+                Kind::FollowPath { points, .. } => {
+                    Some(crate::constraint::ArcTable::new(points.clone()))
+                }
                 _ => None,
             };
-            program.constraints.push(Compiled { owner, other, chain, table });
+            program.constraints.push(Compiled {
+                owner,
+                other,
+                chain,
+                table,
+            });
         }
         let mut at = std::collections::BTreeMap::new();
         for (i, id) in program.items.iter().enumerate() {
@@ -854,13 +951,17 @@ impl Program {
         // A keyed data value holds its document value until something writes it.
         for field in &program.fields {
             let held = field.data.as_ref().and_then(|n| doc.get("data")?.get(n));
-            if let Some(v) = held.map(|d| d.get("value").unwrap_or(d)).and_then(Value::as_f64) {
+            if let Some(v) = held
+                .map(|d| d.get("value").unwrap_or(d))
+                .and_then(Value::as_f64)
+            {
                 program.base[field.slot] = v;
             }
         }
         // #493: the shots read the compiled program: their framing bounds its writers' forms.
         program.shots = crate::shots::Plan::compile(doc, &program)?.map(Arc::new);
-        program.betweens = crate::morph::betweens_of(doc, &doc::Ctx::of(program.motion.frame_rate))?;
+        program.betweens =
+            crate::morph::betweens_of(doc, &doc::Ctx::of(program.motion.frame_rate))?;
         Ok(program)
     }
 
@@ -869,17 +970,37 @@ impl Program {
     fn resolve_times(&mut self, doc: &Map<String, Value>) -> Result<(), Refused> {
         use crate::remap::{self, Pending};
         let controls = doc.get("controls").and_then(Value::as_object);
-        let times = |this: &Program, filter: &crate::occurrence::Filter, path: String| -> Result<Vec<crate::occurrence::Occurrence>, Refused> {
+        let times = |this: &Program,
+                     filter: &crate::occurrence::Filter,
+                     path: String|
+         -> Result<Vec<crate::occurrence::Occurrence>, Refused> {
             // The reader: `placements/<id>` or `time_remaps/<id>`.
             let reader = path.splitn(3, '/').take(2).collect::<Vec<_>>().join("/");
-            let list = this.occurrences(filter, doc, &reader, &[])?.ok_or_else(|| Refused { code: "ref_unresolved", path: path.clone(), detail: None })?;
-            crate::occurrence::filtered(filter, list).map_err(|r| Refused { code: r.code, path, detail: Some(Box::new(json!({"why": r.why}))) })
+            let list = this
+                .occurrences(filter, doc, &reader, &[])?
+                .ok_or_else(|| Refused {
+                    code: "ref_unresolved",
+                    path: path.clone(),
+                    detail: None,
+                })?;
+            crate::occurrence::filtered(filter, list).map_err(|r| Refused {
+                code: r.code,
+                path,
+                detail: Some(Box::new(json!({"why": r.why}))),
+            })
         };
         for r in 0..self.motion.remaps.len() {
-            let Some(pending) = self.motion.remaps[r].pending.clone() else { continue };
+            let Some(pending) = self.motion.remaps[r].pending.clone() else {
+                continue;
+            };
             let path = format!("time_remaps/{}/map", self.motion.remaps[r].id);
             let segs = match &pending {
-                Pending::Hitstop { at, on, hold, rejoin } => {
+                Pending::Hitstop {
+                    at,
+                    on,
+                    hold,
+                    rejoin,
+                } => {
                     let mut matches = at.clone();
                     if let Some(on) = on {
                         matches.extend(times(self, on, path)?.iter().map(|o| o.t));
@@ -892,15 +1013,37 @@ impl Program {
                         remap::hitstop_lag(&matches, *hold)
                     }
                 }
-                Pending::Replay { on, before, after, rate } => {
+                Pending::Replay {
+                    on,
+                    before,
+                    after,
+                    rate,
+                } => {
                     let list: Vec<i64> = times(self, on, path)?.iter().map(|o| o.t).collect();
-                    let rate = if self.options.planted == Planted::ReplayAtRate1 { (1, 1) } else { *rate };
-                    let class = |e: &&Entry| controls.and_then(|c| c.get(&e.control)?.get("class")?.as_str()) == Some("document");
-                    let ends: Vec<i64> = self.options.input.iter().filter(class).map(|e| e.t).collect();
+                    let rate = if self.options.planted == Planted::ReplayAtRate1 {
+                        (1, 1)
+                    } else {
+                        *rate
+                    };
+                    let class = |e: &&Entry| {
+                        controls.and_then(|c| c.get(&e.control)?.get("class")?.as_str())
+                            == Some("document")
+                    };
+                    let ends: Vec<i64> = self
+                        .options
+                        .input
+                        .iter()
+                        .filter(class)
+                        .map(|e| e.t)
+                        .collect();
                     remap::replay(&list, &ends, *before, *after, rate)
                 }
                 Pending::Scrub { control } => {
-                    let default = controls.and_then(|c| c.get(control)).and_then(|c| c.get("default")).and_then(Value::as_f64).unwrap_or(0.0);
+                    let default = controls
+                        .and_then(|c| c.get(control))
+                        .and_then(|c| c.get("default"))
+                        .and_then(Value::as_f64)
+                        .unwrap_or(0.0);
                     remap::scrub(&self.control_entries(control), default)
                 }
             };
@@ -915,11 +1058,16 @@ impl Program {
             }
         }
         for p in 0..self.motion.placements.len() {
-            let Some(start_on) = self.motion.placements[p].timing.start_on.clone() else { continue };
+            let Some(start_on) = self.motion.placements[p].timing.start_on.clone() else {
+                continue;
+            };
             let path = format!("placements/{}/start_on", self.motion.placements[p].id);
             let mut list = times(self, &start_on.on, path)?;
             list.sort_by_key(|o| o.t);
-            let clip_span = self.motion.clip(&self.motion.placements[p].clip).map_or(1, |c| c.span);
+            let clip_span = self
+                .motion
+                .clip(&self.motion.placements[p].clip)
+                .map_or(1, |c| c.span);
             let active = self.motion.placements[p].active_for(clip_span);
             let mut runs: Vec<i64> = Vec::new();
             let mut closes: Vec<bool> = Vec::new();
@@ -928,7 +1076,8 @@ impl Program {
                 let changed = last.as_ref() != Some(&o.payload);
                 last = Some(o.payload.clone());
                 let busy = runs.last().is_some_and(|r| o.t < r + active);
-                if (start_on.change && !changed) || (start_on.policy == doc::Policy::Ignore && busy) {
+                if (start_on.change && !changed) || (start_on.policy == doc::Policy::Ignore && busy)
+                {
                     continue;
                 }
                 runs.push(o.t);
@@ -939,23 +1088,43 @@ impl Program {
             self.motion.placements[p].timing.closes = closes;
         }
         for p in 0..self.motion.placements.len() {
-            let Some(switch) = &self.motion.placements[p].blending.switch else { continue };
-            let default = controls.and_then(|c| c.get(&switch.control)).and_then(|c| c.get("default")).cloned();
-            let Some(first) = default else {
-                return Err(Refused { code: "ref_unresolved", path: format!("placements/{}/switch/control", self.motion.placements[p].id), detail: None });
+            let Some(switch) = &self.motion.placements[p].blending.switch else {
+                continue;
             };
-            let mut entries: Vec<&Entry> = self.options.input.iter().filter(|e| e.control == switch.control).collect();
+            let default = controls
+                .and_then(|c| c.get(&switch.control))
+                .and_then(|c| c.get("default"))
+                .cloned();
+            let Some(first) = default else {
+                return Err(Refused {
+                    code: "ref_unresolved",
+                    path: format!("placements/{}/switch/control", self.motion.placements[p].id),
+                    detail: None,
+                });
+            };
+            let mut entries: Vec<&Entry> = self
+                .options
+                .input
+                .iter()
+                .filter(|e| e.control == switch.control)
+                .collect();
             entries.sort_by_key(|e| e.key());
             // A synced change waits for the placement's next pass, or for the change before it.
             let placement = &self.motion.placements[p];
-            let pass = placement.active_for(self.motion.clip(&placement.clip).map_or(1, |c| c.span)) / i64::from(placement.count);
+            let pass = placement
+                .active_for(self.motion.clip(&placement.clip).map_or(1, |c| c.span))
+                / i64::from(placement.count);
             let (sync, origin) = (switch.sync, placement.start);
             let mut held = first.clone();
             let mut changes: Vec<(i64, Value)> = Vec::new();
             for e in entries {
                 if e.value != held {
                     held = e.value.clone();
-                    let at = if sync { origin + (e.t - origin + pass - 1).div_euclid(pass) * pass } else { e.t };
+                    let at = if sync {
+                        origin + (e.t - origin + pass - 1).div_euclid(pass) * pass
+                    } else {
+                        e.t
+                    };
                     changes.push((at, held.clone()));
                 }
             }
@@ -969,32 +1138,53 @@ impl Program {
 
     /// `control`'s input track entries in time order, with values as numbers.
     fn control_entries(&self, control: &str) -> Vec<(i64, f64)> {
-        let mut entries: Vec<&Entry> = self.options.input.iter().filter(|e| e.control == control).collect();
+        let mut entries: Vec<&Entry> = self
+            .options
+            .input
+            .iter()
+            .filter(|e| e.control == control)
+            .collect();
         entries.sort_by_key(|e| e.key());
-        entries.into_iter().filter_map(|e| Some((e.t, e.value.as_f64()?))).collect()
+        entries
+            .into_iter()
+            .filter_map(|e| Some((e.t, e.value.as_f64()?)))
+            .collect()
     }
 
     /// Groups each path's mix placements, by placement ID, so neither placement nor writer order
     /// changes the result.
     fn gather_mixes(&mut self) {
-        let mut groups: std::collections::BTreeMap<(usize, usize), Vec<(usize, usize)>> = Default::default();
+        let mut groups: std::collections::BTreeMap<(usize, usize), Vec<(usize, usize)>> =
+            Default::default();
         for (p, writes) in self.placements.iter().enumerate() {
             if self.motion.placements[p].blending.blend != doc::Blend::Mix {
                 continue;
             }
             for (w, write) in writes.iter().enumerate() {
-                groups.entry((write.slot, write.width)).or_default().push((p, w));
+                groups
+                    .entry((write.slot, write.width))
+                    .or_default()
+                    .push((p, w));
             }
         }
         self.mixes = groups
             .into_iter()
             .map(|((slot, width), mut members)| {
-                members.sort_by(|a, b| self.motion.placements[a.0].id.cmp(&self.motion.placements[b.0].id));
+                members.sort_by(|a, b| {
+                    self.motion.placements[a.0]
+                        .id
+                        .cmp(&self.motion.placements[b.0].id)
+                });
                 let (p, w) = members[0];
                 let clip = self.motion.clip(&self.motion.placements[p].clip);
                 let channel = clip.map(|c| &c.channels[self.placements[p][w].channel]);
                 let turns = channel.is_some_and(|c| c.ty == doc::ValueType::Quat);
-                Mix { slot, width, turns, members }
+                Mix {
+                    slot,
+                    width,
+                    turns,
+                    members,
+                }
             })
             .collect();
     }
@@ -1005,12 +1195,20 @@ impl Program {
         let refused = |a: &str, b: &str, slot: usize| Refused {
             code: "second_writer",
             path: format!("{a} and {b}"),
-            detail: Some(Box::new(json!({"writers": [a, b], "item": self.item_of(slot)}))),
+            detail: Some(Box::new(
+                json!({"writers": [a, b], "item": self.item_of(slot)}),
+            )),
         };
         let mut writers: std::collections::BTreeMap<usize, String> = Default::default();
         let mut claim = |slot: usize, entry: String| -> Result<(), Refused> {
             match writers.get(&slot) {
-                Some(other) if *other != entry && !(other.starts_with("placements/") && entry.starts_with("placements/")) => Err(refused(other, &entry, slot)),
+                Some(other)
+                    if *other != entry
+                        && !(other.starts_with("placements/")
+                            && entry.starts_with("placements/")) =>
+                {
+                    Err(refused(other, &entry, slot))
+                }
                 _ => {
                     writers.entry(slot).or_insert(entry);
                     Ok(())
@@ -1026,7 +1224,10 @@ impl Program {
             claim(slot, self.motion.follows[f].entry())?;
         }
         for s in &self.staggered {
-            claim(s.slot, format!("channels/{}", self.motion.staggers[s.stagger].id))?;
+            claim(
+                s.slot,
+                format!("channels/{}", self.motion.staggers[s.stagger].id),
+            )?;
         }
         for (p, writes) in self.placements.iter().enumerate() {
             for w in writes {
@@ -1036,11 +1237,22 @@ impl Program {
             }
         }
         // A status binding owns its paint slot: nothing else writes it.
-        for (id, binding) in doc.get("status_bindings").and_then(Value::as_object).into_iter().flatten() {
-            let Some(target) = binding.get("target").and_then(Value::as_str) else { continue };
+        for (id, binding) in doc
+            .get("status_bindings")
+            .and_then(Value::as_object)
+            .into_iter()
+            .flatten()
+        {
+            let Some(target) = binding.get("target").and_then(Value::as_str) else {
+                continue;
+            };
             for c in &self.motion.channels {
                 if format!("items/{}/{}", c.target.owner, c.target.field.join("/")) == target {
-                    return Err(refused(&format!("channels/{}", c.id), &format!("status_bindings/{id}"), self.channels.first().map_or(0, |c| c.0)));
+                    return Err(refused(
+                        &format!("channels/{}", c.id),
+                        &format!("status_bindings/{id}"),
+                        self.channels.first().map_or(0, |c| c.0),
+                    ));
                 }
             }
         }
@@ -1048,7 +1260,28 @@ impl Program {
         for (d, (slot, _)) in self.drivers.iter().enumerate() {
             let id = self.motion.drivers[d].id.as_str();
             if let Some(other) = drivers.insert(*slot, id) {
-                return Err(refused(&format!("drivers/{other}"), &format!("drivers/{id}"), *slot));
+                return Err(refused(
+                    &format!("drivers/{other}"),
+                    &format!("drivers/{id}"),
+                    *slot,
+                ));
+            }
+        }
+        // #2013: a rest on true shapes never moves an item a channel, placement or driver drives
+        // (Constraint: rest_on): it writes the owner's position, and its rotation when it aligns.
+        for (k, c) in self.motion.constraints.iter().enumerate() {
+            let doc::Kind::RestOn { on: Some(rest), .. } = &c.kind else {
+                continue;
+            };
+            let own = self.constraints[k].owner * TRANSFORM;
+            for slot in own..own + if rest.align { 6 } else { 3 } {
+                let driven = writers
+                    .get(&slot)
+                    .cloned()
+                    .or_else(|| drivers.get(&slot).map(|d| format!("drivers/{d}")));
+                if let Some(other) = driven {
+                    return Err(refused(&other, &format!("constraints/{}", c.id), slot));
+                }
             }
         }
         Ok(())
@@ -1069,25 +1302,43 @@ impl Program {
             Some(p) => p.bindings.iter().any(|b| b.item == item),
             None => motion.applies(r, item),
         };
-        let drivers = motion.drivers.iter().filter(|d| targets(&d.target.owner)).find_map(|d| {
-            d.inputs.iter().find_map(|(name, input)| {
-                let source = match input {
-                    doc::DriverInput::Control(c) => format!("controls/{c}"),
-                    doc::DriverInput::List(f) if f.list.starts_with("input.") => f.list.clone(),
-                    doc::DriverInput::List(f) if self.world_of(&f.list).is_some_and(|w| w.1) => format!("worlds/{}", f.list),
-                    _ => return None,
-                };
-                Some(format!("drivers/{}/vars/{name} ({source})", d.id))
-            })
-        });
-        let follows = || {
-            let keyed = motion.channels.iter().filter(|c| targets(&c.target.owner)).find_map(|c| match &c.follow.as_ref()?.source {
-                crate::follow::Source::Control(control) => Some(format!("channels/{} (controls/{control})", c.id)),
-                crate::follow::Source::Keys(_) => None,
+        let drivers = motion
+            .drivers
+            .iter()
+            .filter(|d| targets(&d.target.owner))
+            .find_map(|d| {
+                d.inputs.iter().find_map(|(name, input)| {
+                    let source = match input {
+                        doc::DriverInput::Control(c) => format!("controls/{c}"),
+                        doc::DriverInput::List(f) if f.list.starts_with("input.") => f.list.clone(),
+                        doc::DriverInput::List(f)
+                            if self.world_of(&f.list).is_some_and(|w| w.1) =>
+                        {
+                            format!("worlds/{}", f.list)
+                        }
+                        _ => return None,
+                    };
+                    Some(format!("drivers/{}/vars/{name} ({source})", d.id))
+                })
             });
+        let follows = || {
+            let keyed = motion
+                .channels
+                .iter()
+                .filter(|c| targets(&c.target.owner))
+                .find_map(|c| match &c.follow.as_ref()?.source {
+                    crate::follow::Source::Control(control) => {
+                        Some(format!("channels/{} (controls/{control})", c.id))
+                    }
+                    crate::follow::Source::Keys(_) => None,
+                });
             keyed.or_else(|| {
                 let f = motion.follows.iter().find(|f| targets(&f.target.owner))?;
-                Some(format!("{} (controls/{})", f.entry(), motion.controls[f.control].id))
+                Some(format!(
+                    "{} (controls/{})",
+                    f.entry(),
+                    motion.controls[f.control].id
+                ))
             })
         };
         let own = || {
@@ -1100,7 +1351,8 @@ impl Program {
                 return Some(format!("{at}/switch (controls/{})", s.control));
             }
             let start = p.timing.start_on.as_ref()?;
-            let live = start.on.list.starts_with("input.") || self.world_of(&start.on.list).is_some_and(|w| w.1);
+            let live = start.on.list.starts_with("input.")
+                || self.world_of(&start.on.list).is_some_and(|w| w.1);
             live.then(|| format!("{at}/start_on ({})", start.on.list))
         };
         drivers.or_else(follows).or_else(own)
@@ -1128,16 +1380,23 @@ impl Program {
         let (still, glides) = self.layout.as_ref()?;
         let mut out = still.clone();
         for (c, at_keys) in glides {
-            let Some(glide) = &self.motion.channels[*c].glide else { continue };
+            let Some(glide) = &self.motion.channels[*c].glide else {
+                continue;
+            };
             let mut u = [0.0];
             glide.sample_into(doc_t, &mut u);
-            let Some(last) = at_keys.len().checked_sub(1) else { continue };
+            let Some(last) = at_keys.len().checked_sub(1) else {
+                continue;
+            };
             let i = (u[0].floor().max(0.0) as usize).min(last);
             let s = u[0] - i as f64;
             let next = &at_keys[(i + 1).min(last)];
             for (id, from) in &at_keys[i] {
                 let to = next.get(id).unwrap_or(from);
-                out.insert(id.clone(), std::array::from_fn(|k| from[k] + (to[k] - from[k]) * s));
+                out.insert(
+                    id.clone(),
+                    std::array::from_fn(|k| from[k] + (to[k] - from[k]) * s),
+                );
             }
         }
         Some(out)
@@ -1147,7 +1406,11 @@ impl Program {
     /// at least 0, by bisection on the expression's interval form down to single flicks. Each
     /// var reads a slot one keyed channel writes, or nothing writes; one the forms can't settle
     /// within the budget, or a condition that never holds in the window, is refused, naming it.
-    fn solve_first(&mut self, items: &Map<String, Value>, first: &doc::First) -> Result<doc::Marker, Refused> {
+    fn solve_first(
+        &mut self,
+        items: &Map<String, Value>,
+        first: &doc::First,
+    ) -> Result<doc::Marker, Refused> {
         let id = &first.marker.id;
         let refused = |code: &'static str, why: String| Refused {
             code,
@@ -1165,7 +1428,10 @@ impl Program {
         let mut reads: Vec<Src> = Vec::new();
         for name in &expr.vars {
             let Some((_, target)) = first.vars.iter().find(|(n, _)| n == name) else {
-                return Err(refused("ref_unresolved", format!("`{name}` is not one of its vars")));
+                return Err(refused(
+                    "ref_unresolved",
+                    format!("`{name}` is not one of its vars"),
+                ));
             };
             let Some(target) = target else {
                 reads.push(Src::Time);
@@ -1184,14 +1450,32 @@ impl Program {
                 })
                 .collect();
             let written_elsewhere = self.follows.contains(&slot)
-                || self.placements.iter().flatten().any(|w| (w.slot..w.slot + w.width).contains(&slot))
+                || self
+                    .placements
+                    .iter()
+                    .flatten()
+                    .any(|w| (w.slot..w.slot + w.width).contains(&slot))
                 || self.motion.drivers.iter().any(|d| d.target == *target)
                 || self.motion.limits.iter().any(|l| l.owner == target.owner)
-                || self.motion.constraints.iter().any(|c| c.owner == target.owner);
+                || self
+                    .motion
+                    .constraints
+                    .iter()
+                    .any(|c| c.owner == target.owner);
             match by.as_slice() {
                 [] if !written_elsewhere => reads.push(Src::Base(self.base[slot])),
-                [c] if !written_elsewhere && self.channels[*c].1 == 1 && channel_bound(&self.motion.channels[*c]).is_some() => reads.push(Src::Channel(*c)),
-                _ => return Err(refused("first_unsettled", format!("`{name}` reads {at}, which the forms can't bound over time"))),
+                [c] if !written_elsewhere
+                    && self.channels[*c].1 == 1
+                    && channel_bound(&self.motion.channels[*c]).is_some() =>
+                {
+                    reads.push(Src::Channel(*c))
+                }
+                _ => {
+                    return Err(refused(
+                        "first_unsettled",
+                        format!("`{name}` reads {at}, which the forms can't bound over time"),
+                    ))
+                }
             }
         }
         let start = self.motion.transport.start;
@@ -1200,7 +1484,10 @@ impl Program {
             let channel = &self.motion.channels[c];
             let mut v = [0.0];
             channel.curve.sample_into(t, &mut v);
-            channel.modifiers.iter().fold(v[0], |v, m| m.apply(v, t - start))
+            channel
+                .modifiers
+                .iter()
+                .fold(v[0], |v, m| m.apply(v, t - start))
         };
         let point = |t: i64| {
             let vals: Vec<f64> = reads
@@ -1221,7 +1508,9 @@ impl Program {
                         let e = 4.0 * f64::EPSILON * seconds(a).abs().max(seconds(b).abs());
                         Iv::new(seconds(a) - e, seconds(b) + e)
                     }
-                    Src::Channel(c) => channel_window(&self.motion.channels[c], a, b, value(c, a), value(c, b)),
+                    Src::Channel(c) => {
+                        channel_window(&self.motion.channels[c], a, b, value(c, a), value(c, b))
+                    }
                     Src::Base(base) => Iv::point(base),
                 })
                 .collect();
@@ -1230,7 +1519,9 @@ impl Program {
         let mut stack = vec![(first.after, first.before)];
         let mut budget = 100_000u32;
         let found = loop {
-            let Some((a, b)) = stack.pop() else { break None };
+            let Some((a, b)) = stack.pop() else {
+                break None;
+            };
             let bound = over(a, b);
             if bound.hi < 0.0 {
                 continue;
@@ -1244,7 +1535,12 @@ impl Program {
                 }
                 continue;
             }
-            budget = budget.checked_sub(1).ok_or_else(|| refused("first_unsettled", "the interval forms don't settle it within the check's budget".into()))?;
+            budget = budget.checked_sub(1).ok_or_else(|| {
+                refused(
+                    "first_unsettled",
+                    "the interval forms don't settle it within the check's budget".into(),
+                )
+            })?;
             let mid = a + (b - a) / 2;
             stack.push((mid + 1, b));
             stack.push((a, mid));
@@ -1252,7 +1548,10 @@ impl Program {
         let Some(start) = found else {
             return Err(refused(
                 "first_never",
-                format!("markers/{id}: `{} >= 0` never holds in [{}, {}] flicks", first.expr, first.after, first.before),
+                format!(
+                    "markers/{id}: `{} >= 0` never holds in [{}, {}] flicks",
+                    first.expr, first.after, first.before
+                ),
             ));
         };
         Ok(doc::Marker {
@@ -1304,11 +1603,31 @@ impl Program {
         match source {
             crate::follow::Source::Keys(keys) => (keys[0].1, keys[1..].to_vec()),
             crate::follow::Source::Control(id) => {
-                let default = self.motion.control_defaults.iter().find(|(c, _)| c == id).map_or(0.0, |c| c.1);
-                let mut entries: Vec<&Entry> = self.options.input.iter().filter(|e| e.control == *id).collect();
+                let default = self
+                    .motion
+                    .control_defaults
+                    .iter()
+                    .find(|(c, _)| c == id)
+                    .map_or(0.0, |c| c.1);
+                let mut entries: Vec<&Entry> = self
+                    .options
+                    .input
+                    .iter()
+                    .filter(|e| e.control == *id)
+                    .collect();
                 entries.sort_by_key(|e| e.key());
-                let value = |e: &Entry| e.value.as_f64().or_else(|| e.value.as_bool().map(|b| f64::from(u8::from(b))));
-                (default, entries.iter().filter_map(|e| Some((e.t, value(e)?))).collect())
+                let value = |e: &Entry| {
+                    e.value
+                        .as_f64()
+                        .or_else(|| e.value.as_bool().map(|b| f64::from(u8::from(b))))
+                };
+                (
+                    default,
+                    entries
+                        .iter()
+                        .filter_map(|e| Some((e.t, value(e)?)))
+                        .collect(),
+                )
             }
         }
     }
@@ -1330,18 +1649,32 @@ impl Program {
             }
             let n = st.targets.len();
             for (id, rank) in &st.targets {
-                let Some(a) = self.assemblies.iter().find(|a| a.id == *id) else { continue };
+                let Some(a) = self.assemblies.iter().find(|a| a.id == *id) else {
+                    continue;
+                };
                 let mut delayed: Vec<(i64, f64)> = Vec::new();
                 let mut held = initial;
                 for &(t, v) in &changes {
-                    let r = if st.reverse_on_close && v < held { n - 1 - rank } else { *rank };
-                    let at = if self.options.planted == Planted::TakeApartAllAtOnce { t } else { t + r as i64 * st.lag };
+                    let r = if st.reverse_on_close && v < held {
+                        n - 1 - rank
+                    } else {
+                        *rank
+                    };
+                    let at = if self.options.planted == Planted::TakeApartAllAtOnce {
+                        t
+                    } else {
+                        t + r as i64 * st.lag
+                    };
                     delayed.retain(|(d, _)| *d <= at);
                     delayed.push((at, v));
                     held = v;
                 }
                 let restart = self.options.planted == Planted::TransitionRestarts;
-                out.push(Staggered { stagger: k, slot: a.slot + 1, follow: Follow::with(model, initial, &delayed, restart) });
+                out.push(Staggered {
+                    stagger: k,
+                    slot: a.slot + 1,
+                    follow: Follow::with(model, initial, &delayed, restart),
+                });
             }
         }
         out
@@ -1397,14 +1730,20 @@ impl Program {
         width: usize,
     ) -> usize {
         // #504: an assembly's value takes its own slot.
-        if let Some(a) = owner.strip_prefix("assemblies/").and_then(|id| self.assemblies.iter().find(|a| a.id == id)) {
+        if let Some(a) = owner
+            .strip_prefix("assemblies/")
+            .and_then(|id| self.assemblies.iter().find(|a| a.id == id))
+        {
             return a.slot;
         }
         let item = self.items.iter().position(|i| i == owner);
         // A vec3 on a whole `at` vector writes the transform's own three slots, so a frame draws
         // it as it draws a component's.
         if let (Some(i), [at, name], 3) = (item, target.field.as_slice(), width) {
-            if let (true, Some(g)) = (at == "at", ["pos", "rot", "scale"].iter().position(|n| n == name)) {
+            if let (true, Some(g)) = (
+                at == "at",
+                ["pos", "rot", "scale"].iter().position(|n| n == name),
+            ) {
                 return i * TRANSFORM + 3 * g;
             }
         }
@@ -1542,9 +1881,20 @@ impl Program {
             Some((lo, hi)) => Iv::new(lo, hi),
             None if !self.writes(x.slot..x.slot + 1) => Iv::point(self.base[x.slot]),
             None => {
-                let span = self.motion.transport.span.map_or(f64::INFINITY, |s| s as f64 / deep_canvas::grammar::FLICKS_PER_SECOND as f64);
-                let by: Vec<&doc::Channel> = self.channels.iter().zip(&self.motion.channels).filter(|((s, _), _)| *s == x.slot).map(|(_, c)| c).collect();
-                match (by.as_slice(), self.slot_bound_over(x.slot, Iv::new(0.0, span))) {
+                let span = self.motion.transport.span.map_or(f64::INFINITY, |s| {
+                    s as f64 / deep_canvas::grammar::FLICKS_PER_SECOND as f64
+                });
+                let by: Vec<&doc::Channel> = self
+                    .channels
+                    .iter()
+                    .zip(&self.motion.channels)
+                    .filter(|((s, _), _)| *s == x.slot)
+                    .map(|(_, c)| c)
+                    .collect();
+                match (
+                    by.as_slice(),
+                    self.slot_bound_over(x.slot, Iv::new(0.0, span)),
+                ) {
                     (_, Some(b)) if b.is_bounded() => b,
                     ([c], _) => channel_bound(c).map(|(lo, hi)| Iv::new(lo, hi))?,
                     _ => return None,
@@ -1555,11 +1905,20 @@ impl Program {
         for s in self.staggered.iter().filter(|s| s.slot == x.slot + 1) {
             let spec = &self.motion.staggers[s.stagger].spec;
             let (initial, changes) = self.source_changes(&spec.source);
-            let mut reach = changes.iter().fold(Iv::point(initial), |r, (_, v)| r.hull(Iv::point(*v)));
+            let mut reach = changes
+                .iter()
+                .fold(Iv::point(initial), |r, (_, v)| r.hull(Iv::point(*v)));
             if let Source::Control(id) = &spec.source {
                 let c = doc.get("controls").and_then(|c| c.get(id));
-                if let Some([lo, hi]) = c.and_then(|c| c.get("range")).and_then(Value::as_array).map(Vec::as_slice) {
-                    reach = reach.hull(Iv::new(lo.as_f64().unwrap_or(0.0), hi.as_f64().unwrap_or(1.0)));
+                if let Some([lo, hi]) = c
+                    .and_then(|c| c.get("range"))
+                    .and_then(Value::as_array)
+                    .map(Vec::as_slice)
+                {
+                    reach = reach.hull(Iv::new(
+                        lo.as_f64().unwrap_or(0.0),
+                        hi.as_f64().unwrap_or(1.0),
+                    ));
                 }
                 if c.and_then(|c| c.get("kind")).and_then(Value::as_str) == Some("toggle") {
                     reach = reach.hull(Iv::new(0.0, 1.0));
@@ -1567,11 +1926,21 @@ impl Program {
             }
             let overshoots = match spec.model {
                 Model::Spring(_) => true,
-                Model::Transition { along: Along::Ease(e), .. } => !e.bounded(),
-                Model::Transition { along: Along::Bezier(z), .. } => !(0.0..=1.0).contains(&z.y1) || !(0.0..=1.0).contains(&z.y2),
+                Model::Transition {
+                    along: Along::Ease(e),
+                    ..
+                } => !e.bounded(),
+                Model::Transition {
+                    along: Along::Bezier(z),
+                    ..
+                } => !(0.0..=1.0).contains(&z.y1) || !(0.0..=1.0).contains(&z.y2),
                 _ => false,
             };
-            share = share.hull(if overshoots { Iv::new(0.0, 1.0) } else { reach.meet(Iv::new(0.0, 1.0)) });
+            share = share.hull(if overshoots {
+                Iv::new(0.0, 1.0)
+            } else {
+                reach.meet(Iv::new(0.0, 1.0))
+            });
         }
         Some((value, share))
     }
@@ -1617,7 +1986,9 @@ impl Program {
         }
         // The look's quantize steps the document's time first; a document remap comes next, and
         // the clock's `valid_until` still counts from the timeline's own position.
-        let shown = self.quantize.map_or(doc_t, |rate| crate::eval::grid(doc_t, rate));
+        let shown = self
+            .quantize
+            .map_or(doc_t, |rate| crate::eval::grid(doc_t, rate));
         let timeline = self.timeline(doc_t);
         for (p, placement) in motion.placements.iter().enumerate() {
             state.locals[p] = placement.local(motion, timeline);
@@ -1645,7 +2016,8 @@ impl Program {
                         state.follow[c] = out;
                         run[0] = out.value;
                     } else {
-                        state.iterations[c] = channel.curve.sample_into(channel.stepped(doc_t), run);
+                        state.iterations[c] =
+                            channel.curve.sample_into(channel.stepped(doc_t), run);
                     }
                     for m in &channel.modifiers {
                         run[0] = m.apply(run[0], doc_t - motion.transport.start);
@@ -1667,23 +2039,41 @@ impl Program {
                     };
                     let w = &self.placements[p][w];
                     let at = if self.options.planted == Planted::PlacementF32Seconds {
-                        let seconds = (timeline as f64 / deep_canvas::grammar::FLICKS_PER_SECOND as f64) as f32;
+                        let seconds = (timeline as f64
+                            / deep_canvas::grammar::FLICKS_PER_SECOND as f64)
+                            as f32;
                         (f64::from(seconds) * deep_canvas::grammar::FLICKS_PER_SECOND as f64) as i64
                     } else {
                         timeline
                     };
                     let channel = &clip.channels[w.channel];
                     let run = &mut scratch[..w.width.min(4)];
-                    if self.options.planted == Planted::UnkeyedResetsToBase && placement.local_after(motion, at, w.delay).is_some() {
-                        for other in self.placements.iter().flatten().filter(|o| o.slot != w.slot) {
-                            state.slots[other.slot..other.slot + other.width].copy_from_slice(&self.base[other.slot..other.slot + other.width]);
+                    if self.options.planted == Planted::UnkeyedResetsToBase
+                        && placement.local_after(motion, at, w.delay).is_some()
+                    {
+                        for other in self
+                            .placements
+                            .iter()
+                            .flatten()
+                            .filter(|o| o.slot != w.slot)
+                        {
+                            state.slots[other.slot..other.slot + other.width]
+                                .copy_from_slice(&self.base[other.slot..other.slot + other.width]);
                         }
                     }
                     let slots = &mut state.slots[w.slot..w.slot + run.len()];
                     let mut land = |local: i64, start: i64| {
                         channel.read(local, run);
                         let weight = self.weight(p, start, timeline);
-                        crate::blend::over(placement.blending.blend, channel.ty, self.options.planted.arc(), weight, run, &w.reference[..run.len()], slots);
+                        crate::blend::over(
+                            placement.blending.blend,
+                            channel.ty,
+                            self.options.planted.arc(),
+                            weight,
+                            run,
+                            &w.reference[..run.len()],
+                            slots,
+                        );
                     };
                     let mut overlaps = false;
                     for start in placement.overlapping(motion, at, w.delay) {
@@ -1694,7 +2084,12 @@ impl Program {
                         let Some(l) = placement.local_after(motion, at, w.delay) else {
                             continue;
                         };
-                        land(l.local, placement.run_start(at, w.delay).unwrap_or(placement.start + w.delay));
+                        land(
+                            l.local,
+                            placement
+                                .run_start(at, w.delay)
+                                .unwrap_or(placement.start + w.delay),
+                        );
                     }
                     let run = &scratch[..w.width.min(4)];
                     note(
@@ -1731,7 +2126,12 @@ impl Program {
                         }
                         if !overlaps {
                             if let Some(l) = placement.local_after(motion, timeline, w.delay) {
-                                land(l.local, placement.run_start(timeline, w.delay).unwrap_or(placement.start + w.delay));
+                                land(
+                                    l.local,
+                                    placement
+                                        .run_start(timeline, w.delay)
+                                        .unwrap_or(placement.start + w.delay),
+                                );
                             }
                         }
                     }
@@ -1800,8 +2200,15 @@ impl Program {
             None => timeline,
         };
         // #504: a take-apart changes until its last target's move ends.
-        let staggered = self.staggered.iter().filter_map(|s| s.follow.next_change(t)).min();
-        [timeline, self.inputs.next_change(t), staggered].into_iter().flatten().min()
+        let staggered = self
+            .staggered
+            .iter()
+            .filter_map(|s| s.follow.next_change(t))
+            .min();
+        [timeline, self.inputs.next_change(t), staggered]
+            .into_iter()
+            .flatten()
+            .min()
     }
 
     /// #1487: the `valid_until` of the frame `state` holds, counting only items a view shows
@@ -1936,9 +2343,15 @@ fn segment_reach(a: &Key, b: &Key, comp: usize) -> Vec<(f64, String)> {
         Interp::Spring(spring) => {
             let v0 = a.velocity.get(comp).copied().unwrap_or(0.0);
             for t in spring.extremes(va - vb, v0, span).into_iter().flatten() {
-                out.push((vb + spring.at(va - vb, v0, t).e, format!("its spring peaks at {{}} {t} s after the key")));
+                out.push((
+                    vb + spring.at(va - vb, v0, t).e,
+                    format!("its spring peaks at {{}} {t} s after the key"),
+                ));
             }
-            out.push((vb + spring.at(va - vb, v0, span).e, "its spring reaches {} by the next key".into()));
+            out.push((
+                vb + spring.at(va - vb, v0, span).e,
+                "its spring reaches {} by the next key".into(),
+            ));
         }
         Interp::Bezier { x1, y1, x2, y2 } => {
             let bz = Bezier::new(x1, y1, x2, y2);
@@ -1982,12 +2395,17 @@ fn segment_reach(a: &Key, b: &Key, comp: usize) -> Vec<(f64, String)> {
 }
 
 fn range_check(c: &doc::Channel) -> Result<(), Refused> {
-    let Some((lo, hi)) = c.range else { return Ok(()) };
+    let Some((lo, hi)) = c.range else {
+        return Ok(());
+    };
     let keys = &c.curve.keys;
     let out = |v: f64| v < lo || v > hi;
     let refuse = |key: &str, what: String| Refused {
         code: "out_of_range",
-        path: format!("channels/{}/keys/{key}: {what}, outside the range [{lo}, {hi}]", c.id),
+        path: format!(
+            "channels/{}/keys/{key}: {what}, outside the range [{lo}, {hi}]",
+            c.id
+        ),
         detail: None,
     };
     for (i, a) in keys.iter().enumerate() {
@@ -2012,13 +2430,22 @@ fn range_check(c: &doc::Channel) -> Result<(), Refused> {
 pub fn channel_bound(c: &doc::Channel) -> Option<(f64, f64)> {
     use crate::curve::Extrapolate;
     let keys = &c.curve.keys;
-    if c.follow.is_some() || keys.is_empty() || c.curve.before != Extrapolate::Hold || c.curve.after != Extrapolate::Hold {
+    if c.follow.is_some()
+        || keys.is_empty()
+        || c.curve.before != Extrapolate::Hold
+        || c.curve.after != Extrapolate::Hold
+    {
         return None;
     }
     // A Catmull-Rom or an unclamped auto segment overshoots its keys by a reach no form
     // bounds yet: the channel's bound is an estimate.
     use crate::curve::Interp;
-    if keys.iter().any(|k| matches!(k.interp, Interp::CatmullRom | Interp::Auto { clamp: false, .. })) {
+    if keys.iter().any(|k| {
+        matches!(
+            k.interp,
+            Interp::CatmullRom | Interp::Auto { clamp: false, .. }
+        )
+    }) {
         return None;
     }
     let (mut lo, mut hi) = (f64::INFINITY, f64::NEG_INFINITY);
@@ -2030,7 +2457,9 @@ pub fn channel_bound(c: &doc::Channel) -> Option<(f64, f64)> {
         a.value.iter().for_each(|v| take(*v));
         if let Some(b) = keys.get(i + 1) {
             for comp in 0..a.value.len() {
-                segment_reach(a, b, comp).into_iter().for_each(|(v, _)| take(v));
+                segment_reach(a, b, comp)
+                    .into_iter()
+                    .for_each(|(v, _)| take(v));
             }
         }
     }
@@ -2042,7 +2471,11 @@ pub fn channel_bound(c: &doc::Channel) -> Option<(f64, f64)> {
 
 /// The document's auto layout, and for each channel keying a frame's layout, the layout at each
 /// key, solved with that key's value in place.
-fn layouts(doc: &Map<String, Value>, motion: &Motion, solve: Layout) -> Result<(Boxes, Glides), Refused> {
+fn layouts(
+    doc: &Map<String, Value>,
+    motion: &Motion,
+    solve: Layout,
+) -> Result<(Boxes, Glides), Refused> {
     let run = |doc: Value| {
         solve.0(&doc).map_err(|(code, item)| Refused {
             code: "layout_refused",
@@ -2053,7 +2486,9 @@ fn layouts(doc: &Map<String, Value>, motion: &Motion, solve: Layout) -> Result<(
     let still = run(Value::Object(doc.clone()))?;
     let mut glides = Vec::new();
     for (c, channel) in motion.channels.iter().enumerate() {
-        let Some(glide) = &channel.glide else { continue };
+        let Some(glide) = &channel.glide else {
+            continue;
+        };
         let mut at_keys = Vec::new();
         for key in &glide.keys {
             let label = channel
@@ -2126,7 +2561,9 @@ fn open_eases(motion: &mut Motion, options: &Options) -> Result<(), Refused> {
                         return Err(Refused {
                             code: "ref_unresolved",
                             path: format!("channels/{}/keys/{}/interp/ease/table", c.id, k.id),
-                            detail: Some(Box::new(json!({"table": name, "why": "no pack gives this ease table"}))),
+                            detail: Some(Box::new(
+                                json!({"table": name, "why": "no pack gives this ease table"}),
+                            )),
                         })
                     }
                 }
@@ -2148,7 +2585,13 @@ fn open_eases(motion: &mut Motion, options: &Options) -> Result<(), Refused> {
 
 /// An item's pose from its nine transform slots starting at `first`.
 fn pose(slots: &[f64], first: usize) -> crate::constraint::Pose {
-    let g = |k: usize| [slots[first + 3 * k], slots[first + 3 * k + 1], slots[first + 3 * k + 2]];
+    let g = |k: usize| {
+        [
+            slots[first + 3 * k],
+            slots[first + 3 * k + 1],
+            slots[first + 3 * k + 2],
+        ]
+    };
     crate::constraint::Pose {
         pos: g(0),
         rot: g(1),
@@ -2168,7 +2611,9 @@ impl Program {
     /// Whether constraint `k` is a `look_at` whose aim has no heading.
     fn aims_nowhere(&self, k: usize, slots: &[f64]) -> bool {
         let c = &self.constraints[k];
-        let (doc::Kind::LookAt { .. }, Some((i, group))) = (&self.motion.constraints[k].kind, c.other) else {
+        let (doc::Kind::LookAt { .. }, Some((i, group))) =
+            (&self.motion.constraints[k].kind, c.other)
+        else {
             return false;
         };
         let other = match group {
@@ -2181,7 +2626,9 @@ impl Program {
     /// The timeline position placements read at `doc_t`: the look's quantize, then a document
     /// remap.
     pub fn timeline(&self, doc_t: i64) -> i64 {
-        let shown = self.quantize.map_or(doc_t, |rate| crate::eval::grid(doc_t, rate));
+        let shown = self
+            .quantize
+            .map_or(doc_t, |rate| crate::eval::grid(doc_t, rate));
         self.motion.document_time(shown)
     }
 
@@ -2209,10 +2656,16 @@ impl Program {
         let channel = &self.motion.channels[c];
         let motion = &self.motion;
         let start = motion.transport.start;
-        let shown = self.quantize.map_or(doc_t, |rate| crate::eval::grid(doc_t, rate));
+        let shown = self
+            .quantize
+            .map_or(doc_t, |rate| crate::eval::grid(doc_t, rate));
         let mut t = shown;
         let mut scale = 1.0;
-        for r in motion.remaps.iter().filter(|r| motion.applies(r, &channel.target.owner)) {
+        for r in motion
+            .remaps
+            .iter()
+            .filter(|r| motion.applies(r, &channel.target.owner))
+        {
             scale *= r.rate(t - start);
             t = start + r.child(t - start);
         }
@@ -2259,18 +2712,36 @@ impl Program {
                 v[0]
             }
             doc::Influence::Control(control) => {
-                let last = self.options.input.iter().filter(|e| e.control == *control && e.t <= at).max_by_key(|e| e.key());
+                let last = self
+                    .options
+                    .input
+                    .iter()
+                    .filter(|e| e.control == *control && e.t <= at)
+                    .max_by_key(|e| e.key());
                 last.and_then(|e| e.value.as_f64()).unwrap_or_else(|| {
-                    self.motion.control_defaults.iter().find(|(id, _)| id == control).map_or(0.0, |c| c.1)
+                    self.motion
+                        .control_defaults
+                        .iter()
+                        .find(|(id, _)| id == control)
+                        .map_or(0.0, |c| c.1)
                 })
             }
         };
-        let influence = b.switch.as_ref().map_or(influence, |s| influence * s.weight(at));
+        let influence = b
+            .switch
+            .as_ref()
+            .map_or(influence, |s| influence * s.weight(at));
         if b.fade_in == 0 && b.fade_out == 0 {
             return influence;
         }
         let end = start + placement.active_span(&self.motion);
-        let ramp = |d: i64, span: i64| if span == 0 { 1.0 } else { (d as f64 / span as f64).clamp(0.0, 1.0) };
+        let ramp = |d: i64, span: i64| {
+            if span == 0 {
+                1.0
+            } else {
+                (d as f64 / span as f64).clamp(0.0, 1.0)
+            }
+        };
         influence * ramp(at - start, b.fade_in) * ramp(end - at, b.fade_out)
     }
 
@@ -2279,7 +2750,11 @@ impl Program {
         if slot < self.items.len() * TRANSFORM {
             return self.items[slot / TRANSFORM].clone();
         }
-        if let Some(a) = self.assemblies.iter().find(|a| (a.slot..a.slot + 2).contains(&slot)) {
+        if let Some(a) = self
+            .assemblies
+            .iter()
+            .find(|a| (a.slot..a.slot + 2).contains(&slot))
+        {
             return format!("assemblies/{}", a.id);
         }
         self.fields
@@ -2300,6 +2775,8 @@ impl Program {
             None => Vec::new(),
         };
         let (reads, writes) = match &self.motion.constraints[k].kind {
+            // #2013: solved at check outside the program, so no step of a frame reads or writes.
+            Kind::RestOn { on: Some(_), .. } => (vec![], vec![]),
             Kind::ChildOf { .. } => (groups(own, &[0, 1, 2]), groups(own, &[0, 1, 2])),
             Kind::LookAt { .. } => (groups(own, &[0, 1]), groups(own, &[1])),
             Kind::Copy { what, .. } => (vec![], groups(own, &[what.group()])),
@@ -2307,13 +2784,19 @@ impl Program {
             Kind::Reach2 { .. } => {
                 let [lower, end] = c.chain.map(|i| i * TRANSFORM);
                 (
-                    [groups(own, &[0, 1, 2]), groups(lower, &[0, 1]), groups(end, &[0])].concat(),
+                    [
+                        groups(own, &[0, 1, 2]),
+                        groups(lower, &[0, 1]),
+                        groups(end, &[0]),
+                    ]
+                    .concat(),
                     [groups(own, &[1, 2]), groups(lower, &[1])].concat(),
                 )
             }
-            Kind::FollowPath { .. } | Kind::RestOn { .. } | Kind::SpringChain { .. } | Kind::FollowTip { .. } => {
-                (groups(own, &[0, 1]), groups(own, &[0, 1]))
-            }
+            Kind::FollowPath { .. }
+            | Kind::RestOn { .. }
+            | Kind::SpringChain { .. }
+            | Kind::FollowTip { .. } => (groups(own, &[0, 1]), groups(own, &[0, 1])),
         };
         ([other, reads].concat(), writes)
     }
@@ -2357,11 +2840,29 @@ impl Program {
         // Mixes first on their paths, so replace, add and multiply apply over them.
         for (m, mix) in self.mixes.iter().enumerate() {
             let entry = format!("placements/{}", self.motion.placements[mix.members[0].0].id);
-            push(Step::Mix(m), Node { entry, item: self.item_of(mix.slot), stage: Stage::Channels, reads: vec![], writes: (mix.slot..mix.slot + mix.width).collect() });
+            push(
+                Step::Mix(m),
+                Node {
+                    entry,
+                    item: self.item_of(mix.slot),
+                    stage: Stage::Channels,
+                    reads: vec![],
+                    writes: (mix.slot..mix.slot + mix.width).collect(),
+                },
+            );
         }
         for (c, &(slot, width)) in self.channels.iter().enumerate() {
             let entry = format!("channels/{}", self.motion.channels[c].id);
-            push(Step::Channel(c), Node { entry, item: self.item_of(slot), stage: Stage::Channels, reads: vec![], writes: (slot..slot + width).collect() });
+            push(
+                Step::Channel(c),
+                Node {
+                    entry,
+                    item: self.item_of(slot),
+                    stage: Stage::Channels,
+                    reads: vec![],
+                    writes: (slot..slot + width).collect(),
+                },
+            );
         }
         // The other blends by writer layer, then order, then time: never by how the document
         // happens to list them.
@@ -2378,7 +2879,16 @@ impl Program {
             for (w, write) in writes.iter().enumerate() {
                 let entry = format!("placements/{}", self.motion.placements[p].id);
                 let slots = (write.slot..write.slot + write.width.min(4)).collect();
-                push(Step::Write(p, w), Node { entry, item: self.item_of(write.slot), stage: Stage::Channels, reads: vec![], writes: slots });
+                push(
+                    Step::Write(p, w),
+                    Node {
+                        entry,
+                        item: self.item_of(write.slot),
+                        stage: Stage::Channels,
+                        reads: vec![],
+                        writes: slots,
+                    },
+                );
             }
         }
         for (d, (slot, ops)) in self.drivers.iter().enumerate() {
@@ -2400,18 +2910,45 @@ impl Program {
                 })
                 .collect();
             let entry = format!("drivers/{}", self.motion.drivers[d].id);
-            push(Step::Driver(d), Node { entry, item: self.item_of(*slot), stage: Stage::Driver, reads, writes: vec![*slot] });
+            push(
+                Step::Driver(d),
+                Node {
+                    entry,
+                    item: self.item_of(*slot),
+                    stage: Stage::Driver,
+                    reads,
+                    writes: vec![*slot],
+                },
+            );
         }
         for (l, (first, _)) in self.limits.iter().enumerate() {
             let slots: Vec<usize> = (*first..first + 3).collect();
             let entry = format!("constraints/{}", self.motion.limits[l].id);
-            push(Step::Limit(l), Node { entry, item: self.item_of(*first), stage: Stage::Constraints, reads: slots.clone(), writes: slots });
+            push(
+                Step::Limit(l),
+                Node {
+                    entry,
+                    item: self.item_of(*first),
+                    stage: Stage::Constraints,
+                    reads: slots.clone(),
+                    writes: slots,
+                },
+            );
         }
         for k in 0..self.constraints.len() {
             let (reads, writes) = self.constraint_slots(k);
             let entry = format!("constraints/{}", self.motion.constraints[k].id);
             let item = self.items[self.constraints[k].owner].clone();
-            push(Step::Constraint(k), Node { entry, item, stage: Stage::Constraints, reads, writes });
+            push(
+                Step::Constraint(k),
+                Node {
+                    entry,
+                    item,
+                    stage: Stage::Constraints,
+                    reads,
+                    writes,
+                },
+            );
         }
         let order = crate::schedule::order(&nodes, whole_items).map_err(|cycle| Refused {
             code: "cycle",
@@ -2419,7 +2956,9 @@ impl Program {
                 .iter()
                 .map(|&i| format!("{} ({})", nodes[i].entry, nodes[i].item))
                 .collect::<Vec<_>>()
-                .join(" → "), detail: None })?;
+                .join(" → "),
+            detail: None,
+        })?;
         self.order = order.iter().map(|&i| steps[i]).collect();
         // The order by item and stage: an item's transform composes before its first
         // constraint, or after its last write when it has none.
@@ -2459,10 +2998,13 @@ impl Program {
         let mut inputs_of: Vec<(&str, CoreInput)> = vars
             .iter()
             .map(|(n, v)| {
-                (*n, match *v {
-                    Var::Slot(s) => CoreInput::Slot(s),
-                    Var::World(i, k) => CoreInput::World(i, k),
-                })
+                (
+                    *n,
+                    match *v {
+                        Var::Slot(s) => CoreInput::Slot(s),
+                        Var::World(i, k) => CoreInput::World(i, k),
+                    },
+                )
             })
             .collect();
         let lists: Vec<&str> = driver
@@ -2482,19 +3024,28 @@ impl Program {
             .and_then(Value::as_array)
             .and_then(|r| Some((r.first()?.as_u64()? as u32, r.get(1)?.as_u64()? as u32)))
             .unwrap_or_default();
-        let time = deep_canvas::grammar::TimeContext { frame_rate, ..Default::default() };
-        let (text, lagged) = crate::lag::rewrite(&driver.text, &time).map_err(|r| refused(r.code, r.why))?;
-        let (text, found) = crate::occurrence::rewrite(&text, &lists).map_err(|r| refused(r.code, r.why))?;
+        let time = deep_canvas::grammar::TimeContext {
+            frame_rate,
+            ..Default::default()
+        };
+        let (text, lagged) =
+            crate::lag::rewrite(&driver.text, &time).map_err(|r| refused(r.code, r.why))?;
+        let (text, found) =
+            crate::occurrence::rewrite(&text, &lists).map_err(|r| refused(r.code, r.why))?;
         for f in &found {
-            let Some((_, doc::DriverInput::List(filter))) = driver.inputs.iter().find(|(n, _)| *n == f.list) else {
+            let Some((_, doc::DriverInput::List(filter))) =
+                driver.inputs.iter().find(|(n, _)| *n == f.list)
+            else {
                 continue;
             };
             let fields: Vec<&str> = f.field.first().map(String::as_str).into_iter().collect();
-            let entries = self.occurrences(filter, doc, &format!("drivers/{}", driver.id), &fields)?.ok_or_else(|| Refused {
-                code: "ref_unresolved",
-                path: format!("{path}/vars/{}/list", f.list),
-                detail: Some(Box::new(json!({"driver": driver.id, "list": filter.list}))),
-            })?;
+            let entries = self
+                .occurrences(filter, doc, &format!("drivers/{}", driver.id), &fields)?
+                .ok_or_else(|| Refused {
+                    code: "ref_unresolved",
+                    path: format!("{path}/vars/{}/list", f.list),
+                    detail: Some(Box::new(json!({"driver": driver.id, "list": filter.list}))),
+                })?;
             // Occurrences read on the driver's clock, from the transport's start as `time` reads.
             let start = self.motion.transport.start;
             let entries = entries
@@ -2509,10 +3060,14 @@ impl Program {
             if f.function == "next" && filter.list.starts_with("input.") {
                 return Err(refused(
                     "look_ahead_on_input",
-                    format!("drivers/{}: next({}) looks ahead on {}, which the input track feeds", driver.id, f.list, filter.list),
+                    format!(
+                        "drivers/{}: next({}) looks ahead on {}, which the input track feeds",
+                        driver.id, f.list, filter.list
+                    ),
                 ));
             }
-            let list = crate::occurrence::filtered(filter, entries).map_err(|r| refused(r.code, r.why))?;
+            let list =
+                crate::occurrence::filtered(filter, entries).map_err(|r| refused(r.code, r.why))?;
             let read = crate::occurrence::read_of(f, &list).map_err(|r| refused(r.code, r.why))?;
             if read.needs_fallback() && driver.fallback.is_none() {
                 return Err(refused("fallback_missing", format!("drivers/{}: {}({}) has no match before its first, so the driver needs a fallback", driver.id, f.function, f.list)));
@@ -2525,26 +3080,45 @@ impl Program {
                 doc::DriverInput::Array(array) => {
                     // #497: a stepping module's array has no steps after t yet, as the input
                     // track has no entries after t, so a lag or smooth that looks ahead through it
-                    // is refused; motion's evaluation reads no module's array at any time.
+                    // is refused; motion reads only a logic output its host baked (#1183).
                     if lagged.iter().any(|l| l.var == *name && l.dt < 0) {
                         return Err(refused("look_ahead_on_array", format!("lag({name}) looks ahead through the array `{array}`, which a stepping module writes step by step")));
+                    }
+                    // #1183: a logic item's scalar output its host baked into the document.
+                    if let Some(read) = doc
+                        .get("arrays")
+                        .and_then(|a| a.get(array.as_str()))
+                        .and_then(crate::array::Read::of)
+                    {
+                        inputs_of.push((name.as_str(), CoreInput::Array(Arc::new(read))));
+                        continue;
                     }
                     return Err(Refused {
                         code: "ref_unresolved",
                         path: format!("{path}/vars/{name}"),
-                        detail: Some(Box::new(json!({"driver": driver.id, "array": array, "why": "motion's drivers read no canvas module's array"}))),
+                        detail: Some(Box::new(
+                            json!({"driver": driver.id, "array": array, "why": "motion's drivers read only a logic item's scalar f64 output, baked into the document"}),
+                        )),
                     });
                 }
                 doc::DriverInput::Time => CoreInput::Time,
                 doc::DriverInput::Rate(id) => {
                     let Some(c) = self.motion.channels.iter().position(|c| c.id == *id) else {
-                        return Err(Refused { code: "ref_unresolved", path: format!("{path}/vars/{name}"), detail: None });
+                        return Err(Refused {
+                            code: "ref_unresolved",
+                            path: format!("{path}/vars/{name}"),
+                            detail: None,
+                        });
                     };
                     CoreInput::Rate(c)
                 }
                 doc::DriverInput::Remap(id, progress) => {
                     let Some(r) = self.motion.remaps.iter().position(|r| r.id == *id) else {
-                        return Err(Refused { code: "ref_unresolved", path: format!("{path}/vars/{name}"), detail: None });
+                        return Err(Refused {
+                            code: "ref_unresolved",
+                            path: format!("{path}/vars/{name}"),
+                            detail: None,
+                        });
                     };
                     CoreInput::Remap(r, *progress)
                 }
@@ -2561,13 +3135,24 @@ impl Program {
                     let (lo, hi) = (lo.as_f64().unwrap_or(0.0), hi.as_f64().unwrap_or(0.0));
                     // A range written high to low holds no value.
                     if lo > hi {
-                        return Err(Refused { code: "out_of_range", path: format!("controls/{id}/range"), detail: None });
+                        return Err(Refused {
+                            code: "out_of_range",
+                            path: format!("controls/{id}/range"),
+                            detail: None,
+                        });
                     }
                     scope.maxes.insert(name.clone(), hi);
-                    let mut track: Vec<&Entry> = self.options.input.iter().filter(|e| e.control == *id).collect();
+                    let mut track: Vec<&Entry> = self
+                        .options
+                        .input
+                        .iter()
+                        .filter(|e| e.control == *id)
+                        .collect();
                     track.sort_by_key(|e| e.key());
-                    let entries: Vec<(i64, i64, f64)> =
-                        track.into_iter().filter_map(|e| Some((e.t, e.seq, e.value.as_f64()?))).collect();
+                    let entries: Vec<(i64, i64, f64)> = track
+                        .into_iter()
+                        .filter_map(|e| Some((e.t, e.seq, e.value.as_f64()?)))
+                        .collect();
                     CoreInput::Control {
                         entries,
                         default: c.get("default").and_then(Value::as_f64).unwrap_or(lo),
@@ -2636,7 +3221,9 @@ impl Program {
                         "{path}: its bound [{}, {}] leaves the range [{lo}, {hi}]",
                         b.lo, b.hi
                     ),
-                    detail: Some(Box::new(json!({"driver": driver.id, "bound": [b.lo, b.hi]}))),
+                    detail: Some(Box::new(
+                        json!({"driver": driver.id, "bound": [b.lo, b.hi]}),
+                    )),
                 });
             }
         }
@@ -2697,6 +3284,7 @@ impl Program {
                     }
                     _ => f64::NAN,
                 },
+                CoreInput::Array(read) => read.at(doc_t),
                 CoreInput::Occurrence(read) => match read.at(t) {
                     Some(v) => v,
                     None => return core.fallback.unwrap_or(f64::NAN),
@@ -2758,7 +3346,10 @@ impl Program {
                 return Err(bad("bad_doc", ""));
             };
             let from = rows.get("from").and_then(Value::as_object);
-            let filter = doc::filter_of(from.ok_or(bad("bad_doc", "/from"))?, &format!("{path}/from"))?;
+            let filter = doc::filter_of(
+                from.ok_or(bad("bad_doc", "/from"))?,
+                &format!("{path}/from"),
+            )?;
             // The payload fields its columns name.
             let fields: Vec<&str> = rows
                 .get("columns")
@@ -2779,7 +3370,12 @@ impl Program {
                 let c = controls?.get(name)?;
                 let default = c.get("default").and_then(Value::as_f64).unwrap_or(0.0);
                 let entries = self.options.input.iter().filter(|e| e.control == name);
-                Some((entries.filter_map(|e| Some((e.t, e.value.as_f64()?))).collect(), default))
+                Some((
+                    entries
+                        .filter_map(|e| Some((e.t, e.value.as_f64()?)))
+                        .collect(),
+                    default,
+                ))
             };
             out.push(crate::rows::RowList::read(id, rows, list, control)?);
         }
@@ -2806,26 +3402,51 @@ impl Program {
             if self.options.planted != Planted::AcceptsUndeclaredOccurrence {
                 undeclared(emits, filter, reader, fields)?;
             }
-            let rows = doc.get("occurrences").and_then(|o| o.get(&filter.list)).and_then(Value::as_array);
-            let id = |r: &Value, k: &str| r.get(k).map(|v| v.as_str().map_or_else(|| v.to_string(), str::to_string));
+            let rows = doc
+                .get("occurrences")
+                .and_then(|o| o.get(&filter.list))
+                .and_then(Value::as_array);
+            let id = |r: &Value, k: &str| {
+                r.get(k)
+                    .map(|v| v.as_str().map_or_else(|| v.to_string(), str::to_string))
+            };
             return Ok(Some(
                 rows.into_iter()
                     .flatten()
                     .filter_map(|r| {
                         let kind = r.get("kind")?.as_str()?;
                         let declared = emits.get(kind)?.get("fields").and_then(Value::as_object);
-                        let payload: Map<String, Value> =
-                            declared.into_iter().flatten().filter_map(|(n, _)| Some((n.clone(), r.get(n)?.clone()))).collect();
+                        let payload: Map<String, Value> = declared
+                            .into_iter()
+                            .flatten()
+                            .filter_map(|(n, _)| Some((n.clone(), r.get(n)?.clone())))
+                            .collect();
                         let t = r.get("t")?.as_i64()?;
-                        Some(Occurrence { t, end: t, a: id(r, "a"), b: id(r, "b"), kind: kind.to_string(), tags: Vec::new(), payload: Value::Object(payload) })
+                        Some(Occurrence {
+                            t,
+                            end: t,
+                            a: id(r, "a"),
+                            b: id(r, "b"),
+                            kind: kind.to_string(),
+                            tags: Vec::new(),
+                            payload: Value::Object(payload),
+                        })
                     })
                     .collect(),
             ));
         }
-        Ok(self.listed(filter, doc.get("controls").and_then(Value::as_object)))
+        // #1918: a world's rows come from its bake, through the column view.
+        let world = self
+            .world_of(&filter.list)
+            .map(|_| crate::occurrence::baked(doc, &filter.list));
+        Ok(world.or_else(|| self.listed(filter, doc.get("controls").and_then(Value::as_object))))
     }
 
-    fn listed(&self, filter: &crate::occurrence::Filter, controls: Option<&Map<String, Value>>) -> Option<Vec<crate::occurrence::Occurrence>> {
+    fn listed(
+        &self,
+        filter: &crate::occurrence::Filter,
+        controls: Option<&Map<String, Value>>,
+    ) -> Option<Vec<crate::occurrence::Occurrence>> {
         use crate::occurrence::Occurrence;
         // A list names a marker kind or a declared control; any other would read empty forever.
         if let Some(kind) = filter.list.strip_prefix("markers.") {
@@ -2849,15 +3470,16 @@ impl Program {
                     .collect(),
             );
         }
-        // A world's occurrences come from its bake, which no evaluation here has run.
-        if self.world_of(&filter.list).is_some() {
-            return Some(Vec::new());
-        }
         let control = filter.list.strip_prefix("input.")?;
         if !controls.is_some_and(|c| c.contains_key(control)) {
             return None;
         }
-        let mut entries: Vec<&Entry> = self.options.input.iter().filter(|e| e.control == control).collect();
+        let mut entries: Vec<&Entry> = self
+            .options
+            .input
+            .iter()
+            .filter(|e| e.control == control)
+            .collect();
         entries.sort_by_key(|e| e.key());
         Some(
             entries
@@ -2903,9 +3525,16 @@ impl Program {
     pub fn time_only(&self, s: usize) -> bool {
         !(self.follows.contains(&s)
             || self.staggered.iter().any(|x| x.slot == s)
-            || self.placements.iter().flatten().any(|w| (w.slot..w.slot + w.width).contains(&s))
+            || self
+                .placements
+                .iter()
+                .flatten()
+                .any(|w| (w.slot..w.slot + w.width).contains(&s))
             || self.drivers.iter().any(|(slot, _)| *slot == s)
-            || self.limits.iter().any(|(first, _)| (*first..first + 3).contains(&s))
+            || self
+                .limits
+                .iter()
+                .any(|(first, _)| (*first..first + 3).contains(&s))
             || (0..self.constraints.len()).any(|k| self.constraint_slots(k).1.contains(&s)))
     }
 
@@ -2915,7 +3544,10 @@ impl Program {
     pub fn slot_window(&self, s: usize, a: i64, b: i64, at_a: f64, at_b: f64) -> Option<Iv> {
         // #504: a take-apart share, the hull of its ends inside one move of its follow.
         if let Some(x) = self.staggered.iter().find(|x| x.slot == s) {
-            return x.follow.window(a, b, at_a, at_b).map(|iv| iv.meet(Iv::new(0.0, 1.0)));
+            return x
+                .follow
+                .window(a, b, at_a, at_b)
+                .map(|iv| iv.meet(Iv::new(0.0, 1.0)));
         }
         let lone: Vec<usize> = (0..self.channels.len())
             .filter(|&c| (self.channels[c].0..self.channels[c].0 + self.channels[c].1).contains(&s))
@@ -2954,16 +3586,31 @@ impl Program {
             .iter()
             .map(|input| match input {
                 CoreInput::Time => time,
-                CoreInput::Control { entries, default, range } => self.control_in(entries, *default, *range, time, span),
+                CoreInput::Control {
+                    entries,
+                    default,
+                    range,
+                } => self.control_in(entries, *default, *range, time, span),
                 CoreInput::Slot(s) => self.slot_bound(*s),
                 CoreInput::World(..) | CoreInput::Rate(_) => Iv::ENTIRE,
                 CoreInput::Remap(..) => Iv::new(0.0, 1.0),
                 CoreInput::Occurrence(read) => read.bound(span),
+                CoreInput::Array(read) => read.bound(),
                 CoreInput::Lag(inner, dt) => match &**inner {
                     CoreInput::Slot(s) => self.slot_bound(*s),
-                    CoreInput::Control { entries, default, range } => {
+                    CoreInput::Control {
+                        entries,
+                        default,
+                        range,
+                    } => {
                         let back = *dt as f64 / f;
-                        self.control_in(entries, *default, *range, Iv::new(time.lo - back, time.hi - back), span)
+                        self.control_in(
+                            entries,
+                            *default,
+                            *range,
+                            Iv::new(time.lo - back, time.hi - back),
+                            span,
+                        )
                     }
                     _ => Iv::new(0.0, span),
                 },
@@ -2981,7 +3628,14 @@ impl Program {
     /// each entry inside it, so a replayed sweep is bounded between its entries; over the whole
     /// document (the hard-range check's) or with no entries, its declared range. The window is
     /// widened by a flick each way, past the rounding of its seconds.
-    fn control_in(&self, entries: &[(i64, i64, f64)], default: f64, range: (f64, f64), time: Iv, span: f64) -> Iv {
+    fn control_in(
+        &self,
+        entries: &[(i64, i64, f64)],
+        default: f64,
+        range: (f64, f64),
+        time: Iv,
+        span: f64,
+    ) -> Iv {
         let whole = time.lo <= 0.0 && time.hi >= span;
         if entries.is_empty() || whole || self.options.planted == Planted::ReplayBoundsWholeRange {
             return Iv::new(range.0, range.1);
@@ -2989,12 +3643,23 @@ impl Program {
         let f = deep_canvas::grammar::FLICKS_PER_SECOND as f64;
         let start = self.motion.transport.start as f64;
         // A window reaching the document's ends reaches what the clock reads past them.
-        let lo = if time.lo <= 0.0 { f64::NEG_INFINITY } else { (start + time.lo * f).floor() - 1.0 };
-        let hi = if time.hi >= span { f64::INFINITY } else { (start + time.hi * f).ceil() + 1.0 };
+        let lo = if time.lo <= 0.0 {
+            f64::NEG_INFINITY
+        } else {
+            (start + time.lo * f).floor() - 1.0
+        };
+        let hi = if time.hi >= span {
+            f64::INFINITY
+        } else {
+            (start + time.hi * f).ceil() + 1.0
+        };
         let i = entries.partition_point(|e| (e.0 as f64) < lo);
         let open = i.checked_sub(1).map_or(default, |i| entries[i].2);
         let held = |v: f64| Iv::point(v.clamp(range.0, range.1));
-        entries[i..].iter().take_while(|e| e.0 as f64 <= hi).fold(held(open), |b, e| b.hull(held(e.2)))
+        entries[i..]
+            .iter()
+            .take_while(|e| e.0 as f64 <= hi)
+            .fold(held(open), |b, e| b.hull(held(e.2)))
     }
 
     /// The bound of what slot `s` holds: its base value when nothing writes it, a channel's
@@ -3010,13 +3675,21 @@ impl Program {
         // leaves the slot unbounded here.
         let others = self.follows.contains(&s)
             || self.staggered.iter().any(|x| x.slot == s)
-            || self.placements.iter().flatten().any(|w| (w.slot..w.slot + w.width).contains(&s))
+            || self
+                .placements
+                .iter()
+                .flatten()
+                .any(|w| (w.slot..w.slot + w.width).contains(&s))
             || self.drivers.iter().any(|(slot, _)| *slot == s)
-            || self.limits.iter().any(|(first, _)| (*first..first + 3).contains(&s))
+            || self
+                .limits
+                .iter()
+                .any(|(first, _)| (*first..first + 3).contains(&s))
             || (0..self.constraints.len()).any(|k| self.constraint_slots(k).1.contains(&s));
         match by.as_slice() {
             [] if !self.writes(s..s + 1) => Iv::point(self.base[s]),
-            [c] if !others => channel_bound(&self.motion.channels[*c]).map_or(Iv::ENTIRE, |(lo, hi)| Iv::new(lo, hi)),
+            [c] if !others => channel_bound(&self.motion.channels[*c])
+                .map_or(Iv::ENTIRE, |(lo, hi)| Iv::new(lo, hi)),
             _ => Iv::ENTIRE,
         }
     }
@@ -3067,16 +3740,32 @@ impl Program {
             Kind::LookAt { .. } => cs::look_at(&own, other.pos, &mut ops),
             Kind::Copy { what, .. } => cs::copy(&own, *what, &other, &mut ops),
             Kind::Distance { min, max, .. } => cs::distance(&own, other.pos, *min, *max, &mut ops),
-            Kind::FollowPath { fraction, orient, offset, .. } => match &c.table {
+            Kind::FollowPath {
+                fraction,
+                orient,
+                offset,
+                ..
+            } => match &c.table {
                 Some(table) => cs::follow_path(&own, table, *fraction, *orient, *offset, &mut ops),
                 None => own,
             },
-            Kind::FollowTip { offset, rotate, .. } => {
-                cs::follow_tip(&own, [other.pos[0], other.pos[1]], other.rot[2], *offset, *rotate, &mut ops)
-            }
-            Kind::RestOn { ground, bottom, offset, max_drop } => {
-                cs::rest_on(&own, *bottom, *ground, *offset, *max_drop, &mut ops).unwrap_or(own)
-            }
+            Kind::FollowTip { offset, rotate, .. } => cs::follow_tip(
+                &own,
+                [other.pos[0], other.pos[1]],
+                other.rot[2],
+                *offset,
+                *rotate,
+                &mut ops,
+            ),
+            Kind::RestOn {
+                ground,
+                bottom,
+                offset,
+                max_drop,
+                on: None,
+            } => cs::rest_on(&own, *bottom, *ground, *offset, *max_drop, &mut ops).unwrap_or(own),
+            // #2013: a rest on true shapes is solved at check by the module that holds them.
+            Kind::RestOn { on: Some(_), .. } => own,
             Kind::SpringChain { .. } => own,
             Kind::Reach2 { bend, cartoon, .. } => {
                 let [lower, end] = c.chain.map(|i| pose(slots, i * TRANSFORM));
@@ -3101,7 +3790,10 @@ impl Program {
         let w = spec.influence;
         let (_, writes) = self.constraint_slots(k);
         let after = [solved.pos, solved.rot, solved.scale].concat();
-        for s in writes.iter().filter(|s| (own_at..own_at + TRANSFORM).contains(s)) {
+        for s in writes
+            .iter()
+            .filter(|s| (own_at..own_at + TRANSFORM).contains(s))
+        {
             let v = after[s - own_at];
             slots[*s] += w * (v - slots[*s]);
         }
@@ -3207,13 +3899,21 @@ impl Program {
                     limit: false,
                     reads: Vec::new(),
                 },
-                Event::Mix(m) if (self.mixes[*m].slot..self.mixes[*m].slot + self.mixes[*m].width).contains(&slot) => Traced {
-                    entry: format!("placements/{}", self.motion.placements[self.mixes[*m].members[0].0].id),
-                    operator: "channels",
-                    value: slots[slot],
-                    limit: false,
-                    reads: Vec::new(),
-                },
+                Event::Mix(m)
+                    if (self.mixes[*m].slot..self.mixes[*m].slot + self.mixes[*m].width)
+                        .contains(&slot) =>
+                {
+                    Traced {
+                        entry: format!(
+                            "placements/{}",
+                            self.motion.placements[self.mixes[*m].members[0].0].id
+                        ),
+                        operator: "channels",
+                        value: slots[slot],
+                        limit: false,
+                        reads: Vec::new(),
+                    }
+                }
                 Event::Driver(d) if self.drivers[*d].0 == slot => {
                     let driver = &self.motion.drivers[*d];
                     let reads = driver
@@ -3278,19 +3978,31 @@ fn logic_emits<'d>(doc: &'d Map<String, Value>, list: &str) -> Option<&'d Map<St
         return None;
     }
     static NONE: std::sync::LazyLock<Map<String, Value>> = std::sync::LazyLock::new(Map::new);
-    Some(item.get("params").and_then(|p| p.get("emits")).and_then(Value::as_object).unwrap_or(&NONE))
+    Some(
+        item.get("params")
+            .and_then(|p| p.get("emits"))
+            .and_then(Value::as_object)
+            .unwrap_or(&NONE),
+    )
 }
 
 /// Refuses a reader of a logic item's occurrences that names a kind the item doesn't declare in
 /// `emits`, or a field none of the kinds it reads declares: `occurrence.undeclared`, naming the
 /// reader, the name and up to three close declared names (Logic: occurrences).
-fn undeclared(emits: &Map<String, Value>, filter: &crate::occurrence::Filter, reader: &str, fields: &[&str]) -> Result<(), Refused> {
+fn undeclared(
+    emits: &Map<String, Value>,
+    filter: &crate::occurrence::Filter,
+    reader: &str,
+    fields: &[&str],
+) -> Result<(), Refused> {
     match deep_canvas::document::undeclared(emits, filter.kinds.as_deref(), fields) {
         None => Ok(()),
         Some((name, close)) => Err(Refused {
             code: "occurrence.undeclared",
             path: reader.to_string(),
-            detail: Some(Box::new(json!({"reader": reader, "list": filter.list, "name": name, "close": close}))),
+            detail: Some(Box::new(
+                json!({"reader": reader, "list": filter.list, "name": name, "close": close}),
+            )),
         }),
     }
 }

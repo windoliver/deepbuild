@@ -7,8 +7,9 @@
 //! - `run:<program> [<arg>…]`: a program the call runs, through any wrapper or nested shell, is `<program>`,
 //!   and its arguments that aren't options match the `<arg>` globs in order; an `<arg>` that starts with `-`
 //!   matches any of its arguments instead.
-//! - `write:<path>…`: the call writes a path matching one of the globs, by Edit, Write, a patch or a
-//!   recognizable shell write, the path as written and as its links and `..` resolve, against each glob and
+//! - `write:<path>…`: the call writes a path matching one of the globs, by Edit, Write, a patch, a
+//!   recognizable shell write or an MCP call that names it (#1848), unless its tool counts as read, the path as
+//!   written and as its links and `..` resolve, against each glob and
 //!   the file it links to. `~` is the home folder, `*` matches any run, slashes included, a glob that
 //!   doesn't start with `/` or `~` matches a path's end, and a glob after `!` takes the paths it matches out.
 //! - `kill:by-name`: a kill by name or port: pkill, killall, `fuser -k`, kill-port, or `kill` fed from a
@@ -19,7 +20,7 @@
 //! - `git:other-checkout`: git aimed at a worktree of the session's repository other than its own, by `cd`,
 //!   `-C`, `--git-dir`, `--work-tree`, `GIT_DIR` or `GIT_WORK_TREE`.
 //! - `read:<path>…`: the call reads a path matching one of the globs, as `write:` reads them: by Read or Grep,
-//!   a redirection, or any shell run that names the path among its arguments.
+//!   a redirection, any shell run that names the path among its arguments, or an MCP call that names it.
 //! - `hub:stop`: `deep hub stop` of the installed hub: with no `--root`, or one that is `~/.deepbuild`.
 //! - `hub:service`: a stop, unload, removal or edit of the hub's login service (launchd's `com.deepbuild.hub`,
 //!   systemd's `deepbuild-hub.service`), or a change to the environment systemd's manager gives it.
@@ -60,6 +61,8 @@ use std::path::{Path, PathBuf};
 
 use crate::shell::{self, glob, lexical, real, same_name, Arg, Run, Unread};
 
+mod paths;
+
 /// What deep-hook reads from one call: the runs of its shell command and the paths it writes.
 pub struct Call {
     pub command: Option<String>,
@@ -69,6 +72,9 @@ pub struct Call {
     /// The run each write and each read comes from, by its index in `runs`, and whether by a redirection; None
     /// for a file tool's path.
     by: (Vec<From>, Vec<From>),
+    /// The argument that names each path an MCP call names, and its value, in the order those paths lead `writes`
+    /// and `reads`; empty for any other call (#1848).
+    args: Vec<(String, String)>,
     pub cwd: Option<PathBuf>,
     pub home: PathBuf,
     /// The hub's socket, whose peer is the hub's process.
@@ -79,6 +85,15 @@ pub struct Call {
 
 /// The run a path comes from, by its index, and whether by a redirection.
 type From = Option<(usize, bool)>;
+
+/// Whether a call reads the paths it names outright, writes them, or both: an MCP call reads the paths its arguments
+/// name, and writes them too unless its tool counts as read (#1848).
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Names {
+    Reads,
+    Writes,
+    Both,
+}
 
 /// What a match found: the entry matched, with what a person needs to act on it, when there's more to say.
 pub struct Hit {
@@ -114,16 +129,20 @@ const HUB_UNIT: &str = "deepbuild-hub";
 
 /// Whether `line` holds `key`, in any case, with no letter, digit, `_`, `-`, `.` or `/` against either end of it.
 fn holds_word(line: &str, key: &str) -> bool {
-    words_at(&line.to_lowercase(), &key.to_lowercase()).next().is_some()
+    words_at(&line.to_lowercase(), &key.to_lowercase())
+        .next()
+        .is_some()
 }
 
 /// Where `line` holds `key` as a whole word, in its case, as `holds_word` reads one.
 fn words_at<'a>(line: &'a str, key: &'a str) -> impl Iterator<Item = usize> + 'a {
     let word = |c: char| c.is_alphanumeric() || matches!(c, '_' | '-' | '.' | '/');
-    line.match_indices(key).map(|(at, _)| at).filter(move |&at| {
-        !line[..at].chars().next_back().is_some_and(word)
-            && !line[at + key.len()..].chars().next().is_some_and(word)
-    })
+    line.match_indices(key)
+        .map(|(at, _)| at)
+        .filter(move |&at| {
+            !line[..at].chars().next_back().is_some_and(word)
+                && !line[at + key.len()..].chars().next().is_some_and(word)
+        })
 }
 
 /// Whether deep-hook can read `pattern`.
@@ -144,12 +163,13 @@ pub fn known(pattern: &str) -> bool {
 }
 
 impl Call {
-    /// A call as deep-hook reads it: a shell command (`tool_input.command`), a file tool's path, or a patch;
-    /// `read` says the paths are read, not written.
+    /// A call as deep-hook reads it: a shell command (`tool_input.command`), a file tool's path, a patch, or the
+    /// paths an MCP call's arguments name, `args` naming the argument of each; `names` says whether they are read,
+    /// written or both.
     pub fn new(
         tool: &str,
         command: Option<&str>,
-        (paths, read): (&[String], bool),
+        (paths, args, names): (&[String], &[String], Names),
         cwd: Option<&Path>,
         home: &Path,
         hub: &Path,
@@ -170,11 +190,22 @@ impl Call {
                 cwd.map(|c| c.join(path))
             }
         };
-        let named: Vec<PathBuf> = paths.iter().filter_map(|p| at(p)).collect();
-        let (mut writes, mut reads) = if read {
-            (Vec::new(), named)
+        let (mut named, mut kept) = (Vec::new(), Vec::new());
+        for (k, p) in paths.iter().enumerate() {
+            if let Some(path) = at(p) {
+                named.push(path);
+                kept.extend(args.get(k).map(|arg| (arg.clone(), p.clone())));
+            }
+        }
+        let mut writes = if names == Names::Reads {
+            Vec::new()
         } else {
-            (named, Vec::new())
+            named.clone()
+        };
+        let mut reads = if names == Names::Writes {
+            Vec::new()
+        } else {
+            named
         };
         let mut by = (vec![None; writes.len()], vec![None; reads.len()]);
         for (k, run) in runs.iter().enumerate() {
@@ -211,6 +242,7 @@ impl Call {
             writes,
             reads,
             by,
+            args: kept,
             cwd: cwd.map(Path::to_path_buf),
             home: home.to_path_buf(),
             hub: hub.to_path_buf(),
@@ -242,15 +274,17 @@ impl Call {
                 let wanted: Vec<&str> = rest.split_whitespace().skip(1).collect();
                 args_match(run, &wanted)
             }
-            Some(Unread::Program) if kind == "effect" || kind == "unread" => programs(rest).iter().any(|p| {
-                let known = Run {
-                    program: p.to_string(),
-                    glob: false,
-                    unread: None,
-                    ..(*run).clone()
-                };
-                self.has_effect(&known, rest)
-            }),
+            Some(Unread::Program) if kind == "effect" || kind == "unread" => {
+                programs(rest).iter().any(|p| {
+                    let known = Run {
+                        program: p.to_string(),
+                        glob: false,
+                        unread: None,
+                        ..(*run).clone()
+                    };
+                    self.has_effect(&known, rest)
+                })
+            }
             _ => false,
         };
         let run = self.runs.iter().find(fits)?;
@@ -316,49 +350,7 @@ impl Call {
                     .find(|r| r.is(&program) && args_match(r, &wanted))
                     .map(runs_it)
             }
-            "write" | "read" => {
-                let (but, globs): (Vec<&str>, Vec<&str>) =
-                    rest.split_whitespace().partition(|g| g.starts_with('!'));
-                let (paths, by, verb) = if kind == "write" {
-                    (&self.writes, &self.by.0, "writes")
-                } else {
-                    (&self.reads, &self.by.1, "reads")
-                };
-                if paths.is_empty() {
-                    return None;
-                }
-                // Each glob and each path is spelled out once, its links resolved, not once per pair
-                // of them; the exceptions only once some glob matches.
-                let globs: Vec<Vec<String>> =
-                    globs.iter().map(|g| self.glob_spellings(g)).collect();
-                let mut excepted: Option<Vec<Vec<String>>> = None;
-                let any = |globs: &[Vec<String>], forms: &[String]| {
-                    globs.iter().any(|g| {
-                        forms
-                            .iter()
-                            .any(|text| g.iter().any(|p| glob_path(p.as_bytes(), text.as_bytes())))
-                    })
-                };
-                let k = paths.iter().position(|w| {
-                    let forms = self.path_spellings(w);
-                    any(&globs, &forms)
-                        && !any(
-                            excepted.get_or_insert_with(|| {
-                                but.iter().map(|g| self.glob_spellings(&g[1..])).collect()
-                            }),
-                            &forms,
-                        )
-                })?;
-                // A redirection isn't one of its run's words, so the call's own line names it.
-                let ran = match (by[k], &self.command) {
-                    (Some((_, true)), Some(line)) => format!(" It runs: {line}"),
-                    (Some((r, _)), _) => format!(" It runs: {}", command_of(&self.runs[r])),
-                    _ => String::new(),
-                };
-                Some(Hit {
-                    detail: Some(format!("It {verb} {}.{ran}", real(&paths[k]).display())),
-                })
-            }
+            "write" | "read" => self.names_path(kind, rest),
             "hub" if rest == "stop" => self
                 .runs
                 .iter()
@@ -708,59 +700,6 @@ impl Call {
         })
     }
 
-    /// A path glob as it is matched whole: as written and, when anchored, with its literal part's
-    /// links resolved; one that isn't anchored matches under any folder.
-    fn glob_spellings(&self, pattern: &str) -> Vec<String> {
-        let pattern = match pattern.strip_prefix("~/") {
-            Some(rest) => format!("{}/{rest}", self.home.display()),
-            None if pattern == "~" => self.home.display().to_string(),
-            None => pattern.to_string(),
-        };
-        let anchored = pattern.starts_with('/');
-        let mut patterns = vec![pattern.clone()];
-        // The file a config path links to is guarded as the config is: the glob's literal part, resolved.
-        if anchored {
-            let cut = pattern.find(['*', '?', '[']).unwrap_or(pattern.len());
-            let (literal, tail) = pattern.split_at(cut);
-            let resolved = real(Path::new(literal.trim_end_matches('/')));
-            let joined = if literal.ends_with('/') {
-                format!("{}/{tail}", resolved.display())
-            } else {
-                format!("{}{tail}", resolved.display())
-            };
-            patterns.push(joined);
-        }
-        // The planted twin matches the path only as written, against each glob only as written.
-        if cfg!(feature = "plant-paths-as-written") {
-            patterns.truncate(1);
-        }
-        patterns
-            .iter()
-            .map(|p| {
-                let p = same_name(p);
-                if anchored {
-                    p
-                } else {
-                    format!("*/{p}")
-                }
-            })
-            .collect()
-    }
-
-    /// A path as a glob is matched against it: as written and as its links resolve.
-    fn path_spellings(&self, written: &Path) -> Vec<String> {
-        // The planted twin matches the path only as written.
-        let forms = if cfg!(feature = "plant-paths-as-written") {
-            vec![lexical(written)]
-        } else {
-            vec![lexical(written), real(written)]
-        };
-        forms
-            .iter()
-            .map(|form| same_name(&form.to_string_lossy()))
-            .collect()
-    }
-
     /// The other checkout a git run is aimed at, and the command for you to run there.
     fn other_checkout(&self) -> Option<String> {
         // A call that runs no git is aimed at no checkout: its own is never looked up.
@@ -872,6 +811,12 @@ fn pids(run: &Run) -> Vec<i64> {
 fn peer_pid(path: &Path) -> Option<i64> {
     use std::os::fd::AsRawFd;
     let stream = std::os::unix::net::UnixStream::connect(path).ok()?;
+    peer_of(stream.as_raw_fd())
+}
+
+/// The PID of the process at the other end of the connected Unix socket `fd`, by the OS's peer credentials: what
+/// `deep-hook peer` tells the hub of a connection the hub hands it (#2070).
+pub fn peer_of(fd: i32) -> Option<i64> {
     extern "C" {
         fn getsockopt(fd: i32, level: i32, name: i32, value: *mut u8, len: *mut u32) -> i32;
     }
@@ -884,15 +829,7 @@ fn peer_pid(path: &Path) -> Option<i64> {
     let mut value = [0u8; 12];
     let mut len = value.len() as u32;
     // SAFETY: the buffer outlives the call and `len` says its size.
-    let ok = unsafe {
-        getsockopt(
-            stream.as_raw_fd(),
-            level,
-            name,
-            value.as_mut_ptr(),
-            &mut len,
-        )
-    } == 0;
+    let ok = unsafe { getsockopt(fd, level, name, value.as_mut_ptr(), &mut len) } == 0;
     let pid = i32::from_ne_bytes([value[0], value[1], value[2], value[3]]);
     (ok && pid > 0).then_some(i64::from(pid))
 }
@@ -947,14 +884,31 @@ fn has_effect(run: &Run, class: &str) -> bool {
 fn programs(class: &str) -> &'static [&'static str] {
     match class {
         "cloud-resource" => &[
-            "aws", "gcloud", "az", "doctl", "eksctl", "gsutil", "terraform", "tofu", "pulumi", "cdk", "sam",
-            "serverless", "sls",
+            "aws",
+            "gcloud",
+            "az",
+            "doctl",
+            "eksctl",
+            "gsutil",
+            "terraform",
+            "tofu",
+            "pulumi",
+            "cdk",
+            "sam",
+            "serverless",
+            "sls",
         ],
         "dependency" => &[
             "npm", "pnpm", "bun", "yarn", "pip", "pip3", "gem", "brew", "uv", "cargo", "go",
         ],
         "service" => &[
-            "docker", "podman", "docker-compose", "brew", "systemctl", "launchctl", "pm2",
+            "docker",
+            "podman",
+            "docker-compose",
+            "brew",
+            "systemctl",
+            "launchctl",
+            "pm2",
         ],
         "unknown-reach-delete" | "unrestorable-delete" => {
             &["rm", "unlink", "shred", "srm", "find", "git", "rsync"]
@@ -1211,8 +1165,33 @@ fn api_method(words: &[&str]) -> String {
 fn sub(run: &Run) -> (&'static str, Vec<&str>) {
     const TOOLS: &[(&str, &[&str])] = &[
         ("git", GIT_VALUED),
-        ("jj", &["-R", "--repository", "--at-op", "--at-operation", "--config", "--config-toml", "--config-file", "--color"]),
-        ("sl", &["-R", "--repository", "--cwd", "--config", "--configfile", "--color", "--pager", "--encoding", "--encodingmode"]),
+        (
+            "jj",
+            &[
+                "-R",
+                "--repository",
+                "--at-op",
+                "--at-operation",
+                "--config",
+                "--config-toml",
+                "--config-file",
+                "--color",
+            ],
+        ),
+        (
+            "sl",
+            &[
+                "-R",
+                "--repository",
+                "--cwd",
+                "--config",
+                "--configfile",
+                "--color",
+                "--pager",
+                "--encoding",
+                "--encodingmode",
+            ],
+        ),
         ("gt", &["--cwd"]),
         ("glab", &["-R", "--repo"]),
         ("git-town", &[]),
@@ -1244,7 +1223,9 @@ fn opens_pr(run: &Run) -> bool {
         || submits(run)
         || town(run, &["propose", "new-pull-request"])
         || match sub(run) {
-            ("glab", rest) => rest.starts_with(&["mr", "create"]) || rest.starts_with(&["mr", "new"]),
+            ("glab", rest) => {
+                rest.starts_with(&["mr", "create"]) || rest.starts_with(&["mr", "new"])
+            }
             ("sl", rest) => rest.starts_with(&["pr", "submit"]),
             _ => false,
         }
@@ -1280,7 +1261,9 @@ fn merges(run: &Run) -> bool {
 
 /// The word of `glab api` naming a merge request's merge endpoint, `projects/<id>/merge_requests/<n>/merge`.
 fn glab_merge_endpoint(run: &Run) -> Option<&str> {
-    let ("glab", rest) = sub(run) else { return None };
+    let ("glab", rest) = sub(run) else {
+        return None;
+    };
     if rest.first() != Some(&"api") {
         return None;
     }
@@ -1299,7 +1282,11 @@ fn gt_merge(run: &Run) -> bool {
 
 /// The mutations of a `gh api graphql` call that merge, arm (auto-merge or the merge queue) or disarm a merge.
 const MUTATIONS: &[&str] = &[
-    "mergePullRequest", "enablePullRequestAutoMerge", "enqueuePullRequest", "disablePullRequestAutoMerge", "dequeuePullRequest",
+    "mergePullRequest",
+    "enablePullRequestAutoMerge",
+    "enqueuePullRequest",
+    "disablePullRequestAutoMerge",
+    "dequeuePullRequest",
 ];
 const ARMS: &[&str] = &["enablePullRequestAutoMerge", "enqueuePullRequest"];
 const DISARMS: &[&str] = &["disablePullRequestAutoMerge", "dequeuePullRequest"];
@@ -1314,23 +1301,42 @@ fn graphql_merge(run: &Run) -> Option<(String, Vec<(String, String)>)> {
         return None;
     }
     let fields = fields(&words);
-    let query = fields.iter().find(|(k, _)| k == "query").map(|(_, v)| v.clone());
-    let Some(query) = query.filter(|q| !q.is_empty() && !q.starts_with('@') && !q.starts_with('$')) else {
+    let query = fields
+        .iter()
+        .find(|(k, _)| k == "query")
+        .map(|(_, v)| v.clone());
+    let Some(query) = query.filter(|q| !q.is_empty() && !q.starts_with('@') && !q.starts_with('$'))
+    else {
         return Some((String::new(), fields));
     };
-    MUTATIONS.iter().any(|m| holds_word(&query, m)).then_some((query, fields))
+    MUTATIONS
+        .iter()
+        .any(|m| holds_word(&query, m))
+        .then_some((query, fields))
 }
 
 /// A GraphQL argument's literal value for `name`, or the field a `$variable` in its place names; none unless the
 /// query names it exactly once, as one merge's input does. A `$name` is a variable, not the argument.
 fn graphql_value(query: &str, fields: &[(String, String)], name: &str) -> Option<String> {
-    let args: Vec<usize> = words_at(query, name).filter(|&at| !query[..at].ends_with('$')).collect();
+    let args: Vec<usize> = words_at(query, name)
+        .filter(|&at| !query[..at].ends_with('$'))
+        .collect();
     let [at] = args[..] else { return None };
-    let rest = query[at + name.len()..].trim_start().strip_prefix(':')?.trim_start();
+    let rest = query[at + name.len()..]
+        .trim_start()
+        .strip_prefix(':')?
+        .trim_start();
     if let Some(var) = rest.strip_prefix('$') {
         // gh keeps the last field of a name; one given twice names no head.
-        let var: String = var.chars().take_while(|c| c.is_alphanumeric() || *c == '_').collect();
-        let values: Vec<&String> = fields.iter().filter(|(k, _)| *k == var).map(|(_, v)| v).collect();
+        let var: String = var
+            .chars()
+            .take_while(|c| c.is_alphanumeric() || *c == '_')
+            .collect();
+        let values: Vec<&String> = fields
+            .iter()
+            .filter(|(k, _)| *k == var)
+            .map(|(_, v)| v)
+            .collect();
         let [value] = values[..] else { return None };
         return Some(value.clone());
     }
@@ -1372,31 +1378,71 @@ fn merge_read(run: &Run) -> String {
     let words = run.words();
     let value = |flag: &str| {
         words.iter().enumerate().find_map(|(k, w)| {
-            w.strip_prefix(&format!("{flag}=")).or_else(|| (*w == flag).then(|| words.get(k + 1).copied()).flatten())
+            w.strip_prefix(&format!("{flag}="))
+                .or_else(|| (*w == flag).then(|| words.get(k + 1).copied()).flatten())
         })
     };
     let (sub_name, rest) = sub(run);
     let mut disable = words.contains(&"--disable-auto");
     let (pr, head, auto) = if let Some(path) = merge_endpoint(run) {
-        let pr = path.trim_matches('/').rsplit('/').nth(1).map(str::to_string);
-        (pr, words.iter().find_map(|w| w.strip_prefix("sha=")).map(str::to_string), false)
+        let pr = path
+            .trim_matches('/')
+            .rsplit('/')
+            .nth(1)
+            .map(str::to_string);
+        (
+            pr,
+            words
+                .iter()
+                .find_map(|w| w.strip_prefix("sha="))
+                .map(str::to_string),
+            false,
+        )
     } else if let Some((query, fields)) = graphql_merge(run) {
         // A head covers one merge: a query that holds more than one names none.
-        let one = MUTATIONS.iter().map(|m| words_at(&query, m).count()).sum::<usize>() == 1;
+        let one = MUTATIONS
+            .iter()
+            .map(|m| words_at(&query, m).count())
+            .sum::<usize>()
+            == 1;
         let any = |names: &[&str]| names.iter().any(|m| holds_word(&query, m));
         // A query that disarms and also merges or arms is read as the merge, since `disable` alone skips the head rule.
         if any(DISARMS) && !any(ARMS) && !holds_word(&query, "mergePullRequest") {
             disable = true;
         }
         // A head only a comment names is none: the argument must be there with the comments taken out too.
-        let bare: String = query.lines().map(|l| l.split('#').next().unwrap_or("")).collect::<Vec<_>>().join("\n");
-        let head = graphql_value(&query, &fields, "expectedHeadOid").filter(|_| one && holds_word(&bare, "expectedHeadOid"));
-        (graphql_value(&query, &fields, "pullRequestId"), head, any(ARMS))
+        let bare: String = query
+            .lines()
+            .map(|l| l.split('#').next().unwrap_or(""))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let head = graphql_value(&query, &fields, "expectedHeadOid")
+            .filter(|_| one && holds_word(&bare, "expectedHeadOid"));
+        (
+            graphql_value(&query, &fields, "pullRequestId"),
+            head,
+            any(ARMS),
+        )
     } else if let Some(path) = glab_merge_endpoint(run) {
-        let pr = path.trim_matches('/').rsplit('/').nth(1).map(str::to_string);
-        (pr, words.iter().find_map(|w| w.strip_prefix("sha=")).map(str::to_string), false)
+        let pr = path
+            .trim_matches('/')
+            .rsplit('/')
+            .nth(1)
+            .map(str::to_string);
+        (
+            pr,
+            words
+                .iter()
+                .find_map(|w| w.strip_prefix("sha="))
+                .map(str::to_string),
+            false,
+        )
     } else if sub_name == "glab" {
-        (plain(&rest).get(2).map(|p| p.to_string()), value("--sha").map(str::to_string), false)
+        (
+            plain(&rest).get(2).map(|p| p.to_string()),
+            value("--sha").map(str::to_string),
+            false,
+        )
     } else {
         // The repository `-R` names is no pull request.
         let named: Vec<&str> = (0..words.len())
@@ -1649,7 +1695,11 @@ fn fields(words: &[&str]) -> Vec<(String, String)> {
             _ => w
                 .strip_prefix("--field=")
                 .or(w.strip_prefix("--raw-field="))
-                .or_else(|| w.strip_prefix("-f").or(w.strip_prefix("-F")).filter(|v| v.contains('='))),
+                .or_else(|| {
+                    w.strip_prefix("-f")
+                        .or(w.strip_prefix("-F"))
+                        .filter(|v| v.contains('='))
+                }),
         };
         if let Some((key, v)) = value.and_then(|v| v.split_once('=')) {
             out.push((key.to_string(), v.to_string()));
@@ -1714,7 +1764,14 @@ fn from_endpoint(url: &str, pairs: &[(String, String)]) -> String {
 
 /// git's global options that take a value.
 const GIT_VALUED: &[&str] = &[
-    "-C", "-c", "--git-dir", "--work-tree", "--namespace", "--exec-path", "--config-env", "--super-prefix",
+    "-C",
+    "-c",
+    "--git-dir",
+    "--work-tree",
+    "--namespace",
+    "--exec-path",
+    "--config-env",
+    "--super-prefix",
 ];
 
 /// The words past the leading options, skipping the value of each option in `valued`.
@@ -1780,7 +1837,10 @@ fn first_two<'a>(words: &[&'a str], valued: &[&str]) -> [&'a str; 2] {
 
 /// git's subcommand and what follows it, past its global options.
 fn git_rest(run: &Run) -> Vec<String> {
-    past(&run.words(), GIT_VALUED).iter().map(|w| w.to_string()).collect()
+    past(&run.words(), GIT_VALUED)
+        .iter()
+        .map(|w| w.to_string())
+        .collect()
 }
 
 fn stash_unnamed(run: &Run) -> bool {
@@ -1948,7 +2008,7 @@ mod tests {
         Call::new(
             "Bash",
             Some(line),
-            (&[], false),
+            (&[], &[], Names::Writes),
             Some(Path::new("/w")),
             Path::new("/h"),
             Path::new("/h/.deepbuild/hub.sock"),
@@ -1967,7 +2027,7 @@ mod tests {
             let call = Call::new(
                 "Write",
                 None,
-                (&[path.to_string()], false),
+                (&[path.to_string()], &[], Names::Writes),
                 Some(Path::new("/w")),
                 Path::new("/h"),
                 Path::new("/h/.deepbuild/hub.sock"),
@@ -1975,7 +2035,9 @@ mod tests {
             call.matches(rule).is_some()
         };
         assert!(written("/h/.config/systemd/user/deepbuild-hub.service"));
-        assert!(written("/h/.config/systemd/user/deepbuild-hub.service.d/polkit.conf"));
+        assert!(written(
+            "/h/.config/systemd/user/deepbuild-hub.service.d/polkit.conf"
+        ));
         assert!(written("/h/.config/environment.d/hub.conf"));
         assert!(!written("/h/.config/systemd/user/other.service"));
     }
@@ -1983,10 +2045,16 @@ mod tests {
     #[test]
     fn unread_matches_only_a_call_the_reader_couldnt_read_whole() {
         assert!(known("unread:push") && !known("unread:nothing"));
-        let hit = bash("\"$(printf git)\" push origin main").matches("unread:push").unwrap();
+        let hit = bash("\"$(printf git)\" push origin main")
+            .matches("unread:push")
+            .unwrap();
         assert!(hit.detail.unwrap().contains("couldn't be read"));
-        assert!(bash("git push origin main").matches("unread:push").is_none());
-        assert!(bash("\"$CC\" -o app main.c").matches("unread:push").is_none());
+        assert!(bash("git push origin main")
+            .matches("unread:push")
+            .is_none());
+        assert!(bash("\"$CC\" -o app main.c")
+            .matches("unread:push")
+            .is_none());
     }
 
     #[test]
@@ -2001,7 +2069,12 @@ mod tests {
             assert!(bash(line).matches("effect:merge").is_none(), "{line}");
         }
         let cc = bash("\"$CC\" -o app main.c");
-        for pattern in ["effect:push", "run:git push", "effect:unknown-reach-delete", "effect:cloud-resource"] {
+        for pattern in [
+            "effect:push",
+            "run:git push",
+            "effect:unknown-reach-delete",
+            "effect:cloud-resource",
+        ] {
             assert!(cc.matches(pattern).is_none(), "{pattern}");
         }
         assert!(bash("\"$X\" pr merge 12").matches("effect:merge").is_some());
@@ -2190,9 +2263,11 @@ mod tests {
             .matches("hub:service")
             .is_some());
         // The hub's environment is its service's: a variable set for the manager reaches it at the next restart (#70).
-        assert!(bash("systemctl --user set-environment DEEP_HUB_PLANT=answer-on-token")
-            .matches("hub:service")
-            .is_some());
+        assert!(
+            bash("systemctl --user set-environment DEEP_HUB_PLANT=answer-on-token")
+                .matches("hub:service")
+                .is_some()
+        );
         assert!(bash("systemctl --user import-environment NODE_OPTIONS")
             .matches("hub:service")
             .is_some());
@@ -2303,7 +2378,8 @@ mod tests {
 
     #[test]
     fn push_pr_and_merge_read_every_tools_spelling() {
-        let has = |line: &str, class: &str| bash(line).matches(&format!("effect:{class}")).is_some();
+        let has =
+            |line: &str, class: &str| bash(line).matches(&format!("effect:{class}")).is_some();
         let q = "gh api graphql -f query='mutation { mergePullRequest(input: {pullRequestId: \"PR_1\", expectedHeadOid: \"abc1234\"}) { clientMutationId } }'";
         for (line, classes) in [
             ("jj git push --bookmark main", &["push"][..]),
@@ -2324,7 +2400,11 @@ mod tests {
             ("gh issue create -t x", &["send"]),
         ] {
             for class in ["push", "pr", "merge", "send"] {
-                assert_eq!(has(line, class), classes.contains(&class), "{line} as {class}");
+                assert_eq!(
+                    has(line, class),
+                    classes.contains(&class),
+                    "{line} as {class}"
+                );
             }
         }
         for line in [
@@ -2357,7 +2437,10 @@ mod tests {
         let two = "gh api graphql -f query='mutation { a: mergePullRequest(input: {pullRequestId: \"A\", expectedHeadOid: \"abc1234\"}) { clientMutationId } b: mergePullRequest(input: {pullRequestId: \"B\"}) { clientMutationId } }'";
         assert!(!read(two).contains("head="), "two merges name no one head");
         let commented = "gh api graphql -f query='mutation { mergePullRequest(input: {pullRequestId: \"A\" # expectedHeadOid: \"abc1234\"\n}) { clientMutationId } }'";
-        assert!(!read(commented).contains("head="), "a comment names no head");
+        assert!(
+            !read(commented).contains("head="),
+            "a comment names no head"
+        );
         let hidden = "gh api graphql -f query='mutation { addComment(input: {subjectId: \"I\", body: \"#\"}) { clientMutationId } m: mergePullRequest(input: {pullRequestId: \"A\"}) { clientMutationId } }'";
         assert!(has(hidden, "merge"), "a `#` in a string hides no merge");
         assert_eq!(
@@ -2368,7 +2451,10 @@ mod tests {
             read("gh api graphql -f query='mutation { mergePullRequest(input: {clientMutationId: \"\u{130}\u{130}\", pullRequestId: \"A\", expectedHeadOid: \"abc1234\"}) { clientMutationId } }'"),
             "merge pr=A head=abc1234"
         );
-        assert_eq!(read("glab mr merge 3 --sha abc1234"), "merge pr=3 head=abc1234");
+        assert_eq!(
+            read("glab mr merge 3 --sha abc1234"),
+            "merge pr=3 head=abc1234"
+        );
         // Review round at 642a592e: gh's options before `graphql`, a query deep-hook can't read, the merge queue,
         // GitLab's REST merge, a disarm that also merges, a variable given twice, and global options before a push.
         let m = "mutation { mergePullRequest(input: {pullRequestId: \"A\"}) { clientMutationId } }";
@@ -2385,25 +2471,43 @@ mod tests {
         ] {
             assert!(has(&line, "merge"), "{line} as merge");
         }
-        assert!(!has("glab api projects/1/merge_requests/3/merge", "merge"), "a GET of the endpoint");
+        assert!(
+            !has("glab api projects/1/merge_requests/3/merge", "merge"),
+            "a GET of the endpoint"
+        );
         assert!(has("sl --color never push --to main", "push"));
         assert!(has("jj --config-toml 'x=1' git push", "push"));
         let both = "gh api graphql -f query='mutation { d: disablePullRequestAutoMerge(input: {pullRequestId: \"A\"}) { clientMutationId } m: mergePullRequest(input: {pullRequestId: \"A\", expectedHeadOid: \"abc1234\"}) { clientMutationId } }'";
-        assert_eq!(read(both), "merge", "disarming and merging at once is a merge with no head and no disable");
+        assert_eq!(
+            read(both),
+            "merge",
+            "disarming and merging at once is a merge with no head and no disable"
+        );
         let twice = "gh api graphql -f query='mutation($h: GitObjectID) { mergePullRequest(input: {pullRequestId: \"A\", expectedHeadOid: $h}) { clientMutationId } }' -f h=abc1234 -F h=def5678";
-        assert_eq!(read(twice), "merge pr=A", "a variable given twice names no head");
+        assert_eq!(
+            read(twice),
+            "merge pr=A",
+            "a variable given twice names no head"
+        );
         assert_eq!(
             read("gh api graphql -f query='mutation { enqueuePullRequest(input: {pullRequestId: \"A\", expectedHeadOid: \"abc1234\"}) { clientMutationId } }'"),
             "merge pr=A head=abc1234 auto"
         );
         assert_eq!(read("gh api graphql -f query='mutation { dequeuePullRequest(input: {id: \"A\"}) { clientMutationId } }'"), "merge disable");
-        assert_eq!(read("glab api -X PUT projects/1/merge_requests/3/merge -f sha=abc1234"), "merge pr=3 head=abc1234");
+        assert_eq!(
+            read("glab api -X PUT projects/1/merge_requests/3/merge -f sha=abc1234"),
+            "merge pr=3 head=abc1234"
+        );
         assert_eq!(read("gh api graphql -F query=@merge.graphql"), "merge");
         assert_eq!(read("gt merge"), "merge blind");
         assert_eq!(read("git town ship"), "merge blind");
-        let unread = bash("\"$(printf jj)\" git push").matches("unread:push").unwrap();
+        let unread = bash("\"$(printf jj)\" git push")
+            .matches("unread:push")
+            .unwrap();
         assert!(unread.detail.unwrap().contains("printf jj"));
-        assert!(bash("\"$(printf gh)\" issue create -t x").matches("effect:send").is_some());
+        assert!(bash("\"$(printf gh)\" issue create -t x")
+            .matches("effect:send")
+            .is_some());
     }
 
     #[test]
@@ -2415,7 +2519,7 @@ mod tests {
             Call::new(
                 "Bash",
                 Some(line),
-                (&[], false),
+                (&[], &[], Names::Writes),
                 Some(&repo),
                 Path::new("/h"),
                 Path::new("/h/s"),
@@ -2448,7 +2552,7 @@ mod tests {
         let call = Call::new(
             "apply_patch",
             None,
-            (&paths, false),
+            (&paths, &[], Names::Writes),
             Some(Path::new("/repo")),
             Path::new("/h"),
             Path::new("/h/.deepbuild/hub.sock"),
@@ -2575,7 +2679,7 @@ mod tests {
         Call::new(
             "Bash",
             Some(line),
-            (&[], false),
+            (&[], &[], Names::Writes),
             Some(cwd),
             home,
             &home.join(".deepbuild/hub.sock"),

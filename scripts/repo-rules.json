@@ -162,6 +162,10 @@
           "spec": "^0.3",
           "why": "Issue #337: NSString for the menu-bar title. Already in gpui's tree."
         },
+        "security-framework": {
+          "spec": "^3",
+          "why": "Issue #1606: the device key is a Keychain item only the app that made it reads, never a file. Already in gpui-shell's tree."
+        },
         "objc2-user-notifications": {
           "spec": "^0.3",
           "why": "Issue #883: the app reads what Notification Center still holds from it on start, so it can withdraw one whose ask closed; `--notification-center` prints it for the Proof. Already in gpui's tree."
@@ -611,6 +615,30 @@
         "@deepbuild/conformance": {
           "spec": "0.0.0",
           "why": "Issue #68: the check.kind@1 slot's fill, context and result types, and the kit types and Finding each work kind's own kit is judged with by the one kit runner."
+        }
+      }
+    },
+    "packages/checks-host/package.json": {
+      "dependencies": {
+        "@deepbuild/conformance": {
+          "spec": "0.0.0",
+          "why": "Issue #1943: the check.kind@1 slot's fill, context and result types, the probe runner that ends a run at its deadline, and the kit types and Finding each host kind's own kit is judged with by the one kit runner."
+        }
+      }
+    },
+    "packages/routing-replay/package.json": {
+      "dependencies": {
+        "@deepbuild/asks": {
+          "spec": "0.0.0",
+          "why": "Issue #1980: the asks core the router raises one ask per cause through, and whose deadline takes each ask's default."
+        },
+        "@deepbuild/evidence": {
+          "spec": "0.0.0",
+          "why": "Issue #1980: the evidence store the replay keeps its snapshot in, by the snapshot's hash."
+        },
+        "@deepbuild/record": {
+          "spec": "0.0.0",
+          "why": "Issue #1980: the record the replay's asks, withdrawals and fix tasks are appended to, and read back for its report."
         }
       }
     },
@@ -1203,6 +1231,14 @@
         "deep-logic": {
           "spec": "* path=../deep-logic",
           "why": "Issue #499: the logic module's world, which a live play steps on the transport's clock."
+        },
+        "deep-canvas-physics": {
+          "spec": "* path=../deep-canvas-physics",
+          "why": "Issue #1918: the physics module, physics@1, whose column.source@1 entries the full set seals."
+        },
+        "deep-physics-rapier": {
+          "spec": "* path=../deep-physics-rapier",
+          "why": "Issue #1918: the Rapier backend each world a scene lists bakes on, so its occurrence lists and outputs reach the column view."
         }
       },
       "target.'cfg(target_os = \"macos\")'.dependencies": {
@@ -1914,11 +1950,11 @@
         },
         "wasmparser": {
           "spec": "=0.258.3",
-          "why": "Issue #238: the subset check's parser and validator, on an allowlist of WebAssembly 2.0 features; the version wasmtime 49.0.2 itself parses with, so Cargo.lock holds one."
+          "why": "Issue #238: the subset check's parser and validator, on an allowlist of WebAssembly 2.0 features; the version wasmtime 49.0.5 itself parses with, so Cargo.lock holds one."
         },
         "wasm-encoder": {
           "spec": "=0.258.3",
-          "why": "Issue #238: writes the rewritten program, through its reencoder of wasmparser's operators; the version wasmtime 49.0.2 uses."
+          "why": "Issue #238: writes the rewritten program, through its reencoder of wasmparser's operators; the version wasmtime 49.0.5 uses."
         }
       }
     },
@@ -1929,7 +1965,7 @@
           "why": "Issue #238: the check, the rewrite and the kit this engine runs, with no copy of its own."
         },
         "wasmtime": {
-          "spec": "=49.0.2",
+          "spec": "=49.0.5",
           "why": "Issue #238: sandbox@1's engine in the app, the version the design pins (Logic: sandbox), cranelift and runtime only."
         },
         "base64": {
@@ -1942,7 +1978,7 @@
         },
         "wat": {
           "spec": "=1.263.0",
-          "why": "Issue #238: assembles sandbox@1's kit programs from their text; the version wasmtime 49.0.2 already pulls in."
+          "why": "Issue #238: assembles sandbox@1's kit programs from their text; the version wasmtime 49.0.5 already pulls in."
         }
       }
     },
@@ -1963,6 +1999,10 @@
         "deep-canvas-physics": {
           "spec": "* path=../deep-canvas-physics",
           "why": "Issue #2009: the world reader, the caps and the backend interface this backend implements, with no copy of its own."
+        },
+        "deep-canvas-motion": {
+          "spec": "* path=../deep-canvas-motion",
+          "why": "Issue #1918: a world inside a scene reads the paths the scene's channels and drivers write, evaluated by the motion module at each step's time."
         },
         "rapier3d": {
           "spec": "=0.36.1",
@@ -1989,12 +2029,12 @@
           "why": "Spike #245: the fixture through sandbox@1's check and logic rewrite, as deep-logic runs a program."
         },
         "wasmtime": {
-          "spec": "=49.0.2",
+          "spec": "=49.0.5",
           "why": "Spike #245: the app's engine at the version the design pins, so both forms run what the app would."
         },
         "wat": {
           "spec": "=1.263.0",
-          "why": "Spike #245: assembles steer.wat; the version wasmtime 49.0.2 already pulls in."
+          "why": "Spike #245: assembles steer.wat; the version wasmtime 49.0.5 already pulls in."
         },
         "libc": {
           "spec": "^0.2",
@@ -2137,7 +2177,7 @@
           "why": "Issue #531: the pinned wasmtime's version, named in a bake key and a report, and sandbox@1's web runner, served before the logic runtime."
         },
         "wasmtime": {
-          "spec": "=49.0.2",
+          "spec": "=49.0.5",
           "why": "Issue #531: runs the rewritten program; the version deep-sandbox-wasmtime pins, cranelift and runtime only."
         },
         "wasmparser": {

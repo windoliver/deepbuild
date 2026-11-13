@@ -1,0 +1,107 @@
+{
+  "title": "session.named@1",
+  "description": "A session's name (#2018): the one you gave it from the Session menu's Rename, or its agent's own title for it, read from the agent's hook. Every surface shows your name first, then its task's title, then the agent's title, then its first prompt's first line. Only the core appends it, and it is no sign of the session: it moves neither when the session was last seen nor its state's time.",
+  "x-since": "R1",
+  "x-stability": "stable",
+  "x-feeds": [],
+  "type": "object",
+  "properties": {
+    "v": {
+      "const": 1,
+      "description": "The kind's schema version."
+    },
+    "id": {
+      "type": "string",
+      "format": "ulid",
+      "description": "The event's ULID, its identity."
+    },
+    "kind": {
+      "const": "session.named"
+    },
+    "subject": {
+      "type": "string",
+      "pattern": "^(task|ask|claim|verdict|run|req|decision|plan|lease|reading|notice|doc|ev|session):[0-9A-Za-z]+(#[A-Za-z0-9][A-Za-z0-9._-]*)?$",
+      "description": "The record object this event is about."
+    },
+    "writer": {
+      "const": "core",
+      "description": "Only the core appends this kind."
+    },
+    "actor": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The person behind it, from the credential."
+    },
+    "scope": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Who may see it."
+    },
+    "ts": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "Milliseconds since the Unix epoch."
+    },
+    "seq": {
+      "type": "string",
+      "format": "seq",
+      "description": "Order within the session: ns since the epoch when the hook started."
+    },
+    "log_pos": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991,
+      "description": "Its position in the event log, assigned by the hub at append."
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "The name, on one line; the hub keeps it to 512 characters."
+        },
+        "by": {
+          "type": "string",
+          "enum": [
+            "you",
+            "agent"
+          ],
+          "description": "Who named it: you, by Rename, or the agent, as its own session title.",
+          "x-closure": {
+            "closed": "each value is a state the record defines and every reader acts on, so a value outside the list has no meaning",
+            "reopens": "a new major of this schema",
+            "mark": "exhaustive"
+          }
+        }
+      },
+      "required": [
+        "name",
+        "by"
+      ],
+      "additionalProperties": false
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$",
+        "description": "A SHA-256, in lower-case hex."
+      }
+    }
+  },
+  "required": [
+    "v",
+    "id",
+    "kind",
+    "writer",
+    "actor",
+    "scope",
+    "ts",
+    "data",
+    "subject"
+  ],
+  "additionalProperties": false
+}

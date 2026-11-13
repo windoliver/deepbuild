@@ -1,0 +1,58 @@
+media_import: {"sha256":"803df829b8f45db2cb045f32a965c4d84317766612aa300cb38bc98bc668aca6","kind":"terminal","probe":{"terminal":{"cols":104,"rows":12,"span":11105678921,"keyframes":16}},"decoder":{"name":"deep-canvas-cells","version":"1.0.0"}}
+deep show: presented, issues []
+
+t = 1.00 s: played and seeked equal (cells and render); render 6cc37fbb77bf8613b12f1e80daa690fec302e8a29b5de444087ee5d01582c0b0
+  |
+  |
+  |
+  |
+  |
+  |
+  |
+  |
+  |
+  |
+  |
+  |
+
+t = 1.57 s: played and seeked equal (cells and render); render c2765963aade427c1d6c7dc8c41044f188b2614cb412794402a6df37bdb52cdb
+  |
+  |running 6 tests
+  |test recording::tests::a_play_maps_film_time_to_source_time_as_a_strip_does ... ok
+  |test recording::tests::a_recording_file_is_its_size_then_timed_chunks ... ok
+  |test recording::tests::a_recording_plays_by_its_source_time_and_equals_a_live_grid_fed_the_same_bytes ..
+  |. ok
+  |test recording::tests::every_keyframe_is_the_grid_the_patches_before_it_make ... ok
+  |test recording::tests::the_digits_a_recording_shows_are_listed_once_with_the_time_they_appear ... ok
+  |test recording::tests::upstream_recordings_play_as_a_live_grid_fed_the_same_bytes_shows_them ...
+  |
+  |
+  |
+
+t = 8.00 s: played and seeked equal (cells and render); render c2765963aade427c1d6c7dc8c41044f188b2614cb412794402a6df37bdb52cdb
+  |
+  |running 6 tests
+  |test recording::tests::a_play_maps_film_time_to_source_time_as_a_strip_does ... ok
+  |test recording::tests::a_recording_file_is_its_size_then_timed_chunks ... ok
+  |test recording::tests::a_recording_plays_by_its_source_time_and_equals_a_live_grid_fed_the_same_bytes ..
+  |. ok
+  |test recording::tests::every_keyframe_is_the_grid_the_patches_before_it_make ... ok
+  |test recording::tests::the_digits_a_recording_shows_are_listed_once_with_the_time_they_appear ... ok
+  |test recording::tests::upstream_recordings_play_as_a_live_grid_fed_the_same_bytes_shows_them ...
+  |
+  |
+  |
+
+t = 15.80 s: played and seeked equal (cells and render); render a32f31ac9815120e07e5c273d049cdd4402158d2307429badec1fe5bfe34606a
+  |running 6 tests
+  |test recording::tests::a_play_maps_film_time_to_source_time_as_a_strip_does ... ok
+  |test recording::tests::a_recording_file_is_its_size_then_timed_chunks ... ok
+  |test recording::tests::a_recording_plays_by_its_source_time_and_equals_a_live_grid_fed_the_same_bytes ..
+  |. ok
+  |test recording::tests::every_keyframe_is_the_grid_the_patches_before_it_make ... ok
+  |test recording::tests::the_digits_a_recording_shows_are_listed_once_with_the_time_they_appear ... ok
+  |test recording::tests::upstream_recordings_play_as_a_live_grid_fed_the_same_bytes_shows_them ... ok
+  |
+  |test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 14 filtered out; finished in 14.18s
+  |
+  |

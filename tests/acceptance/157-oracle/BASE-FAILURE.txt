@@ -1,0 +1,28 @@
+#157 Oracle lane: why each test fails at the base 35df4523f ("Merge pull request #2280"). A note, not a run.
+
+Not run at the base, and `deep-show` not built, for the reason tests/acceptance/157/BASE-FAILURE.txt gives; read from
+the base's code. The lane parses and type-checks: `vitest list --root tests/acceptance/157-oracle` lists 16 tests in 4
+files, and `tsc -p tests/acceptance/157-oracle/tsconfig.json` is clean. Checked by hand outside the product, on this
+Mac's FFmpeg 9.0.2: both FATE samples hash to their pins, and FATE's recipe gives their references' framecrc
+(0xb035f658, 0x74480f47) exactly; the transparency sample's alpha takes 256 levels from 0 to 4095 and its colour sits
+in limited range, so an alpha read as limited range misses by up to 21 code values there.
+
+What the base has: the decode worker's probe (`color` with `range`, no `alpha`) and its decode (`format: bgra`, alpha
+255 from I420 planes); #501's export with no `av_offset`, `color_probe` or `fidelity` on its receipt; none of the
+planted names below (each answers `bad_input`).
+
+- AC8 (prores.test.ts, 2): delivered; "export.color: the receipt's probe reads null, not tags {range: tv, alpha:
+  full}" and "the decode worker probes colour limited and alpha null"; planted: bad_input for `prores_fed_full_range`.
+- AC10 (prores.test.ts, 1): INCONCLUSIVE where the samples can't be fetched; else "prores-alpha: the decode worker
+  probes its alpha as null, not full" (and its BGRA alpha, 255 everywhere, misses the transparency sample's).
+- AC9 (sync.test.ts, 4): "av_offset: the receipt's av_offset is null, not {samples, priming, edit_list}"; the three
+  planted tests: bad_input.
+- AC23 (sync.test.ts, 3): the eight deliveries may already be in sync at the base; each fails at "av_offset: the
+  receipt reads null, not 0 samples with PCM"; the two planted tests: bad_input.
+- AC12 (frames.test.ts, 4): "the 60 s delivery: receipt.fidelity is an object, got null"; the three planted tests:
+  bad_input.
+- AC24 (readers.test.ts, 2): the two readers may already agree at the base, so the clean test may pass there; the
+  criterion's planted reader answers bad_input at the base, so the test of the case's failing does fail there.
+
+Expected at the base: 16 tests; all fail or read INCONCLUSIVE except, possibly, AC24's clean comparison, whose
+planted twin fails on bad_input.
