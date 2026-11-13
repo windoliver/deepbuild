@@ -1138,7 +1138,7 @@ describe('a verdict\'s commit syncs the evidence its requirements stand on, with
     const put = await store.connect({ role: 'deepbuild', via: 'job' }).put({ bytes: Buffer.from('a run\'s output'), kind: 'log', source: 'test', redaction: 'complete', license: { name: 'record', allows: [] } });
     if (put.status !== 'stored') throw Error(put.reason);
     const seen: { named: string[]; committed: number }[] = [];
-    const watched = { ...store, sync: async (named: readonly string[]) => { seen.push({ named: [...named], committed: (await r.read({ after: 0 })).length }); await store.sync(named); } };
+    const watched = { ...store, sync: async (named: readonly string[]) => { await store.sync(named); seen.push({ named: [...named], committed: (await r.read({ after: 0 })).length }); } };
     const r = await openRecord({ path: 'record.db', now: () => T0, storage, evidence: watched, commitEach: true });
     open.push(r);
     const S = ulidAt(T0 - 1000);
@@ -1149,7 +1149,7 @@ describe('a verdict\'s commit syncs the evidence its requirements stand on, with
     const [requirement] = (verdict.data as { requirements: Record<string, JsonValue>[] }).requirements;
     (verdict.data as Record<string, JsonValue>).requirements = [{ ...requirement!, evidence: [put.evidence.sha256] }];
     await r.append(core(S), verdict);
-    expect(seen, 'one sync, of the file the requirement names, with the verdict not yet in the log').toEqual([{ named: [put.evidence.sha256], committed: 2 }]);
+    expect(seen, 'one sync, of the file the requirement names, done with the verdict not yet in the log').toEqual([{ named: [put.evidence.sha256], committed: 2 }]);
     // Retention keeps what a verdict's own list cites: the list stays as its writer gave it.
     expect((await r.read({ after: 0 })).find((e) => e.id === verdict.id)?.evidence).toEqual([]);
   });
