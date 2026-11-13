@@ -1,0 +1,351 @@
+{
+  "format": 1,
+  "id": "strokes-and-paper",
+  "profile": "film",
+  "title": "Strokes and paper",
+  "description": "Pencil strokes drawn on one after another over ruled notebook paper: an underline, a spiral, a house on an index card, a sun and a signature.",
+  "size": [
+    1280,
+    720
+  ],
+  "camera": "cam",
+  "look": {
+    "asset": "notebook_pencil@1",
+    "theme": "light"
+  },
+  "budget": {
+    "class": "showpiece"
+  },
+  "transport": {
+    "span": "10s",
+    "frame_rate": [
+      30,
+      1
+    ],
+    "sample_rate": 48000
+  },
+  "items": {
+    "cam": {
+      "id": "cam",
+      "kind": "camera@1",
+      "name": "Camera",
+      "order": "a00",
+      "params": {
+        "projection": "orthographic",
+        "target": [
+          640,
+          360,
+          0
+        ],
+        "view_width": 1280
+      }
+    },
+    "card": {
+      "id": "card",
+      "kind": "rect@1",
+      "name": "Index card",
+      "order": "a01",
+      "params": {
+        "box": [
+          700,
+          210,
+          480,
+          410
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      }
+    },
+    "title": {
+      "id": "title",
+      "kind": "text@1",
+      "name": "Title",
+      "order": "a02",
+      "params": {
+        "text": "Strokes and paper",
+        "font": "body",
+        "size": 72,
+        "box": {
+          "w": 900,
+          "h": 100
+        },
+        "align": "start"
+      },
+      "at": {
+        "pos": [
+          96,
+          48,
+          0
+        ]
+      }
+    },
+    "underline": {
+      "id": "underline",
+      "kind": "path@1",
+      "name": "Underline",
+      "order": "a03",
+      "params": {
+        "d": "M 96 182 C 260 172 500 192 710 178",
+        "ops": [
+          {
+            "trim": {
+              "start": 0,
+              "end": 0,
+              "offset": 0
+            }
+          }
+        ],
+        "paint": {
+          "stroke": {
+            "role": "ink",
+            "width": 4
+          }
+        }
+      }
+    },
+    "spiral": {
+      "id": "spiral",
+      "kind": "path@1",
+      "name": "Spiral",
+      "order": "a04",
+      "params": {
+        "d": "M 342 450 L 343.12 451.73 L 343.98 453.75 L 344.51 456.01 L 344.67 458.47 L 344.42 461.07 L 343.73 463.73 L 342.57 466.38 L 340.94 468.96 L 338.85 471.36 L 336.31 473.53 L 333.34 475.38 L 330 476.83 L 326.34 477.83 L 322.42 478.31 L 318.31 478.22 L 314.11 477.52 L 309.9 476.19 L 305.78 474.22 L 301.85 471.6 L 298.2 468.36 L 294.93 464.53 L 292.14 460.14 L 289.92 455.28 L 288.33 450 L 287.46 444.4 L 287.37 438.58 L 288.08 432.64 L 289.63 426.69 L 292.04 420.87 L 295.29 415.29 L 299.37 410.08 L 304.22 405.35 L 309.8 401.23 L 316.02 397.81 L 322.79 395.21 L 330 393.5 L 337.54 392.76 L 345.26 393.04 L 353.04 394.37 L 360.72 396.79 L 368.16 400.27 L 375.2 404.8 L 381.69 410.34 L 387.49 416.81 L 392.48 424.12 L 396.51 432.18 L 399.5 440.85 L 401.33 450 L 401.95 459.47 L 401.29 469.1 L 399.33 478.72 L 396.06 488.14 L 391.5 497.19 L 385.68 505.68 L 378.69 513.46 L 370.61 520.34 L 361.56 526.18 L 351.66 530.84 L 341.09 534.2 L 330 536.17 L 318.59 536.66 L 307.06 535.62 L 295.61 533.03 L 284.44 528.9 L 273.78 523.26 L 263.83 516.17 L 254.77 507.72 L 246.81 498.03 L 240.11 487.23 L 234.83 475.5 L 231.09 463.02 L 229 450 L 228.64 436.66 L 230.05 423.22 L 233.26 409.93 L 238.25 397.03 L 244.97 384.75 L 253.34 373.34 L 263.25 363.01 L 274.56 353.97 L 287.09 346.41 L 300.66 340.5 L 315.04 336.38 L 330 334.17 L 345.28 333.93 L 360.62 335.73 L 375.75 339.56 L 390.39 345.4 L 404.28 353.2 L 417.15 362.85 L 428.76 374.22 L 438.88 387.14 L 447.29 401.42 L 453.83 416.82 L 458.32 433.11 L 460.67 450 L 460.77 467.22 L 458.6 484.46 L 454.15 501.42 L 447.44 517.81 L 438.57 533.31 L 427.64 547.64 L 414.81 560.53 L 400.28 571.72 L 384.26 581 L 367.02 588.15 L 348.83 593.03 L 330 595.5 L 310.85 595.48 L 291.7 592.93 L 272.9 587.85 L 254.78 580.29 L 237.66 570.34 L 221.87 558.13 L 207.7 543.84 L 195.43 527.69 L 185.3 509.94 L 177.52 490.86 L 172.26 470.77 L 169.67 450 L 169.81 428.91 L 172.74 407.86 L 178.45 387.22 L 186.87 367.36 L 197.9 348.63 L 211.38 331.38 L 227.13 315.93 L 244.89 302.58 L 264.39 291.59 L 285.3 283.19 L 307.3 277.56 L 330 274.83 L 353.03 275.11 L 375.98 278.41 L 398.45 284.74 L 420.06 294.02 L 440.4 306.13 L 459.11 320.89 L 475.83 338.1 L 490.26 357.47 L 502.11 378.71 L 511.14 401.46 L 517.15 425.36 L 520 450",
+        "ops": [
+          {
+            "trim": {
+              "start": 0,
+              "end": 0,
+              "offset": 0
+            }
+          }
+        ],
+        "paint": {
+          "stroke": {
+            "role": "ink",
+            "width": 4
+          }
+        }
+      }
+    },
+    "house": {
+      "id": "house",
+      "kind": "path@1",
+      "name": "House",
+      "order": "a05",
+      "params": {
+        "d": "M 790 580 L 790 440 L 930 330 L 1070 440 L 1070 580 Z M 890 580 L 890 490 L 970 490 L 970 580",
+        "ops": [
+          {
+            "trim": {
+              "start": 0,
+              "end": 0,
+              "offset": 0
+            }
+          }
+        ],
+        "paint": {
+          "stroke": {
+            "role": "ink",
+            "width": 5
+          }
+        }
+      }
+    },
+    "sun": {
+      "id": "sun",
+      "kind": "path@1",
+      "name": "Sun",
+      "order": "a06",
+      "params": {
+        "d": "M 1096 244 L 1100.96 244.33 L 1105.84 245.29 L 1110.54 246.89 L 1115 249.09 L 1119.13 251.85 L 1122.87 255.13 L 1126.15 258.87 L 1128.91 263 L 1131.11 267.46 L 1132.71 272.16 L 1133.67 277.04 L 1134 282 L 1133.67 286.96 L 1132.71 291.84 L 1131.11 296.54 L 1128.91 301 L 1126.15 305.13 L 1122.87 308.87 L 1119.13 312.15 L 1115 314.91 L 1110.54 317.11 L 1105.84 318.71 L 1100.96 319.67 L 1096 320 L 1091.04 319.67 L 1086.16 318.71 L 1081.46 317.11 L 1077 314.91 L 1072.87 312.15 L 1069.13 308.87 L 1065.85 305.13 L 1063.09 301 L 1060.89 296.54 L 1059.29 291.84 L 1058.33 286.96 L 1058 282 L 1058.33 277.04 L 1059.29 272.16 L 1060.89 267.46 L 1063.09 263 L 1065.85 258.87 L 1069.13 255.13 L 1072.87 251.85 L 1077 249.09 L 1081.46 246.89 L 1086.16 245.29 L 1091.04 244.33 L 1096 244",
+        "ops": [
+          {
+            "trim": {
+              "start": 0,
+              "end": 0,
+              "offset": 0
+            }
+          }
+        ],
+        "paint": {
+          "stroke": {
+            "role": "accent",
+            "width": 5
+          }
+        }
+      }
+    },
+    "signature": {
+      "id": "signature",
+      "kind": "path@1",
+      "name": "Signature",
+      "order": "a07",
+      "params": {
+        "d": "M 110 660 C 150 610 190 690 230 640 C 260 605 300 680 340 640 L 420 650",
+        "ops": [
+          {
+            "trim": {
+              "start": 0,
+              "end": 0,
+              "offset": 0
+            }
+          }
+        ],
+        "paint": {
+          "stroke": {
+            "role": "accent",
+            "width": 4
+          }
+        }
+      }
+    }
+  },
+  "channels": {
+    "underline": {
+      "target": "items/underline/params/ops/0/trim/end",
+      "type": "f32",
+      "keys": {
+        "k0": {
+          "t": "0.2s",
+          "value": 0,
+          "interp": "linear"
+        },
+        "k1": {
+          "t": "1s",
+          "value": 1,
+          "interp": "hold"
+        }
+      }
+    },
+    "spiral": {
+      "target": "items/spiral/params/ops/0/trim/end",
+      "type": "f32",
+      "keys": {
+        "k0": {
+          "t": "0.8s",
+          "value": 0,
+          "interp": "linear"
+        },
+        "k1": {
+          "t": "3.8s",
+          "value": 1,
+          "interp": "hold"
+        }
+      }
+    },
+    "house": {
+      "target": "items/house/params/ops/0/trim/end",
+      "type": "f32",
+      "keys": {
+        "k0": {
+          "t": "3.6s",
+          "value": 0,
+          "interp": "linear"
+        },
+        "k1": {
+          "t": "6.6s",
+          "value": 1,
+          "interp": "hold"
+        }
+      }
+    },
+    "sun": {
+      "target": "items/sun/params/ops/0/trim/end",
+      "type": "f32",
+      "keys": {
+        "k0": {
+          "t": "5.8s",
+          "value": 0,
+          "interp": "linear"
+        },
+        "k1": {
+          "t": "7.4s",
+          "value": 1,
+          "interp": "hold"
+        }
+      }
+    },
+    "signature": {
+      "target": "items/signature/params/ops/0/trim/end",
+      "type": "f32",
+      "keys": {
+        "k0": {
+          "t": "7s",
+          "value": 0,
+          "interp": "linear"
+        },
+        "k1": {
+          "t": "8.6s",
+          "value": 1,
+          "interp": "hold"
+        }
+      }
+    }
+  },
+  "markers": {
+    "underline": {
+      "kind": "cue",
+      "name": "Underline drawn",
+      "t": "0.2s",
+      "span": "0.8s"
+    },
+    "spiral": {
+      "kind": "cue",
+      "name": "Spiral drawn",
+      "t": "0.8s",
+      "span": "3s"
+    },
+    "house": {
+      "kind": "cue",
+      "name": "House drawn",
+      "t": "3.6s",
+      "span": "3s"
+    },
+    "sun": {
+      "kind": "cue",
+      "name": "Sun drawn",
+      "t": "5.8s",
+      "span": "1.6s"
+    },
+    "drawn": {
+      "kind": "hold",
+      "name": "All drawn",
+      "t": "8.6s",
+      "span": "1.4s"
+    }
+  },
+  "assets": {
+    "notebook_pencil": {
+      "sha256": "5e0c3e5ee3b35fd9a0b1344553734356db49bc8cb192eced922bac849c227863",
+      "license": {
+        "id": "Apache-2.0",
+        "terms": "Apache License 2.0.",
+        "shareable": true,
+        "credit": "A look bundled with DeepBuild."
+      }
+    },
+    "chime": {
+      "sha256": "a9e449b8270343d0c9339c600295ad669fde65d5b3a967649e6d7df7c5034528",
+      "license": {
+        "id": "CC0-1.0",
+        "terms": "Public domain dedication.",
+        "shareable": true,
+        "credit": "Made for the #239 fixture films."
+      }
+    }
+  },
+  "strips": {
+    "sound": {
+      "track": 1,
+      "src": "a9e449b8270343d0c9339c600295ad669fde65d5b3a967649e6d7df7c5034528",
+      "start": 0,
+      "in": 0,
+      "out": "4s",
+      "rate": 1,
+      "loop": true
+    }
+  }
+}
