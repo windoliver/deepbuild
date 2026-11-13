@@ -3120,9 +3120,17 @@ impl Program {
                     };
                     CoreInput::Remap(r, *progress)
                 }
-                doc::DriverInput::Control(id) if let Some((entries, default, range)) = controls.and_then(|c| crate::present::choice_read(c.get(id)?, id, &self.options.input)) => {
+                doc::DriverInput::Control(id)
+                    if let Some((entries, default, range)) = controls.and_then(|c| {
+                        crate::present::choice_read(c.get(id)?, id, &self.options.input)
+                    }) =>
+                {
                     scope.maxes.insert(name.clone(), range.1);
-                    CoreInput::Control { entries, default, range }
+                    CoreInput::Control {
+                        entries,
+                        default,
+                        range,
+                    }
                 }
                 doc::DriverInput::Control(id) => {
                     let c = controls.and_then(|c| c.get(id));

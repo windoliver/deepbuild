@@ -498,7 +498,11 @@ pub fn parse(c: &Map<String, Value>) -> Option<Job> {
             .or_else(|| video.and_then(|v| v.get("lottie")))
             .cloned()
             .unwrap_or(Value::Null),
-        notes: c.get("pdf").and_then(|p| p.get("notes")).and_then(Value::as_bool).unwrap_or(false),
+        notes: c
+            .get("pdf")
+            .and_then(|p| p.get("notes"))
+            .and_then(Value::as_bool)
+            .unwrap_or(false),
     })
 }
 
