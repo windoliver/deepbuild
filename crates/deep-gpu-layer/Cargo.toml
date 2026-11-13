@@ -39,6 +39,7 @@ deep-canvas-drawn = { path = "../deep-canvas-drawn" }
 deep-canvas-marks = { path = "../deep-canvas-marks" }
 deep-text = { path = "../deep-text" }
 deep-canvas-motion = { path = "../deep-canvas-motion" }
+deep-canvas-media = { path = "../deep-canvas-media" }
 # Issue #443: vector's outline source, so view3d extrudes a vector item as deep_show's full build does.
 deep-canvas-vector = { path = "../deep-canvas-vector" }
 # Issue #140: the live-headless calls draw a 2D writer layer through the app's GPUI frame path and
