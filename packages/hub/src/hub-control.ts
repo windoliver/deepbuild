@@ -73,8 +73,6 @@ import { fromView, Requests, type Caller, type Effect, type Landed } from './req
 
 export interface HubControlOptions {
   settings: CoreOptions;
-  /** The writes with an effect (#1577): request IDs, receipts and the log_pos a write landed at. */
-  requests: () => Requests;
   services: {
     readonly wikiWritten: KnowledgeProvider['writtenOf'];
     readonly log: LogReads;
@@ -133,6 +131,8 @@ export class HubControl {
   private readonly evidence: EvidenceAccess;
   private readonly readings: HubReadings;
   private readonly work: WorkspaceActions;
+  /** The writes with an effect (#1577): each one's request ID, the receipt that commits with its event, and the log_pos it landed at. */
+  readonly requests = new Requests({ now: () => this.options.services.now(), record: () => this.options.services.record, core: () => this.options.events.connection('core') });
 
   constructor(private readonly options: HubControlOptions) {
     const control: HumanControlPort = { trusted: (method, params, context, what, handle, revision) => this.authority.trusted(method, params, context, what, handle, revision), revisionOf: (handle, ask) => this.human.revisionOf(handle, ask) };
@@ -340,7 +340,7 @@ export class HubControl {
    */
   private async writeOnce(method: string, params: Obj, context: CallContext, effect: Effect, body: () => Promise<Obj> | Obj, again: (event: Landed) => Obj | Promise<Obj>): Promise<Obj> {
     const caller = this.callerOf(method, params, context);
-    const done = await this.options.requests().write(method, params, caller, effect, async () => body(), async (e) => again(e));
+    const done = await this.requests.write(method, params, caller, effect, async () => body(), async (e) => again(e));
     // What the write's event set off lands first (a state pass, a row), so a read at its log_pos and a retry find them
     // written, and a retry writes nothing of its own.
     if (caller) await this.options.state().statesSettled();

@@ -323,6 +323,17 @@ export function streamed(record: RecordStore, appended: (input: EventInput, conn
   });
 }
 
+/**
+ * The record as the hub writes it: a write's receipt committed with its own event, whoever appends that event: the hub,
+ * the asks core or a run (#1577); then the tests' cut points (DEEP_HUB_TEST_CRASH) and read log (DEEP_HUB_TEST_READS).
+ */
+export function wrapped(record: RecordStore, requests: Requests): RecordStore {
+  let r = receipted(record, requests);
+  if (process.env.DEEP_HUB_TEST_CRASH) r = crashing(r, process.env.DEEP_HUB_TEST_CRASH);
+  if (process.env.DEEP_HUB_TEST_READS) r = readsLogged(r, process.env.DEEP_HUB_TEST_READS);
+  return r;
+}
+
 /** The record, with a write's receipt committed beside the first event of it the write's effect names (#1577). */
 export function receipted(record: RecordStore, requests: Requests): RecordStore {
   return withAppend(record, (connection, input, given) => {

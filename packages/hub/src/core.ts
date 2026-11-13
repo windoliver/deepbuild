@@ -96,8 +96,7 @@ import { claudeHomes, claudeOnPath, denyHolds, homeMods, homeOfTranscript, login
 import { disk, testVfs, type Durable } from './vfs.js';
 import { CHROME, EXTENSION_HOOK_MS, refuse, signature, ulid, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Scope, SCREEN_TOOLS } from './wire.js';
 import type { CallContext, Session, Live, Cursor, Counter, Routes } from './session-types.js';
-import { CODEX_BINARY, CLAUDE_BINARY, HOUR, ARCHIVED_THREADS_MS, DRIFT_MS, DAY, sql, letters, ghToken, GITHUB_PASS_MS, HOOK_CHECK_MS, CALL_GRACE, SLEPT, said, TURN_ENTRIES, PROMPT_PLACE_MS, CORES, machineLoad, FOREIGN, HOLDS_NO_PROMPT, signInCommands, type Obj, isObj, watching, waitingOn, READS, AUTOMATIC_QUEUED, effectEntries, callOf, MODS_MS, sendKey, OWN_TURN, holdsTurns, childPrompt, readsLogged, streamed, crashing, receipted } from "./hub-shared.js";
-import { Requests, type Landed, type Receipt } from './requests.js';
+import { CODEX_BINARY, CLAUDE_BINARY, HOUR, ARCHIVED_THREADS_MS, DRIFT_MS, DAY, sql, letters, ghToken, GITHUB_PASS_MS, HOOK_CHECK_MS, CALL_GRACE, SLEPT, said, TURN_ENTRIES, PROMPT_PLACE_MS, CORES, machineLoad, FOREIGN, HOLDS_NO_PROMPT, signInCommands, type Obj, isObj, watching, waitingOn, READS, AUTOMATIC_QUEUED, effectEntries, callOf, MODS_MS, sendKey, OWN_TURN, holdsTurns, childPrompt, streamed, wrapped } from "./hub-shared.js";
 
 import { HubCanvas } from './hub-canvas.js';
 import { TranscriptReader } from './transcript-reader.js';
@@ -171,7 +170,7 @@ export class Core {
     const readreplaying = () => this.replaying;
     const readblocked = () => this.blocked;
     const readjobs = () => this.jobs;
-    this.control = new HubControl({ settings: this.options, requests: () => this.requests, services: lazyServices({ wikiWritten: () => this.providers.knowledge.writtenOf, log: () => this.log, people: () => this.people, numbers: () => this.numbers, staging: () => this.staging, agents: () => this.agents, box: () => this.box, extensions: () => this.extensions, runs: () => this.runs, hosts: () => this.hosts, sessionStarts: () => this.sessionStarts, heavy: () => this.heavy, wikiBuild: () => this.wikiBuild, raw: () => this.raw, root: () => this.root, record: () => this.record, now: () => this.now, acceptance: () => this.acceptance, landing: () => this.landing, runner: () => this.runner, checkKinds: () => this.checkKinds, canvasSide: () => this.canvasSide, spaces: () => this.spaces, asks: () => this.asks, tasks: () => this.tasks, claudeSettings: () => this.claudeSettings, store: () => this.store, devices: () => this.devices, confirmer: () => this.confirmer, teardowns: () => this.teardowns, openItems: () => this.openItems, checkouts: () => this.checkouts, channels: () => this.channels, libraries: () => this.libraries, jobKinds: () => this.jobKinds, durable: () => this.durable, stacks: () => this.stacks }), delivery: () => this.delivery, judging: () => this.judging, state: () => this.state, memory: () => this.memory, mcp: () => this.mcp, transcripts: () => this.transcripts, events: { connection: (writer, extra) => this.connection(writer, extra), appendCore: (kind, data, extra) => this.appendCore(kind, data, extra), appendReading: (session, agent, reading, hook) => this.appendReading(session, agent, reading, hook), append: (connection, input, backfill) => this.append(connection, input, backfill) }, kernel: { get ready() { return readready(); }, get blocked() { return readblocked(); }, get jobs() { return readjobs(); } }, schedule: { testClock: (params) => this.testClock(params), replayLate: (kept) => this.replayLate(kept), get replaying() { return readreplaying(); }, queue: (work, starting) => this.queue(work, starting) } });
+    this.control = new HubControl({ settings: this.options, services: lazyServices({ wikiWritten: () => this.providers.knowledge.writtenOf, log: () => this.log, people: () => this.people, numbers: () => this.numbers, staging: () => this.staging, agents: () => this.agents, box: () => this.box, extensions: () => this.extensions, runs: () => this.runs, hosts: () => this.hosts, sessionStarts: () => this.sessionStarts, heavy: () => this.heavy, wikiBuild: () => this.wikiBuild, raw: () => this.raw, root: () => this.root, record: () => this.record, now: () => this.now, acceptance: () => this.acceptance, landing: () => this.landing, runner: () => this.runner, checkKinds: () => this.checkKinds, canvasSide: () => this.canvasSide, spaces: () => this.spaces, asks: () => this.asks, tasks: () => this.tasks, claudeSettings: () => this.claudeSettings, store: () => this.store, devices: () => this.devices, confirmer: () => this.confirmer, teardowns: () => this.teardowns, openItems: () => this.openItems, checkouts: () => this.checkouts, channels: () => this.channels, libraries: () => this.libraries, jobKinds: () => this.jobKinds, durable: () => this.durable, stacks: () => this.stacks }), delivery: () => this.delivery, judging: () => this.judging, state: () => this.state, memory: () => this.memory, mcp: () => this.mcp, transcripts: () => this.transcripts, events: { connection: (writer, extra) => this.connection(writer, extra), appendCore: (kind, data, extra) => this.appendCore(kind, data, extra), appendReading: (session, agent, reading, hook) => this.appendReading(session, agent, reading, hook), append: (connection, input, backfill) => this.append(connection, input, backfill) }, kernel: { get ready() { return readready(); }, get blocked() { return readblocked(); }, get jobs() { return readjobs(); } }, schedule: { testClock: (params) => this.testClock(params), replayLate: (kept) => this.replayLate(kept), get replaying() { return readreplaying(); }, queue: (work, starting) => this.queue(work, starting) } });
   }
 
   private transcriptReader!: TranscriptReader;
@@ -185,13 +184,6 @@ export class Core {
   private readonly raw: RecordStore['raw'] = (sql, params) => this.record.raw(sql, params);
   /** The log's pages, read-ahead and stream; a read waits for the appends in flight, and the owner's stream reads what the owner may see (#1337). */
   private readonly log = new LogReads({ raw: this.raw, settled: () => Promise.allSettled([...this.inflight]), ownerSeen: () => this.state.seenBy(OWNER), emit: (sub, json, caught) => this.emit(sub, json, caught) });
-  /** The writes with an effect (#1577): each one's request ID, the receipt that commits with its event, and the log_pos it landed at. */
-  private readonly requests = new Requests({
-    now: () => this.now(),
-    receipt: (device, request) => this.receiptOf(device, request),
-    append: async (receipt) => (await this.record.append(this.connection('core'), receipt)).log_pos,
-    end: async () => Number(((await this.record.raw('SELECT coalesce(max(log_pos), 0) AS end FROM events')) as { end: number }[])[0]?.end ?? 0),
-  });
   private asks!: Asks;
   /** Online model libraries (#1731): which are on, your standing rules, searches and fetches. */
   private libraries?: Libraries;
@@ -605,14 +597,10 @@ export class Core {
     // Each event its own commit: the durable write points a run makes depend only on the events it appends,
     // never on how many arrived together, so a cut at any one can be replayed.
     this.record = await openRecord({ path: this.root.ledger, now: this.now, evidence: this.store, commitEach: true, ...(storage ? { storage } : {}), ...(this.options.plant === 'turn-closes-at-child-stop' ? { plant: this.options.plant } : {}) });
-    // A write's receipt commits with its own event, whoever appends that event: the hub, the asks core or a run (#1577).
-    this.record = receipted(this.record, this.requests);
-    if (process.env.DEEP_HUB_TEST_CRASH) this.record = crashing(this.record, process.env.DEEP_HUB_TEST_CRASH);
-    if (process.env.DEEP_HUB_TEST_READS) this.record = readsLogged(this.record, process.env.DEEP_HUB_TEST_READS);
+    this.record = wrapped(this.record, this.control.requests);
     // Every append reaches the stream, whoever appends it: the hub, the asks core, the supervisor or the leases.
     this.record = streamed(this.record, ({ kind, subject, data }, connection) => {
       this.log.stream();
-      // A receipt kept alone changes no session's state (#1577).
       if (kind !== 'session.state' && kind !== 'row.set' && kind !== 'write.done') {
         // The next state pass reads the sessions appended to since the last; an event of no session, every session.
         if (this.state.touched !== 'all') { if (connection.session) this.state.touched.add(connection.session); else this.state.touched = 'all'; }
@@ -661,7 +649,6 @@ export class Core {
       errorTurnHook: (agent) => adapterOf(agent)?.caps.errorTurnHook === true,
     });
     await this.delivery.continues();
-    // Your words the last hub said it had and no prompt has shown yet go on their way again (#1577).
     await this.delivery.notesOwed();
     this.askingSoon();
     // The results every session's claims share (#1018): each kept run's key, from its finish, read once at start.
@@ -1063,15 +1050,6 @@ export class Core {
 
   // ---- Appends.
 
-  /** The receipt of a request from a device, as the record holds it: the write's own event, or the result it kept alone (#1577). */
-  private async receiptOf(device: string, request: string): Promise<Receipt | undefined> {
-    const [row] = (await this.record.raw(`SELECT r.log_pos AS at, r.data AS receipt, e.id AS id, e.kind AS kind, e.subject AS subject, e.data AS data, e.log_pos AS log_pos FROM events r LEFT JOIN events e ON e.id = json_extract(r.data, '$.event')
-      WHERE r.kind = 'write.done' AND json_extract(r.data, '$.device') = ? AND json_extract(r.data, '$.request') = ? ORDER BY r.log_pos LIMIT 1`, [device, request])) as { at: number; receipt: string; id: string | null; kind: string | null; subject: string | null; data: string | null; log_pos: number | null }[];
-    if (!row) return undefined;
-    const d = JSON.parse(row.receipt) as { method: string; params: string; result?: Obj };
-    const event: Landed | undefined = row.id === null ? undefined : { id: row.id, kind: String(row.kind), subject: row.subject, data: JSON.parse(row.data ?? '{}') as Obj, log_pos: Number(row.log_pos) };
-    return { method: d.method, params: d.params, ...(event ? { event } : { result: d.result ?? {} }), log_pos: event?.log_pos ?? Number(row.at) };
-  }
   /**
    * An event's connection: its actor is the person whose connection sent it, or for the core's own events the person
    * whose session they are about, never a field the event carries (#1337); its scope is who may see it.

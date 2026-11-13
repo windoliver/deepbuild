@@ -5,7 +5,7 @@
 // held, since the only mark that it is under way is a promise in this process's memory.
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { canonicalize, sha256Hex, type JsonValue } from '@deepbuild/contracts';
-import type { EventInput } from '@deepbuild/record';
+import type { Connection, EventInput, RecordStore } from '@deepbuild/record';
 import { refusal, Refused, ulid } from './wire.js';
 
 type Obj = Record<string, unknown>;
@@ -39,12 +39,10 @@ interface Writing { effect: Effect; data: Obj | undefined; done: boolean; taken?
 
 interface RequestsOptions {
   now(): number;
-  /** The receipt of `request` from `device`, as the record holds it. */
-  receipt(device: string, request: string): Promise<Receipt | undefined>;
-  /** Appends the receipt of a write that appended no event of its own; its log_pos. */
-  append(receipt: EventInput): Promise<number>;
-  /** The log's end. */
-  end(): Promise<number>;
+  /** The record the receipts are in, as the hub holds it once open. */
+  record(): RecordStore;
+  /** A connection of the core, which appends a receipt kept alone. */
+  core(): Connection;
 }
 
 export class Requests {
@@ -75,7 +73,7 @@ export class Requests {
       // What a retry must send again: the params, with the signature and the request ID left out.
       const { signature: _signature, request: _request, ...sent } = params;
       const hash = sha256Hex(canonicalize(JSON.parse(JSON.stringify(sent)) as JsonValue));
-      const done = await this.o.receipt(caller.device, caller.request);
+      const done = await this.receipt(caller.device, caller.request);
       if (!done) return this.landed(effect, { method, request: caller.request, device: caller.device, params: hash }, body);
       if (done.method !== method || done.params !== hash) {
         throw new Refused(refusal('const', '/params/request', `The request ID ${caller.request} was used already, for ${done.method === method ? 'other params' : done.method}, so this write did nothing. A new write takes a new request ID.`, caller.request));
@@ -99,10 +97,23 @@ export class Requests {
       writing.done = true;
     }
     if (writing.taken?.log_pos !== undefined) return { ...result, log_pos: writing.taken.log_pos };
-    if (!data) return { ...result, log_pos: await this.o.end() };
+    if (!data) return { ...result, log_pos: await this.end() };
     // A write that appended no event of its own (an overrule already made) keeps its receipt alone, with its result.
     const ts = this.o.now();
-    return { ...result, log_pos: await this.o.append({ v: 1, id: ulid(ts), kind: 'write.done', ts, data: { ...data, result } as JsonValue }) };
+    return { ...result, log_pos: (await this.o.record().append(this.o.core(), { v: 1, id: ulid(ts), kind: 'write.done', ts, data: { ...data, result } as JsonValue })).log_pos };
+  }
+  /** The log's end. */
+  private async end(): Promise<number> {
+    return Number(((await this.o.record().raw('SELECT coalesce(max(log_pos), 0) AS end FROM events')) as { end: number }[])[0]?.end ?? 0);
+  }
+  /** The receipt of a request from a device, as the record holds it: the write's own event, or the result it kept alone. */
+  private async receipt(device: string, request: string): Promise<Receipt | undefined> {
+    const [row] = (await this.o.record().raw(`SELECT r.log_pos AS at, r.data AS receipt, e.id AS id, e.kind AS kind, e.subject AS subject, e.data AS data, e.log_pos AS log_pos FROM events r LEFT JOIN events e ON e.id = json_extract(r.data, '$.event')
+      WHERE r.kind = 'write.done' AND json_extract(r.data, '$.device') = ? AND json_extract(r.data, '$.request') = ? ORDER BY r.log_pos LIMIT 1`, [device, request])) as { at: number; receipt: string; id: string | null; kind: string | null; subject: string | null; data: string | null; log_pos: number | null }[];
+    if (!row) return undefined;
+    const d = JSON.parse(row.receipt) as { method: string; params: string; result?: Obj };
+    const event: Landed | undefined = row.id === null ? undefined : { id: row.id, kind: String(row.kind), subject: row.subject, data: JSON.parse(row.data ?? '{}') as Obj, log_pos: Number(row.log_pos) };
+    return { method: d.method, params: d.params, ...(event ? { event } : { result: d.result ?? {} }), log_pos: event?.log_pos ?? Number(row.at) };
   }
 
   /**
