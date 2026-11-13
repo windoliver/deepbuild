@@ -22,6 +22,7 @@ import { type Checkouts } from '@deepbuild/gate';
 
 import { Acceptance } from './acceptance.js';
 import type { Landing } from './landing.js';
+import type { Work } from './work.js';
 import { type JobSpec, type Runner, type WindowReport } from '@deepbuild/runner';
 
 import { ClaudeSettings } from './claude-settings.js';
@@ -92,6 +93,7 @@ export interface HubControlOptions {
     readonly now: () => number;
     readonly acceptance: Acceptance;
     readonly landing: Landing;
+    readonly work: Work;
     readonly runner: Runner;
     readonly checkKinds: CheckKinds;
     readonly canvasSide: HubCanvas;
@@ -285,6 +287,10 @@ export class HubControl {
       // Landing in turn (#1331): `deep land judge`, `deep land` and `deep work --once`, from your own terminal.
       case 'land.judge': return this.work.workspaceCall(() => this.options.services.landing.judgeAll(String(params.repo ?? '')));
       case 'land.round': return this.work.workspaceCall(() => this.options.services.landing.land(String(params.repo ?? '')));
+      // The work run (#1332): `deep work "<scope>"` raises its one approval, `deep work show` and `deep work pause`.
+      case 'work.approve': return this.options.services.work.approve(params, context);
+      case 'work.show': return this.options.services.work.show(params);
+      case 'work.pause': return this.options.services.work.pause(params);
       case 'work.once': return this.work.workspaceCall(() => this.options.services.landing.workOnce(String(params.repo ?? ''), Array.isArray(params.issues) ? params.issues.map(Number).filter((n) => Number.isSafeInteger(n) && n > 0) : []));
       case 'job.submit': return this.options.services.runner.submit(params.spec as JobSpec);
       case 'job.status': return this.options.services.runner.status(String(params.job));

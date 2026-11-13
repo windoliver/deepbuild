@@ -411,8 +411,9 @@ export class McpOperations {
     const subject = this.options.settings.plant === 'repeat-reaches-you' ? undefined
       : kind === 'choice' && typeof about.point === 'string' ? { point: about.point }
       : kind === 'taste' && typeof about.screen === 'string' && typeof about.element === 'string' ? { screen: about.screen, element: about.element } : undefined;
-    // A taste call or a choice with a recommendation goes on at once with it, marked as undoable (#84).
-    const provisional = kind !== 'unblock' && raised.recommended !== null && raised.recommended !== undefined;
+    // A taste call or a choice with a recommendation goes on at once with it, marked as undoable (#84); in a session a
+    // work run started, the issue waits on you instead and gives up its slot (#1332).
+    const provisional = kind !== 'unblock' && raised.recommended !== null && raised.recommended !== undefined && !(await this.options.services.sessionStarts.inWorkRun(session));
     const ask = { ...raised, fallback: 'you', provisional, owner: 'you', key: sha256Hex(canonicalize({ kind, question, session } as JsonValue)), pinned_to: pinned, ...(subject ? { subject } : {}) };
     const handle = await this.options.services.asks.raise(this.agentConnection(session), `deep_ask.${kind}`, ask);
     if (provisional) {
