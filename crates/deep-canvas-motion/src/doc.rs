@@ -2902,9 +2902,7 @@ fn cuts_of(
 }
 
 /// The marker kinds (canvas primitives: Marker), with a reading hold (#419), which motion blur
-/// never spans. #407: a stage marker plays through outside present mode (Marker: present mode);
-/// one that waits for a control holds even there, which motion doesn't land yet, so that one is
-/// refused rather than played through.
+/// never spans; #507's present-mode fields are read in `present`.
 pub(crate) const MARKER_KINDS: [&str; 9] = [
     "cue", "shot", "section", "stage", "beat", "word", "moment", "record", "hold",
 ];
@@ -2924,9 +2922,6 @@ pub(crate) fn markers_of(
         let kind = m.get("kind").and_then(Value::as_str).unwrap_or("cue");
         if !MARKER_KINDS.contains(&kind) {
             return refuse("bad_marker_kind", format!("{path}/kind"));
-        }
-        if kind == "stage" && m.get("waits_for").is_some() {
-            return refuse("bad_marker_kind", format!("{path}/waits_for"));
         }
         // Word markers come only from a bake; beat markers from the tempo map or a beats bake.
         let on_beat = matches!(
@@ -3400,7 +3395,8 @@ fn take_apart_of(
 
 /// #504: the input track a played form carries inline, `track: [{t: flick, control, value,
 /// seq, player}]`, as the hub inlines it beside the saved document; `None` without one. An
-/// entry's `seq` is its place in the list where it names none, and its player is 1.
+/// entry's `seq` is its place in the list where it names none, and its player is 1. #507: a
+/// `{t, present}` entry is kept with no control and the present value as its value.
 pub fn track(doc: &Map<String, Value>) -> Result<Option<Vec<crate::input::Entry>>, Refused> {
     let list = match doc.get("track") {
         None | Some(Value::Null) => return Ok(None),
@@ -3413,11 +3409,15 @@ pub fn track(doc: &Map<String, Value>) -> Result<Option<Vec<crate::input::Entry>
         let Some(t) = e.get("t").and_then(Value::as_i64) else {
             return refuse("bad_doc", at("t"));
         };
-        let Some(control) = e.get("control").and_then(Value::as_str) else {
-            return refuse("bad_doc", at("control"));
-        };
-        let Some(value) = e.get("value") else {
-            return refuse("bad_doc", at("value"));
+        let (control, value) = match (
+            e.get("present"),
+            e.get("control").and_then(Value::as_str),
+            e.get("value"),
+        ) {
+            (Some(present), None, _) => ("", present),
+            (None, Some(control), Some(value)) => (control, value),
+            (None, None, _) => return refuse("bad_doc", at("control")),
+            _ => return refuse("bad_doc", at("value")),
         };
         let seq = match e.get("seq") {
             None => i as i64,
