@@ -2,7 +2,7 @@
   "uri": "deep://schedule/core@0.0.0",
   "core": "core@0.0.0",
   "build_set": "full",
-  "set_digest": "5dea705cb807f37e75f290b4252c72064d5acbb45eb8051615dad9e6964a8aa0",
+  "set_digest": "a9313100d5ed948e43047dabddec4d52ce02f4a3a0c12e19cb488d808955d67b",
   "runtime_digest": "b0d9637fcffe5b58be4a3025853302613578659fa143fc9ca6bd110364894ab8",
   "interfaces": {
     "building@1": {
@@ -115,6 +115,35 @@
       "module": "effects",
       "implementation": {
         "name": "effects",
+        "version": "1.0.0",
+        "pins": {},
+        "equivalence": "bit",
+        "state": "canonical"
+      }
+    },
+    "export@1": {
+      "digest": "34526b4e8e03053b5515c9c0ccc3c0151cb2219375ce731e109658532ed51988",
+      "reference": "export",
+      "kit": [
+        "fixtures",
+        "clean_rebuild",
+        "patch_fuzz",
+        "read_set",
+        "order",
+        "schedule",
+        "repair_loop",
+        "carried_state",
+        "late_entry",
+        "time_order",
+        "contribution",
+        "catalog",
+        "migration",
+        "bit"
+      ],
+      "behavior": "none",
+      "module": "export",
+      "implementation": {
+        "name": "export",
         "version": "1.0.0",
         "pins": {},
         "equivalence": "bit",
