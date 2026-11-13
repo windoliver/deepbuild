@@ -81,7 +81,7 @@ pub fn outline_of(g: &Glyph) -> Option<Vec<Cmd>> {
     let mut pen = Pen {
         at: [0.0, 0.0],
         k: f64::from(g.size) / upm,
-        slant: f64::from(g.skew).to_radians().tan(),
+        slant: deep_canvas::ops::tan(f64::from(g.skew).to_radians()),
         cmds: Vec::new(),
     };
     let coords: Vec<skrifa::instance::NormalizedCoord> = g
