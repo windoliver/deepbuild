@@ -33,6 +33,8 @@ export type Plant =
   | 'actor-from-payload' | 'reads-unfiltered'
   // #1338: a hub that listens on its network listener with no project members.
   | 'listen-without-members'
+  // #1840: a person's deep_search that reads every decision, whatever scope it was saved at.
+  | 'search-decisions-unfiltered'
   | 'writer-from-payload' | 'unlink-before-lock' | 'accept-stops-at-emfile' | 'ends-binding' | 'git-in-hook-handler' | 'commit-on-event-loop'
   | 'parse-on-event-loop' | 'origin-from-payload' | 'no-run-values' | 'empty-cited' | 'ignores-unknown-field' | 'run-spawns-itself'
   | 'env-kills-by-port' | 'env-leases-port-again' | 'env-holds-lease-for-helper' | 'compose-default-project' | 'env-clone-without-record'
@@ -334,7 +336,7 @@ const PLANTS: readonly string[] = [
   'lands-unjudged-commit', 'lander-reruns-all', 'closes-on-open', 'second-attempt-beside-pr', 'trusts-forge-merged', 'lands-as-person',
   'drafted-spec-only', 'bootstrap-commands-only', 'failures-as-fail',
   'edited-check-approved', 'verdict-from-exit-status', 'empty-commit-run-alone', 'own-files-test-folders-only',
-  'actor-from-payload', 'reads-unfiltered', 'listen-without-members',
+  'actor-from-payload', 'reads-unfiltered', 'listen-without-members', 'search-decisions-unfiltered',
   'job-key-params-text', 'job-key-no-version', 'job-build-entry-only', 'job-build-hashes-paths', 'job-build-hashes-mtimes',
   'job-host-asks-again', 'job-host-sends-early', 'job-weights-call-anyway', 'job-weights-not-keyed',
   'job-second-call', 'job-joiner-cancels-job', 'job-host-down-done',
