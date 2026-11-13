@@ -690,6 +690,7 @@ pub enum Call {
     Logic(Box<crate::picks::LogicCall>),
     /// #2014: rays met by a terrain plate's drawn triangles, its physics shape and a pick.
     TerrainRays(Box<crate::terrain::TerrainRays>),
+    PhysicsBake(Box<crate::physics::Bake>),
     /// #306: the pack store's rows.
     Packs,
     /// #306: one pack version installed mid-run; #200: through a session, which wrote it.
@@ -1856,6 +1857,7 @@ impl<'a> Hub<'a> {
             Call::Spatial(s) => self.spatial(s),
             Call::Logic(l) => self.logic_call(l),
             Call::TerrainRays(r) => self.terrain_rays(r),
+            Call::PhysicsBake(b) => self.physics_bake(b),
             Call::SceneQuery(q) => self.scene_query(q),
             Call::Packs => self.packs_reply(),
             Call::InstallPack { id, dir, session } => {

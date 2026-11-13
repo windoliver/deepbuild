@@ -447,7 +447,7 @@ pub enum Kind {
     },
     FollowPath {
         points: Vec<[f64; 2]>,
-        fraction: f64,
+        fraction: crate::constraint::Fraction,
         orient: bool,
         offset: [f64; 2],
     },
@@ -1653,7 +1653,8 @@ fn constraint_of(id: &str, c: &Map<String, Value>) -> Result<Constraint, Refused
             }
             Kind::FollowPath {
                 points,
-                fraction: num_or("fraction", 0.0)?,
+                fraction: crate::constraint::Fraction::of(c.get("fraction"))
+                    .or_else(|code| refuse(code, at("fraction")))?,
                 orient: flag("orient"),
                 offset: pair(c.get("offset"), &at("offset"))?,
             }
@@ -3531,7 +3532,7 @@ fn filter_named(list: &str) -> crate::occurrence::Filter {
 }
 
 /// An occurrence list and its filter: its name, or `{list, kinds, a, b, tags, where}`.
-fn list_of(v: &Value, path: &str) -> Result<crate::occurrence::Filter, Refused> {
+pub(crate) fn list_of(v: &Value, path: &str) -> Result<crate::occurrence::Filter, Refused> {
     match v {
         Value::String(list) => Ok(filter_named(list)),
         Value::Object(f) => filter_of(f, path),

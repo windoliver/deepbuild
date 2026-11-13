@@ -13,5 +13,7 @@ pub mod module;
 pub mod occurrence;
 pub mod pairs;
 pub mod query;
+pub mod ring;
 pub mod roles;
+pub mod track;
 pub mod written;

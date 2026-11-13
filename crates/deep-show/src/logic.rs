@@ -142,7 +142,7 @@ impl Hub<'_> {
     /// from the evidence store, and its rows written to `occurrences.<logic ID>.occurrences`:
     /// `{t, step, kind, a, b}` and its declared fields by name, as Spawn and motion read a row.
     fn inline_logic(&self, form: &mut Value, track: &[Value]) -> Result<(), Box<Issue>> {
-        self.inline_worlds(form)?;
+        self.inline_worlds(form, track)?;
         let Some(piece) = self.logic_piece(form)? else {
             return Ok(());
         };
