@@ -34,7 +34,7 @@ import { readPack } from './packs.js';
 import { refuse, Refused, refusal, ulid, type CoreOptions } from './wire.js';
 import type { CallContext } from './session-types.js';
 import { HubCanvas } from './hub-canvas.js';
-import { AUTHORITY, type Obj, isObj } from "./hub-shared.js";
+import { AUTHORITY, type Obj, isObj, writing } from "./hub-shared.js";
 import type { HumanControlPort } from './human-control-port.js';
 export interface TrustedActionsOptions {
  settings: CoreOptions;
@@ -82,7 +82,9 @@ export class TrustedActions {
       throw new Refused(refusal('role', '/params/ask', `${handle} stays open: this deep command runs inside agent session ${agent}'s process tree, so it acts as that session, and no agent answers an ask${params.signature !== undefined ? ', whatever it signs' : ''}. Answer it from your own terminal or on the question card.`, handle));
     }
     if (params.signature !== undefined) {
-      const why = this.options.services.devices.verify(params.signature, { method, hub: this.hubId(), params, now: this.options.services.now() }, { skipsTime: this.options.settings.plant === 'signature-skips-time' });
+      // A write with a request ID spends the signature's once-only ID as it ends: a crash before it commits spends none (#1577).
+      const write = writing.getStore();
+      const why = this.options.services.devices.verify(params.signature, { method, hub: this.hubId(), params, now: this.options.services.now() }, { skipsTime: this.options.settings.plant === 'signature-skips-time', ...(write?.receipt && !write.done ? { spentAfter: write.after } : {}) });
       if (!why) return;
       const signed = (params.signature as { signed?: Obj }).signed;
       throw new Refused(refusal('credential', why.field === 'signature' ? '/params/signature/sig' : `/params/signature/signed/${why.field}`, `${handle} stays open: the signature's ${why.field} doesn't hold (${why.reason}). Sign it again with a device you paired, for ${method} on this hub, over exactly the params it sends.`, signed?.[why.field] ?? why.field));
