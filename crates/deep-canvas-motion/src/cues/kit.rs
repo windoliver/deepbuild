@@ -235,7 +235,10 @@ fn rule_inside_span(entry: &Value) -> Result<(), String> {
 
 /// The paths it wrote on its targets, each with what it holds after the last key and what the
 /// document without the cue holds there.
-fn ends(entry: &Value) -> Result<Vec<(String, Option<Value>, Option<Value>)>, String> {
+/// A path an entry wrote, what it holds after the last key and what it holds without the cue.
+type End = (String, Option<Value>, Option<Value>);
+
+fn ends(entry: &Value) -> Result<Vec<End>, String> {
     let (doc, lowered, _, end) = once(entry)?;
     let t = last(&lowered, end);
     let targets = targets(entry);

@@ -66,7 +66,7 @@ pub struct Lowered {
 pub struct Refusal {
     pub code: &'static str,
     pub path: String,
-    pub actual: Value,
+    pub actual: Box<Value>,
     pub what: String,
 }
 
@@ -138,7 +138,7 @@ pub(super) fn run(
             Err(refusals) => {
                 issues.extend(refusals.into_iter().map(|r| Issue {
                     ids: vec![id.clone()],
-                    ..Issue::envelope(r.code, r.path, r.actual, &r.what)
+                    ..Issue::envelope(r.code, r.path, *r.actual, &r.what)
                 }));
                 continue;
             }

@@ -72,7 +72,7 @@ pub(crate) fn refused(code: &'static str, path: String, actual: Value, what: Str
     Refusal {
         code,
         path,
-        actual,
+        actual: Box::new(actual),
         what,
     }
 }
