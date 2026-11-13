@@ -50,7 +50,9 @@ Then run the existing guard and preserve its real result. Review and land the ap
 ## 3. Supply proof capacity/access
 
 - Spark is optional by the owner's explicit 2026-11-12 scope decision. No Spark endpoint is required to close #1123; Linux-container results remain supplemental and are not relabelled.
-- Arrange a quiet Mac admission interval without killing unrelated sessions. The previous complete pair request exhausted the documented 60-minute timed window with no grant. The same source/test pair and overlay recipe are ready under `/tmp/deep-1123-complete/full-pair/`; neither side executed.
-- Once capacity or access has genuinely changed, run the prepared complete pair once through the existing throttle. Do not change HOME, forge a grant, relax a load gate, or substitute a sample for the full unit lane. Record complete alone-block intervals, statuses, skips and source hashes.
+- The full Mac pair subsequently received a timed grant and ran for roughly 6 h 55 min. Before parallel completed; before alone never completed, and after never started. The retained [blocker record](../mac-run-blocker.md) supersedes the earlier no-grant-only status.
+- A baseline-benchmark watchdog candidate then compiled but did not pass the unchanged hidden/shown checks; see [the latest attempt](../watchdog-unblock-progress.md). Its source and test fixtures remain uncommitted, and no measurement or waiter is still running.
+- A valid GUI verification needs an unlocked, quiet desktop with the test window visible, as well as actual throttle admission. Environment loss stays INCONCLUSIVE. No unrelated session may be killed to make room.
+- The old temporary before workspace was reused for the candidate benchmark build and is no longer an untouched timing input. After the blocker is repaired and verified, freeze and verify both workload sides anew before one complete pair through the existing throttle. Do not change HOME, forge a grant, relax a load gate, or substitute a sample for the full unit lane. Record complete alone-block intervals, statuses, skips and source hashes.
 
 Only after these actions and the remaining non-PASS verification results are resolved can #2321 claim completion and #1123 close. The conversational approval changes permission to proceed; it does not manufacture those check results.
