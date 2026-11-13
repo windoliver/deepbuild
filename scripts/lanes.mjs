@@ -530,6 +530,10 @@ alone.push('tests/acceptance/1606-redraft-ac5-ac9/');
 // #2324's files each build deep-show (with the planted engine build and sandbox.alt), deep-sandbox and deep-logic, run
 // them in Docker on linux/amd64 and drive headless Chrome, as #238's and #531's do.
 alone.push('tests/acceptance/2324/');
+// #509's files each build deep-show and speak their fixtures with macOS say; most start a hub and deepbuild/speech's
+// model host on its fixed port 8720 (recording.test.ts also deepbuild/bakes' on 8719); budgets.test.ts times them.
+alone.push('tests/acceptance/509/', 'tests/acceptance/509-oracle/');
+timed.push('tests/acceptance/509/budgets.test.ts');
 // #2197's files each start a real hub and one or two agent processes, each with its own deep mcp; budget.test.ts times
 // deep_status against #26's 100 ms on the reference Mac.
 alone.push('tests/acceptance/2197/');
