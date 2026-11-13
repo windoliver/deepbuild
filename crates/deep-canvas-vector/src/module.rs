@@ -124,18 +124,22 @@ fn register(r: &mut Registrar, paint: fn(&mut View<'_>) -> Result<(), OpError>) 
         .run(paint);
     // The import's codes (svg_*) join the catalog with their planted fixtures when the kit seals
     // vector@1 (#399). The hub draws a vector from the SVG its evidence store holds (#1162); the
-    // fixture names one no store holds, which its codes name.
-    r.fixture("formula", formula(), None).sidecar(json!({
-        "checks": [{"kind": "document.validate"}],
-        "oracles": ["analytic"],
-        "codes": ["asset_missing", "unknown_kind"],
-    }));
+    // fixture names one no store holds, which its codes name: a planted document (#2085).
+    r.fixture("formula", formula(), None)
+        .planted()
+        .sidecar(json!({
+            "checks": [{"kind": "document.validate"}],
+            "oracles": ["analytic"],
+            "codes": ["asset_missing", "unknown_kind"],
+        }));
     // #399: a vector whose `colors` maps `currentColor` to the accent, beside a mapped sRGB color.
-    r.fixture("paint", paint_board(), None).sidecar(json!({
-        "checks": [{"kind": "document.validate"}],
-        "oracles": ["analytic"],
-        "codes": ["asset_missing", "unknown_kind"],
-    }));
+    r.fixture("paint", paint_board(), None)
+        .planted()
+        .sidecar(json!({
+            "checks": [{"kind": "document.validate"}],
+            "oracles": ["analytic"],
+            "codes": ["asset_missing", "unknown_kind"],
+        }));
 }
 
 /// What a vector item draws as in a frame (#1162): one `path@1` of its imported outline, which

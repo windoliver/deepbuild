@@ -349,6 +349,8 @@ pub enum Planted {
     TargetWritesBakedChannel,
     /// #501: media fills export.target@1's `png` with a reader that is its own writer.
     TargetReaderIsWriter,
+    /// #2085: effects sealed with an operator check that trusts a compute write's index.
+    TrustsWriteIndex,
     /// #501: the mixer's Linux build adds one 16-bit step to every sample.
     MixerLinuxOneStep,
     /// #501: the drop-frame labeller drops frame numbers in the tenth minutes too.

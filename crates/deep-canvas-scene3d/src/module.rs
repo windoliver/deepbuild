@@ -436,10 +436,12 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
         "covers": {"kinds": ["instance@1"], "fields": ["instance@1/params/of", "instance@1/params/from"]},
     }));
     // #2013: a ball told to rest on a shelf it doesn't stand over, which raises `no_support`.
-    r.fixture("rest-no-support", unsupported(), None).sidecar(json!({
-        "codes": ["no_support"],
-        "covers": {"kinds": ["mark.sphere@1"], "fields": ["mark.sphere@1/params/size"]},
-    }));
+    r.fixture("rest-no-support", unsupported(), None)
+        .planted()
+        .sidecar(json!({
+            "codes": ["no_support"],
+            "covers": {"kinds": ["mark.sphere@1"], "fields": ["mark.sphere@1/params/size"]},
+        }));
     // #486: the lobe outputs, occlusion and normal in gpu.output@1, core.bump@1 in gpu.function@1.
     crate::gpu::register(r);
 }

@@ -61,6 +61,16 @@ pub fn module() -> Module {
     }
 }
 
+/// #2085's planted twin: the module with an operator check that trusts a compute write's index,
+/// #429's wrong program for its write rule, so the kit's planted `scattered-write` stops raising
+/// `operator_kind_rule`.
+pub fn trusts_write_index() -> Module {
+    Module {
+        manifest: manifest(),
+        register: |r| register_with(r, trusting_rule),
+    }
+}
+
 /// The three operator kinds as items of their writer's layer (GPU operator): `gpu.material@1`,
 /// `gpu.pass@1` and `gpu.compute@1`, the operator's fields in `params`.
 pub const OPERATOR_KINDS: [(&str, &str); 3] = [
@@ -156,11 +166,24 @@ fn particles_rule(doc: &Value, id: &str, item: &Value) -> Vec<Raised> {
 /// shipped operators only, a data view passes and compute), and every check input whose probe
 /// reads it: a check whose result holds on any machine reads only an exact operator.
 fn operator_rule(doc: &Value, id: &str, item: &Value) -> Vec<Raised> {
+    rule_with(doc, id, item, check::CheckOptions::default())
+}
+
+/// [`operator_rule`] with #2085's planted check, which trusts a compute write's index.
+fn trusting_rule(doc: &Value, id: &str, item: &Value) -> Vec<Raised> {
+    let options = check::CheckOptions {
+        trusts_index: true,
+        ..Default::default()
+    };
+    rule_with(doc, id, item, options)
+}
+
+fn rule_with(doc: &Value, id: &str, item: &Value, options: check::CheckOptions) -> Vec<Raised> {
     let Some(op) = operator_of(id, item) else {
         return Vec::new();
     };
     let at = |p: &str| format!("items/{id}/params/{p}");
-    let checked = match graph::read(&op).and_then(|o| check::check(&o)) {
+    let checked = match graph::read(&op).and_then(|o| check::check_with(&o, options)) {
         Ok(c) => c,
         Err(issues) => {
             return issues
@@ -621,6 +644,11 @@ fn pack_functions(manifest: &Value) -> Vec<(String, String)> {
 }
 
 fn register(r: &mut Registrar) {
+    register_with(r, operator_rule);
+}
+
+/// The module's registration, with `rule` as its operator check.
+fn register_with(r: &mut Registrar, rule: deep_canvas::registry::Rule) {
     for (name, place) in PASSES {
         r.pass(name, place);
     }
@@ -634,7 +662,7 @@ fn register(r: &mut Registrar) {
     for (name, kind) in OPERATOR_KINDS {
         r.kind(operator_entry(name), &[], "")
             .described("A GPU operator as data: typed inputs, steps from the closed list, typed outputs, checked, costed and classed before it runs.");
-        r.rule(&kind[..kind.len() - 2], operator_rule);
+        r.rule(&kind[..kind.len() - 2], rule);
     }
     r.rule("group", group_rule);
     // #449: a particles@1 item's count against its budget class's cap, wherever the check runs.
@@ -659,17 +687,23 @@ fn register(r: &mut Registrar) {
     // its pixels need the GPU, and the acceptance suite draws them there.
     // #429's planted documents, each raising the one code it names: a check that holds on any
     // machine reading a same-machine operator's readback, and a composed pass in a core view.
+    // Each is planted: the kit runs it, and the `fixtures` call leaves it out (#2085).
     r.fixture("same-machine-check", same_machine_check(), None)
+        .planted()
         .sidecar(json!({"codes": ["not_exact"], "covers": {"kinds": ["gpu.compute@1"], "fields": ["gpu.compute@1/params/outputs"]}}));
     r.fixture("composed-in-core-view", composed_in_core_view(), None)
+        .planted()
         .sidecar(json!({"codes": ["operator_budget_class"], "covers": {"kinds": ["gpu.pass@1"], "fields": ["gpu.pass@1/params/steps"]}}));
     r.fixture("live-only-material", live_only_material(), None)
+        .planted()
         .sidecar(json!({"codes": ["live_only_canonical"], "covers": {"kinds": ["gpu.material@1"], "fields": ["gpu.material@1/params/fallback"]}}));
     r.fixture("scattered-write", scattered_write(), None)
+        .planted()
         .sidecar(json!({"codes": ["operator_kind_rule"], "covers": {"kinds": ["gpu.compute@1"], "fields": ["gpu.compute@1/params/steps"]}}));
     // A tint with one step changed for each of the check's other codes.
     for (code, steps, cost) in planted_tints() {
         r.fixture(&format!("tint-{}", code.replace('_', "-")), tint_figure(steps, cost), None)
+            .planted()
             .sidecar(json!({"codes": [code], "covers": {"kinds": ["gpu.pass@1"], "fields": ["gpu.pass@1/params/steps"]}}));
     }
     r.fixture("shadowed-box", shadowed_box(), None)

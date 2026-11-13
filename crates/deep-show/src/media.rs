@@ -138,7 +138,12 @@ impl Hub<'_> {
                 continue;
             };
             let path = format!("items/{id}/params/{param}");
-            let named = item.pointer(&format!("/params/{param}")).and_then(Value::as_str).unwrap_or("").to_string();
+            // An item that names no asset, a cell grid with no recording to play (#1967), has
+            // nothing to probe.
+            let Some(named) = item.pointer(&format!("/params/{param}")) else {
+                continue;
+            };
+            let named = named.as_str().unwrap_or("").to_string();
             let sha = doc
                 .pointer(&format!("/assets/{named}/sha256"))
                 .and_then(Value::as_str)

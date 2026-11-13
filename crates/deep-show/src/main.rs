@@ -1291,6 +1291,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "counts_declared_as_reached" => Planted::CountsDeclaredAsReached,
                 "skips_snapshot_comparison" => Planted::SkipsSnapshotComparison,
                 "checks_expected_code_only" => Planted::ChecksExpectedCodeOnly,
+                "trusts_write_index" => Planted::TrustsWriteIndex,
                 "accepts_agent_decisions" => Planted::AcceptsAgentDecisions,
                 "every_digest_positive" => Planted::EveryDigestPositive,
                 "checks_share_only" => Planted::ChecksShareOnly,
@@ -1642,6 +1643,25 @@ fn answer(command: &str, startup: &Startup, line: &str) -> Value {
     if scenario.planted.is_none() {
         scenario.planted = startup.run_planted;
     }
+    // #2085: a scenario under effects' planted check runs on a set sealed with that check.
+    let resealed;
+    let startup = if scenario.planted == Some(Planted::TrustsWriteIndex)
+        && startup.run_planted != scenario.planted
+    {
+        let planted = Some(StartPlanted::Run(Planted::TrustsWriteIndex));
+        match seal(planted, startup.sealed.costs.clone()) {
+            Ok(s) => {
+                resealed = Startup {
+                    cache: startup.cache.clone(),
+                    ..s
+                };
+                &resealed
+            }
+            Err(_) => return bad_input(),
+        }
+    } else {
+        startup
+    };
     match command {
         "run" => {
             let replies = jobs::around(&scenario, startup, |background| {
@@ -2362,6 +2382,11 @@ fn seal(planted: Option<StartPlanted>, costs: Coefficients) -> Result<Startup, B
     if planted == Some(StartPlanted::Run(Planted::TargetReaderIsWriter)) {
         for m in held.iter_mut().filter(|m| m.manifest.name == "media") {
             *m = deep_canvas_media::module::png_reads_itself();
+        }
+    }
+    if planted == Some(StartPlanted::Run(Planted::TrustsWriteIndex)) {
+        for m in held.iter_mut().filter(|m| m.manifest.name == "effects") {
+            *m = deep_canvas_effects::module::trusts_write_index();
         }
     }
     if let Some(StartPlanted::ControlKind(p)) = planted {

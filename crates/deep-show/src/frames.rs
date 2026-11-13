@@ -182,13 +182,15 @@ impl<'a> Hub<'a> {
         })
     }
 
-    /// Every canvas module's fixtures, the core's first.
+    /// Every canvas module's fixtures, the core's first; a planted document, which the check
+    /// refuses, is the kit's alone (#2085).
     pub fn fixtures_reply(&self) -> Value {
         let list: Vec<Value> = self
             .startup
             .sealed
             .fixtures
             .iter()
+            .filter(|(_, f)| !f.planted)
             .map(|(module, f)| {
                 let mut v = json!({"module": module, "name": f.name, "document": f.document});
                 if let Some(r) = &f.record {
