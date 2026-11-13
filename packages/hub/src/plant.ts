@@ -258,6 +258,8 @@ export type Plant =
   | 'set-up-line-says-nothing-blocks' | 'set-up-line-to-stdout' | 'silent-steps'
   // #2043's: a parser pool that hears its workers' messages only, and one that replaces an ended worker but leaves its lines waiting.
   | 'parser-pool-messages-only' | 'parser-pool-leaves-line-waiting'
+  // #1890's: a hub that keeps no background job's failure, so hub.health reads every job as not failing.
+  | 'drops-job-failure'
   // #2197's: a deep_status that lists every session's open asks.
   | 'status-lists-every-ask'
   // #1577's: a request ID marked in progress where the mark outlives the hub, and an undo applied past a newer change.
@@ -363,6 +365,7 @@ const PLANTS: readonly string[] = [
   'replay-keeps-place-by-id', 'asks-keep-place-by-id',
   'set-up-line-says-nothing-blocks', 'set-up-line-to-stdout', 'silent-steps',
   'parser-pool-messages-only', 'parser-pool-leaves-line-waiting',
+  'drops-job-failure',
   'status-lists-every-ask',
   'pending-across-restart', 'applies-stale-undo',
 ];
