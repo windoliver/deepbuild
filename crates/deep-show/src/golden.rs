@@ -101,6 +101,7 @@ impl Hub<'_> {
                 arrays: Vec::new(),
                 paths: Vec::new(),
                 track: None,
+                data_hash: false,
             };
             let r = self.eval(&e);
             if r["outcome"] != "evaluated" {

@@ -362,8 +362,16 @@ fn write(item: &mut Value, field: &[String], value: Value) {
     };
     let mut at = item;
     for (depth, name) in rest.iter().enumerate() {
-        if depth == 3 && rest[0] == "params" && rest[1] == "ops" {
+        // `ops/<i>/end` reaches through the op's one key; `ops/<i>/trim/end` names it (#222).
+        let named = at
+            .as_object()
+            .is_some_and(|m| m.contains_key(name.as_str()));
+        if depth == 3 && rest[0] == "params" && rest[1] == "ops" && !named {
             at = through_op(at);
+        }
+        // #222: an index into a list the item doesn't hold yet starts that list.
+        if at.is_null() && name.parse::<usize>().is_ok() {
+            *at = Value::Array(Vec::new());
         }
         at = match at {
             Value::Array(list) => match name.parse::<usize>() {

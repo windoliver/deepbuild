@@ -214,6 +214,8 @@ pub(crate) fn context_of(doc: &Value) -> TimeContext {
             .unwrap_or((60, 1)),
         ..TimeContext::default()
     };
+    // #222: a cue list's markers `cues.<id>` anchor narration, sound and literals too.
+    let doc = &deep_canvas_motion::cues::with_markers(doc);
     if let Some(motion) = doc.as_object().and_then(|m| read_motion(m).ok()) {
         for m in motion.markers {
             ctx.markers.insert(m.id, (m.start, m.end));

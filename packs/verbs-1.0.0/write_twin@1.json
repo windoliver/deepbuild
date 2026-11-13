@@ -1,0 +1,20 @@
+{
+  "id": "verbs.write_twin",
+  "version": "1.0",
+  "title": "Write, planted twin",
+  "license": "Apache-2.0",
+  "author": "DeepBuild",
+  "description": "The planted twin of write: a wrong curve, timing or end state its fixture must catch.",
+  "inputs": {},
+  "steps": {
+    "write": {
+      "op": "cue",
+      "params": {
+        "from": {
+          "params/reveal/progress": 0
+        },
+        "ease": "linear"
+      }
+    }
+  }
+}
