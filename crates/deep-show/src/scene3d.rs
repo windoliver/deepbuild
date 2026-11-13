@@ -300,6 +300,18 @@ pub fn points_at(
     if doc.get("size").is_none() {
         doc["size"] = json!([640, 360]);
     }
+    // Where a point sits reads no camera: a document that names none is evaluated under a stand-in.
+    let named = doc
+        .get("camera")
+        .and_then(Value::as_str)
+        .map(str::to_string);
+    if named.is_none_or(|c| doc.pointer(&format!("/items/{c}")).is_none()) {
+        doc["camera"] = json!("\u{0}camera");
+        let params = json!({"projection": "orthographic", "view_width": 10, "target": [0, 0, 0],
+                            "position": [0, 0, 10]});
+        doc["items"]["\u{0}camera"] =
+            json!({"id": "\u{0}camera", "kind": "camera@1", "params": params});
+    }
     let look = Look3::from_roles(palette.clone());
     let fills = Fills::of(sealed, planted);
     let scene =
