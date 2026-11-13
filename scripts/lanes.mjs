@@ -572,6 +572,8 @@ timed.push('tests/acceptance/204/budgets.test.ts');
 // AC7's blind redraft runs the same way. The first draft's export file is kept by hand: its film names its own layers,
 // which `deep show` from your shell refuses before any export (tests/acceptance/204-redraft-ac7/DISPUTE.md).
 alone.push('tests/acceptance/204-redraft-ac7/');
+// #204's gap test builds deep-show and reads the registries around a pack's install.
+alone.push('tests/acceptance/204-gaps/');
 byHand.push('tests/acceptance/204/export.test.ts');
 
 export const checks = [
