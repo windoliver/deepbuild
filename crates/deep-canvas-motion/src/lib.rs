@@ -29,7 +29,7 @@ pub mod lengths;
 pub mod modifier;
 pub mod module;
 pub mod morph;
-mod occurrence;
+pub mod occurrence;
 mod pace;
 pub mod program;
 pub mod quat;

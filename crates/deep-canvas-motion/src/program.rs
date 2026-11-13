@@ -3397,7 +3397,7 @@ impl Program {
     /// `occurrences` (#544), after `reader`'s kinds and payload `fields` are checked against the
     /// item's `emits`: a name it doesn't declare is refused `occurrence.undeclared`, from the
     /// document alone, so before any step runs.
-    fn occurrences(
+    pub(crate) fn occurrences(
         &self,
         filter: &crate::occurrence::Filter,
         doc: &Map<String, Value>,
