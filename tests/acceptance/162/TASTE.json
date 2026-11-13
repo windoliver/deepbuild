@@ -1,0 +1,13 @@
+{
+  "issue": 162,
+  "criterion": "#162.43d9564a",
+  "verdict": "looks_right",
+  "who": "Claude, on the owner's standing delegation of taste calls; the owner can overrule it on the PR",
+  "when": "2026-11-13T08:43:23Z",
+  "screenshots": {
+    "title-from-lottie.png": "b2251b321b6f94cd3887012190f1b2144db6579ad209d425d35f1f342ea1b662",
+    "title-own-render.png": "464df3be7f6019f507be2a53536f5f7f7a28416d9fd679747562d32d8ea9f0b4",
+    "title-motion.apng": "53ce3386e9851773565863a500ba759df758986bb35084a55f9ac29f2e2cb140"
+  },
+  "note": "Checked by pixel first: outside the tiles the frame played from the Lottie file and the document's own render differ by 1.1 luma RMS (44 of 175,400 pixels past 32 levels, all on edges), and the mask cuts both at x = 160. The tiles turn 0 to 45 degrees in the Lottie file, as the document keys them, but not in the own render, because the 2D render doesn't draw an item's turn yet (a renderer gap the fidelity check leaves out and the PR lists as a follow-up). The motion plays the trim drawing the curve, the mask halving at 0.9375 s and the tiles turning."
+}
