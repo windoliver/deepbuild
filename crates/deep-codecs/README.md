@@ -9,21 +9,26 @@ A binary that links the crate starts each helper as a copy of itself with the ar
 ## Where new code goes
 
 - `src/lib.rs`: caps, the planted wrong programs, probing, decoding, proxies, the encode job and its MP4 muxer, `serve` and `Helper`.
-- `src/mp4.rs`: the ISO base media file format: sample tables, edit lists read as FFmpeg reads them, sample entries, color boxes, data references.
-- `src/color.rs`: the H.264 SPS's video signal, the written rule for untagged color, and RGB conversion by the probe's matrix and range.
+- `src/pipe.rs`: the helpers' framing, a JSON line then the raw bytes it names, and `Helper::feed`, `hear` and `take` (#157).
+- `src/stream.rs`: the decode worker's `stream` op: a delivery's boxes, edits, times and sound, then each frame's luma or BGRA in presentation order (#157).
+- `src/mp4.rs`: the ISO base media file format: sample tables, edit lists read as FFmpeg reads them, sample entries, color boxes, data references, and a file's top-level boxes read without its samples.
+- `src/color.rs`: the H.264 SPS's video signal, the written rule for untagged color, RGB conversion by the probe's matrix and range, the export's fixed-point NV12 and the colour probe pattern.
 - `src/wav.rs`: our own WAVE reader.
 - `src/audio.rs`: our own audio decoders (#503): a file's container by its first bytes, one track of packets, each
   listed codec's decoder (PCM, MP3, AAC-LC and HE-AAC, ALAC, FLAC, Opus, Vorbis), the encoder's delay and padding
   trimmed as FFmpeg trims them, integer samples to f32 as sample ÷ 2^(depth − 1), and the `unsupported_codec`
-  refusal naming any other codec as ffprobe names it. MP4 audio is read by `mp4.rs` and decoded here.
+  refusal naming any other codec as ffprobe names it. MP4 audio is read by `mp4.rs` and decoded here, whole or
+  streamed.
 - `src/flac.rs`: our own FLAC decoder, every FLAC file's: STREAMINFO and frames, samples in i64 so a 32-bit
-  stream's 33-bit side channel is exact.
+  stream's 33-bit side channel is exact, and a score stem's loop points from its Vorbis comment (#154).
 - `src/chunks.rs`: AIFF, AIFF-C and CAF by their chunks; ASF only to name its codec. `src/ogg.rs`: Ogg's pages, a
   chain's links and the granules Vorbis and Opus end by. `src/mkv.rs`: Matroska and WebM's first audio track and its
   DiscardPadding.
-- `src/mov.rs`: the header-first MP4 and QuickTime writer for exports: video, float PCM or AAC, timecode (#501).
-- `src/export.rs`: the encode tool's export jobs: `export.part`, `export.join`, `export.png` (#501).
-- `src/apple.rs`: the macOS backend: VideoToolbox decode and encode, AudioToolbox AAC encode, the sandbox.
+- `src/mov.rs`: the header-first MP4 and QuickTime writer for exports: video, float PCM or AAC, timecode (#501); `head` before streamed samples, `moov` after a part's (#157).
+- `src/export.rs`: the encode tool's export jobs: `export.part`, `export.join`, `export.png` (#501), their frames from files or over the pipe (#157).
+- `src/apple.rs`: the macOS backend: VideoToolbox decode, AudioToolbox AAC encode, the sandbox.
+- `src/apple/encoder.rs`: the streaming VideoToolbox encoder (H.264, HEVC, ProRes 4444) fed a frame at a time from its own pool (#157).
+- `src/apple/decoder.rs`: the stream op's asynchronous VideoToolbox decoder, pictures in the decoder's own format (#157).
 - Another platform's backend goes in its own file beside `apple.rs`, chosen by `cfg`.
 - Tests: the acceptance tests in tests/acceptance/498/decode drive the crate through `deep-show run`.
 
@@ -45,6 +50,7 @@ format.
   its decode refuses that stream alone; a file with no video is refused whole. Opus of more than two channels
   (channel mapping family 1) isn't decoded. CAF's ALAC keeps the packet table's valid frames, where FFmpeg also
   drops the last packet's remainder a second time. MP3 inside a WAVE file is refused naming `mp3`. An MP3 file's
-  frames end at the first bytes that aren't one (FFmpeg resyncs past them). Vorbis inverse coupling follows the
-  specification and FFmpeg's C code; FFmpeg's arm64 (NEON) kernel reads a magnitude of +0.0 as positive, which an
-  FFmpeg-encoded stereo stream reaches, so FFmpeg's decode of one on an Apple silicon Mac differs from ours.
+  frames end at the first bytes that aren't one (FFmpeg resyncs past them). Vorbis inverse coupling reads a magnitude
+  of +0.0 as positive, as FFmpeg's arm64 (NEON) kernel does and the specification's `M > 0` doesn't; an
+  FFmpeg-encoded stereo stream reaches it (`vendor/symphonia-codec-vorbis`).
+- H.264 and HEVC sessions run in real time: otherwise the hardware encoder's bytes change with the load other sessions put on it, and equal frames would not give equal parts.

@@ -66,14 +66,26 @@ impl State {
                 .as_array()?
                 .iter()
                 .map(|l| {
-                    let buf = l.get("buf")?.as_array()?.iter().map(|x| x.as_f64().map(|f| f as f32)).collect::<Option<Vec<f32>>>()?;
+                    let buf = l
+                        .get("buf")?
+                        .as_array()?
+                        .iter()
+                        .map(|x| x.as_f64().map(|f| f as f32))
+                        .collect::<Option<Vec<f32>>>()?;
                     let at = l.get("at")?.as_u64()? as usize;
                     (at < buf.len()).then_some(())?;
-                    Some(Line { buf, at, store: l.get("store")?.as_f64()? as f32 })
+                    Some(Line {
+                        buf,
+                        at,
+                        store: l.get("store")?.as_f64()? as f32,
+                    })
                 })
                 .collect()
         };
-        Some(State { combs: lines("combs")?, allpasses: lines("allpasses")? })
+        Some(State {
+            combs: lines("combs")?,
+            allpasses: lines("allpasses")?,
+        })
     }
 
     /// The planted restore: positions and stores, but silent delay lines.
@@ -126,7 +138,13 @@ impl Reverb {
     /// How long the reverb keeps sounding after its input stops, to −120 dBFS, in seconds: the
     /// combs fall 60 dB per `decay`, and each allpass halves per pass (20 passes are −120 dB).
     pub fn tail_seconds(&self) -> f64 {
-        let longest = self.state.combs.iter().map(|l| l.buf.len()).max().unwrap_or(0);
+        let longest = self
+            .state
+            .combs
+            .iter()
+            .map(|l| l.buf.len())
+            .max()
+            .unwrap_or(0);
         let passes: usize = self.state.allpasses.iter().map(|l| l.buf.len()).sum();
         2.0 * self.spec.decay + (longest + 20 * passes) as f64 / self.rate
     }

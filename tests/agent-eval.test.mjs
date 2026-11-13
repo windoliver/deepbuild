@@ -7,10 +7,11 @@ import { score } from '../scripts/agent-eval.mjs';
 // tests/acceptance/26 with the installed skill, and the same run with the skill pinned to another version.
 const skill = readFileSync(new URL('../skills/deepbuild/SKILL.md', import.meta.url), 'utf8');
 const { version } = JSON.parse(readFileSync(new URL('../packages/hub/package.json', import.meta.url), 'utf8'));
+const tools = Object.keys(JSON.parse(readFileSync(new URL('../packages/hub/tools.json', import.meta.url), 'utf8')));
 const recorded = () => {
   const run = JSON.parse(readFileSync(new URL('./acceptance/26/fixtures/eval/run.json', import.meta.url), 'utf8'));
   run.skill.text = skill;
-  run.tools = ['deep_ask', 'deep_wait', 'deep_open_item', 'deep_status', 'deep_search', 'deep_claim', 'deep_evidence', 'deep_run'].map((name) => ({ name }));
+  run.tools = tools.map((name) => ({ name }));
   return run;
 };
 

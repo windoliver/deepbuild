@@ -1114,7 +1114,14 @@ pub fn blur(axis: &str) -> Value {
     let mut g = G::new();
     let uv = g.s("screen_uv@1", json!({}));
     let texel = texel(&mut g, "src");
-    let along = g.ty(if axis == "x" { json!([1, 0]) } else { json!([0, 1]) }, "vec2<f32>");
+    let along = g.ty(
+        if axis == "x" {
+            json!([1, 0])
+        } else {
+            json!([0, 1])
+        },
+        "vec2<f32>",
+    );
     let px = g.mul(&texel, &along);
     let reach = g.mul(&px, "radius");
     let mut b = G::named("b");
@@ -1168,7 +1175,14 @@ pub fn frost(axis: &str, taps: u32) -> Value {
     let mut g = G::new();
     let pix = g.s("pixel@1", json!({}));
     let at = g.convert(&pix, "vec2<i32>");
-    let along = g.ty(if axis == "x" { json!([1, 0]) } else { json!([0, 1]) }, "vec2<i32>");
+    let along = g.ty(
+        if axis == "x" {
+            json!([1, 0])
+        } else {
+            json!([0, 1])
+        },
+        "vec2<i32>",
+    );
     let mut b = G::named("b");
     let i = b.convert("i", "f32");
     let k = b.add(&i, "first");

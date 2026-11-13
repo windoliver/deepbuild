@@ -60,9 +60,19 @@ fn close_names<'n>(wrong: &str, candidates: impl Iterator<Item = &'n str>) -> Ve
 /// declared names close to it: a kind outside `declared` (each kind's `{fields: {name: type}}`,
 /// as a logic item's `emits` gives them), or a field none of the kinds it reads declares. A row's
 /// own columns (step, t, kind, a, b) are always declared (#544).
-pub fn undeclared(declared: &Map<String, Value>, kinds: Option<&[String]>, fields: &[&str]) -> Option<(String, Vec<String>)> {
+pub fn undeclared(
+    declared: &Map<String, Value>,
+    kinds: Option<&[String]>,
+    fields: &[&str],
+) -> Option<(String, Vec<String>)> {
     let close = |name: &str, candidates: Vec<&str>| {
-        Some((name.to_string(), close_names(name, candidates.into_iter()).into_iter().map(str::to_string).collect()))
+        Some((
+            name.to_string(),
+            close_names(name, candidates.into_iter())
+                .into_iter()
+                .map(str::to_string)
+                .collect(),
+        ))
     };
     let kinds: Vec<&str> = match kinds {
         Some(kinds) => {
@@ -78,13 +88,15 @@ pub fn undeclared(declared: &Map<String, Value>, kinds: Option<&[String]>, field
         .filter_map(|k| declared.get(*k)?.get("fields")?.as_object())
         .flat_map(|f| f.keys().map(String::as_str))
         .collect();
-    let f = fields.iter().find(|f| !names.contains(f) && !["step", "t", "kind", "a", "b"].contains(f))?;
+    let f = fields
+        .iter()
+        .find(|f| !names.contains(f) && !["step", "t", "kind", "a", "b"].contains(f))?;
     close(f, names)
 }
 
 /// The close names for a kind text no registry in this build holds: every kind at its build
 /// major, by spelling.
-pub(super) fn kind_names(text: &str, kinds: &Registry, fault: Option<Fault>) -> Vec<Value> {
+pub fn kind_names(text: &str, kinds: &Registry, fault: Option<Fault>) -> Vec<Value> {
     if fault == Some(Fault::NoCloseNames) {
         return Vec::new();
     }
@@ -102,12 +114,7 @@ pub(super) fn kind_names(text: &str, kinds: &Registry, fault: Option<Fault>) -> 
 
 /// Every other kind whose build major defines a field of exactly `name`, as `family.name@major`,
 /// by name (#1970).
-pub(super) fn owners(
-    name: &str,
-    entry: &Entry,
-    kinds: &Registry,
-    fault: Option<Fault>,
-) -> Vec<String> {
+pub fn owners(name: &str, entry: &Entry, kinds: &Registry, fault: Option<Fault>) -> Vec<String> {
     if matches!(fault, Some(Fault::NoCloseNames | Fault::CloseBySpelling)) {
         return Vec::new();
     }
@@ -125,7 +132,7 @@ pub(super) fn owners(
 /// The close names for a field `name` the kind's `version` doesn't define: the name a rename
 /// record up to that version gives it, then each kind in `owners` that defines it, then its
 /// params by spelling.
-pub(super) fn field_names(
+pub fn field_names(
     name: &str,
     entry: &Entry,
     version: &Version,

@@ -159,9 +159,33 @@ pub struct Read {
     part: usize,
     range: [f64; 2],
     wraps: bool,
+    /// #537: it reads a vector's every part, each narrowed by the one rule.
+    whole: bool,
 }
 
 impl Read {
+    /// #537: how a 3D reader takes a source of type `ty` whole: a vector's every part, each
+    /// narrowed as `as` (f64 or f32), its row hiding when any part can't narrow; a scalar as
+    /// [`Read::of`] reads it.
+    pub fn whole(column: &Value, ty: &str) -> Option<Read> {
+        if width(ty)? == 1 {
+            return Read::of(column, ty);
+        }
+        if column.get("part").is_some_and(|p| !p.is_null()) {
+            return None;
+        }
+        let as_ = column.get("as").and_then(Value::as_str).unwrap_or("f64");
+        narrow(0.0, "f64", as_)?;
+        Some(Read {
+            from: "f64",
+            as_: as_.to_string(),
+            part: 0,
+            range: [f64::NEG_INFINITY, f64::INFINITY],
+            wraps: false,
+            whole: true,
+        })
+    }
+
     /// How `column` reads a source of type `ty`, or `None` where its `as` can't narrow from it:
     /// a vector without `part`, a scalar with one, or an `as` the type doesn't take.
     pub fn of(column: &Value, ty: &str) -> Option<Read> {
@@ -200,6 +224,7 @@ impl Read {
             part: part.unwrap_or(0),
             range: [bound(0, f64::NEG_INFINITY), bound(1, f64::INFINITY)],
             wraps: false,
+            whole: false,
         })
     }
 
@@ -232,6 +257,36 @@ impl Read {
     /// The number of an element this column reads: its part of a vector, or the scalar.
     fn scalar(&self, element: &[f64]) -> f64 {
         element.get(self.part).copied().unwrap_or(f64::NAN)
+    }
+
+    /// Writes an element's read numbers into `out` (its one number, or a whole vector's), zeros
+    /// where its row hides; false where it hides.
+    fn put(&self, element: &[f64], out: &mut [f64]) -> bool {
+        let kept = if self.whole {
+            (0..out.len()).all(|i| {
+                let v = element.get(i).copied().unwrap_or(f64::NAN);
+                narrow(v, self.from, &self.as_)
+                    .flatten()
+                    .map(|x| out[i] = x)
+                    .is_some()
+            })
+        } else {
+            self.row(element).map(|x| out[0] = x).is_some()
+        };
+        if !kept {
+            out.fill(0.0);
+        }
+        kept
+    }
+
+    /// The number that hides an element's row, `None` where the row shows.
+    fn hiding(&self, element: &[f64]) -> Option<f64> {
+        if self.whole {
+            let hides = |v: &f64| narrow(*v, self.from, &self.as_).flatten().is_none();
+            element.iter().copied().find(hides)
+        } else {
+            self.row(element).is_none().then(|| self.scalar(element))
+        }
     }
 }
 
@@ -275,11 +330,14 @@ pub struct Mapped {
     pub step: i64,
     raw: Vec<f64>,
     before: Vec<f64>,
+    /// Each row's `per` numbers, end to end.
     pub values: Vec<f64>,
     pub hidden: Vec<bool>,
     /// For each step this frame applied, the rows it mapped for that step, those the step handed
     /// over: from nothing, one entry of every row. A proof reading, not part of the frame.
     pub remaps: Vec<(i64, usize)>,
+    /// #537: the numbers a row holds: one, or a vector's width when read whole.
+    pub per: usize,
 }
 
 impl Canonical for Mapped {
@@ -303,16 +361,23 @@ fn rows_of(ranges: &Value, into: &mut BTreeSet<usize>) {
 /// without it, or from a later step (a seek back), every row does. `wraps`: the planted
 /// narrowing.
 pub fn map(column: &Value, t: i64, last: Option<&Mapped>, wraps: bool) -> Option<Mapped> {
-    let ty = column["type"].as_str()?;
-    let mut read = Read::of(column, ty)?;
+    let mut read = Read::of(column, column["type"].as_str()?)?;
     if wraps {
         read = read.wrapping();
     }
+    mapped(&read, column, t, last)
+}
+
+/// #537: [`map`] for a reader that holds its baked `array` apart from how it reads it (`read`),
+/// as scene3d's readers do: an instancer's columns, a line's points and a plate's overlays.
+pub fn mapped(read: &Read, array: &Value, t: i64, last: Option<&Mapped>) -> Option<Mapped> {
+    let ty = array["type"].as_str()?;
     let w = width(ty)?;
-    let n = column["count"].as_u64()? as usize;
-    let every = column["every"].as_i64()?.max(1);
-    let linear = column["linear"].as_bool() == Some(true);
-    let steps = column["steps"].as_array()?;
+    let per = if read.whole { w } else { 1 };
+    let n = array["count"].as_u64()? as usize;
+    let every = array["every"].as_i64()?.max(1);
+    let linear = array["linear"].as_bool() == Some(true);
+    let steps = array["steps"].as_array()?;
     let k = t.div_euclid(every);
     let at = |step: i64| steps.iter().find(|s| s["step"].as_i64() == Some(step));
     let mut rows = BTreeSet::new();
@@ -336,9 +401,10 @@ pub fn map(column: &Value, t: i64, last: Option<&Mapped>, wraps: bool) -> Option
                 step: k,
                 raw: zero.clone(),
                 before: zero,
-                values: vec![0.0; n],
+                values: vec![0.0; n * per],
                 hidden: vec![false; n],
                 remaps: vec![(k, n)],
+                per,
             };
             (m, None)
         }
@@ -391,9 +457,7 @@ pub fn map(column: &Value, t: i64, last: Option<&Mapped>, wraps: bool) -> Option
         } else {
             m.raw[e].to_vec()
         };
-        let read = read.row(&element);
-        m.values[row] = read.unwrap_or(0.0);
-        m.hidden[row] = read.is_none();
+        m.hidden[row] = !read.put(&element, &mut m.values[row * per..(row + 1) * per]);
     }
     Some(m)
 }
@@ -417,18 +481,27 @@ pub fn data_of(m: &Mapped) -> String {
 
 /// Every step at which a row of `column` (baked) begins to hide, by the rule alone, with its
 /// value: `(step, row, value)`.
-fn excursions(column: &Value) -> Vec<(i64, usize, f64)> {
-    let (Some(ty), Some(n)) = (column["type"].as_str(), column["count"].as_u64()) else {
-        return Vec::new();
-    };
-    let (Some(read), Some(w)) = (Read::of(column, ty), width(ty)) else {
+fn excursions_of(column: &Value) -> Vec<(i64, usize, f64)> {
+    match Read::of(column, column["type"].as_str().unwrap_or_default()) {
+        Some(read) => excursions(&read, column),
+        None => Vec::new(),
+    }
+}
+
+/// #537: every step at which a row of `array` (baked), as `read` takes it, begins to hide, by
+/// the rule alone, with the value that hides it: `(step, row, value)`.
+pub fn excursions(read: &Read, array: &Value) -> Vec<(i64, usize, f64)> {
+    let (Some(n), Some(w)) = (
+        array["count"].as_u64(),
+        array["type"].as_str().and_then(width),
+    ) else {
         return Vec::new();
     };
     let n = n as usize;
     let mut raw = vec![0.0; n * w];
     let mut hidden = vec![false; n];
     let mut out = Vec::new();
-    let steps = column["steps"].as_array().cloned().unwrap_or_default();
+    let steps = array["steps"].as_array().cloned().unwrap_or_default();
     // Every row is read at step 0, whether or not step 0 wrote it; after it, the rows a step wrote.
     let mut checks = Vec::new();
     if steps.first().and_then(|s| s["step"].as_i64()) != Some(0) {
@@ -457,12 +530,11 @@ fn excursions(column: &Value) -> Vec<(i64, usize, f64)> {
             touched.into_iter().collect()
         };
         for row in rows {
-            let element = &raw[row * w..(row + 1) * w];
-            let hides = read.row(element).is_none();
-            if hides && !hidden[row] {
-                out.push((step, row, read.scalar(element)));
+            let hiding = read.hiding(&raw[row * w..(row + 1) * w]);
+            if let Some(value) = hiding.filter(|_| !hidden[row]) {
+                out.push((step, row, value));
             }
-            hidden[row] = hides;
+            hidden[row] = hiding.is_some();
         }
     }
     out
@@ -581,7 +653,7 @@ pub fn raised_at(doc: &Value, t: i64) -> Vec<Issue> {
             .filter(|(_, c, _)| c.get("steps").is_some());
         for (name, column, path) in readers {
             let k = t.div_euclid(column["every"].as_i64().unwrap_or(1).max(1));
-            for (step, row, value) in excursions(column).into_iter().filter(|e| e.0 == k) {
+            for (step, row, value) in excursions_of(column).into_iter().filter(|e| e.0 == k) {
                 out.push(out_of_range(id, name, &path, row, value, step));
             }
         }
@@ -589,8 +661,15 @@ pub fn raised_at(doc: &Value, t: i64) -> Vec<Issue> {
     out
 }
 
-/// `column.out_of_range`, naming the set as its reader.
-fn out_of_range(id: &str, column: &str, path: &str, row: usize, value: f64, step: i64) -> Issue {
+/// `column.out_of_range`, naming the set (or, #537, the instancer or line) as its reader.
+pub fn out_of_range(
+    id: &str,
+    column: &str,
+    path: &str,
+    row: usize,
+    value: f64,
+    step: i64,
+) -> Issue {
     Issue {
         severity: "warning",
         ..Issue::error(
@@ -601,6 +680,40 @@ fn out_of_range(id: &str, column: &str, path: &str, row: usize, value: f64, step
             "a row's value is out of its reader's range; the row hides while it lasts",
         )
     }
+}
+
+/// #537: the baked array `form` names (an `array` reader's, at `path`), resolved through
+/// `worlds` and `entries` (the build's `column.source@1`): `module_missing` where no module in
+/// the build fills it, `ref_unresolved` where nothing in the document writes it.
+pub fn source<'a>(
+    (arrays, worlds): (&'a Value, &Value),
+    entries: &[SealedEntry],
+    id: &str,
+    path: &str,
+    form: &str,
+) -> Result<&'a Value, Box<Issue>> {
+    let world = world_source(worlds, form, entries);
+    if world == Some(None) {
+        return Err(Box::new(physics_missing(id, path.to_string(), form)));
+    }
+    if world.is_none() && resolve(form, entries, true).is_none() {
+        return Err(Box::new(Issue::error(
+            "module_missing",
+            id,
+            path.to_string(),
+            json!({"module": ARRAY_MODULE, "array": form}),
+            &format!("this column reads an array the {ARRAY_MODULE} module fills, which this build lacks"),
+        )));
+    }
+    arrays.get(form).ok_or_else(|| {
+        Box::new(Issue::error(
+            "ref_unresolved",
+            id,
+            path.to_string(),
+            json!(form),
+            "no logic item or world in the document writes this array",
+        ))
+    })
 }
 
 /// A set's columns, and its `alive`, that read an array: each checked, baked from `arrays` (the
@@ -637,30 +750,18 @@ fn arrays_of(
     let mut counts: Vec<(String, String, u64)> = Vec::new();
     for (name, path, column) in readers {
         let form = column["array"].as_str().unwrap_or_default().to_string();
-        let world = world_source(worlds, &form, entries);
-        if world == Some(None) {
-            issues.push(physics_missing(id, format!("{path}/array"), &form));
-            continue;
-        }
-        if world.is_none() && resolve(&form, entries, true).is_none() {
-            issues.push(Issue::error(
-                "module_missing",
-                id,
-                format!("{path}/array"),
-                json!({"module": ARRAY_MODULE, "array": form}),
-                &format!("this column reads an array the {ARRAY_MODULE} module fills, which this build lacks"),
-            ));
-            continue;
-        }
-        let Some(baked) = arrays.get(&form) else {
-            issues.push(Issue::error(
-                "ref_unresolved",
-                id,
-                format!("{path}/array"),
-                json!(form),
-                "no logic item or world in the document writes this array",
-            ));
-            continue;
+        let baked = match source(
+            (arrays, worlds),
+            entries,
+            id,
+            &format!("{path}/array"),
+            &form,
+        ) {
+            Ok(baked) => baked,
+            Err(issue) => {
+                issues.push(*issue);
+                continue;
+            }
         };
         let ty = baked["type"].as_str().unwrap_or_default();
         if Read::of(column, ty).is_none() {
@@ -679,7 +780,7 @@ fn arrays_of(
             }
         }
         let alive = name == "alive";
-        for (step, row, value) in excursions(column) {
+        for (step, row, value) in excursions_of(column) {
             issues.push(out_of_range(id, &name, &path, row, value, step));
         }
         if let (Some(m), Some(c)) = (map(column, t, None, false), column.as_object_mut()) {
@@ -784,5 +885,26 @@ mod tests {
         let mid = map(&column, 15, None, false).expect("a map");
         let played = map(&column, 20, Some(&mid), false).expect("a map");
         assert_eq!(played.values[0], 8.0);
+    }
+
+    /// #537: a vec3 array read whole as f32 narrows every part; a row whose y is NaN hides, its
+    /// excursion names the NaN, and the other row keeps all three parts. A mark set's column still
+    /// can't read a vector without `part`.
+    #[test]
+    fn a_whole_read_hides_a_row_when_any_part_cannot_narrow() {
+        let array = json!({"type": "vec3", "count": 2, "every": 10, "linear": false,
+            "steps": [{"step": 0, "changed": [[0, 2]], "values": [[0, [[1.5, 2.1, 3.0], [4.0, null, 6.0]]]]}]});
+        let column = json!({"array": "brain.ends", "as": "f32"});
+        assert!(Read::of(&column, "vec3").is_none());
+        let read = Read::whole(&column, "vec3").expect("a whole read");
+        let m = mapped(&read, &array, 0, None).expect("a map");
+        let f = |x: f64| f64::from(x as f32);
+        assert_eq!(m.per, 3);
+        assert_eq!(m.values, vec![1.5, f(2.1), 3.0, 0.0, 0.0, 0.0]);
+        assert_eq!(m.hidden, vec![false, true]);
+        let raised = excursions(&read, &array);
+        assert_eq!(raised.len(), 1);
+        assert_eq!((raised[0].0, raised[0].1), (0, 1));
+        assert!(raised[0].2.is_nan());
     }
 }

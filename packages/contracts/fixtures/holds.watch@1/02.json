@@ -1,0 +1,13 @@
+{
+  "v": 1,
+  "id": "01K9QZ6V2T8M4R1N5P7W3X9Z06",
+  "kind": "holds.watch",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013446000,
+  "data": {
+    "cause": "off",
+    "on": true
+  }
+}

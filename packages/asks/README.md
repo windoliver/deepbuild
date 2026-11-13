@@ -6,7 +6,11 @@ The asks core (#318): an ask is raised only from a place in ask.sources@1, holds
 
 ## Where new code goes
 
-- `src/index.ts`: the core. Its state is a function of the record: each method first reads what the log gained, then appends what that state calls for. New rules follow the same read-then-append order.
+- `src/index.ts`: the public entry, record fold and core wiring. Each method first reads what the log gained, then appends what that state calls for; it keeps the exclusive boundary around both.
+- `src/resolver-gate.ts`: resolver registration, refusals and answer gating. Its options are the plant, decision lookup, coverage check, recorded application and delivery. Collection runs outside the core's lock; acceptance runs after a fresh read under it.
+- `src/showing.ts`: showing, folding, shared cards and batch rules, with the record-derived batch indexes. Its options are ask lookup, open asks, thread's open asks, clock, schedule and batch append. Appending each identity's batch precedes the next log read, as before.
+- `src/decision-keys.ts`: structured keys, scopes, bounds, suggestions and target-origin exclusions. Its options are session lookup, decisions by key and near key, and the plant.
+- `src/model.ts`: shared data and public types, reexported by `index.ts`; no seam imports the entry, even for types.
 - `sources.json`: the ask.sources@1 table. A new place that raises asks gets a row here, with its kind and a fixture, or it can't raise one.
 - Tests: `test/` for rules beyond the acceptance suites in `tests/acceptance/318/` and `tests/acceptance/319/`.
 

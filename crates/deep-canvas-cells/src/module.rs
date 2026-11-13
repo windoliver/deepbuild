@@ -8,10 +8,14 @@
 use deep_canvas::kinds::{Entry, Param, ParamType, Version};
 use deep_canvas::registry::{Dependency, Manifest, Module, Raised, Range, Registrar, Semver};
 use deep_canvas::schedule::{OpError, Val, View};
+
+use crate::palette::resolve_in;
+use crate::recording;
 use serde_json::{json, Value};
 
 /// The grid's drawing: each row of the frame as one line of text in the mono face, its cells'
-/// foreground color by run, and each cell's background where it isn't the grid's own.
+/// foreground color by run, and each cell's background where it isn't the grid's own; and every
+/// cell as drawn, with the cursor, which a comparison reads (#1967).
 #[derive(Clone, Debug, PartialEq)]
 pub struct Grid {
     /// The grid's top left and cell size, in u.
@@ -20,17 +24,21 @@ pub struct Grid {
     pub font_size: f64,
     pub bg: [u8; 3],
     pub rows: Vec<Row>,
+    pub cols: usize,
+    /// Every cell, row-major, as drawn.
+    pub cells: Vec<Drawn>,
+    pub cursor: Cursor,
+    /// For a grid that plays a recording, the source time it shows; never part of its value.
+    pub source: Option<i64>,
 }
 
 impl deep_canvas::schedule::Canonical for Grid {
     fn encode(&self, out: &mut Vec<u8>) {
         deep_canvas::schedule::Canonical::encode(
             &(
-                &self.origin,
-                &self.cell,
-                &self.font_size,
-                &self.bg,
+                (&self.origin, &self.cell, &self.font_size, &self.bg),
                 &self.rows,
+                (&self.cols, &self.cells, &self.cursor),
             ),
             out,
         );
@@ -48,6 +56,49 @@ pub struct Row {
 impl deep_canvas::schedule::Canonical for Row {
     fn encode(&self, out: &mut Vec<u8>) {
         deep_canvas::schedule::Canonical::encode(&(&self.text, &self.runs, &self.fills), out);
+    }
+}
+
+/// One cell as drawn: its grapheme (`""` for a blank cell), its colors after the palette, its
+/// attribute bits in [`crate::emulator::ATTRS`] order and its link ID, 0 for none.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Drawn {
+    pub g: String,
+    pub fg: [u8; 3],
+    pub bg: [u8; 3],
+    pub attrs: u16,
+    pub link: u32,
+}
+
+impl deep_canvas::schedule::Canonical for Drawn {
+    fn encode(&self, out: &mut Vec<u8>) {
+        deep_canvas::schedule::Canonical::encode(
+            &((&self.g, &self.fg, &self.bg), (&self.attrs, &self.link)),
+            out,
+        );
+    }
+}
+
+/// The cursor as the frame gives it (Cell grid: `cursor`).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Cursor {
+    pub x: u64,
+    pub y: u64,
+    pub shape: String,
+    pub visible: bool,
+    pub blink: bool,
+}
+
+impl deep_canvas::schedule::Canonical for Cursor {
+    fn encode(&self, out: &mut Vec<u8>) {
+        deep_canvas::schedule::Canonical::encode(
+            &(
+                (&self.x, &self.y),
+                &self.shape,
+                (&self.visible, &self.blink),
+            ),
+            out,
+        );
     }
 }
 
@@ -72,7 +123,10 @@ fn manifest() -> Manifest {
         feature: "cells".into(),
         license: "Apache-2.0".into(),
         implements: "cells@1".into(),
-        implementation: deep_canvas::registry::Implementation::reference("cells", deep_canvas::registry::Semver::parse("1.0.0").expect("a version")),
+        implementation: deep_canvas::registry::Implementation::reference(
+            "cells",
+            deep_canvas::registry::Semver::parse("1.0.0").expect("a version"),
+        ),
     }
 }
 
@@ -117,11 +171,20 @@ fn kind() -> Entry {
 
 fn register(r: &mut Registrar) {
     // The kind keeps the module's name, as the design writes it.
-    r.kind(kind(), &[], "");
+    // #1967: a grid that plays a recording names it in `play.asset`, which the decode worker
+    // probes and converts when the document is checked.
+    r.kind(kind(), &[], "").probes("play/asset");
     r.array("cells.grid", "grid", "item", "geometry", "items");
-    r.operator("grid", "items", &["self", "look"], &["cells.grid"])
-        .applies(is_grid)
-        .run(grid);
+    // #1967: a grid that plays a recording reads the time and the recording as the decode
+    // worker converted it, which the host holds outside the document.
+    r.operator(
+        "grid",
+        "items",
+        &["self", "look", "t", "reading"],
+        &["cells.grid"],
+    )
+    .applies(is_grid)
+    .run(grid);
     r.rule("cells", fields_rule);
     r.fixture("grid", board(), None).sidecar(json!({
         "checks": [{"kind": "document.validate"}],
@@ -222,15 +285,6 @@ fn fields_rule(_: &Value, id: &str, item: &Value) -> Vec<Raised> {
     out
 }
 
-fn hex(v: &Value) -> Option<[u8; 3]> {
-    let s = v.as_str()?.strip_prefix('#')?;
-    if s.len() != 6 {
-        return None;
-    }
-    let b = |i: usize| u8::from_str_radix(s.get(i..i + 2)?, 16).ok();
-    Some([b(0)?, b(2)?, b(4)?])
-}
-
 /// The look's color of `role`, as the session's tokens give it.
 fn role(v: &mut View<'_>, role: &str) -> Result<Option<[u8; 3]>, OpError> {
     let tokens = v.look()?;
@@ -244,7 +298,62 @@ fn role(v: &mut View<'_>, role: &str) -> Result<Option<[u8; 3]>, OpError> {
     }))
 }
 
-/// Each row of the frame as text, its runs of one foreground color and its fills.
+/// A time field in flicks: a whole number of flicks, or a time literal such as `"1.5s"`.
+fn time_of(v: &Value) -> Option<i64> {
+    match v {
+        Value::Null => Some(0),
+        Value::Number(n) => n.as_i64(),
+        Value::String(s)
+            if s.trim_start_matches(['0', '.'])
+                .trim_end_matches(['s', 'f'])
+                .is_empty() =>
+        {
+            Some(0)
+        }
+        t => deep_canvas::document::duration(&Value::Null, t).ok(),
+    }
+}
+
+/// The frame a grid that plays a recording shows at the session's time (Cell grid: `play`):
+/// the conversion's keyframe at or before the source time plus the patches up to it.
+fn played(v: &mut View<'_>, play: &Value, path: &str) -> Result<(Value, i64), OpError> {
+    let bad = |f: &str| OpError::new("bad_doc", format!("{path}/play/{f}"));
+    let sha = play["asset"].as_str().ok_or_else(|| bad("asset"))?;
+    let start = time_of(&play["start"]).ok_or_else(|| bad("start"))?;
+    let t = v.t()?;
+    let source = recording::source_time(play, start, t).ok_or_else(|| bad("rate"))?;
+    let planted = v.planted();
+    // A session that doesn't hold the conversion, as a document's check doesn't, draws the
+    // grid blank; the host's probe names a recording it can't read.
+    let Some(converted) = v.outside()?.readings.get(&format!("terminal:{sha}")) else {
+        return Ok((json!({"cells": []}), source));
+    };
+    let shown = match planted {
+        // Planted: every patch of the recording, whatever t.
+        Some("cells_play_every_patch") => i64::MAX,
+        // Planted: a seek (the session's first frame, or one earlier than the last) shows the
+        // keyframe at or before the source time and none of the patches after it.
+        Some("cells_seek_skips_patches") => {
+            let last = v.last("cells.grid").and_then(|g| g.as_typed::<Grid>());
+            let seek = last.and_then(|g| g.source).is_none_or(|was| source < was);
+            let keyframes = converted["keyframes"].as_array().map_or(1, Vec::len).max(1) as i64;
+            let key = source
+                .div_euclid(recording::KEYFRAME_EVERY)
+                .clamp(0, keyframes - 1);
+            match seek {
+                true => key * recording::KEYFRAME_EVERY,
+                false => source,
+            }
+        }
+        _ => source,
+    };
+    let frame = recording::frame_at(converted, shown).ok_or_else(|| bad("asset"))?;
+    Ok((frame, source))
+}
+
+/// Each row of the frame as text, its runs of one foreground color and its fills; and every
+/// cell as drawn. A cell's colors are the palette's defaults, one of its 16 ANSI roles (or the
+/// 256-color cube) by index, or a color the program sent, drawn as sent.
 fn grid(v: &mut View<'_>) -> Result<(), OpError> {
     let fields = v.item()?;
     let path = format!("items/{}/params", v.id().unwrap_or_default());
@@ -261,10 +370,30 @@ fn grid(v: &mut View<'_>) -> Result<(), OpError> {
     let bg_role = p["palette"]["bg"].as_str().unwrap_or("ground").to_string();
     let fg = role(v, &fg_role)?.ok_or_else(|| bad("palette/fg"))?;
     let bg = role(v, &bg_role)?.ok_or_else(|| bad("palette/bg"))?;
-    let cells = p["frame"]["cells"]
+    let mut ansi = crate::palette::ANSI;
+    for (i, r) in p["palette"]["ansi"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .take(16)
+        .enumerate()
+    {
+        if let Some(c) = r.as_str().map(|r| role(v, r)).transpose()?.flatten() {
+            ansi[i] = c;
+        }
+    }
+    let (frame, source) = match p.get("play").filter(|x| !x.is_null()) {
+        Some(play) => {
+            let (frame, source) = played(v, play, &path)?;
+            (std::borrow::Cow::Owned(frame), Some(source))
+        }
+        None => (std::borrow::Cow::Borrowed(&p["frame"]), None),
+    };
+    let cells = frame["cells"]
         .as_array()
         .ok_or_else(|| bad("frame/cells"))?;
     let mut out = Vec::with_capacity(rows);
+    let mut drawn = Vec::with_capacity(cols * rows);
     for r in 0..rows {
         let mut row = Row {
             text: String::new(),
@@ -272,20 +401,36 @@ fn grid(v: &mut View<'_>) -> Result<(), OpError> {
             fills: Vec::new(),
         };
         for c in 0..cols {
-            let cell = cells.get(r * cols + c);
-            let g = cell.and_then(|x| x["g"].as_str()).filter(|g| !g.is_empty());
-            row.text.push_str(g.unwrap_or(" "));
-            let f = cell.and_then(|x| hex(&x["fg"])).unwrap_or(fg);
+            let cell = cells.get(r * cols + c).map(recording::cell_of);
+            let g = cell.as_ref().map(|x| x.g.text()).unwrap_or_default();
+            row.text.push_str(if g.is_empty() { " " } else { &g });
+            let f = cell.as_ref().map_or(fg, |x| resolve_in(x.fg, fg, &ansi));
+            let b = cell.as_ref().map_or(bg, |x| resolve_in(x.bg, bg, &ansi));
             match row.runs.last_mut() {
                 Some(last) if last.2 == f && last.1 == c => last.1 = c + 1,
                 _ => row.runs.push((c, c + 1, f)),
             }
-            if let Some(b) = cell.and_then(|x| hex(&x["bg"])).filter(|b| *b != bg) {
+            if b != bg {
                 row.fills.push((c, c + 1, b));
             }
+            drawn.push(Drawn {
+                g,
+                fg: f,
+                bg: b,
+                attrs: cell.as_ref().map_or(0, |x| x.attrs),
+                link: cell.as_ref().map_or(0, |x| x.link),
+            });
         }
         out.push(row);
     }
+    let k = &frame["cursor"];
+    let cursor = Cursor {
+        x: k["x"].as_u64().unwrap_or(0),
+        y: k["y"].as_u64().unwrap_or(0),
+        shape: k["shape"].as_str().unwrap_or("block").to_string(),
+        visible: k["visible"].as_bool().unwrap_or(true),
+        blink: k["blink"].as_bool().unwrap_or(false),
+    };
     let pos = &fields["at"]["pos"];
     let grid = Grid {
         origin: [
@@ -296,6 +441,10 @@ fn grid(v: &mut View<'_>) -> Result<(), OpError> {
         font_size: p["font"]["size"].as_f64().unwrap_or(13.0),
         bg,
         rows: out,
+        cols,
+        cells: drawn,
+        cursor,
+        source,
     };
     v.write("cells.grid", Val::typed(grid))
 }

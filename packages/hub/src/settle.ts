@@ -5,7 +5,7 @@ import { runInNewContext } from 'node:vm';
 
 export function shedStartup(): void {
   setFlagsFromString('--expose-gc');
-  (runInNewContext('gc') as () => void)();
+  (runInNewContext('gc') as (options: { type: 'major'; execution: 'sync'; flavor: 'last-resort' }) => void)({ type: 'major', execution: 'sync', flavor: 'last-resort' });
 }
 
 /**

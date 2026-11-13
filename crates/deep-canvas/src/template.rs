@@ -80,13 +80,27 @@ pub fn value(doc: &Value, path: &str) -> Option<Shown> {
         let id = path.strip_prefix(section)?.strip_suffix("/value")?;
         let entry = doc.get(section.trim_end_matches('/'))?.get(id)?;
         let first = entry.get("range").and_then(|r| r.get(0));
-        Some(entry.get(field).or_else(|| entry.get("default")).or(first).and_then(Value::as_f64))
+        Some(
+            entry
+                .get(field)
+                .or_else(|| entry.get("default"))
+                .or(first)
+                .and_then(Value::as_f64),
+        )
     };
     if let Some(v) = moved("assemblies/", "value") {
-        return Some(Shown { text: number(v.unwrap_or(0.0)), source: None, number: true });
+        return Some(Shown {
+            text: number(v.unwrap_or(0.0)),
+            source: None,
+            number: true,
+        });
     }
     if let Some(v) = moved("controls/", "value") {
-        return Some(Shown { text: number(v?), source: None, number: true });
+        return Some(Shown {
+            text: number(v?),
+            source: None,
+            number: true,
+        });
     }
     let name = path.strip_prefix("data/")?;
     let constant = doc.get("data")?.get(name)?;
@@ -107,6 +121,19 @@ pub fn value(doc: &Value, path: &str) -> Option<Shown> {
         source,
         number,
     })
+}
+
+/// The value at `path` as `item`'s template reads it: in an overlay that discloses an
+/// exaggeration, a bare `factor` or `shown_at` is that exaggeration's (#1183); else [`value`].
+pub fn value_in(doc: &Value, item: &str, path: &str) -> Option<Shown> {
+    match crate::lengths::slot(doc, item, path) {
+        Some(v) => Some(Shown {
+            text: number(v),
+            source: None,
+            number: true,
+        }),
+        None => value(doc, path),
+    }
 }
 
 /// Whether `path` reads a mark set's read-only anchor, `items/<set>#period/by` or
@@ -151,11 +178,20 @@ pub fn card_lines(doc: &Value) -> Vec<(&'static str, &str)> {
 /// The template with each slot replaced by what it shows; `Err` holds the first slot that
 /// resolves to nothing, or `None` when a brace is unbalanced.
 pub fn expand(doc: &Value, template: &str) -> Result<String, Option<String>> {
+    expand_in(doc, "", template)
+}
+
+/// [`expand`] for `item`'s own template, whose slots read through [`value_in`].
+pub fn expand_in(doc: &Value, item: &str, template: &str) -> Result<String, Option<String>> {
     let mut out = String::new();
     for part in parts(template).map_err(|_| None)? {
         match part {
             Part::Words(w) => out.push_str(w),
-            Part::Slot(path) => out.push_str(&value(doc, path).ok_or(Some(path.to_string()))?.text),
+            Part::Slot(path) => out.push_str(
+                &value_in(doc, item, path)
+                    .ok_or(Some(path.to_string()))?
+                    .text,
+            ),
         }
     }
     Ok(out)

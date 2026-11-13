@@ -59,7 +59,11 @@ pub fn edges(bands: usize, scale: Scale, range: [f64; 2]) -> Vec<f64> {
 /// to the band above it.
 pub fn bins(edges: &[f64], n: usize, sample_rate: i64) -> Vec<Range<usize>> {
     let centre = |k: usize| k as f64 * sample_rate as f64 / n as f64;
-    let first_at = |f: f64, from: usize| (from..=n / 2).find(|&k| centre(k) >= f).unwrap_or(n / 2 + 1);
+    let first_at = |f: f64, from: usize| {
+        (from..=n / 2)
+            .find(|&k| centre(k) >= f)
+            .unwrap_or(n / 2 + 1)
+    };
     edges
         .windows(2)
         .map(|e| {
@@ -72,12 +76,22 @@ pub fn bins(edges: &[f64], n: usize, sample_rate: i64) -> Vec<Range<usize>> {
 /// Each band that holds no bin centre at `window`, with the shortest window of [`WINDOWS`]
 /// whose bins fill it, or `None` where none does.
 pub fn empty(edges: &[f64], window: usize, sample_rate: i64) -> Vec<(usize, Option<usize>)> {
-    let each: Vec<(usize, Vec<Range<usize>>)> = WINDOWS.iter().map(|&n| (n, bins(edges, n, sample_rate))).collect();
+    let each: Vec<(usize, Vec<Range<usize>>)> = WINDOWS
+        .iter()
+        .map(|&n| (n, bins(edges, n, sample_rate)))
+        .collect();
     bins(edges, window, sample_rate)
         .iter()
         .enumerate()
         .filter(|(_, b)| b.is_empty())
-        .map(|(band, _)| (band, each.iter().find(|(_, b)| !b[band].is_empty()).map(|(n, _)| *n)))
+        .map(|(band, _)| {
+            (
+                band,
+                each.iter()
+                    .find(|(_, b)| !b[band].is_empty())
+                    .map(|(n, _)| *n),
+            )
+        })
         .collect()
 }
 
@@ -87,13 +101,27 @@ pub fn empty(edges: &[f64], window: usize, sample_rate: i64) -> Vec<(usize, Opti
 /// holds each band's level 10 log10(Σ|X_k|² ÷ (3N²/32)) dB over its bins, floored at −120 dB, so
 /// a full-scale sine wholly inside a band reads 0 dB. `normalized: false` is the planted bake
 /// (`spectrum_skips_window_norm`) that leaves out the division by 3N²/32.
-pub fn rows(samples: &[f32], channels: usize, sample_rate: i64, rate: i64, window: usize, edges: &[f64], normalized: bool) -> Vec<Vec<f64>> {
+pub fn rows(
+    samples: &[f32],
+    channels: usize,
+    sample_rate: i64,
+    rate: i64,
+    window: usize,
+    edges: &[f64],
+    normalized: bool,
+) -> Vec<Vec<f64>> {
     let x = mono(samples, channels.max(1));
     let len = x.len() as i64;
     let count = (len * rate + sample_rate - 1) / sample_rate;
-    let hann: Vec<f64> = (0..window).map(|i| 0.5 - 0.5 * ops::cos(ops::TAU * i as f64 / window as f64)).collect();
+    let hann: Vec<f64> = (0..window)
+        .map(|i| 0.5 - 0.5 * ops::cos(ops::TAU * i as f64 / window as f64))
+        .collect();
     let bands = bins(edges, window, sample_rate);
-    let norm = if normalized { 3.0 * (window * window) as f64 / 32.0 } else { 1.0 };
+    let norm = if normalized {
+        3.0 * (window * window) as f64 / 32.0
+    } else {
+        1.0
+    };
     (0..count)
         .map(|r| {
             let end = r * sample_rate / rate;
@@ -137,24 +165,55 @@ mod tests {
     #[test]
     fn a_bin_centred_sine_reads_its_amplitude_in_its_band_and_the_floor_elsewhere() {
         let e = edges(16, Scale::Log, [40.0, 16_000.0]);
-        assert!((e[8] - 800.0).abs() < 1e-9 && (e[9] - 1163.3).abs() < 0.1, "band 8 is {} to {} Hz", e[8], e[9]);
+        assert!(
+            (e[8] - 800.0).abs() < 1e-9 && (e[9] - 1163.3).abs() < 0.1,
+            "band 8 is {} to {} Hz",
+            e[8],
+            e[9]
+        );
         let r = rows(&tone(), 1, 48_000, 60, 2048, &e, true);
         assert_eq!(r.len(), 600);
-        assert!((r[180][8] - 20.0 * ops::log10(0.5)).abs() < 0.01, "band 8 at 3 s reads {}", r[180][8]);
-        assert!(r[180].iter().enumerate().all(|(b, l)| b == 8 || *l == FLOOR), "{:?}", r[180]);
+        assert!(
+            (r[180][8] - 20.0 * ops::log10(0.5)).abs() < 0.01,
+            "band 8 at 3 s reads {}",
+            r[180][8]
+        );
+        assert!(
+            r[180]
+                .iter()
+                .enumerate()
+                .all(|(b, l)| b == 8 || *l == FLOOR),
+            "{:?}",
+            r[180]
+        );
         assert!(r[60].iter().all(|l| *l == FLOOR), "{:?}", r[60]);
         // Without the window's normalization the tone reads 10 log10(0.25 × 3 × 2048² ÷ 32).
         let raw = rows(&tone(), 1, 48_000, 60, 2048, &e, false);
-        assert!((raw[180][8] - 49.93).abs() < 0.01, "unnormalized band 8 reads {}", raw[180][8]);
+        assert!(
+            (raw[180][8] - 49.93).abs() < 0.01,
+            "unnormalized band 8 reads {}",
+            raw[180][8]
+        );
         // Evenly in hertz, band 0 (40 to 1,037.5 Hz) holds the tone.
-        let hz = rows(&tone(), 1, 48_000, 60, 2048, &edges(16, Scale::Hertz, [40.0, 16_000.0]), true);
+        let hz = rows(
+            &tone(),
+            1,
+            48_000,
+            60,
+            2048,
+            &edges(16, Scale::Hertz, [40.0, 16_000.0]),
+            true,
+        );
         assert!(hz[180][0] > -7.0 && hz[180][8] == FLOOR, "{:?}", hz[180]);
     }
 
     #[test]
     fn an_empty_band_names_the_shortest_window_that_fills_it() {
         let e = edges(32, Scale::Log, [40.0, 16_000.0]);
-        assert_eq!(empty(&e, 2048, 48_000), vec![(1, Some(8192)), (2, Some(4096))]);
+        assert_eq!(
+            empty(&e, 2048, 48_000),
+            vec![(1, Some(8192)), (2, Some(4096))]
+        );
         assert!(empty(&e, 8192, 48_000).is_empty());
         assert!(empty(&edges(16, Scale::Log, [40.0, 16_000.0]), 2048, 48_000).is_empty());
     }
@@ -163,6 +222,9 @@ mod tests {
     fn mel_edges_are_even_in_mel() {
         let e = edges(4, Scale::Mel, [0.0, 8000.0]);
         let steps: Vec<f64> = e.windows(2).map(|w| mel(w[1]) - mel(w[0])).collect();
-        assert!(steps.iter().all(|s| (s - steps[0]).abs() < 1e-9), "{steps:?}");
+        assert!(
+            steps.iter().all(|s| (s - steps[0]).abs() < 1e-9),
+            "{steps:?}"
+        );
     }
 }

@@ -375,21 +375,6 @@ fn frame(app: &mut App, v: &Named, path: &Path, k: usize) -> Result<Arc<Texels>,
     Ok(t)
 }
 
-/// The frames a call draws, in order: `frames` of them from `from`, each seek jumping once.
-pub fn frame_order(from: u64, frames: u64, seeks: &[(u64, u64)]) -> Vec<u64> {
-    let mut left: Vec<(u64, u64)> = seeks.to_vec();
-    let mut n = from;
-    let mut order = Vec::with_capacity(frames as usize);
-    for _ in 0..frames {
-        order.push(n);
-        n = match left.iter().position(|(after, _)| *after == n) {
-            Some(k) => left.remove(k).1,
-            None => n + 1,
-        };
-    }
-    order
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

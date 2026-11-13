@@ -716,11 +716,12 @@ export function predictionContradictions(
   return out.sort((a, b) => (order(a) < order(b) ? -1 : order(a) > order(b) ? 1 : 0));
 }
 
-/** The verdict record's hash, leaving out display fields: reasons, open item words, ask questions and contradictions. */
+/** The verdict record's hash, leaving out display fields: reasons, their codes, open item words, ask questions and contradictions. */
 export function verdictHash(v: Verdict): string {
   return sha256(canonical({
     ...v,
     reasons: undefined,
+    why: undefined,
     contradictions: undefined,
     checks: v.checks.map((c) => ({ ...c, reasons: undefined })),
     open_items: v.open_items.map((i) => ({ ...i, text: undefined })),

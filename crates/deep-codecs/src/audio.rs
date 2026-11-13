@@ -11,7 +11,7 @@ use symphonia::core::codecs::audio::well_known::{CODEC_ID_ALAC, CODEC_ID_MP3, CO
 use symphonia::core::codecs::audio::{AudioCodecParameters, AudioDecoderOptions};
 use symphonia::core::packet::Packet;
 
-use crate::refused;
+use crate::{mp4, refused, Planted};
 
 /// Linear PCM's layout: bits a sample, float or integer, byte order, and (8-bit) unsigned.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -472,7 +472,7 @@ fn mp3(data: &[u8]) -> Option<Track> {
 
 /// A native FLAC file: STREAMINFO, and every frame as one packet.
 fn flac(data: &[u8]) -> Option<Track> {
-    let (streaminfo, frames) = crate::flac::native(data)?;
+    let (streaminfo, _, frames) = crate::flac::native(data)?;
     let i = crate::flac::info(streaminfo)?;
     let mut t = Track::new(Codec::Flac, i.rate, i.channels, streaminfo.to_vec());
     t.packets = vec![frames.to_vec()];
@@ -607,6 +607,106 @@ pub fn decode(t: &Track) -> Result<Decoded, String> {
         }
     }
     Ok(d)
+}
+
+/// An MP4 or QuickTime track's packets, decoded by the codec its sample entry names: untrimmed,
+/// at the decoder's own rate and channel count. A whole file's decode and the stream op both read
+/// a track's sound through it.
+pub fn mp4_decode(t: &mp4::Track, packets: Vec<Vec<u8>>) -> Result<Decoded, String> {
+    let (found, config) = mp4_codec(&t.entry.fourcc, t.entry.config.as_ref());
+    let found = found.map_err(|name| format!("no decoder for {name}"))?;
+    let mut track = Track::new(
+        found,
+        t.entry.sample_rate,
+        u32::from(t.entry.channels),
+        config,
+    );
+    track.packets = packets;
+    decode(&track)
+}
+
+/// A track's samples' bytes, the first `n` of them.
+pub fn mp4_packets(t: &mp4::Track, data: &[u8], n: usize) -> Vec<Vec<u8>> {
+    (t.samples.iter().take(n))
+        .map(|s| {
+            data.get(s.offset as usize..s.offset.saturating_add(s.size as u64) as usize)
+                .unwrap_or_default()
+                .to_vec()
+        })
+        .collect()
+}
+
+/// #157: 16-bit integer PCM, little-endian (`sowt`) or big-endian (`twos`), as f32. QuickTime
+/// sizes each sample of uncompressed sound as one byte and stores a chunk's frames back to back,
+/// so a run of contiguous samples is read as that many whole frames from its first byte.
+fn int_pcm(t: &mp4::Track, data: &[u8], channels: u32, big: bool) -> Vec<f32> {
+    let frame = 2 * channels as usize;
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < t.samples.len() {
+        let (first, mut n, mut bytes) =
+            (t.samples[i].offset as usize, 1, t.samples[i].size as usize);
+        while i + n < t.samples.len()
+            && t.samples[i + n].offset
+                == t.samples[i + n - 1].offset + u64::from(t.samples[i + n - 1].size)
+        {
+            bytes += t.samples[i + n].size as usize;
+            n += 1;
+        }
+        let len = if bytes == n { n * frame } else { bytes };
+        let run = data
+            .get(first..first.saturating_add(len))
+            .unwrap_or_default();
+        out.extend(run.as_chunks::<2>().0.iter().map(|b| {
+            f32::from(if big {
+                i16::from_be_bytes(*b)
+            } else {
+                i16::from_le_bytes(*b)
+            }) / 32_768.0
+        }));
+        i += n;
+    }
+    out
+}
+
+/// A track's audio, decoded by our own decoders (#503) and trimmed by its edit list: the
+/// samples, the first kept sample's presentation time, the rate and the channel count. The
+/// encoder's priming lies before the edit's media time, so trimming to the edit removes it, as
+/// FATE's references do.
+pub fn mp4_track(
+    t: &mp4::Track,
+    timescale: u32,
+    data: &[u8],
+    planted: &Planted,
+) -> Result<(Vec<f32>, Value, u32, u32), String> {
+    let (mut samples, rate, channels) =
+        if matches!(&t.entry.fourcc, b"sowt" | b"twos") && t.entry.bits == 16 {
+            let channels = t.entry.channels.max(1) as u32;
+            let pcm = int_pcm(t, data, channels, t.entry.fourcc == *b"twos");
+            (pcm, t.entry.sample_rate.max(1), channels)
+        } else {
+            let decoded = mp4_decode(t, mp4_packets(t, data, usize::MAX))?;
+            (decoded.samples, decoded.rate.max(1), decoded.channels)
+        };
+    let first_cts = t.samples.first().map_or(0, |s| s.cts);
+    let (media, at) = t.first_edit(timescale);
+    // Ticks of the track's timescale in samples at the stream's rate.
+    let to_samples = |ticks: i64| ticks * rate as i64 / t.timescale.max(1) as i64;
+    if planted.is("keeps_priming") || t.edits.is_empty() {
+        let first = first_cts - if t.edits.is_empty() { 0 } else { media - at };
+        return Ok((samples, json!([to_samples(first), rate]), rate, channels));
+    }
+    let skip = to_samples((media - first_cts).max(0)) as usize * channels as usize;
+    samples.drain(..skip.min(samples.len()));
+    let mut span = to_samples(t.span(timescale)) as usize;
+    // #157: the planted reader rounds the edit's end up to a whole 1,024-sample packet.
+    if planted.is("reader_pads_last_packet") {
+        let start = skip / channels as usize;
+        span = (start + span).div_ceil(1024) * 1024 - start;
+    }
+    samples.truncate(span * channels as usize);
+    let first = at + (first_cts - media).max(0);
+    Ok((samples, json!([to_samples(first), rate]), rate, channels))
 }
 
 /// `t` decoded and trimmed, then each link chained after it: the samples, rate and channels.

@@ -99,8 +99,12 @@ fn columns(v: &mut View<'_>) -> Result<(), OpError> {
         });
         let every = column["every"].as_i64().unwrap_or(1).max(1);
         let late = planted == Some(SPECTRUM_ROW_LATE)
-            && column["array"].as_str().is_some_and(|a| a.starts_with("spectrum."))
-            && before.as_ref().is_some_and(|b| b.step == t.div_euclid(every) - 1);
+            && column["array"]
+                .as_str()
+                .is_some_and(|a| a.starts_with("spectrum."))
+            && before
+                .as_ref()
+                .is_some_and(|b| b.step == t.div_euclid(every) - 1);
         // The planted mapping: a frame right after the frame before it reads that frame's row.
         let read = if late {
             map(column, t - every, None, wraps).map(|mut m| {

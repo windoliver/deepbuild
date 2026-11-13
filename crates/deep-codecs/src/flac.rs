@@ -1,7 +1,9 @@
-//! #503: our own FLAC decoder (RFC 9639), for every FLAC file the worker reads: STREAMINFO, then
-//! frames of CONSTANT, VERBATIM, FIXED and LPC subframes with wasted bits, Rice residuals and
+//! Our own FLAC decoder (RFC 9639), for every FLAC file the worker reads (#503; canvas
+//! primitives: Decode worker, "FLAC and Opus always decode through our own decoders"): STREAMINFO,
+//! then frames of CONSTANT, VERBATIM, FIXED and LPC subframes with wasted bits, Rice residuals and
 //! stereo decorrelation. Samples are held in i64, so a 32-bit stream's 33-bit side channel
-//! decodes exactly.
+//! decodes exactly. A score stem's loop region rides in its Vorbis comment as `LOOPSTART` and
+//! `LOOPLENGTH` in samples, and is read as the asset's loop points (#154).
 
 /// What STREAMINFO says of a stream.
 pub struct Info {
@@ -23,20 +25,92 @@ pub fn info(b: &[u8]) -> Option<Info> {
     })
 }
 
-/// A native FLAC file (after `fLaC`): its STREAMINFO body and the bytes of its frames.
-pub fn native(data: &[u8]) -> Option<(&[u8], &[u8])> {
-    let (mut at, mut streaminfo) = (4, None);
+/// A native FLAC file (after `fLaC`): its STREAMINFO body, its Vorbis comment body if it has
+/// one, and the bytes of its frames.
+pub fn native(data: &[u8]) -> Option<(&[u8], Option<&[u8]>, &[u8])> {
+    let (mut at, mut streaminfo, mut comment) = (4, None, None);
     loop {
         let head = data.get(at..at + 4)?;
         let len = usize::from(head[1]) << 16 | usize::from(head[2]) << 8 | usize::from(head[3]);
-        if head[0] & 0x7f == 0 {
-            streaminfo = data.get(at + 4..at + 4 + len);
+        match head[0] & 0x7f {
+            0 => streaminfo = data.get(at + 4..at + 4 + len),
+            4 => comment = data.get(at + 4..at + 4 + len),
+            _ => {}
         }
         at += 4 + len;
         if head[0] & 0x80 != 0 {
-            return Some((streaminfo?, data.get(at..)?));
+            return Some((streaminfo?, comment, data.get(at..)?));
         }
     }
+}
+
+/// A native FLAC file decoded whole (#154).
+pub struct Flac {
+    pub rate: u32,
+    pub channels: u16,
+    /// Frames (samples per channel).
+    pub frames: u64,
+    /// `(start, end)` in samples, from the Vorbis comment.
+    pub loop_region: Option<(u64, u64)>,
+    /// Every sample, interleaved, as sample ÷ 2^(depth − 1).
+    pub samples: Vec<f32>,
+}
+
+/// The `KEY=value` comments of a Vorbis comment block's body, keys upper-cased.
+fn comments(b: &[u8]) -> Vec<(String, String)> {
+    let le = |p: usize| Some(u32::from_le_bytes(b.get(p..p + 4)?.try_into().ok()?) as usize);
+    let mut out = Vec::new();
+    let Some(vendor) = le(0) else { return out };
+    let mut p = 4 + vendor;
+    let Some(count) = le(p) else { return out };
+    p += 4;
+    for _ in 0..count {
+        let Some(len) = le(p) else { break };
+        p += 4;
+        let Some(text) = b.get(p..p + len).and_then(|t| std::str::from_utf8(t).ok()) else {
+            break;
+        };
+        p += len;
+        if let Some((k, v)) = text.split_once('=') {
+            out.push((k.to_ascii_uppercase(), v.to_string()));
+        }
+    }
+    out
+}
+
+/// A native FLAC file, its samples kept to STREAMINFO's count when it gives one.
+pub fn parse(data: &[u8]) -> Option<Flac> {
+    if !data.starts_with(b"fLaC") {
+        return None;
+    }
+    let (streaminfo, comment, frames) = native(data)?;
+    let i = info(streaminfo)?;
+    if i.rate == 0 {
+        return None;
+    }
+    let mut ints = decode(&i, frames).ok()?;
+    let nch = i.channels as usize;
+    if i.frames > 0 {
+        ints.truncate(i.frames as usize * nch);
+    }
+    let scale = (1u64 << (i.bits - 1)) as f32;
+    let tags = comment.map(comments).unwrap_or_default();
+    let tag = |k: &str| {
+        tags.iter()
+            .find(|(key, _)| key == k)
+            .and_then(|(_, v)| v.trim().parse::<u64>().ok())
+    };
+    let loop_region = match (tag("LOOPSTART"), tag("LOOPLENGTH")) {
+        (Some(s), Some(l)) if l > 0 => Some((s, s + l)),
+        _ => None,
+    };
+    Some(Flac {
+        rate: i.rate,
+        channels: nch as u16,
+        frames: (ints.len() / nch) as u64,
+        loop_region,
+        samples: ints.iter().map(|&v| v as f32 / scale).collect(),
+    })
 }
 
 /// An MSB-first bit reader that answers `None` past the end.
@@ -336,5 +410,27 @@ mod tests {
             frames: 2,
         };
         assert_eq!(decode(&info, &frame), Ok(vec![i32::MIN, i32::MAX, 5, -7]));
+    }
+
+    /// A stereo 24-bit file the score renderer's encoder wrote: three samples a channel, the
+    /// left one fixed-predicted, the right one constant, with a loop region of [1, 3) (#154).
+    #[test]
+    fn reads_samples_and_loop_points() {
+        let file = include_bytes!("flac_fixture.flac");
+        let f = parse(file).expect("a FLAC file");
+        assert_eq!((f.rate, f.channels, f.frames), (48_000, 2, 3));
+        assert_eq!(f.loop_region, Some((1, 3)));
+        let s = 8_388_608.0;
+        assert_eq!(
+            f.samples,
+            vec![
+                1.0 / s,
+                -5.0 / s,
+                -8_388_608.0 / s,
+                -5.0 / s,
+                8_388_607.0 / s,
+                -5.0 / s
+            ]
+        );
     }
 }

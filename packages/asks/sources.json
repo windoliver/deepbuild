@@ -831,6 +831,42 @@
     }
   },
   {
+    "source": "work.breaker",
+    "kind": "exception",
+    "fixture": {
+      "ask": {
+        "kind": "exception",
+        "question": "Issue #104's last 3 attempts were replaced: attempt 1: claude-code, its default model, crashed or interrupted; attempt 2: codex, its default model, stalled; attempt 3: claude-code, its default model, sent back past its rounds, FAIL: R2 FAIL. Start another attempt, or leave it waiting?",
+        "options": [
+          {
+            "id": "again",
+            "label": "Start another attempt",
+            "decision": "none"
+          },
+          {
+            "id": "leave",
+            "label": "Leave it waiting",
+            "decision": "none"
+          }
+        ],
+        "recommended": "leave",
+        "deadline": 1760186251123,
+        "fallback": "you",
+        "default": "leave",
+        "provisional": false,
+        "owner": "you",
+        "key": "7a3d9e2f1c0b8a7f6e5d4c3b2a1f0e9d8c7b6a5f4e3d2c1b0a9f8e7d6c5b4a39",
+        "pinned_to": {
+          "kind": "evidence",
+          "ref": "7a3d9e2f1c0b8a7f6e5d4c3b2a1f0e9d8c7b6a5f4e3d2c1b0a9f8e7d6c5b4a39"
+        }
+      },
+      "at_deadline": {
+        "decision": "none"
+      }
+    }
+  },
+  {
     "source": "deep_ask.taste",
     "kind": "taste",
     "fixture": {
@@ -2153,6 +2189,83 @@
         "pinned_to": {
           "kind": "evidence",
           "ref": "4b8e2d6f0a1c3e5b7d9f1a3c5e7b9d1f3a5c7e9b1d3f5a7c9e1b3d5f7a9c1e3b"
+        }
+      },
+      "at_deadline": {
+        "decision": "deny"
+      }
+    }
+  },
+  {
+    "source": "replay.routing",
+    "kind": "choice",
+    "fixture": {
+      "ask": {
+        "kind": "choice",
+        "question": "Evaluation 1829617: 688 jobs newly fail with merge 3b4545497180. Fix them, revert the merge, or leave them failing?",
+        "options": [
+          {
+            "id": "fix",
+            "label": "Fix the failing jobs",
+            "decision": "none"
+          },
+          {
+            "id": "revert",
+            "label": "Revert the merge",
+            "decision": "none"
+          },
+          {
+            "id": "leave",
+            "label": "Leave them failing",
+            "decision": "none"
+          }
+        ],
+        "recommended": "fix",
+        "deadline": 1760186251123,
+        "fallback": "queue:nixpkgs-unstable",
+        "default": "leave",
+        "provisional": false,
+        "owner": "maintainer-1",
+        "key": "9c3e1a5b7d2f4c6e8a0b1d3f5a7c9e2b4d6f8a0c1e3b5d7f9a2c4e6b8d0f1a3c",
+        "pinned_to": {
+          "kind": "commit",
+          "ref": "3b454549718018467a25fc5d40a910132dc45709"
+        }
+      },
+      "at_deadline": {
+        "decision": "none"
+      }
+    }
+  },
+  {
+    "source": "contract.extension",
+    "kind": "authority",
+    "fixture": {
+      "ask": {
+        "kind": "authority",
+        "question": "Extend the preview api:deep.on from R4 to R6? Its replacement lands in R6.",
+        "options": [
+          {
+            "id": "approve",
+            "label": "Extend it to R6",
+            "decision": "allow"
+          },
+          {
+            "id": "decline",
+            "label": "Keep R4",
+            "decision": "deny"
+          }
+        ],
+        "recommended": null,
+        "deadline": 1760099851123,
+        "fallback": "you",
+        "default": "decline",
+        "provisional": false,
+        "owner": "you",
+        "key": "721381b14d0e51f152e1b21caa585c12259fa853bf31eea70e706d54fca25a02",
+        "pinned_to": {
+          "kind": "evidence",
+          "ref": "721381b14d0e51f152e1b21caa585c12259fa853bf31eea70e706d54fca25a02"
         }
       },
       "at_deadline": {

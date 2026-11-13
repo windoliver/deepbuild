@@ -278,37 +278,54 @@ impl Frames {
         size: [u32; 2],
         offsets: &Offsets,
     ) -> Result<crate::scene::Camera, Refused> {
-        let map = doc.as_object().expect("a document is an object");
-        self.program.evaluate(t, Validity::Full, &mut self.state);
-        let items = deep_canvas_motion::eval::items(map, &self.program, &self.state);
-        let id = map.get("camera").and_then(Value::as_str).unwrap_or("");
-        let params = items
-            .get(id)
-            .and_then(|c| c.get("params"))
-            .and_then(Value::as_object)
-            .cloned()
-            .unwrap_or_default();
-        let path = format!("items/{id}/params");
-        let spec = Spec::read(&with_defaults("camera@1", &params), &path).map_err(|r| Refused {
-            code: r.code,
-            path: r.path,
-        })?;
-        let mut bounds = Vec::new();
-        for l in &scene.layers {
-            for s in &l.solids {
-                corners_into(&s.model, &mut bounds);
-            }
-        }
-        turned(
-            &spec,
-            &path,
-            offsets,
-            size,
-            num(params.get("near")),
-            num(params.get("far")),
-            &bounds,
-        )
+        turned_camera(doc, &self.program, scene, t, size, offsets)
     }
+}
+
+/// `doc`'s camera at `t` turned by a viewer's `offsets` on a frame of `size`, around `scene`'s
+/// solids: the view a hand turned, as [`Frames::at`] draws it (#173's `view3d`).
+pub fn turned_camera(
+    doc: &Value,
+    program: &Program,
+    scene: &Scene,
+    t: i64,
+    size: [u32; 2],
+    offsets: &Offsets,
+) -> Result<crate::scene::Camera, Refused> {
+    let map = doc.as_object().ok_or(Refused {
+        code: "out_of_range",
+        path: String::new(),
+    })?;
+    let mut state = program.state();
+    program.evaluate(t, Validity::Full, &mut state);
+    let items = deep_canvas_motion::eval::items(map, program, &state);
+    let id = map.get("camera").and_then(Value::as_str).unwrap_or("");
+    let params = items
+        .get(id)
+        .and_then(|c| c.get("params"))
+        .and_then(Value::as_object)
+        .cloned()
+        .unwrap_or_default();
+    let path = format!("items/{id}/params");
+    let spec = Spec::read(&with_defaults("camera@1", &params), &path).map_err(|r| Refused {
+        code: r.code,
+        path: r.path,
+    })?;
+    let mut bounds = Vec::new();
+    for l in &scene.layers {
+        for s in &l.solids {
+            corners_into(&s.model, &mut bounds);
+        }
+    }
+    turned(
+        &spec,
+        &path,
+        offsets,
+        size,
+        num(params.get("near")),
+        num(params.get("far")),
+        &bounds,
+    )
 }
 
 fn camera_params(map: &Map<String, Value>) -> Option<&Map<String, Value>> {

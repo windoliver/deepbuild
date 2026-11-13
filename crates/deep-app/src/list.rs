@@ -41,6 +41,107 @@ pub struct Session {
     /// Since when it's been in its state, in ms.
     pub since: Option<u64>,
     pub unread: bool,
+    /// Why it reads as it does, as the hub's row says it (#2018): whom it waits for and what it needs.
+    pub why: String,
+    /// What its turn is doing now, as the hub's row says it (#2021).
+    pub doing: Option<Doing>,
+    /// How many events its hooks have sent, and when the newest came (#2021).
+    pub hooks: (u64, Option<u64>),
+    /// Its one flag beside its word, as the hub's row carries it (#2019).
+    pub flag: Option<Flag>,
+}
+
+/// A session row's flag (#2019): never a state, at most one, in the right slot beside its word.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Flag {
+    /// interrupted, retrying, repeating, watch-only or unpushed.
+    pub code: String,
+    /// The one line its slot shows, from record facts.
+    pub text: String,
+    /// What clears it, where something you can do does; empty otherwise.
+    pub fix: String,
+}
+
+/// What a working session's turn is doing now (#2021): its latest tool event's words, when that event came, and
+/// whether the step is over, so its time reads "2 min ago" rather than how long it has run.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Doing {
+    pub words: String,
+    pub at: u64,
+    pub ago: bool,
+}
+
+impl Doing {
+    /// The line as every surface says it at `now`: "Running npm · 40 s", "Edited cart/total.ts · 2 min ago". It
+    /// changes with its events and its time alone.
+    pub fn line(&self, now: u64) -> String {
+        let age = now.saturating_sub(self.at);
+        crate::states::changes_after(crate::states::changes_in(age));
+        let ago = if self.ago { " ago" } else { "" };
+        format!("{} · {}{ago}", self.words, crate::states::span(age))
+    }
+}
+
+/// What `session`'s turn is doing now, from its hub row `row` (#2021), with the planted wrong lines of #2021's suite in
+/// a build with `env-plants`: none reads anything but the row's hook facts as shipped.
+pub fn doing_of(
+    view: &crate::record::View,
+    row: &serde_json::Value,
+    session: &str,
+    now: u64,
+) -> Option<Doing> {
+    let given = &row["doing"];
+    let mut doing = Doing {
+        words: crate::question::visible(given["words"].as_str()?),
+        at: given["at"].as_u64()?,
+        ago: given["ago"].as_bool().unwrap_or(false),
+    };
+    let newest = |kind: &str| {
+        view.events
+            .iter()
+            .rev()
+            .find(|e| e["kind"] == kind && of_session(e, session))
+    };
+    if crate::plain::planted("line-reads-message") {
+        if let Some(said) = newest("session.activity").and_then(|e| e["data"]["activity"].as_str())
+        {
+            doing.words = said.to_owned();
+        }
+    }
+    if crate::plain::planted("line-keeps-running") {
+        if let Some(object) = doing.words.strip_prefix("Couldn't run ") {
+            (doing.words, doing.ago) = (format!("Running {object}"), false);
+        }
+    }
+    if crate::plain::planted("line-whole-command") {
+        if let Some(command) = newest("tool.before").and_then(|e| e["data"]["command"].as_str()) {
+            doing.words = format!("Running {command}");
+        }
+    }
+    if crate::plain::planted("line-stalls-on-timer") && stalled(view, session, now) {
+        doing.words = "stalled".to_owned();
+    }
+    Some(doing)
+}
+
+/// #2021's planted timer: two minutes after a session's last event.
+fn stalled(view: &crate::record::View, session: &str, now: u64) -> bool {
+    view.table()
+        .hooks(session)
+        .1
+        .is_some_and(|heard| now.saturating_sub(heard) >= 120_000)
+}
+
+/// Whether `event` is `session`'s: by its session, or by its subject's letters.
+fn of_session(event: &serde_json::Value, session: &str) -> bool {
+    event["session"] == session
+        || event["subject"].as_str().is_some_and(|s| {
+            s.trim_start_matches("session:")
+                == session
+                    .chars()
+                    .filter(char::is_ascii_alphanumeric)
+                    .collect::<String>()
+        })
 }
 
 /// What a row's time slot shows.
@@ -68,6 +169,15 @@ pub struct Row {
     pub loud: bool,
     /// It left its state and keeps its slot for now.
     pub left: bool,
+    /// A session's why, as the hub's row says it (#2018); empty for any other row.
+    pub why: String,
+    /// What a working session's turn is doing now (#2021); none for any other row.
+    pub doing: Option<Doing>,
+    /// How many events a session's hooks have sent and when the newest came (#2021): its working mark's step, and its
+    /// time under reduce motion.
+    pub hooks: (u64, Option<u64>),
+    /// A session's flag beside its word (#2019).
+    pub flag: Option<Flag>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -78,7 +188,7 @@ pub enum Item {
         title: String,
         count: Option<usize>,
     },
-    Row(Row),
+    Row(Box<Row>),
 }
 
 impl Item {
@@ -150,7 +260,7 @@ pub fn build(asks: &[Ask], sessions: &[Session]) -> Vec<Item> {
         } else {
             ask.kind.clone()
         };
-        items.push(Item::Row(Row {
+        items.push(Item::Row(Box::new(Row {
             id: ask.handle.clone(),
             address: Address::ask(&ask.handle),
             title: ask.question.clone(),
@@ -165,7 +275,11 @@ pub fn build(asks: &[Ask], sessions: &[Session]) -> Vec<Item> {
                 && ask.status != "later"
                 && ask.status != "held",
             left: false,
-        }));
+            why: String::new(),
+            doing: None,
+            hooks: (0, None),
+            flag: None,
+        })));
     }
     let mut projects: Vec<Option<&str>> = Vec::new();
     for s in sessions {
@@ -185,7 +299,7 @@ pub fn build(asks: &[Ask], sessions: &[Session]) -> Vec<Item> {
         let mine = sessions.iter().filter(|s| s.project.as_deref() == project);
         let (quiet, awake): (Vec<&Session>, Vec<&Session>) = mine.partition(|s| s.word == "quiet");
         for s in awake {
-            items.push(Item::Row(Row {
+            items.push(Item::Row(Box::new(Row {
                 id: format!("session:{}", s.id),
                 address: Address::session(&s.id),
                 title: s.title.clone(),
@@ -195,11 +309,15 @@ pub fn build(asks: &[Ask], sessions: &[Session]) -> Vec<Item> {
                 time: s.since.map(Time::Since),
                 loud: s.unread || s.entry == "needs_you",
                 left: false,
-            }));
+                why: s.why.clone(),
+                doing: s.doing.clone(),
+                hooks: s.hooks,
+                flag: s.flag.clone(),
+            })));
         }
         if !quiet.is_empty() {
             let last = quiet.iter().filter_map(|s| s.since).max();
-            items.push(Item::Row(Row {
+            items.push(Item::Row(Box::new(Row {
                 id: format!("quiet:{id}"),
                 address: Address::new(Place::Project, &id),
                 title: match quiet.len() {
@@ -212,7 +330,11 @@ pub fn build(asks: &[Ask], sessions: &[Session]) -> Vec<Item> {
                 time: last.map(Time::Since),
                 loud: quiet.iter().any(|s| s.unread),
                 left: false,
-            }));
+                why: String::new(),
+                doing: None,
+                hooks: (0, None),
+                flag: None,
+            })));
         }
     }
     items
@@ -349,7 +471,13 @@ pub fn read(view: &crate::record::View, now: u64) -> (Vec<Ask>, Vec<Session>) {
                 if crate::plain::planted("waiting-as-working") && word == "needs you" {
                     (word, entry) = ("working".to_owned(), "running");
                 }
+                // #2021's planted row says stalled two minutes after its session's last event.
+                if crate::plain::planted("line-stalls-on-timer") && stalled(view, &session, now) {
+                    word = "stalled".to_owned();
+                }
                 Session {
+                    doing: doing_of(view, row, &session, now),
+                    hooks: table.hooks(&session),
                     id: text(row, "session"),
                     title: crate::question::visible(&text(row, "title")),
                     project: row["project"].as_str().map(str::to_owned),
@@ -357,6 +485,12 @@ pub fn read(view: &crate::record::View, now: u64) -> (Vec<Ask>, Vec<Session>) {
                     entry,
                     since: row["since"].as_u64(),
                     unread: row["unread"].as_bool().unwrap_or(false) || spoke || whole_day,
+                    why: crate::question::visible(&text(row, "why")),
+                    flag: row["flag"]["code"].as_str().map(|code| Flag {
+                        code: code.to_owned(),
+                        text: crate::question::visible(&text(&row["flag"], "text")),
+                        fix: crate::question::visible(&text(&row["flag"], "fix")),
+                    }),
                 }
             })
             .collect();
@@ -375,6 +509,7 @@ pub fn read(view: &crate::record::View, now: u64) -> (Vec<Ask>, Vec<Session>) {
         .map(|(id, title, _)| {
             let (word, entry) = table.row(&id, now);
             Session {
+                hooks: table.hooks(&id),
                 id,
                 title,
                 project: None,
@@ -382,6 +517,9 @@ pub fn read(view: &crate::record::View, now: u64) -> (Vec<Ask>, Vec<Session>) {
                 entry,
                 since: None,
                 unread: false,
+                why: String::new(),
+                doing: None,
+                flag: None,
             }
         })
         .collect();
@@ -434,12 +572,11 @@ impl Kept {
         // Each row that left stays until 2 s after both it left and you left the list.
         let due = |left: u64| away_since.is_some_and(|away| now >= left.max(away) + HOLD);
         self.left_at.retain(|_, left| !due(*left));
-        let next = if self.left_at.is_empty()
+        let next = if (self.left_at.is_empty()
             && !attended
-            && away_since.is_some_and(|a| now >= a + HOLD)
+            && away_since.is_some_and(|a| now >= a + HOLD))
+            || self.drawn.is_empty()
         {
-            fresh
-        } else if self.drawn.is_empty() {
             fresh
         } else {
             self.frozen(fresh)
@@ -577,6 +714,10 @@ mod tests {
             entry: if word == "quiet" { "idle" } else { "running" },
             since: Some(10),
             unread: false,
+            why: String::new(),
+            doing: None,
+            hooks: (0, None),
+            flag: None,
         }
     }
 

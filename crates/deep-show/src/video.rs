@@ -101,7 +101,10 @@ impl Hub<'_> {
                     .as_str()
                     .unwrap_or("limited")
                     .to_string(),
-                size: [v["size"][0].as_u64().unwrap_or(0), v["size"][1].as_u64().unwrap_or(0)],
+                size: [
+                    v["size"][0].as_u64().unwrap_or(0),
+                    v["size"][1].as_u64().unwrap_or(0),
+                ],
             })
         })();
         self.media.video.streams.insert(sha.to_string(), s.clone());
@@ -202,19 +205,31 @@ impl Hub<'_> {
             .filter(|(_, i)| i["kind"] == "mark.point@1")
             .filter_map(|(id, i)| {
                 let v = i.pointer("/params/from/video")?;
-                Some((id.clone(), v["asset"].as_str()?.to_string(), v["step"].as_u64().unwrap_or(1).max(1)))
+                Some((
+                    id.clone(),
+                    v["asset"].as_str()?.to_string(),
+                    v["step"].as_u64().unwrap_or(1).max(1),
+                ))
             })
             .collect();
         let mut issues = Vec::new();
         for (id, sha, step) in sets {
-            let Some([w, h]) = self.stream(&sha).map(|s| s.size) else { continue };
+            let Some([w, h]) = self.stream(&sha).map(|s| s.size) else {
+                continue;
+            };
             let points = (w / step) * (h / step);
             if matches!(class, Some(Class::Showpiece | Class::Export)) && points <= ELEMENTS {
                 continue;
             }
             let actual = json!({"points": points, "size": [w, h], "step": step, "elements": ELEMENTS, "class": doc.pointer("/budget/class")});
             let what = "a point set from a video draws (w ÷ step) × (h ÷ step) points, at most the 1,048,576 compute elements of a showpiece or an export";
-            issues.push(Issue::error("over_budget", &id, format!("items/{id}/params/from/video"), actual, what));
+            issues.push(Issue::error(
+                "over_budget",
+                &id,
+                format!("items/{id}/params/from/video"),
+                actual,
+                what,
+            ));
         }
         issues
     }

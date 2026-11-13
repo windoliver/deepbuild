@@ -60,13 +60,28 @@ fn unknown_by_kind(notices: &[Notice], into: &mut BTreeMap<String, Vec<String>>)
     }
 }
 
-/// The items of a kind this build doesn't know, which the check skipped (sorted).
+/// The items of a kind this build doesn't know, and the instances of a pack it lacks (#1958),
+/// which the check skipped (sorted).
 pub fn unknown_items(notices: &[Notice]) -> Vec<String> {
     let mut by_kind = BTreeMap::new();
     unknown_by_kind(notices, &mut by_kind);
     let mut ids: Vec<String> = by_kind.into_values().flatten().collect();
+    ids.extend(missing_packs(notices).flat_map(|n| n.ids.iter().cloned()));
     ids.sort();
+    ids.dedup();
     ids
+}
+
+/// The check's `pack_missing` notices: a pack version the document names and this build lacks.
+fn missing_packs(notices: &[Notice]) -> impl Iterator<Item = &Notice> {
+    notices.iter().filter(|n| n.code == "pack_missing")
+}
+
+/// Why checks are BLOCKED, one row per missing pack version with its instances (#1958).
+fn missing_rows(notices: &[Notice]) -> Vec<Value> {
+    missing_packs(notices)
+        .map(|n| json!({"code": "pack_missing", "pack": n.actual["pack"], "version": n.actual["version"], "ids": n.ids}))
+        .collect()
 }
 
 /// `doc` without the items `skipped`: what the frame evaluates and draws, so the rest of a
@@ -110,6 +125,13 @@ impl<'a> Hub<'a> {
     /// build doesn't know, when the claim names the document among its deliverables. Outside a
     /// claim they stay notices (#389).
     pub fn blocked_in_claim(&self, show: &Show, notices: &[Notice]) -> Vec<Value> {
+        // A check of a document touches every item, so a pack version it lacks blocks it, claim
+        // or not (#1958).
+        let mut rows = if show.check {
+            missing_rows(notices)
+        } else {
+            Vec::new()
+        };
         let in_claim = show.check
             && show
                 .claim
@@ -117,11 +139,12 @@ impl<'a> Hub<'a> {
                 .and_then(|h| self.scenario.claims.get(h))
                 .is_some_and(|c| c.deliverables.contains(&show.doc));
         if !in_claim || self.planted(Planted::ChecksSkipUnknownKind) {
-            return Vec::new();
+            return rows;
         }
         let mut by_kind = BTreeMap::new();
         unknown_by_kind(notices, &mut by_kind);
-        blocked_rows(by_kind)
+        rows.extend(blocked_rows(by_kind));
+        rows
     }
 
     /// What a canvas module this build lacks blocks in a `deep show --check` whose claim names
@@ -145,14 +168,19 @@ impl<'a> Hub<'a> {
             return Vec::new();
         }
         let item_kind = |i: &Issue| {
-            (i.code == "module_missing" && i.path.starts_with("items/") && i.path.ends_with("/kind"))
-                .then(|| i.actual.as_str().map(str::to_string))
-                .flatten()
+            (i.code == "module_missing"
+                && i.path.starts_with("items/")
+                && i.path.ends_with("/kind"))
+            .then(|| i.actual.as_str().map(str::to_string))
+            .flatten()
         };
         let mut by_kind: BTreeMap<String, Vec<String>> = BTreeMap::new();
         for i in issues.iter() {
             if let Some(kind) = item_kind(i) {
-                by_kind.entry(kind).or_default().extend(i.ids.iter().cloned());
+                by_kind
+                    .entry(kind)
+                    .or_default()
+                    .extend(i.ids.iter().cloned());
             }
         }
         if by_kind.is_empty() {
@@ -205,7 +233,13 @@ impl<'a> Hub<'a> {
         let fed;
         let c = if self.planted(Planted::FigureFeedsVerdict) {
             let mut x = c.clone();
-            x.deliverables.extend(scenario.docs_for.iter().filter(|(_, f)| *f == claim).map(|(d, _)| d.clone()));
+            x.deliverables.extend(
+                scenario
+                    .docs_for
+                    .iter()
+                    .filter(|(_, f)| *f == claim)
+                    .map(|(d, _)| d.clone()),
+            );
             fed = x;
             &fed
         } else {
@@ -215,6 +249,7 @@ impl<'a> Hub<'a> {
         let determinism = self.determinism_runs(c);
         let layout = self.film_layout_runs(c);
         let audits = self.geometry_audit_runs(claim, c);
+        let shapes = self.geometry_shape_runs(c);
         // #407: the film audit and the flicker check on every deliverable, the brief's own checks,
         // and the frame each honest-numbers subject first shows in.
         let films = self.film_audit_runs(c);
@@ -252,13 +287,21 @@ impl<'a> Hub<'a> {
                 let compared = timed.map(|(i, _)| i).or(laid.map(|(i, _)| i));
                 let mut row = match (audits.get(&r.id), films.get(&r.id), flickers.get(&r.id)) {
                     (Some(j), _, _) if !missing && !docs.is_empty() => self.judge_audit(r, j),
+                    _ if !missing && !docs.is_empty() && shapes.contains_key(&r.id) => {
+                        shapes[&r.id].clone()
+                    }
                     (_, Some(a), _) if !missing && !docs.is_empty() => {
                         film_row(r, &a.issues, &a.blocked, &a.not_run)
                     }
-                    (_, _, Some(f)) if !missing && !docs.is_empty() => match f {
-                        Ok(issues) => film_row(r, issues, &[], &[]),
-                        Err(b) => film_row(r, &[], std::slice::from_ref(b), &[]),
-                    },
+                    (_, _, Some((f, counters))) if !missing && !docs.is_empty() => {
+                        let mut row = match f {
+                            Ok(issues) => film_row(r, issues, &[], &[]),
+                            Err(b) => film_row(r, &[], std::slice::from_ref(b), &[]),
+                        };
+                        // #1399: the frames it judged beside those it analyzed.
+                        row["counters"] = json!(counters);
+                        row
+                    }
                     _ => self.judge(r, &docs, missing, &read, &c.session, compared),
                 };
                 // #407: an unsourced number in a film names the frame its item first shows in.
@@ -276,7 +319,10 @@ impl<'a> Hub<'a> {
                 // #405: what hashing adds to the canonical renders, both in ms.
                 if let (Some((_, t)), Some(map)) = (timed, row.as_object_mut()) {
                     if t.render_ms > 0.0 {
-                        map.insert("timing".into(), json!({"render_ms": t.render_ms, "hash_ms": t.hash_ms}));
+                        map.insert(
+                            "timing".into(),
+                            json!({"render_ms": t.render_ms, "hash_ms": t.hash_ms}),
+                        );
                     }
                 }
                 // #408: film.layout's own time on the requirement.
@@ -292,9 +338,13 @@ impl<'a> Hub<'a> {
         }
         // A deliverable the hub doesn't hold is INVALID; a definition with no requirement checks
         // nothing, so it never passes.
+        // #409: craft checks never pass a film on their own.
+        let craft_passes = rows
+            .iter()
+            .all(|r| r["from"]["craft"].is_string() && r["result"] == "PASS");
         let result = if missing {
             "INVALID"
-        } else if none {
+        } else if none || craft_passes {
             "INCONCLUSIVE"
         } else {
             WORST_FIRST
@@ -403,12 +453,23 @@ impl<'a> Hub<'a> {
     /// comparison on a 60 Hz display), an error for each time whose GPU pixel hashes differ
     /// (#1897) or that couldn't be drawn; a requirement this machine can't run alone (no GPU, or
     /// a `compare` other than `same_machine`) is BLOCKED instead. Requirement ID → its issues.
-    fn determinism_runs(&mut self, c: &crate::hub::Claim) -> BTreeMap<String, (Vec<Value>, Timing)> {
+    fn determinism_runs(
+        &mut self,
+        c: &crate::hub::Claim,
+    ) -> BTreeMap<String, (Vec<Value>, Timing)> {
         let mut out = BTreeMap::new();
-        for r in c.requirements.iter().filter(|r| r.check["kind"] == DETERMINISM) {
+        for r in c
+            .requirements
+            .iter()
+            .filter(|r| r.check["kind"] == DETERMINISM)
+        {
             let at_times: Option<Vec<i64>> = r.check["at_times"].as_array().map(|ts| {
                 ts.iter()
-                    .filter_map(|t| t.as_str().and_then(crate::hub::flicks).or_else(|| t.as_i64()))
+                    .filter_map(|t| {
+                        t.as_str()
+                            .and_then(crate::hub::flicks)
+                            .or_else(|| t.as_i64())
+                    })
                     .collect()
             });
             let mut issues = Vec::new();
@@ -517,7 +578,10 @@ impl<'a> Hub<'a> {
             if !asks.is_empty() {
                 row.insert("asks".into(), Value::Array(asks));
             }
-            row.insert("pending".into(), json!(j.pending.iter().map(|(id, _, _)| id).collect::<Vec<_>>()));
+            row.insert(
+                "pending".into(),
+                json!(j.pending.iter().map(|(id, _, _)| id).collect::<Vec<_>>()),
+            );
             return done(row, "INCONCLUSIVE", Vec::new());
         }
         done(row, "PASS", Vec::new())
@@ -614,6 +678,8 @@ impl<'a> Hub<'a> {
         // Honest numbers (canvas primitives: Honest numbers, the check): every number each
         // deliverable shows, with what it traces to.
         let mut numbers: Vec<Value> = Vec::new();
+        // #1183: each length mapping with the ratio it is drawn at, and whether any went unread.
+        let (mut lengths, mut unchecked) = (Vec::new(), false);
         let mut results: Vec<Value> = Vec::new();
         for (doc, cur) in docs {
             // Checked with the pack store, so a deliverable that names an installed pack resolves
@@ -621,6 +687,7 @@ impl<'a> Hub<'a> {
             let checked = check_packed(cur.doc, sealed, &self.packs);
             if !self.planted(Planted::ChecksSkipUnknownKind) {
                 unknown_by_kind(&checked.notices, &mut by_kind);
+                blocked.extend(missing_rows(&checked.notices));
             }
             // A document that requires a canvas module the build lacks is BLOCKED, never a
             // FAIL (#305), naming the module where the `requires/modules/<module>` path does.
@@ -722,6 +789,12 @@ impl<'a> Hub<'a> {
                     }
                     Err(b) => blocked.push(b),
                 }
+                let found = self.lengths(doc, cur.doc);
+                lengths.extend(found.record);
+                unchecked |= found.unchecked;
+                numbers.extend(found.numbers);
+                raised.extend(found.issues);
+                blocked.extend(found.blocked);
             }
             for i in &mut raised {
                 i["doc"] = json!(doc);
@@ -748,6 +821,9 @@ impl<'a> Hub<'a> {
             "BLOCKED"
         } else if errors {
             "FAIL"
+        } else if unchecked {
+            // #1183: a length mapping the check couldn't read is never passed.
+            "INCONCLUSIVE"
         } else if only_own {
             let asks: Vec<Value> = own_rules
                 .iter()
@@ -779,6 +855,9 @@ impl<'a> Hub<'a> {
         row.insert("issues".into(), Value::Array(issues));
         if honest {
             row.insert("numbers".into(), Value::Array(numbers));
+            if !lengths.is_empty() {
+                row.insert("lengths".into(), Value::Array(lengths));
+            }
         }
         if registered.is_some_and(|(_, c)| c.report.is_some()) {
             row.insert("results".into(), Value::Array(results));
@@ -796,7 +875,26 @@ impl<'a> Hub<'a> {
             return Err(json!({"code": r.code, "kind": HONEST, "ids": [], "path": r.path}));
         }
         let empty = serde_json::Map::new();
-        Ok(deep_canvas_marks::check::numbers(doc.as_object().unwrap_or(&empty)))
+        let (mut numbers, issues) =
+            deep_canvas_marks::check::numbers(doc.as_object().unwrap_or(&empty));
+        // #1967: a cell grid that plays a recording quotes it, so its digits are quotation.
+        for (id, item) in doc["items"].as_object().into_iter().flatten() {
+            let played = (item["kind"] == "cells@1")
+                .then(|| item.pointer("/params/play/asset")?.as_str())
+                .flatten();
+            let Some(sha) = played else { continue };
+            for d in self
+                .media
+                .recordings
+                .get(sha)
+                .map(deep_canvas_cells::recording::digits)
+                .unwrap_or_default()
+            {
+                numbers.push(json!({"item": id, "text": d["text"],
+                    "source": {"quotation": {"source": sha}, "at": d["at"], "row": d["row"], "x": d["x"]}}));
+            }
+        }
+        Ok((numbers, issues))
     }
 
     /// The bytes of every asset a lowered document's items name by hash that the evidence store

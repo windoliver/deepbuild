@@ -60,6 +60,11 @@ deep-codecs = { path = "../deep-codecs" }
 # Issue #503: the frame a video item shows at t, read by the one lookup deep_show's frames use.
 deep-canvas-media = { path = "../deep-canvas-media" }
 deep-canvas-effects = { path = "../deep-canvas-effects" }
+# Issue #1921: a scene's physics worlds, baked so their outputs write its instancers' columns.
+deep-canvas-physics = { path = "../deep-canvas-physics" }
+deep-physics-rapier = { path = "../deep-physics-rapier" }
+# Issue #537: a scene's logic items, run so their arrays feed its instancers, plates and lines.
+deep-logic = { path = "../deep-logic" }
 deep-effects-render = { path = "../deep-effects-render" }
 wgpu-profiler = "0.28"
 # Issue #464: the indexed operator's class, computed from its module.

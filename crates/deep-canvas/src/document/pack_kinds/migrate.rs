@@ -510,11 +510,7 @@ fn current<'a>(pack: &'a Pack, full: &str) -> Option<(u64, &'a PackKind)> {
 
 /// Migrates each instance saved at an earlier major of its pinned pack's kind, on the check's
 /// copy and before expansion: one major a step, one `migrated` notice a step (Migration).
-pub(in crate::document) fn at_load(
-    items: &mut Map<String, Value>,
-    resolved: &Resolved,
-    notices: &mut Vec<Notice>,
-) {
+pub fn at_load(items: &mut Map<String, Value>, resolved: &Resolved, notices: &mut Vec<Notice>) {
     for (key, item) in items.iter_mut() {
         migrate_item(key, item, resolved, notices);
     }

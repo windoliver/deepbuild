@@ -1,0 +1,17 @@
+{
+  "v": 1,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6Y",
+  "kind": "work.state",
+  "subject": "ask:01K74FKZVK8Q2X5R7M3N9P4T6W",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "data": {
+    "ask": "ask:01K74FKZVK8Q2X5R7M3N9P4T6W",
+    "issue": 100,
+    "word": "PASS",
+    "waits_on": null,
+    "why": "landed through PR #3"
+  }
+}

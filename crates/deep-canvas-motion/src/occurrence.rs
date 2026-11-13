@@ -376,7 +376,10 @@ pub fn read_of(found: &Found, list: &[Occurrence]) -> Result<Read, Refusal> {
 pub fn band(doc: &serde_json::Map<String, Value>, var: &str, start: i64) -> Option<Read> {
     let (name, index) = var.strip_suffix(']')?.split_once('[')?;
     let i: usize = index.parse().ok()?;
-    let array = doc.get("arrays")?.get(name).filter(|_| name.starts_with("spectrum."))?;
+    let array = doc
+        .get("arrays")?
+        .get(name)
+        .filter(|_| name.starts_with("spectrum."))?;
     let every = array["every"].as_i64()?;
     if i as u64 >= array["count"].as_u64()? {
         return None;
@@ -393,7 +396,11 @@ pub fn band(doc: &serde_json::Map<String, Value>, var: &str, start: i64) -> Opti
         values.push(level);
     }
     let ends = times.clone();
-    Some(Read { how: How::LastField(values), times, ends })
+    Some(Read {
+        how: How::LastField(values),
+        times,
+        ends,
+    })
 }
 
 #[cfg(test)]
@@ -409,7 +416,10 @@ mod tests {
             {"step": 0, "changed": [[0, 2]], "values": [[0, [-120.0, -120.0]]]},
             {"step": 3, "changed": [[1, 2]], "values": [[1, [-6.0]]]},
             {"step": 5, "changed": [[0, 1]], "values": [[0, [-20.0]]]}]});
-        let doc = json!({"arrays": {"spectrum.m": array, "logic.m": array}}).as_object().cloned().unwrap();
+        let doc = json!({"arrays": {"spectrum.m": array, "logic.m": array}})
+            .as_object()
+            .cloned()
+            .unwrap();
         let b1 = band(&doc, "spectrum.m[1]", 0).unwrap();
         let at: Vec<Option<f64>> = [0, 29, 30, 55].iter().map(|t| b1.at(*t)).collect();
         assert_eq!(at, [Some(-120.0), Some(-120.0), Some(-6.0), Some(-6.0)]);

@@ -80,6 +80,9 @@ pub struct Lod {
     pub proxy: Option<Proxy>,
     /// For a mesh without levels, the proxy the simplify step made of it once per content key.
     pub proxy_mesh: Option<Level>,
+    /// A terrain plate's tile, its column and row (#2017): its levels' errors are in m, and
+    /// project at its nearest point.
+    pub tile: Option<[u32; 2]>,
 }
 
 /// A proxy band's `params` (Level of detail: proxies): `ratio`, the share of triangles kept,
@@ -189,6 +192,8 @@ pub struct Choice {
     /// With levels, the level the shadow passes draw: chosen by the light's projection, the
     /// camera's band kept.
     pub shadow_level: Option<usize>,
+    /// A terrain plate's tile, its column and row (#2017).
+    pub tile: Option<[u32; 2]>,
 }
 
 /// The item's world bounds' centre and largest extent, m.
@@ -233,10 +238,40 @@ pub fn bands_at(bands: &[(f64, Show)], margin: f64, size: f64) -> (Vec<Show>, Op
     )
 }
 
-/// Each level's error projected through the view at the item's centre, device px.
+/// Each level's error projected through the view at the item's centre, device px; a terrain
+/// tile's at its nearest point (#2017).
 pub fn errors_px(camera: &Camera, model: &Affine3, lod: &Lod) -> Vec<f64> {
+    if lod.tile.is_some() {
+        return errors_at(model, lod, nearest_px_per_m(camera, model, lod.bounds));
+    }
     let (centre, _) = world_bounds(model, lod);
     errors_at(model, lod, px_per_m(camera, centre))
+}
+
+/// Px per m at the nearest point of `bounds` (#2017, as a chunk tree projects its chunks): at
+/// the least view depth of its corners, held at the near plane, widened by the frame's corner,
+/// where a ray leaves the view's axis most. A move of e m anywhere in the bounds moves its point
+/// on screen by at most e times this.
+pub fn nearest_px_per_m(camera: &Camera, model: &Affine3, bounds: [V3; 2]) -> f64 {
+    if !camera.perspective {
+        return camera.scale;
+    }
+    let [lo, hi] = bounds;
+    let depth = (0..8)
+        .map(|c| {
+            let p = [0, 1, 2].map(|k| if c & (1 << k) == 0 { lo[k] } else { hi[k] });
+            camera.to_view(crate::scene::apply(model, p))[2]
+        })
+        .fold(f64::INFINITY, f64::min)
+        .max(camera.near);
+    let [w, h] = camera.size;
+    let [cx, cy] = camera.centre;
+    let corner = [(0.0, 0.0), (w, 0.0), (0.0, h), (w, h)]
+        .map(|(x, y)| (x - cx).hypot(y - cy))
+        .into_iter()
+        .fold(0.0, f64::max)
+        / camera.scale.max(1e-9);
+    camera.px_per_m(depth) * (1.0 + corner * corner).sqrt()
 }
 
 /// Each level's error at `px_per_m` px per m, device px.
@@ -278,7 +313,7 @@ pub fn choose(
 ) -> Choice {
     let size = size_px(camera, &s.model, lod);
     let (bands, blend) = bands.unwrap_or_else(|| bands_at(&lod.bands, lod.margin, size));
-    let (level, errors_px) = if lod.levels.len() > 1 {
+    let (level, errors_px) = if lod.levels.len() > 1 || lod.tile.is_some() {
         let e = errors_px(camera, &s.model, lod);
         (Some(level_at(&e, lod.lod_px)), Some(e))
     } else {
@@ -293,6 +328,7 @@ pub fn choose(
         errors_px,
         triangles: None,
         shadow_level: None,
+        tile: lod.tile,
     };
     c.triangles = c.level.map(|l| triangles(&c, lod, l));
     c
@@ -314,7 +350,8 @@ pub fn shadow_levels(
         .flat_map(|l| &l.solids)
         .filter_map(|s| Some((s, s.lod.as_ref()?)));
     for ((s, lod), c) in solids.zip(choices.iter_mut()) {
-        if c.level.is_none() {
+        // A terrain tile casts as it draws, so its shadow lands on its own surface (#2017).
+        if c.level.is_none() || lod.tile.is_some() {
             continue;
         }
         let (centre, _) = world_bounds(&s.model, lod);
@@ -623,6 +660,7 @@ mod tests {
             lod_px: LOD_PX,
             proxy: None,
             proxy_mesh: None,
+            tile: None,
         }));
         let mut choices = select(&s);
         // At 10 m the camera has about 33 px per m, so level 1's error (0.1 of 2 m) is 6.6 px and

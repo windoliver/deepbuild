@@ -7,7 +7,7 @@ use std::collections::BTreeMap;
 use std::f32::consts::PI;
 
 use deep_canvas_physics::backend::{
-    Backend, BodyState, Canonical, Checkpoint, Input, ShapeRef, State, Targets,
+    Backend, BodyState, Canonical, Checkpoint, Hit, Input, Query, ShapeRef, State, Targets,
 };
 use deep_canvas_physics::bake::{Build, Pin};
 use deep_canvas_physics::caps::{Caps, RAPIER3D};
@@ -16,8 +16,10 @@ use deep_canvas_physics::doc::{
     Pose as DocPose, Refusal, Region, Rot, Rule, Shape, World,
 };
 use deep_canvas_physics::occurrence::Raw;
+use rapier3d::control::KinematicCharacterController;
 use rapier3d::math::glamx::EulerRot;
 use rapier3d::math::{Pose, Rotation};
+use rapier3d::parry::query::{self as parry_query, ShapeCastOptions};
 use rapier3d::prelude::*;
 use serde_json::{json, Value};
 
@@ -29,10 +31,24 @@ pub fn leaked_world() -> rapier3d::prelude::PhysicsWorld {
     PhysicsWorld::default()
 }
 
+pub mod bound;
 pub mod fp;
 mod occurrences;
 pub mod runner;
 pub mod scene;
+
+/// #1919 criterion 1's test backend (`test-count-calls`): each backend-interface call this process
+/// made, by method, `query`'s by kind (`query.ray`), which `backend_calls` answers.
+#[cfg(feature = "test-count-calls")]
+pub static CALLS: std::sync::Mutex<BTreeMap<&str, u32>> = std::sync::Mutex::new(BTreeMap::new());
+
+/// Counts one backend-interface call in the test backend; nothing in a shipped build.
+fn tally(_method: &'static str) {
+    #[cfg(feature = "test-count-calls")]
+    if let Ok(mut calls) = CALLS.lock() {
+        *calls.entry(_method).or_default() += 1;
+    }
+}
 
 /// The code of a checkpoint refused at restore.
 pub const CHECKPOINT_REFUSED: &str = "physics.checkpoint_refused";
@@ -102,6 +118,8 @@ pub struct Rapier {
     /// #1918's test backend (`test-reverse-pairs`): reads every pair last to first, from its
     /// second collider's side.
     reverse_pairs: bool,
+    /// The world's shapes, which a query's probe shape names as a compound's children (#1919).
+    shapes: BTreeMap<String, Shape>,
 }
 
 fn v3(a: [f64; 3]) -> Vector {
@@ -155,8 +173,9 @@ fn spring(hz: f64, zeta: f64) -> (f32, f32) {
     (w * w, 2.0 * zeta as f32 * w)
 }
 
-/// `shape` as Rapier's, or `None` when it builds nothing (a flat hull, a degenerate mesh).
-fn shared(w: &World, shape: &Shape) -> Option<SharedShape> {
+/// `shape` as Rapier's, a compound's children read from the world's `shapes`, or `None` when it
+/// builds nothing (a flat hull, a degenerate mesh).
+fn shared(shapes: &BTreeMap<String, Shape>, shape: &Shape) -> Option<SharedShape> {
     let pts = |p: &[[f64; 3]]| p.iter().map(|x| v3(*x)).collect::<Vec<_>>();
     Some(match shape {
         Shape::Sphere { radius } => SharedShape::ball(*radius as f32),
@@ -178,16 +197,37 @@ fn shared(w: &World, shape: &Shape) -> Option<SharedShape> {
             vertices,
             triangles,
         } => SharedShape::trimesh(pts(vertices), triangles.clone()).ok()?,
+        // #2014: row along +Z, column along +X, in Rapier's column-major layout; no cell zigzags,
+        // so each splits as a terrain plate draws it.
+        Shape::Heightfield {
+            cols,
+            rows,
+            heights,
+            scale,
+        } => {
+            let mut zx = vec![0.0f32; rows * cols];
+            for r in 0..*rows {
+                for c in 0..*cols {
+                    zx[r + c * rows] = heights[r * cols + c] as f32;
+                }
+            }
+            SharedShape::heightfield(Array2::new(*rows, *cols, zx), v3(*scale))
+        }
         Shape::Compound { children } => SharedShape::compound(
             children
                 .iter()
-                .map(|(id, p)| Some((pose(p), shared(w, &w.shapes[id])?)))
+                .map(|(id, p)| Some((pose(p), shared(shapes, shapes.get(id)?)?)))
                 .collect::<Option<Vec<_>>>()?,
         ),
     })
 }
 
 impl Rapier {
+    /// The bodies in the order this world built them (#1921: `check`'s `built`).
+    pub fn built(&self) -> Vec<String> {
+        self.bodies.iter().map(|(id, _)| id.clone()).collect()
+    }
+
     /// Moves body `id`'s canonical field `field` (an index of `FIELDS`) by `ulps` f32 values: the
     /// one-field shift a golden's locator is proved on (Checkpoint ring). False for no such body.
     pub fn shift(&mut self, id: &str, field: usize, ulps: i64) -> bool {
@@ -257,19 +297,23 @@ impl Rapier {
         let u = &b.shapes[i];
         let path = format!("bodies/{id}/shapes/{i}");
         let shape = &w.shapes[&u.shape];
-        if matches!(shape, Shape::Plane { .. } | Shape::Mesh { .. }) && b.kind != BodyKind::Static {
+        if matches!(
+            shape,
+            Shape::Plane { .. } | Shape::Mesh { .. } | Shape::Heightfield { .. }
+        ) && b.kind != BodyKind::Static
+        {
             out.push(refusal(
                 "out_of_range",
                 format!("{path}/shape"),
                 json!(u.shape),
                 format!(
-                    "{} is a plane or a mesh, which only a static body holds",
+                    "{} is a plane, a mesh or a heightfield, which only a static body holds",
                     u.shape
                 ),
             ));
             return None;
         }
-        let Some(shared) = shared(w, shape) else {
+        let Some(shared) = shared(&w.shapes, shape) else {
             out.push(refusal(
                 "out_of_range",
                 format!("shapes/{}", u.shape),
@@ -586,6 +630,91 @@ impl Rapier {
     }
 }
 
+impl Rapier {
+    /// What `query()` answers, from Rapier's own spatial queries: every shape use `q` meets among
+    /// those in `groups`, sorted by distance, then shape use. Only the backend interface calls it,
+    /// but for #1919's planted physics.query, which reaches it past the interface.
+    pub fn hits(&self, q: &Query, groups: u32) -> Vec<Hit> {
+        let w = &self.world;
+        // A probe shape as Rapier's, at its pose, with the motion a sweep takes.
+        let probe = |shape: &Shape, at: &DocPose, to: [f64; 3]| {
+            let (at, s) = (pose(at), shared(&self.shapes, shape)?);
+            let motion = v3(to) - at.translation;
+            let aabb = s.compute_aabb(&at);
+            let end = s.compute_aabb(&Pose::from_parts(v3(to), at.rotation));
+            Some((s, at, motion, aabb.merged(&end)))
+        };
+        let (cast, aabb) = match q {
+            Query::Ray { from, dir, max } => {
+                let ray = Ray::new(v3(*from), v3(*dir).normalize());
+                let max = *max as f32;
+                let aabb = Aabb::from_points([ray.origin, ray.point_at(max)]);
+                (Err((ray, max)), aabb)
+            }
+            Query::Sweep { shape, from, to } => match probe(shape, from, to.pos) {
+                Some((s, at, motion, aabb)) => (Ok((s, at, motion)), aabb),
+                None => return Vec::new(),
+            },
+            Query::Overlap { shape, at } => match probe(shape, at, at.pos) {
+                Some((s, at, motion, aabb)) => (Ok((s, at, motion)), aabb),
+                None => return Vec::new(),
+            },
+        };
+        // The distance along the probe at which collider `c` meets it, if it does.
+        let meet = |c: &Collider| -> Option<f32> {
+            match &cast {
+                Err((ray, max)) => c.shape().cast_ray(c.position(), ray, *max, true),
+                Ok((s, at, motion)) if *motion == Vector::ZERO => {
+                    parry_query::intersection_test(at, s.as_ref(), c.position(), c.shape())
+                        .ok()?
+                        .intersecting
+                        .then_some(0.0)
+                }
+                Ok((s, at, motion)) => {
+                    let hit = parry_query::cast_shapes(
+                        at,
+                        *motion,
+                        s.as_ref(),
+                        c.position(),
+                        Vector::ZERO,
+                        c.shape(),
+                        ShapeCastOptions::with_max_time_of_impact(1.0),
+                    )
+                    .ok()??;
+                    Some(hit.time_of_impact * motion.length())
+                }
+            }
+        };
+        let member =
+            |_: ColliderHandle, c: &Collider| c.collision_groups().memberships.bits() & groups != 0;
+        let filter = QueryFilter::default().predicate(&member);
+        // A world never stepped has no broad-phase tree yet; after a step, the tree's boxes hold
+        // each collider's current pose, so only those under the probe's box are tested.
+        let candidates: Vec<(ColliderHandle, &Collider)> = if self.step == 0 {
+            w.all_colliders()
+                .filter(|(h, c)| c.is_enabled() && member(*h, c))
+                .collect()
+        } else {
+            w.intersect_aabb_conservative(aabb, filter).collect()
+        };
+        let mut hits: Vec<Hit> = candidates
+            .into_iter()
+            .filter_map(|(h, c)| {
+                Some(Hit {
+                    shape: self.uses.get(&h)?.clone(),
+                    distance: f64::from(meet(c)?),
+                })
+            })
+            .collect();
+        hits.sort_by(|a, b| {
+            a.distance
+                .total_cmp(&b.distance)
+                .then_with(|| a.shape.cmp(&b.shape))
+        });
+        hits
+    }
+}
+
 impl Backend for Rapier {
     fn id(&self) -> String {
         format!("{}@{}", RAPIER3D.backend, RAPIER3D.version)
@@ -596,6 +725,7 @@ impl Backend for Rapier {
     }
 
     fn build(&mut self, w: &World) -> Result<(), Vec<Refusal>> {
+        tally("build");
         let mut out = Vec::new();
         self.world = PhysicsWorld::default();
         self.world_body = None;
@@ -610,6 +740,7 @@ impl Backend for Rapier {
             .filter_map(|(j, _)| Some((j.clone(), w.joints.get(j)?.clone())))
             .collect();
         self.last.clear();
+        self.shapes = w.shapes.clone();
         self.hit_threshold = w.solver.hit_threshold as f32;
         self.tags = w
             .bodies
@@ -636,7 +767,8 @@ impl Backend for Rapier {
         p.normalized_max_linear_velocity = w.solver.max_speed as f32;
         p.max_ccd_substeps = usize::from(w.solver.ccd);
         let mut handles = BTreeMap::new();
-        for (id, b) in &w.bodies {
+        for id in deep_canvas_physics::occurrence::built_order(w) {
+            let b = &w.bodies[id];
             let mut locks = LockedAxes::empty();
             let flags = [
                 (b.lock_linear[0], LockedAxes::TRANSLATION_LOCKED_X),
@@ -714,6 +846,7 @@ impl Backend for Rapier {
     }
 
     fn step(&mut self, inputs: &[Input], targets: &Targets) -> Result<(), Box<Refusal>> {
+        tally("step");
         // A world declares no inputs yet (the reader refuses `inputs`), so none can arrive.
         if let Some(i) = inputs.first() {
             return Err(Box::new(refusal(
@@ -738,10 +871,12 @@ impl Backend for Rapier {
     }
 
     fn occurrences(&self) -> Vec<Raw> {
+        tally("occurrences");
         self.last.clone()
     }
 
     fn read(&self) -> State {
+        tally("read");
         let bodies = self
             .bodies
             .iter()
@@ -779,6 +914,7 @@ impl Backend for Rapier {
     }
 
     fn canonical(&self) -> Vec<Canonical> {
+        tally("canonical");
         self.bodies
             .iter()
             .map(|(id, h)| {
@@ -795,6 +931,7 @@ impl Backend for Rapier {
     }
 
     fn checkpoint(&self) -> Checkpoint {
+        tally("checkpoint");
         Checkpoint {
             backend: RAPIER3D.backend.into(),
             version: RAPIER3D.version.into(),
@@ -805,6 +942,7 @@ impl Backend for Rapier {
     }
 
     fn restore(&mut self, cp: &Checkpoint) -> Result<(), Box<Refusal>> {
+        tally("restore");
         if !self.restore_any_version
             && (cp.backend != RAPIER3D.backend || cp.version != RAPIER3D.version)
         {
@@ -833,5 +971,97 @@ impl Backend for Rapier {
         self.step = cp.step;
         self.last.clear();
         Ok(())
+    }
+
+    fn query(&self, q: &Query, groups: u32) -> Vec<Hit> {
+        tally(match q {
+            Query::Ray { .. } => "query.ray",
+            Query::Sweep { .. } => "query.sweep",
+            Query::Overlap { .. } => "query.overlap",
+        });
+        self.hits(q, groups)
+    }
+
+    fn move_character(
+        &mut self,
+        body: &str,
+        translation: [f64; 3],
+    ) -> Result<[f64; 3], Box<Refusal>> {
+        tally("move_character");
+        let refuse = |what: String| {
+            Box::new(refusal(
+                "physics.not_character",
+                format!("bodies/{body}"),
+                json!(body),
+                what,
+            ))
+        };
+        let h = self
+            .handle_of(body)
+            .ok_or_else(|| refuse(format!("{body} isn't a body of this world")))?;
+        let rb = &self.world.bodies[h];
+        let shape = rb.colliders().first().map(|c| &self.world.colliders[*c]);
+        let Some(c) = shape.filter(|_| rb.is_kinematic()) else {
+            return Err(refuse(format!(
+                "{body} isn't a kinematic body with a shape, so no character controller moves it"
+            )));
+        };
+        let moved = KinematicCharacterController::default().move_shape(
+            self.world.integration_parameters.dt,
+            &self
+                .world
+                .query_pipeline_with_filter(QueryFilter::default().exclude_rigid_body(h)),
+            c.shape(),
+            c.position(),
+            v3(translation),
+            |_| {},
+        );
+        let to = rb.translation() + moved.translation;
+        self.world.bodies[h].set_next_kinematic_translation(to);
+        Ok(back(moved.translation))
+    }
+
+    /// Each collider's own ray cast at its placed pose, so a world never stepped answers too.
+    fn ray(&self, from: [f64; 3], dir: [f64; 3], max: f64) -> Option<f64> {
+        tally("ray");
+        let ray = Ray::new(v3(from), v3(dir));
+        self.world
+            .colliders
+            .iter()
+            .filter_map(|(_, c)| c.shape().cast_ray(c.position(), &ray, max as f32, true))
+            .min_by(f32::total_cmp)
+            .map(f64::from)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A static 2 × 2 m height field of 3 × 3 samples, raised only at its (column 2, row 0)
+    /// corner, through the physics document and the backend interface.
+    #[test]
+    fn a_ray_down_meets_a_heightfield_on_its_shipped_split() {
+        let mut heights = vec![0.0; 9];
+        heights[2] = 1.0;
+        let doc = json!({
+            "kind": "physics.world@1", "dimensions": 3, "step_rate": 60, "substeps": 1,
+            "gravity": [0, 0, 0], "mode": "dynamic",
+            "capacity": {"bodies": 1, "shapes": 1, "joints": 0, "contacts": 0, "particles": 0},
+            "backend": {"name": "rapier3d", "version": "=0.36.1"},
+            "shapes": {"land": {"kind": "heightfield", "cols": 3, "rows": 3, "heights": heights, "scale": [2, 1, 2]}},
+            "bodies": {"ground": {"kind": "static", "shapes": [{"shape": "land"}]}}
+        });
+        let w =
+            deep_canvas_physics::check::check(&doc, &RAPIER3D, &deep_canvas_physics::roles::TABLE)
+                .unwrap_or_else(|e| panic!("{e:?}"));
+        let mut b = Rapier::default();
+        b.build(&w).unwrap();
+        let down = [0.0, -1.0, 0.0];
+        // The raised cell's centre lies on the diagonal through its raised corner: 0.5 m.
+        let k = b.ray([0.5, 2.0, -0.5], down, 10.0).unwrap();
+        assert!((2.0 - k - 0.5).abs() < 1e-6, "{k}");
+        assert!((2.0 - b.ray([-0.5, 2.0, 0.5], down, 10.0).unwrap()).abs() < 1e-6);
+        assert_eq!(b.ray([5.0, 2.0, 0.0], down, 10.0), None);
     }
 }

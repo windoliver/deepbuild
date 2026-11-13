@@ -479,7 +479,12 @@ impl Hub<'_> {
         let planted = self.scenario.planted;
         let now = self.now;
         match call {
-            GateCall::Open { panel, strips, media, piece } => {
+            GateCall::Open {
+                panel,
+                strips,
+                media,
+                piece,
+            } => {
                 if !self.scenario.panels.contains_key(panel) {
                     return refused("unknown_panel");
                 }
@@ -585,6 +590,34 @@ impl Hub<'_> {
                     }),
                     None => ungated,
                 };
+                // #1163: a panel showing a film with strips plays the film's own mix live, as a
+                // media document opened there would.
+                if !self
+                    .gate
+                    .owners
+                    .get(panel)
+                    .is_some_and(|o| o.strips.is_some())
+                {
+                    let film = self
+                        .scenario
+                        .docs
+                        .iter()
+                        .filter(|(_, p)| *p == panel)
+                        .find_map(|(id, _)| {
+                            self.current(id)
+                                .map(|r| r.doc.clone())
+                                .filter(|d| d.get("strips").is_some_and(|s| s.is_object()))
+                        });
+                    if let Some(doc) = film {
+                        let mix = match self.mix_of(&doc) {
+                            Ok(mix) => Arc::new(mix),
+                            Err(e) => return e,
+                        };
+                        let o = self.gate.owners.entry(panel.clone()).or_default();
+                        o.strips = Some(Rc::new(Vec::new()));
+                        o.media = Some(mix);
+                    }
+                }
                 let Some(o) = self
                     .gate
                     .owners
@@ -650,9 +683,11 @@ impl Hub<'_> {
                     "reserved": reserved().iter().map(|r| r.0).collect::<Vec<_>>(),
                 }})
             }
-            GateCall::Output { device: Some(device), from, to } => {
-                self.device_output(device, *from, *to)
-            }
+            GateCall::Output {
+                device: Some(device),
+                from,
+                to,
+            } => self.device_output(device, *from, *to),
             GateCall::Output { from, to, .. } => {
                 let (first, last) = (sample_at(*from), sample_at(*to));
                 let mut mix = vec![0f32; (last - first).max(0) as usize];

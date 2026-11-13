@@ -7,8 +7,8 @@ use deep_canvas::grammar::FLICKS_PER_SECOND;
 use deep_canvas::interval::Iv;
 
 use crate::curve::Bezier;
-use deep_canvas::ease::Named;
 use crate::spring::Spring;
+use deep_canvas::ease::Named;
 
 /// How a transition moves from where the value is to its new target.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -32,12 +32,20 @@ impl Along {
 pub enum Model {
     /// Toward the target at rate (target − value) ÷ tau, with tau_up while rising and tau_down
     /// while falling.
-    FirstOrder { tau_up: f64, tau_down: f64 },
+    FirstOrder {
+        tau_up: f64,
+        tau_down: f64,
+    },
     Spring(Spring),
     /// Toward the target at `max` per second, then held.
-    RateLimit { max: f64 },
+    RateLimit {
+        max: f64,
+    },
     /// From the value at the change to the new target over `span` flicks.
-    Transition { span: i64, along: Along },
+    Transition {
+        span: i64,
+        along: Along,
+    },
 }
 
 /// What a follow channel follows: keys, each held until the next, or a control's value, which
@@ -141,7 +149,9 @@ impl Follow {
 
 impl Follow {
     fn owner(&self, t: i64) -> usize {
-        self.segments.partition_point(|s| s.t <= t).saturating_sub(1)
+        self.segments
+            .partition_point(|s| s.t <= t)
+            .saturating_sub(1)
     }
 
     /// #504: the earliest time after `t` at which the value may differ: the next flick while a
@@ -152,7 +162,9 @@ impl Follow {
         let moving = s.t != i64::MIN
             && match self.model {
                 Model::Transition { span, .. } => t - s.t < span && s.start.value != s.target,
-                Model::RateLimit { max } => seconds(t - s.t) < (s.start.value - s.target).abs() / max,
+                Model::RateLimit { max } => {
+                    seconds(t - s.t) < (s.start.value - s.target).abs() / max
+                }
                 _ => s.start.value != s.target || s.start.rate != 0.0,
             };
         if moving {
@@ -181,7 +193,10 @@ impl Follow {
                 if span <= 0 {
                     return Some(ends);
                 }
-                let u = Iv::new(((a - s.t) as f64 / span as f64).clamp(0.0, 1.0), ((b - s.t) as f64 / span as f64).clamp(0.0, 1.0));
+                let u = Iv::new(
+                    ((a - s.t) as f64 / span as f64).clamp(0.0, 1.0),
+                    ((b - s.t) as f64 / span as f64).clamp(0.0, 1.0),
+                );
                 let w = match along {
                     Along::Linear => u,
                     Along::Ease(e) => e.bound(u),
@@ -202,7 +217,15 @@ impl Follow {
             return self.at(t);
         };
         let target = self.segments[self.owner(t)].target;
-        solve(self.model, &Segment { t: at, target, start: out }, t)
+        solve(
+            self.model,
+            &Segment {
+                t: at,
+                target,
+                start: out,
+            },
+            t,
+        )
     }
 }
 

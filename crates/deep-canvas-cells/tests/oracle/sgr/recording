@@ -1,0 +1,26 @@
+[user0000000@host01 sgr]$ echo -e "\e[9;38:2:255:0:255;4mTEST\e[0m"
+[9;38:2:255:0:255;4mTEST[0m
+[user0000000@host01 sgr]$ echo -e "\e[9;38:2:0:255:0:255;4mTEST\e[0m"
+[9;38:2:0:255:0:255;4mTEST[0m
+[user0000000@host01 sgr]$ echo -e "\e[9;38:5:1;4mTEST\e[0m"
+[9;38:5:1;4mTEST[0m
+[user0000000@host01 sgr]$ echo -e "\e[9;48:2:255:0:255;4mTEST\e[0m"
+[9;48:2:255:0:255;4mTEST[0m
+[user0000000@host01 sgr]$ echo -e "\e[9;48:2:0:255:0:255;4mTEST\e[0m"
+[9;48:2:0:255:0:255;4mTEST[0m
+[user0000000@host01 sgr]$ echo -e "\e[9;48:5:1;4mTEST\e[0m"
+[9;48:5:1;4mTEST[0m
+[user0000000@host01 sgr]$ echo -e "\e[9;38;2;255;0;255;4mTEST\e[0m"
+[9;38;2;255;0;255;4mTEST[0m
+[user0000000@host01 sgr]$ echo -e "\e[9;38;2;0;255;0;255;4mTEST\e[0m"
+[9;38;2;0;255;0;255;4mTEST[0m
+[user0000000@host01 sgr]$ echo -e "\e[9;38;5;1;4mTEST\e[0m"
+[9;38;5;1;4mTEST[0m
+[user0000000@host01 sgr]$ echo -e "\e[9;48;2;255;0;255;4mTEST\e[0m"
+[9;48;2;255;0;255;4mTEST[0m
+[user0000000@host01 sgr]$ echo -e "\e[9;48;2;0;255;0;255;4mTEST\e[0m"
+[9;48;2;0;255;0;255;4mTEST[0m
+[user0000000@host01 sgr]$ echo -e "\e[9;48;5;1;4mTEST\e[0m"
+[9;48;5;1;4mTEST[0m
+[user0000000@host01 sgr]$ exit
+exit

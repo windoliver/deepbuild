@@ -1,0 +1,56 @@
+Base commit: 3134672ec ("Merge pull request #2265 from windoliver/worktree-confident-satoshi-8c4ded"; its first parent is
+568adc8f5, "Merge pull request #2266 …"), this job's worktree at its base, with only tests/acceptance/1399/ added.
+Date: 2026-11-11  darwin-arm64, Node 24.22.2, cargo 1.99.1 from /opt/homebrew/opt/rustup/bin
+
+Command (from the checkout root, node_modules linked from the main checkout and removed afterwards):
+  export PATH=/opt/homebrew/opt/rustup/bin:$PATH
+  CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 node node_modules/vitest/vitest.mjs run --root tests/acceptance/1399 --no-file-parallelism --testTimeout=600000
+  node node_modules/typescript/bin/tsc -p tests/acceptance/1399/tsconfig.json
+
+Builds: the worktree had no target folder. Before the run, the job ran the suite's own two build commands, unchanged
+(cargo build --locked --bin deep-show --no-default-features --features full; cargo build --locked --bin deep-gpu, with
+CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0), so the files' own build steps found them fresh; nothing else was built
+in the checkout.
+
+Result: Test Files 6 failed (6); Tests 7 failed (7); vitest exit 1, in 35 s. tsc exit 0.
+Every test ran its binary and failed on an assertion it names; none failed to load, build or run a scenario.
+
+exercise.test.ts
+  × #1399.6564d3ed a seam fixture of 12 samples against a floor of 64 reads INCONCLUSIVE, naming the counter
+      exercise.test.ts:36  status: expected 'INCONCLUSIVE', received 'PASS'. The base's seam_suite takes no `exercise`
+      (crates/deep-show/src/seams.rs, parse and network): 12 messages, relay {messages: 12, delayed 0, dropped 0,
+      duplicated 0, reordered 0}, status PASS.
+  × #1399.6564d3ed with 64 samples the seam fixture reads its result
+      exercise.test.ts:49  faults [] and status PASS hold; then "the suite lists the counter its fixture declared, with
+      the count read from the run": the reply has no `exercise` rows.
+field-effect.test.ts
+  × #1399.cfce1159 a planted kind with a field that never reaches a shader fails field.effect, naming the field
+      The control acme/shelf@1.0.0 installs (line 29 holds). field-effect.test.ts:32  outcome: expected 'refused',
+      received 'installed': the kit has no field.effect part (crates/deep-canvas/src/document/pack_kinds.rs, kit_one:
+      defaults, determinism, cost, rules, migration), so acme/shelf@1.0.1 with its unread input gloss installs.
+per-frame.test.ts
+  × #1399.09928950 a planted cache that analyzes once and serves 25 frames fails its per-frame check, naming the counter
+      The still film's flicker row reads PASS (line 37 holds). per-frame.test.ts:39  "the flicker check's row counts
+      its frames and its real evaluations for the film": expected > 0 counters rows, got 0; the row is {id, kind,
+      machines, determinism, issues: [], result: PASS} (crates/deep-show/src/verdict.rs, film_row). The planted run is
+      not reached; `flicker_analyzes_once` is no planted name at the base (main.rs's match answers bad_input).
+golden.test.ts
+  × #1399.34aa835f two matching flat light grey frames read BLOCKED, reason blank; two matching black frames still read BLOCKED
+      All three blessings read decided. golden.test.ts:47  verdict: expected 'BLOCKED', received 'PASS': the grey pair
+      passes the dark-frame guard alone (crates/deep-gpu-layer/src/golden.rs, blank: luma <= 0.06 on 98% of pixels)
+      and the perceptual oracle compares it, its pooled mean difference 0, PASS, under the noop fingerprint {gpu:
+      noop, driver: noop}. The later assertions aren't reached in the test; run apart on the same base binary (a probe with
+      the test's frames, not part of the suite), the black pair reads {verdict: BLOCKED, reason: blank} and the
+      64-color pair {verdict: PASS}, as the test expects of them.
+feature-response.test.ts
+  × #1399.6334af37 removing a fixture feature that moves too little fails feature.response, naming the band
+      acme/shelf@1.0.2 is refused (line 31 holds), but only with unknown_field at
+      kinds/shelf.bookcase@1/feature.response, "not a field of a pack kind" (pack_kinds.rs, KIND_KEYS).
+      feature-response.test.ts:33  "the refusal has an error naming the kit's part feature.response (not
+      unknown_field)": expected > 0, got 0. (The control acme/shelf@1.0.3 is refused the same way at the base.)
+fail-closed.test.ts
+  × #1399.33228c2f a check that never ran reads failing, not zero
+      The call is answered and its outcome is failed, "the relay 127.0.0.1:<port> is unreachable: Connection refused
+      (os error 61)" (line 42 holds). fail-closed.test.ts:43  reader status: expected 'FAIL', received 'PASS'; the
+      reader is {status: PASS, failures: []} (crates/deep-show/src/seams.rs, relay_client: failures default to an
+      empty list when the client never took a seat).

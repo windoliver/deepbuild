@@ -774,6 +774,36 @@ fn type_of(
     Ok(ty)
 }
 
+/// The marks a look's `diff` gives a role (#1965).
+const DIFF_MARKS: [&str; 3] = ["added", "removed", "changed"];
+
+/// A look's `code` or `diff` map (#1965; Look `look@1`: `code: {class → role}`, `diff: {added,
+/// removed, changed → role}`): none, or a role for each of `names` and nothing else, each a color
+/// both themes give, so the guard holds it to the status distance as it holds every role.
+fn role_map(
+    def: &Map<String, Value>,
+    field: &str,
+    names: &[&str],
+    themes: [&Palette; 2],
+) -> Result<BTreeMap<String, String>, Refusal> {
+    let Some(map) = object(def.get(field), field)? else {
+        return Ok(BTreeMap::new());
+    };
+    if let Some(key) = map.keys().find(|k| !names.contains(&k.as_str())) {
+        return Err(Refusal::Bad(format!("{field}/{key}")));
+    }
+    names
+        .iter()
+        .map(|name| {
+            map.get(*name)
+                .and_then(Value::as_str)
+                .filter(|role| themes.iter().all(|p| p.contains_key(*role)))
+                .map(|role| (name.to_string(), role.to_string()))
+                .ok_or_else(|| Refusal::Bad(format!("{field}/{name}")))
+        })
+        .collect()
+}
+
 /// The nearest status color within `min_distance` of `color` (in OKLab), with its distance: the
 /// status color a data color clashes with (The status-color rule).
 pub fn clash(color: Rgb, status: &Status) -> Option<(&'static str, f64)> {
@@ -943,9 +973,17 @@ pub fn resolve_in(def: &Value, bundled: &[&str], at: Distance) -> Result<Look, R
             });
         }
     }
+    let code = role_map(def, "code", &crate::code::CLASSES, [&light, &dark])?;
+    role_map(def, "diff", &DIFF_MARKS, [&light, &dark])?;
     let look = Look {
-        light_type: type_of(def, &fonts, &light_fonts)?,
-        dark_type: type_of(def, &fonts, &dark_fonts)?,
+        light_type: Type {
+            code: code.clone(),
+            ..type_of(def, &fonts, &light_fonts)?
+        },
+        dark_type: Type {
+            code,
+            ..type_of(def, &fonts, &dark_fonts)?
+        },
         light,
         dark,
         light_alpha,
@@ -1291,6 +1329,71 @@ mod tests {
                 ..
             })
         ));
+    }
+
+    #[test]
+    fn every_shipped_look_gives_each_token_class_and_diff_mark_a_role_the_guard_holds() {
+        for id in SHIPPED {
+            let def = shipped(id).unwrap();
+            // The guard as the app's look: every role at the status distance, in both themes.
+            let look = resolve(&def).unwrap_or_else(|r| panic!("{id}: {r:?}"));
+            let classes: Vec<&str> = look.light_type.code.keys().map(String::as_str).collect();
+            let mut listed = crate::code::CLASSES.to_vec();
+            listed.sort_unstable();
+            assert_eq!(classes, listed, "{id}");
+            assert_eq!(look.dark_type.code, look.light_type.code, "{id}");
+            for mark in DIFF_MARKS {
+                let role = def["diff"][mark].as_str().unwrap_or_default();
+                assert!(look.light.contains_key(role), "{id}: diff/{mark} in light");
+                assert!(look.dark.contains_key(role), "{id}: diff/{mark} in dark");
+            }
+        }
+    }
+
+    #[test]
+    fn a_code_or_diff_map_is_refused_at_what_it_lacks_or_adds() {
+        let refused = |edit: &dyn Fn(&mut Value)| {
+            let mut def = shipped("clean").unwrap();
+            edit(&mut def);
+            resolve(&def).err()
+        };
+        let bad = |path: &str| Some(Refusal::Bad(path.into()));
+        assert_eq!(
+            refused(&|d| d["code"]["identifier"] = json!("ink")),
+            bad("code/identifier")
+        );
+        assert_eq!(
+            refused(&|d| {
+                d["code"].as_object_mut().unwrap().remove("comment");
+            }),
+            bad("code/comment")
+        );
+        // A role the look doesn't give, a font role, and a role only one theme gives.
+        assert_eq!(
+            refused(&|d| d["code"]["keyword"] = json!("crimson")),
+            bad("code/keyword")
+        );
+        assert_eq!(
+            refused(&|d| d["code"]["plain"] = json!("math")),
+            bad("code/plain")
+        );
+        assert_eq!(
+            refused(&|d| {
+                d["palette"]["leaf"] = json!("#0f4f32");
+                d["themes"]["dark"]["roles"]["leaf"] = json!("leaf");
+                d["diff"]["added"] = json!("leaf");
+            }),
+            bad("diff/added")
+        );
+        assert_eq!(
+            refused(&|d| d["diff"]["moved"] = json!("ink")),
+            bad("diff/moved")
+        );
+        // A look with neither is still a look: its tokens draw in plain.
+        let mut bare = shipped("clean").unwrap();
+        bare.as_object_mut().unwrap().remove("code");
+        bare.as_object_mut().unwrap().remove("diff");
+        assert!(resolve(&bare).unwrap().light_type.code.is_empty());
     }
 
     #[test]

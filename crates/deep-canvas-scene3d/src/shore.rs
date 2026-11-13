@@ -194,6 +194,38 @@ pub fn static_items(doc: &Map<String, Value>) -> Result<(), Refused> {
         .get("items")
         .and_then(Value::as_object)
         .unwrap_or(&empty);
+    for (material, item) in items {
+        let Some(collection) = item
+            .pointer("/params/water/shore/items")
+            .and_then(Value::as_str)
+        else {
+            continue;
+        };
+        let Ok(set) = members(doc, material, collection) else {
+            continue;
+        };
+        if let Some(member) = moving_member(doc, set) {
+            return Err(bad(
+                "out_of_range",
+                format!("items/{member}: a shore item of material {material} moves or reshapes during the span"),
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// The first of `members` that a channel, driver, constraint, clip, physics or logic moves or
+/// reshapes during the document's span, with every parent it has (#449's landing map reads only
+/// static items, as a shore's field does).
+pub fn moving_member<'a>(
+    doc: &Map<String, Value>,
+    members: impl IntoIterator<Item = &'a str>,
+) -> Option<&'a str> {
+    let empty = Map::new();
+    let items = doc
+        .get("items")
+        .and_then(Value::as_object)
+        .unwrap_or(&empty);
     let section = |k: &str| -> Vec<(&String, &Value)> {
         doc.get(k)
             .and_then(Value::as_object)
@@ -268,30 +300,13 @@ pub fn static_items(doc: &Map<String, Value>) -> Result<(), Refused> {
                 .and_then(|i| i.get("params"))
                 .is_some_and(|p| reads_logic(p, &|owner| kind(owner).starts_with("logic")))
     };
-    for (material, item) in items {
-        let Some(collection) = item
-            .pointer("/params/water/shore/items")
-            .and_then(Value::as_str)
-        else {
-            continue;
-        };
-        let Ok(set) = members(doc, material, collection) else {
-            continue;
-        };
-        for member in set {
-            let line = chain(Some(items), member);
-            let moved = line.iter().any(|c| {
-                constrained.contains(c) || simulated(c) || written.iter().any(|w| moves(w, c))
-            });
-            if moved || member.contains('#') && simulated(member.split('#').next().unwrap_or("")) {
-                return Err(bad(
-                    "out_of_range",
-                    format!("items/{member}: a shore item of material {material} moves or reshapes during the span"),
-                ));
-            }
-        }
-    }
-    Ok(())
+    members.into_iter().find(|member| {
+        let line = chain(Some(items), member);
+        let moved = line.iter().any(|c| {
+            constrained.contains(c) || simulated(c) || written.iter().any(|w| moves(w, c))
+        });
+        moved || member.contains('#') && simulated(member.split('#').next().unwrap_or(""))
+    })
 }
 
 /// Whether `v` holds an `{array: "<item>.<name>"}` whose item `is_logic` says is a logic item.
@@ -376,7 +391,7 @@ fn primitive(shape: Shape) -> (Vec<[f64; 3]>, Vec<u32>) {
 }
 
 /// A solid's triangles in world space.
-pub(crate) fn triangles(s: &Solid) -> Vec<[[f64; 3]; 3]> {
+pub fn triangles(s: &Solid) -> Vec<[[f64; 3]; 3]> {
     let (positions, indices) = match (&s.mesh, s.shape) {
         (Some(m), _) => (m.positions.clone(), m.indices.clone()),
         (None, shape) => primitive(shape),

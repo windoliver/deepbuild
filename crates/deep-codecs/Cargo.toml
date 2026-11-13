@@ -25,6 +25,8 @@ symphonia = { version = "0.6.1", default-features = false, features = ["mp3", "v
 rusty_aac = "2.0.1"
 opus-rs = { version = "0.1.42", default-features = false, features = ["libm"] }
 libm = "0.2.16"
+# Issue #1967: terminal recordings, converted at import by the cells module's emulator.
+deep-canvas-cells = { path = "../deep-canvas-cells" }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 libc = "0.2"

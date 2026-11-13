@@ -3,6 +3,9 @@
   "description": "A result delivered back to the work source it came from (#66), one event per step: recorded, asked (waiting on your authority ask), claimed (synced before the request goes out), sent, tried (answered and not taken; it is tried again), gone (the target can never take it), refused (you said no) or unknown (no answer and no way to find out).",
   "x-since": "R2",
   "x-stability": "preview",
+  "x-tracking": "#66",
+  "x-preview_since": "R2",
+  "x-decide_by": "R5",
   "x-feeds": [],
   "type": "object",
   "properties": {

@@ -24,13 +24,13 @@ import type { PlanInput } from '@deepbuild/asks';
 import { call } from './client.js';
 import { hubAddress, installedRoot, rootOf } from './paths.js';
 import { activePlant, refusal, Refused, ulid, type Plant } from './wire.js';
+import { shellQuote as q } from './shell.js';
 
 type Obj = Record<string, unknown>;
 /** How long a follower may go without a byte, output or heartbeat, before its connection counts as stalled; a new one may take longer for its first. */
 const STALL_MS = 5000;
 const FIRST_BYTE_MS = 30_000;
 const DAY = 86_400_000;
-const q = (s: string): string => `'${s.replace(/'/g, `'\\''`)}'`;
 const sha = (s: string | Uint8Array): string => createHash('sha256').update(s).digest('hex');
 const RUNS = 'd="$HOME/.deepbuild/runs/$1"';
 
@@ -107,7 +107,7 @@ const PLANS = '/var/lib/deepbuild/plans';
  * root can write, its hash checked there against the one your yes locked, and only then that copy run, from /. Its
  * stdout and stderr, exit and the SHA-256 of each file the plan names are kept beside it, for the hub to read.
  */
-export const ROOT_RUN = String.raw`umask 022; want=$1; d=${PLANS}/$2; shift 2
+const ROOT_RUN = String.raw`umask 022; want=$1; d=${PLANS}/$2; shift 2
 install -d -m 0755 -o root -g root /var/lib/deepbuild ${PLANS} && mkdir -m 0755 "$d" || exit 96
 cat > "$d/script" && chmod 0700 "$d/script" || exit 96
 found=$(sha256sum < "$d/script" | cut -d' ' -f1)
@@ -521,6 +521,8 @@ export const isRoot = (argv: string[]): boolean => ['sudo', 'su', 'doas', 'pkexe
  * copies it into a folder only root can write, checks it there again and runs that copy. Your terminal is ssh's own, so
  * the password you type at sudo's prompt goes to sudo on the host and passes through nothing of DeepBuild's.
  * `deep host changes <host>`: each change the record holds for a host, with its undo.
+ * `deep host list`: the hosts your SSH config names, one a line. `deep host facts <host> [--refresh]`: one's facts as
+ * one line of JSON, each with when it was read; `--refresh` reads them over SSH now.
  */
 export async function hostCommand(args: string[]): Promise<number> {
   const hub = async (method: string, params: Obj): Promise<{ result?: Obj; error?: { remediation: string } }> => {
@@ -539,8 +541,20 @@ export async function hostCommand(args: string[]): Promise<number> {
     for (const c of changes) await say(`  ${new Date(c.ts).toISOString()}  ${c.grant === 'root' ? `as root (${c.ask})` : 'as you'}  ${c.change}\n      undo: ${c.undo ?? "can't undo"}`);
     return 0;
   }
+  if (args[0] === 'list' && args.length === 1) {
+    const reply = await hub('host.list', {});
+    if (!reply.result) { await say(reply.error?.remediation ?? 'no reply', process.stderr); return 1; }
+    for (const { name } of reply.result.hosts as { name: string }[]) await say(name);
+    return 0;
+  }
+  if (args[0] === 'facts' && args[1] && !args[1].startsWith('-') && (args.length === 2 || (args.length === 3 && args[2] === '--refresh'))) {
+    const reply = await hub('host.facts', { host: args[1], refresh: args.length === 3 });
+    if (!reply.result) { await say(reply.error?.remediation ?? 'no reply', process.stderr); return 1; }
+    await say(JSON.stringify(reply.result));
+    return 0;
+  }
   if (args[0] !== 'run' || args.length !== 2) {
-    await say('Usage: deep host run <ask>\n       deep host changes <host>', process.stderr);
+    await say('Usage: deep host run <ask>\n       deep host changes <host>\n       deep host list\n       deep host facts <host> [--refresh]', process.stderr);
     return 2;
   }
   const reply = await hub('host.plan', { ask: args[1] });

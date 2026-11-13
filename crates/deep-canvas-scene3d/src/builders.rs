@@ -246,6 +246,9 @@ pub fn build(kind: &str, params: &Value, ctx: &Ctx<'_>) -> Result<Mesh, Fault> {
         "tube@1" => tube_item(params, ctx)?,
         "ball@1" => ball(params, ctx.plants)?,
         "coil@1" => coil(params)?,
+        "plate@1" if crate::terrain::of_params(params).is_some() => {
+            crate::terrain::built(params, ctx.planted)?
+        }
         "plate@1" => plate(params)?,
         "display@1" => display(params)?,
         "hull@1" => crate::hull::hull(&hull_points(params, ctx)?, ctx.plants.hull)
@@ -435,6 +438,9 @@ pub fn counts(kind: &str, params: &Value, ctx: &Ctx<'_>) -> Result<(u64, u64), F
         "coil@1" => {
             let p = Sampled::bare(coil_path(params)?, false);
             tube_count(&coil_tube(params)?, &p)?
+        }
+        "plate@1" if crate::terrain::of_params(params).is_some() => {
+            return crate::terrain::counted(params, ctx.planted)
         }
         "plate@1" => plate_count(params)?,
         "display@1" => {
@@ -2053,7 +2059,7 @@ fn display(p: &Value) -> Result<Mesh, Fault> {
 
 /// A plate's `height` field at (x, z), metres: a number, `{wave: {amplitude, wavelength,
 /// direction}}` or `{noise: {amplitude, scale, seed}}` (value noise on a lattice `scale` apart).
-fn height_at(field: &Value, x: f64, z: f64) -> Option<f64> {
+pub(crate) fn height_at(field: &Value, x: f64, z: f64) -> Option<f64> {
     if let Some(h) = field.as_f64() {
         return Some(h);
     }
