@@ -28,8 +28,7 @@
   "requires": {
     "modules": {
       "marks2d": "^1",
-      "motion": "^1",
-      "media": "^1"
+      "motion": "^1"
     }
   },
   "items": {
