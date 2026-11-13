@@ -515,6 +515,13 @@ alone.push('tests/acceptance/539/');
 // design's grid rule gives another (tests/acceptance/539-oracle-redraft/DISPUTE.md); its blind redraft runs in its place.
 alone.push('tests/acceptance/539-oracle-redraft/');
 byHand.push('tests/acceptance/539-oracle/');
+// #538's files build deep-show (ac8 also deep-gpu) and #544's assembler, run logic programs and draw; ac8-budgets
+// judges the task's budgets on the reference Mac.
+alone.push('tests/acceptance/538/', 'tests/acceptance/538-oracle/', 'tests/acceptance/538-redraft-ac8/');
+timed.push('tests/acceptance/538/ac8-budgets.test.ts', 'tests/acceptance/538-redraft-ac8/ac8-budgets.test.ts');
+// #538's first AC8 draft is kept by hand until the owner swaps it: its heap, crowd and fogger programs run out of the
+// default fuel at step 0, so their arrays never change; its blind redraft, 538-redraft-ac8/, runs in its place.
+byHand.push('tests/acceptance/538/ac8-budgets.test.ts');
 // #1920's files build deep-show seven times, in the full and core sets, and read each build's published plan.
 alone.push('tests/acceptance/1920/');
 // #1863's files each start a real hub and a session through deep-hook; the speed file times five 5 s and 6 s waits a
