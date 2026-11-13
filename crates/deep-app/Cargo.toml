@@ -246,3 +246,10 @@ harness = false
 name = "acceptance_2117"
 path = "../../tests/acceptance/2117/app/panel.rs"
 harness = false
+
+# Issue #1606: AC5 and AC9 redrafted blind in tests/acceptance/1606-redraft-ac5-ac9, the app's card answered with no
+# window. card.test.ts runs it with an ask and an option; with none, as in a workspace run, it answers nothing.
+[[test]]
+name = "acceptance_1606"
+path = "../../tests/acceptance/1606-redraft-ac5-ac9/app/card.rs"
+harness = false
