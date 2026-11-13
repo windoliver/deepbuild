@@ -171,6 +171,9 @@ pub enum JointKind {
     Slider,
     Distance,
     Rope,
+    /// #523: couplings the kinematic solve runs (`reads::Coupling`).
+    Gear,
+    Pulley,
 }
 
 /// One end of a joint: a body (and the local point it's held at), or the world.
@@ -212,6 +215,7 @@ pub struct Joint {
     pub breaks_at: Option<Breaks>,
     pub collide_connected: bool,
     pub active: bool,
+    pub coupling: reads::Coupling,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -668,6 +672,7 @@ impl Reader {
                 joints.insert(id.clone(), j);
             }
         }
+        self.gears(&joints);
         let mut forces = BTreeMap::new();
         for (id, v) in self.map(m, "forces") {
             if let Some(f) = self.force(v, &format!("forces/{id}"), &bodies, &groups) {
@@ -1351,8 +1356,10 @@ impl Reader {
             Some("slider") => JointKind::Slider,
             Some("distance") => JointKind::Distance,
             Some("rope") => JointKind::Rope,
-            // Couplings: the check refuses them by caps() (crate::check); their run is #523's.
-            Some("gear" | "rack" | "pulley" | "path") => return None,
+            Some("gear") => JointKind::Gear,
+            Some("pulley") => JointKind::Pulley,
+            // The check refuses these by caps() and as unsupported (crate::check).
+            Some("rack" | "path") => return None,
             _ => {
                 self.refuse("out_of_range", join(p, "kind"), j.get("kind").unwrap_or(&Value::Null), "a joint's kind must be fixed, ball, hinge, slider, distance, rope, gear, rack, pulley or path".into());
                 return None;
@@ -1428,6 +1435,7 @@ impl Reader {
             breaks_at: self.breaks(j, p),
             collide_connected: self.flag(j, "collide_connected", p, false),
             active: self.flag(j, "active", p, true),
+            coupling: self.coupling(j, p, kind),
         })
     }
 

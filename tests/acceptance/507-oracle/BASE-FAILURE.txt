@@ -1,0 +1,13 @@
+At base 53c0e72a3 (origin/main, "Merge pull request #2356"), on 2026-11-12, the lane was not run: the machine is shared
+and loaded, so deep-show was not built. What the test would meet first was read from the base's code, not observed. The
+type-check passes.
+
+- loop.test.ts, "at clock offsets across loop boundaries the held stage shows the span's frame …":
+  - Without the oracle checkout (no $DEEP_ORACLES and no ../deep-oracles/doneright/oracles beside the checkout), it fails
+    at its first line with "BLOCKED: the pinned looping playback test (commit 396c9f0599…, sha256 67f85901…) is not under
+    …/vendor/*-396c9f0599/. Unblock: …".
+  - With it, the file is found by its hash and holds the update times `30 * 5`, `30 * 12` and `30 * 23`. The loop film is
+    presented (the base reads no `hold` on a marker) and pops out full screen (#400); the test fails at
+    `presentEntry(adv, 'advance', '→ on stage s1')`: "→ on stage s1: appended is an array, got undefined", since the
+    base's film viewer (crates/deep-show/src/film_viewer.rs `viewer_key`) takes → as a 5 s seek and replies
+    `{serial, viewer}`. There is no present mode, no held loop, and `determinism`'s sides carry no `position`.

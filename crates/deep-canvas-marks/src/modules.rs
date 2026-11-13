@@ -1166,6 +1166,8 @@ fn register_data(r: &mut Registrar, decimate: fn(&mut View<'_>) -> Result<(), Op
         .applies(is_line_series)
         .run(decimate);
     crate::arrays::register(r);
+    // #226: 3D axes' marks and their deform, through the core's fills.
+    crate::axes3d::register(r);
     // A scale it can't read raises marks2d's `scale_type` or `bad_scale`, which mark sets and
     // axes raise through the same scale.
     r.fixture("points", points_board(), None).sidecar(json!({
