@@ -831,6 +831,42 @@
     }
   },
   {
+    "source": "work.breaker",
+    "kind": "exception",
+    "fixture": {
+      "ask": {
+        "kind": "exception",
+        "question": "Issue #104's last 3 attempts were replaced: attempt 1: claude-code, its default model, crashed or interrupted; attempt 2: codex, its default model, stalled; attempt 3: claude-code, its default model, sent back past its rounds, FAIL: R2 FAIL. Start another attempt, or leave it waiting?",
+        "options": [
+          {
+            "id": "again",
+            "label": "Start another attempt",
+            "decision": "none"
+          },
+          {
+            "id": "leave",
+            "label": "Leave it waiting",
+            "decision": "none"
+          }
+        ],
+        "recommended": "leave",
+        "deadline": 1760186251123,
+        "fallback": "you",
+        "default": "leave",
+        "provisional": false,
+        "owner": "you",
+        "key": "7a3d9e2f1c0b8a7f6e5d4c3b2a1f0e9d8c7b6a5f4e3d2c1b0a9f8e7d6c5b4a39",
+        "pinned_to": {
+          "kind": "evidence",
+          "ref": "7a3d9e2f1c0b8a7f6e5d4c3b2a1f0e9d8c7b6a5f4e3d2c1b0a9f8e7d6c5b4a39"
+        }
+      },
+      "at_deadline": {
+        "decision": "none"
+      }
+    }
+  },
+  {
     "source": "deep_ask.taste",
     "kind": "taste",
     "fixture": {

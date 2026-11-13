@@ -536,6 +536,8 @@ alone.push('tests/acceptance/2197/');
 timed.push('tests/acceptance/2197/budget.test.ts');
 // #2144's AC1 runs the canvas lint on the checkout, a cargo clippy over every scope crate in its target/.
 alone.push('tests/acceptance/2144/');
+// #1332's files each start their own hubs, a played forge and played agents, and run a work run to its landings.
+alone.push('tests/acceptance/1332/');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
