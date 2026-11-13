@@ -151,7 +151,7 @@ pub(crate) struct Compiled {
     pub(crate) other: Option<(usize, Option<usize>)>,
     /// reach2's lower bone and end, after the owner (its upper bone).
     pub(crate) chain: [usize; 2],
-    pub(crate) table: Option<crate::constraint::ArcTable>,
+    pub(crate) table: Option<crate::constraint::PathRead>,
 }
 
 /// A placement's write: one clip channel into one bound item's slots, after its target's delay.
@@ -921,9 +921,14 @@ impl Program {
                 _ => [owner; 2],
             };
             let table = match &c.kind {
-                Kind::FollowPath { points, .. } => {
-                    Some(crate::constraint::ArcTable::new(points.clone()))
-                }
+                Kind::FollowPath {
+                    points, fraction, ..
+                } => Some(crate::constraint::PathRead::compile(
+                    points,
+                    fraction,
+                    &program.fields,
+                    &path,
+                )?),
                 _ => None,
             };
             program.constraints.push(Compiled {
@@ -2796,7 +2801,14 @@ impl Program {
             Kind::FollowPath { .. }
             | Kind::RestOn { .. }
             | Kind::SpringChain { .. }
-            | Kind::FollowTip { .. } => (groups(own, &[0, 1]), groups(own, &[0, 1])),
+            | Kind::FollowTip { .. } => (
+                [
+                    groups(own, &[0, 1]),
+                    c.table.iter().filter_map(|t| t.from).collect(),
+                ]
+                .concat(),
+                groups(own, &[0, 1]),
+            ),
         };
         ([other, reads].concat(), writes)
     }
@@ -3753,7 +3765,14 @@ impl Program {
                 offset,
                 ..
             } => match &c.table {
-                Some(table) => cs::follow_path(&own, table, *fraction, *orient, *offset, &mut ops),
+                Some(read) => cs::follow_path(
+                    &own,
+                    &read.table,
+                    read.fraction(fraction, slots),
+                    *orient,
+                    *offset,
+                    &mut ops,
+                ),
                 None => own,
             },
             Kind::FollowTip { offset, rotate, .. } => cs::follow_tip(

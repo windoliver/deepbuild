@@ -284,6 +284,8 @@ deep-canvas-scene3d = { path = "../deep-canvas-scene3d" }
 # Issue #499: the media module, media@1; the logic module's world, which a live play steps on the
 # transport's clock.
 deep-canvas-media = { path = "../deep-canvas-media" }
+deep-canvas-export = { path = "../deep-canvas-export" }
+deep-lottie-reader = { path = "../deep-lottie-reader" }
 deep-logic = { path = "../deep-logic" }
 # Issue #1918: the physics module, physics@1, and the Rapier backend a scene's worlds bake on.
 deep-canvas-physics = { path = "../deep-canvas-physics" }

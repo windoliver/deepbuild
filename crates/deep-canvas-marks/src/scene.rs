@@ -32,7 +32,7 @@ use crate::outline::{self, Star};
 use crate::paint::{self, Adjust, By, Over, Ramp, Span, Steps};
 use crate::path::{self, Mesh, Verb};
 use crate::pathops;
-use crate::relations;
+use crate::place::Place;
 use crate::story;
 use deep_canvas::schedule::{Key, KeyTree};
 use deep_canvas::template;
@@ -1549,87 +1549,6 @@ pub(crate) fn bounds_of(verbs: &[Verb]) -> [f64; 4] {
 fn four(v: Option<&Value>) -> Option<[f64; 4]> {
     let b: Option<Vec<f64>> = v?.as_array()?.iter().map(|v| num(Some(v))).collect();
     <[f64; 4]>::try_from(b?.as_slice()).ok()
-}
-
-/// Where an item draws: `x ↦ scale·x + pos` from its evaluated `at`, which already rides its
-/// parents as the evaluator composes them; with a box-point pivot it scales about that point of
-/// its own box (#221). Rotation, shear and a numeric pivot wait for the GPU layer, as R1's
-/// marks' do.
-#[derive(Clone, Copy, Debug, PartialEq)]
-struct Place {
-    scale: [f64; 2],
-    offset: [f64; 2],
-}
-
-impl Place {
-    const NONE: Place = Place {
-        scale: [1.0, 1.0],
-        offset: [0.0, 0.0],
-    };
-
-    fn of(item: &Value) -> Place {
-        let pivots = item
-            .get("at")
-            .and_then(|a| a.get("pivot"))
-            .is_some_and(Value::is_string);
-        let local = pivots
-            .then(|| {
-                let kind = item.get("kind").and_then(Value::as_str)?;
-                relations::own_box(kind, object_or_empty(item.get("params")))
-            })
-            .flatten();
-        let (scale, offset) = relations::place_of(item, local);
-        Place { scale, offset }
-    }
-
-    fn at(&self, p: [f64; 2]) -> [f64; 2] {
-        [
-            self.scale[0] * p[0] + self.offset[0],
-            self.scale[1] * p[1] + self.offset[1],
-        ]
-    }
-
-    /// True when the place only moves what it holds, as R1's marks can draw.
-    fn moves(&self) -> bool {
-        self.scale == [1.0, 1.0]
-    }
-
-    /// As a gradient's transform.
-    fn affine(&self) -> [f64; 6] {
-        [
-            self.scale[0],
-            0.0,
-            0.0,
-            self.scale[1],
-            self.offset[0],
-            self.offset[1],
-        ]
-    }
-
-    /// A box `[x, y, w, h]` where it draws.
-    fn rect(&self, [x, y, w, h]: [f64; 4]) -> [f64; 4] {
-        let (a, b) = (self.at([x, y]), self.at([x + w, y + h]));
-        [
-            a[0].min(b[0]),
-            a[1].min(b[1]),
-            (b[0] - a[0]).abs(),
-            (b[1] - a[1]).abs(),
-        ]
-    }
-
-    fn verbs(&self, verbs: Vec<Verb>) -> Vec<Verb> {
-        let m = |p: [f64; 2]| self.at(p);
-        verbs
-            .into_iter()
-            .map(|v| match v {
-                Verb::Move(p) => Verb::Move(m(p)),
-                Verb::Line(p) => Verb::Line(m(p)),
-                Verb::Quad(a, b) => Verb::Quad(m(a), m(b)),
-                Verb::Cubic(a, b, c) => Verb::Cubic(m(a), m(b), m(c)),
-                Verb::Close => Verb::Close,
-            })
-            .collect()
-    }
 }
 
 /// The most dashes one path draws (Paint: "at most 10,000 dashes per path").
@@ -4710,7 +4629,7 @@ pub fn base_verbs(kind: &str, params: &Map<String, Value>) -> Option<Vec<Verb>> 
 
 /// A 2D item's outline where it draws, for a union outline or an attachment at `outline`: a
 /// rect, a circle, a star or a path through its ops.
-fn item_outline(items: &Map<String, Value>, id: &str) -> Option<Vec<Verb>> {
+pub fn item_outline(items: &Map<String, Value>, id: &str) -> Option<Vec<Verb>> {
     let item = items.get(id)?;
     let kind = item.get("kind").and_then(Value::as_str)?;
     let params = object_or_empty(item.get("params"));
@@ -5131,7 +5050,7 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
             };
             // #535: `at.rot`'s z (degrees) turns the image about its origin.
             let turn = num(item.pointer("/at/rot/2")).unwrap_or(0.0);
-            let origin = place.at([0.0, 0.0]);
+            let origin = place.offset;
             vec![Mark::Image {
                 item: id.clone(),
                 asset: asset.to_ascii_lowercase(),

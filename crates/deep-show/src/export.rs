@@ -14,6 +14,7 @@ mod feed;
 mod fidelity;
 mod frames;
 mod guards;
+mod lottie;
 #[cfg(feature = "test-export-guards")]
 mod test_guards;
 
@@ -302,6 +303,8 @@ pub struct Job {
     pub refuse_end_cuts: bool,
     /// #157: the agent session that asks for the export, which holds its GPU lease.
     pub session: Option<String>,
+    /// #162: `lottie: {container, images}` (or `video.lottie`), the Lottie target's options.
+    pub lottie: Value,
 }
 
 impl Default for Job {
@@ -329,6 +332,7 @@ impl Default for Job {
             keyframe_interval: None,
             refuse_end_cuts: false,
             session: None,
+            lottie: Value::Null,
         }
     }
 }
@@ -479,6 +483,11 @@ pub fn parse(c: &Map<String, Value>) -> Option<Job> {
             .and_then(Value::as_array)
             .is_some_and(|r| r.contains(&json!("end_cut"))),
         session: s(c.get("session")),
+        lottie: c
+            .get("lottie")
+            .or_else(|| video.and_then(|v| v.get("lottie")))
+            .cloned()
+            .unwrap_or(Value::Null),
     })
 }
 
@@ -573,6 +582,10 @@ impl Hub<'_> {
             .ok_or_else(
                 || json!({"code": "unknown_target", "target": target, "codec": job.codec}),
             )?;
+        // #162: a Lottie can't keep the status rule: refused before anything is written.
+        if let Some(r) = lottie::refused(&doc).filter(|_| target == "lottie") {
+            return Err(r);
+        }
         // Rates, and what the check refuses before anything is drawn.
         let (p, q) = job
             .frame_rate
@@ -720,6 +733,10 @@ impl Hub<'_> {
             return Err(
                 json!({"outcome": "stopped", "state": "BLOCKED", "gate": "readiness", "frames_drawn": drawn, "issues": [issue]}),
             );
+        }
+        // #162: the Lottie target writes no frames: its writer reads the document as the frames show it.
+        if target == "lottie" {
+            return self.export_lottie(job, &doc, ((p, q), frame), frames, &out, &temp);
         }
         // #502: the script's lines, their captions laid out on this export's frames and held to
         // their profile, before any frame is drawn.
