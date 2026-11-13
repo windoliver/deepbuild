@@ -1,23 +1,26 @@
 //! The loop canvas module (technical design: Canvas modules; canvas primitives: Check input:
 //! loop kinds): the loop's check kinds. Issue #453 lands its first, `geometry.shading`'s defect
-//! counts and quad ratio, on every `mesh.asset@1` item a document holds.
+//! counts and quad ratio, on every `mesh.asset@1` item a document holds; #1935 its readings of
+//! each UV set, hidden faces, unused vertices and islands.
 
 pub mod count;
 mod fixtures;
+pub mod uv;
 
 use deep_canvas::registry::{
     Dependency, Implementation, Manifest, Module, Raised, Range, Registrar, Report, Semver,
 };
 use deep_canvas_scene3d::gltf::{self, Raw};
+use deep_canvas_scene3d::measures;
 use serde_json::{json, Map, Value};
 
 use count::{Counts, Edge, Opts, Prim};
 
 pub const KIND: &str = "geometry.shading";
 
-/// The wrong programs #453's criteria plant in geometry.shading, each reachable only through a
-/// proof surface's `planted`, which the hub puts in the check's input.
-pub const PLANTED: [&str; 8] = [
+/// The wrong programs #453's and #1935's criteria plant in geometry.shading, each reachable only
+/// through a proof surface's `planted`, which the hub puts in the check's input.
+pub const PLANTED: [&str; 9] = [
     "no_weld",
     "one_winding_sum",
     "degenerate_exact_zero",
@@ -26,18 +29,20 @@ pub const PLANTED: [&str; 8] = [
     "unreadable_skipped",
     "quad_fails_rigid",
     "pair_ignores_corners",
+    "uv_overlap_from_boxes",
 ];
 
 /// The most IDs a result lists per field.
 const IDS: usize = 64;
 
-const CODES: [&str; 6] = [
+const CODES: [&str; 7] = [
     "loop.unreadable",
     "loop.degenerate",
     "loop.flipped",
     "loop.inconsistent",
     "loop.normals_inward",
     "loop.quad_ratio",
+    "loop.uv",
 ];
 
 fn manifest() -> Manifest {
@@ -135,6 +140,12 @@ fn register(r: &mut Registrar) {
         "Run a remesh job in quad mode on the mesh before it is rigged.",
         false,
     );
+    r.code(
+        "loop.uv",
+        "A UV set past a limit: area outside the unit square on a set other than uv0, or the input's uv_overlap_max, uv_fill_min, min_gap_px or texel.",
+        "Unwrap the set again with the padding and texel density it needs, its charts inside the unit square.",
+        false,
+    );
     fixtures::register(r);
 }
 
@@ -175,6 +186,47 @@ fn edge_id(e: &Edge, c: &Counts, read: &[(usize, Prim)]) -> String {
     format!("{}/{}", vertex_id(e[0], c, read), vertex_id(e[1], c, read))
 }
 
+/// A position's ID, `<primitive>:<vertex>`, from its index across the read primitives.
+fn position_id(i: usize, read: &[(usize, Prim)]) -> String {
+    let mut i = i;
+    for (p, prim) in read {
+        if i < prim.positions.len() {
+            return format!("{p}:{i}");
+        }
+        i -= prim.positions.len();
+    }
+    String::new()
+}
+
+/// Each UV set's faces across the read primitives: set `k` holds the triangles of every
+/// primitive that carries `TEXCOORD_k`.
+fn uv_faces(read: &[(usize, Prim)], sets: &[Vec<Vec<[f64; 2]>>], c: &Counts) -> Vec<Vec<uv::Face>> {
+    let n = read
+        .iter()
+        .map(|(p, _)| sets.get(*p).map_or(0, Vec::len))
+        .max()
+        .unwrap_or(0);
+    let mut out: Vec<Vec<uv::Face>> = (0..n).map(|_| Vec::new()).collect();
+    let (mut base, mut first) = (0usize, 0usize);
+    for (p, prim) in read {
+        let own = sets.get(*p).map_or(&[][..], Vec::as_slice);
+        for (k, set) in own.iter().enumerate() {
+            for (t, tri) in prim.indices.as_chunks::<3>().0.iter().enumerate() {
+                let i = tri.map(|i| i as usize);
+                out[k].push(uv::Face {
+                    f: first + t,
+                    uv: i.map(|i| set[i]),
+                    v: i.map(|i| c.vertices[base + i]),
+                    area: c.areas[first + t],
+                });
+            }
+        }
+        base += prim.positions.len();
+        first += prim.indices.len() / 3;
+    }
+    out
+}
+
 /// geometry.shading on every `mesh.asset@1` item of `lowered`, given the check input with the
 /// assets its items name.
 pub fn report(lowered: &Value, input: &Value) -> Report {
@@ -190,6 +242,24 @@ pub fn report(lowered: &Value, input: &Value) -> Report {
     };
     let quad_min = number(input, "/quad_min", 0.85).max(0.85);
     let outward = input.get("normals").and_then(Value::as_str) != Some("consistent");
+    // #1935: the UV readings' raster and limits; a limit absent from the input never fails.
+    let limit = |path: &str| input.pointer(path).and_then(Value::as_f64);
+    let texel = match input
+        .get("texel")
+        .and_then(Value::as_array)
+        .map(Vec::as_slice)
+    {
+        Some([lo, hi]) => lo.as_f64().zip(hi.as_f64()).map(|(l, h)| [l, h]),
+        _ => None,
+    };
+    let uv_opts = uv::Opts {
+        resolution: number(input, "/resolution", 1024.0).max(1.0),
+        padding: number(input, "/padding", 4.0).max(0.0),
+        min_gap_px: limit("/min_gap_px"),
+        texel,
+        boxes: plants("uv_overlap_from_boxes"),
+    };
+    let (overlap_max, fill_min) = (limit("/uv_overlap_max"), limit("/uv_fill_min"));
     let mut out = Report::default();
     let empty = Map::new();
     let items = lowered
@@ -254,8 +324,31 @@ pub fn report(lowered: &Value, input: &Value) -> Report {
         if blocked {
             continue;
         }
+        let Ok(sets) = gltf::uv_sets(&bytes, &node) else {
+            out.blocked.push(unread(None, "file"));
+            continue;
+        };
         let prims: Vec<&Prim> = read.iter().map(|(_, p)| p).collect();
         let c = count::count(&prims, &opts);
+        let tris: Vec<[count::V3; 3]> = prims
+            .iter()
+            .flat_map(|p| {
+                p.indices
+                    .as_chunks::<3>()
+                    .0
+                    .iter()
+                    .map(|t| t.map(|i| p.positions[i as usize]))
+            })
+            .collect();
+        let hidden: Vec<usize> = measures::hidden(&tris)
+            .into_iter()
+            .enumerate()
+            .filter_map(|(f, h)| h.then_some(f))
+            .collect();
+        let readings: Vec<uv::Reading> = uv_faces(&read, &sets, &c)
+            .iter()
+            .map(|faces| uv::read(faces, &uv_opts))
+            .collect();
         let faces = |fs: &[usize]| -> Vec<String> {
             fs.iter().take(IDS).map(|f| face_id(*f, &read)).collect()
         };
@@ -270,6 +363,36 @@ pub fn report(lowered: &Value, input: &Value) -> Report {
             .collect();
         let ratio = c.quad_ratio();
         let unpaired = faces(&c.unpaired);
+        // A chart's ID is its first face's.
+        let charts = |r: &uv::Reading, cs: &[usize]| -> Vec<String> {
+            cs.iter()
+                .take(IDS)
+                .map(|ch| face_id(r.charts[*ch][0], &read))
+                .collect()
+        };
+        let uv_json: Map<String, Value> = readings
+            .iter()
+            .enumerate()
+            .map(|(k, r)| {
+                let set = json!({
+                    "uv_flipped": r.flipped.len(),
+                    "uv_overlap": r.overlap,
+                    "out_of_unit": r.out_of_unit,
+                    "uv_fill": r.fill,
+                    "min_gap_px": r.min_gap_px,
+                    "texel_p5": r.texel_p5,
+                    "texel_p95": r.texel_p95,
+                    "ids": {
+                        "uv_flipped": faces(&r.flipped),
+                        "uv_overlap": charts(r, &r.overlapping),
+                        "out_of_unit": charts(r, &r.outside),
+                        "min_gap_px": charts(r, &r.close),
+                        "texel": charts(r, &r.off_texel),
+                    },
+                });
+                (format!("uv{k}"), set)
+            })
+            .collect();
         out.results.push(json!({
             "item": id,
             "welded_vertices": c.welded,
@@ -288,10 +411,18 @@ pub fn report(lowered: &Value, input: &Value) -> Report {
                 "degenerate_faces": faces(&c.degenerate_faces),
                 "boundary_edges": edges(&c.boundary_edges),
                 "unpaired": unpaired,
+                "hidden_faces": faces(&hidden),
+                "unused_vertices": c.unused.iter().take(IDS).map(|i| position_id(*i, &read)).collect::<Vec<_>>(),
+                "smallest_island": faces(&c.smallest_island),
             },
             "signed_volume": c.volume,
             "quad_ratio": ratio,
             "unpaired": c.unpaired.len(),
+            "hidden_faces": hidden.len(),
+            "unused_vertices": c.unused.len(),
+            "islands": c.islands,
+            "smallest_island_share": c.smallest_share,
+            "uv": uv_json,
         }));
         // The fields decide what fails, never a severity: degenerate faces under `degenerate:
         // refuse`, flipped faces and inconsistent edges under either `normals`, and a closed
@@ -339,6 +470,52 @@ pub fn report(lowered: &Value, input: &Value) -> Report {
                 format!("a mesh that deforms pairs into quads at {ratio:.4}, under {quad_min}"),
                 json!({"quad_ratio": ratio, "unpaired": c.unpaired.len(), "ids": faces(&c.unpaired)}),
             );
+        }
+        // #1935: uv0 may tile, so it never fails on overlap or on area outside the unit square;
+        // any other set fails on area outside it, and every set on a limit the input sets.
+        for (k, r) in readings.iter().enumerate() {
+            let mut fail = |reading: &str, value: Value, limit: Value, ids: Vec<String>| {
+                raise(
+                    "loop.uv",
+                    format!("uv{k}'s {reading} is {value}, past {limit}"),
+                    json!({"set": k, "reading": reading, "value": value, "limit": limit, "ids": ids}),
+                );
+            };
+            if k > 0 && !r.outside.is_empty() {
+                fail(
+                    "out_of_unit",
+                    json!(r.out_of_unit),
+                    json!(0),
+                    charts(r, &r.outside),
+                );
+            }
+            if let Some(m) = overlap_max.filter(|m| k > 0 && r.overlap > *m) {
+                fail(
+                    "uv_overlap",
+                    json!(r.overlap),
+                    json!(m),
+                    charts(r, &r.overlapping),
+                );
+            }
+            if let Some(m) = fill_min.filter(|m| r.fill < *m) {
+                fail("uv_fill", json!(r.fill), json!(m), Vec::new());
+            }
+            if !r.close.is_empty() && uv_opts.min_gap_px.is_some() {
+                fail(
+                    "min_gap_px",
+                    json!(r.min_gap_px),
+                    json!(uv_opts.min_gap_px),
+                    charts(r, &r.close),
+                );
+            }
+            if !r.off_texel.is_empty() {
+                fail(
+                    "texel",
+                    json!([r.texel_p5, r.texel_p95]),
+                    json!(uv_opts.texel),
+                    charts(r, &r.off_texel),
+                );
+            }
         }
     }
     out

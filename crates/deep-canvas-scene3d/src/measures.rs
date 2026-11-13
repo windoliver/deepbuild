@@ -195,6 +195,61 @@ fn occlusion(m: &Mesh, p: &Poly) -> Vec<f64> {
         .collect()
 }
 
+/// #1935, geometry.shading's `hidden_faces`: whether each triangle is hidden, none of its sample
+/// points reaching the bounding sphere along the fixed directions. Each point is tried from both
+/// sides of its face, each direction turned into that side's hemisphere as occlusion turns it, so
+/// a face is hidden only when neither side sees out. A triangle with no area is never hidden.
+pub fn hidden(tris: &[[V3; 3]]) -> Vec<bool> {
+    // The centroid, then points 2/3 and 0.9 of the way to each corner.
+    const SAMPLES: [[f64; 3]; 7] = [
+        [1.0 / 3.0, 1.0 / 3.0, 1.0 / 3.0],
+        [2.0 / 3.0, 1.0 / 6.0, 1.0 / 6.0],
+        [1.0 / 6.0, 2.0 / 3.0, 1.0 / 6.0],
+        [1.0 / 6.0, 1.0 / 6.0, 2.0 / 3.0],
+        [0.9, 0.05, 0.05],
+        [0.05, 0.9, 0.05],
+        [0.05, 0.05, 0.9],
+    ];
+    let (mut lo, mut hi) = ([f64::INFINITY; 3], [f64::NEG_INFINITY; 3]);
+    for p in tris.iter().flatten() {
+        for k in 0..3 {
+            lo[k] = lo[k].min(p[k]);
+            hi[k] = hi[k].max(p[k]);
+        }
+    }
+    let off = if tris.is_empty() {
+        0.0
+    } else {
+        1e-6 * length(sub(hi, lo)).max(1e-3)
+    };
+    let bvh = Bvh::new(tris.to_vec());
+    let dirs = directions();
+    tris.iter()
+        .map(|&[a, b, c]| {
+            let n = cross(sub(b, a), sub(c, a));
+            if length(n) == 0.0 {
+                return false;
+            }
+            let n = unit(n);
+            let sees_out = SAMPLES.iter().any(|w| {
+                let q = add(add(scale(a, w[0]), scale(b, w[1])), scale(c, w[2]));
+                [n, scale(n, -1.0)].iter().any(|&side| {
+                    let o = add(q, scale(side, off));
+                    dirs.iter().any(|&d| {
+                        let d = if dot(d, side) < 0.0 {
+                            scale(d, -1.0)
+                        } else {
+                            d
+                        };
+                        !bvh.blocks(o, d, off * 1e-3)
+                    })
+                })
+            });
+            !sees_out
+        })
+        .collect()
+}
+
 /// The elements of a built item's part in a domain, in index order (Recipe: repeat over
 /// elements): each face of the part's polygon view, or each welded point on them, with `i`,
 /// `center`, `normal`, `area`, `size` and the part's attributes and measures. Registered by

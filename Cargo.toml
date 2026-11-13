@@ -34,6 +34,10 @@ opt-level = 3
 # Issue #402: the terminal emulator a panel host feeds 50 MB of a program's output through.
 [profile.dev.package.deep-canvas-cells]
 opt-level = 3
+# Issue #1935: geometry.shading rasterizes each UV set at 1,024 px and casts the hidden-face rays in
+# the dev binary every pack kind's mesh and the acceptance tests run, so it builds at release speed.
+[profile.dev.package.deep-canvas-loop]
+opt-level = 3
 # Issue #399: a 10,000-node graph laid out incrementally in under 50 ms per change, read off the
 # dev binary.
 [profile.dev.package.deep-canvas-graph]

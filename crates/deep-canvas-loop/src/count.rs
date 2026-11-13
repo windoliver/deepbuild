@@ -81,6 +81,17 @@ pub struct Counts {
     pub volume: Option<f64>,
     pub pairs: usize,
     pub unpaired: Vec<usize>,
+    /// #1935: each position's welded vertex, across the primitives.
+    pub vertices: Vec<u32>,
+    /// Each face's area, m².
+    pub areas: Vec<f64>,
+    /// The positions no triangle uses, by index across the primitives.
+    pub unused: Vec<usize>,
+    /// The islands (faces that share a welded vertex are one), and the smallest by area: its
+    /// share of the mesh's area and its faces.
+    pub islands: usize,
+    pub smallest_share: f64,
+    pub smallest_island: Vec<usize>,
 }
 
 impl Counts {
@@ -183,8 +194,12 @@ pub fn count(prims: &[&Prim], o: &Opts) -> Counts {
         } else {
             dot(sub(hi, lo), sub(hi, lo))
         };
+        let mut used = vec![false; prim.positions.len()];
         for t in prim.indices.as_chunks::<3>().0 {
             let i = [t[0], t[1], t[2]].map(|i| i as usize);
+            for k in i {
+                used[k] = true;
+            }
             let p = i.map(|i| prim.positions[i]);
             let area2 = cross(sub(p[1], p[0]), sub(p[2], p[0]));
             let f = faces.len();
@@ -199,6 +214,7 @@ pub fn count(prims: &[&Prim], o: &Opts) -> Counts {
             if degenerate {
                 c.degenerate_faces.push(f);
             }
+            c.areas.push(area);
             faces.push(Face {
                 v,
                 p,
@@ -206,9 +222,13 @@ pub fn count(prims: &[&Prim], o: &Opts) -> Counts {
                 area2,
             });
         }
+        c.unused
+            .extend((0..used.len()).filter(|k| !used[*k]).map(|k| base + k));
         base += prim.positions.len();
     }
+    c.vertices = welded;
     c.triangles = faces.len();
+    islands(&faces, nwelded, &mut c);
     // A face is flipped when its corner normals point against its own vector area.
     let sum: f64 = faces
         .iter()
@@ -260,6 +280,47 @@ pub fn count(prims: &[&Prim], o: &Opts) -> Counts {
     }
     pair(&faces, &edges, o, &mut c);
     c
+}
+
+/// The mesh's islands: faces that share a welded vertex are one, so a vertex no face uses is
+/// none. The smallest is the one of least area, ties to its lowest face.
+fn islands(faces: &[Face], n: usize, c: &mut Counts) {
+    let mut parent: Vec<usize> = (0..n).collect();
+    fn root(p: &mut [usize], mut i: usize) -> usize {
+        while p[i] != i {
+            p[i] = p[p[i]];
+            i = p[i];
+        }
+        i
+    }
+    for face in faces {
+        for k in 1..3 {
+            let (a, b) = (
+                root(&mut parent, face.v[0] as usize),
+                root(&mut parent, face.v[k] as usize),
+            );
+            parent[a.max(b)] = a.min(b);
+        }
+    }
+    let mut by_root: BTreeMap<usize, (f64, Vec<usize>)> = BTreeMap::new();
+    let mut total = 0.0;
+    for (f, face) in faces.iter().enumerate() {
+        let a = len(face.area2) / 2.0;
+        total += a;
+        let island = by_root
+            .entry(root(&mut parent, face.v[0] as usize))
+            .or_default();
+        island.0 += a;
+        island.1.push(f);
+    }
+    c.islands = by_root.len();
+    if let Some((a, fs)) = by_root
+        .into_values()
+        .min_by(|x, y| x.0.total_cmp(&y.0).then(x.1[0].cmp(&y.1[0])))
+    {
+        c.smallest_share = if total > 0.0 { a / total } else { 0.0 };
+        c.smallest_island = fs;
+    }
 }
 
 /// The welded vertices whose faces make more than one fan: faces around a vertex join when they
