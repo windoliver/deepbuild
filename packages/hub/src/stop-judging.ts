@@ -21,7 +21,7 @@ import { type LeaseTable } from '@deepbuild/leases';
 import { type Runner, type WindowReport } from '@deepbuild/runner';
 import { type Grant, type Host } from '@deepbuild/supervisor';
 import { recordVerdict, verdictHash, verdictLine, type Result } from '@deepbuild/verdicts';
-import { parse as parseYaml } from 'yaml';
+import { shellQuote } from './shell.js';
 import { words } from './claude-settings.js';
 import { holdsFor, stopTimeoutS } from './codex-settings.js';
 import { codexReadings, heartbeatsGone, loopsCovered, standingReadings, stands, uncoveredLoops } from './codex-loops.js';
@@ -57,7 +57,8 @@ import { DAY, sql, letters, ghToken, COMPLETION_PROMPTS, unseenTools, type Obj, 
 const VERDICT_WAIT_MS = 30 * 60_000;
 
 export interface StopJudgingOptions {
-  settings: CoreOptions;
+  settings: CoreOptions & { forge: string };
+  doneSpec(cwd: string): unknown;
   services: {
     readonly tasks: AskTasks;
     readonly openItems: OpenItems;
@@ -88,7 +89,7 @@ export interface StopJudgingOptions {
   };
   state: () => Pick<SessionStatePort, "attention" | "live" | "sessions" | "startOf">;
   mcp: () => Pick<McpOperationsPort, "checksOf" | "pinOf">;
-  delivery: () => Pick<AnswerDeliveryPort, "cap" | "deliver" | "handed" | "offer" | "promiseCarried" | "releases" | "unwoken" | "waiting" | "waitingFor">;
+  delivery: () => Pick<AnswerDeliveryPort, "cap" | "deliver" | "handed" | "offer" | "promiseCarried" | "releases" | "unwoken" | "waiting" | "answers">;
   transcripts: () => Pick<TranscriptsPort, "cursors">;
   control: () => Pick<HubControlPort, "onSwitchedTree">;
   flags: () => Pick<SessionFlagsPort, "watchOnly">;
@@ -649,7 +650,7 @@ export class StopJudging {
       if (!check) return [];
       const deadline = check.deadline === undefined ? undefined : duration(check.deadline as JsonValue);
       const conflict = 'conflict' in merged ? merged.conflict : undefined;
-      const command = conflict ? `printf '%s\\n' '${conflict.replaceAll("'", "'\\''")}' >&2; exit 1` : check.run;
+      const command = conflict ? `printf '%s\\n' ${shellQuote(conflict)} >&2; exit 1` : check.run;
       return [{ check: name, approved: null, command, covers: [], depth: 'unit' as const, on_base: 'passes' as const, asserts: [], source: 'spec' as const, commit: 'commit' in merged ? merged.commit : head, ...(deadline ? { deadline_ms: deadline } : {}) }];
     });
   }
@@ -718,7 +719,7 @@ export class StopJudging {
       await this.options.events.appendReading(meta.session, meta.agent, `This stop isn't held: ${why}. Its verdict comes with your next message.`).catch(() => undefined);
     };
     // Something already sends the agent on: the turn isn't ending, so no slow check starts.
-    const waiting = () => this.options.schedule.queue(() => this.options.delivery().waitingFor(meta.session));
+    const waiting = () => this.options.schedule.queue(() => this.options.delivery().answers.waitingFor(meta.session));
     if (r.sendBacks.length || (await waiting()).length) return undefined;
     const deadlines = this.options.services.gate.slowDeadlines(claim);
     const late = deadlines.find((c) => c.deadline_ms === null || !holdsFor(c.deadline_ms, timeoutS));
@@ -788,9 +789,9 @@ export class StopJudging {
         return r.sendBacks.shift();
       }
       if (this.options.delivery().releases) {
-        if ((await this.options.schedule.queue(() => this.options.delivery().waitingFor(session))).length) return undefined;
+        if ((await this.options.schedule.queue(() => this.options.delivery().answers.waitingFor(session))).length) return undefined;
       } else {
-        const block = await this.options.schedule.queue(async () => (this.options.schedule.abandoned.has(meta.id) ? undefined : this.options.delivery().deliver(await this.options.delivery().waitingFor(session), 'stop_hold', { session, id: meta.id })));
+        const block = await this.options.schedule.queue(async () => (this.options.schedule.abandoned.has(meta.id) ? undefined : this.options.delivery().deliver(await this.options.delivery().answers.waitingFor(session), 'stop_hold', { session, id: meta.id })));
         if (block) return block;
       }
       if (polls) await new Promise((done) => setTimeout(done, Math.min(250, Math.max(0, until - Date.now()))));
@@ -1067,7 +1068,7 @@ export class StopJudging {
       const checks: ClaimCheck[] = r.checks.map((c) => {
         const covered = r.requirements.filter((q) => q.check === c.check);
         const deepest = covered.map((q) => DEPTHS.indexOf(depth(q.depth))).reduce((a, b) => Math.max(a, b), 0);
-        return { ...c, command: c.command ?? `sh '${c.check.replaceAll("'", "'\\''")}'`, covers: covered.map((q) => q.req), depth: DEPTHS[deepest]!, source: 'definition' as const };
+        return { ...c, command: c.command ?? `sh ${shellQuote(c.check)}`, covers: covered.map((q) => q.req), depth: DEPTHS[deepest]!, source: 'definition' as const };
       });
       // The repo's spec checks run beside the definition's (#322): in a project the core's trust decision marks
       // trusted, or one the agents' own trust records already do; an untrusted repo's spec commands never run, and
@@ -1140,8 +1141,8 @@ export class StopJudging {
    * as a command run in the claim's checkout, the repo's own, covering the claim as a whole.
    */
   private specChecks(cwd: string): ClaimCheck[] {
-    let spec: unknown;
-    try { spec = parseYaml(readFileSync(join(cwd, '.deepbuild', 'done.yaml'), 'utf8')); } catch { return []; }
+    const spec = this.options.doneSpec(cwd);
+    if (spec === undefined) return [];
     const checks = this.options.mcp().checksOf(cwd);
     const docs = this.options.services.canvasSide.docChecksOf(cwd);
     const done = isObj(spec) && isObj(spec.claims) && isObj(spec.claims.done) && Array.isArray(spec.claims.done.checks) ? spec.claims.done.checks.map(String) : [...checks.keys(), ...docs.keys()];
@@ -1350,8 +1351,7 @@ export class StopJudging {
    * those suites start (the workspaces, deep-hook) once per checkout.
    */
   private outsideOf(cwd: string, check: string): { build: string } | undefined {
-    let spec: unknown;
-    try { spec = parseYaml(readFileSync(join(cwd, '.deepbuild', 'done.yaml'), 'utf8')); } catch { return undefined; }
+    const spec = this.options.doneSpec(cwd);
     const o = isObj(spec) && isObj(spec.outside) ? spec.outside : undefined;
     const paths = Array.isArray(o?.checks) ? o.checks.map(String) : [];
     return o && typeof o.build === 'string' && paths.some((p) => check === p || (p.endsWith('/') && check.startsWith(p))) ? { build: o.build } : undefined;
@@ -1381,7 +1381,7 @@ export class StopJudging {
    */
   async judgeLanding(r: { repo: string; checkout: string; issue: number; pr: number; commit: string; session: string }): Promise<{ claim: string; outcome: Outcome; requirements: { req: string; text: string; settled_by: string | null; outcome: string }[] } | undefined> {
     const [owner, name] = r.repo.split('/') as [string, string];
-    const fetch = this.options.settings.github ? recordedFetch(this.options.settings.github) : liveFetch(this.options.settings.forge ?? 'https://api.github.com', process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN ?? await ghToken());
+    const fetch = this.options.settings.github ? recordedFetch(this.options.settings.github) : liveFetch(this.options.settings.forge, process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN ?? await ghToken());
     // A reading with no revision time is revised by its text: the definition still names the issue it locked from.
     const readings = (await readIssue(fetch, owner, name, r.issue, this.options.settings.plant).catch(() => undefined))?.map((x) => (x.updated ? x : { ...x, updated: sha256Hex(new TextEncoder().encode(x.body)) }));
     if (!readings?.[0]) throw Error(`issue #${r.issue} of ${r.repo} couldn't be read, so its change can't be judged`);

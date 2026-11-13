@@ -12,7 +12,7 @@ import net from 'node:net';
 import { homedir, tmpdir } from 'node:os';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import type { SlotFill } from '@deepbuild/conformance';
-import type { Grant, Host, ResourceKind, Supervisor } from '@deepbuild/supervisor';
+import { listening, type Grant, type Host, type ResourceKind, type Supervisor } from '@deepbuild/supervisor';
 import { parse } from 'yaml';
 
 /** The `environment:` block of done.yaml. */
@@ -143,15 +143,8 @@ const SESSION_KIND = (name: string) => ({ name, match: 'exact', cap: 1000, coold
 /** env-local's resource kinds, as its manifest declares them in the kernel's lease table (#237). */
 export const leaseKinds = [PORT_KIND, COMPOSE_KIND, ...SESSION_KINDS.map(SESSION_KIND)];
 const HOSTS = ['127.0.0.1', '0.0.0.0', '::'];
-/** lsof, where the platform ships it: /usr/sbin on macOS, /usr/bin on Linux. */
-const LSOF = process.platform === 'darwin' ? '/usr/sbin/lsof' : '/usr/bin/lsof';
-/** Whether lsof shows no listener on the port, on any address; a failed lsof is not proof, so not free. */
-const unlisted = (port: number): Promise<boolean> => new Promise((resolve) => {
-  execFile(LSOF, ['-nP', `-iTCP:${port}`, '-sTCP:LISTEN', '-Fp'], { env: { ...process.env, LC_ALL: 'C' } }, (error, stdout, stderr) => {
-    // lsof exits 1 with no output when nothing matches.
-    resolve(stdout.trim() === '' && (!error || ((error as { code?: unknown }).code === 1 && stderr.trim() === '')));
-  });
-});
+/** Whether lsof shows no listener; an unreadable process table never proves a port free. */
+const unlisted = (port: number): Promise<boolean> => listening(port).then((result) => result.empty, () => false);
 /** Answers whether a connection to the port on the host is refused. */
 const refused = (port: number, host: string): Promise<boolean> => new Promise((resolve) => {
   const s = net.connect({ port, host });
