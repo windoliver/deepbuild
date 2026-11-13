@@ -3532,7 +3532,7 @@ fn filter_named(list: &str) -> crate::occurrence::Filter {
 }
 
 /// An occurrence list and its filter: its name, or `{list, kinds, a, b, tags, where}`.
-fn list_of(v: &Value, path: &str) -> Result<crate::occurrence::Filter, Refused> {
+pub(crate) fn list_of(v: &Value, path: &str) -> Result<crate::occurrence::Filter, Refused> {
     match v {
         Value::String(list) => Ok(filter_named(list)),
         Value::Object(f) => filter_of(f, path),

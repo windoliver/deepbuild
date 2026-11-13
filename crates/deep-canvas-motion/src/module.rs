@@ -174,6 +174,12 @@ fn register_compiling(
     for (name, value) in crate::kit::entries(planted, cycle_through) {
         r.entry("constraint@1", name, value, "R6");
     }
+    // #450: a trail on a 3D line or a 2D path reads its source's chain at earlier times: each
+    // frame's evaluations count in the budget estimate, and its fields are checked here.
+    for kind in ["mark.line", "path"] {
+        r.cost(kind, crate::trail::cost)
+            .rule(kind, crate::trail::rule);
+    }
     r.array("motion.program", "program", "document", "geometry", "plan");
     r.contribution(
         "motion.at",

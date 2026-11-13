@@ -385,6 +385,8 @@ pub struct Program {
     pub(crate) members: Vec<(usize, usize)>,
     /// #504: each take-apart target's share slot and its follow, in stagger then list order.
     pub(crate) staggered: Vec<Staggered>,
+    /// #450: its 2D trails' whole-window bakes, taken once and kept with it.
+    pub trails: crate::trail::Bakes,
 }
 
 /// #504: one take-apart target: its stagger (in [`Motion::staggers`]), its assembly's share slot
@@ -670,6 +672,7 @@ impl Program {
             assemblies,
             members,
             staggered: Vec::new(),
+            trails: Default::default(),
         };
         // Only a document with frames is laid out; it is refused here only when a key glides
         // its layout, since the layout is otherwise not motion's to check. A glide needs a frame
@@ -3409,7 +3412,7 @@ impl Program {
     /// `occurrences` (#544), after `reader`'s kinds and payload `fields` are checked against the
     /// item's `emits`: a name it doesn't declare is refused `occurrence.undeclared`, from the
     /// document alone, so before any step runs.
-    fn occurrences(
+    pub(crate) fn occurrences(
         &self,
         filter: &crate::occurrence::Filter,
         doc: &Map<String, Value>,
