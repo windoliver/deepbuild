@@ -140,7 +140,10 @@ assertion in this folder (`BASE-FAILURE.txt`), and each file's header names the 
 
 ## Fixtures
 
-All made at test time in `helpers.ts`; no file outside the checkout, no personal data, CC0.
+All made at test time in `helpers.ts`; no file outside the checkout, no personal data, CC0. Every film is 640 × 360
+with an ink band over its lower third (y 240 to 360) on the ground, so no frame is flat or black under export's
+film.blank guard (#157: 98% of a frame's pixels in one luma window 3 code values wide, for 0.1 s or more); each film's
+block slides over it.
 
 - **The quiz film** (criteria 1 and 2): 640 × 360, 50 s at 10 fps; a block sliding 12 u a second; stage markers
   `intro` 0 s, `fork` 8 s (waits for `path`, options A and B, default A; `then: {B: part2}`), `ask1` 33 s, `ask2` 37 s,

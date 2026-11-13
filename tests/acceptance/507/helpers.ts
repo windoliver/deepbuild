@@ -340,10 +340,15 @@ const shownOver = (id: string, from: number, to: number | null): JsonObject => (
   target: `items/${id}/adjust/opacity`, type: 'f32',
   keys: { k0: { t: '0s', value: 0, interp: 'hold' }, k1: { t: at(from), value: 1, interp: 'hold' }, ...(to === null ? {} : { k2: { t: at(to), value: 0, interp: 'hold' } }) },
 });
+/**
+ * A film: the ground, then an ink band over the lower third, under its own items. The band keeps every frame off
+ * export's film.blank guard (#157): with it no luma window 3 code values wide holds 98% of a frame's pixels.
+ */
 function film(id: string, title: string, items: JsonObject[], extra: JsonObject): JsonObject {
+  const band: JsonObject = { ...rect('band', [0, 240, SIZE[0], 120], 'ink', 1), order: 'a0001b' };
   return {
     format: 1, id, profile: 'film', title, description: `${title}: a piece the #507 acceptance tests present.`, size: SIZE, safe: 24, camera: 'cam',
-    items: Object.fromEntries([camera2d(), rect('back', [0, 0, SIZE[0], SIZE[1]], 'ground', 1), ...items].map((i) => [String(i['id']), i])),
+    items: Object.fromEntries([camera2d(), rect('back', [0, 0, SIZE[0], SIZE[1]], 'ground', 1), band, ...items].map((i) => [String(i['id']), i])),
     ...extra,
   };
 }
@@ -353,7 +358,8 @@ const choice = (label: string, options: string[], def?: string): JsonObject =>
 // The quiz film (criteria 1 and 2): 50 s at 10 fps; a stage marker at 8 s waiting for a two-option choice (A plays on, B
 // goes on at the marker at 21 s), a goto at 20 s to 30 s, three questions waiting at 33, 37 and 41 s, and a counter of
 // right answers from 45 s. Each waiting marker's text shows only from its marker for 0.1 s of the timeline, so it is the
-// one text that frame shows; a block slides 12 u a second, so every timeline frame differs.
+// one text that frame shows; a block slides 12 u a second over the ink band, so every timeline frame differs and none
+// is flat.
 
 /**
  * The texts and their counts of graphemes the hold rule reads (whitespace never counts): 45, 60, 51 and 39. None shows a
