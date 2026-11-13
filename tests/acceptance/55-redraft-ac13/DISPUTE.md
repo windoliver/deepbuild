@@ -33,6 +33,9 @@ general terms, that every agent paseo runs is started by paseo and so runs insid
 that nothing in its tests may rest on a process outside paseo's tree being taken as paseo's agent.
 
 Its world starts Claude Code as a child of the process that hosts the plugin. On the base its three AC13 tests pass and
-the planted `paseo-delivers-beside-waiter` fails naming the ask (`BASE-RUN.txt`). The first draft's `delivery.test.ts` is
-kept by hand in `scripts/lanes.mjs`; the redraft runs in its place. Whoever settles the dispute swaps them
-(design: Dogfooding).
+the planted `paseo-delivers-beside-waiter` fails naming the ask (`BASE-RUN.txt`). On #2070's change it reads the same.
+
+## Settled
+
+The owner approved the swap on November 12, 2026, in #2070's session ("I approve everything"). The first draft's
+`delivery.test.ts` is removed, and #55's README points AC13 at this redraft.
