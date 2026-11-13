@@ -503,6 +503,14 @@ alone.push('tests/acceptance/306-redraft-1958/');
 // budgets.test.ts reads the machine's load.
 alone.push('tests/acceptance/157/', 'tests/acceptance/157-oracle/');
 timed.push('tests/acceptance/157/budgets.test.ts');
+// #162's files each build deep-show (atomic.test.ts with test-export-guards) and export to Lottie through the pinned
+// reference renderer; the import legs start a hub and run its import job; budgets.test.ts times both.
+alone.push('tests/acceptance/162/', 'tests/acceptance/162-oracle/');
+timed.push('tests/acceptance/162/budgets.test.ts');
+// #162's first-draft AC6 file keys a twist whose outline's corners all lie as far as the twist reaches, so its output never
+// changes (tests/acceptance/162-redraft-ac6/DISPUTE.md); its blind redraft runs in its place.
+alone.push('tests/acceptance/162-redraft-ac6/');
+byHand.push('tests/acceptance/162/repeater.test.ts');
 // #1183's files each build deep-show and judge 3D figures whose logic runs in the sandbox.
 alone.push('tests/acceptance/1183/');
 // #537's files build deep-gpu (most also deep-show, and #544's assembler), run logic programs and draw on the GPU;
@@ -515,6 +523,13 @@ alone.push('tests/acceptance/539/');
 // design's grid rule gives another (tests/acceptance/539-oracle-redraft/DISPUTE.md); its blind redraft runs in its place.
 alone.push('tests/acceptance/539-oracle-redraft/');
 byHand.push('tests/acceptance/539-oracle/');
+// #538's files build deep-show (ac8 also deep-gpu) and #544's assembler, run logic programs and draw; ac8-budgets
+// judges the task's budgets on the reference Mac.
+alone.push('tests/acceptance/538/', 'tests/acceptance/538-oracle/', 'tests/acceptance/538-redraft-ac8/');
+timed.push('tests/acceptance/538/ac8-budgets.test.ts', 'tests/acceptance/538-redraft-ac8/ac8-budgets.test.ts');
+// #538's first AC8 draft is kept by hand until the owner swaps it: its heap, crowd and fogger programs run out of the
+// default fuel at step 0, so their arrays never change; its blind redraft, 538-redraft-ac8/, runs in its place.
+byHand.push('tests/acceptance/538/ac8-budgets.test.ts');
 // #1920's files build deep-show seven times, in the full and core sets, and read each build's published plan.
 alone.push('tests/acceptance/1920/');
 // #1863's files each start a real hub and a session through deep-hook; the speed file times five 5 s and 6 s waits a
@@ -565,6 +580,18 @@ alone.push('tests/acceptance/525/');
 alone.push('tests/acceptance/525-device/');
 timed.push('tests/acceptance/525-device/device.test.ts');
 slow.push('tests/acceptance/525-device/device.test.ts');
+// #204's files each build deep-show and mix seconds of synth through it; export.test.ts encodes a film, and
+// budgets.test.ts times renders, seeks and a pack's sweep.
+alone.push('tests/acceptance/204/', 'tests/acceptance/204-oracle/');
+timed.push('tests/acceptance/204/budgets.test.ts');
+// AC7's blind redraft runs the same way. The first draft's export file is kept by hand: its film names its own layers,
+// which `deep show` from your shell refuses before any export (tests/acceptance/204-redraft-ac7/DISPUTE.md).
+alone.push('tests/acceptance/204-redraft-ac7/');
+// #204's gap test builds deep-show and reads the registries around a pack's install.
+alone.push('tests/acceptance/204-gaps/');
+byHand.push('tests/acceptance/204/export.test.ts');
+// #450's files each build deep-gpu and draw trails and ribbons on the Metal GPU.
+alone.push('tests/acceptance/450/');
 // #226's files each build deep-gpu, deep-show (full and without data) or deep-canvas-render and draw on the Metal GPU;
 // ac7-budgets judges the task's budgets on the reference Mac.
 alone.push('tests/acceptance/226/', 'tests/acceptance/226-oracle/');

@@ -401,7 +401,8 @@ fn kind_rows(sealed: &Sealed, planted: Option<Planted>) -> Vec<KindRow> {
                 json!({"x-opaque": "params the drawing module reads; the kind registry holds no schema for them yet"})
             }
         };
-        let fields = version.map(|v| fields_of(v, planted)).unwrap_or_default();
+        let mut fields = version.map(|v| fields_of(v, planted)).unwrap_or_default();
+        fields.extend(crate::forms::of(&name));
         let description = kind
             .and_then(|k| k.description.clone())
             .unwrap_or_else(|| kind_description(&name, &module, version));
@@ -1324,6 +1325,7 @@ pub fn dump_value(sealed: &Sealed, planted: Option<Planted>) -> Value {
                             if let Some(o) = f.as_object_mut() {
                                 o.remove("grammar");
                                 o.remove("forms");
+                                o.remove("form");
                             }
                             f
                         })

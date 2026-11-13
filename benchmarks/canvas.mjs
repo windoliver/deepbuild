@@ -1058,13 +1058,15 @@ const EFFICIENCY = {
   'canvas-water': { lake_gpu_ms: (r) => r.lake_gpu_ms, waves_vertex_ms: (r) => r.waves_vertex_ms },
   'canvas-occlusion': { gpu_fall: (r) => r.gpu_fall, pyramid_declared_error: (r) => r.pyramid_declared_error },
   'canvas-water-shore': { shore_lake_gpu_ms: (r) => r.shore_lake_gpu_ms },
-  'canvas-axes3d': { axes_over_marks: (r) => r.axes_over_marks, still_maps: (r) => r.still_maps },
   'canvas-ground': {
     bevel_ms: (r) => r.bevel_ms, subdivide_ms: (r) => r.subdivide_ms, distribute_ms: (r) => r.distribute_ms, arc_length_ms: (r) => r.arc_length_ms,
     still_steps: (r) => r.still_steps, sway_gpu_ms: (r) => r.sway_gpu_ms,
   },
+  // #538: each reading by its own name (benchmarks/game-state.mjs).
+  'canvas-axes3d': { axes_over_marks: (r) => r.axes_over_marks, still_maps: (r) => r.still_maps },
+  'canvas-game-state': Object.fromEntries(['compare_ms', 'remap_row_us', 'remap_layer_ms', 'upload_slots_ms', 'overlay_upload_ms', 'fit_check_ms', 'idle_steps'].map((k) => [k, (r) => r[k]])),
 };
-const COUNTS = new Set(['summary_tokens', 'page_rows', 'frames', 'upload_bytes_per_item', 'indexed_target_bytes', 'still_steps', 'still_maps']);
+const COUNTS = new Set(['summary_tokens', 'page_rows', 'frames', 'upload_bytes_per_item', 'indexed_target_bytes', 'still_steps', 'idle_steps', 'still_maps']);
 
 /** The stage that took the most of a sample's time, as a reason names it (#896); none for a sample without stages. */
 const costliest = (s) => {
@@ -1472,29 +1474,40 @@ workloads['export-fidelity'] = () => {
   }
 };
 
-// #226: criterion 7's 3D axes against the same lines, ticks and labels written as marks, orbiting at 1080p; a still view's maps.
-workloads.axes3d = () => {
-  const fingerprint = release('deep-gpu-layer', 'deep-gpu'), dir = mkdtempSync(join(tmpdir(), 'deep-canvas-bench-')), look = JSON.parse(readFileSync(LOOK, 'utf8'));
-  const at = (a, v, off = 0) => [a === 0 ? v : a === 2 ? off : 0, a === 2 ? v : -off, a === 1 ? -v : 0], ink = { stroke: { role: 'ink' } }, vs = [-4, -2, 0, 2, 4];
-  const spin = { target: 'items/cam/params/orbit/azimuth', type: 'f32', keys: { k0: { t: '0s', value: 0, interp: 'linear' }, k1: { t: '5s', value: 360, interp: 'linear' } } }, cam = { kind: 'camera@1', params: { projection: 'perspective', target: [0, 0, 0], orbit: { azimuth: 30, elevation: 25, distance: 24 }, fov: 45, near: 0.1, far: 200 } };
-  const doc = (name, items, still) => { const file = join(dir, `${name}.json`); writeFileSync(file, JSON.stringify({ format: 1, id: name, profile: 'scene', title: name, description: '#226 bench.', size: [1920, 1080], camera: 'cam', requires: { modules: { scene3d: '^1' } }, budget: { class: 'figure' }, layers: { main: { writer: 'agent:bench', title: 'Main', order: 'a0' } }, transport: { span: '5s' }, ...(still ? {} : { channels: { spin } }),
-    items: Object.fromEntries(Object.entries({ cam, ...items }).map(([id, it], k) => [id, { id, name: id, layer: 'main', order: `a${String(k).padStart(3, '0')}`, ...it }])) })); return file; };
-  const axes = { ...Object.fromEntries(['x', 'y', 'z'].map((r) => [`${r}s`, { kind: 'scale@1', params: { type: 'linear', domain: [-4, 4], range: r, nice: false } }])), axes: { kind: 'axes3d@1', params: { x: 'xs', y: 'ys', z: 'zs', lengths: [8, 8, 8], up: 'z', planes: ['xy'] } } };
-  const twin = Object.fromEntries([0, 1, 2].flatMap((a) => [[`line${a}`, { kind: 'mark.line@1', params: { points: [at(a, -4), at(a, 4)], width: 1.5, paint: ink } }], [`ticks${a}`, { kind: 'mark.line@1', params: { mode: 'segments', width: 1, paint: ink, points: vs.flatMap((v) => [at(a, v), at(a, v, 0.05)]) } }],
-    ...vs.map((v) => [`label${a}${v}`, { kind: 'mark.text@1', at: { pos: at(a, v, 0.15) }, params: { text: String(v), font: 'body', size: 0.25, size_space: 'world', paint: { fill: { role: 'ink' } } } }]),
-    [`grid${a}`, { kind: 'mark.line@1', params: { mode: 'segments', width: 1, paint: { stroke: { role: 'muted' } }, points: a === 2 ? [] : vs.flatMap((v) => (a === 0 ? [[v, 0, 4], [v, 0, -4]] : [[-4, 0, -v], [4, 0, -v]])) } }]]));
-  const pt = { kind: 'mark.point@1', parent: 'axes', at: { pos: [2, 3, 1] }, params: { size: 10, paint: { fill: { role: 'ink' } } }, modifiers: [{ kind: 'mod.axes@1', params: { axes: 'axes' } }] };
-  const [axesDoc, twinDoc, stillDoc] = [doc('axes', axes), doc('twin', twin), doc('still', { ...axes, pt }, true)], view = (file, extra = {}) => ({ call: 'view3d', doc: file, look, size: [1920, 1080], frames: 300, fps: 60, capture: [], timings: true, ...extra });
-  let k = 0; try {
-    console.log(JSON.stringify({ task: 'canvas-axes3d', fingerprint, runs: runs(() => {
-      const twinFirst = k++ % 2 === 1, answer = once('deep-gpu', ['run'], { out: dir, calls: twinFirst ? [view(twinDoc), view(axesDoc)] : [view(axesDoc), view(twinDoc)] });
-      const still = once('deep-gpu', ['run'], { out: dir, calls: [view(stillDoc, { frames: 4, counts: true, timings: false })] }).replies[0];
-      if (answer.ok !== true || answer.replies.some((r) => r.code) || still.code) throw Error(`deep-gpu answered ${JSON.stringify([answer, still]).slice(0, 1500)}`);
-      const [ax, tw] = (twinFirst ? [...answer.replies].reverse() : answer.replies).map((r) => p95(r.frames.map((f) => f.gpu_ms)));
-      return { axes_p95_ms: ax, twin_p95_ms: tw, axes_over_marks: ax / tw, still_maps: still.frames.slice(1).reduce((n, f) => n + f.axes_mapped.length, 0) };
-    }) }));
-  } finally { rmSync(dir, { recursive: true, force: true }); }
+// #162: the Lottie export of a 200-item title with 2,000 Bézier keys, its fidelity check included;
+// prints the receipt's timing.wall (under 1 s, which tests/acceptance/162/budgets.test.ts judges).
+workloads['lottie-export'] = () => {
+  const evidence = mkdtempSync(join(tmpdir(), 'deep-canvas-bench-'));
+  try {
+    const frame = SEC / 30;
+    const items = { cam: { id: 'cam', kind: 'camera@1', name: 'cam', order: 'a0', params: { projection: 'orthographic', target: [160, 90, 0], view_width: 320 } } };
+    const channels = {};
+    for (let i = 0; i < 200; i++) {
+      const id = `r${String(i).padStart(3, '0')}`;
+      items[id] = { id, kind: 'rect@1', name: `Rect ${i}`, order: `b${String(i).padStart(3, '0')}`, params: { box: [0, 0, 12, 12], paint: { fill: { role: i % 2 ? 'accent' : 'ink' } } }, at: { pos: [16 * (i % 20), 18 * Math.floor(i / 20), 0] } };
+      const keys = {};
+      for (let k = 0; k < 10; k++) keys[`k${k}`] = { t: Math.round(k * 0.4 * SEC), value: 16 * (i % 20) + (k % 2 ? 6 : 0), interp: { bezier: { x1: 0.4, y1: 0, x2: 0.2, y2: 1 } } };
+      channels[`x${i}`] = { target: `items/${id}/at/pos/0`, type: 'f32', keys };
+    }
+    const document = { format: 1, id: 'bench-162', profile: 'film', title: 'Lottie export bench', description: 'A 200-item title with 2,000 keys.', size: [320, 180], camera: 'cam', transport: { span: 120 * frame, frame_rate: [30, 1] }, items, channels };
+    const out = join(evidence, 'title.json');
+    const peer = { pid: 3002, start: 3_000 };
+    const processes = [{ pid: 1, ppid: 0, start: 0 }, { pid: 3000, ppid: 1, start: 100 }, { pid: 3001, ppid: 3000, start: 110 }, { pid: 3002, ppid: 3001, start: 3_000 }];
+    const calls = [{ call: 'deep show', peer, doc: DOC, document }, { call: 'export', doc: DOC, out, video: { codec: 'lottie' }, lottie: { container: 'json', images: 'embed' } }];
+    const sc = { evidence, sessions: {}, processes, panels: { main: { rect: [0, 0, 1280, 720] } }, docs: { [DOC]: { panel: 'main' } }, calls };
+    const [answer] = run('deep-show', 'run', [JSON.stringify(sc)]);
+    const reply = answer.replies?.[1];
+    if (reply?.outcome !== 'exported') throw Error(`the export wasn't delivered: ${JSON.stringify(reply ?? answer).slice(0, 2000)}`);
+    console.log(JSON.stringify({ task: 'lottie-export', wall_seconds: reply.receipt.timing?.wall }));
+  } finally {
+    rmSync(evidence, { recursive: true, force: true });
+  }
 };
+// #538's budgets: live game state's compares, remaps, uploads and fit check (benchmarks/game-state.mjs).
+workloads['game-state'] = async () => (await import('./game-state.mjs')).gameState({ root, release, once, runs });
+// #226's budgets: the 3D axes against the same marks, and a still view's maps (benchmarks/axes3d.mjs).
+workloads.axes3d = async () => (await import('./axes3d.mjs')).axes3d({ root, release, once, runs });
+
 const task = process.argv[2];
 if (!workloads[task]) throw Error(`Unknown task ${task}; one of: ${Object.keys(workloads).join(', ')}`);
 await workloads[task]();

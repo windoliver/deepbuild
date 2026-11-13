@@ -242,6 +242,57 @@ pub fn json(row: &Row) -> Value {
     Value::Object(m)
 }
 
+/// A row as [`json`] wrote it, read back exactly (each f32 was written as its own f64): how a
+/// stored bake's list is taken up again when a fork re-simulates past its checkpoint (#522).
+pub fn row(v: &Value) -> Option<Row> {
+    let f = |k: &str| v.get(k)?.as_f64().map(|x| x as f32);
+    let f3 = |k: &str| -> Option<[f32; 3]> {
+        let a = v.get(k)?.as_array()?;
+        Some([
+            a.first()?.as_f64()? as f32,
+            a.get(1)?.as_f64()? as f32,
+            a.get(2)?.as_f64()? as f32,
+        ])
+    };
+    let index = |k: &str| v.get(k).and_then(Value::as_u64).map(|x| x as u32);
+    let payload = if v.get("speed").is_some() {
+        Payload::Hit {
+            point: f3("point")?,
+            normal: f3("normal")?,
+            speed: f("speed")?,
+            impulse: f("impulse")?,
+            tags: v["tags"]
+                .as_array()?
+                .iter()
+                .map(|t| t.as_str().map(String::from))
+                .collect::<Option<_>>()?,
+        }
+    } else if v.get("point").is_some() {
+        Payload::Contact {
+            point: f3("point")?,
+            normal: f3("normal")?,
+        }
+    } else if v.get("force").is_some() {
+        Payload::Break {
+            force: f("force")?,
+            torque: f("torque")?,
+        }
+    } else {
+        Payload::None
+    };
+    Some(Row {
+        step: v.get("step")?.as_u64()? as u32,
+        raw: Raw {
+            kind: code(v.get("kind")?.as_str()?)?,
+            a: v.get("a")?.as_str()?.into(),
+            a_use: index("a_use"),
+            b: v.get("b").and_then(Value::as_str).map(String::from),
+            b_use: index("b_use"),
+            payload,
+        },
+    })
+}
+
 /// The list as its rows.
 pub fn listed(rows: &[Row]) -> Vec<Value> {
     rows.iter().map(json).collect()

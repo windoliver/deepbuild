@@ -51,6 +51,7 @@ pub mod stack;
 pub mod sweep;
 pub mod terrain;
 pub mod tints;
+pub mod trail;
 pub mod uv;
 pub mod water;
 
