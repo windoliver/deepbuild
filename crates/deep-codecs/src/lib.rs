@@ -623,14 +623,26 @@ fn int_pcm(t: &mp4::Track, data: &[u8], channels: u32, big: bool) -> Vec<f32> {
     let mut out = Vec::new();
     let mut i = 0;
     while i < t.samples.len() {
-        let (first, mut n, mut bytes) = (t.samples[i].offset as usize, 1, t.samples[i].size as usize);
-        while i + n < t.samples.len() && t.samples[i + n].offset == t.samples[i + n - 1].offset + u64::from(t.samples[i + n - 1].size) {
+        let (first, mut n, mut bytes) =
+            (t.samples[i].offset as usize, 1, t.samples[i].size as usize);
+        while i + n < t.samples.len()
+            && t.samples[i + n].offset
+                == t.samples[i + n - 1].offset + u64::from(t.samples[i + n - 1].size)
+        {
             bytes += t.samples[i + n].size as usize;
             n += 1;
         }
         let len = if bytes == n { n * frame } else { bytes };
-        let run = data.get(first..first.saturating_add(len)).unwrap_or_default();
-        out.extend(run.as_chunks::<2>().0.iter().map(|b| f32::from(if big { i16::from_be_bytes(*b) } else { i16::from_le_bytes(*b) }) / 32_768.0));
+        let run = data
+            .get(first..first.saturating_add(len))
+            .unwrap_or_default();
+        out.extend(run.as_chunks::<2>().0.iter().map(|b| {
+            f32::from(if big {
+                i16::from_be_bytes(*b)
+            } else {
+                i16::from_le_bytes(*b)
+            }) / 32_768.0
+        }));
         i += n;
     }
     out
@@ -1388,17 +1400,46 @@ mod tests {
         let values: [i16; 6] = [1, -1, 16_384, -16_384, 32_767, -32_768];
         let want: Vec<f32> = values.iter().map(|&v| f32::from(v) / 32_768.0).collect();
         for (fourcc, big) in [(*b"sowt", false), (*b"twos", true)] {
-            let data: Vec<u8> = values.iter().flat_map(|v| if big { v.to_be_bytes() } else { v.to_le_bytes() }).collect();
+            let data: Vec<u8> = values
+                .iter()
+                .flat_map(|v| {
+                    if big {
+                        v.to_be_bytes()
+                    } else {
+                        v.to_le_bytes()
+                    }
+                })
+                .collect();
             let track = mp4::Track {
                 kind: mp4::Kind::Audio,
                 timescale: 48_000,
                 duration: 3,
                 edits: Vec::new(),
-                entry: mp4::Entry { fourcc, channels: 2, bits: 16, sample_rate: 48_000, ..Default::default() },
-                samples: (0..3).map(|k| mp4::Sample { offset: k, size: 1, dts: k as i64, cts: k as i64, key: true }).collect(),
+                entry: mp4::Entry {
+                    fourcc,
+                    channels: 2,
+                    bits: 16,
+                    sample_rate: 48_000,
+                    ..Default::default()
+                },
+                samples: (0..3)
+                    .map(|k| mp4::Sample {
+                        offset: k,
+                        size: 1,
+                        dts: k as i64,
+                        cts: k as i64,
+                        key: true,
+                    })
+                    .collect(),
             };
-            let (got, _, rate, channels) = audio(&track, 48_000, &data, &Planted::default()).unwrap();
-            assert_eq!((got, rate, channels), (want.clone(), 48_000, 2), "{}", String::from_utf8_lossy(&fourcc));
+            let (got, _, rate, channels) =
+                audio(&track, 48_000, &data, &Planted::default()).unwrap();
+            assert_eq!(
+                (got, rate, channels),
+                (want.clone(), 48_000, 2),
+                "{}",
+                String::from_utf8_lossy(&fourcc)
+            );
         }
     }
 

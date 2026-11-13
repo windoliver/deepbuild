@@ -35,9 +35,9 @@ use sha2::{Digest, Sha256};
 
 use crate::frames::drawing_of;
 use crate::hub::{EvalTime, Hub, Planted};
-use crate::time::{context_of, sample_rate_of};
 use crate::mixdown::planted_of;
 use crate::snapshot::Unfit;
+use crate::time::{context_of, sample_rate_of};
 use frames::{Lease, Run, Sink};
 
 /// The export guards' wrong programs (#157), each only to prove its acceptance test fails on it.
@@ -142,17 +142,24 @@ impl Hub<'_> {
         let (block, pictures) = self.videos_at(doc, t, true);
         // #157: a video the decode worker couldn't decode at this frame stops the frame.
         if let Some(id) = undecoded(doc, &block) {
-            return Err(Unfit { code: "decode_error", path: format!("items/{id}") });
+            return Err(Unfit {
+                code: "decode_error",
+                path: format!("items/{id}"),
+            });
         }
         self.renderer.videos = pictures;
         self.caption_at(doc, t);
-        let unfit = |code| Unfit { code, path: "frames".into() };
+        let unfit = |code| Unfit {
+            code,
+            path: "frames".into(),
+        };
         let drawing = drawing_of(sched, session).ok_or_else(|| unfit("no_drawing"))?;
         #[allow(unused_mut)]
         let (mut rgba, size) = if deep_canvas_scene3d::scene::has_3d(doc) {
             self.rgba3d(doc, t, &drawing, size)?
         } else {
-            let sides = crate::film::program_of(sched, session).and_then(|p| crate::film::sides(&p, doc, t, false));
+            let sides = crate::film::program_of(sched, session)
+                .and_then(|p| crate::film::sides(&p, doc, t, false));
             let (rgba, _, size) = match sides {
                 Some(sides) => self.film_rgba(&drawing, size, &sides, doc, (opaque, Some(t)))?,
                 None if opaque => self.printed_frame(doc, t, &drawing, size)?,
@@ -161,7 +168,9 @@ impl Hub<'_> {
             (rgba, size)
         };
         #[cfg(feature = "test-export-guards")]
-        test_guards::paint(doc, test_guards::frame_of(doc, t), &mut rgba, size, |r| self.look.light.get(r).copied());
+        test_guards::paint(doc, test_guards::frame_of(doc, t), &mut rgba, size, |r| {
+            self.look.light.get(r).copied()
+        });
         // #1163: the planted renderer seeds its noise from the clock in exports too.
         if self.scenario.planted == Some(Planted::SeedsNoiseFromClock) {
             crate::hub::export_noise(&mut rgba, t);
@@ -172,17 +181,29 @@ impl Hub<'_> {
     /// #157: an opaque 2D frame as the canvas shows it: when the document's look prints (its
     /// grain), its items through the print finish on the GPU, then the caption and the status
     /// marks over them; otherwise the canonical raster.
-    fn printed_frame(&mut self, doc: &Value, t: i64, drawing: &crate::frames::Painted, size: Option<[u16; 2]>) -> Result<(Vec<u8>, crate::snapshot::Drawn, [u16; 2]), Unfit> {
+    fn printed_frame(
+        &mut self,
+        doc: &Value,
+        t: i64,
+        drawing: &crate::frames::Painted,
+        size: Option<[u16; 2]>,
+    ) -> Result<(Vec<u8>, crate::snapshot::Drawn, [u16; 2]), Unfit> {
         let Some(def) = self.print_look(doc, None) else {
             return self.canonical_rgba(drawing, size, true);
         };
-        let drawn = self.renderer.prepare_drawing(drawing, &self.scenario.evidence)?;
+        let drawn = self
+            .renderer
+            .prepare_drawing(drawing, &self.scenario.evidence)?;
         let px = size.unwrap_or_else(|| crate::snapshot::px(drawn.frame.size));
-        let Some(mut rgba) = self.print_part(&def, doc, &drawn.part(drawn.view, true, false), px, t)? else {
+        let Some(mut rgba) =
+            self.print_part(&def, doc, &drawn.part(drawn.view, true, false), px, t)?
+        else {
             return self.canonical_rgba(drawing, size, true);
         };
         self.caption_over(&mut rgba, px);
-        let status = self.renderer.raster(&drawn.part(drawn.view, false, true), px, None);
+        let status = self
+            .renderer
+            .raster(&drawn.part(drawn.view, false, true), px, None);
         crate::snapshot::over(&mut rgba, &status);
         Ok((rgba, drawn, px))
     }
@@ -190,7 +211,12 @@ impl Hub<'_> {
     /// One shard's sound: the mix's samples over each of its frames' spans (frame k's span starts
     /// at ⌊k·Δ × hz ÷ flicks⌋), from a player sought to the shard's first sample, appended to
     /// `pcm`; each span's SHA-256 over f32le, and whether the master's limiter cut.
-    fn export_sound(&mut self, shard: &Shard, mix: &Arc<Mix>, pcm: &mut Vec<u8>) -> (Vec<String>, bool) {
+    fn export_sound(
+        &mut self,
+        shard: &Shard,
+        mix: &Arc<Mix>,
+        pcm: &mut Vec<u8>,
+    ) -> (Vec<String>, bool) {
         let hz = mix.rate as u32;
         let span = |k: i64| self.span_start(k, shard.frame, hz);
         let mut player = Player::new(mix.clone(), planted_of(self.scenario.planted, false));
@@ -201,7 +227,11 @@ impl Hub<'_> {
         let first = span(shard.frames.start);
         // Planted: the splitter rounds the shard's first sample instead of flooring it.
         let rounded = self.guard_planted(Guard::ShardStartRounds) && shard.frames.start > 0;
-        player.seek(if rounded { round_start(shard.frames.start, shard.frame, hz) } else { first });
+        player.seek(if rounded {
+            round_start(shard.frames.start, shard.frame, hz)
+        } else {
+            first
+        });
         let mut hashes = Vec::new();
         for k in shard.frames.clone() {
             let n = (span(k + 1) - span(k)).max(0) as usize;
@@ -308,7 +338,11 @@ pub struct Captions {
 
 impl Default for Captions {
     fn default() -> Self {
-        Captions { profile: None, files: vec!["srt".into()], mode: "open".into() }
+        Captions {
+            profile: None,
+            files: vec!["srt".into()],
+            mode: "open".into(),
+        }
     }
 }
 
@@ -397,14 +431,19 @@ pub fn parse(c: &Map<String, Value>) -> Option<Job> {
             Some(v) => u8::try_from(v.as_u64()?).ok().filter(|n| *n >= 1)?,
         },
         timecode: s(tc.and_then(|t| t.get("start"))).unwrap_or_else(|| "00:00:00:00".into()),
-        drop_frame: tc.and_then(|t| t.get("drop_frame")).and_then(Value::as_bool).unwrap_or(false),
+        drop_frame: tc
+            .and_then(|t| t.get("drop_frame"))
+            .and_then(Value::as_bool)
+            .unwrap_or(false),
         out: s(c.get("out"))?,
         software: match c.get("adapter") {
             None => false,
             Some(a) => a.as_str()? == "software",
         },
         readback: c.get("readback").and_then(Value::as_bool).unwrap_or(false),
-        track: c.get("track").map_or(Some(Vec::new()), |t| t.as_array().cloned())?,
+        track: c
+            .get("track")
+            .map_or(Some(Vec::new()), |t| t.as_array().cloned())?,
         captions: {
             let cap = c.get("captions");
             Captions {
@@ -412,7 +451,11 @@ pub fn parse(c: &Map<String, Value>) -> Option<Job> {
                 files: match cap.and_then(|c| c.get("files")) {
                     None => vec!["srt".into()],
                     Some(Value::String(f)) => vec![f.clone()],
-                    Some(f) => f.as_array()?.iter().map(|f| f.as_str().map(str::to_string)).collect::<Option<_>>()?,
+                    Some(f) => f
+                        .as_array()?
+                        .iter()
+                        .map(|f| f.as_str().map(str::to_string))
+                        .collect::<Option<_>>()?,
                 },
                 mode: s(cap.and_then(|c| c.get("mode"))).unwrap_or_else(|| "open".into()),
             }
@@ -422,9 +465,14 @@ pub fn parse(c: &Map<String, Value>) -> Option<Job> {
             None => "standard".into(),
             Some(q) => Some(q).filter(|q| rules::quality_floor(q).is_some())?,
         },
-        premultiplied: video.and_then(|v| v.get("alpha")).and_then(Value::as_str) == Some("premultiplied"),
+        premultiplied: video.and_then(|v| v.get("alpha")).and_then(Value::as_str)
+            == Some("premultiplied"),
         keyframe_interval: crate::optional(video.and_then(|v| v.get("keyframe_interval")), whole)?,
-        refuse_end_cuts: c.get("brief").and_then(|b| b.get("refuse")).and_then(Value::as_array).is_some_and(|r| r.contains(&json!("end_cut"))),
+        refuse_end_cuts: c
+            .get("brief")
+            .and_then(|b| b.get("refuse"))
+            .and_then(Value::as_array)
+            .is_some_and(|r| r.contains(&json!("end_cut"))),
         session: s(c.get("session")),
     })
 }
@@ -461,7 +509,12 @@ impl Hub<'_> {
         // volume the disk gate reads; nothing of it outlives the export.
         let out = PathBuf::from(&job.out);
         let temp = temp_of(&out);
-        let scratch = out.with_file_name(format!(".{}.export-{}-{}", name_of(&out), std::process::id(), self.media.exports));
+        let scratch = out.with_file_name(format!(
+            ".{}.export-{}-{}",
+            name_of(&out),
+            std::process::id(),
+            self.media.exports
+        ));
         self.media.exports += 1;
         let result = self.export_inner(job, doc, &scratch);
         self.media.captions = None;
@@ -469,7 +522,10 @@ impl Hub<'_> {
         // All or nothing: a failed export leaves nothing at its temporary name (only #501's
         // planted export that starts and stops leaves its partial file).
         if result.is_err() && self.scenario.planted != Some(Planted::ExportStartsThenStops) {
-            for p in [temp.clone(), PathBuf::from(format!("{}.part", temp.display()))] {
+            for p in [
+                temp.clone(),
+                PathBuf::from(format!("{}.part", temp.display())),
+            ] {
                 let _ = std::fs::remove_file(&p);
                 let _ = std::fs::remove_dir_all(&p);
             }
@@ -505,7 +561,9 @@ impl Hub<'_> {
             .registry("export.target@1")
             .and_then(|r| r.entry(&target))
             .map(|e| e.value.clone())
-            .ok_or_else(|| json!({"code": "unknown_target", "target": target, "codec": job.codec}))?;
+            .ok_or_else(
+                || json!({"code": "unknown_target", "target": target, "codec": job.codec}),
+            )?;
         // Rates, and what the check refuses before anything is drawn.
         let (p, q) = job
             .frame_rate
@@ -528,22 +586,33 @@ impl Hub<'_> {
             }
             // #157: a 4:2:0 codec needs an even size, the job's or the document's own.
             let own = job.size.or_else(|| doc_size(&doc));
-            if let Some(odd) = own.filter(|_| job.codec != "prores_4444").and_then(guards::odd_size) {
+            if let Some(odd) = own
+                .filter(|_| job.codec != "prores_4444")
+                .and_then(guards::odd_size)
+            {
                 return Err(odd);
             }
         }
         // #502: the captions asked for: a mode that draws them or sidecars that carry them.
         let cap = &job.captions;
-        if !matches!(cap.mode.as_str(), "open" | "closed" | "both") || cap.files.iter().any(|f| f != "srt" && f != "vtt") {
-            return Err(json!({"code": "bad_captions", "captions": {"mode": cap.mode, "files": cap.files},
-                "why": "captions.mode is open, closed or both, and captions.files lists srt, vtt or both"}));
+        if !matches!(cap.mode.as_str(), "open" | "closed" | "both")
+            || cap.files.iter().any(|f| f != "srt" && f != "vtt")
+        {
+            return Err(
+                json!({"code": "bad_captions", "captions": {"mode": cap.mode, "files": cap.files},
+                "why": "captions.mode is open, closed or both, and captions.files lists srt, vtt or both"}),
+            );
         }
         if cap.mode != "open" && cap.files.is_empty() {
-            return Err(json!({"code": "captions_not_carried", "captions": {"mode": cap.mode, "files": cap.files},
-                "why": format!("captions: mode {} with no file would carry no captions; name srt or vtt in captions.files", cap.mode)}));
+            return Err(
+                json!({"code": "captions_not_carried", "captions": {"mode": cap.mode, "files": cap.files},
+                "why": format!("captions: mode {} with no file would carry no captions; name srt or vtt in captions.files", cap.mode)}),
+            );
         }
         let profile = job.loudness_profile.as_deref().unwrap_or("none");
-        let profile = delivery::profile(profile).ok_or_else(|| json!({"code": "unknown_loudness_profile", "loudness_profile": profile}))?;
+        let profile = delivery::profile(profile).ok_or_else(
+            || json!({"code": "unknown_loudness_profile", "loudness_profile": profile}),
+        )?;
         // The frames that leave, as absolute indices on the frame grid.
         let on_grid = |t: i64| -> Result<i64, Value> {
             if t.rem_euclid(frame) != 0 {
@@ -591,10 +660,17 @@ impl Hub<'_> {
         let temp = temp_of(&out);
         // #504: the frames replay the document's input track (the job's, or the hub's), so an
         // export shows each pick from its entry on; session view values never reach it (#501).
-        let mut track = if job.track.is_empty() { self.track_json(&job.doc) } else { job.track.clone() };
+        let mut track = if job.track.is_empty() {
+            self.track_json(&job.doc)
+        } else {
+            job.track.clone()
+        };
         if self.planted(Planted::VariantExportFinalChoice) {
             // Planted: each choice's entries all take its last entry's option.
-            let last: BTreeMap<String, Value> = track.iter().map(|e| (e["control"].to_string(), e["value"].clone())).collect();
+            let last: BTreeMap<String, Value> = track
+                .iter()
+                .map(|e| (e["control"].to_string(), e["value"].clone()))
+                .collect();
             for e in &mut track {
                 e["value"] = last[&e["control"].to_string()].clone();
             }
@@ -602,7 +678,8 @@ impl Hub<'_> {
         doc = crate::played::with_track(&doc, &track);
         let _ = self.inline_tables(&mut doc);
         let _ = self.inline_vectors(&mut doc);
-        self.inline_occurrences(&mut doc, &job.track).map_err(|i| json!({"code": i.code, "issues": [i.to_json()]}))?;
+        self.inline_occurrences(&mut doc, &job.track)
+            .map_err(|i| json!({"code": i.code, "issues": [i.to_json()]}))?;
         let _ = self.column_view(&mut doc, 0);
         std::fs::create_dir_all(scratch).map_err(|_| refuse("export_unwritable"))?;
         // The readiness gate: every asset the frames or the mix read, before any frame.
@@ -611,14 +688,25 @@ impl Hub<'_> {
             if self.scenario.planted == Some(Planted::ExportStartsThenStops) {
                 // Planted: it starts anyway and stops at the missing strip's first frame, its
                 // frames' rows written to the temporary name as they are drawn.
-                let stop = issue["start"].as_i64().map_or(0, |t| clock::index(t, frame));
-                let shard = Shard { frames: frames.start..stop.max(frames.start), frame, size: job.size, opaque: !job.alpha, gain: 0.0, ceiling: None };
+                let stop = issue["start"]
+                    .as_i64()
+                    .map_or(0, |t| clock::index(t, frame));
+                let shard = Shard {
+                    frames: frames.start..stop.max(frames.start),
+                    frame,
+                    size: job.size,
+                    opaque: !job.alpha,
+                    gain: 0.0,
+                    ceiling: None,
+                };
                 let file = std::fs::File::create(&temp).map_err(|_| refuse("export_unwritable"))?;
                 let mut run = Run::new(scratch, Vec::new(), false);
                 self.export_frames(&doc, &shard, &mut run, &mut Sink::Raw(file))?;
                 drawn = (shard.frames.end - shard.frames.start) as usize;
             }
-            return Err(json!({"outcome": "stopped", "state": "BLOCKED", "gate": "readiness", "frames_drawn": drawn, "issues": [issue]}));
+            return Err(
+                json!({"outcome": "stopped", "state": "BLOCKED", "gate": "readiness", "frames_drawn": drawn, "issues": [issue]}),
+            );
         }
         // #502: the script's lines, their captions laid out on this export's frames and held to
         // their profile, before any frame is drawn.
@@ -630,8 +718,10 @@ impl Hub<'_> {
                 // #157: one ask, naming whose licence it is, the one thing that unblocks it.
                 let ask = json!({"kind": "unblock", "about": who,
                     "ask": format!("give a licence that says shareable: true for {who}, or replace it, so the export can carry the narration")});
-                return Err(json!({"outcome": "blocked", "state": "BLOCKED", "code": "narration.unshareable", "unshareable": who, "asks": [ask],
-                    "reason": format!("an export carries narration only under a license that says shareable: true; this one's doesn't: {who}")}));
+                return Err(
+                    json!({"outcome": "blocked", "state": "BLOCKED", "code": "narration.unshareable", "unshareable": who, "asks": [ask],
+                    "reason": format!("an export carries narration only under a license that says shareable: true; this one's doesn't: {who}")}),
+                );
             }
         }
         // #157: the licences the export carries, through every job output to its inputs; a CC BY
@@ -641,13 +731,23 @@ impl Hub<'_> {
             return Err(json!({"outcome": "failed", "code": "credit_missing", "issues": missing}));
         }
         let cuts = self.cuts_of(&doc);
-        self.media.captions = Some(crate::narration::View { frame, draw: cap.mode != "closed", profile: cap.profile.clone(), cuts });
+        self.media.captions = Some(crate::narration::View {
+            frame,
+            draw: cap.mode != "closed",
+            profile: cap.profile.clone(),
+            cuts,
+        });
         let laid = self.captions_of(&doc, frame, cap.profile.as_deref())?;
         if let Some(l) = &laid {
             let found = captions::check(&l.captions, &l.limits, &crate::narration::graphemes);
             if !found.is_empty() {
-                let list: Vec<Value> = found.iter().map(|v| json!({"caption": v.caption, "measure": v.limit, "what": v.what})).collect();
-                return Err(json!({"outcome": "failed", "code": "captions", "profile": l.profile.name, "issues": list}));
+                let list: Vec<Value> = found
+                    .iter()
+                    .map(|v| json!({"caption": v.caption, "measure": v.limit, "what": v.what}))
+                    .collect();
+                return Err(
+                    json!({"outcome": "failed", "code": "captions", "profile": l.profile.name, "issues": list}),
+                );
             }
         }
         let hz = job.sample_rate.unwrap_or_else(|| sample_rate_of(&doc));
@@ -669,7 +769,10 @@ impl Hub<'_> {
         };
         let (mut gain, mut before) = (0.0, None);
         if let (Some(mix), Some((target_lufs, _))) = (&mix, profile.integrated) {
-            let (first, last) = (self.span_start(frames.start, frame, hz), self.span_start(frames.end, frame, hz));
+            let (first, last) = (
+                self.span_start(frames.start, frame, hz),
+                self.span_start(frames.end, frame, hz),
+            );
             let planted = planted_of(self.scenario.planted, false);
             let pass = |db: f64| {
                 let mut player = Player::new(mix.clone(), planted);
@@ -680,16 +783,30 @@ impl Hub<'_> {
                 player.seek(first);
                 let mut buf = vec![0f32; 2 * (last - first).max(0) as usize];
                 player.read(&mut buf);
-                (loudness::measure(&buf, &[1.0, 1.0], i64::from(hz), 8), player.limited())
+                (
+                    loudness::measure(&buf, &[1.0, 1.0], i64::from(hz), 8),
+                    player.limited(),
+                )
             };
             let (master, _) = pass(0.0);
             // Planted: no static gain; the normalizer rides the master instead.
-            if let Some(g) = profile.gain(master.integrated).filter(|_| !deep_canvas_media::planted(NORMALIZER)) {
+            if let Some(g) = profile
+                .gain(master.integrated)
+                .filter(|_| !deep_canvas_media::planted(NORMALIZER))
+            {
                 let (read, cut) = pass(g);
-                gain = if cut && !profile.holds(read.integrated) { g + target_lufs - read.integrated } else { g };
+                gain = if cut && !profile.holds(read.integrated) {
+                    g + target_lufs - read.integrated
+                } else {
+                    g
+                };
                 // #157: a delivery louder than the streaming level is held to a lower ceiling; the one
                 // correction keeps it at the level instead (0.01 LU under it).
-                if let Some(l) = profile.louder.as_ref().filter(|l| read.integrated > l.integrated) {
+                if let Some(l) = profile
+                    .louder
+                    .as_ref()
+                    .filter(|l| read.integrated > l.integrated)
+                {
                     gain -= read.integrated - l.integrated + 0.01;
                 }
             }
@@ -697,8 +814,15 @@ impl Hub<'_> {
         }
         // Planted: the png writer exports only the session's selected items.
         if target == "png" && self.scenario.planted == Some(Planted::TargetExportsSelection) {
-            let selection = self.session_state.get(&job.doc).map(|s| s["selection"].clone()).unwrap_or(Value::Null);
-            if let (Some(sel), Some(items)) = (selection.as_array().filter(|s| !s.is_empty()), doc["items"].as_object_mut()) {
+            let selection = self
+                .session_state
+                .get(&job.doc)
+                .map(|s| s["selection"].clone())
+                .unwrap_or(Value::Null);
+            if let (Some(sel), Some(items)) = (
+                selection.as_array().filter(|s| !s.is_empty()),
+                doc["items"].as_object_mut(),
+            ) {
                 items.retain(|id, i| sel.contains(&json!(id)) || i["kind"] == "camera@1");
             }
         }
@@ -716,19 +840,28 @@ impl Hub<'_> {
             })
             .collect();
         // #157: each strip the film's end cuts, listed as a warning a brief may refuse.
-        let warnings = mix.as_deref().map(|m| guards::end_cuts(m, frames.end * frame)).unwrap_or_default();
+        let warnings = mix
+            .as_deref()
+            .map(|m| guards::end_cuts(m, frames.end * frame))
+            .unwrap_or_default();
         if job.refuse_end_cuts && !warnings.is_empty() {
             return Err(json!({"outcome": "failed", "code": "end_cut", "issues": warnings}));
         }
         // #157: the readiness gate's disk count: the PCM is all an export keeps on disk.
         let needed = match mix {
-            Some(_) => (self.span_start(frames.end, frame, hz) - self.span_start(frames.start, frame, hz)).max(0) as u64 * 8,
+            Some(_) => {
+                (self.span_start(frames.end, frame, hz) - self.span_start(frames.start, frame, hz))
+                    .max(0) as u64
+                    * 8
+            }
             None => 0,
         };
         let disk = guards::disk_gate(needed, scratch);
         if !disk.fits && !self.guard_planted(Guard::NoDiskGate) {
-            return Err(json!({"outcome": "refused", "code": "export_disk_short", "needed": needed, "free": disk.free, "frames_drawn": 0,
-                "what": format!("the export keeps {needed} bytes of PCM on disk while it runs, and {} has {} bytes free", scratch.display(), disk.free)}));
+            return Err(
+                json!({"outcome": "refused", "code": "export_disk_short", "needed": needed, "free": disk.free, "frames_drawn": 0,
+                "what": format!("the export keeps {needed} bytes of PCM on disk while it runs, and {} has {} bytes free", scratch.display(), disk.free)}),
+            );
         }
         // #157: the sound first, held to its profile before any frame is drawn; and, when the
         // limiter never cut, its loudness range held to the master's before the gain (#502).
@@ -742,10 +875,19 @@ impl Hub<'_> {
             if before.is_some() && deep_canvas_media::planted(NORMALIZER) {
                 ride_gain(&mut pcm, hz);
             }
-            let samples: Vec<f32> = pcm.as_chunks::<4>().0.iter().map(|b| f32::from_le_bytes(*b)).collect();
+            let samples: Vec<f32> = pcm
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .map(|b| f32::from_le_bytes(*b))
+                .collect();
             let read = loudness::measure(&samples, &[1.0, 1.0], i64::from(hz), 8);
             let mut misses = profile.misses(&read);
-            misses.extend(before.as_ref().and_then(|b: &Loudness| delivery::range_kept(b.range, read.range, cut)));
+            misses.extend(
+                before
+                    .as_ref()
+                    .and_then(|b: &Loudness| delivery::range_kept(b.range, read.range, cut)),
+            );
             if !misses.is_empty() {
                 return Err(loudness_failed(profile.name, "pcm", &misses, &read));
             }
@@ -759,7 +901,12 @@ impl Hub<'_> {
                     "what": format!("{} couldn't be written: {e}", audio.display())}]})
             })?;
         }
-        let raw: Vec<f32> = pcm.as_chunks::<4>().0.iter().map(|b| f32::from_le_bytes(*b)).collect();
+        let raw: Vec<f32> = pcm
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|b| f32::from_le_bytes(*b))
+            .collect();
         drop(pcm);
         // #157: the machine's GPU lease, held while the export draws and reads its frames.
         let lease = Lease::take();
@@ -772,45 +919,77 @@ impl Hub<'_> {
             std::fs::create_dir_all(parent).map_err(|_| refuse("export_unwritable"))?;
         }
         let chapters = chapters_of(&doc, frame, &frames);
-        let mut run = Run::new(scratch, chapters.iter().map(|c| c.2).collect(), job.readback);
+        let mut run = Run::new(
+            scratch,
+            chapters.iter().map(|c| c.2).collect(),
+            job.readback,
+        );
         let mut sink = self.sink_for(job, &doc, &target, &entry, &temp, (p, q), len)?;
         for shard in &shards {
             self.export_frames(&doc, shard, &mut run, &mut sink)?;
         }
         let looping = doc.pointer("/transport/loop").and_then(Value::as_str) == Some("wrap");
         let seen = run.seen.take().ok_or_else(|| refuse("no_frames"))?;
-        let (hashes, reads, wrap) = seen
-            .finish(looping)
-            .map_err(|()| stopped(frames.end - 1, "device_lost", &format!("the GPU device was lost at frame {}", frames.end - 1)))?;
+        let (hashes, reads, wrap) = seen.finish(looping).map_err(|()| {
+            stopped(
+                frames.end - 1,
+                "device_lost",
+                &format!("the GPU device was lost at frame {}", frames.end - 1),
+            )
+        })?;
         // #157: frames.finite, film.blank and film.wrap, from what the GPU read of each frame.
         let mut issues = std::mem::take(&mut run.nonfinite);
-        issues.extend(self.frame_guards(&doc, job, frame, frames.start, &reads, wrap.filter(|_| looping), run.size)?);
+        issues.extend(self.frame_guards(
+            &doc,
+            job,
+            frame,
+            frames.start,
+            &reads,
+            wrap.filter(|_| looping),
+            run.size,
+        )?);
         if !issues.is_empty() {
             return Err(json!({"outcome": "failed", "code": "export.frames", "issues": issues}));
         }
         let size = run.size;
-        let encoder = self.sink_finish(sink, job, &target, &entry, &temp, &audio, hz, &tc, tc_start)?;
+        let encoder =
+            self.sink_finish(sink, job, &target, &entry, &temp, &audio, hz, &tc, tc_start)?;
         // #157: the colour probe, and the delivery read back from its own bytes.
         let (mut probe, mut read, mut found) = (Value::Null, None, Vec::new());
         if target == "video" {
             match self.color_probe(job, size, (p, q), scratch) {
                 Ok(p) => probe = p,
-                Err(e) if e["outcome"] == "failed" => found.extend(e["issues"].as_array().cloned().unwrap_or_default()),
+                Err(e) if e["outcome"] == "failed" => {
+                    found.extend(e["issues"].as_array().cloned().unwrap_or_default())
+                }
                 Err(e) => return Err(e),
             }
         }
         if target == "video" || target == "png" {
             let pcm = mix.as_ref().map(|_| (&raw[..], 2, hz));
             let d = fidelity::Delivery {
-                path: &temp, doc: &doc, job, frames: frames.clone(), frame, rate: (p, q), size, hashes: &hashes, pcm,
-                chapters: &chapters, kept: self.guard_planted(Guard::FidelityKeepsFrames).then_some(&run.kept[..]),
+                path: &temp,
+                doc: &doc,
+                job,
+                frames: frames.clone(),
+                frame,
+                rate: (p, q),
+                size,
+                hashes: &hashes,
+                pcm,
+                chapters: &chapters,
+                kept: self
+                    .guard_planted(Guard::FidelityKeepsFrames)
+                    .then_some(&run.kept[..]),
                 priming: encoder.pointer("/audio/priming").and_then(Value::as_i64),
                 reads: &reads,
             };
             match self.read_delivery(&d) {
                 Ok(r) => read = Some(r),
                 Err(e) if e["outcome"] == "failed" && found.is_empty() => return Err(e),
-                Err(e) if e["outcome"] == "failed" => found.extend(e["issues"].as_array().cloned().unwrap_or_default()),
+                Err(e) if e["outcome"] == "failed" => {
+                    found.extend(e["issues"].as_array().cloned().unwrap_or_default())
+                }
                 Err(e) => return Err(e),
             }
         }
@@ -822,7 +1001,9 @@ impl Hub<'_> {
         let mut delivered = None;
         if sound.is_some() {
             let Some((rate, channels, samples)) = read.as_ref().and_then(|r| r.pcm.as_ref()) else {
-                return Err(json!({"code": "delivery_unread", "why": "the delivery holds no sound"}));
+                return Err(
+                    json!({"code": "delivery_unread", "why": "the delivery holds no sound"}),
+                );
             };
             let got = loudness::measure(samples, &vec![1.0; *channels], i64::from(*rate), 8);
             let misses = profile.misses(&got);
@@ -840,18 +1021,33 @@ impl Hub<'_> {
         if let Some(l) = &laid {
             for kind in &job.captions.files {
                 let cues = sidecar_cues(&l.captions, frame);
-                let text = if kind == "srt" { captions::srt(&cues) } else { captions::vtt(&cues) };
+                let text = if kind == "srt" {
+                    captions::srt(&cues)
+                } else {
+                    captions::vtt(&cues)
+                };
                 let to = out.with_extension(kind);
-                let part = to.with_file_name(format!(".{}.part", to.file_name().map(|f| f.to_string_lossy()).unwrap_or_default()));
+                let part = to.with_file_name(format!(
+                    ".{}.part",
+                    to.file_name()
+                        .map(|f| f.to_string_lossy())
+                        .unwrap_or_default()
+                ));
                 if std::fs::write(&part, text).is_err() {
                     drop_temp();
-                    sidecars.iter().for_each(|(part, _)| drop(std::fs::remove_file(part)));
+                    sidecars
+                        .iter()
+                        .for_each(|(part, _)| drop(std::fs::remove_file(part)));
                     return Err(refuse("export_unwritable"));
                 }
                 sidecars.push((part, to));
             }
         }
-        let renamed = std::fs::rename(&temp, &out).and_then(|()| sidecars.iter().try_for_each(|(part, to)| std::fs::rename(part, to)));
+        let renamed = std::fs::rename(&temp, &out).and_then(|()| {
+            sidecars
+                .iter()
+                .try_for_each(|(part, to)| std::fs::rename(part, to))
+        });
         if let Err(e) = renamed {
             drop_temp();
             for (part, to) in &sidecars {
@@ -870,8 +1066,15 @@ impl Hub<'_> {
             json!({"name": a.name, "driver": a.driver, "driver_info": a.driver_info, "backend": format!("{:?}", a.backend),
                 "software": a.device_type == wgpu::DeviceType::Cpu})
         });
-        let holder = job.session.clone().unwrap_or_else(|| format!("process {}", std::process::id()));
-        let key = adapter.as_ref().and_then(|a| a["name"].as_str()).unwrap_or("gpu").to_string();
+        let holder = job
+            .session
+            .clone()
+            .unwrap_or_else(|| format!("process {}", std::process::id()));
+        let key = adapter
+            .as_ref()
+            .and_then(|a| a["name"].as_str())
+            .unwrap_or("gpu")
+            .to_string();
         let lease = lease.release(&holder, &key);
         let hidden: Vec<&String> = match entry["hidden"].as_str() {
             Some("listed") => doc["items"]
@@ -927,7 +1130,8 @@ impl Hub<'_> {
             receipt["loudness_profile"] = json!(profile.name);
             receipt["gain"] = json!(gain);
             receipt["limiter_cut"] = json!(cut);
-            receipt["delivery"] = Value::Object(delivered.as_ref().map(readings).unwrap_or_default());
+            receipt["delivery"] =
+                Value::Object(delivered.as_ref().map(readings).unwrap_or_default());
         }
         if let Some(l) = &laid {
             receipt["captions"] = json!({
@@ -952,7 +1156,11 @@ impl Hub<'_> {
         }
         let (fps, drop) = (u64::from(tc.nominal), u64::from(tc.drop));
         let per_minute = fps * 60 - drop;
-        let f = if n >= drop { n + drop * ((n - drop) / per_minute) } else { n };
+        let f = if n >= drop {
+            n + drop * ((n - drop) / per_minute)
+        } else {
+            n
+        };
         let (s, ff) = (f / fps, f % fps);
         format!("{:02}:{:02}:{:02};{:02}", s / 3600, s / 60 % 60, s % 60, ff)
     }
@@ -967,18 +1175,26 @@ impl Hub<'_> {
             .flatten()
             .filter_map(|(id, s)| {
                 let sha = deep_canvas_media::doc::strip_asset(s)?.to_string();
-                Some((id.clone(), sha, deep_canvas_media::doc::time(doc, s.get("start"))))
+                Some((
+                    id.clone(),
+                    sha,
+                    deep_canvas_media::doc::time(doc, s.get("start")),
+                ))
             })
             .collect();
         for (id, sha, start) in strips {
             if sha.len() != 64 || crate::evidence::read(&self.scenario.evidence, &sha).is_none() {
-                return Err(json!({"code": "asset_missing", "severity": "error", "strip": id, "asset": sha, "start": start,
-                    "what": format!("strip `{id}` plays asset {sha}, which the evidence store doesn't hold")}));
+                return Err(
+                    json!({"code": "asset_missing", "severity": "error", "strip": id, "asset": sha, "start": start,
+                    "what": format!("strip `{id}` plays asset {sha}, which the evidence store doesn't hold")}),
+                );
             }
         }
         if let Some(issue) = self.probe_assets(doc).into_iter().next() {
-            return Err(json!({"code": "asset_missing", "severity": "error", "item": issue.ids.first(), "path": issue.path,
-                "asset": issue.actual, "why": issue.code, "what": issue.what}));
+            return Err(
+                json!({"code": "asset_missing", "severity": "error", "item": issue.ids.first(), "path": issue.path,
+                "asset": issue.actual, "why": issue.code, "what": issue.what}),
+            );
         }
         Ok(())
     }
@@ -999,7 +1215,10 @@ impl Hub<'_> {
             rev: last.map_or(1, |r| r.rev + 1),
             base_rev: last.map_or(0, |r| r.rev),
             writer: last.map_or_else(
-                || deep_canvas::show::Writer { kind: deep_canvas::show::WriterKind::Plugin, id: "export".into() },
+                || deep_canvas::show::Writer {
+                    kind: deep_canvas::show::WriterKind::Plugin,
+                    id: "export".into(),
+                },
                 |r| r.writer.clone(),
             ),
             hash,
@@ -1011,7 +1230,6 @@ impl Hub<'_> {
         }
         rows.push(row);
     }
-
 }
 
 impl Hub<'_> {
@@ -1022,7 +1240,11 @@ impl Hub<'_> {
             let mut state = state.clone();
             for k in ["selection", "view"] {
                 if state.get(k).is_none() {
-                    state[k] = if k == "selection" { json!([]) } else { json!({}) };
+                    state[k] = if k == "selection" {
+                        json!([])
+                    } else {
+                        json!({})
+                    };
                 }
             }
             self.session_state.insert(doc.to_string(), state);
@@ -1056,7 +1278,9 @@ impl Hub<'_> {
                 Err(e) => return e,
             }
         }
-        let adapter = self.gpu3().and_then(|g| g.device().adapter.as_ref().map(|a| a.name.clone()));
+        let adapter = self
+            .gpu3()
+            .and_then(|g| g.device().adapter.as_ref().map(|a| a.name.clone()));
         json!({"outcome": "hashed", "hashes": hashes, "adapter": {"name": adapter, "software": false}})
     }
 
@@ -1065,13 +1289,23 @@ impl Hub<'_> {
         let planted = deep_gpu::blake3::Planted {
             joins_right_left: self.scenario.planted == Some(Planted::ChunkTreeWrongOrder),
         };
-        let gpu = self.gpu3().map(|g| g.device().clone()).ok_or_else(|| json!({"outcome": "refused", "code": "gpu_unavailable"}))?;
-        let mut frames = deep_gpu::blake3::Blake3::new(&gpu.device, planted).frames(&gpu.device, &gpu.queue, size);
+        let gpu = self
+            .gpu3()
+            .map(|g| g.device().clone())
+            .ok_or_else(|| json!({"outcome": "refused", "code": "gpu_unavailable"}))?;
+        let mut frames = deep_gpu::blake3::Blake3::new(&gpu.device, planted).frames(
+            &gpu.device,
+            &gpu.queue,
+            size,
+        );
         let lost = |_| json!({"outcome": "refused", "code": "device_lost"});
         let first = frames.push(bgra).map_err(lost)?;
         match first {
             Some(d) => Ok(d),
-            None => frames.finish().map_err(lost)?.ok_or_else(|| json!({"outcome": "refused", "code": "gpu_unavailable"})),
+            None => frames
+                .finish()
+                .map_err(lost)?
+                .ok_or_else(|| json!({"outcome": "refused", "code": "gpu_unavailable"})),
         }
     }
 
@@ -1082,9 +1316,14 @@ impl Hub<'_> {
     pub fn cross_machine(&self, wavs: &[String; 2]) -> Value {
         let mut read = Vec::new();
         for sha in wavs {
-            match crate::evidence::read(&self.scenario.evidence, sha).as_deref().and_then(wav_samples) {
+            match crate::evidence::read(&self.scenario.evidence, sha)
+                .as_deref()
+                .and_then(wav_samples)
+            {
                 Some(w) => read.push(w),
-                None => return json!({"outcome": "refused", "code": "unreadable_audio", "audio": sha}),
+                None => {
+                    return json!({"outcome": "refused", "code": "unreadable_audio", "audio": sha})
+                }
             }
         }
         let (a, b) = (&read[0], &read[1]);
@@ -1092,7 +1331,11 @@ impl Hub<'_> {
             return json!({"outcome": "refused", "code": "audio_differs_in_shape",
                 "audio": [{"rate": a.0, "channels": a.1, "samples": a.2.len()}, {"rate": b.0, "channels": b.1, "samples": b.2.len()}]});
         }
-        let peak = a.2.iter().zip(&b.2).map(|(x, y)| (f64::from(*x) - f64::from(*y)).abs()).fold(0.0, f64::max);
+        let peak =
+            a.2.iter()
+                .zip(&b.2)
+                .map(|(x, y)| (f64::from(*x) - f64::from(*y)).abs())
+                .fold(0.0, f64::max);
         let db = (peak > 0.0).then(|| 20.0 * peak.log10());
         let verdict = match db {
             Some(d) if d > -96.0 => "INCONCLUSIVE",
@@ -1130,8 +1373,18 @@ fn wav_samples(bytes: &[u8]) -> Option<(u32, u16, Vec<f32>)> {
     }
     let ((tag, channels, rate, bits), data) = (fmt?, data?);
     let samples = match (tag, bits) {
-        (3, 32) => data.as_chunks::<4>().0.iter().map(|c| f32::from_le_bytes(*c)).collect(),
-        (1, 16) => data.as_chunks::<2>().0.iter().map(|c| f32::from(i16::from_le_bytes(*c)) / 32_768.0).collect(),
+        (3, 32) => data
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|c| f32::from_le_bytes(*c))
+            .collect(),
+        (1, 16) => data
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|c| f32::from(i16::from_le_bytes(*c)) / 32_768.0)
+            .collect(),
         _ => return None,
     };
     Some((rate, channels, samples))
@@ -1149,15 +1402,29 @@ fn sidecar_cues(captions: &[Caption], frame: i64) -> Vec<Caption> {
         return captions.to_vec();
     }
     let at_24 = |t: i64| t / frame * (deep_canvas::grammar::FLICKS_PER_SECOND / 24);
-    captions.iter().map(|c| Caption { start: at_24(c.start), end: at_24(c.end), ..c.clone() }).collect()
+    captions
+        .iter()
+        .map(|c| Caption {
+            start: at_24(c.start),
+            end: at_24(c.end),
+            ..c.clone()
+        })
+        .collect()
 }
 
 /// The planted normalizer: each 10 ms of the PCM takes the gain that brings the short-term
 /// loudness of the 3 s ending there to −23 LUFS, the first 3 s the first whole window's.
 fn ride_gain(pcm: &mut [u8], hz: u32) {
-    let samples: Vec<f32> = pcm.as_chunks::<4>().0.iter().map(|b| f32::from_le_bytes(*b)).collect();
+    let samples: Vec<f32> = pcm
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|b| f32::from_le_bytes(*b))
+        .collect();
     let short_term = loudness::measure(&samples, &[1.0, 1.0], i64::from(hz), 1).short_term;
-    let Some(last) = short_term.len().checked_sub(1) else { return };
+    let Some(last) = short_term.len().checked_sub(1) else {
+        return;
+    };
     let block = (hz as usize / 100).max(1) * 8;
     for (k, bytes) in pcm.chunks_mut(block).enumerate() {
         let read = short_term[k.clamp(299.min(last), last)];
@@ -1175,11 +1442,18 @@ fn ride_gain(pcm: &mut [u8], hz: u32) {
 fn readings(l: &Loudness) -> serde_json::Map<String, Value> {
     let n = |x: f64| if x.is_finite() { json!(x) } else { Value::Null };
     let plr = l.true_peak - l.integrated;
-    [("integrated", n(l.integrated)), ("lra", n(l.range)), ("max_m", n(l.momentary_max)), ("max_s", n(l.short_term_max)),
-        ("true_peak", n(l.true_peak)), ("sample_peak", n(l.sample_peak)), ("plr", n(plr))]
-        .into_iter()
-        .map(|(k, v)| (k.to_string(), v))
-        .collect()
+    [
+        ("integrated", n(l.integrated)),
+        ("lra", n(l.range)),
+        ("max_m", n(l.momentary_max)),
+        ("max_s", n(l.short_term_max)),
+        ("true_peak", n(l.true_peak)),
+        ("sample_peak", n(l.sample_peak)),
+        ("plr", n(plr)),
+    ]
+    .into_iter()
+    .map(|(k, v)| (k.to_string(), v))
+    .collect()
 }
 
 /// An export whose sound lies outside its loudness profile: each measure that does, with its
@@ -1229,26 +1503,43 @@ fn temp_of(out: &Path) -> PathBuf {
 }
 
 fn name_of(out: &Path) -> String {
-    out.file_name().map(|f| f.to_string_lossy().into_owned()).unwrap_or_default()
+    out.file_name()
+        .map(|f| f.to_string_lossy().into_owned())
+        .unwrap_or_default()
 }
 
 /// The document's own size in pixels, when it gives one.
 fn doc_size(doc: &Value) -> Option<[u16; 2]> {
     let s = doc.get("size")?.as_array()?;
-    Some(crate::snapshot::px([s.first()?.as_f64()?, s.get(1)?.as_f64()?]))
+    Some(crate::snapshot::px([
+        s.first()?.as_f64()?,
+        s.get(1)?.as_f64()?,
+    ]))
 }
-
 
 /// #157: the chapters, one per section marker inside `frames`, in order: its marker, its name and
 /// its first frame, the first frame at or after the marker's start.
-fn chapters_of(doc: &Value, frame: i64, frames: &std::ops::Range<i64>) -> Vec<(String, String, i64)> {
-    let Some(motion) = doc.as_object().and_then(|m| deep_canvas_motion::doc::read(m).ok()) else { return Vec::new() };
+fn chapters_of(
+    doc: &Value,
+    frame: i64,
+    frames: &std::ops::Range<i64>,
+) -> Vec<(String, String, i64)> {
+    let Some(motion) = doc
+        .as_object()
+        .and_then(|m| deep_canvas_motion::doc::read(m).ok())
+    else {
+        return Vec::new();
+    };
     let mut out: Vec<(String, String, i64)> = motion
         .markers
         .iter()
         .filter(|m| m.kind == "section")
         .map(|m| {
-            let name = doc.pointer(&format!("/markers/{}/name", m.id)).and_then(Value::as_str).unwrap_or(&m.id).to_string();
+            let name = doc
+                .pointer(&format!("/markers/{}/name", m.id))
+                .and_then(Value::as_str)
+                .unwrap_or(&m.id)
+                .to_string();
             (m.id.clone(), name, clock::index(m.start + frame - 1, frame))
         })
         .filter(|(_, _, k)| frames.contains(k))
@@ -1279,7 +1570,11 @@ fn undecoded(doc: &Value, block: &Map<String, Value>) -> Option<String> {
     doc["items"]
         .as_object()?
         .iter()
-        .filter(|(_, i)| i["kind"] == "image@1" && i["params"].get("frames").is_some() && i["params"]["asset"].is_string())
+        .filter(|(_, i)| {
+            i["kind"] == "image@1"
+                && i["params"].get("frames").is_some()
+                && i["params"]["asset"].is_string()
+        })
         .map(|(id, _)| id)
         .find(|id| !block.contains_key(*id))
         .cloned()

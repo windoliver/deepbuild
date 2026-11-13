@@ -62,17 +62,23 @@ impl Ring {
         }
         out[n..].fill(0.0);
         self.read.store(r + n, Ordering::Release);
-        self.taken_frames.fetch_add((out.len() / 2) as u64, Ordering::Relaxed);
+        self.taken_frames
+            .fetch_add((out.len() / 2) as u64, Ordering::Relaxed);
         if n < out.len() {
             self.underruns.fetch_add(1, Ordering::Relaxed);
-            self.short_frames.fetch_add(((out.len() - n) / 2) as u64, Ordering::Relaxed);
+            self.short_frames
+                .fetch_add(((out.len() - n) / 2) as u64, Ordering::Relaxed);
         }
     }
 
     /// Underruns so far, the frames of silence they filled, and the frames the consumer took.
     pub fn counts(&self) -> (u64, u64, u64) {
         let l = |a: &AtomicU64| a.load(Ordering::Relaxed);
-        (l(&self.underruns), l(&self.short_frames), l(&self.taken_frames))
+        (
+            l(&self.underruns),
+            l(&self.short_frames),
+            l(&self.taken_frames),
+        )
     }
 }
 
@@ -101,7 +107,9 @@ pub fn soak(mut player: Player, seconds: u64) -> Value {
     fill(&mut player);
     let unit = match mac::Unit::start(&ring, rate) {
         Ok(u) => u,
-        Err(status) => return json!({"outcome": "refused", "code": "device_failed", "status": status}),
+        Err(status) => {
+            return json!({"outcome": "refused", "code": "device_failed", "status": status})
+        }
     };
     let begun = Instant::now();
     let deadline = begun + Duration::from_secs(seconds);
@@ -160,7 +168,8 @@ mod mac {
         reserved: u32,
     }
 
-    type Render = extern "C" fn(*mut c_void, *mut u32, *const c_void, u32, u32, *mut BufferList) -> i32;
+    type Render =
+        extern "C" fn(*mut c_void, *mut u32, *const c_void, u32, u32, *mut BufferList) -> i32;
 
     #[repr(C)]
     struct RenderCallback {
@@ -190,10 +199,20 @@ mod mac {
 
     #[link(name = "AudioToolbox", kind = "framework")]
     extern "C" {
-        fn AudioComponentFindNext(after: *mut c_void, desc: *const ComponentDescription) -> *mut c_void;
+        fn AudioComponentFindNext(
+            after: *mut c_void,
+            desc: *const ComponentDescription,
+        ) -> *mut c_void;
         fn AudioComponentInstanceNew(component: *mut c_void, out: *mut *mut c_void) -> i32;
         fn AudioComponentInstanceDispose(unit: *mut c_void) -> i32;
-        fn AudioUnitSetProperty(unit: *mut c_void, id: u32, scope: u32, element: u32, data: *const c_void, size: u32) -> i32;
+        fn AudioUnitSetProperty(
+            unit: *mut c_void,
+            id: u32,
+            scope: u32,
+            element: u32,
+            data: *const c_void,
+            size: u32,
+        ) -> i32;
         fn AudioUnitInitialize(unit: *mut c_void) -> i32;
         fn AudioUnitUninitialize(unit: *mut c_void) -> i32;
         fn AudioOutputUnitStart(unit: *mut c_void) -> i32;
@@ -218,12 +237,23 @@ mod mac {
 
     /// One property of a CoreAudio object, if it reads.
     fn property<T: Copy + Default>(object: u32, selector: u32, scope: u32) -> Option<T> {
-        let address = Address { selector, scope, element: 0 };
+        let address = Address {
+            selector,
+            scope,
+            element: 0,
+        };
         let mut value = T::default();
         let mut size = std::mem::size_of::<T>() as u32;
         // SAFETY: `value` is `size` writable bytes and `address` a live property address.
         let status = unsafe {
-            AudioObjectGetPropertyData(object, &address, 0, std::ptr::null(), &mut size, (&raw mut value).cast())
+            AudioObjectGetPropertyData(
+                object,
+                &address,
+                0,
+                std::ptr::null(),
+                &mut size,
+                (&raw mut value).cast(),
+            )
         };
         (status == 0 && size as usize == std::mem::size_of::<T>()).then_some(value)
     }
@@ -233,24 +263,37 @@ mod mac {
 
     /// The default output device, or `None` when the machine has none.
     pub fn default_output() -> Option<Device> {
-        property::<u32>(SYSTEM_OBJECT, code(b"dOut"), GLOBAL).filter(|&d| d != 0).map(Device)
+        property::<u32>(SYSTEM_OBJECT, code(b"dOut"), GLOBAL)
+            .filter(|&d| d != 0)
+            .map(Device)
     }
 
     impl Device {
         /// The output latency the device reports, in seconds: its latency, safety offset and
         /// buffer, and its first output stream's latency.
         pub fn latency(&self) -> f64 {
-            let frames = |selector: &[u8; 4]| property::<u32>(self.0, code(selector), OUTPUT).unwrap_or(0) as f64;
+            let frames = |selector: &[u8; 4]| {
+                property::<u32>(self.0, code(selector), OUTPUT).unwrap_or(0) as f64
+            };
             let stream = property::<u32>(self.0, code(b"stm#"), OUTPUT)
                 .and_then(|s| property::<u32>(s, code(b"ltnc"), GLOBAL))
                 .unwrap_or(0) as f64;
-            let rate = property::<f64>(self.0, code(b"nsrt"), GLOBAL).filter(|r| *r > 0.0).unwrap_or(48_000.0);
+            let rate = property::<f64>(self.0, code(b"nsrt"), GLOBAL)
+                .filter(|r| *r > 0.0)
+                .unwrap_or(48_000.0);
             (frames(b"ltnc") + frames(b"saft") + frames(b"fsiz") + stream) / rate
         }
     }
 
     /// The device's render callback: the ring's samples, or silence and an underrun.
-    extern "C" fn render(ring: *mut c_void, _: *mut u32, _: *const c_void, _: u32, frames: u32, data: *mut BufferList) -> i32 {
+    extern "C" fn render(
+        ring: *mut c_void,
+        _: *mut u32,
+        _: *const c_void,
+        _: u32,
+        frames: u32,
+        data: *mut BufferList,
+    ) -> i32 {
         // SAFETY: `ring` is the Ring `Unit::start` was given, which outlives the unit; `data` is
         // this call's buffer list, one interleaved stereo f32 buffer by the format set on the unit.
         unsafe {
@@ -290,7 +333,10 @@ mod mac {
                 bits_per_channel: 32,
                 reserved: 0,
             };
-            let callback = RenderCallback { proc_: render, ref_con: (ring as *const Ring).cast_mut().cast() };
+            let callback = RenderCallback {
+                proc_: render,
+                ref_con: (ring as *const Ring).cast_mut().cast(),
+            };
             let ok = |s: i32| if s == 0 { Ok(()) } else { Err(s) };
             // SAFETY: each call gets the unit it made and properties of the sizes they name;
             // the unit is disposed of on any failure and on drop.
@@ -304,8 +350,22 @@ mod mac {
                 let unit = Unit(unit);
                 let size = |n: usize| n as u32;
                 // kAudioUnitProperty_StreamFormat (8) and _SetRenderCallback (23), input scope (1).
-                ok(AudioUnitSetProperty(unit.0, 8, 1, 0, (&raw const format).cast(), size(std::mem::size_of::<StreamFormat>())))?;
-                ok(AudioUnitSetProperty(unit.0, 23, 1, 0, (&raw const callback).cast(), size(std::mem::size_of::<RenderCallback>())))?;
+                ok(AudioUnitSetProperty(
+                    unit.0,
+                    8,
+                    1,
+                    0,
+                    (&raw const format).cast(),
+                    size(std::mem::size_of::<StreamFormat>()),
+                ))?;
+                ok(AudioUnitSetProperty(
+                    unit.0,
+                    23,
+                    1,
+                    0,
+                    (&raw const callback).cast(),
+                    size(std::mem::size_of::<RenderCallback>()),
+                ))?;
                 ok(AudioUnitInitialize(unit.0))?;
                 ok(AudioOutputUnitStart(unit.0))?;
                 Ok(unit)
@@ -343,11 +403,19 @@ mod tests {
         ring.push(&[0.5; 8]);
         let mut out = [1.0f32; 12];
         ring.pull(&mut out);
-        assert_eq!(ring.counts(), (1, 2, 6), "one underrun of 2 frames, 6 frames taken");
+        assert_eq!(
+            ring.counts(),
+            (1, 2, 6),
+            "one underrun of 2 frames, 6 frames taken"
+        );
         assert_eq!(&out[..8], &[0.5; 8]);
         assert_eq!(&out[8..], &[0.0; 4], "the missing frames are silence");
         ring.pull(&mut out);
-        assert_eq!(ring.counts(), (2, 8, 12), "an empty ring is an underrun of the whole ask");
+        assert_eq!(
+            ring.counts(),
+            (2, 8, 12),
+            "an empty ring is an underrun of the whole ask"
+        );
     }
 
     #[test]
@@ -360,6 +428,10 @@ mod tests {
             }
             ring.pull(&mut out);
         }
-        assert_eq!(ring.counts(), (0, 0, 60), "no underrun, 20 pulls of 3 frames taken");
+        assert_eq!(
+            ring.counts(),
+            (0, 0, 60),
+            "no underrun, 20 pulls of 3 frames taken"
+        );
     }
 }

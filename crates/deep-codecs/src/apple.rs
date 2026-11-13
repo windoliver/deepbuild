@@ -454,7 +454,11 @@ pub fn decode_video(
             return Err(format!("CMVideoFormatDescriptionCreate: {st}"));
         }
         let fd = Cf(fd);
-        let format = if codec == fourcc(b"ap4h") { b"y416" } else { b"y420" };
+        let format = if codec == fourcc(b"ap4h") {
+            b"y416"
+        } else {
+            b"y420"
+        };
         let format = i32_number(fourcc(format) as i32);
         let attrs = dict(&[(kCVPixelBufferPixelFormatTypeKey, format.0)]);
         let mut out = Box::new(Decoded {
@@ -797,7 +801,12 @@ pub fn encode_aac(f32le: &[u8], rate: u32, channels: u32) -> Result<Aac, String>
     // #157: 256 kb/s (kAudioConverterEncodeBitRate).
     let bits = 256_000u32;
     let st = unsafe {
-        AudioConverterSetProperty(conv, fourcc(b"brat"), 4, &bits as *const u32 as *const c_void)
+        AudioConverterSetProperty(
+            conv,
+            fourcc(b"brat"),
+            4,
+            &bits as *const u32 as *const c_void,
+        )
     };
     if st != 0 {
         unsafe { AudioConverterDispose(conv) };

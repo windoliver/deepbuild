@@ -502,7 +502,10 @@ impl W<'_> {
             let at = self.arg_as(s, "ixy", &Ty::V(Sc::U32, dims));
             let v = match out.format.as_str() {
                 "r32uint" => format!("vec4<u32>({}, 0u, 0u, 1u)", self.arg_as(s, "v", &Ty::U32)),
-                "r32float" => format!("vec4<f32>({}, 0.0, 0.0, 1.0)", self.arg_as(s, "v", &Ty::F32)),
+                "r32float" => format!(
+                    "vec4<f32>({}, 0.0, 0.0, 1.0)",
+                    self.arg_as(s, "v", &Ty::F32)
+                ),
                 _ => self.arg_as(s, "v", &Ty::V(Sc::F32, 4)),
             };
             let store = format!(
@@ -1060,7 +1063,10 @@ impl W<'_> {
             "role" => self.raw(s, "x"),
             "normal" => format!(
                 "g.normal_{}",
-                s.fields.get("space").and_then(Value::as_str).unwrap_or("object")
+                s.fields
+                    .get("space")
+                    .and_then(Value::as_str)
+                    .unwrap_or("object")
             ),
             "position" => "g.position_world".into(),
             "tangent" => "g.tangent".into(),
@@ -1322,7 +1328,9 @@ fn bindings(c: &Checked, options: Options, m: &mut String) {
 
 /// The storage outputs an atomic statement adds into, anywhere in the steps: WGSL holds them as
 /// atomics, so every write to them is an atomic store.
-fn atomic_bufs(steps: &std::collections::BTreeMap<String, Step>) -> std::collections::BTreeSet<String> {
+fn atomic_bufs(
+    steps: &std::collections::BTreeMap<String, Step>,
+) -> std::collections::BTreeSet<String> {
     let mut out = std::collections::BTreeSet::new();
     let mut stack: Vec<&std::collections::BTreeMap<String, Step>> = vec![steps];
     while let Some(st) = stack.pop() {
@@ -1349,7 +1357,13 @@ fn prologue(w: &mut W<'_>) {
             // A light response's port, from what the light loop hands it (#485).
             From::Port => format!("a.{n}"),
             // Textures and storage bind as they are, and arrays are read in place.
-            _ if matches!(i.ty, Ty::Tex(_) | Ty::Tex3(_) | Ty::Arr(..) | Ty::Storage(..)) => continue,
+            _ if matches!(
+                i.ty,
+                Ty::Tex(_) | Ty::Tex3(_) | Ty::Arr(..) | Ty::Storage(..)
+            ) =>
+            {
+                continue
+            }
             _ => unslot(&format!("inputs.{n}"), &i.ty),
         };
         w.line(&format!("let {}: {} = {e};", input_ident(n), i.ty.wgsl()));
@@ -1562,7 +1576,10 @@ pub fn material(c: &Checked, options: Options, groups: [u32; 2]) -> String {
     let m = m
         .replace("@group(0)", &format!("@group({})", groups[0]))
         .replace("@group(1)", &format!("@group({})", groups[1]));
-    let header = format!("// {}: written by the core from its checked steps.\n", c.op.id);
+    let header = format!(
+        "// {}: written by the core from its checked steps.\n",
+        c.op.id
+    );
     header + &rename(&m, RENAMES)
 }
 
@@ -1595,7 +1612,11 @@ pub fn responses(c: &Checked, options: Options, beside: &str) -> String {
                 m.push_str(helper);
             }
         }
-        let port = if name == "light" { "LightIn" } else { "AmbientIn" };
+        let port = if name == "light" {
+            "LightIn"
+        } else {
+            "AmbientIn"
+        };
         let _ = writeln!(m, "fn {name}(a: {port}) -> vec3<f32> {{");
         m.push_str(&w.out);
         m.push_str("}\n");
@@ -1641,7 +1662,10 @@ pub fn compute(c: &Checked, options: Options) -> String {
     // An indirect dispatch's last workgroup holds invocations past its count (#484).
     if c.op.counted && !options.no_count_guard {
         let count = input_ident(crate::graph::DISPATCH_COUNT);
-        w.line(&format!("if gid.x >= min({count}[0], {}u) {{ return; }}", c.op.elements));
+        w.line(&format!(
+            "if gid.x >= min({count}[0], {}u) {{ return; }}",
+            c.op.elements
+        ));
     } else {
         w.line(&format!("if gid.x >= {}u {{ return; }}", c.op.elements));
     }
