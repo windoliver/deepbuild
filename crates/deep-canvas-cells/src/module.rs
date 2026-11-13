@@ -123,7 +123,10 @@ fn manifest() -> Manifest {
         feature: "cells".into(),
         license: "Apache-2.0".into(),
         implements: "cells@1".into(),
-        implementation: deep_canvas::registry::Implementation::reference("cells", deep_canvas::registry::Semver::parse("1.0.0").expect("a version")),
+        implementation: deep_canvas::registry::Implementation::reference(
+            "cells",
+            deep_canvas::registry::Semver::parse("1.0.0").expect("a version"),
+        ),
     }
 }
 

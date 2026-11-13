@@ -337,7 +337,11 @@ impl Hub<'_> {
         // session state (Control), never to the scope's view.
         let doc_id = self.panel_doc(panel);
         if let (Event::Control { control, value }, Some(id)) = (event, doc_id.as_deref()) {
-            if doc.get("controls").and_then(|c| c.get(control.as_str())).is_some() {
+            if doc
+                .get("controls")
+                .and_then(|c| c.get(control.as_str()))
+                .is_some()
+            {
                 return match self.enter(id, control, value.clone(), now, serial) {
                     Ok(entry) => json!({"serial": serial, "state": self.state(panel), "picks": 0,
                         "commits": [{"gesture": serial}], "appended": entry.into_iter().collect::<Vec<_>>()}),
@@ -379,7 +383,11 @@ impl Hub<'_> {
         // selection.
         let mut appended = Vec::new();
         if let (Some(pick), Some(id)) = (done.pick.as_ref(), doc_id.as_deref()) {
-            let at = if matches!(event, Event::Up(_)) { self.scopes[panel].pressed } else { now };
+            let at = if matches!(event, Event::Up(_)) {
+                self.scopes[panel].pressed
+            } else {
+                now
+            };
             match self.enter(id, &pick.control, json!(pick.option), at, serial) {
                 Ok(entry) => appended.extend(entry),
                 Err(e) => return e,
