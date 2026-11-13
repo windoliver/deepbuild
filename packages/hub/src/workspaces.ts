@@ -43,6 +43,8 @@ export class Workspaces {
   /** The workspace a session outside any repo landed in, so its next task lands there too. */
   private readonly sessions = new Map<string, string>();
   private readonly kept = new Set<string>();
+  /** Each checkout's workspace, by the git it shares, or null for one that is no workspace's. */
+  private readonly checkouts = new Map<string, string | null>();
   constructor(private readonly o: WorkspaceDeps) {}
 
   /** What the record holds of its workspaces: each by its path, for the project id. */
@@ -76,13 +78,21 @@ export class Workspaces {
     try { path = realpathSync(folder); } catch { /* as given */ }
     return this.at(path)?.id;
   }
-  /** The workspace a folder is, or a checkout of its git is (#1347): a run's task is judged in one of its own. */
+  /**
+   * The workspace a folder is, or a checkout of its git is (#1347): a run's task is judged in one of its own. Each
+   * checkout's answer is kept, so a claim in a repo asks git once, and not at all while there's no workspace.
+   */
   private async spaceOf(folder: string): Promise<{ space: Space; own: boolean } | undefined> {
     const own = this.at(folder);
     if (own) return { space: own, own: true };
-    const common = await git(folder, 'rev-parse', '--path-format=absolute', '--git-common-dir').catch(() => '');
-    let space: Space | undefined;
-    try { space = common && basename(common) === '.git' ? this.at(realpathSync(dirname(common))) : undefined; } catch { /* no such folder */ }
+    if (!this.spaces.size) return undefined;
+    if (!this.checkouts.has(folder)) {
+      const common = await git(folder, 'rev-parse', '--path-format=absolute', '--git-common-dir').catch(() => '');
+      let id: string | null = null;
+      try { id = common && basename(common) === '.git' ? this.at(realpathSync(dirname(common)))?.id ?? null : null; } catch { /* no such folder */ }
+      this.checkouts.set(folder, id);
+    }
+    const space = this.spaces.get(this.checkouts.get(folder) ?? '');
     return space ? { space, own: false } : undefined;
   }
   private core(id: string): Connection {
