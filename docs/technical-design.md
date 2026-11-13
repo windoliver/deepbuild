@@ -410,7 +410,7 @@ export default function (deep: Deep) {
   deep.registerChannel(name, channel)  // a way to reach you: deliver({ summary, link, thread_key }) → delivered | stalled | timed_out (R2)
                                      // receive() → { thread_key, answer, signature | account_link_id }; the hub checks the proof and decides what the answer counts as
   deep.channel.fetch(call, request)    // a channel's one call to its own service, only during a send or read of its own: GET or POST to a path on the host the channel was granted, answered through the hub (R2)
-  deep.registerRoute(route)            // "<METHOD> <path>": an HTTP route served on 127.0.0.1, which reaches the plug-in only once you turn it on
+  deep.registerRoute(route)            // "<METHOD> <path>": an HTTP route served on 127.0.0.1, which reaches the plug-in only once you turn it on; the host refuses a request a browser sent (one with an Origin or a Sec-Fetch-Site header) and one whose Host isn't the listener's, before the plug-in sees it
   deep.provide(name@major, kind, schema) // an output other pieces may use: readings, actions, notice kinds, views or checks
   deep.use(name@major, { from?, optional? }) // an output interface; the hub resolves it by type to an installed provider,
                                      // the one named in from first; typed and pinned to a version
