@@ -7,10 +7,8 @@ publish = false
 
 # Issue #394: the graph module's R1 slice, the basic layered layout with its memory format
 # (canvas primitives: Graph and layout memory). Named deep-canvas* so the canvas lint reads it:
-# a check reads the positions it writes. It draws nothing.
-[[bin]]
-name = "deep-graph"
-path = "src/main.rs"
+# a check reads the positions it writes. It draws nothing. Its proof binary `deep-graph` is the crate
+# crates/deep-graph.
 
 [dependencies]
 deep-canvas = { path = "../deep-canvas" }

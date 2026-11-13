@@ -4,6 +4,8 @@
 
 use std::f64::consts::{PI, TAU};
 
+use deep_canvas::ops;
+
 /// The table's columns, by azimuth from the light's +X, and rows, by angle from its axis.
 pub const WIDTH: usize = 256;
 pub const HEIGHT: usize = 128;
@@ -25,7 +27,7 @@ pub struct Distribution {
 impl Distribution {
     /// The share of its flux within `cos_outer` of its axis, which a spot keeps of the file.
     pub fn share(&self, cos_outer: f64) -> f64 {
-        let outer = cos_outer.clamp(-1.0, 1.0).acos();
+        let outer = ops::acos(cos_outer.clamp(-1.0, 1.0));
         let mut sum = 0.0;
         for j in 0..HEIGHT {
             let (a, b) = (
@@ -39,7 +41,7 @@ impl Distribution {
                 .iter()
                 .map(|v| f64::from(*v))
                 .sum();
-            sum += row * (TAU / WIDTH as f64) * (a.cos() - b.min(outer).cos());
+            sum += row * (TAU / WIDTH as f64) * (ops::cos(a) - ops::cos(b.min(outer)));
         }
         sum / (4.0 * PI)
     }
@@ -60,7 +62,10 @@ impl Distribution {
                 .map(|v| f64::from(*v))
                 .sum();
             // ∫ cos θ sin θ dθ across the row, times its cell's azimuth.
-            sum += row * (TAU / WIDTH as f64) * 0.5 * (a.cos().powi(2) - b.cos().powi(2));
+            sum += row
+                * (TAU / WIDTH as f64)
+                * 0.5
+                * (ops::powi(ops::cos(a), 2) - ops::powi(ops::cos(b), 2));
         }
         sum / PI
     }
@@ -196,7 +201,7 @@ pub fn parse(sha: &str, text: &str) -> Result<Distribution, &'static str> {
             (j + 1) as f64 * PI / HEIGHT as f64,
         );
         let theta = (j as f64 + 0.5) * 180.0 / HEIGHT as f64;
-        let omega = d_phi * (a.cos() - b.cos());
+        let omega = d_phi * (ops::cos(a) - ops::cos(b));
         for i in 0..WIDTH {
             let phi = (i as f64 + 0.5) * 360.0 / WIDTH as f64;
             let c = file.at(theta, phi);

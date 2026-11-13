@@ -375,14 +375,7 @@ pub fn flash_rate(op: &Operator, entry: &Value) -> Result<f64, String> {
     const SECONDS: f64 = 2.0;
     const RATE: f64 = 24.0;
     let size = [16, 11];
-    let lin = |v: u8| {
-        let c = f64::from(v) / 255.0;
-        if c <= 0.04045 {
-            c / 12.92
-        } else {
-            ((c + 0.055) / 1.055).powf(2.4)
-        }
-    };
+    let lin = |v: u8| deep_canvas::color::srgb_decode(f64::from(v) / 255.0);
     // Nothing that never reads the clock can flash.
     if !op.moves() {
         return Ok(0.0);

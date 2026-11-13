@@ -10,6 +10,7 @@ use std::sync::Arc;
 
 use deep_canvas::document::duration;
 use deep_canvas::expr::{Expr, Resolve};
+use deep_canvas::ops;
 use deep_text::{Glyph, Shaped};
 use serde_json::{Map, Value};
 
@@ -184,7 +185,7 @@ pub fn range_amount(shape: Shape, s: f64, e: f64, ind: f64, ease: Ease) -> f64 {
                 let tot = e - s;
                 let i = (ind + 0.5 - s).max(0.0).min(tot);
                 let (x, a) = (-tot / 2.0 + i, tot / 2.0);
-                (1.0 - (x * x) / (a * a)).sqrt()
+                ops::sqrt(1.0 - (x * x) / (a * a))
             }
         }
         Shape::Smooth => {
@@ -192,7 +193,7 @@ pub fn range_amount(shape: Shape, s: f64, e: f64, ind: f64, ease: Ease) -> f64 {
                 0.0
             } else {
                 let i = (ind + 0.5 - s).max(0.0).min(e - s);
-                (1.0 + (std::f64::consts::PI + std::f64::consts::TAU * i / (e - s)).cos()) / 2.0
+                (1.0 + ops::cos(std::f64::consts::PI + std::f64::consts::TAU * i / (e - s))) / 2.0
             }
         }
         Shape::Square => {
@@ -476,7 +477,7 @@ fn translate(x: f64, y: f64) -> M {
 }
 
 fn rotate(rad: f64) -> M {
-    let (s, c) = rad.sin_cos();
+    let (s, c) = (ops::sin(rad), ops::cos(rad));
     [c, s, -s, c, 0.0, 0.0]
 }
 
@@ -1034,7 +1035,7 @@ impl Curve {
         };
         for _ in 0..8 {
             let d = dbez(p, t);
-            let speed = d[0].hypot(d[1]);
+            let speed = ops::hypot(d[0], d[1]);
             if speed == 0.0 {
                 break;
             }
@@ -1042,7 +1043,7 @@ impl Curve {
             t = (t - err / speed).clamp(a, b);
         }
         let d = dbez(p, t);
-        (bez(p, t), d[1].atan2(d[0]))
+        (bez(p, t), ops::atan2(d[1], d[0]))
     }
 }
 
@@ -1071,7 +1072,7 @@ fn gauss(p: &[[f64; 2]; 4], a: f64, b: f64) -> f64 {
         .zip(W)
         .map(|(x, w)| {
             let d = dbez(p, m + h * x);
-            w * d[0].hypot(d[1])
+            w * ops::hypot(d[0], d[1])
         })
         .sum::<f64>()
         * h
@@ -1422,9 +1423,9 @@ pub fn lay_out(input: &Input<'_>, host: &mut dyn Host) -> Result<Laid, Refused> 
         if a.rot3 != [0.0; 3] {
             // R = Rz·Ry·Rx about the pivot, seen along z: its upper-left 2×2.
             let [rx, ry, rz] = a.rot3.map(f64::to_radians);
-            let (sx, cx) = rx.sin_cos();
-            let (sy, cy) = ry.sin_cos();
-            let (sz, cz) = rz.sin_cos();
+            let (sx, cx) = (ops::sin(rx), ops::cos(rx));
+            let (sy, cy) = (ops::sin(ry), ops::cos(ry));
+            let (sz, cz) = (ops::sin(rz), ops::cos(rz));
             let r = [
                 cz * cy,
                 sz * cy,
@@ -1437,7 +1438,7 @@ pub fn lay_out(input: &Input<'_>, host: &mut dyn Host) -> Result<Laid, Refused> 
         }
         if a.shear != 0.0 {
             let axis = a.shear_axis.to_radians();
-            let k = a.shear.to_radians().tan();
+            let k = ops::tan(a.shear.to_radians());
             lin = mul(
                 lin,
                 mul(

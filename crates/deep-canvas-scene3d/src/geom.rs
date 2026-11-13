@@ -547,9 +547,9 @@ impl Mesh {
         border: bool,
         planted: Option<&str>,
     ) -> (std::sync::Arc<Vec<[V3; 2]>>, bool) {
-        use std::collections::HashMap;
+        use std::collections::BTreeMap;
         use std::sync::{Arc, Mutex, OnceLock};
-        type Made = HashMap<[u8; 16], Arc<Vec<[V3; 2]>>>;
+        type Made = BTreeMap<[u8; 16], Arc<Vec<[V3; 2]>>>;
         static MADE: OnceLock<Mutex<Made>> = OnceLock::new();
         let below = planted == Some("crease_below_angle");
         let mut h = deep_canvas::schedule::Hasher::new("scene3d.creases");

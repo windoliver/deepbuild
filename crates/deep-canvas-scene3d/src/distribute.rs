@@ -8,7 +8,7 @@
 //! element per frame.
 
 use std::cmp::Ordering;
-use std::collections::{BTreeMap, BinaryHeap, HashMap};
+use std::collections::{BTreeMap, BinaryHeap};
 use std::sync::Arc;
 
 use deep_canvas::expr::{Expr, Nothing, V};
@@ -286,7 +286,7 @@ struct Cells {
     /// cell, plus 1, with its position.
     head: Vec<u32>,
     next: Vec<(u32, V3)>,
-    map: HashMap<[i64; 3], Vec<(u32, V3)>>,
+    map: BTreeMap<[i64; 3], Vec<(u32, V3)>>,
 }
 
 impl Cells {
@@ -308,7 +308,7 @@ impl Cells {
                 _ => Vec::new(),
             },
             next: Vec::new(),
-            map: HashMap::new(),
+            map: BTreeMap::new(),
         }
     }
 

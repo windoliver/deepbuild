@@ -1072,7 +1072,19 @@
         },
         "serde_json": {
           "spec": "^1",
-          "why": "Issue #394: the deep-graph CLI's JSON lines and the layout memory it reads and writes. Already in the workspace tree."
+          "why": "Issue #394: the graphs, layouts and layout memory it reads and writes as JSON. Already in the workspace tree."
+        }
+      }
+    },
+    "crates/deep-graph/Cargo.toml": {
+      "dependencies": {
+        "deep-canvas-graph": {
+          "spec": "* path=../deep-canvas-graph",
+          "why": "Issue #394: the layout and layout memory the deep-graph proof binary reads, lays out and writes; the binary moved out of the deep-canvas* crate because #399's `ms` reads the clock (#2382)."
+        },
+        "serde_json": {
+          "spec": "^1",
+          "why": "Issue #394: the deep-graph CLI's JSON lines. Already in the workspace tree."
         }
       }
     },

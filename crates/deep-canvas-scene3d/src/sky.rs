@@ -108,11 +108,7 @@ impl Sky {
 }
 
 fn srgb_decode(c: f64) -> f64 {
-    if c <= 0.04045 {
-        c / 12.92
-    } else {
-        ((c + 0.055) / 1.055).powf(2.4)
-    }
+    deep_canvas::color::srgb_decode(c)
 }
 
 /// A color: linear RGB numbers, `#rrggbb` (sRGB), or a look role.
@@ -175,7 +171,7 @@ pub fn parse(
         None => look.exposure,
         Some(v) => {
             let ev = num(Some(v)).ok_or_else(|| bad("exposure"))?;
-            1.0 / (1.2 * 2f64.powf(ev))
+            1.0 / (1.2 * deep_canvas::ops::pow(2.0, ev))
         }
     }
     .max(1e-12);

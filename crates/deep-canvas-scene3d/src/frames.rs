@@ -6,7 +6,7 @@
 //! whole evaluation gave it. A document that moves anything else (a line, a label, a paint) is
 //! evaluated whole every frame, which gives the same scene and allocates.
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use deep_canvas::camera::{Offsets, Rig, Spec, Vec3};
 use deep_canvas::kinds::with_defaults;
@@ -113,7 +113,7 @@ impl Frames {
             code: "out_of_range",
             path: String::new(),
         })?;
-        let scene = evaluate_compiled(map, &program, 0, look, labels, None, &[])?;
+        let scene = evaluate_compiled(map, &program, 0, look, labels, None, &[], None)?;
         let state = program.state();
         let fast = fast_path(map, &program, &scene);
         let mut bounds = Vec::with_capacity(scene.layers.iter().map(|l| l.solids.len() * 8).sum());
@@ -375,7 +375,7 @@ fn fast_path(map: &Map<String, Value>, program: &Program, scene: &Scene) -> Opti
     }
     let items = map.get("items")?.as_object()?;
     // Each item's first index in the program, looked up once per solid and parent.
-    let mut indices: HashMap<&str, usize> = HashMap::with_capacity(program.items.len());
+    let mut indices: BTreeMap<&str, usize> = BTreeMap::new();
     for (i, id) in program.items.iter().enumerate() {
         indices.entry(id.as_str()).or_insert(i);
     }

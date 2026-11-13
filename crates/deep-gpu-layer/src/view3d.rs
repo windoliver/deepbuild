@@ -955,6 +955,8 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
     // The cold report's build time runs from here to the first frame's scene, less the view's
     // opening, which compiles (#428).
     let started = std::time::Instant::now();
+    // The host's clock a shore field's bake is timed by, where the scene's evaluation runs it (#268).
+    let clock = || started.elapsed().as_secs_f64() * 1e3;
     let mut args = parse(call)?;
     // A document that names packs draws as the check lowers it, the call's packs installed
     // first (#429).
@@ -1214,9 +1216,16 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             deep_canvas_physics::written::write(&mut composed, t);
             baked.settle(&mut composed, t);
             let outlines = &pack_sealed()?.outlines;
-            let mut scene =
-                evaluate_sourced(&composed, t, &args.look, &mut labels, &read, outlines)
-                    .map_err(|r| refused(r.code, r.path))?;
+            let mut scene = evaluate_sourced(
+                &composed,
+                t,
+                &args.look,
+                &mut labels,
+                &read,
+                outlines,
+                &clock,
+            )
+            .map_err(|r| refused(r.code, r.path))?;
             if drops_dispersion {
                 scene.plant_drops_dispersion();
             }
@@ -1276,7 +1285,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             // #268's wrong field: the shore measured from each item's centre.
             if app.planted == Some(Planted::ShoreFieldFromCentre) {
                 scene
-                    .plant_shore_from_centre(&composed)
+                    .plant_shore_from_centre(&composed, &clock)
                     .map_err(|r| refused(r.code, r.path))?;
             }
             // #2017's planted plate: each tile shades from its level's own vertex normals.
@@ -1463,8 +1472,9 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 edge_plant,
             );
             let at_time = |tk: i64, labels: &mut Labels| -> Result<Scene, Value> {
-                let mut sc = evaluate_sourced(&composed, tk, &args.look, labels, &read, outlines)
-                    .map_err(|r| refused(r.code, r.path))?;
+                let mut sc =
+                    evaluate_sourced(&composed, tk, &args.look, labels, &read, outlines, &clock)
+                        .map_err(|r| refused(r.code, r.path))?;
                 if drops_dispersion {
                     sc.plant_drops_dispersion();
                 }

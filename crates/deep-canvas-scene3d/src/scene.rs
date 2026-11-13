@@ -8,7 +8,7 @@
 //! Box, cylinder and sphere are unit meshes, 1 m across and centred on the item's origin, scaled
 //! by `size`; a cylinder's axis is +Y.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 use std::ops::Index;
 use std::sync::Arc;
 
@@ -864,8 +864,12 @@ impl Scene {
     }
 
     /// #268's wrong field, reachable only through `deep-gpu --planted`: the water's shore baked
-    /// with each item's centre standing for where it meets the water.
-    pub fn plant_shore_from_centre(&mut self, doc: &Value) -> Result<(), Refused> {
+    /// with each item's centre standing for where it meets the water, timed by the host's `clock`.
+    pub fn plant_shore_from_centre(
+        &mut self,
+        doc: &Value,
+        clock: crate::shore::Clock<'_>,
+    ) -> Result<(), Refused> {
         let (Some(map), Some(water)) = (doc.as_object(), self.water.as_mut()) else {
             return Ok(());
         };
@@ -880,6 +884,7 @@ impl Scene {
                 &plates,
                 w.level,
                 crate::shore::Planted::FromCentre,
+                Some(clock),
             )?);
         }
         Ok(())
@@ -1073,13 +1078,13 @@ struct Items<'a> {
     written: &'a Map<String, Value>,
     /// Each item as evaluated, and for an object nothing writes, its index in the program: its
     /// transform is its `TRANSFORM` slots from there.
-    entries: HashMap<&'a str, (&'a Value, Option<usize>)>,
+    entries: BTreeMap<&'a str, (&'a Value, Option<usize>)>,
     slots: &'a [f64],
     /// #2013: each item a `rest_on` rested on true shapes, with its own position and rotation
     /// as solved.
     rested: BTreeMap<String, (Vec3, Vec3)>,
     /// #504: each assembly's world transform at this state, by ID.
-    assemblies: HashMap<String, Affine3>,
+    assemblies: BTreeMap<String, Affine3>,
 }
 
 impl<'a> Items<'a> {
@@ -1092,7 +1097,7 @@ impl<'a> Items<'a> {
         state: &'a State,
         program: &Program,
     ) -> Self {
-        let mut entries = HashMap::with_capacity(doc.len());
+        let mut entries = BTreeMap::new();
         let mut copies = written.iter().peekable();
         for (i, (id, item)) in doc.iter().enumerate() {
             let entry = match copies.next_if(|(w, _)| *w == id) {
@@ -2270,7 +2275,7 @@ pub type Outlines<'a> = &'a [deep_canvas::registry::SealedOutline];
 /// Evaluates `doc` at `t` (flicks) on a frame of its `size`; a `mesh.asset@1` draws only where
 /// [`evaluate_with`] has a store to read it from.
 pub fn evaluate(doc: &Value, t: i64, look: &Look3, labels: &mut Labels) -> Result<Scene, Refused> {
-    evaluate_any(doc, t, look, labels, None, &[])
+    evaluate_any(doc, t, look, labels, None, &[], None)
 }
 
 /// [`evaluate`] with the asset store `assets` that `mesh.asset@1` items read their glTF from.
@@ -2281,10 +2286,11 @@ pub fn evaluate_with(
     labels: &mut Labels,
     assets: Assets<'_>,
 ) -> Result<Scene, Refused> {
-    evaluate_any(doc, t, look, labels, Some(assets), &[])
+    evaluate_any(doc, t, look, labels, Some(assets), &[], None)
 }
 
-/// [`evaluate_with`] whose extrudes read their outlines through `outlines` (#443).
+/// [`evaluate_with`] whose extrudes read their outlines through `outlines` (#443), and whose
+/// shore field's bake the host's `clock` times (#268).
 pub fn evaluate_sourced(
     doc: &Value,
     t: i64,
@@ -2292,8 +2298,9 @@ pub fn evaluate_sourced(
     labels: &mut Labels,
     assets: Assets<'_>,
     outlines: Outlines<'_>,
+    clock: crate::shore::Clock<'_>,
 ) -> Result<Scene, Refused> {
-    evaluate_any(doc, t, look, labels, Some(assets), outlines)
+    evaluate_any(doc, t, look, labels, Some(assets), outlines, Some(clock))
 }
 
 fn evaluate_any(
@@ -2303,6 +2310,7 @@ fn evaluate_any(
     labels: &mut Labels,
     assets: Option<Assets<'_>>,
     outlines: Outlines<'_>,
+    clock: Option<crate::shore::Clock<'_>>,
 ) -> Result<Scene, Refused> {
     let Some(map) = doc.as_object() else {
         return refused("out_of_range", "");
@@ -2315,7 +2323,7 @@ fn evaluate_any(
         code: r.code,
         path: r.path,
     })?;
-    evaluate_compiled(map, &program, t, look, labels, assets, outlines)
+    evaluate_compiled(map, &program, t, look, labels, assets, outlines, clock)
 }
 
 /// The items a scatter's field names: an item's ID (a part's `<item>#<part>` as its item), or a
@@ -2951,7 +2959,9 @@ fn solid_op(
     }))
 }
 
-/// [`evaluate`] of a document whose motion program is compiled already.
+/// [`evaluate`] of a document whose motion program is compiled already; `clock` times a shore
+/// field's bake.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn evaluate_compiled(
     map: &Map<String, Value>,
     program: &Program,
@@ -2960,6 +2970,7 @@ pub(crate) fn evaluate_compiled(
     labels: &mut Labels,
     assets: Option<Assets<'_>>,
     outlines: Outlines<'_>,
+    clock: Option<crate::shore::Clock<'_>>,
 ) -> Result<Scene, Refused> {
     tones(map)?;
     let mut state = program.state();
@@ -3056,7 +3067,7 @@ pub(crate) fn evaluate_compiled(
             }
         }
     }
-    let mut protos: HashMap<String, Vec<Solid>> = HashMap::new();
+    let mut protos: BTreeMap<String, Vec<Solid>> = BTreeMap::new();
     let mut instancers: Vec<(usize, String)> = Vec::new();
     let mut cutaway = None;
     let mut flare: Option<Arc<crate::flare::Flare>> = None;
@@ -3650,8 +3661,8 @@ pub(crate) fn evaluate_compiled(
         }
         // #2017: a prototype whose sway weighs each vertex by its height, batched on the GPU,
         // sways as a shear of each element's place, so every element keeps the one rest mesh.
-        type Sheared = HashMap<(usize, usize), Option<(Arc<crate::geom::Mesh>, u64)>>;
-        let mut sheared: Sheared = HashMap::new();
+        type Sheared = BTreeMap<(usize, usize), Option<(Arc<crate::geom::Mesh>, u64)>>;
+        let mut sheared: Sheared = BTreeMap::new();
         for e in elements {
             let Some(solids) = protos.get(&of[e.proto]) else {
                 return refused("ref_unresolved", format!("{path}/of"));
@@ -3903,6 +3914,7 @@ pub(crate) fn evaluate_compiled(
                 &plates,
                 w.level,
                 crate::shore::Planted::None,
+                clock,
             )?);
         }
         if scene.mirror.is_none() {

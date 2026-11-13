@@ -5,6 +5,7 @@
 use std::collections::BTreeSet;
 
 use deep_canvas::camera::Vec3;
+use deep_canvas::ops;
 use serde_json::Value;
 
 use crate::scene::{local_of, num, Affine3, Refused};
@@ -87,7 +88,7 @@ pub fn cutaway(
             .filter(|a| a.len() == 3)
             .and_then(|a| Some([num(a.first())?, num(a.get(1))?, num(a.get(2))?]))
             .ok_or_else(|| bad(&format!("planes/{k}/normal")))?;
-        let len = (n[0] * n[0] + n[1] * n[1] + n[2] * n[2]).sqrt();
+        let len = ops::sqrt(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]);
         if len < 1e-9 {
             return Err(bad(&format!("planes/{k}/normal")));
         }
@@ -279,9 +280,7 @@ pub fn elements(params: &Value, path: &str) -> Result<(Vec<String>, Vec<Element>
 
 /// A unit quaternion `[x, y, z, w]` as a rotation matrix.
 pub(crate) fn quat(q: [f64; 4]) -> [[f64; 3]; 3] {
-    let l = (q[0] * q[0] + q[1] * q[1] + q[2] * q[2] + q[3] * q[3])
-        .sqrt()
-        .max(1e-12);
+    let l = ops::sqrt(q[0] * q[0] + q[1] * q[1] + q[2] * q[2] + q[3] * q[3]).max(1e-12);
     let [x, y, z, w] = q.map(|c| c / l);
     [
         [

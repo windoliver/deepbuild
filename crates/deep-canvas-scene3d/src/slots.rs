@@ -6,7 +6,7 @@
 //! isn't announced. Each prototype solid is its own batch laid out by slot, so a slot that spawns,
 //! despawns or moves rewrites its own records alone.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 
 use deep_canvas::camera::Vec3;
 use deep_canvas::columns::Mapped;
@@ -427,7 +427,7 @@ pub(crate) fn place<'a>(
     params: &Value,
     t: i64,
     (at, of, from, assets): (&Affine3, &[String], &[Affine3], Option<Assets<'_>>),
-    protos: &HashMap<String, Vec<Solid>>,
+    protos: &BTreeMap<String, Vec<Solid>>,
     (batches_all, layer, bounds): Sink<'_, 'a>,
 ) -> Result<(), Refused> {
     let (n, units) = units(map, id, params, t)?;
@@ -592,7 +592,7 @@ pub fn drop_stale(
     let Some(map) = doc.as_object() else {
         return Vec::new();
     };
-    let mut held: HashMap<String, Option<Vec<(u32, u32)>>> = HashMap::new();
+    let mut held: BTreeMap<String, Option<Vec<(u32, u32)>>> = BTreeMap::new();
     let mut dropped = Vec::new();
     selection.retain(|entry| {
         let Some((item, sub)) = entry.split_once('#') else {

@@ -6,6 +6,7 @@
 
 use std::sync::Arc;
 
+use deep_canvas::ops;
 use serde_json::Value;
 
 use crate::geom::{Mesh, V3};
@@ -267,22 +268,17 @@ pub fn nearest_px_per_m(camera: &Camera, model: &Affine3, bounds: [V3; 2]) -> f6
     let [w, h] = camera.size;
     let [cx, cy] = camera.centre;
     let corner = [(0.0, 0.0), (w, 0.0), (0.0, h), (w, h)]
-        .map(|(x, y)| (x - cx).hypot(y - cy))
+        .map(|(x, y)| ops::hypot(x - cx, y - cy))
         .into_iter()
         .fold(0.0, f64::max)
         / camera.scale.max(1e-9);
-    camera.px_per_m(depth) * (1.0 + corner * corner).sqrt()
+    camera.px_per_m(depth) * ops::sqrt(1.0 + corner * corner)
 }
 
 /// Each level's error at `px_per_m` px per m, device px.
 fn errors_at(model: &Affine3, lod: &Lod, px_per_m: f64) -> Vec<f64> {
     let scale = (0..3)
-        .map(|c| {
-            (0..3)
-                .map(|r| model[r][c] * model[r][c])
-                .sum::<f64>()
-                .sqrt()
-        })
+        .map(|c| ops::sqrt((0..3).map(|r| model[r][c] * model[r][c]).sum::<f64>()))
         .fold(0.0, f64::max);
     let k = lod.extent * scale * px_per_m;
     lod.levels.iter().map(|l| l.error * k).collect()
@@ -445,7 +441,7 @@ fn drawn(camera: &Camera, s: &Solid, lod: &Lod, show: Show, level: Option<usize>
                 let (centre, _) = world_bounds(&s.model, lod);
                 let m = 4.0 / px_per_m(camera, centre).max(1e-9);
                 let scale = (0..3)
-                    .map(|c| (0..3).map(|r| s.model[r][c].powi(2)).sum::<f64>().sqrt())
+                    .map(|c| ops::sqrt((0..3).map(|r| ops::powi(s.model[r][c], 2)).sum::<f64>()))
                     .fold(0.0, f64::max)
                     .max(1e-9);
                 [m / scale; 3]
@@ -495,10 +491,10 @@ fn proxy_level(lod: &Lod, level: Option<usize>) -> Option<&Level> {
 /// The proxy of `mesh` (keyed by `hash`) that keeps `p.ratio` of its triangles within `p.error`,
 /// made once per content key by meshoptimizer and stored by hash, never per frame.
 pub fn proxy_of(mesh: &Mesh, hash: u64, p: Proxy) -> Option<Level> {
-    use std::collections::HashMap;
+    use std::collections::BTreeMap;
     use std::sync::{Mutex, OnceLock};
     type Key = (u64, u64, u64);
-    static MADE: OnceLock<Mutex<HashMap<Key, Option<Level>>>> = OnceLock::new();
+    static MADE: OnceLock<Mutex<BTreeMap<Key, Option<Level>>>> = OnceLock::new();
     let key = (hash, p.ratio.to_bits(), p.error.unwrap_or(-1.0).to_bits());
     let made = MADE.get_or_init(Default::default);
     if let Some(l) = made.lock().ok()?.get(&key) {

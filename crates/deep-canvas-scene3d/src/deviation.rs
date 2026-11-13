@@ -46,7 +46,7 @@ fn dot(a: V3, b: V3) -> f64 {
     a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
 }
 fn len(a: V3) -> f64 {
-    dot(a, a).sqrt()
+    deep_canvas::ops::sqrt(dot(a, a))
 }
 
 /// The squared distance from `p` to triangle `abc` (Ericson, Real-Time Collision Detection 5.1.5).
@@ -341,7 +341,7 @@ pub fn measure(
         let (mut largest, mut s, mut c) = (0.0f64, 0.0, 0usize);
         for (f, tri) in item.iter().enumerate() {
             for p in samples(*tri, spacing) {
-                let d = ref_bvh.nearest(p).0.sqrt();
+                let d = deep_canvas::ops::sqrt(ref_bvh.nearest(p).0);
                 if d.is_finite() {
                     largest = largest.max(d);
                     faces[f] = faces[f].max(d);
@@ -364,7 +364,7 @@ pub fn measure(
             let (d2, Some(f)) = item_bvh.nearest(p) else {
                 continue;
             };
-            let d = d2.sqrt();
+            let d = deep_canvas::ops::sqrt(d2);
             largest = largest.max(d);
             faces[f] = faces[f].max(d);
             s += d;
@@ -380,7 +380,7 @@ pub fn measure(
 
     out.per_vertex = item_pos
         .iter()
-        .map(|&p| ref_bvh.nearest(p).0.sqrt())
+        .map(|&p| deep_canvas::ops::sqrt(ref_bvh.nearest(p).0))
         .collect();
     out.largest_m = out.to_reference.largest_m.max(out.from_reference.largest_m);
     out.mean_m = if count > 0 { sum / count as f64 } else { 0.0 };

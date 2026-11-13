@@ -228,7 +228,10 @@ pub(crate) fn apply(
                 .expect("a group with an echo has params");
             params.remove("echo");
             params.remove("flip");
-            params.insert("opacity".into(), json!(own * decay.powi(k as i32)));
+            params.insert(
+                "opacity".into(),
+                json!(own * deep_canvas::ops::powi(decay, k as i32)),
+            );
             params.insert("isolate".into(), json!(true));
             params.insert(
                 "draw_order".into(),

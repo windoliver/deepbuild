@@ -2,7 +2,7 @@
 //! defects; …: quad ratio; issue #453): its positions welded within `weld`, then each defect
 //! counted per face or edge, and its triangles paired back into quads, best first.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 
 use deep_canvas::ops::{acos, deg, sqrt};
 
@@ -107,7 +107,7 @@ pub fn weld(points: &[V3], weld: f64) -> (Vec<u32>, usize) {
         let s = if weld > 0.0 { weld } else { 1.0 };
         p.map(|c| (c / s).floor() as i64)
     };
-    let mut grid: HashMap<[i64; 3], Vec<usize>> = HashMap::new();
+    let mut grid: BTreeMap<[i64; 3], Vec<usize>> = BTreeMap::new();
     for (i, p) in points.iter().enumerate() {
         let c = cell(*p);
         for dx in -1..=1 {
@@ -127,7 +127,7 @@ pub fn weld(points: &[V3], weld: f64) -> (Vec<u32>, usize) {
         }
         grid.entry(c).or_default().push(i);
     }
-    let mut number: HashMap<usize, u32> = HashMap::new();
+    let mut number: BTreeMap<usize, u32> = BTreeMap::new();
     let mut out = Vec::with_capacity(points.len());
     for i in 0..points.len() {
         let r = root(&mut parent, i);
