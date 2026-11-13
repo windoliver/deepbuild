@@ -27,6 +27,7 @@ use deep_hook::matcher;
 mod actions;
 mod heavy;
 mod remote;
+mod tool_paths;
 
 /// How long the hub has to acknowledge a request, from the hook's start: the 20 ms the hub has to acknowledge
 /// once it reads it. The rest of the design's 50 ms is for the process to start, decide, spool and exit.
@@ -370,67 +371,11 @@ const READ_TOOLS: &[&str] = &[
     "Grep",
 ];
 
-/// A path as pi's file tools open it (pi's `normalizePath`): its unicode spaces plain, without one leading `@`, a bare
-/// `~` the home folder, and a `file://` URL the path it names.
-fn pi_path(path: &str) -> String {
-    let spaced: String = path
-        .chars()
-        .map(|c| match c {
-            '\u{00A0}' | '\u{2000}'..='\u{200A}' | '\u{202F}' | '\u{205F}' | '\u{3000}' => ' ',
-            c => c,
-        })
-        .collect();
-    let bare = spaced.strip_prefix('@').unwrap_or(&spaced);
-    if bare == "~" {
-        return "~/".to_string();
-    }
-    match bare.strip_prefix("file://") {
-        Some(url) => file_url_path(url),
-        None => bare.to_string(),
-    }
-}
-
-/// What Node's `fileURLToPath` makes of a `file://` URL's rest: the URL parser ends it at a `?` or `#`, drops tabs and
-/// newlines and what trails it and reads `\` as `/`; then it is percent-decoded. Any host is passed over: Node opens the
-/// path under one that decodes to `localhost` however it is spelled, and throws on the rest, so nothing else opens.
-fn file_url_path(url: &str) -> String {
-    let clean: String = url
-        .trim_end_matches(|c: char| c <= ' ')
-        .chars()
-        .filter(|c| !matches!(c, '\t' | '\n' | '\r'))
-        .map(|c| if c == '\\' { '/' } else { c })
-        .collect();
-    let path = clean.split(['?', '#']).next().unwrap_or("");
-    let path = path.find('/').map_or(path, |slash| &path[slash..]);
-    let bytes = path.as_bytes();
-    let mut out = Vec::with_capacity(bytes.len());
-    let mut i = 0;
-    while i < bytes.len() {
-        let hex = (bytes[i] == b'%')
-            .then(|| path.get(i + 1..i + 3))
-            .flatten()
-            .and_then(|h| u8::from_str_radix(h, 16).ok());
-        match hex {
-            Some(byte) => {
-                out.push(byte);
-                i += 3;
-            }
-            None => {
-                out.push(bytes[i]);
-                i += 1;
-            }
-        }
-    }
-    String::from_utf8_lossy(&out).into_owned()
-}
-
 /// The call a tool hook makes, as guards read it: a shell command (Bash's `tool_input.command`), a file tool's
-/// path (Edit, MultiEdit, Write, NotebookEdit; Read and Grep read theirs), a patch's (Codex's apply_patch) or the
-/// paths an MCP call's arguments name (`mcp__<server>__<tool>`, #1848), and for every tool, what it counts as: the
-/// class `classes` gives it, else change, and destructive for a tool whose name starts with `delete_`, whatever it is
-/// given. None for a payload that names no tool.
+/// path (Edit, MultiEdit, Write, NotebookEdit; Read and Grep read theirs), a patch's (Codex's apply_patch) or an MCP
+/// call's path arguments (#1848), and for every tool, what it counts as: the class `classes` gives it, else change, and
+/// destructive for a tool whose name starts with `delete_`, whatever it is given. None for a payload that names no tool.
 fn call(payload: &Value, classes: &[(String, String)]) -> Option<matcher::Call> {
-    use matcher::Names::{Both, Reads, Writes};
     let Some(Value::String(tool)) = member(payload, "tool_name") else {
         return None;
     };
@@ -438,6 +383,29 @@ fn call(payload: &Value, classes: &[(String, String)]) -> Option<matcher::Call> 
     let field = |key: &str| match input.and_then(|i| member(i, key)) {
         Some(Value::String(text)) => Some(text.as_str()),
         _ => None,
+    };
+    let (command, paths, read) = match tool.as_str() {
+        "Bash" => (Some(field("command")?), Vec::new(), false),
+        "Edit" | "MultiEdit" | "Write" => (None, vec![field("file_path")?.to_string()], false),
+        "NotebookEdit" => (None, vec![field("notebook_path")?.to_string()], false),
+        "apply_patch" => (None, matcher::patched(field("command")?), false),
+        "Read" => (None, vec![field("file_path")?.to_string()], true),
+        "Grep" => (
+            None,
+            field("path").map(str::to_string).into_iter().collect(),
+            true,
+        ),
+        // pi's tools, whose calls name a `path` that may be relative.
+        "bash" => (field("command"), Vec::new(), false),
+        "edit" | "write" => (
+            None,
+            field("path").map(tool_paths::pi_path).into_iter().collect(),
+            false,
+        ),
+        "read" | "grep" | "find" | "ls" => {
+            (None, field("path").map(tool_paths::pi_path).into_iter().collect(), true)
+        }
+        _ => (None, Vec::new(), false),
     };
     let cwd = match member(payload, "cwd") {
         Some(Value::String(cwd)) if Path::new(cwd).is_absolute() => Some(PathBuf::from(cwd)),
@@ -459,48 +427,14 @@ fn call(payload: &Value, classes: &[(String, String)]) -> Option<matcher::Call> 
                     .to_string(),
             )
         };
-    let (command, paths, args, names) = match tool.as_str() {
-        "Bash" => (Some(field("command")?), Vec::new(), Vec::new(), Writes),
-        "Edit" | "MultiEdit" | "Write" => {
-            (None, vec![field("file_path")?.to_string()], Vec::new(), Writes)
+    // An MCP call reads the paths its arguments name, and writes them too unless its tool counts as read.
+    use matcher::Names::{Both, Reads, Writes};
+    let (args, paths, names) = match tool_paths::mcp(tool, input, cwd.as_deref(), &home) {
+        Some(mcp) => {
+            let (args, paths) = mcp.into_iter().unzip();
+            (args, paths, if counts.as_deref() == Some("read") { Reads } else { Both })
         }
-        "NotebookEdit" => (None, vec![field("notebook_path")?.to_string()], Vec::new(), Writes),
-        "apply_patch" => (None, matcher::patched(field("command")?), Vec::new(), Writes),
-        "Read" => (None, vec![field("file_path")?.to_string()], Vec::new(), Reads),
-        "Grep" => (
-            None,
-            field("path").map(str::to_string).into_iter().collect(),
-            Vec::new(),
-            Reads,
-        ),
-        // pi's tools, whose calls name a `path` that may be relative.
-        "bash" => (field("command"), Vec::new(), Vec::new(), Writes),
-        "edit" | "write" => (
-            None,
-            field("path").map(pi_path).into_iter().collect(),
-            Vec::new(),
-            Writes,
-        ),
-        "read" | "grep" | "find" | "ls" => (
-            None,
-            field("path").map(pi_path).into_iter().collect(),
-            Vec::new(),
-            Reads,
-        ),
-        _ => match tool.strip_prefix("mcp__").and_then(|t| t.split_once("__")) {
-            // DeepBuild's own servers act through the hub, which checks the paths they name itself.
-            Some((server, _)) if OWN_SERVERS.contains(&server) => {
-                (None, Vec::new(), Vec::new(), Writes)
-            }
-            Some((server, name)) => {
-                let (args, paths) = mcp_paths(input, server, name, cwd.as_deref(), &home)
-                    .into_iter()
-                    .unzip();
-                let names = if counts.as_deref() == Some("read") { Reads } else { Both };
-                (None, paths, args, names)
-            }
-            None => (None, Vec::new(), Vec::new(), Writes),
-        },
+        None => (Vec::new(), paths, if read { Reads } else { Writes }),
     };
     let mut call = matcher::Call::new(
         tool,
@@ -512,109 +446,6 @@ fn call(payload: &Value, classes: &[(String, String)]) -> Option<matcher::Call> 
     );
     call.counts = counts;
     Some(call)
-}
-
-/// The MCP servers' facts as this build ships them: a server they list may name which of a tool's arguments hold paths.
-const MCP_FACTS: &str = include_str!("../../../adapters/mcp-servers.facts.json");
-
-/// DeepBuild's own MCP servers, as `deep setup` names them for Claude Code (`deepbuild`, `deep-actions`) and as Codex and
-/// pi name the deep_* tools (`deep`). `deep_propose`, which a guard's denial points to, may name the spec it would change.
-const OWN_SERVERS: &[&str] = &["deepbuild", "deep", "deep-actions"];
-
-/// The paths an MCP call's arguments name, each with its argument (#1848): every string in them, a nested one named by
-/// its place (`files[0].path`), with no whitespace, as an absolute path, one under `~/` or one relative to the call's
-/// folder. When the MCP servers' facts name the tool's path arguments, only those count, whatever they hold.
-fn mcp_paths(
-    input: Option<&Value>,
-    server: &str,
-    tool: &str,
-    cwd: Option<&Path>,
-    home: &Path,
-) -> Vec<(String, String)> {
-    fn strings(value: &Value, at: String, out: &mut Vec<(String, String)>) {
-        match value {
-            Value::String(text) => out.push((at, text.clone())),
-            Value::Array(items) => {
-                for (k, item) in items.iter().enumerate() {
-                    strings(item, format!("{at}[{k}]"), out);
-                }
-            }
-            Value::Object(fields) => {
-                for (key, item) in fields {
-                    let at = if at.is_empty() { key.clone() } else { format!("{at}.{key}") };
-                    strings(item, at, out);
-                }
-            }
-            _ => {}
-        }
-    }
-    let mut found = Vec::new();
-    if let Some(input) = input {
-        strings(input, String::new(), &mut found);
-    }
-    // The planted wrong program for #1848's AC3 counts every string as a path, whatever it holds or the facts name.
-    match path_args(server, tool, cwd, home) {
-        _ if cfg!(feature = "plant-every-string-a-path") => {}
-        Some(listed) => found.retain(|(arg, _)| {
-            listed.iter().any(|name| {
-                arg == name
-                    || arg.strip_prefix(name.as_str()).is_some_and(|rest| rest.starts_with(['[', '.']))
-            })
-        }),
-        None => found.retain(|(_, text)| !text.is_empty() && !text.contains(char::is_whitespace)),
-    }
-    found
-}
-
-/// The arguments of `server`'s `tool` that hold paths, when the MCP servers' facts name them and the agent loads that
-/// server as they describe it, as the hub reads them (packages/hub/src/mcp-servers.ts): from a scope they list, with
-/// the config they match. None when every string argument counts.
-fn path_args(server: &str, tool: &str, cwd: Option<&Path>, home: &Path) -> Option<Vec<String>> {
-    let facts = parse(MCP_FACTS).ok()?;
-    let known = member(member(&facts, "servers")?, server)?;
-    let Value::Array(listed) = member(member(member(known, "tools")?, tool)?, "paths")? else {
-        return None;
-    };
-    let (scope, config) = mcp_source(server, cwd?, home)?;
-    let scoped = matches!(member(known, "scopes"), Some(Value::Array(s)) if s.contains(&Value::String(scope.into())));
-    let fits = match member(known, "match") {
-        Some(Value::Object(fields)) => fields.iter().all(|(k, v)| member(&config, k) == Some(v)),
-        _ => true,
-    };
-    (scoped && fits).then(|| {
-        listed
-            .iter()
-            .filter_map(|n| match n {
-                Value::String(name) => Some(name.clone()),
-                _ => None,
-            })
-            .collect()
-    })
-}
-
-/// The config Claude Code loads `server` from in `cwd`, and its scope: your local config, the repo's .mcp.json when you
-/// approved it there, else your user config.
-fn mcp_source(server: &str, cwd: &Path, home: &Path) -> Option<(&'static str, Value)> {
-    let read = |file: PathBuf| fs::read_to_string(file).ok().and_then(|text| parse(&text).ok());
-    let entry = |config: &Value| match member(member(config, "mcpServers")?, server)? {
-        found @ Value::Object(_) => Some(found.clone()),
-        _ => None,
-    };
-    let user = read(home.join(".claude.json"));
-    let project = user
-        .as_ref()
-        .and_then(|u| member(member(u, "projects")?, cwd.to_str()?));
-    if let Some(local) = project.and_then(entry) {
-        return Some(("local", local));
-    }
-    let approved = project.is_some_and(|p| {
-        member(p, "enableAllProjectMcpServers") == Some(&Value::Bool(true))
-            || matches!(member(p, "enabledMcpjsonServers"), Some(Value::Array(a)) if a.contains(&Value::String(server.into())))
-    });
-    if let Some(shared) = read(cwd.join(".mcp.json")).filter(|_| approved).as_ref().and_then(entry) {
-        return Some(("project", shared));
-    }
-    user.as_ref().and_then(entry).map(|mine| ("user", mine))
 }
 
 /// The heavy.command@1 entry a shell call's command matches (#1015), read from the payload as the agent sent it.
@@ -2182,7 +2013,7 @@ fn main() -> ExitCode {
 #[cfg(test)]
 mod tests {
     use super::append;
-    use super::pi_path;
+    use crate::tool_paths::pi_path;
     use deep_hook::shell::glob;
     use std::fs::{self, DirBuilder};
     use std::os::unix::fs::DirBuilderExt;
