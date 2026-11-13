@@ -219,6 +219,20 @@ pub(crate) fn context_of(doc: &Value) -> TimeContext {
             ctx.markers.insert(m.id, (m.start, m.end));
         }
     }
+    // #509: the script's spoken times, as DeepBuild wrote them.
+    for (name, v) in doc
+        .pointer("/script/spoken")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten()
+    {
+        if let (Some(a), Some(b)) = (
+            v.get(0).and_then(Value::as_i64),
+            v.get(1).and_then(Value::as_i64),
+        ) {
+            ctx.markers.entry(name.clone()).or_insert((a, b));
+        }
+    }
     ctx
 }
 
@@ -395,36 +409,31 @@ impl Hub<'_> {
     /// `time`: a literal's flicks in a document. A word anchor (#502), `@line.word:text#k`,
     /// resolves to the word marker the line's words record places.
     pub fn time_reply(&mut self, doc: &str, text: &str) -> Value {
-        if let Ok(Time::Word {
-            line,
-            text: word,
-            k,
-            offset,
-        }) = Time::parse(text)
-        {
+        // #509: a word or line anchor resolves from the compiled script's spoken times.
+        let parsed = Time::parse(text);
+        if let Ok(Time::Word { .. } | Time::Anchor { .. }) = &parsed {
             let Some(document) = self.current(doc).map(|r| r.doc.clone()) else {
                 return refused("no_revision");
             };
-            let markers = self
-                .script_of(&document)
-                .map(|s| s.markers.clone())
-                .unwrap_or_default();
-            let prefix = format!("{}.word:{word}#", line.as_str());
-            let found: Vec<i64> = markers
-                .iter()
-                .filter(|(name, _)| name.starts_with(&prefix))
-                .map(|(_, t)| *t)
-                .collect();
-            let at = match k {
-                Some(k) => found.get(k as usize - 1).copied(),
-                None if found.len() == 1 => Some(found[0]),
-                None => None,
-            };
-            let offset = offset.map_or(Ok(0), |o| o.resolve(&context_of(&document)));
-            return match (at, offset) {
-                (Some(t), Ok(o)) => json!({"outcome": "resolved", "t": t + o}),
-                _ => refused("time_unresolved"),
-            };
+            if let Some(s) = self.script_of(&document) {
+                if let Some(problem) = &s.problem {
+                    return problem.clone();
+                }
+                let mut ctx = context_of(&document);
+                for (name, span) in &s.spoken {
+                    ctx.markers.entry(name.clone()).or_insert(*span);
+                }
+                if let Ok(t) = parsed
+                    .as_ref()
+                    .map_err(|_| ())
+                    .and_then(|p| p.resolve(&ctx).map_err(|_| ()))
+                {
+                    return json!({"outcome": "resolved", "t": t});
+                }
+                if let Ok(Time::Word { .. }) = parsed {
+                    return refused("time_unresolved");
+                }
+            }
         }
         match self.resolve_time(doc, &EvalTime::Literal(text.to_string())) {
             Ok(t) => json!({"outcome": "resolved", "t": t}),

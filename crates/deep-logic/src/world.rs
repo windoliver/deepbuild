@@ -216,6 +216,9 @@ pub struct Record {
     pub traps: Vec<Value>,
     /// Each item's fuel at each step it ran.
     pub fuel: BTreeMap<usize, Vec<(i64, i64)>>,
+    /// #538: each item's comparison of its arrays after each step with their values before it,
+    /// as `(step, bytes compared, ms)`: a proof reading of the bake's cost, never part of a run.
+    pub compares: BTreeMap<String, Vec<(i64, usize, f64)>>,
 }
 
 impl Record {
@@ -1057,7 +1060,10 @@ impl World {
         if self.planted.replay_changes_step_37 && k == 37 && i == 0 {
             changed(item, &mut fresh);
         }
+        let started = std::time::Instant::now();
         let mut changed = bake::ranges(item, k, &l.arrays, &fresh);
+        let ms = started.elapsed().as_secs_f64() * 1000.0;
+        rec.compares.entry(item.id.clone()).or_default().push((k, n, ms));
         if self.planted.ranges_drop_second_at_step_5000 && k == 5000 && changed.len() > 1 {
             changed.remove(1);
         }

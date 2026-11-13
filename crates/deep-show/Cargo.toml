@@ -49,6 +49,9 @@ test-glyph-label = ["dep:deep-canvas-test-modules"]
 # stricter rule; nothing else changes.
 test-hold-min-2s = []
 test-leave-out-logic = []
+# #538: the planted data module whose operator reads a logic array itself, not through the core's
+# column view; built with test-leave-out-logic, the seal refuses it.
+test-data-reads-logic-array = []
 # Issue #489: the full set without the data module, so motion@1's digest is compared without it.
 test-leave-out-data = []
 # Issue #1919: the full set without the physics module, whose physics shapes mode answers

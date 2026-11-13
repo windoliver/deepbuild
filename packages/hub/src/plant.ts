@@ -240,6 +240,8 @@ export type Plant =
   | 'job-second-call' | 'job-joiner-cancels-job'
   // #1819's: a runner whose job is done, each output an empty record, when its tool's host doesn't answer.
   | 'job-host-down-done'
+  // #509's: a hub that keeps the speech kind's tools as a list in code, the three first-party names, and so lists and runs no other.
+  | 'job-speech-tools-enum'
   // #1942's: a host link that drops every connection to a host when one stalls, and one that sends an unknown start again.
   | 'host-link-drops-every-connection' | 'host-link-resends-on-reconnect'
   // #1945's: a `deep host run` that runs the script where the agent wrote it, a host's first run with no lingering, and a
@@ -349,7 +351,7 @@ const PLANTS: readonly string[] = [
   'actor-from-payload', 'reads-unfiltered', 'listen-without-members', 'search-decisions-unfiltered',
   'job-key-params-text', 'job-key-no-version', 'job-build-entry-only', 'job-build-hashes-paths', 'job-build-hashes-mtimes',
   'job-host-asks-again', 'job-host-sends-early', 'job-weights-call-anyway', 'job-weights-not-keyed',
-  'job-second-call', 'job-joiner-cancels-job', 'job-host-down-done',
+  'job-second-call', 'job-joiner-cancels-job', 'job-host-down-done', 'job-speech-tools-enum',
   'host-link-drops-every-connection', 'host-link-resends-on-reconnect',
   'root-plan-runs-agent-path', 'host-skips-lingering', 'host-package-fully-undoable',
   'figure-in-needs-you', 'figure-feeds-verdict',

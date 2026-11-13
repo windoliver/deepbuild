@@ -22,6 +22,7 @@ mod film;
 mod film_audit;
 mod film_layout;
 mod film_viewer;
+mod forms;
 mod frames;
 mod function;
 mod gate;
@@ -76,13 +77,15 @@ mod test_sim;
 #[cfg(feature = "test-threads")]
 mod test_threads;
 mod time;
+mod timings;
 #[cfg(any(
     feature = "test-json",
     feature = "test-debug-digest",
     feature = "test-accent",
     feature = "test-threads",
     feature = "test-scene3d-tie-by-order",
-    feature = "test-scene3d-reads-vector"
+    feature = "test-scene3d-reads-vector",
+    feature = "test-data-reads-logic-array"
 ))]
 mod twins;
 mod verdict;
@@ -728,6 +731,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
                 paced: flag("paced")?,
                 revise,
                 pixels: flag("pixels")?,
+                timings: flag("timings")?,
             })));
         }
         "settle" => {
@@ -1245,6 +1249,10 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 // #1967's wrong programs live in the cells module's playback and conversion.
                 || deep_canvas_cells::recording::PLANTED.contains(p)
                 || deep_canvas_input::rows::PLANTED.contains(p)
+                // #538's in the cells, text and motion modules.
+                || *p == deep_canvas_cells::module::GRID_WRAPS_INDEX
+                || deep_canvas_marks::copy::PLANTED.contains(p)
+                || *p == deep_canvas_motion::held::FLIP_HOLDS_LAST
         })
         .map(str::to_string);
     // #433's wrong programs are twins of the familiar@1 pack.
@@ -1921,6 +1929,7 @@ const TEST_BUILD: bool = cfg!(any(
     feature = "test-check-kind",
     feature = "test-glyph-label",
     feature = "test-leave-out-logic",
+    feature = "test-data-reads-logic-array",
     feature = "test-leave-out-data",
     feature = "test-leave-out-sandbox",
     feature = "test-mesh-item",
@@ -1957,7 +1966,13 @@ fn modules(set: BuildSet) -> Vec<Module> {
             if cfg!(feature = "test-data-m4-drops-last") {
                 deep_canvas_marks::modules::data_m4_drops_last()
             } else {
-                deep_canvas_marks::modules::data()
+                // #538: `test-data-reads-logic-array` seals the planted data module that reads a
+                // logic array itself.
+                #[cfg(feature = "test-data-reads-logic-array")]
+                let data = twins::data_reads_logic_array();
+                #[cfg(not(feature = "test-data-reads-logic-array"))]
+                let data = deep_canvas_marks::modules::data();
+                data
             },
             if cfg!(feature = "test-graph-tie-by-registration") {
                 deep_canvas_graph::module::tie_by_registration()

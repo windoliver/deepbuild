@@ -2308,6 +2308,7 @@ dependencies = [
  "deep-canvas-scene3d",
  "serde_json",
  "sha2 0.10.9",
+ "unicode-normalization",
 ]
 
 [[package]]
@@ -2718,6 +2719,14 @@ dependencies = [
  "sha2 0.10.9",
  "vello_cpu 0.3.0",
  "wgpu 30.0.1",
+]
+
+[[package]]
+name = "deep-synth-job"
+version = "0.0.0"
+dependencies = [
+ "deep-canvas-media",
+ "serde_json",
 ]
 
 [[package]]

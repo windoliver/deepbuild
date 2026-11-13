@@ -517,6 +517,13 @@ alone.push('tests/acceptance/539/');
 // design's grid rule gives another (tests/acceptance/539-oracle-redraft/DISPUTE.md); its blind redraft runs in its place.
 alone.push('tests/acceptance/539-oracle-redraft/');
 byHand.push('tests/acceptance/539-oracle/');
+// #538's files build deep-show (ac8 also deep-gpu) and #544's assembler, run logic programs and draw; ac8-budgets
+// judges the task's budgets on the reference Mac.
+alone.push('tests/acceptance/538/', 'tests/acceptance/538-oracle/', 'tests/acceptance/538-redraft-ac8/');
+timed.push('tests/acceptance/538/ac8-budgets.test.ts', 'tests/acceptance/538-redraft-ac8/ac8-budgets.test.ts');
+// #538's first AC8 draft is kept by hand until the owner swaps it: its heap, crowd and fogger programs run out of the
+// default fuel at step 0, so their arrays never change; its blind redraft, 538-redraft-ac8/, runs in its place.
+byHand.push('tests/acceptance/538/ac8-budgets.test.ts');
 // #1920's files build deep-show seven times, in the full and core sets, and read each build's published plan.
 alone.push('tests/acceptance/1920/');
 // #1863's files each start a real hub and a session through deep-hook; the speed file times five 5 s and 6 s waits a
@@ -549,6 +556,10 @@ alone.push('tests/acceptance/1606-redraft-ac5-ac9/');
 // #2324's files each build deep-show (with the planted engine build and sandbox.alt), deep-sandbox and deep-logic, run
 // them in Docker on linux/amd64 and drive headless Chrome, as #238's and #531's do.
 alone.push('tests/acceptance/2324/');
+// #509's files each build deep-show and speak their fixtures with macOS say; most start a hub and deepbuild/speech's
+// model host on its fixed port 8720 (recording.test.ts also deepbuild/bakes' on 8719); budgets.test.ts times them.
+alone.push('tests/acceptance/509/', 'tests/acceptance/509-oracle/');
+timed.push('tests/acceptance/509/budgets.test.ts');
 // #2197's files each start a real hub and one or two agent processes, each with its own deep mcp; budget.test.ts times
 // deep_status against #26's 100 ms on the reference Mac.
 alone.push('tests/acceptance/2197/');
@@ -563,6 +574,16 @@ alone.push('tests/acceptance/525/');
 alone.push('tests/acceptance/525-device/');
 timed.push('tests/acceptance/525-device/device.test.ts');
 slow.push('tests/acceptance/525-device/device.test.ts');
+// #204's files each build deep-show and mix seconds of synth through it; export.test.ts encodes a film, and
+// budgets.test.ts times renders, seeks and a pack's sweep.
+alone.push('tests/acceptance/204/', 'tests/acceptance/204-oracle/');
+timed.push('tests/acceptance/204/budgets.test.ts');
+// AC7's blind redraft runs the same way. The first draft's export file is kept by hand: its film names its own layers,
+// which `deep show` from your shell refuses before any export (tests/acceptance/204-redraft-ac7/DISPUTE.md).
+alone.push('tests/acceptance/204-redraft-ac7/');
+// #204's gap test builds deep-show and reads the registries around a pack's install.
+alone.push('tests/acceptance/204-gaps/');
+byHand.push('tests/acceptance/204/export.test.ts');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },

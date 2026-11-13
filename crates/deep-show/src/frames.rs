@@ -323,10 +323,12 @@ impl<'a> Hub<'a> {
         // #535: a logic column's row whose value goes out of range raises column.out_of_range at
         // the frame of the step its excursion begins.
         if let (Some(doc), Some(list)) = (evaluated.document(), reply["issues"].as_array_mut()) {
-            // #537: and scene3d's readers', an instancer's columns and a line's points.
+            // #537: and scene3d's readers', an instancer's columns and a line's points; #538: and
+            // the cell grid's, keyed copy's and flip's, in the session's locale.
             let raised = [
                 deep_canvas::columns::raised_at(doc, t),
                 deep_canvas_scene3d::arrays::raised_at(doc, t),
+                crate::logic::raised_at(doc, Some(t), view[deep_canvas::schedule::LOCALE].as_str().unwrap_or("en")),
             ];
             list.extend(raised.iter().flatten().map(|i| i.to_json()));
         }
@@ -624,6 +626,7 @@ impl<'a> Hub<'a> {
         let mut last: Option<(Option<*const Drawing>, Option<*const StatusDrawing>, String)> = None;
         let mut out = Vec::with_capacity(f.count);
         let mut revised_now = false;
+        let mut seen = BTreeMap::new();
         for k in 0..f.count {
             if f.paced {
                 let due = started + period * k as u32;
@@ -654,6 +657,7 @@ impl<'a> Hub<'a> {
                 break;
             };
             let view = session_view(session, &Map::new());
+            let before = f.timings.then(|| crate::timings::mappings(&self.sched, session));
             let _ = self.sched.take_json();
             let frame_started = Instant::now();
             let (ran, allocs) =
@@ -673,6 +677,10 @@ impl<'a> Hub<'a> {
             // #1732: the solves of each arrangement this frame ran, from the scheduler's nodes.
             frame["solves"] = solves(&self.sched, &self.sessions[&f.doc], revised_now);
             frame["remaps"] = remaps(&self.sched, &self.sessions[&f.doc]);
+            if let (Some(before), Some(doc)) = (&before, self.sessions[&f.doc].document()) {
+                let after = crate::timings::mappings(&self.sched, &self.sessions[&f.doc]);
+                crate::timings::add(&mut frame, (doc, before, &after, t), &mut seen);
+            }
             revised_now = false;
             let mut capture = 0;
             if f.pixels {
@@ -1035,10 +1043,12 @@ fn cell_grids(
                     color: *c,
                 })
                 .collect();
+            let text = row.text.trim_end().to_string();
             out.push(mark(Mark::Text {
                 item: id.clone(),
                 spec: scene::TextSpec {
-                    text: row.text.trim_end().to_string(),
+                    spans: crate::terminal::cell_spacing(&text, cw, g.font_size),
+                    text,
                     font: "mono".into(),
                     family: Some(deep_text::Role::Mono.family()),
                     fallback: Vec::new(),
@@ -1050,7 +1060,6 @@ fn cell_grids(
                     mask: false,
                     align: scene::Align::Start,
                     bound: false,
-                    spans: Vec::new(),
                 },
                 origin: [g.origin[0], y],
                 role: None,

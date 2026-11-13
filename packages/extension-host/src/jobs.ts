@@ -130,6 +130,13 @@ function outputsOf(tool: string, answer: unknown): Record<string, Uint8Array> {
   if (typeof outputs !== 'object' || outputs === null || !Object.values(outputs).every((v) => typeof v === 'string')) throw Error(`${tool} wrote no {outputs}, each output's bytes in base64`);
   return Object.fromEntries(Object.entries(outputs as Record<string, string>).map(([n, b]) => [n, new Uint8Array(Buffer.from(b, 'base64'))]));
 }
+/** A run its tool's host holds BLOCKED (#509), such as a word an engine has no pronunciation for: the host's cause. */
+class JobBlocked extends Error {
+  constructor(message: string, readonly blocked: Record<string, JsonValue>) {
+    super(message);
+    this.name = 'JobBlocked';
+  }
+}
 /** The target triple a tool's build is held for (#1922): this machine's CPU architecture and OS. */
 const TRIPLE = `${process.arch}-${process.platform}`;
 /** A job kind as an install holds it (#1922), with the tools that joined it. */
@@ -184,7 +191,9 @@ export class JobTools {
 
   /**
    * One call to a tool's host (#1924), made by the hub, never the package: to the URL its descriptor names on the host
-   * its manifest names, with no redirect, bounded in time and size; its answer's JSON.
+   * its manifest names, with no redirect, bounded in time and size; its answer's JSON. An answer that isn't 200 throws
+   * with the host's own `error` text, and a 409 `{blocked: cause}` (#509), a run the host holds until you change its
+   * inputs, throws a JobBlocked carrying that cause.
    */
   private async hostCall(tool: string, url: URL, method: 'GET' | 'POST', body?: string): Promise<unknown> {
     const answer = await globalThis.fetch(url, {
@@ -198,8 +207,14 @@ export class JobTools {
       if (size > JOB_OUT) throw Error(`${tool}'s host answered more than ${JOB_OUT} bytes`);
       chunks.push(chunk);
     }
-    if (answer.status !== 200) throw Error(`${tool}'s host answered ${method} ${url.pathname} with ${answer.status}`);
-    try { return JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { throw Error(`${tool}'s host answered ${method} ${url.pathname} with no JSON`); }
+    let json: unknown;
+    try { json = JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { json = undefined; }
+    const said = (typeof json === 'object' && json !== null ? json : {}) as { error?: unknown; blocked?: unknown; refused?: unknown };
+    if (answer.status === 409 && typeof said.blocked === 'object' && said.blocked !== null) throw new JobBlocked(`${tool}'s host holds the run: ${JSON.stringify(said.blocked)}`, said.blocked as Record<string, JsonValue>);
+    if (answer.status === 422 && typeof said.refused === 'string') throw Object.assign(Error(said.refused), { name: 'JobRefused' });
+    if (answer.status !== 200) throw Error(`${tool}'s host answered ${method} ${url.pathname} with ${answer.status}${typeof said.error === 'string' ? `: ${said.error}` : ''}`);
+    if (json === undefined) throw Error(`${tool}'s host answered ${method} ${url.pathname} with no JSON`);
+    return json;
   }
 
   /**
