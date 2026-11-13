@@ -86,7 +86,7 @@ fn seat_of(item: &Value, shape: impl Iterator<Item = f64>, m: &Affine3, [lo, hi]
 fn boundary_edges(mesh: &deep_canvas_scene3d::geom::Mesh, m: &Affine3) -> Vec<[V3; 2]> {
     let (welded, _) = deep_canvas_loop::count::weld(&mesh.positions, 0.00001);
     let mut faces: std::collections::BTreeMap<[u32; 2], (usize, [u32; 2])> = std::collections::BTreeMap::new();
-    for t in mesh.indices.chunks_exact(3) {
+    for t in mesh.indices.as_chunks::<3>().0 {
         let w = [t[0], t[1], t[2]].map(|i| welded[i as usize]);
         // A face whose corners weld together has no edges.
         if w[0] == w[1] || w[1] == w[2] || w[0] == w[2] {
