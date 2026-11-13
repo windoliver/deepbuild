@@ -270,6 +270,7 @@ fn fonts() -> TableValue {
 
 fn register_text(r: &mut Registrar) {
     r.built_table("text.fonts", fonts);
+    crate::copy::register(r);
     // #443: a shaped run's glyph outlines, text's entry in the core's `outline.source@1`.
     r.outline_source(
         "text",
@@ -282,7 +283,7 @@ fn register_text(r: &mut Registrar) {
     r.operator(
         "counter",
         "items",
-        &["core.fields", "refs", "reading", "view(locale)"],
+        &["core.fields", "refs", "reading", "view(locale)", "text.copy"],
         &["text.counter"],
     )
     .applies(is_bound_text)
@@ -400,7 +401,7 @@ fn is_bound_text(doc: &Value, id: &str, item: &Value) -> bool {
         .is_some()
         || scene::copy_key(item).is_some();
     let template = scene::template_of(item).is_some();
-    bound || counter || template
+    bound || counter || template || crate::copy::is_keyed(doc, id, item)
 }
 
 fn is_animated(doc: &Value, id: &str, item: &Value) -> bool {
@@ -416,6 +417,10 @@ fn is_animated(doc: &Value, id: &str, item: &Value) -> bool {
 fn counter(v: &mut View<'_>) -> Result<(), OpError> {
     // The evaluated item: a keyed data value its template reads rides on it (motion@1).
     let item = fields_of(v)?;
+    // #538: keyed copy, as the copy operator showed it at t.
+    if let Some(copy) = v.typed::<Option<Shown>>("text.copy")? {
+        return v.write("text.counter", Val::typed((*copy).clone()));
+    }
     let doc = v.document()?;
     let record = record_of(v.outside()?);
     let locale = v.locale()?;

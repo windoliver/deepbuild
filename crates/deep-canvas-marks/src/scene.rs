@@ -4278,7 +4278,9 @@ pub fn frame_planted(
     let items = moved.as_ref().unwrap_or(items);
     // #1653: terrain drawn as its atlas set, and each animated atlas row at its frame.
     let tiled = crate::atlas::apply(doc, items, record.pinned)?;
-    let items = tiled.as_ref().unwrap_or(items);
+    // #538: keyed copy at the record's time, in the document's locale.
+    let copied = crate::copy::apply(doc, tiled.as_ref().unwrap_or(items), record.pinned, doc.get("locale").and_then(Value::as_str).unwrap_or("en"));
+    let items = copied.as_ref().or(tiled.as_ref()).unwrap_or(items);
     let bound = bound_texts(doc, items, record)?;
     frame_shown(
         doc,

@@ -213,6 +213,8 @@ fn register_compiling(
     .run(channels);
     register_arrange(r);
     register_score(r);
+    // #538: a flip by array in the frame the hub draws.
+    crate::held::register(r);
     r.code(
         "bad_doc",
         "A motion section, or a field of one, that isn't the shape motion reads.",

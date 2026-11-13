@@ -36,7 +36,6 @@ use sha2::{Digest, Sha256};
 
 use crate::frames::drawing_of;
 use crate::hub::{EvalTime, Hub, Planted};
-use crate::mixdown::planted_of;
 use crate::snapshot::Unfit;
 use crate::time::{context_of, sample_rate_of};
 use frames::{Lease, Run, Sink};
@@ -223,7 +222,10 @@ impl Hub<'_> {
     ) -> (Vec<String>, bool) {
         let hz = mix.rate as u32;
         let span = |k: i64| self.span_start(k, shard.frame, hz);
-        let mut player = Player::new(mix.clone(), planted_of(self.scenario.planted, false));
+        let mut player = Player::new(
+            mix.clone(),
+            crate::mixdown::export_planted(self.scenario.planted),
+        );
         player.delivery = amp(shard.gain);
         if let Some(db) = shard.ceiling {
             player.set_ceiling(db);
@@ -802,7 +804,7 @@ impl Hub<'_> {
                 self.span_start(frames.start, frame, hz),
                 self.span_start(frames.end, frame, hz),
             );
-            let planted = planted_of(self.scenario.planted, false);
+            let planted = crate::mixdown::export_planted(self.scenario.planted);
             let pass = |db: f64| {
                 let mut player = Player::new(mix.clone(), planted);
                 player.delivery = amp(db);

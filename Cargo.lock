@@ -2773,6 +2773,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "deep-synth-job"
+version = "0.0.0"
+dependencies = [
+ "deep-canvas-media",
+ "serde_json",
+]
+
+[[package]]
 name = "deep-text"
 version = "0.0.0"
 dependencies = [

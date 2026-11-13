@@ -213,13 +213,15 @@ impl Canonical for Datum {
 
 impl Datum {
     /// As JSON, for a reader that hands its item on as the document writes it; a typed value
-    /// has no JSON form and reads as null.
+    /// has no JSON form and reads as null, but a JSON one (#538: a column a module rewrote) reads
+    /// as itself.
     fn to_json(&self) -> Value {
         match self {
             Datum::Num(x) => json!(x),
             Datum::Nums(xs) => json!(xs),
             Datum::Bool(b) => json!(b),
             Datum::Text(t) => json!(t),
+            Datum::Typed(crate::schedule::Val::Json(v)) => v.as_ref().clone(),
             Datum::Typed(_) => Value::Null,
         }
     }

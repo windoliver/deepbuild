@@ -1062,8 +1062,10 @@ const EFFICIENCY = {
     bevel_ms: (r) => r.bevel_ms, subdivide_ms: (r) => r.subdivide_ms, distribute_ms: (r) => r.distribute_ms, arc_length_ms: (r) => r.arc_length_ms,
     still_steps: (r) => r.still_steps, sway_gpu_ms: (r) => r.sway_gpu_ms,
   },
+  // #538: each reading by its own name (benchmarks/game-state.mjs).
+  'canvas-game-state': Object.fromEntries(['compare_ms', 'remap_row_us', 'remap_layer_ms', 'upload_slots_ms', 'overlay_upload_ms', 'fit_check_ms', 'idle_steps'].map((k) => [k, (r) => r[k]])),
 };
-const COUNTS = new Set(['summary_tokens', 'page_rows', 'frames', 'upload_bytes_per_item', 'indexed_target_bytes', 'still_steps']);
+const COUNTS = new Set(['summary_tokens', 'page_rows', 'frames', 'upload_bytes_per_item', 'indexed_target_bytes', 'still_steps', 'idle_steps']);
 
 /** The stage that took the most of a sample's time, as a reason names it (#896); none for a sample without stages. */
 const costliest = (s) => {
@@ -1500,6 +1502,8 @@ workloads['lottie-export'] = () => {
     rmSync(evidence, { recursive: true, force: true });
   }
 };
+// #538's budgets: live game state's compares, remaps, uploads and fit check (benchmarks/game-state.mjs).
+workloads['game-state'] = async () => (await import('./game-state.mjs')).gameState({ root, release, once, runs });
 
 const task = process.argv[2];
 if (!workloads[task]) throw Error(`Unknown task ${task}; one of: ${Object.keys(workloads).join(', ')}`);

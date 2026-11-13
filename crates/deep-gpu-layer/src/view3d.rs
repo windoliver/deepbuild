@@ -1847,6 +1847,8 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             }
             if args.timings {
                 frame.insert("wall_ms".into(), json!(wall_ms));
+                // #538: each fed instancer's and overlaid plate's upload time this frame.
+                frame.insert("upload_ms".into(), json!(drawn.counts.upload_ms));
             }
             frame.insert("samples".into(), samples_report);
             frame.insert(
