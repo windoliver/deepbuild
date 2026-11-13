@@ -6,11 +6,11 @@
 // so the same item raised twice is one record. An item closes only on evidence, your answer or a rule: a thread a
 // reviewer resolves, your waiver through the item's ask. The agent's word closes nothing: a thread its own account
 // resolved stays open, naming who resolved it, and an item it marks completed stays open.
-import { execFile } from 'node:child_process';
+import { exec as childRun } from './children.js';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Asks } from '@deepbuild/asks';
-import { sha256Hex } from '@deepbuild/contracts';
+import { isRecord as isObj, sha256Hex } from '@deepbuild/contracts';
 import { addedLines, errorShape, leftOpen, limitsIn, openTasks, placeholders, type LeftOpen, type TaskListFacts } from '@deepbuild/gate';
 import { ulid, type Connection, type EventInput } from '@deepbuild/record';
 import { openItemId } from '@deepbuild/verdicts';
@@ -19,7 +19,6 @@ import type { Answer, Fetch, Graphql } from './github-source.js';
 import type { Plant } from './plant.js';
 
 type Obj = Record<string, unknown>;
-const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 
 /** The sections whose items are claims nobody proved: each reaches you through an ask that can waive it. */
 const UNVERIFIED = new Set(['not verified', 'not run', 'not exercised', 'remaining proof gaps', 'remaining proof gap']);
@@ -54,10 +53,11 @@ interface ClaimRead {
 interface Found extends Omit<LeftOpen, 'from'> { from: LeftOpen['from'] | 'review_thread'; resolved_by?: string }
 interface Standing { item: string; text: string; from: string; open: boolean; by: string | null; resolved_by: string | null }
 
-const run = (cmd: string, args: string[], cwd: string): Promise<string> => new Promise((resolve) => {
+const run = async (cmd: string, args: string[], cwd: string): Promise<string> => {
   const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith('GIT_')));
-  execFile(cmd, args, { cwd, env, encoding: 'utf8', maxBuffer: 64 << 20, timeout: 10_000 }, (error, stdout) => resolve(error ? '' : stdout));
-});
+  const { error, stdout } = await childRun(cmd, args, { cwd, env, maxBuffer: 64 << 20, timeout: 10_000 });
+  return error ? '' : stdout;
+};
 
 export class OpenItems {
   /** Whether each task has an item a pending verdict opened still open (#82), once known. */

@@ -1,11 +1,11 @@
 import type { HubEvents, HubRuntime, HookSchedule } from './hub-capabilities.js';
 import type { AnswerDeliveryPort, StopJudgingPort, SessionStatePort, HubControlPort } from './hub-ports.js';
 import { execFile } from 'node:child_process';
-import { existsSync, readFileSync, realpathSync } from 'node:fs';
+import { existsSync, realpathSync } from 'node:fs';
 
 import { Numbers } from './numbers.js';
 
-import { isAbsolute, join } from 'node:path';
+import { isAbsolute } from 'node:path';
 
 import { AskRefused, duration, type Asks } from '@deepbuild/asks';
 
@@ -15,7 +15,6 @@ import { type ExtensionHost } from '@deepbuild/extension-host';
 import { RecordError, type Connection, type RecordStore } from '@deepbuild/record';
 
 import { predictionContradictions, type Prediction, type RunOutcome } from '@deepbuild/verdicts';
-import { parse as parseYaml } from 'yaml';
 import { ASK_WAIT_MS, relations, words } from './claude-settings.js';
 
 import { codexRelations } from './codex-settings.js';
@@ -54,6 +53,7 @@ import { sql, letters, noWake, unseenTools, type Obj, isObj, isUnder, asRefused 
 
 export interface McpOperationsOptions {
   settings: CoreOptions;
+  doneSpec(cwd: string): unknown;
   services: {
     readonly sessionStarts: Starts;
     readonly hosts: Hosts;
@@ -73,7 +73,7 @@ export interface McpOperationsOptions {
   control: () => Pick<HubControlPort, "attach" | "job">;
   state: () => Pick<SessionStatePort, "live" | "rows" | "sessions">;
   judging: () => Pick<StopJudgingPort, "claimed" | "reachOfSession">;
-  delivery: () => Pick<AnswerDeliveryPort, "askWaits" | "deliver" | "routes" | "settling" | "waitingFor">;
+  delivery: () => Pick<AnswerDeliveryPort, "askWaits" | "deliver" | "routes" | "settling" | "answers">;
   events: Pick<HubEvents, "connection" | "appendReading" | "append">;
 kernel: Pick<HubRuntime, "blocked" | "stopping">;
 schedule: Pick<HookSchedule, "replaying" | "queue" | "askingNow" | "wakeable">;
@@ -314,7 +314,7 @@ export class McpOperations {
     // its saver's personal scope. The planted wrong program reads every decision.
     const person = project?.person && project.person !== OWNER && this.options.settings.plant !== 'search-decisions-unfiltered';
     return search({
-      query, index: await this.wikiIndex(), raw: (q, params) => this.options.services.record.raw(q, params), worktree, session: everyone ? { everyone: true } : session, covers,
+      query, index: await this.wikiIndex(), raw: this.options.services.raw, worktree, session: everyone ? { everyone: true } : session, covers,
       ...(person ? { decides: (scope: string) => scope !== 'all' && scopes.has(scope) } : {}),
       trustsIndex: this.options.settings.plant === 'trusts-index',
       readings: (q) => this.options.services.numbers.search(q, everyone ? { everyone: true } : session),
@@ -333,7 +333,7 @@ export class McpOperations {
       const by = new Set((await this.options.services.record.touched(file, worktree)).map((t) => t.session));
       sessions = sessions.filter((id) => by.has(id));
     }
-    return { sessions, messages: (terms, ids) => this.options.services.record.findMessages(terms, ids), about: (ids) => aboutSessions((sql, params) => this.options.services.record.raw(sql, params), ids) };
+    return { sessions, messages: (terms, ids) => this.options.services.record.findMessages(terms, ids), about: (ids) => aboutSessions(this.options.services.raw, ids) };
   }
 
   /** The wiki's index: a loaded package's in place of the shipped one, rebuilt from the pages when it first serves (#355). */
@@ -357,8 +357,7 @@ export class McpOperations {
 
   /** The checks a worktree's spec names, by name, with the command each runs and its deadline as the spec writes it, where it gives one. */
   checksOf(worktree: string): Map<string, { run: string; deadline?: unknown; type?: string; host?: string }> {
-    let spec: unknown;
-    try { spec = parseYaml(readFileSync(join(worktree, '.deepbuild', 'done.yaml'), 'utf8')); } catch { return new Map(); }
+    const spec = this.options.doneSpec(worktree);
     const checks = isObj(spec) && isObj(spec.checks) ? spec.checks : {};
     return new Map(Object.entries(checks).flatMap(([name, c]) => {
       if (!isObj(c) || typeof c.run !== 'string') return [];
@@ -581,7 +580,7 @@ export class McpOperations {
     if (live && unseenTools(this.options.state().sessions.get(session)?.agent)) live.judged = true;
     // An answer to an ended session of another thread waits on its task: the next session that works the task reads it.
     const task = sql(String(args.task_ref));
-    const answers = await this.options.schedule.queue(async () => this.options.delivery().deliver(await this.options.delivery().waitingFor(session, `a.session_id IN (SELECT session_id FROM events WHERE kind = 'claim.made' AND json_extract(data, '$.task_ref') = '${task}')
+    const answers = await this.options.schedule.queue(async () => this.options.delivery().deliver(await this.options.delivery().answers.waitingFor(session, `a.session_id IN (SELECT session_id FROM events WHERE kind = 'claim.made' AND json_extract(data, '$.task_ref') = '${task}')
       AND a.session_id IN (SELECT session_id FROM events WHERE kind = 'session.end')`), 'next_prompt'));
     return { session, claim: `claim:${id}`, event: id, ...(answers ? { answers } : {}) };
   }

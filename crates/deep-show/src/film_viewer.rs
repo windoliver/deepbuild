@@ -273,7 +273,9 @@ mod tests {
     fn the_keymap_names_each_viewer_key_a_film_control_holds() {
         // Sealed without `seal()`, whose runs another test counts.
         let full = crate::BuildSet::Full;
-        let sealed = crate::assemble(full, crate::modules(full)).seal().expect("the shipped set seals");
+        let sealed = crate::assemble(full, crate::modules(full))
+            .seal()
+            .expect("the shipped set seals");
         let startup = crate::tests::startup_of(sealed);
         let doc = "01JB501V00000000000000000A";
         let film = json!({

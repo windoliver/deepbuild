@@ -14,10 +14,21 @@ pub type V3 = [f64; 3];
 #[derive(Clone, Debug, PartialEq)]
 pub enum Shape {
     /// An oriented box: its centre, its three unit axes and its half extents along them.
-    Obb { c: V3, axes: [V3; 3], half: V3 },
-    Ball { c: V3, r: f64 },
+    Obb {
+        c: V3,
+        axes: [V3; 3],
+        half: V3,
+    },
+    Ball {
+        c: V3,
+        r: f64,
+    },
     /// A segment swept by a ball: a wire, a tube or a rod.
-    Capsule { a: V3, b: V3, r: f64 },
+    Capsule {
+        a: V3,
+        b: V3,
+        r: f64,
+    },
     /// #2014: a terrain plate's surface, solid under it.
     Heights(Arc<crate::heights::Heights>),
 }
@@ -79,7 +90,11 @@ impl Default for Config {
 
 impl Config {
     fn related(&self, a: &str, b: &str) -> bool {
-        let key = if a <= b { (a.to_string(), b.to_string()) } else { (b.to_string(), a.to_string()) };
+        let key = if a <= b {
+            (a.to_string(), b.to_string())
+        } else {
+            (b.to_string(), a.to_string())
+        };
         self.relations.contains(&key)
     }
 }
@@ -131,13 +146,21 @@ fn dot(a: V3, b: V3) -> f64 {
     a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
 }
 fn cross(a: V3, b: V3) -> V3 {
-    [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]
+    [
+        a[1] * b[2] - a[2] * b[1],
+        a[2] * b[0] - a[0] * b[2],
+        a[0] * b[1] - a[1] * b[0],
+    ]
 }
 fn len(a: V3) -> f64 {
     sqrt(dot(a, a))
 }
 fn lerp(a: V3, b: V3, t: f64) -> V3 {
-    [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t]
+    [
+        a[0] + (b[0] - a[0]) * t,
+        a[1] + (b[1] - a[1]) * t,
+        a[2] + (b[2] - a[2]) * t,
+    ]
 }
 
 impl Shape {
@@ -175,7 +198,11 @@ fn box_sdf(p: V3, c: V3, axes: &[V3; 3], half: V3) -> f64 {
 fn seg_point(a: V3, b: V3, p: V3) -> f64 {
     let ab = sub(b, a);
     let l = dot(ab, ab);
-    let t = if l > 0.0 { (dot(sub(p, a), ab) / l).clamp(0.0, 1.0) } else { 0.0 };
+    let t = if l > 0.0 {
+        (dot(sub(p, a), ab) / l).clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
     len(sub(p, lerp(a, b, t)))
 }
 
@@ -204,7 +231,11 @@ fn seg_closest(p1: V3, q1: V3, p2: V3, q2: V3) -> (V3, V3) {
         } else {
             let b = dot(d1, d2);
             let den = a * e - b * b;
-            let s0 = if den > 0.0 { ((b * f - c * e) / den).clamp(0.0, 1.0) } else { 0.0 };
+            let s0 = if den > 0.0 {
+                ((b * f - c * e) / den).clamp(0.0, 1.0)
+            } else {
+                0.0
+            };
             let t0 = (b * s0 + f) / e;
             if t0 < 0.0 {
                 t = 0.0;
@@ -247,14 +278,34 @@ pub fn depth(x: &Shape, y: &Shape) -> f64 {
         (Ball { c: p, r }, Obb { c, axes, half }) | (Obb { c, axes, half }, Ball { c: p, r }) => {
             r - box_sdf(*p, *c, axes, *half)
         }
-        (Capsule { a, b, r: ra }, Ball { c, r: rb }) | (Ball { c, r: rb }, Capsule { a, b, r: ra }) => {
-            ra + rb - seg_point(*a, *b, *c)
-        }
-        (Capsule { a: a1, b: b1, r: r1 }, Capsule { a: a2, b: b2, r: r2 }) => r1 + r2 - seg_seg(*a1, *b1, *a2, *b2),
-        (Capsule { a, b, r }, Obb { c, axes, half }) | (Obb { c, axes, half }, Capsule { a, b, r }) => {
-            r - seg_box(*a, *b, *c, axes, *half)
-        }
-        (Obb { c: ca, axes: aa, half: ha }, Obb { c: cb, axes: ab, half: hb }) => boxes(*ca, aa, *ha, *cb, ab, *hb).0,
+        (Capsule { a, b, r: ra }, Ball { c, r: rb })
+        | (Ball { c, r: rb }, Capsule { a, b, r: ra }) => ra + rb - seg_point(*a, *b, *c),
+        (
+            Capsule {
+                a: a1,
+                b: b1,
+                r: r1,
+            },
+            Capsule {
+                a: a2,
+                b: b2,
+                r: r2,
+            },
+        ) => r1 + r2 - seg_seg(*a1, *b1, *a2, *b2),
+        (Capsule { a, b, r }, Obb { c, axes, half })
+        | (Obb { c, axes, half }, Capsule { a, b, r }) => r - seg_box(*a, *b, *c, axes, *half),
+        (
+            Obb {
+                c: ca,
+                axes: aa,
+                half: ha,
+            },
+            Obb {
+                c: cb,
+                axes: ab,
+                half: hb,
+            },
+        ) => boxes(*ca, aa, *ha, *cb, ab, *hb).0,
         (Heights(h), o) | (o, Heights(h)) => h.depth(o),
     }
 }
@@ -278,17 +329,41 @@ fn boxes(ca: V3, aa: &[V3; 3], ha: V3, cb: V3, ab: &[V3; 3], hb: V3) -> (f64, V3
             let ra: f64 = (0..3).map(|k| (dot(aa[k], *l) * ha[k]).abs()).sum();
             let rb: f64 = (0..3).map(|k| (dot(ab[k], *l) * hb[k]).abs()).sum();
             let along = dot(d, *l);
-            (ra + rb - along.abs(), l.map(|x| if along < 0.0 { -x } else { x }))
+            (
+                ra + rb - along.abs(),
+                l.map(|x| if along < 0.0 { -x } else { x }),
+            )
         })
-        .fold((f64::INFINITY, [0.0; 3]), |least, x| if x.0 < least.0 { x } else { least })
+        .fold((f64::INFINITY, [0.0; 3]), |least, x| {
+            if x.0 < least.0 {
+                x
+            } else {
+                least
+            }
+        })
 }
 
 /// The least move of `b` that takes it out of `a`, where their deepest pieces are two boxes: the
 /// depth along the axis of least overlap.
 fn apart(a: &Solid, b: &Solid) -> Option<V3> {
-    let pieces = a.shapes.iter().flat_map(|x| b.shapes.iter().map(move |y| (x, y)));
+    let pieces = a
+        .shapes
+        .iter()
+        .flat_map(|x| b.shapes.iter().map(move |y| (x, y)));
     let deepest = pieces.max_by(|p, q| depth(p.0, p.1).total_cmp(&depth(q.0, q.1)))?;
-    let (Shape::Obb { c: ca, axes: aa, half: ha }, Shape::Obb { c: cb, axes: ab, half: hb }) = deepest else {
+    let (
+        Shape::Obb {
+            c: ca,
+            axes: aa,
+            half: ha,
+        },
+        Shape::Obb {
+            c: cb,
+            axes: ab,
+            half: hb,
+        },
+    ) = deepest
+    else {
         return None;
     };
     let (d, axis) = boxes(*ca, aa, *ha, *cb, ab, *hb);
@@ -299,9 +374,17 @@ fn apart(a: &Solid, b: &Solid) -> Option<V3> {
 fn lowered(s: &Shape, t: f64) -> Shape {
     let down = |p: &V3| [p[0], p[1] - t, p[2]];
     match s {
-        Shape::Obb { c, axes, half } => Shape::Obb { c: down(c), axes: *axes, half: *half },
+        Shape::Obb { c, axes, half } => Shape::Obb {
+            c: down(c),
+            axes: *axes,
+            half: *half,
+        },
         Shape::Ball { c, r } => Shape::Ball { c: down(c), r: *r },
-        Shape::Capsule { a, b, r } => Shape::Capsule { a: down(a), b: down(b), r: *r },
+        Shape::Capsule { a, b, r } => Shape::Capsule {
+            a: down(a),
+            b: down(b),
+            r: *r,
+        },
         Shape::Heights(h) => Shape::Heights(Arc::new(h.moved([0.0, -t, 0.0]))),
     }
 }
@@ -312,7 +395,11 @@ fn lowered(s: &Shape, t: f64) -> Shape {
 fn fall(solids: &[Solid], i: usize) -> Option<f64> {
     let mut least: Option<f64> = None;
     for (_, o) in solids.iter().enumerate().filter(|(j, _)| *j != i) {
-        for (x, y) in solids[i].shapes.iter().flat_map(|x| o.shapes.iter().map(move |y| (x, y))) {
+        for (x, y) in solids[i]
+            .shapes
+            .iter()
+            .flat_map(|x| o.shapes.iter().map(move |y| (x, y)))
+        {
             let ([xl, xh], [yl, yh]) = (x.aabb(), y.aabb());
             if xl[0] > yh[0] || yl[0] > xh[0] || xl[2] > yh[2] || yl[2] > xh[2] || yl[1] >= xl[1] {
                 continue;
@@ -373,7 +460,9 @@ pub fn bounds(s: &Solid) -> [V3; 2] {
 /// O(n log n + pairs) (the broad phase).
 pub fn near_pairs(solids: &[Solid], margin: f64) -> Vec<(usize, usize)> {
     let b: Vec<[V3; 2]> = solids.iter().map(bounds).collect();
-    let mut order: Vec<usize> = (0..solids.len()).filter(|&i| b[i][0][0].is_finite()).collect();
+    let mut order: Vec<usize> = (0..solids.len())
+        .filter(|&i| b[i][0][0].is_finite())
+        .collect();
     order.sort_by(|&i, &j| b[i][0][0].total_cmp(&b[j][0][0]).then(i.cmp(&j)));
     let mut out = Vec::new();
     for (k, &i) in order.iter().enumerate() {
@@ -381,7 +470,9 @@ pub fn near_pairs(solids: &[Solid], margin: f64) -> Vec<(usize, usize)> {
             if b[j][0][0] > b[i][1][0] + margin {
                 break;
             }
-            if (1..3).all(|a| b[j][0][a] <= b[i][1][a] + margin && b[i][0][a] <= b[j][1][a] + margin) {
+            if (1..3)
+                .all(|a| b[j][0][a] <= b[i][1][a] + margin && b[i][0][a] <= b[j][1][a] + margin)
+            {
                 out.push((i.min(j), i.max(j)));
             }
         }
@@ -433,7 +524,10 @@ fn off_grid(seat: &Seat, sub: f64) -> Option<(V3, f64)> {
 /// The audit of one state: each fault names its part IDs in document order (Geometry audit).
 pub fn audit(solids: &[Solid], cfg: &Config) -> Vec<Fault> {
     let n = solids.len();
-    let margin = cfg.touch.max(cfg.land).max(if cfg.seams.is_some() { NEAR } else { 0.0 });
+    let margin = cfg
+        .touch
+        .max(cfg.land)
+        .max(if cfg.seams.is_some() { NEAR } else { 0.0 });
     let pairs = near_pairs(solids, margin);
     let mut out = Vec::new();
     // A scene's coincident items, before the overlap pass, which then leaves the pair alone: one
@@ -443,7 +537,9 @@ pub fn audit(solids: &[Solid], cfg: &Config) -> Vec<Fault> {
         let (Some(a), Some(b)) = (&solids[i].seat, &solids[j].seat) else {
             continue;
         };
-        let apart = (0..8).map(|k| len(sub(a.corners[k], b.corners[k]))).fold(0.0, f64::max);
+        let apart = (0..8)
+            .map(|k| len(sub(a.corners[k], b.corners[k])))
+            .fold(0.0, f64::max);
         if a.geometry == b.geometry && apart <= SAME {
             twins.insert((i, j));
             out.push(Fault {
@@ -480,9 +576,19 @@ pub fn audit(solids: &[Solid], cfg: &Config) -> Vec<Fault> {
                 by: d,
                 fix: format!("move {} or {} apart by {:.4} m", a.id, b.id, d),
                 // The move is the later part's, unless that one alone is declared floating, as a floor is.
-                change: apart(a, b).map(|v| match cfg.floating.contains(&b.id) && !cfg.floating.contains(&a.id) {
-                    true => Change::Place { id: a.id.clone(), by: v.map(|x| -x), yaw: 0.0 },
-                    false => Change::Place { id: b.id.clone(), by: v, yaw: 0.0 },
+                change: apart(a, b).map(|v| {
+                    match cfg.floating.contains(&b.id) && !cfg.floating.contains(&a.id) {
+                        true => Change::Place {
+                            id: a.id.clone(),
+                            by: v.map(|x| -x),
+                            yaw: 0.0,
+                        },
+                        false => Change::Place {
+                            id: b.id.clone(),
+                            by: v,
+                            yaw: 0.0,
+                        },
+                    }
                 }),
             });
         }
@@ -498,7 +604,10 @@ pub fn audit(solids: &[Solid], cfg: &Config) -> Vec<Fault> {
                     code: UNLANDED,
                     ids: vec![s.id.clone()],
                     by: k as f64,
-                    fix: format!("end {}'s end {k} at ({:.4}, {:.4}, {:.4}) m on a part", s.id, e[0], e[1], e[2]),
+                    fix: format!(
+                        "end {}'s end {k} at ({:.4}, {:.4}, {:.4}) m on a part",
+                        s.id, e[0], e[1], e[2]
+                    ),
                     change: None,
                 });
             }
@@ -513,7 +622,11 @@ pub fn audit(solids: &[Solid], cfg: &Config) -> Vec<Fault> {
     for &i in &stack {
         held[i] = true;
     }
-    for (i, a) in solids.iter().enumerate().filter(|_| !cfg.relations.is_empty()) {
+    for (i, a) in solids
+        .iter()
+        .enumerate()
+        .filter(|_| !cfg.relations.is_empty())
+    {
         for (j, b) in solids.iter().enumerate().skip(i + 1) {
             if cfg.related(&a.id, &b.id) && !contact[i].contains(&j) {
                 contact[i].push(j);
@@ -536,8 +649,15 @@ pub fn audit(solids: &[Solid], cfg: &Config) -> Vec<Fault> {
                 code: FLOATING,
                 ids: vec![s.id.clone()],
                 by: 0.0,
-                fix: format!("rest {} on a part, relate it to one, or declare it floating", s.id),
-                change: drop.map(|t| Change::Place { id: s.id.clone(), by: [0.0, -t, 0.0], yaw: 0.0 }),
+                fix: format!(
+                    "rest {} on a part, relate it to one, or declare it floating",
+                    s.id
+                ),
+                change: drop.map(|t| Change::Place {
+                    id: s.id.clone(),
+                    by: [0.0, -t, 0.0],
+                    yaw: 0.0,
+                }),
             });
         }
     }
@@ -551,15 +671,25 @@ pub fn audit(solids: &[Solid], cfg: &Config) -> Vec<Fault> {
                 code: OFF_GRID,
                 ids: vec![s.id.clone()],
                 by: len(by),
-                fix: format!("snap {} by ({:.4}, {:.4}, {:.4}) m and {yaw:.2}° onto the {sub} m grid", s.id, by[0], by[1], by[2]),
-                change: Some(Change::Place { id: s.id.clone(), by, yaw }),
+                fix: format!(
+                    "snap {} by ({:.4}, {:.4}, {:.4}) m and {yaw:.2}° onto the {sub} m grid",
+                    s.id, by[0], by[1], by[2]
+                ),
+                change: Some(Change::Place {
+                    id: s.id.clone(),
+                    by,
+                    yaw,
+                }),
             });
         }
     }
     // Seams: between the listed sets, a boundary edge near another item's meets it. The fix moves
     // the item more seams name, since one moved piece opens a gap to each neighbour, else the later.
     if let Some((sets, max_gap)) = &cfg.seams {
-        let listed = |a: &str, b: &str| sets.iter().any(|[x, y]| x.contains(a) && y.contains(b) || x.contains(b) && y.contains(a));
+        let listed = |a: &str, b: &str| {
+            sets.iter()
+                .any(|[x, y]| x.contains(a) && y.contains(b) || x.contains(b) && y.contains(a))
+        };
         let edges = |i: usize| solids[i].seat.as_ref().map_or(&[][..], |s| &s.edges[..]);
         let gaps: Vec<(usize, usize, f64, V3)> = pairs
             .iter()
@@ -568,13 +698,24 @@ pub fn audit(solids: &[Solid], cfg: &Config) -> Vec<Fault> {
             .collect();
         let named = |i: usize| gaps.iter().filter(|g| g.0 == i || g.1 == i).count();
         for &(i, j, d, v) in &gaps {
-            let (id, by) = if named(i) > named(j) { (&solids[i].id, v.map(|x| -x)) } else { (&solids[j].id, v) };
+            let (id, by) = if named(i) > named(j) {
+                (&solids[i].id, v.map(|x| -x))
+            } else {
+                (&solids[j].id, v)
+            };
             out.push(Fault {
                 code: SEAM,
                 ids: vec![solids[i].id.clone(), solids[j].id.clone()],
                 by: d,
-                fix: format!("move {id} by ({:.4}, {:.4}, {:.4}) m to close the {d:.4} m gap", by[0], by[1], by[2]),
-                change: Some(Change::Place { id: id.clone(), by, yaw: 0.0 }),
+                fix: format!(
+                    "move {id} by ({:.4}, {:.4}, {:.4}) m to close the {d:.4} m gap",
+                    by[0], by[1], by[2]
+                ),
+                change: Some(Change::Place {
+                    id: id.clone(),
+                    by,
+                    yaw: 0.0,
+                }),
             });
         }
     }
@@ -606,7 +747,12 @@ pub const MIN_WIDTH: f64 = 1e-9;
 /// or the audit fails it; a pair that fails once is found and stops splitting. A part `reach`
 /// can't bound makes its samples' stretch an estimate; the other pairs are still bounded. What
 /// `MAX_PIECES` or `MIN_WIDTH` leaves open is an estimate too.
-pub fn sweep(samples: &[f64], cfg: &Config, state_at: &mut dyn FnMut(f64) -> Vec<Solid>, reach: &mut Reach<'_>) -> Swept {
+pub fn sweep(
+    samples: &[f64],
+    cfg: &Config,
+    state_at: &mut dyn FnMut(f64) -> Vec<Solid>,
+    reach: &mut Reach<'_>,
+) -> Swept {
     let mut out = Swept::default();
     let mut found: BTreeSet<(String, String)> = BTreeSet::new();
     let mut audit_at = |v: f64, out: &mut Swept, found: &mut BTreeSet<(String, String)>| {
@@ -624,7 +770,10 @@ pub fn sweep(samples: &[f64], cfg: &Config, state_at: &mut dyn FnMut(f64) -> Vec
     let mut vs: Vec<f64> = samples.to_vec();
     vs.sort_by(f64::total_cmp);
     vs.dedup();
-    let states: Vec<Vec<Solid>> = vs.iter().map(|&v| audit_at(v, &mut out, &mut found)).collect();
+    let states: Vec<Vec<Solid>> = vs
+        .iter()
+        .map(|&v| audit_at(v, &mut out, &mut found))
+        .collect();
     // Each piece: its stretch, its start's parts, and the samples' stretch it lies in.
     let mut pieces: Vec<(f64, f64, Vec<Solid>, usize)> = vs
         .windows(2)
@@ -667,7 +816,8 @@ pub fn sweep(samples: &[f64], cfg: &Config, state_at: &mut dyn FnMut(f64) -> Vec
     }
     for (k, w) in vs.windows(2).enumerate() {
         if !unbounded[k].is_empty() || unsettled[k] {
-            out.estimates.push(([w[0], w[1]], unbounded[k].iter().cloned().collect()));
+            out.estimates
+                .push(([w[0], w[1]], unbounded[k].iter().cloned().collect()));
         }
     }
     out.failed.sort_by(|x, y| x.0.total_cmp(&y.0));
@@ -683,26 +833,42 @@ mod tests {
     const I3: [V3; 3] = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
 
     fn cube(id: &str, c: V3, half: V3) -> Solid {
-        Solid { id: id.into(), shapes: vec![Shape::Obb { c, axes: I3, half }], ends: vec![], moved: false, seat: None }
+        Solid {
+            id: id.into(),
+            shapes: vec![Shape::Obb { c, axes: I3, half }],
+            ends: vec![],
+            moved: false,
+            seat: None,
+        }
     }
 
     #[test]
     fn a_stack_passes_and_each_fault_names_its_parts() {
         let base = cube("base", [0.0, 0.05, 0.0], [0.5, 0.05, 0.5]);
         let top = cube("top", [0.0, 0.15, 0.0], [0.1, 0.05, 0.1]);
-        let cfg = Config { floating: ["base".to_string()].into(), ..Config::default() };
+        let cfg = Config {
+            floating: ["base".to_string()].into(),
+            ..Config::default()
+        };
         assert!(audit(&[base.clone(), top.clone()], &cfg).is_empty());
         let sunk = cube("sunk", [0.3, 0.12, 0.0], [0.1, 0.05, 0.1]);
         let loose = cube("loose", [2.0, 1.0, 0.0], [0.1, 0.1, 0.1]);
         let wire = Solid {
             id: "wire".into(),
-            shapes: vec![Shape::Capsule { a: [0.0, 0.2, 0.0], b: [0.0, 0.6, 0.0], r: 0.01 }],
+            shapes: vec![Shape::Capsule {
+                a: [0.0, 0.2, 0.0],
+                b: [0.0, 0.6, 0.0],
+                r: 0.01,
+            }],
             ends: vec![[0.0, 0.2, 0.0], [0.0, 0.6, 0.0]],
             moved: false,
             seat: None,
         };
         let f = audit(&[base, top, sunk, loose, wire], &cfg);
-        let got: Vec<(&str, Vec<&str>)> = f.iter().map(|f| (f.code, f.ids.iter().map(String::as_str).collect())).collect();
+        let got: Vec<(&str, Vec<&str>)> = f
+            .iter()
+            .map(|f| (f.code, f.ids.iter().map(String::as_str).collect()))
+            .collect();
         assert_eq!(
             got,
             vec![
@@ -724,10 +890,17 @@ mod tests {
         };
         let samples = [0.0, 0.25, 0.5, 0.75, 1.0];
         assert!(samples.iter().all(|&s| lift(s) < 0.001));
-        let cfg = Config { floating: ["shelf".to_string()].into(), ..Config::default() };
+        let cfg = Config {
+            floating: ["shelf".to_string()].into(),
+            ..Config::default()
+        };
         // The lift's interval form over [a, b]: its peak where the stretch holds 0.6.
         let mut reach = |a: f64, b: f64, _: &[Solid]| {
-            let hi = if a <= 0.6 && 0.6 <= b { 0.05 } else { lift(a).max(lift(b)) };
+            let hi = if a <= 0.6 && 0.6 <= b {
+                0.05
+            } else {
+                lift(a).max(lift(b))
+            };
             let lo = lift(a).min(lift(b));
             vec![Some(hi - lo), Some(0.0)]
         };
@@ -737,7 +910,9 @@ mod tests {
         assert_eq!(faults[0].ids, vec!["lid", "shelf"]);
         assert!(swept.estimates.is_empty());
         // A part no form bounds leaves its stretches an estimate.
-        let swept = sweep(&samples, &cfg, &mut |s| state(s), &mut |_, _, _| vec![None, Some(0.0)]);
+        let swept = sweep(&samples, &cfg, &mut |s| state(s), &mut |_, _, _| {
+            vec![None, Some(0.0)]
+        });
         assert!(swept.failed.is_empty());
         assert_eq!(swept.estimates.len(), 4);
         assert_eq!(swept.estimates[0].1, vec!["lid"]);
@@ -747,13 +922,19 @@ mod tests {
     /// the audit's one fault on it with the move its fix names, which, made, leaves no fault.
     fn moved_clear(c: V3, half: V3, floor_first: bool) -> (&'static str, V3) {
         let scene = |c: V3| {
-            let mut parts = vec![cube("floor", [0.0, -0.1, 0.0], [3.0, 0.1, 3.0]), cube("part", c, half)];
+            let mut parts = vec![
+                cube("floor", [0.0, -0.1, 0.0], [3.0, 0.1, 3.0]),
+                cube("part", c, half),
+            ];
             if !floor_first {
                 parts.reverse();
             }
             parts
         };
-        let cfg = Config { floating: ["floor".to_string()].into(), ..Config::default() };
+        let cfg = Config {
+            floating: ["floor".to_string()].into(),
+            ..Config::default()
+        };
         let f = audit(&scene(c), &cfg);
         assert_eq!(f.len(), 1, "{f:?}");
         let Some(Change::Place { id, by, yaw }) = &f[0].change else {
@@ -783,18 +964,47 @@ mod tests {
 
     /// A kit sheet lying flat, 1 m square about `origin`, with its yaw and the boundary edges given.
     fn sheet(id: &str, origin: V3, yaw: f64, edges: Vec<[V3; 2]>) -> Solid {
-        let seat = Seat { geometry: crate::schedule::Key::default(), corners: [origin; 8], origin, yaw, edges };
-        Solid { seat: Some(seat), ..cube(id, origin, [0.5, 0.0, 0.5]) }
+        let seat = Seat {
+            geometry: crate::schedule::Key::default(),
+            corners: [origin; 8],
+            origin,
+            yaw,
+            edges,
+        };
+        Solid {
+            seat: Some(seat),
+            ..cube(id, origin, [0.5, 0.0, 0.5])
+        }
     }
 
     #[test]
     fn a_kit_piece_turned_off_a_quarter_turn_is_off_its_grid() {
         let kit: BTreeSet<String> = ["turned".to_string(), "square".to_string()].into();
-        let cfg = Config { floating: kit.clone(), grid: Some((0.5, kit)), ..Config::default() };
-        let f = audit(&[sheet("turned", [1.0, 0.0, 2.5], 100.0, vec![]), sheet("square", [4.0, 0.0, 0.0], -90.0, vec![])], &cfg);
+        let cfg = Config {
+            floating: kit.clone(),
+            grid: Some((0.5, kit)),
+            ..Config::default()
+        };
+        let f = audit(
+            &[
+                sheet("turned", [1.0, 0.0, 2.5], 100.0, vec![]),
+                sheet("square", [4.0, 0.0, 0.0], -90.0, vec![]),
+            ],
+            &cfg,
+        );
         assert_eq!(f.len(), 1, "{f:?}");
-        assert_eq!((f[0].code, f[0].ids.as_slice()), (OFF_GRID, &["turned".to_string()][..]));
-        assert_eq!(f[0].change, Some(Change::Place { id: "turned".into(), by: [0.0; 3], yaw: -10.0 }));
+        assert_eq!(
+            (f[0].code, f[0].ids.as_slice()),
+            (OFF_GRID, &["turned".to_string()][..])
+        );
+        assert_eq!(
+            f[0].change,
+            Some(Change::Place {
+                id: "turned".into(),
+                by: [0.0; 3],
+                yaw: -10.0
+            })
+        );
     }
 
     #[test]
@@ -802,22 +1012,52 @@ mod tests {
         // Three sheets edge to edge along x; the middle one, first in the document, sits 2 mm up.
         let side = |x: f64, y: f64| [[x, y, 0.0], [x, y, 1.0]];
         let pieces = [
-            sheet("mid", [1.5, 0.002, 0.5], 0.0, vec![side(1.0, 0.002), side(2.0, 0.002)]),
+            sheet(
+                "mid",
+                [1.5, 0.002, 0.5],
+                0.0,
+                vec![side(1.0, 0.002), side(2.0, 0.002)],
+            ),
             sheet("left", [0.5, 0.0, 0.5], 0.0, vec![side(1.0, 0.0)]),
             sheet("right", [2.5, 0.0, 0.5], 0.0, vec![side(2.0, 0.0)]),
         ];
         let kit: BTreeSet<String> = pieces.iter().map(|p| p.id.clone()).collect();
-        let cfg = Config { floating: kit.clone(), seams: Some((vec![[kit.clone(), kit]], 0.001)), ..Config::default() };
-        let got: Vec<_> = audit(&pieces, &cfg).into_iter().map(|f| (f.code, f.ids.join("+"), f.by, f.change)).collect();
-        let lower = Some(Change::Place { id: "mid".into(), by: [0.0, -0.002, 0.0], yaw: 0.0 });
-        assert_eq!(got, vec![(SEAM, "mid+left".to_string(), 0.002, lower.clone()), (SEAM, "mid+right".to_string(), 0.002, lower)]);
+        let cfg = Config {
+            floating: kit.clone(),
+            seams: Some((vec![[kit.clone(), kit]], 0.001)),
+            ..Config::default()
+        };
+        let got: Vec<_> = audit(&pieces, &cfg)
+            .into_iter()
+            .map(|f| (f.code, f.ids.join("+"), f.by, f.change))
+            .collect();
+        let lower = Some(Change::Place {
+            id: "mid".into(),
+            by: [0.0, -0.002, 0.0],
+            yaw: 0.0,
+        });
+        assert_eq!(
+            got,
+            vec![
+                (SEAM, "mid+left".to_string(), 0.002, lower.clone()),
+                (SEAM, "mid+right".to_string(), 0.002, lower)
+            ]
+        );
     }
 
     #[test]
     fn a_rotated_box_and_a_capsule_meet_only_when_they_do() {
         let s = sqrt(0.5);
-        let turned = Shape::Obb { c: [0.0; 3], axes: [[s, s, 0.0], [-s, s, 0.0], [0.0, 0.0, 1.0]], half: [0.5; 3] };
-        let rod = |x: f64| Shape::Capsule { a: [x, -1.0, 0.0], b: [x, 1.0, 0.0], r: 0.05 };
+        let turned = Shape::Obb {
+            c: [0.0; 3],
+            axes: [[s, s, 0.0], [-s, s, 0.0], [0.0, 0.0, 1.0]],
+            half: [0.5; 3],
+        };
+        let rod = |x: f64| Shape::Capsule {
+            a: [x, -1.0, 0.0],
+            b: [x, 1.0, 0.0],
+            r: 0.05,
+        };
         assert!(depth(&turned, &rod(0.75)) > 0.0);
         assert!(depth(&turned, &rod(0.8)) < 0.0);
     }

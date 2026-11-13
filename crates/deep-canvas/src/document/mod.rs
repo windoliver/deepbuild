@@ -1021,10 +1021,24 @@ mod tests {
             .filter(|i| i.path.starts_with("assemblies/") || i.path.starts_with("items/a/parent"))
             .map(|i| format!("{} {}", i.code, i.path))
             .collect();
-        assert!(found.contains(&"out_of_range assemblies/a5/parent".to_string()), "{found:?}");
-        assert!(found.contains(&"cycle assemblies/x/parent".to_string()), "{found:?}");
-        assert!(found.contains(&"ref_unresolved assemblies/lost/parent".to_string()), "{found:?}");
-        assert!(!found.iter().any(|f| f.contains("a4") || f.contains("items/a/parent")), "{found:?}");
+        assert!(
+            found.contains(&"out_of_range assemblies/a5/parent".to_string()),
+            "{found:?}"
+        );
+        assert!(
+            found.contains(&"cycle assemblies/x/parent".to_string()),
+            "{found:?}"
+        );
+        assert!(
+            found.contains(&"ref_unresolved assemblies/lost/parent".to_string()),
+            "{found:?}"
+        );
+        assert!(
+            !found
+                .iter()
+                .any(|f| f.contains("a4") || f.contains("items/a/parent")),
+            "{found:?}"
+        );
     }
 
     #[test]

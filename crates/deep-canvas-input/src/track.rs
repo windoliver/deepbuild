@@ -170,9 +170,9 @@ impl Track {
 
     /// How many of `control`'s entries are at or before `t`.
     pub fn count_at(&self, control: &str, t: i64) -> usize {
-        self.by_control.get(control).map_or(0, |list| {
-            list.partition_point(|&i| self.entries[i].t <= t)
-        })
+        self.by_control
+            .get(control)
+            .map_or(0, |list| list.partition_point(|&i| self.entries[i].t <= t))
     }
 
     /// `control`'s entries, in time order.

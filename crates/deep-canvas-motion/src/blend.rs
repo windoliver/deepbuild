@@ -6,7 +6,15 @@ use crate::doc::{Blend, ValueType};
 use crate::quat::{self, Arc};
 
 /// `clip` over `slots` under `blend` at `weight`; `reference` is an add's reference pose.
-pub fn over(blend: Blend, ty: ValueType, arc: Arc, weight: f64, clip: &[f64], reference: &[f64], slots: &mut [f64]) {
+pub fn over(
+    blend: Blend,
+    ty: ValueType,
+    arc: Arc,
+    weight: f64,
+    clip: &[f64],
+    reference: &[f64],
+    slots: &mut [f64],
+) {
     if ty == ValueType::Quat {
         return turn(blend, arc, weight, clip, reference, slots);
     }
@@ -20,7 +28,11 @@ pub fn over(blend: Blend, ty: ValueType, arc: Arc, weight: f64, clip: &[f64], re
         Blend::Replace | Blend::Mix if weight == 1.0 => slots.copy_from_slice(clip),
         Blend::Replace | Blend::Mix => {
             for (s, c) in slots.iter_mut().zip(clip) {
-                let change = if ty == ValueType::Angle { shortest(*c - *s) } else { c - *s };
+                let change = if ty == ValueType::Angle {
+                    shortest(*c - *s)
+                } else {
+                    c - *s
+                };
                 *s += weight * change;
             }
         }
@@ -46,7 +58,14 @@ fn turn(blend: Blend, arc: Arc, weight: f64, clip: &[f64], reference: &[f64], sl
             if q == reference {
                 return;
             }
-            quat::mul(now, quat::slerp(quat::IDENTITY, quat::mul(quat::inverse(reference), q), weight))
+            quat::mul(
+                now,
+                quat::slerp(
+                    quat::IDENTITY,
+                    quat::mul(quat::inverse(reference), q),
+                    weight,
+                ),
+            )
         }
         Blend::Multiply => quat::mul(now, quat::slerp(quat::IDENTITY, q, weight)),
     };
