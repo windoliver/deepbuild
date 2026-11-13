@@ -74,6 +74,10 @@
     },
     "crates/deep-app/Cargo.toml": {
       "dependencies": {
+        "deep-images": {
+          "spec": "* path=../deep-images",
+          "why": "Issue #1486: the one image service: levels, a visible-first queue and a byte budget, shared with the canvas renderers."
+        },
         "deep-canvas-cells": {
           "spec": "* path=../deep-canvas-cells",
           "why": "Issue #402: the cell grid's emulator and palette, whose screen the app paints row by row in the spike feeding a busy terminal's changes to it."
@@ -153,6 +157,10 @@
         "objc2": {
           "spec": "^0.6",
           "why": "Issue #337: the menu-bar count; gpui-kit has no status item. Already in gpui's tree."
+        },
+        "accesskit_macos": {
+          "spec": "^0.26",
+          "why": "Issue #1462: the window forwards an assistive client's question of what is focused to gpui's view, so the row or control the keys are on is what VoiceOver and Full Keyboard Access follow (the version gpui uses, vendored)."
         },
         "objc2-app-kit": {
           "spec": "^0.3",
@@ -928,6 +936,10 @@
     },
     "crates/deep-marks-render/Cargo.toml": {
       "dependencies": {
+        "deep-images": {
+          "spec": "* path=../deep-images",
+          "why": "Issue #1486: the one image service: levels, a visible-first queue and a byte budget."
+        },
         "deep-canvas": {
           "spec": "* path=../deep-canvas",
           "why": "Issue #392: the `check` subcommand runs the document check, with the honest-numbers and status-color rules."
@@ -1112,6 +1124,10 @@
         }
       },
       "dependencies": {
+        "deep-images": {
+          "spec": "* path=../deep-images",
+          "why": "Issue #1486: the one image service: levels, a visible-first queue and a byte budget."
+        },
         "deep-canvas-cells": {
           "spec": "* path=../deep-canvas-cells",
           "why": "Issue #402: the cells canvas module in the r2 build set and up, and the terminal emulator its panel host feeds a program's output through."
@@ -1388,6 +1404,18 @@
     },
     "crates/deep-gpu-layer/Cargo.toml": {
       "dependencies": {
+        "deep-canvas-physics": {
+          "spec": "* path=../deep-canvas-physics",
+          "why": "Issue #1921: a scene's physics worlds, read for the bake whose outputs write its instancers' columns."
+        },
+        "deep-physics-rapier": {
+          "spec": "* path=../deep-physics-rapier",
+          "why": "Issue #1921: the pinned Rapier backend bakes a scene's physics worlds so their outputs write its instancers' columns."
+        },
+        "deep-logic": {
+          "spec": "* path=../deep-logic",
+          "why": "Issue #537: a scene's logic items, run so their arrays feed its instancers, plates and lines."
+        },
         "deep-gpu": {
           "spec": "* path=../deep-gpu",
           "why": "Issue #377: the GPU layer the binary drives."
@@ -1870,6 +1898,10 @@
     },
     "crates/deep-codecs/Cargo.toml": {
       "dependencies": {
+        "deep-canvas-cells": {
+          "spec": "* path=../deep-canvas-cells",
+          "why": "Issue #1967: terminal recordings, converted at import by the cells module's emulator."
+        },
         "serde_json": {
           "spec": "^1",
           "why": "Issue #498: the worker's jobs and replies, one JSON line each; already in the tree."
@@ -1999,6 +2031,12 @@
       }
     },
     "crates/deep-physics-rapier/Cargo.toml": {
+      "dev-dependencies": {
+        "simba": {
+          "spec": "=0.10.2",
+          "why": "Issue #2012: Rapier's own tests/simd_backend_parity.rs names simba's SIMD types; the version and wide feature are the ones rapier3d 0.36.1 already resolves."
+        }
+      },
       "dependencies": {
         "deep-canvas-physics": {
           "spec": "* path=../deep-canvas-physics",
@@ -2023,6 +2061,74 @@
         "serde_json": {
           "spec": "^1",
           "why": "Issue #2009: deep-physics's JSON lines. Already in the workspace tree."
+        }
+      }
+    },
+    "crates/deep-images/Cargo.toml": {
+      "dependencies": {
+        "deep-canvas": {
+          "spec": "* path=../deep-canvas",
+          "why": "Issue #1486: the pinned sRGB transfer the reduced image levels average through, in linear light."
+        },
+        "image": {
+          "spec": "^0.25",
+          "why": "Issue #1486: reads PNG and JPEG headers before applying decode caps, then decodes the source pixels for the shared image service."
+        },
+        "sha2": {
+          "spec": "^0.10",
+          "why": "Issue #1486: verifies source images against their content hashes and names the reduced levels stored by SHA-256."
+        }
+      }
+    },
+    "crates/deep-typeset/Cargo.toml": {
+      "dependencies": {
+        "mitex": {
+          "spec": "* git+https://github.com/mitex-rs/mitex?rev=51f7210e026ab05d037125247e92d4d023d8a80d",
+          "why": "Issue #220: the typst-mitex job tool converts a formula's LaTeX source to Typst, pinned to the converter used by its bundled scope files."
+        },
+        "mitex-spec-gen": {
+          "spec": "* git+https://github.com/mitex-rs/mitex?rev=51f7210e026ab05d037125247e92d4d023d8a80d",
+          "why": "Issue #220: the spec mitex converts by, from its own prebuilt file, never regenerated by a typst found on PATH."
+        },
+        "serde_json": {
+          "spec": "^1",
+          "why": "Issue #220: the typeset job's params and probe cross the WebAssembly tool boundary as JSON."
+        },
+        "ttf-parser": {
+          "spec": "^0.25",
+          "why": "Issue #220: reads each typeset glyph's outline for the tool's outline-only SVG."
+        },
+        "typst": {
+          "spec": "=0.15.1",
+          "why": "Issue #220: compiles the formula and its tagged parts together with the fonts and scope files the job supplies, pinned to Typst 0.15.1."
+        },
+        "typst-layout": {
+          "spec": "=0.15.1",
+          "why": "Issue #220: the PagedDocument layout whose glyph positions the typeset tool exports to SVG, at the same version as Typst."
+        }
+      }
+    },
+    "tests/acceptance/544/wat/Cargo.toml": {
+      "dependencies": {
+        "wat": {
+          "spec": "=1.263.0",
+          "why": "Issue #544's blind suite: its own fixture assembler converts WebAssembly text to bytes, apart from the logic and sandbox code under test."
+        },
+        "wasmparser": {
+          "spec": "=0.263.0",
+          "why": "Issue #544's blind suite: validates every fixture module before the independent assembler writes it."
+        }
+      }
+    },
+    "tests/acceptance/545/wat/Cargo.toml": {
+      "dependencies": {
+        "wat": {
+          "spec": "=1.263.0",
+          "why": "Issue #545's blind suite: its own fixture assembler converts WebAssembly text to bytes, apart from the logic and sandbox code under test."
+        },
+        "wasmparser": {
+          "spec": "=0.263.0",
+          "why": "Issue #545's blind suite: validates every fixture module before the independent assembler writes it."
         }
       }
     },
