@@ -314,12 +314,15 @@ export class Landing {
     if (merged.status !== 200) return undefined;
     if (open.length) await this.call('PATCH', `/repos/${s.repo}/issues/${c.issue}`, { state: 'open' }, gate);
     const said = isObj(merged.body) && typeof merged.body.sha === 'string' ? merged.body.sha : '';
+    // Landed as the forge merged it, recorded at once (#1332): the forge may close the issue at the merge, and the
+    // record holds the landing as soon as it does. The read-back below stops landings if main holds another tree.
+    const took = SHA.test(said) ? said : null;
+    await this.step('landed', s.repo, c, { head, main: took, commit: took, tree: null, claim: judged.claim, outcome: judged.outcome, open });
+    delete s.changes[c.pr];
     await this.fetch(checkout, []);
     const main = await must(checkout, ['rev-parse', 'refs/remotes/origin/main']);
     // The planted wrong program takes the forge's merged state for the landed tree, with no read-back.
     const read = this.o.plant === 'trusts-forge-merged' ? judged.tree : await must(checkout, ['rev-parse', `${main}^{tree}`]);
-    await this.step('landed', s.repo, c, { head, main, commit: main, tree: read, claim: judged.claim, outcome: judged.outcome, open });
-    delete s.changes[c.pr];
     if (read !== judged.tree) {
       const files = (await must(checkout, ['diff', '--name-only', judged.tree, read])).split('\n').filter(Boolean);
       this.save(s);
