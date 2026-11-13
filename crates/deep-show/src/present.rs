@@ -397,6 +397,8 @@ pub(crate) struct Presenting {
     /// The stage number typed so far, which Enter takes.
     digits: String,
     notice: Option<String>,
+    /// When the notice was set: it shows for [`NOTICE_FOR`].
+    notice_at: i64,
     /// When Shift+P opened the presenter view.
     presenter: Option<i64>,
 }
@@ -489,6 +491,9 @@ const SHADOWED: [&str; 13] = [
     "9",
 ];
 
+/// How long a notice shows.
+const NOTICE_FOR: i64 = 3 * deep_canvas::grammar::FLICKS_PER_SECOND;
+
 /// The notice for a stage number that lies behind: only back goes back.
 const BEHIND: &str = "That stage is behind you: press back (←) to go back to it.";
 
@@ -549,6 +554,7 @@ impl Hub<'_> {
             blank: false,
             digits: String::new(),
             notice: None,
+            notice_at: 0,
             presenter: None,
         });
     }
@@ -639,7 +645,9 @@ impl Hub<'_> {
                         json!({"goto": s.marker})
                     }
                     Some(_) => {
-                        self.present.as_mut()?.notice = Some(BEHIND.to_string());
+                        let now = self.now;
+                        let p = self.present.as_mut()?;
+                        (p.notice, p.notice_at) = (Some(BEHIND.to_string()), now);
                         return Some(reply(Vec::new()));
                     }
                     None => return Some(reply(Vec::new())),
@@ -665,7 +673,7 @@ impl Hub<'_> {
                     return json!({"present": {"on": false, "display": null, "stage": null, "number": null, "blank": false, "notice": null}});
                 };
                 let on = p.ended.is_none();
-                let (display, blank, notice) = (p.display.clone(), p.blank, p.notice.clone());
+                let (display, blank, notice) = (p.display.clone(), p.blank, self.notice_now());
                 let path = self.present_path().unwrap_or_default();
                 let stage = Self::stage_of(&path, self.now);
                 let mut out = json!({"present": {"on": on, "display": display, "stage": stage.map(|s| s.marker.clone()), "number": stage.and_then(|s| s.stage),
@@ -694,7 +702,7 @@ impl Hub<'_> {
         if p.presenter.is_none() {
             return json!({"presenter": null});
         }
-        let (doc, shown_on, since) = (p.doc.clone(), p.display.clone(), p.since);
+        let (doc, shown_on, since, blank) = (p.doc.clone(), p.display.clone(), p.since, p.blank);
         let display = self
             .placement
             .display_uuids()
@@ -718,7 +726,8 @@ impl Hub<'_> {
             _ => None,
         };
         let mut out = json!({"presenter": {"display": display, "stage": stage.marker, "number": stage.stage, "name": stage.name, "notes": stage.notes,
-            "next": next.as_ref().map(|n| json!({"stage": n.marker, "hash": hash})), "elapsed": self.now - since}});
+            "next": next.as_ref().map(|n| json!({"stage": n.marker, "hash": hash})), "elapsed": self.now - since,
+            "blank": blank, "notice": self.notice_now()}});
         if let (Some(size), Some(d)) = (pixels, &current) {
             let stages = path.stops.iter().filter(|s| s.stage.is_some()).count();
             out["presenter"]["picture"] =
@@ -772,8 +781,43 @@ impl Hub<'_> {
         )
     }
 
+    /// The notice present mode shows now: one set in the last [`NOTICE_FOR`].
+    fn notice_now(&self) -> Option<String> {
+        let p = self.present.as_ref()?;
+        p.notice
+            .clone()
+            .filter(|_| self.now < p.notice_at + NOTICE_FOR)
+    }
+
+    /// `items` laid out by the canvas on a board `points` wide and tall, drawn at `size` pixels.
+    fn board_rgba(
+        &mut self,
+        id: &str,
+        items: Vec<Value>,
+        points: [f64; 2],
+        size: [u16; 2],
+    ) -> Option<(Vec<u8>, [u16; 2])> {
+        let items: Map<String, Value> = items
+            .into_iter()
+            .map(|i| (i["id"].as_str().unwrap_or_default().to_string(), i))
+            .collect();
+        let board = json!({"format": 1, "id": id, "profile": "board", "title": "Present mode",
+            "description": "What present mode draws for the presenter.", "size": points, "items": items});
+        let writer = deep_canvas::show::Writer {
+            kind: deep_canvas::show::WriterKind::Shell,
+            id: "presenter".into(),
+        };
+        let stamped = deep_canvas::show::stamp(board, id, &writer, "Present mode").ok()?;
+        let (form, _) = self.drawing_form(&stamped);
+        let session = self.evaluated(&form, 0);
+        let painted = crate::frames::drawing_of(&self.sched, &session)?;
+        let (rgba, _, size) = self.canonical_rgba(&painted, Some(size), true).ok()?;
+        Some((rgba, size))
+    }
+
     /// What present mode shows on its display now, `size` pixels: the piece at the clock,
-    /// letterboxed in black, or black while blanked.
+    /// letterboxed in black, or black while blanked; with no presenter view open, a notice shows
+    /// in a band along its foot for [`NOTICE_FOR`].
     fn presented_picture(&mut self, size: [u16; 2]) -> Value {
         let Some(p) = self.present.as_ref() else {
             return Value::Null;
@@ -788,6 +832,21 @@ impl Hub<'_> {
             if let Some((rgba, at)) = self.frame_at(&form, now, fit(&form, size)) {
                 let (x, y) = ((size[0] - at[0]) / 2, (size[1] - at[1]) / 2);
                 paste(&mut out, size, &rgba, at, usize::from(x), usize::from(y));
+            }
+        }
+        let open = self.present.as_ref().is_some_and(|p| p.presenter.is_some());
+        if let (Some(words), false) = (self.notice_now(), open) {
+            let w = f64::from(size[0]) / 2.0;
+            let band = [size[0], size[1] / 12];
+            let items = vec![
+                json!({"id": "ground", "kind": "rect@1", "name": "Ground", "order": "a0", "params": {"box": [0, 0, w, f64::from(band[1]) / 2.0], "paint": {"fill": {"role": "ground"}}}}),
+                json!({"id": "notice", "kind": "text@1", "name": "Notice", "order": "a1", "at": {"pos": [24, 12, 0]},
+                    "params": {"text": words, "font": "body", "size": 20, "box": {"w": w - 48.0, "h": 30}, "align": "start"}}),
+            ];
+            if let Some((rgba, at)) =
+                self.board_rgba("present-notice", items, [w, f64::from(band[1]) / 2.0], band)
+            {
+                paste(&mut out, size, &rgba, at, 0, usize::from(size[1] - at[1]));
             }
         }
         self.stored_picture(out, size)
@@ -840,41 +899,28 @@ impl Hub<'_> {
                 168.0,
                 1.0,
             ),
-            text("notes_label", "Notes".to_string(), 18.0, 48.0, 248.0, 1.0),
-            text(
-                "notes",
-                view["notes"].as_str().unwrap_or_default().to_string(),
-                28.0,
-                48.0,
-                280.0,
-                8.0,
-            ),
         ];
+        // What the presenter must know of the room, a line of two each: a blanked display, and
+        // a notice. The notes go below them.
+        let mut y = 204.0;
+        if view["blank"] == true {
+            let words = "Blank: the room sees black. Press B to show the stage.".to_string();
+            items.push(text("blanked", words, 18.0, 48.0, y, 2.0));
+            y += 56.0;
+        }
+        if let Some(words) = view["notice"].as_str() {
+            items.push(text("notice", words.to_string(), 18.0, 48.0, y, 2.0));
+            y += 56.0;
+        }
+        let y = y.max(248.0);
+        items.push(text("notes_label", "Notes".to_string(), 18.0, 48.0, y, 1.0));
+        let notes = view["notes"].as_str().unwrap_or_default().to_string();
+        items.push(text("notes", notes, 28.0, 48.0, y + 32.0, 8.0));
         if let Some(n) = next {
             let label = format!("Next: stage {}, {}", n.stage.unwrap_or(0), n.name);
             items.push(text("next_label", label, 18.0, w * 0.52, 248.0, 1.0));
         }
-        let items: Map<String, Value> = items
-            .into_iter()
-            .map(|i| (i["id"].as_str().unwrap_or_default().to_string(), i))
-            .collect();
-        let board = json!({"format": 1, "id": "presenter-view", "profile": "board", "title": "The presenter view",
-            "description": "What the presenter sees on the other display while a stage holds.", "size": [w, h], "items": items});
-        let writer = deep_canvas::show::Writer {
-            kind: deep_canvas::show::WriterKind::Shell,
-            id: "presenter".into(),
-        };
-        let Ok(stamped) =
-            deep_canvas::show::stamp(board, "presenter-view", &writer, "Presenter view")
-        else {
-            return Value::Null;
-        };
-        let (form, _) = self.drawing_form(&stamped);
-        let session = self.evaluated(&form, 0);
-        let Some(painted) = crate::frames::drawing_of(&self.sched, &session) else {
-            return Value::Null;
-        };
-        let Ok((mut rgba, _, size)) = self.canonical_rgba(&painted, Some(size), true) else {
+        let Some((mut rgba, size)) = self.board_rgba("presenter-view", items, [w, h], size) else {
             return Value::Null;
         };
         if let Some(n) = next {
