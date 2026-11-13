@@ -601,6 +601,8 @@ alone.push('tests/acceptance/450/');
 alone.push('tests/acceptance/239/', 'tests/look-type.test.ts');
 timed.push('tests/acceptance/239/seek-play.test.ts', 'tests/acceptance/239/budget.test.ts', 'tests/acceptance/239/off-reference.test.ts');
 slow.push('tests/acceptance/239/exports.test.ts', 'tests/acceptance/239/checks.test.ts');
+// #507's files each build deep-show with cargo; ac6 reads PDFs with poppler, ac3 renders a 50 s session's sound.
+alone.push('tests/acceptance/507/', 'tests/acceptance/507-oracle/');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
