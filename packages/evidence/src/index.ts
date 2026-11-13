@@ -225,9 +225,10 @@ export async function openEvidenceStore(options: EvidenceStoreOptions = {}): Pro
     await writeFile(temp, data);
     await rename(temp, path);
   }
-  /** Syncs what is at the path now, and says which file that was. */
-  async function syncOne(path: string): Promise<string> {
-    const handle = await open(path, 'r');
+  /** Syncs what is at the path now, and says which file that was; nothing when it is gone. */
+  async function syncOne(path: string): Promise<string | undefined> {
+    const handle = await open(path, 'r').catch((error: NodeJS.ErrnoException) => { if (error.code !== 'ENOENT') throw error; });
+    if (!handle) return undefined;
     try {
       const stamp = stampOf(await handle.stat({ bigint: true }));
       await handle.sync();
@@ -405,7 +406,7 @@ export async function openEvidenceStore(options: EvidenceStoreOptions = {}): Pro
         const above = folders.some((folder) => !synced.has(folder)) ? [root, ...(synced.has(dirname(root)) ? [] : [dirname(root)])] : [];
         await Promise.all([...folders, ...above].map(syncOne));
         for (const path of [...folders, ...above]) synced.set(path, '');
-        for (const [i, path] of files.entries()) synced.set(path, stamps[i]!);
+        for (const [i, path] of files.entries()) { const stamp = stamps[i]; if (stamp !== undefined) synced.set(path, stamp); }
       }
     },
 
