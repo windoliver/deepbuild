@@ -1460,6 +1460,29 @@
       "criteria": [
         "#509.39975b5a"
       ]
+    },
+    {
+      "id": "canvas-game-state",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "game-state"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "compare_ms": 0.2,
+        "remap_row_us": 20,
+        "remap_layer_ms": 1,
+        "upload_slots_ms": 0.5,
+        "overlay_upload_ms": 0.1,
+        "fit_check_ms": 2000,
+        "idle_steps": 0
+      },
+      "initialReason": "Issue #538 first measurement: the merge base reports none of live game state's costs and has no such task. Release deep-show's frames with timings read each logic step's comparison of the 1 MiB a program writes (compares) and each remap of a 9,216-row atlas layer, one row a step and every row on its first frame and five seeks back (remaps[].ms); deep_show with timing reads the fit check over a 5,000-key copy table in en, fr and de (timing.copy_fit_ms); release deep-gpu's view3d with timings reads each frame's upload of 1,000 changed slots of a 100,000-slot instancer and of a 256 x 256 terrain overlay (upload_ms); and a still document with no logic columns counts the operators its frames after the first run past a bare document's (the scheduler's ran). Each reading is the median of its frames, five runs after a warm-up one, each a fresh process per binary. canvas.mjs judge holds the times on a reference Mac and the count anywhere. p50 and peak memory of the whole command get a 50% margin against the merge base once main has this task.",
+      "criteria": [
+        "#538.ed6f8052"
+      ]
     }
   ]
 }

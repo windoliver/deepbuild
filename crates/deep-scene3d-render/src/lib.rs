@@ -297,6 +297,10 @@ pub struct Counts {
     pub local_maps: Vec<local::Report>,
     /// #537: per terrain overlay (`<plate>/<layer>`), the runs of rows this frame wrote.
     pub overlay_rows: BTreeMap<String, Vec<[u32; 2]>>,
+    /// #538: per instancer fed by logic and per plate with overlays, the CPU time in ms from the
+    /// start of writing this frame's changed slot records (or overlay cells) to the return of the
+    /// queue's write of them: a proof reading of the upload's cost.
+    pub upload_ms: BTreeMap<String, f64>,
 }
 
 /// The key light's direction, toward the light: what the solids are shaded by and what casts the
@@ -4605,6 +4609,7 @@ impl Renderer {
         if self.tints.upload(device, &scene.tints, keep) {
             self.rebind_lights(device);
         }
+        self.counts.upload_ms.extend(self.tints.upload_ms.clone());
         for layer in &scene.layers {
             self.prepare_batch(device, layer, &scene.camera);
         }
@@ -6282,7 +6287,13 @@ impl Renderer {
         batch.casters.retain(|_, set| set.count > 0);
         let mut fed_uploads: BTreeMap<String, BTreeSet<u32>> = BTreeMap::new();
         for (key, set) in batch.solids.iter_mut().chain(batch.casters.iter_mut()) {
+            let started = std::time::Instant::now();
             set.finish(device, &mut next, &mut written);
+            if layer.fed.contains_key(&key.3) {
+                let owner = set.owners.first().and_then(|o| o.split('#').next()).unwrap_or_default();
+                let ms = started.elapsed().as_secs_f64() * 1000.0;
+                *self.counts.upload_ms.entry(owner.to_string()).or_default() += ms;
+            }
             for (item, e) in set.uploaded_elements().filter(|_| key.3 != 0) {
                 // #537: a fed slot whose parts sit in several batches is one element.
                 if layer.fed.contains_key(&key.3) {

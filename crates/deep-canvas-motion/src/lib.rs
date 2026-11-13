@@ -19,7 +19,7 @@ pub mod curve;
 pub mod doc;
 pub mod eval;
 pub mod follow;
-mod held;
+pub mod held;
 mod hover;
 pub mod input;
 pub mod insert;
