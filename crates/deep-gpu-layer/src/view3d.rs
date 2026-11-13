@@ -1183,6 +1183,13 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             let mut scene =
                 evaluate_sourced(&composed, t, &args.look, &mut labels, &read, outlines)
                     .map_err(|r| refused(r.code, r.path))?;
+            // #450: mesh particles draw through an instancer's columns, read off the scene.
+            if let Some(fed) =
+                crate::particles::meshes(&composed, &scene, t as f64 / 705_600_000.0, app.planted)?
+            {
+                scene = evaluate_sourced(&fed, t, &args.look, &mut labels, &read, outlines)
+                    .map_err(|r| refused(r.code, r.path))?;
+            }
             if drops_dispersion {
                 scene.plant_drops_dispersion();
             }
@@ -1304,6 +1311,9 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 .iter()
                 .flat_map(|l| &l.solids)
                 .any(|s| s.stroke.is_some());
+            // #450: the planted trail, then each asked trail as it draws.
+            crate::trails::plant(&mut scene, app.planted, t);
+            let trails = crate::trails::report(&scene, &call["trails"]);
             let scene = Arc::new(scene);
             let selected = levels.select(&composed, &scene);
             let settled = levels.settle(&selected);
@@ -1881,6 +1891,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 frame.insert("values".into(), values);
             }
             frame.extend(particles.map(|p| ("particles".to_string(), p)));
+            frame.extend(trails.map(|p| ("trails".to_string(), p)));
             frame.insert("selection".into(), presented);
             if let Some(bytes) = drawn.gpu_bytes {
                 frame.insert("gpu_bytes".into(), json!(bytes));

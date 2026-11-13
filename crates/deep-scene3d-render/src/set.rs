@@ -85,12 +85,18 @@ impl Set {
         self.uploaded.clear();
         if members_changed {
             if self.buffer.is_none() || self.capacity < self.count {
-                self.capacity = self.count.max(1);
+                // A set no record has reached yet has no stride: its stand-in buffer holds none,
+                // so its first record allocates again (#450: a trail that starts with no segment).
+                self.capacity = if self.stride == 0 {
+                    0
+                } else {
+                    self.count.max(1)
+                };
                 *next_generation += 1;
                 self.generation = *next_generation;
                 self.buffer = Some(device.device.create_buffer(&wgpu::BufferDescriptor {
                     label: Some("scene3d instances"),
-                    size: (stride * self.capacity) as u64,
+                    size: (stride * self.capacity.max(1)) as u64,
                     // A culled batch's vertex stage reads its records from storage (#484).
                     usage: wgpu::BufferUsages::VERTEX
                         | wgpu::BufferUsages::STORAGE

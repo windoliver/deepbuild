@@ -415,6 +415,17 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
                 json!("miter"),
                 json!("round"),
             ),
+            // #450: the path of the item it names, in place of points; the sweep leaves it unset,
+            // since the fixture holds no source.
+            p(
+                "trail",
+                "{of, span, segments, width, taper, fade, space, window, rate, max_points}",
+                "",
+                Value::Null,
+                G,
+                Value::Null,
+                Value::Null,
+            ),
         ])),
         reads: None,
         fixture: json!({"it": item("mark.line@1", json!({"points": [[0, 0, 0], [1, 1, 0]], "width": 2, "paint": {"fill": {"role": "ink"}}}))}),
