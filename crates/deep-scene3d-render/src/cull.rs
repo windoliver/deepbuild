@@ -13,9 +13,9 @@
 
 use std::sync::Arc;
 
+use deep_gpu::counted::Written;
 use deep_gpu::device::Device;
 use deep_gpu::structural::{Plan, Structural};
-use wgpu::util::DeviceExt as _;
 
 const SOURCE: &str = include_str!("cull.wgsl");
 const PYRAMID: &str = include_str!("pyramid.wgsl");
@@ -118,7 +118,7 @@ pub struct Kernels {
 }
 
 impl Kernels {
-    pub fn new(d: &wgpu::Device) -> Kernels {
+    pub fn new(d: &deep_gpu::counted::Wgpu) -> Kernels {
         let module = d.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("scene3d cull"),
             source: wgpu::ShaderSource::Wgsl(SOURCE.into()),
@@ -276,6 +276,8 @@ pub struct View {
     pub args: wgpu::Buffer,
     pub count: wgpu::Buffer,
     params: wgpu::Buffer,
+    /// What the params last uploaded (#1903).
+    written: Written,
     bind: wgpu::BindGroup,
     plan: Arc<Plan>,
     /// What its list was culled from.
@@ -419,7 +421,12 @@ impl Run {
     }
 }
 
-fn storage(d: &wgpu::Device, label: &str, n: u32, usage: wgpu::BufferUsages) -> wgpu::Buffer {
+fn storage(
+    d: &deep_gpu::counted::Wgpu,
+    label: &str,
+    n: u32,
+    usage: wgpu::BufferUsages,
+) -> wgpu::Buffer {
     d.create_buffer(&wgpu::BufferDescriptor {
         label: Some(label),
         size: u64::from(n.max(1)) * 4,
@@ -429,7 +436,7 @@ fn storage(d: &wgpu::Device, label: &str, n: u32, usage: wgpu::BufferUsages) -> 
 }
 
 /// A draw's indirect arguments, its instance count 0 until a cull writes it.
-pub fn indirect_args(d: &wgpu::Device, index_count: u32) -> wgpu::Buffer {
+pub fn indirect_args(d: &deep_gpu::counted::Wgpu, index_count: u32) -> wgpu::Buffer {
     d.create_buffer_init(&wgpu::util::BufferInitDescriptor {
         label: Some("scene3d indirect draw"),
         contents: bytemuck::cast_slice(&[index_count, 0, 0, 0, 0]),
@@ -441,7 +448,7 @@ pub fn indirect_args(d: &wgpu::Device, index_count: u32) -> wgpu::Buffer {
 
 impl Culled {
     pub fn new(
-        d: &wgpu::Device,
+        d: &deep_gpu::counted::Wgpu,
         kernels: &Kernels,
         records: &wgpu::Buffer,
         made_for: (u64, u32),
@@ -513,7 +520,13 @@ impl Culled {
     }
 
     /// Makes view `k`'s list and arguments, which stay its own while this cull lasts.
-    pub fn view(&mut self, d: &wgpu::Device, kernels: &Kernels, records: &wgpu::Buffer, k: usize) {
+    pub fn view(
+        &mut self,
+        d: &deep_gpu::counted::Wgpu,
+        kernels: &Kernels,
+        records: &wgpu::Buffer,
+        k: usize,
+    ) {
         if self.views[k].is_none() {
             self.views[k] = Some(self.make_view(d, kernels, records));
         }
@@ -522,7 +535,7 @@ impl Culled {
     /// Makes view `k`'s frustum list and its occlusion test, beside its list (#1637).
     fn occluded_view(
         &mut self,
-        d: &wgpu::Device,
+        d: &deep_gpu::counted::Wgpu,
         kernels: &Kernels,
         records: &wgpu::Buffer,
         k: usize,
@@ -566,7 +579,12 @@ impl Culled {
         });
     }
 
-    fn make_view(&self, d: &wgpu::Device, kernels: &Kernels, records: &wgpu::Buffer) -> View {
+    fn make_view(
+        &self,
+        d: &deep_gpu::counted::Wgpu,
+        kernels: &Kernels,
+        records: &wgpu::Buffer,
+    ) -> View {
         let n = self.made_for.1;
         let rows = storage(
             d,
@@ -614,6 +632,7 @@ impl Culled {
             rows,
             count,
             params,
+            written: Written::default(),
             bind,
             plan: Arc::new(plan),
             key: None,
@@ -651,7 +670,9 @@ impl Culled {
             }
         });
         let test = if occluded {
-            self.views[k].as_mut().map(|v| v.key = None);
+            if let Some(v) = self.views[k].as_mut() {
+                v.key = None;
+            }
             match (&self.tests[k], &self.views[k]) {
                 (Some(t), Some(v)) => Some(Occlude {
                     pipeline: kernels.occlude.clone(),
@@ -717,7 +738,7 @@ impl Culled {
         deep_gpu::alloc::outside(|| {
             device
                 .queue
-                .write_buffer(&view.params, 0, bytemuck::bytes_of(&params))
+                .write_changed(&view.params, &view.written, bytemuck::bytes_of(&params))
         });
         Some(Run {
             pipeline: match self.kept {
@@ -778,12 +799,19 @@ pub struct Pyramid {
     down: wgpu::ComputePipeline,
     downs: Vec<wgpu::BindGroup>,
     uniform: wgpu::Buffer,
+    /// What the uniform last uploaded (#1903).
+    written: Written,
     /// The occlusion test's group 1: the camera and the pyramid.
     test: wgpu::BindGroup,
 }
 
 impl Pyramid {
-    pub fn new(d: &wgpu::Device, kernels: &Kernels, size: [u32; 2], samples: u32) -> Pyramid {
+    pub fn new(
+        d: &deep_gpu::counted::Wgpu,
+        kernels: &Kernels,
+        size: [u32; 2],
+        samples: u32,
+    ) -> Pyramid {
         let [w, h] = size.map(|v| v.max(1));
         let levels = 32 - w.max(h).leading_zeros();
         let extent = |depth| wgpu::Extent3d {
@@ -886,12 +914,13 @@ impl Pyramid {
             down: kernels.down.0.clone(),
             downs,
             uniform,
+            written: Written::default(),
             test,
         }
     }
 
     /// The camera the test projects with this frame, and the planted test of centres.
-    pub fn write(&self, queue: &wgpu::Queue, clip: &[f64; 16], centre: bool) {
+    pub fn write(&self, queue: &deep_gpu::counted::Queue, clip: &[f64; 16], centre: bool) {
         let params = OcclusionParams {
             clip: std::array::from_fn(|c| std::array::from_fn(|r| clip[c * 4 + r] as f32)),
             size: self.size.map(|v| v as f32),
@@ -899,7 +928,7 @@ impl Pyramid {
             centre: u32::from(centre),
         };
         deep_gpu::alloc::outside(|| {
-            queue.write_buffer(&self.uniform, 0, bytemuck::bytes_of(&params))
+            queue.write_changed(&self.uniform, &self.written, bytemuck::bytes_of(&params))
         });
     }
 

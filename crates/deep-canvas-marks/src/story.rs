@@ -371,9 +371,10 @@ impl Periods {
             columns,
             opacity,
             precision: rows.precision.clone(),
-            period: Some(Anchor {
+            // No rows, no period.
+            period: self.by.get(j).map(|by| Anchor {
                 column: self.by_column.clone(),
-                value: self.by[j],
+                value: *by,
             }),
             ..Rows::default()
         }
@@ -486,10 +487,7 @@ fn emphasis(rows: &mut Rows, spec: &Map<String, Value>, path: &str) -> Result<()
 type Listed<'a> = (&'a str, &'a Map<String, Value>, String);
 
 /// The transforms of a mark set's `params`, in order.
-pub fn listed<'a>(
-    params: &'a Map<String, Value>,
-    path: &str,
-) -> Result<Vec<Listed<'a>>, Refused> {
+pub fn listed<'a>(params: &'a Map<String, Value>, path: &str) -> Result<Vec<Listed<'a>>, Refused> {
     let Some(list) = params.get("transforms") else {
         return Ok(Vec::new());
     };
@@ -800,5 +798,12 @@ mod tests {
         assert_eq!(precision_of(&json!({"dtype": "f64"}), &[1.5, 2.25]), 2);
         let table = json!({"dtype": "f64", "trace": {"cells": [{"raw": "1.50"}]}});
         assert_eq!(precision_of(&table, &[1.5]), 2);
+    }
+
+    #[test]
+    fn periods_over_no_rows_play_no_rows_and_no_period() {
+        let at = play(race(&[]), 2000.0, 10);
+        assert!(at.keys.is_empty());
+        assert_eq!(at.anchor("period", "by"), None);
     }
 }

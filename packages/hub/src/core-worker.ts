@@ -1,15 +1,17 @@
 // The core's worker thread: the core answers each request the event loop forwards, in order, and streams
 // appended events back for subscribers.
+import './children.js';
 import { parentPort, workerData } from 'node:worker_threads';
-import { Core, type CallContext } from './core.js';
+import type { Core, CallContext } from './core.js';
+import { createCore } from './hub-runtime.js';
 import type { Part } from './context-fit.js';
 import { ReadOnlyCore, unreadable } from './readonly-core.js';
 import { shedStartup } from './settle.js';
-import { Refused, refusal, type CoreOptions, type Draft, type Gated, type HookMeta } from './wire.js';
+import { Refused, refusal, type CoreOptions, type Draft, type Gated, type HookMeta, type Scope } from './wire.js';
 
 export type CoreRequest =
   | { op: 'call'; method: string; params: unknown; context: CallContext }
-  | { op: 'mcp-hello'; parent: { pid: number; start: string } | undefined; paseo?: string }
+  | { op: 'mcp-hello'; fd?: number | undefined; parent: { pid: number; start: string } | undefined; paseo?: string }
   | { op: 'health' }
   | { op: 'extension-hook'; data: unknown }
   | { op: 'hook-reply'; meta: HookMeta; until: number }
@@ -19,7 +21,7 @@ export type CoreRequest =
   | { op: 'permission'; meta: HookMeta; until?: number; inPaseo?: boolean }
   | { op: 'paseo-owner'; meta: HookMeta }
   | { op: 'paseo-app-answer'; meta: HookMeta }
-  | { op: 'subscribe'; sub: string; after: number }
+  | { op: 'subscribe'; sub: string; after: number; scope?: Scope }
   | { op: 'waits' }
   | { op: 'lock-lost'; path: string }
   | { op: 'stop'; reason: string };
@@ -29,6 +31,8 @@ export type CoreMessage =
   | { op: 'replayed'; drafts: Draft[]; meta: HookMeta }
   | { op: 'waiter-gone'; key: number }
   | { op: 'notifier-gone' }
+  // A deep mcp call whose caller cancelled it or closed its connection (#1923), `closed` for the latter (#1925).
+  | { op: 'call-gone'; call: string; closed?: boolean }
   | { op: 'hook-gone'; id: string; session: string }
   // A call still running past its expected time (#120): recorded as an overrun, with the line the chat shows of it.
   | { op: 'overrun'; session: string; agent: string; cwd: string; data: { call: string; kind: string; command: string | null; expected_ms: number; ran_ms: number; deadline: 'attached' | 'recorded' | 'none' } }
@@ -45,7 +49,7 @@ export type CoreMessage =
 export async function answer(core: Core | ReadOnlyCore, request: CoreRequest): Promise<unknown> {
   switch (request.op) {
     case 'call': return core.call(request.method, request.params, request.context);
-    case 'mcp-hello': return core.mcpHello(request.parent, request.paseo);
+    case 'mcp-hello': return core.mcpHello(request.fd, request.parent, request.paseo);
     case 'health': return core.health();
     case 'extension-hook': return core.extensionHook(request.data);
     case 'hook-reply': return core.hookReply(request.meta, request.until);
@@ -54,7 +58,7 @@ export async function answer(core: Core | ReadOnlyCore, request: CoreRequest): P
     case 'permission': return core.permission(request.meta, request.until, request.inPaseo);
     case 'paseo-owner': return core.paseoOwner(request.meta);
     case 'paseo-app-answer': return core.paseoAppAnswer(request.meta);
-    case 'subscribe': return core.subscribe(request.sub, request.after);
+    case 'subscribe': return core.subscribe(request.sub, request.after, request.scope);
     case 'waits': return core.waitsState();
     case 'lock-lost': return core.lockLost(request.path);
     case 'stop': return core.stop(request.reason);
@@ -67,7 +71,7 @@ if (parentPort && workerData?.core) {
   // A record a newer version wrote is opened read-only, by a stand-in that appends nothing (#41).
   const options = workerData.core as CoreOptions;
   const why = unreadable(options);
-  const core = why ? new ReadOnlyCore(why) : new Core(options, (sub, event) => port.postMessage({ op: 'frame', sub, event }), (sessions, judged, resend, cantRun) => port.postMessage({ op: 'asking', sessions, judged, resend, cantRun }), (session) => port.postMessage({ op: 'acking', session }), (values) => port.postMessage({ op: 'scrub', values }));
+  const core = why ? new ReadOnlyCore(why) : createCore(options, (sub, event, caught) => port.postMessage({ op: 'frame', sub, event, ...(caught ? { caught } : {}) }), (sessions, judged, resend, cantRun) => port.postMessage({ op: 'asking', sessions, judged, resend, cantRun }), (session) => port.postMessage({ op: 'acking', session }), (values) => port.postMessage({ op: 'scrub', values }));
   core.started().then(
     () => { shedStartup(); port.postMessage({ op: 'started', hooks: core.hooks() }); },
     (error: unknown) => port.postMessage({ op: 'fatal', message: error instanceof Error ? error.stack ?? error.message : String(error) }),
@@ -77,6 +81,7 @@ if (parentPort && workerData?.core) {
     if (message.op === 'replayed') return void core.replayed(message.drafts, message.meta).catch(() => undefined);
     if (message.op === 'waiter-gone') return core.waiterGone(message.key);
     if (message.op === 'notifier-gone') return void core.notifierGone();
+    if (message.op === 'call-gone') return core.callGone(message.call, message.closed === true);
     if (message.op === 'hook-gone') return core.hookGone(message.id, message.session);
     if (message.op === 'overrun') return void core.overrun(message).catch(() => undefined);
     if (message.op === 'later') return core.later(message.session, message.cwd, message.text);

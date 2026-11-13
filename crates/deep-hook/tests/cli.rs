@@ -322,6 +322,47 @@ fn now_ms() -> u128 {
 }
 
 #[test]
+fn a_line_nested_deeper_than_the_stack_holds_is_denied_as_unread() {
+    // No hub is there, and the line's first command meets no entry: what it nests past the reader's reach does.
+    let home = short_home("nest");
+    let mut wrong = Vec::new();
+    for open in ["$(", "${a:-", "<(", "(", "{ ", "if ", "function "] {
+        let command = format!("echo ok\\n{}", open.repeat(200_000));
+        let (code, _, _) = pre_tool_use(&home, &command);
+        if code != Some(2) {
+            wrong.push(format!("{open:?} nested: exit code {code:?}"));
+        }
+    }
+    std::fs::remove_dir_all(&home).unwrap();
+    assert_eq!(
+        wrong,
+        Vec::<String>::new(),
+        "each is denied, none ends by a signal"
+    );
+}
+
+#[test]
+fn a_line_denied_for_its_nested_syntax_names_that_bound() {
+    // One shell, with a substitution nested 200 levels deep in it: past the 64 levels of syntax, not the 12 shells.
+    let home = short_home("names");
+    let payload = format!(
+        r#"{{"session_id":"s","cwd":"/tmp","hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{{"command":"echo ok\n{}"}}}}"#,
+        "$(".repeat(200)
+    );
+    let mut child = hook(&home, "PreToolUse");
+    feed(&mut child, payload.as_bytes());
+    let stderr = stderr_of(&mut child);
+    let status = child.wait().unwrap();
+    std::fs::remove_dir_all(&home).unwrap();
+    assert_eq!(status.code(), Some(2), "the line is denied: {stderr}");
+    let said = stderr.split("it nests past what the reader reads").nth(1);
+    assert!(
+        said.is_some_and(|said| said.contains("64")),
+        "the denial names the 64 levels of syntax the line nests past: {stderr}"
+    );
+}
+
+#[test]
 fn a_call_whose_acknowledged_hold_runs_out_is_still_spooled() {
     let home = short_home("hold");
     // A hub that acknowledges with a hold 300 ms ahead and never replies.
@@ -903,8 +944,16 @@ fn runners_fetched_and_written_programs_meet_the_floor_with_the_hub_away() {
 /// `deep-hook clone <from> <to>`, its exit code and stderr.
 #[cfg(target_os = "linux")]
 fn clone_tree(from: &std::path::Path, to: &std::path::Path) -> (Option<i32>, String) {
-    let out = Command::new(env!("CARGO_BIN_EXE_deep-hook")).arg("clone").arg(from).arg(to).output().unwrap();
-    (out.status.code(), String::from_utf8_lossy(&out.stderr).into_owned())
+    let out = Command::new(env!("CARGO_BIN_EXE_deep-hook"))
+        .arg("clone")
+        .arg(from)
+        .arg(to)
+        .output()
+        .unwrap();
+    (
+        out.status.code(),
+        String::from_utf8_lossy(&out.stderr).into_owned(),
+    )
 }
 
 /// A folder of what staging meets: a file, an executable, a subfolder and a link.
@@ -925,12 +974,20 @@ fn tree(at: &std::path::Path) {
 #[cfg(target_os = "linux")]
 fn a_folder_is_cloned_copy_on_write_where_the_file_system_can_and_exits_3_where_it_cannot() {
     use std::os::unix::fs::PermissionsExt;
-    let cow = std::path::PathBuf::from(std::env::var("DEEP_TEST_COW_DIR").unwrap_or_else(|_| "/var/tmp".into()));
+    let cow = std::path::PathBuf::from(
+        std::env::var("DEEP_TEST_COW_DIR").unwrap_or_else(|_| "/var/tmp".into()),
+    );
     let dir = cow.join(format!("deep-hook-clone-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(dir.join("probe"), "p").unwrap();
-    let reflinks = Command::new("cp").arg("--reflink=always").arg(dir.join("probe")).arg(dir.join("probe.copy")).status().unwrap().success();
+    let reflinks = Command::new("cp")
+        .arg("--reflink=always")
+        .arg(dir.join("probe"))
+        .arg(dir.join("probe.copy"))
+        .status()
+        .unwrap()
+        .success();
     if !reflinks {
         let _ = std::fs::remove_dir_all(&dir);
         panic!("BLOCKED: {} can't make a reflink copy; set DEEP_TEST_COW_DIR to a folder on btrfs or XFS with reflink", cow.display());
@@ -940,9 +997,23 @@ fn a_folder_is_cloned_copy_on_write_where_the_file_system_can_and_exits_3_where_
     assert_eq!(code, Some(0), "clone on {}: {err}", cow.display());
     let to = dir.join("to");
     assert_eq!(std::fs::read(to.join("a.txt")).unwrap(), b"a\n");
-    assert_eq!(std::fs::read(to.join("sub/b.bin")).unwrap(), vec![7u8; 1 << 16]);
-    assert_eq!(std::fs::read_link(to.join("link")).unwrap(), std::path::PathBuf::from("a.txt"), "a link stays a link");
-    assert_eq!(std::fs::metadata(to.join("run.sh")).unwrap().permissions().mode() & 0o777, 0o755);
+    assert_eq!(
+        std::fs::read(to.join("sub/b.bin")).unwrap(),
+        vec![7u8; 1 << 16]
+    );
+    assert_eq!(
+        std::fs::read_link(to.join("link")).unwrap(),
+        std::path::PathBuf::from("a.txt"),
+        "a link stays a link"
+    );
+    assert_eq!(
+        std::fs::metadata(to.join("run.sh"))
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o777,
+        0o755
+    );
     let _ = std::fs::remove_dir_all(&dir);
 
     let shm = std::path::PathBuf::from(format!("/dev/shm/deep-hook-clone-{}", std::process::id()));
@@ -951,6 +1022,84 @@ fn a_folder_is_cloned_copy_on_write_where_the_file_system_can_and_exits_3_where_
     let (code, err) = clone_tree(&shm.join("from"), &shm.join("to"));
     let left = shm.join("to").exists();
     let _ = std::fs::remove_dir_all(&shm);
-    assert_eq!(code, Some(3), "tmpfs makes no copy-on-write copy, so clone must exit 3: {err}");
-    assert!(!left, "a clone that can't be copy-on-write leaves nothing at the target");
+    assert_eq!(
+        code,
+        Some(3),
+        "tmpfs makes no copy-on-write copy, so clone must exit 3: {err}"
+    );
+    assert!(
+        !left,
+        "a clone that can't be copy-on-write leaves nothing at the target"
+    );
+}
+
+#[test]
+fn the_mcp_servers_facts_name_a_tools_path_arguments_only_for_a_server_loaded_as_they_describe_it()
+{
+    // #1848: the facts list GitHub's remote server's file tools with no local path argument, so a repo path one names
+    // passes the spec guard while your user config loads that server as the facts match it; a server loaded under the
+    // same name with another config has each whitespace-free string read as a path. DeepBuild's own deep_propose, which
+    // the spec guard's denial points to, is never read for a path.
+    let home = fresh_home(format!("/tmp/dh1848-{}", std::process::id()).into());
+    std::fs::write(
+        home.join(".deepbuild/rules.json"),
+        include_str!("../default-rules.json"),
+    )
+    .unwrap();
+    let repo = home.join("w");
+    std::fs::create_dir_all(&repo).unwrap();
+    let decide = |github: &str, tool: &str, input: &str| {
+        std::fs::write(
+            home.join(".claude.json"),
+            format!(r#"{{"mcpServers":{{"github":{github}}}}}"#),
+        )
+        .unwrap();
+        let mut child = Command::new(env!("CARGO_BIN_EXE_deep-hook"))
+            .args(["claude-code", "PreToolUse"])
+            .env_clear()
+            .env("HOME", &home)
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .unwrap();
+        let payload = format!(
+            r#"{{"session_id":"s1848","hook_event_name":"PreToolUse","cwd":{},"tool_name":"{tool}","tool_input":{input}}}"#,
+            json_string(&repo.to_string_lossy()),
+        );
+        feed(&mut child, payload.as_bytes());
+        let output = child.wait_with_output().unwrap();
+        (
+            output.status.code(),
+            String::from_utf8_lossy(&output.stderr).to_string(),
+        )
+    };
+    let official = r#"{"type":"http","url":"https://api.githubcopilot.com/mcp/"}"#;
+    let other = r#"{"type":"stdio","command":"github-files"}"#;
+    let spec = r#"{"owner":"o","repo":"r","path":".deepbuild/done.yaml","content":"x","message":"m","branch":"b"}"#;
+    let (code, said) = decide(official, "mcp__github__create_or_update_file", spec);
+    assert_eq!(
+        code,
+        Some(0),
+        "the facts name no local path argument for GitHub's remote server: {said}"
+    );
+    let (code, said) = decide(other, "mcp__github__create_or_update_file", spec);
+    assert_eq!(
+        code,
+        Some(2),
+        "a server the facts don't describe has its strings read as paths: {said}"
+    );
+    assert!(
+        said.contains("no-deepbuild-spec-write") && said.contains("Its argument path names it"),
+        "{said}"
+    );
+    let propose =
+        r#"{"target":".deepbuild/done.yaml","change":"Add a criterion.","evidence":null}"#;
+    let (code, said) = decide(official, "mcp__deepbuild__deep_propose", propose);
+    assert_eq!(
+        code,
+        Some(0),
+        "deep_propose is where the denial points: {said}"
+    );
+    let _ = std::fs::remove_dir_all(&home);
 }

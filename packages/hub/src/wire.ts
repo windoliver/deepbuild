@@ -9,10 +9,12 @@ export const VERSION = 1;
 /** The features the hub lists in its hello; a client turns off any of its own the hub doesn't list. */
 export const FEATURES: readonly string[] = [
   // Every method the app calls (#41): crates/deep-app/src/hub.rs NEEDS checks this hello against them.
-  'inbox.read', 'stream.subscribe', 'events.read', 'notifications.report', 'views.shown', 'views.hidden', 'canvas.drawn', 'canvas.user',
+  'inbox.read', 'stream.subscribe', 'events.read', 'notifications.report', 'views.shown', 'views.hidden', 'row.read', 'canvas.drawn', 'canvas.user',
 ];
 /** The hub's contract version, "major.minor": a client needing a newer one shows the hub as older (compat.ts). */
 export const CONTRACT = '1.0';
+/** What a stream subscribe asks for (#1575): one session's events, or the list's rows; with none, every event, as the app subscribes. */
+export type Scope = { kind: 'session'; session: string } | { kind: 'list' };
 
 /** error@3: one refusal. */
 export interface Refusal { code: string; retryable: boolean; remediation: string; path: string; actual: string; evidence: string[] }
@@ -64,6 +66,8 @@ export interface HookMeta {
   /** The session this one replaced in the same process, where its agent says. */
   parent?: string;
   id: string;
+  /** The hook's original nanosecond stamp, shared by event and reply ownership classification. */
+  seq?: string;
   agent: string;
   event: string;
   session: string;
@@ -122,7 +126,7 @@ export interface HookMeta {
    * What the core joins to the transcript or reads loop facts from: the payload's prompt ID, prompt, error and
    * subagent, a stop's last message, Codex's turn, and a FileChanged hook's path.
    */
-  fields?: { prompt_id?: string; prompt?: string; error?: string; agent_id?: string; source?: string; last_assistant_message?: string; turn_id?: string; file_path?: string };
+  fields?: { prompt_id?: string; prompt?: string; error?: string; agent_id?: string; source?: string; last_assistant_message?: string; turn_id?: string; file_path?: string; session_title?: string; model?: string };
   /**
    * A tool call's own fields, for a PreToolUse, a PermissionRequest or a PostToolUse (#23): the session's permission
    * mode, the tool, its input, and the options the agent offers in its own permission dialog.

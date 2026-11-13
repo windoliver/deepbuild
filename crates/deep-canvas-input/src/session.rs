@@ -388,7 +388,9 @@ impl Session {
         }
         match c.behavior {
             Behavior::Choice => {
-                let at = v.as_str().and_then(|s| c.options.iter().position(|o| o == s));
+                let at = v
+                    .as_str()
+                    .and_then(|s| c.options.iter().position(|o| o == s));
                 json!(at.map_or(-1, |k| k as i64))
             }
             _ => v,
@@ -416,7 +418,11 @@ impl Session {
     fn knob(&self, c: &Control, v: f64) -> Option<Rect> {
         let (item, along) = c.handle.as_ref()?;
         let r = *self.items.get(item)?;
-        let f = if c.max > c.min { (v - c.min) / (c.max - c.min) } else { 0.0 };
+        let f = if c.max > c.min {
+            (v - c.min) / (c.max - c.min)
+        } else {
+            0.0
+        };
         let centre = match along {
             Along::Axis(k, travel) => {
                 let mut p = [r[0] + r[2] / 2.0, r[1] + r[3] / 2.0];
@@ -436,7 +442,9 @@ impl Session {
         };
         match c.smoothing {
             Some(model) => {
-                Follow::with(model, start, changes, self.planted.smoothing_from_peak).at(t).value
+                Follow::with(model, start, changes, self.planted.smoothing_from_peak)
+                    .at(t)
+                    .value
             }
             None => changes
                 .iter()
@@ -465,7 +473,11 @@ impl Session {
         if self.gesturing() {
             return None;
         }
-        let wait = if self.interrupted { tour.resume_after } else { tour.idle_after };
+        let wait = if self.interrupted {
+            tour.resume_after
+        } else {
+            tour.idle_after
+        };
         Some(self.last_end + wait)
     }
 
@@ -496,7 +508,11 @@ impl Session {
         if let (Some(origin), Some(tour)) = (self.origin(), self.tour.clone()) {
             let mut due: Vec<(i64, usize, Value)> = Vec::new();
             let looping = tour.period > 0;
-            let first = if looping { ((p0 - origin) / tour.period - 1).max(0) } else { 0 };
+            let first = if looping {
+                ((p0 - origin) / tour.period - 1).max(0)
+            } else {
+                0
+            };
             let mut k = first;
             loop {
                 let base = origin + k * tour.period;
@@ -549,7 +565,14 @@ impl Session {
         self.track.append(e)
     }
 
-    fn yours(&mut self, control: usize, t: i64, value: Value, samples: Option<Vec<Sample>>, serial: u32) -> usize {
+    fn yours(
+        &mut self,
+        control: usize,
+        t: i64,
+        value: Value,
+        samples: Option<Vec<Sample>>,
+        serial: u32,
+    ) -> usize {
         let id = self.controls[control].id.clone();
         self.append(Entry {
             t,
@@ -600,7 +623,11 @@ impl Session {
             }
             "seek" => {
                 let t = need_t()?;
-                let dropped = if self.planted.forks_on_scrub { self.track.cut_after(t) } else { 0 };
+                let dropped = if self.planted.forks_on_scrub {
+                    self.track.cut_after(t)
+                } else {
+                    0
+                };
                 self.playhead = t;
                 Ok(json!({"dropped": dropped}))
             }
@@ -628,7 +655,9 @@ impl Session {
                 let control = op.get("control").and_then(Value::as_str).unwrap_or("");
                 let i = self.index(control)?;
                 let mode = op.get("mode").and_then(Value::as_str).unwrap_or("live");
-                Ok(json!({"value": self.read_value(i, t, mode), "count": self.track.count_at(control, t)}))
+                Ok(
+                    json!({"value": self.read_value(i, t, mode), "count": self.track.count_at(control, t)}),
+                )
             }
             _ => Err(refused("bad_input", "op")),
         }
@@ -643,7 +672,9 @@ impl Session {
         };
         match e {
             Some(e) => e.value.clone(),
-            None => self.index(control).map_or(Value::Null, |i| self.controls[i].default.clone()),
+            None => self
+                .index(control)
+                .map_or(Value::Null, |i| self.controls[i].default.clone()),
         }
     }
 
@@ -687,13 +718,26 @@ impl Session {
                             self.gesture = Some(Gesture::Drag(d));
                             return Ok(json!({"value": v, "appended": 0, "dropped": 0}));
                         }
-                        let dropped = self.yours(d.control, d.t0, json!(v), Some(d.samples), d.serial);
+                        let dropped =
+                            self.yours(d.control, d.t0, json!(v), Some(d.samples), d.serial);
                         self.end(t);
                         Ok(json!({"value": v, "appended": 1, "dropped": dropped}))
                     }
-                    Some(Gesture::Pick { control, option, item, serial, t0 }) => {
+                    Some(Gesture::Pick {
+                        control,
+                        option,
+                        item,
+                        serial,
+                        t0,
+                    }) => {
                         if !up {
-                            self.gesture = Some(Gesture::Pick { control, option, item, serial, t0 });
+                            self.gesture = Some(Gesture::Pick {
+                                control,
+                                option,
+                                item,
+                                serial,
+                                t0,
+                            });
                             return Ok(json!({"appended": 0, "dropped": 0}));
                         }
                         self.end(t);
@@ -713,7 +757,13 @@ impl Session {
     }
 
     /// What a press at `w` grabs: a handle, the track under it, or a target to pick.
-    fn press(&mut self, w: [f64; 2], px: [f64; 2], t: i64, mods: Mods) -> Result<Option<Gesture>, Refused> {
+    fn press(
+        &mut self,
+        w: [f64; 2],
+        px: [f64; 2],
+        t: i64,
+        mods: Mods,
+    ) -> Result<Option<Gesture>, Refused> {
         for i in 0..self.controls.len() {
             let c = self.controls[i].clone();
             if c.class != Class::Document {
@@ -722,7 +772,9 @@ impl Session {
             match c.behavior {
                 Behavior::Number | Behavior::Turn | Behavior::Path => {
                     let v = self.number(&c, &self.current(i));
-                    let Some(knob) = self.knob(&c, v) else { continue };
+                    let Some(knob) = self.knob(&c, v) else {
+                        continue;
+                    };
                     let on_knob = contains(&knob, w);
                     let on_track = !on_knob && self.on_track(&c, w);
                     if !on_knob && !on_track {
@@ -755,7 +807,9 @@ impl Session {
                         }
                     }
                     if c.behavior == Behavior::Path && at.is_none() {
-                        at = self.knob(&c, d.value).map(|r| [r[0] + r[2] / 2.0, r[1] + r[3] / 2.0]);
+                        at = self
+                            .knob(&c, d.value)
+                            .map(|r| [r[0] + r[2] / 2.0, r[1] + r[3] / 2.0]);
                     }
                     d.samples.push(Sample {
                         t: self.stamp(t),
@@ -802,8 +856,12 @@ impl Session {
     }
 
     fn on_track(&self, c: &Control, w: [f64; 2]) -> bool {
-        let Some((item, along)) = &c.handle else { return false };
-        let Some(r) = self.items.get(item) else { return false };
+        let Some((item, along)) = &c.handle else {
+            return false;
+        };
+        let Some(r) = self.items.get(item) else {
+            return false;
+        };
         match along {
             Along::Axis(k, travel) => {
                 let j = 1 - k;
@@ -821,7 +879,13 @@ impl Session {
     }
 
     /// The drag grammar: the value a drag reaches at `w`.
-    fn drag_to(&self, c: &Control, d: &mut Drag, w: [f64; 2], mods: Mods) -> (f64, Option<[f64; 2]>) {
+    fn drag_to(
+        &self,
+        c: &Control,
+        d: &mut Drag,
+        w: [f64; 2],
+        mods: Mods,
+    ) -> (f64, Option<[f64; 2]>) {
         if c.behavior == Behavior::Path {
             let (v, p) = self.place(c, w).unwrap_or((d.value, None));
             d.value = v;
@@ -869,7 +933,11 @@ impl Session {
         if mods.cmd {
             if let Some(inc) = c.increment.filter(|i| *i > 0.0) {
                 let steps = (v - c.min) / inc;
-                let r = if steps - steps.floor() >= 0.5 { steps.floor() + 1.0 } else { steps.floor() };
+                let r = if steps - steps.floor() >= 0.5 {
+                    steps.floor() + 1.0
+                } else {
+                    steps.floor()
+                };
                 v = (c.min + r * inc).clamp(c.min, c.max);
             }
         }
@@ -901,7 +969,15 @@ impl Session {
         out
     }
 
-    fn key(&mut self, control: &str, key: &str, phase: &str, repeat: bool, mods: Mods, t: i64) -> Result<Value, Refused> {
+    fn key(
+        &mut self,
+        control: &str,
+        key: &str,
+        phase: &str,
+        repeat: bool,
+        mods: Mods,
+        t: i64,
+    ) -> Result<Value, Refused> {
         let i = self.index(control)?;
         let c = self.controls[i].clone();
         let press_down = phase == "down" && !repeat;
@@ -965,9 +1041,16 @@ impl Session {
             cmd: mods.contains(&"cmd"),
         };
         // A press with no keys of its own takes Enter and Space, as `key` reads it.
-        let press = |c: &Control| c.behavior == Behavior::Press && c.keys.is_empty() && (key == "Enter" || key == " ");
+        let press = |c: &Control| {
+            c.behavior == Behavior::Press && c.keys.is_empty() && (key == "Enter" || key == " ")
+        };
         let takes = |(i, c): &(usize, &Control)| press(c) || self.keyed(*i, key, mods).is_some();
-        self.controls.iter().enumerate().filter(takes).map(|(_, c)| c.id.clone()).collect()
+        self.controls
+            .iter()
+            .enumerate()
+            .filter(takes)
+            .map(|(_, c)| c.id.clone())
+            .collect()
     }
 
     /// The value key `key` gives control `i`: its own `keys` first, then the default keys.
@@ -1027,12 +1110,22 @@ impl Session {
             Behavior::Toggle => {
                 (key == " " || key == "Enter").then(|| json!(!now.as_bool().unwrap_or(false)))
             }
-            Behavior::Choice => (dir != 0).then(|| step(dir)).flatten().map(|k| json!(c.options[k])),
+            Behavior::Choice => (dir != 0)
+                .then(|| step(dir))
+                .flatten()
+                .map(|k| json!(c.options[k])),
             Behavior::Stages => {
-                if let Some((id, _)) = c.stages.iter().find(|(_, keys)| keys.iter().any(|k| k == key)) {
+                if let Some((id, _)) = c
+                    .stages
+                    .iter()
+                    .find(|(_, keys)| keys.iter().any(|k| k == key))
+                {
                     return Some(json!(id));
                 }
-                (dir != 0).then(|| step(dir)).flatten().map(|k| json!(c.stages[k].0))
+                (dir != 0)
+                    .then(|| step(dir))
+                    .flatten()
+                    .map(|k| json!(c.stages[k].0))
             }
             Behavior::Press | Behavior::Hover => None,
         }
@@ -1058,7 +1151,10 @@ impl Session {
         let i = self.index(control)?;
         self.advance(t, true);
         let c = &self.controls[i];
-        let parameter = matches!(c.behavior, Behavior::Number | Behavior::Turn | Behavior::Path | Behavior::Toggle);
+        let parameter = matches!(
+            c.behavior,
+            Behavior::Number | Behavior::Turn | Behavior::Path | Behavior::Toggle
+        );
         if c.class != Class::Document || !parameter {
             return Ok(json!({"appended": 0, "dropped": 0, "refused": "not_a_parameter"}));
         }
@@ -1068,7 +1164,15 @@ impl Session {
         } else {
             (Writer::Agent, None)
         };
-        let dropped = self.append(Entry { t, seq: 0, control: id, value, samples: None, writer, serial });
+        let dropped = self.append(Entry {
+            t,
+            seq: 0,
+            control: id,
+            value,
+            samples: None,
+            writer,
+            serial,
+        });
         Ok(json!({"appended": 1, "dropped": dropped}))
     }
 
@@ -1080,15 +1184,31 @@ impl Session {
             return Ok(0);
         }
         let c = self.controls[i].clone();
-        let v = self.place(&c, self.world(px)).map_or_else(|| self.current(i), |x| json!(x.0));
-        self.append(Entry { t, seq: 0, control: c.id, value: v, samples: None, writer: Writer::Agent, serial: None });
+        let v = self
+            .place(&c, self.world(px))
+            .map_or_else(|| self.current(i), |x| json!(x.0));
+        self.append(Entry {
+            t,
+            seq: 0,
+            control: c.id,
+            value: v,
+            samples: None,
+            writer: Writer::Agent,
+            serial: None,
+        });
         Ok(1)
     }
 
     fn read_channel(&mut self, id: &str, t: i64) -> Result<Value, Refused> {
         let path = format!("channels/{id}");
-        let ch = self.channels.get(id).ok_or_else(|| refused("ref_unresolved", path.clone()))?;
-        let f = ch.get("follow").and_then(Value::as_object).ok_or_else(|| refused("bad_doc", path.clone()))?;
+        let ch = self
+            .channels
+            .get(id)
+            .ok_or_else(|| refused("ref_unresolved", path.clone()))?;
+        let f = ch
+            .get("follow")
+            .and_then(Value::as_object)
+            .ok_or_else(|| refused("bad_doc", path.clone()))?;
         let spec = deep_canvas_motion::doc::follow_spec(f, &format!("{path}/follow"))
             .map_err(|r| refused(r.code, r.path))?;
         let deep_canvas_motion::follow::Source::Control(control) = &spec.source else {
@@ -1121,13 +1241,21 @@ impl Session {
             let from = follow.segments.len() - 1;
             for &(ct, target) in &changes[from..] {
                 let start = follow.at(ct);
-                follow.segments.push(Segment { t: ct, target, start });
+                follow.segments.push(Segment {
+                    t: ct,
+                    target,
+                    start,
+                });
                 built.solves += 1;
             }
             built.follow = Some(follow);
             built.changes = changes;
         }
-        let f = built.follow.as_ref().map(|f| f.at(t).value).unwrap_or(initial);
+        let f = built
+            .follow
+            .as_ref()
+            .map(|f| f.at(t).value)
+            .unwrap_or(initial);
         let segments = built.follow.as_ref().map_or(0, |f| f.segments.len() - 1);
         Ok(json!({"value": f, "solves": built.solves, "segments": segments}))
     }
@@ -1148,7 +1276,10 @@ struct Mods {
 }
 
 fn mods_of(v: Option<&Value>) -> Mods {
-    let has = |m: &str| v.and_then(Value::as_array).is_some_and(|a| a.iter().any(|x| x.as_str() == Some(m)));
+    let has = |m: &str| {
+        v.and_then(Value::as_array)
+            .is_some_and(|a| a.iter().any(|x| x.as_str() == Some(m)))
+    };
     Mods {
         shift: has("shift"),
         cmd: has("cmd"),
@@ -1157,7 +1288,9 @@ fn mods_of(v: Option<&Value>) -> Mods {
 
 fn items_of(doc: &Value) -> BTreeMap<String, Rect> {
     let mut out = BTreeMap::new();
-    let Some(items) = doc.get("items").and_then(Value::as_object) else { return out };
+    let Some(items) = doc.get("items").and_then(Value::as_object) else {
+        return out;
+    };
     for (id, item) in items {
         let pos = pair(item.get("at").and_then(|a| a.get("pos"))).unwrap_or([0.0, 0.0]);
         let params = item.get("params");
@@ -1192,13 +1325,18 @@ fn camera_of(doc: &Value) -> ([f64; 2], Option<f64>) {
         (Some(t), _) => (t, width),
         (None, size) => {
             let s = pair(size).unwrap_or([0.0, 0.0]);
-            ([s[0] / 2.0, s[1] / 2.0], width.or(Some(s[0]).filter(|w| *w > 0.0)))
+            (
+                [s[0] / 2.0, s[1] / 2.0],
+                width.or(Some(s[0]).filter(|w| *w > 0.0)),
+            )
         }
     }
 }
 
 fn control_of(id: &str, c: &Value, extra: &[(&str, Behavior)]) -> Result<Option<Control>, Refused> {
-    let Some(kind) = c.get("kind").and_then(Value::as_str) else { return Ok(None) };
+    let Some(kind) = c.get("kind").and_then(Value::as_str) else {
+        return Ok(None);
+    };
     let Some(behavior) = KINDS
         .iter()
         .chain(extra.iter())
@@ -1214,13 +1352,30 @@ fn control_of(id: &str, c: &Value, extra: &[(&str, Behavior)]) -> Result<Option<
         None => Class::Document,
     };
     let range = c.get("range").and_then(Value::as_array);
-    let r = |k: usize, d: f64| range.and_then(|a| a.get(k)).and_then(Value::as_f64).unwrap_or(d);
-    let top = if behavior == Behavior::Turn { 360.0 } else { 1.0 };
+    let r = |k: usize, d: f64| {
+        range
+            .and_then(|a| a.get(k))
+            .and_then(Value::as_f64)
+            .unwrap_or(d)
+    };
+    let top = if behavior == Behavior::Turn {
+        360.0
+    } else {
+        1.0
+    };
     let (min, max) = (r(0, 0.0), r(1, top));
+    // A value is clamped into the range, which panics on a range that runs high to low.
+    if min > max {
+        return Err(refused("out_of_range", format!("controls/{id}/range")));
+    }
     let options: Vec<String> = c
         .get("options")
         .and_then(Value::as_array)
-        .map(|a| a.iter().filter_map(|o| o.as_str().map(str::to_string)).collect())
+        .map(|a| {
+            a.iter()
+                .filter_map(|o| o.as_str().map(str::to_string))
+                .collect()
+        })
         .unwrap_or_default();
     let stages: Vec<(String, Vec<String>)> = c
         .get("stages")
@@ -1231,7 +1386,11 @@ fn control_of(id: &str, c: &Value, extra: &[(&str, Behavior)]) -> Result<Option<
                     let keys = s
                         .get("keys")
                         .and_then(Value::as_array)
-                        .map(|a| a.iter().filter_map(|k| k.as_str().map(str::to_string)).collect())
+                        .map(|a| {
+                            a.iter()
+                                .filter_map(|k| k.as_str().map(str::to_string))
+                                .collect()
+                        })
                         .unwrap_or_default();
                     (sid.clone(), keys)
                 })
@@ -1249,7 +1408,11 @@ fn control_of(id: &str, c: &Value, extra: &[(&str, Behavior)]) -> Result<Option<
     };
     let handle = match c.get("handle") {
         Some(h) => {
-            let item = h.get("item").and_then(Value::as_str).unwrap_or("").to_string();
+            let item = h
+                .get("item")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string();
             let along = match h.get("along") {
                 Some(Value::String(a)) => {
                     let travel = num(h.get("travel")).unwrap_or(100.0);
@@ -1262,11 +1425,19 @@ fn control_of(id: &str, c: &Value, extra: &[(&str, Behavior)]) -> Result<Option<
                         .map(|a| a.iter().filter_map(|p| pair(Some(p))).collect())
                         .unwrap_or_default();
                     if points.len() < 2 {
-                        return Err(refused("out_of_range", format!("controls/{id}/handle/along")));
+                        return Err(refused(
+                            "out_of_range",
+                            format!("controls/{id}/handle/along"),
+                        ));
                     }
                     Along::Path(points)
                 }
-                _ => return Err(refused("out_of_range", format!("controls/{id}/handle/along"))),
+                _ => {
+                    return Err(refused(
+                        "out_of_range",
+                        format!("controls/{id}/handle/along"),
+                    ))
+                }
             };
             Some((item, along))
         }
@@ -1275,7 +1446,11 @@ fn control_of(id: &str, c: &Value, extra: &[(&str, Behavior)]) -> Result<Option<
     let targets = c
         .get("targets")
         .and_then(Value::as_object)
-        .map(|m| m.iter().filter_map(|(k, v)| Some((k.clone(), v.as_str()?.to_string()))).collect())
+        .map(|m| {
+            m.iter()
+                .filter_map(|(k, v)| Some((k.clone(), v.as_str()?.to_string())))
+                .collect()
+        })
         .unwrap_or_default();
     let smoothing = match c.get("smoothing") {
         Some(Value::Object(o)) => match o.get("follow") {
@@ -1283,8 +1458,11 @@ fn control_of(id: &str, c: &Value, extra: &[(&str, Behavior)]) -> Result<Option<
                 let mut f = Map::new();
                 f.insert("source".into(), json!(format!("controls/{id}/value")));
                 f.insert("model".into(), model.clone());
-                let spec = deep_canvas_motion::doc::follow_spec(&f, &format!("controls/{id}/smoothing/follow"))
-                    .map_err(|r| refused(r.code, r.path))?;
+                let spec = deep_canvas_motion::doc::follow_spec(
+                    &f,
+                    &format!("controls/{id}/smoothing/follow"),
+                )
+                .map_err(|r| refused(r.code, r.path))?;
                 Some(spec.model)
             }
             None => None,
@@ -1301,7 +1479,11 @@ fn control_of(id: &str, c: &Value, extra: &[(&str, Behavior)]) -> Result<Option<
         increment: num(c.get("increment")),
         options,
         stages,
-        keys: c.get("keys").and_then(Value::as_object).cloned().unwrap_or_default(),
+        keys: c
+            .get("keys")
+            .and_then(Value::as_object)
+            .cloned()
+            .unwrap_or_default(),
         handle,
         targets,
         smoothing,
@@ -1317,8 +1499,13 @@ fn tour_of(t: &Value) -> Result<Option<Tour>, Refused> {
     for (control, list) in keys {
         let mut ks = Vec::new();
         for (i, k) in list.as_array().into_iter().flatten().enumerate() {
-            let a = k.as_array().ok_or_else(|| refused("bad_doc", format!("tour/keys/{control}/{i}")))?;
-            let s = a.first().and_then(Value::as_f64).ok_or_else(|| refused("bad_doc", format!("tour/keys/{control}/{i}")))?;
+            let a = k
+                .as_array()
+                .ok_or_else(|| refused("bad_doc", format!("tour/keys/{control}/{i}")))?;
+            let s = a
+                .first()
+                .and_then(Value::as_f64)
+                .ok_or_else(|| refused("bad_doc", format!("tour/keys/{control}/{i}")))?;
             let at = flicks(s);
             last = last.max(at);
             ks.push((at, a.get(1).cloned().unwrap_or(Value::Null)));
@@ -1337,13 +1524,19 @@ fn tour_of(t: &Value) -> Result<Option<Tour>, Refused> {
 
 /// The point at fraction `f` of a polyline's arc length.
 fn point_at(points: &[[f64; 2]], f: f64) -> [f64; 2] {
-    let total: f64 = points.windows(2).map(|w| ops::hypot(w[1][0] - w[0][0], w[1][1] - w[0][1])).sum();
+    let total: f64 = points
+        .windows(2)
+        .map(|w| ops::hypot(w[1][0] - w[0][0], w[1][1] - w[0][1]))
+        .sum();
     let mut d = f.clamp(0.0, 1.0) * total;
     for w in points.windows(2) {
         let len = ops::hypot(w[1][0] - w[0][0], w[1][1] - w[0][1]);
         if d <= len && len > 0.0 {
             let u = d / len;
-            return [w[0][0] + (w[1][0] - w[0][0]) * u, w[0][1] + (w[1][1] - w[0][1]) * u];
+            return [
+                w[0][0] + (w[1][0] - w[0][0]) * u,
+                w[0][1] + (w[1][1] - w[0][1]) * u,
+            ];
         }
         d -= len;
     }
@@ -1352,13 +1545,20 @@ fn point_at(points: &[[f64; 2]], f: f64) -> [f64; 2] {
 
 /// The nearest point of a polyline to `p`: its fraction of the arc length, and the point.
 fn project(points: &[[f64; 2]], p: [f64; 2]) -> (f64, [f64; 2]) {
-    let total: f64 = points.windows(2).map(|w| ops::hypot(w[1][0] - w[0][0], w[1][1] - w[0][1])).sum();
+    let total: f64 = points
+        .windows(2)
+        .map(|w| ops::hypot(w[1][0] - w[0][0], w[1][1] - w[0][1]))
+        .sum();
     let mut best = (f64::INFINITY, 0.0, points[0]);
     let mut run = 0.0;
     for w in points.windows(2) {
         let (dx, dy) = (w[1][0] - w[0][0], w[1][1] - w[0][1]);
         let len2 = dx * dx + dy * dy;
-        let u = if len2 > 0.0 { (((p[0] - w[0][0]) * dx + (p[1] - w[0][1]) * dy) / len2).clamp(0.0, 1.0) } else { 0.0 };
+        let u = if len2 > 0.0 {
+            (((p[0] - w[0][0]) * dx + (p[1] - w[0][1]) * dy) / len2).clamp(0.0, 1.0)
+        } else {
+            0.0
+        };
         let q = [w[0][0] + dx * u, w[0][1] + dy * u];
         let d = ops::hypot(p[0] - q[0], p[1] - q[1]);
         let len = ops::sqrt(len2);
@@ -1376,13 +1576,41 @@ mod tests {
     use super::*;
 
     #[test]
+    fn a_range_written_high_to_low_is_refused() {
+        let doc = json!({"controls": {"gain": {"kind": "slider", "range": [1, 0]}}});
+        let key = json!({"op": "key", "control": "gain", "key": "ArrowRight", "t": 0});
+        let refusal = Session::new(
+            &doc,
+            [640.0, 360.0],
+            (60, 1),
+            false,
+            Planted::default(),
+            &[],
+        )
+        .and_then(|mut s| s.op(key.as_object().expect("an op")))
+        .err();
+        assert_eq!(
+            refusal,
+            Some(refused("out_of_range", "controls/gain/range"))
+        );
+    }
+
+    #[test]
     fn holders_names_the_controls_a_key_reaches_and_no_other() {
         let doc = json!({"controls": {
             "speed": {"kind": "slider"},
             "sound": {"kind": "toggle", "keys": {"m": "toggle"}},
             "go": {"kind": "press"},
         }});
-        let s = Session::new(&doc, [640.0, 360.0], (60, 1), false, Planted::default(), &[]).unwrap();
+        let s = Session::new(
+            &doc,
+            [640.0, 360.0],
+            (60, 1),
+            false,
+            Planted::default(),
+            &[],
+        )
+        .unwrap();
         assert_eq!(s.holders("m", &[]), ["sound"]);
         assert_eq!(s.holders("ArrowRight", &["alt"]), ["speed"]);
         assert_eq!(s.holders(" ", &[]), ["sound", "go"]);

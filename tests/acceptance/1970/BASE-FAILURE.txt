@@ -1,0 +1,159 @@
+Base run of the #1970 acceptance tests at 2df533990 (main), November 10, 2026, on the shared Mac.
+
+Command (cargo on PATH from rustup toolchain 1.99.1; JS built with npm ci && npm run build --workspaces):
+  CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 node node_modules/vitest/vitest.mjs run --root tests/acceptance/1970 --no-file-parallelism --testTimeout=600000
+
+Summary:
+- field.test.ts, AC1: FAILS as the criterion says. The check and the patch each refuse w with unknown_field at
+  items/d/params/w (ok false; outcome refused), but its fix is the code's one line, "Remove the field, or require the
+  kind's minor that defines it.", with no close names: it names no kind. Each failure names the field w.
+- mcp.test.ts, AC2, first run: BLOCKED, not a verdict. The hub would not start: "no deep-hook is built under
+  <repo>/target; run cargo build -p deep-hook first". The file then gained a beforeAll that builds deep-hook, as
+  field.test.ts builds deep-canvas; no assertion changed. Its second run, below, is the file's only verdict: it FAILS
+  as the criterion says. docs is refused at /params/arguments/docs and pixel under /params/arguments/include, but
+  each remediation only lists every choice once ("Leave out docs: the schema lists only doc, document, patch,
+  removes, t, size, include, rev."; "Give one of issues, audit, timing, pixels."), naming no nearest name. The
+  zzzzzz part passes: it lists every field and singles none out, today's behavior, which the criterion keeps.
+
+================ Run 1: both files ================
+
+
+ RUN  v5.0.5 <repo>/tests/acceptance/1970
+
+ ❯ mcp.test.ts (1 test | 1 failed) 2393ms
+   ❯ AC2 a misspelt deep mcp name names the nearest listed one; a far one names none and lists the choices (1)
+     × AC2 deep_show with docs names doc at /params/arguments/docs, include pixel names pixels, and zzzzzz names none and lists the fields 2383ms
+ ❯ field.test.ts (1 test | 1 failed) 1889ms
+   ❯ AC1 a field set on the wrong kind names the kind in the build that defines it (1)
+     × AC1 test.dot@1 setting w is refused with unknown_field whose fix names test.rect@1 before any close name, by the check and by a patch 220ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  field.test.ts > AC1 a field set on the wrong kind names the kind in the build that defines it > AC1 test.dot@1 setting w is refused with unknown_field whose fix names test.rect@1 before any close name, by the check and by a patch
+AssertionError: the document check: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "field w on test.dot@1, by the document check: unknown_field's fix names no kind that defines w, not test.rect@1: fix {\"fix\":\"Remove the field, or require the kind's minor that defines it.\"}, close names []",
++ ]
+
+ ❯ field.test.ts:40:124
+     38|     const checked = canvas(b, 'check', { doc: WITH_W });
+     39|     expect.soft(checked['ok'], `field w on test.dot@1: the document ch…
+     40|     expect.soft(kindFirstFailures(checked, { ...WANT, where: 'test.dot…
+       |                                                                                                                            ^
+     41|
+     42|     const patched = canvas(b, 'apply', { doc: CLEAN, writer: WRITER, p…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  field.test.ts > AC1 a field set on the wrong kind names the kind in the build that defines it > AC1 test.dot@1 setting w is refused with unknown_field whose fix names test.rect@1 before any close name, by the check and by a patch
+AssertionError: the patch: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "field w on test.dot@1, by a patch: unknown_field's fix names no kind that defines w, not test.rect@1: fix {\"fix\":\"Remove the field, or require the kind's minor that defines it.\"}, close names []",
++ ]
+
+ ❯ field.test.ts:44:104
+     42|     const patched = canvas(b, 'apply', { doc: CLEAN, writer: WRITER, p…
+     43|     expect.soft(patched['outcome'], `field w on test.dot@1: the patch …
+     44|     expect.soft(kindFirstFailures(patched, { ...WANT, where: 'test.dot…
+       |                                                                                                        ^
+     45|   }, 3_600_000);
+     46| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  mcp.test.ts > AC2 a misspelt deep mcp name names the nearest listed one; a far one names none and lists the choices > AC2 deep_show with docs names doc at /params/arguments/docs, include pixel names pixels, and zzzzzz names none and lists the fields
+AssertionError: BLOCKED: the hub didn't start: deep hub: the core stopped: Error: no deep-hook is built under <repo>/target; run cargo build -p deep-hook first
+    at deepHook (file://<repo>/packages/hub/dist/paths.js:216:15)
+    at Object.guard (file://<repo>/packages/hub/dist/core.js:678:75)
+    at Products.secure (file://<repo>/packages/hub/dist/products.js:203:36)
+    at Products.open (file://<repo>/packages/hub/dist/products.js:191:24)
+    at Core.init (file://<repo>/packages/hub/dist/core.js:1080:29)
+: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ startHub helpers.ts:147:73
+    145|     child.on('exit', () => { clearTimeout(timer); done(false); });
+    146|   });
+    147|   expect(ready, `BLOCKED: the hub didn't start: ${out.slice(0, 2000)}`…
+       |                                                                         ^
+    148| }
+    149|
+ ❯ mcp.test.ts:33:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  2 failed (2)
+   Start at  14:58:24
+   Duration  6.42s (tests 91%, import 4%, worker 2%, transform 2%)
+
+    Isolate  2 workers spawned · ~629ms startup each (spawn + environment, per file)
+             at least ~629ms faster with isolate: false — reuses workers across files instead of one per file
+
+
+================ Run 2: mcp.test.ts, with deep-hook built by the file ================
+
+
+ RUN  v5.0.5 <repo>/tests/acceptance/1970
+
+ ❯ mcp.test.ts (1 test | 1 failed) 110003ms
+   ❯ AC2 a misspelt deep mcp name names the nearest listed one; a far one names none and lists the choices (1)
+     × AC2 deep_show with docs names doc at /params/arguments/docs, include pixel names pixels, and zzzzzz names none and lists the fields 2681ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  mcp.test.ts > AC2 a misspelt deep mcp name names the nearest listed one; a far one names none and lists the choices > AC2 deep_show with docs names doc at /params/arguments/docs, include pixel names pixels, and zzzzzz names none and lists the fields
+AssertionError: deep_show with docs: the remediation names doc, the nearest listed field, not only the list of fields: "Leave out docs: the schema lists only doc, document, patch, removes, t, size, include, rev.": expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ mcp.test.ts:50:176
+     48|     expect.soft(docs['path'], `deep_show with docs is refused at /para…
+     49|     const fixDocs = String(docs['remediation'] ?? '');
+     50|     expect.soft(singlesOut(fixDocs, 'doc', fields), `deep_show with do…
+       |                                                                                                                                                                                ^
+     51|
+     52|     const pixel = refusal(await mcp.call('deep_show', { doc: DOC, incl…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  mcp.test.ts > AC2 a misspelt deep mcp name names the nearest listed one; a far one names none and lists the choices > AC2 deep_show with docs names doc at /params/arguments/docs, include pixel names pixels, and zzzzzz names none and lists the fields
+AssertionError: deep_show with include pixel: the remediation names pixels, the nearest listed value, not only the list of values: "Give one of issues, audit, timing, pixels.": expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ mcp.test.ts:55:193
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  14:59:20
+   Duration  111.07s (tests 100%)
+

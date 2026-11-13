@@ -41,7 +41,7 @@ pub fn os() -> String {
 }
 
 /// This run's fingerprint: the OS, the GPU, its driver and the wgpu this binary is built with.
-fn fingerprint(app: &App) -> Value {
+pub(crate) fn fingerprint(app: &App) -> Value {
     let info = app.worker.call(|state| state.gpu.device().adapter.clone());
     let (gpu, driver) = match info {
         Some(i) => {
@@ -72,7 +72,16 @@ fn rgba(bytes: &[u8]) -> Option<image::RgbaImage> {
     image::load_from_memory(bytes).ok().map(|i| i.to_rgba8())
 }
 
+/// Distinct colors a frame must hold before a similarity counts (#1399).
+const COLORS: usize = 32;
+/// The share of a frame's pixels that must differ from its modal color (#1399).
+const OFF_MODAL: f64 = 0.05;
+
+/// A frame no comparison counts on: dark (98% of its pixels at luma 0.06 or under), or flat
+/// (#1399: under 32 distinct colors, or under 5% of its pixels off its modal color), so two
+/// matching blank frames never pass.
 fn blank(img: &image::RgbaImage) -> bool {
+    let total = f64::from(img.width() * img.height());
     let dark = img
         .pixels()
         .filter(|p| {
@@ -80,7 +89,14 @@ fn blank(img: &image::RgbaImage) -> bool {
                 <= 0.06
         })
         .count();
-    dark as f64 >= 0.98 * f64::from(img.width() * img.height())
+    let mut colors = std::collections::HashMap::<[u8; 4], u32>::new();
+    for p in img.pixels() {
+        *colors.entry(p.0).or_default() += 1;
+    }
+    let modal = colors.values().copied().max().unwrap_or(0);
+    dark as f64 >= 0.98 * total
+        || colors.len() < COLORS
+        || total - f64::from(modal) < OFF_MODAL * total
 }
 
 /// `decide`: your blessing records the PNG as the fixture's golden under this run's fingerprint;
@@ -89,14 +105,19 @@ pub fn decide(app: &mut App, call: &Value) -> Value {
     if call["via"] != "you" {
         return json!({"outcome": "refused", "code": "not_your_decision", "reason": "only your decision blesses a golden"});
     }
+    // #1903: your limits for the envelope's calibration metrics.
+    if call["decision"].get("limits").is_some() {
+        return crate::envelope::decide_limits(call);
+    }
     // A bless names a PNG, or an operator output's bytes (`state`, #252).
     let bless = &call["decision"]["bless"];
-    let snapshot = bless["png"].as_str().map(|p| (p, false)).or(bless["state"].as_str().map(|p| (p, true)));
-    let (Some(store), Some(fixture), Some((png, state))) = (
-        call["store"].as_str(),
-        bless["fixture"].as_str(),
-        snapshot,
-    ) else {
+    let snapshot = bless["png"]
+        .as_str()
+        .map(|p| (p, false))
+        .or(bless["state"].as_str().map(|p| (p, true)));
+    let (Some(store), Some(fixture), Some((png, state))) =
+        (call["store"].as_str(), bless["fixture"].as_str(), snapshot)
+    else {
         return refused(
             "bad_input",
             "decide takes a store and a bless {fixture, png | state}",
@@ -106,7 +127,11 @@ pub fn decide(app: &mut App, call: &Value) -> Value {
         return json!({"outcome": "refused", "code": "no_snapshot", "reason": format!("{png} isn't there")});
     };
     let (meta, image) = store_paths(store, fixture);
-    let image = if state { state_path(store, fixture) } else { image };
+    let image = if state {
+        state_path(store, fixture)
+    } else {
+        image
+    };
     let record =
         json!({"fixture": fixture, "fingerprint": fingerprint(app), "digest": hex(&bytes)});
     let written = std::fs::create_dir_all(store)
@@ -163,17 +188,33 @@ fn state_path(store: &str, fixture: &str) -> PathBuf {
     Path::new(store).join(format!("{fixture}.state"))
 }
 
+/// A golden's snapshot is a canonical render: it never draws through frame history (#173).
+fn canonical(view3d: &mut Value) {
+    if view3d["look"].is_object() {
+        view3d["look"]["history"] = json!({"mode": "none"});
+    }
+}
+
 /// #252: the snapshot is an operator output's bytes as the view3d's first frame reads them,
 /// compared byte for byte under the class its writer computes: a same-machine output compares
 /// only under the fingerprint its golden was blessed under, and reads INCONCLUSIVE under another,
 /// naming both; an exact one compares anywhere.
-fn state_golden(app: &mut App, out: &str, call: &Value, store: &str, fixture: &str, key: &str, fp: &Value) -> Value {
+fn state_golden(
+    app: &mut App,
+    out: &str,
+    call: &Value,
+    store: &str,
+    fixture: &str,
+    key: &str,
+    fp: &Value,
+) -> Value {
     let oracle = "hash";
     let mut v = call["view3d"].clone();
     let from = v["from"].as_u64().unwrap_or(0);
     v["capture"] = json!([from]);
     v["frames"] = json!(1);
     v["read"] = json!([key]);
+    canonical(&mut v);
     let reply = view3d::call(app, out, &v);
     let read = &reply["frames"][0]["read"][key];
     let class = read["class"].as_str().unwrap_or("same_machine");
@@ -184,8 +225,11 @@ fn state_golden(app: &mut App, out: &str, call: &Value, store: &str, fixture: &s
         return json!({"verdict": "BLOCKED", "reason": "no_snapshot", "fingerprint": fp, "golden": null, "oracle": oracle, "class": class});
     };
     let (meta, _) = store_paths(store, fixture);
-    let record = std::fs::read_to_string(&meta).ok().and_then(|t| serde_json::from_str::<Value>(&t).ok());
-    let (Some(record), Ok(golden_bytes)) = (record, std::fs::read(state_path(store, fixture))) else {
+    let record = std::fs::read_to_string(&meta)
+        .ok()
+        .and_then(|t| serde_json::from_str::<Value>(&t).ok());
+    let (Some(record), Ok(golden_bytes)) = (record, std::fs::read(state_path(store, fixture)))
+    else {
         return json!({"verdict": "BLOCKED", "reason": "no_golden", "fingerprint": fp, "golden": null, "oracle": oracle, "class": class,
             "ask": {"kind": "bless", "fixture": fixture, "ask": "bless this fixture's golden by your decision"}});
     };
@@ -257,6 +301,7 @@ pub fn golden(app: &mut App, out: &str, call: &Value) -> Value {
         v["targets"] = json!(["final"]);
         v["capture"] = json!([0]);
         v["frames"] = json!(1);
+        canonical(&mut v);
         let reply = view3d::call(app, out, &v);
         reply["frames"][0]["final"]
             .as_str()

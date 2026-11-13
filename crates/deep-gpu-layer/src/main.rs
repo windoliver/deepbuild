@@ -10,10 +10,13 @@
 //! and no app, so no window. #385 adds the 2D calls (`layers`, `window2d`, `vello_gpu`,
 //! `spike2d`; tests/acceptance/385/README.md) and, in test-spike builds, `--spike-record <file>`.
 //! #417 adds `film2d`: a 2D film in the window under a look, with its look switches timed.
+//! #1056 adds `index_record` and `cross_index`: a pixel look's per-frame index records, compared
+//! across GPU families (records.rs).
 
 #[cfg(feature = "test-meter")]
 mod allocations;
 mod blur;
+mod budget;
 mod calibrate;
 mod columns;
 mod compare;
@@ -21,9 +24,12 @@ mod compile;
 mod conformance;
 mod drawn;
 mod effects;
+mod envelope;
 #[cfg(feature = "test-faults")]
 mod faults;
+mod fed;
 mod film;
+mod fix;
 mod fixtures;
 mod flat;
 mod frames;
@@ -41,8 +47,11 @@ mod marks2d;
 mod opframe;
 mod paintfx;
 mod parity;
+mod particles;
+mod physics;
 mod plugin;
 mod print2d;
+mod records;
 mod reference;
 mod scene;
 mod seam;
@@ -114,6 +123,11 @@ pub enum Planted {
     WaitsOnGpu,
     CompilesOnUiThread,
     ExposesGpuToPanels,
+    /// #537's wrong programs (tests/acceptance/537/README.md: Planted twins).
+    InstancerAddressesBySlot,
+    OverlayKeepsGridOnSeek,
+    LineReadsPreviousStep,
+    PartPoseInWorldSpace,
     /// #378's wrong programs (tests/acceptance/378/README.md: Planted programs).
     ForwardZ,
     EncodesTwice,
@@ -213,6 +227,13 @@ pub enum Planted {
     VelocityPairsByIndex,
     SettleResetsEachFrame,
     SamplerHoldsCamera,
+    /// #173's wrong programs (tests/acceptance/173/README.md: Planted programs): a resolve that
+    /// keeps the grid frame before its window; a determinism check that hashes the live view's
+    /// resolved frames; a window grid at the display's refresh; outlines drawn into the window.
+    KeepsFramePastWindow,
+    DeterminismHashesLiveView,
+    GridAtRefresh,
+    OutlinesInHistory,
     EdgesUnwelded,
     EdgesSkipDepth,
     /// #1640's: crease lines keep the edges below their angle, derive their set every frame, or
@@ -285,6 +306,8 @@ pub enum Planted {
     LocalMapRekeysOnAnyT,
     CutKeyOmitsPlanes,
     SinglePixelPick,
+    /// #1976's: a hit's point put back from the depth target.
+    HitFromDepth,
     CascadeCacheKeepsStale,
     PrefilterOverFrames,
     UncompensatedLobe,
@@ -304,6 +327,11 @@ pub enum Planted {
     ClimbNeverStepsDown,
     CanonicalClimbs,
     ReclimbsWithoutViewChange,
+    /// #2017's wrong programs (tests/acceptance/2017/README.md: Assumed surfaces 8): a terrain
+    /// tile's level by its distance alone, as a 1920 × 1080 view would choose it at every size;
+    /// each tile shaded from its level's own vertex normals.
+    TerrainLodByDistance,
+    TerrainShadesOwnLevelNormals,
     /// #428's wrong programs (tests/acceptance/428/README.md: Planted programs).
     DropsDispersion,
     AbsorptionIgnoresThickness,
@@ -319,6 +347,23 @@ pub enum Planted {
     // added to the whole diffuse.
     SubsurfaceAcrossParts,
     SubsurfaceAddsToDiffuse,
+    // #486: a lobe output multiplies its field; occlusion scales the direct light and emission
+    // too; core.bump@1 ignores the tangent's handedness; coat_normal bends the base lobes too;
+    // the check admits a lobe the material lacks, which the frame it first runs compiles.
+    LobeOutputScalesField,
+    OcclusionScalesDirect,
+    BumpIgnoresHandedness,
+    CoatNormalBendsBase,
+    MissingLobeTurnedOn,
+    // #485: core.light@1 without its Fresnel term; core.ambient@1 adding 0.01 × n.z; the light
+    // loop handing `light` a shadow of 1, calling it for the lights the policy cut too, handing
+    // `ambient` the world-space normal, and handing both `v` away from the eye.
+    LightDropsFresnel,
+    AmbientAddsNz,
+    LoopShadowOne,
+    LoopCallsCutLights,
+    LoopWorldNormal,
+    LoopViewAway,
     // #483: the structural steps' wrong programs.
     IterateFeedsFirst,
     SortTiesDecreasing,
@@ -342,6 +387,36 @@ pub enum Planted {
     KeepsLatestError,
     ReopensTightLoop,
     ResizeLeavesRendering,
+    /// #1899's wrong programs (tests/acceptance/1899/README.md: Planted programs).
+    RepeatsLastReading,
+    DropsUnresolvedFrames,
+    LadderActsInBudgetRun,
+    /// #1903's wrong programs (tests/acceptance/1903/README.md: Planted programs).
+    TimesEachPassAlone,
+    TakesFirstMeasurementAsLimit,
+    HoldsInput,
+    HeldInputMeterAtEncode,
+    BindGroupPerItem,
+    UploadsEveryTransform,
+    WarmsPerItem,
+    TimesOnlyScene,
+    WaitClockAfterWarmup,
+    /// #1937's wrong chooser (tests/acceptance/1937/README.md: Planted programs).
+    PicksLargestGain,
+    /// #449's wrong programs (tests/acceptance/449/README.md: Planted programs).
+    CountCap65536EveryClass,
+    CountCap1048576EveryClass,
+    BounceFirstTwoPlanes,
+    LandFloorPlaneOnly,
+    DragFirstOrder,
+    DragEuler120,
+    TurbulenceTableZeros,
+    BoundsEmitRegionOnly,
+    HidesAtSpanEnd,
+    SurfaceTrianglesUniform,
+    SurfaceBindPose,
+    InheritPreviousFrame,
+    BoundsBindPose,
 }
 
 impl Planted {
@@ -444,11 +519,28 @@ impl Planted {
             "ignores_spike" => Planted::IgnoresSpike,
             "sectors_source_over" => Planted::SectorsSourceOver,
             "particles_integrate" => Planted::ParticlesIntegrate,
+            "count_cap_65536_every_class" => Planted::CountCap65536EveryClass,
+            "count_cap_1048576_every_class" => Planted::CountCap1048576EveryClass,
+            "bounce_first_two_planes" => Planted::BounceFirstTwoPlanes,
+            "land_floor_plane_only" => Planted::LandFloorPlaneOnly,
+            "drag_first_order" => Planted::DragFirstOrder,
+            "drag_euler_120" => Planted::DragEuler120,
+            "turbulence_table_zeros" => Planted::TurbulenceTableZeros,
+            "bounds_emit_region_only" => Planted::BoundsEmitRegionOnly,
+            "hides_at_span_end" => Planted::HidesAtSpanEnd,
+            "surface_triangles_uniform" => Planted::SurfaceTrianglesUniform,
+            "surface_bind_pose" => Planted::SurfaceBindPose,
+            "inherit_previous_frame" => Planted::InheritPreviousFrame,
+            "bounds_bind_pose" => Planted::BoundsBindPose,
             "velocity_from_transform" => Planted::VelocityFromTransform,
             "sampler_steps_world" => Planted::SamplerStepsWorld,
             "velocity_pairs_by_index" => Planted::VelocityPairsByIndex,
             "settle_resets_each_frame" => Planted::SettleResetsEachFrame,
             "sampler_holds_camera" => Planted::SamplerHoldsCamera,
+            "keeps_frame_past_window" => Planted::KeepsFramePastWindow,
+            "determinism_hashes_live_view" => Planted::DeterminismHashesLiveView,
+            "grid_at_refresh" => Planted::GridAtRefresh,
+            "outlines_in_history" => Planted::OutlinesInHistory,
             "edges_unwelded" => Planted::EdgesUnwelded,
             "edges_skip_depth" => Planted::EdgesSkipDepth,
             "crease_below_angle" => Planted::CreaseBelowAngle,
@@ -504,6 +596,7 @@ impl Planted {
             "local_map_rekeys_on_any_t" => Planted::LocalMapRekeysOnAnyT,
             "cut_key_omits_planes" => Planted::CutKeyOmitsPlanes,
             "single_pixel_pick" => Planted::SinglePixelPick,
+            "hit_from_depth" => Planted::HitFromDepth,
             "cascade_cache_keeps_stale" => Planted::CascadeCacheKeepsStale,
             "prefilter_over_frames" => Planted::PrefilterOverFrames,
             "uncompensated_lobe" => Planted::UncompensatedLobe,
@@ -518,6 +611,8 @@ impl Planted {
             "climb_never_steps_down" => Planted::ClimbNeverStepsDown,
             "canonical_climbs" => Planted::CanonicalClimbs,
             "reclimbs_without_view_change" => Planted::ReclimbsWithoutViewChange,
+            "terrain_lod_by_distance" => Planted::TerrainLodByDistance,
+            "terrain_shades_own_level_normals" => Planted::TerrainShadesOwnLevelNormals,
             "drops_dispersion" => Planted::DropsDispersion,
             "absorption_ignores_thickness" => Planted::AbsorptionIgnoresThickness,
             "transmission_ignores_roughness" => Planted::TransmissionIgnoresRoughness,
@@ -530,6 +625,17 @@ impl Planted {
             "flakes_by_pixel" => Planted::FlakesByPixel,
             "subsurface_across_parts" => Planted::SubsurfaceAcrossParts,
             "subsurface_adds_to_diffuse" => Planted::SubsurfaceAddsToDiffuse,
+            "lobe_output_scales_field" => Planted::LobeOutputScalesField,
+            "occlusion_scales_direct" => Planted::OcclusionScalesDirect,
+            "bump_ignores_handedness" => Planted::BumpIgnoresHandedness,
+            "coat_normal_bends_base" => Planted::CoatNormalBendsBase,
+            "missing_lobe_turned_on" => Planted::MissingLobeTurnedOn,
+            "light_drops_fresnel" => Planted::LightDropsFresnel,
+            "ambient_adds_nz" => Planted::AmbientAddsNz,
+            "loop_shadow_one" => Planted::LoopShadowOne,
+            "loop_calls_cut_lights" => Planted::LoopCallsCutLights,
+            "loop_world_normal" => Planted::LoopWorldNormal,
+            "loop_view_away" => Planted::LoopViewAway,
             "iterate_feeds_first" => Planted::IterateFeedsFirst,
             "sort_ties_decreasing" => Planted::SortTiesDecreasing,
             "compact_by_atomic" => Planted::CompactByAtomic,
@@ -549,6 +655,23 @@ impl Planted {
             "keeps_latest_error" => Planted::KeepsLatestError,
             "reopens_tight_loop" => Planted::ReopensTightLoop,
             "resize_leaves_rendering" => Planted::ResizeLeavesRendering,
+            "repeats_last_reading" => Planted::RepeatsLastReading,
+            "drops_unresolved_frames" => Planted::DropsUnresolvedFrames,
+            "ladder_acts_in_budget_run" => Planted::LadderActsInBudgetRun,
+            "times_each_pass_alone" => Planted::TimesEachPassAlone,
+            "takes_first_measurement_as_limit" => Planted::TakesFirstMeasurementAsLimit,
+            "holds_input" => Planted::HoldsInput,
+            "held_input_meter_at_encode" => Planted::HeldInputMeterAtEncode,
+            "bind_group_per_item" => Planted::BindGroupPerItem,
+            "uploads_every_transform" => Planted::UploadsEveryTransform,
+            "warms_per_item" => Planted::WarmsPerItem,
+            "times_only_scene" => Planted::TimesOnlyScene,
+            "wait_clock_after_warmup" => Planted::WaitClockAfterWarmup,
+            "picks_largest_gain" => Planted::PicksLargestGain,
+            "instancer_addresses_by_slot" => Planted::InstancerAddressesBySlot,
+            "overlay_keeps_grid_on_seek" => Planted::OverlayKeepsGridOnSeek,
+            "line_reads_previous_step" => Planted::LineReadsPreviousStep,
+            "part_pose_in_world_space" => Planted::PartPoseInWorldSpace,
             _ => return None,
         })
     }
@@ -568,6 +691,8 @@ pub struct App {
     pub worker: Worker,
     pub backend: Backend,
     pub planted: Option<Planted>,
+    /// The `--planted` name, which a process the app starts runs under too (#1903).
+    pub planted_name: Option<String>,
     pub decision: Decision,
     pub declarations: Declarations,
     /// Dark declarations in the order they were recorded.
@@ -776,6 +901,7 @@ impl App {
             Some("decisions") => compare::decisions(self),
             Some("plugin") => plugin::call(self, out, call),
             Some("view3d") => view3d::call(self, out, call),
+            Some("particles") => particles::call(self, out, call),
             Some("simplify") => simplify::call(out, call),
             Some("workers") => textures::workers(self),
             Some("tone") => tone::call(self, out, call),
@@ -790,6 +916,8 @@ impl App {
             Some("columns") => columns::call(self, call),
             Some("exact") => effects::exact(self, out),
             Some("cross_gpu") => effects::cross_gpu(self, call),
+            Some("index_record") => records::index_record(self, out, call),
+            Some("cross_index") => records::cross_index(call),
             Some("op_table") => steps_ref::op_table(),
             Some("steps_reference") => steps_ref::steps_reference(self, out),
             Some("interp_suite") => interp_suite::call(self, call),
@@ -805,6 +933,11 @@ impl App {
             Some("spike2d") => marks2d::spike2d(self, out, call),
             Some("film2d") => film::film2d(self, out, call),
             Some("canonical") => live::canonical(self, out, call),
+            Some("frame_budget") => budget::call(self, call),
+            Some("envelope") => envelope::call(self, out, call),
+            Some("envelope_counts") => envelope::counts(self, call),
+            Some("envelope_opens") => envelope::opens(self, call),
+            Some("budget_fix") => fix::call(self, out, call),
             Some("adapter") => timing::adapter(self),
             Some("tick") => timing::tick(self, call),
             #[cfg(feature = "test-meter")]
@@ -869,7 +1002,7 @@ fn main() {
     if first.as_deref() != Some("run") {
         bad_input();
     }
-    let (mut backend, mut planted) = (Backend::Gpu, None);
+    let (mut backend, mut planted, mut planted_name) = (Backend::Gpu, None, None);
     let (mut startup, mut validation) = (Startup::default(), false);
     let mut headless = false;
     // The planted reopen (#1413, test-faults): the first n reopens fail, or every one.
@@ -890,12 +1023,9 @@ fn main() {
                 Some("noop") => backend = Backend::Noop,
                 _ => bad_input(),
             },
-            "--planted" => match args.next().as_deref().and_then(Planted::parse) {
-                Some(p) => {
-                    if p == Planted::DropsDispersion {
-                        deep_canvas_scene3d::gltf::DROPS_DISPERSION
-                            .store(true, std::sync::atomic::Ordering::Relaxed);
-                    }
+            "--planted" => match args.next().and_then(|n| Some((Planted::parse(&n)?, n))) {
+                Some((p, name)) => {
+                    planted_name = Some(name);
                     planted = Some(p)
                 }
                 None => bad_input(),
@@ -998,6 +1128,7 @@ fn main() {
         worker,
         backend,
         planted,
+        planted_name,
         decision: Decision {
             path,
             fps_cap: None,

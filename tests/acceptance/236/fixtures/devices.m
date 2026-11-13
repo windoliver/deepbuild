@@ -71,6 +71,30 @@ static NSString *openAudioOutput(void) {
   return s == noErr ? @"ok" : [NSString stringWithFormat:@"failed: AudioQueueStart %d", (int)s];
 }
 
+#if __MAC_OS_X_VERSION_MIN_REQUIRED >= 150000
+#import <ScreenCaptureKit/ScreenCaptureKit.h>
+static NSString *openScreen(int *authorized) {
+  *authorized = CGPreflightScreenCaptureAccess();
+  if (!*authorized) return @"not tried: screen capture not allowed";
+  dispatch_semaphore_t done = dispatch_semaphore_create(0);
+  __block NSString *open = nil;
+  [SCShareableContent getShareableContentWithCompletionHandler:^(SCShareableContent *content, NSError *error) {
+    SCDisplay *display = content.displays.firstObject;
+    if (!display) {
+      open = [NSString stringWithFormat:@"failed: %@", error.localizedDescription ?: @"no display"];
+      dispatch_semaphore_signal(done);
+      return;
+    }
+    SCContentFilter *filter = [[SCContentFilter alloc] initWithDisplay:display excludingWindows:@[]];
+    [SCScreenshotManager captureImageWithFilter:filter configuration:[[SCStreamConfiguration alloc] init] completionHandler:^(CGImageRef image, NSError *failure) {
+      open = image ? @"ok" : [NSString stringWithFormat:@"failed: %@", failure.localizedDescription ?: @"no image"];
+      dispatch_semaphore_signal(done);
+    }];
+  }];
+  if (dispatch_semaphore_wait(done, dispatch_time(DISPATCH_TIME_NOW, 10 * NSEC_PER_SEC))) return @"failed: no reply from ScreenCaptureKit in 10 s";
+  return open;
+}
+#else
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
 static NSString *openScreen(int *authorized) {
@@ -82,6 +106,7 @@ static NSString *openScreen(int *authorized) {
   return @"ok";
 }
 #pragma clang diagnostic pop
+#endif
 
 static int denied(const char *operation, const char *name) {
   pid_t self = getpid();

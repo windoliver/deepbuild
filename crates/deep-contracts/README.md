@@ -18,4 +18,4 @@ Core layer. It has no dependencies at all: std only. It never imports another wo
 
 ## Deviations
 
-- `src/generated.rs`: a 46,000-line generated file checked in, under `#[allow(clippy::all, non_snake_case)]` and `#[rustfmt::skip]` in `src/lib.rs`. Its fields spell the schemas' keys as written (`readBy`, `SessionStart`) so a key and its field never differ, and the acceptance tests hold it equal to the generator's output, so formatting or renaming it breaks that check.
+- `src/generated.rs`: a generated file of about 72,000 lines, checked in, under `#[allow(clippy::all, non_snake_case)]` and `#[rustfmt::skip]` in `src/lib.rs`. Its fields spell the schemas' keys as written (`readBy`, `SessionStart`) so a key and its field never differ, and the acceptance tests hold it equal to the generator's output, so formatting or renaming it breaks that check.

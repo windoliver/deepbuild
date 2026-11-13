@@ -1,0 +1,11 @@
+{
+  "plant": "beats_fixed_120",
+  "tempos": [
+    120,
+    120
+  ],
+  "failures": [
+    "the asset 2d9be2737a39b4b3122a04c0c562ce08c680b27cc3d26714a71233aa751dba9a (the 100 BPM click track) reads 120.000 BPM, not 100 ± 0.5",
+    "the asset 6d5865366467cff00842d69066cfb15e5995bd50b8860d4b9ba065e3d89e4f07 (the 96 BPM click track) reads 120.000 BPM, not 96 ± 0.5"
+  ]
+}

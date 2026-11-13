@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { afterAll, expect, it } from 'vitest';
 import { runApiJourney } from '../src/api.ts';
 import { firstDiffering, type ComparedStep } from '../src/compare.ts';
-import { featuresWithoutJourney, listFeatures, selectJourneys } from '../src/features.ts';
+import { listFeatures, selectJourneys } from '../src/features.ts';
 import { parseJourney, reviewJourney } from '../src/journey.ts';
 import { judgeLatency } from '../src/latency.ts';
 import { assertMotion, assertReducedMotion, type Animation } from '../src/motion.ts';
@@ -68,7 +68,7 @@ it('lists features by their feature key, selects the changed ones and those shar
   expect(selectJourneys(features, ['src/money.js']).journeys.sort()).toEqual(['checkout', 'export']);
   expect(selectJourneys(features, ['src/cart.js'])).toMatchObject({ changed: ['cart'], neighbors: [], journeys: ['checkout'] });
   expect(selectJourneys(features, ['src/money.js']).neighbors).toEqual(['cart', 'export']);
-  expect(featuresWithoutJourney(features)).toEqual(['about']);
+  expect(selectJourneys(features, ['src/about.js', 'src/cart.js']).withoutJourney).toEqual(['about']);
 });
 
 const step = (id: string, route: string, raw: string, controls: ComparedStep['controls'], outcome = 'passed'): ComparedStep => ({ id, outcome, route, raw, controls });

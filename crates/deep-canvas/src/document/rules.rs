@@ -98,6 +98,8 @@ pub(crate) fn check(
     ) -> Vec<ItemRules<'e>>,
 ) {
     let items = member(doc, "items").and_then(Value::as_object);
+    // #1183: an assembly's `shown_at` and an `exaggerate`, which lengths drawn larger than real read.
+    crate::lengths::check(doc, issues);
     status_bindings(doc, items, issues);
     let Some(items) = items else {
         return;
@@ -139,6 +141,8 @@ struct Texts<'d> {
     /// Whether number words count as numbers (`number_words`, true unless a check input says
     /// false).
     number_words: bool,
+    /// The overlays that disclose an exaggeration, whose templates are displayed text (#1183).
+    disclosures: BTreeSet<&'d str>,
 }
 
 impl<'d> Texts<'d> {
@@ -175,6 +179,7 @@ impl<'d> Texts<'d> {
             number_words: !inputs
                 .iter()
                 .any(|c| member(c, "number_words") == Some(&Value::Bool(false))),
+            disclosures: crate::lengths::disclosures(doc).collect(),
         }
     }
 
@@ -210,7 +215,8 @@ fn numbers_of(doc: &Value, texts: &Texts<'_>, id: &String, item: &Value, issues:
         }
         return;
     }
-    if !kind_text(item).is_some_and(|k| k.starts_with("text@")) {
+    let disclosure = texts.disclosures.contains(id.as_str());
+    if !disclosure && !kind_text(item).is_some_and(|k| k.starts_with("text@")) {
         return;
     }
     let params = member(item, "params");
@@ -226,7 +232,16 @@ fn numbers_of(doc: &Value, texts: &Texts<'_>, id: &String, item: &Value, issues:
     // A code item's text is its raw bytes' display form. A quote's digits are quotation, listed
     // and never counted; an unquoted code item's digits count as numbers (Text `text@1`: code).
     if param("code").is_some() {
-        if let (None, Some(Value::String(raw))) = (param("quote"), param("raw")) {
+        // #1965: a raw that is an asset shows its bytes, which its host read into `base64`.
+        let raw = match param("raw") {
+            Some(Value::String(raw)) => Some(raw.clone()),
+            Some(raw) => member(raw, "base64")
+                .and_then(Value::as_str)
+                .and_then(crate::base64::decode)
+                .map(|bytes| String::from_utf8_lossy(&bytes).into_owned()),
+            None => None,
+        };
+        if let (None, Some(raw)) = (param("quote"), &raw) {
             if texts.shows_number(raw) {
                 issues.push(Issue::error(
                     "number_unsourced",
@@ -289,7 +304,8 @@ fn template_numbers(doc: &Value, texts: &Texts<'_>, id: &str, t: &str, issues: &
             )),
             Part::Words(_) => {}
             Part::Slot(slot)
-                if template::value(doc, slot).is_none() && !template::reads_anchor(doc, slot) =>
+                if template::value_in(doc, id, slot).is_none()
+                    && !template::reads_anchor(doc, slot) =>
             {
                 issues.push(Issue::error(
                     "ref_unresolved",
@@ -620,6 +636,17 @@ mod tests {
         assert_eq!(unsourced(&d), [vec!["c".to_string()]]);
         d["items"]["c"]["params"]["quote"] =
             json!({"source": "0".repeat(64), "path": "r.py", "lines": [1, 1]});
+        assert_eq!(unsourced(&d), Vec::<Vec<String>>::new());
+        // #1965: a raw that is an asset counts as its bytes do, once its host has read them.
+        d["items"]["c"]["params"]
+            .as_object_mut()
+            .unwrap()
+            .remove("quote");
+        let read = crate::base64::encode(b"caf\xe9 = 3\n");
+        d["items"]["c"]["params"]["raw"] = json!({"asset": "0".repeat(64), "base64": read});
+        assert_eq!(unsourced(&d), [vec!["c".to_string()]]);
+        let read = crate::base64::encode(b"caf\xe9\n");
+        d["items"]["c"]["params"]["raw"] = json!({"asset": "0".repeat(64), "base64": read});
         assert_eq!(unsourced(&d), Vec::<Vec<String>>::new());
     }
 }

@@ -7,7 +7,6 @@
 use bytemuck::{Pod, Zeroable};
 use deep_canvas_scene3d::scene::{Affine3, Camera, Depth, Motion, Scene, Shape};
 use deep_gpu::device::Device;
-use wgpu::util::DeviceExt as _;
 
 use crate::mesh::{Mesh, FLOATS};
 
@@ -187,7 +186,7 @@ fn rows(m: &Affine3) -> [[f32; 4]; 3] {
 }
 
 fn texture(
-    d: &wgpu::Device,
+    d: &deep_gpu::counted::Wgpu,
     label: &str,
     size: [u32; 2],
     format: wgpu::TextureFormat,
@@ -276,7 +275,7 @@ fn uniform_of(
 }
 
 impl MotionPass {
-    fn pipes(&mut self, d: &wgpu::Device) -> &Pipes {
+    fn pipes(&mut self, d: &deep_gpu::counted::Wgpu) -> &Pipes {
         if self.pipes.is_none() {
             let module = d.create_shader_module(wgpu::ShaderModuleDescriptor {
                 label: Some("scene3d.motion"),
@@ -557,20 +556,20 @@ impl MotionPass {
         let binds = [
             group(
                 &computes[0],
-                &[(0, u.clone()), (1, Tv(&velocity_view)), (2, Tv(&tile_view))],
+                &[(0, u.clone()), (1, Tv(velocity_view)), (2, Tv(tile_view))],
             ),
             group(
                 &computes[1],
-                &[(0, u.clone()), (3, Tv(&tile_view)), (4, Tv(&near_view))],
+                &[(0, u.clone()), (3, Tv(tile_view)), (4, Tv(near_view))],
             ),
             group(
                 &computes[2],
                 &[
                     (0, u.clone()),
-                    (1, Tv(&velocity_view)),
-                    (5, Tv(&near_view)),
+                    (1, Tv(velocity_view)),
+                    (5, Tv(near_view)),
                     (6, Tv(linear)),
-                    (7, Tv(&resolved_view)),
+                    (7, Tv(resolved_view)),
                 ],
             ),
         ];

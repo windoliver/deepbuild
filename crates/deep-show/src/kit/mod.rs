@@ -182,7 +182,12 @@ impl KitCall {
             patch_seed: optional(c.get("patch_seed"), Value::as_u64)?,
             replay: path("replay")?,
             // The committed migration corpus, unless the call names another folder.
-            corpus: path("corpus")?.or_else(|| Some(PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/kit-corpus")))),
+            corpus: path("corpus")?.or_else(|| {
+                Some(PathBuf::from(concat!(
+                    env!("CARGO_MANIFEST_DIR"),
+                    "/kit-corpus"
+                )))
+            }),
             ledger: path("ledger")?,
             registries: list("registries")?,
         })
@@ -429,6 +434,10 @@ impl<'a> Hub<'a> {
             if !module_failures.is_empty() {
                 verdict = Verdict::Fail;
             }
+            // A module none of whose parts ran passes nothing.
+            if parts.is_empty() {
+                verdict = Verdict::Invalid;
+            }
             corpus_files.extend(ctx.corpus.iter().cloned());
             for (k, v) in &ctx.criteria {
                 let e = criteria.entry(k.clone()).or_insert(v);
@@ -455,7 +464,13 @@ impl<'a> Hub<'a> {
             );
             modules.push(m);
         }
-        if let Some(path) = &call.ledger {
+        // A call that matched no module ran nothing: it passes nothing and writes no ledger.
+        if modules.is_empty() {
+            overall = Verdict::Invalid;
+        }
+        // Nor does a run over some parts only: its PASS would seal a module the others never ran on.
+        let whole = !modules.is_empty() && call.parts.is_none();
+        if let Some(path) = call.ledger.as_ref().filter(|_| whole) {
             if let Some(dir) = path.parent() {
                 let _ = std::fs::create_dir_all(dir);
             }
@@ -582,7 +597,9 @@ fn sandbox_part(module: &str) -> Option<PartRun> {
     let cases = kit["cases"].as_array().cloned().unwrap_or_default();
     let mut run = PartRun::new(cases.len() as u64);
     for c in cases {
-        let Value::Object(mut fields) = c else { continue };
+        let Value::Object(mut fields) = c else {
+            continue;
+        };
         let verdict = match fields.remove("verdict").as_ref().and_then(Value::as_str) {
             Some("PASS") => Verdict::Pass,
             _ => Verdict::Fail,

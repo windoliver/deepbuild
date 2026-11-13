@@ -146,7 +146,7 @@ function problems(o: Seen): string[] {
 
 function holds(o: Seen): void {
   const found = problems(o);
-  if (found.length) throw Error(`${TAG}${o.plant ? ` (DEEP_HUB_PLANT=${o.plant})` : ''}:\n- ${found.join('\n- ')}`);
+  expect(found, `${TAG}${o.plant ? ` (DEEP_HUB_PLANT=${o.plant})` : ''}:\n- ${found.join('\n- ')}`).toEqual([]);
 }
 
 test(`${TAG} a deep_ask from a session's deep mcp is filed under that session; a process whose parent matches no session reads the wiki but no session's items, and can't ask or claim`, async () => {

@@ -154,6 +154,8 @@ pub const TABLE: &[Def] = &[
     d("not@1", X, 1.0, true, ALL),
     d("or@1", A, 1.0, true, ALL),
     d("pixel@1", NONE, 0.0, true, MATERIAL | PASS),
+    // Geometry steps (#486): the fragment's position in `space` (world).
+    d("position@1", NONE, 0.0, false, MATERIAL),
     d("pow@1", A, 8.0, false, ALL),
     d("rand@1", &["key"], 7.0, false, ALL),
     tex("read@1", &["buf", "i"], true, ALL),
@@ -182,9 +184,13 @@ pub const TABLE: &[Def] = &[
     d("sub@1", A, 1.0, true, ALL),
     d("t@1", NONE, 0.0, false, ALL),
     d("tan@1", X, 8.0, false, ALL),
+    // The surface's tangent in world space, its frame's handedness in w (#486).
+    d("tangent@1", NONE, 0.0, false, MATERIAL),
     d("to_hsl@1", &["rgb"], 12.0, false, MATERIAL | PASS),
     d("transpose@1", X, 4.0, false, ALL),
     d("trunc@1", X, 1.0, true, ALL),
+    // The mesh's first texture coordinates (#486).
+    d("uv0@1", NONE, 0.0, false, MATERIAL),
     d("write@1", W, 1.0, true, COMPUTE),
     d("xor@1", A, 1.0, true, ALL),
 ];
@@ -661,6 +667,9 @@ fn base(step: &str, a: &[V], env: &Value, to: Option<&str>) -> Result<V, String>
         "const" => env_v("value")?,
         "camera" => Vf(env_nums("camera")?),
         "normal" => Vf(env_nums("normal")?),
+        "position" => Vf(env_nums("position")?),
+        "tangent" => Vf(env_nums("tangent")?),
+        "uv0" => Vf(env_nums("uv0")?),
         "role" => arg(0)?,
         "pixel" => UVec(env_nums("pixel")?.into_iter().map(|n| n as u32).collect()),
         "screen_size" => Vf(env_nums("size")?),
@@ -815,7 +824,12 @@ fn structural(name: &str, a: &[V], env: &Value, twin: &str) -> Result<V, String>
             let size: Vec<usize> = env
                 .get("size")
                 .and_then(Value::as_array)
-                .map(|s| s.iter().filter_map(Value::as_u64).map(|x| x as usize).collect())
+                .map(|s| {
+                    s.iter()
+                        .filter_map(Value::as_u64)
+                        .map(|x| x as usize)
+                        .collect()
+                })
                 .ok_or_else(|| format!("{name}'s fixture names no size"))?;
             if size.len() != 3 || raw.len() != size[0] * size[1] * size[2] {
                 return Err(format!("{name}'s texture isn't its size"));

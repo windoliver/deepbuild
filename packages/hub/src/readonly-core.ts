@@ -41,6 +41,7 @@ export function unreadable(options: CoreOptions): Unreadable | null {
   const db = new Database(root.ledger, { readonly: true, fileMustExist: true });
   let rows: { kind: string; v: number }[];
   try {
+    db.pragma('cache_size = -2000');
     const has = db.prepare("SELECT 1 FROM sqlite_schema WHERE type = 'table' AND name = 'events'").get();
     rows = has ? (db.prepare('SELECT kind, max(v) AS v FROM events GROUP BY kind').all() as { kind: string; v: number }[]) : [];
   } finally {
@@ -67,7 +68,7 @@ export class ReadOnlyCore {
     if (method === 'hub.health' || method === 'health') return this.health();
     return Promise.reject(Error(this.why.reason));
   }
-  mcpHello(): Promise<string | null> { return Promise.resolve(null); }
+  mcpHello(): Promise<{ session: null }> { return Promise.resolve({ session: null }); }
   extensionHook(): Promise<null> { return Promise.resolve(null); }
   hookReply(): Promise<Obj> { return Promise.resolve({}); }
   /** No record to keep the rest in: the parts joined as they came (#1296). */
@@ -76,7 +77,7 @@ export class ReadOnlyCore {
   permission(): Promise<{ decision: 'none' }> { return Promise.resolve({ decision: 'none' }); }
   paseoOwner(): Promise<string | null> { return Promise.resolve(null); }
   paseoAppAnswer(): Promise<Obj> { return Promise.resolve({}); }
-  subscribe(): Promise<void> { return Promise.resolve(); }
+  subscribe(): Promise<{ head?: number; snapshot?: true }> { return Promise.resolve({}); }
   waitsState(): Promise<{ history: [string, number][]; sessions: never[] }> { return Promise.resolve({ history: [], sessions: [] }); }
   lockLost(): void {}
   stop(): Promise<void> { return Promise.resolve(); }
@@ -84,6 +85,7 @@ export class ReadOnlyCore {
   replayed(): Promise<void> { return Promise.resolve(); }
   waiterGone(): void {}
   notifierGone(): void {}
+  callGone(): void {}
   hookGone(): void {}
   overrun(): Promise<void> { return Promise.resolve(); }
   later(): void {}

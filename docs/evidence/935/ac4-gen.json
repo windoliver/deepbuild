@@ -1,0 +1,1677 @@
+{
+  "takes": [
+    [
+      "f355be58fa129ce848c20a8646b2b6dfa354c2b1d6f8f7d01a91baed0c49c2b1",
+      "ad733409b4d74d129b87bb75e4d5f5265c96ea63e6a45a8ca9e508dec9827877",
+      "13c86f438b3c7175806a099fd7a61eda1900e33b404f2e41dcf169c815820ce7",
+      "cbd26fe0818c63f1b4d13d87676bf0aea72bab827f198b4ec0fb8962eded6b5c"
+    ],
+    [
+      "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa",
+      "997739980328e3b315f0016f83c3d9d57c6e7cd01fbe77ca16e54843aa63d898",
+      "2087b7f9cc5d4ca82f14b402a7385ae5a56fad7f0011604c5ac3fee19d177610",
+      "208655de011ec646d5a3f6aad2388be9b2386f926f58aa2dc549259a864a193a"
+    ],
+    [
+      "724bb4f4af9059ff98565d3d19060571f76d81b9854795de12c77f0d2e9b6789",
+      "d4fcde79f470b1b319900d1094bce0a3f1aec0de83bda2cffc94986725768b28",
+      "abf8bc68ebb7995fc32bbf3aaa2b225ec7f66eae853c85d631ff2fc9660729e4",
+      "7e5796983dfdbd55d109c7be92cd14ddd6910c6eaa854e7d4e10c1e228f7a5c7"
+    ]
+  ],
+  "hot_take": "bb664b945ea305baa59549ac4e99e4dd762e2f8709aca16e3ece0f34c69cdcb3",
+  "coin": {
+    "state": "PASS",
+    "readings": {
+      "takes": [
+        {
+          "integrated": -27.999999998179987,
+          "target": -28,
+          "true_peak": -21.83957680762568,
+          "lead": 0.00014583333333333335,
+          "duration": 0.2775,
+          "path": "sounds/coin/variants/0/takes/0",
+          "asset": "f355be58fa129ce848c20a8646b2b6dfa354c2b1d6f8f7d01a91baed0c49c2b1"
+        },
+        {
+          "integrated": -27.999999999477645,
+          "target": -28,
+          "true_peak": -21.69328631260155,
+          "lead": 0.00014583333333333335,
+          "duration": 0.2925,
+          "path": "sounds/coin/variants/0/takes/1",
+          "asset": "ad733409b4d74d129b87bb75e4d5f5265c96ea63e6a45a8ca9e508dec9827877"
+        },
+        {
+          "integrated": -28.000000003483084,
+          "target": -28,
+          "true_peak": -21.697606296322213,
+          "lead": 0.00014583333333333335,
+          "duration": 0.3075,
+          "path": "sounds/coin/variants/0/takes/2",
+          "asset": "13c86f438b3c7175806a099fd7a61eda1900e33b404f2e41dcf169c815820ce7"
+        },
+        {
+          "integrated": -27.999999999998224,
+          "target": -28,
+          "true_peak": -21.56562629116829,
+          "lead": 0.00014583333333333335,
+          "duration": 0.3225,
+          "path": "sounds/coin/variants/0/takes/3",
+          "asset": "cbd26fe0818c63f1b4d13d87676bf0aea72bab827f198b4ec0fb8962eded6b5c"
+        },
+        {
+          "integrated": -21.999999999198742,
+          "target": -22,
+          "true_peak": -16.036340653362867,
+          "lead": 0.000125,
+          "duration": 0.2775,
+          "path": "sounds/coin/variants/1/takes/0",
+          "asset": "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+        },
+        {
+          "integrated": -22.000000000910752,
+          "target": -22,
+          "true_peak": -15.893882616830169,
+          "lead": 0.000125,
+          "duration": 0.2925,
+          "path": "sounds/coin/variants/1/takes/1",
+          "asset": "997739980328e3b315f0016f83c3d9d57c6e7cd01fbe77ca16e54843aa63d898"
+        },
+        {
+          "integrated": -22.000000002216666,
+          "target": -22,
+          "true_peak": -15.903708687389946,
+          "lead": 0.000125,
+          "duration": 0.3075,
+          "path": "sounds/coin/variants/1/takes/2",
+          "asset": "2087b7f9cc5d4ca82f14b402a7385ae5a56fad7f0011604c5ac3fee19d177610"
+        },
+        {
+          "integrated": -22.000000000577714,
+          "target": -22,
+          "true_peak": -15.771907015193882,
+          "lead": 0.000125,
+          "duration": 0.3225,
+          "path": "sounds/coin/variants/1/takes/3",
+          "asset": "208655de011ec646d5a3f6aad2388be9b2386f926f58aa2dc549259a864a193a"
+        },
+        {
+          "integrated": -16.00000000073151,
+          "target": -16,
+          "true_peak": -10.241986325439656,
+          "lead": 0.00008333333333333333,
+          "duration": 0.2775,
+          "path": "sounds/coin/variants/2/takes/0",
+          "asset": "724bb4f4af9059ff98565d3d19060571f76d81b9854795de12c77f0d2e9b6789"
+        },
+        {
+          "integrated": -15.999999996140131,
+          "target": -16,
+          "true_peak": -10.103234656395596,
+          "lead": 0.00008333333333333333,
+          "duration": 0.2925,
+          "path": "sounds/coin/variants/2/takes/1",
+          "asset": "d4fcde79f470b1b319900d1094bce0a3f1aec0de83bda2cffc94986725768b28"
+        },
+        {
+          "integrated": -15.999999998364167,
+          "target": -16,
+          "true_peak": -10.117947610598822,
+          "lead": 0.00008333333333333333,
+          "duration": 0.3075,
+          "path": "sounds/coin/variants/2/takes/2",
+          "asset": "abf8bc68ebb7995fc32bbf3aaa2b225ec7f66eae853c85d631ff2fc9660729e4"
+        },
+        {
+          "integrated": -16.00000000481279,
+          "target": -16,
+          "true_peak": -9.988362037202018,
+          "lead": 0.00008333333333333333,
+          "duration": 0.3225,
+          "path": "sounds/coin/variants/2/takes/3",
+          "asset": "7e5796983dfdbd55d109c7be92cd14ddd6910c6eaa854e7d4e10c1e228f7a5c7"
+        }
+      ],
+      "median_duration": 0.3,
+      "closest": {
+        "pair": [
+          "sounds/coin/variants/1/takes/1",
+          "sounds/coin/variants/1/takes/2"
+        ],
+        "distance": 3.95928640652426
+      }
+    },
+    "issues": [],
+    "blocked": []
+  },
+  "one_file": {
+    "state": "FAIL",
+    "readings": {
+      "takes": [
+        {
+          "integrated": -21.999999999198742,
+          "target": -28,
+          "true_peak": -16.036340653362867,
+          "lead": 0.000125,
+          "duration": 0.2775,
+          "path": "sounds/one_file/variants/0/takes/0",
+          "asset": "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+        },
+        {
+          "integrated": -21.999999999198742,
+          "target": -28,
+          "true_peak": -16.036340653362867,
+          "lead": 0.000125,
+          "duration": 0.2775,
+          "path": "sounds/one_file/variants/0/takes/1",
+          "asset": "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+        },
+        {
+          "integrated": -21.999999999198742,
+          "target": -28,
+          "true_peak": -16.036340653362867,
+          "lead": 0.000125,
+          "duration": 0.2775,
+          "path": "sounds/one_file/variants/0/takes/2",
+          "asset": "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+        },
+        {
+          "integrated": -21.999999999198742,
+          "target": -28,
+          "true_peak": -16.036340653362867,
+          "lead": 0.000125,
+          "duration": 0.2775,
+          "path": "sounds/one_file/variants/0/takes/3",
+          "asset": "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+        },
+        {
+          "integrated": -21.999999999198742,
+          "target": -22,
+          "true_peak": -16.036340653362867,
+          "lead": 0.000125,
+          "duration": 0.2775,
+          "path": "sounds/one_file/variants/1/takes/0",
+          "asset": "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+        },
+        {
+          "integrated": -21.999999999198742,
+          "target": -22,
+          "true_peak": -16.036340653362867,
+          "lead": 0.000125,
+          "duration": 0.2775,
+          "path": "sounds/one_file/variants/1/takes/1",
+          "asset": "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+        },
+        {
+          "integrated": -21.999999999198742,
+          "target": -22,
+          "true_peak": -16.036340653362867,
+          "lead": 0.000125,
+          "duration": 0.2775,
+          "path": "sounds/one_file/variants/1/takes/2",
+          "asset": "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+        },
+        {
+          "integrated": -21.999999999198742,
+          "target": -22,
+          "true_peak": -16.036340653362867,
+          "lead": 0.000125,
+          "duration": 0.2775,
+          "path": "sounds/one_file/variants/1/takes/3",
+          "asset": "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+        },
+        {
+          "integrated": -21.999999999198742,
+          "target": -16,
+          "true_peak": -16.036340653362867,
+          "lead": 0.000125,
+          "duration": 0.2775,
+          "path": "sounds/one_file/variants/2/takes/0",
+          "asset": "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+        },
+        {
+          "integrated": -21.999999999198742,
+          "target": -16,
+          "true_peak": -16.036340653362867,
+          "lead": 0.000125,
+          "duration": 0.2775,
+          "path": "sounds/one_file/variants/2/takes/1",
+          "asset": "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+        },
+        {
+          "integrated": -21.999999999198742,
+          "target": -16,
+          "true_peak": -16.036340653362867,
+          "lead": 0.000125,
+          "duration": 0.2775,
+          "path": "sounds/one_file/variants/2/takes/2",
+          "asset": "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+        },
+        {
+          "integrated": -21.999999999198742,
+          "target": -16,
+          "true_peak": -16.036340653362867,
+          "lead": 0.000125,
+          "duration": 0.2775,
+          "path": "sounds/one_file/variants/2/takes/3",
+          "asset": "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+        }
+      ],
+      "median_duration": 0.2775,
+      "closest": {
+        "pair": [
+          "sounds/one_file/variants/0/takes/0",
+          "sounds/one_file/variants/0/takes/1"
+        ],
+        "distance": 0
+      }
+    },
+    "issues": [
+      {
+        "code": "audio.gen.level",
+        "path": "sounds/one_file/variants/0/takes/0",
+        "actual": {
+          "integrated": -21.999999999198742,
+          "target": -28,
+          "tolerance": 1
+        },
+        "what": "sounds/one_file/variants/0/takes/0 reads -22.00 LUFS, outside ±1 LU of its target -28 LUFS"
+      },
+      {
+        "code": "audio.gen.level",
+        "path": "sounds/one_file/variants/0/takes/1",
+        "actual": {
+          "integrated": -21.999999999198742,
+          "target": -28,
+          "tolerance": 1
+        },
+        "what": "sounds/one_file/variants/0/takes/1 reads -22.00 LUFS, outside ±1 LU of its target -28 LUFS"
+      },
+      {
+        "code": "audio.gen.level",
+        "path": "sounds/one_file/variants/0/takes/2",
+        "actual": {
+          "integrated": -21.999999999198742,
+          "target": -28,
+          "tolerance": 1
+        },
+        "what": "sounds/one_file/variants/0/takes/2 reads -22.00 LUFS, outside ±1 LU of its target -28 LUFS"
+      },
+      {
+        "code": "audio.gen.level",
+        "path": "sounds/one_file/variants/0/takes/3",
+        "actual": {
+          "integrated": -21.999999999198742,
+          "target": -28,
+          "tolerance": 1
+        },
+        "what": "sounds/one_file/variants/0/takes/3 reads -22.00 LUFS, outside ±1 LU of its target -28 LUFS"
+      },
+      {
+        "code": "audio.gen.level",
+        "path": "sounds/one_file/variants/2/takes/0",
+        "actual": {
+          "integrated": -21.999999999198742,
+          "target": -16,
+          "tolerance": 1
+        },
+        "what": "sounds/one_file/variants/2/takes/0 reads -22.00 LUFS, outside ±1 LU of its target -16 LUFS"
+      },
+      {
+        "code": "audio.gen.level",
+        "path": "sounds/one_file/variants/2/takes/1",
+        "actual": {
+          "integrated": -21.999999999198742,
+          "target": -16,
+          "tolerance": 1
+        },
+        "what": "sounds/one_file/variants/2/takes/1 reads -22.00 LUFS, outside ±1 LU of its target -16 LUFS"
+      },
+      {
+        "code": "audio.gen.level",
+        "path": "sounds/one_file/variants/2/takes/2",
+        "actual": {
+          "integrated": -21.999999999198742,
+          "target": -16,
+          "tolerance": 1
+        },
+        "what": "sounds/one_file/variants/2/takes/2 reads -22.00 LUFS, outside ±1 LU of its target -16 LUFS"
+      },
+      {
+        "code": "audio.gen.level",
+        "path": "sounds/one_file/variants/2/takes/3",
+        "actual": {
+          "integrated": -21.999999999198742,
+          "target": -16,
+          "tolerance": 1
+        },
+        "what": "sounds/one_file/variants/2/takes/3 reads -22.00 LUFS, outside ±1 LU of its target -16 LUFS"
+      },
+      {
+        "code": "audio.gen.same",
+        "path": "sounds/one_file/variants/0/takes/0",
+        "actual": {
+          "pair": [
+            "sounds/one_file/variants/0/takes/0",
+            "sounds/one_file/variants/0/takes/1"
+          ],
+          "assets": [
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa",
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+          ],
+          "by": "hash",
+          "distance": 0,
+          "limit": 0.5
+        },
+        "what": "sounds/one_file/variants/0/takes/0 and sounds/one_file/variants/0/takes/1 are the same take: one file, 13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+      },
+      {
+        "code": "audio.gen.same",
+        "path": "sounds/one_file/variants/0/takes/0",
+        "actual": {
+          "pair": [
+            "sounds/one_file/variants/0/takes/0",
+            "sounds/one_file/variants/0/takes/2"
+          ],
+          "assets": [
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa",
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+          ],
+          "by": "hash",
+          "distance": 0,
+          "limit": 0.5
+        },
+        "what": "sounds/one_file/variants/0/takes/0 and sounds/one_file/variants/0/takes/2 are the same take: one file, 13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+      },
+      {
+        "code": "audio.gen.same",
+        "path": "sounds/one_file/variants/0/takes/0",
+        "actual": {
+          "pair": [
+            "sounds/one_file/variants/0/takes/0",
+            "sounds/one_file/variants/0/takes/3"
+          ],
+          "assets": [
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa",
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+          ],
+          "by": "hash",
+          "distance": 0,
+          "limit": 0.5
+        },
+        "what": "sounds/one_file/variants/0/takes/0 and sounds/one_file/variants/0/takes/3 are the same take: one file, 13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+      },
+      {
+        "code": "audio.gen.same",
+        "path": "sounds/one_file/variants/0/takes/0",
+        "actual": {
+          "pair": [
+            "sounds/one_file/variants/0/takes/0",
+            "sounds/one_file/variants/1/takes/0"
+          ],
+          "assets": [
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa",
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+          ],
+          "by": "hash",
+          "distance": 0,
+          "limit": 0.5
+        },
+        "what": "sounds/one_file/variants/0/takes/0 and sounds/one_file/variants/1/takes/0 are the same take: one file, 13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+      },
+      {
+        "code": "audio.gen.same",
+        "path": "sounds/one_file/variants/0/takes/0",
+        "actual": {
+          "pair": [
+            "sounds/one_file/variants/0/takes/0",
+            "sounds/one_file/variants/1/takes/1"
+          ],
+          "assets": [
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa",
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+          ],
+          "by": "hash",
+          "distance": 0,
+          "limit": 0.5
+        },
+        "what": "sounds/one_file/variants/0/takes/0 and sounds/one_file/variants/1/takes/1 are the same take: one file, 13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+      },
+      {
+        "code": "audio.gen.same",
+        "path": "sounds/one_file/variants/0/takes/0",
+        "actual": {
+          "pair": [
+            "sounds/one_file/variants/0/takes/0",
+            "sounds/one_file/variants/1/takes/2"
+          ],
+          "assets": [
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa",
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+          ],
+          "by": "hash",
+          "distance": 0,
+          "limit": 0.5
+        },
+        "what": "sounds/one_file/variants/0/takes/0 and sounds/one_file/variants/1/takes/2 are the same take: one file, 13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+      },
+      {
+        "code": "audio.gen.same",
+        "path": "sounds/one_file/variants/0/takes/0",
+        "actual": {
+          "pair": [
+            "sounds/one_file/variants/0/takes/0",
+            "sounds/one_file/variants/1/takes/3"
+          ],
+          "assets": [
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa",
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+          ],
+          "by": "hash",
+          "distance": 0,
+          "limit": 0.5
+        },
+        "what": "sounds/one_file/variants/0/takes/0 and sounds/one_file/variants/1/takes/3 are the same take: one file, 13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+      },
+      {
+        "code": "audio.gen.same",
+        "path": "sounds/one_file/variants/0/takes/0",
+        "actual": {
+          "pair": [
+            "sounds/one_file/variants/0/takes/0",
+            "sounds/one_file/variants/2/takes/0"
+          ],
+          "assets": [
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa",
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+          ],
+          "by": "hash",
+          "distance": 0,
+          "limit": 0.5
+        },
+        "what": "sounds/one_file/variants/0/takes/0 and sounds/one_file/variants/2/takes/0 are the same take: one file, 13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+      },
+      {
+        "code": "audio.gen.same",
+        "path": "sounds/one_file/variants/0/takes/0",
+        "actual": {
+          "pair": [
+            "sounds/one_file/variants/0/takes/0",
+            "sounds/one_file/variants/2/takes/1"
+          ],
+          "assets": [
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa",
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+          ],
+          "by": "hash",
+          "distance": 0,
+          "limit": 0.5
+        },
+        "what": "sounds/one_file/variants/0/takes/0 and sounds/one_file/variants/2/takes/1 are the same take: one file, 13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+      },
+      {
+        "code": "audio.gen.same",
+        "path": "sounds/one_file/variants/0/takes/0",
+        "actual": {
+          "pair": [
+            "sounds/one_file/variants/0/takes/0",
+            "sounds/one_file/variants/2/takes/2"
+          ],
+          "assets": [
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa",
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+          ],
+          "by": "hash",
+          "distance": 0,
+          "limit": 0.5
+        },
+        "what": "sounds/one_file/variants/0/takes/0 and sounds/one_file/variants/2/takes/2 are the same take: one file, 13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+      },
+      {
+        "code": "audio.gen.same",
+        "path": "sounds/one_file/variants/0/takes/0",
+        "actual": {
+          "pair": [
+            "sounds/one_file/variants/0/takes/0",
+            "sounds/one_file/variants/2/takes/3"
+          ],
+          "assets": [
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa",
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+          ],
+          "by": "hash",
+          "distance": 0,
+          "limit": 0.5
+        },
+        "what": "sounds/one_file/variants/0/takes/0 and sounds/one_file/variants/2/takes/3 are the same take: one file, 13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+      },
+      {
+        "code": "audio.gen.same",
+        "path": "sounds/one_file/variants/0/takes/1",
+        "actual": {
+          "pair": [
+            "sounds/one_file/variants/0/takes/1",
+            "sounds/one_file/variants/0/takes/2"
+          ],
+          "assets": [
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa",
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+          ],
+          "by": "hash",
+          "distance": 0,
+          "limit": 0.5
+        },
+        "what": "sounds/one_file/variants/0/takes/1 and sounds/one_file/variants/0/takes/2 are the same take: one file, 13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+      },
+      {
+        "code": "audio.gen.same",
+        "path": "sounds/one_file/variants/0/takes/1",
+        "actual": {
+          "pair": [
+            "sounds/one_file/variants/0/takes/1",
+            "sounds/one_file/variants/0/takes/3"
+          ],
+          "assets": [
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa",
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+          ],
+          "by": "hash",
+          "distance": 0,
+          "limit": 0.5
+        },
+        "what": "sounds/one_file/variants/0/takes/1 and sounds/one_file/variants/0/takes/3 are the same take: one file, 13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+      },
+      {
+        "code": "audio.gen.same",
+        "path": "sounds/one_file/variants/0/takes/1",
+        "actual": {
+          "pair": [
+            "sounds/one_file/variants/0/takes/1",
+            "sounds/one_file/variants/1/takes/0"
+          ],
+          "assets": [
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa",
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+          ],
+          "by": "hash",
+          "distance": 0,
+          "limit": 0.5
+        },
+        "what": "sounds/one_file/variants/0/takes/1 and sounds/one_file/variants/1/takes/0 are the same take: one file, 13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+      },
+      {
+        "code": "audio.gen.same",
+        "path": "sounds/one_file/variants/0/takes/1",
+        "actual": {
+          "pair": [
+            "sounds/one_file/variants/0/takes/1",
+            "sounds/one_file/variants/1/takes/1"
+          ],
+          "assets": [
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa",
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+          ],
+          "by": "hash",
+          "distance": 0,
+          "limit": 0.5
+        },
+        "what": "sounds/one_file/variants/0/takes/1 and sounds/one_file/variants/1/takes/1 are the same take: one file, 13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+      },
+      {
+        "code": "audio.gen.same",
+        "path": "sounds/one_file/variants/0/takes/1",
+        "actual": {
+          "pair": [
+            "sounds/one_file/variants/0/takes/1",
+            "sounds/one_file/variants/1/takes/2"
+          ],
+          "assets": [
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa",
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+          ],
+          "by": "hash",
+          "distance": 0,
+          "limit": 0.5
+        },
+        "what": "sounds/one_file/variants/0/takes/1 and sounds/one_file/variants/1/takes/2 are the same take: one file, 13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+      },
+      {
+        "code": "audio.gen.same",
+        "path": "sounds/one_file/variants/0/takes/1",
+        "actual": {
+          "pair": [
+            "sounds/one_file/variants/0/takes/1",
+            "sounds/one_file/variants/1/takes/3"
+          ],
+          "assets": [
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa",
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+          ],
+          "by": "hash",
+          "distance": 0,
+          "limit": 0.5
+        },
+        "what": "sounds/one_file/variants/0/takes/1 and sounds/one_file/variants/1/takes/3 are the same take: one file, 13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+      },
+      {
+        "code": "audio.gen.same",
+        "path": "sounds/one_file/variants/0/takes/1",
+        "actual": {
+          "pair": [
+            "sounds/one_file/variants/0/takes/1",
+            "sounds/one_file/variants/2/takes/0"
+          ],
+          "assets": [
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa",
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+          ],
+          "by": "hash",
+          "distance": 0,
+          "limit": 0.5
+        },
+        "what": "sounds/one_file/variants/0/takes/1 and sounds/one_file/variants/2/takes/0 are the same take: one file, 13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+      },
+      {
+        "code": "audio.gen.same",
+        "path": "sounds/one_file/variants/0/takes/1",
+        "actual": {
+          "pair": [
+            "sounds/one_file/variants/0/takes/1",
+            "sounds/one_file/variants/2/takes/1"
+          ],
+          "assets": [
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa",
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+          ],
+          "by": "hash",
+          "distance": 0,
+          "limit": 0.5
+        },
+        "what": "sounds/one_file/variants/0/takes/1 and sounds/one_file/variants/2/takes/1 are the same take: one file, 13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+      },
+      {
+        "code": "audio.gen.same",
+        "path": "sounds/one_file/variants/0/takes/1",
+        "actual": {
+          "pair": [
+            "sounds/one_file/variants/0/takes/1",
+            "sounds/one_file/variants/2/takes/2"
+          ],
+          "assets": [
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa",
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+          ],
+          "by": "hash",
+          "distance": 0,
+          "limit": 0.5
+        },
+        "what": "sounds/one_file/variants/0/takes/1 and sounds/one_file/variants/2/takes/2 are the same take: one file, 13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+      },
+      {
+        "code": "audio.gen.same",
+        "path": "sounds/one_file/variants/0/takes/1",
+        "actual": {
+          "pair": [
+            "sounds/one_file/variants/0/takes/1",
+            "sounds/one_file/variants/2/takes/3"
+          ],
+          "assets": [
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa",
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+          ],
+          "by": "hash",
+          "distance": 0,
+          "limit": 0.5
+        },
+        "what": "sounds/one_file/variants/0/takes/1 and sounds/one_file/variants/2/takes/3 are the same take: one file, 13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+      },
+      {
+        "code": "audio.gen.same",
+        "path": "sounds/one_file/variants/0/takes/2",
+        "actual": {
+          "pair": [
+            "sounds/one_file/variants/0/takes/2",
+            "sounds/one_file/variants/0/takes/3"
+          ],
+          "assets": [
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa",
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+          ],
+          "by": "hash",
+          "distance": 0,
+          "limit": 0.5
+        },
+        "what": "sounds/one_file/variants/0/takes/2 and sounds/one_file/variants/0/takes/3 are the same take: one file, 13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+      },
+      {
+        "code": "audio.gen.same",
+        "path": "sounds/one_file/variants/0/takes/2",
+        "actual": {
+          "pair": [
+            "sounds/one_file/variants/0/takes/2",
+            "sounds/one_file/variants/1/takes/0"
+          ],
+          "assets": [
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa",
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+          ],
+          "by": "hash",
+          "distance": 0,
+          "limit": 0.5
+        },
+        "what": "sounds/one_file/variants/0/takes/2 and sounds/one_file/variants/1/takes/0 are the same take: one file, 13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+      },
+      {
+        "code": "audio.gen.same",
+        "path": "sounds/one_file/variants/0/takes/2",
+        "actual": {
+          "pair": [
+            "sounds/one_file/variants/0/takes/2",
+            "sounds/one_file/variants/1/takes/1"
+          ],
+          "assets": [
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa",
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+          ],
+          "by": "hash",
+          "distance": 0,
+          "limit": 0.5
+        },
+        "what": "sounds/one_file/variants/0/takes/2 and sounds/one_file/variants/1/takes/1 are the same take: one file, 13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+      },
+      {
+        "code": "audio.gen.same",
+        "path": "sounds/one_file/variants/0/takes/2",
+        "actual": {
+          "pair": [
+            "sounds/one_file/variants/0/takes/2",
+            "sounds/one_file/variants/1/takes/2"
+          ],
+          "assets": [
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa",
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+          ],
+          "by": "hash",
+          "distance": 0,
+          "limit": 0.5
+        },
+        "what": "sounds/one_file/variants/0/takes/2 and sounds/one_file/variants/1/takes/2 are the same take: one file, 13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+      },
+      {
+        "code": "audio.gen.same",
+        "path": "sounds/one_file/variants/0/takes/2",
+        "actual": {
+          "pair": [
+            "sounds/one_file/variants/0/takes/2",
+            "sounds/one_file/variants/1/takes/3"
+          ],
+          "assets": [
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa",
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+          ],
+          "by": "hash",
+          "distance": 0,
+          "limit": 0.5
+        },
+        "what": "sounds/one_file/variants/0/takes/2 and sounds/one_file/variants/1/takes/3 are the same take: one file, 13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+      },
+      {
+        "code": "audio.gen.same",
+        "path": "sounds/one_file/variants/0/takes/2",
+        "actual": {
+          "pair": [
+            "sounds/one_file/variants/0/takes/2",
+            "sounds/one_file/variants/2/takes/0"
+          ],
+          "assets": [
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa",
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+          ],
+          "by": "hash",
+          "distance": 0,
+          "limit": 0.5
+        },
+        "what": "sounds/one_file/variants/0/takes/2 and sounds/one_file/variants/2/takes/0 are the same take: one file, 13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+      },
+      {
+        "code": "audio.gen.same",
+        "path": "sounds/one_file/variants/0/takes/2",
+        "actual": {
+          "pair": [
+            "sounds/one_file/variants/0/takes/2",
+            "sounds/one_file/variants/2/takes/1"
+          ],
+          "assets": [
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa",
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+          ],
+          "by": "hash",
+          "distance": 0,
+          "limit": 0.5
+        },
+        "what": "sounds/one_file/variants/0/takes/2 and sounds/one_file/variants/2/takes/1 are the same take: one file, 13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+      },
+      {
+        "code": "audio.gen.same",
+        "path": "sounds/one_file/variants/0/takes/2",
+        "actual": {
+          "pair": [
+            "sounds/one_file/variants/0/takes/2",
+            "sounds/one_file/variants/2/takes/2"
+          ],
+          "assets": [
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa",
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+          ],
+          "by": "hash",
+          "distance": 0,
+          "limit": 0.5
+        },
+        "what": "sounds/one_file/variants/0/takes/2 and sounds/one_file/variants/2/takes/2 are the same take: one file, 13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+      },
+      {
+        "code": "audio.gen.same",
+        "path": "sounds/one_file/variants/0/takes/2",
+        "actual": {
+          "pair": [
+            "sounds/one_file/variants/0/takes/2",
+            "sounds/one_file/variants/2/takes/3"
+          ],
+          "assets": [
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa",
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+          ],
+          "by": "hash",
+          "distance": 0,
+          "limit": 0.5
+        },
+        "what": "sounds/one_file/variants/0/takes/2 and sounds/one_file/variants/2/takes/3 are the same take: one file, 13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+      },
+      {
+        "code": "audio.gen.same",
+        "path": "sounds/one_file/variants/0/takes/3",
+        "actual": {
+          "pair": [
+            "sounds/one_file/variants/0/takes/3",
+            "sounds/one_file/variants/1/takes/0"
+          ],
+          "assets": [
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa",
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+          ],
+          "by": "hash",
+          "distance": 0,
+          "limit": 0.5
+        },
+        "what": "sounds/one_file/variants/0/takes/3 and sounds/one_file/variants/1/takes/0 are the same take: one file, 13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+      },
+      {
+        "code": "audio.gen.same",
+        "path": "sounds/one_file/variants/0/takes/3",
+        "actual": {
+          "pair": [
+            "sounds/one_file/variants/0/takes/3",
+            "sounds/one_file/variants/1/takes/1"
+          ],
+          "assets": [
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa",
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+          ],
+          "by": "hash",
+          "distance": 0,
+          "limit": 0.5
+        },
+        "what": "sounds/one_file/variants/0/takes/3 and sounds/one_file/variants/1/takes/1 are the same take: one file, 13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+      },
+      {
+        "code": "audio.gen.same",
+        "path": "sounds/one_file/variants/0/takes/3",
+        "actual": {
+          "pair": [
+            "sounds/one_file/variants/0/takes/3",
+            "sounds/one_file/variants/1/takes/2"
+          ],
+          "assets": [
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa",
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+          ],
+          "by": "hash",
+          "distance": 0,
+          "limit": 0.5
+        },
+        "what": "sounds/one_file/variants/0/takes/3 and sounds/one_file/variants/1/takes/2 are the same take: one file, 13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+      },
+      {
+        "code": "audio.gen.same",
+        "path": "sounds/one_file/variants/0/takes/3",
+        "actual": {
+          "pair": [
+            "sounds/one_file/variants/0/takes/3",
+            "sounds/one_file/variants/1/takes/3"
+          ],
+          "assets": [
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa",
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+          ],
+          "by": "hash",
+          "distance": 0,
+          "limit": 0.5
+        },
+        "what": "sounds/one_file/variants/0/takes/3 and sounds/one_file/variants/1/takes/3 are the same take: one file, 13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+      },
+      {
+        "code": "audio.gen.same",
+        "path": "sounds/one_file/variants/0/takes/3",
+        "actual": {
+          "pair": [
+            "sounds/one_file/variants/0/takes/3",
+            "sounds/one_file/variants/2/takes/0"
+          ],
+          "assets": [
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa",
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+          ],
+          "by": "hash",
+          "distance": 0,
+          "limit": 0.5
+        },
+        "what": "sounds/one_file/variants/0/takes/3 and sounds/one_file/variants/2/takes/0 are the same take: one file, 13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+      },
+      {
+        "code": "audio.gen.same",
+        "path": "sounds/one_file/variants/0/takes/3",
+        "actual": {
+          "pair": [
+            "sounds/one_file/variants/0/takes/3",
+            "sounds/one_file/variants/2/takes/1"
+          ],
+          "assets": [
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa",
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+          ],
+          "by": "hash",
+          "distance": 0,
+          "limit": 0.5
+        },
+        "what": "sounds/one_file/variants/0/takes/3 and sounds/one_file/variants/2/takes/1 are the same take: one file, 13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+      },
+      {
+        "code": "audio.gen.same",
+        "path": "sounds/one_file/variants/0/takes/3",
+        "actual": {
+          "pair": [
+            "sounds/one_file/variants/0/takes/3",
+            "sounds/one_file/variants/2/takes/2"
+          ],
+          "assets": [
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa",
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+          ],
+          "by": "hash",
+          "distance": 0,
+          "limit": 0.5
+        },
+        "what": "sounds/one_file/variants/0/takes/3 and sounds/one_file/variants/2/takes/2 are the same take: one file, 13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+      },
+      {
+        "code": "audio.gen.same",
+        "path": "sounds/one_file/variants/0/takes/3",
+        "actual": {
+          "pair": [
+            "sounds/one_file/variants/0/takes/3",
+            "sounds/one_file/variants/2/takes/3"
+          ],
+          "assets": [
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa",
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+          ],
+          "by": "hash",
+          "distance": 0,
+          "limit": 0.5
+        },
+        "what": "sounds/one_file/variants/0/takes/3 and sounds/one_file/variants/2/takes/3 are the same take: one file, 13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+      },
+      {
+        "code": "audio.gen.same",
+        "path": "sounds/one_file/variants/1/takes/0",
+        "actual": {
+          "pair": [
+            "sounds/one_file/variants/1/takes/0",
+            "sounds/one_file/variants/1/takes/1"
+          ],
+          "assets": [
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa",
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+          ],
+          "by": "hash",
+          "distance": 0,
+          "limit": 0.5
+        },
+        "what": "sounds/one_file/variants/1/takes/0 and sounds/one_file/variants/1/takes/1 are the same take: one file, 13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+      },
+      {
+        "code": "audio.gen.same",
+        "path": "sounds/one_file/variants/1/takes/0",
+        "actual": {
+          "pair": [
+            "sounds/one_file/variants/1/takes/0",
+            "sounds/one_file/variants/1/takes/2"
+          ],
+          "assets": [
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa",
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+          ],
+          "by": "hash",
+          "distance": 0,
+          "limit": 0.5
+        },
+        "what": "sounds/one_file/variants/1/takes/0 and sounds/one_file/variants/1/takes/2 are the same take: one file, 13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+      },
+      {
+        "code": "audio.gen.same",
+        "path": "sounds/one_file/variants/1/takes/0",
+        "actual": {
+          "pair": [
+            "sounds/one_file/variants/1/takes/0",
+            "sounds/one_file/variants/1/takes/3"
+          ],
+          "assets": [
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa",
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+          ],
+          "by": "hash",
+          "distance": 0,
+          "limit": 0.5
+        },
+        "what": "sounds/one_file/variants/1/takes/0 and sounds/one_file/variants/1/takes/3 are the same take: one file, 13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+      },
+      {
+        "code": "audio.gen.same",
+        "path": "sounds/one_file/variants/1/takes/0",
+        "actual": {
+          "pair": [
+            "sounds/one_file/variants/1/takes/0",
+            "sounds/one_file/variants/2/takes/0"
+          ],
+          "assets": [
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa",
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+          ],
+          "by": "hash",
+          "distance": 0,
+          "limit": 0.5
+        },
+        "what": "sounds/one_file/variants/1/takes/0 and sounds/one_file/variants/2/takes/0 are the same take: one file, 13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+      },
+      {
+        "code": "audio.gen.same",
+        "path": "sounds/one_file/variants/1/takes/0",
+        "actual": {
+          "pair": [
+            "sounds/one_file/variants/1/takes/0",
+            "sounds/one_file/variants/2/takes/1"
+          ],
+          "assets": [
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa",
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+          ],
+          "by": "hash",
+          "distance": 0,
+          "limit": 0.5
+        },
+        "what": "sounds/one_file/variants/1/takes/0 and sounds/one_file/variants/2/takes/1 are the same take: one file, 13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+      },
+      {
+        "code": "audio.gen.same",
+        "path": "sounds/one_file/variants/1/takes/0",
+        "actual": {
+          "pair": [
+            "sounds/one_file/variants/1/takes/0",
+            "sounds/one_file/variants/2/takes/2"
+          ],
+          "assets": [
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa",
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+          ],
+          "by": "hash",
+          "distance": 0,
+          "limit": 0.5
+        },
+        "what": "sounds/one_file/variants/1/takes/0 and sounds/one_file/variants/2/takes/2 are the same take: one file, 13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+      },
+      {
+        "code": "audio.gen.same",
+        "path": "sounds/one_file/variants/1/takes/0",
+        "actual": {
+          "pair": [
+            "sounds/one_file/variants/1/takes/0",
+            "sounds/one_file/variants/2/takes/3"
+          ],
+          "assets": [
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa",
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+          ],
+          "by": "hash",
+          "distance": 0,
+          "limit": 0.5
+        },
+        "what": "sounds/one_file/variants/1/takes/0 and sounds/one_file/variants/2/takes/3 are the same take: one file, 13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+      },
+      {
+        "code": "audio.gen.same",
+        "path": "sounds/one_file/variants/1/takes/1",
+        "actual": {
+          "pair": [
+            "sounds/one_file/variants/1/takes/1",
+            "sounds/one_file/variants/1/takes/2"
+          ],
+          "assets": [
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa",
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+          ],
+          "by": "hash",
+          "distance": 0,
+          "limit": 0.5
+        },
+        "what": "sounds/one_file/variants/1/takes/1 and sounds/one_file/variants/1/takes/2 are the same take: one file, 13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+      },
+      {
+        "code": "audio.gen.same",
+        "path": "sounds/one_file/variants/1/takes/1",
+        "actual": {
+          "pair": [
+            "sounds/one_file/variants/1/takes/1",
+            "sounds/one_file/variants/1/takes/3"
+          ],
+          "assets": [
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa",
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+          ],
+          "by": "hash",
+          "distance": 0,
+          "limit": 0.5
+        },
+        "what": "sounds/one_file/variants/1/takes/1 and sounds/one_file/variants/1/takes/3 are the same take: one file, 13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+      },
+      {
+        "code": "audio.gen.same",
+        "path": "sounds/one_file/variants/1/takes/1",
+        "actual": {
+          "pair": [
+            "sounds/one_file/variants/1/takes/1",
+            "sounds/one_file/variants/2/takes/0"
+          ],
+          "assets": [
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa",
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+          ],
+          "by": "hash",
+          "distance": 0,
+          "limit": 0.5
+        },
+        "what": "sounds/one_file/variants/1/takes/1 and sounds/one_file/variants/2/takes/0 are the same take: one file, 13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+      },
+      {
+        "code": "audio.gen.same",
+        "path": "sounds/one_file/variants/1/takes/1",
+        "actual": {
+          "pair": [
+            "sounds/one_file/variants/1/takes/1",
+            "sounds/one_file/variants/2/takes/1"
+          ],
+          "assets": [
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa",
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+          ],
+          "by": "hash",
+          "distance": 0,
+          "limit": 0.5
+        },
+        "what": "sounds/one_file/variants/1/takes/1 and sounds/one_file/variants/2/takes/1 are the same take: one file, 13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+      },
+      {
+        "code": "audio.gen.same",
+        "path": "sounds/one_file/variants/1/takes/1",
+        "actual": {
+          "pair": [
+            "sounds/one_file/variants/1/takes/1",
+            "sounds/one_file/variants/2/takes/2"
+          ],
+          "assets": [
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa",
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+          ],
+          "by": "hash",
+          "distance": 0,
+          "limit": 0.5
+        },
+        "what": "sounds/one_file/variants/1/takes/1 and sounds/one_file/variants/2/takes/2 are the same take: one file, 13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+      },
+      {
+        "code": "audio.gen.same",
+        "path": "sounds/one_file/variants/1/takes/1",
+        "actual": {
+          "pair": [
+            "sounds/one_file/variants/1/takes/1",
+            "sounds/one_file/variants/2/takes/3"
+          ],
+          "assets": [
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa",
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+          ],
+          "by": "hash",
+          "distance": 0,
+          "limit": 0.5
+        },
+        "what": "sounds/one_file/variants/1/takes/1 and sounds/one_file/variants/2/takes/3 are the same take: one file, 13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+      },
+      {
+        "code": "audio.gen.same",
+        "path": "sounds/one_file/variants/1/takes/2",
+        "actual": {
+          "pair": [
+            "sounds/one_file/variants/1/takes/2",
+            "sounds/one_file/variants/1/takes/3"
+          ],
+          "assets": [
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa",
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+          ],
+          "by": "hash",
+          "distance": 0,
+          "limit": 0.5
+        },
+        "what": "sounds/one_file/variants/1/takes/2 and sounds/one_file/variants/1/takes/3 are the same take: one file, 13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+      },
+      {
+        "code": "audio.gen.same",
+        "path": "sounds/one_file/variants/1/takes/2",
+        "actual": {
+          "pair": [
+            "sounds/one_file/variants/1/takes/2",
+            "sounds/one_file/variants/2/takes/0"
+          ],
+          "assets": [
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa",
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+          ],
+          "by": "hash",
+          "distance": 0,
+          "limit": 0.5
+        },
+        "what": "sounds/one_file/variants/1/takes/2 and sounds/one_file/variants/2/takes/0 are the same take: one file, 13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+      },
+      {
+        "code": "audio.gen.same",
+        "path": "sounds/one_file/variants/1/takes/2",
+        "actual": {
+          "pair": [
+            "sounds/one_file/variants/1/takes/2",
+            "sounds/one_file/variants/2/takes/1"
+          ],
+          "assets": [
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa",
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+          ],
+          "by": "hash",
+          "distance": 0,
+          "limit": 0.5
+        },
+        "what": "sounds/one_file/variants/1/takes/2 and sounds/one_file/variants/2/takes/1 are the same take: one file, 13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+      },
+      {
+        "code": "audio.gen.same",
+        "path": "sounds/one_file/variants/1/takes/2",
+        "actual": {
+          "pair": [
+            "sounds/one_file/variants/1/takes/2",
+            "sounds/one_file/variants/2/takes/2"
+          ],
+          "assets": [
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa",
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+          ],
+          "by": "hash",
+          "distance": 0,
+          "limit": 0.5
+        },
+        "what": "sounds/one_file/variants/1/takes/2 and sounds/one_file/variants/2/takes/2 are the same take: one file, 13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+      },
+      {
+        "code": "audio.gen.same",
+        "path": "sounds/one_file/variants/1/takes/2",
+        "actual": {
+          "pair": [
+            "sounds/one_file/variants/1/takes/2",
+            "sounds/one_file/variants/2/takes/3"
+          ],
+          "assets": [
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa",
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+          ],
+          "by": "hash",
+          "distance": 0,
+          "limit": 0.5
+        },
+        "what": "sounds/one_file/variants/1/takes/2 and sounds/one_file/variants/2/takes/3 are the same take: one file, 13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+      },
+      {
+        "code": "audio.gen.same",
+        "path": "sounds/one_file/variants/1/takes/3",
+        "actual": {
+          "pair": [
+            "sounds/one_file/variants/1/takes/3",
+            "sounds/one_file/variants/2/takes/0"
+          ],
+          "assets": [
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa",
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+          ],
+          "by": "hash",
+          "distance": 0,
+          "limit": 0.5
+        },
+        "what": "sounds/one_file/variants/1/takes/3 and sounds/one_file/variants/2/takes/0 are the same take: one file, 13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+      },
+      {
+        "code": "audio.gen.same",
+        "path": "sounds/one_file/variants/1/takes/3",
+        "actual": {
+          "pair": [
+            "sounds/one_file/variants/1/takes/3",
+            "sounds/one_file/variants/2/takes/1"
+          ],
+          "assets": [
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa",
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+          ],
+          "by": "hash",
+          "distance": 0,
+          "limit": 0.5
+        },
+        "what": "sounds/one_file/variants/1/takes/3 and sounds/one_file/variants/2/takes/1 are the same take: one file, 13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+      },
+      {
+        "code": "audio.gen.same",
+        "path": "sounds/one_file/variants/1/takes/3",
+        "actual": {
+          "pair": [
+            "sounds/one_file/variants/1/takes/3",
+            "sounds/one_file/variants/2/takes/2"
+          ],
+          "assets": [
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa",
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+          ],
+          "by": "hash",
+          "distance": 0,
+          "limit": 0.5
+        },
+        "what": "sounds/one_file/variants/1/takes/3 and sounds/one_file/variants/2/takes/2 are the same take: one file, 13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+      },
+      {
+        "code": "audio.gen.same",
+        "path": "sounds/one_file/variants/1/takes/3",
+        "actual": {
+          "pair": [
+            "sounds/one_file/variants/1/takes/3",
+            "sounds/one_file/variants/2/takes/3"
+          ],
+          "assets": [
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa",
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+          ],
+          "by": "hash",
+          "distance": 0,
+          "limit": 0.5
+        },
+        "what": "sounds/one_file/variants/1/takes/3 and sounds/one_file/variants/2/takes/3 are the same take: one file, 13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+      },
+      {
+        "code": "audio.gen.same",
+        "path": "sounds/one_file/variants/2/takes/0",
+        "actual": {
+          "pair": [
+            "sounds/one_file/variants/2/takes/0",
+            "sounds/one_file/variants/2/takes/1"
+          ],
+          "assets": [
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa",
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+          ],
+          "by": "hash",
+          "distance": 0,
+          "limit": 0.5
+        },
+        "what": "sounds/one_file/variants/2/takes/0 and sounds/one_file/variants/2/takes/1 are the same take: one file, 13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+      },
+      {
+        "code": "audio.gen.same",
+        "path": "sounds/one_file/variants/2/takes/0",
+        "actual": {
+          "pair": [
+            "sounds/one_file/variants/2/takes/0",
+            "sounds/one_file/variants/2/takes/2"
+          ],
+          "assets": [
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa",
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+          ],
+          "by": "hash",
+          "distance": 0,
+          "limit": 0.5
+        },
+        "what": "sounds/one_file/variants/2/takes/0 and sounds/one_file/variants/2/takes/2 are the same take: one file, 13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+      },
+      {
+        "code": "audio.gen.same",
+        "path": "sounds/one_file/variants/2/takes/0",
+        "actual": {
+          "pair": [
+            "sounds/one_file/variants/2/takes/0",
+            "sounds/one_file/variants/2/takes/3"
+          ],
+          "assets": [
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa",
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+          ],
+          "by": "hash",
+          "distance": 0,
+          "limit": 0.5
+        },
+        "what": "sounds/one_file/variants/2/takes/0 and sounds/one_file/variants/2/takes/3 are the same take: one file, 13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+      },
+      {
+        "code": "audio.gen.same",
+        "path": "sounds/one_file/variants/2/takes/1",
+        "actual": {
+          "pair": [
+            "sounds/one_file/variants/2/takes/1",
+            "sounds/one_file/variants/2/takes/2"
+          ],
+          "assets": [
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa",
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+          ],
+          "by": "hash",
+          "distance": 0,
+          "limit": 0.5
+        },
+        "what": "sounds/one_file/variants/2/takes/1 and sounds/one_file/variants/2/takes/2 are the same take: one file, 13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+      },
+      {
+        "code": "audio.gen.same",
+        "path": "sounds/one_file/variants/2/takes/1",
+        "actual": {
+          "pair": [
+            "sounds/one_file/variants/2/takes/1",
+            "sounds/one_file/variants/2/takes/3"
+          ],
+          "assets": [
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa",
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+          ],
+          "by": "hash",
+          "distance": 0,
+          "limit": 0.5
+        },
+        "what": "sounds/one_file/variants/2/takes/1 and sounds/one_file/variants/2/takes/3 are the same take: one file, 13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+      },
+      {
+        "code": "audio.gen.same",
+        "path": "sounds/one_file/variants/2/takes/2",
+        "actual": {
+          "pair": [
+            "sounds/one_file/variants/2/takes/2",
+            "sounds/one_file/variants/2/takes/3"
+          ],
+          "assets": [
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa",
+            "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+          ],
+          "by": "hash",
+          "distance": 0,
+          "limit": 0.5
+        },
+        "what": "sounds/one_file/variants/2/takes/2 and sounds/one_file/variants/2/takes/3 are the same take: one file, 13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+      }
+    ],
+    "blocked": []
+  },
+  "hot_take_gen": {
+    "state": "FAIL",
+    "readings": {
+      "takes": [
+        {
+          "integrated": -27.999999998179987,
+          "target": -28,
+          "true_peak": -21.83957680762568,
+          "lead": 0.00014583333333333335,
+          "duration": 0.2775,
+          "path": "sounds/hot_take/variants/0/takes/0",
+          "asset": "f355be58fa129ce848c20a8646b2b6dfa354c2b1d6f8f7d01a91baed0c49c2b1"
+        },
+        {
+          "integrated": -27.999999999477645,
+          "target": -28,
+          "true_peak": -21.69328631260155,
+          "lead": 0.00014583333333333335,
+          "duration": 0.2925,
+          "path": "sounds/hot_take/variants/0/takes/1",
+          "asset": "ad733409b4d74d129b87bb75e4d5f5265c96ea63e6a45a8ca9e508dec9827877"
+        },
+        {
+          "integrated": -28.000000003483084,
+          "target": -28,
+          "true_peak": -21.697606296322213,
+          "lead": 0.00014583333333333335,
+          "duration": 0.3075,
+          "path": "sounds/hot_take/variants/0/takes/2",
+          "asset": "13c86f438b3c7175806a099fd7a61eda1900e33b404f2e41dcf169c815820ce7"
+        },
+        {
+          "integrated": -27.999999999998224,
+          "target": -28,
+          "true_peak": -21.56562629116829,
+          "lead": 0.00014583333333333335,
+          "duration": 0.3225,
+          "path": "sounds/hot_take/variants/0/takes/3",
+          "asset": "cbd26fe0818c63f1b4d13d87676bf0aea72bab827f198b4ec0fb8962eded6b5c"
+        },
+        {
+          "integrated": -21.999999999198742,
+          "target": -22,
+          "true_peak": -16.036340653362867,
+          "lead": 0.000125,
+          "duration": 0.2775,
+          "path": "sounds/hot_take/variants/1/takes/0",
+          "asset": "13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa"
+        },
+        {
+          "integrated": -22.000000000910752,
+          "target": -22,
+          "true_peak": -15.893882616830169,
+          "lead": 0.000125,
+          "duration": 0.2925,
+          "path": "sounds/hot_take/variants/1/takes/1",
+          "asset": "997739980328e3b315f0016f83c3d9d57c6e7cd01fbe77ca16e54843aa63d898"
+        },
+        {
+          "integrated": -22.000000002216666,
+          "target": -22,
+          "true_peak": -15.903708687389946,
+          "lead": 0.000125,
+          "duration": 0.3075,
+          "path": "sounds/hot_take/variants/1/takes/2",
+          "asset": "2087b7f9cc5d4ca82f14b402a7385ae5a56fad7f0011604c5ac3fee19d177610"
+        },
+        {
+          "integrated": -22.000000000577714,
+          "target": -22,
+          "true_peak": -15.771907015193882,
+          "lead": 0.000125,
+          "duration": 0.3225,
+          "path": "sounds/hot_take/variants/1/takes/3",
+          "asset": "208655de011ec646d5a3f6aad2388be9b2386f926f58aa2dc549259a864a193a"
+        },
+        {
+          "integrated": -16.00000000073151,
+          "target": -16,
+          "true_peak": -10.241986325439656,
+          "lead": 0.00008333333333333333,
+          "duration": 0.2775,
+          "path": "sounds/hot_take/variants/2/takes/0",
+          "asset": "724bb4f4af9059ff98565d3d19060571f76d81b9854795de12c77f0d2e9b6789"
+        },
+        {
+          "integrated": -15.999154687893585,
+          "target": -16,
+          "true_peak": 0.4000000838452499,
+          "lead": 0.000041666666666666665,
+          "duration": 0.2965,
+          "path": "sounds/hot_take/variants/2/takes/1",
+          "asset": "bb664b945ea305baa59549ac4e99e4dd762e2f8709aca16e3ece0f34c69cdcb3"
+        },
+        {
+          "integrated": -15.999999998364167,
+          "target": -16,
+          "true_peak": -10.117947610598822,
+          "lead": 0.00008333333333333333,
+          "duration": 0.3075,
+          "path": "sounds/hot_take/variants/2/takes/2",
+          "asset": "abf8bc68ebb7995fc32bbf3aaa2b225ec7f66eae853c85d631ff2fc9660729e4"
+        },
+        {
+          "integrated": -16.00000000481279,
+          "target": -16,
+          "true_peak": -9.988362037202018,
+          "lead": 0.00008333333333333333,
+          "duration": 0.3225,
+          "path": "sounds/hot_take/variants/2/takes/3",
+          "asset": "7e5796983dfdbd55d109c7be92cd14ddd6910c6eaa854e7d4e10c1e228f7a5c7"
+        }
+      ],
+      "median_duration": 0.302,
+      "closest": {
+        "pair": [
+          "sounds/hot_take/variants/1/takes/1",
+          "sounds/hot_take/variants/1/takes/2"
+        ],
+        "distance": 3.95928640652426
+      }
+    },
+    "issues": [
+      {
+        "code": "audio.gen.peak",
+        "path": "sounds/hot_take/variants/2/takes/1",
+        "actual": {
+          "true_peak": 0.4000000838452499,
+          "ceiling": -1
+        },
+        "what": "sounds/hot_take/variants/2/takes/1 peaks at 0.40 dBTP, over the -1 dBTP ceiling"
+      }
+    ],
+    "blocked": []
+  }
+}

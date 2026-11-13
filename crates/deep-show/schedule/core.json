@@ -3,6 +3,7 @@
   "core": "core@0.0.0",
   "build_set": "core",
   "set_digest": "defa634b84644ee6ea91f1230b7fd2af60627bbc219950d8b4cabc7bcd1294be",
+  "runtime_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
   "interfaces": {
     "look@1": {
       "digest": "73684d66474313667ea24e7012a44acca516326247a214ea2c0a3070961fdeea",

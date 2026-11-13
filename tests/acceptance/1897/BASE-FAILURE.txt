@@ -1,0 +1,82 @@
+Base commit: d51be2c33e55ee540865ab6ece81aee92e077086 ("Merge pull request #2108")
+Commands, one file at a time:
+  NO_COLOR=1 npx vitest run --root tests/acceptance/1897 seek-play.test.ts --no-file-parallelism --testTimeout=600000
+  NO_COLOR=1 npx vitest run --root tests/acceptance/1897 cross-machine.test.ts --no-file-parallelism --testTimeout=600000
+  NO_COLOR=1 npx vitest run --root tests/acceptance/1897 pixel-hash.test.ts --no-file-parallelism --testTimeout=600000
+Run in this job's worktree at the base, holding only these test files (untracked), after npm ci and npm run build --workspaces;
+each file's beforeAll built deep-show (full,test-tick for seek-play, full for the others) and the build succeeded.
+Every test fails on an assertion its file names, none on a missing binary or a crash:
+- seek-play (AC1, both tests): the base's determinism call compares, but its sides carry no pixel_hash (the GPU pixel hash).
+- cross-machine (AC2): the base's determinism call ignores compare: "cross_machine" and answers its same-machine
+  comparison, so no record is made.
+- pixel-hash (AC3, honest): deep-show run answers {"ok":false,"code":"bad_input"} to a scenario holding the pixel_hash
+  call the base lacks.
+- pixel-hash (AC3, planted): deep-show run --planted hash_xors_without_position exits 2 with {"ok":false,"code":"bad_input"},
+  a startup value the base doesn't know.
+Date: 2026-11-10  Node v24.22.0  vitest 5.0.5  darwin-arm64 (Mac17,10)  cargo 1.99.1
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/1897
+
+ ❯ seek-play.test.ts (2 tests | 2 failed) 10287ms
+   ❯ AC1 #1897.b9031214 jumping to a time equals playing to it, by hash (2)
+     × AC1 #1897.b9031214 on the ticking board, at every named time the seek's GPU pixel hash equals the play's, the step at 0.5 s changes the hash, and document.determinism passes holding on machines: same 5247ms
+     × AC1 #1897.b9031214 a planted seek that restores the checkpoint nearest in distance (checkpoint_nearest_in_distance) fails by hash at 352,799,999 flicks, naming the flick, in the call and in the verdict 2018ms
+
+ FAIL  seek-play.test.ts > … > AC1 #1897.b9031214 on the ticking board, at every named time the seek's GPU pixel hash equals the play's, the step at 0.5 s changes the hash, and document.determinism passes holding on machines: same
+AssertionError: seek against play: frames[0].play.pixel_hash is a string, got undefined: expected 'undefined' to be 'string' // Object.is equality
+ ❯ str helpers.ts:54:64
+ ❯ hash128 helpers.ts:65:13
+ ❯ seek-play.test.ts:32:13
+ ❯ compared seek-play.test.ts:28:58
+ ❯ seekAndPlay seek-play.test.ts:49:20
+ ❯ seek-play.test.ts:54:29
+
+ FAIL  seek-play.test.ts > … > AC1 #1897.b9031214 a planted seek that restores the checkpoint nearest in distance (checkpoint_nearest_in_distance) fails by hash at 352,799,999 flicks, naming the flick, in the call and in the verdict
+AssertionError: seek against play: frames[0].play.pixel_hash is a string, got undefined: expected 'undefined' to be 'string' // Object.is equality
+ ❯ str helpers.ts:54:64
+ ❯ hash128 helpers.ts:65:13
+ ❯ seek-play.test.ts:32:13
+ ❯ compared seek-play.test.ts:28:58
+ ❯ seekAndPlay seek-play.test.ts:49:20
+ ❯ seek-play.test.ts:64:29
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/1897
+
+ ❯ cross-machine.test.ts (1 test | 1 failed) 78761ms
+   ❯ AC2 #1897.0cf38b45 across machines the determinism check compares only Vello CPU rasters from the f32 pipeline at the scalar level (1)
+     × AC2 #1897.0cf38b45 an honest record holds only Vello CPU f32 scalar rasters and no GPU pixel hash; a raster at the detected SIMD level or through u8 is refused on either side, naming simd or pipeline; an honest pair from one machine is compared but never passes; the other architecture's record passes 2648ms
+
+ FAIL  cross-machine.test.ts > … > AC2 #1897.0cf38b45 an honest record holds only Vello CPU f32 scalar rasters and no GPU pixel hash; a raster at the detected SIMD level or through u8 is refused on either side, naming simd or pipeline; an honest pair from one machine is compared but never passes; the other architecture's record passes
+AssertionError: the honest record is recorded: {"outcome":"compared","at_times":[0,705600000,1411199999],"frames":[{"t":0,"play":{"pixels":"2ec57abb89a366ffbf7b4855025387565e3db5e1222e996152f6d018cf265115","nodes":[{"operator":"core.lower","module":"core","item":"back",…: expected 'compared' to be 'recorded' // Object.is equality
+ ❯ recordOf cross-machine.test.ts:38:67
+ ❯ cross-machine.test.ts:66:20
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/1897
+
+ ❯ pixel-hash.test.ts (2 tests | 2 failed) 7812ms
+   ❯ AC3 #1897.de2ffa3e the GPU pixel hash is the CPU's, bit for bit, and sees every bit and every pixel's place (2)
+     × AC3 #1897.de2ffa3e on 1,000 seeded rgba8 and rgba16float frames the GPU's hash equals the CPU's of the read-back buffer, which is the frame; one bit flipped at 100 seeded pixels per format and 10 swaps of unequal pixels per format each change it 4156ms
+     × AC3 #1897.de2ffa3e a planted hash that XORs pixels without their position (hash_xors_without_position) passes the flips and fails on the swap, naming the pixels 437ms
+
+ FAIL  pixel-hash.test.ts > … > AC3 #1897.de2ffa3e on 1,000 seeded rgba8 and rgba16float frames the GPU's hash equals the CPU's of the read-back buffer, which is the frame; one bit flipped at 100 seeded pixels per format and 10 swaps of unequal pixels per format each change it
+AssertionError: the pixel hashes: deep-show run answers the scenario ok; got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+ ❯ runShow helpers.ts:174:88
+ ❯ pixel-hash.test.ts:83:26
+
+ FAIL  pixel-hash.test.ts > … > AC3 #1897.de2ffa3e a planted hash that XORs pixels without their position (hash_xors_without_position) passes the flips and fails on the swap, naming the pixels
+AssertionError: the flipped and swapped frames (--planted hash_xors_without_position): deep-show run exits 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+ ❯ runShow helpers.ts:171:151
+ ❯ pixel-hash.test.ts:101:21
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)

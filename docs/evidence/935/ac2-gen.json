@@ -1,0 +1,102 @@
+{
+  "seam": {
+    "clean": 1843200,
+    "cut": 1842720
+  },
+  "loop": {
+    "state": "BLOCKED",
+    "readings": {
+      "loop": {
+        "start": 0,
+        "end": 1843200,
+        "seconds": 38.4,
+        "bar": 2.4,
+        "bars": 16
+      },
+      "seam": {
+        "at": 1843200,
+        "to": 0,
+        "step": 0.003930270671844482,
+        "step_p99": 0.093939870595932,
+        "flux": 161.82781780803612,
+        "flux_p99": 236.41364192153785
+      },
+      "integrated": -23.00000000067033,
+      "target": -23,
+      "true_peak": -3.6728218381051407,
+      "lead": 0,
+      "duration": 38.4
+    },
+    "issues": [],
+    "blocked": [
+      {
+        "input": "beats",
+        "path": "sounds/loop/beats",
+        "analyzer": "beat-this@1.1.0",
+        "pcm_sha256": "a5f66c0dd7fa327f494a8d8dd2ddfc7818c90b188e0b91a3eb82c9e3c3f313d1",
+        "job": "bake.beats",
+        "reason": "no record of beat-this@1.1.0 for the PCM a5f66c0dd7fa327f494a8d8dd2ddfc7818c90b188e0b91a3eb82c9e3c3f313d1: run bake.beats on beat-this@1.1.0 with the input pcm a5f66c0dd7fa327f494a8d8dd2ddfc7818c90b188e0b91a3eb82c9e3c3f313d1, sample_rate 48000 and channels 1"
+      }
+    ]
+  },
+  "cut_loop": {
+    "state": "FAIL",
+    "readings": {
+      "loop": {
+        "start": 0,
+        "end": 1842720,
+        "seconds": 38.39,
+        "bar": 2.4,
+        "bars": 15.995833333333334
+      },
+      "seam": {
+        "at": 1842720,
+        "to": 0,
+        "step": 0.2511703744530678,
+        "step_p99": 0.09395315032452345,
+        "flux": 213.89477063660215,
+        "flux_p99": 236.41364192153785
+      },
+      "integrated": -22.997176065071077,
+      "target": -23,
+      "true_peak": -3.6728218381051407,
+      "lead": 0,
+      "duration": 38.39
+    },
+    "issues": [
+      {
+        "code": "audio.gen.bars",
+        "path": "sounds/cut_loop/loop",
+        "actual": {
+          "bars": 15.995833333333334,
+          "seconds": 38.39,
+          "bar": 2.4
+        },
+        "what": "the loop region is 38.390 s, 16.00 bars of 2.4 s at 100 BPM, not within 1 ms of a whole number of bars"
+      },
+      {
+        "code": "audio.gen.seam",
+        "path": "sounds/cut_loop/loop",
+        "actual": {
+          "at": 1842720,
+          "to": 0,
+          "step": 0.2511703744530678,
+          "step_p99": 0.09395315032452345,
+          "flux": 213.89477063660215,
+          "flux_p99": 236.41364192153785
+        },
+        "what": "the seam at sample 1842720 (back to 0) steps 0.2512 against the bed's 99th percentile 0.0940, with flux 213.8948 against 236.4136"
+      }
+    ],
+    "blocked": [
+      {
+        "input": "beats",
+        "path": "sounds/cut_loop/beats",
+        "analyzer": "beat-this@1.1.0",
+        "pcm_sha256": "994082f330c8dcd22b8bcc86ec95c6af42b4e7287395fb31a1be50866e33030d",
+        "job": "bake.beats",
+        "reason": "no record of beat-this@1.1.0 for the PCM 994082f330c8dcd22b8bcc86ec95c6af42b4e7287395fb31a1be50866e33030d: run bake.beats on beat-this@1.1.0 with the input pcm 994082f330c8dcd22b8bcc86ec95c6af42b4e7287395fb31a1be50866e33030d, sample_rate 48000 and channels 1"
+      }
+    ]
+  }
+}

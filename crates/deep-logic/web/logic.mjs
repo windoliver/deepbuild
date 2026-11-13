@@ -45,7 +45,8 @@ function encoded(live) {
   return concat(parts);
 }
 const memoryOf = (live) => new Uint8Array(live.ex.memory.buffer);
-const stepHash = async (live) => (await h64(concat([encoded(live), live.arrays]))).hex;
+// The step hash: globals, arrays, and each row emitted after its kind's index.
+const stepHash = async (live, rows) => (await h64(concat([encoded(live), live.arrays, ...rows.flatMap(([j, r]) => [le(32, j), r])]))).hex;
 async function deepHash(live) {
   let pending = 0;
   for (const q of live.pending.values()) pending += q.length;
@@ -80,6 +81,33 @@ function value(type, b) {
 }
 const SIZE = { bool: 4, i32: 4, f64: 8, vec2: 16, vec3: 24, quat: 32 };
 
+// An emitted row as the occurrence list holds it: its kind, a, b and its fields by name.
+function rowValue(e, r) {
+  const d = new DataView(r.buffer, r.byteOffset, r.length);
+  const fields = {};
+  let at = 8;
+  for (const [name, type] of e.fields) { fields[name] = value(type, r.subarray(at, at + SIZE[type])); at += SIZE[type]; }
+  return { kind: e.kind, a: d.getUint32(0, true), b: d.getUint32(4, true), fields };
+}
+
+// The rows a step wrote to the emit region, each kind's sorted by (a, b) with ties in write order,
+// or the first kind whose count passes its max_per_step.
+function emitted(item, m) {
+  const d = new DataView(m.buffer, m.byteOffset, m.length);
+  const rows = [];
+  let at = item.emits_at;
+  for (const [j, e] of item.emits.entries()) {
+    const count = d.getUint32(at, true);
+    if (count > e.max) return { over: { occurrence: e.kind, count } };
+    const kind = Array.from({ length: count }, (_, r) => m.slice(at + 4 + r * e.row, at + 4 + (r + 1) * e.row));
+    const pair = (r) => { const v = new DataView(r.buffer); return [v.getUint32(0, true), v.getUint32(4, true)]; };
+    kind.sort((x, y) => { const [a, b] = pair(x); const [c, e2] = pair(y); return a - c || b - e2; });
+    for (const r of kind) rows.push([j, r]);
+    at += e.size;
+  }
+  return { rows };
+}
+
 function trackOf(entries) {
   const out = new Map();
   for (const e of entries) { if (!out.has(e.control)) out.set(e.control, []); out.get(e.control).push(e); }
@@ -91,13 +119,14 @@ class Record {
   constructor() { this.steps = new Map(); this.checkpoints = {}; this.traps = []; }
   at(k) { if (!this.steps.has(k)) this.steps.set(k, { items: {}, arrays: {} }); return this.steps.get(k); }
   json(len) { return [...this.steps.entries()].sort((a, b) => a[0] - b[0]).map(([k, s]) => ({ step: k, t: k * len, items: s.items, arrays: s.arrays })); }
-  report(live, k, hash, fuel, pages) {
+  report(live, k, hash, fuel, pages, rows = []) {
     const s = this.at(k);
     s.items[live.item.id] = { hash, fuel, failed: live.failed, pages };
     for (const w of live.item.writes) {
       const size = SIZE[w.type];
       s.arrays[`${live.item.id}.${w.name}`] = Array.from({ length: w.count }, (_, j) => value(w.type, live.arrays.subarray(w.offset + j * size, w.offset + (j + 1) * size)));
     }
+    if (live.item.emits.length && hash !== null) s.arrays[`${live.item.id}.occurrences`] = rows.map(([j, r]) => rowValue(live.item.emits[j], r));
   }
 }
 
@@ -207,10 +236,25 @@ class World {
     const region = new Uint8Array(size);
     const d = new DataView(region.buffer);
     for (const e of item.regions) {
-      if (e.read === 'control') {
+      if (e.read === 'control' && e.type === 'text') {
+        // A text commit's bytes come with its control kind (#542).
+      } else if (e.read === 'control') {
         const list = taken.get(e.name);
         d.setUint32(e.offset, list.length, true);
-        list.forEach((x, j) => { d.setUint32(e.offset + 8 + 16 * j, x.player, true); d.setFloat64(e.offset + 16 + 16 * j, x.value, true); });
+        // Each entry a u32 player, 4 zero bytes and its value as the control's form lays it
+        // out: a number's f64, or a pick's u32 set, 4 zero bytes, i64 key[0], i64 key[1].
+        const stride = (e.size - 8) / PER_STEP;
+        list.forEach((x, j) => {
+          const o = e.offset + 8 + stride * j;
+          d.setUint32(o, x.player, true);
+          const pick = typeof x.value === 'object' && x.value !== null;
+          if (!pick && stride === 16) d.setFloat64(o + 8, x.value, true);
+          if (pick && stride === 32) {
+            d.setUint32(o + 8, x.value.set, true);
+            d.setBigInt64(o + 16, BigInt(x.value.key[0]), true);
+            d.setBigInt64(o + 24, BigInt(x.value.key[1]), true);
+          }
+        });
       } else if (e.read === 'array') {
         region.set(snapshot[e.from].subarray(e.from_offset, e.from_offset + e.size), e.offset);
       } else if (e.read === 'seed') {
@@ -226,7 +270,11 @@ class World {
     }
     memoryOf(l).set(region, from);
     const words = item.pages.map(() => 0n);
-    if (size > 0) for (let p = Math.floor(from / PAGE); p <= Math.floor((from + size - 1) / PAGE); p++) words[p >> 6] |= 1n << BigInt(p & 63);
+    const mark = (p) => { if (p >> 6 < words.length) words[p >> 6] |= 1n << BigInt(p & 63); };
+    if (size > 0) for (let p = Math.floor(from / PAGE); p <= Math.floor((from + size - 1) / PAGE); p++) mark(p);
+    // Each emitted kind's count, zeroed before the step.
+    let at = item.emits_at;
+    for (const e of item.emits) { memoryOf(l).fill(0, at, at + 4); mark(Math.floor(at / PAGE)); at += e.size; }
     item.pages.forEach((n, i) => { l.ex[n].value = BigInt.asIntN(64, words[i]); });
     const trap = call(l, 'step', [BigInt(k)]);
     const left = l.ex['sandbox.fuel'].value;
@@ -240,8 +288,15 @@ class World {
       rec.report(l, k, null, fuel, pages);
       return;
     }
+    const out = emitted(item, memoryOf(l));
+    if (out.over) {
+      l.failed = true;
+      rec.traps.push({ item: item.id, step: k, t, kind: 'occurrences', ...out.over, function: null, offset: null, inputs });
+      rec.report(l, k, null, fuel, pages);
+      return;
+    }
     l.arrays = memoryOf(l).slice(item.writes_at, item.writes_at + l.arrays.length);
-    rec.report(l, k, await stepHash(l), fuel, pages);
+    rec.report(l, k, await stepHash(l, out.rows), fuel, pages, out.rows);
   }
 
   async load(item, memory, globals) {

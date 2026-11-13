@@ -33,11 +33,21 @@ pub enum Render {
     Unfit(String),
 }
 
-/// The machine's GPU lease: one kit at a time draws on the GPU. Held until dropped.
+/// The machine's GPU lease: one kit or export at a time draws on the GPU. Held until dropped.
 pub struct GpuLease(Option<PathBuf>);
 
 impl GpuLease {
     pub fn take() -> GpuLease {
+        Self::acquire(Some(600))
+    }
+
+    /// #157: the lease for an export, however long its holder keeps it, so a second export waits
+    /// for it instead of sharing the GPU.
+    pub fn wait() -> GpuLease {
+        Self::acquire(None)
+    }
+
+    fn acquire(tries: Option<usize>) -> GpuLease {
         let dir = std::env::var_os("HOME")
             .map(PathBuf::from)
             .unwrap_or_else(std::env::temp_dir)
@@ -45,7 +55,7 @@ impl GpuLease {
             .join("deepbuild-gpu");
         let _ = std::fs::create_dir_all(&dir);
         let file = dir.join("lease");
-        for _ in 0..600 {
+        for _ in 0..tries.unwrap_or(usize::MAX) {
             match std::fs::OpenOptions::new()
                 .write(true)
                 .create_new(true)
@@ -71,7 +81,11 @@ impl GpuLease {
                         let _ = std::fs::remove_file(&file);
                         continue;
                     }
-                    std::thread::sleep(std::time::Duration::from_millis(500));
+                    std::thread::sleep(std::time::Duration::from_millis(if tries.is_some() {
+                        500
+                    } else {
+                        50
+                    }));
                 }
             }
         }
@@ -258,11 +272,25 @@ fn load(path: &Path) -> Value {
         .unwrap_or_else(|| json!({"fixtures": {}, "decisions": []}))
 }
 
-fn save(path: &Path, store: &Value) {
-    if let Some(dir) = path.parent() {
-        let _ = std::fs::create_dir_all(dir);
+/// The store to change and save back, empty when it has no file yet; `None` when its file is
+/// there and can't be read, since saving over it would drop every golden and decision it holds.
+fn load_whole(path: &Path) -> Option<Value> {
+    match std::fs::read(path) {
+        Ok(bytes) => serde_json::from_slice(&bytes).ok(),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            Some(json!({"fixtures": {}, "decisions": []}))
+        }
+        Err(_) => None,
     }
-    let _ = std::fs::write(path, serde_json::to_vec_pretty(store).unwrap_or_default());
+}
+
+/// Writes the store whole before it is named: a temporary file beside it, renamed over it.
+fn save(path: &Path, store: &Value) -> std::io::Result<()> {
+    let dir = path.parent().expect("the store has a folder");
+    std::fs::create_dir_all(dir)?;
+    let temp = dir.join(format!(".tmp-{}-store.json", std::process::id()));
+    std::fs::write(&temp, serde_json::to_vec_pretty(store)?)?;
+    std::fs::rename(&temp, path)
 }
 
 /// A fixture's frame on a backend, its digest, and the store's verdict on it.
@@ -387,7 +415,7 @@ impl<'a> Hub<'a> {
     }
 
     /// Who a decision or a record comes from: the writer, and whether it is you.
-    fn decider(&self, via: Option<&Via>) -> (Value, bool) {
+    pub(crate) fn decider(&self, via: Option<&Via>) -> (Value, bool) {
         let Some(via) = via else {
             return (json!({"kind": "you", "id": "you"}), true);
         };
@@ -416,7 +444,9 @@ impl<'a> Hub<'a> {
         let (environment, fingerprint) = environment(self, backend);
         let (writer, _) = self.decider(via);
         let path = store_path(self);
-        let mut store = load(&path);
+        let Some(mut store) = load_whole(&path) else {
+            return json!({"outcome": "refused", "code": "store_unreadable"});
+        };
         let list = digests_mut(&mut store, &f.name);
         if !list.iter().any(|d| {
             d["digest"] == digest.as_str()
@@ -429,7 +459,9 @@ impl<'a> Hub<'a> {
                              "commit": commit(self), "recorded_by": writer}),
             );
         }
-        save(&path, &store);
+        if save(&path, &store).is_err() {
+            return json!({"outcome": "refused", "code": "store_unwritable"});
+        }
         json!({"outcome": "recorded", "digest": digest, "state": "untriaged"})
     }
 
@@ -487,7 +519,9 @@ impl<'a> Hub<'a> {
             return json!({"outcome": "refused", "code": "not_your_decision", "writer": writer});
         }
         let path = store_path(self);
-        let mut store = load(&path);
+        let Some(mut store) = load_whole(&path) else {
+            return json!({"outcome": "refused", "code": "store_unreadable"});
+        };
         let n = store["decisions"].as_array().map_or(0, Vec::len);
         let id = format!(
             "dec-{n:04}-{}",
@@ -657,7 +691,9 @@ impl<'a> Hub<'a> {
             .as_array_mut()
             .expect("a list")
             .push(json!({"decision": id, "by": writer, "what": decision}));
-        save(&path, &store);
+        if save(&path, &store).is_err() {
+            return refused("store_unwritable");
+        }
         reply
     }
 }
@@ -675,4 +711,42 @@ fn digests_mut<'s>(store: &'s mut Value, fixture: &str) -> &'s mut Vec<Value> {
         slot["digests"] = json!([]);
     }
     slot["digests"].as_array_mut().expect("a list")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// #138: a store read while it is saved again is the whole store, never one cut short.
+    #[test]
+    fn a_store_read_during_a_save_is_whole() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        let dir = std::env::temp_dir().join(format!("deep-138-save-{}", std::process::id()));
+        let path = dir.join("store.json");
+        let digests: Vec<Value> = (0..20_000)
+            .map(|i| json!({"digest": format!("{i:064x}"), "state": "untriaged"}))
+            .collect();
+        let store = json!({"fixtures": {"f": {"digests": digests}}, "decisions": []});
+        save(&path, &store).expect("saved");
+        assert_eq!(load_whole(&path).as_ref(), Some(&store));
+        let whole = std::fs::read(&path).expect("the store");
+        let saving = AtomicBool::new(true);
+        let (reads, cut_short) = std::thread::scope(|scope| {
+            let reader = scope.spawn(|| {
+                let (mut reads, mut cut_short) = (0, 0);
+                while saving.load(Ordering::Relaxed) {
+                    reads += 1;
+                    cut_short += usize::from(std::fs::read(&path).ok().as_ref() != Some(&whole));
+                }
+                (reads, cut_short)
+            });
+            for _ in 0..60 {
+                save(&path, &store).expect("saved");
+            }
+            saving.store(false, Ordering::Relaxed);
+            reader.join().expect("the reader ends")
+        });
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(cut_short, 0, "of {reads} reads");
+    }
 }

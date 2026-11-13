@@ -16,5 +16,6 @@ pub mod fx;
 pub mod graph;
 pub mod interp;
 pub mod module;
+pub mod particles;
 pub mod shipped;
 pub mod table;

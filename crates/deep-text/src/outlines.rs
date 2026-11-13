@@ -30,14 +30,17 @@ pub struct GlyphOutline {
 struct Pen {
     at: [f64; 2],
     k: f64,
+    /// #1964: the tangent of the glyph's faux-italic slant.
+    slant: f64,
     cmds: Vec<Cmd>,
 }
 
 impl Pen {
     fn p(&self, x: f32, y: f32) -> [f64; 2] {
+        let (x, y) = (f64::from(x), f64::from(y));
         [
-            self.at[0] + f64::from(x) * self.k,
-            self.at[1] - f64::from(y) * self.k,
+            self.at[0] + (x + y * self.slant) * self.k,
+            self.at[1] - y * self.k,
         ]
     }
 }
@@ -78,6 +81,7 @@ pub fn outline_of(g: &Glyph) -> Option<Vec<Cmd>> {
     let mut pen = Pen {
         at: [0.0, 0.0],
         k: f64::from(g.size) / upm,
+        slant: deep_canvas::ops::tan(f64::from(g.skew).to_radians()),
         cmds: Vec::new(),
     };
     let coords: Vec<skrifa::instance::NormalizedCoord> = g

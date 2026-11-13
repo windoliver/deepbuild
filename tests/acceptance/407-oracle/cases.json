@@ -1,0 +1,23 @@
+{
+  "about": "The upstream flash-detection suite's video cases, re-expressed as the relative luminance of each frame: read from the expected logs it pins (data/ExpectedVideoLogFiles/<case>_RELATIVE.csv, columns AverageLuminance, FlashAreaLuminance, LuminanceTransitions and FlashLuminanceFailedFrame), in the vendored folder for commit fd3e09e4e6 under doneright/oracles/vendor/ on branch doneright of DeepBuildAI/deepbuild. Every frame of a case is wholly at `low` or wholly at `high` (a flash area of 100% or 0%); `high_frames` lists the 1-based frames at `high`, first and last of each run. `upstream` keeps what the log says: the most transitions it counts in a second, the first frame it marks a flash fail (result 3) and the first it marks an extended fail (result 2), a rule of the upstream suite's own beyond the three-flash limit.",
+  "cases": [
+    { "case": "2Hz_5s", "fps": 5, "frames": 25, "low": 0, "high": 1,
+      "high_frames": [[7, 7], [9, 9], [11, 11], [13, 13], [16, 16], [18, 18], [21, 21], [23, 23]],
+      "upstream": { "max_transitions": 5, "first_flash_fail": null, "first_extended_fail": null } },
+    { "case": "2Hz_6s", "fps": 25, "frames": 149, "low": 0, "high": 1,
+      "high_frames": [[6, 8], [12, 14], [30, 32], [36, 38], [55, 57], [61, 63], [80, 82], [86, 88], [105, 107], [111, 113], [130, 132], [136, 138]],
+      "upstream": { "max_transitions": 5, "first_flash_fail": null, "first_extended_fail": 114 } },
+    { "case": "3Hz_6s", "fps": 25, "frames": 149, "low": 0, "high": 1,
+      "high_frames": [[6, 8], [12, 14], [17, 19], [30, 32], [36, 38], [41, 43], [55, 57], [61, 63], [66, 68], [80, 82], [86, 88], [91, 93], [105, 107], [111, 113], [116, 118], [130, 132], [136, 138], [141, 143]],
+      "upstream": { "max_transitions": 7, "first_flash_fail": 30, "first_extended_fail": 120 } },
+    { "case": "gray", "fps": 25, "frames": 50, "low": 0.83077, "high": 1,
+      "high_frames": [[5, 8], [13, 16], [21, 25], [31, 34], [39, 42], [47, 50]],
+      "upstream": { "max_transitions": 0, "first_flash_fail": null, "first_extended_fail": null } },
+    { "case": "extendedFLONG", "fps": 25, "frames": 200, "low": 0, "high": 1,
+      "high_frames": [[10, 20], [34, 44], [59, 69], [84, 94], [109, 119], [134, 144], [159, 169], [184, 194]],
+      "upstream": { "max_transitions": 3, "first_flash_fail": null, "first_extended_fail": null } },
+    { "case": "intermitentEF", "fps": 25, "frames": 200, "low": 0, "high": 1,
+      "high_frames": [[10, 20], [34, 44], [59, 69], [84, 94], [134, 144], [159, 169]],
+      "upstream": { "max_transitions": 3, "first_flash_fail": null, "first_extended_fail": null } }
+  ]
+}

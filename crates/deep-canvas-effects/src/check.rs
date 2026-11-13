@@ -11,8 +11,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde_json::Value;
 
 use crate::graph::{
-    self, Arg, Body, Class, Count, Fallback, From, Issue, Kind, Operator, Origin, Sc, Step, Tex,
-    Ty,
+    self, Arg, Body, Class, Count, Fallback, From, Issue, Kind, Operator, Origin, Sc, Step, Tex, Ty,
 };
 use crate::table::{self, Def};
 
@@ -65,6 +64,8 @@ pub struct Checked {
     /// Each `iterate@1` step's body, checked as a pass of its own (#483); the step itself is an
     /// input of `op`, the texture its last run writes.
     pub iterates: Vec<Iterated>,
+    /// A material's light responses (#485), each checked as a material operator of its own.
+    pub responses: BTreeMap<String, Checked>,
 }
 
 /// An iterate step as the check passed it: its body a pass whose inputs are those of the
@@ -808,10 +809,18 @@ impl Ctx<'_> {
                 Some("object" | "world" | "view") => Ty::V(Sc::F32, 3),
                 _ => return Err(bad("normal takes space: object, world or view".into())),
             },
+            "position" => match s.fields.get("space").and_then(Value::as_str) {
+                Some("world") => Ty::V(Sc::F32, 3),
+                _ => return Err(bad("position takes space: world".into())),
+            },
+            "tangent" => Ty::V(Sc::F32, 4),
+            "uv0" => Ty::V(Sc::F32, 2),
             "blend" => {
                 let mode = s.fields.get("mode").and_then(Value::as_str);
                 if mode.and_then(deep_canvas::blend::step_mode).is_none() {
-                    return Err(bad("blend takes a mode: a group's blend modes but dissolve".into()));
+                    return Err(bad(
+                        "blend takes a mode: a group's blend modes but dissolve".into(),
+                    ));
                 }
                 for port in ["base", "over"] {
                     if float(&need(port)?).map_err(bad)? != Ty::V(Sc::F32, 3) {
@@ -926,7 +935,12 @@ impl Ctx<'_> {
                 }
                 match need("tex")? {
                     Ty::Tex3(Tex::Float) => Ty::V(Sc::F32, 4),
-                    t => return Err(bad(format!("sample3d reads a float texture3d, not {}", t.wgsl()))),
+                    t => {
+                        return Err(bad(format!(
+                            "sample3d reads a float texture3d, not {}",
+                            t.wgsl()
+                        )))
+                    }
                 }
             }
             "with" => {
@@ -949,7 +963,11 @@ impl Ctx<'_> {
                 let storage = |p: &str| -> Result<(Sc, u32), Issue> {
                     match need(p)? {
                         Ty::Storage(sc, n) => Ok((sc, n)),
-                        t => Err(bad(format!("{} reads storage at {p}, not {}", s.op, t.wgsl()))),
+                        t => Err(bad(format!(
+                            "{} reads storage at {p}, not {}",
+                            s.op,
+                            t.wgsl()
+                        ))),
                     }
                 };
                 let count = |len: u32| -> Result<u32, Issue> {
@@ -1070,18 +1088,31 @@ impl Ctx<'_> {
             Arg::Lit(_) => true,
             Arg::Ref(n, None) => {
                 self.uniform.contains(n)
-                    || self
-                        .op
-                        .inputs
-                        .get(n)
-                        .is_some_and(|i| !matches!(i.ty, Ty::Tex(_) | Ty::Tex3(_) | Ty::Storage(..)))
+                    || self.op.inputs.get(n).is_some_and(|i| {
+                        !matches!(i.ty, Ty::Tex(_) | Ty::Tex3(_) | Ty::Storage(..))
+                    })
             }
             Arg::Ref(..) => false,
         };
         let pure = matches!(
             name,
-            "const" | "convert" | "bitcast" | "add" | "sub" | "mul" | "div" | "rem" | "min"
-                | "max" | "and" | "or" | "xor" | "shl" | "shr" | "select" | "hash"
+            "const"
+                | "convert"
+                | "bitcast"
+                | "add"
+                | "sub"
+                | "mul"
+                | "div"
+                | "rem"
+                | "min"
+                | "max"
+                | "and"
+                | "or"
+                | "xor"
+                | "shl"
+                | "shr"
+                | "select"
+                | "hash"
         );
         let is_uniform = pure && s.args.values().all(uniform);
         let of = |a: Option<&Arg>| -> Option<(u64, u64)> {
@@ -1098,7 +1129,11 @@ impl Ctx<'_> {
         };
         let got = match name {
             "element" => Some((1, 0)),
-            "const" => s.fields.get("value").and_then(Value::as_u64).map(|c| (0, c)),
+            "const" => s
+                .fields
+                .get("value")
+                .and_then(Value::as_u64)
+                .map(|c| (0, c)),
             "convert" | "bitcast" => of(s.args.get("x")),
             "add" => match (of(s.args.get("a")), of(s.args.get("b"))) {
                 (Some((a, b)), Some((c, d))) => a.checked_add(c).zip(b.checked_add(d)),
@@ -1166,10 +1201,9 @@ impl Ctx<'_> {
         }
         if !atomic && !self.options.trusts_index && self.op.elements > 1 {
             let own = match s.args.get("i") {
-                Some(Arg::Ref(n, None)) => self
-                    .affine
-                    .get(n)
-                    .is_some_and(|(k, j)| *k >= 1 && j < k),
+                Some(Arg::Ref(n, None)) => {
+                    self.affine.get(n).is_some_and(|(k, j)| *k >= 1 && j < k)
+                }
                 _ => false,
             };
             if !own {
@@ -1223,7 +1257,10 @@ impl Ctx<'_> {
             _ => return Err(bad("store names its texture output at tex".into())),
         };
         let dims = if out.dim3 { 3 } else { 2 };
-        let at = s.args.get("ixy").ok_or_else(|| bad("store needs ixy".into()))?;
+        let at = s
+            .args
+            .get("ixy")
+            .ok_or_else(|| bad("store needs ixy".into()))?;
         match lanes(&concrete(self.ty_of(scope, at, id)?)) {
             Some((sc, n)) if sc.is_int() && n == dims => {}
             _ => return Err(bad(format!("store's ixy is a vec{dims} of integers"))),
@@ -1232,7 +1269,12 @@ impl Ctx<'_> {
         let vt = self.ty_of(scope, v, id)?;
         let want = out.value();
         if concrete(unify(&want, &vt).map_err(bad)?) != want {
-            return Err(bad(format!("a {} texel holds a {}, not a {}", out.format, want.wgsl(), vt.wgsl())));
+            return Err(bad(format!(
+                "a {} texel holds a {}, not a {}",
+                out.format,
+                want.wgsl(),
+                vt.wgsl()
+            )));
         }
         if let Some(w) = &s.when {
             if self.ty_of(scope, &Arg::Ref(w.clone(), None), id)? != Ty::BOOL {
@@ -1262,12 +1304,15 @@ impl Ctx<'_> {
             )
         };
         let planted = (self.options.exact_f32_compares
-            && matches!(def.name, "eq@1" | "ne@1" | "lt@1" | "le@1" | "gt@1" | "ge@1"))
+            && matches!(
+                def.name,
+                "eq@1" | "ne@1" | "lt@1" | "le@1" | "gt@1" | "ge@1"
+            ))
             || (self.options.exact_f32_floor && def.name == "floor@1");
         // Floats travel only as bits: a bitcast or a constant moves them without an f32 operation.
         let carries_bits = matches!(def.name, "bitcast@1" | "const@1");
-        let inexact = !def.exact
-            || (!planted && !carries_bits && (floats(out) || args.values().any(floats)));
+        let inexact =
+            !def.exact || (!planted && !carries_bits && (floats(out) || args.values().any(floats)));
         if inexact && self.inexact.is_none() {
             let why = if def.exact {
                 format!("{} on f32 values", def.name)
@@ -1511,14 +1556,25 @@ fn stepped_rules(op: &Operator, issues: &mut Vec<Issue>) {
         issues.push(Issue::at_path("operator_kind_rule", path, what));
     };
     if op.stepped.is_some() && op.kind != Kind::Compute {
-        rule(issues, "stepped", format!("{} is stepped, and only compute work steps", op.id));
+        rule(
+            issues,
+            "stepped",
+            format!("{} is stepped, and only compute work steps", op.id),
+        );
     }
     if op.stepped.is_some() {
         return;
     }
     for (name, s) in &op.storage {
         if s.carry.is_some() {
-            rule(issues, &format!("outputs/{name}/carry"), format!("{} carries {name} between frames, and only a stepped operator carries state", op.id));
+            rule(
+                issues,
+                &format!("outputs/{name}/carry"),
+                format!(
+                    "{} carries {name} between frames, and only a stepped operator carries state",
+                    op.id
+                ),
+            );
         }
     }
     for (name, input) in &op.inputs {
@@ -1538,6 +1594,8 @@ fn input_class(from: &From) -> Class {
     match from {
         // A target the GPU rasterized is same machine, and so is time.
         From::Target { .. } | From::Time | From::Phase(_) => Class::SameMachine,
+        // What the light loop hands a response comes from the GPU's own shading (#485).
+        From::Port => Class::SameMachine,
         // Storage carries its writer's bits; an operator's class over them is its own.
         From::Param(_)
         | From::Channel(_)
@@ -1566,7 +1624,11 @@ fn first_iterate(steps: &BTreeMap<String, Step>) -> Option<(&String, &graph::Ite
 }
 
 /// Every name the steps (and their repeats' and outputs') arguments read.
-fn reads_of(steps: &BTreeMap<String, Step>, outputs: &BTreeMap<String, Arg>, out: &mut BTreeSet<String>) {
+fn reads_of(
+    steps: &BTreeMap<String, Step>,
+    outputs: &BTreeMap<String, Arg>,
+    out: &mut BTreeSet<String>,
+) {
     let mut push = |a: &Arg| {
         if let Arg::Ref(n, _) = a {
             out.insert(n.clone());
@@ -1598,10 +1660,16 @@ fn check_iterating(op: &Operator, options: CheckOptions) -> Result<Checked, Vec<
         };
         let refuse = |code: &'static str, m: String| Err(vec![Issue::at_step(code, id, m)]);
         if op.kind != Kind::Pass {
-            return refuse("operator_kind_rule", format!("iterate is a pass step, not a {} one", op.kind.name()));
+            return refuse(
+                "operator_kind_rule",
+                format!("iterate is a pass step, not a {} one", op.kind.name()),
+            );
         }
         if it.count == 0 || it.count > MAX_ITERATE {
-            return refuse("operator_limit", format!("iterate runs 1 to {MAX_ITERATE} times, not {}", it.count));
+            return refuse(
+                "operator_limit",
+                format!("iterate runs 1 to {MAX_ITERATE} times, not {}", it.count),
+            );
         }
         if let Some((inner, _)) = first_iterate(&it.steps) {
             return Err(vec![Issue {
@@ -1614,7 +1682,14 @@ fn check_iterating(op: &Operator, options: CheckOptions) -> Result<Checked, Vec<
             }]);
         }
         if !PING_PONG.contains(&it.format.as_str()) {
-            return refuse("operator_type", format!("a ping-pong target is {}, not {}", PING_PONG.join(" or "), it.format));
+            return refuse(
+                "operator_type",
+                format!(
+                    "a ping-pong target is {}, not {}",
+                    PING_PONG.join(" or "),
+                    it.format
+                ),
+            );
         }
         let mut read = BTreeSet::new();
         reads_of(&it.steps, &it.outputs, &mut read);
@@ -1641,14 +1716,22 @@ fn check_iterating(op: &Operator, options: CheckOptions) -> Result<Checked, Vec<
         let key = format!("{}.{id}", op.id);
         let tex = |output: &str| graph::Input {
             ty: Ty::Tex(Tex::Float),
-            from: From::Target { op: key.clone(), output: output.into() },
+            from: From::Target {
+                op: key.clone(),
+                output: output.into(),
+            },
             range: None,
             default: None,
         };
         inputs.insert("prev".into(), tex("prev"));
         inputs.insert(
             it.index.clone(),
-            graph::Input { ty: Ty::U32, from: From::Param(it.index.clone()), range: None, default: None },
+            graph::Input {
+                ty: Ty::U32,
+                from: From::Param(it.index.clone()),
+                range: None,
+                default: None,
+            },
         );
         let body = Operator {
             id: key.clone(),
@@ -1674,6 +1757,7 @@ fn check_iterating(op: &Operator, options: CheckOptions) -> Result<Checked, Vec<
             origin: Origin::Shipped,
             chain: op.chain.clone(),
             order: op.order.clone(),
+            responses: BTreeMap::new(),
         };
         let checked = check_with(&body, options)?;
         extra += it.count as f64 * checked.estimate;
@@ -1696,10 +1780,69 @@ fn check_iterating(op: &Operator, options: CheckOptions) -> Result<Checked, Vec<
 
 /// [`check`], under the planted wrong programs `options` turns on.
 pub fn check_with(op: &Operator, options: CheckOptions) -> Result<Checked, Vec<Issue>> {
+    if !op.responses.is_empty() {
+        return check_answering(op, options);
+    }
     if op.steps.values().any(|s| s.iterate.is_some()) {
         return check_iterating(op, options);
     }
     check_inner(op, options, 0.0, Class::Exact)
+}
+
+/// The type of the light loop's response `name`, its radiance: scene3d's entry of `gpu.output@1`.
+fn response_type(name: &str) -> Option<&'static str> {
+    deep_canvas_scene3d::gpu::RESPONSES
+        .iter()
+        .any(|r| r.0 == name)
+        .then_some("vec3<f32>")
+}
+
+/// A material with light responses (#485; Operator output: light response): each response runs
+/// the whole check as a material operator of its own, a refusal named under its field; the
+/// operator's estimate counts `light`'s once for each light a pixel's cluster may hold and
+/// `ambient`'s once, and its class is at best theirs.
+fn check_answering(op: &Operator, options: CheckOptions) -> Result<Checked, Vec<Issue>> {
+    let mut extra = 0.0;
+    let mut floor = Class::Exact;
+    let mut responses = BTreeMap::new();
+    let mut issues = Vec::new();
+    for (name, r) in &op.responses {
+        match check_with(r, options) {
+            Ok(c) => {
+                let calls = if name == "light" {
+                    deep_canvas_scene3d::light::SHADED as f64
+                } else {
+                    1.0
+                };
+                extra += c.estimate * calls;
+                floor = floor.max(c.class);
+                responses.insert(name.clone(), c);
+            }
+            Err(e) => issues.extend(e.into_iter().map(|mut i| {
+                i.path = Some(match i.path.take() {
+                    Some(p) => format!("{name}/{p}"),
+                    None => name.clone(),
+                });
+                i
+            })),
+        }
+    }
+    if !issues.is_empty() {
+        return Err(issues);
+    }
+    let mut outer = op.clone();
+    outer.responses.clear();
+    let mut c = if outer.steps.values().any(|s| s.iterate.is_some()) {
+        let mut c = check_iterating(&outer, options)?;
+        c.estimate += extra;
+        c.class = c.class.max(floor);
+        c
+    } else {
+        check_inner(&outer, options, extra, floor)?
+    };
+    c.op.responses = op.responses.clone();
+    c.responses = responses;
+    Ok(c)
 }
 
 /// The check over an operator with no iterate step left: `extra` ns its iterates' runs cost and
@@ -1753,7 +1896,12 @@ fn check_inner(
             ));
         }
         // A 3D texture is read only in the frame that wrote it (structural steps, #483).
-        if let From::Texture3d { op: from, output, previous: true } = &input.from {
+        if let From::Texture3d {
+            op: from,
+            output,
+            previous: true,
+        } = &input.from
+        {
             issues.push(Issue::at_path(
                 "operator_kind_rule",
                 &path,
@@ -1770,6 +1918,7 @@ fn check_inner(
                 From::Target { output, .. } => {
                     format!("it reads the {output} target, which the GPU rasterized")
                 }
+                From::Port => format!("it reads {name}, which the light loop computes"),
                 _ => "it reads time".to_string(),
             })
         } else if matches!(input.ty, Ty::V(Sc::F32, _) | Ty::Mat(_)) {
@@ -1843,14 +1992,21 @@ fn check_inner(
     for (name, t) in &op.textures {
         let path = format!("outputs/{name}");
         if op.kind != Kind::Compute {
-            issues.push(Issue::at_path("operator_type", &path, "only a compute operator writes a texture output"));
+            issues.push(Issue::at_path(
+                "operator_type",
+                &path,
+                "only a compute operator writes a texture output",
+            ));
         }
         // Integers don't average, and r32float isn't filterable on every adapter.
         if t.mips && !matches!(t.format.as_str(), "rgba16float" | "rgba8unorm") {
             issues.push(Issue::at_path(
                 "operator_type",
                 &path,
-                format!("mips: true takes rgba16float or rgba8unorm, not {}", t.format),
+                format!(
+                    "mips: true takes rgba16float or rgba8unorm, not {}",
+                    t.format
+                ),
             ));
         }
         let cap = if t.dim3 { MAX_TEXTURE3D } else { MAX_TEXTURE2D };
@@ -1858,7 +2014,10 @@ fn check_inner(
             issues.push(Issue::at_path(
                 "operator_limit",
                 &path,
-                format!("a {} output is 1 to {cap} texels a side", if t.dim3 { "texture3d" } else { "texture" }),
+                format!(
+                    "a {} output is 1 to {cap} texels a side",
+                    if t.dim3 { "texture3d" } else { "texture" }
+                ),
             ));
         }
     }
@@ -1866,8 +2025,10 @@ fn check_inner(
         return Err(issues);
     }
     let mut scope = BTreeSet::new();
+    // A light response runs inside the light loop, where pixels diverge (#485).
+    let answers = op.inputs.values().any(|i| i.from == From::Port);
     let order = ctx
-        .graph(&op.steps, &mut scope, 0, 1, false)
+        .graph(&op.steps, &mut scope, 0, 1, answers)
         .map_err(|e| vec![e])?;
     let total: usize = order.len() + ctx.body_order.values().map(Vec::len).sum::<usize>();
     if total > 2048 {
@@ -1917,7 +2078,12 @@ fn check_inner(
                 Ok(t) => issues.push(Issue::at_path(
                     "operator_type",
                     &path,
-                    format!("{name} is storage of {} {}, so it takes such storage, not {}", so.count, so.sc.wgsl(), t.wgsl()),
+                    format!(
+                        "{name} is storage of {} {}, so it takes such storage, not {}",
+                        so.count,
+                        so.sc.wgsl(),
+                        t.wgsl()
+                    ),
                 )),
                 Err(mut e) => {
                     e.step = None;
@@ -1935,10 +2101,19 @@ fn check_inner(
     }
     for (name, a) in &op.outputs {
         let path = format!("outputs/{name}");
-        // Today's outputs are the core's entries of gpu.output@1 (#200).
-        let want = match deep_canvas::registry::core_lists::output_type(op.kind.name(), name) {
+        // Today's outputs are the core's entries of gpu.output@1 (#200); a material's lobes,
+        // occlusion and normal are scene3d's (#486).
+        let scene3d = (op.kind == Kind::Material)
+            .then(|| deep_canvas_scene3d::gpu::output_type(name))
+            .flatten();
+        // A light response's one output, its radiance, takes the response's name (#485).
+        let scene3d = scene3d.or_else(|| answers.then(|| response_type(name)).flatten());
+        let want = match deep_canvas::registry::core_lists::output_type(op.kind.name(), name)
+            .or(scene3d)
+        {
             Some("vec4<f32>") => Ty::V(Sc::F32, 4),
             Some("vec3<f32>") => Ty::V(Sc::F32, 3),
+            Some("vec2<f32>") => Ty::V(Sc::F32, 2),
             Some("f32") => Ty::F32,
             _ => {
                 issues.push(Issue::at_path(
@@ -2066,6 +2241,7 @@ fn check_inner(
         textures,
         storage_inputs,
         iterates: Vec::new(),
+        responses: BTreeMap::new(),
     })
 }
 
@@ -2077,4 +2253,41 @@ pub fn read_and_check(v: &Value) -> Result<Checked, Vec<Issue>> {
 /// [`read_and_check`] under planted wrong programs.
 pub fn read_and_check_with(v: &Value, options: CheckOptions) -> Result<Checked, Vec<Issue>> {
     check_with(&graph::read(v)?, options)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    /// A material operator that writes nothing and answers the light loop with `light` (#485).
+    fn answering(light: Value) -> Value {
+        json!({"id": "cel", "kind": "material", "origin": "composed", "about": "A response.",
+            "steps": {}, "outputs": {}, "cost": {"ns_per_px": 50}, "light": light})
+    }
+
+    fn response(first: Value) -> Value {
+        json!({"steps": {"d": first, "c": {"op": "mul@1", "args": {"a": "radiance", "b": "d"}}},
+            "outputs": {"radiance": "c"}})
+    }
+
+    #[test]
+    fn a_light_response_counts_once_for_each_light_a_cluster_holds() {
+        let ndl = json!({"op": "dot@1", "args": {"a": "n", "b": "l"}});
+        let c = read_and_check(&answering(response(ndl))).expect("it checks");
+        let light = &c.responses["light"];
+        assert!(light.estimate > 0.0);
+        let lights = deep_canvas_scene3d::light::SHADED as f64;
+        assert_eq!(c.estimate, light.estimate * lights);
+        // What the loop hands it comes from the GPU's shading: same machine at best.
+        assert_eq!(c.class, Class::SameMachine);
+    }
+
+    #[test]
+    fn a_light_response_takes_no_derivative() {
+        let ddx = json!({"op": "ddx@1", "args": {"x": "shadow"}});
+        let issues = read_and_check(&answering(response(ddx))).unwrap_err();
+        assert_eq!(issues[0].reason, Some("derivative_in_divergent_flow"));
+        assert_eq!(issues[0].path.as_deref(), Some("light"));
+    }
 }
