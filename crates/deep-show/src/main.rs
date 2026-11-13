@@ -49,6 +49,7 @@ mod picks;
 mod placement;
 #[cfg(feature = "test-accent")]
 mod planted;
+mod net;
 mod played;
 mod points;
 mod print;
@@ -2035,6 +2036,8 @@ fn modules(set: BuildSet) -> Vec<Module> {
         // Issue #308: controls and the input track's handling, with control@1; #535: logic's arrays.
         out.extend([deep_canvas_input::module::module(), deep_logic::module(), deep_canvas_export::module::module()]);
         out.extend(physics::module());
+        // #540: the net module's `net@1`, as far as a lockstep match's point entries need it.
+        out.push(net::module());
     }
     // Issue #238: the sandbox module, on core alone; `test-sandbox-alt` seals the test
     // implementation `sandbox.alt` in its place, and `test-sandbox-needs-logic` plants a manifest
