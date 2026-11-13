@@ -44,7 +44,8 @@ waiting texts (45, 60, 51, 39), the 560-frame path, and the criterion IDs.
   `video.codec`), `mixdown.rs` (`media_mix`), `played.rs` (the session's track, `enter`), `ring.rs` (`install`,
   `attempts`, `toasts`), `gate.rs`, `hub.rs`; `crates/deep-canvas-motion/src/doc.rs` (`markers_of`: a stage marker with
   `waits_for` is refused `bad_marker_kind`), `tempo.rs` (`tempo_map.segments`); `crates/deep-canvas-input/src/track.rs`
-  (an entry's JSON); `crates/deep-canvas/src/document/mod.rs` (the envelope's keys); `scripts/proof-change.mjs`
+  (an entry's JSON); `crates/deep-canvas/src/document/mod.rs` (the envelope's keys), `rules.rs` (`shows_number`: a
+  text@1 showing a digit or a number word with no source is refused `number_unsourced`); `scripts/proof-change.mjs`
   (`criterionId`), `scripts/public-text.mjs`; the suites `400/`, `401/` (displays, windows, the card, the ring),
   `501/` and `157/` (export, stills, receipts), `502/` (narration lines and words records), `504/` (controls, stages,
   glides, `appended`, the taste test), `407/` (the hold rule's numbers), `1163/` (the Driver), `1965-oracle/` and
@@ -144,8 +145,8 @@ All made at test time in `helpers.ts`; no file outside the checkout, no personal
 - **The quiz film** (criteria 1 and 2): 640 × 360, 50 s at 10 fps; a block sliding 12 u a second; stage markers
   `intro` 0 s, `fork` 8 s (waits for `path`, options A and B, default A; `then: {B: part2}`), `ask1` 33 s, `ask2` 37 s,
   `ask3` 41 s (wait for `q1` … `q3`, options a and b, no default); cues `jump` 20 s (`goto: resume`), `part2` 21 s,
-  `resume` 30 s; texts shown only over [M, M + 0.1 s) at each waiting marker M, of 45, 60, 51 and 39 graphemes; the
-  counter from 45 s. Right answers: a, b, a. The reference twin plays straight: no markers, each question's default a.
+  `resume` 30 s; texts shown only over [M, M + 0.1 s) at each waiting marker M, of 45, 60, 51 and 39 graphemes, none
+  showing a digit or a number word; the counter from 45 s. Right answers: a, b, a. The reference twin plays straight: no markers, each question's default a.
 - **The loop film** (criterion 5, the Oracle lane): 20 s at 30 fps; `s1` 0 s, cue `span_start` 4 s, `s2` 6 s with
   `hold: {loop: {from: span_start}}`, `s3` 12 s; a block sliding 30 u a second.
 - **The nine-stage piece** (criteria 4 to 7): 36 s at 30 fps; stage `s<k>` at 4(k − 1) s, named Welcome, Setup, Method,

@@ -355,12 +355,16 @@ const choice = (label: string, options: string[], def?: string): JsonObject =>
 // right answers from 45 s. Each waiting marker's text shows only from its marker for 0.1 s of the timeline, so it is the
 // one text that frame shows; a block slides 12 u a second, so every timeline frame differs.
 
-/** The texts and their counts of graphemes the hold rule reads (whitespace never counts): 45, 60, 51 and 39. */
+/**
+ * The texts and their counts of graphemes the hold rule reads (whitespace never counts): 45, 60, 51 and 39. None shows a
+ * number (no digit and no number word), since a text@1 that shows one with no source is refused at check
+ * (`number_unsourced`, Honest numbers).
+ */
 export const QUIZ_TEXT = {
-  prompt: 'Pick A to watch part one, or B to skip to the part two quiz',
-  q1: 'Question 1: Which of these planets is the largest one in our solar system',
-  q2: 'Question 2: Which number is a prime, 21 or 23, out of these two?',
-  q3: 'Question 3: Is the Moon closer to us than the Sun',
+  prompt: 'Pick A to watch the opening part, or B to skip to the quiz',
+  q1: 'First question: Which of the planets is the largest in our solar system?',
+  q2: 'Second question: Is a prime number divisible only by itself?',
+  q3: 'Last question: Is the Moon closer than the Sun?',
 } as const;
 /** The waiting markers, their texts and their controls. */
 export const WAITS = [
