@@ -28,6 +28,7 @@ export const alone = ['tests/acceptance/149/', 'tests/acceptance/1523/', 'tests/
   'tests/acceptance/159/budgets.test.ts', 'tests/acceptance/761/budgets.test.ts', 'tests/acceptance/85/budgets.test.ts', 'tests/acceptance/666/fast.test.ts', 'tests/acceptance/668/fast.test.ts', 'tests/acceptance/567/fast.test.ts', 'tests/acceptance/669/fast.test.ts', 'tests/acceptance/1156/fast.test.ts', 'tests/acceptance/237/', 'tests/acceptance/34/', 'tests/acceptance/667/', 'tests/acceptance/380/', 'tests/acceptance/382/', 'tests/acceptance/386/', 'tests/acceptance/1174/', 'tests/acceptance/1173/', 'tests/acceptance/371/', 'tests/acceptance/376/', 'tests/acceptance/306/', 'tests/acceptance/403/', 'tests/acceptance/429/', 'tests/acceptance/431/', 'tests/acceptance/432/', 'tests/acceptance/483/', 'tests/acceptance/484/', 'tests/acceptance/252/',
   'tests/acceptance/18/kit/', 'tests/acceptance/18/session/', 'tests/acceptance/18/binding/', ...['callers', 'failures', 'loops', 'mcp', 'prompts', 'record', 'replies'].map((f) => `tests/acceptance/18/mapping/${f}.test.ts`),
   'tests/acceptance/453/',
+  'tests/acceptance/1633/', 'packages/hub/test/reopened-items.test.ts',
   'tests/acceptance/46/', 'packages/github/test/',
   'tests/acceptance/1172/',
   'tests/acceptance/1454/',
@@ -56,6 +57,7 @@ export const alone = ['tests/acceptance/149/', 'tests/acceptance/1523/', 'tests/
  */
 export const slow = [
   'packages/conformance/src/slots/environment.test.ts', 'packages/hub/test/loop-starters.test.ts',
+  'packages/hub/test/reopened-items.test.ts', 'tests/acceptance/1633/reopened.test.ts',
   'packages/hub/test/loop-transcript.test.ts', 'packages/pi/test/guards.test.ts',
   'tests/acceptance/1002/cli.test.ts', 'tests/acceptance/1002/screens.test.ts',
   'tests/acceptance/1002/twins.test.ts', 'tests/acceptance/1015/claude.test.ts',
