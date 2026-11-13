@@ -232,6 +232,95 @@ fn channel_energy(x: &[f64], stages: &[Biquad; 2], bounds: &[usize]) -> Vec<f64>
         .collect()
 }
 
+/// #509: a bus's power bake, made as its samples arrive: f64 K-weighted energy Σ y² per channel
+/// per 10 ms sub-block, sub-block k from sample ⌊k × rate ÷ 100⌋, the filters from zero state at
+/// sample 0. Samples before 0 or already read are skipped, and a gap reads as silence, so one pass
+/// from the start gives the same bake whatever renders it.
+pub struct Power {
+    rate: i64,
+    channels: usize,
+    stages: [Biquad; 2],
+    state: Vec<[[f64; 2]; 2]>,
+    next: i64,
+    acc: Vec<f64>,
+    /// Each whole sub-block's energies, channel by channel.
+    pub energy: Vec<f64>,
+}
+
+impl Power {
+    pub fn new(rate: i64, channels: usize) -> Power {
+        Power {
+            rate,
+            channels,
+            stages: k_weighting(rate as f64),
+            state: vec![[[0.0; 2]; 2]; channels],
+            next: 0,
+            acc: vec![0.0; channels],
+            energy: Vec::new(),
+        }
+    }
+
+    fn bound(&self, k: usize) -> i64 {
+        (k as i128 * self.rate as i128 / 100) as i64
+    }
+
+    fn frame(&mut self, f: &[f32]) {
+        for c in 0..self.channels {
+            let mut y = f64::from(f.get(c).copied().unwrap_or(0.0));
+            for (s, b) in self.state[c].iter_mut().zip(&self.stages) {
+                let out = b.b0 * y + s[0];
+                s[0] = b.b1 * y - b.a1 * out + s[1];
+                s[1] = b.b2 * y - b.a2 * out;
+                y = out;
+            }
+            self.acc[c] += y * y;
+        }
+        self.next += 1;
+        let k = self.energy.len() / self.channels.max(1);
+        if self.next == self.bound(k + 1) {
+            self.energy.append(&mut self.acc.clone());
+            self.acc.iter_mut().for_each(|a| *a = 0.0);
+        }
+    }
+
+    /// Adds interleaved `frames`, the first at sample `at`.
+    pub fn push(&mut self, at: i64, frames: &[f32]) {
+        let ch = self.channels.max(1);
+        let silent = vec![0.0f32; ch];
+        while self.next < at {
+            self.frame(&silent);
+        }
+        for (i, f) in frames.chunks_exact(ch).enumerate() {
+            if at + i as i64 == self.next {
+                self.frame(f);
+            }
+        }
+    }
+
+    /// The sub-blocks that end at or before `frames`.
+    pub fn subblocks(&self, frames: i64) -> usize {
+        let mut k = (self.energy.len() / self.channels.max(1)).min((frames.max(0) as i128 * 100 / self.rate as i128) as usize + 1);
+        while k > 0 && self.bound(k) > frames {
+            k -= 1;
+        }
+        k
+    }
+
+    /// The bake's bytes up to `frames`: each energy as f64 little-endian, sub-block by sub-block.
+    pub fn bytes(&self, frames: i64) -> Vec<u8> {
+        self.energy[..self.subblocks(frames) * self.channels].iter().flat_map(|e| e.to_le_bytes()).collect()
+    }
+}
+
+/// The loudness (LUFS) of sub-blocks [from, to) of power bakes summed, each of `channels`
+/// channels at weight 1, at `rate`: −0.691 + 10 log10 of the mean square.
+pub fn loudness_of(bakes: &[&[f64]], channels: usize, rate: i64, from: usize, to: usize) -> f64 {
+    let bound = |k: usize| (k as i128 * rate as i128 / 100) as i64;
+    let samples = (bound(to) - bound(from)).max(1) as f64;
+    let sum: f64 = bakes.iter().map(|b| b.get(from * channels..to * channels).unwrap_or_default().iter().sum::<f64>()).sum();
+    lufs(sum / samples)
+}
+
 /// Taps per interpolator phase: each point between samples i and i + 1 reads x[i − 7] to x[i + 8].
 pub(crate) const TAPS: usize = 16;
 /// Zeros before a channel's first sample in the padded buffer.

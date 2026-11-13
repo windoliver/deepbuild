@@ -633,6 +633,11 @@ impl Hub<'_> {
                 return Err(json!({"outcome": "blocked", "state": "BLOCKED", "code": "narration.unshareable", "unshareable": who, "asks": [ask],
                     "reason": format!("an export carries narration only under a license that says shareable: true; this one's doesn't: {who}")}));
             }
+            // #509: a line that runs past its section's end.
+            let fit = crate::narration::heard_back::fit_issues(&doc, &s);
+            if !fit.is_empty() {
+                return Err(json!({"outcome": "failed", "code": "pace", "issues": fit}));
+            }
         }
         // #157: the licences the export carries, through every job output to its inputs; a CC BY
         // input without its credit FAILs.
@@ -919,6 +924,16 @@ impl Hub<'_> {
             receipt["sample_rate"] = json!(hz);
             receipt["audio"] = json!(job.audio_codec);
             receipt["pcm_hashes"] = json!(pcm_hashes);
+            // #509: each bus's power bake, kept by hash, from one pass over the whole mix.
+            let mut d = doc.clone();
+            d["transport"]["sample_rate"] = json!(hz);
+            let bakes = self.power_bakes(&d)?;
+            let mut listed = Vec::new();
+            for ((bus, _), bytes) in bakes.routes.iter().zip(&bakes.bytes) {
+                let sha = crate::evidence::put(&self.scenario.evidence, bytes).map_err(|_| refuse("store_failed"))?;
+                listed.push(json!({"bus": bus, "channels": 2, "subblocks": bytes.len() / 16, "bytes": bytes.len(), "sha256": sha}));
+            }
+            receipt["bakes"] = json!(listed);
         }
         if let Some(read) = &sound {
             for (k, v) in readings(read) {

@@ -26,6 +26,7 @@ pub mod kit;
 mod lag;
 pub mod lengths;
 pub mod morph;
+mod pace;
 pub mod modifier;
 mod occurrence;
 pub mod module;

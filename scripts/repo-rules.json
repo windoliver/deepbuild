@@ -2147,6 +2147,10 @@
         "sha2": {
           "spec": "^0.10",
           "why": "Issue #499: a hash of each tap's samples, so a seek's output is compared with a play's bit for bit; already in the tree."
+        },
+        "unicode-normalization": {
+          "spec": "^0.1",
+          "why": "Issue #509: normalizer@1's NFKC on both sides of a heard-back comparison; table-driven, already in the tree for deep-canvas."
         }
       }
     },

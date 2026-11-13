@@ -51,6 +51,8 @@ pub enum MixCall {
     Gen { doc: Value, sound: String },
     /// #154: a score's render plan, `{doc, item}`.
     Score(Value),
+    /// #509: a line's words and a transcript compared after normalizer@1.
+    Heard(Map<String, Value>),
     /// #501: a media document played live on the default output for `seconds` of real time.
     Soak {
         media: Value,
@@ -81,6 +83,7 @@ pub fn parse_call(name: &str, c: &Map<String, Value>) -> Option<MixCall> {
             sound: c.get("sound")?.as_str()?.to_string(),
         },
         "score_plan" => MixCall::Score(Value::Object(c.clone())),
+        "media_heard" => MixCall::Heard(c.clone()),
         "handed" => MixCall::Handed {
             panel: c.get("panel")?.as_str()?.to_string(),
             from: t("from")?,
@@ -534,6 +537,7 @@ impl Hub<'_> {
             MixCall::Bake(b) => self.bake_call(b),
             MixCall::Gen { doc, sound } => self.gen_call(doc, sound),
             MixCall::Score(c) => self.score_plan(c),
+            MixCall::Heard(c) => crate::narration::heard_back::heard_call(c),
             MixCall::Handed { panel, from, to } => {
                 let now = self.now;
                 let Some(live) = self.gate.live_of(panel, now) else {
