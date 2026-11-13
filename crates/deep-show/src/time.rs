@@ -49,7 +49,13 @@ pub enum PlayPath {
 
 /// What [`Hub::evaluate`] leaves: the last frame's drawing, its nodes' results, each video
 /// image item's frame, each cell grid, and a 2D film's sides at the last time (#239).
-pub(crate) type Evaluated = (Painted, Vec<Value>, Map<String, Value>, Map<String, Value>, Option<crate::film::Sides>);
+pub(crate) type Evaluated = (
+    Painted,
+    Vec<Value>,
+    Map<String, Value>,
+    Map<String, Value>,
+    Option<crate::film::Sides>,
+);
 
 /// A `determinism` call.
 pub struct Determinism {
@@ -677,7 +683,8 @@ impl Hub<'_> {
         let cells = crate::terminal::grid_blocks(&sched, &session);
         // #239: a 2D film's shots and transitions at the last time, as eval's still draws them.
         let last = times.last().copied().unwrap_or(0);
-        let sides = crate::film::program_of(&sched, &session).and_then(|p| crate::film::sides(&p, doc, last, false));
+        let sides = crate::film::program_of(&sched, &session)
+            .and_then(|p| crate::film::sides(&p, doc, last, false));
         Ok((drawing, nodes, video, cells, sides))
     }
 
