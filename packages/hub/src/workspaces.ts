@@ -5,17 +5,22 @@
 // check reads its checkout's `.deepbuild/state/<touch>.json`, a run on the base commit the reading pinned at the lock,
 // and the verdict's key holds the digests, so two readings on one commit are two keys. A drift marks stale the verdicts
 // whose reading moved and runs again only the checks that read it, on the claim's commit, the others' results carried.
+// A workspace's tasks live in its record (#1347), each a `workspace.task` with work.item@1's fields and what it is
+// blocked by: a work run takes them as it takes a forge's issues, a task's finish keeps the version before it a step
+// back, and a move to a repo files the open ones as issues, with their links.
+import { execFile } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { cpSync, existsSync, mkdirSync, readdirSync, realpathSync, renameSync, rmdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { dirname, isAbsolute, join, normalize, sep } from 'node:path';
+import { basename, dirname, isAbsolute, join, normalize, sep } from 'node:path';
 import type { StateItem, StateSource } from '@deepbuild/conformance';
 import type { JsonValue } from '@deepbuild/contracts';
 import { ulid, type Connection } from '@deepbuild/record';
 import { markStale, type Verdict } from '@deepbuild/verdicts';
 import { diffOf, keepWork, makeWorkspace, reading, revertCommit, sourceOf, WORKSPACE_FILE, workspaceFile, type Touch } from '@deepbuild/workspaces';
+import { gitEnv } from '@deepbuild/gate';
 import type { StatePin } from './gate-runner.js';
 import { nameWorkspace, repoOf } from './paths.js';
-import type { WorkspaceDeps } from './workspaces-port.js';
+import type { SpaceTask, WorkspaceDeps } from './workspaces-port.js';
 
 type Obj = Record<string, unknown>;
 type Source = Omit<StateSource, 'fixture'>;
@@ -27,6 +32,9 @@ const TOUCH = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 const letters = (s: string): string => s.replace(/[^0-9A-Za-z]/g, '');
 const stateFile = (touch: string): string => `.deepbuild/state/${touch}.json`;
 const mapOf = (items: readonly StateItem[]): string => JSON.stringify(Object.fromEntries(items.map((i) => [i.id, i.value])));
+/** A run task's ref, as a landing opens it from its item (#1331). */
+const taskRefOf = (source_id: string): string => `task:${letters(source_id)}`;
+const git = (cwd: string, ...args: string[]): Promise<string> => new Promise((done, fail) => execFile('git', ['-C', cwd, ...args], { encoding: 'utf8', env: gitEnv(), timeout: 60_000 }, (error, out, err) => (error ? fail(Error(String(err || error.message).trim())) : done(String(out).trim()))));
 
 export class Workspaces {
   private readonly spaces = new Map<string, Space>();
@@ -39,10 +47,13 @@ export class Workspaces {
 
   /** What the record holds of its workspaces: each by its path, for the project id. */
   async open(): Promise<void> {
-    const rows = (await this.o.raw(`SELECT kind, data FROM events WHERE kind IN ('workspace.created', 'workspace.moved', 'state.read') ORDER BY log_pos`)) as { kind: string; data: string }[];
+    const rows = (await this.o.raw(`SELECT kind, data FROM events WHERE kind IN ('workspace.created', 'workspace.moved', 'state.read', 'workspace.task') ORDER BY log_pos`)) as { kind: string; data: string }[];
+    // A run's task is judged in a checkout of its own, never in the workspace's folder (#1347).
+    const run = new Set(rows.filter((r) => r.kind === 'workspace.task').map((r) => taskRefOf(String((JSON.parse(r.data) as Obj).source_id))));
     for (const row of rows) {
       const d = JSON.parse(row.data) as Obj;
-      if (row.kind === 'state.read') this.tasks.set(String(d.task_ref), String(d.workspace));
+      if (row.kind === 'workspace.task') continue;
+      if (row.kind === 'state.read') { if (!run.has(String(d.task_ref))) this.tasks.set(String(d.task_ref), String(d.workspace)); }
       else if (row.kind === 'workspace.moved') this.spaces.get(String(d.workspace))!.folder = String(d.folder);
       else {
         this.spaces.set(String(d.workspace), { id: String(d.workspace), folder: String(d.folder), name: String(d.topic) });
@@ -58,6 +69,21 @@ export class Workspaces {
   }
   private at(folder: string): Space | undefined {
     return [...this.spaces.values()].find((s) => s.folder === folder);
+  }
+  /** The workspace a folder is, by its real path. */
+  idAt(folder: string): string | undefined {
+    let path = folder;
+    try { path = realpathSync(folder); } catch { /* as given */ }
+    return this.at(path)?.id;
+  }
+  /** The workspace a folder is, or a checkout of its git is (#1347): a run's task is judged in one of its own. */
+  private async spaceOf(folder: string): Promise<{ space: Space; own: boolean } | undefined> {
+    const own = this.at(folder);
+    if (own) return { space: own, own: true };
+    const common = await git(folder, 'rev-parse', '--path-format=absolute', '--git-common-dir').catch(() => '');
+    let space: Space | undefined;
+    try { space = common && basename(common) === '.git' ? this.at(realpathSync(dirname(common))) : undefined; } catch { /* no such folder */ }
+    return space ? { space, own: false } : undefined;
   }
   private core(id: string): Connection {
     return this.o.connection({ project: id });
@@ -91,9 +117,10 @@ export class Workspaces {
     await this.o.append(this.core(id), { v: 1, id: ulid(ts), kind: 'workspace.created', ts, data: { workspace: id, folder, topic: name, task_ref } });
     return space;
   }
-  /** Moves it to a folder you pick: the same id, files and history. */
-  async move(id: string, to: string): Promise<Space> {
+  /** Moves it to a folder you pick: the same id, files and history. A repo's checkout takes its open tasks as issues instead (#1347). */
+  async move(id: string, to: string): Promise<Space | (Space & { repo: string; filed: { task: number; issue: number }[] })> {
     const space = this.named(id);
+    if (isAbsolute(to) && existsSync(join(to, '.git'))) return { ...space, ...await this.file(space, to) };
     this.free(to);
     if (existsSync(to)) rmdirSync(to);
     mkdirSync(dirname(to), { recursive: true });
@@ -116,6 +143,105 @@ export class Workspaces {
   async revert(id: string, commit: string): Promise<{ commit: string }> {
     if (!/^[0-9a-f]{7,64}$/.test(commit)) throw Error(`${commit} isn't a commit`);
     return { commit: await revertCommit(this.named(id).folder, commit) };
+  }
+
+  // ---- Tasks in the record (#1347).
+
+  /** Each task of a workspace as its newest record item holds it, by number. */
+  async tasksOf(id: string): Promise<SpaceTask[]> {
+    const rows = (await this.o.raw(`SELECT data FROM events WHERE kind = 'workspace.task' AND json_extract(data, '$.workspace') = ? ORDER BY log_pos`, [id])) as { data: string }[];
+    const out = new Map<number, SpaceTask>();
+    for (const row of rows) {
+      const d = JSON.parse(row.data) as SpaceTask;
+      const was = out.get(d.task);
+      // A filed task keeps naming its issue, and a finished one its versions.
+      out.set(d.task, { ...d, commit: d.commit ?? was?.commit ?? null, kept: d.kept ?? was?.kept ?? null, issue: d.issue ?? was?.issue ?? null });
+    }
+    return [...out.values()].sort((a, b) => a.task - b.task);
+  }
+  private appendTask(t: SpaceTask): Promise<void> {
+    const ts = this.o.now();
+    return this.o.append(this.core(t.workspace), { v: 1, id: ulid(ts), kind: 'workspace.task', ts, data: t as unknown as JsonValue });
+  }
+  /** `deep workspace task`: a task entered in the workspace's record, numbered from 1, blocked only by tasks it already has. */
+  async task(id: string, params: Obj): Promise<{ task: number; source_id: string }> {
+    this.named(id);
+    const title = typeof params.title === 'string' ? params.title.trim().slice(0, 8192) : '';
+    const criteria = Array.isArray(params.criteria) ? params.criteria.filter((c): c is string => typeof c === 'string' && c.trim() !== '').map((c) => c.slice(0, 8192)) : [];
+    const blocked_by = Array.isArray(params.blocked_by) ? [...new Set(params.blocked_by.map(Number))].sort((a, b) => a - b) : [];
+    if (!title) throw Error('a task needs a title');
+    if (!criteria.length) throw Error('a task needs at least one criterion, with --criterion');
+    const tasks = await this.tasksOf(id);
+    const unknown = blocked_by.find((n) => !tasks.some((t) => t.task === n));
+    if (unknown !== undefined) throw Error(`${id} has no task #${unknown} to be blocked by`);
+    const n = tasks.length + 1;
+    const source_id = `${id}#${n}`;
+    await this.appendTask({
+      workspace: id, task: n, step: 'entered', source_id, link: `deepbuild://workspace/${id}/task/${n}`, title, body: `task:${id}#${n}`, criteria,
+      authors: [{ handle: 'you', role: 'owner' }], updated: new Date(this.o.now()).toISOString(), blocked_by, issue: null, commit: null, kept: null,
+    });
+    return { task: n, source_id };
+  }
+  /** A run finished a task: its change is main's head at `commit`, and `kept`, main before it, is the last version. */
+  async finished(id: string, n: number, commit: string, kept: string): Promise<void> {
+    const t = (await this.tasksOf(id)).find((x) => x.task === n);
+    if (t) await this.appendTask({ ...t, step: 'finished', updated: new Date(this.o.now()).toISOString(), commit, kept });
+  }
+  /**
+   * Going back one step: the newest finished task's version undone, main's files back to the version kept before it,
+   * byte for byte, as a new commit. A state source that can't undo what changed since that task's lock says so first,
+   * and nothing changes; what the others can undo comes back as their plans, for someone to carry out.
+   */
+  async back(id: string): Promise<{ commit: string; task: number; undo: string[] }> {
+    const space = this.named(id);
+    const last = (await this.tasksOf(id)).filter((t) => t.step === 'finished' && t.commit).sort((a, b) => (a.updated < b.updated ? 1 : -1))[0];
+    if (!last?.commit || !last.kept) throw Error(`${id} has no finished task to go back from`);
+    const undo: string[] = [];
+    const cannot: string[] = [];
+    const lock = await this.newest(id, `json_extract(data, '$.task_ref') = ? AND json_extract(data, '$.claim') IS NULL`, [taskRefOf(last.source_id)]);
+    for (const touch of workspaceFile(space.folder).touches.filter((t) => t.source !== 'git')) {
+      const then = lock?.readings.find((r) => r.touch === touch.id);
+      if (!then) continue;
+      const source = await this.source(touch, space.folder);
+      for (const c of await diffOf(source, await this.itemsAt(then.digest), await source.read())) {
+        const said = await source.undo({ id: `${touch.id}:${c.item}`, item: c.item, was: c.was, to: c.now });
+        if ('cannot' in said) cannot.push(`${touch.id}'s ${c.item}: ${said.cannot}`);
+        else undo.push(...said.plan.steps.map((step) => `${touch.id}: ${step.does}`));
+      }
+    }
+    if (cannot.length) throw Error(`going back from task #${last.task} can't undo everything it changed, so nothing was changed: ${cannot.join('; ')}`);
+    // Every file as the kept version holds it, and nothing it doesn't: one commit on top, so going back is history too.
+    await git(space.folder, 'read-tree', '-u', '--reset', last.kept);
+    await git(space.folder, '-c', 'user.name=DeepBuild', '-c', 'user.email=workspace@deepbuild.invalid', '-c', 'commit.gpgsign=false', '-c', 'core.hooksPath=/dev/null', 'commit', '-q', '--allow-empty', '-m', `Go back one step: task #${last.task} undone, to ${last.kept}`);
+    return { commit: await git(space.folder, 'rev-parse', 'HEAD'), task: last.task, undo };
+  }
+  /**
+   * A move to a repo: each open task filed once as an issue at the checkout's forge, blockers first, each body listing
+   * under `### Depends on` the issues filed for its open blockers. A task filed already isn't filed again.
+   */
+  private async file(space: Space, checkout: string): Promise<{ repo: string; filed: { task: number; issue: number }[] }> {
+    const origin = await git(checkout, 'remote', 'get-url', 'origin').catch(() => '');
+    const repo = this.o.repoOf(origin.replace(/^https?:\/\/[^/]+\/(?=github\.com\/)/, 'https://'));
+    if (!repo) throw Error(`${checkout}'s origin (${origin || 'none'}) names no forge repository to file the tasks in`);
+    const token = await this.o.token();
+    const tasks = await this.tasksOf(space.id);
+    const issues = new Map(tasks.filter((t) => t.issue !== null).map((t) => [t.task, t.issue!]));
+    const filed: { task: number; issue: number }[] = [];
+    for (const t of tasks) {
+      if (t.step !== 'entered') continue;
+      const depends = t.blocked_by.filter((b) => issues.has(b)).map((b) => `- #${issues.get(b)!}`);
+      const body = [...t.criteria.map((c) => `- [ ] ${c}`), ...(depends.length ? ['', '### Depends on', ...depends] : [])].join('\n');
+      const res = await fetch(`${this.o.forge}/repos/${repo}/issues`, {
+        method: 'POST', signal: AbortSignal.timeout(30_000), body: JSON.stringify({ title: t.title, body }),
+        headers: { accept: 'application/vnd.github+json', 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) },
+      });
+      const made = await res.json().catch(() => undefined) as Obj | undefined;
+      if (res.status !== 201 || typeof made?.number !== 'number') throw Error(`the forge answered ${res.status} for task #${t.task}'s issue; ${filed.length} filed before it`);
+      issues.set(t.task, made.number);
+      filed.push({ task: t.task, issue: made.number });
+      await this.appendTask({ ...t, step: 'filed', link: typeof made.html_url === 'string' ? made.html_url : `${repo}#${made.number}`, issue: made.number, updated: new Date(this.o.now()).toISOString() });
+    }
+    return { repo, filed };
   }
 
   /**
@@ -188,8 +314,9 @@ export class Workspaces {
 
   /** The definition is about to lock in a workspace: every touch read, and which each requirement's check reads. */
   async pin(task_ref: string, folder: string, requirements: readonly Obj[]): Promise<void> {
-    const space = this.at(folder);
-    if (!space) return;
+    const found = await this.spaceOf(folder);
+    if (!found) return;
+    const { space } = found;
     const touches = workspaceFile(folder).touches;
     const reads: Reads[] = [];
     for (const r of requirements) {
@@ -199,7 +326,8 @@ export class Workspaces {
       if (named.length) reads.push({ req: String(r.id), check: typeof r.check === 'string' && r.check ? r.check : null, touches: named });
     }
     const readings = await Promise.all(touches.map((t) => this.read(folder, t)));
-    this.tasks.set(task_ref, space.id);
+    // A task judged in a checkout of its own stays there: its claims are made on that checkout's commit.
+    if (found.own) this.tasks.set(task_ref, space.id);
     await this.appendRead({ workspace: space.id, task_ref, claim: null, readings: readings.map(({ touch, source, digest }) => ({ touch, source, digest })), reads });
   }
   /** A claim's digests and files from the readings it pins, and the base's from the lock's. */
@@ -211,7 +339,7 @@ export class Workspaces {
   }
   /** A claim in a workspace: what its checks read, read now, and pinned to the claim. Undefined outside a workspace, or for a definition that reads nothing. */
   async claimState(task_ref: string, folder: string, claim: string): Promise<StatePin | undefined> {
-    const space = this.at(folder);
+    const space = (await this.spaceOf(folder))?.space;
     const lock = space && await this.newest(space.id, `json_extract(data, '$.task_ref') = ? AND json_extract(data, '$.claim') IS NULL`, [task_ref]);
     if (!space || !lock?.reads.length) return undefined;
     const wanted = [...new Set(lock.reads.flatMap((r) => r.touches))];

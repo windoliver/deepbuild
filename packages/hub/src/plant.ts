@@ -30,6 +30,8 @@ export type Plant =
   // issue's state word from a comment on it, a breaker that counts an issue's replaced attempts per agent, and a run that
   // keeps a budget-only blocker's dependents waiting for the window.
   | 'starts-before-blockers-done' | 'state-from-comment' | 'breaker-counts-per-agent' | 'waits-for-budget-window'
+  // #1347's: a run over a workspace's tasks that reads or writes a forge.
+  | 'workspace-calls-forge'
   // #33's gate@1 corpus: a gate that counts a check whose own files the claim edited as approved, reads a command check's
   // result from its exit status alone, judges a retry's run alone, or counts only files under the test folders as a check's own.
   | 'edited-check-approved' | 'verdict-from-exit-status' | 'empty-commit-run-alone' | 'own-files-test-folders-only'
@@ -346,6 +348,7 @@ const PLANTS: readonly string[] = [
   'kind-without-route',
   'lands-unjudged-commit', 'lander-reruns-all', 'closes-on-open', 'second-attempt-beside-pr', 'trusts-forge-merged', 'lands-as-person',
   'starts-before-blockers-done', 'state-from-comment', 'breaker-counts-per-agent', 'waits-for-budget-window',
+  'workspace-calls-forge',
   'drafted-spec-only', 'bootstrap-commands-only', 'failures-as-fail',
   'edited-check-approved', 'verdict-from-exit-status', 'empty-commit-run-alone', 'own-files-test-folders-only',
   'actor-from-payload', 'reads-unfiltered', 'listen-without-members', 'search-decisions-unfiltered',
