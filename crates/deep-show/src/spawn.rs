@@ -238,6 +238,9 @@ struct Planned {
     report: Value,
 }
 
+/// A live play's decoded assets, by SHA-256, as [`Hub::voices`] reads them (#525).
+pub(crate) type Sources<'s> = &'s mut dyn FnMut(&str) -> Result<Arc<Source>, Value>;
+
 impl Hub<'_> {
     /// Every spawn's voices as strips, and the reply's `voices`: in start order, ties by spawn
     /// ID, then occurrence index.
@@ -246,11 +249,22 @@ impl Hub<'_> {
         d: &Value,
         master: usize,
     ) -> Result<(Vec<Strip>, Vec<Value>), Value> {
+        let planted = self.scenario.module_planted.clone();
+        Hub::voices(d, master, planted.as_deref(), &mut |sha| self.source(sha))
+    }
+
+    /// [`Hub::spawned`] with the module's wrong program `planted` and the assets from `source`,
+    /// which a live play holds decoded (#525).
+    pub(crate) fn voices(
+        d: &Value,
+        master: usize,
+        planted: Option<&str>,
+        source: Sources,
+    ) -> Result<(Vec<Strip>, Vec<Value>), Value> {
         let bad = |what: String| json!({"code": "bad_media", "what": what});
         let empty = Map::new();
         let obj = |k: &str| d.get(k).and_then(Value::as_object).unwrap_or(&empty);
-        let planted = self.scenario.module_planted.clone();
-        let planted = |p: &str| planted.as_deref() == Some(p);
+        let planted = |p: &str| planted == Some(p);
         let ms = FLICKS / 1000;
         let three_d = d.get("scene").is_some_and(Value::is_object);
         let (ear, right) = listener(d);
@@ -349,7 +363,7 @@ impl Hub<'_> {
             for (t, _) in &entries {
                 let sha = doc::strip_asset(t)
                     .ok_or_else(|| bad(format!("spawn {sid}: a template's src.asset")))?;
-                let source = self.source(sha)?;
+                let source = source(sha)?;
                 let time = |k: &str| {
                     doc::time(d, t.get(k))
                         .ok_or_else(|| bad(format!("spawn {sid}: a template's {k}")))

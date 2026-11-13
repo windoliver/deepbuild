@@ -365,6 +365,13 @@ alone.push('tests/acceptance/1819/');
 // #502's files each build deep-show, export films through the GPU and the encode tool and speak their fixture with
 // `say`; onsets.test.ts also starts a hub and the model host on its fixed port 8719: one file at a time.
 alone.push('tests/acceptance/502/', 'tests/acceptance/502-oracle/');
+// #503's files each build deep-show or deep-gpu, draw on the GPU, decode every listed audio format in the decode worker
+// and rebake a spectrum in a linux/amd64 container; its oracle lane fetches and decodes the FATE audio samples; so does
+// the blind redraft of AC1's bar chart, which builds deep-show and plays and seeks the chart's 600 frames.
+alone.push('tests/acceptance/503/', 'tests/acceptance/503-oracle/', 'tests/acceptance/503-redraft-ac1/');
+// #503's blind redraft of AC4's lossy test is kept by hand, as the record of its dispute: it also failed on the work
+// (FFmpeg's arm64 Vorbis decode and its HE-AAC v2 decode at 32k), so the first draft stands and runs in its place.
+byHand.push('tests/acceptance/503-redraft-ac4/');
 // #935's files each build deep-show and run audio.gen on 38.4 s beds and the EBU loudness set; tempo.test.ts also starts
 // a hub and the model host on its fixed port 8719: one file at a time.
 alone.push('tests/acceptance/935/', 'tests/acceptance/935-oracle/');
@@ -550,6 +557,12 @@ timed.push('tests/acceptance/2197/budget.test.ts');
 alone.push('tests/acceptance/2144/');
 // #1332's files each start their own hubs, a played forge and played agents, and run a work run to its landings.
 alone.push('tests/acceptance/1332/');
+// #525's files each build deep-show (criterion 3 also the test.sim B builds) and play a live lab ten minutes long.
+alone.push('tests/acceptance/525/');
+// Its device gap test plays the labs out loud on this Mac's default output in real time, 10 minutes for the first.
+alone.push('tests/acceptance/525-device/');
+timed.push('tests/acceptance/525-device/device.test.ts');
+slow.push('tests/acceptance/525-device/device.test.ts');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },

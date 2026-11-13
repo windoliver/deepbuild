@@ -1539,6 +1539,10 @@
         "deep-physics-rapier": {
           "spec": "* path=../deep-physics-rapier",
           "why": "Issue #1921: the Rapier backend a scene's physics worlds bake on, so their outputs write its instancers' columns."
+        },
+        "deep-canvas-media": {
+          "spec": "* path=../deep-canvas-media",
+          "why": "Issue #503: a video item's frame at t from the media module's one source time, which deep-show and the GPU layer both read."
         }
       },
       "target.'cfg(target_os = \"macos\")'.dependencies": {
@@ -1917,6 +1921,22 @@
         "deep-canvas-cells": {
           "spec": "* path=../deep-canvas-cells",
           "why": "Issue #1967: terminal recordings, converted at import by the cells module's emulator."
+        },
+        "symphonia": {
+          "spec": "^0.6.1",
+          "why": "Issue #503: our own MP3, Vorbis and ALAC decoders in the decode worker, pure Rust so every platform and the web player decode the same."
+        },
+        "rusty_aac": {
+          "spec": "^2.0.1",
+          "why": "Issue #503: our own AAC-LC and HE-AAC decoder in the decode worker, pure Rust, in place of AudioToolbox."
+        },
+        "opus-rs": {
+          "spec": "^0.1.42",
+          "why": "Issue #503: our own Opus decoder, a port of the reference decoder's float form, built without std so its math runs through libm."
+        },
+        "libm": {
+          "spec": "^0.2.16",
+          "why": "Issue #503: Opus's output gain through the same pinned libm as opus-rs's math, so a decode is equal on every platform."
         }
       },
       "target.'cfg(target_os = \"macos\")'.dependencies": {

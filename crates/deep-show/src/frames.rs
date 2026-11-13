@@ -355,7 +355,18 @@ impl<'a> Hub<'a> {
                             _ => None,
                         }
                     };
-                    (name.clone(), n.or(x).or_else(logic).unwrap_or(Value::Null))
+                    // #503: a spectrum's bands, the array the document's bake fills, as this frame reads them.
+                    let doc = evaluated.document();
+                    let bands = || {
+                        doc.and_then(|d| {
+                            deep_canvas::columns::map(d.get("arrays")?.get(name)?, t, None, false)
+                        })
+                        .map(|m| json!(m.values))
+                    };
+                    (
+                        name.clone(),
+                        n.or(x).or_else(logic).or_else(bands).unwrap_or(Value::Null),
+                    )
                 })
                 .collect();
             reply["arrays"] = Value::Object(read);

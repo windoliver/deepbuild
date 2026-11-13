@@ -1,0 +1,20 @@
+FATE recipes and reference outputs from FFmpeg, vendored unchanged for the #503 Oracle lane (criterion 4: our own
+audio decoders).
+
+Source: https://github.com/FFmpeg/FFmpeg/tree/24e860f6d3c4f2ebae65ed7649e2a8860d512879/tests
+Commit: 24e860f6d3c4f2ebae65ed7649e2a8860d512879 (the commit the #503 oracle page pins)
+
+Files, each the file of the same path under tests/ at that commit:
+  fate/aac.mak, fate/mp3.mak, fate/opus.mak, fate/vorbis.mak, fate/matroska.mak, fate/ogg-opus.mak,
+  fate/ogg-vorbis.mak, fate/flac.mak, fate/alac.mak, fate/lossless-audio.mak, fate/caf.mak, fate/lavf-audio.mak,
+  ref/fate/matroska-opus-remux, ref/fate/lossless-alac, ref/fate/caf-demux, ref/lavf/aiff, ref/lavf/wav, ref/lavf/caf
+
+FFmpeg is free software; you can redistribute it and/or modify it under the terms of the GNU Lesser General Public
+License as published by the Free Software Foundation; either version 2.1 of the License, or (at your option) any later
+version. FFmpeg is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied
+warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See COPYING.LGPLv2.1 beside this file (copied from
+the same commit) for the license text.
+
+The media samples and the reference decodes the recipes name are not vendored: the tests fetch them from
+https://fate-suite.ffmpeg.org on first use into a cache outside the repository and check each against the SHA-256 and
+size in ../samples.json.

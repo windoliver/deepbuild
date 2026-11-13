@@ -28,6 +28,7 @@ mod gate;
 mod generated;
 mod geometry;
 mod geometry_audit;
+mod golden;
 mod host;
 mod hub;
 mod input;
@@ -64,6 +65,7 @@ mod shared;
 mod snapshot;
 mod spatial;
 mod spawn;
+mod stepped;
 mod terminal;
 mod terrain;
 #[cfg(feature = "test-machines")]
@@ -467,6 +469,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
             return Some(Call::Input {
                 panel: c.get("panel")?.as_str()?.to_string(),
                 event: input::event(c.get("event")?)?,
+                t: optional(c.get("event")?.get("t"), Value::as_i64)?,
             })
         }
         "scope" => return Some(Call::Scope(c.get("panel")?.as_str()?.to_string())),
@@ -679,6 +682,9 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         "seam_suite" => return seams::parse(c),
         "relay_client" => return seams::parse_client(c),
         "schedule" => return Some(Call::Schedule),
+        "golden_record" | "golden_verify" => {
+            return golden::parse(name, c).map(Call::RuntimeGolden)
+        }
         "rate" | "time" | "export" | "play" | "determinism" => {
             return crate::time::parse_call(name, c)
         }
@@ -1260,6 +1266,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
             None if export_planted(p).is_some() => export_planted(p),
             None if geometry_audit::planted(p).is_some() => geometry_audit::planted(p),
             None if physics::planted(p).is_some() => physics::planted(p),
+            None if stepped::planted(p).is_some() => stepped::planted(p),
             None => Some(match p {
                 "presents_unnamed_removal" => Planted::PresentsUnnamedRemoval,
                 "diffs_items_only" => Planted::DiffsItemsOnly,
@@ -1626,6 +1633,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
         devices: capture::Devices::parse(input)?,
         decode_caps: media::caps(input)?,
         audio: audio::parse(input.get("audio"))?,
+        delays: stepped::delays(input.get("delays"))?,
     })
 }
 

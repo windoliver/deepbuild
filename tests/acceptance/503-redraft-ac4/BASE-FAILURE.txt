@@ -1,0 +1,29 @@
+#503 AC4 lossy redraft: how lossy.test.ts fails at the base 014344430 (main plus the design commit for #503). A note,
+not a run.
+
+The suite was not run at the base: there is no #503 code to tell apart, and this machine was asked not to build Rust for
+this draft. What follows is read from the base's code. The suite type-checks (tsc -p
+tests/acceptance/503-redraft-ac4/tsconfig.json: clean) and collects one test (vitest list --root
+tests/acceptance/503-redraft-ac4). Its fixtures, FFmpeg's reference decodes and its judge were run once by hand with the
+local FFmpeg 9.0.2 (README: Authoring check).
+
+What the base has: `deep-show run` with #498's `media_decode` and `workers` calls and the planted `decodes_in_app`.
+Its decode worker reads WAV, PNG, MP4/QuickTime and playlists only (`format()` in crates/deep-codecs/src/lib.rs); any
+other file is refused `unreadable` ("not a format the worker reads"). An AAC track in MP4 goes to the platform's AAC
+decoder (`apple::decode_aac`). The scenario's `planted` doesn't know `lossy_one_sample_late`, `lossy_level_off` or
+`vorbis_missing` (an unknown name answers bad_input).
+
+Expected on macOS with Homebrew's ffmpeg: the fixtures and references are made, deep-show builds, the first run
+answers ok, and the first check fails, listing at least these eight sentences:
+
+  mp3-cbr-44k-stereo [MP3]: refused unreadable, where FFmpeg decodes it
+  mp3-vbr-24k-mono [MP3]: refused unreadable, where FFmpeg decodes it
+  opus-ogg-48k-stereo [Opus (Ogg)]: refused unreadable, where FFmpeg decodes it
+  opus-ogg-16k-mono [Opus (Ogg)]: refused unreadable, where FFmpeg decodes it
+  opus-webm-48k-stereo [Opus (WebM)]: refused unreadable, where FFmpeg decodes it
+  opus-webm-48k-mono [Opus (WebM)]: refused unreadable, where FFmpeg decodes it
+  vorbis-ogg-44k-stereo [Vorbis (Ogg)]: refused unreadable, where FFmpeg decodes it
+  vorbis-ogg-22k-stereo [Vorbis (Ogg)]: refused unreadable, where FFmpeg decodes it
+
+The four MP4 fixtures (AAC-LC and HE-AAC) reach the platform's AAC decoder at the base; whether each lands within
+−90 dBFS of FFmpeg's `aac` decode, at FFmpeg's rate and length, was not run. The planted runs are never reached.

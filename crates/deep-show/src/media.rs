@@ -106,6 +106,17 @@ pub struct Media {
     pub recordings: std::collections::BTreeMap<String, Value>,
 }
 
+/// #503: a worker's refusal answers with its `code` and what it names at the reply's top level
+/// too, beside `refused` (#498's place for it).
+fn hoist(mut reply: Value) -> Value {
+    if let Some(r) = reply.get("refused").and_then(Value::as_object).cloned() {
+        if let Some(o) = reply.as_object_mut() {
+            o.extend(r);
+        }
+    }
+    reply
+}
+
 /// The worker-side name of a planted wrong program, if it is one the decode worker runs.
 fn worker_planted(p: Option<Planted>) -> Option<&'static str> {
     Some(match p? {
@@ -259,7 +270,7 @@ impl Hub<'_> {
                 let (mut reply, pid) =
                     self.media_job(DECODE_WORKER, json!({"op": "probe", "path": path}));
                 reply["worker"] = json!({"pid": pid});
-                reply
+                hoist(reply)
             }
             MediaCall::Decode(c) => {
                 let mut job = c.clone();
@@ -269,7 +280,7 @@ impl Hub<'_> {
                     Some(d) => d["worker"] = json!({"pid": pid}),
                     None => reply["worker"] = json!({"pid": pid}),
                 }
-                reply
+                hoist(reply)
             }
             MediaCall::Proxy(c) => {
                 let tmp = std::env::temp_dir().join(format!(
