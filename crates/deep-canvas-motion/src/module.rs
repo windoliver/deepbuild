@@ -252,6 +252,24 @@ fn register_compiling(
         false,
     );
     r.code(
+        "marker_order",
+        "A then or goto that names a marker at or before its own, or a loop that replays from one at or after its stage: paths only go forward (#507).",
+        "Name a later marker; to go back, press back in present mode.",
+        false,
+    );
+    r.code(
+        "waits_for_class",
+        "A marker that waits for a control of class view or viewer, whose entries never reach the input track (#507).",
+        "Wait for a control of class document.",
+        false,
+    );
+    r.code(
+        "too_many_paths",
+        "A film whose waits and branches make more than 64 paths, more than the film audit runs on (#507).",
+        "Join branches, or let some options play on, so the film makes 64 paths or fewer.",
+        false,
+    );
+    r.code(
         "time_unresolved",
         "A marker whose time never resolves, through a loop of markers or one that doesn't exist.",
         "Time the marker from a marker that resolves, or give it its own time.",

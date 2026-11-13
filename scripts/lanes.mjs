@@ -576,6 +576,8 @@ timed.push('tests/acceptance/2197/budget.test.ts');
 alone.push('tests/acceptance/2144/');
 // #1332's files each start their own hubs, a played forge and played agents, and run a work run to its landings.
 alone.push('tests/acceptance/1332/');
+// #1347's files each start their own hubs, an unreachable or played forge and played agents, and run a workspace's tasks.
+alone.push('tests/acceptance/1347/');
 // #525's files each build deep-show (criterion 3 also the test.sim B builds) and play a live lab ten minutes long.
 alone.push('tests/acceptance/525/');
 // Its device gap test plays the labs out loud on this Mac's default output in real time, 10 minutes for the first.
@@ -594,6 +596,23 @@ alone.push('tests/acceptance/204-gaps/');
 byHand.push('tests/acceptance/204/export.test.ts');
 // #450's files each build deep-gpu and draw trails and ribbons on the Metal GPU.
 alone.push('tests/acceptance/450/');
+// #239's files each build deep-show or deep-gpu and draw, export or time both fixture films on the GPU, and its
+// look-type regression builds deep-show; seek-play,
+// budget and off-reference read this machine's fingerprint, budget its load too. exports (289 s) and checks (151 s)
+// were over two minutes on their recorded runs.
+alone.push('tests/acceptance/239/', 'tests/look-type.test.ts');
+timed.push('tests/acceptance/239/seek-play.test.ts', 'tests/acceptance/239/budget.test.ts', 'tests/acceptance/239/off-reference.test.ts');
+slow.push('tests/acceptance/239/exports.test.ts', 'tests/acceptance/239/checks.test.ts');
+// #507's files each build deep-show with cargo; ac6 reads PDFs with poppler, ac3 renders a 50 s session's sound.
+alone.push('tests/acceptance/507/', 'tests/acceptance/507-oracle/');
+// #226's files each build deep-gpu, deep-show (full and without data) or deep-canvas-render and draw on the Metal GPU;
+// ac7-budgets judges the task's budgets on the reference Mac.
+alone.push('tests/acceptance/226/');
+timed.push('tests/acceptance/226/ac7-budgets.test.ts');
+// #226's first-draft Oracle lane needs a tick at every whole number on [−4, 4], where axis@1's rule ticks every other
+// one (tests/acceptance/226-oracle-redraft/DISPUTE.md); its blind redraft runs in its place.
+alone.push('tests/acceptance/226-oracle-redraft/');
+byHand.push('tests/acceptance/226-oracle/');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
@@ -1090,7 +1109,11 @@ export function runLanes(lanes, { cwd = root } = {}) {
       let found = run.found;
       if (result.status !== 0 && !run.explained) {
         const lines = output.split('\n').map((line) => line.trim()).filter(Boolean);
+        // A test run's first error is its first failing test, as its runner's report names it: an output line can't
+        // stand in, since a coloured assertion misses the pattern and a line the lease prints matches the fallback (#12).
+        const failed = results?.failures?.find(({ state }) => state === 'FAIL');
         const error = result.error?.message
+          ?? (failed && `${failed.id}${failed.message ? `: ${failed.message}` : ''}`)
           ?? lines.find((line) => /\b(?:[a-z]*error(?:\[[^\]]+\])?|fatal):|\berror TS\d+:|panicked at/i.test(line))
           ?? lines.find((line) => /\berror\b|AssertionError|panicked|\bFAIL\b|\bBLOCKED\b|\bINVALID\b|\bINCONCLUSIVE\b/i.test(line))
           ?? lines[0] ?? `${command} exited ${result.signal ?? result.status}`;
