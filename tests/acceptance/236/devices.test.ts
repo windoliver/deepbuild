@@ -54,7 +54,7 @@ describe('AC1 #236.5dec450f a sandboxed piece and its child processes get no dev
   it('AC1 on a Mac where the app holds the permissions, the same helper that opens each device outside the sandbox is denied inside it', async (ctx) => {
     const control = outside();
     const missing = control.filter((d) => d.open !== 'ok').map((d) => `${d.device} (${d.open})`);
-    if (missing.length) ctx.skip(`INCONCLUSIVE: outside the sandbox this machine's app can't open ${missing.join(', ')}; run on the reference Mac with DeepBuild holding the camera, microphone and screen recording permissions`);
+    if (missing.length) ctx.skip(`BLOCKED: outside the sandbox this machine's app can't open ${missing.join(', ')}; run on the reference Mac with DeepBuild holding the camera, microphone and screen recording permissions`);
     const w = await openWorld();
     try {
       for (const d of await inPiece(w, true)) {

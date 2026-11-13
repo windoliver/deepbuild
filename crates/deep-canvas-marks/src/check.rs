@@ -16,6 +16,62 @@ use crate::look::{self, Look};
 use crate::paint::Adjust;
 use crate::scene::{self, object_or_empty, Palette, Planted, Record, Rgb, Type};
 
+/// render.contrast's default minimum: the WCAG ratio a text keeps on what is under its glyphs.
+pub const CONTRAST_MIN: f64 = 4.5;
+
+/// #1653: a text whose halos, laid outside in over the ground, leave its ink under
+/// [`CONTRAST_MIN`] in either theme is refused, naming the item (Text `text@1`: halo). Under the
+/// glyphs every halo covers the run, so the ground is what they make there; offset and blur, which
+/// thin a halo only at its edge, are left out.
+fn halo_contrast(items: &Map<String, Value>, look: &Look) -> Vec<Issue> {
+    let mut out = Vec::new();
+    for (id, item) in items {
+        let kind = item.get("kind").and_then(Value::as_str);
+        let params = object_or_empty(item.get("params"));
+        let texts = kind == Some("text@1")
+            || (kind == Some("marks@1")
+                && params.get("mark").and_then(Value::as_str) == Some("text"));
+        if !texts || params.get("halo").is_none() {
+            continue;
+        }
+        let path = format!("items/{id}/params/halo");
+        for (theme, palette) in [("light", &look.light), ("dark", &look.dark)] {
+            let Ok(halos) = crate::fx::halos(palette, params.get("halo"), &path) else {
+                continue;
+            };
+            let ink_role = params
+                .get("paint")
+                .and_then(|p| p.pointer("/fill/role"))
+                .and_then(Value::as_str)
+                .unwrap_or("ink");
+            let (Some(&ink), Some(&ground)) = (palette.get(ink_role), palette.get("ground")) else {
+                continue;
+            };
+            let under = halos.iter().fold(ground, |base, h| {
+                let t = h.opacity.clamp(0.0, 1.0);
+                std::array::from_fn(|i| {
+                    (f64::from(base[i]) * (1.0 - t) + f64::from(h.color[i]) * t).round() as u8
+                })
+            });
+            let ratio = look::contrast(ink, under);
+            if ratio < CONTRAST_MIN {
+                out.push(Issue {
+                    fix: "Give the halo a role that keeps the text's ink apart, or drop it.".into(),
+                    ..Issue::error(
+                        "halo_contrast",
+                        id,
+                        path.clone(),
+                        json!({"theme": theme, "ratio": ratio, "min": CONTRAST_MIN}),
+                        "its halos bring the text under render.contrast's minimum",
+                    )
+                });
+                break;
+            }
+        }
+    }
+    out
+}
+
 /// Every look role an item's paint names, sorted and once each.
 fn roles(value: &Value, out: &mut Vec<String>) {
     match value {
@@ -149,7 +205,8 @@ fn text_numbers(doc: &Map<String, Value>, id: &str, item: &Value) -> Vec<Value> 
             .chain(anchors)
             .collect();
     }
-    let (Some(quote), Some(Value::String(raw))) = (p.get("quote"), p.get("raw")) else {
+    let raw = crate::code::raw(p).filter(|r| r.len() <= crate::code::RAW_CAP);
+    let (Some(quote), Some(raw)) = (p.get("quote"), raw) else {
         return Vec::new();
     };
     crate::code::digits(&crate::code::display(raw, crate::code::tab(p)))
@@ -161,24 +218,38 @@ fn text_numbers(doc: &Map<String, Value>, id: &str, item: &Value) -> Vec<Value> 
         .collect()
 }
 
-/// Each quoting code item whose raw bytes differ from its source's lines, line ends included
+/// Each quoting item whose quoted bytes differ from its source's lines, line ends included
 /// (`quote_mismatch`, naming the first line and byte that differ), or whose source `bytes` can't
-/// read by its sha256 (`asset_missing`). The display text never decides it (Text `text@1`: code).
+/// read by its sha256 (`asset_missing`): a code item's raw (Text `text@1`: code), or a formula's
+/// `alt` (#1963, Vector and formula `vector@1`: quote). The source is an evidence file,
+/// `ev:<sha256>`, or an asset's sha256. The display text never decides it.
 pub fn quotes(doc: &Map<String, Value>, bytes: impl Fn(&str) -> Option<Vec<u8>>) -> Vec<Issue> {
     let mut issues = Vec::new();
     for (id, item) in object_or_empty(doc.get("items")) {
         let p = object_or_empty(item.get("params"));
-        let (Some(quote), Some(Value::String(raw))) = (p.get("quote"), p.get("raw")) else {
+        let Some(quote) = p.get("quote") else {
             continue;
         };
+        let field = match item.get("kind").and_then(Value::as_str) {
+            Some("vector@1") => "alt",
+            _ => "raw",
+        };
+        let raw = match field {
+            "raw" => crate::code::raw(p),
+            _ => p
+                .get(field)
+                .and_then(Value::as_str)
+                .map(|alt| alt.as_bytes().into()),
+        }
+        .unwrap_or_default();
         let source = quote.get("source").and_then(Value::as_str).unwrap_or("");
-        let Some(found) = bytes(source) else {
+        let Some(found) = bytes(source.strip_prefix("ev:").unwrap_or(source)) else {
             issues.push(Issue::error(
                 "asset_missing",
                 id,
                 format!("items/{id}/params/quote/source"),
                 json!(source),
-                "no stored source has this sha256",
+                "no stored evidence or asset has this sha256",
             ));
             continue;
         };
@@ -189,18 +260,18 @@ pub fn quotes(doc: &Map<String, Value>, bytes: impl Fn(&str) -> Option<Vec<u8>>)
                 .and_then(Value::as_u64)
                 .map_or(1, |n| n as usize)
         };
-        if let Some((line, byte)) =
-            crate::code::mismatch(raw.as_bytes(), &found, [line(0), line(1)])
-        {
+        if let Some((line, byte)) = crate::code::mismatch(&raw, &found, [line(0), line(1)]) {
             issues.push(Issue {
                 fix: "Quote the source's bytes exactly, line ends included, or don't quote it."
                     .into(),
                 ..Issue::error(
                     "quote_mismatch",
                     id,
-                    format!("items/{id}/params/raw"),
+                    format!("items/{id}/params/{field}"),
                     json!({"line": line, "byte": byte}),
-                    &format!("the raw bytes differ from the source's at line {line}, byte {byte}"),
+                    &format!(
+                        "its {field} differs from the source's bytes at line {line}, byte {byte}"
+                    ),
                 )
             });
         }
@@ -396,6 +467,76 @@ fn glyph_issues(items: &Map<String, Value>, ty: &Type, issues: &mut Vec<Issue>) 
     }
 }
 
+/// The most characters a text written as text holds (Text `text@1`: `text`); a code item's
+/// display text is held to the cap on its raw bytes instead ([`crate::code::RAW_CAP`]).
+const TEXT_CAP: usize = 4_096;
+
+/// #1965: each text@1 whose own text runs past text@1's cap, named with its size and the cap.
+/// The check holds the cap and the shaper doesn't: #856 shapes one text of 10,000 glyphs.
+fn text_cap_issues(items: &Map<String, Value>) -> Vec<Issue> {
+    let mut issues = Vec::new();
+    for (id, item) in items {
+        let text = item.get("params").and_then(|p| p.get("text"));
+        let (Some("text@1"), Some(text)) = (
+            item.get("kind").and_then(Value::as_str),
+            text.and_then(Value::as_str),
+        ) else {
+            continue;
+        };
+        let chars = text.chars().count();
+        if chars > TEXT_CAP {
+            let what =
+                format!("its text runs to {chars} characters, past text@1's cap of {TEXT_CAP}");
+            let actual = json!({"chars": chars, "cap": TEXT_CAP});
+            let path = format!("items/{id}/params/text");
+            issues.push(Issue {
+                fix: "Shorten the text, or split it between items.".into(),
+                ..Issue::error("out_of_range", id, path, actual, &what)
+            });
+        }
+    }
+    issues
+}
+
+/// #1965: a code item's refusal that names what it holds to: its raw past the code's cap, with
+/// its size and the cap, and a token's class outside the list (Text `text@1`: code). `None` for
+/// any other refusal.
+fn text_refusal(items: &Map<String, Value>, id: &str, r: &scene::Refused) -> Option<Issue> {
+    let params = object_or_empty(items.get(id)?.get("params"));
+    let field = r.path.strip_prefix(&format!("items/{id}/params/"))?;
+    if r.code != "out_of_range" {
+        return None;
+    }
+    let (actual, what, fix) = match field {
+        "raw" => {
+            let (bytes, cap) = (crate::code::raw(params)?.len(), crate::code::RAW_CAP);
+            (
+                json!({"bytes": bytes, "cap": cap}),
+                format!(
+                    "its raw holds {bytes} bytes, past a code item's cap of 256 KiB ({cap} bytes)"
+                ),
+                "Quote only the lines the film shows.",
+            )
+        }
+        _ => {
+            let (_, class) = field.strip_prefix("code/tokens/")?.split_once("/class: ")?;
+            let classes = crate::code::CLASSES;
+            (
+                json!({"class": class, "classes": classes}),
+                format!(
+                    "a token's class is one of {}; `{class}` is none of them",
+                    classes.join(", ")
+                ),
+                "Give the token a class of the list.",
+            )
+        }
+    };
+    Some(Issue {
+        fix: fix.into(),
+        ..Issue::error(r.code, id, r.path.clone(), actual, &what)
+    })
+}
+
 /// Each mark set's transforms read at check, standing ranked among them, and every row a log
 /// scale can't place, each named.
 fn story_issues(items: &Map<String, Value>) -> Vec<Issue> {
@@ -443,6 +584,7 @@ pub fn check(doc: &Map<String, Value>, look: &Look, min: Option<f64>) -> Vec<Iss
     let mut issues = roles_apart(items, look);
     issues.extend(numbers(doc).1);
     issues.extend(story_issues(items));
+    issues.extend(text_cap_issues(items));
     // Status can show wherever a status binding is.
     let status_shows = doc
         .get("status_bindings")
@@ -486,6 +628,10 @@ pub fn check(doc: &Map<String, Value>, look: &Look, min: Option<f64>) -> Vec<Iss
                 .strip_prefix("items/")
                 .and_then(|rest| rest.split(['/', ':']).next())
                 .unwrap_or("");
+            if let Some(issue) = text_refusal(items, id, &r) {
+                issues.push(issue);
+                break;
+            }
             // A segment budget names the count the ops declared (#160).
             let actual = if r.code == "segment_budget" {
                 scene::declared_of(items, id).map_or(
@@ -521,6 +667,9 @@ pub fn check(doc: &Map<String, Value>, look: &Look, min: Option<f64>) -> Vec<Iss
     }
     // #467: a looping document's parallax bands travel whole repeats.
     issues.extend(crate::fields::loop_issues(doc, true));
+    issues.extend(halo_contrast(items, look));
+    // #1653: no repeated status, and no status badge a y sort can slide under.
+    issues.extend(crate::fields::status_issues(doc));
     glyph_issues(items, &look.light_type, &mut issues);
     if look.dark_type != look.light_type {
         glyph_issues(items, &look.dark_type, &mut issues);

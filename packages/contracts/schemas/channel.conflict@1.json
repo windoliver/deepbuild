@@ -3,6 +3,9 @@
   "description": "A channel's provider said another client holds the same account or bot token: the hub sends nothing through that channel, and calls it no more, until you remove one. Only the core appends it (#65).",
   "x-since": "R2",
   "x-stability": "preview",
+  "x-tracking": "#65",
+  "x-preview_since": "R2",
+  "x-decide_by": "R5",
   "x-feeds": [],
   "type": "object",
   "properties": {

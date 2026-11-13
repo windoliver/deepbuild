@@ -5,7 +5,7 @@
 
 use deep_canvas::kinds::{Entry, Param, ParamType, Version};
 use deep_canvas::registry::{
-    Dependency, Implementation, Manifest, Module, Range, Raised, Registrar, Semver, StepInput,
+    Dependency, Implementation, Manifest, Module, Raised, Range, Registrar, Semver, StepInput,
     Stepper,
 };
 use serde_json::{json, Value};
@@ -135,8 +135,8 @@ fn strip_kind() -> Entry {
         operator: "",
     };
     let fields = [
-        "track", "src", "start", "in", "out", "rate", "offset", "span", "loop", "gain", "pitch", "pan",
-        "bus", "enabled", "fade_in", "fade_out", "align", "at_stage", "tags",
+        "track", "src", "start", "in", "out", "rate", "offset", "span", "loop", "gain", "pitch",
+        "pan", "bus", "enabled", "fade_in", "fade_out", "align", "at_stage", "tags",
     ];
     Entry {
         family: "media",
@@ -160,7 +160,9 @@ fn strips_of<'d>(doc: &'d Value, asset: &str) -> Vec<(String, &'d Value)> {
         }
     }
     for (iid, item) in doc["items"].as_object().into_iter().flatten() {
-        if item["kind"] == "media.strip@1" && crate::doc::strip_asset(&item["params"]) == Some(asset) {
+        if item["kind"] == "media.strip@1"
+            && crate::doc::strip_asset(&item["params"]) == Some(asset)
+        {
             out.push((format!("items/{iid}/params"), &item["params"]));
         }
     }
@@ -186,14 +188,19 @@ fn av_link_strip(doc: &Value, id: &str, item: &Value) -> Vec<Raised> {
     }
     let mut out = Vec::new();
     for (pid, pic) in doc["items"].as_object().into_iter().flatten() {
-        let (Some(frames), Some(a)) = (pic.pointer("/params/frames"), pic.pointer("/params/asset").and_then(Value::as_str)) else {
+        let (Some(frames), Some(a)) = (
+            pic.pointer("/params/frames"),
+            pic.pointer("/params/asset").and_then(Value::as_str),
+        ) else {
             continue;
         };
         if a != asset {
             continue;
         }
         for f in linked_fields() {
-            if crate::doc::link_value(doc, frames, f) != crate::doc::link_value(doc, &item["params"], f) {
+            if crate::doc::link_value(doc, frames, f)
+                != crate::doc::link_value(doc, &item["params"], f)
+            {
                 out.push(Raised {
                     code: "av_unlinked",
                     severity: "error",
@@ -221,7 +228,7 @@ fn step(state: &mut Value, input: &StepInput<'_>) {
     }
     let first = (input.step - 1) * BLOCK;
     let mut block = vec![0f32; 2 * BLOCK as usize];
-    for (i, f) in block.chunks_exact_mut(2).enumerate() {
+    for (i, f) in block.as_chunks_mut::<2>().0.iter_mut().enumerate() {
         if (first + i as i64) % (RATE / 10) == 0 {
             f[0] = 0.5;
             f[1] = 0.5;

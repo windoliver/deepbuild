@@ -4,6 +4,14 @@
 //! depends on no engine, so no backend type crosses it.
 
 pub mod backend;
+pub mod bake;
 pub mod caps;
 pub mod check;
 pub mod doc;
+pub mod golden;
+pub mod module;
+pub mod occurrence;
+pub mod pairs;
+pub mod query;
+pub mod roles;
+pub mod written;

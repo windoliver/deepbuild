@@ -59,9 +59,12 @@ components:
    hub (`checksOf`, through `@deepbuild/asks`' `duration`) and passed by `deep_run` to its run (`runCheck`, `runStart`,
    `launch`). A real hub process can't be put on a fake clock: its core runs in a worker thread of its own process,
    which this test's timers can't reach, and `CoreOptions.clock` moves only the core's `now`, not its timers. So the
-   core runs in the test's own thread: `Core`, the class the hub runs in its worker and inline (`coreInline`), loaded
-   from the hub's build (`packages/hub/dist/core.js`, typed by `src/core.ts`), with the injected clock. It isn't the
-   hub's public entry (`packages/hub/src/index.ts` exports none), which is why this is said here. Under it everything
+   core runs in the test's own thread: `Core`, constructed by the synchronous `createCore(options, emit)` factory
+   the hub's worker and inline (`coreInline`) use, loaded from `packages/hub/dist/hub-runtime.js` and typed by
+   `src/hub-runtime.ts`, with the same injected clock and `started()` wait. This outer composition entry supplies
+   concrete providers inward without a Core-to-extension import. It isn't the hub's public package entry, which is
+   why this is said here. This construction-only substitution is authorized by the #1687 boundary proposal;
+   all seven deadline cases, assertions, expected values, timing and cleanup remain unchanged. Under it everything
    is real: the record, the supervisor and the sandbox, so the check's command (`sh -c 'sleep 3600; : …'`) is a real
    process. The session is met as the hub meets one whose hook it missed: a SessionStart line as deep-hook writes it
    (hook.request on the wire) in the root's spool, which the core replays as it starts, with a transcript under the

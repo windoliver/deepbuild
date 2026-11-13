@@ -11,7 +11,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { afterAll, describe, expect, it } from 'vitest';
 import { call } from '../src/client.js';
 import { Forge } from '../src/forge.js';
-import { numbersLines } from '../src/numbers.js';
+import { Numbers, numbersLines } from '../src/numbers.js';
 import { search } from '../src/search.js';
 import { startOf, ulid } from '../src/wire.js';
 import { hookLine, send, withHub } from './hub.js';
@@ -144,6 +144,13 @@ describe('deep numbers', () => {
     expect(lines[1]).toContain('cost.turn msg_low: unknown usd unpriced');
     expect(lines[1]).not.toContain('0 usd');
   });
+  it('prints the hand-backs reading as it prints every row, with its unit, source, basis and age (#84)', async () => {
+    await withHub(async (_root, home) => {
+      const cli = fileURLToPath(new URL('../../cli/dist/main.js', import.meta.url));
+      const ran = spawnSync(process.execPath, [cli, 'numbers'], { env: { ...process.env, HOME: home }, cwd: home, encoding: 'utf8' });
+      expect(ran.stdout).toMatch(/^handbacks_sent_back: 0 count · record · observed · 0ms$/m);
+    });
+  }, 60_000);
 });
 
 describe('deep_search', () => {
@@ -229,5 +236,13 @@ describe('Codex\'s usage', () => {
       expect(usages()[0]?.cost).toEqual({ basis: 'unpriced' });
       expect(usages()[0]?.tokens.output).toBe(7);
     });
+  }, 60_000);
+});
+
+describe('the readings\' first fold', () => {
+  it('takes a record of 600,000 events in one read', async () => {
+    const rows = Array.from({ length: 600_000 }, (_, k) => ({ id: `e${k}`, kind: 'session.start', v: 1, ts: k, session_id: 'another', subject: null, data: '{}', log_pos: k + 1 }));
+    const numbers = new Numbers({ raw: async (query: string) => (query.includes('log_pos > 0 ') ? rows : []), now: () => 1, root: '/nonexistent', held: () => undefined } as never);
+    expect(await numbers.search('cache', 'mine'), 'none of them is this session\'s').toEqual([]);
   }, 60_000);
 });

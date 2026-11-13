@@ -42,9 +42,19 @@ test-deprecated = ["dep:deep-canvas-test-modules"]
 # Issue #403: a test canvas module that registers a document check kind, and a build with the
 # logic module left out of the full set's list.
 test-check-kind = ["dep:deep-canvas-test-modules"]
+# Issue #408: a test canvas module whose kind's items contribute glyph boxes to the core's
+# glyph-box array, and draw nothing else.
+test-glyph-label = ["dep:deep-canvas-test-modules"]
+# Issue #407: the film audit with a shortest reading hold of 2 s, standing in for a new release's
+# stricter rule; nothing else changes.
+test-hold-min-2s = []
 test-leave-out-logic = []
 # Issue #489: the full set without the data module, so motion@1's digest is compared without it.
 test-leave-out-data = []
+# Issue #1919: the full set without the physics module, whose physics shapes mode answers
+# module_missing; and its twin, whose mode draws an empty snapshot instead.
+test-leave-out-physics = []
+test-physics-shapes-empty = ["test-leave-out-physics"]
 # Issue #490: the full set without the motion module; the planted layout that declares ease@1 in
 # the motion module; and the planted opening that renumbers ease@1's entries.
 test-leave-out-motion = []
@@ -55,12 +65,14 @@ test-camera-in-scene3d = []
 # Issue #238: the sandbox module's test builds (the #238 acceptance README: Test features of
 # deep-show): the full set without sandbox; test.mesh, whose kind takes a provider's mesh at check;
 # test.prog, whose registry packs fill with programs; a planted sandbox module that requires logic;
-# and the test implementation sandbox.alt, pinning another wasmtime 49.0 patch.
+# and the test implementation sandbox.alt, pinning another wasmtime release with the fixes (#2324).
 test-leave-out-sandbox = []
 test-mesh-item = ["dep:deep-canvas-test-modules"]
 test-prog-registry = ["dep:deep-canvas-test-modules"]
 test-sandbox-needs-logic = []
 test-sandbox-alt = []
+# Issue #2324: the planted engine build, whose engine gives one kit fixture another result.
+plant-engine-differs = ["deep-sandbox-wasmtime/plant-engine-differs"]
 # Issue #387: the test canvas modules of the #387 acceptance README. `test-accent`'s planted
 # operator reads the look's accent role from a static, which the canvas lint keeps out of every
 # deep-canvas* crate, so it lives in this binary.
@@ -76,10 +88,16 @@ test-json = []
 test-debug-alt = []
 test-debug-digest = []
 test-peek = ["dep:deep-canvas-test-modules"]
+# Issue #157: `test.guards`, whose kinds plant a NaN in a frame's float target, lose the device at
+# a frame, and draw a frame differently the second time it is drawn.
+test-export-guards = ["dep:deep-canvas-test-modules"]
 # Issue #412: the #412 acceptance README's test canvas modules: a preview kind, a registry of cue
 # kinds with the cue list that plays it (pop_in's default span 0.5 s, or 0.8 s), the ring at
 # fixture digests A and B, and a kind whose one-liner overruns the sheet.
 test-preview = ["dep:deep-canvas-test-modules"]
+# Issue #1802: `test.preview` once it removed its preview kind, with a migration and, planted, without.
+test-preview-removed = ["dep:deep-canvas-test-modules"]
+test-preview-removed-bare = ["dep:deep-canvas-test-modules"]
 test-cue = ["dep:deep-canvas-test-modules"]
 test-cue-span = ["dep:deep-canvas-test-modules"]
 test-ring-a = ["dep:deep-canvas-test-modules"]
@@ -168,6 +186,13 @@ test-sim-b-off = ["test-sim"]
 test-sim-behavior = ["test-sim"]
 test-sim-c = ["test-sim"]
 test-gpu-second-backend = []
+# Issue #1920: A and B at version 1.0.1 and B with its pin's feature changed, each built in its
+# implementation's place, and the full set with the physics module's rapier3d pin moved one patch
+# (tests/acceptance/1920/README.md: Names this suite chooses).
+test-sim-a-1-0-1 = ["test-sim"]
+test-sim-b-1-0-1 = ["test-sim"]
+test-sim-b-pin-feature = ["test-sim"]
+test-physics-rapier-patch = []
 # Issue #421: a planted implementation of scene3d@1, declared bit, whose light policy breaks a tie
 # by registration order instead of by ID; the kit fails it and a release build refuses it.
 test-scene3d-tie-by-order = []
@@ -178,6 +203,8 @@ test-scene3d-reads-vector = []
 # Issue #200: the test canvas modules of the #200 acceptance README, the build without effects,
 # and the planted layout in which the effects module fills the op table's base steps.
 test-mark = ["dep:deep-canvas-test-modules"]
+# Issue #202: the test canvas module test.weight, an item kind of 0.20 ms of CPU.
+test-weight = ["dep:deep-canvas-test-modules"]
 # Issue #397: `test.columns`, which fills the core's `column.source@1` with `test.column.big`.
 test-column-source = ["dep:deep-canvas-test-modules"]
 test-mark-dot-9 = ["dep:deep-canvas-test-modules"]
@@ -217,9 +244,20 @@ test-export-target-in-media = []
 test-leave-out-input = []
 test-control-kind = []
 test-steps-in-effects = []
+# Issue #485: a build without scene3d and the modules that need it, effects kept; and the planted
+# layout in which the effects module declares gpu.output@1 instead of the core.
+test-leave-out-scene3d = []
+test-gpu-output-in-effects = []
+# Issue #1918 criterion 3's planted twins (tests/acceptance/1918/README.md): the physics module whose
+# readings entry hands the column view no changed ranges, and a motion module with one more operator
+# that reads the physics module's occurrence list by its array name.
+test-physics-hands-no-changes = []
+test-motion-reads-physics-array = []
 
 [dependencies]
 deep-canvas = { path = "../deep-canvas" }
+# Issue #1486: the one image service: still pictures drawn at their levels.
+deep-images = { path = "../deep-images" }
 deep-canvas-test-modules = { path = "../deep-canvas-test-modules", optional = true }
 deep-canvas-marks = { path = "../deep-canvas-marks" }
 deep-canvas-graph = { path = "../deep-canvas-graph" }
@@ -236,6 +274,9 @@ deep-canvas-scene3d = { path = "../deep-canvas-scene3d" }
 # transport's clock.
 deep-canvas-media = { path = "../deep-canvas-media" }
 deep-logic = { path = "../deep-logic" }
+# Issue #1918: the physics module, physics@1, and the Rapier backend a scene's worlds bake on.
+deep-canvas-physics = { path = "../deep-canvas-physics" }
+deep-physics-rapier = { path = "../deep-physics-rapier" }
 # Issue #380: the shipped effects module, in R2's build set beside scene3d.
 deep-canvas-effects = { path = "../deep-canvas-effects" }
 deep-canvas-sandbox = { path = "../deep-canvas-sandbox" }
@@ -259,9 +300,15 @@ libc = "0.2"
 image = { version = "0.25", default-features = false, features = ["png"] }
 serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
 sha2 = "0.10"
-vello_cpu = { version = "0.3", default-features = false, features = ["std", "text", "f32_pipeline"] }
+# Issue #1897: the u8 pipeline too, so a cross-machine record drawn through it is real and refused.
+vello_cpu ={ version = "0.3", default-features = false, features = ["std", "text", "f32_pipeline", "u8_pipeline"] }
 # Issue #138: the kit's headless backend (wgpu's noop) and its GPU backend.
 wgpu = { version = "30", default-features = false, features = ["std", "wgsl", "noop"] }
+
+# Issue #1901: the build script's digest of the sources this binary is built from; already in the
+# lockfile.
+[build-dependencies]
+sha2 = "0.10"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 wgpu = { version = "30", default-features = false, features = ["std", "wgsl", "noop", "metal"] }

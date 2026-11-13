@@ -1,0 +1,733 @@
+{
+  "issue": 1687,
+  "note": "Each twin laid over a moved method, run against the built candidate. A snapshot per twin is the candidate with the twin laid over it and only the packages it replaces rebuilt; the criterion cases (vitest -t pattern) run there and on a clean snapshot, and each failure is classed by atAssertion as scripts/proof-runs.mjs holds it.",
+  "candidate": "39bee16ae",
+  "mergeBase": "afadc469d",
+  "ranAt": "2026-11-12T07:44Z to 07:54Z",
+  "twins": {
+    "349--refusals-unrecorded": {
+      "criteria": [
+        "#349.27abd805",
+        "#349.70f6262e"
+      ],
+      "overlays": [
+        "packages/asks/src/resolver-gate.ts"
+      ],
+      "tests": [
+        "tests/acceptance/349/resolver.test.ts",
+        "tests/acceptance/349/decisions.test.ts"
+      ],
+      "pattern": "#349\\.(27abd805|70f6262e)",
+      "build": "ok",
+      "state": "KILLED: 4 of 6 criterion cases fail on the twin at their assertion",
+      "clean": {
+        "cases": 6,
+        "passed": 6
+      },
+      "twin": [
+        {
+          "test": "AC7 #349.70f6262e a resolver naming a revoked decision, or an active one saved in another repo, is refused and the ask reaches you; a core checking only that the decision exists applies both and fails naming the decision › AC7 a resolver naming a revoked decision of the ask's kind and scope is refused, naming the decision, and the ask reaches you",
+          "status": "fail",
+          "atAssertion": true,
+          "cause": "AssertionError: the core refused the resolver's answer to ask:<id>: expected 0 to be greater than or equal to 1",
+          "frame": "refusedAndReachesYou (tests/acceptance/349/resolving.ts:55:79)"
+        },
+        {
+          "test": "AC7 #349.70f6262e a resolver naming a revoked decision, or an active one saved in another repo, is refused and the ask reaches you; a core checking only that the decision exists applies both and fails naming the decision › AC7 a resolver naming an active decision saved in another repo is refused, naming the decision, and the ask reaches you; in its own repo the same decision applies",
+          "status": "fail",
+          "atAssertion": true,
+          "cause": "AssertionError: the core refused the resolver's answer to ask:<id>: expected 0 to be greater than or equal to 1",
+          "frame": "refusedAndReachesYou (tests/acceptance/349/resolving.ts:55:79)"
+        },
+        {
+          "test": "AC7 #349.70f6262e a resolver naming a revoked decision, or an active one saved in another repo, is refused and the ask reaches you; a core checking only that the decision exists applies both and fails naming the decision › AC7 (wrong program) a core that checks only that the named decision exists applies the revoked one and the other repo's, and fails this test naming each decision",
+          "status": "pass"
+        },
+        {
+          "test": "AC3 #349.27abd805 a resolver answering an authority ask without naming an active decision of its kind and scope is refused and the ask reaches you; naming one, the answer is applied and logged as decided for you › AC3 a resolver that answers approve naming no decision is refused by the core, nothing is applied, and the ask reaches you",
+          "status": "fail",
+          "atAssertion": true,
+          "cause": "AssertionError: the core refused the resolver's answer to ask:<id>: expected 0 to be greater than or equal to 1",
+          "frame": "refusedAndReachesYou (tests/acceptance/349/resolving.ts:55:79)"
+        },
+        {
+          "test": "AC3 #349.27abd805 a resolver answering an authority ask without naming an active decision of its kind and scope is refused and the ask reaches you; naming one, the answer is applied and logged as decided for you › AC3 a resolver naming an active decision of another kind (saved from a merge ask) is refused for a push ask, naming the decision, and the ask reaches you",
+          "status": "fail",
+          "atAssertion": true,
+          "cause": "AssertionError: the core refused the resolver's answer to ask:<id>: expected 0 to be greater than or equal to 1",
+          "frame": "refusedAndReachesYou (tests/acceptance/349/resolving.ts:55:79)"
+        },
+        {
+          "test": "AC3 #349.27abd805 a resolver answering an authority ask without naming an active decision of its kind and scope is refused and the ask reaches you; naming one, the answer is applied and logged as decided for you › AC3 the same answer naming an active decision of the ask's kind and scope is applied: decision.applied names it, the ask is logged as decided for you, and the answer reaches the agent",
+          "status": "pass"
+        }
+      ]
+    },
+    "349--applied-but-never-handed": {
+      "criteria": [
+        "#349.27abd805"
+      ],
+      "overlays": [
+        "packages/asks/src/resolver-gate.ts"
+      ],
+      "tests": [
+        "tests/acceptance/349/resolver.test.ts"
+      ],
+      "pattern": "#349\\.27abd805",
+      "build": "ok",
+      "state": "KILLED: 1 of 3 criterion cases fail on the twin at their assertion",
+      "clean": {
+        "cases": 3,
+        "passed": 3
+      },
+      "twin": [
+        {
+          "test": "AC3 #349.27abd805 a resolver answering an authority ask without naming an active decision of its kind and scope is refused and the ask reaches you; naming one, the answer is applied and logged as decided for you › AC3 a resolver that answers approve naming no decision is refused by the core, nothing is applied, and the ask reaches you",
+          "status": "pass"
+        },
+        {
+          "test": "AC3 #349.27abd805 a resolver answering an authority ask without naming an active decision of its kind and scope is refused and the ask reaches you; naming one, the answer is applied and logged as decided for you › AC3 a resolver naming an active decision of another kind (saved from a merge ask) is refused for a push ask, naming the decision, and the ask reaches you",
+          "status": "pass"
+        },
+        {
+          "test": "AC3 #349.27abd805 a resolver answering an authority ask without naming an active decision of its kind and scope is refused and the ask reaches you; naming one, the answer is applied and logged as decided for you › AC3 the same answer naming an active decision of the ask's kind and scope is applied: decision.applied names it, the ask is logged as decided for you, and the answer reaches the agent",
+          "status": "fail",
+          "atAssertion": true,
+          "cause": "AssertionError: the answer reached the agent, once, as the decision says: expected [] to match object [ { option: 'approve', …(2) } ]",
+          "frame": "Proxy.<anonymous> (<path>)"
+        }
+      ]
+    },
+    "349--plants-ignored": {
+      "criteria": [
+        "#349.77853dd0",
+        "#349.70f6262e"
+      ],
+      "overlays": [
+        "packages/extension-host/src/index.ts",
+        "packages/asks/src/resolver-gate.ts"
+      ],
+      "tests": [
+        "tests/acceptance/349/owner.test.ts",
+        "tests/acceptance/349/decisions.test.ts"
+      ],
+      "pattern": "#349\\.(77853dd0|70f6262e)",
+      "build": "ok",
+      "state": "KILLED: 3 of 6 criterion cases fail on the twin at their assertion",
+      "clean": {
+        "cases": 6,
+        "passed": 6
+      },
+      "twin": [
+        {
+          "test": "AC7 #349.70f6262e a resolver naming a revoked decision, or an active one saved in another repo, is refused and the ask reaches you; a core checking only that the decision exists applies both and fails naming the decision › AC7 a resolver naming a revoked decision of the ask's kind and scope is refused, naming the decision, and the ask reaches you",
+          "status": "pass"
+        },
+        {
+          "test": "AC7 #349.70f6262e a resolver naming a revoked decision, or an active one saved in another repo, is refused and the ask reaches you; a core checking only that the decision exists applies both and fails naming the decision › AC7 a resolver naming an active decision saved in another repo is refused, naming the decision, and the ask reaches you; in its own repo the same decision applies",
+          "status": "pass"
+        },
+        {
+          "test": "AC7 #349.70f6262e a resolver naming a revoked decision, or an active one saved in another repo, is refused and the ask reaches you; a core checking only that the decision exists applies both and fails naming the decision › AC7 (wrong program) a core that checks only that the named decision exists applies the revoked one and the other repo's, and fails this test naming each decision",
+          "status": "fail",
+          "atAssertion": true,
+          "cause": "AssertionError: promise resolved \"undefined\" instead of rejecting",
+          "frame": "_Assertion.__VITEST_REJECTS__ (<path>)"
+        },
+        {
+          "test": "AC6 #349.77853dd0 two adapters see one session; the second to bind it gates it and delivers each answer once, the other only relays; a host letting both deliver, or giving the session to the first to bind, fails naming the session › AC6 the gating adapter, second to bind the session, owns it and delivers each answer once; the first to bind only relays",
+          "status": "pass"
+        },
+        {
+          "test": "AC6 #349.77853dd0 two adapters see one session; the second to bind it gates it and delivers each answer once, the other only relays; a host letting both deliver, or giving the session to the first to bind, fails naming the session › AC6 (wrong program) a host that lets both adapters deliver sends one answer twice, and fails this test naming the session",
+          "status": "fail",
+          "atAssertion": true,
+          "cause": "AssertionError: promise resolved \"undefined\" instead of rejecting",
+          "frame": "_Assertion.__VITEST_REJECTS__ (<path>)"
+        },
+        {
+          "test": "AC6 #349.77853dd0 two adapters see one session; the second to bind it gates it and delivers each answer once, the other only relays; a host letting both deliver, or giving the session to the first to bind, fails naming the session › AC6 (wrong program) a host that gives the session to the first adapter to bind it delivers through the adapter that doesn't gate it, and fails this test naming the session",
+          "status": "fail",
+          "atAssertion": true,
+          "cause": "AssertionError: promise resolved \"undefined\" instead of rejecting",
+          "frame": "_Assertion.__VITEST_REJECTS__ (<path>)"
+        }
+      ]
+    },
+    "349--passed-without-results": {
+      "criteria": [
+        "#349.68572cba"
+      ],
+      "overlays": [
+        "packages/extension-host/src/index.ts"
+      ],
+      "tests": [
+        "tests/acceptance/349/results.test.ts"
+      ],
+      "pattern": "#349\\.68572cba",
+      "build": "ok",
+      "state": "KILLED: 1 of 1 criterion cases fail on the twin at their assertion",
+      "clean": {
+        "cases": 1,
+        "passed": 1
+      },
+      "twin": [
+        {
+          "test": "AC1 #349.68572cba a check runner can't return a passed run without its results › AC1 a loaded runner that reports passed with no test counted gets no passed run from the core, which names the kind; the same runner's complete passed run goes through unchanged",
+          "status": "fail",
+          "atAssertion": true,
+          "cause": "AssertionError: the core returned a passed run with no results: {\"outcome\":\"passed\",\"testsRun\":0,\"failures\":[],\"evidence\":[],\"read\":[],\"mask\":null}: expected 'passed' not to be 'passed' // Object.is equality",
+          "frame": "tests/acceptance/349/results.test.ts:27:111"
+        }
+      ]
+    },
+    "349--routes-by-name": {
+      "criteria": [
+        "#349.009ae072"
+      ],
+      "overlays": [
+        "packages/extension-host/src/index.ts"
+      ],
+      "tests": [
+        "tests/acceptance/349/delivery.test.ts"
+      ],
+      "pattern": "#349\\.009ae072",
+      "build": "ok",
+      "state": "KILLED: 3 of 3 criterion cases fail on the twin at their assertion",
+      "clean": {
+        "cases": 3,
+        "passed": 3
+      },
+      "twin": [
+        {
+          "test": "AC2 #349.009ae072 a test adapter with steer false gets answers through its stop hold or its next prompt, never in the middle of a turn › AC2 steer false, holdStop true: an answer that arrives mid-turn waits, and is delivered once in the stop hold, by the route `hold`",
+          "status": "fail",
+          "atAssertion": true,
+          "cause": "AssertionError: mid-turn, the answer waits: {\"status\":\"delivered\",\"session\":\"<id>\",\"adapter\":\"claude-code\",\"route\":\"steer\"}: expected 'delivered' to be 'held' // Object.is equality",
+          "frame": "tests/acceptance/349/delivery.test.ts:22:78"
+        },
+        {
+          "test": "AC2 #349.009ae072 a test adapter with steer false gets answers through its stop hold or its next prompt, never in the middle of a turn › AC2 steer false, holdStop false: an answer that arrives mid-turn waits through the stop, and is delivered once at the next prompt, by the route `prompt`",
+          "status": "fail",
+          "atAssertion": true,
+          "cause": "AssertionError: an adapter that can't hold a stop gets nothing at the stop: expected [ { answer: { …(10) }, …(3) } ] to deeply equal []",
+          "frame": "tests/acceptance/349/delivery.test.ts:40:84"
+        },
+        {
+          "test": "AC2 #349.009ae072 a test adapter with steer false gets answers through its stop hold or its next prompt, never in the middle of a turn › AC2 steer true: the same answer is delivered in the middle of the turn, by the route `steer`, so the flag and not the name decides",
+          "status": "fail",
+          "atAssertion": true,
+          "cause": "AssertionError: {\"status\":\"held\",\"session\":\"<id>\",\"adapter\":\"steerer\"}: expected { status: 'held', …(2) } to match object { status: 'delivered', …(3) }",
+          "frame": "Proxy.<anonymous> (<path>)"
+        }
+      ]
+    },
+    "349--kit-skipped-at-install": {
+      "criteria": [
+        "#349.e98531fc"
+      ],
+      "overlays": [
+        "packages/extension-host/src/index.ts"
+      ],
+      "tests": [
+        "tests/acceptance/349/install-kit.test.ts"
+      ],
+      "pattern": "#349\\.e98531fc",
+      "build": "ok",
+      "state": "KILLED: 2 of 2 criterion cases fail on the twin at their assertion",
+      "clean": {
+        "cases": 2,
+        "passed": 2
+      },
+      "twin": [
+        {
+          "test": "AC4 #349.e98531fc a second journey installs only after check.kind@1's fixtures pass; a planted runner passing a crashed suite with 12 tests is refused at install naming the fixture, and the kind in use keeps running › AC4 the first journey installs with check.kind@1 passed and runs; the planted second one is refused at install, naming fail-elsewhere, and the first keeps running",
+          "status": "fail",
+          "atAssertion": true,
+          "cause": "AssertionError: the install ran check.kind@1's kit on journey: [{\"slot\":\"check.kind@1\",\"fill\":\"journey\",\"verdict\":\"BLOCKED\"}]: expected [ { slot: 'check.kind@1', …(2) } ] to deep equally contain { slot: 'check.kind@1', …(2) }",
+          "frame": "tests/acceptance/349/install-kit.test.ts:30:110"
+        },
+        {
+          "test": "AC4 #349.e98531fc a second journey installs only after check.kind@1's fixtures pass; a planted runner passing a crashed suite with 12 tests is refused at install naming the fixture, and the kind in use keeps running › AC4 a sound second implementation of journey installs, after check.kind@1's fixtures pass on it",
+          "status": "fail",
+          "atAssertion": true,
+          "cause": "AssertionError: [{\"slot\":\"check.kind@1\",\"fill\":\"journey\",\"verdict\":\"BLOCKED\"}]: expected [ { slot: 'check.kind@1', …(2) } ] to deep equally contain { slot: 'check.kind@1', …(2) }",
+          "frame": "tests/acceptance/349/install-kit.test.ts:44:60"
+        }
+      ]
+    },
+    "349--both-adapters-deliver": {
+      "criteria": [
+        "#349.77853dd0"
+      ],
+      "overlays": [
+        "packages/extension-host/src/index.ts"
+      ],
+      "tests": [
+        "tests/acceptance/349/owner.test.ts"
+      ],
+      "pattern": "#349\\.77853dd0",
+      "build": "ok",
+      "state": "KILLED: 1 of 3 criterion cases fail on the twin at their assertion",
+      "clean": {
+        "cases": 3,
+        "passed": 3
+      },
+      "twin": [
+        {
+          "test": "AC6 #349.77853dd0 two adapters see one session; the second to bind it gates it and delivers each answer once, the other only relays; a host letting both deliver, or giving the session to the first to bind, fails naming the session › AC6 the gating adapter, second to bind the session, owns it and delivers each answer once; the first to bind only relays",
+          "status": "fail",
+          "atAssertion": true,
+          "cause": "AssertionError: the adapter that gates session <id> owns it: {\"adapter\":\"relay\"}: expected 'relay' to be 'gater' // Object.is equality",
+          "frame": "gatesAndRelays (tests/acceptance/349/owner.test.ts:27:99)"
+        },
+        {
+          "test": "AC6 #349.77853dd0 two adapters see one session; the second to bind it gates it and delivers each answer once, the other only relays; a host letting both deliver, or giving the session to the first to bind, fails naming the session › AC6 (wrong program) a host that lets both adapters deliver sends one answer twice, and fails this test naming the session",
+          "status": "pass"
+        },
+        {
+          "test": "AC6 #349.77853dd0 two adapters see one session; the second to bind it gates it and delivers each answer once, the other only relays; a host letting both deliver, or giving the session to the first to bind, fails naming the session › AC6 (wrong program) a host that gives the session to the first adapter to bind it delivers through the adapter that doesn't gate it, and fails this test naming the session",
+          "status": "pass"
+        }
+      ]
+    },
+    "351--admits-everything": {
+      "criteria": [
+        "#351.83b84661",
+        "#351.542cefd7",
+        "#351.f151ca10",
+        "#351.86308453",
+        "#351.838460c6",
+        "#351.c5e40eeb"
+      ],
+      "overlays": [
+        "packages/extension-host/src/index.ts"
+      ],
+      "tests": [
+        "tests/acceptance/351/conflicts.test.ts",
+        "tests/acceptance/351/ring.test.ts",
+        "tests/acceptance/351/done-gate.test.ts",
+        "tests/acceptance/351/digest.test.ts",
+        "tests/acceptance/351/signature.test.ts",
+        "tests/acceptance/351/journey.test.ts"
+      ],
+      "pattern": "#351\\.(83b84661|542cefd7|f151ca10|86308453|838460c6|c5e40eeb)",
+      "build": "ok",
+      "state": "KILLED: 11 of 13 criterion cases fail on the twin at their assertion",
+      "clean": {
+        "cases": 13,
+        "passed": 13
+      },
+      "twin": [
+        {
+          "test": "AC2 #351.83b84661 installing a package that conflicts with an installed one is refused, naming the conflict › AC2 a package declaring it conflicts with an installed one is refused at install, naming that one, which stays installed; with nothing it conflicts with installed, it installs",
+          "status": "fail",
+          "atAssertion": true,
+          "cause": "AssertionError: test/beta, which conflicts with the installed test/alpha, is refused at install: expected null not to be null",
+          "frame": "tests/acceptance/351/conflicts.test.ts:23:104"
+        },
+        {
+          "test": "AC5 #351.86308453 a package whose envelope digest doesn't match its files is refused at install, naming the package; an installer trusting the envelope's digest without hashing the files installs it and fails this test › AC5 a package whose files changed after its envelope digest was written is refused at install, naming it; a package whose digest matches installs with that digest",
+          "status": "fail",
+          "atAssertion": true,
+          "cause": "AssertionError: test/altered, whose envelope digest doesn't match its files, is refused at install: expected null not to be null",
+          "frame": "refusedNamingThePackage (tests/acceptance/351/digest.test.ts:25:102)"
+        },
+        {
+          "test": "AC5 #351.86308453 a package whose envelope digest doesn't match its files is refused at install, naming the package; an installer trusting the envelope's digest without hashing the files installs it and fails this test › AC5 (wrong program) an installer that trusts the envelope's digest without hashing the files installs the altered package, carrying the envelope's digest, and fails this test",
+          "status": "pass"
+        },
+        {
+          "test": "AC4 #351.f151ca10 a package replacing the done gate, or providing a second one beside it, is refused at install naming the done gate until gate@1 opens; the installed test gate keeps judging; a host refusing only the ring's pieces fails this test › AC4 gate@1 hasn't opened; a package declaring it replaces the done gate, and one providing a second done gate beside it, are each refused at install naming the done gate, which keeps judging; without the declarations they install",
+          "status": "fail",
+          "atAssertion": true,
+          "cause": "AssertionError: deepbuild/rival-gate, which declares it replaces the done gate, is refused at install: the done gate is not replaceable: expected null not to be null",
+          "frame": "refusedNamingTheDoneGate (tests/acceptance/351/done-gate.test.ts:54:104)"
+        },
+        {
+          "test": "AC4 #351.f151ca10 a package replacing the done gate, or providing a second one beside it, is refused at install naming the done gate until gate@1 opens; the installed test gate keeps judging; a host refusing only the ring's pieces fails this test › AC4 (wrong program) a host that refuses only the ring's pieces refuses a package replacing the supervisor, installs the one replacing the done gate, and fails this test",
+          "status": "fail",
+          "atAssertion": true,
+          "cause": "AssertionError: the planted host is the twin the criterion names: it refuses a package replacing a ring piece, the supervisor: expected null not to be null",
+          "frame": "tests/acceptance/351/done-gate.test.ts:78:158"
+        },
+        {
+          "test": "AC7 #351.c5e40eeb a second package registering the check kind journey without declaring it replaces the first is refused at install naming the first; one that declares it installs, and only it runs journeys › AC7 a second journey that doesn't declare it replaces the first is refused at install, naming the first, which keeps running journeys",
+          "status": "fail",
+          "atAssertion": true,
+          "cause": "AssertionError: deepbuild/journey-b registers journey without declaring it replaces deepbuild/journey-a, and is refused at install: expected null not to be null",
+          "frame": "tests/acceptance/351/journey.test.ts:53:113"
+        },
+        {
+          "test": "AC7 #351.c5e40eeb a second package registering the check kind journey without declaring it replaces the first is refused at install naming the first; one that declares it installs, and only it runs journeys › AC7 a second journey that declares it replaces the first installs, and only it runs journeys",
+          "status": "pass"
+        },
+        {
+          "test": "AC3 #351.542cefd7 a package that declares it replaces the app shell, the canvas core, the supervisor or the installer is refused at install › AC3 a package that declares it replaces the app shell (replaces: [\"app-shell\"]) is refused at install, inside the release or out; without the declaration it installs",
+          "status": "fail",
+          "atAssertion": true,
+          "cause": "AssertionError: deepbuild/ring-app-shell, which declares it replaces the app shell, is refused at install: expected null not to be null",
+          "frame": "tests/acceptance/351/ring.test.ts:26:117"
+        },
+        {
+          "test": "AC3 #351.542cefd7 a package that declares it replaces the app shell, the canvas core, the supervisor or the installer is refused at install › AC3 a package that declares it replaces the canvas core (replaces: [\"canvas-core\"]) is refused at install, inside the release or out; without the declaration it installs",
+          "status": "fail",
+          "atAssertion": true,
+          "cause": "AssertionError: deepbuild/ring-canvas-core, which declares it replaces the canvas core, is refused at install: expected null not to be null",
+          "frame": "tests/acceptance/351/ring.test.ts:26:117"
+        },
+        {
+          "test": "AC3 #351.542cefd7 a package that declares it replaces the app shell, the canvas core, the supervisor or the installer is refused at install › AC3 a package that declares it replaces the supervisor (replaces: [\"supervisor\"]) is refused at install, inside the release or out; without the declaration it installs",
+          "status": "fail",
+          "atAssertion": true,
+          "cause": "AssertionError: deepbuild/ring-supervisor, which declares it replaces the supervisor, is refused at install: expected null not to be null",
+          "frame": "tests/acceptance/351/ring.test.ts:26:117"
+        },
+        {
+          "test": "AC3 #351.542cefd7 a package that declares it replaces the app shell, the canvas core, the supervisor or the installer is refused at install › AC3 a package that declares it replaces the installer (replaces: [\"installer\"]) is refused at install, inside the release or out; without the declaration it installs",
+          "status": "fail",
+          "atAssertion": true,
+          "cause": "AssertionError: deepbuild/ring-installer, which declares it replaces the installer, is refused at install: expected null not to be null",
+          "frame": "tests/acceptance/351/ring.test.ts:26:117"
+        },
+        {
+          "test": "AC6 #351.838460c6 a package whose envelope names a publisher key with a signature that doesn't verify is refused at install naming the key; an update signed by another key than the one trusted on first use is refused until you trust the new key on the trusted path › AC6 a package naming a publisher key, signed by another key, is refused at install naming the key it names; signed by that key, it installs",
+          "status": "fail",
+          "atAssertion": true,
+          "cause": "AssertionError: test/forged, whose signature doesn't verify against the key its envelope names, is refused at install: expected null not to be null",
+          "frame": "tests/acceptance/351/signature.test.ts:21:131"
+        },
+        {
+          "test": "AC6 #351.838460c6 a package whose envelope names a publisher key with a signature that doesn't verify is refused at install naming the key; an update signed by another key than the one trusted on first use is refused until you trust the new key on the trusted path › AC6 an update signed by another key than the one trusted on first use is refused, an agent's call doesn't trust the new key, and once you trust it on the trusted path the update installs",
+          "status": "fail",
+          "atAssertion": true,
+          "cause": "AssertionError: the update, signed by another key than the one trusted on first use, is refused: expected null not to be null",
+          "frame": "tests/acceptance/351/signature.test.ts:38:126"
+        }
+      ]
+    },
+    "351--plants-ignored": {
+      "criteria": [
+        "#351.f151ca10",
+        "#351.86308453"
+      ],
+      "overlays": [
+        "packages/extension-host/src/index.ts"
+      ],
+      "tests": [
+        "tests/acceptance/351/done-gate.test.ts",
+        "tests/acceptance/351/digest.test.ts"
+      ],
+      "pattern": "#351\\.(f151ca10|86308453)",
+      "build": "ok",
+      "state": "KILLED: 2 of 4 criterion cases fail on the twin at their assertion",
+      "clean": {
+        "cases": 4,
+        "passed": 4
+      },
+      "twin": [
+        {
+          "test": "AC5 #351.86308453 a package whose envelope digest doesn't match its files is refused at install, naming the package; an installer trusting the envelope's digest without hashing the files installs it and fails this test › AC5 a package whose files changed after its envelope digest was written is refused at install, naming it; a package whose digest matches installs with that digest",
+          "status": "pass"
+        },
+        {
+          "test": "AC5 #351.86308453 a package whose envelope digest doesn't match its files is refused at install, naming the package; an installer trusting the envelope's digest without hashing the files installs it and fails this test › AC5 (wrong program) an installer that trusts the envelope's digest without hashing the files installs the altered package, carrying the envelope's digest, and fails this test",
+          "status": "fail",
+          "atAssertion": true,
+          "cause": "AssertionError: promise resolved \"undefined\" instead of rejecting",
+          "frame": "_Assertion.__VITEST_REJECTS__ (<path>)"
+        },
+        {
+          "test": "AC4 #351.f151ca10 a package replacing the done gate, or providing a second one beside it, is refused at install naming the done gate until gate@1 opens; the installed test gate keeps judging; a host refusing only the ring's pieces fails this test › AC4 gate@1 hasn't opened; a package declaring it replaces the done gate, and one providing a second done gate beside it, are each refused at install naming the done gate, which keeps judging; without the declarations they install",
+          "status": "pass"
+        },
+        {
+          "test": "AC4 #351.f151ca10 a package replacing the done gate, or providing a second one beside it, is refused at install naming the done gate until gate@1 opens; the installed test gate keeps judging; a host refusing only the ring's pieces fails this test › AC4 (wrong program) a host that refuses only the ring's pieces refuses a package replacing the supervisor, installs the one replacing the done gate, and fails this test",
+          "status": "fail",
+          "atAssertion": true,
+          "cause": "AssertionError: promise resolved \"undefined\" instead of rejecting",
+          "frame": "_Assertion.__VITEST_REJECTS__ (<path>)"
+        }
+      ]
+    },
+    "351--replaced-kind-kept": {
+      "criteria": [
+        "#351.c5e40eeb"
+      ],
+      "overlays": [
+        "packages/extension-host/src/index.ts"
+      ],
+      "tests": [
+        "tests/acceptance/351/journey.test.ts"
+      ],
+      "pattern": "#351\\.c5e40eeb",
+      "build": "ok",
+      "state": "KILLED: 1 of 2 criterion cases fail on the twin at their assertion",
+      "clean": {
+        "cases": 2,
+        "passed": 2
+      },
+      "twin": [
+        {
+          "test": "AC7 #351.c5e40eeb a second package registering the check kind journey without declaring it replaces the first is refused at install naming the first; one that declares it installs, and only it runs journeys › AC7 a second journey that doesn't declare it replaces the first is refused at install, naming the first, which keeps running journeys",
+          "status": "pass"
+        },
+        {
+          "test": "AC7 #351.c5e40eeb a second package registering the check kind journey without declaring it replaces the first is refused at install naming the first; one that declares it installs, and only it runs journeys › AC7 a second journey that declares it replaces the first installs, and only it runs journeys",
+          "status": "fail",
+          "atAssertion": true,
+          "cause": "AssertionError: journey is deepbuild/journey-c's alone: expected [ { kind: 'journey', …(1) } ] to deeply equal [ { kind: 'journey', …(1) } ]",
+          "frame": "tests/acceptance/351/journey.test.ts:63:95"
+        }
+      ]
+    },
+    "332--clone-record-under-plant": {
+      "criteria": [
+        "#332.92539e14"
+      ],
+      "overlays": [
+        "packages/hub/src/stacks.ts"
+      ],
+      "tests": [
+        "tests/acceptance/332/seed.test.ts"
+      ],
+      "pattern": "#332\\.92539e14",
+      "build": "ok",
+      "state": "KILLED: 1 of 3 criterion cases fail on the twin at their assertion",
+      "clean": {
+        "cases": 3,
+        "passed": 3
+      },
+      "twin": [
+        {
+          "test": "AC8 #332.92539e14 a run's database cloned from the seed's template carries the template's seed record with the template's digest and the time it was cloned; a clone of a template kept without its record is BLOCKED, naming the missing record, and a cloner that copies the database without its record fails this test › AC8 the journey runs on its own clone of the seeded template, and the run's record carries the seed's source, copy time and migration with the template's digest and the time it was cloned",
+          "status": "pass"
+        },
+        {
+          "test": "AC8 #332.92539e14 a run's database cloned from the seed's template carries the template's seed record with the template's digest and the time it was cloned; a clone of a template kept without its record is BLOCKED, naming the missing record, and a cloner that copies the database without its record fails this test › AC8 a template kept without its record: the run that seeds it and the next run on it are each BLOCKED, naming the missing seed record, and no journey runs",
+          "status": "pass"
+        },
+        {
+          "test": "AC8 #332.92539e14 a run's database cloned from the seed's template carries the template's seed record with the template's digest and the time it was cloned; a clone of a template kept without its record is BLOCKED, naming the missing record, and a cloner that copies the database without its record fails this test › AC8 (wrong program) a cloner that copies the database without its record (DEEP_HUB_PLANT=env-clone-without-record) fails the reading: the run's record carries no seed record for its clone",
+          "status": "fail",
+          "atAssertion": true,
+          "cause": "AssertionError: the reading passes on a cloner that drops the seed record: expected null not to be null",
+          "frame": "tests/acceptance/332/seed.test.ts:136:88"
+        }
+      ]
+    },
+    "39--takes-first-stamp": {
+      "criteria": [
+        "#39.de9f23ce"
+      ],
+      "overlays": [
+        "packages/hub/src/mcp-operations.ts"
+      ],
+      "tests": [
+        "tests/acceptance/39/session.test.ts"
+      ],
+      "pattern": "#39\\.de9f23ce",
+      "build": "ok",
+      "state": "SURVIVED: every criterion case passes on the twin",
+      "clean": {
+        "cases": 1,
+        "passed": 1
+      },
+      "twin": [
+        {
+          "test": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session › AC5 #39.de9f23ce two threads whose hooks and one deep mcp share a parent process: each deep_ask binds to the PreToolUse stamped for it, in either order",
+          "status": "pass"
+        }
+      ],
+      "repeats": "Five runs on this head: the twin failed its criterion case at its assertion in one and passed in four. The case sends its two asks at once, and the twin binds wrongly only when the stamps and the calls arrive in different orders. Its two fault lines equal the merge base twin's."
+    },
+    "39-redraft--job-hooks-as-session": {
+      "criteria": [
+        "#39.edfd0196"
+      ],
+      "overlays": [
+        "packages/hub/src/core.ts"
+      ],
+      "tests": [
+        "tests/acceptance/39-redraft/job.test.ts"
+      ],
+      "pattern": "#39\\.edfd0196",
+      "build": "ok",
+      "state": "KILLED: 2 of 2 criterion cases fail on the twin at their assertion",
+      "clean": {
+        "cases": 2,
+        "passed": 2
+      },
+      "twin": [
+        {
+          "test": "AC6 #39.edfd0196 a Codex job the runner started leaves no session row, claim or task spend › AC6 #39.edfd0196 a job through `codex exec` whose hooks carry the thread ID it printed reads as the job's events, with no session row, claim or task spend, while a plain Codex session beside it has its row",
+          "status": "fail",
+          "atAssertion": true,
+          "cause": "AssertionError: session row for the job run:<id>'s thread f096dc87-6571-47de-8914-8d0977282f5f: expected [ …(2) ] to not include 'f096dc87657147de89148d0977282f5f'",
+          "frame": "Proxy.<anonymous> (<path>)"
+        },
+        {
+          "test": "AC6 #39.edfd0196 a Codex job the runner started leaves no session row, claim or task spend › AC6 #39.edfd0196 hooks that reach the hub from the job's folder before the runner has read its thread ID still read as the job's, never as a session",
+          "status": "fail",
+          "atAssertion": true,
+          "cause": "AssertionError: session row for the job run:<id>'s thread 02bd0029-d152-4270-a374-c656e27f0d5c: expected [ '02bd0029d1524270a374c656e27f0d5c' ] to not include '02bd0029d1524270a374c656e27f0d5c'",
+          "frame": "Proxy.<anonymous> (<path>)"
+        }
+      ]
+    },
+    "83--stop-without-line": {
+      "criteria": [
+        "#83.8a03aacc"
+      ],
+      "overlays": [
+        "packages/hub/src/stop-reply.ts"
+      ],
+      "tests": [
+        "tests/acceptance/83/line.test.ts"
+      ],
+      "pattern": "#83\\.8a03aacc",
+      "build": "ok",
+      "state": "KILLED: 2 of 2 criterion cases fail on the twin at their assertion",
+      "clean": {
+        "cases": 2,
+        "passed": 2
+      },
+      "twin": [
+        {
+          "test": "AC1 #83.8a03aacc The line appears in the Claude Code and Codex chats at every judged stop › AC1 #83.8a03aacc Claude Code: a stop whose turn edited a file is judged, and its Stop reply carries one line the chat shows, at most 80 columns, naming a state; a stop right after startup carries none",
+          "status": "fail",
+          "atAssertion": true,
+          "cause": "AssertionError: a judged stop's reply carries the line (systemMessage, or a send-back's reason): {\"runs\":[{\"command\":\"exec '<path> claude-code Stop\",\"code\":0,\"signal\":null,\"timedOut\":false,\"stdout\":\"\",\"stderr\":\"\"},{\"command\":\"exec '<path> c",
+          "frame": "tests/acceptance/83/line.test.ts:31:123"
+        },
+        {
+          "test": "AC1 #83.8a03aacc The line appears in the Claude Code and Codex chats at every judged stop › AC1 #83.8a03aacc Codex: a stop whose turn ran a command is judged, and its Stop reply carries the line; a verdict that lands after the hold is delivered on the next prompt",
+          "status": "fail",
+          "atAssertion": true,
+          "cause": "AssertionError: Codex's judged stop carries the line in its reply (systemMessage or a block's reason): exit 0, stdout \"\", stderr \"\": expected undefined to be defined",
+          "frame": "tests/acceptance/83/line.test.ts:52:253"
+        }
+      ]
+    },
+    "83--answers-any-origin": {
+      "criteria": [
+        "#83.4b0836ba"
+      ],
+      "overlays": [
+        "packages/hub/src/core.ts"
+      ],
+      "tests": [
+        "tests/acceptance/83/status.test.ts"
+      ],
+      "pattern": "#83\\.4b0836ba",
+      "build": "ok",
+      "state": "KILLED: 1 of 2 criterion cases fail on the twin at their assertion",
+      "clean": {
+        "cases": 2,
+        "passed": 2
+      },
+      "twin": [
+        {
+          "test": "AC4 #83.4b0836ba Only a prompt a person typed is answered from the record; one from a scheduled task, a subagent's report or another session reaches the model unchanged › AC4 #83.4b0836ba \"still going?\" from a scheduled task, a subagent's report, another session, a prompt the adapter can't place reaches the model unchanged (no block, a model call in the hook log); the same words a person typed are answered from the record",
+          "status": "fail",
+          "atAssertion": true,
+          "cause": "AssertionError: \"still going? (scheduled)\" from a scheduled task isn't answered from the record: {\"blocked\":\"working · next: agent (for 0s) · needs you: 0\\nwork: <path> · session ae6fbddc (claude-code) · resume: claude --resume ae6fbddc-e53",
+          "frame": "tests/acceptance/83/status.test.ts:92:107"
+        },
+        {
+          "test": "AC4 #83.4b0836ba Only a prompt a person typed is answered from the record; one from a scheduled task, a subagent's report or another session reaches the model unchanged › AC4 #83.4b0836ba (wrong program) a hub that reads an unplaced prompt as a person's (DEEP_HUB_PLANT=unplaced-is-person) answers a status question nobody typed from the record, and fails this check naming the prompt",
+          "status": "pass"
+        }
+      ]
+    },
+    "83--plant-ignored": {
+      "criteria": [
+        "#83.4b0836ba"
+      ],
+      "overlays": [
+        "packages/hub/src/core.ts"
+      ],
+      "tests": [
+        "tests/acceptance/83/status.test.ts"
+      ],
+      "pattern": "#83\\.4b0836ba",
+      "build": "ok",
+      "state": "KILLED: 1 of 2 criterion cases fail on the twin at their assertion",
+      "clean": {
+        "cases": 2,
+        "passed": 2
+      },
+      "twin": [
+        {
+          "test": "AC4 #83.4b0836ba Only a prompt a person typed is answered from the record; one from a scheduled task, a subagent's report or another session reaches the model unchanged › AC4 #83.4b0836ba \"still going?\" from a scheduled task, a subagent's report, another session, a prompt the adapter can't place reaches the model unchanged (no block, a model call in the hook log); the same words a person typed are answered from the record",
+          "status": "pass"
+        },
+        {
+          "test": "AC4 #83.4b0836ba Only a prompt a person typed is answered from the record; one from a scheduled task, a subagent's report or another session reaches the model unchanged › AC4 #83.4b0836ba (wrong program) a hub that reads an unplaced prompt as a person's (DEEP_HUB_PLANT=unplaced-is-person) answers a status question nobody typed from the record, and fails this check naming the prompt",
+          "status": "fail",
+          "atAssertion": true,
+          "cause": "AssertionError: the planted hub must fail the unplaced-prompt check: expected null not to be null",
+          "frame": "tests/acceptance/83/status.test.ts:113:80"
+        }
+      ]
+    },
+    "18--unbound-reads-all": {
+      "criteria": [
+        "#18.7f5b2ce8"
+      ],
+      "overlays": [
+        "packages/hub/src/mcp-operations.ts"
+      ],
+      "tests": [
+        "tests/acceptance/18/binding/binding.test.ts"
+      ],
+      "pattern": "#18\\.7f5b2ce8",
+      "build": "ok",
+      "state": "KILLED: 1 of 2 criterion cases fail on the twin at their assertion",
+      "clean": {
+        "cases": 2,
+        "passed": 2
+      },
+      "twin": [
+        {
+          "test": "AC9 #18.7f5b2ce8 a deep_ask from a session's deep mcp is filed under that session; a process whose parent matches no session reads the wiki but no session's items, and can't ask or claim",
+          "status": "fail",
+          "atAssertion": true,
+          "cause": "AssertionError: AC9 #18.7f5b2ce8:",
+          "frame": "holds (tests/acceptance/18/binding/binding.test.ts:149:101)"
+        },
+        {
+          "test": "AC9 #18.7f5b2ce8 (wrong program unbound-reads-all) a hub that shows a call bound to no session another session's open items fails this test, naming the open item",
+          "status": "pass"
+        }
+      ]
+    },
+    "21--plant-ignored": {
+      "criteria": [
+        "#21.9a5768d4"
+      ],
+      "overlays": [
+        "packages/hub/src/spool.ts"
+      ],
+      "tests": [
+        "tests/acceptance/21/replay.test.ts"
+      ],
+      "pattern": "#21\\.9a5768d4.*\\(wrong program\\) a hub that appends a replayed event twice",
+      "build": "ok",
+      "state": "DIAGNOSTIC, outside a timed grant: KILLED: 1 of 1 criterion cases fail on the twin at their assertion",
+      "clean": {
+        "cases": 1,
+        "passed": 1
+      },
+      "twin": [
+        {
+          "test": "AC2 #21.9a5768d4 Over 1,000 real tool calls, with the hub stopped for 200 and SIGSTOPped for 200, no hook takes more than 50 ms over process start, and all 400 events are in the record once after the hub resumes › AC2 #21.9a5768d4 (wrong program) a hub that appends a replayed event twice (DEEP_HUB_PLANT=replay-appends-twice) fails the same check, naming the call",
+          "status": "fail",
+          "atAssertion": true,
+          "cause": "AssertionError: the check names an event in the record twice: expected '' to match /in the record 2 times/",
+          "frame": "tests/acceptance/21/replay.test.ts:161:81"
+        }
+      ]
+    }
+  }
+}

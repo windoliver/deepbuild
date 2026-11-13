@@ -1,0 +1,7 @@
+{
+  "id": "test/hosted-kind",
+  "version": "1.0.0",
+  "digest": "d1:0000000000000000000000000000000000000000000000000000000000000000",
+  "jobs": ["test.hosted"],
+  "requires": { "preview": ["deep.registerJob"] }
+}

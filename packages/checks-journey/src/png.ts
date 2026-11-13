@@ -141,10 +141,3 @@ export function highlight(image: Image, boxes: readonly Box[]): Image {
   }
   return { width, height: image.height, data };
 }
-
-/** The 4×4 block the planted head image changes (tests): a copy with one block set to one color. */
-export function plantBlock(image: Image, at: { x: number; y: number }, size = 4): Image {
-  const data = new Uint8Array(image.data);
-  for (let y = at.y; y < at.y + size; y++) for (let x = at.x; x < at.x + size; x++) { const o = (y * image.width + x) * 4; data[o] = 7; data[o + 1] = 200; data[o + 2] = 90; data[o + 3] = 255; }
-  return { ...image, data };
-}

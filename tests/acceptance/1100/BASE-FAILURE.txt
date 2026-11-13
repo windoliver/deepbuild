@@ -1,0 +1,103 @@
+#1100's acceptance tests on the base, 435141d5 (origin/main, which holds 07b63844), on Mac17,10 under a 1-minute load average
+of about 330 to 350 on 18 cores, Node 24.22.2, after `npm ci` (better-sqlite3 from its prebuild), `npm run build
+--workspaces` and `cargo build --locked -p deep-hook --bin deep-hook`.
+
+Only `first-command.test.ts` was run: its surfaces (the built CLI, setup, the hub through the login service stand-in, the
+hook entries) all exist at the base. The other files need the replica (`deep-drive`, plain and with `env-plants`) or the
+real app, a cold Cargo build of the GPUI stack, which isn't quick on this machine at this load, and the surfaces they judge
+are plainly absent at the base; each is named below with what the base shows instead, and the outcome given is the
+expected one, not a run's.
+
+## Run on the base: first-command.test.ts, 6 failed, 1 passed (266 s)
+
+AC11's two tests were run a second time after one fixture fix and before any other change: the `paseo` stand-in now writes
+`~/.paseo/config.json` as it installs a plugin, as paseo's own manager does. In the first run setup's paseo step failed on
+the missing file ("paseo was left out of setup: ENOENT ... .paseo/config.json"), a fixture fault, not the base's. The
+outcomes below for AC11 are the second run's; no test was edited after it.
+
+### AC8 #1100.5f1d5581: FAILS, as the criterion says the merge base does
+
+The hub started with its wiki folder read-only, and setup's wiki read was refused; setup's exit code 4 ends the command:
+
+    × AC8 #1100.5f1d5581: in a fresh home with a hub whose wiki read is refused, the first deep status prints the set-up
+      line naming deep setup --undo on stderr, then the session list
+    + "the first deep status's stderr names no undo (deep setup --undo): exit 4, stdout \"\", stderr \"deep setup: the wiki
+       wasn't built: EACCES: permission denied, open '/private/tmp/da1100-…/h/.deepbuild/wiki/you.md.tmp'\\n\"",
+    + "the first deep status printed no session list, so the command you typed didn't run: exit 4, …"
+
+### AC9 #1100.c0eb6fe9: FAILS; its wrong program is BLOCKED
+
+The session's `pkill -f vite` was denied by the shipped entry; the base's line says no verdict blocks and no count:
+
+    × AC9 #1100.c0eb6fe9: after setup a fixture session's call that a shipped guard entry blocks is blocked, and the set-up
+      line says the guard entries block, with how many the shipped list holds
+    + "the set-up line says nothing of the 30 shipped guard entries that block, yet no-kill-by-name blocked the session's
+       call: \"DeepBuild added its hooks in watch-only mode, so no stop is held and no verdict blocks until you approve a
+       repo's checks, and started the hub at login; deep setup --undo removes it all.\""
+
+    × AC9 #1100.c0eb6fe9 wrong program: a set-up line that says nothing blocks fails, naming the entry that did
+    Error: BLOCKED: after the first deep command no hub answers: exit 3, … "deep hub start: no hub answered … within 15 s"
+
+The base's hub refuses `DEEP_HUB_PLANT=set-up-line-says-nothing-blocks`, a name its closed list doesn't hold (README,
+Pinned 7), so the hub the login service starts with it doesn't start.
+
+### AC11 #1100.0bc0935d: FAILS, naming paseo's line on stdout; its wrong program is BLOCKED
+
+    × AC11 #1100.0bc0935d: with paseo on the PATH, which setup reports on, the first deep status | cat holds only the
+      session list
+    + "the first deep status | cat printed a line that isn't the session list: \"paseo: + plugin deepbuild from
+       npm:@deepbuild/paseo@0.1.0, through paseo plugin install; /private/tmp/da1100-…/h/.paseo/config.json is kept as it
+       is now, and deep setup --undo puts it back.\""
+
+    × AC11 #1100.0bc0935d wrong program: a set-up line written to stdout fails, naming the line
+    Error: BLOCKED: the first deep status | cat didn't finish setup, so a later one sets up again … "deep hub start: no hub
+      answered … within 15 s"
+
+The same refusal of an unlisted plant name by the base's hub.
+
+### AC12 #1100.ccd14b19: FAILS; its wrong program PASSES at the base
+
+The scratch checkout's setup ran the `cargo` stand-in (5.1 s, start and end logged) and printed nothing about it:
+
+    × AC12 #1100.ccd14b19: with a build step that takes 5 s, the first command prints one line naming the step before it
+      ends
+    + "the first command printed no line naming the step (cargo build -p deep-hook, 5 s) before it ended: its stderr
+       \"DeepBuild added its hooks in watch-only mode, … deep setup --undo removes it all.\\n\""
+
+    ✓ AC12 #1100.ccd14b19 wrong program: a planted silent step fails, naming it
+
+It passes on purpose: the base is itself the silent step, so the judge fails on it with or without the plant.
+
+## Not run on the base: the surface is plainly absent
+
+- `journey.test.ts`, AC1 #1100.09a72dfd: the base's first-launch page (`crates/deep-app/src/views.rs`, `Kind::Welcome`)
+  draws the lockup, the Set up button and, after the click, one line; no `setup-agent:` or `setup-step:` node, and the
+  record has no `setup.step` kind (`packages/contracts/schemas/`). Expected: FAILS, "the screen has no row for Claude Code
+  (a node with id setup-agent:claude-code)".
+- `journey.test.ts`, AC2 #1100.919771a4: the base's page holds one control, Set up. Expected: PASSES; its wrong program
+  needs `first-launch-second-option`, which the base doesn't have.
+- `journey.test.ts`, AC3 #1100.f7be8897: no take-it-back line on the base's page. Expected: FAILS, "the screen has no
+  take-it-back line (a node with id setup-line:undo …)".
+- `journey.test.ts`, AC4 #1100.7caad132: the base's page shows no term of the table. Expected: PASSES; its wrong program
+  needs `first-launch-pretooluse`, and a table holding the term (README, Pinned 8).
+- `journey.test.ts`, AC6 #1100.dbc87baa: on the base, a Set up that works refreshes the setup files and `open_first` shows
+  the box page (`crates/deep-app/src/open.rs`). Expected: PASSES; its wrong program needs `stays-on-first-launch`.
+- `journey.test.ts`, AC7 #1100.51fb49b2: the base's `deep-drive` ignores `launch.notifications` and `see` answers no
+  `notifications`. Expected: FAILS, "BLOCKED: the replica launched as a fresh account … reads its notification setting as
+  undefined before the click".
+- `journey.test.ts`, AC14 #1100.da894c8b: no `setup-step:history:<agent>` node. Expected: FAILS, "the screen lists no
+  reading job".
+- `plants.test.ts`: every plant name is absent at the base (`plain::planted` names, the hub's closed list). Expected: each
+  fails, its planted program not there to fail the judge.
+- `stops.test.ts`, AC5 #1100.bde8557a: after the failed setup the base draws `set-up-said`, `deep setup failed (exit
+  status: 1): deep setup: <home>/.claude/settings.json isn't JSON …`, and hides Set up (`said.is_some()` in views.rs).
+  Expected: FAILS, "the line holds an exit status" and "the Set up button is gone once setup stopped", as the criterion
+  says of the merge base.
+- `stops.test.ts`, AC10 #1100.fb98dd92: the base's `set_up` puts setup's whole stderr into that line (setup.rs). Expected:
+  FAILS, "the screen shows setup's error output, its line \"TypeError: Cannot read properties of undefined (reading
+  'hooks')\""; the wrong program needs `set-up-prints-output`.
+- `busy.test.ts`, AC13 #1100.ac11c199: while setup runs the base hides the button and draws a `set-up-working` label
+  (views.rs). Expected: FAILS, "0 buttons read Setting up"; the wrong programs need `set-up-hides-button` and
+  `set-up-starts-twice`.
+- `shown.test.ts`, AC15 #1100.616f99b5: needs the real app, Accessibility and Screen Recording. Expected: INCONCLUSIVE at
+  best (TASTE.json holds no call); on the base the window names no agent, so the state check fails first.

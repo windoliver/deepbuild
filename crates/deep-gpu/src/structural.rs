@@ -3,8 +3,6 @@
 //! dispatches over buffers made once for its count and recorded into the frame's compute pass.
 //! The WGSL is `structural.wgsl`, reviewed with the app; its results depend only on their inputs.
 
-use wgpu::util::DeviceExt as _;
-
 const SOURCE: &str = include_str!("structural.wgsl");
 /// Elements a workgroup covers.
 pub const TILE: u32 = 1024;
@@ -47,7 +45,7 @@ pub struct Plan {
     _keep: Vec<wgpu::Buffer>,
 }
 
-fn storage(d: &wgpu::Device, label: &str, words: u32) -> wgpu::Buffer {
+fn storage(d: &crate::counted::Wgpu, label: &str, words: u32) -> wgpu::Buffer {
     d.create_buffer(&wgpu::BufferDescriptor {
         label: Some(label),
         size: u64::from(words.max(1)) * 4,
@@ -58,7 +56,7 @@ fn storage(d: &wgpu::Device, label: &str, words: u32) -> wgpu::Buffer {
     })
 }
 
-fn params(d: &wgpu::Device, n: u32, arg: u32, tiles: u32) -> wgpu::Buffer {
+fn params(d: &crate::counted::Wgpu, n: u32, arg: u32, tiles: u32) -> wgpu::Buffer {
     let bytes: Vec<u8> = [n, arg, tiles, 0]
         .iter()
         .flat_map(|w| w.to_le_bytes())
@@ -71,7 +69,7 @@ fn params(d: &wgpu::Device, n: u32, arg: u32, tiles: u32) -> wgpu::Buffer {
 }
 
 impl Structural {
-    pub fn new(d: &wgpu::Device) -> Structural {
+    pub fn new(d: &crate::counted::Wgpu) -> Structural {
         let module = d.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("structural steps"),
             source: wgpu::ShaderSource::Wgsl(SOURCE.into()),
@@ -106,7 +104,7 @@ impl Structural {
 
     fn dispatch(
         &self,
-        d: &wgpu::Device,
+        d: &crate::counted::Wgpu,
         pipeline: &wgpu::ComputePipeline,
         params: &wgpu::Buffer,
         buffers: &[&wgpu::Buffer],
@@ -136,7 +134,7 @@ impl Structural {
     /// The exclusive scan of `n` words of `src` into `dst`; `flags` reads each word as 0 or 1.
     fn scan_into(
         &self,
-        d: &wgpu::Device,
+        d: &crate::counted::Wgpu,
         plan: &mut Plan,
         src: &wgpu::Buffer,
         dst: &wgpu::Buffer,
@@ -159,7 +157,13 @@ impl Structural {
     }
 
     /// `scan {in, op: add}` over `n` words (u32 or i32: a wrapping add is the same bits).
-    pub fn scan(&self, d: &wgpu::Device, src: &wgpu::Buffer, dst: &wgpu::Buffer, n: u32) -> Plan {
+    pub fn scan(
+        &self,
+        d: &crate::counted::Wgpu,
+        src: &wgpu::Buffer,
+        dst: &wgpu::Buffer,
+        n: u32,
+    ) -> Plan {
         let mut plan = Plan::new();
         plan.clears.push(dst.clone());
         self.scan_into(d, &mut plan, src, dst, n, false);
@@ -170,7 +174,7 @@ impl Structural {
     /// count into `count`'s first word.
     pub fn compact(
         &self,
-        d: &wgpu::Device,
+        d: &crate::counted::Wgpu,
         src: &wgpu::Buffer,
         flag: &wgpu::Buffer,
         out: &wgpu::Buffer,
@@ -204,7 +208,7 @@ impl Structural {
     /// `count`'s first word needs, capped at `max`, into `args`, on the GPU.
     pub fn dispatch_args(
         &self,
-        d: &wgpu::Device,
+        d: &crate::counted::Wgpu,
         count: &wgpu::Buffer,
         args: &wgpu::Buffer,
         workgroup: u32,
@@ -222,7 +226,7 @@ impl Structural {
     /// index order, the values into `values_out` and the keys into `keys_out`.
     pub fn sort_by_key(
         &self,
-        d: &wgpu::Device,
+        d: &crate::counted::Wgpu,
         keys: &wgpu::Buffer,
         values: &wgpu::Buffer,
         keys_out: &wgpu::Buffer,
@@ -378,7 +382,7 @@ mod tests {
     use super::*;
     use crate::device::{Backend, Gpu};
 
-    fn upload(d: &wgpu::Device, words: &[u32]) -> wgpu::Buffer {
+    fn upload(d: &crate::counted::Wgpu, words: &[u32]) -> wgpu::Buffer {
         let bytes: Vec<u8> = words.iter().flat_map(|w| w.to_le_bytes()).collect();
         d.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("test input"),

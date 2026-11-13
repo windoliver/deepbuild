@@ -47,12 +47,40 @@ fn coefficients(b: &Band, rate: f64) -> [f64; 5] {
     let a = ops::pow(10.0, b.gain / 40.0);
     let sq = 2.0 * ops::sqrt(a) * alpha;
     let [b0, b1, b2, a0, a1, a2] = match b.kind {
-        Type::Lowpass => [(1.0 - cos) / 2.0, 1.0 - cos, (1.0 - cos) / 2.0, 1.0 + alpha, -2.0 * cos, 1.0 - alpha],
-        Type::Highpass => [(1.0 + cos) / 2.0, -(1.0 + cos), (1.0 + cos) / 2.0, 1.0 + alpha, -2.0 * cos, 1.0 - alpha],
+        Type::Lowpass => [
+            (1.0 - cos) / 2.0,
+            1.0 - cos,
+            (1.0 - cos) / 2.0,
+            1.0 + alpha,
+            -2.0 * cos,
+            1.0 - alpha,
+        ],
+        Type::Highpass => [
+            (1.0 + cos) / 2.0,
+            -(1.0 + cos),
+            (1.0 + cos) / 2.0,
+            1.0 + alpha,
+            -2.0 * cos,
+            1.0 - alpha,
+        ],
         Type::Bandpass => [alpha, 0.0, -alpha, 1.0 + alpha, -2.0 * cos, 1.0 - alpha],
         Type::Notch => [1.0, -2.0 * cos, 1.0, 1.0 + alpha, -2.0 * cos, 1.0 - alpha],
-        Type::Allpass => [1.0 - alpha, -2.0 * cos, 1.0 + alpha, 1.0 + alpha, -2.0 * cos, 1.0 - alpha],
-        Type::Peaking => [1.0 + alpha * a, -2.0 * cos, 1.0 - alpha * a, 1.0 + alpha / a, -2.0 * cos, 1.0 - alpha / a],
+        Type::Allpass => [
+            1.0 - alpha,
+            -2.0 * cos,
+            1.0 + alpha,
+            1.0 + alpha,
+            -2.0 * cos,
+            1.0 - alpha,
+        ],
+        Type::Peaking => [
+            1.0 + alpha * a,
+            -2.0 * cos,
+            1.0 - alpha * a,
+            1.0 + alpha / a,
+            -2.0 * cos,
+            1.0 - alpha / a,
+        ],
         Type::Lowshelf => [
             a * ((a + 1.0) - (a - 1.0) * cos + sq),
             2.0 * a * ((a - 1.0) - (a + 1.0) * cos),
@@ -85,11 +113,14 @@ impl Eq {
     pub fn new(bands: &[Band], rate: i64) -> Eq {
         let coefficients: Vec<_> = bands.iter().map(|b| coefficients(b, rate as f64)).collect();
         let state = vec![[0.0; 2]; 2 * coefficients.len()];
-        Eq { coefficients, state }
+        Eq {
+            coefficients,
+            state,
+        }
     }
 
     pub fn process(&mut self, block: &mut [f32]) {
-        for frame in block.chunks_exact_mut(2) {
+        for frame in block.as_chunks_mut::<2>().0 {
             for (ch, x) in frame.iter_mut().enumerate() {
                 let mut v = *x as f64;
                 for (k, c) in self.coefficients.iter().enumerate() {

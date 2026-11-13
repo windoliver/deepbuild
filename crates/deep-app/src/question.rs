@@ -204,6 +204,13 @@ struct SendWaiting {
     seq: u64,
 }
 
+/// A step's switch or the receipt's Undo pressed by an input that isn't hardware, waiting for the OS (#1462).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum SwitchWaiting {
+    Step(usize),
+    Undo,
+}
+
 pub struct Controller {
     model: Model,
     machine: Machine,
@@ -216,6 +223,7 @@ pub struct Controller {
     /// The source of the press held down on Send, until its release.
     send_down: Option<Source>,
     send_waiting: Option<SendWaiting>,
+    switch_waiting: Option<SwitchWaiting>,
     /// What the card says after a refused press, until it arms.
     holding: Option<&'static str>,
     /// An approval was held back because the ask's own steps are off.
@@ -251,6 +259,7 @@ impl Controller {
             focused: None,
             send_down: None,
             send_waiting: None,
+            switch_waiting: None,
             holding: None,
             switch_first: false,
             receipt: None,
@@ -475,6 +484,55 @@ impl Controller {
         rows
     }
 
+    /// The card's rows on an ask's page (#1461), where the box under it holds your words, the lines that say what
+    /// they do and the send control: every row but those.
+    pub fn page_rows(&self) -> Vec<Row> {
+        self.rows()
+            .into_iter()
+            .filter(|row| match row {
+                Row::Send => false,
+                Row::Text(text) => {
+                    !text.starts_with("Your words: ")
+                        && text != WONT_RUN
+                        && text != ANSWERS_THIS_ASK_ONLY
+                }
+                _ => true,
+            })
+            .collect()
+    }
+
+    /// The box's send control on an ask's page (#1461), saying what the press does: Say no on an approval, whose words
+    /// go as the reason, else Answer; and the lines above it once it holds words.
+    pub fn words_send(&self) -> (&'static str, Vec<&'static str>) {
+        let approval = self.allow_option().is_some();
+        let label = if approval { "Say no" } else { "Answer" };
+        let mut lines = Vec::new();
+        if !self.words.is_empty() || self.image.is_some() {
+            lines.push(ANSWERS_THIS_ASK_ONLY);
+            if approval {
+                lines.push(WONT_RUN);
+            }
+        }
+        (label, lines)
+    }
+
+    /// The card was laid out in `slot` (#1461): a slot that moved, as when the window changed size, presents it
+    /// again, unarmed, where it now is.
+    pub fn placed(&mut self, slot: Slot, now: u64) {
+        if slot == self.slot {
+            return;
+        }
+        self.slot = slot;
+        if matches!(
+            self.machine.state(),
+            State::Presented { .. } | State::Armed { .. }
+        ) {
+            self.machine.present(now, slot);
+            self.send_down = None;
+            self.holding = None;
+        }
+    }
+
     /// The card's text snapshot: every row's words, in reading order.
     pub fn lines(&self) -> Vec<String> {
         self.rows()
@@ -507,7 +565,10 @@ impl Controller {
         } = input;
         // While the OS asks about one press, no other input the card can't trust counts: the prompt is modal, and
         // one confirmation answers one press.
-        if !source.trusted() && (self.machine.confirming().is_some() || self.send_waiting.is_some())
+        if !source.trusted()
+            && (self.machine.confirming().is_some()
+                || self.send_waiting.is_some()
+                || self.switch_waiting.is_some())
         {
             return Did::Nothing;
         }
@@ -567,20 +628,34 @@ impl Controller {
                     }
                 }
             },
-            // The receipt's Undo and a step's switch change what the card does next, so only hardware works them.
+            // The receipt's Undo and a step's switch change what the card does next: hardware works them, and any
+            // other press once the OS confirms you, as an option's does (#1462).
             Target::Undo => {
-                if phase != Phase::Up || !source.trusted() || self.receipt.is_none() {
+                if phase != Phase::Up || self.receipt.is_none() {
                     return Did::Nothing;
                 }
-                self.receipt = None;
-                self.send_waiting = None;
-                self.machine.undo(t);
-                self.record("undone", now);
-                Did::Undone
+                if !source.trusted() {
+                    self.switch_waiting = Some(SwitchWaiting::Undo);
+                    return Did::NeedsConfirmation(confirm::reason(&self.model.question, "Undo"));
+                }
+                self.undo_answer(t, now)
             }
             Target::Step(index) => {
-                if phase != Phase::Up || !source.trusted() || !shown {
+                if phase != Phase::Up || !shown {
                     return Did::Nothing;
+                }
+                if !source.trusted() {
+                    // #1462's planted card takes hardware alone, as the merge base did.
+                    if cfg!(feature = "plant-step-ignores-press") {
+                        return Did::Nothing;
+                    }
+                    let does = self
+                        .model
+                        .steps
+                        .get(index)
+                        .map_or_else(String::new, |step| step.does.clone());
+                    self.switch_waiting = Some(SwitchWaiting::Step(index));
+                    return Did::NeedsConfirmation(confirm::reason(&self.model.question, &does));
                 }
                 self.toggle_step(index);
                 Did::Switched
@@ -656,6 +731,18 @@ impl Controller {
         if confirmed {
             PASSED_ONCE.store(true, Ordering::SeqCst);
         }
+        // A switch or Undo waits on the OS alone: confirmed, it works once; cancelled, nothing changes.
+        if let Some(waiting) = self.switch_waiting.take() {
+            return match (confirmed, waiting) {
+                (false, _) => Did::Nothing,
+                (true, SwitchWaiting::Step(index)) => {
+                    self.toggle_step(index);
+                    Did::Switched
+                }
+                (true, SwitchWaiting::Undo) if self.receipt.is_some() => self.undo_answer(now, now),
+                (true, SwitchWaiting::Undo) => Did::Nothing,
+            };
+        }
         // The ask's own steps were switched off while the OS asked: the approval waits for its switch again.
         if let Some((_, option)) = self.machine.confirming() {
             if self.is_allow(option) && !self.model.own_on() {
@@ -678,6 +765,15 @@ impl Controller {
             }
         }
         Did::Nothing
+    }
+
+    /// Takes back the answer the receipt shows.
+    fn undo_answer(&mut self, t: u64, now: u64) -> Did {
+        self.receipt = None;
+        self.send_waiting = None;
+        self.machine.undo(t);
+        self.record("undone", now);
+        Did::Undone
     }
 
     /// The app is leaving with the card up: nothing is written. The planted shell answers with the default.
@@ -787,7 +883,12 @@ impl Controller {
     /// The answer through Send with no option: your words and image alone, this ask's only, never a decision
     /// and never the plan.
     fn answer_words(&mut self, t: u64, events: &[Value], now: u64) {
-        if self.faults.typed_yes_allows && self.words.trim().eq_ignore_ascii_case("yes") {
+        // #1461's planted page reads words that start with yes as the approval.
+        let reads_yes = crate::plain::planted("words-read-yes")
+            && self.words.trim().to_lowercase().starts_with("yes");
+        if reads_yes
+            || (self.faults.typed_yes_allows && self.words.trim().eq_ignore_ascii_case("yes"))
+        {
             if let Some(index) = self.allow_option() {
                 self.machine.answered();
                 self.answer_option(index, t, events, now);
@@ -1041,6 +1142,41 @@ mod tests {
             "the step was switched off: nothing is sent"
         );
         assert!(card.lines().contains(&SWITCH_FIRST.to_owned()));
+    }
+
+    #[test]
+    fn on_an_asks_page_the_box_holds_the_words_and_says_no_on_an_approval() {
+        let events = vec![approval("P"), taste("B")];
+        let mut push = Controller::present(&events, "ask:P", NOW, SLOT, Faults::default()).unwrap();
+        assert_eq!(push.words_send(), ("Say no", vec![]));
+        push.type_words("yes, but squash first");
+        assert_eq!(
+            push.words_send(),
+            ("Say no", vec![ANSWERS_THIS_ASK_ONLY, WONT_RUN])
+        );
+        let rows = push.page_rows();
+        assert!(
+            !rows.contains(&Row::Send),
+            "the card draws no Send of its own"
+        );
+        assert!(rows
+            .iter()
+            .all(|r| !r.label().starts_with("Your words") && r.label() != WONT_RUN));
+        let mut taste =
+            Controller::present(&events, "ask:B", NOW, SLOT, Faults::default()).unwrap();
+        taste.type_words("keep it, but smaller");
+        assert_eq!(taste.words_send(), ("Answer", vec![ANSWERS_THIS_ASK_ONLY]));
+        // A moved slot presents it again, unarmed.
+        taste.tick(NOW + ARM_AFTER);
+        assert_eq!(taste.state_name(), "armed");
+        taste.placed(
+            Slot {
+                rect: [10, 10, CARD_SIZE[0], CARD_SIZE[1]],
+                ..SLOT
+            },
+            NOW + ARM_AFTER + 1,
+        );
+        assert_eq!(taste.state_name(), "presented");
     }
 
     #[test]

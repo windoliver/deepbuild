@@ -1,0 +1,31 @@
+# #2281: scripts/affected.mjs on the branch with main merged once, through the throttle's test class
+# node scripts/throttle.mjs test --wait 120 -- node scripts/affected.mjs, on 1bf37f897 (main merged once), macOS 27.2
+# queued 2026-11-12T06:43:34Z
+# granted 2026-11-12T07:30:27Z, load { 60.87 63.24 95.72 }
+# affected exit=1; ended 2026-11-12T07:31:26Z, load { 60.84 60.91 92.54 }
+# throttle exit=0
+# Below: its selection, every line that is about a test or this change, the lint lines counted by lint, and its last line.
+# None of the 165 NEW FAIL lines and none of the 11 KNOWN lines names a test or a file this change touches; each is a lint finding on main's own files.
+
+alone vitest: tests/acceptance/236/cleanup.test.ts tests/acceptance/236/contain.test.ts tests/acceptance/236/dependents.test.ts tests/acceptance/236/devices.test.ts tests/acceptance/236/host.test.ts tests/acceptance/236/hub.test.ts tests/acceptance/236/pool.test.ts tests/acceptance/236/suite.test.ts
+timed vitest: tests/acceptance/236/budgets.test.ts (--timed runs them)
+NOTE docs/evidence/2281/after.txt reaches no test
+NOTE docs/evidence/2281/before.txt reaches no test
+NOTE docs/evidence/2281/fixture.txt reaches no test
+BLOCKED tests/acceptance/236/devices.test.ts › AC1 #236.5dec450f a sandboxed piece and its child processes get no devices › AC1 on a Mac where the app holds the permissions, the same helper that opens each device outside the sandbox is denied inside it: BLOCKED: outside the sandbox this machine's app can't open camera (not tried: authorization status 0), microphone (not tried: authorization status 0), screen-capture (not tried: screen capture not allowed); run on the reference Mac with DeepBuild holding the camera, microphone and screen recording permissions
+INCONCLUSIVE 1 timed file was not run; --timed runs them under a timed grant: tests/acceptance/236/budgets.test.ts
+
+NEW FAIL lines, by lint:
+  60 canvas-lint
+  36 size
+  22 deps
+  18 carried-patch table
+  13 code mappings
+   6 slots
+   5 slot kit
+   2 cards
+   1 secrets
+   1 record reader
+   1 drift
+
+FAIL affected: 165 new, 11 already failing on main, 1 inconclusive or blocked, 0 listed skips, 28 passed, in 58 s at load 61; logs in <tmp>

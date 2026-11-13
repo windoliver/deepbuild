@@ -9,6 +9,9 @@ import { dirname, join, resolve } from 'node:path';
 type Obj = Record<string, unknown>;
 const sha = (bytes: Buffer | string): string => createHash('sha256').update(bytes).digest('hex');
 
+/** A file's identity, size and time, so a change is read once; 'none' while it is missing. */
+export const statKey = (file: string): string => { try { const s = statSync(file); return `${s.ino}:${s.size}:${s.mtimeMs}`; } catch { return 'none'; } };
+
 /** A strict JSON object: the value, or why it won't do, naming a duplicate key by its path. */
 export function strictObject(text: string): { value: Obj } | { refused: string } {
   let at = 0;

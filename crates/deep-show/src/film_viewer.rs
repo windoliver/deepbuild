@@ -195,7 +195,7 @@ impl Hub<'_> {
             let (mut px, size) = self
                 .export_frame(&mut sched, &mut session, doc, t, None, true)
                 .map_err(|u| json!({"code": u.code, "path": u.path}))?;
-            for p in px.chunks_exact_mut(4) {
+            for p in px.as_chunks_mut::<4>().0 {
                 p.swap(0, 2);
             }
             let f = frames.get_or_insert_with(|| {
@@ -205,9 +205,11 @@ impl Hub<'_> {
                     [u32::from(size[0]), u32::from(size[1])],
                 )
             });
-            out.extend(f.push(&px));
+            out.extend(f.push(&px).map_err(|_| json!({"code": "device_lost"}))?);
         }
-        out.extend(frames.as_mut().and_then(deep_gpu::blake3::Frames::finish));
+        if let Some(f) = frames.as_mut() {
+            out.extend(f.finish().map_err(|_| json!({"code": "device_lost"}))?);
+        }
         Ok(out.iter().map(hex).collect())
     }
 
@@ -271,7 +273,9 @@ mod tests {
     fn the_keymap_names_each_viewer_key_a_film_control_holds() {
         // Sealed without `seal()`, whose runs another test counts.
         let full = crate::BuildSet::Full;
-        let sealed = crate::assemble(full, crate::modules(full)).seal().expect("the shipped set seals");
+        let sealed = crate::assemble(full, crate::modules(full))
+            .seal()
+            .expect("the shipped set seals");
         let startup = crate::tests::startup_of(sealed);
         let doc = "01JB501V00000000000000000A";
         let film = json!({

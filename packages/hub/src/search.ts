@@ -8,8 +8,7 @@
 import { execFile } from 'node:child_process';
 import { readdirSync, readFileSync } from 'node:fs';
 import { isAbsolute, join, relative } from 'node:path';
-import { pathToFileURL } from 'node:url';
-import { CAP } from '@deepbuild/reading';
+import { CAP } from '@deepbuild/reading/slices';
 import { foldText, parseClaimLine, type FoundMessage } from '@deepbuild/record';
 
 interface Hit {
@@ -122,14 +121,6 @@ export function pageClaims(wiki: string): Claim[] {
   return claims;
 }
 
-/** The test's index when DEEP_HUB_TEST_INDEX names one, rebuilt from the pages; undefined for the ledger's own. */
-export async function openIndex(wiki: string, module?: string): Promise<IndexFill | undefined> {
-  if (!module) return undefined;
-  const fill = ((await import(pathToFileURL(module).href)) as { default: () => IndexFill }).default();
-  await fill.rebuild(pageClaims(wiki));
-  return fill;
-}
-
 /** One `?` per value, for an IN list whose values are bound. */
 const marks = (values: readonly unknown[]): string => values.map(() => '?').join(', ');
 /**
@@ -192,6 +183,8 @@ interface SearchIn {
   session: string | undefined | { everyone: true };
   /** Whether a claim's scope covers the caller: its session, its repo, or everywhere; a call bound to no session reads repo and all. */
   covers(scope: string): boolean;
+  /** Whether a decision saved at a scope reaches the caller (#1840); undefined, every decision does. */
+  decides?(scope: string): boolean;
   /** A planted wrong program: the index's marks stand, and nothing is dropped. */
   trustsIndex?: boolean;
   /**
@@ -238,6 +231,7 @@ export async function search(input: SearchIn): Promise<{ hits: Hit[]; more: numb
   for (const d of decisions) {
     if (!holds(d.question, wanted)) continue;
     const { answer, scope } = JSON.parse(d.data) as { answer: string; scope: string };
+    if (input.decides && !input.decides(scope)) continue;
     decided.push({ source: `decision:${d.id}`, quote: `${d.question} → ${answer} (${scope})`.slice(0, QUOTE) });
   }
 

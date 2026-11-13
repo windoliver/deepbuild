@@ -42,3 +42,6 @@ plant-every-pipe-unread = []
 # The planted wrong program for #1676: a reader that counts every command after an earlier one on the line as running a
 # script the line wrote.
 plant-later-command-unread = []
+# The planted wrong program for #1848's AC3: a reader that counts every string an MCP call's arguments hold as a path,
+# spaces included, whatever the MCP servers' facts name.
+plant-every-string-a-path = []

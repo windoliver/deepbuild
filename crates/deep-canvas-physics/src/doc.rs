@@ -57,15 +57,53 @@ pub struct Material {
     pub density: Option<f64>,
     pub rolling_resistance: f64,
     pub tangent_speed: f64,
+    /// Such as "wood": a hit carries both sides' tags (#1918).
+    pub tag: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Shape {
-    Sphere { radius: f64 },
-    Box { half: [f64; 3] },
-    Capsule { half_height: f64, radius: f64 },
-    Cylinder { half_height: f64, radius: f64 },
-    Plane { normal: [f64; 3] },
+    Sphere {
+        radius: f64,
+    },
+    Box {
+        half: [f64; 3],
+    },
+    Capsule {
+        half_height: f64,
+        radius: f64,
+    },
+    Cylinder {
+        half_height: f64,
+        radius: f64,
+    },
+    Plane {
+        normal: [f64; 3],
+    },
+    /// The hull of at most 64 points, rounded by `radius`.
+    Convex {
+        points: Vec<[f64; 3]>,
+        radius: f64,
+    },
+    /// Triangles over vertices; static only.
+    Mesh {
+        vertices: Vec<[f64; 3]>,
+        triangles: Vec<[u32; 3]>,
+    },
+    /// #2014: `rows` × `cols` heights, row by row, row along +Z and column along +X, spanning
+    /// `scale[0]` × `scale[2]` m centred on the body with each height times `scale[1]`; each cell
+    /// splits along the diagonal from its (column, row + 1) corner to its (column + 1, row) one,
+    /// as a terrain plate draws it. Static only.
+    Heightfield {
+        cols: usize,
+        rows: usize,
+        heights: Vec<f64>,
+        scale: [f64; 3],
+    },
+    /// Other shapes of the world by ID, each at its pose.
+    Compound {
+        children: Vec<(String, Pose)>,
+    },
 }
 
 /// A rotation as written: a quaternion `[x, y, z, w]` or Euler degrees `[x, y, z]`.
@@ -97,12 +135,17 @@ pub struct ShapeUse {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BodyKind {
     Static,
+    /// Moved only to its `follow` channel's pose at each step's time (#1918).
+    Kinematic,
     Dynamic,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Body {
     pub kind: BodyKind,
+    /// The channel path a kinematic body follows (Body: `follow`).
+    pub follow: Option<String>,
+    pub priority: i64,
     pub shapes: Vec<ShapeUse>,
     pub pose: Pose,
     pub linear: [f64; 3],
@@ -149,6 +192,8 @@ pub struct Spring {
 pub struct Motor {
     pub velocity: bool,
     pub target: f64,
+    /// A channel path the target reads at each step's time instead (Joint: motor target).
+    pub channel: Option<String>,
     pub max: Option<f64>,
     pub hz: f64,
     pub damping_ratio: f64,
@@ -163,8 +208,17 @@ pub struct Joint {
     pub limits: Option<[f64; 2]>,
     pub spring: Option<Spring>,
     pub motor: Option<Motor>,
+    /// `{force: N, torque: N·m, over_steps}`: past either for that many steps, it breaks.
+    pub breaks_at: Option<Breaks>,
     pub collide_connected: bool,
     pub active: bool,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct Breaks {
+    pub force: Option<f64>,
+    pub torque: Option<f64>,
+    pub over_steps: u32,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -216,12 +270,22 @@ pub struct World {
     pub contact_materials: BTreeMap<String, Material>,
     /// Steps between deep checkpoints (Checkpoint ring: `every`).
     pub checkpoint_every: u64,
+    /// ms: the 95th percentile of a step's time each host it ships to holds (World: `budget`).
+    pub step_p95: f64,
     pub groups: Vec<String>,
     pub shapes: BTreeMap<String, Shape>,
     pub bodies: BTreeMap<String, Body>,
     pub joints: BTreeMap<String, Joint>,
     pub forces: BTreeMap<String, Force>,
+    pub outputs: BTreeMap<String, Output>,
+    /// In kinematic mode, what sets each driven joint's coordinate (#1918).
+    pub solve: Option<Solve>,
 }
+
+mod heightfield;
+mod reads;
+pub use heightfield::HEIGHTFIELD_SAMPLES;
+pub use reads::{probe_pose, probe_shape, Output, Read, Solve, READS};
 
 /// The world document's own fields; `kind` names it.
 const WORLD_KEYS: &[&str] = &[
@@ -248,9 +312,10 @@ const WORLD_KEYS: &[&str] = &[
     "forces",
     "inputs",
     "outputs",
+    "solve",
 ];
 /// Fields this backend interface doesn't run yet, each with the issue that brings it.
-const LATER: &[(&str, &str)] = &[("inputs", "#522"), ("outputs", "#1918")];
+const LATER: &[(&str, &str)] = &[("inputs", "#522")];
 const RULES: &[(&str, Rule)] = &[
     ("geometric", Rule::Geometric),
     ("average", Rule::Average),
@@ -535,6 +600,7 @@ impl Reader {
             density: None,
             rolling_resistance: 0.0,
             tangent_speed: 0.0,
+            tag: None,
         };
         let default_damping = self.num(d, "damping", "defaults", 0.0, 0.0, f64::MAX);
         let mut materials = BTreeMap::new();
@@ -567,6 +633,7 @@ impl Reader {
                     density: self.opt_num(c, "density", &p, 0.0),
                     rolling_resistance: self.num(c, "rolling_resistance", &p, 0.0, 0.0, f64::MAX),
                     tangent_speed: self.num(c, "tangent_speed", &p, 0.0, f64::MIN, f64::MAX),
+                    tag: self.text(c, "tag", &p),
                 },
             );
         }
@@ -577,6 +644,19 @@ impl Reader {
         );
         let checkpoint_every =
             self.num(cp, "every", "checkpoint", 60.0, 1.0, f64::from(u32::MAX)) as u64;
+        let budget = &self.obj(
+            m.get("budget").unwrap_or(&Value::Null),
+            "budget",
+            &["step_p95", "memory", "bake_10s"],
+        );
+        let step_p95 = self.num(
+            budget,
+            "step_p95",
+            "budget",
+            2.0,
+            f64::MIN_POSITIVE,
+            f64::MAX,
+        );
         let groups = self.groups(m);
         let mut shapes = BTreeMap::new();
         for (id, v) in self.map(m, "shapes") {
@@ -584,6 +664,7 @@ impl Reader {
                 shapes.insert(id.clone(), s);
             }
         }
+        self.children(&shapes);
         let mut bodies = BTreeMap::new();
         for (id, v) in self.map(m, "bodies") {
             let b = self.body(
@@ -608,6 +689,13 @@ impl Reader {
                 forces.insert(id.clone(), f);
             }
         }
+        let solve = self.solve(m, mode == Mode::Kinematic, &joints);
+        let mut outputs = BTreeMap::new();
+        for (id, v) in self.map(m, "outputs") {
+            if let Some(o) = self.output(v, &format!("outputs/{id}"), &bodies, &joints) {
+                outputs.insert(id.clone(), o);
+            }
+        }
         World {
             dimensions,
             step_rate,
@@ -621,11 +709,14 @@ impl Reader {
             defaults,
             contact_materials: materials,
             checkpoint_every,
+            step_p95,
             groups,
             shapes,
             bodies,
             joints,
             forces,
+            outputs,
+            solve,
         }
     }
 
@@ -734,6 +825,23 @@ impl Reader {
         }
     }
 
+    /// A shape use's `member`: all groups when absent; an empty list, a member of no group, is
+    /// refused, naming the shape use (Collision group; #2011).
+    fn member(&mut self, m: &Map<String, Value>, path: &str, groups: &[String]) -> u32 {
+        if m.get("member")
+            .and_then(Value::as_array)
+            .is_some_and(Vec::is_empty)
+        {
+            self.refuse(
+                "physics.no_group",
+                join(path, "member"),
+                &m["member"],
+                format!("shape {path} is a member of no collision group; name at least one, or give it a role"),
+            );
+        }
+        self.mask(m, "member", path, groups)
+    }
+
     /// The bit mask of the group names at `key`; all bits when absent.
     fn mask(&mut self, m: &Map<String, Value>, key: &str, path: &str, groups: &[String]) -> u32 {
         let Some(v) = m.get(key) else { return u32::MAX };
@@ -765,7 +873,25 @@ impl Reader {
     }
 
     fn shape(&mut self, v: &Value, p: &str) -> Option<Shape> {
-        let s = &self.obj(v, p, &["kind", "radius", "half", "half_height", "normal"]);
+        let s = &self.obj(
+            v,
+            p,
+            &[
+                "kind",
+                "radius",
+                "half",
+                "half_height",
+                "normal",
+                "points",
+                "vertices",
+                "triangles",
+                "children",
+                "cols",
+                "rows",
+                "heights",
+                "scale",
+            ],
+        );
         let kind = s.get("kind").and_then(Value::as_str).unwrap_or("");
         let pos = f64::MIN_POSITIVE;
         Some(match kind {
@@ -786,27 +912,148 @@ impl Reader {
             "plane" => Shape::Plane {
                 normal: self.vec3(s, "normal", p, [0.0, 1.0, 0.0]),
             },
-            "convex" | "mesh" | "heightfield" | "compound" => {
-                self.refuse(
-                    "physics.unsupported",
-                    join(p, "kind"),
-                    &s["kind"],
-                    format!(
-                        "a {kind} shape isn't built by this backend interface yet; #927 brings it"
-                    ),
-                );
-                return None;
+            "convex" => {
+                let points = self.points(s, "points", p)?;
+                if points.len() < 4 || points.len() > 64 {
+                    self.refuse(
+                        "out_of_range",
+                        join(p, "points"),
+                        &s["points"],
+                        format!("a convex shape takes 4 to 64 points, not {}", points.len()),
+                    );
+                    return None;
+                }
+                Shape::Convex {
+                    points,
+                    radius: self.num(s, "radius", p, 0.0, 0.0, f64::MAX),
+                }
             }
+            "mesh" => {
+                let vertices = self.points(s, "vertices", p)?;
+                let tp = join(p, "triangles");
+                let triangles = s
+                    .get("triangles")
+                    .and_then(Value::as_array)
+                    .and_then(|a| {
+                        a.iter()
+                            .map(|t| {
+                                let t = t.as_array().filter(|t| t.len() == 3)?;
+                                let i = |k: usize| {
+                                    t[k].as_u64()
+                                        .filter(|&i| (i as usize) < vertices.len())
+                                        .map(|i| i as u32)
+                                };
+                                Some([i(0)?, i(1)?, i(2)?])
+                            })
+                            .collect::<Option<Vec<_>>>()
+                    })
+                    .filter(|t| !t.is_empty());
+                let Some(triangles) = triangles else {
+                    self.refuse(
+                        "out_of_range",
+                        tp,
+                        s.get("triangles").unwrap_or(&Value::Null),
+                        "a mesh's triangles must be a list of three indices into its vertices"
+                            .into(),
+                    );
+                    return None;
+                };
+                Shape::Mesh {
+                    vertices,
+                    triangles,
+                }
+            }
+            "compound" => {
+                let cp = join(p, "children");
+                let Some(list) = s
+                    .get("children")
+                    .and_then(Value::as_array)
+                    .filter(|a| !a.is_empty())
+                else {
+                    self.refuse(
+                        "out_of_range",
+                        cp,
+                        s.get("children").unwrap_or(&Value::Null),
+                        "a compound's children must be a list of {shape, pose}".into(),
+                    );
+                    return None;
+                };
+                let mut children = Vec::new();
+                for (i, c) in list.iter().enumerate() {
+                    let at = format!("{cp}/{i}");
+                    let m = &self.obj(c, &at, &["shape", "pose"]);
+                    let id = m.get("shape").and_then(Value::as_str).unwrap_or("");
+                    children.push((id.to_string(), self.pose(m.get("pose"), &at)));
+                }
+                Shape::Compound { children }
+            }
+            "heightfield" => self.heightfield(s, p)?,
             _ => {
                 self.refuse(
                     "out_of_range",
                     join(p, "kind"),
                     s.get("kind").unwrap_or(&Value::Null),
-                    "a shape's kind must be sphere, box, capsule, cylinder or plane".into(),
+                    "a shape's kind must be sphere, box, capsule, cylinder, plane, convex, mesh, heightfield or compound".into(),
                 );
                 return None;
             }
         })
+    }
+
+    /// A list of points `[x, y, z]` at `key`, or its refusal.
+    fn points(&mut self, m: &Map<String, Value>, key: &str, p: &str) -> Option<Vec<[f64; 3]>> {
+        let got = m.get(key).and_then(Value::as_array).and_then(|a| {
+            a.iter()
+                .map(|x| {
+                    let x = x.as_array().filter(|x| x.len() == 3)?;
+                    Some([x[0].as_f64()?, x[1].as_f64()?, x[2].as_f64()?])
+                })
+                .collect::<Option<Vec<_>>>()
+        });
+        if got.is_none() {
+            self.refuse(
+                "out_of_range",
+                join(p, key),
+                m.get(key).unwrap_or(&Value::Null),
+                format!("{} must be a list of points [x, y, z]", show(&join(p, key))),
+            );
+        }
+        got
+    }
+
+    /// A compound's children name shapes of the world that a compound can hold: no mesh, plane or
+    /// other compound.
+    fn children(&mut self, shapes: &BTreeMap<String, Shape>) {
+        for (id, s) in shapes {
+            let Shape::Compound { children } = s else {
+                continue;
+            };
+            for (i, (child, _)) in children.iter().enumerate() {
+                let at = format!("shapes/{id}/children/{i}/shape");
+                match shapes.get(child) {
+                    None => self.refuse(
+                        "ref_unresolved",
+                        at,
+                        &Value::from(child.as_str()),
+                        format!("{child:?} is not a shape of this world"),
+                    ),
+                    Some(
+                        Shape::Mesh { .. }
+                        | Shape::Plane { .. }
+                        | Shape::Compound { .. }
+                        | Shape::Heightfield { .. },
+                    ) => {
+                        self.refuse(
+                            "out_of_range",
+                            at,
+                            &Value::from(child.as_str()),
+                            format!("{child} is a mesh, a plane, a heightfield or a compound, which a compound can't hold"),
+                        )
+                    }
+                    Some(_) => {}
+                }
+            }
+        }
     }
 
     fn pose(&mut self, v: Option<&Value>, p: &str) -> Pose {
@@ -866,12 +1113,9 @@ impl Reader {
         let kind = match b.get("kind").and_then(Value::as_str) {
             Some("static") => BodyKind::Static,
             Some("dynamic") => BodyKind::Dynamic,
-            Some(k @ ("kinematic" | "character" | "vehicle")) => {
-                let issue = match k {
-                    "kinematic" => "#522",
-                    "character" => "#182",
-                    _ => "#251",
-                };
+            Some("kinematic") => BodyKind::Kinematic,
+            Some(k @ ("character" | "vehicle")) => {
+                let issue = if k == "character" { "#182" } else { "#251" };
                 self.refuse(
                     "physics.unsupported",
                     join(p, "kind"),
@@ -892,16 +1136,15 @@ impl Reader {
                 BodyKind::Static
             }
         };
-        for (key, issue) in [("follow", "#522"), ("inertia", "#2098")] {
-            if let Some(x) = b.get(key) {
-                self.refuse(
-                    "physics.unsupported",
-                    join(p, key),
-                    x,
-                    format!("{key} isn't run by this backend interface yet; {issue} brings it"),
-                );
-            }
+        if let Some(x) = b.get("inertia") {
+            self.refuse(
+                "physics.unsupported",
+                join(p, "inertia"),
+                x,
+                "inertia isn't run by this backend interface yet; #2098 brings it".into(),
+            );
         }
+        let follow = self.follow(b, p, kind);
         let mut uses = Vec::new();
         for (i, u) in b
             .get("shapes")
@@ -965,7 +1208,7 @@ impl Reader {
                 shape,
                 offset: self.pose(m.get("offset"), &join(&up, "offset")),
                 material,
-                member: self.mask(m, "member", &up, groups),
+                member: self.member(m, &up, groups),
                 collides: self.mask(m, "collides", &up, groups),
                 sensor: self.flag(m, "sensor", &up, false),
             });
@@ -1002,6 +1245,15 @@ impl Reader {
         }
         Body {
             kind,
+            follow,
+            priority: self.num(
+                b,
+                "priority",
+                p,
+                0.0,
+                f64::from(i32::MIN),
+                f64::from(i32::MAX),
+            ) as i64,
             shapes: uses,
             pose: self.pose(b.get("pose"), &join(p, "pose")),
             linear: self.vec3(vel, "linear", &join(p, "velocity"), [0.0; 3]),
@@ -1118,7 +1370,7 @@ impl Reader {
                 return None;
             }
         };
-        for (key, issue) in [("breaks_at", "#523"), ("swing", "#132"), ("twist", "#132")] {
+        for (key, issue) in [("swing", "#132"), ("twist", "#132")] {
             if let Some(x) = j.get(key) {
                 self.refuse(
                     "physics.unsupported",
@@ -1148,14 +1400,32 @@ impl Reader {
         });
         let motor = j.get("motor").map(|s| {
             let mp = join(p, "motor");
-            let m = &self.obj(s, &mp, &["mode", "target", "max_force", "max_torque", "hz", "damping_ratio"]);
-            if let Some(t) = m.get("target").filter(|t| t.is_string()) {
-                self.refuse("physics.unsupported", join(&mp, "target"), t, "a motor target read from a channel isn't run by this backend interface yet; #522 brings it".into());
-            }
+            let m = &self.obj(
+                s,
+                &mp,
+                &[
+                    "mode",
+                    "target",
+                    "max_force",
+                    "max_torque",
+                    "hz",
+                    "damping_ratio",
+                ],
+            );
             Motor {
-                velocity: self.word(m, "mode", &mp, "velocity", &["velocity", "position"]) == "velocity",
+                velocity: self.word(m, "mode", &mp, "velocity", &["velocity", "position"])
+                    == "velocity",
                 target: m.get("target").and_then(Value::as_f64).unwrap_or(0.0),
-                max: self.opt_num(m, "max_force", &mp, 0.0).or(self.opt_num(m, "max_torque", &mp, 0.0)),
+                channel: m
+                    .get("target")
+                    .filter(|t| !t.is_number())
+                    .and_then(|_| self.text(m, "target", &mp)),
+                max: self.opt_num(m, "max_force", &mp, 0.0).or(self.opt_num(
+                    m,
+                    "max_torque",
+                    &mp,
+                    0.0,
+                )),
                 hz: self.num(m, "hz", &mp, 1.0, f64::MIN_POSITIVE, f64::MAX),
                 damping_ratio: self.num(m, "damping_ratio", &mp, 1.0, 0.0, f64::MAX),
             }
@@ -1167,6 +1437,7 @@ impl Reader {
             limits,
             spring,
             motor,
+            breaks_at: self.breaks(j, p),
             collide_connected: self.flag(j, "collide_connected", p, false),
             active: self.flag(j, "active", p, true),
         })

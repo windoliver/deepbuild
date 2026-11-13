@@ -12,13 +12,18 @@
 //! Normals writes corner normals: weighted, by area, corner angle or both, from the strongest
 //! faces at each point (a bevel's own faces are weak, so the large faces beside them stay flat);
 //! by_angle, smooth within each fan of faces no edge sharper than the angle splits.
+//!
+//! Both read the polygon view's flat half-edge table ([`Halves`]; #2017), not maps keyed by edge
+//! or by point.
 
+use std::cell::RefCell;
+use std::cmp::Ordering;
 use std::collections::BTreeMap;
 
 use deep_canvas::ops::{acos, cos, pow, rad, sin};
 
 use crate::geom::{add, cross, dot, length, scale, sub, unit, V2, V3};
-use crate::poly::{key, Poly};
+use crate::poly::{counted, Halves, Poly};
 
 /// Which edges a bevel takes.
 #[derive(Clone, Debug, PartialEq)]
@@ -46,34 +51,76 @@ pub struct Beveled {
     pub weak: Vec<bool>,
 }
 
-/// A new face: its points, its source face, whether it is the bevel's own, its corner normals.
-type NewFace = (Vec<Pt>, usize, bool, Vec<V3>);
+/// Where the points a bevel's faces name sit in one numbering: each old point; each corner's
+/// inset point (both of the face's edges at the corner beveled), by its face's first corner at
+/// its point; the slide point on an unbeveled edge at each end; and a beveled edge's profile
+/// points 1..segments − 1 at each end, by the edge's place among the beveled ones.
+struct Slots {
+    inset: u32,
+    slide: u32,
+    profile: u32,
+    s: u32,
+}
 
-/// The point a corner of a face moves to.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-enum Pt {
-    Old(u32),
-    /// Both of the face's edges at the corner are beveled: its own point.
-    Inset(usize, u32),
-    /// The slide point on an unbeveled edge (by its ends) at its end `.1`.
-    Slide((u32, u32), u32),
-    /// A beveled edge's profile point `k` (1..segments − 1) at its end `.1`.
-    Profile((u32, u32), u32, usize),
+impl Slots {
+    fn inset(&self, corner: u32) -> u32 {
+        self.inset + corner
+    }
+    fn slide(&self, edge: u32, end: u32) -> u32 {
+        self.slide + 2 * edge + end
+    }
+    fn profile(&self, rank: u32, end: u32, k: u32) -> u32 {
+        self.profile + (2 * rank + end) * (self.s - 1) + k - 1
+    }
+}
+
+/// The bevel's new faces, flat: each one's points (as slots) from its `start`, its source face,
+/// whether it is the bevel's own, and its corner normals (when hardened).
+struct NewFaces {
+    start: Vec<u32>,
+    points: Vec<u32>,
+    src: Vec<u32>,
+    weak: Vec<bool>,
+    normals: Vec<V3>,
+}
+
+impl NewFaces {
+    fn with_capacity(faces: usize, points: usize, normals: bool) -> NewFaces {
+        NewFaces {
+            start: Vec::with_capacity(faces),
+            points: Vec::with_capacity(points),
+            src: Vec::with_capacity(faces),
+            weak: Vec::with_capacity(faces),
+            normals: Vec::with_capacity(if normals { points } else { 0 }),
+        }
+    }
+    fn open(&mut self, src: u32, weak: bool) {
+        self.start.push(self.points.len() as u32);
+        self.src.push(src);
+        self.weak.push(weak);
+    }
+    fn face(&self, k: usize) -> &[u32] {
+        let end = self
+            .start
+            .get(k + 1)
+            .map_or(self.points.len(), |e| *e as usize);
+        &self.points[self.start[k] as usize..end]
+    }
 }
 
 /// Points in (x, y, z) order.
-fn order3(a: &V3, b: &V3) -> std::cmp::Ordering {
-    (0..3)
-        .map(|k| a[k].total_cmp(&b[k]))
-        .find(|o| o.is_ne())
-        .unwrap_or(std::cmp::Ordering::Equal)
+fn order3(a: &V3, b: &V3) -> Ordering {
+    a[0].total_cmp(&b[0])
+        .then(a[1].total_cmp(&b[1]))
+        .then(a[2].total_cmp(&b[2]))
 }
 
-/// The mean of `pts`, summed in (x, y, z) order so it never depends on theirs.
-fn centroid(mut pts: Vec<V3>) -> V3 {
-    pts.sort_by(order3);
+/// The mean of `pts`, summed in (x, y, z) order so it never depends on theirs (equal points are
+/// equal bits, so an unstable sort orders them as a stable one would).
+fn centroid(pts: &mut [V3]) -> V3 {
+    pts.sort_unstable_by(order3);
     let n = pts.len().max(1) as f64;
-    scale(pts.into_iter().fold([0.0; 3], add), 1.0 / n)
+    scale(pts.iter().fold([0.0; 3], |s, q| add(s, *q)), 1.0 / n)
 }
 
 /// The angle in degrees between two unit vectors.
@@ -86,127 +133,33 @@ fn mean2(a: f64, b: f64) -> f64 {
     (a + b) / 2.0
 }
 
-pub fn bevel(p: &Poly, b: &Bevel, part_of: &[Option<u32>]) -> Beveled {
-    let edges = p.edges();
-    let normal: Vec<V3> = (0..p.faces.len()).map(|f| unit(p.normal(f))).collect();
-    let beveled = |e: &(u32, u32)| -> bool {
-        let fs = &edges[e];
-        if fs.len() != 2 {
-            return false;
-        }
-        match &b.limit {
-            Limit::All => true,
-            Limit::Angle(a) => angle(normal[fs[0]], normal[fs[1]]) > *a,
-            Limit::Parts(parts) => fs
-                .iter()
-                .any(|&f| part_of[f].is_some_and(|q| parts.contains(&q))),
-        }
-    };
-    let bev: BTreeMap<(u32, u32), bool> = edges.keys().map(|e| (*e, beveled(e))).collect();
-    let pt = |i: u32| p.points[i as usize];
-    let dir = |from: u32, to: u32| unit(sub(pt(to), pt(from)));
-    // Each corner: its face, its place, its point and the two neighbours.
-    let corner = |f: usize, k: usize| {
-        let c = &p.faces[f];
-        let n = c.len();
-        (c[(k + n - 1) % n], c[k], c[(k + 1) % n])
-    };
-    let sin_at = |prev: u32, v: u32, next: u32| length(cross(dir(v, prev), dir(v, next)));
-    // The width, clamped so no corner moves past the middle of an edge it slides along.
-    let mut width = b.width;
-    if b.clamp {
-        for f in 0..p.faces.len() {
-            for k in 0..p.faces[f].len() {
-                let (prev, v, next) = corner(f, k);
-                let (bi, bo) = (bev[&key(prev, v)], bev[&key(v, next)]);
-                if !(bi || bo) {
-                    continue;
-                }
-                let s = sin_at(prev, v, next).max(1e-9);
-                for (q, moved) in [(prev, bo), (next, bi)] {
-                    if moved {
-                        width = width.min(0.5 * length(sub(pt(q), pt(v))) * s);
-                    }
-                }
+/// Which edges the limit bevels: each edge with two faces that it picks.
+fn beveled(h: &Halves, normal: &[V3], b: &Bevel, part_of: &[Option<u32>]) -> Vec<bool> {
+    (0..h.ends.len())
+        .map(|e| {
+            let on = h.on(e);
+            if on.len() != 2 {
+                return false;
             }
-        }
-    }
-    // Slide distances per (unbeveled edge, end), from each face that slides along it.
-    let mut slides: BTreeMap<((u32, u32), u32), Vec<f64>> = BTreeMap::new();
-    for f in 0..p.faces.len() {
-        for k in 0..p.faces[f].len() {
-            let (prev, v, next) = corner(f, k);
-            let (bi, bo) = (bev[&key(prev, v)], bev[&key(v, next)]);
-            let s = sin_at(prev, v, next).max(1e-9);
-            if bi && !bo {
-                slides.entry((key(v, next), v)).or_default().push(width / s);
-            } else if bo && !bi {
-                slides.entry((key(prev, v), v)).or_default().push(width / s);
+            let fs = [on[0], on[1]].map(|c| h.face[c as usize] as usize);
+            match &b.limit {
+                Limit::All => true,
+                Limit::Angle(a) => angle(normal[fs[0]], normal[fs[1]]) > *a,
+                Limit::Parts(parts) => fs
+                    .iter()
+                    .any(|&f| part_of[f].is_some_and(|q| parts.contains(&q))),
             }
-        }
-    }
-    let mut points: BTreeMap<Pt, V3> = BTreeMap::new();
-    for (&(e, v), d) in &slides {
-        let dist = if d.len() == 2 {
-            mean2(d[0], d[1])
-        } else {
-            d[0]
-        };
-        let other = if e.0 == v { e.1 } else { e.0 };
-        points.insert(Pt::Slide(e, v), add(pt(v), scale(dir(v, other), dist)));
-    }
-    let point_of = |f: usize, prev: u32, v: u32, next: u32| -> Pt {
-        match (bev[&key(prev, v)], bev[&key(v, next)]) {
-            (true, true) => Pt::Inset(f, v),
-            (true, false) => Pt::Slide(key(v, next), v),
-            (false, true) => Pt::Slide(key(prev, v), v),
-            (false, false) => Pt::Old(v),
-        }
-    };
-    // Each face's new outline.
-    let mut outlines: Vec<Vec<Pt>> = Vec::new();
-    for f in 0..p.faces.len() {
-        let mut out = Vec::new();
-        for k in 0..p.faces[f].len() {
-            let (prev, v, next) = corner(f, k);
-            let q = point_of(f, prev, v, next);
-            if let Pt::Inset(..) = q {
-                let s = sin_at(prev, v, next).max(1e-9);
-                let at = add(pt(v), scale(add(dir(v, prev), dir(v, next)), width / s));
-                points.insert(q, at);
-            }
-            let incoming = Pt::Slide(key(prev, v), v);
-            let outgoing = Pt::Slide(key(v, next), v);
-            if q == Pt::Old(v) && slides.contains_key(&(key(prev, v), v)) {
-                out.push(incoming);
-            }
-            out.push(q);
-            if q == Pt::Old(v) && slides.contains_key(&(key(v, next), v)) {
-                out.push(outgoing);
-            }
-        }
-        outlines.push(out);
-    }
-    // The face across each half-edge.
-    let mut across: BTreeMap<(u32, u32), usize> = BTreeMap::new();
-    for (f, c) in p.faces.iter().enumerate() {
-        for k in 0..c.len() {
-            across.insert((c[k], c[(k + 1) % c.len()]), f);
-        }
-    }
-    let find = |f: usize, v: u32| -> usize { p.faces[f].iter().position(|&x| x == v).unwrap_or(0) };
-    let s = b.segments.max(1);
-    let lookup = |f: usize, v: u32| -> Pt {
-        let k = find(f, v);
-        let (a, x, c) = corner(f, k);
-        point_of(f, a, x, c)
-    };
-    // The profile: (x, y) weights of its two arms at each step, mirrored so a profile read from
-    // either side gives the same points.
-    let r = if b.shape >= 1.0 {
+        })
+        .collect()
+}
+
+/// The profile's (x, y) weights of its two arms at each step 0..=s, mirrored so a profile read
+/// from either side gives the same points.
+fn profile_weights(s: usize, shape: f64) -> (Vec<V2>, bool) {
+    let r = if shape >= 1.0 {
         f64::INFINITY
     } else {
-        2.0 * b.shape.max(1e-6) / (1.0 - b.shape)
+        2.0 * shape.max(1e-6) / (1.0 - shape)
     };
     let w: Vec<V2> = (0..=s)
         .map(|k| {
@@ -216,87 +169,225 @@ pub fn bevel(p: &Poly, b: &Bevel, part_of: &[Option<u32>]) -> Beveled {
             [pow(cos(phi), e), pow(sin(phi), e)]
         })
         .collect();
-    let weights = |k: usize| -> V2 {
-        if 2 * k <= s {
-            w[k]
-        } else {
-            [w[k][1], w[k][0]]
+    let weights = (0..=s)
+        .map(|k| if 2 * k <= s { w[k] } else { [w[k][1], w[k][0]] })
+        .collect();
+    (weights, r.is_infinite())
+}
+
+pub fn bevel(p: &Poly, b: &Bevel, part_of: &[Option<u32>]) -> Beveled {
+    let h = Halves::of(p);
+    let (faces, corners, edges) = (p.faces.len(), h.from.len(), h.ends.len());
+    let normal: Vec<V3> = (0..faces).map(|f| unit(p.normal(f))).collect();
+    let bev = beveled(&h, &normal, b, part_of);
+    let bev_in = |c: usize| bev[h.edge[h.prev(c)] as usize];
+    let bev_out = |c: usize| bev[h.edge[c] as usize];
+    let pt = |i: u32| p.points[i as usize];
+    let dir = |from: u32, to: u32| unit(sub(pt(to), pt(from)));
+    // Each corner's point before it, and the sine between its two edges.
+    let before: Vec<u32> = (0..corners).map(|c| h.from[h.prev(c)]).collect();
+    let sin_at: Vec<f64> = (0..corners)
+        .map(|c| {
+            let v = h.from[c];
+            length(cross(dir(v, before[c]), dir(v, h.to[c])))
+        })
+        .collect();
+    // The width, clamped so no corner moves past the middle of an edge it slides along.
+    let mut width = b.width;
+    if b.clamp {
+        for c in 0..corners {
+            let (bi, bo) = (bev_in(c), bev_out(c));
+            if !(bi || bo) {
+                continue;
+            }
+            let s = sin_at[c].max(1e-9);
+            let v = h.from[c];
+            for (q, moved) in [(before[c], bo), (h.to[c], bi)] {
+                if moved {
+                    width = width.min(0.5 * length(sub(pt(q), pt(v))) * s);
+                }
+            }
+        }
+    }
+    // Which end of edge `e` point `v` is.
+    let end = |e: u32, v: u32| u32::from(h.ends[e as usize].1 == v);
+    // Slide distances per (unbeveled edge, end), from each face that slides along it: how many,
+    // and the first two.
+    let mut slid: Vec<(u32, f64, f64)> = vec![(0, 0.0, 0.0); 2 * edges];
+    for c in 0..corners {
+        let e = match (bev_in(c), bev_out(c)) {
+            (true, false) => h.edge[c],
+            (false, true) => h.edge[h.prev(c)],
+            _ => continue,
+        };
+        let d = width / sin_at[c].max(1e-9);
+        let row = &mut slid[(2 * e + end(e, h.from[c])) as usize];
+        row.0 += 1;
+        match row.0 {
+            1 => row.1 = d,
+            2 => row.2 = d,
+            _ => {}
+        }
+    }
+    let ranked: Vec<u32> = (0..edges as u32).filter(|&e| bev[e as usize]).collect();
+    let mut rank = vec![0u32; edges];
+    for (r, &e) in ranked.iter().enumerate() {
+        rank[e as usize] = r as u32;
+    }
+    let s = b.segments.max(1);
+    let slots = Slots {
+        inset: p.points.len() as u32,
+        slide: (p.points.len() + corners) as u32,
+        profile: (p.points.len() + corners + 2 * edges) as u32,
+        s: s as u32,
+    };
+    let total = slots.profile as usize + 2 * ranked.len() * (s - 1);
+    // Each slot's position and the old point it carries attributes from.
+    let mut pos: Vec<V3> = vec![[0.0; 3]; total];
+    let mut from: Vec<u32> = vec![0; total];
+    for (v, q) in p.points.iter().enumerate() {
+        pos[v] = *q;
+        from[v] = v as u32;
+    }
+    for (e, &(lo, hi)) in h.ends.iter().enumerate() {
+        for (k, v) in [lo, hi].into_iter().enumerate() {
+            let d = slid[2 * e + k];
+            if d.0 == 0 {
+                continue;
+            }
+            let dist = if d.0 == 2 { mean2(d.1, d.2) } else { d.1 };
+            let other = if lo == v { hi } else { lo };
+            let q = slots.slide(e as u32, k as u32) as usize;
+            pos[q] = add(pt(v), scale(dir(v, other), dist));
+            from[q] = v;
+        }
+    }
+    // The point a corner moves to.
+    let point_of = |c: usize| -> u32 {
+        let v = h.from[c];
+        match (bev_in(c), bev_out(c)) {
+            (true, true) => slots.inset(h.first[c]),
+            (true, false) => slots.slide(h.edge[c], end(h.edge[c], v)),
+            (false, true) => {
+                let e = h.edge[h.prev(c)];
+                slots.slide(e, end(e, v))
+            }
+            (false, false) => v,
         }
     };
-    // Each beveled edge's profile at each end, from the face on its half-edge a→b to the other.
-    let mut strip_sides: BTreeMap<(u32, u32), (usize, usize)> = BTreeMap::new();
-    for (e, is) in &bev {
-        if !is {
-            continue;
+    let has_slide = |e: u32, v: u32| slid[(2 * e + end(e, v)) as usize].0 > 0;
+    // Each face's new outline.
+    let mut out = NewFaces::with_capacity(2 * faces, 2 * corners, b.harden);
+    for (f, &n_f) in normal.iter().enumerate() {
+        out.open(f as u32, false);
+        for c in h.start[f] as usize..h.start[f + 1] as usize {
+            let (v, q) = (h.from[c], point_of(c));
+            if bev_in(c) && bev_out(c) {
+                let s = sin_at[c].max(1e-9);
+                let at = add(
+                    pt(v),
+                    scale(add(dir(v, before[c]), dir(v, h.to[c])), width / s),
+                );
+                pos[q as usize] = at;
+                from[q as usize] = v;
+            }
+            let old = q == v;
+            let (incoming, outgoing) = (h.edge[h.prev(c)], h.edge[c]);
+            if old && has_slide(incoming, v) {
+                out.points.push(slots.slide(incoming, end(incoming, v)));
+            }
+            out.points.push(q);
+            if old && has_slide(outgoing, v) {
+                out.points.push(slots.slide(outgoing, end(outgoing, v)));
+            }
         }
-        let (f, g) = (across[&(e.0, e.1)], across[&(e.1, e.0)]);
-        strip_sides.insert(*e, (f, g));
-        for v in [e.0, e.1] {
-            let other = if v == e.0 { e.1 } else { e.0 };
-            let (pf, pg) = (points[&lookup(f, v)], points[&lookup(g, v)]);
+        if b.harden {
+            let n = out.points.len() - out.start[f] as usize;
+            out.normals.extend(std::iter::repeat_n(n_f, n));
+        }
+    }
+    let (w, square) = profile_weights(s, b.shape);
+    // Each beveled edge's sides: the corners on its half-edges lo → hi (face f) and hi → lo
+    // (face g), from which each side's point at either end is found.
+    let sides: Vec<(usize, usize)> = ranked
+        .iter()
+        .map(|&e| {
+            let (lo, hi) = h.ends[e as usize];
+            let x = h
+                .across(e as usize, lo, hi)
+                .expect("a beveled edge has two half-edges");
+            let y = h
+                .across(e as usize, hi, lo)
+                .expect("a beveled edge has two half-edges");
+            (x, y)
+        })
+        .collect();
+    // The corner of side x (or y) at point v: its face's first corner there.
+    let at_end = |x: usize, v: u32| -> usize {
+        if h.from[x] == v {
+            h.first[x] as usize
+        } else {
+            h.first[h.next(x)] as usize
+        }
+    };
+    // Each beveled edge's profile at each end, from face f's side to g's.
+    for (r, &e) in ranked.iter().enumerate() {
+        let (lo, hi) = h.ends[e as usize];
+        let (x, y) = sides[r];
+        for v in [lo, hi] {
+            let other = if v == lo { hi } else { lo };
+            let (pf, pg) = (
+                pos[point_of(at_end(x, v)) as usize],
+                pos[point_of(at_end(y, v)) as usize],
+            );
             let d = dir(v, other);
             let along = mean2(dot(sub(pf, pt(v)), d), dot(sub(pg, pt(v)), d));
             let corner_pt = add(pt(v), scale(d, along));
             let centre = sub(add(pf, pg), corner_pt);
             let (arm_f, arm_g) = (sub(pf, centre), sub(pg, centre));
-            for k in 1..s {
-                let [x, y] = weights(k);
-                let q = if r.is_infinite() {
+            for (k, &[wx, wy]) in w.iter().enumerate().take(s).skip(1) {
+                let q = slots.profile(r as u32, end(e, v), k as u32) as usize;
+                pos[q] = if square {
                     corner_pt
                 } else {
-                    add(centre, add(scale(arm_f, x), scale(arm_g, y)))
+                    add(centre, add(scale(arm_f, wx), scale(arm_g, wy)))
                 };
-                points.insert(Pt::Profile(*e, v, k), q);
+                from[q] = v;
             }
         }
     }
-    // Old points are their own.
-    for (i, q) in p.points.iter().enumerate() {
-        points.insert(Pt::Old(i as u32), *q);
-    }
-    // The profile at end v of beveled edge e, from face `from`'s side to the other's.
-    let profile = |e: (u32, u32), v: u32, from: usize| -> Vec<Pt> {
-        let (f, g) = strip_sides[&e];
-        let mut row: Vec<Pt> = (0..=s)
-            .map(|k| match k {
-                0 => lookup(f, v),
-                k if k == s => lookup(g, v),
-                k => Pt::Profile(e, v, k),
-            })
-            .collect();
-        if from != f {
-            row.reverse();
+    // Point k of the profile at end v of the beveled edge ranked r, from face `from_face`'s side.
+    let profile = |r: usize, v: u32, from_face: u32, k: usize| -> u32 {
+        let (x, y) = sides[r];
+        let k = if from_face == h.face[x] { k } else { s - k };
+        match k {
+            0 => point_of(at_end(x, v)),
+            k if k == s => point_of(at_end(y, v)),
+            k => slots.profile(r as u32, end(ranked[r], v), k as u32),
         }
-        row
     };
-    let mut faces: Vec<NewFace> = Vec::new();
-    for (f, out) in outlines.into_iter().enumerate() {
-        let n = vec![normal[f]; out.len()];
-        faces.push((out, f, false, n));
-    }
+    // Each face's corners sorted and its centroid, for the nearer source face.
+    let mut sorted: Vec<V3> = h.from.iter().map(|&v| pt(v)).collect();
+    let centres: Vec<V3> = (0..faces)
+        .map(|f| centroid(&mut sorted[h.start[f] as usize..h.start[f + 1] as usize]))
+        .collect();
+    let corners_of =
+        |f: u32| &sorted[h.start[f as usize] as usize..h.start[f as usize + 1] as usize];
     // The nearer source face; a tie goes to the face whose corners, sorted, sort first, so a tie
     // never depends on the faces' order.
-    let corners_of = |f: usize| -> Vec<V3> {
-        let mut c: Vec<V3> = p.faces[f].iter().map(|&i| p.points[i as usize]).collect();
-        c.sort_by(order3);
-        c
-    };
-    let by_corners = |a: usize, b: usize| -> std::cmp::Ordering {
-        let (ca, cb) = (corners_of(a), corners_of(b));
-        ca.iter()
-            .zip(&cb)
-            .map(|(x, y)| order3(x, y))
-            .find(|o| o.is_ne())
-            .unwrap_or(ca.len().cmp(&cb.len()))
-    };
-    let nearer = |cands: &[usize], at: V3| -> usize {
-        let mut sorted = cands.to_vec();
-        sorted.sort_by(|&a, &b| by_corners(a, b));
-        let mut best = sorted[0];
+    let nearer = |cands: &mut [u32], at: V3| -> u32 {
+        cands.sort_by(|&a, &b| {
+            let (ca, cb) = (corners_of(a), corners_of(b));
+            ca.iter()
+                .zip(cb)
+                .map(|(x, y)| order3(x, y))
+                .find(|o| o.is_ne())
+                .unwrap_or(ca.len().cmp(&cb.len()))
+        });
+        let mut best = cands[0];
         let mut dist = f64::INFINITY;
-        for &c in &sorted {
-            let q = centroid(p.faces[c].iter().map(|&i| pt(i)).collect());
-            let d = dot(sub(at, q), normal[c]).abs();
+        for &c in cands.iter() {
+            let d = dot(sub(at, centres[c as usize]), normal[c as usize]).abs();
             if d < dist - 1e-12 * (1.0 + d.abs()) {
                 dist = d;
                 best = c;
@@ -306,84 +397,85 @@ pub fn bevel(p: &Poly, b: &Bevel, part_of: &[Option<u32>]) -> Beveled {
     };
     // Strips: row k between profile points k and k + 1, wound so its first row twins face f's
     // edge.
-    let mut point_normal: BTreeMap<Pt, V3> = BTreeMap::new();
-    for (e, (f, g)) in &strip_sides {
-        let (ra, rb) = (profile(*e, e.0, *f), profile(*e, e.1, *f));
+    let mut point_normal: Vec<Option<V3>> = vec![None; if b.harden { total } else { 0 }];
+    let mut scratch: Vec<V3> = Vec::new();
+    for (r, &e) in ranked.iter().enumerate() {
+        let (lo, hi) = h.ends[e as usize];
+        let (f, g) = (h.face[sides[r].0], h.face[sides[r].1]);
+        let ra = |k: usize| profile(r, lo, f, k);
+        let rb = |k: usize| profile(r, hi, f, k);
         let normal_at = |k: usize| -> V3 {
-            let [x, y] = weights(k);
-            unit(add(scale(normal[*f], x), scale(normal[*g], y)))
+            let [x, y] = w[k];
+            unit(add(
+                scale(normal[f as usize], x),
+                scale(normal[g as usize], y),
+            ))
         };
-        for k in 0..=s {
-            point_normal.insert(ra[k], normal_at(k));
-            point_normal.insert(rb[k], normal_at(k));
+        if b.harden {
+            for k in 0..=s {
+                point_normal[ra(k) as usize] = Some(normal_at(k));
+                point_normal[rb(k) as usize] = Some(normal_at(k));
+            }
         }
         for k in 0..s {
-            let quad = vec![ra[k], ra[k + 1], rb[k + 1], rb[k]];
-            let mid = centroid(quad.iter().map(|q| points[q]).collect());
+            let quad = [ra(k), ra(k + 1), rb(k + 1), rb(k)];
             let src = if 2 * k + 1 < s {
-                *f
+                f
             } else if 2 * k + 1 > s {
-                *g
+                g
             } else {
-                nearer(&[*f, *g], mid)
+                scratch.clear();
+                scratch.extend(quad.iter().map(|&q| pos[q as usize]));
+                nearer(&mut [f, g], centroid(&mut scratch))
             };
-            let n = vec![
-                normal_at(k),
-                normal_at(k + 1),
-                normal_at(k + 1),
-                normal_at(k),
-            ];
-            faces.push((quad, src, true, n));
+            out.open(src, true);
+            out.points.extend(quad);
+            if b.harden {
+                let (n0, n1) = (normal_at(k), normal_at(k + 1));
+                out.normals.extend([n0, n1, n1, n0]);
+            }
         }
     }
     // Patches: around each vertex a strip ends at, the faces in turn across their incoming
     // edges, each one's corner point and, across a beveled edge, that edge's profile.
-    let mut at_vertex: BTreeMap<u32, Vec<usize>> = BTreeMap::new();
-    for (f, c) in p.faces.iter().enumerate() {
-        for &v in c {
-            at_vertex.entry(v).or_default().push(f);
-        }
-    }
-    for (&v, fs) in &at_vertex {
-        let touches = fs.iter().any(|&f| {
-            let (a, _, c) = corner(f, find(f, v));
-            bev[&key(a, v)] || bev[&key(v, c)]
-        });
-        if !touches {
+    let by_point = counted(corners, p.points.len(), |c| h.from[c as usize] as usize);
+    let (mut ring, mut cands): (Vec<u32>, Vec<u32>) = (Vec::new(), Vec::new());
+    for at_v in by_point.chunk_by(|a, b| h.from[*a as usize] == h.from[*b as usize]) {
+        let v = h.from[at_v[0] as usize];
+        // Each face's first corner at v, in corner order.
+        let firsts = || at_v.iter().map(|&c| h.first[c as usize] as usize);
+        if !firsts().any(|c| bev_in(c) || bev_out(c)) {
             continue;
         }
+        // The face before (and after) one round v, by its corner at v.
+        let pred = |c: usize| -> Option<usize> {
+            h.across(h.edge[c] as usize, h.to[c], v)
+                .map(|x| h.first[h.next(x)] as usize)
+        };
+        let succ = |c: usize| -> Option<usize> {
+            h.across(h.edge[h.prev(c)] as usize, v, before[c])
+                .map(|x| h.first[x] as usize)
+        };
         // A start: a face no face precedes (an open fan) or the lowest.
-        let pred = |f: usize| -> Option<usize> {
-            let (_, _, c) = corner(f, find(f, v));
-            across.get(&(c, v)).copied()
-        };
-        let succ = |f: usize| -> Option<usize> {
-            let (a, _, _) = corner(f, find(f, v));
-            across.get(&(v, a)).copied()
-        };
-        let start = fs
-            .iter()
-            .copied()
-            .find(|&f| pred(f).is_none())
-            .unwrap_or(fs[0]);
-        let open = pred(start).is_none();
-        let mut ring: Vec<Pt> = Vec::new();
-        if open {
-            ring.push(Pt::Old(v));
+        let start = firsts()
+            .find(|&c| pred(c).is_none())
+            .unwrap_or(h.first[at_v[0] as usize] as usize);
+        ring.clear();
+        if pred(start).is_none() {
+            ring.push(v);
         }
-        let mut f = start;
-        for _ in 0..fs.len() {
-            ring.push(lookup(f, v));
-            let (a, _, _) = corner(f, find(f, v));
-            let Some(g) = succ(f) else { break };
-            if bev[&key(a, v)] {
-                let row = profile(key(a, v), v, f);
-                ring.extend(&row[1..s]);
+        let mut c = start;
+        for _ in 0..at_v.len() {
+            ring.push(point_of(c));
+            let Some(next) = succ(c) else { break };
+            if bev_in(c) {
+                let r = rank[h.edge[h.prev(c)] as usize] as usize;
+                ring.extend((1..s).map(|k| profile(r, v, h.face[c], k)));
             }
-            if g == start {
+            if next == start {
                 break;
             }
-            f = g;
+            c = next;
         }
         ring.dedup();
         while ring.len() > 1 && ring.first() == ring.last() {
@@ -392,65 +484,78 @@ pub fn bevel(p: &Poly, b: &Bevel, part_of: &[Option<u32>]) -> Beveled {
         if ring.len() < 3 {
             continue;
         }
-        let centre = centroid(ring.iter().map(|q| points[q]).collect());
-        let src = nearer(fs, centre);
-        let n: Vec<V3> = ring
-            .iter()
-            .map(|q| match point_normal.get(q) {
-                Some(n) => *n,
-                None => unit(fs.iter().fold([0.0; 3], |acc, &f| add(acc, normal[f]))),
-            })
-            .collect();
-        faces.push((ring, src, true, n));
+        scratch.clear();
+        scratch.extend(ring.iter().map(|&q| pos[q as usize]));
+        let centre = centroid(&mut scratch);
+        cands.clear();
+        cands.extend(at_v.iter().map(|&c| h.face[c as usize]));
+        let src = nearer(&mut cands, centre);
+        out.open(src, true);
+        out.points.extend_from_slice(&ring);
+        if b.harden {
+            let fallback = unit(at_v.iter().fold([0.0; 3], |acc, &c| {
+                add(acc, normal[h.face[c as usize] as usize])
+            }));
+            out.normals.extend(
+                ring.iter()
+                    .map(|&q| point_normal[q as usize].unwrap_or(fallback)),
+            );
+        }
     }
-    // Number the points in order of their keys, so the numbering never depends on face order.
-    let mut ids: BTreeMap<Pt, u32> = BTreeMap::new();
-    for (face, ..) in &faces {
-        for q in face {
-            let next = ids.len() as u32;
-            ids.entry(*q).or_insert(next);
+    assemble(p, out, &pos, &from, b.harden)
+}
+
+/// The bevel's polygon view from its new faces: points numbered in order of first appearance,
+/// so the numbering never depends on the slots, each carrying its old point's attributes.
+fn assemble(p: &Poly, faces: NewFaces, pos: &[V3], from: &[u32], harden: bool) -> Beveled {
+    let mut ids = vec![u32::MAX; pos.len()];
+    let mut order: Vec<u32> = Vec::new();
+    for &q in &faces.points {
+        if ids[q as usize] == u32::MAX {
+            ids[q as usize] = order.len() as u32;
+            order.push(q);
         }
     }
     let mut out = Poly {
-        points: vec![[0.0; 3]; ids.len()],
+        points: order.iter().map(|&q| pos[q as usize]).collect(),
         attrs: p
             .attrs
-            .keys()
-            .map(|k| (k.clone(), vec![0.0; ids.len()]))
+            .iter()
+            .map(|(k, values)| {
+                let v = order.iter().map(|&q| values[from[q as usize] as usize]);
+                (k.clone(), v.collect())
+            })
             .collect(),
-        uv: p.uv.as_ref().map(|_| Vec::new()),
+        faces: Vec::with_capacity(faces.src.len()),
+        origin: Vec::with_capacity(faces.src.len()),
+        uv: p.uv.as_ref().map(|_| Vec::with_capacity(faces.src.len())),
         ..Poly::default()
     };
-    for (q, &i) in &ids {
-        out.points[i as usize] = points[q];
-        let from = match q {
-            Pt::Old(v) | Pt::Inset(_, v) | Pt::Slide(_, v) | Pt::Profile(_, v, _) => *v,
-        };
-        for (name, values) in &p.attrs {
-            out.attrs.get_mut(name).expect("made above")[i as usize] = values[from as usize];
-        }
-    }
     let maps: Vec<Option<UvMap>> = (0..p.faces.len()).map(|f| UvMap::of(p, f)).collect();
-    let mut normals = Vec::new();
-    let mut weak = Vec::new();
-    for (face, src, is_weak, n) in faces {
-        out.faces.push(face.iter().map(|q| ids[q]).collect());
+    let mut normals = Vec::with_capacity(if harden { faces.src.len() } else { 0 });
+    for k in 0..faces.src.len() {
+        let face = faces.face(k);
+        let src = faces.src[k] as usize;
+        out.faces
+            .push(face.iter().map(|&q| ids[q as usize]).collect());
         out.origin.push(p.origin[src]);
         if let Some(uv) = &mut out.uv {
             let map = maps[src].as_ref();
             uv.push(
                 face.iter()
-                    .map(|q| map.map_or([0.0; 2], |m| m.at(points[q])))
+                    .map(|&q| map.map_or([0.0; 2], |m| m.at(pos[q as usize])))
                     .collect(),
             );
         }
-        normals.push(n);
-        weak.push(is_weak);
+        if harden {
+            let at = faces.start[k] as usize;
+            normals.push(faces.normals[at..at + face.len()].to_vec());
+        }
     }
     Beveled {
         poly: out,
-        normals: b.harden.then_some(normals),
-        weak,
+        normals: harden.then_some(normals),
+        weak: faces.weak,
     }
 }
 
@@ -466,17 +571,23 @@ pub struct UvMap {
 impl UvMap {
     pub fn of(p: &Poly, f: usize) -> Option<UvMap> {
         let uv = p.uv.as_ref()?;
-        let mut cs: Vec<(V3, V2)> = p.faces[f]
+        let corners = p.faces[f]
             .iter()
             .zip(&uv[f])
-            .map(|(&i, t)| (p.points[i as usize], *t))
-            .collect();
-        cs.sort_by(|a, b| {
-            (0..3)
-                .map(|k| a.0[k].total_cmp(&b.0[k]))
-                .find(|o| o.is_ne())
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
+            .map(|(&i, t)| (p.points[i as usize], *t));
+        // A small face's corners stay on the stack.
+        let n = p.faces[f].len().min(uv[f].len());
+        let (mut small, mut large) = ([([0.0; 3], [0.0; 2]); 8], Vec::new());
+        let cs: &mut [(V3, V2)] = if n <= small.len() {
+            for (s, c) in small.iter_mut().zip(corners) {
+                *s = c;
+            }
+            &mut small[..n]
+        } else {
+            large.extend(corners);
+            &mut large
+        };
+        cs.sort_by(|a, b| order3(&a.0, &b.0));
         let o = cs[0];
         let a = cs.get(1)?;
         let c = cs
@@ -531,100 +642,279 @@ pub fn normals(
     sharp: &BTreeMap<(u32, u32), bool>,
     blocks: usize,
 ) -> Vec<Vec<V3>> {
-    let edges = p.edges();
-    let n: Vec<V3> = (0..p.faces.len()).map(|f| unit(p.normal(f))).collect();
-    let area: Vec<f64> = (0..p.faces.len())
-        .map(|f| 0.5 * length(p.normal(f)))
+    let sharp: Vec<((u32, u32), bool)> = sharp.iter().map(|(e, s)| (*e, *s)).collect();
+    let mut flat = normals_sorted(p, opts, weak, &sharp, blocks).into_iter();
+    p.faces
+        .iter()
+        .map(|c| flat.by_ref().take(c.len()).collect())
+        .collect()
+}
+
+/// The most faces a fan walks to on each side of its corner.
+const WALK: usize = 64;
+
+/// [`normals`] with `sharp` as edges by their sorted ends, in that order, and the normals in one
+/// list, face after face.
+pub(crate) fn normals_sorted(
+    p: &Poly,
+    opts: &Normals,
+    weak: &[bool],
+    sharp: &[((u32, u32), bool)],
+    blocks: usize,
+) -> Vec<V3> {
+    let h = Halves::of(p);
+    let newell: Vec<V3> = (0..p.faces.len()).map(|f| p.normal(f)).collect();
+    // The edges split: open or shared by more than two faces, sharper than the angle (by_angle),
+    // or shaded sharp (keep_sharp).
+    let marked = sharp_edges(&h.ends, sharp);
+    let split: Vec<bool> = (0..h.ends.len())
+        .map(|e| {
+            let on = h.on(e);
+            if on.len() != 2 {
+                return true;
+            }
+            if opts.by_angle {
+                let [a, b] = [on[0], on[1]].map(|c| unit(newell[h.face[c as usize] as usize]));
+                return angle(a, b) > opts.angle;
+            }
+            opts.keep_sharp && marked[e]
+        })
         .collect();
-    let split = |e: &(u32, u32)| -> bool {
-        let fs = &edges[e];
-        if fs.len() != 2 {
-            return true;
-        }
-        if opts.by_angle {
-            return angle(n[fs[0]], n[fs[1]]) > opts.angle;
-        }
-        opts.keep_sharp && sharp.get(e).copied().unwrap_or(false)
+    let mut fan = Fans {
+        steps: steps(&h, &split),
+        n: newell.iter().map(|&q| unit(q)).collect(),
+        area: newell.iter().map(|&q| 0.5 * length(q)).collect(),
+        corner_angle: if opts.corner_angle && !opts.by_angle {
+            corner_angles(p, &h)
+        } else {
+            Vec::new()
+        },
+        h,
+        opts,
+        weak,
+        rank: Vec::new(),
+        ranked: Vec::new(),
     };
-    // The fan of each corner: the faces around its point reachable without crossing a split edge.
-    let mut across: BTreeMap<(u32, u32), usize> = BTreeMap::new();
-    for (f, c) in p.faces.iter().enumerate() {
-        for k in 0..c.len() {
-            across.insert((c[k], c[(k + 1) % c.len()]), f);
+    fan.rank_crowded(p.points.len());
+    // A fan's lists, kept between corners (they never carry a result from one to the next).
+    let lists = RefCell::new(Fan {
+        members: Vec::new(),
+        terms: Vec::new(),
+        ranks: Vec::new(),
+        bits: Vec::new(),
+        mark: vec![u32::MAX; p.faces.len()],
+    });
+    crate::poly::blocked(fan.h.from.len(), blocks, |c| {
+        fan.normal(c, &mut lists.borrow_mut())
+    })
+}
+
+/// One corner's fan: its corners, their weighted normals or ranks, and each face's mark (the
+/// corner whose fan last took it).
+struct Fan {
+    members: Vec<u32>,
+    terms: Vec<V3>,
+    ranks: Vec<u32>,
+    bits: Vec<u64>,
+    mark: Vec<u32>,
+}
+
+/// Each edge's mark in `sharp` (edges by sorted ends, in that order), or false.
+fn sharp_edges(ends: &[(u32, u32)], sharp: &[((u32, u32), bool)]) -> Vec<bool> {
+    let mut k = 0;
+    ends.iter()
+        .map(|e| {
+            while k < sharp.len() && sharp[k].0 < *e {
+                k += 1;
+            }
+            k < sharp.len() && sharp[k].0 == *e && sharp[k].1
+        })
+        .collect()
+}
+
+/// Each corner's step round its point to the next face's first corner there (with that face):
+/// forward across its incoming edge, back across its outgoing one; none where that edge splits or
+/// has no twin.
+fn steps(h: &Halves, split: &[bool]) -> [Vec<(u32, u32)>; 2] {
+    let n = h.from.len();
+    let to = |x: u32| (x, h.face[x as usize]);
+    let forward = (0..n)
+        .map(|c| {
+            let b = h.prev(c);
+            let e = h.edge[b] as usize;
+            if split[e] {
+                return NONE;
+            }
+            h.across(e, h.from[c], h.from[b])
+                .map_or(NONE, |x| to(h.first[x]))
+        })
+        .collect();
+    let back = (0..n)
+        .map(|c| {
+            let e = h.edge[c] as usize;
+            if split[e] {
+                return NONE;
+            }
+            h.across(e, h.to[c], h.from[c])
+                .map_or(NONE, |x| to(h.first[h.next(x)]))
+        })
+        .collect();
+    [forward, back]
+}
+
+/// No step.
+const NONE: (u32, u32) = (u32::MAX, u32::MAX);
+
+/// Each corner's angle between its two edges, in radians.
+fn corner_angles(p: &Poly, h: &Halves) -> Vec<f64> {
+    let q = |i: u32| p.points[i as usize];
+    (0..h.from.len())
+        .map(|c| {
+            let (a, v, b) = (q(h.from[h.prev(c)]), q(h.from[c]), q(h.to[c]));
+            rad(angle(unit(sub(a, v)), unit(sub(b, v))))
+        })
+        .collect()
+}
+
+/// What a corner's fan reads: the steps round each point, and each face's unit normal, area and
+/// weakness, each corner's angle (weighted by angle).
+struct Fans<'a> {
+    h: Halves,
+    steps: [Vec<(u32, u32)>; 2],
+    n: Vec<V3>,
+    area: Vec<f64>,
+    corner_angle: Vec<f64>,
+    opts: &'a Normals,
+    weak: &'a [bool],
+    /// Each corner's place in `ranked` at a crowded point (none elsewhere), and the terms of each
+    /// crowded point's corners in sorted order.
+    rank: Vec<u32>,
+    ranked: Vec<V3>,
+}
+
+/// A point with more corners than this sorts its corners' terms once, and a fan there sorts by
+/// their ranks (the top of a lathe holds every segment's face).
+const CROWDED: usize = 32;
+
+impl Fans<'_> {
+    /// Corner `x`'s weighted normal, as a fan sums it.
+    fn term(&self, x: usize) -> V3 {
+        let g = self.h.face[x] as usize;
+        let wgt = if self.opts.by_angle {
+            self.area[g]
+        } else {
+            match (self.opts.area, self.opts.corner_angle) {
+                (true, true) => self.area[g] * self.corner_angle[x],
+                (false, true) => self.corner_angle[x],
+                _ => self.area[g],
+            }
+        };
+        scale(self.n[g], wgt)
+    }
+
+    /// Ranks the corners at each crowded point (of `points`) by their terms.
+    fn rank_crowded(&mut self, points: usize) {
+        let mut count = vec![0u32; points];
+        for &v in &self.h.from {
+            count[v as usize] += 1;
+        }
+        let mut group = vec![u32::MAX; points];
+        let mut lists: Vec<Vec<usize>> = Vec::new();
+        for (v, &k) in count.iter().enumerate() {
+            if k as usize > CROWDED {
+                group[v] = lists.len() as u32;
+                lists.push(Vec::new());
+            }
+        }
+        if lists.is_empty() {
+            return;
+        }
+        for (c, &v) in self.h.from.iter().enumerate() {
+            if let Some(list) = lists.get_mut(group[v as usize] as usize) {
+                list.push(c);
+            }
+        }
+        self.rank = vec![u32::MAX; self.h.from.len()];
+        for mut list in lists {
+            list.sort_unstable_by(|&a, &b| order3(&self.term(a), &self.term(b)));
+            for c in list {
+                self.rank[c] = self.ranked.len() as u32;
+                let t = self.term(c);
+                self.ranked.push(t);
+            }
         }
     }
-    let corner_angle = |f: usize, k: usize| -> f64 {
-        let c = &p.faces[f];
-        let m = c.len();
-        let q = |i: u32| p.points[i as usize];
-        let (a, v, b) = (q(c[(k + m - 1) % m]), q(c[k]), q(c[(k + 1) % m]));
-        rad(angle(unit(sub(a, v)), unit(sub(b, v))))
-    };
-    crate::poly::blocked(p.faces.len(), blocks, |f| {
-        let c = &p.faces[f];
-        let m = c.len();
-        let mut row = Vec::with_capacity(m);
-        for (k, &v) in c.iter().enumerate() {
-            let mut fan: Vec<(usize, usize)> = vec![(f, k)];
-            // Walk both ways round v.
-            for forward in [true, false] {
-                let (mut g, mut j) = (f, k);
-                for _ in 0..64 {
-                    let cg = &p.faces[g];
-                    let mg = cg.len();
-                    let other = if forward {
-                        cg[(j + mg - 1) % mg]
-                    } else {
-                        cg[(j + 1) % mg]
-                    };
-                    if split(&key(other, v)) {
-                        break;
-                    }
-                    let next = if forward {
-                        across.get(&(v, other))
-                    } else {
-                        across.get(&(other, v))
-                    };
-                    let Some(&h) = next else { break };
-                    if h == f || fan.iter().any(|x| x.0 == h) {
-                        break;
-                    }
-                    j = p.faces[h].iter().position(|&x| x == v).unwrap_or(0);
-                    g = h;
-                    fan.push((g, j));
+
+    /// Corner `c`'s normal: its fan, the faces round its point reachable without crossing a split
+    /// edge (walked both ways, at most [`WALK`] each), weighted and summed in sorted order.
+    fn normal(&self, c: usize, lists: &mut Fan) -> V3 {
+        let face = &self.h.face;
+        let Fan {
+            members: fan,
+            terms,
+            ranks,
+            bits,
+            mark,
+        } = lists;
+        fan.clear();
+        fan.push(c as u32);
+        mark[face[c] as usize] = c as u32;
+        for step in &self.steps {
+            let mut at = c;
+            for _ in 0..WALK {
+                let (next, g) = step[at];
+                // No step, or a face the fan already holds, ends the walk.
+                if next == u32::MAX || mark[g as usize] == c as u32 {
+                    break;
+                }
+                mark[g as usize] = c as u32;
+                fan.push(next);
+                at = next as usize;
+            }
+        }
+        // A lone face always counts, and needs no sort.
+        if fan.len() == 1 {
+            return unit(add([0.0; 3], self.term(c)));
+        }
+        let weak = |g: usize| self.weak.get(g).copied().unwrap_or(false);
+        let strong = fan.iter().any(|&x| !weak(face[x as usize] as usize));
+        // Every corner of a fan is at c's point, so a crowded one's are all ranked.
+        let by_rank = fan.len() > CROWDED && self.rank.get(c).is_some_and(|&r| r != u32::MAX);
+        terms.clear();
+        ranks.clear();
+        for &x in fan.iter() {
+            if !(self.opts.by_angle || !strong || !weak(face[x as usize] as usize)) {
+                continue;
+            }
+            if by_rank {
+                ranks.push(self.rank[x as usize]);
+            } else {
+                terms.push(self.term(x as usize));
+            }
+        }
+        if by_rank {
+            // The ranks are distinct and lie in one point's range: set them as bits, read in order.
+            let low = ranks.iter().min().map_or(0, |&r| r as usize);
+            let high = ranks.iter().max().map_or(0, |&r| r as usize);
+            bits.clear();
+            bits.resize((high - low) / 64 + 1, 0);
+            for &r in ranks.iter() {
+                let r = r as usize - low;
+                bits[r / 64] |= 1 << (r % 64);
+            }
+            for (k, &word) in bits.iter().enumerate() {
+                let mut word = word;
+                while word != 0 {
+                    terms.push(self.ranked[low + 64 * k + word.trailing_zeros() as usize]);
+                    word &= word - 1;
                 }
             }
-            let strong = fan
-                .iter()
-                .any(|(g, _)| !weak.get(*g).copied().unwrap_or(false));
-            let mut terms: Vec<V3> = fan
-                .iter()
-                .filter(|(g, _)| {
-                    opts.by_angle || !strong || !weak.get(*g).copied().unwrap_or(false)
-                })
-                .map(|&(g, j)| {
-                    let wgt = if opts.by_angle {
-                        area[g]
-                    } else {
-                        match (opts.area, opts.corner_angle) {
-                            (true, true) => area[g] * corner_angle(g, j),
-                            (false, true) => corner_angle(g, j),
-                            _ => area[g],
-                        }
-                    };
-                    scale(n[g], wgt)
-                })
-                .collect();
-            terms.sort_by(|a, b| {
-                (0..3)
-                    .map(|i| a[i].total_cmp(&b[i]))
-                    .find(|o| o.is_ne())
-                    .unwrap_or(std::cmp::Ordering::Equal)
-            });
-            row.push(unit(terms.into_iter().fold([0.0; 3], add)));
+        } else {
+            // Equal terms are equal bits, so an unstable sort orders them as a stable one would.
+            terms.sort_unstable_by(order3);
         }
-        row
-    })
+        unit(terms.iter().fold([0.0; 3], |s, t| add(s, *t)))
+    }
 }
 
 #[cfg(test)]

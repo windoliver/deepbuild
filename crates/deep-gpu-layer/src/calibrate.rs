@@ -428,7 +428,7 @@ struct Clock {
 }
 
 impl Clock {
-    fn new(d: &wgpu::Device, stages: u32, frames: u32) -> Clock {
+    fn new(d: &deep_gpu::counted::Wgpu, stages: u32, frames: u32) -> Clock {
         let count = stages * 2 * frames;
         let buffer = |usage| {
             d.create_buffer(&wgpu::BufferDescriptor {

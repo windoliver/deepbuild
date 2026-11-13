@@ -1,0 +1,208 @@
+The #2011 suite run once at base commit f28d8777e (no implementation of #2011; #2009's, #2010's and #2012's merges are
+there), on macOS arm64 (Mac17,10, Apple M5 Max, rustc 1.99.1 (58cf8f9c3 2026-10-13), Node 24.22.0, vitest/5.0.5 darwin-arm64 node-v24.22.0), with
+`NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 npx vitest run --root tests/acceptance/2011 --testTimeout=600000 --no-file-parallelism`
+in a clean export of HEAD (`git archive f28d8777e`, npm ci, its own CARGO_TARGET_DIR), because the checkout's working
+tree held another session's uncommitted physics changes at the time; paths redacted to `<checkout>`. deep-physics
+(dev profile) was built before the run, 37 s cold. One-minute load average about 280 during the run.
+
+8 of 8 tests fail, each at an assertion because the surface is absent, none in the harness and none BLOCKED:
+- ac1's two tests: deep-physics answers the `pairs` call with {"ok":false,"code":"bad_input"} (no physics.pairs).
+- ac2's four tests: node scripts/physics-budget.mjs doesn't exist. None reached a release build, Chrome or a timing.
+- ac3's first test: deep-physics answers `pairs` with bad_input; its second: `deep-physics --planted
+  role_table_pickup_solid` exits 2 with bad_input (no such plant).
+Checked apart from this run, at the base: criterion 1's world passes the base's document check with no issue;
+criterion 2's worlds are refused only for their convex, compound and mesh shapes ("#927 brings it") and what follows
+from them; criterion 3's world, its roles written as explicit groups, bakes as the test expects (the player at x = 1.5
+at step 60 and 6.0 at step 240 through a sensor pickup, stopped at 1.5000 by a solid one).
+The type-check, `npx tsc -p tests/acceptance/2011/tsconfig.json`, exits 0.
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/2011
+
+ ❯ ac2-step-budget.test.ts (4 tests | 4 failed) 833ms
+   ❯ #2011.a8a76103 budget.step_p95 is held in the app and in the wasm32 build in headless Chrome on the reference Mac (4)
+     × #2011.a8a76103 50 capsules on the 20,000-triangle level built as a compound of convex pieces keep step_p95 under 2 ms in the app and in headless Chrome 289ms
+     × #2011.a8a76103 the same level as one mesh shape, under 2 ms in the app and over it in headless Chrome, fails on the web host, naming web, the step and the shape pair 175ms
+     × #2011.a8a76103 a planted check that times only the app passes the mesh level and is caught 164ms
+     × #2011.a8a76103 with no reference Mac configured for the web, its budget is BLOCKED with one unblock ask, never PASS 204ms
+ ❯ ac3-roles.test.ts (2 tests | 2 failed) 1984ms
+   ❯ #2011.b8ab4f30 roles expand into collision groups that physics.pairs reads (2)
+     × #2011.b8ab4f30 a world built only from roles: player and enemies touch ground and wall, the shot touches enemies and wall but never its owner, and the pickup's sensor writes one sensor_enter for the player and none for enemies 500ms
+     × #2011.b8ab4f30 the planted role table that makes the pickup solid to the player stops the player at the pickup and fails physics.pairs, naming the pair 47ms
+ ❯ ac1-pairs.test.ts (2 tests | 2 failed) 1000ms
+   ❯ #2011.3daf6b1d physics.pairs holds the brief's locked pairs over the interaction matrix (2)
+     × #2011.3daf6b1d the world meeting player–ground, shot–enemy touch and shot–player never passes with its 10 group pairs; ground omitting player fails naming player–ground and both shapes; shot naming player fails naming shot–player 163ms
+     × #2011.3daf6b1d a shape whose member is empty is refused, naming it 22ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 8 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac1-pairs.test.ts > #2011.3daf6b1d physics.pairs holds the brief's locked pairs over the interaction matrix > #2011.3daf6b1d the world meeting player–ground, shot–enemy touch and shot–player never passes with its 10 group pairs; ground omitting player fails naming player–ground and both shapes; shot naming player fails naming shot–player
+AssertionError: the world meeting the brief: physics.pairs ran (the `pairs` call answers ok: true): {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ pairsOf helpers.ts:61:107
+     59| /** A `pairs` reply that ran (ok: true), its lists read. */
+     60| export function pairsOf(reply: JsonObject, what: string): Pairs {
+     61|   expect(reply['ok'], `${what}: physics.pairs ran (the \`pairs\` call …
+       |                                                                                                           ^
+     62|   const list = (key: string): JsonObject[] => arr(reply[key], `${what}…
+     63|   return { verdict: reply['verdict'], groups: arr(reply['groups'], `${…
+ ❯ ac1-pairs.test.ts:64:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/8]⎯
+
+ FAIL  ac1-pairs.test.ts > #2011.3daf6b1d physics.pairs holds the brief's locked pairs over the interaction matrix > #2011.3daf6b1d a shape whose member is empty is refused, naming it
+AssertionError: the refusal's issues is an array, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ arr ../2009/helpers.ts:52:67
+     50| }
+     51| export function arr(v: JsonValue | undefined, what: string): JsonValue…
+     52|   expect(Array.isArray(v), `${what} is an array, got ${show(v)}`).toBe…
+       |                                                                   ^
+     53|   return v as JsonValue[];
+     54| }
+ ❯ ac1-pairs.test.ts:82:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/8]⎯
+
+ FAIL  ac2-step-budget.test.ts > #2011.a8a76103 budget.step_p95 is held in the app and in the wasm32 build in headless Chrome on the reference Mac > #2011.a8a76103 50 capsules on the 20,000-triangle level built as a compound of convex pieces keep step_p95 under 2 ms in the app and in headless Chrome
+AssertionError: the step-budget check, node scripts/physics-budget.mjs, exists (README: The surface under test): expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ budget helpers.ts:125:136
+    123| /** Runs the check on `request` (with `--planted times_only_app` when …
+    124| export function budget(request: BudgetRequest, planted?: 'times_only_a…
+    125|   expect(existsSync(BUDGET_SCRIPT), 'the step-budget check, node scrip…
+       |                                                                                                                                        ^
+    126|   const args = [BUDGET_SCRIPT, ...(planted ? ['--planted', planted] : …
+    127|   const what = `node scripts/physics-budget.mjs${planted ? ` --planted…
+ ❯ ac2-step-budget.test.ts:45:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/8]⎯
+
+ FAIL  ac2-step-budget.test.ts > #2011.a8a76103 budget.step_p95 is held in the app and in the wasm32 build in headless Chrome on the reference Mac > #2011.a8a76103 the same level as one mesh shape, under 2 ms in the app and over it in headless Chrome, fails on the web host, naming web, the step and the shape pair
+AssertionError: the step-budget check, node scripts/physics-budget.mjs, exists (README: The surface under test): expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ budget helpers.ts:125:136
+    123| /** Runs the check on `request` (with `--planted times_only_app` when …
+    124| export function budget(request: BudgetRequest, planted?: 'times_only_a…
+    125|   expect(existsSync(BUDGET_SCRIPT), 'the step-budget check, node scrip…
+       |                                                                                                                                        ^
+    126|   const args = [BUDGET_SCRIPT, ...(planted ? ['--planted', planted] : …
+    127|   const what = `node scripts/physics-budget.mjs${planted ? ` --planted…
+ ❯ ac2-step-budget.test.ts:55:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/8]⎯
+
+ FAIL  ac2-step-budget.test.ts > #2011.a8a76103 budget.step_p95 is held in the app and in the wasm32 build in headless Chrome on the reference Mac > #2011.a8a76103 a planted check that times only the app passes the mesh level and is caught
+AssertionError: the step-budget check, node scripts/physics-budget.mjs, exists (README: The surface under test): expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ budget helpers.ts:125:136
+    123| /** Runs the check on `request` (with `--planted times_only_app` when …
+    124| export function budget(request: BudgetRequest, planted?: 'times_only_a…
+    125|   expect(existsSync(BUDGET_SCRIPT), 'the step-budget check, node scrip…
+       |                                                                                                                                        ^
+    126|   const args = [BUDGET_SCRIPT, ...(planted ? ['--planted', planted] : …
+    127|   const what = `node scripts/physics-budget.mjs${planted ? ` --planted…
+ ❯ ac2-step-budget.test.ts:73:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/8]⎯
+
+ FAIL  ac2-step-budget.test.ts > #2011.a8a76103 budget.step_p95 is held in the app and in the wasm32 build in headless Chrome on the reference Mac > #2011.a8a76103 with no reference Mac configured for the web, its budget is BLOCKED with one unblock ask, never PASS
+AssertionError: the step-budget check, node scripts/physics-budget.mjs, exists (README: The surface under test): expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ budget helpers.ts:125:136
+    123| /** Runs the check on `request` (with `--planted times_only_app` when …
+    124| export function budget(request: BudgetRequest, planted?: 'times_only_a…
+    125|   expect(existsSync(BUDGET_SCRIPT), 'the step-budget check, node scrip…
+       |                                                                                                                                        ^
+    126|   const args = [BUDGET_SCRIPT, ...(planted ? ['--planted', planted] : …
+    127|   const what = `node scripts/physics-budget.mjs${planted ? ` --planted…
+ ❯ ac2-step-budget.test.ts:81:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/8]⎯
+
+ FAIL  ac3-roles.test.ts > #2011.b8ab4f30 roles expand into collision groups that physics.pairs reads > #2011.b8ab4f30 a world built only from roles: player and enemies touch ground and wall, the shot touches enemies and wall but never its owner, and the pickup's sensor writes one sensor_enter for the player and none for enemies
+AssertionError: the roles world: physics.pairs ran (the `pairs` call answers ok: true): {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ pairsOf helpers.ts:61:107
+     59| /** A `pairs` reply that ran (ok: true), its lists read. */
+     60| export function pairsOf(reply: JsonObject, what: string): Pairs {
+     61|   expect(reply['ok'], `${what}: physics.pairs ran (the \`pairs\` call …
+       |                                                                                                           ^
+     62|   const list = (key: string): JsonObject[] => arr(reply[key], `${what}…
+     63|   return { verdict: reply['verdict'], groups: arr(reply['groups'], `${…
+ ❯ ac3-roles.test.ts:53:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/8]⎯
+
+ FAIL  ac3-roles.test.ts > #2011.b8ab4f30 roles expand into collision groups that physics.pairs reads > #2011.b8ab4f30 the planted role table that makes the pickup solid to the player stops the player at the pickup and fails physics.pairs, naming the pair
+AssertionError: deep-physics --planted role_table_pickup_solid exits 0; stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ ask helpers.ts:33:119
+     31|   if (run.error && code !== 'EPIPE') throw Error(`${what}: ${run.error…
+     32|   const stdout = run.stdout ?? '';
+     33|   expect(run.status, `${what} exits 0; stdout: ${stdout.slice(0, 1000)…
+       |                                                                                                                       ^
+     34|   const lines = stdout.split('\n').filter((l) => l !== '');
+     35|   expect(lines.length, `${what}: one reply per call`).toBe(calls.lengt…
+ ❯ ac3-roles.test.ts:79:28
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/8]⎯
+
+
+ Test Files  3 failed (3)
+      Tests  8 failed (8)
+   Start at  18:47:20
+   Duration  4.59s (tests 95%, transform 3%, import 1%)
+
+    Isolate  3 workers spawned · ~149ms startup each (spawn + environment, per file)
+             at least ~299ms faster with isolate: false — reuses workers across files instead of one per file
+

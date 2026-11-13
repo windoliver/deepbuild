@@ -30,7 +30,8 @@ node node_modules/typescript/bin/tsc -p tests/acceptance/236/tsconfig.json   # n
 - Nothing needs the network: every "host" is a listener the test runs on 127.0.0.1, every "hub's socket" and
   "inbox socket" a Unix socket listener the test runs, or a dev hub (`deep hub run --root`) the test starts.
 - The probes are compiled once per test process from `fixtures/` with `cc` into `/tmp/dh236-bin-*`. A machine
-  without `cc` fails every test that needs them as BLOCKED, naming the compile.
+  without `cc` fails every test that needs them as BLOCKED, naming the compile. `devices` is compiled at its
+  first use, so a file that never runs it doesn't depend on its build.
 - Every test makes its folders under `/tmp/dh236-*` (real paths, short enough for a socket path; Seatbelt
   matches real paths), sets `HOME` to a temp folder for itself and every child, removes the agent's own
   `CLAUDE_*` and `DEEP_*` variables from its environment first (so no sandbox failure can ever reach a real
@@ -205,7 +206,7 @@ the criterion says; the scenario itself must run, so a plant that doesn't start 
 
 | ID | Criterion (short) | Tests | At this base |
 |---|---|---|---|
-| AC1 `#236.5dec450f` | a sandboxed piece's children get no devices | `devices.test.ts` (2): the piece and a helper it spawns, each device denied by the sandbox and not opened; the same with the app holding the permissions | the first fails (no package); the second is skipped INCONCLUSIVE where the app can't open every device outside the sandbox |
+| AC1 `#236.5dec450f` | a sandboxed piece's children get no devices | `devices.test.ts` (2): the piece and a helper it spawns, each device denied by the sandbox and not opened; the same with the app holding the permissions | the first fails (no package); the second is skipped BLOCKED where the app can't open every device outside the sandbox |
 | AC2 `#236.0c11913d` | no hub socket, no inbox socket, no turn | `hub.test.ts` AC2 (1), through the hub's `run.start` | fails: the probe connects to the hub's socket |
 | AC3 `#236.c43ad465` | undeclared read, write, network denied; digests by the parent | `contain.test.ts` AC3 (1) | fails (no package) |
 | AC4 `#236.cc0de139` | a read-only job's undeclared write refused by the sandbox, recorded | `contain.test.ts` AC4 (1): a job's child writing outside what the job declared; `dependents.test.ts` AC4 (1): the runner's job (#159), now tested through `openRunner` | both fail (no package; no runner at this base) |
@@ -228,10 +229,12 @@ the criterion says; the scenario itself must run, so a plant that doesn't start 
   sandbox and "allow" outside it on any Mac, whatever the OS's permissions say, so a TCC refusal can't pass for a
   sandbox denial. It also tries each device for real: the camera and the microphone through AVFoundation only
   when the OS already records permission (never a prompt), the audio output through an AudioQueue (no permission
-  needed: outside the sandbox it opens, inside it fails), and a screen capture through CoreGraphics only when the
-  OS already allows it. The first test runs on any Mac; the second, "with DeepBuild holding the permissions",
-  runs only where the helper opens all four outside the sandbox, and is skipped INCONCLUSIVE elsewhere, naming
-  what the app couldn't open. The piece is the started process; the helper is its child, spawned by the probe.
+  needed: outside the sandbox it opens, inside it fails), and a screen capture only when the OS already allows
+  it: through CoreGraphics where `cc` builds for a macOS before 15, and through ScreenCaptureKit from 15 on,
+  where CoreGraphics' call is gone. The first test runs on any Mac; the second, "with DeepBuild holding the
+  permissions", runs only where the helper opens all four outside the sandbox, and is skipped BLOCKED
+  elsewhere, naming what the app couldn't open. The piece is the started process; the helper is its child,
+  spawned by the probe.
 - **AC2.** The process is run by the hub's own supervisor (`run.start`), with the session's inbox socket (a
   listener of the test's) in `CLAUDE_CODE_MESSAGING_SOCKET`. "Never starts a turn": the inbox listener gets no
   connection and no byte, and the hub appends no `hook`-written event from it.

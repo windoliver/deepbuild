@@ -187,14 +187,16 @@ export interface Deep {
         tool: {
             tool: string;
             params: { [key: string]: unknown };
-            run: {
-                dir: string;
-                entry: string;
-            };
+            run: unknown | unknown;
             qualification: { [key: string]: unknown };
             cost?: {
                 usd: number;
             };
+            weights?: Array<{
+                name: string;
+                sha256: string;
+            }>;
+            needs?: Array<string>;
         };
     }): Promise<unknown>;
     registerResolver(params: {

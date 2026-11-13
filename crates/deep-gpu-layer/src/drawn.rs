@@ -16,7 +16,6 @@ use deep_gpu::device::Device;
 use deep_gpu::encode::Job;
 use deep_scene3d_render::{Post, PostFrame};
 use serde_json::{Map, Value};
-use wgpu::util::DeviceExt as _;
 
 use crate::refused;
 
@@ -518,7 +517,7 @@ impl Drawn {
     /// The pass's bind group: its words, the tile and what it reads.
     fn bind(
         &self,
-        d: &wgpu::Device,
+        d: &deep_gpu::counted::Wgpu,
         words: &[[f32; 4]],
         tile: &wgpu::TextureView,
         views: [&wgpu::TextureView; 3],
@@ -737,7 +736,6 @@ impl Drawn {
         into: &wgpu::Texture,
         rect: [u32; 4],
     ) {
-        let f = |v: f64| v as f32;
         let flags = Self::tooth_flag(page) | if linear { 4 } else { 0 };
         let w = self.medium_words(page, m, flags);
         let tile = self.tile_or_grain(device, page);

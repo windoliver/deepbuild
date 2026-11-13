@@ -30,6 +30,11 @@ pub struct Selection {
     pending: Option<AnyView>,
     mount: Option<Mount>,
     shown: Shown,
+    /// Whether the window still opens where it opens (#1461): the first open ask, else the latest project, else the
+    /// box alone. A layout that shows another page first doesn't.
+    opens: bool,
+    /// When the address shown was opened, by the views' clock.
+    opened_at: u64,
 }
 
 impl Global for Selection {}
@@ -48,6 +53,16 @@ pub fn opened_session(cx: &App) -> Option<String> {
     current(cx)
         .filter(|address| address.place == Place::Session)
         .map(|address| address.id)
+}
+
+/// The shell's window, which the menu bar's items and the table's keys act in (#1462).
+pub fn window(cx: &App) -> Option<AnyWindowHandle> {
+    cx.try_global::<Selection>()?.window
+}
+
+/// Where the page region draws, once an address was opened (#1462).
+pub fn shown_region(cx: &App) -> Option<Region> {
+    cx.try_global::<Selection>()?.shown.region
 }
 
 /// The shipped page popped out into a window of its own.
@@ -116,11 +131,12 @@ fn dock(cx: &mut App) -> Option<Entity<DockArea>> {
     selection(cx).dock.clone().and_then(|dock| dock.upgrade())
 }
 
-/// Where a page draws: a shipped page's panel, or the extension slot.
+/// Where a page draws: a shipped page's panel, the extension slot, or an ask's page with its card (#1461).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Region {
     Shipped(Kind),
     Slot,
+    Ask,
 }
 
 /// The page region as it stands: where it draws, the address it shows, and what became of an address that showed
@@ -164,7 +180,9 @@ enum Target {
     Ask(String),
     /// An installed view's page.
     Page(AnyView),
-    /// An ask that closed: Needs you, saying what closed it.
+    /// A project's page (#1461).
+    Project,
+    /// An ask that closed: the page shown, saying what closed it.
     Closed(String),
     /// Nothing the address names: what the window says instead.
     Gone(String),
@@ -174,12 +192,26 @@ fn no_match(text: &str) -> String {
     format!("No match for \"{text}\"")
 }
 
-/// The center pages an address can name: every shipped page but the two that frame them.
+/// The pages an address can name by a shipped name: every shipped page but the list, its first section, the line and
+/// a session's page, which have addresses of their own.
 fn shipped(name: &str) -> Option<Kind> {
     Kind::ALL.into_iter().find(|kind| {
-        !matches!(kind, Kind::Sidebar | Kind::Line | Kind::Session)
-            && kind.name().strip_prefix("deepbuild/") == Some(name)
+        !matches!(
+            kind,
+            Kind::Sidebar | Kind::Line | Kind::Session | Kind::NeedsYou | Kind::Home
+        ) && kind.name().strip_prefix("deepbuild/") == Some(name)
     })
+}
+
+/// What the window opens on (#1461): the first open ask, else the project with the latest activity. `None` before
+/// the record is read, or with nothing in it.
+pub fn opening() -> Option<Address> {
+    let now = views::now();
+    record::with_view(|view| {
+        let (asks, sessions) = crate::list::read(view, now);
+        crate::list::opens_on(&asks, &sessions)
+    })
+    .flatten()
 }
 
 /// The session `id` names: that ID, or the one session whose ID starts with it, as a receipt shortens it (#1460).
@@ -216,9 +248,15 @@ fn closed(events: &[serde_json::Value], handle: &str) -> Option<String> {
     let question = ask["data"]["question"].as_str().unwrap_or_default();
     let end = events.iter().find(|event| states::closes(event, handle))?;
     let kind = end["kind"].as_str().unwrap_or_default();
+    // The machine's word for how it closed is the core's text; the outcome it names has words of its own (#2029).
     let how = match kind {
         "decision.applied" => "decided",
         other => other.strip_prefix("ask.").unwrap_or(other),
+    };
+    let outcome = if kind == "decision.applied" {
+        "decided_for_you"
+    } else {
+        how
     };
     let answer = end["data"]["answer"].as_str().map(|id| {
         let options = ask["data"]["options"].as_array();
@@ -242,9 +280,13 @@ fn closed(events: &[serde_json::Value], handle: &str) -> Option<String> {
         Some(via) => format!(" through {via}"),
         None => String::new(),
     };
+    // What the approved step did once it ran, from its call's own records (#2029).
+    let receipt = crate::codes::receipt(events, handle)
+        .map(|receipt| format!(" {receipt}."))
+        .unwrap_or_default();
     Some(format!(
-        "{question} {how_capital}{answer}{at}{through}. Nothing is left to answer.",
-        how_capital = capital(how),
+        "{question} {how}{answer}{at}{through}.{receipt} Nothing is left to answer.",
+        how = crate::codes::outcome(outcome, &capital(how)),
         answer = answer.unwrap_or_default(),
     ))
 }
@@ -285,8 +327,21 @@ fn resolve(address: &Address, window: &mut Window, cx: &mut App) -> (Target, Add
                     .map_or_else(|| Target::Gone(no_match(&text)), Target::Closed)
             }
         }
+        // Needs you and home are where the window opens (#1461): the first open ask, else the latest project.
+        Place::Page
+            if address.parameter.is_none()
+                && (address.id == "needs-you" || address.id == "home") =>
+        {
+            match opening() {
+                Some(opening) => return resolve(&opening, window, cx),
+                None => Target::Shipped(Kind::Home),
+            }
+        }
         Place::Page => match shipped(&address.id) {
             Some(kind) if address.parameter.is_none() => Target::Shipped(kind),
+            _ if address.parameter.is_none() && views::page_named(&address.id).is_some() => {
+                Target::Page(views::page_named(&address.id).expect("named just now"))
+            }
             _ => {
                 let mount = selection(cx).mount.clone();
                 mount
@@ -294,7 +349,8 @@ fn resolve(address: &Address, window: &mut Window, cx: &mut App) -> (Target, Add
                     .map_or_else(|| Target::Gone(no_match(&text)), Target::Page)
             }
         },
-        Place::Project => Target::Gone(format!("No page for \"{text}\" yet")),
+        // A project's page, whatever it holds now: one with no session says so on its page (#1461).
+        Place::Project => Target::Project,
     };
     (target, full)
 }
@@ -311,6 +367,22 @@ fn select(kind: Kind, window: &mut Window, cx: &mut App) {
             let panel = cx.new(|cx| Shipped::new(kind, cx));
             dock.update(cx, |dock, cx| {
                 dock.add_panel(panel, DockPlacement::Center, None, window, cx)
+            });
+        }
+    }
+}
+
+/// Selects the ask's page in the center, adding it the first time (#1461).
+fn select_ask(window: &mut Window, cx: &mut App) {
+    let Some(dock) = dock(cx) else {
+        return;
+    };
+    match panel_named(&dock, crate::card::ASK_PAGE, cx) {
+        Some(panel) => dock.update(cx, |dock, cx| dock.select_panel(panel, window, cx)),
+        None => {
+            let page = cx.new(crate::card::AskPage::new);
+            dock.update(cx, |dock, cx| {
+                dock.add_panel(page, DockPlacement::Center, None, window, cx)
             });
         }
     }
@@ -344,12 +416,12 @@ fn page(view: AnyView, window: &mut Window, cx: &mut App) {
     }
 }
 
-/// What the window says of an address that shows nothing of its own, on the page it shows, or on Needs you when it
-/// shows none yet. The history stays as it was.
+/// What the window says of an address that shows nothing of its own, on the page it shows, or on the home page when
+/// it shows none yet. The history stays as it was.
 fn say(words: String, window: &mut Window, cx: &mut App) -> Result<Address, String> {
     if selection(cx).shown.region.is_none() {
-        select(Kind::NeedsYou, window, cx);
-        selection(cx).shown.region = Some(Region::Shipped(Kind::NeedsYou));
+        select(Kind::Home, window, cx);
+        selection(cx).shown.region = Some(Region::Shipped(Kind::Home));
     }
     selection(cx).shown.notice = Some(words.clone());
     window.refresh();
@@ -373,30 +445,61 @@ fn show(address: &Address, window: &mut Window, cx: &mut App) -> Result<Address,
             (Region::Shipped(kind), None)
         }
         Target::Ask(handle) => {
-            select(Kind::NeedsYou, window, cx);
+            select_ask(window, cx);
             crate::card::present_ask(&handle, window, cx);
             #[cfg(feature = "plant-open-writes-event")]
             plant_write(cx);
-            (Region::Shipped(Kind::NeedsYou), None)
+            (Region::Ask, None)
+        }
+        Target::Project => {
+            select(Kind::Home, window, cx);
+            (Region::Shipped(Kind::Home), None)
         }
         Target::Page(view) => {
             page(view, window, cx);
             (Region::Slot, None)
         }
         Target::Closed(words) => {
-            select(Kind::NeedsYou, window, cx);
-            (Region::Shipped(Kind::NeedsYou), Some(words))
+            select(Kind::Home, window, cx);
+            (Region::Shipped(Kind::Home), Some(words))
         }
         Target::Gone(words) => return say(words, window, cx),
     };
+    if selection(cx).shown.region != Some(region) {
+        hand_keys(region, window, cx);
+    }
+    let changed = selection(cx).shown.address.as_ref() != Some(&full);
     selection(cx).shown = Shown {
         region: Some(region),
         address: Some(full.clone()),
         notice,
     };
+    if changed {
+        selection(cx).opened_at = views::now();
+    }
     window.refresh();
     cx.refresh_windows();
     Ok(full)
+}
+
+/// The page region now draws `region`: what had the keyboard on the page it left, such as that ask's card, is drawn no
+/// more, so a shipped page takes it, as F6 gives it the page, and ⌘[ and ⌘] reach it (#1460). The list and the box
+/// keep it, since every page draws them, and an ask's card takes it at its next frame (#1462).
+fn hand_keys(region: Region, window: &mut Window, cx: &mut App) {
+    let Region::Shipped(kind) = region else {
+        return;
+    };
+    if views::list_has_keys(window) || crate::words::focused(window) {
+        return;
+    }
+    let Some(dock) = dock(cx) else {
+        return;
+    };
+    let keys = panel_named(&dock, kind.name(), cx)
+        .and_then(|id| dock.read(cx).panel(id).map(|panel| panel.focus_handle(cx)));
+    if let Some(keys) = keys {
+        window.focus(&keys, cx);
+    }
 }
 
 /// Makes `address` the last address you opened, with nothing forward of it.
@@ -418,6 +521,8 @@ fn push(address: Address, cx: &mut App) {
 /// Opens `address`: shows its page, and it becomes the last address you opened. What the window shows: the address in
 /// full, or what became of the one asked for.
 pub fn open(address: &Address, window: &mut Window, cx: &mut App) -> Result<String, String> {
+    // Something was opened: the window no longer opens on its own (#1461).
+    selection(cx).opens = false;
     let full = show(address, window, cx)?;
     push(full.clone(), cx);
     Ok(full.to_string())
@@ -555,4 +660,137 @@ pub fn pop_out(address: Address, kind: Kind, cx: &mut App) {
         selection(cx).popped = Some((address, kind, handle));
     }
     cx.refresh_windows();
+}
+
+/// Whether the window opens where it opens, as its layout says (#1461).
+pub fn set_opens(opens: bool, cx: &mut App) {
+    selection(cx).opens = opens;
+}
+
+/// Opens what the window opens on (#1461), once setup finished and the record is read, if the window still does: the
+/// first open ask, else the latest project, else the page that is the box alone, its box focused.
+pub fn open_first(window: &mut Window, cx: &mut App) {
+    if !selection(cx).opens {
+        return;
+    }
+    // First launch is its own page until Set up finishes; before the record is read, the home page says so.
+    // #1100's planted app stays on the first-launch page after a Set up that works.
+    if crate::setup::needed() || crate::plain::planted("stays-on-first-launch") {
+        return show_page(Kind::Welcome, "welcome", window, cx);
+    }
+    if !record::read_yet() {
+        return show_page(Kind::Home, "home", window, cx);
+    }
+    match opening() {
+        Some(opening) => {
+            let _ = open(&opening, window, cx);
+        }
+        None => {
+            selection(cx).opens = false;
+            show_page(Kind::Home, "home", window, cx);
+            views::focus_box_next();
+        }
+    }
+}
+
+/// Shows the shipped page `kind` at `page/<name>`, without touching the history.
+fn show_page(kind: Kind, name: &str, window: &mut Window, cx: &mut App) {
+    let address = Address::page(name);
+    if selection(cx).shown.address.as_ref() == Some(&address) {
+        return;
+    }
+    select(kind, window, cx);
+    selection(cx).shown = Shown {
+        region: Some(Region::Shipped(kind)),
+        address: Some(address),
+        notice: None,
+    };
+    window.refresh();
+}
+
+/// The ask shown closed (#1461): the next open ask opens, else what the window opens on, and no row moves.
+pub fn next(cx: &mut App) {
+    let Some(window) = selection(cx).window else {
+        return;
+    };
+    let _ = window.update(cx, |_, window, cx| match opening() {
+        Some(opening) => {
+            let _ = open(&opening, window, cx);
+        }
+        None => show_page(Kind::Home, "home", window, cx),
+    });
+}
+
+thread_local! {
+    /// The unread row whose page is open, by the one unread rule (#1461).
+    static READER: std::cell::RefCell<crate::unread::Reader> = std::cell::RefCell::default();
+    /// #1461's planted app that reads a row drawn in the list: when each unread row was first drawn.
+    static DRAWN: std::cell::RefCell<std::collections::HashMap<String, u64>> = std::cell::RefCell::default();
+}
+
+/// Time passed (#1461): the window opens where it opens once the record is read, or once Set up finished; and the row
+/// whose page has been open a second while you're present reads as read.
+pub fn tick(now: u64, cx: &mut App) {
+    let Some(window) = selection(cx).window else {
+        return;
+    };
+    let _ = window.update(cx, |_, window, cx| {
+        open_first(window, cx);
+        let opened_at = selection(cx).opened_at;
+        let unread = |row: &str| {
+            record::with_view(|view| {
+                view.table()
+                    .row_of(row)
+                    .filter(|r| r["unread"].as_bool() == Some(true))
+                    .map(|r| r["since"].as_u64().unwrap_or(0))
+            })
+            .flatten()
+        };
+        let row = current(cx)
+            .filter(|address| address.place == Place::Session)
+            .map(|address| format!("session:{}", address.id))
+            // #1461's planted app reads a change only on a page opened after it.
+            .filter(|row| {
+                unread(row).is_some_and(|since| {
+                    !crate::plain::planted("read-needs-reopen") || since < opened_at
+                })
+            });
+        let present = crate::unread::present(
+            window.is_window_active() || crate::shown::forced().is_some(),
+            crate::shown::seen(window),
+            views::last_input(),
+            now,
+        );
+        let due = READER.with(|reader| reader.borrow_mut().due(row.as_deref(), present, now));
+        if let Some(row) = due {
+            record::mark_read(&row);
+        }
+        // #1461's planted app reads every row drawn in the list a second while you're present.
+        if crate::plain::planted("read-when-drawn") {
+            let drawn: Vec<String> = record::with_view(|view| {
+                view.table()
+                    .list()
+                    .into_iter()
+                    .filter(|r| r["unread"].as_bool() == Some(true))
+                    .filter_map(|r| r["id"].as_str().map(str::to_owned))
+                    .collect()
+            })
+            .unwrap_or_default();
+            let due: Vec<String> = DRAWN.with(|seen| {
+                let mut seen = seen.borrow_mut();
+                seen.retain(|id, _| drawn.contains(id));
+                drawn
+                    .iter()
+                    .filter(|id| {
+                        let first = *seen.entry((*id).clone()).or_insert(now);
+                        present && now >= first + crate::unread::READ_AFTER
+                    })
+                    .cloned()
+                    .collect()
+            });
+            for row in due {
+                record::mark_read(&row);
+            }
+        }
+    });
 }

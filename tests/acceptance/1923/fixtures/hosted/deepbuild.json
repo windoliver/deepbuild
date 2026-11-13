@@ -1,0 +1,9 @@
+{
+  "id": "test/hosted",
+  "version": "1.0.0",
+  "digest": "d1:0000000000000000000000000000000000000000000000000000000000000000",
+  "access": { "words": ["hosts"] },
+  "jobs": ["test.hosted"],
+  "job_tools": [{ "kind": "test.hosted", "tool": "hosted-upper@1.0.0", "provider": "127.0.0.1:0" }],
+  "requires": { "preview": ["deep.registerJob", "deep.registerJobTool"] }
+}

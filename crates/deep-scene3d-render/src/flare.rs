@@ -5,9 +5,9 @@
 //! frame. It reads nothing from an earlier frame, so seeking equals playing.
 
 use deep_canvas_scene3d::flare::{Flare, Source, MAX_SOURCES};
+use deep_gpu::counted::Written;
 use deep_gpu::device::Device;
 use deep_gpu::encode::Job;
-use wgpu::util::DeviceExt;
 
 use crate::{FLARE_PASS, LINEAR};
 
@@ -37,7 +37,6 @@ struct Params {
 
 pub struct Flarer {
     count_layout: wgpu::BindGroupLayout,
-    draw_layout: wgpu::BindGroupLayout,
     count: wgpu::ComputePipeline,
     draw: wgpu::RenderPipeline,
     shares: wgpu::Buffer,
@@ -48,8 +47,16 @@ pub struct Flarer {
     pick: wgpu::ComputePipeline,
     tiles: wgpu::Buffer,
     found: wgpu::Buffer,
-    /// This frame's parameters, how many sources, and whether they're emissive pixels.
-    params: Option<(wgpu::Buffer, u32, bool)>,
+    /// The parameters, written where a frame's differ from the last one's, and the draw's bind
+    /// group over them.
+    params: wgpu::Buffer,
+    written: Written,
+    draw_bind: wgpu::BindGroup,
+    /// This frame's sources: how many, and whether they're emissive pixels.
+    frame: Option<(u32, bool)>,
+    /// The reduction's bind group, with the target it reads: the image when it finds emissive
+    /// pixels, else the depth.
+    reduce: Option<(wgpu::TextureView, bool, wgpu::BindGroup)>,
 }
 
 impl Flarer {
@@ -198,9 +205,32 @@ impl Flarer {
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
+        let params = d.create_buffer(&wgpu::BufferDescriptor {
+            label: Some(FLARE_PASS),
+            size: std::mem::size_of::<Params>() as u64,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let draw_bind = d.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some(FLARE_PASS),
+            layout: &draw_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: params.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: shares.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 7,
+                    resource: found.as_entire_binding(),
+                },
+            ],
+        });
         Flarer {
             count_layout,
-            draw_layout,
             count,
             draw,
             shares,
@@ -209,8 +239,17 @@ impl Flarer {
             pick,
             tiles,
             found,
-            params: None,
+            params,
+            written: Written::default(),
+            draw_bind,
+            frame: None,
+            reduce: None,
         }
+    }
+
+    /// A frame with no flare: the reduction lets go of the targets it bound.
+    pub fn rest(&mut self) {
+        self.reduce = None;
     }
 
     /// This frame's sources: `depth(p)` gives a world point's depth as the depth target stores
@@ -235,7 +274,8 @@ impl Flarer {
             sources.len().min(MAX_SOURCES)
         };
         if n == 0 {
-            self.params = None;
+            self.frame = None;
+            self.reduce = None;
             return;
         }
         let far = if grows_nearer { 0.0 } else { 1.0 };
@@ -254,7 +294,7 @@ impl Flarer {
             ];
         }
         let w = f64::from(size[0]);
-        let spikes = if flare.blades % 2 == 0 {
+        let spikes = if flare.blades.is_multiple_of(2) {
             flare.blades
         } else {
             2 * flare.blades
@@ -293,93 +333,77 @@ impl Flarer {
             ],
             sources: rows,
         };
-        let buffer = device
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some(FLARE_PASS),
-                contents: bytemuck::bytes_of(&params),
-                usage: wgpu::BufferUsages::UNIFORM,
-            });
-        self.params = Some((buffer, n as u32, emissive));
+        deep_gpu::alloc::outside(|| {
+            device
+                .queue
+                .write_changed(&self.params, &self.written, bytemuck::bytes_of(&params))
+        });
+        self.frame = Some((n as u32, emissive));
+    }
+
+    /// The reduction's bind group: each source's share of `depth`, or the sources found among
+    /// `into`'s emissive pixels.
+    fn reduce_bind(
+        &self,
+        device: &Device,
+        depth: &wgpu::TextureView,
+        into: &wgpu::TextureView,
+        emissive: bool,
+    ) -> wgpu::BindGroup {
+        let entry = |binding, resource| wgpu::BindGroupEntry { binding, resource };
+        let params = entry(0, self.params.as_entire_binding());
+        let (layout, entries) = if emissive {
+            (
+                &self.emit_layout,
+                vec![
+                    params,
+                    entry(4, self.found.as_entire_binding()),
+                    entry(5, wgpu::BindingResource::TextureView(into)),
+                    entry(6, self.tiles.as_entire_binding()),
+                ],
+            )
+        } else {
+            (
+                &self.count_layout,
+                vec![
+                    params,
+                    entry(1, wgpu::BindingResource::TextureView(depth)),
+                    entry(2, self.shares.as_entire_binding()),
+                ],
+            )
+        };
+        device.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some(FLARE_PASS),
+            layout,
+            entries: &entries,
+        })
     }
 
     /// The reduction over `depth` and the pass adding the flare into `into`.
     pub fn job(
-        &self,
+        &mut self,
         device: &Device,
         depth: &wgpu::TextureView,
         into: &wgpu::TextureView,
         profiler: &Option<crate::Profiler>,
     ) -> Option<Job> {
-        let (params, n, emissive) = self.params.as_ref()?;
-        let d = &device.device;
-        let count_bind = d.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some(FLARE_PASS),
-            layout: &self.count_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: params.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::TextureView(depth),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: self.shares.as_entire_binding(),
-                },
-            ],
-        });
-        let draw_bind = d.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some(FLARE_PASS),
-            layout: &self.draw_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: params.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 3,
-                    resource: self.shares.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 7,
-                    resource: self.found.as_entire_binding(),
-                },
-            ],
-        });
-        let emit = emissive.then(|| {
-            let bind = d.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some(FLARE_PASS),
-                layout: &self.emit_layout,
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: params.as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 4,
-                        resource: self.found.as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 5,
-                        resource: wgpu::BindingResource::TextureView(into),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 6,
-                        resource: self.tiles.as_entire_binding(),
-                    },
-                ],
-            });
-            (self.emitted.clone(), self.pick.clone(), bind)
-        });
-        let (count, draw, shares, into, n) = (
+        let (n, emissive) = self.frame?;
+        let read = if emissive { into } else { depth };
+        let reduce = match &self.reduce {
+            Some((r, e, bind)) if r == read && *e == emissive => bind.clone(),
+            _ => {
+                let bind = self.reduce_bind(device, depth, into, emissive);
+                self.reduce = Some((read.clone(), emissive, bind.clone()));
+                bind
+            }
+        };
+        let emit = emissive.then(|| (self.emitted.clone(), self.pick.clone()));
+        let (count, draw, shares, into, draw_bind) = (
             self.count.clone(),
             self.draw.clone(),
             self.shares.clone(),
             into.clone(),
-            *n,
+            self.draw_bind.clone(),
         );
         let profiler = profiler.clone();
         Some(Box::new(move |encoder| {
@@ -391,8 +415,8 @@ impl Flarer {
                 });
                 match &emit {
                     // Emissive pixels show as the frame does, so no share is counted: each is 1.
-                    Some((emitted, pick, bind)) => {
-                        pass.set_bind_group(0, bind, &[]);
+                    Some((emitted, pick)) => {
+                        pass.set_bind_group(0, &reduce, &[]);
                         pass.set_pipeline(emitted);
                         pass.dispatch_workgroups(16, 9, 1);
                         pass.set_pipeline(pick);
@@ -400,7 +424,7 @@ impl Flarer {
                     }
                     None => {
                         pass.set_pipeline(&count);
-                        pass.set_bind_group(0, &count_bind, &[]);
+                        pass.set_bind_group(0, &reduce, &[]);
                         pass.dispatch_workgroups(n, 1, 1);
                     }
                 }

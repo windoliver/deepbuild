@@ -2,7 +2,7 @@
 // (tests/acceptance/236/suite.test.ts): every case holds on bubblewrap, each planted twin fails its own case and no
 // other, and a run through the supervisor is scanned, refused and recorded as the seam promises.
 import { createHash } from 'node:crypto';
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync, existsSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync, existsSync } from 'node:fs';
 import net from 'node:net';
 import { join } from 'node:path';
 import { openAsks } from '@deepbuild/asks';
@@ -149,6 +149,69 @@ describe.skipIf(!linux)('a run through the supervisor on Linux', () => {
       const denied = ((await record.read({ after: 0, limit: 10_000 })) as Event[]).filter((e) => e.kind === 'sandbox.denied').map((e) => (e.data as { operation: string; target: string }));
       expect(denied.map((d) => d.target)).toContain(join(dir, 'guarded', 'kept.txt'));
       expect(denied.map((d) => d.target)).toContain(join(dir, 'guarded'));
+    } finally {
+      await sup.close();
+      await record.close();
+    }
+  }, 60_000);
+
+  test('a run with no write grant lists a folder the system ships, and nothing is refused', async () => {
+    const dir = tempDir();
+    const record = await openRecord({ path: join(dir, 'ledger.db'), now: Date.now });
+    const asks = await openAsks({ record, now: Date.now, deliver: () => undefined });
+    const sup = await openSupervisor({ record, asks, now: Date.now, settings: { asks: { unblock: { deadline_ms: 86_400_000 } } } });
+    try {
+      await sup.start({ run: 'run:LS', argv: ['/bin/ls', '/usr'], cwd: dir, grant: {} });
+      const exit = await sup.wait('run:LS');
+      const denied = ((await record.read({ after: 0, limit: 10_000 })) as Event[]).filter((e) => e.kind === 'sandbox.denied').map((e) => e.data as { operation: string; target: string });
+      expect({ code: exit.code, denied }, 'opening a folder to list it is no write').toEqual({ code: 0, denied: [] });
+    } finally {
+      await sup.close();
+      await record.close();
+    }
+  }, 60_000);
+
+  test('a run writes its checkout but not the agents\' hook and MCP files in it, and each refusal names the file', async () => {
+    const dir = tempDir();
+    const checkout = join(dir, 'checkout');
+    mkdirSync(join(checkout, '.claude'), { recursive: true });
+    writeFileSync(join(checkout, '.claude', 'settings.json'), 'kept\n');
+    const record = await openRecord({ path: join(dir, 'ledger.db'), now: Date.now });
+    const asks = await openAsks({ record, now: Date.now, deliver: () => undefined });
+    const sup = await openSupervisor({ record, asks, now: Date.now, settings: { asks: { unblock: { deadline_ms: 86_400_000 } } } });
+    try {
+      const script = 'echo mine > mine.txt; echo hook > .claude/settings.json; echo server > .mcp.json; echo server > .claude.json; mkdir .codex; true';
+      await sup.start({ run: 'run:AGENTS', argv: ['/bin/sh', '-c', script], cwd: checkout, grant: { write: [checkout] } });
+      await sup.wait('run:AGENTS');
+      const made = ['mine.txt', '.mcp.json', '.claude.json', '.codex'].filter((name) => existsSync(join(checkout, name)));
+      expect({ made, settings: readFileSync(join(checkout, '.claude', 'settings.json'), 'utf8') }).toEqual({ made: ['mine.txt'], settings: 'kept\n' });
+      const denied = ((await record.read({ after: 0, limit: 10_000 })) as Event[]).filter((e) => e.kind === 'sandbox.denied').map((e) => (e.data as { target: string }).target);
+      expect(denied.sort()).toEqual(['.claude.json', '.claude/settings.json', '.codex', '.mcp.json'].map((name) => join(checkout, name)));
+    } finally {
+      await sup.close();
+      await record.close();
+    }
+  }, 60_000);
+
+  test('a send that would open a connection itself reaches no port the grant leaves out', async () => {
+    const dir = tempDir();
+    const out = join(dir, 'out');
+    mkdirSync(out);
+    let reached = 0;
+    const stranger = net.createServer((sock) => { reached++; sock.on('error', () => undefined).resume(); });
+    servers.push(stranger);
+    await new Promise<void>((done) => stranger.listen(0, '127.0.0.1', done));
+    const port = String((stranger.address() as net.AddressInfo).port);
+    const record = await openRecord({ path: join(dir, 'ledger.db'), now: Date.now });
+    const asks = await openAsks({ record, now: Date.now, deliver: () => undefined });
+    const sup = await openSupervisor({ record, asks, now: Date.now, settings: { asks: { unblock: { deadline_ms: 86_400_000 } } } });
+    try {
+      // TCP Fast Open: one sendto that connects and sends, with no connect for the sandbox's parent to check.
+      await sup.start({ run: 'run:TFO', argv: [HELPER, 'probe', join(out, 'tries.json'), 'tfo', port], cwd: dir, grant: { read: [HELPER.slice(0, HELPER.lastIndexOf('/'))], write: [out] } });
+      await sup.wait('run:TFO');
+      // Refused by the helper's filter, or before it by Ubuntu's AppArmor profile for bwrap: either way the send fails and the port sees nothing.
+      const tries = readFileSync(join(out, 'tries.json'), 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l) as { op: string; ok: boolean });
+      expect({ tries: tries.map((t) => `${t.op} ${t.ok ? 'allowed' : 'refused'}`), reached }).toEqual({ tries: ['tfo refused'], reached: 0 });
     } finally {
       await sup.close();
       await record.close();

@@ -293,6 +293,50 @@ impl Tempo {
             .ok_or_else(past)
     }
 
+    /// #154: the beats from the map's first downbeat to bar `bar`, beat `beat` (fractional, from
+    /// 1), for a score's note at a beat between beats; or why it isn't on the map.
+    pub fn position(&self, bar: u64, beat: f64) -> Result<f64, String> {
+        let (i, s) = self
+            .sections
+            .iter()
+            .enumerate()
+            .rev()
+            .find(|(_, s)| s.bar <= bar)
+            .ok_or_else(|| format!("bar {bar} is before the tempo map"))?;
+        if !(beat >= 1.0 && beat < s.per_bar as f64 + 1.0) {
+            return Err(format!("beat {beat} is not in a bar of {}", s.per_bar));
+        }
+        Ok(self.start_beats(i) + ((bar - s.bar) * s.per_bar) as f64 + (beat - 1.0))
+    }
+
+    /// The flick `x` beats after the map's first downbeat, or why it isn't on the map.
+    pub fn at_position(&self, x: f64) -> Result<i64, String> {
+        let past = || format!("beat {x} is past the tempo map's end");
+        let i = (0..self.sections.len())
+            .rev()
+            .find(|&i| self.start_beats(i) <= x)
+            .ok_or_else(|| format!("beat {x} is before the tempo map"))?;
+        let s = &self.sections[i];
+        let local = x - self.start_beats(i);
+        if local > s.span {
+            return Err(past());
+        }
+        s.offset(local, self.f32_seconds)
+            .and_then(|o| flick(s.start + o))
+            .ok_or_else(past)
+    }
+
+    /// The beats from the map's first downbeat to `t`, for a note whose onset is a time.
+    pub fn position_of(&self, t: i64) -> f64 {
+        let i = self.sections.iter().rposition(|s| s.at() <= t).unwrap_or(0);
+        self.start_beats(i) + self.sections[i].beats_at(t)
+    }
+
+    /// The beats before section `i`.
+    fn start_beats(&self, i: usize) -> f64 {
+        self.sections[..i].iter().map(|s| s.span).sum()
+    }
+
     /// The bar:beat that lands exactly on `t`, if one does.
     pub fn beat_on(&self, t: i64) -> Option<String> {
         let s = self.sections.iter().rev().find(|s| s.at() <= t)?;

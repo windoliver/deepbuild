@@ -1,0 +1,74 @@
+#1606 at the base: commit 1c4d1f0e2 (main) with this folder added and nothing else, on macOS, Node 24.22.0 (fnm), Rust
+1.99.1, from the Bash tool of an agent session. Every line below was observed in that run unless it says "read from the
+code". `probe access` printed {"ax":false,"screen":false} for this session, inside and outside the tool's sandbox.
+
+  NO_COLOR=1 node node_modules/vitest/vitest.mjs run tests/acceptance/1606/<file> --testTimeout=1800000 --no-file-parallelism
+
+12 tests: 7 fail for the expected reason; 4 read BLOCKED (AC5 and AC9 for want of Accessibility, AC4's and AC5's
+wrong programs because their plants don't exist yet); 1 passes on purpose, AC1's merge-base test, which needs the merge
+base to fail the criterion.
+
+hook.test.ts (22 s)
+ x AC1 #1606.0f8635c4 a session's cat of ~/.deepbuild/channels.json and its Read of it are each denied with the hub stopped, naming the guard
+     "`cat ~/.deepbuild/channels.json` was allowed with the hub stopped: exit 0 after 19.3 ms, stdout \"\", stderr \"\""
+     "Read /private/tmp/dh16-dunJKt/h/.deepbuild/channels.json was allowed with the hub stopped: exit 0 after 9.6 ms, stdout \"\", stderr \"\""
+ v AC1 #1606.0f8635c4 wrong program: deep-hook on the merge base allows both and fails this test
+     (the merge base's deep-hook, built offline from 1c4d1f0e2 with its own default entries, allowed both calls; the
+     judge failed naming both. On the base this is the same program as the one under test, so the test above fails too.)
+ x AC7 #1606.fca4f55a a session's Read of ~/.deepbuild/app/device.json and its cat of it are each denied with the hub stopped, naming the guard
+     "`cat ~/.deepbuild/app/device.json` was allowed with the hub stopped: exit 0 after 18.0 ms, stdout \"\", stderr \"\""
+     "Read /private/tmp/dh16-kVXmoG/h/.deepbuild/app/device.json was allowed with the hub stopped: exit 0 after 9.9 ms, stdout \"\", stderr \"\""
+
+channels.test.ts (86 s)
+ x AC2 #1606.692cab52 after the hub starts on channels.json holding the chat channel's token, the file names it by handle, the store holds it, and a provider call carries it in its header
+     "/private/tmp/dh16-hvpYv6/h/.deepbuild/channels.json still holds the token (raw)"
+     "/private/tmp/dh16-hvpYv6/h/.deepbuild/channels.json names the chat channel's token by undefined, not the handle secret:channels/chat: {...}"
+     (that run printed the whole file after the colon; the message now prints the channel's entry alone.)
+     "/private/tmp/dh16-hvpYv6/h/.deepbuild/channels.json still has the chat channel's token field: \"bot-1606-47c0…\""
+     "the secret store (DEEP_HUB_TEST_SECRETS) holds nothing under deepbuild/channels/chat"
+     (the provider-call part held: the base sends the token from the file.)
+ x AC3 #1606.8cb3635c a channels.json readable by its group (0640), and one readable by others (0604), are each refused, naming the file and its mode
+     "the hub used /private/tmp/dh16-PtzdKD/h/.deepbuild/channels.json, mode 0640: 10 calls to the chat provider carried its token"
+     "the hub's log (deep hub run's standard error) has no line naming /private/tmp/dh16-PtzdKD/h/.deepbuild/channels.json and its mode 0640: ..."
+     "the hub used /private/tmp/dh16-BLzfmJ/h/.deepbuild/channels.json, mode 0604: 10 calls to the chat provider carried its token"
+     "the hub's log (deep hub run's standard error) has no line naming /private/tmp/dh16-BLzfmJ/h/.deepbuild/channels.json and its mode 0604: ..."
+ x AC4 #1606.701685ed after a channel send, the record, the logs and an agent's environment hold no form of the token
+     "/private/tmp/dh16-9rkbMG/h/.deepbuild/channels.json holds the token (raw)"
+     (the record, the hub's log and the agent's environment held none at the base; the file is the base's leak.)
+ x AC4 #1606.701685ed wrong program: a hub that logs the header (logs-channel-header) fails, naming where
+     BLOCKED: the hub didn't start (deep hub run): exit 1 ... Error: DEEP_HUB_PLANT=logs-channel-header names no planted program
+     (the plant is the implementer's to add.)
+
+session.test.ts (2 s)
+ x AC8 #1606.bf38dab5 a deep command run in an agent session's shell, sending an approval signed by a device you paired, is refused naming the session, and the ask stays open
+     "ask:01M78N280S477GZTZME9X62TBA was answered: the hub counted a signed ask.answer from a deep command inside agent session ac5673fc-6a5a-4387-98de-6a7712776129's process tree: {\"ask\":\"ask:01M78N280S477GZTZME9X62TBA\",\"answer\":\"approve\",\"scope\":null}"
+     "ask:01M78N280S477GZTZME9X62TBA was recorded answered (1 ask.answered: [{\"answer\":\"approve\",...,\"decision\":\"allow\",\"via\":\"inbox\",\"verified\":true,...}])"
+     This is the criterion's "the merge base counts it and fails, naming the ask". The same fixture sending the answer
+     unsigned was refused at the base with code role, naming the session (a scratch run, since removed), so the peer
+     check does find the session; only the signed path skips it.
+
+stolen.test.ts (41 s; the real base app, built with test-confirm, started on the home and answering `deep open`)
+ x AC6 #1606.632a863e with every file under ~/.deepbuild read, its signed Allow on a fixture approval ask is refused with credential, and the ask stays open
+     "ask:01M78NEHFQT9NXBHDM6XHQZRG0 was answered by a signed Allow this test process made as device:01M78NEHXKXMN26QJC6WJD88FJ with the key pair in /private/tmp/dh16-Dh46zl/h/.deepbuild/app/device.json: {\"ask\":\"ask:01M78NEHFQT9NXBHDM6XHQZRG0\",\"answer\":\"approve\",\"scope\":null}"
+     "ask:01M78NEHFQT9NXBHDM6XHQZRG0: the signed Allow made as device:01M78NEHXKXMN26QJC6WJD88FJ with a key of its own was refused with not_found, not credential: {...\"remediation\":\"ask:01M78NEHFQT9NXBHDM6XHQZRG0 was already answered approve from deep inbox; the first answer stands...\"}"
+     "ask:01M78NEHFQT9NXBHDM6XHQZRG0 was recorded answered (1 ask.answered: [{\"answer\":\"approve\",...,\"decision\":\"allow\",...}])"
+     This is the criterion's "the merge base counts it and fails, naming the ask": the base app left its key in
+     device.json, and the hub counted the Allow signed with it. The run fell back to the base's test-confirm build, since
+     the crate has no test-secrets and its code is the merge base's own; the test's last assertion would also have
+     failed on that ("the app was built with its stand-ins").
+
+device.test.ts (BLOCKED before the app; their expected failures are NOT shown)
+ x AC5 #1606.1b905924 after the real app paired and its card's answer counted once, no file under ~/.deepbuild holds the device's private key
+     BLOCKED: this process has no Accessibility permission, so nothing can read the real window's nodes or the menu bar; grant it to the app the tests run under
+ x AC5 #1606.1b905924 wrong program: an app that keeps its key in a file (plant-key-in-file) fails, naming the path
+     BLOCKED: crates/deep-app/Cargo.toml has no feature plant-key-in-file (README, Surfaces), so this build can't be made
+ x AC9 #1606.21a4b991 after the app moves an older app's key out of ~/.deepbuild/app/device.json at its start, an answer on its card counts once, signed with that key
+     BLOCKED: this process has no Accessibility permission, ...
+     Read from the code, not observed: with Accessibility, AC5 on the base would fail naming
+     ~/.deepbuild/app/device.json (crates/deep-app/src/device.rs keeps {device, seed} there), and AC9 would fail with
+     "<home>/.deepbuild/app/device.json is still there two minutes after the app started: the app didn't move the key".
+     The parts that need no window were run on the base in a scratch test, since removed: AC5's judge named
+     <root>/app/device.json for a key written in the base's format and found nothing once the file was gone, and this
+     suite's hub with #26's agent stand-in filed a deep_ask taste ask through raise().
+
+Type check: node node_modules/typescript/bin/tsc -p tests/acceptance/1606/tsconfig.json, clean.

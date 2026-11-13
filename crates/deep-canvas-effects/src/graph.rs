@@ -276,6 +276,9 @@ pub enum From {
         domain: String,
         lanes: u8,
     },
+    /// A light response's input, which the core's light loop hands it (#485): `n`, `l`,
+    /// `radiance` and the rest.
+    Port,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -512,6 +515,10 @@ pub struct Operator {
     /// A pass's chain (`effects` or `finish`) and order key.
     pub chain: String,
     pub order: String,
+    /// A material's light responses (#485), by output (`light`, `ambient`): each a material
+    /// operator of its own over its ports and the operator's value inputs. A default named, or
+    /// none, leaves the core's own shading.
+    pub responses: BTreeMap<String, Operator>,
 }
 
 /// The fields an operator may carry; anything else is refused, and a field that carries code is
@@ -539,6 +546,9 @@ const FIELDS: &[&str] = &[
     "stepped",
     // Whether a pixel-wise pass may fuse with its neighbours (#432: pass fusion).
     "fuse",
+    // A material's light responses (#485).
+    "light",
+    "ambient",
 ];
 /// Fields that hold a program's text in other engines' formats.
 const CODE_FIELDS: &[&str] = &[
@@ -689,7 +699,9 @@ fn step(id: &str, s: &Value, issues: &mut Vec<Issue>) -> Option<Step> {
         issues.push(Issue::at_step(
             "operator_source",
             id,
-            format!("a step carries no shader text ({k}): every step is an op from the closed list"),
+            format!(
+                "a step carries no shader text ({k}): every step is an op from the closed list"
+            ),
         ));
         return None;
     }
@@ -735,7 +747,7 @@ fn step(id: &str, s: &Value, issues: &mut Vec<Issue>) -> Option<Step> {
     })
 }
 
-fn size_of(v: Option<&Value>, path: &str, issues: &mut Vec<Issue>) -> Size {
+fn resolution_of(v: Option<&Value>, path: &str, issues: &mut Vec<Issue>) -> Size {
     match v.and_then(Value::as_str) {
         None | Some("half") => Size::Half,
         Some("full") => Size::Full,
@@ -755,7 +767,10 @@ fn iterate(id: &str, a: &Map<String, Value>, issues: &mut Vec<Issue>) -> Iterate
     let pp = a.get("ping_pong");
     let body = a.get("body");
     let mut outputs = BTreeMap::new();
-    if let Some(o) = body.and_then(|b| b.get("outputs")).and_then(Value::as_object) {
+    if let Some(o) = body
+        .and_then(|b| b.get("outputs"))
+        .and_then(Value::as_object)
+    {
         for (name, v) in o {
             outputs.insert(name.clone(), arg(v));
         }
@@ -783,7 +798,7 @@ fn iterate(id: &str, a: &Map<String, Value>, issues: &mut Vec<Issue>) -> Iterate
             .and_then(Value::as_str)
             .unwrap_or("rgba16float")
             .to_string(),
-        resolution: size_of(pp.and_then(|p| p.get("resolution")), "steps", issues),
+        resolution: resolution_of(pp.and_then(|p| p.get("resolution")), "steps", issues),
         steps: steps(
             body.and_then(|b| b.get("steps")).unwrap_or(&Value::Null),
             issues,
@@ -979,6 +994,11 @@ fn input(name: &str, v: &Value, issues: &mut Vec<Issue>) -> Option<Input> {
 /// Reads an operator. Refuses shader text in a field of its own (`operator_source`), unknown
 /// fields and malformed parts (`operator_type`) before any later check runs.
 pub fn read(v: &Value) -> Result<Operator, Vec<Issue>> {
+    // A call to a step function scene3d ships, such as core.bump@1, is inlined first (#486), on
+    // every path that reads an operator.
+    if calls_shipped(&v["steps"]) {
+        return read(&inline_functions(v, &Functions::new(), true)?);
+    }
     let mut issues = Vec::new();
     let Some(o) = v.as_object() else {
         return Err(vec![Issue::new(
@@ -1166,7 +1186,12 @@ pub fn read(v: &Value) -> Result<Operator, Vec<Issue>> {
                 let size: Vec<u32> = t
                     .get("size")
                     .and_then(Value::as_array)
-                    .map(|a| a.iter().filter_map(Value::as_u64).map(|n| n as u32).collect())
+                    .map(|a| {
+                        a.iter()
+                            .filter_map(Value::as_u64)
+                            .map(|n| n as u32)
+                            .collect()
+                    })
                     .unwrap_or_default();
                 let mips = t.get("mips").and_then(Value::as_bool).unwrap_or(false);
                 let dims = if dim3 { 3 } else { 2 };
@@ -1174,7 +1199,10 @@ pub fn read(v: &Value) -> Result<Operator, Vec<Issue>> {
                     issues.push(Issue::at_path(
                         "operator_type",
                         &path,
-                        format!("a texture output is {{format: {}, size: [{dims} sizes]}}", TEXTURE_FORMATS.join(" | ")),
+                        format!(
+                            "a texture output is {{format: {}, size: [{dims} sizes]}}",
+                            TEXTURE_FORMATS.join(" | ")
+                        ),
                     ));
                     continue;
                 }
@@ -1193,11 +1221,20 @@ pub fn read(v: &Value) -> Result<Operator, Vec<Issue>> {
                 instances.insert(
                     name.clone(),
                     InstancesOut {
-                        instancer: i.get("instancer").and_then(Value::as_str).unwrap_or("").into(),
+                        instancer: i
+                            .get("instancer")
+                            .and_then(Value::as_str)
+                            .unwrap_or("")
+                            .into(),
                         columns: i
                             .get("columns")
                             .and_then(Value::as_array)
-                            .map(|a| a.iter().filter_map(Value::as_str).map(String::from).collect())
+                            .map(|a| {
+                                a.iter()
+                                    .filter_map(Value::as_str)
+                                    .map(String::from)
+                                    .collect()
+                            })
                             .unwrap_or_default(),
                         count: i.get("count").and_then(Value::as_str).map(String::from),
                     },
@@ -1218,7 +1255,10 @@ pub fn read(v: &Value) -> Result<Operator, Vec<Issue>> {
                 let sc = s.get("type").and_then(Value::as_str).and_then(Ty::parse);
                 // Carried state (#252): `carry: {every: steps ≥ 1, budget: bytes}`.
                 let carry = v.get("carry").map(|c| {
-                    let every = c.get("every").and_then(Value::as_u64).and_then(|e| u32::try_from(e).ok());
+                    let every = c
+                        .get("every")
+                        .and_then(Value::as_u64)
+                        .and_then(|e| u32::try_from(e).ok());
                     match (every, c.get("budget").and_then(Value::as_u64)) {
                         (Some(every @ 1..), Some(budget)) => Some(Carry { every, budget }),
                         _ => {
@@ -1334,7 +1374,11 @@ pub fn read(v: &Value) -> Result<Operator, Vec<Issue>> {
     let elements = counted_by.map_or(o.get("elements"), |e| e.get("max"));
     let counted = counted_by.is_some();
     if let Some(e) = counted_by {
-        match e.get("from").and_then(Value::as_str).and_then(|f| f.split_once('.')) {
+        match e
+            .get("from")
+            .and_then(Value::as_str)
+            .and_then(|f| f.split_once('.'))
+        {
             Some((op, output)) => {
                 inputs.insert(
                     DISPATCH_COUNT.to_string(),
@@ -1360,10 +1404,18 @@ pub fn read(v: &Value) -> Result<Operator, Vec<Issue>> {
     // A stepped operator (#252): `stepped: {rate}`, steps a second of document time.
     let stepped = match o.get("stepped") {
         None => None,
-        Some(st) => match st.get("rate").and_then(Value::as_u64).and_then(|r| u32::try_from(r).ok()) {
+        Some(st) => match st
+            .get("rate")
+            .and_then(Value::as_u64)
+            .and_then(|r| u32::try_from(r).ok())
+        {
             Some(r @ 1..=1000) => Some(r),
             _ => {
-                issues.push(Issue::at_path("operator_type", "stepped", "stepped is {rate: steps a second, 1 to 1,000}"));
+                issues.push(Issue::at_path(
+                    "operator_type",
+                    "stepped",
+                    "stepped is {rate: steps a second, 1 to 1,000}",
+                ));
                 None
             }
         },
@@ -1383,10 +1435,12 @@ pub fn read(v: &Value) -> Result<Operator, Vec<Issue>> {
                 .collect()
         })
         .unwrap_or_default();
+    let responses = read_responses(o, kind, &inputs, &id, &mut issues);
     if !issues.is_empty() {
         return Err(issues);
     }
     Ok(Operator {
+        responses,
         id,
         kind,
         about,
@@ -1429,6 +1483,145 @@ pub type Functions = BTreeMap<String, Value>;
 /// How deep step functions may call each other.
 const USE_DEPTH: usize = 4;
 
+/// A WGSL type of scene3d's response ports as a step type.
+fn port_ty(t: &str) -> Ty {
+    match t {
+        "vec3<f32>" => Ty::V(Sc::F32, 3),
+        "u32" => Ty::U32,
+        _ => Ty::F32,
+    }
+}
+
+/// The values a port spans, for the values stage: unit vectors, light (linear, ≥ 0), and the
+/// part's own fields in [0, 1].
+fn port_range(name: &str) -> Option<[f64; 2]> {
+    match name {
+        "n" | "v" | "l" => Some([-1.0, 1.0]),
+        "radiance" | "irradiance" | "env" => Some([0.0, 1e6]),
+        "light_hash" => None,
+        _ => Some([0.0, 1.0]),
+    }
+}
+
+/// A material's light responses (#485; Operator output: light response): each of `light` and
+/// `ambient` absent, its default's name (the core's own shading), or a graph `{steps, outputs:
+/// {radiance: <step>}}` read as a material operator of its own whose inputs are its ports, then
+/// the operator's value inputs; its one output takes the response's name.
+fn read_responses(
+    o: &Map<String, Value>,
+    kind: Kind,
+    inputs: &BTreeMap<String, Input>,
+    id: &str,
+    issues: &mut Vec<Issue>,
+) -> BTreeMap<String, Operator> {
+    let mut out = BTreeMap::new();
+    for (name, ports, default) in deep_canvas_scene3d::gpu::RESPONSES {
+        let Some(v) = o.get(*name) else {
+            continue;
+        };
+        if kind != Kind::Material {
+            issues.push(Issue::at_path(
+                "operator_type",
+                name,
+                "only a material operator answers the light loop",
+            ));
+            continue;
+        }
+        if v.as_str() == Some(*default) {
+            continue;
+        }
+        let graph = v.as_object().filter(|g| {
+            g.keys().all(|k| k == "steps" || k == "outputs")
+                && g.get("outputs")
+                    .and_then(Value::as_object)
+                    .is_some_and(|r| r.len() == 1 && r["radiance"].is_string())
+        });
+        let Some(graph) = graph else {
+            issues.push(Issue::at_path(
+                "operator_type",
+                name,
+                format!("{name} is {default} or a graph {{steps, outputs: {{radiance: <step>}}}}"),
+            ));
+            continue;
+        };
+        let mut outputs = Map::new();
+        outputs.insert((*name).into(), graph["outputs"]["radiance"].clone());
+        let mut sub = json!({
+            "id": format!("{id}.{name}"),
+            "kind": "material",
+            "steps": graph.get("steps").cloned().unwrap_or_else(|| json!({})),
+            "outputs": outputs,
+        });
+        for k in ["about", "origin", "cost"] {
+            if let Some(x) = o.get(k) {
+                sub[k] = x.clone();
+            }
+        }
+        let mut r = match read(&sub) {
+            Ok(r) => r,
+            Err(e) => {
+                issues.extend(e.into_iter().map(|mut i| {
+                    i.path = Some(format!("{name}/{}", i.path.take().unwrap_or_default()));
+                    i
+                }));
+                continue;
+            }
+        };
+        let own = deep_canvas_scene3d::gpu::response_in(ports);
+        for (port, t) in &own {
+            r.inputs.insert(
+                (*port).into(),
+                Input {
+                    ty: port_ty(t),
+                    from: From::Port,
+                    range: port_range(port),
+                    default: None,
+                },
+            );
+        }
+        // The operator's value inputs, read from its uniform as its own steps read them.
+        for (n, i) in inputs {
+            if own.iter().any(|(p, _)| p == n) {
+                issues.push(Issue::at_path(
+                    "operator_type",
+                    &format!("inputs/{n}"),
+                    format!("{n} is an input of the light loop's {name}"),
+                ));
+            } else if !matches!(
+                i.ty,
+                Ty::Tex(_) | Ty::Tex3(_) | Ty::Storage(..) | Ty::Arr(..)
+            ) {
+                r.inputs.entry(n.clone()).or_insert_with(|| i.clone());
+            }
+        }
+        out.insert((*name).to_string(), r);
+    }
+    out
+}
+
+/// The step functions canvas modules ship (#486: scene3d's `core.bump@1`), which any operator
+/// calls by name as it calls a pack's.
+fn shipped() -> &'static Functions {
+    static SHIPPED: std::sync::OnceLock<Functions> = std::sync::OnceLock::new();
+    SHIPPED.get_or_init(|| deep_canvas_scene3d::gpu::functions().into_iter().collect())
+}
+
+/// The step function `name`: a pack's, else a shipped one.
+fn function<'a>(functions: &'a Functions, name: &str) -> Option<&'a Value> {
+    functions.get(name).or_else(|| shipped().get(name))
+}
+
+/// Whether `steps`, or a repeat's body among them, calls a shipped step function.
+fn calls_shipped(steps: &Value) -> bool {
+    steps.as_object().into_iter().flatten().any(|(_, s)| {
+        (s["op"] == "use@1"
+            && s["args"]["name"]
+                .as_str()
+                .is_some_and(|n| shipped().contains_key(n)))
+            || calls_shipped(&s["args"]["body"])
+    })
+}
+
 /// Whether a step function's body takes implicit derivatives, its own or through a function it
 /// calls: `ddx`, `ddy`, `fwidth`, `triplanar` or a `sample` with no `lod`.
 fn holds_derivative(f: &Value, functions: &Functions, depth: usize) -> bool {
@@ -1441,7 +1634,7 @@ fn holds_derivative(f: &Value, functions: &Functions, depth: usize) -> bool {
                     && depth < USE_DEPTH
                     && s["args"]["name"]
                         .as_str()
-                        .and_then(|n| functions.get(n))
+                        .and_then(|n| function(functions, n))
                         .is_some_and(|g| holds_derivative(g, functions, depth + 1)))
                 || s["args"]["body"]
                     .as_object()
@@ -1499,7 +1692,7 @@ pub fn inline_functions(
                 _ => continue,
             }
             let name = step["args"]["name"].as_str().unwrap_or("");
-            let Some(f) = functions.get(name).filter(|_| depth < USE_DEPTH) else {
+            let Some(f) = function(functions, name).filter(|_| depth < USE_DEPTH) else {
                 issues.push(Issue::at_step(
                     "operator_unknown_op",
                     &id,

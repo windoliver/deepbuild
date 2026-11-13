@@ -1,0 +1,171 @@
+{
+  "failures": [
+    "a weight file swapped: the job test.hosted open-a@1.0.0 {\"case\":\"lower\"} on a83fc9c511c3313bd03009163641e1553bcfd1773d3857d1aa07f68fa59bfe71 called 127.0.0.1:63972 anyway (1 call(s)); it must be BLOCKED before the call",
+    "a weight file swapped: the job test.hosted open-a@1.0.0 {\"case\":\"lower\"} on a83fc9c511c3313bd03009163641e1553bcfd1773d3857d1aa07f68fa59bfe71 must be BLOCKED: it answered {\"status\":\"done\",\"outputs\":{\"text\":{\"sha256\":\"a83fc9c511c3313bd03009163641e1553bcfd1773d3857d1aa07f68fa59bfe71\"}},\"receipt\":{\"kind\":\"test.hosted\",\"tool\":\"open-a@1.0.0\",\"key\":\"f8d3f06165e5b85736117e86dde40bf47b23502cfd88414af884dde389d7f96e\",\"build\":null,\"cache\":\"miss\",\"inputs\":{\"text\":\"a83fc9c511c3313bd03009163641e1553bcfd1773d3857d1aa07f68fa59bfe71\"},\"sent\":[{\"sha256\":\"a83fc9c511c3313bd03009163641e1553bcfd1773d3857d1aa07f68fa59bfe71\",\"host\":\"127.0.0.1:63972\"}],\"weights\":[{\"name\":\"model.safetensors\",\"sha256\":\"e8fb502ae03200521418276253cf63d53ad5f9c2c61f8f0451340dbd0fe373c7\"},{\"name\":\"tokenizer.json\",\"sha256\":\"4636ba8d89b09b2555d9179c22cb0bf5432bd0df3e9b46f5717ef7f20827cbd3\"}]}}",
+    "a weight file swapped: the job test.hosted open-a@1.0.0 {\"case\":\"lower\"} on a83fc9c511c3313bd03009163641e1553bcfd1773d3857d1aa07f68fa59bfe71 must raise an unblock ask naming model.safetensors; the asks raised: []",
+    "the capability missing: the job test.hosted open-a@1.0.0 {\"case\":\"upper\",\"trim\":true} on a83fc9c511c3313bd03009163641e1553bcfd1773d3857d1aa07f68fa59bfe71 called 127.0.0.1:63972 anyway (1 call(s)); it must be BLOCKED before the call",
+    "the capability missing: the job test.hosted open-a@1.0.0 {\"case\":\"upper\",\"trim\":true} on a83fc9c511c3313bd03009163641e1553bcfd1773d3857d1aa07f68fa59bfe71 must be BLOCKED: it answered {\"status\":\"done\",\"outputs\":{\"text\":{\"sha256\":\"0ad7d3b4069484f326c88ade113c134820067e8fecb7c7f52242f5eb1c5fce09\"}},\"receipt\":{\"kind\":\"test.hosted\",\"tool\":\"open-a@1.0.0\",\"key\":\"28b8ca8b183eca827d7db7c97614fdcfc11d547056cad2c5f26e9955067c9657\",\"build\":null,\"cache\":\"miss\",\"inputs\":{\"text\":\"a83fc9c511c3313bd03009163641e1553bcfd1773d3857d1aa07f68fa59bfe71\"},\"sent\":[{\"sha256\":\"a83fc9c511c3313bd03009163641e1553bcfd1773d3857d1aa07f68fa59bfe71\",\"host\":\"127.0.0.1:63972\"}],\"weights\":[{\"name\":\"model.safetensors\",\"sha256\":\"e8fb502ae03200521418276253cf63d53ad5f9c2c61f8f0451340dbd0fe373c7\"},{\"name\":\"tokenizer.json\",\"sha256\":\"4636ba8d89b09b2555d9179c22cb0bf5432bd0df3e9b46f5717ef7f20827cbd3\"}]}}",
+    "the capability missing: the job test.hosted open-a@1.0.0 {\"case\":\"upper\",\"trim\":true} on a83fc9c511c3313bd03009163641e1553bcfd1773d3857d1aa07f68fa59bfe71 must raise an unblock ask naming fp16; the asks raised: []"
+  ],
+  "seen": {
+    "render": "a83fc9c511c3313bd03009163641e1553bcfd1773d3857d1aa07f68fa59bfe71",
+    "weights": {
+      "model": "e8fb502ae03200521418276253cf63d53ad5f9c2c61f8f0451340dbd0fe373c7",
+      "tokenizer": "4636ba8d89b09b2555d9179c22cb0bf5432bd0df3e9b46f5717ef7f20827cbd3",
+      "swapped": "3b2897601609438ef548baeae6749d4913bc57ac660a5fb707a1dc7ad52379a5"
+    },
+    "both": {
+      "reply": {
+        "status": "done",
+        "outputs": {
+          "text": {
+            "sha256": "0ad7d3b4069484f326c88ade113c134820067e8fecb7c7f52242f5eb1c5fce09"
+          }
+        },
+        "receipt": {
+          "kind": "test.hosted",
+          "tool": "open-a@1.0.0",
+          "key": "83162854895e3c37e129ad9110781b12d192d0b339e14576904bb3c8e91efc81",
+          "build": null,
+          "cache": "miss",
+          "inputs": {
+            "text": "a83fc9c511c3313bd03009163641e1553bcfd1773d3857d1aa07f68fa59bfe71"
+          },
+          "sent": [
+            {
+              "sha256": "a83fc9c511c3313bd03009163641e1553bcfd1773d3857d1aa07f68fa59bfe71",
+              "host": "127.0.0.1:63972"
+            }
+          ],
+          "weights": [
+            {
+              "name": "model.safetensors",
+              "sha256": "e8fb502ae03200521418276253cf63d53ad5f9c2c61f8f0451340dbd0fe373c7"
+            },
+            {
+              "name": "tokenizer.json",
+              "sha256": "4636ba8d89b09b2555d9179c22cb0bf5432bd0df3e9b46f5717ef7f20827cbd3"
+            }
+          ]
+        }
+      },
+      "calls": 1
+    },
+    "a weight file swapped": {
+      "reply": {
+        "status": "done",
+        "outputs": {
+          "text": {
+            "sha256": "a83fc9c511c3313bd03009163641e1553bcfd1773d3857d1aa07f68fa59bfe71"
+          }
+        },
+        "receipt": {
+          "kind": "test.hosted",
+          "tool": "open-a@1.0.0",
+          "key": "f8d3f06165e5b85736117e86dde40bf47b23502cfd88414af884dde389d7f96e",
+          "build": null,
+          "cache": "miss",
+          "inputs": {
+            "text": "a83fc9c511c3313bd03009163641e1553bcfd1773d3857d1aa07f68fa59bfe71"
+          },
+          "sent": [
+            {
+              "sha256": "a83fc9c511c3313bd03009163641e1553bcfd1773d3857d1aa07f68fa59bfe71",
+              "host": "127.0.0.1:63972"
+            }
+          ],
+          "weights": [
+            {
+              "name": "model.safetensors",
+              "sha256": "e8fb502ae03200521418276253cf63d53ad5f9c2c61f8f0451340dbd0fe373c7"
+            },
+            {
+              "name": "tokenizer.json",
+              "sha256": "4636ba8d89b09b2555d9179c22cb0bf5432bd0df3e9b46f5717ef7f20827cbd3"
+            }
+          ]
+        }
+      },
+      "asks": [],
+      "calls": 1
+    },
+    "the capability missing": {
+      "reply": {
+        "status": "done",
+        "outputs": {
+          "text": {
+            "sha256": "0ad7d3b4069484f326c88ade113c134820067e8fecb7c7f52242f5eb1c5fce09"
+          }
+        },
+        "receipt": {
+          "kind": "test.hosted",
+          "tool": "open-a@1.0.0",
+          "key": "28b8ca8b183eca827d7db7c97614fdcfc11d547056cad2c5f26e9955067c9657",
+          "build": null,
+          "cache": "miss",
+          "inputs": {
+            "text": "a83fc9c511c3313bd03009163641e1553bcfd1773d3857d1aa07f68fa59bfe71"
+          },
+          "sent": [
+            {
+              "sha256": "a83fc9c511c3313bd03009163641e1553bcfd1773d3857d1aa07f68fa59bfe71",
+              "host": "127.0.0.1:63972"
+            }
+          ],
+          "weights": [
+            {
+              "name": "model.safetensors",
+              "sha256": "e8fb502ae03200521418276253cf63d53ad5f9c2c61f8f0451340dbd0fe373c7"
+            },
+            {
+              "name": "tokenizer.json",
+              "sha256": "4636ba8d89b09b2555d9179c22cb0bf5432bd0df3e9b46f5717ef7f20827cbd3"
+            }
+          ]
+        }
+      },
+      "asks": [],
+      "calls": 1
+    },
+    "newHash": {
+      "reply": {
+        "status": "done",
+        "outputs": {
+          "text": {
+            "sha256": "0ad7d3b4069484f326c88ade113c134820067e8fecb7c7f52242f5eb1c5fce09"
+          }
+        },
+        "receipt": {
+          "kind": "test.hosted",
+          "tool": "open-a@1.0.0",
+          "key": "d6707816b0b8645ec04709f89350aee3dfbc44ca5e1da632f458f30c3f155473",
+          "build": null,
+          "cache": "miss",
+          "inputs": {
+            "text": "a83fc9c511c3313bd03009163641e1553bcfd1773d3857d1aa07f68fa59bfe71"
+          },
+          "sent": [
+            {
+              "sha256": "a83fc9c511c3313bd03009163641e1553bcfd1773d3857d1aa07f68fa59bfe71",
+              "host": "127.0.0.1:63972"
+            }
+          ],
+          "weights": [
+            {
+              "name": "model.safetensors",
+              "sha256": "3b2897601609438ef548baeae6749d4913bc57ac660a5fb707a1dc7ad52379a5"
+            },
+            {
+              "name": "tokenizer.json",
+              "sha256": "4636ba8d89b09b2555d9179c22cb0bf5432bd0df3e9b46f5717ef7f20827cbd3"
+            }
+          ]
+        }
+      },
+      "calls": 1
+    },
+    "host": {
+      "127.0.0.1:63972": "[\"POST /run {\\\"params\\\":{\\\"case\\\":\\\"upper\\\",\\\"trim\\\":false},\\\"inputs\\\":{\\\"text\\\":\\\"aGVsbG8=\\\"}}\",\"POST /run {\\\"params\\\":{\\\"case\\\":\\\"upper\\\",\\\"trim\\\":false},\\\"inputs\\\":{\\\"text\\\":\\\"cmVuZGVyIGFhOWY4Yjg3YmI3NzogZnJhbWUgNDIgb2YgdGhlIGhlcm8gc2hvdA==\\\"}}\",\"POST /run {\\\"params\\\":{\\\"case\\\":\\\"lower\\\",\\\"trim\\\":false},\\\"inputs\\\":{\\\"text\\\":\\\"cmVuZGVyIGFhOWY4Yjg3YmI3NzogZnJhbWUgNDIgb2YgdGhlIGhlcm8gc2hvdA==\\\"}}\",\"POST /run {\\\"params\\\":{\\\"case\\\":\\\"upper\\\",\\\"trim\\\":true},\\\"inputs\\\":{\\\"text\\\":\\\"cmVuZGVyIGFhOWY4Yjg3YmI3NzogZnJhbWUgNDIgb2YgdGhlIGhlcm8gc2hvdA==\\\"}}\",\"POST /run {\\\"params\\\":{\\\"case\\\":\\\"upper\\\",\\\"trim\\\":false},\\\"inputs\\\":{\\\"text\\\":\\\"aGVsbG8=\\\"}}\",\"POST /run {\\\"params\\\":{\\\"case\\\":\\\"upper\\\",\\\"trim\\\":false},\\\"inputs\\\":{\\\"text\\\":\\\"cmVuZGVyIGFhOWY4Yjg3YmI3NzogZnJhbWUgNDIgb2YgdGhlIGhlcm8gc2hvdA==\\\"}}\"]"
+    }
+  }
+}
