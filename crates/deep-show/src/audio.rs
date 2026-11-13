@@ -675,11 +675,7 @@ impl Hub<'_> {
         let mut play = AudioPlay::new(mix, piece, self.now, grid)?;
         // #525: a media document's worlds play live, stepped ahead of the blocks.
         if let Some(d) = doc {
-            let (sources, planted) = (
-                self.gate.sources.clone(),
-                self.scenario.module_planted.clone(),
-            );
-            play.worlds = Worlds::new(&d, sources, master, planted, self.scenario.delays.clone())?;
+            play.worlds = self.live_worlds(&d, master)?;
         }
         if let Some(b) = self.backend() {
             play.open(&b, self.now);
@@ -936,26 +932,8 @@ impl Hub<'_> {
             return Ok(());
         };
         let stamp = p.stamp(&b, t.unwrap_or(now), now, at_frame);
-        let Some(w) = p.worlds.as_mut() else {
-            return Ok(());
-        };
-        let seq = w.track.len();
-        w.track.push(
-            json!({"t": stamp, "seq": seq, "control": control, "value": value, "writer": "you"}),
-        );
-        let played = w.played();
-        let mut mix = self.mix_of(&played)?;
-        let runs = mix
-            .strips
-            .drain(..)
-            .filter(|s| s.id.contains('#'))
-            .collect();
-        if let Some(w) = self
-            .gate
-            .audio_play_mut(panel)
-            .and_then(|p| p.worlds.as_mut())
-        {
-            w.set_runs(runs);
+        if let Some(w) = p.worlds.as_mut() {
+            w.press(stamp, control, value);
         }
         Ok(())
     }

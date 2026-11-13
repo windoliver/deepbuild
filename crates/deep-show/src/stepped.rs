@@ -82,8 +82,10 @@ pub struct Worlds {
     done: Vec<(usize, u64)>,
     /// Each row's flick as planned, once seen: a planted program may move it.
     planned: BTreeMap<(usize, usize), i64>,
-    /// The play's recorded input track.
+    /// The play's recorded input track, the `start_on` strips with what starts them, and the
+    /// runs the track has started.
     pub track: Vec<Value>,
+    templates: Vec<(Strip, Value)>,
     runs: Vec<Strip>,
     dirty: bool,
 }
@@ -96,6 +98,7 @@ impl Worlds {
         master: usize,
         planted: Option<String>,
         delays: Vec<Delay>,
+        templates: Vec<(Strip, Value)>,
     ) -> Result<Option<Worlds>, Value> {
         let Some(listed) = doc
             .get("worlds")
@@ -134,6 +137,7 @@ impl Worlds {
             done: Vec::new(),
             planned: BTreeMap::new(),
             track: Vec::new(),
+            templates,
             runs: Vec::new(),
             dirty: false,
         }))
@@ -149,6 +153,13 @@ impl Worlds {
 
     pub fn ids(&self) -> impl Iterator<Item = &str> {
         self.worlds.iter().map(|w| w.id.as_str())
+    }
+
+    /// Whether a world whose span goes on hasn't stepped to `t` (#525: the device play's count).
+    pub fn behind(&self, t: i64) -> bool {
+        self.worlds
+            .iter()
+            .any(|w| w.live.steps < w.last && (w.live.steps as i64) * w.live.step_flicks() < t)
     }
 
     /// The first step not yet run, as a time: the latest of the worlds'.
@@ -205,12 +216,22 @@ impl Worlds {
         d
     }
 
-    /// The runs the track starts, and the world inputs it derives for the steps not yet run.
-    pub fn set_runs(&mut self, runs: Vec<Strip>) {
+    /// Your press of `control`, an entry on the track at `t`: it starts each `start_on` strip it
+    /// matches, as a replay of the track does, and derives the worlds' inputs for the steps not
+    /// yet run.
+    pub fn press(&mut self, t: i64, control: &str, value: &Value) {
+        let seq = self.track.len();
+        self.track
+            .push(json!({"t": t, "seq": seq, "control": control, "value": value, "writer": "you"}));
         for w in &mut self.worlds {
             w.live.track(&self.track);
         }
-        self.runs = runs;
+        let played = self.played();
+        self.runs = self
+            .templates
+            .iter()
+            .flat_map(|(s, on)| runs(&played, s, on))
+            .collect();
         self.dirty = true;
     }
 
@@ -249,6 +270,51 @@ impl Worlds {
         let voices = crate::hub::Hub::voices(&d, self.master, self.planted.as_deref(), &mut source)
             .map_or_else(|_| Vec::new(), |v| v.0);
         Some(self.runs.iter().chain(&voices).cloned().collect())
+    }
+}
+
+impl crate::hub::Hub<'_> {
+    /// #525: the live worlds of an opened media document (lists empty), with its `start_on`
+    /// strips built as the mix builds them, to start on each press; none when it lists no world.
+    pub(crate) fn live_worlds(
+        &mut self,
+        opened: &Value,
+        master: usize,
+    ) -> Result<Option<Worlds>, Value> {
+        let mut plain = opened.clone();
+        let mut ons = Vec::new();
+        for (sid, s) in plain
+            .get_mut("strips")
+            .and_then(Value::as_object_mut)
+            .into_iter()
+            .flatten()
+        {
+            if let Some(on) = s.as_object_mut().and_then(|o| o.remove("start_on")) {
+                ons.push((sid.clone(), on));
+            }
+        }
+        let mut templates = Vec::new();
+        if !ons.is_empty() {
+            let mix = self.mix_of(&plain)?;
+            templates = ons
+                .into_iter()
+                .filter_map(|(sid, on)| {
+                    Some((mix.strips.iter().find(|s| s.id == sid)?.clone(), on))
+                })
+                .collect();
+        }
+        let (sources, planted) = (
+            self.gate.sources.clone(),
+            self.scenario.module_planted.clone(),
+        );
+        Worlds::new(
+            opened,
+            sources,
+            master,
+            planted,
+            self.scenario.delays.clone(),
+            templates,
+        )
     }
 }
 
@@ -337,11 +403,8 @@ pub(crate) fn expand(d: &mut Value, offered: &[(String, PathBuf)]) -> Result<(),
             (manifest.get("version")?.as_str()? == version)
                 .then(|| manifest.get("recipes")?.get(kind).cloned())?
         });
-        let Some(recipe) = recipe else {
-            return Err(
-                json!({"code": "recipe_unresolved", "item": iid, "kind": kind, "packs": listed}),
-            );
-        };
+        // An item no listed pack's recipe names (a logic item, say) is left as it is.
+        let Some(recipe) = recipe else { continue };
         let mut inputs = Map::new();
         for (name, decl) in recipe
             .get("inputs")

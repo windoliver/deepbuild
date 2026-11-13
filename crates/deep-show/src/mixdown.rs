@@ -58,6 +58,9 @@ pub enum MixCall {
     Soak {
         media: Value,
         seconds: u64,
+        /// #525: scripted presses during a live play, each `(at, control, value)`: host flicks
+        /// after the play starts.
+        presses: Vec<(i64, String, Value)>,
     },
 }
 
@@ -94,6 +97,18 @@ pub fn parse_call(name: &str, c: &Map<String, Value>) -> Option<MixCall> {
         "soak" => MixCall::Soak {
             media: c.get("media").filter(|d| d.is_object())?.clone(),
             seconds: c.get("seconds")?.as_u64().filter(|s| *s > 0)?,
+            presses: c.get("presses").map_or(Some(Vec::new()), |p| {
+                p.as_array()?
+                    .iter()
+                    .map(|x| {
+                        Some((
+                            x.get("at")?.as_i64()?,
+                            x.get("control")?.as_str()?.to_string(),
+                            x.get("value").cloned().unwrap_or(json!(true)),
+                        ))
+                    })
+                    .collect()
+            })?,
         },
         _ => return None,
     })
@@ -670,13 +685,41 @@ impl Hub<'_> {
                 json!({"handed": {"sample_rate": rate, "channels": 2, "first": first, "frames": last - first,
                     "sha256": sha, "wav": w}})
             }
-            MixCall::Soak { media, seconds } => match self.mix_of(media) {
-                Ok(m) => crate::device::soak(
-                    Player::new(Arc::new(m), planted_of(self.scenario.planted, true)),
-                    *seconds,
-                ),
-                Err(e) => e,
-            },
+            MixCall::Soak {
+                media,
+                seconds,
+                presses,
+            } => {
+                // #525: a document with worlds plays them live, stepped ahead of the mixer's blocks.
+                let live = match crate::stepped::opened(media, &self.scenario.packs) {
+                    Ok(d) => d,
+                    Err(e) => return e,
+                };
+                let mix = match self.mix_of(&live) {
+                    Ok(m) => Arc::new(m),
+                    Err(e) => return e,
+                };
+                let master = mix.buses.iter().position(|b| b.id == "master").unwrap_or(0);
+                let worlds = match self.live_worlds(&live, master) {
+                    Ok(w) => w,
+                    Err(e) => return e,
+                };
+                let player = Player::new(mix, planted_of(self.scenario.planted, true));
+                let planted =
+                    |p: crate::stepped::Planted| self.scenario.planted == Some(Planted::Ahead(p));
+                let late = planted(crate::stepped::Planted::LateStepMovesVoice);
+                let at_frame = planted(crate::stepped::Planted::EntryStampedAtFrame);
+                match worlds {
+                    Some(w) => crate::device::soak_live(
+                        player,
+                        w,
+                        *seconds,
+                        presses.clone(),
+                        (late, at_frame),
+                    ),
+                    None => crate::device::soak(player, *seconds),
+                }
+            }
         }
     }
 }
