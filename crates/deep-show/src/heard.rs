@@ -27,6 +27,22 @@ const ANALYZER: &str = "whisper-cpp@1.9.5";
 const ACTIVITY: &str = "bake.activity";
 const ASKED: &str = "narration.exception.asked";
 const ANSWERED: &str = "narration.exception.answered";
+/// The codes a compiled script's first problem can carry, as a document issue names them.
+const SCRIPT_CODES: [&str; 13] = [
+    "narration.words_unbaked",
+    "narration.speech_job",
+    "narration.words_differ",
+    "narration.no_asset",
+    "narration.after",
+    "narration.overlap",
+    "narration.polyphonic",
+    "say_not_text",
+    "record_of_another_kind",
+    "record_of_another_pcm",
+    "bad_record",
+    "bad_time",
+    "unknown_asset",
+];
 
 fn hex(d: impl AsRef<[u8]>) -> String {
     d.as_ref().iter().map(|b| format!("{b:02x}")).collect()
@@ -134,22 +150,43 @@ impl Hub<'_> {
     }
 
     /// `script.spoken`, written into a document whose times name a narration line or its words:
-    /// each line's and word marker's `[start, end]`, from the compiled script.
-    pub(crate) fn stamp_spoken(&mut self, doc: &mut Value) {
-        let Some(lines) = doc.pointer("/script/lines").and_then(Value::as_object) else {
-            return;
-        };
+    /// each line's and word marker's `[start, end]`, from the compiled script. While the script
+    /// can't compile, such a time can't resolve, so the document gets the script's own issue,
+    /// naming the line and what it waits on (the job and the PCM's hash), not a bare `bad_time`.
+    pub(crate) fn stamp_spoken(&mut self, doc: &mut Value) -> Option<deep_canvas::document::Issue> {
+        let lines = doc.pointer("/script/lines").and_then(Value::as_object)?;
         let text = doc.to_string();
         if !lines.keys().any(|id| text.contains(&format!("\"@{id}"))) {
-            return;
+            return None;
         }
-        let Some(s) = self.script_of(doc) else { return };
+        let s = self.script_of(doc)?;
         let spoken: serde_json::Map<String, Value> = s
             .spoken
             .iter()
             .map(|(n, (a, b))| (n.clone(), json!([a, b])))
             .collect();
         doc["script"]["spoken"] = Value::Object(spoken);
+        let p = s.problem.as_ref()?;
+        let code = SCRIPT_CODES
+            .iter()
+            .copied()
+            .find(|c| p["code"] == *c)
+            .unwrap_or("narration.unready");
+        let line = p["line"].as_str().unwrap_or_default();
+        let why = p["reason"]
+            .as_str()
+            .or(p["why"].as_str())
+            .unwrap_or_default();
+        let mut issue = deep_canvas::document::Issue::error(code, line, format!("script/lines/{line}"), p.clone(),
+            &format!("a time in this document names a narration line, and the script can't place its lines yet: {why}"));
+        issue.fix = match p["job"].as_str() {
+            Some(job) => format!(
+                "run {job} on the PCM {} and attach its record to the line's audio asset",
+                p["pcm_sha256"].as_str().unwrap_or_default()
+            ),
+            None => "fix the script as its issue says, then the line's times resolve".into(),
+        };
+        Some(issue)
     }
 
     /// #509: an export's receipt `bakes`: each bus's power bake of the mix at `hz`, kept by hash,

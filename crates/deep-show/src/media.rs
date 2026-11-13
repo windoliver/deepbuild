@@ -199,7 +199,7 @@ impl Hub<'_> {
             }
         }
         // #509: a document that names a narration line's time gets the script's spoken times.
-        self.stamp_spoken(doc);
+        out.extend(self.stamp_spoken(doc));
         out
     }
 
