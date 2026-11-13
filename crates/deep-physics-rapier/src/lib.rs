@@ -34,9 +34,11 @@ pub fn leaked_world() -> rapier3d::prelude::PhysicsWorld {
 
 pub mod bound;
 pub mod fp;
+mod inputs;
 mod joints;
 mod kinematic;
 mod occurrences;
+pub mod planted;
 pub mod runner;
 pub mod scene;
 
@@ -150,6 +152,10 @@ pub struct Rapier {
     reverse_pairs: bool,
     /// The world's shapes, which a query's probe shape names as a compound's children (#1919).
     shapes: BTreeMap<String, Shape>,
+    /// #522: each held grab, by body; and the planted restore's: the next step applies no
+    /// warm-start impulse.
+    grabs: BTreeMap<String, inputs::Grab>,
+    cold: bool,
 }
 
 fn v3(a: [f64; 3]) -> Vector {
@@ -862,39 +868,21 @@ impl Backend for Rapier {
 
     fn step(&mut self, inputs: &[Input], targets: &Targets) -> Result<(), Box<Refusal>> {
         tally("step");
-        // #525: a launch sets its body's velocities at the start of its step; the reader
-        // refuses every other kind (#522).
-        for i in inputs {
-            let body = self
-                .bodies
-                .iter()
-                .find(|(b, _)| *b == i.target)
-                .map(|(_, h)| *h);
-            let (Some(h), "launch") = (body, i.kind.as_str()) else {
-                let what = format!(
-                    "the input {} on {} isn't run by this backend interface yet; #522 brings it",
-                    i.kind, i.target
-                );
-                return Err(Box::new(refusal(
-                    "physics.unsupported",
-                    "inputs/kind".into(),
-                    json!(i.kind),
-                    what,
-                )));
-            };
-            let v = |k: &str| -> [f64; 3] {
-                serde_json::from_value(i.data[k].clone()).unwrap_or([0.0; 3])
-            };
-            let rb = &mut self.world.bodies[h];
-            rb.set_linvel(v3(v("linear")), true);
-            rb.set_angvel(v3(v("angular")) * (PI / 180.0), true);
-        }
+        self.apply(inputs)?;
         let before = self.before();
         let start = self.start();
         let watched = self.readings();
         self.aim(targets);
         self.push();
-        self.world.step();
+        self.pull();
+        if std::mem::take(&mut self.cold) {
+            let warm = self.world.integration_parameters.warmstart_coefficient;
+            self.world.integration_parameters.warmstart_coefficient = 0.0;
+            self.world.step();
+            self.world.integration_parameters.warmstart_coefficient = warm;
+        } else {
+            self.world.step();
+        }
         self.step += 1;
         self.last = self.gather(&before);
         let turned = self.turned(&start);
@@ -979,7 +967,11 @@ impl Backend for Rapier {
             version: RAPIER3D.version.into(),
             features: RAPIER3D.features.iter().map(|f| f.to_string()).collect(),
             step: self.step,
-            state: bincode::serialize(&self.world).expect("a Rapier world serializes"),
+            state: [
+                bincode::serialize(&self.world).expect("a Rapier world serializes"),
+                self.grab_bytes(),
+            ]
+            .concat(),
         }
     }
 
@@ -998,7 +990,8 @@ impl Backend for Rapier {
                 ),
             )));
         }
-        let world: PhysicsWorld = bincode::deserialize(&cp.state).map_err(|e| {
+        let mut rest = &cp.state[..];
+        let world: PhysicsWorld = bincode::deserialize_from(&mut rest).map_err(|e| {
             Box::new(refusal(
                 CHECKPOINT_REFUSED,
                 "checkpoint/state".into(),
@@ -1010,6 +1003,7 @@ impl Backend for Rapier {
             ))
         })?;
         self.world = world;
+        self.grabs = Rapier::grabs_of(rest);
         self.step = cp.step;
         self.last.clear();
         if self.twin == Twin::CheckpointDropsTurns {
