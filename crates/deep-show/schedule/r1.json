@@ -554,7 +554,8 @@
           "core.fields",
           "text.counter",
           "view(locale)",
-          "table:text.fonts"
+          "table:text.fonts",
+          "look"
         ],
         "writes": [
           "text.run"
