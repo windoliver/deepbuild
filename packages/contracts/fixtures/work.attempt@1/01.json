@@ -15,7 +15,7 @@
     "run": "run:01K74FKZVK8Q2X5R7M3N9P4T6W",
     "agent": "claude-code",
     "model": null,
-    "worktree": "/Users/you/.deepbuild/worktrees/shop/run01K74F",
+    "worktree": "~/.deepbuild/worktrees/shop/run01K74F",
     "branch": "deep/100-p4t6w",
     "reason": "unblocks #102, #103; then the lowest number; claude-code's turn: the approved agents take turns",
     "cause": "none",
