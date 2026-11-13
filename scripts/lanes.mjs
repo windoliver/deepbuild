@@ -565,6 +565,16 @@ alone.push('tests/acceptance/525/');
 alone.push('tests/acceptance/525-device/');
 timed.push('tests/acceptance/525-device/device.test.ts');
 slow.push('tests/acceptance/525-device/device.test.ts');
+// #204's files each build deep-show and mix seconds of synth through it; export.test.ts encodes a film, and
+// budgets.test.ts times renders, seeks and a pack's sweep.
+alone.push('tests/acceptance/204/', 'tests/acceptance/204-oracle/');
+timed.push('tests/acceptance/204/budgets.test.ts');
+// AC7's blind redraft runs the same way. The first draft's export file is kept by hand: its film names its own layers,
+// which `deep show` from your shell refuses before any export (tests/acceptance/204-redraft-ac7/DISPUTE.md).
+alone.push('tests/acceptance/204-redraft-ac7/');
+// #204's gap test builds deep-show and reads the registries around a pack's install.
+alone.push('tests/acceptance/204-gaps/');
+byHand.push('tests/acceptance/204/export.test.ts');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
