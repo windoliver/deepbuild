@@ -592,7 +592,6 @@ alone.push('tests/acceptance/204-gaps/');
 byHand.push('tests/acceptance/204/export.test.ts');
 // #450's files each build deep-gpu and draw trails and ribbons on the Metal GPU.
 alone.push('tests/acceptance/450/');
-// #239's files each build deep-show or deep-gpu and draw, export or time both fixture films on the GPU; seek-play,
 // #239's files each build deep-show or deep-gpu and draw, export or time both fixture films on the GPU, and its
 // look-type regression builds deep-show; seek-play,
 // budget and off-reference read this machine's fingerprint, budget its load too. exports (289 s) and checks (151 s)
