@@ -64,28 +64,32 @@ After the fix, use the affected selector rather than a neighbouring whole suite:
 ```sh
 node scripts/affected.mjs \
   packages/hub/src/mcp-operations.ts \
+  packages/hub/src/hub-control.ts \
   tests/acceptance/2072/held-action.test.ts \
-  tests/acceptance/2072/digest-binding.test.ts
+  tests/acceptance/2072/digest-binding.test.ts \
+  tests/acceptance/2072/redraft/retry.test.ts
 ```
 
 Use `--list` to inspect selection without running it. From the repository root,
 Vitest retains the repository's setup and process cleanup; do not change its root
 to this test folder. A throttle timeout runs no test and proves no behavior.
 
-## Proof status and blind redraft
+## Final proof and blind redraft
 
-The production fix is implemented. The original tests failed on the merge base
-(6 failed, 1 passed); after the fix, 5 pass and 2 total-ledger-count assertions
-fail on delayed `session.state` / `row.set` events from answering the ask. Their
-action-entry, handler and store checks pass. Neither test file was edited or
-skipped.
+All **11 acceptance tests pass unchanged** after the production fix. The original
+files fail on the merge base (6 failed, 1 passed). The digest-only intermediate
+change left two total-ledger-count assertions failing because answer-related
+`session.state` / `row.set` updates arrived later. The final change waits for
+those existing state updates before acknowledging the answer, so the original
+assertions now pass too. No test was edited, skipped or weakened.
 
 `redraft/` is a fresh independent draft from the original issue, design and base,
 without the work, first draft or dispute. Its 4 tests fail on the base and pass on
-the fix, unchanged. Under Dogfooding, the owner must settle which draft counts;
-the first draft remains enabled until then. The redraft's typecheck also passes.
+the fix, unchanged; its typecheck also passes. It never replaced the first draft,
+and no acceptance dispute remains because both drafts pass.
 
-[The proof report](../../../reports/2072/README.md) links before/after output,
-the delayed-event observation, six passing #363 regression tests, the scheduling
-deviation, and the affected run's unrun checks. Those gaps remain explicit;
-`Part of #2072` is not a closing claim.
+[The proof report](../../../reports/2072/README.md) links all before/after output,
+the intermediate failure and its correction, 13 passing answer/action regression
+tests, the scheduling deviation, inherited lint failures, and the broad affected
+run's INCONCLUSIVE status. Every #2072 acceptance criterion is proven; broader
+unrun checks are not represented as PASS.

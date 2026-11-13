@@ -327,7 +327,12 @@ export class HubControl {
     }
   }
 
-  async answer(params: Obj, context: CallContext, channel?: { channel: string; proof: 'device' | 'account_link'; plan_hash: string | null }): Promise<Obj> { return this.human.answer(params, context, channel); }
+  async answer(params: Obj, context: CallContext, channel?: { channel: string; proof: 'device' | 'account_link'; plan_hash: string | null }): Promise<Obj> {
+    const result = await this.human.answer(params, context, channel);
+    // Acknowledging the answer also settles its card/session rows; they must not trail into the next call's effects.
+    await this.options.state().statesSettled();
+    return result;
+  }
 
   async onSwitchedTree(claim: string): Promise<string | undefined> { return this.human.onSwitchedTree(claim); }
 
