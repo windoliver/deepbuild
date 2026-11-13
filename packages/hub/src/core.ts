@@ -1359,7 +1359,7 @@ export class Core {
   private async handleHook(drafts: Draft[], meta: HookMeta, writer: string, replayed = false, waited = false, placing = false): Promise<{ settled: Promise<void> }> {
     const early = await this.routeHook(drafts, meta, writer, replayed, waited, placing);
     if (early) return early;
-    const verified = meta.watchOnly ? false : await this.state.verify(meta);
+    const verified = meta.watchOnly || await this.delivery.tokenTaken(meta) ? false : this.delivery.checked(meta, await this.state.verify(meta));
     // A session's first hook from under a run DeepBuild started (#1330): its start.session first, so its first event names the run.
     if (meta.session) await this.sessionStarts.sessionOf(meta.session, meta.ppid, meta.agent).catch(() => undefined);
     const unread = Boolean(meta.watchOnly && meta.session && !this.state.versioned.has(meta.session));
@@ -2633,7 +2633,7 @@ export class Core {
 
   waiterGone(key: number): void { return this.delivery.waiterGone(key); }
 
-  mcpHello(parent: { pid: number; start: string } | undefined, paseo?: string): Promise<string | null> { return this.state.mcpHello(parent, paseo); }
+  mcpHello(fd: number | undefined, claimed: { pid: number; start: string } | undefined, paseo?: string): Promise<{ session: string | null; parent?: { pid: number; start: string } }> { return this.state.mcpHello(fd, claimed, paseo); }
 
   async notifierGone(): Promise<void> { return this.control.notifierGone(); }
 

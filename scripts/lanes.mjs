@@ -517,6 +517,10 @@ byHand.push('tests/acceptance/2017/ac2-light-holds.test.ts');
 alone.push('tests/acceptance/173/');
 timed.push('tests/acceptance/173/budgets.test.ts', 'tests/acceptance/173/envelope.test.ts');
 slow.push('tests/acceptance/173/budgets.test.ts', 'tests/acceptance/173/envelope.test.ts');
+// #2070's tests each start their own hub, paseo daemon stand-in and agent stand-in.
+alone.push('tests/acceptance/2070/', 'tests/acceptance/2070-gaps/');
+// #55's AC13 is its blind redraft's since #2070's dispute, settled by the owner (tests/acceptance/55-redraft-ac13/DISPUTE.md).
+alone.push('tests/acceptance/55-redraft-ac13/');
 // #1606's files each start their own hubs, and device.test.ts and stolen.test.ts the real app, built with its stand-ins;
 // device.test.ts presses the real app's card, with Accessibility and Screen Recording, by hand.
 alone.push('tests/acceptance/1606/');

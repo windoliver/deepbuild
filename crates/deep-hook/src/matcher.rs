@@ -797,6 +797,12 @@ fn pids(run: &Run) -> Vec<i64> {
 fn peer_pid(path: &Path) -> Option<i64> {
     use std::os::fd::AsRawFd;
     let stream = std::os::unix::net::UnixStream::connect(path).ok()?;
+    peer_of(stream.as_raw_fd())
+}
+
+/// The PID of the process at the other end of the connected Unix socket `fd`, by the OS's peer credentials: what
+/// `deep-hook peer` tells the hub of a connection the hub hands it (#2070).
+pub fn peer_of(fd: i32) -> Option<i64> {
     extern "C" {
         fn getsockopt(fd: i32, level: i32, name: i32, value: *mut u8, len: *mut u32) -> i32;
     }
@@ -811,7 +817,7 @@ fn peer_pid(path: &Path) -> Option<i64> {
     // SAFETY: the buffer outlives the call and `len` says its size.
     let ok = unsafe {
         getsockopt(
-            stream.as_raw_fd(),
+            fd,
             level,
             name,
             value.as_mut_ptr(),
