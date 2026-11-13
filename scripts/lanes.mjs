@@ -534,6 +534,8 @@ alone.push('tests/acceptance/2324/');
 // deep_status against #26's 100 ms on the reference Mac.
 alone.push('tests/acceptance/2197/');
 timed.push('tests/acceptance/2197/budget.test.ts');
+// #2144's AC1 runs the canvas lint on the checkout, a cargo clippy over every scope crate in its target/.
+alone.push('tests/acceptance/2144/');
 // #1332's files each start their own hubs, a played forge and played agents, and run a work run to its landings.
 alone.push('tests/acceptance/1332/');
 
