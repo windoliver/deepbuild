@@ -8,7 +8,7 @@ import { readFacts } from '@deepbuild/adapters';
 
 import { AskRefused } from '@deepbuild/asks';
 
-import { canonicalize, sha256Hex, type JsonValue } from '@deepbuild/contracts';
+import { canonicalize, isRecord as isObj, sha256Hex, type JsonValue } from '@deepbuild/contracts';
 
 import { type Connection, type EventInput, type RecordStore } from '@deepbuild/record';
 
@@ -174,7 +174,7 @@ export const reusedPids = (): number[] => {
   try { const list = JSON.parse(readFileSync(file, 'utf8')) as unknown; return Array.isArray(list) ? list.filter((n): n is number => Number.isSafeInteger(n)) : []; } catch { return []; }
 };
 
-export const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
+export { isObj };
 
 /** A verdict as the hub records and returns it: the gate's, or its opposite in #1334's planted misjudging build. */
 export const misjudged = <V extends { outcome: string }>(v: V, plant: Plant | undefined): V => (plant === 'judges-claims-wrongly' ? { ...v, outcome: v.outcome === 'PASS' ? 'FAIL' : 'PASS' } : v);

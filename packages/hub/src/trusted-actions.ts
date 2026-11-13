@@ -20,6 +20,7 @@ import { inviteText, People } from './people.js';
 import { identityAt } from './identity.js';
 
 import { Channels } from './channels.js';
+import { enterSlackToken } from './reach.js';
 
 import { checkKey, Devices } from './trusted.js';
 
@@ -76,9 +77,14 @@ export class TrustedActions {
    * Whether an answer may count: a paired device's valid signature for this method, this hub and these params (#1579),
    * from any role; otherwise, from the CLI alone, the OS confirming you with a prompt that names what you answer. The
    * control token and the peer check alone never make one count, and a deep command run inside an agent's process
-   * tree acts as that agent's session.
+   * tree acts as that agent's session, signed or not (#1606): a command an agent starts runs as you, so a signature it
+   * carries proves nothing about who answered.
    */
   async trusted(method: string, params: Obj, context: CallContext, what: string, handle: string, revision: string): Promise<void> {
+    const agent = await this.options.state().agentAbove(context.peer);
+    if (agent && this.options.settings.plant !== 'answer-inside-session') {
+      throw new Refused(refusal('role', '/params/ask', `${handle} stays open: this deep command runs inside agent session ${agent}'s process tree, so it acts as that session, and no agent answers an ask${params.signature !== undefined ? ', whatever it signs' : ''}. Answer it from your own terminal or on the question card.`, handle));
+    }
     if (params.signature !== undefined) {
       // A write with a request ID follows that ID (#1577): its receipt, not the spent once-only ID, makes a retry count
       // once. Only the writes that keep a receipt: any other signed call still counts once by its once-only ID.
@@ -88,10 +94,6 @@ export class TrustedActions {
       throw new Refused(refusal('credential', why.field === 'signature' ? '/params/signature/sig' : `/params/signature/signed/${why.field}`, `${handle} stays open: the signature's ${why.field} doesn't hold (${why.reason}). Sign it again with a device you paired, for ${method} on this hub, over exactly the params it sends.`, signed?.[why.field] ?? why.field));
     }
     if (context.role !== 'cli') throw new Refused(refusal('unconfirmed', '/params/signature', `${handle} stays open: an answer from the app counts only when a device you paired signs it.`, handle));
-    const agent = await this.options.state().agentAbove(context.peer);
-    if (agent && this.options.settings.plant !== 'answer-inside-session') {
-      throw new Refused(refusal('role', '/params/ask', `${handle} stays open: this deep command runs inside agent session ${agent}'s process tree, so it acts as that session, and no agent answers an ask. Answer it from your own terminal or on the question card.`, handle));
-    }
     const plant = this.options.settings.plant;
     if (plant === 'answer-on-token' || plant === 'answer-on-peer-check') return;
     const why = await this.options.services.confirmer.you(what, { handle, revision, process: context.peer });
@@ -108,6 +110,15 @@ export class TrustedActions {
   async enterSecret(params: Obj, context: CallContext): Promise<Obj> {
     const { extension, name, value } = params;
     if (typeof extension !== 'string' || typeof name !== 'string' || typeof value !== 'string' || !value) throw new Refused(refusal('required', '/params', 'Name the package and the secret, and give its value.', null));
+    // A channel's token or the Slack connector's (#1606): `deep secret add channels <channel>` or `deep secret add slack token`.
+    if (extension === 'channels' || extension === 'slack') {
+      const what = extension === 'slack' ? "the Slack connector's token" : `the token of the channel ${name}`;
+      const channels = this.options.services.channels;
+      if (extension === 'channels' && !channels) throw new Refused(refusal('unavailable', '', 'The hub has no channels yet; try again once it is ready.', name, true));
+      await this.trusted('secret.enter', params, context, `add ${what}`, `secret:${extension}/${name}`, name);
+      await (extension === 'slack' ? enterSlackToken(this.options.services.root.dir, value) : channels!.enterToken(name, value)).catch((e: Error) => { throw new Refused(refusal('unavailable', '/params/name', `${what} wasn't saved: ${e.message}.`, name)); });
+      return { saved: true, test: 'untested' };
+    }
     if (!this.options.services.extensions) throw new Refused(refusal('unavailable', '/params/extension', `${extension} isn't loaded, so nothing can name ${name}.`, extension));
     await this.trusted('secret.enter', params, context, `add the secret ${name} for ${extension}`, `secret:${extension}/${name}`, name);
     const { saved, test } = await this.options.services.extensions.enterSecret(this.options.events.connection('cli'), extension, name, value);

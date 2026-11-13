@@ -402,9 +402,11 @@ fn call(payload: &Value, classes: &[(String, String)]) -> Option<matcher::Call> 
             field("path").map(tool_paths::pi_path).into_iter().collect(),
             false,
         ),
-        "read" | "grep" | "find" | "ls" => {
-            (None, field("path").map(tool_paths::pi_path).into_iter().collect(), true)
-        }
+        "read" | "grep" | "find" | "ls" => (
+            None,
+            field("path").map(tool_paths::pi_path).into_iter().collect(),
+            true,
+        ),
         _ => (None, Vec::new(), false),
     };
     let cwd = match member(payload, "cwd") {
@@ -432,7 +434,15 @@ fn call(payload: &Value, classes: &[(String, String)]) -> Option<matcher::Call> 
     let (args, paths, names) = match tool_paths::mcp(tool, input, cwd.as_deref(), &home) {
         Some(mcp) => {
             let (args, paths) = mcp.into_iter().unzip();
-            (args, paths, if counts.as_deref() == Some("read") { Reads } else { Both })
+            (
+                args,
+                paths,
+                if counts.as_deref() == Some("read") {
+                    Reads
+                } else {
+                    Both
+                },
+            )
         }
         None => (Vec::new(), paths, if read { Reads } else { Writes }),
     };
@@ -478,6 +488,17 @@ fn heavy_call(
         }
     };
     hit.map(|hit| (hit, command.clone()))
+}
+
+/// `deep-hook peer`: the PID of the process at the other end of the Unix socket on stdin, by the OS's peer
+/// credentials, or `null` where the OS reports none. The hub hands it a deep mcp's connection to learn who opened
+/// it (#2070); stdin is never read.
+fn peer() -> ExitCode {
+    match deep_hook::matcher::peer_of(0) {
+        Some(pid) => println!("{pid}"),
+        None => println!("null"),
+    }
+    ExitCode::SUCCESS
 }
 
 /// `deep-hook heavy`: the heavy.command@1 entry a command line on stdin matches in the current folder (#1016), as
@@ -1981,11 +2002,12 @@ fn main() -> ExitCode {
     match args.as_slice() {
         [arg] if arg == "--version" => println!("{}", env!("CARGO_PKG_VERSION")),
         [arg] if arg == "--help" => println!(
-            "Usage: deep-hook [--help | --version]\n       deep-hook <agent> <event>    the hook's JSON on stdin\n       deep-hook statusline         Claude Code's status line JSON on stdin\n       deep-hook <agent> waiter     the background Stop entry: the hook's JSON on stdin\n       deep-hook mcp actions        the deep-actions MCP server, on stdin and stdout\n       deep-hook check              an entry and a call as JSON on stdin: whether the entry matches\n       deep-hook match              a tool hook's JSON per line on stdin: what guards match, per line\n       deep-hook heavy              a command line on stdin: the heavy command entry it matches here\n       deep-hook clone <from> <to>  a copy-on-write clone, for staging a destructive command"
+            "Usage: deep-hook [--help | --version]\n       deep-hook <agent> <event>    the hook's JSON on stdin\n       deep-hook statusline         Claude Code's status line JSON on stdin\n       deep-hook <agent> waiter     the background Stop entry: the hook's JSON on stdin\n       deep-hook mcp actions        the deep-actions MCP server, on stdin and stdout\n       deep-hook check              an entry and a call as JSON on stdin: whether the entry matches\n       deep-hook match              a tool hook's JSON per line on stdin: what guards match, per line\n       deep-hook heavy              a command line on stdin: the heavy command entry it matches here\n       deep-hook peer               a Unix socket on stdin: the PID at its other end\n       deep-hook clone <from> <to>  a copy-on-write clone, for staging a destructive command"
         ),
         [arg] if arg == "statusline" => return statusline(),
         [arg] if arg == "check" => return check(),
         [arg] if arg == "heavy" => return heavy_entry(),
+        [arg] if arg == "peer" => return peer(),
         [arg] if arg == "match" => return matching(),
         [arg, from, to] if arg == "clone" => return clone(Path::new(from), Path::new(to)),
         [arg, line] if arg == "statusline-send" => {

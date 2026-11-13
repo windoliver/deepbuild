@@ -44,7 +44,8 @@ pub struct ShortForm {
 /// The pages the #157 rows were read from.
 const SHORT_FORM: &str = "EBU R 128 s1 version 3 (August 2020), recommendation d and Definitions";
 const STREAMING: &str = "Spotify for Artists, Loudness normalization";
-const PODCAST: &str = "Apple Podcasts for Creators, Audio requirements: Best practices, Audio levels";
+const PODCAST: &str =
+    "Apple Podcasts for Creators, Audio requirements: Best practices, Audio levels";
 
 pub const PROFILES: [Profile; 4] = [
     Profile {
@@ -122,7 +123,8 @@ impl Profile {
 
     /// Whether `integrated` is inside the profile.
     pub fn holds(&self, integrated: f64) -> bool {
-        self.integrated.is_none_or(|(target, tolerance)| (integrated - target).abs() <= tolerance)
+        self.integrated
+            .is_none_or(|(target, tolerance)| (integrated - target).abs() <= tolerance)
     }
 
     /// #157: the true-peak ceiling, dBTP, for a reading at `integrated` LUFS.
@@ -142,20 +144,42 @@ impl Profile {
         let mut out = Vec::new();
         if let Some((target, tolerance)) = self.integrated {
             if !self.holds(read.integrated) {
-                out.push(Miss { measure: "integrated", reading: read.integrated, target, tolerance, at: None });
+                out.push(Miss {
+                    measure: "integrated",
+                    reading: read.integrated,
+                    target,
+                    tolerance,
+                    at: None,
+                });
             }
         }
         if let Some(ceiling) = self.ceiling(read.integrated) {
             if read.true_peak > ceiling {
-                out.push(Miss { measure: "true_peak", reading: read.true_peak, target: ceiling, tolerance: 0.0, at: None });
+                out.push(Miss {
+                    measure: "true_peak",
+                    reading: read.true_peak,
+                    target: ceiling,
+                    tolerance: 0.0,
+                    at: None,
+                });
             }
         }
         if let Some(s) = &self.short_form {
             let seconds = read.short_term.len() as f64 / 100.0;
             if seconds <= s.seconds && read.short_term_max > s.max_s {
                 // Entry k is the 3 s window ending at (k + 1) × 10 ms.
-                let at = read.short_term.iter().position(|v| *v == read.short_term_max).map(|k| ((k + 1) as f64 / 100.0 - 3.0).max(0.0));
-                out.push(Miss { measure: "max_s", reading: read.short_term_max, target: s.max_s, tolerance: 0.0, at });
+                let at = read
+                    .short_term
+                    .iter()
+                    .position(|v| *v == read.short_term_max)
+                    .map(|k| ((k + 1) as f64 / 100.0 - 3.0).max(0.0));
+                out.push(Miss {
+                    measure: "max_s",
+                    reading: read.short_term_max,
+                    target: s.max_s,
+                    tolerance: 0.0,
+                    at,
+                });
             }
         }
         out
@@ -173,7 +197,9 @@ impl Profile {
             "pcm" => 0.0,
             _ => return None,
         };
-        let at = self.integrated.map_or(f64::NEG_INFINITY, |(target, _)| target);
+        let at = self
+            .integrated
+            .map_or(f64::NEG_INFINITY, |(target, _)| target);
         Some(self.ceiling(at)? - under_read - margin)
     }
 }
@@ -181,8 +207,13 @@ impl Profile {
 /// The loudness range comparison: with one static gain and a limiter that never cut, the
 /// delivered range is the master's pre-gain range.
 pub fn range_kept(before: f64, delivered: f64, limiter_cut: bool) -> Option<Miss> {
-    (!limiter_cut && (delivered - before).abs() > LRA_KEPT)
-        .then_some(Miss { measure: "lra", reading: delivered, target: before, tolerance: LRA_KEPT, at: None })
+    (!limiter_cut && (delivered - before).abs() > LRA_KEPT).then_some(Miss {
+        measure: "lra",
+        reading: delivered,
+        target: before,
+        tolerance: LRA_KEPT,
+        at: None,
+    })
 }
 
 #[cfg(test)]
@@ -210,8 +241,20 @@ mod tests {
         assert_eq!(r128.gain(-30.5), Some(7.5));
         assert_eq!(r128.gain(f64::NEG_INFINITY), None);
         assert!(r128.misses(&read(-23.2, -1.0)).is_empty());
-        assert_eq!(r128.misses(&read(-22.7, -3.0)).iter().map(|m| m.measure).collect::<Vec<_>>(), ["integrated"]);
-        assert_eq!(r128.misses(&read(-23.0, -0.9)).iter().map(|m| m.measure).collect::<Vec<_>>(), ["true_peak"]);
+        assert_eq!(
+            r128.misses(&read(-22.7, -3.0))
+                .iter()
+                .map(|m| m.measure)
+                .collect::<Vec<_>>(),
+            ["integrated"]
+        );
+        assert_eq!(
+            r128.misses(&read(-23.0, -0.9))
+                .iter()
+                .map(|m| m.measure)
+                .collect::<Vec<_>>(),
+            ["true_peak"]
+        );
     }
 
     #[test]
@@ -227,7 +270,13 @@ mod tests {
         for p in &PROFILES {
             let targets = usize::from(p.integrated.is_some()) + usize::from(p.true_peak.is_some());
             assert_eq!(p.sources.len(), targets, "{}", p.name);
-            assert!(p.sources.iter().all(|(value, page, read)| !value.is_empty() && !page.is_empty() && read.len() == 10), "{}", p.name);
+            assert!(
+                p.sources.iter().all(|(value, page, read)| !value.is_empty()
+                    && !page.is_empty()
+                    && read.len() == 10),
+                "{}",
+                p.name
+            );
         }
     }
 
@@ -235,11 +284,17 @@ mod tests {
     /// dBFS: at 1 kHz a stereo tone's loudness in LUFS is its level in dBFS.
     fn programme(seconds: usize, quiet: f64, loud: f64) -> Loudness {
         const RATE: usize = 48_000;
-        let period: Vec<f64> = (0..48).map(|i| ops::sin(ops::TAU * i as f64 / 48.0)).collect();
+        let period: Vec<f64> = (0..48)
+            .map(|i| ops::sin(ops::TAU * i as f64 / 48.0))
+            .collect();
         let (q, l) = (ops::pow(10.0, quiet / 20.0), ops::pow(10.0, loud / 20.0));
         let mut x = Vec::with_capacity(2 * seconds * RATE);
         for i in 0..seconds * RATE {
-            let a = if (30 * RATE..33 * RATE).contains(&i) { l } else { q };
+            let a = if (30 * RATE..33 * RATE).contains(&i) {
+                l
+            } else {
+                q
+            };
             let v = (a * period[i % 48]) as f32;
             x.extend([v, v]);
         }
@@ -254,29 +309,57 @@ mod tests {
     #[test]
     fn a_short_r128_programme_whose_loudest_3_s_read_7_lu_over_fails_naming_max_s_and_when() {
         let read = programme(60, quiet_for(-16.0), -16.0);
-        assert!((read.integrated + 23.0).abs() <= 0.1, "integrated {}", read.integrated);
+        assert!(
+            (read.integrated + 23.0).abs() <= 0.1,
+            "integrated {}",
+            read.integrated
+        );
         let found = profile("r128").unwrap().misses(&read);
-        assert_eq!(found.iter().map(|m| m.measure).collect::<Vec<_>>(), ["max_s"], "{found:?}");
+        assert_eq!(
+            found.iter().map(|m| m.measure).collect::<Vec<_>>(),
+            ["max_s"],
+            "{found:?}"
+        );
         let m = &found[0];
-        assert!((m.reading + 16.0).abs() <= 0.1 && m.target == -18.0, "{m:?}");
-        assert!(m.at.is_some_and(|t| (t - 30.0).abs() < 0.015), "the loudest 3 s begin at 30 s: {m:?}");
+        assert!(
+            (m.reading + 16.0).abs() <= 0.1 && m.target == -18.0,
+            "{m:?}"
+        );
+        assert!(
+            m.at.is_some_and(|t| (t - 30.0).abs() < 0.015),
+            "the loudest 3 s begin at 30 s: {m:?}"
+        );
         // 4.5 LU over its integrated loudness, the same film passes.
         let read = programme(60, quiet_for(-18.5), -18.5);
-        assert!((read.integrated + 23.0).abs() <= 0.1, "integrated {}", read.integrated);
+        assert!(
+            (read.integrated + 23.0).abs() <= 0.1,
+            "integrated {}",
+            read.integrated
+        );
         assert_eq!(profile("r128").unwrap().misses(&read), []);
     }
 
     #[test]
     fn past_2_minutes_r128_holds_no_short_term_maximum() {
         let read = programme(121, -23.2, -16.0);
-        assert!(profile("r128").unwrap().misses(&read).iter().all(|m| m.measure != "max_s"));
+        assert!(profile("r128")
+            .unwrap()
+            .misses(&read)
+            .iter()
+            .all(|m| m.measure != "max_s"));
     }
 
     #[test]
     fn streaming_holds_minus_1_dbtp_and_minus_2_above_minus_14_lufs() {
         let streaming = profile("streaming").unwrap();
         assert_eq!(streaming.gain(-20.0), Some(6.0));
-        let at = |integrated, peak| streaming.misses(&read(integrated, peak)).iter().map(|m| (m.measure, m.reading, m.target)).collect::<Vec<_>>();
+        let at = |integrated, peak| {
+            streaming
+                .misses(&read(integrated, peak))
+                .iter()
+                .map(|m| (m.measure, m.reading, m.target))
+                .collect::<Vec<_>>()
+        };
         assert_eq!(at(-14.0, -0.7), [("true_peak", -0.7, -1.0)]);
         assert_eq!(at(-13.5, -1.5), [("true_peak", -1.5, -2.0)]);
         assert_eq!(at(-13.5, -2.0), []);
@@ -289,34 +372,62 @@ mod tests {
     fn podcast_holds_minus_16_within_1_lu_under_minus_1_dbtp() {
         let podcast = profile("podcast").unwrap();
         assert!(podcast.misses(&read(-15.0, -1.0)).is_empty());
-        assert_eq!(podcast.misses(&read(-14.9, -0.9)).iter().map(|m| m.measure).collect::<Vec<_>>(), ["integrated", "true_peak"]);
+        assert_eq!(
+            podcast
+                .misses(&read(-14.9, -0.9))
+                .iter()
+                .map(|m| m.measure)
+                .collect::<Vec<_>>(),
+            ["integrated", "true_peak"]
+        );
     }
 
     #[test]
     fn the_limiter_sits_under_the_ceiling_by_the_meters_under_read_and_the_codec_margin() {
         let near = |a: Option<f64>, b: f64| a.is_some_and(|a| (a - b).abs() < 1e-9);
         let streaming = profile("streaming").unwrap();
-        assert!(near(streaming.limiter_ceiling(8, "aac"), -1.67), "{:?}", streaming.limiter_ceiling(8, "aac"));
+        assert!(
+            near(streaming.limiter_ceiling(8, "aac"), -1.67),
+            "{:?}",
+            streaming.limiter_ceiling(8, "aac")
+        );
         assert!(near(streaming.limiter_ceiling(4, "aac"), -2.19));
-        assert!(near(profile("r128").unwrap().limiter_ceiling(8, "pcm"), -1.17));
+        assert!(near(
+            profile("r128").unwrap().limiter_ceiling(8, "pcm"),
+            -1.17
+        ));
         assert_eq!(profile("none").unwrap().limiter_ceiling(8, "aac"), None);
     }
 
     #[test]
     fn a_rule_a_row_holds_under_a_condition_has_its_own_dated_source() {
         for p in &PROFILES {
-            let sources = p.louder.iter().map(|l| l.source).chain(p.short_form.iter().map(|s| s.source));
+            let sources = p
+                .louder
+                .iter()
+                .map(|l| l.source)
+                .chain(p.short_form.iter().map(|s| s.source));
             for (value, page, read) in sources {
-                assert!(!value.is_empty() && !page.is_empty() && read.len() == 10, "{}", p.name);
+                assert!(
+                    !value.is_empty() && !page.is_empty() && read.len() == 10,
+                    "{}",
+                    p.name
+                );
             }
         }
-        assert!(profile("streaming").unwrap().louder.is_some() && profile("r128").unwrap().short_form.is_some());
+        assert!(
+            profile("streaming").unwrap().louder.is_some()
+                && profile("r128").unwrap().short_form.is_some()
+        );
     }
 
     #[test]
     fn a_range_that_moved_under_an_idle_limiter_names_lra() {
         assert_eq!(range_kept(12.0, 11.95, false), None);
-        assert_eq!(range_kept(12.0, 10.6, false).map(|m| m.measure), Some("lra"));
+        assert_eq!(
+            range_kept(12.0, 10.6, false).map(|m| m.measure),
+            Some("lra")
+        );
         assert_eq!(range_kept(12.0, 10.6, true), None);
     }
 }

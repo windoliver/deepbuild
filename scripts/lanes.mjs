@@ -520,6 +520,19 @@ byHand.push('tests/acceptance/2017/ac2-light-holds.test.ts');
 alone.push('tests/acceptance/173/');
 timed.push('tests/acceptance/173/budgets.test.ts', 'tests/acceptance/173/envelope.test.ts');
 slow.push('tests/acceptance/173/budgets.test.ts', 'tests/acceptance/173/envelope.test.ts');
+// #2070's tests each start their own hub, paseo daemon stand-in and agent stand-in.
+alone.push('tests/acceptance/2070/', 'tests/acceptance/2070-gaps/');
+// #55's AC13 is its blind redraft's since #2070's dispute, settled by the owner (tests/acceptance/55-redraft-ac13/DISPUTE.md).
+alone.push('tests/acceptance/55-redraft-ac13/');
+// #1606's files each start their own hubs, and device.test.ts and stolen.test.ts the real app, built with its stand-ins;
+// device.test.ts presses the real app's card, with Accessibility and Screen Recording, by hand.
+alone.push('tests/acceptance/1606/');
+byHand.push('tests/acceptance/1606/device.test.ts');
+// Its redraft answers the app's card with no window, so it needs no permission and runs in the lane.
+alone.push('tests/acceptance/1606-redraft-ac5-ac9/');
+// #2324's files each build deep-show (with the planted engine build and sandbox.alt), deep-sandbox and deep-logic, run
+// them in Docker on linux/amd64 and drive headless Chrome, as #238's and #531's do.
+alone.push('tests/acceptance/2324/');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },

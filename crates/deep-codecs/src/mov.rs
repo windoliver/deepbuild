@@ -141,7 +141,10 @@ pub fn timescale(p: u32, q: u32) -> (u32, u32) {
 
 /// #157: `timescale`, or the planted muxers' 600 or 1000 with the nearest whole tick per frame.
 pub(crate) fn planted_timescale(p: u32, q: u32, planted: &Planted) -> (u32, u32) {
-    let fixed = [("muxer_timescale_600", 600u64), ("muxer_timescale_1000", 1000)];
+    let fixed = [
+        ("muxer_timescale_600", 600u64),
+        ("muxer_timescale_1000", 1000),
+    ];
     match fixed.iter().find(|(name, _)| planted.is(name)) {
         Some((_, t)) => (*t as u32, ((t * q as u64 + p as u64 / 2) / p as u64) as u32),
         None => timescale(p, q),
@@ -372,7 +375,10 @@ fn trak(brand: Brand, t: &Trak, id: u32, movie: u32, at: u64, wide: bool) -> Vec
         true => full_box(b"co64", 0, &[&be(1)[..], &at.to_be_bytes()].concat()),
         false => full_box(b"stco", 0, &[be(1), be(at as u32)].concat()),
     };
-    let stbl = mp4_box(b"stbl", &[stsd, stts, ctts, stss, stsc, stsz, stco].concat());
+    let stbl = mp4_box(
+        b"stbl",
+        &[stsd, stts, ctts, stss, stsc, stsz, stco].concat(),
+    );
     let dref = full_box(
         b"dref",
         0,
@@ -692,7 +698,11 @@ mod tests {
             sizes: vec![1; frames as usize],
             keys: None,
             colr: BT709,
-            shift: if planted.is("muxer_drops_video_edit_list") { ticks } else { 0 },
+            shift: if planted.is("muxer_drops_video_edit_list") {
+                ticks
+            } else {
+                0
+            },
             held: None,
         };
         let one = [0u8; 1];

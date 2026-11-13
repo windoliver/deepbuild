@@ -27,8 +27,8 @@ import { commitsBetween, headOf } from './session-facts.js';
 import { GateRunner } from './gate-runner.js';
 import { Siblings } from './siblings.js';
 
-import { argsOf, parents, startOf } from './children.js';
-import { type Root } from './paths.js';
+import { argsOf, parentOf, parents, peerOf, startOf } from './children.js';
+import { deepHook, type Root } from './paths.js';
 import { OWNER, People } from './people.js';
 
 import { UNREAD_WINDOW } from './status.js';
@@ -58,6 +58,7 @@ export interface SessionStateOptions {
     readonly asks: Asks;
     readonly now: () => number;
     readonly record: RecordStore;
+    readonly raw: RecordStore['raw'];
     readonly transcriptReader: TranscriptReader;
     readonly stacks: Stacks;
     readonly replicas: Replicas;
@@ -71,7 +72,7 @@ export interface SessionStateOptions {
   };
   judging: () => Pick<StopJudgingPort, "completions" | "counters" | "idleSent" | "lastMessage" | "nudgeable" | "watchEnded">;
   transcripts: () => Pick<TranscriptsPort, "cursors" | "saveCursors" | "writeCursors">;
-  delivery: () => Pick<AnswerDeliveryPort, "answerWaiting" | "answers" | "binds" | "typedAt" | "unread" | "waitingFor">;
+  delivery: () => Pick<AnswerDeliveryPort, "answerWaiting" | "answers" | "binds" | "typedAt" | "unread">;
   mcp: () => Pick<McpOperationsPort, "stamps">;
   memory: () => Pick<SessionMemoryPort, "firstPrompted" | "tasted">;
   flags: () => Pick<SessionFlagsPort, "unpushed" | "modelCalled">;
@@ -356,8 +357,7 @@ export class SessionState {
       this.options.transcripts().cursors.set(id, { ...cursor, watch: undefined });
       this.startChecked.delete(id);
       this.options.transcripts().saveCursors();
-      const ts = this.options.services.now();
-      await this.options.events.append(this.options.events.connection('core', { session: id, agent: watch.agent }), { v: 1, id: ulid(ts), kind: 'session.gone', ts, subject: `session:${letters(id)}`, data: { pid: watch.pid, start: watch.start } }).catch(() => undefined);
+      await this.options.events.appendSession(id, watch.agent, 'session.gone', { pid: watch.pid, start: watch.start }).catch(() => undefined);
     }
     for (const session of [...this.sessions.values()]) {
       if (session.ended || !session.pid || !session.watched) continue;
@@ -375,8 +375,7 @@ export class SessionState {
       session.interrupted = true;
       if (this.options.settings.plant === 'reap-on-kill') this.options.services.stacks.endFor(session.id);
       this.letGoLive(session.id);
-      const ts = this.options.services.now();
-      await this.options.events.append(this.options.events.connection('core', { session: session.id, agent: session.agent }), { v: 1, id: ulid(ts), kind: 'session.gone', ts, subject: `session:${letters(session.id)}`, data: { pid: session.pid, start: session.start } }).catch(() => undefined);
+      await this.options.events.appendSession(session.id, session.agent, 'session.gone', { pid: session.pid, start: session.start }).catch(() => undefined);
       if (session.agent === 'codex' && this.options.settings.plant !== 'leaves-codex-session-open') await this.closedAtExit(session).catch(() => undefined);
       this.endedOrder.delete(session.id);
       this.endedOrder.add(session.id);
@@ -482,12 +481,11 @@ export class SessionState {
     if (only !== 'all' && !only.size) return;
     try {
       // Appended together, so the record commits them in one batch, as it does a first start's state for every session.
-      const query = (q: string) => this.options.services.record.raw(q);
-      const readings = await sessionStates(query, this.options.services.now(), only === 'all' ? undefined : only);
+      const readings = await sessionStates(this.options.services.raw, this.options.services.now(), only === 'all' ? undefined : only);
       // The list's rows (#1463): each that changed, and each ask's that left the list, in the same batch.
       // The open asks are the asks core's inbox projection, by its one close rule (#2026).
       const inbox = (await this.options.services.asks.inbox()).filter((a) => a.status !== 'closed').map((a) => a.ask);
-      const named = await buildRows(query, readings, inbox);
+      const named = await buildRows(this.options.services.raw, readings, inbox);
       // Each session's one name (#2018), with its short ID only where another session's row would read the same: a
       // row whose twin came or went is set again with it, though nothing else of it changed.
       for (const r of named) if (r.id.startsWith('session:')) this.names.set(r.id, r.title);
@@ -598,15 +596,14 @@ export class SessionState {
    * row read and, for each row above it, the fact it lacked, from the same call that picks every session's state.
    */
   async whySeen(role: string, params: Obj): Promise<Obj> {
-    const query = (q: string) => this.options.services.record.raw(q);
     const rows = () => [...this.rows.values()].map((p) => p.row);
-    let found = await whyOf(query, this.options.services.now(), String(params.session ?? ''), rows());
+    let found = await whyOf(this.options.services.raw, this.options.services.now(), String(params.session ?? ''), rows());
     // A row the clock alone moved since its last pass, as one gone quiet, is set first: the row and its why agree.
     const listed = (id: string) => this.rows.get(id)?.row;
     if (!('refused' in found) && (found.word !== listed(found.id)?.word || found.why !== listed(found.id)?.why)) {
       if (this.touched !== 'all') this.touched.add(found.id.slice('session:'.length));
       await this.recordStates().catch(() => undefined);
-      found = await whyOf(query, this.options.services.now(), found.id, rows());
+      found = await whyOf(this.options.services.raw, this.options.services.now(), found.id, rows());
     }
     if ('refused' in found) throw refuse('not_found', '/params/session', found.refused, params.session);
     const seen = role.startsWith('person:') ? this.seenBy(role) : '';
@@ -650,8 +647,7 @@ export class SessionState {
   async childOf(session: Session, agent: string): Promise<void> {
     const parent = await this.agentAbove({ pid: session.pid, start: session.start });
     if (!parent || parent === session.id) return;
-    const ts = this.options.services.now();
-    await this.options.events.append(this.options.events.connection('core', { session: session.id, agent }), { v: 1, id: ulid(ts), kind: 'session.child_started', ts, subject: `session:${letters(session.id)}`, data: { parent: `session:${letters(parent)}`, child: `session:${letters(session.id)}`, task_ref: null } });
+    await this.options.events.appendSession(session.id, agent, 'session.child_started', { parent: `session:${letters(parent)}`, child: `session:${letters(session.id)}`, task_ref: null });
   }
 
   /**
@@ -671,8 +667,7 @@ export class SessionState {
     for (const sha of first ? [head.sha] : await commitsBetween(meta.cwd, before!, head.sha)) {
       if (this.committed.has(sha)) continue;
       this.committed.add(sha);
-      const ts = this.options.services.now();
-      await this.options.events.append(this.options.events.connection('core', { session: meta.session, agent: live.agent }), { v: 1, id: ulid(ts), kind: 'commit.made', ts, subject: `session:${letters(meta.session)}`, data: { sha, worktree: meta.cwd, branch: head.branch } }).catch(() => undefined);
+      await this.options.events.appendSession(meta.session, live.agent, 'commit.made', { sha, worktree: meta.cwd, branch: head.branch }).catch(() => undefined);
     }
   }
 
@@ -811,18 +806,29 @@ export class SessionState {
     }
   }
 
-  /** Binds a deep mcp to the one live session whose checked hooks came from its parent process, or to none. */
-  mcpHello(parent: { pid: number; start: string } | undefined, paseo?: string): Promise<string | null> {
+  /**
+   * Binds a deep mcp to the one live session whose checked hooks came from its parent process, or to none, and names
+   * the parent its calls bind by. That parent is read from the process the OS reports at the other end of its
+   * connection `fd`, by PID and start time, never from its hello (#2070): the session's agent process itself, as the
+   * pi package runs inside pi, or else that process's parent. Where the OS reports no peer, it binds to none here and
+   * each call binds by the PreToolUse stamped for it, as a shared process's do.
+   */
+  async mcpHello(fd: number | undefined, claimed: { pid: number; start: string } | undefined, paseo?: string): Promise<{ session: string | null; parent?: { pid: number; start: string } }> {
+    let hook: string | undefined;
+    try { hook = deepHook(); } catch { /* no deep-hook here to ask the OS: no peer */ }
+    const peer = hook && fd !== undefined && fd >= 0 ? await peerOf(hook, fd) : undefined;
+    const at = async (pid: number | undefined) => { const start = pid === undefined ? undefined : await this.startOf(pid, true); return start ? { pid: pid!, start } : undefined; };
+    const serves = (p: { pid: number; start: string } | undefined) => p !== undefined && [...this.sessions.values()].some((s) => s.pid === p.pid && s.start === p.start && !s.ended);
+    const own = peer !== undefined && [...this.sessions.values()].some((s) => s.pid === peer) ? await at(peer) : undefined;
+    const parent = peer === undefined ? claimed : serves(own) ? own : await at(await parentOf(peer));
     return this.options.schedule.queue(async () => {
-      // A server paseo's plugin added names its agent's session by the token the plugin's lines carry (#55).
+      // A server paseo's plugin added names its agent's session by the token the plugin's checked lines carry (#55).
       const bound = paseo ? this.options.delivery().binds.get(paseo) : undefined;
-      if (bound && !this.sessions.get(bound)?.ended) return bound;
-      if (!parent) return null;
-      const actual = await this.startOf(parent.pid, true);
-      if (!actual || actual !== parent.start) return null;
-      const served = [...this.sessions.values()].filter((s) => s.pid === parent.pid && s.start === actual && !s.ended);
+      if (bound && !this.sessions.get(bound)?.ended) return { session: bound };
+      if (peer === undefined || !parent) return { session: null, ...(parent ? { parent } : {}) };
+      const served = [...this.sessions.values()].filter((s) => s.pid === parent.pid && s.start === parent.start && !s.ended);
       // A Codex process may run another thread at any time: each of its calls binds by its own stamp.
-      return served.length === 1 && !manyThreads(served[0]!.agent) ? served[0]!.id : null;
+      return { session: served.length === 1 && !manyThreads(served[0]!.agent) ? served[0]!.id : null, parent };
     });
   }
 
@@ -834,7 +840,7 @@ export class SessionState {
       const visible = new Set(((await this.options.services.record.raw(`SELECT DISTINCT session_id AS id FROM events WHERE session_id IS NOT NULL${seen}`)) as { id: string }[]).map((r) => r.id));
       rows = rows.filter((row) => visible.has(String(row.id)));
     }
-    for (const id of [...this.options.delivery().answerWaiting]) if (!(await this.options.delivery().waitingFor(id)).length) this.options.delivery().answerWaiting.delete(id);
+    for (const id of [...this.options.delivery().answerWaiting]) if (!(await this.options.delivery().answers.waitingFor(id)).length) this.options.delivery().answerWaiting.delete(id);
     // The session map (#352): each session's repo, branch, issue and changed files, the commands it runs now, its leases and its state.
     const leases = (await this.options.services.record.raw(`SELECT kind, key, holder FROM leases WHERE state = 'held'`)) as { kind: string; key: string; holder: string }[];
     return rows.map((row) => {
@@ -855,8 +861,7 @@ export class SessionState {
    * status when `detail` asks for it.
    */
   async rowsSeen(role: string, detail: boolean): Promise<Obj> {
-    const query = (q: string) => this.options.services.record.raw(q);
-    let rows = (await listRows(query)).map((p) => p.row);
+    let rows = (await listRows(this.options.services.raw)).map((p) => p.row);
     const seen = role.startsWith('person:') ? this.seenBy(role) : '';
     if (seen) {
       const visible = new Set(((await this.options.services.record.raw(`SELECT DISTINCT session_id AS id FROM events WHERE session_id IS NOT NULL${seen}`)) as { id: string }[]).map((r) => r.id));
@@ -877,7 +882,7 @@ export class SessionState {
   }
 
   async statusSeen(role: string): Promise<StatusRow[]> {
-    const rows = await statusRows((sql) => this.options.services.record.raw(sql), this.options.services.now());
+    const rows = await statusRows(this.options.services.raw, this.options.services.now());
     for (const row of rows) {
       const own = this.windowOf.get(row.id);
       const unread = row.readings?.[0]?.startsWith(UNREAD_WINDOW);

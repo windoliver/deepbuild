@@ -545,7 +545,11 @@ impl Indexer {
         }
     }
 
-    fn up(&mut self, device: &deep_gpu::counted::Wgpu, format: wgpu::TextureFormat) -> wgpu::RenderPipeline {
+    fn up(
+        &mut self,
+        device: &deep_gpu::counted::Wgpu,
+        format: wgpu::TextureFormat,
+    ) -> wgpu::RenderPipeline {
         if let Some((f, p)) = &self.up {
             if *f == format {
                 return p.clone();

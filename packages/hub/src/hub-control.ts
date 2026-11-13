@@ -72,7 +72,7 @@ import { type Obj } from "./hub-shared.js";
 import { fromView, Requests, type Caller, type Effect, type Landed } from './requests.js';
 
 export interface HubControlOptions {
-  settings: CoreOptions;
+  settings: CoreOptions & { forge: string };
   services: {
     readonly wikiWritten: KnowledgeProvider['writtenOf'];
     readonly log: LogReads;
@@ -278,8 +278,8 @@ export class HubControl {
       case 'rules.sync':
         this.options.schedule.replayLate();
         return (this.options.schedule.replaying ?? Promise.resolve()).then(() => this.options.schedule.queue(() => this.options.memory().syncRules()));
-      case 'rules.reach': return ruleReach((sql, p) => this.options.services.record.raw(sql, p), realpathSync(String(params.repo)), String(params.scope), reachSince(this.options.services.now(), 30));
-      case 'rules.credit': return { sessions: await creditOf((sql, p) => this.options.services.record.raw(sql, p), String(params.rule)) };
+      case 'rules.reach': return ruleReach(this.options.services.raw, realpathSync(String(params.repo)), String(params.scope), reachSince(this.options.services.now(), 30));
+      case 'rules.credit': return { sessions: await creditOf(this.options.services.raw, String(params.rule)) };
       case 'session.rules': return this.options.memory().sessionRules(params);
       case 'acceptance.start': return this.options.services.acceptance.start(params);
       case 'acceptance.status': return this.options.services.acceptance.status(params);
@@ -330,7 +330,12 @@ export class HubControl {
     }
   }
 
-  async answer(params: Obj, context: CallContext, channel?: { channel: string; proof: 'device' | 'account_link'; plan_hash: string | null }): Promise<Obj> { return this.human.answer(params, context, channel); }
+  async answer(params: Obj, context: CallContext, channel?: { channel: string; proof: 'device' | 'account_link'; plan_hash: string | null }): Promise<Obj> {
+    const result = await this.human.answer(params, context, channel);
+    // Acknowledging the answer also settles its card/session rows; they must not trail into the next call's effects.
+    await this.options.state().statesSettled();
+    return result;
+  }
 
   /**
    * One write with an effect (#1577), on the trusted path or not: its request ID, if any, makes a retry from the same
