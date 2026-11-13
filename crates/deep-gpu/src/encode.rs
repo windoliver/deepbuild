@@ -96,7 +96,12 @@ impl Pool {
     }
 
     /// Encodes every job and submits the buffers; returns what happened to each, by layer.
-    pub fn run(&self, device: &crate::counted::Wgpu, queue: &crate::counted::Queue, jobs: Vec<Job>) -> Vec<Encode> {
+    pub fn run(
+        &self,
+        device: &crate::counted::Wgpu,
+        queue: &crate::counted::Queue,
+        jobs: Vec<Job>,
+    ) -> Vec<Encode> {
         let n = jobs.len();
         let (done, arrived) = mpsc::channel();
         let tasks = self.tasks.as_ref().expect("pool is open");

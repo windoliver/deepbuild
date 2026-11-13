@@ -2944,7 +2944,9 @@ impl Registry {
                 .filter(|e| e.registry != "ease@1")
                 .collect();
         if eases {
-            core_entries.extend(core_lists::ease_entries(self.fault == Some(Fault::EaseRenumbered)));
+            core_entries.extend(core_lists::ease_entries(
+                self.fault == Some(Fault::EaseRenumbered),
+            ));
         }
         if outputs_elsewhere {
             core_entries.retain(|e| e.registry != "gpu.output@1");
@@ -3089,7 +3091,10 @@ impl Registry {
         let digest = pinned(digest, m).map_err(bad)?;
         let covers = self.fault == Some(Fault::DigestCoversPins);
         if covers {
-            listed.insert("pins".into(), d1(&m.implementation.to_json()["pins"]).map_err(bad)?);
+            listed.insert(
+                "pins".into(),
+                d1(&m.implementation.to_json()["pins"]).map_err(bad)?,
+            );
         }
         let started = self.clock.map(|c| c());
         let declared = self.interfaces.get(&m.implements);
@@ -3103,7 +3108,8 @@ impl Registry {
             let (want, mut want_listed) = module_shapes(&r, own.as_ref(), private).map_err(bad)?;
             let want = pinned(want, &i.reference.manifest).map_err(bad)?;
             if covers {
-                let pins = d1(&i.reference.manifest.implementation.to_json()["pins"]).map_err(bad)?;
+                let pins =
+                    d1(&i.reference.manifest.implementation.to_json()["pins"]).map_err(bad)?;
                 want_listed.insert("pins".into(), pins);
             }
             if want != digest {
@@ -3168,7 +3174,8 @@ pub(crate) fn id_named(name: &str) -> bool {
         !b.is_empty()
             && b.len() <= 48
             && (b[0].is_ascii_lowercase() || b[0].is_ascii_digit())
-            && b.iter().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || *c == b'_' || *c == b'-')
+            && b.iter()
+                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || *c == b'_' || *c == b'-')
     })
 }
 
@@ -3208,7 +3215,11 @@ fn may_read(
                 owned_by.unwrap_or(owner)
             ),
         );
-        err.implementations = [reader, owned_by].into_iter().flatten().map(str::to_string).collect();
+        err.implementations = [reader, owned_by]
+            .into_iter()
+            .flatten()
+            .map(str::to_string)
+            .collect();
         err.implementations.sort();
         return Err(err);
     }
@@ -3481,7 +3492,10 @@ fn module_shapes(
         ("tool_entry", &tools, &["tool", "entry"]),
     ] {
         for v in list_of {
-            let name: Vec<String> = keys.iter().map(|k| v[*k].to_string().trim_matches('"').to_string()).collect();
+            let name: Vec<String> = keys
+                .iter()
+                .map(|k| v[*k].to_string().trim_matches('"').to_string())
+                .collect();
             list(format!("{what} {}", name.join(" ")), v)?;
         }
     }
@@ -3603,7 +3617,10 @@ mod tests {
             feature: name.into(),
             license: "Apache-2.0".into(),
             implements: format!("{name}@1"),
-            implementation: Implementation::reference(name, Semver::parse("1.0.0").expect("a version")),
+            implementation: Implementation::reference(
+                name,
+                Semver::parse("1.0.0").expect("a version"),
+            ),
         }
     }
 

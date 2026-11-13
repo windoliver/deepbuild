@@ -3,7 +3,6 @@
 //! dispatches over buffers made once for its count and recorded into the frame's compute pass.
 //! The WGSL is `structural.wgsl`, reviewed with the app; its results depend only on their inputs.
 
-
 const SOURCE: &str = include_str!("structural.wgsl");
 /// Elements a workgroup covers.
 pub const TILE: u32 = 1024;
@@ -158,7 +157,13 @@ impl Structural {
     }
 
     /// `scan {in, op: add}` over `n` words (u32 or i32: a wrapping add is the same bits).
-    pub fn scan(&self, d: &crate::counted::Wgpu, src: &wgpu::Buffer, dst: &wgpu::Buffer, n: u32) -> Plan {
+    pub fn scan(
+        &self,
+        d: &crate::counted::Wgpu,
+        src: &wgpu::Buffer,
+        dst: &wgpu::Buffer,
+        n: u32,
+    ) -> Plan {
         let mut plan = Plan::new();
         plan.clears.push(dst.clone());
         self.scan_into(d, &mut plan, src, dst, n, false);

@@ -48,7 +48,10 @@ pub fn time(doc: &Value, v: Option<&Value>) -> Option<i64> {
         None => Some(0),
         Some(Value::Number(n)) => n.as_i64(),
         Some(t @ Value::String(s)) => {
-            if s.trim_start_matches(['0', '.']).trim_end_matches(['s', 'f']).is_empty() {
+            if s.trim_start_matches(['0', '.'])
+                .trim_end_matches(['s', 'f'])
+                .is_empty()
+            {
                 return Some(0);
             }
             deep_canvas::document::duration(doc, t).ok()
