@@ -168,8 +168,17 @@ fn main() {
     if mode == Mode::SetUp {
         match deep_app::setup::set_up() {
             Ok(line) => println!("{line}"),
-            Err(error) => {
-                eprintln!("deep-app: {error}");
+            Err(stopped) => {
+                deep_app::setup::refresh();
+                let line = stopped
+                    .line
+                    .or_else(deep_app::setup::reason)
+                    .unwrap_or_default();
+                eprintln!("deep-app: {line}");
+                // A terminal shows what setup printed too; the window keeps it one press away (#1100).
+                if !stopped.output.trim().is_empty() {
+                    eprintln!("{}", stopped.output.trim());
+                }
                 std::process::exit(1);
             }
         }
@@ -203,6 +212,8 @@ fn main() {
                 eprintln!("deep-app: couldn't claim the app, so no notifications: {error}")
             }
         }
+        // A key an older app kept in a file moves into the OS secret store, once, as the app starts (#1606).
+        deep_app::device::Device::moved();
     }
     // A `deepbuild://` link the OS hands the app waits for the tick, which can open it (#1460).
     let (links, linked) = std::sync::mpsc::channel::<String>();
@@ -520,6 +531,7 @@ mod notifications {
             let mut watch = HubWatch::default();
             let (mut begun, mut active) = (false, false);
             let notifies = held.is_some();
+            let answered = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
             let mut shown = deep_app::menu_bar_line();
             // The status item's menu: a line per session with its state's word and mark (#1462).
             let mut listed: Vec<String> = Vec::new();
@@ -528,6 +540,14 @@ mod notifications {
             }
             loop {
                 cx.background_executor().timer(TICK).await;
+                // macOS's Reduce Motion as it is now, not only at launch: the working marks hold still under it (#2021).
+                #[cfg(target_os = "macos")]
+                cx.update(|cx| {
+                    cx.set_reduce_motion(
+                        objc2_app_kit::NSWorkspace::sharedWorkspace()
+                            .accessibilityDisplayShouldReduceMotion(),
+                    )
+                });
                 // A later launch brings the app forward; `deep open` and a link open their address (#1460).
                 for call in held.as_ref().map(Held::calls).unwrap_or_default() {
                     eprintln!("deep-app: brought forward");
@@ -549,6 +569,25 @@ mod notifications {
                 }
                 let was_active = std::mem::replace(&mut active, super::menu_bar::app_active());
                 if notifies && active && !was_active {
+                    read_setting(&mut notifier);
+                }
+                // macOS asks whether DeepBuild may notify you at the Set up click (#1100), or, set up from a terminal,
+                // the first time the app comes forward; never when an ask comes due. Once you've answered, it's read.
+                let not_asked = notifier.reach(false).setting == NotificationSetting::NotAsked;
+                if notify::take_ask()
+                    || (notifies
+                        && active
+                        && !was_active
+                        && not_asked
+                        && !deep_app::setup::needed())
+                {
+                    eprintln!("deep-app: asked macOS to allow notifications");
+                    let answered = answered.clone();
+                    super::notification_center::request(move || {
+                        answered.store(true, std::sync::atomic::Ordering::SeqCst);
+                    });
+                }
+                if answered.swap(false, std::sync::atomic::Ordering::SeqCst) {
                     read_setting(&mut notifier);
                 }
                 let now = now();

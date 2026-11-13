@@ -228,6 +228,16 @@ fn number(p: &Value, name: &str, default: f64) -> Result<f64, String> {
 impl Curve {
     /// A `curve@1` item's params made into a curve, or why not (the path of the bad field).
     pub fn new(params: &Value) -> Result<Curve, String> {
+        Curve::made(params, None).map(|(c, _)| c)
+    }
+
+    /// `new`, with how long tabulating its arc-length table over every span took by `clock`, in
+    /// milliseconds, its frames apart (#2017's `geometry` timings).
+    pub fn timed(params: &Value, clock: fn() -> f64) -> Result<(Curve, f64), String> {
+        Curve::made(params, Some(clock)).map(|(c, ms)| (c, ms.unwrap_or(0.0)))
+    }
+
+    fn made(params: &Value, clock: Option<fn() -> f64>) -> Result<(Curve, Option<f64>), String> {
         let pts = params
             .get("points")
             .and_then(points)
@@ -348,17 +358,24 @@ impl Curve {
             nodes: Vec::new(),
             seam_twist: false,
         };
-        c.tabulate(samples, up);
+        let started = clock.map(|now| now());
+        c.tabulate(samples);
+        let ms = clock.zip(started).map(|(now, s)| now() - s);
+        c.carry_frames(up);
         c.roll = c.roll_stations(&rolls);
-        Ok(c)
+        Ok((c, ms))
     }
 
-    /// The arc-length table and the frames carried along it, and the closure at the seam.
-    fn tabulate(&mut self, samples: usize, up: V3) {
+    /// The arc-length table: each span's start, and a node at each of its `samples` steps with
+    /// its arc length from the start.
+    fn tabulate(&mut self, samples: usize) {
         let mut s = 0.0;
-        let mut nodes: Vec<Node> = Vec::new();
-        let t0 = heading(&self.spans[0], 0.0);
-        let mut r = normal_from(up, t0);
+        let mut nodes: Vec<Node> = Vec::with_capacity(self.spans.len() * (samples + 1));
+        let still = Frame {
+            point: [0.0; 3],
+            tangent: [0.0; 3],
+            normal: [0.0; 3],
+        };
         for (k, span) in self.spans.iter().enumerate() {
             self.starts.push(s);
             for j in 0..=samples {
@@ -366,24 +383,34 @@ impl Curve {
                 if j > 0 {
                     s += arc(span, (j - 1) as f64 / samples as f64, t);
                 }
-                let (x, tan) = (bezier(span, t), heading(span, t));
-                if let Some(last) = nodes.last() {
-                    r = transport(r, last.frame.point, last.frame.tangent, x, tan);
-                }
                 nodes.push(Node {
                     span: k,
                     t,
                     s,
-                    frame: Frame {
-                        point: x,
-                        tangent: tan,
-                        normal: r,
-                    },
+                    frame: still,
                 });
             }
         }
         self.length = s;
         self.nodes = nodes;
+    }
+
+    /// The frames carried along the table's nodes, and the closure at the seam.
+    fn carry_frames(&mut self, up: V3) {
+        let t0 = heading(&self.spans[0], 0.0);
+        let mut r = normal_from(up, t0);
+        for i in 0..self.nodes.len() {
+            let Node { span, t, .. } = self.nodes[i];
+            let (x, tan) = (bezier(&self.spans[span], t), heading(&self.spans[span], t));
+            if let Some(last) = i.checked_sub(1).map(|p| self.nodes[p].frame) {
+                r = transport(r, last.point, last.tangent, x, tan);
+            }
+            self.nodes[i].frame = Frame {
+                point: x,
+                tangent: tan,
+                normal: r,
+            };
+        }
         if self.closed && self.up.is_none() {
             let last = self.nodes[self.nodes.len() - 1].frame;
             let first = self.nodes[0].frame;

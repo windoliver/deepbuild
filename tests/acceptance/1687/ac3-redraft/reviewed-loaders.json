@@ -1,0 +1,282 @@
+{
+  "format": "1687-reviewed-loaders-v1",
+  "basis": "User-approved boundary proposal; independent source review, not a signed approval token. Base evidence remains unchanged.",
+  "baseRevision": "c52f1c66d22886c336189d41237265e82843c34a",
+  "base": {
+    "sites": [
+      {
+        "from": "packages/conformance/src/bin.ts",
+        "line": 46,
+        "expression": "import(pathToFileURL(path).href)",
+        "expressionDigest": "f4acda790b923924ab83ce26a053b1fcde3d0064fa47ff5f25c13b906e5e9259",
+        "scope": "main",
+        "scopeDigest": "3f4a057686ec9d8745fb142aabb32ad22e3da4ec4290b267714f13fe354ba0f7",
+        "kind": "cli-fill",
+        "origin": "Explicit process.argv --fill operand, resolved by node:path.resolve; only standalone CLI main calls it.",
+        "boundary": "Trusted caller explicitly executes a kit fill, not a hub extension install. No sandbox is promised by this developer CLI; must not acquire a fixed concrete provider or another programmatic caller."
+      },
+      {
+        "from": "packages/extension-host/runtime/deep.mjs",
+        "line": 87,
+        "expression": "import(file)",
+        "expressionDigest": "f849bf3aec0adf77d7f0f24b6376b97b506159668016529ef0687edd4e394810",
+        "scope": "extensionSide",
+        "scopeDigest": "7daf33f895881e2eec02eff1c994ff4afd94a796c5bf5d6b71c82b02188c05d2",
+        "kind": "unused-default",
+        "origin": "extensionSide third argument default imports(file); test RPC params.file reaches it only if caller omits third argument.",
+        "boundary": "Both production callers supply their own importer. Freeze the caller inventory; default is never used by a production path. No arbitrary path from extension RPC may activate it."
+      },
+      {
+        "from": "packages/extension-host/runtime/runner.mjs",
+        "line": 33,
+        "expression": "import(url)",
+        "expressionDigest": "0c9247a2940ca1520d4d20486d90bde822e48bc077a11fe859e7568385499104",
+        "scope": "IfStatement",
+        "scopeDigest": "a05d48a252f965c5cb0cb10f75de7a18f0eda903d9fa93d3e1918f33520574ba",
+        "kind": "sandbox",
+        "origin": "Host.sandboxed passes private snapshot folder/entry in argv and host runTests supplies enumerated relative tests path and optional stripped TS source.",
+        "boundary": "Supervisor process with package cwd, no inherited environment, grant limited to Node/runtime and private connection. index.ts or tests/*.test.{ts,mjs,js} under snapshot; packageDigest rejects symlinks. The importer lives inside that sandbox, not the hub.",
+        "proof": [
+          "348/places.test.ts",
+          "348/conformance.test.ts",
+          "103/wiring.test.ts AC15"
+        ]
+      },
+      {
+        "from": "packages/extension-host/src/host.ts",
+        "line": 2503,
+        "expression": "import(url)",
+        "expressionDigest": "0c9247a2940ca1520d4d20486d90bde822e48bc077a11fe859e7568385499104",
+        "scope": "Host",
+        "scopeDigest": "5fb5b23b7aaeb4094fbfe8a6fdb34ca428cd49a5a5874884e7680ef6cfc85b90",
+        "kind": "release",
+        "origin": "Host.start index.ts in immutable digest snapshot with cache-busting digest/start query.",
+        "boundary": "Only ext.place=hub after hubBound: builtBy=null, index.ts exists, signed-release id/version/digest match. Every other package executes through supervisor sandbox. load requires passing conformance for exact digest and trust. No module path comes from an extension dispatch argument.",
+        "proof": [
+          "348/places.test.ts",
+          "348/conformance.test.ts",
+          "103/wiring.test.ts AC15"
+        ]
+      },
+      {
+        "from": "packages/extension-host/src/host.ts",
+        "line": 2505,
+        "expression": "import(pathToFileURL(join(ext.folder, file)).href)",
+        "expressionDigest": "cf58751cf93e890a6e261b50a6d4c42c214e40feaf40e4f0c72090ae64a49c3c",
+        "scope": "Host",
+        "scopeDigest": "5fb5b23b7aaeb4094fbfe8a6fdb34ca428cd49a5a5874884e7680ef6cfc85b90",
+        "kind": "release",
+        "origin": "Host.runTests enumerates tests recursively from the same snapshot; callback joins each relative path under ext.folder.",
+        "boundary": "Only ext.place=hub after hubBound: builtBy=null, index.ts exists, signed-release id/version/digest match. Every other package executes through supervisor sandbox. load requires passing conformance for exact digest and trust. No module path comes from an extension dispatch argument.",
+        "proof": [
+          "348/places.test.ts",
+          "348/conformance.test.ts",
+          "103/wiring.test.ts AC15"
+        ]
+      },
+      {
+        "from": "packages/hub/src/core.ts",
+        "line": 1139,
+        "expression": "import(pathToFileURL(this.options.host).href)",
+        "expressionDigest": "34459fa12f5b21bec2db99838d88ded2b52e5dceb80925e73304018b85754260",
+        "scope": "Core",
+        "scopeDigest": "b372c0e8c3216302caef6516e53b89a37776662766312ac1794164e6de013045",
+        "kind": "blocked",
+        "origin": "CoreOptions.host or CoreOptions.index supplied by server test environment variable.",
+        "boundary": "Arbitrary provider module path inside core closure has no path or sandbox restriction. Reviewed UNSAFE, not grandfathered; must move outside core."
+      },
+      {
+        "from": "packages/hub/src/mcp.ts",
+        "line": 116,
+        "expression": "import(new URL(file, dir).href)",
+        "expressionDigest": "9809eadb808ffaf0d777b806b027e2f8ab3346f9414eb26c1b67b7f55dc1c952",
+        "scope": "runMcp",
+        "scopeDigest": "131721f174a2128e7767ed62eaf7bd5768e104f7c0a0d265efc823859ac6ebe2",
+        "kind": "hub-directory",
+        "origin": "Only server=deep with activePlant()=mcp-loads-hub; readdirSync of import.meta.url directory, .js filenames only.",
+        "boundary": "Deliberate wrong-program plant, not a production provider. ALL top-level hub TS source targets (dist JS counterparts), including self, become static runtime edges on BOTH base and candidate. No cycle waiver."
+      },
+      {
+        "from": "packages/hub/src/search.ts",
+        "line": 128,
+        "expression": "import(pathToFileURL(module).href)",
+        "expressionDigest": "06e2f718060795a532c8294a919482451f575e800e4fc6ba034e7c1b39e3a46a",
+        "scope": "openIndex",
+        "scopeDigest": "f326c9263019496f7d86d1db6e477b84566fe6b497c8700f254bdecad643a671",
+        "kind": "blocked",
+        "origin": "CoreOptions.host or CoreOptions.index supplied by server test environment variable.",
+        "boundary": "Arbitrary provider module path inside core closure has no path or sandbox restriction. Reviewed UNSAFE, not grandfathered; must move outside core."
+      },
+      {
+        "from": "packages/pi/src/index.ts",
+        "line": 398,
+        "expression": "import('@earendil-works/pi-coding-agent' as string)",
+        "expressionDigest": "b7b08d28dc507135ef36dec8ad5a1330279fb57a329d5e5fa2356b9921e24249",
+        "scope": "deepbuild",
+        "scopeDigest": "67466a188ddbe172dba3e0ba629f9f01a2cbec27e1e50d45f85f131f8810b1d0",
+        "kind": "literal",
+        "target": "@earendil-works/pi-coding-agent",
+        "origin": "Constant string under TypeScript as string cast; reads VERSION of pi host.",
+        "boundary": "Static external dependency, not a computed user path and not a core extension import. Graph receives exact literal edge."
+      }
+    ],
+    "inputs": {
+      "packages/conformance/src/bin.ts": "1dbacdc8a8d2993f403b03d194bf73d812c9e50dd10ac14ec64b82d4e7813a92",
+      "packages/extension-host/src/host.ts": "a67ccebe31e13f6203052ff59ae7547d70d6e667e53d0b9848340a90023b9b43",
+      "packages/extension-host/src/digest.ts": "04753795c54abdba347b0b67aea68e586585cd90c3b3dd7bd38b98d736bb7d41",
+      "packages/extension-host/runtime/deep.mjs": "34873cb206cc434269f9c8f971112f61f0529224c3bb56d319b189cee53b0606",
+      "packages/extension-host/runtime/runner.mjs": "a2e4ec2e91feefde7af7c88e05f4c8ac66270e87a342cae2fa72005873284793",
+      "packages/hub/src/plant.ts": "d28c172b444fcdd98057be1c25a9bcdaea625f0dbc0d1b36800b8054f8ba0acb",
+      "packages/hub/src/core.ts": "f4a497e7c13800aed813a33742e7db3f69c29f1f1faa752c7eb3612bdfefd55c",
+      "packages/hub/src/server.ts": "361fe61c0fdb8433325f8ad6882051b63886353d4c92874c5eb6e98440689951",
+      "packages/hub/src/core-worker.ts": "6ec05991851348a20d34f648db49767e13a8b4fb3c1a4fb072d164aa7779b24e",
+      "packages/hub/src/search.ts": "d684ca09849fca30e635d9b507c74fce35d6c28cc30570851689bf987541d205"
+    },
+    "extensionSideCalls": [
+      "packages/extension-host/runtime/runner.mjs:3:4dca52d8ec6ac5d68c74cde68f03284d49c6b64c8084aa4d6e81b6de463b7ded",
+      "packages/extension-host/src/host.ts:3:fec1d5b512cb6222f67c786020ccb430028da07c7bc0788e5099f0a7d82bd5f3"
+    ],
+    "providerCalls": []
+  },
+  "current": {
+    "sites": [
+      {
+        "from": "packages/conformance/src/bin.ts",
+        "line": 46,
+        "expression": "import(pathToFileURL(path).href)",
+        "expressionDigest": "f4acda790b923924ab83ce26a053b1fcde3d0064fa47ff5f25c13b906e5e9259",
+        "scope": "main",
+        "scopeDigest": "3f4a057686ec9d8745fb142aabb32ad22e3da4ec4290b267714f13fe354ba0f7",
+        "kind": "cli-fill",
+        "origin": "Explicit process.argv --fill operand, resolved by node:path.resolve; only standalone CLI main calls it.",
+        "boundary": "Trusted caller explicitly executes a kit fill, not a hub extension install. No sandbox is promised by this developer CLI; must not acquire a fixed concrete provider or another programmatic caller."
+      },
+      {
+        "from": "packages/extension-host/runtime/deep.mjs",
+        "line": 87,
+        "expression": "import(file)",
+        "expressionDigest": "f849bf3aec0adf77d7f0f24b6376b97b506159668016529ef0687edd4e394810",
+        "scope": "extensionSide",
+        "scopeDigest": "7daf33f895881e2eec02eff1c994ff4afd94a796c5bf5d6b71c82b02188c05d2",
+        "kind": "unused-default",
+        "origin": "extensionSide third argument default imports(file); test RPC params.file reaches it only if caller omits third argument.",
+        "boundary": "Both production callers supply their own importer. Freeze the caller inventory; default is never used by a production path. No arbitrary path from extension RPC may activate it."
+      },
+      {
+        "from": "packages/extension-host/runtime/runner.mjs",
+        "line": 33,
+        "expression": "import(url)",
+        "expressionDigest": "0c9247a2940ca1520d4d20486d90bde822e48bc077a11fe859e7568385499104",
+        "scope": "IfStatement",
+        "scopeDigest": "a05d48a252f965c5cb0cb10f75de7a18f0eda903d9fa93d3e1918f33520574ba",
+        "kind": "sandbox",
+        "origin": "Host.sandboxed passes private snapshot folder/entry in argv and host runTests supplies enumerated relative tests path and optional stripped TS source.",
+        "boundary": "Supervisor process with package cwd, no inherited environment, grant limited to Node/runtime and private connection. index.ts or tests/*.test.{ts,mjs,js} under snapshot; packageDigest rejects symlinks. The importer lives inside that sandbox, not the hub.",
+        "proof": [
+          "348/places.test.ts",
+          "348/conformance.test.ts",
+          "103/wiring.test.ts AC15"
+        ]
+      },
+      {
+        "from": "packages/extension-host/src/host.ts",
+        "line": 1743,
+        "expression": "import(url)",
+        "expressionDigest": "0c9247a2940ca1520d4d20486d90bde822e48bc077a11fe859e7568385499104",
+        "scope": "Host",
+        "scopeDigest": "ba6705627643de075b8fb2c90b3417a9f68999251559c50d15d46dc344d3b952",
+        "kind": "release",
+        "origin": "Host.start index.ts in immutable digest snapshot with cache-busting digest/start query.",
+        "boundary": "Only ext.place=hub after hubBound: builtBy=null, index.ts exists, signed-release id/version/digest match. Every other package executes through supervisor sandbox. load requires passing conformance for exact digest and trust. No module path comes from an extension dispatch argument.",
+        "proof": [
+          "348/places.test.ts",
+          "348/conformance.test.ts",
+          "103/wiring.test.ts AC15"
+        ]
+      },
+      {
+        "from": "packages/extension-host/src/host.ts",
+        "line": 1745,
+        "expression": "import(pathToFileURL(join(ext.folder, file)).href)",
+        "expressionDigest": "cf58751cf93e890a6e261b50a6d4c42c214e40feaf40e4f0c72090ae64a49c3c",
+        "scope": "Host",
+        "scopeDigest": "ba6705627643de075b8fb2c90b3417a9f68999251559c50d15d46dc344d3b952",
+        "kind": "release",
+        "origin": "Host.runTests enumerates tests recursively from the same snapshot; callback joins each relative path under ext.folder.",
+        "boundary": "Only ext.place=hub after hubBound: builtBy=null, index.ts exists, signed-release id/version/digest match. Every other package executes through supervisor sandbox. load requires passing conformance for exact digest and trust. No module path comes from an extension dispatch argument.",
+        "proof": [
+          "348/places.test.ts",
+          "348/conformance.test.ts",
+          "103/wiring.test.ts AC15"
+        ]
+      },
+      {
+        "from": "packages/hub/src/hub-runtime.ts",
+        "line": 43,
+        "expression": "import(pathToFileURL(module).href)",
+        "expressionDigest": "06e2f718060795a532c8294a919482451f575e800e4fc6ba034e7c1b39e3a46a",
+        "scope": "createCore",
+        "scopeDigest": "629b1f89309d7771d06f99a30dadf5f13b2860a9f41bd84eca556c03be43c7ef",
+        "kind": "outer-test-provider",
+        "origin": "CoreOptions.host / CoreOptions.index from server DEEP_HUB_TEST_HOST / DEEP_HUB_TEST_INDEX; explicit test injection.",
+        "boundary": "Arbitrary module path has no sandbox and cannot be approved inside core. Only outer composition may load it and supply capability inward. Acceptance computes core closure and refuses any reach to this module; frozen source excludes concrete hidden specifiers."
+      },
+      {
+        "from": "packages/hub/src/hub-runtime.ts",
+        "line": 54,
+        "expression": "import(pathToFileURL(module).href)",
+        "expressionDigest": "06e2f718060795a532c8294a919482451f575e800e4fc6ba034e7c1b39e3a46a",
+        "scope": "createCore",
+        "scopeDigest": "629b1f89309d7771d06f99a30dadf5f13b2860a9f41bd84eca556c03be43c7ef",
+        "kind": "outer-test-provider",
+        "origin": "CoreOptions.host / CoreOptions.index from server DEEP_HUB_TEST_HOST / DEEP_HUB_TEST_INDEX; explicit test injection.",
+        "boundary": "Arbitrary module path has no sandbox and cannot be approved inside core. Only outer composition may load it and supply capability inward. Acceptance computes core closure and refuses any reach to this module; frozen source excludes concrete hidden specifiers."
+      },
+      {
+        "from": "packages/hub/src/mcp.ts",
+        "line": 118,
+        "expression": "import(new URL(file, dir).href)",
+        "expressionDigest": "9809eadb808ffaf0d777b806b027e2f8ab3346f9414eb26c1b67b7f55dc1c952",
+        "scope": "runMcp",
+        "scopeDigest": "a0a3031f3d2b22ca281a7c6ef618d938ec3af5c9252d5fbb125c6941aeb16db3",
+        "kind": "hub-directory",
+        "origin": "Only server=deep with activePlant()=mcp-loads-hub; readdirSync of import.meta.url directory, .js filenames only.",
+        "boundary": "Deliberate wrong-program plant, not a production provider. ALL top-level hub TS source targets (dist JS counterparts), including self, become static runtime edges on BOTH base and candidate. No cycle waiver."
+      },
+      {
+        "from": "packages/pi/src/index.ts",
+        "line": 398,
+        "expression": "import('@earendil-works/pi-coding-agent' as string)",
+        "expressionDigest": "b7b08d28dc507135ef36dec8ad5a1330279fb57a329d5e5fa2356b9921e24249",
+        "scope": "deepbuild",
+        "scopeDigest": "67466a188ddbe172dba3e0ba629f9f01a2cbec27e1e50d45f85f131f8810b1d0",
+        "kind": "literal",
+        "target": "@earendil-works/pi-coding-agent",
+        "origin": "Constant string under TypeScript as string cast; reads VERSION of pi host.",
+        "boundary": "Static external dependency, not a computed user path and not a core extension import. Graph receives exact literal edge."
+      }
+    ],
+    "inputs": {
+      "packages/conformance/src/bin.ts": "1dbacdc8a8d2993f403b03d194bf73d812c9e50dd10ac14ec64b82d4e7813a92",
+      "packages/extension-host/src/host.ts": "53c5a887b1238ce1383eb988a040953e9811e217c5d14331bbb8df895b8a7384",
+      "packages/extension-host/src/digest.ts": "04753795c54abdba347b0b67aea68e586585cd90c3b3dd7bd38b98d736bb7d41",
+      "packages/extension-host/runtime/deep.mjs": "34873cb206cc434269f9c8f971112f61f0529224c3bb56d319b189cee53b0606",
+      "packages/extension-host/runtime/runner.mjs": "a2e4ec2e91feefde7af7c88e05f4c8ac66270e87a342cae2fa72005873284793",
+      "packages/hub/src/plant.ts": "647c34f1440978d0f43320f768f3048f60a6319e6f78b82b4b5c42fcc39b1c6d",
+      "packages/hub/src/core.ts": "72b082a9b6ad403030978560c1bb43bdc2edf98976f0eef9984e374611c5689a",
+      "packages/hub/src/server.ts": "abeb21c7be1c06955a65331203defd2d633774e235d5a130bcbec111596ddd0a",
+      "packages/hub/src/core-worker.ts": "7f6455593a94b659feacca6fc73a06277dd5c5feb21ca93ab2c9a5aa6903df61",
+      "packages/hub/src/search.ts": "50880b61da487fc5e2622862f5a5a51c04ab5172118946dc04acb2683a0258fb"
+    },
+    "extensionSideCalls": [
+      "packages/extension-host/runtime/runner.mjs:3:4dca52d8ec6ac5d68c74cde68f03284d49c6b64c8084aa4d6e81b6de463b7ded",
+      "packages/extension-host/src/host.ts:3:fec1d5b512cb6222f67c786020ccb430028da07c7bc0788e5099f0a7d82bd5f3"
+    ],
+    "providerCalls": [
+      "packages/hub/src/core-worker.ts:017570be520dc3e4735ce181ca101268b305c819554e650c66f9d44770303cd6",
+      "packages/hub/src/core.ts:7c5b277b8c21a9597a507065b40eca37bc7ad9a4b098c5f179c35483ad59e57f",
+      "packages/hub/src/core.ts:ee88c11d5cc963ae3607c96100e5e81bbc1dd9f15393de278f9f1ee0680d5b08",
+      "packages/hub/src/server.ts:130dfe5944b101ce83f7ea9c866809915d33f5bbe33ddfc0895a03b8fe4984fb"
+    ]
+  }
+}

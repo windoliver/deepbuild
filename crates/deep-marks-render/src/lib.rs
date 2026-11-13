@@ -460,7 +460,7 @@ fn check(
                 expansions.push(json!({"instance": id, "derived": {name: derived}}))
             }
             Err(r) => issues.push(deep_canvas::document::Issue::error(
-                r.code, id, r.path, r.actual, &r.message,
+                r.code, id, r.path, *r.actual, &r.message,
             )),
         }
     }
@@ -703,12 +703,14 @@ fn inline_sidecars(input: &mut Map<String, Value>) -> Result<(), Value> {
         .map(PathBuf::from);
     if let Some(Value::Object(doc)) = input.get_mut("doc") {
         asset::sidecars(doc, store)?;
+        asset::raws(doc, store)?;
         asset::tables(doc, evidence.as_deref())?;
     }
     if let Some(Value::Array(steps)) = input.get_mut("steps") {
         for step in steps {
             if let Some(Value::Object(doc)) = step.get_mut("doc") {
                 asset::sidecars(doc, store)?;
+                asset::raws(doc, store)?;
             }
         }
     }
@@ -1380,6 +1382,7 @@ mod graphs;
 pub mod layer;
 #[cfg(target_os = "macos")]
 mod macos;
+mod neon;
 mod place;
 mod raster;
 mod status;

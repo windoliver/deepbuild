@@ -4,7 +4,7 @@
 import { closeSync, openSync, readFileSync, readSync, readdirSync, fstatSync } from 'node:fs';
 import { join } from 'node:path';
 import { ADAPTERS, factsAdapter, readFacts, registry as emptyRegistry, shipped, type Adapter, type AdapterRegistry, type HookRequestLine, type JsonObject } from '@deepbuild/adapters';
-import { canonicalize, getSchema, sha256Hex, validate, type JsonValue } from '@deepbuild/contracts';
+import { isObject as isObj, canonicalize, getSchema, sha256Hex, validate, type JsonValue } from '@deepbuild/contracts';
 import { scrubText } from '@deepbuild/evidence';
 import { isPrCreate, prUrlIn } from './forge.js';
 import { countMcp } from './mcp-servers.js';
@@ -29,7 +29,6 @@ const CODEX_COMMAND = /^\/(compact|review|init|new|clear|undo|diff|status|model|
 const SEQ_WHY = 'seq is when the hook started, in ns since the Unix epoch, as a canonical decimal string from 0 to 9223372036854775807: digits only, no sign, no leading zero, never a JSON number.';
 const MAX_MS = 9_007_199_254_740_991n;
 
-const isObj = (v: unknown): v is JsonObject => typeof v === 'object' && v !== null && !Array.isArray(v);
 const str = (v: unknown): string => (typeof v === 'string' ? v : '');
 
 /** Whether a kind's event must name the session it is about. */
@@ -174,8 +173,32 @@ export function adapterOf(agent: string | undefined): Adapter | undefined {
   const name = agent === undefined ? undefined : ADAPTERS[agent];
   return name === undefined ? undefined : registry().get(name);
 }
+/** A model call as the agent's own transcript records it (#2019): a retry, with its attempt, most and cause, or the reply that ends the retries. */
+export interface ModelCall { outcome: 'retry' | 'reply'; attempt?: number; max?: number; cause?: string; at: number; record: string }
+/**
+ * A transcript entry the agent's facts (`retries`) mark as its retry of a model call, or as the model's reply that
+ * ends retries; read by the facts alone, never the agent's name or text. Undefined for any other entry.
+ */
+export function modelCallOf(agent: string | undefined, entry: Record<string, unknown>): ModelCall | undefined {
+  const r = (adapterOf(agent)?.facts as JsonObject | undefined)?.retries as JsonObject | undefined;
+  if (!r) return undefined;
+  const at = (path: unknown): unknown => String(path).split('.').reduce<unknown>((inner, key) => (inner && typeof inner === 'object' && Object.hasOwn(inner, key) ? (inner as JsonObject)[key] : undefined), entry);
+  const holds = (match: unknown): boolean => Object.entries((match ?? {}) as JsonObject).every(([path, value]) => at(path) === value);
+  const when = Date.parse(String(at(r.at)));
+  const record = at(r.id);
+  if (!Number.isFinite(when) || typeof record !== 'string' || !record) return undefined;
+  if (holds(r.match)) {
+    const cause = r.cause as { fields: string[]; values: Record<string, string>; otherwise: string };
+    const named = cause.fields.map((f) => at(f)).find((v) => (typeof v === 'string' || typeof v === 'number') && Object.hasOwn(cause.values, String(v)));
+    const n = (path: unknown): number | undefined => (Number.isSafeInteger(at(path)) && (at(path) as number) >= 1 ? (at(path) as number) : undefined);
+    const attempt = n(r.attempt);
+    const max = n(r.max);
+    return { outcome: 'retry', ...(attempt ? { attempt } : {}), ...(max ? { max } : {}), cause: named === undefined ? cause.otherwise : cause.values[String(named)]!, at: when, record };
+  }
+  return holds(r.reply) ? { outcome: 'reply', at: when, record } : undefined;
+}
 /** Whether the facts of the adapter an agent's hooks map through cover a version. */
-export const coveredBy = (agent: string, version: string): boolean => ((registry().get(ADAPTERS[agent] ?? agent).facts as JsonObject).versions as string[]).includes(version);
+export const coveredBy =(agent: string, version: string): boolean => ((registry().get(ADAPTERS[agent] ?? agent).facts as JsonObject).versions as string[]).includes(version);
 
 /** Loads the adapters' facts ahead of the first request. */
 export function warm(): void {
@@ -208,12 +231,13 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
     return { kind: 'refused', id, error: { ...issue, remediation: issue.path === '/seq' ? SEQ_WHY : issue.remediation } };
   }
   const request = value as unknown as HookRequestLine;
-  const name = ADAPTERS[request.agent];
+  // A table's own entries only: a name every object has, such as constructor, is no agent and no event (#2043).
+  const name = Object.hasOwn(ADAPTERS, request.agent) ? ADAPTERS[request.agent] : undefined;
   if (!name) return { kind: 'refused', id, error: refusal('enum', '/agent', `No adapter maps ${request.agent}; send one of ${Object.keys(ADAPTERS).join(', ')}.`, request.agent) };
   if (!isObj(request.payload)) return { kind: 'refused', id, error: refusal('type', '/payload', "Send the agent's hook JSON object as the payload.", request.payload) };
   const payload = request.payload;
   const moments = MOMENTS[name];
-  const event = moments?.[request.event] ?? request.event;
+  const event = moments && Object.hasOwn(moments, request.event) ? moments[request.event]! : request.event;
   // Who is calling: a payload that carries another tool's own fields is that tool's, whatever command or variable
   // named it; a name its fields contradict is recorded as a reading (#993), and a tool that isn't Claude Code is kept.
   const said = name === 'claude' ? payloadCaller(payload) : undefined;
@@ -221,7 +245,7 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
   const agent = said && said !== 'claude-code' ? said : request.agent;
   const scrub = (text: string) => scrubText(text, { held });
   const meta: HookMeta = {
-    id: request.id, agent, event, session: str(payload.session_id), cwd: str(payload.cwd),
+    id: request.id, seq: request.seq, agent, event, session: str(payload.session_id), cwd: str(payload.cwd),
     transcript: str(payload.transcript_path), pid: request.pid, ppid: request.ppid, matched: request.matched,
   };
   if (said && said !== named) meta.caller = `deep-hook named this hook's caller ${named}, but its payload's own fields say ${said} (${said === 'cursor' ? 'cursor_version' : `transcript_path ${str(payload.transcript_path)}`}); it is recorded under ${agent}.`;
@@ -232,6 +256,9 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
   if (request.heavy) meta.heavy = request.heavy;
   const fields: NonNullable<HookMeta['fields']> = {};
   for (const key of ['prompt_id', 'prompt', 'error', 'agent_id', 'source', 'last_assistant_message', 'turn_id', 'file_path'] as const) if (str(payload[key])) fields[key] = str(payload[key]);
+  // The agent's own title for the session (#2018), on one line, scrubbed as a prompt's text is.
+  const titled = scrub(str(payload.session_title)).split(/\r?\n/)[0]!.trim();
+  if (titled) fields.session_title = titled.slice(0, 512);
   if (Object.keys(fields).length) meta.fields = fields;
   if (name === 'pi' && str(payload.parent)) meta.parent = str(payload.parent);
   if (name === 'paseo') {
@@ -329,7 +356,12 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
         // through because the hub was late is marked late.
         if (request.late === true) Object.assign(data, { late: true, matched: request.matched });
         else if (request.matched.length) data.matched = request.matched;
-        v = 3;
+        // A fetch names the host its URL names, never its path or query, for the line that says what a turn does (#2021).
+        const url = callKind === 'fetch' ? str(at(payload, 'tool_input.url')) : '';
+        const host = url && URL.canParse(url) ? scrub(new URL(url).hostname) : '';
+        if (host) data.host = host.slice(0, 253);
+        // Only a fetch that names its host needs the version that has the field.
+        v = host ? 4 : 3;
       } else {
         Object.assign(data, failure(mapped.outcome === 'failed', payload, callKind, meta.cwd));
         v = 2;
@@ -337,6 +369,17 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
         if (isObj(mapped.nested) && typeof mapped.nested.complete === 'boolean') {
           data.nested = { complete: mapped.nested.complete, ...(Number.isSafeInteger(mapped.nested.calls) ? { calls: mapped.nested.calls } : {}) };
           v = 3;
+        }
+        // What the target said first when it failed, scrubbed and clamped: the receipt quotes it, never the agent's words.
+        const said = mapped.outcome === 'failed' ? [...scrub(errorLine(str(payload.error)))] : [];
+        if (said.length) {
+          data.error = said.length > ERROR_LINE ? `${said.slice(0, ERROR_LINE - 1).join('')}…` : said.join('');
+          v = 4;
+        }
+        // An MCP call's arguments as a hash, never the arguments, so a repeat is read by its tool and arguments (#2019).
+        if (callKind === 'mcp' && isObj(payload.tool_input)) {
+          data.args = sha256Hex(canonicalize(payload.tool_input as JsonValue));
+          v = 5;
         }
         // The pull request a `gh pr create` call opened, from the call's own response (#83): only a call that is that
         // one command counts, so an echoed URL never passes for the one gh printed. Read here for both agents, since a
@@ -452,6 +495,19 @@ function failure(failed: boolean, payload: JsonObject, kind: string, cwd: string
   const exit = code ? Number(code[1]) : null;
   const cause = payload.is_interrupt === true ? 'interrupted' : exit !== null ? 'command_failed' : /permission|denied by the user/i.test(error) ? 'permission_denied' : error ? 'tool_error' : 'unknown';
   return { outcome: 'failed', exit_code: exit !== null && exit <= 255 ? exit : null, signature: signature(`${kind}:${cause}`, error, cwd), cause, owner: cause === 'permission_denied' ? 'you' : 'agent' };
+}
+
+/** The most characters of a failed call's error line the record keeps (tool.after@4's `error`). */
+const ERROR_LINE = 300;
+/**
+ * A failure's first error line from its target (#2029), which an allowed step's receipt quotes: the agent's own
+ * "Exit code N" line left out and whitespace runs made one space; the first line that reads as an error (git's `!`,
+ * `error:`, `fatal:`, an exception's name), else the first line.
+ */
+function errorLine(error: string): string {
+  const lines = error.split('\n').map((l) => l.replace(/\s+/g, ' ').trim()).filter(Boolean);
+  const own = /^Exit code \d+$/.test(lines[0] ?? '') ? lines.slice(1) : lines;
+  return own.find((l) => /^(!|error\b|fatal\b|\w*(Error|Exception)\b)/i.test(l)) ?? own[0] ?? '';
 }
 
 /** The loop fact a tool hook carries, by the agent's loop facts: wake-ups and crons once they ran, background subagents and commands, and monitors' watches. */

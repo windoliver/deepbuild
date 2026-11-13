@@ -337,8 +337,10 @@ export function validateBudgets(current, base) {
   if (!Array.isArray(current?.tasks)) throw Error('Missing budget tasks');
   if (base?.preflight && !isDeepStrictEqual(current.preflight, base.preflight)) throw Error('Budget preflight changed or disappeared; restore its frozen definition');
   if (base?.harness && !isDeepStrictEqual(current.harness, base.harness)) throw Error('Budget harness changed or disappeared; restore its frozen definition');
+  // A task's criteria say what it proves, not how it is judged: the budget window reads them as the merge base has them.
+  const definition = ({ criteria, ...task } = {}) => task;
   for (const established of base?.tasks ?? []) {
-    if (!isDeepStrictEqual(current.tasks.find(({ id }) => id === established.id), established))
+    if (!isDeepStrictEqual(definition(current.tasks.find(({ id }) => id === established.id)), definition(established)))
       throw Error(`Budget ${established.id} changed or disappeared; restore its frozen definition`);
   }
   const ids = new Set();

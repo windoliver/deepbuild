@@ -1,0 +1,27 @@
+{
+ "base": "e63447beafd51cc8bdd757865e0a7f2a7935b508",
+ "made_by": "DEEP_2324_RECORD=1 npx vitest run --root tests/acceptance/2324 record.spec.ts, at the merge base, with rust-toolchain.toml's cargo first on PATH",
+ "piece": {
+  "seed": 2324,
+  "controls": {"nudge":{"kind":"slider"}},
+  "items": {"table_copy":{"kind":"logic@1","params":{"program":"6b0b51dbdd8fb602a3909270d035e4d5cf697737ab646013fec11fe027a7c561","writes":{"acc":{"type":"i32"},"mix":{"type":"f64"}},"reads":["nudge"],"checkpoint":{"every":30}}}},
+  "assets": {"6b0b51dbdd8fb602a3909270d035e4d5cf697737ab646013fec11fe027a7c561":"AGFzbQEAAAABCgJgAX8Bf2ABfgADBwYBAQAAAAAEBQFwAQQEBQQBAQICBh0EfwBBAAt/AEGAIAt/AUEAC3wBRAAAAAAAAAAACwcvBQZtZW1vcnkCAAhyZWFkc19hdAMACXdyaXRlc19hdAMBBGluaXQAAARzdGVwAAEJCgEAQQALBAIDBAUKuQEGBwAgAKckAguFAQECfyAApyECQQAoAgBBAEcEQEEQKwMAqiEBCyMCIAIgAWpBA3ERAAAkAkGAgAQgAkHRB2xB4NQDcGpBgMAAIAJBgwFsQdCGA3BqQYAE/AoAAEGAgAEjAkH8/wBxaiMCNgIAIwNEAAAAAAAA4D+iIwK3oCQDQYAgIwI2AgBBiCAjAzkDAAsKACAAQQNsQQFqCwsAIABBldPH3gVzCwcAIABBB3cLCQAgAEG54ABrCwtgAQBBgMAAC1hsb2dpY0AxIGFjY2VwdGFuY2UgIzUzMTogYnl0ZXMgdGhhdCBtZW1vcnkuY29weSBtb3ZlcyBmcm9tIHBsYWNlIHRvIHBsYWNlLCBzdGVwIGJ5IHN0ZXAuAE8EbmFtZQEdBgAEaW5pdAEEc3RlcAICZjADAmYxBAJmMgUCZjMCFQIAAQAEc2VlZAEDAAFrAQF2AgJrawQFAQACb3AHCwICA2FjYwMDbWl4"}
+ },
+ "track": [
+  {"t":82320000,"seq":0,"control":"nudge","value":1,"writer":"you","player":1},
+  {"t":341040000,"seq":1,"control":"nudge","value":4,"writer":"you","player":1},
+  {"t":717360000,"seq":2,"control":"nudge","value":2,"writer":"you","player":1},
+  {"t":1140720000,"seq":3,"control":"nudge","value":3,"writer":"you","player":1}
+ ],
+ "steps": 120,
+ "golden": {
+  "bake_key": {"table_copy":"d770fada7074a4d6f23b4ee1c7d423c2c3a483351691e97bb91151fe534027b4"},
+  "runtime_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+  "machine": {"os":"macos","arch":"aarch64","cpu":"Apple M5 Max"},
+  "step_hashes": {"table_copy":["991ffa4afd1bb870","2971ff706044e925","01d835f1d1b17742","bbac231ead8db748","8d90c4d9867b6ae7","3671001da144fb63","0f748f729419b23a","fb09cbf7b0e1ec7e","317bcf95fa6c01ea","678d478c42216a2e","7a30b6f2c50434d0","a360c5f8631aaab5","b12cc04d61b13cc4","258d57de344bf395","87f9189e6bb5bb46","78f33c36e8dfb47a","485fe9b67f73e062","a4e876a7c83c5462","df9a19bc20970c4c","0f6c92fdccbcf5f8","a70f91282ca3aab6","59f7d93b343fb0c9","a554b37de0780dba","093c3c12979dadde","256cde79176397fe","37c22c5bd7e72a8a","bfd7d1ce96d45132","b28a903f6d844117","013bbf76409f51ac","32301aa15d3daad2","316c6351f6125a02","44e984ae6261dc8c","b58b2fcba5133f59","dd8d59e55ed5662f","bb4aabc435873a97","d24ee7a2b5011716","56f9a17df9d28667","6195ce47bcf31fe8","b6c3563e498d774c","37ffbb8c059d476f","a34c5839e5cb5d1e","9264a247e4bf8640","ae521591f6147915","978caab32c4ca4c1","6af2137d50f5a701","367fa2ba2166a2d0","e1579d6e68e5278d","f37a19c9313e1e25","c7373c1d3f112c5e","85468ad2e49994ed","f62801f087a91284","0012a202a55d0d3f","0df7ee77ffdeb827","a088c5f02e5ca782","93caf297fea4c9c3","483e29681fb5dcf2","fb862e015040c527","72f491b09c16f11c","92083c30c1806296","5c4fe4f3d6b37db8","50a8b24d370b945a","deb2693b4aa70d93","e42bebd9fb26f21e","0cb56fef30a9a341","d7c49f495c8e8040","7d73a3e96c1392be","504bd8d189670aca","d94ec8b9965b04e1","364d418db1f73a90","cfcb6674fd0a74da","d8da8742f9007996","6de97895533c1dee","11ede2fc112724e6","6bd1072d97ddf30c","29bd6310c3a63db8","ce53ff9527024747","12c55d77611ad3ba","ff64a84e1cd02fec","ef2e088cd196b80e","4180f62fbbca0328","6adf81212484c1bc","c2d72a1a127b054f","9d30f6a5b6c49171","796e3c76003575f1","09db4bd5c5772bd4","476c72b4de448afd","55ff565ca47d814f","ad773b05308e8a0f","1d81f1ffd2b83203","9ea9b447a5593657","9d80a02c8206e0c6","0fcb81428612dee8","83200aa17433642b","f392fd6655a76f98","45277a2f780cea0f","704e8be91e622a26","68571728606d2201","194159bcd385629f","b2f7997fea85d51f","d6a843369a71cd70","7148276180caaeaf","f87885e21ac0da4a","e486532bceb13dc3","64d43bb52b159bc3","dae9551f3793ff84","7d15b42116dbf821","9a08d1cf9ddad38d","fbd7e4429848aa74","f9d760a719cee440","c8f64c12f0f3dd8c","8e2e9df51ea528ce","e1c71955e15bc3fa","59d1c99e34930f35","2fec460be77fc719","cb2cb855d5c5638f","0999d96fd8c7e41b","20da2d26368294cd","0d7cc90832830523","dc4cdfbd14e4a58e","803aab9ffb18e933"]},
+  "checkpoint_hashes": {"table_copy":[{"step":0,"deep_hash":"e1c22c2c9915946f"},{"step":30,"deep_hash":"03d95add5ee12c18"},{"step":60,"deep_hash":"9b47b07164d96bd2"},{"step":90,"deep_hash":"99b6b1612471182f"},{"step":120,"deep_hash":"48833ef8a31653b8"}]},
+  "occurrences_hash": null,
+  "record_on": "macos-aarch64",
+  "verify_on": ["linux-x86_64","web"]
+ }
+}

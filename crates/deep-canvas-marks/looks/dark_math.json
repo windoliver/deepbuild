@@ -9,7 +9,12 @@
     "paper_white": "#e7eaf2",
     "slate_fill": "#26304a",
     "gold": "#f6c446",
-    "grid_line": "#1b2236"
+    "grid_line": "#1b2236",
+    "teal": "#5fd3bc",
+    "sky": "#6cc6e8",
+    "leaf": "#9bd17a",
+    "rose": "#f29aa6",
+    "haze": "#8f9bb8"
   },
   "roles": {
     "ground": "navy",
@@ -17,7 +22,16 @@
     "muted": "slate_fill",
     "accent": "gold",
     "grid": "grid_line",
-    "math": "math"
+    "math": "math",
+    "code_keyword": "gold",
+    "code_type": "teal",
+    "code_function": "sky",
+    "code_string": "leaf",
+    "code_number": "rose",
+    "code_comment": "haze",
+    "diff_added": "leaf",
+    "diff_removed": "rose",
+    "diff_changed": "gold"
   },
   "themes": {
     "light": {},
@@ -55,6 +69,23 @@
     "glyph": "⚠"
   },
   "legend": "auto",
+  "code": {
+    "keyword": "code_keyword",
+    "type": "code_type",
+    "function": "code_function",
+    "variable": "ink",
+    "string": "code_string",
+    "number": "code_number",
+    "comment": "code_comment",
+    "operator": "ink",
+    "punctuation": "ink",
+    "plain": "ink"
+  },
+  "diff": {
+    "added": "diff_added",
+    "removed": "diff_removed",
+    "changed": "diff_changed"
+  },
   "lines": {
     "line": {
       "kind": "exact",

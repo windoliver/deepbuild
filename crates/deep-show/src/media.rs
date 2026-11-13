@@ -99,6 +99,9 @@ pub struct Media {
     pub(crate) scripts: std::collections::BTreeMap<String, std::sync::Arc<crate::narration::Script>>,
     pub(crate) captions: Option<crate::narration::View>,
     pub(crate) captions_drawn: std::collections::BTreeMap<String, std::sync::Arc<crate::snapshot::Drawn>>,
+    /// #1967: each terminal recording a cell grid plays, by SHA-256, as the decode worker
+    /// converted it: its keyframes and row patches, which sessions read as `terminal:<sha256>`.
+    pub recordings: std::collections::BTreeMap<String, Value>,
 }
 
 /// The worker-side name of a planted wrong program, if it is one the decode worker runs.
@@ -113,6 +116,8 @@ fn worker_planted(p: Option<Planted>) -> Option<&'static str> {
         Planted::AssumesBt601 => "assumes_bt601",
         Planted::TimecodeTrackZero => "timecode_track_zero",
         Planted::PngPremultipliesStraight => "png_premultiplies_straight",
+        Planted::Export(crate::export::Guard::Codec(name)) => name,
+        Planted::VideoDropsFrame300 => "video_drops_frame_300",
         _ => return None,
     })
 }
@@ -156,6 +161,21 @@ impl Hub<'_> {
                 }
                 None => out.push(issue("unreadable_asset", "the decode worker couldn't probe the asset")),
             }
+            // #1967: a terminal recording is converted once, in the worker, and kept by its hash.
+            let terminal = reply.pointer("/asset/kind").and_then(Value::as_str) == Some("terminal");
+            if terminal && !self.media.recordings.contains_key(&sha) {
+                let (mut reply, _) =
+                    self.media_job(DECODE_WORKER, json!({"op": "decode", "path": file}));
+                match reply.get_mut("decoded").map(Value::take) {
+                    Some(converted) => {
+                        self.media.recordings.insert(sha, converted);
+                    }
+                    None => out.push(issue(
+                        "unreadable_asset",
+                        "the decode worker couldn't convert the recording",
+                    )),
+                }
+            }
         }
         out
     }
@@ -176,11 +196,14 @@ impl Hub<'_> {
         };
         if slot.is_none() {
             let exe = std::env::current_exe().unwrap_or_else(|_| PathBuf::from("deep-show"));
+            // #1967's planted import lives in the cells module's conversion, in the worker.
+            let module = self.scenario.module_planted.as_deref();
+            let import = module.filter(|p| *p == "cells_patch_times_whole_seconds");
             match Helper::start(
                 &exe,
                 role,
                 &self.scenario.decode_caps,
-                worker_planted(planted),
+                worker_planted(planted).or(import),
             ) {
                 Ok(h) => {
                     *slot = Some(h);
@@ -190,6 +213,25 @@ impl Hub<'_> {
         }
         let h = slot.as_mut().expect("started");
         (h.ask(&job), h.pid)
+    }
+
+    /// #157: the run's encode tool, started on first use, for a job that streams its frames.
+    pub(crate) fn encode_tool(&mut self) -> Result<&mut Helper, Value> {
+        if self.media.encoder.is_none() {
+            let exe = std::env::current_exe().unwrap_or_else(|_| PathBuf::from("deep-show"));
+            let h = Helper::start(&exe, ENCODE_TOOL, &self.scenario.decode_caps, worker_planted(self.scenario.planted))
+                .map_err(|e| json!({"code": "encoder_unstarted", "why": format!("the encode tool didn't start: {e}")}))?;
+            self.media.encoder = Some(h);
+        }
+        Ok(self.media.encoder.as_mut().expect("started"))
+    }
+
+    /// #157: a fresh decode worker, apart from the run's and from the encode tool, for reading one
+    /// delivery under caps that fit it; ended when dropped.
+    pub(crate) fn fresh_decoder(&self, caps: &Caps) -> Result<Helper, Value> {
+        let exe = std::env::current_exe().unwrap_or_else(|_| PathBuf::from("deep-show"));
+        Helper::start(&exe, DECODE_WORKER, caps, worker_planted(self.scenario.planted))
+            .map_err(|e| json!({"code": "decoder_unstarted", "why": format!("the decode worker didn't start: {e}")}))
     }
 
     pub fn media_call(&mut self, call: &MediaCall) -> Value {

@@ -372,6 +372,8 @@ pub struct Transport {
     pub start: i64,
     pub span: Option<i64>,
     pub wrap: bool,
+    /// #157: `loop: ping_pong`: each pass plays the span the other way, so it closes by construction.
+    pub ping_pong: bool,
     /// Under reduced motion the timeline holds at its start: `reduced_motion: hold`, in any
     /// profile but a film, which still plays its timeline (Transport).
     pub holds: bool,
@@ -441,7 +443,21 @@ pub enum Kind {
     FollowTip { item: String, offset: [f64; 2], rotate: bool },
     Distance { target: String, min: f64, max: f64 },
     SpringChain { bones: Vec<String>, hz: f64, damping_ratio: f64, max_swing: f64 },
-    RestOn { ground: f64, bottom: f64, offset: f64, max_drop: f64 },
+    /// With `on` (#2013: an item, a collection or `ground`) the owner rests on true shapes, which
+    /// the module that holds them solves at check; without it, on the plane `ground`, here.
+    RestOn { ground: f64, bottom: f64, offset: f64, max_drop: f64, on: Option<RestOn> },
+}
+
+/// What a `rest_on` that names `on` rests its owner on, and how (Constraint: rest_on).
+#[derive(Clone, Debug, PartialEq)]
+pub struct RestOn {
+    pub on: String,
+    /// The unit direction the owner moves along.
+    pub axis: [f64; 3],
+    /// `align: normal`: the owner tilts to the surface it meets.
+    pub align: bool,
+    /// `contact: bounds`: each side's bounds meet, in place of their true shapes.
+    pub bounds: bool,
 }
 
 /// One constraint on an owner item, applied by its influence after the owner's channels and
@@ -481,6 +497,7 @@ impl Kind {
                 chain.iter().chain([target]).map(String::as_str).collect()
             }
             Kind::SpringChain { bones, .. } => bones.iter().map(String::as_str).collect(),
+            Kind::RestOn { on: Some(r), .. } if r.on != "ground" => vec![r.on.as_str()],
             Kind::FollowPath { .. } | Kind::RestOn { .. } => Vec::new(),
         }
     }
@@ -517,8 +534,9 @@ pub struct Control {
     pub options: Vec<String>,
     /// The option it holds before any input.
     pub default: usize,
-    /// A stages control's shot per option, as an index in [`Motion::shots`].
-    pub shots: Vec<usize>,
+    /// A stages control's shot per option, as an index in [`Motion::shots`]; #504: a stage may
+    /// name none.
+    pub shots: Vec<Option<usize>>,
 }
 
 /// A channel that follows a control by a transition (#489: `model: transition {span, interp}`):
@@ -534,6 +552,33 @@ pub struct Follow {
     /// Its own span and interp, or the look's time feel's where it names none.
     pub span: Option<i64>,
     pub ease: Option<Ease>,
+}
+
+impl Follow {
+    /// The document entry that writes it: its channel, or for a stage's `set` (#504) the
+    /// control's stage that first sets the path.
+    pub fn entry(&self) -> String {
+        if self.id.starts_with("controls/") {
+            self.id.clone()
+        } else {
+            format!("channels/{}", self.id)
+        }
+    }
+}
+
+/// #504: a take-apart, a follow whose stagger's targets are assemblies (Follow: `stagger`): each
+/// target's share follows the source, each change reaching target k rank × lag later, or with
+/// `reverse_on_close` a closing change (n − 1 − rank) × lag later.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Stagger {
+    pub id: String,
+    pub spec: follow::Spec,
+    /// Each target assembly, in list order, with its rank: by (the assembly's `order`, its place
+    /// in the list), then the stagger's order.
+    pub targets: Vec<(String, usize)>,
+    /// Flicks between consecutive ranks.
+    pub lag: i64,
+    pub reverse_on_close: bool,
 }
 
 /// A `hold` shot a stage names (canvas primitives: Control/Shot): its camera's target from the
@@ -555,6 +600,8 @@ pub struct Motion {
     pub transport: Transport,
     pub channels: Vec<Channel>,
     pub follows: Vec<Follow>,
+    /// #504: the take-aparts, in channel ID order.
+    pub staggers: Vec<Stagger>,
     pub controls: Vec<Control>,
     /// The shots stages name, in the order stages first name them.
     pub shots: Vec<Shot>,
@@ -686,12 +733,27 @@ impl Ctx {
             ..Ctx::default()
         }
     }
+
+    /// The document's timeline: its tempo map and markers, so a time read after the document's
+    /// own (a shot's, #1163) lands where a key's does.
+    pub(crate) fn timeline(
+        doc: &Map<String, Value>,
+        frame_rate: (u32, u32),
+    ) -> Result<Ctx, Refused> {
+        let mut ctx = Ctx::of(frame_rate);
+        ctx.tempo = Tempo::read(doc, &ctx.time, false)?;
+        markers_of(doc, &mut ctx)?;
+        Ok(ctx)
+    }
 }
 
 /// A time field's flicks: a bar:beat through the tempo map, anything else through the core.
 pub fn time_of(value: Option<&Value>, ctx: &Ctx, path: &str) -> Result<i64, Refused> {
-    let Some(Value::String(text)) = value else {
-        return refuse("bad_time", path);
+    let text = match value {
+        Some(Value::String(text)) => text,
+        // #157: a time in its stored form, whole flicks (Time and the flick).
+        Some(Value::Number(n)) => return n.as_i64().map_or_else(|| refuse("bad_time", path), Ok),
+        _ => return refuse("bad_time", path),
     };
     match (Time::parse(text), &ctx.tempo) {
         (Ok(Time::Beats { bar, beat }), Some(tempo)) => tempo.beat(bar, beat).map_err(|why| Refused {
@@ -915,15 +977,21 @@ pub fn feel_of(look: &Map<String, Value>, frame_rate: (u32, u32)) -> Result<Feel
     Ok(feel)
 }
 
+/// What [`controls_of`] reads: the controls, the shots their stages name and their follows.
+type Controls = (Vec<Control>, Vec<Shot>, Vec<Follow>);
+
 /// The toggle and stages controls, in ID order, and the shots their stages name, each read once,
 /// in the order stages first name them; every other kind of control is read where it lands.
+/// #504: each path a stages control's stages `set` is a follow of that control with a span of 0,
+/// its value per stage the stage's, or the document's own where a stage sets none.
 fn controls_of(
     doc: &Map<String, Value>,
     cameras: &[(String, [f64; 3])],
     ctx: &Ctx,
-) -> Result<(Vec<Control>, Vec<Shot>), Refused> {
+) -> Result<Controls, Refused> {
     let mut controls = Vec::new();
     let mut read: Vec<Shot> = Vec::new();
+    let mut sets: Vec<Follow> = Vec::new();
     for (id, c) in section(doc, "controls")? {
         let path = format!("controls/{id}");
         let (kind, options, shots, default) = match c.get("kind").and_then(Value::as_str) {
@@ -945,22 +1013,52 @@ fn controls_of(
                 let mut shots = Vec::new();
                 for (stage, s) in stages {
                     let at = format!("{path}/stages/{stage}/shot");
-                    let Some(name) = s.get("shot").and_then(Value::as_str) else {
-                        return refuse("bad_doc", at);
-                    };
-                    let shot = match read.iter().position(|x| x.id == name) {
-                        Some(i) => i,
-                        None => {
-                            let def = doc.get("shots").and_then(|m| m.get(name));
-                            let Some(Value::Object(def)) = def else {
-                                return refuse("ref_unresolved", at);
-                            };
-                            read.push(shot_of(name, def, cameras, ctx)?);
-                            read.len() - 1
-                        }
+                    let shot = match s.get("shot") {
+                        None | Some(Value::Null) => None,
+                        Some(Value::String(name)) => Some(match read.iter().position(|x| x.id == *name) {
+                            Some(i) => i,
+                            None => {
+                                let def = doc.get("shots").and_then(|m| m.get(name));
+                                let Some(Value::Object(def)) = def else {
+                                    return refuse("ref_unresolved", at);
+                                };
+                                read.push(shot_of(name, def, cameras, ctx)?);
+                                read.len() - 1
+                            }
+                        }),
+                        Some(_) => return refuse("bad_doc", at),
                     };
                     options.push(stage.clone());
                     shots.push(shot);
+                }
+                // Each path the stages set, with the first stage that sets it.
+                let mut paths: Vec<(&String, &String)> = Vec::new();
+                for (stage, s) in stages {
+                    match s.get("set") {
+                        None | Some(Value::Null) => {}
+                        Some(Value::Object(set)) => {
+                            for name in set.keys() {
+                                if !paths.iter().any(|(p, _)| *p == name) {
+                                    paths.push((name, stage));
+                                }
+                            }
+                        }
+                        Some(_) => return refuse("bad_doc", format!("{path}/stages/{stage}/set")),
+                    }
+                }
+                for (name, stage) in paths {
+                    let id = format!("{path}/stages/{stage}/set/{name}");
+                    let target = target_of(name, false, &id)?;
+                    let mut values = Vec::with_capacity(stages.len());
+                    for (other, o) in stages {
+                        let at = format!("{path}/stages/{other}/set/{name}");
+                        values.push(match o.get("set").and_then(|m| m.get(name)) {
+                            None => authored_number(doc, &target),
+                            Some(Value::Bool(b)) => f64::from(u8::from(*b)),
+                            v => number(v, &at)?,
+                        });
+                    }
+                    sets.push(Follow { id, target, control: controls.len(), values, span: Some(0), ease: None });
                 }
                 let default = match c.get("default") {
                     None => 0,
@@ -982,7 +1080,32 @@ fn controls_of(
             shots,
         });
     }
-    Ok((controls, read))
+    Ok((controls, read, sets))
+}
+
+/// The number a target holds in the document as written: an item's field (an `at` component at
+/// its identity where it names none), a data value's or an assembly's value; 0 where none.
+fn authored_number(doc: &Map<String, Value>, target: &Target) -> f64 {
+    let n = |v: Option<&Value>| match v {
+        Some(Value::Bool(b)) => Some(f64::from(u8::from(*b))),
+        v => v.and_then(Value::as_f64),
+    };
+    if let Some(name) = target.owner.strip_prefix("data/") {
+        let d = doc.get("data").and_then(|d| d.get(name));
+        return n(d.and_then(|d| d.get("value")).or(d)).unwrap_or(0.0);
+    }
+    if let Some(id) = target.owner.strip_prefix("assemblies/") {
+        return n(doc.get("assemblies").and_then(|a| a.get(id)).and_then(|a| a.get("value"))).unwrap_or(0.0);
+    }
+    let mut at = doc.get("items").and_then(|i| i.get(&target.owner));
+    for name in &target.field {
+        at = at.and_then(|v| match v {
+            Value::Array(list) => name.parse::<usize>().ok().and_then(|i| list.get(i)),
+            other => other.get(name),
+        });
+    }
+    let identity = if target.field.get(1).map(String::as_str) == Some("scale") { 1.0 } else { 0.0 };
+    n(at).unwrap_or(identity)
 }
 
 /// Each `camera@1` item with its target (`params.target`, `[0, 0, 0]` where it names none).
@@ -1038,10 +1161,11 @@ fn shot_of(
         None | Some("hold") => {}
         Some(_) => return refuse("bad_doc", format!("{path}/move")),
     }
-    let Some(target) = s.get("target") else {
-        return refuse("bad_doc", format!("{path}/target"));
+    // #504: a shot that frames its kept items names no target; its camera's own holds here.
+    let target = match s.get("target") {
+        None => cameras[camera].1,
+        Some(target) => point_of(target, &format!("{path}/target"))?,
     };
-    let target = point_of(target, &format!("{path}/target"))?;
     let default_glide = FLICKS_PER_SECOND * 4 / 5;
     let glide = match s.get("join") {
         None => default_glide,
@@ -1153,6 +1277,14 @@ fn target_of(text: &str, in_clip: bool, path: &str) -> Result<Target, Refused> {
             ["data", name] if !name.is_empty() => {
                 return Ok(Target {
                     owner: format!("data/{name}"),
+                    field: vec!["value".into()],
+                })
+            }
+            // #504: an assembly's value, its one write target (Assembly: "move except through
+            // value, apart or a constraint").
+            ["assemblies", id, "value"] if !id.is_empty() => {
+                return Ok(Target {
+                    owner: format!("assemblies/{id}"),
                     field: vec!["value".into()],
                 })
             }
@@ -1354,6 +1486,38 @@ fn pair(v: Option<&Value>, path: &str) -> Result<[f64; 2], Refused> {
     }
 }
 
+/// A `rest_on`'s `on`, `axis`, `align` and `contact` (#2013): the axis as a unit direction.
+fn rest_on_of(c: &Map<String, Value>, path: &str) -> Result<RestOn, Refused> {
+    let on = id_of(c, "on", path)?;
+    let axis = match c.get("axis") {
+        None => [0.0, -1.0, 0.0],
+        Some(Value::Array(a)) if a.len() == 3 => {
+            let mut v = [0.0; 3];
+            for (k, x) in a.iter().enumerate() {
+                v[k] = number(Some(x), &format!("{path}/axis/{k}"))?;
+            }
+            let len = deep_canvas::ops::sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
+            if len < 1e-9 {
+                return refuse("out_of_range", format!("{path}/axis"));
+            }
+            v.map(|x| x / len)
+        }
+        Some(_) => return refuse("bad_doc", format!("{path}/axis")),
+    };
+    let one_of = |k: &str, off: &str, on: &str| match c.get(k).map(Value::as_str) {
+        None => Ok(false),
+        Some(Some(v)) if v == off => Ok(false),
+        Some(Some(v)) if v == on => Ok(true),
+        Some(_) => refuse("bad_doc", format!("{path}/{k}")),
+    };
+    Ok(RestOn {
+        on,
+        axis,
+        align: one_of("align", "none", "normal")?,
+        bounds: one_of("contact", "true_shape", "bounds")?,
+    })
+}
+
 /// A constraint of any kind but `limit`. `follow_stream` is the data module's, which this build
 /// may lack; every other kind motion doesn't fill is refused as unknown.
 fn constraint_of(id: &str, c: &Map<String, Value>) -> Result<Constraint, Refused> {
@@ -1445,6 +1609,10 @@ fn constraint_of(id: &str, c: &Map<String, Value>) -> Result<Constraint, Refused
             bottom: num_or("bottom", 0.0)?,
             offset: num_or("offset", 0.0)?,
             max_drop: num_or("max_drop", 10.0)?,
+            on: match c.get("on") {
+                None => None,
+                Some(_) => Some(rest_on_of(c, &path)?),
+            },
         },
         Some("follow_stream") => return refuse("module_missing", at("kind")),
         _ => return refuse("unknown_kind", at("kind")),
@@ -1988,7 +2156,7 @@ fn extend_of(value: Option<&Value>, path: &str) -> Result<Extend, Refused> {
 
 /// The frame rate the time literals resolve against: `transport.frame_rate` as `p/q` text or a
 /// `[p, q]` pair, 60/1 when absent.
-fn frame_rate_of(transport: Option<&Map<String, Value>>) -> Result<(u32, u32), Refused> {
+pub(crate) fn frame_rate_of(transport: Option<&Map<String, Value>>) -> Result<(u32, u32), Refused> {
     let Some(t) = transport.filter(|t| t.contains_key("frame_rate")) else {
         return Ok((60, 1));
     };
@@ -2028,13 +2196,7 @@ pub fn read_with(doc: &Map<String, Value>, f32_beats: bool, arc: quat::Arc) -> R
             .and_then(Value::as_str)
             != Some("slow");
     let transport = match transport_map {
-        None => Transport {
-            start: 0,
-            span: None,
-            wrap: false,
-            holds,
-            reduce_holds,
-        },
+        None => Transport { start: 0, span: None, wrap: false, ping_pong: false, holds, reduce_holds },
         Some(t) => {
             let start = match t.get("start") {
                 None => 0,
@@ -2045,32 +2207,34 @@ pub fn read_with(doc: &Map<String, Value>, f32_beats: bool, arc: quat::Arc) -> R
                 Some(Value::String(s)) if s == "auto" || s == "open" => None,
                 v => Some(time_of(v, &ctx, "transport/span")?),
             };
-            let wrap = match t.get("loop").and_then(Value::as_str) {
-                None | Some("none") => false,
-                Some("wrap") => true,
+            let (wrap, ping_pong) = match t.get("loop").and_then(Value::as_str) {
+                None | Some("none") => (false, false),
+                Some("wrap") => (true, false),
+                Some("ping_pong") => (false, true),
                 Some(_) => return refuse("bad_doc", "transport/loop"),
             };
             // An open span has no end to wrap at: its loop must be none (Transport).
-            if wrap && t.get("span").and_then(Value::as_str) == Some("open") {
+            if (wrap || ping_pong) && t.get("span").and_then(Value::as_str) == Some("open") {
                 return refuse("bad_doc", "transport/loop");
             }
-            if wrap && span.is_none_or(|s| s <= 0) {
+            if (wrap || ping_pong) && span.is_none_or(|s| s <= 0) {
                 return refuse("bad_time", "transport/span");
             }
-            Transport {
-                start,
-                span,
-                wrap,
-                holds,
-                reduce_holds,
-            }
+            Transport { start, span, wrap, ping_pong, holds, reduce_holds }
         }
     };
     let cameras = cameras_of(doc)?;
-    let (controls, shots) = controls_of(doc, &cameras, &ctx)?;
+    let (controls, shots, mut follows) = controls_of(doc, &cameras, &ctx)?;
+    let seed = match doc.get("seed") {
+        None => fnv1a(doc.get("id").and_then(Value::as_str).unwrap_or("")),
+        Some(v) => match v.as_u64() {
+            Some(seed) => seed,
+            None => return refuse("out_of_range", "seed"),
+        },
+    };
     let mut labels = Vec::new();
     let mut channels = Vec::new();
-    let mut follows = Vec::new();
+    let mut staggers = Vec::new();
     for (id, c) in section(doc, "channels")? {
         // #417's follow names a toggle or stages control and its options' values; #489's
         // follows held keys or a control's value path.
@@ -2078,9 +2242,22 @@ pub fn read_with(doc: &Map<String, Value>, f32_beats: bool, arc: quat::Arc) -> R
             .get("follow")
             .and_then(|f| f.get("source"))
             .is_some_and(|s| s.get("control").is_some());
+        let staggered = c.get("follow").and_then(|f| f.get("stagger")).is_some();
+        if names_control && staggered {
+            return refuse("bad_doc", format!("channels/{id}/follow/stagger"));
+        }
         if names_control {
             follows.push(follow_of(id, c, doc, &controls, &ctx)?);
             continue;
+        }
+        // #504: a follow whose stagger's targets are assemblies is a take-apart, writing each
+        // target's apart share; its target is `assemblies/apart`, those shares, or none. Any
+        // other target of its own follows the source unstaggered, as any follow does.
+        if let (true, Some(Value::Object(f))) = (staggered, c.get("follow")) {
+            staggers.push(take_apart_of(id, f, doc, &ctx, seed)?);
+            if c.get("target").is_none_or(|t| t.as_str() == Some("assemblies/apart")) {
+                continue;
+            }
         }
         let path = format!("channels/{id}");
         channels.push(channel_of(id, c, false, &ctx, &transport, &path, &mut labels)?);
@@ -2123,13 +2300,6 @@ pub fn read_with(doc: &Map<String, Value>, f32_beats: bool, arc: quat::Arc) -> R
     for (id, p) in section(doc, "placements")? {
         raw.push(placement_of(id, p, &clips, &ctx, doc.get("layers").and_then(Value::as_object))?);
     }
-    let seed = match doc.get("seed") {
-        None => fnv1a(doc.get("id").and_then(Value::as_str).unwrap_or("")),
-        Some(v) => match v.as_u64() {
-            Some(seed) => seed,
-            None => return refuse("out_of_range", "seed"),
-        },
-    };
     let mut placements = resolve_series(raw, &clips, seed)?;
     let cuts = cuts_of(doc, &mut placements, &clips)?;
     let parents = parents_of(doc)?;
@@ -2160,6 +2330,7 @@ pub fn read_with(doc: &Map<String, Value>, f32_beats: bool, arc: quat::Arc) -> R
         transport,
         channels,
         follows,
+        staggers,
         controls,
         shots,
         cameras,
@@ -2381,15 +2552,16 @@ fn cuts_of(
 }
 
 /// The marker kinds (canvas primitives: Marker), with a reading hold (#419), which motion blur
-/// never spans. Stage markers wait on present mode (Marker: present mode), which motion doesn't
-/// land yet, so they are refused rather than played through.
-pub(crate) const MARKER_KINDS: [&str; 8] = ["cue", "shot", "section", "beat", "word", "moment", "record", "hold"];
+/// never spans. #407: a stage marker plays through outside present mode (Marker: present mode);
+/// one that waits for a control holds even there, which motion doesn't land yet, so that one is
+/// refused rather than played through.
+pub(crate) const MARKER_KINDS: [&str; 9] = ["cue", "shot", "section", "stage", "beat", "word", "moment", "record", "hold"];
 
 /// Resolves every marker at check, in dependency order: a marker whose time names another marker
 /// waits for it, so a relative time keeps its offset when its marker moves. One that never
 /// resolves, through a cycle or a missing marker, is refused, naming it. A `first` marker (#491)
 /// is solved later, from the channels, and comes back unsolved.
-fn markers_of(doc: &Map<String, Value>, ctx: &mut Ctx) -> Result<(Vec<Marker>, Vec<First>), Refused> {
+pub(crate) fn markers_of(doc: &Map<String, Value>, ctx: &mut Ctx) -> Result<(Vec<Marker>, Vec<First>), Refused> {
     let mut pending = Vec::new();
     let mut firsts = Vec::new();
     for (id, m) in section(doc, "markers")? {
@@ -2397,6 +2569,9 @@ fn markers_of(doc: &Map<String, Value>, ctx: &mut Ctx) -> Result<(Vec<Marker>, V
         let kind = m.get("kind").and_then(Value::as_str).unwrap_or("cue");
         if !MARKER_KINDS.contains(&kind) {
             return refuse("bad_marker_kind", format!("{path}/kind"));
+        }
+        if kind == "stage" && m.get("waits_for").is_some() {
+            return refuse("bad_marker_kind", format!("{path}/waits_for"));
         }
         // Word markers come only from a bake; beat markers from the tempo map or a beats bake.
         let on_beat = matches!(m.get("t").and_then(Value::as_str).map(Time::parse), Some(Ok(Time::Beats { .. })));
@@ -2713,27 +2888,10 @@ fn placement_of(
     let lag = match p.get("stagger") {
         None => None,
         Some(Value::Object(st)) => {
-            let lag = match st.get("lag") {
-                Some(Value::String(text)) => Lag::Flicks(time_of(
-                    Some(&Value::String(text.clone())),
-                    ctx,
-                    &format!("{path}/stagger/lag"),
-                )?),
-                Some(v) => match v.as_f64() {
-                    Some(r) if r.is_finite() && r >= 0.0 => Lag::Ratio(r),
-                    _ => return refuse("out_of_range", format!("{path}/stagger/lag")),
-                },
-                None => return refuse("bad_doc", format!("{path}/stagger/lag")),
-            };
-            if st.get("reverse_on_close").and_then(Value::as_bool) == Some(true) {
+            let (lag, order, reverse_on_close) = stagger_of(st, ctx, &format!("{path}/stagger"))?;
+            if reverse_on_close {
                 timing.reach = Some(0);
             }
-            let order = match st.get("order").and_then(Value::as_str) {
-                None | Some("index") => Order::Index,
-                Some("reverse") => Order::Reverse,
-                Some("seeded") => Order::Seeded,
-                Some(_) => return refuse("bad_doc", format!("{path}/stagger/order")),
-            };
             Some((lag, order))
         }
         Some(_) => return refuse("bad_doc", format!("{path}/stagger")),
@@ -2757,6 +2915,125 @@ fn placement_of(
         start,
         lag,
     })
+}
+
+/// A stagger's lag (a ratio, or a time), its order and `reverse_on_close` (Placement and Follow:
+/// `stagger`).
+fn stagger_of(st: &Map<String, Value>, ctx: &Ctx, path: &str) -> Result<(Lag, Order, bool), Refused> {
+    let lag = match st.get("lag") {
+        Some(Value::String(text)) => Lag::Flicks(time_of(Some(&Value::String(text.clone())), ctx, &format!("{path}/lag"))?),
+        Some(v) => match v.as_f64() {
+            Some(r) if r.is_finite() && r >= 0.0 => Lag::Ratio(r),
+            _ => return refuse("out_of_range", format!("{path}/lag")),
+        },
+        None => return refuse("bad_doc", format!("{path}/lag")),
+    };
+    let reverse_on_close = st.get("reverse_on_close").and_then(Value::as_bool) == Some(true);
+    let order = match st.get("order").and_then(Value::as_str) {
+        None | Some("index") => Order::Index,
+        Some("reverse") => Order::Reverse,
+        Some("seeded") => Order::Seeded,
+        Some(_) => return refuse("bad_doc", format!("{path}/order")),
+    };
+    Ok((lag, order, reverse_on_close))
+}
+
+/// Each of `n` targets' rank in a stagger's `order`: its index, reversed, or a Fisher–Yates
+/// permutation drawn from `seed`, the same on every machine and at every evaluation.
+fn ranks(n: usize, order: Order, seed: u64) -> Vec<usize> {
+    let mut shuffled: Vec<usize> = (0..n).collect();
+    if order == Order::Seeded {
+        let mut rng = Seeded::new(seed);
+        for i in (1..n).rev() {
+            let j = rng.below(i as u64 + 1) as usize;
+            shuffled.swap(i, j);
+        }
+    }
+    (0..n)
+        .map(|i| match order {
+            Order::Index => i,
+            Order::Reverse => n - 1 - i,
+            Order::Seeded => shuffled[i],
+        })
+        .collect()
+}
+
+/// #504: a take-apart, a follow channel whose `follow.stagger.targets` are assemblies. Its
+/// targets rank by (the assembly's `order`, their place in the list), then by the stagger's
+/// order; a ratio lag is of the transition's span.
+fn take_apart_of(id: &str, f: &Map<String, Value>, doc: &Map<String, Value>, ctx: &Ctx, seed: u64) -> Result<Stagger, Refused> {
+    let path = format!("channels/{id}/follow");
+    let spec = follow_spec_of(f, ctx, &path)?;
+    let spath = format!("{path}/stagger");
+    let Some(Value::Object(st)) = f.get("stagger") else {
+        return refuse("bad_doc", spath);
+    };
+    let (lag, order, reverse_on_close) = stagger_of(st, ctx, &spath)?;
+    let Some(Value::Array(list)) = st.get("targets") else {
+        return refuse("bad_doc", format!("{spath}/targets"));
+    };
+    let assemblies = doc.get("assemblies").and_then(Value::as_object);
+    let mut ids = Vec::with_capacity(list.len());
+    let mut orders = Vec::with_capacity(list.len());
+    for (i, t) in list.iter().enumerate() {
+        let at = format!("{spath}/targets/{i}");
+        let Some(name) = t.as_str() else {
+            return refuse("bad_doc", at);
+        };
+        let Some(a) = assemblies.and_then(|m| m.get(name)) else {
+            return refuse("ref_unresolved", at);
+        };
+        ids.push(name.to_string());
+        orders.push(a.get("order").and_then(Value::as_u64).unwrap_or(0));
+    }
+    let n = ids.len();
+    let mut sequence: Vec<usize> = (0..n).collect();
+    sequence.sort_by_key(|&i| (orders[i], i));
+    let r = ranks(n, order, seed ^ fnv1a(id));
+    let mut targets = vec![(String::new(), 0); n];
+    for (place, &i) in sequence.iter().enumerate() {
+        targets[i] = (ids[i].clone(), r[place]);
+    }
+    let lag = match (lag, spec.model) {
+        (Lag::Flicks(f), _) => f,
+        (Lag::Ratio(x), follow::Model::Transition { span, .. }) => (x * span as f64).floor() as i64,
+        (Lag::Ratio(_), _) => return refuse("bad_doc", format!("{spath}/lag")),
+    };
+    Ok(Stagger { id: id.to_string(), spec, targets, lag, reverse_on_close })
+}
+
+/// #504: the input track a played form carries inline, `track: [{t: flick, control, value,
+/// seq, player}]`, as the hub inlines it beside the saved document; `None` without one. An
+/// entry's `seq` is its place in the list where it names none, and its player is 1.
+pub fn track(doc: &Map<String, Value>) -> Result<Option<Vec<crate::input::Entry>>, Refused> {
+    let list = match doc.get("track") {
+        None | Some(Value::Null) => return Ok(None),
+        Some(Value::Array(list)) => list,
+        Some(_) => return refuse("bad_doc", "track"),
+    };
+    let mut out = Vec::with_capacity(list.len());
+    for (i, e) in list.iter().enumerate() {
+        let at = |f: &str| format!("track/{i}/{f}");
+        let Some(t) = e.get("t").and_then(Value::as_i64) else {
+            return refuse("bad_doc", at("t"));
+        };
+        let Some(control) = e.get("control").and_then(Value::as_str) else {
+            return refuse("bad_doc", at("control"));
+        };
+        let Some(value) = e.get("value") else {
+            return refuse("bad_doc", at("value"));
+        };
+        let seq = match e.get("seq") {
+            None => i as i64,
+            Some(s) => s.as_i64().map_or_else(|| refuse("bad_doc", at("seq")), Ok)?,
+        };
+        let player = match e.get("player") {
+            None => 1,
+            Some(p) => p.as_i64().filter(|p| (1..=8).contains(p)).map_or_else(|| refuse("out_of_range", at("player")), Ok)?,
+        };
+        out.push(crate::input::Entry { t, seq, control: control.to_string(), value: value.clone(), player });
+    }
+    Ok(Some(out))
 }
 
 /// A placement's writer layer's order key, empty with none.
@@ -2937,22 +3214,9 @@ fn resolve_series(raw: Vec<Raw>, clips: &[Clip], seed: u64) -> Result<Vec<Placem
                 Lag::Ratio(x) => (x * d as f64).floor() as i64,
                 Lag::Flicks(f) => f,
             };
-            let n = r.placement.bindings.len();
-            // Fisher–Yates over the targets' ranks, drawn from the seed and the placement's ID.
-            let mut shuffled: Vec<usize> = (0..n).collect();
-            if order == Order::Seeded {
-                let mut rng = Seeded::new(seed ^ fnv1a(&r.placement.id));
-                for i in (1..n).rev() {
-                    let j = rng.below(i as u64 + 1) as usize;
-                    shuffled.swap(i, j);
-                }
-            }
-            for (i, b) in r.placement.bindings.iter_mut().enumerate() {
-                let rank = match order {
-                    Order::Index => i,
-                    Order::Reverse => n - 1 - i,
-                    Order::Seeded => shuffled[i],
-                };
+            // The targets' ranks, a seeded order drawn from the seed and the placement's ID.
+            let ranks = ranks(r.placement.bindings.len(), order, seed ^ fnv1a(&r.placement.id));
+            for (b, rank) in r.placement.bindings.iter_mut().zip(ranks) {
                 b.delay = rank as i64 * step;
             }
             if r.placement.timing.reach.is_some() {
@@ -3011,13 +3275,16 @@ fn resolve_series(raw: Vec<Raw>, clips: &[Clip], seed: u64) -> Result<Vec<Placem
 }
 
 /// Every parented item with its parent, parents first. A parent that isn't an item, or a cycle,
-/// is refused, naming the item.
+/// is refused, naming the item. #504: a parent that names an assembly is the assembly's
+/// (`Program::member`), never an edge here.
 fn parents_of(doc: &Map<String, Value>) -> Result<Vec<(String, String)>, Refused> {
     let mut edges: Vec<(String, String)> = Vec::new();
+    let assembly = |id: &str| doc.get("assemblies").and_then(|a| a.get(id)).is_some();
     if let Some(Value::Object(items)) = doc.get("items") {
         for (id, item) in items {
             match item.get("parent") {
                 None | Some(Value::Null) => {}
+                Some(Value::String(parent)) if !items.contains_key(parent) && assembly(parent) => {}
                 Some(Value::String(parent)) => {
                     if !items.contains_key(parent) {
                         return refuse("ref_unresolved", format!("items/{id}/parent"));

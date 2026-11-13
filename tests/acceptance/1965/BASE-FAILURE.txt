@@ -1,0 +1,323 @@
+# Base run of tests/acceptance/1965 at 3962d5281ccf822af55928df2c3c77deeee159f0: all 11 tests fail, each at its own assertion for missing behavior.
+# cap.test.ts takes 22 minutes at the base's debug build (the 240,000-byte item is shaped at about 140 s a call). Long lists are cut to their first lines by the tests themselves; the whole run is /tmp/deepbuild-1965-proof/blind-base.log.
+
+scripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `npx vitest run --root tests/acceptance/1965 --no-file-parallelism` runs unleased
+
+ RUN  v5.0.5 ~/doneright-1965-blind/tests/acceptance/1965
+
+ ❯ cap.test.ts (4 tests | 4 failed) 1306818ms
+   ❯ AC3 #1965.47bbd705 the code cap and text@1's 4,096 characters (4)
+     × AC3 #1965.47bbd705 a 2,000-line file of 120 bytes a line loads as one code item with its tokens and shows its lines and tokens 996491ms
+     × AC3 #1965.47bbd705 the file grown to 262,145 bytes is refused naming the item, 262,145 bytes and the 256 KiB cap; 262,144 bytes loads 214390ms
+     × AC3 #1965.47bbd705 the cap counts bytes: 131,072 é (262,144 bytes, half as many characters) loads and 131,073 are refused naming 262,146 bytes 92847ms
+     × AC3 #1965.47bbd705 a text item whose own text runs to 4,097 characters is refused naming text@1's cap; 4,096 characters hold 285ms
+ ❯ quote.test.ts (4 tests | 4 failed) 6334ms
+   ❯ AC2 #1965.1d486d42 a quote of lines 3 to 5 (4)
+     × AC2 #1965.1d486d42 the quote passes, raw equal to the file's lines, and draws the é as one grapheme, the tab as 4 columns, no line end, each token on its glyphs 1835ms
+     × AC2 #1965.1d486d42 the twin with one byte changed (the last e of line 5's name made a) fails quote_mismatch naming line 5 and byte 11 779ms
+     × AC2 #1965.1d486d42 the twin with the é precomposed as U+00E9 fails quote_mismatch naming line 4 and byte 12 and draws the same display text and the same picture 901ms
+     × AC2 #1965.1d486d42 the twin with one CRLF made LF (the end of line 4) fails quote_mismatch naming line 4 and byte 16 and draws the same display text and the same picture 681ms
+ ❯ recolor.test.ts (3 tests | 3 failed) 6174ms
+   ❯ AC1 #1965.1f0016ec switching the look recolors the keywords (3)
+     × AC1 #1965.1f0016ec the same document drawn in two looks draws its keywords in each look's keyword role, its hash unchanged 1799ms
+     × AC1 #1965.1f0016ec every shipped look defines code and diff roles at the status distance, and a look switch among them recolors the keywords 2016ms
+     × AC1 #1965.1f0016ec a token class outside the list is refused naming it, and every class on the list is accepted 1197ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 11 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  cap.test.ts > AC3 #1965.47bbd705 the code cap and text@1's 4,096 characters > AC3 #1965.47bbd705 a 2,000-line file of 120 bytes a line loads as one code item with its tokens and shows its lines and tokens
+AssertionError: 3 of the file's lines and tokens aren't shown where they are:
+  cfg#line:1000: no box
+  cfg#line:2000: no box
+  cfg#tok:1999: no box (a token's anchor): expected [ 'cfg#line:1000: no box', …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "cfg#line:1000: no box",
++   "cfg#line:2000: no box",
++   "cfg#tok:1999: no box (a token's anchor)",
++ ]
+
+ ❯ cap.test.ts:74:132
+     72|     }
+     73|     if (boxes.get(ask[2]!)) failures.push(`${ask[2]}: the file has 2,0…
+     74|     expect(failures, `${failures.length} of the file's lines and token…
+       |                                                                                                                                    ^
+     75|   }, 1_800_000);
+     76|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/11]⎯
+
+ FAIL  cap.test.ts > AC3 #1965.47bbd705 the code cap and text@1's 4,096 characters > AC3 #1965.47bbd705 the file grown to 262,145 bytes is refused naming the item, 262,145 bytes and the 256 KiB cap; 262,144 bytes loads
+AssertionError: the check refuses the 262,145-byte item: []: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ cap.test.ts:82:87
+     80|     expect([Buffer.byteLength(over), Buffer.byteLength(at)], 'the file…
+     81|     const refused = checkOne(bin(), codeDoc('over-1965', over, { token…
+     82|     expect(refused.ok, `the check refuses the 262,145-byte item: ${err…
+       |                                                                                       ^
+     83|     expect(mentions(refused, ITEM, '262145', /262144|256 ?KiB/), 'the …
+     84|     const fix = naming(refused, ITEM).map((e) => String(e.raw['fix'] ?…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/11]⎯
+
+ FAIL  cap.test.ts > AC3 #1965.47bbd705 the code cap and text@1's 4,096 characters > AC3 #1965.47bbd705 the cap counts bytes: 131,072 é (262,144 bytes, half as many characters) loads and 131,073 are refused naming 262,146 bytes
+AssertionError: 131,073 é are 262,146 bytes and are refused: []: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ cap.test.ts:95:85
+     93|     expect(ok.errors.map((e) => `${e.code} ${e.ids.join(',')}`), `131,…
+     94|     const over = checkOne(bin(), codeDoc('bytes-over', 'é'.repeat(131_…
+     95|     expect(over.ok, `131,073 é are 262,146 bytes and are refused: ${er…
+       |                                                                                     ^
+     96|     expect(mentions(over, ITEM, '262146', /262144|256 ?KiB/), 'the ref…
+     97|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/11]⎯
+
+ FAIL  cap.test.ts > AC3 #1965.47bbd705 the code cap and text@1's 4,096 characters > AC3 #1965.47bbd705 a text item whose own text runs to 4,097 characters is refused naming text@1's cap; 4,096 characters hold
+AssertionError: the check refuses the 4,097-character text: []: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ cap.test.ts:102:84
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/11]⎯
+
+ FAIL  quote.test.ts > AC2 #1965.1d486d42 a quote of lines 3 to 5 > AC2 #1965.1d486d42 the quote passes, raw equal to the file's lines, and draws the é as one grapheme, the tab as 4 columns, no line end, each token on its glyphs
+AssertionError: 26 tokens or glyphs are not where their byte ranges put them:
+  token keyword bytes [0, 3): glyph 0 "d" has 0 px in the keyword role vermilion
+  token keyword bytes [0, 3): glyph 1 "e" has 0 px in the keyword role vermilion
+  token keyword bytes [0, 3): glyph 2 "f" has 0 px in the keyword role vermilion
+  token function bytes [4, 8): glyph 4 "p" has 0 px in the function role indigo
+  token function bytes [4, 8): glyph 5 "i" has 0 px in the function role indigo
+  token function bytes [4, 8): glyph 6 "c" has 0 px in the function role indigo
+  token function bytes [4, 8): glyph 7 "k" has 0 px in the function role indigo
+  token variable bytes [19, 23): glyph 21 "n" has 0 px in the variable role moss
+  token variable bytes [19, 23): glyph 22 "a" has 0 px in the variable role moss
+  token variable bytes [19, 23): glyph 23 "m" has 0 px in the variable role moss
+  token variable bytes [19, 23): glyph 24 "e" has 0 px in the variable role moss
+  token operator bytes [24, 25): glyph 26 "=" has 0 px in the operator role accent
+  token string bytes [26, 34): glyph 29 "c" has 0 px in the string role wine
+  token string bytes [26, 34): glyph 30 "a" has 0 px in the string role wine
+  token string bytes [26, 34): glyph 31 "f" has 0 px in the string role wine
+  token string bytes [26, 34): glyph 32 "é" has 0 px in the string role wine
+  token keyword bytes [37, 43): glyph 39 "r" has 0 px in the keyword role vermilion
+  token keyword bytes [37, 43): glyph 40 "e" has 0 px in the keyword role vermilion
+  token keyword bytes [37, 43): glyph 41 "t" has 0 px in the keyword role vermilion
+  token keyword bytes [37, 43): glyph 42 "u" has 0 px in the keyword role vermilion
+  token keyword bytes [37, 43): glyph 43 "r" has 0 px in the keyword role vermilion
+  token keyword bytes [37, 43): glyph 44 "n" has 0 px in the keyword role vermilion
+  token variable bytes [44, 48): glyph 46 "n" has 0 px in the variable role moss
+  token variable bytes [44, 48): glyph 47 "a" has 0 px in the variable role moss
+  token variable bytes [44, 48): glyph 48 "m" has 0 px in the variable role moss
+  token variable bytes [44, 48): glyph 49 "e" has 0 px in the variable role moss: expected [ …(26) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "token keyword bytes [0, 3): glyph 0 \"d\" has 0 px in the keyword role vermilion",
++   "token keyword bytes [0, 3): glyph 1 \"e\" has 0 px in the keyword role vermilion",
++   "token keyword bytes [0, 3): glyph 2 \"f\" has 0 px in the keyword role vermilion",
++   "token function bytes [4, 8): glyph 4 \"p\" has 0 px in the function role indigo",
++   "token function bytes [4, 8): glyph 5 \"i\" has 0 px in the function role indigo",
++   "token function bytes [4, 8): glyph 6 \"c\" has 0 px in the function role indigo",
++   "token function bytes [4, 8): glyph 7 \"k\" has 0 px in the function role indigo",
++   "token variable bytes [19, 23): glyph 21 \"n\" has 0 px in the variable role moss",
++   "token variable bytes [19, 23): glyph 22 \"a\" has 0 px in the variable role moss",
++   "token variable bytes [19, 23): glyph 23 \"m\" has 0 px in the variable role moss",
++   "token variable bytes [19, 23): glyph 24 \"e\" has 0 px in the variable role moss",
++   "token operator bytes [24, 25): glyph 26 \"=\" has 0 px in the operator role accent",
++   "token string bytes [26, 34): glyph 29 \"c\" has 0 px in the string role wine",
++   "token string bytes [26, 34): glyph 30 \"a\" has 0 px in the string role wine",
++   "token string bytes [26, 34): glyph 31 \"f\" has 0 px in the string role wine",
++   "token string bytes [26, 34): glyph 32 \"é\" has 0 px in the string role wine",
++   "token keyword bytes [37, 43): glyph 39 \"r\" has 0 px in the keyword role vermilion",
++   "token keyword bytes [37, 43): glyph 40 \"e\" has 0 px in the keyword role vermilion",
++   "token keyword bytes [37, 43): glyph 41 \"t\" has 0 px in the keyword role vermilion",
++   "token keyword bytes [37, 43): glyph 42 \"u\" has 0 px in the keyword role vermilion",
++   "token keyword bytes [37, 43): glyph 43 \"r\" has 0 px in the keyword role vermilion",
++   "token keyword bytes [37, 43): glyph 44 \"n\" has 0 px in the keyword role vermilion",
++   "token variable bytes [44, 48): glyph 46 \"n\" has 0 px in the variable role moss",
++   "token variable bytes [44, 48): glyph 47 \"a\" has 0 px in the variable role moss",
++   "token variable bytes [44, 48): glyph 48 \"m\" has 0 px in the variable role moss",
++   "token variable bytes [44, 48): glyph 49 \"e\" has 0 px in the variable role moss",
++ ]
+
+ ❯ quote.test.ts:134:131
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/11]⎯
+
+ FAIL  quote.test.ts > AC2 #1965.1d486d42 a quote of lines 3 to 5 > AC2 #1965.1d486d42 the twin with one byte changed (the last e of line 5's name made a) fails quote_mismatch naming line 5 and byte 11
+ FAIL  quote.test.ts > AC2 #1965.1d486d42 a quote of lines 3 to 5 > AC2 #1965.1d486d42 the twin with the é precomposed as U+00E9 fails quote_mismatch naming line 4 and byte 12 and draws the same display text and the same picture
+ FAIL  quote.test.ts > AC2 #1965.1d486d42 a quote of lines 3 to 5 > AC2 #1965.1d486d42 the twin with one CRLF made LF (the end of line 4) fails quote_mismatch naming line 4 and byte 16 and draws the same display text and the same picture
+AssertionError: the passing quote draws its keywords in the keyword role (the comparison below is of tokened pictures): expected 0 to be greater than 0
+ ❯ quote.test.ts:157:127
+    155|       const twinDrawn = accepted(drawOne(bin(), dir(), codeDoc('same-b…
+    156|       const inked = base.glyphs.map((g) => matching(base.image!, cell(…
+    157|       expect(inked, 'the passing quote draws its keywords in the keywo…
+       |                                                                                                                               ^
+    158|       if (!twin.same) return;
+    159|       expect(twinDrawn.shown, 'the twin draws the same display text as…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/11]⎯
+
+ FAIL  recolor.test.ts > AC1 #1965.1f0016ec switching the look recolors the keywords > AC1 #1965.1f0016ec the same document drawn in two looks draws its keywords in each look's keyword role, its hash unchanged
+AssertionError: 24 glyphs are not in the look's code role:
+  look A: def (keyword) glyph 0 has 0 px in its look's keyword role 217,72,43
+  look B: def (keyword) glyph 0 has 0 px in its look's keyword role 95,127,59
+  look A: def (keyword) glyph 1 has 0 px in its look's keyword role 217,72,43
+  look B: def (keyword) glyph 1 has 0 px in its look's keyword role 95,127,59
+  look A: def (keyword) glyph 2 has 0 px in its look's keyword role 217,72,43
+  look B: def (keyword) glyph 2 has 0 px in its look's keyword role 95,127,59
+  look A: go (function) glyph 4 has 0 px in its look's function role 44,62,123
+  look B: go (function) glyph 4 has 0 px in its look's function role 217,72,43
+  look A: go (function) glyph 5 has 0 px in its look's function role 44,62,123
+  look B: go (function) glyph 5 has 0 px in its look's function role 217,72,43
+  look A: return (keyword) glyph 15 has 0 px in its look's keyword role 217,72,43
+  look B: return (keyword) glyph 15 has 0 px in its look's keyword role 95,127,59
+  look A: return (keyword) glyph 16 has 0 px in its look's keyword role 217,72,43
+  look B: return (keyword) glyph 16 has 0 px in its look's keyword role 95,127,59
+  look A: return (keyword) glyph 17 has 0 px in its look's keyword role 217,72,43
+  look B: return (keyword) glyph 17 has 0 px in its look's keyword role 95,127,59
+  look A: return (keyword) glyph 18 has 0 px in its look's keyword role 217,72,43
+  look B: return (keyword) glyph 18 has 0 px in its look's keyword role 95,127,59
+  look A: return (keyword) glyph 19 has 0 px in its look's keyword role 217,72,43
+  look B: return (keyword) glyph 19 has 0 px in its look's keyword role 95,127,59
+  look A: return (keyword) glyph 20 has 0 px in its look's keyword role 217,72,43
+  look B: return (keyword) glyph 20 has 0 px in its look's keyword role 95,127,59
+  look A: a (line 2) (variable) glyph 22 has 0 px in its look's variable role 95,127,59
+  look B: a (line 2) (variable) glyph 22 has 0 px in its look's variable role 44,62,123: expected [ …(24) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "look A: def (keyword) glyph 0 has 0 px in its look's keyword role 217,72,43",
++   "look B: def (keyword) glyph 0 has 0 px in its look's keyword role 95,127,59",
++   "look A: def (keyword) glyph 1 has 0 px in its look's keyword role 217,72,43",
++   "look B: def (keyword) glyph 1 has 0 px in its look's keyword role 95,127,59",
++   "look A: def (keyword) glyph 2 has 0 px in its look's keyword role 217,72,43",
++   "look B: def (keyword) glyph 2 has 0 px in its look's keyword role 95,127,59",
++   "look A: go (function) glyph 4 has 0 px in its look's function role 44,62,123",
++   "look B: go (function) glyph 4 has 0 px in its look's function role 217,72,43",
++   "look A: go (function) glyph 5 has 0 px in its look's function role 44,62,123",
++   "look B: go (function) glyph 5 has 0 px in its look's function role 217,72,43",
++   "look A: return (keyword) glyph 15 has 0 px in its look's keyword role 217,72,43",
++   "look B: return (keyword) glyph 15 has 0 px in its look's keyword role 95,127,59",
++   "look A: return (keyword) glyph 16 has 0 px in its look's keyword role 217,72,43",
++   "look B: return (keyword) glyph 16 has 0 px in its look's keyword role 95,127,59",
++   "look A: return (keyword) glyph 17 has 0 px in its look's keyword role 217,72,43",
++   "look B: return (keyword) glyph 17 has 0 px in its look's keyword role 95,127,59",
++   "look A: return (keyword) glyph 18 has 0 px in its look's keyword role 217,72,43",
++   "look B: return (keyword) glyph 18 has 0 px in its look's keyword role 95,127,59",
++   "look A: return (keyword) glyph 19 has 0 px in its look's keyword role 217,72,43",
++   "look B: return (keyword) glyph 19 has 0 px in its look's keyword role 95,127,59",
++   "look A: return (keyword) glyph 20 has 0 px in its look's keyword role 217,72,43",
++   "look B: return (keyword) glyph 20 has 0 px in its look's keyword role 95,127,59",
++   "look A: a (line 2) (variable) glyph 22 has 0 px in its look's variable role 95,127,59",
++   "look B: a (line 2) (variable) glyph 22 has 0 px in its look's variable role 44,62,123",
++ ]
+
+ ❯ recolor.test.ts:78:112
+     76|       for (const c of ['keyword', 'function', 'variable'] as const) if…
+     77|     }
+     78|     expect(failures, `${failures.length} glyphs are not in the look's …
+       |                                                                                                                ^
+     79|   });
+     80|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/11]⎯
+
+ FAIL  recolor.test.ts > AC1 #1965.1f0016ec switching the look recolors the keywords > AC1 #1965.1f0016ec every shipped look defines code and diff roles at the status distance, and a look switch among them recolors the keywords
+AssertionError: 8 shipped-look findings:
+  clean: no code roles (code: {class → role})
+  clean: no diff roles (diff: {added, removed, changed → role})
+  notebook_pencil: no code roles (code: {class → role})
+  notebook_pencil: no diff roles (diff: {added, removed, changed → role})
+  chalk: no code roles (code: {class → role})
+  chalk: no diff roles (diff: {added, removed, changed → role})
+  dark_math: no code roles (code: {class → role})
+  dark_math: no diff roles (diff: {added, removed, changed → role}): expected [ …(8) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "clean: no code roles (code: {class → role})",
++   "clean: no diff roles (diff: {added, removed, changed → role})",
++   "notebook_pencil: no code roles (code: {class → role})",
++   "notebook_pencil: no diff roles (diff: {added, removed, changed → role})",
++   "chalk: no code roles (code: {class → role})",
++   "chalk: no diff roles (diff: {added, removed, changed → role})",
++   "dark_math: no code roles (code: {class → role})",
++   "dark_math: no diff roles (diff: {added, removed, changed → role})",
++ ]
+
+ ❯ recolor.test.ts:111:95
+    109|       if (kw && themes?.['light']?.[kw]?.startsWith('#')) keyword.set(…
+    110|     }
+    111|     expect(failures, `${failures.length} shipped-look findings:\n  ${f…
+       |                                                                                               ^
+    112|     // The same document under each shipped look: the keywords take th…
+    113|     const doc = codeDoc('shipped-1965', RAW, { tokens: TOKENS, ground:…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/11]⎯
+
+ FAIL  recolor.test.ts > AC1 #1965.1f0016ec switching the look recolors the keywords > AC1 #1965.1f0016ec a token class outside the list is refused naming it, and every class on the list is accepted
+AssertionError: a token class outside keyword, type, function, variable, string, number, comment, operator, punctuation and plain is refused naming it:
+  class "identifier": the check passes the item
+  class "Keyword": the check passes the item
+  class "status.fail": the check passes the item: expected [ …(3) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "class \"identifier\": the check passes the item",
++   "class \"Keyword\": the check passes the item",
++   "class \"status.fail\": the check passes the item",
++ ]
+
+ ❯ recolor.test.ts:143:189
+    141|       else if (named.length === 0) failures.push(`class "${bad}": no e…
+    142|     }
+    143|     expect(failures, `a token class outside keyword, type, function, v…
+       |                                                                                                                                                                                             ^
+    144|   });
+    145| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/11]⎯
+
+
+ Test Files  3 failed (3)
+      Tests  11 failed (11)
+   Start at  21:49:07
+   Duration  1320.48s (tests 100%)
+
+exit 1

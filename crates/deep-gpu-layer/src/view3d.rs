@@ -4,7 +4,10 @@
 //! With a window, the view sits over a flat page and its 2D writer layers anchored to 3D items
 //! draw over it from the evaluated data of the `frame_seq` the shown slot carries. Items that
 //! open deeper documents by reference load them as they come on screen (#383), and with
-//! `timings` each frame reports its GPU time and the GPU memory the device holds.
+//! `timings` each frame reports its GPU time and the GPU memory the device holds. A moving live
+//! view draws through frame history's window (#173, `history`).
+
+mod history;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
@@ -14,7 +17,7 @@ use deep_canvas_marks::look::Status;
 use deep_canvas_scene3d::label::PAGE;
 use deep_canvas_scene3d::look::Look3;
 use deep_canvas_scene3d::module::{GEOMETRY_PASS, OUTPUT_PASS};
-use deep_canvas_scene3d::scene::{evaluate_sourced, placed_at, Labels, Scene};
+use deep_canvas_scene3d::scene::{evaluate_sourced, Labels, Scene};
 use deep_gpu::device::Backend;
 use deep_scene3d_render::status::{Mode, COLORS_PASS, GUARD_PASS};
 use deep_scene3d_render::SHADOW_PASS;
@@ -74,6 +77,9 @@ struct Args {
     window: Option<Window3>,
     latency: Vec<u64>,
     counts: bool,
+    /// `ground_points: {item, at: [[x, z]]}`: each frame reports the height a terrain plate draws
+    /// at each point, with its tile and level (#2017).
+    ground_points: Option<(String, Vec<[f64; 2]>)>,
     /// The glTF files `mesh.asset@1` items name, by sha256 (#420), and the images a material's
     /// maps or a glTF name (#423).
     assets: std::collections::BTreeMap<String, std::path::PathBuf>,
@@ -132,6 +138,8 @@ struct Args {
     /// Viewer-only input in session state, from the frame each names (#419): `{pointer, hover,
     /// selection, readout}`, never a document revision.
     viewer: Vec<(u64, Value)>,
+    /// #173: the frame cap, stalls, scrubs, your hand's orbit and the determinism check.
+    history: history::Inputs,
 }
 
 /// Milliseconds from this process's spawn, as the kernel records its start, to now.
@@ -324,10 +332,11 @@ fn parse(call: &Value) -> Result<Args, Value> {
             "targets are final, linear, ids, pre_tone, dirt, scene, backdrop, depth, reflection and foam",
         ));
     }
+    // A render-back draws as an export does, through the view your hand turned (#173).
     let export = match call["class"].as_str() {
         None | Some("live") => false,
-        Some("export") => true,
-        Some(_) => return Err(bad("class is live or export")),
+        Some("export" | "render_back") => true,
+        Some(_) => return Err(bad("class is live, export or render_back")),
     };
     let mut viewer = Vec::new();
     for v in call["viewer"].as_array().into_iter().flatten() {
@@ -462,6 +471,21 @@ fn parse(call: &Value) -> Result<Args, Value> {
         window,
         latency,
         counts: call["counts"].as_bool().unwrap_or(false),
+        ground_points: match &call["ground_points"] {
+            Value::Null => None,
+            g => {
+                let item = g["item"].as_str();
+                let at: Option<Vec<[f64; 2]>> = g["at"].as_array().and_then(|a| {
+                    a.iter()
+                        .map(|p| Some([p.get(0)?.as_f64()?, p.get(1)?.as_f64()?]))
+                        .collect()
+                });
+                match (item, at) {
+                    (Some(item), Some(at)) => Some((item.to_string(), at)),
+                    _ => return Err(bad("ground_points is {item, at: [[x, z]]}")),
+                }
+            }
+        },
         assets: call["assets"]
             .as_object()
             .into_iter()
@@ -515,6 +539,7 @@ fn parse(call: &Value) -> Result<Args, Value> {
         masks: call["masks"].as_bool().unwrap_or(false),
         export,
         viewer,
+        history: history::inputs(call)?,
     })
 }
 
@@ -577,25 +602,6 @@ fn lowered(doc: &Value, packs: &Packs) -> Result<Value, Value> {
         return Err(issues_refused(&errors));
     }
     Ok(checked.lowered)
-}
-
-/// Each path of `paths` (`items/<id>/<field>…`) as the canvas core evaluates `doc` at `t`
-/// (#429): null where the item or field isn't there.
-fn values_at(doc: &Value, t: i64, paths: &[String]) -> Result<Value, Value> {
-    let items = placed_at(doc, t).map_err(|r| refused(r.code, r.path))?;
-    let mut out = Map::new();
-    for path in paths {
-        let rest = path.strip_prefix("items/").unwrap_or_default();
-        let (id, field) = rest.split_once('/').unwrap_or((rest, ""));
-        let value = items
-            .iter()
-            .find(|(i, _, _)| i == id)
-            .and_then(|(_, item, _)| item.pointer(&format!("/{field}")))
-            .cloned()
-            .unwrap_or(Value::Null);
-        out.insert(path.clone(), value);
-    }
-    Ok(Value::Object(out))
 }
 
 /// A patch's ops applied as `writer`, to the layer its connection stands for.
@@ -939,21 +945,6 @@ fn labels_json(scene: &Scene, out: &str) -> Result<(Value, Value), Value> {
     Ok((json!(labels), json!(pages)))
 }
 
-/// The frames a call draws, in order: `frames` of them from `from`, each seek jumping once.
-fn frame_order(from: u64, frames: u64, seeks: &[(u64, u64)]) -> Vec<u64> {
-    let mut left: Vec<(u64, u64)> = seeks.to_vec();
-    let mut n = from;
-    let mut order = Vec::with_capacity(frames as usize);
-    for _ in 0..frames {
-        order.push(n);
-        n = match left.iter().position(|(after, _)| *after == n) {
-            Some(k) => left.remove(k).1,
-            None => n + 1,
-        };
-    }
-    order
-}
-
 pub fn call(app: &mut App, out: &str, call: &Value) -> Value {
     match run(app, out, call) {
         Ok(v) | Err(v) => v,
@@ -973,6 +964,12 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
     if !broken.is_empty() {
         return Err(json!({"code": "refused", "issues": broken}));
     }
+    crate::physics::bake(&mut args.doc)?;
+    crate::particles::refuse(&args.doc, app.planted)?;
+    // The frames the call draws and how each is reached (#173), the ones logic runs at first.
+    let reached = history::order(args.from, args.frames, &args.seeks, &args.history, args.fps);
+    let order: Vec<u64> = reached.iter().map(|(n, _)| *n).collect();
+    let mut baked = crate::fed::bake(&args.doc, &args.assets, (&order, args.fps), app.planted)?;
     let packed = args.doc["packs"].as_array().is_some_and(|p| !p.is_empty());
     let mut lowered_doc = if packed {
         Some(lowered(&args.doc, &packs)?)
@@ -1011,7 +1008,10 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
     let size = args.size;
     let timings = args.timings && !noop;
     let opening = std::time::Instant::now();
-    let opened = session3::open_doc(app, size, timings, shows, &args.doc)?;
+    // Frame history's temporal upscale rebuilds the pixels from one sample each (#173).
+    let upscales = args.look.history.mode == deep_canvas_scene3d::history::Mode::Upscale;
+    let samples = (upscales && !args.export).then_some(1);
+    let opened = session3::open_doc(app, size, timings, shows, &args.doc, samples)?;
     session3::surface(app, args.surface)?;
     if args.cull_on_cpu {
         session3::cull_on_cpu(app);
@@ -1119,6 +1119,14 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
     }
     let mut settle: Vec<(f64, Part)> = Vec::new();
     let mut settled_on: Option<Scene> = None;
+    // #173: frame history while the live view moves, your hand's turn, and each frame's
+    // 128-bit pixel hash where the determinism check reads it.
+    let mut hist = match args.export || noop {
+        true => None,
+        false => history::Run::of(&args.look, args.history.cap(), args.fps, app.planted)?,
+    };
+    let mut azimuth = 0.0;
+    let mut hashes: BTreeMap<u64, String> = BTreeMap::new();
     // The scene the session drew last, which #431's planted velocity target reads.
     let mut last_drawn: Option<Arc<Scene>> = None;
     let mut hover: Option<String> = None;
@@ -1134,7 +1142,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             Some(Planted::EdgesDashOtherSpace) => Some("edges_dash_other_space"),
             _ => None,
         };
-        for n in frame_order(args.from, args.frames, &args.seeks) {
+        for &(n, reach) in &reached {
             let frame_started = std::time::Instant::now();
             // A seek applies every patch up to the frame it opens at.
             let mut patched = false;
@@ -1200,17 +1208,29 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             if !args.hidden.is_empty() {
                 composed = without_layers(&composed, &args.hidden);
             }
+            deep_canvas_physics::written::write(&mut composed, t);
+            baked.settle(&mut composed, t);
             let outlines = &pack_sealed()?.outlines;
             let mut scene =
                 evaluate_sourced(&composed, t, &args.look, &mut labels, &read, outlines)
                     .map_err(|r| refused(r.code, r.path))?;
+            let selected = (&mut args.selection, &mut viewer_selection);
+            let presented = crate::fed::framed(&mut scene, &composed, t, selected, app.planted);
             if build_ms.is_none() {
                 build_ms = Some(started.elapsed().saturating_sub(opening).as_secs_f64() * 1e3);
             }
+            // #173: the determinism check's played side evaluates every frame, drawing one.
+            if args.history.draw_only.is_some_and(|d| d != n) {
+                continue;
+            }
+            // Your hand's orbit, view input in session state (#173).
+            azimuth = history::hand(&args.history, n, args.from, azimuth);
+            history::turn(&composed, &mut scene, t, azimuth)?;
             let values = if args.evaluate.is_empty() {
                 None
             } else {
-                Some(values_at(&composed, t, &args.evaluate)?)
+                let at = (&read as deep_canvas_scene3d::scene::Assets<'_>, app.planted);
+                Some(crate::fed::values(&composed, t, &args.evaluate, at)?)
             };
             // Its maps, made ready in the decode worker once per run and held to the
             // document's decoded-image cap (#423).
@@ -1241,11 +1261,6 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             if n == args.from {
                 receipt = made;
             }
-            // A particles@1 count past its class's limit is refused, never clamped (#420).
-            let class = args.doc.pointer("/budget/class").and_then(Value::as_str);
-            if let Some(path) = effects::count_refusal(&scene, class) {
-                return Err(refused("out_of_range", path));
-            }
             // #420 AC6's wrong programs: mesh edges unwelded, or drawn over their faces.
             scene.plant_edges(
                 app.planted == Some(Planted::EdgesUnwelded),
@@ -1258,6 +1273,14 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                     .plant_shore_from_centre(&composed)
                     .map_err(|r| refused(r.code, r.path))?;
             }
+            // #2017's planted plate: each tile shades from its level's own vertex normals.
+            if app.planted == Some(Planted::TerrainShadesOwnLevelNormals) {
+                deep_canvas_scene3d::terrain::plant_level_normals(&mut scene);
+            }
+            let tiles = args
+                .ground_points
+                .as_ref()
+                .map(|(item, _)| crate::lod::tiles_of(&scene, item));
             let (choices, cut) = selection.apply(&mut scene, drawn_scale, noop);
             // How many times this frame derived each mesh-edge line's edge set (#1640).
             let edge_sets_derived: Map<String, Value> = scene
@@ -1278,6 +1301,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                         json!(l.segments.iter().map(|s| [s.a, s.b]).collect::<Vec<_>>()),
                     )
                 })
+                .chain(crate::fed::segments(&scene, &composed))
                 .collect();
             // A stroke binding draws its outline around the object, exact (#386).
             if let Some(status) = status.as_ref().filter(|_| bound) {
@@ -1333,6 +1357,8 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 seeding,
             );
             let mut settings = settings;
+            let particles =
+                crate::particles::frame(&mut settings, &args.doc, &scene, fx_t, call, app.planted)?;
             if dirt.is_some() {
                 settings.dirt = dirt.clone();
             }
@@ -1443,14 +1469,33 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 Ok(sc)
             };
             // A live view at rest (its frame draws as the one before it does) with `settle`
-            // adds samples frame by frame until it holds the export's.
-            let settling_view = !args.export && looks.settle && !noop;
-            let at_rest = settling_view && {
-                let prev = at_time(
-                    t - (FLICKS_PER_SECOND as f64 / fps).round() as i64,
-                    &mut labels,
-                )?;
-                blur::draws_same(&prev, &scene)
+            // adds samples frame by frame until it holds the export's; frame history turns settle
+            // on, and while the view moves draws through its window instead (#173).
+            let settling_view = !args.export && (looks.settle || hist.is_some()) && !noop;
+            let planned = match hist.as_mut() {
+                Some(h) => {
+                    let mut still = |tk: i64, step: i64| -> Result<bool, Value> {
+                        let before = at_time(tk - step, &mut labels)?;
+                        Ok(blur::draws_same(&before, &at_time(tk, &mut labels)?))
+                    };
+                    Some(h.plan(t, reach, azimuth, &mut still)?)
+                }
+                None => None,
+            };
+            let windowed = planned
+                .as_ref()
+                .is_some_and(|(_, p)| !matches!(p, deep_canvas_scene3d::history::Plan::Plain));
+            let at_rest = match &planned {
+                Some(_) => settling_view && !windowed && reach != history::Reach::Scrub,
+                None => {
+                    settling_view && {
+                        let prev = at_time(
+                            t - (FLICKS_PER_SECOND as f64 / fps).round() as i64,
+                            &mut labels,
+                        )?;
+                        blur::draws_same(&prev, &scene)
+                    }
+                }
             };
             if app.planted == Some(Planted::SettleResetsEachFrame)
                 || !at_rest
@@ -1655,7 +1700,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 0
             };
             let mut subs: Vec<(f64, Part)> = Vec::new();
-            if !settling_now {
+            if !settling_now && !windowed {
                 for (k, step) in plan[..n_all as usize].iter().enumerate().skip(1) {
                     subs.push((
                         step.weight,
@@ -1676,20 +1721,56 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             }
             // A frame's CPU: its evaluation, up to handing the scene to the render side.
             let cpu_ms = frame_started.elapsed().as_secs_f64() * 1e3;
-            let mut drawn = session3::draw(
-                app,
-                &opened,
-                sub_scene(if settling_now && settle.len() < n_all as usize {
-                    new_k
-                } else {
-                    0
-                }),
-                args.look.clone(),
-                n,
-                delay,
-                read_targets || overlay,
-                shows && n == args.from,
-            )?;
+            let mut drawn = match (hist.as_mut(), &planned) {
+                (Some(h), Some((_, plan))) if windowed => {
+                    // Each window frame is the evaluation at its own grid step, drawn as any
+                    // frame at that step is, so a frame reached by a seek equals one played.
+                    let mut frame_at = |_: &mut App, tk: i64| -> Result<Arc<Scene>, Value> {
+                        let mut sc = at_time(tk, &mut labels)?;
+                        history::turn(&composed, &mut sc, tk, azimuth)?;
+                        let _ = selection.apply(&mut sc, drawn_scale, noop);
+                        let mut settings = effects::settings(
+                            &sc,
+                            &args.look_json,
+                            &args.look,
+                            &args.selection,
+                            tk as f64 / FLICKS_PER_SECOND as f64,
+                            doc_seed,
+                            effects::Seeding::Item,
+                        );
+                        if dirt.is_some() {
+                            settings.dirt = dirt.clone();
+                        }
+                        lock(&fx).settings = settings;
+                        Ok(Arc::new(sc))
+                    };
+                    let read = (read_targets || overlay, shows && n == args.from);
+                    h.draw(
+                        app,
+                        &opened,
+                        &args.look,
+                        n,
+                        plan,
+                        args.surface,
+                        &mut frame_at,
+                        read,
+                    )?
+                }
+                _ => session3::draw(
+                    app,
+                    &opened,
+                    sub_scene(if settling_now && settle.len() < n_all as usize {
+                        new_k
+                    } else {
+                        0
+                    }),
+                    args.look.clone(),
+                    n,
+                    delay,
+                    read_targets || overlay,
+                    shows && n == args.from,
+                )?,
+            };
             // The frame's wall time, from its start (before a seek's restore) until its pixels
             // are read back (#252).
             let wall_ms = frame_started.elapsed().as_secs_f64() * 1e3;
@@ -1790,6 +1871,18 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 frame.insert("wall_ms".into(), json!(wall_ms));
             }
             frame.insert("samples".into(), samples_report);
+            frame.insert(
+                "history".into(),
+                match (&hist, &planned) {
+                    (Some(h), Some((k, plan))) => h.report(t, *k, plan),
+                    _ => history::plain(t),
+                },
+            );
+            if let (true, Some(bytes)) = (args.history.hashes(app.planted), &drawn.bytes) {
+                let hash = history::hash128(app, bytes, size)?;
+                frame.insert("pixel_hash128".into(), json!(hash));
+                hashes.insert(n, hash);
+            }
             if !notices.is_empty() {
                 frame.insert("notices".into(), json!(notices));
             }
@@ -1807,6 +1900,8 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             if let Some(values) = values {
                 frame.insert("values".into(), values);
             }
+            frame.extend(particles.map(|p| ("particles".to_string(), p)));
+            frame.insert("selection".into(), presented);
             if let Some(bytes) = drawn.gpu_bytes {
                 frame.insert("gpu_bytes".into(), json!(bytes));
             }
@@ -1973,6 +2068,8 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 frame.insert("encoded".into(), json!(encoded));
                 frame.insert("replayed".into(), json!(c.replayed));
                 frame.insert("instances_written".into(), json!(c.instances_written));
+                frame.insert("element_uploads".into(), json!(c.element_uploads));
+                frame.insert("row_uploads".into(), crate::fed::rows(&composed, c));
                 frame.insert("cpu_culled".into(), json!(c.cpu_culled));
                 frame.insert("counts_read_back".into(), json!(c.counts_read_back));
                 let draws: Vec<Value> = c
@@ -1982,12 +2079,22 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                     .collect();
                 frame.insert("indirect_draws".into(), json!(draws));
                 frame.insert("meshes_built".into(), json!(c.meshes_built));
+                frame.insert(
+                    "terrain_tiles_selected".into(),
+                    json!(selection.tiles_selected),
+                );
                 frame.insert("compiled".into(), json!(compiled));
                 frame.insert("segments".into(), Value::Object(edge_segments));
                 frame.insert("edge_sets_derived".into(), Value::Object(edge_sets_derived));
             }
             if args.lod {
                 frame.insert("lod".into(), crate::lod::rows(&choices));
+            }
+            if let (Some((item, at)), Some(tiles)) = (&args.ground_points, &tiles) {
+                frame.insert(
+                    "ground_points".into(),
+                    crate::lod::ground_points(item, at, tiles, &choices),
+                );
             }
             if args.cull_report && capture && !noop {
                 let mut rows = Vec::new();
@@ -2181,9 +2288,18 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
     } else {
         size
     };
+    // A view that drew through frame history's window reports its render scale (#173).
+    let (scale, upscale) = hist
+        .as_ref()
+        .and_then(history::Run::surface)
+        .unwrap_or(if below {
+            (args.surface.scale, args.surface.upscale.name())
+        } else {
+            (1.0, "none")
+        });
     let drew = json!({
-        "internal_scale": if below { args.surface.scale } else { 1.0 },
-        "upscale": if below { args.surface.upscale.name() } else { "none" },
+        "internal_scale": scale,
+        "upscale": upscale,
         "sharpen": args.surface.sharpen,
         "size_px": size, "internal_px": internal, "msaa": msaa,
     });
@@ -2212,6 +2328,17 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
     if timings {
         reply["profiler"] =
             json!({"name": "wgpu-profiler", "version": env!("DEEP_WGPU_PROFILER_VERSION")});
+    }
+    if let Some(at_times) = &args.history.determinism {
+        let planted = app.planted == Some(Planted::DeterminismHashesLiveView);
+        reply["determinism"] = history::determinism(
+            app,
+            out,
+            call,
+            at_times,
+            args.fps,
+            (planted, &hashes, azimuth),
+        )?;
     }
     Ok(reply)
 }

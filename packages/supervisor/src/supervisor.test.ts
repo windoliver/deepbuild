@@ -56,3 +56,31 @@ test('a clean run forgotten past the newest 64 still answers status and cleanup 
     await record.close();
   }
 }, 180_000);
+
+// The denial stream filters by the subsystem macOS's sandbox reports carry, so `log` isn't sent every message the
+// machine writes. On a macOS whose reports carry another one (planted here: the filter names a subsystem no report
+// has) the canary never shows through it, and the stream starts again on the sender alone. Without that second
+// start no denial is recorded, and this fails waiting for it.
+test.skipIf(process.platform !== 'darwin')('a refused write is recorded on a macOS whose sandbox reports carry another subsystem', async () => {
+  const dir = realpathSync(mkdtempSync(join(tmpdir(), 'supervisor-')));
+  dirs.push(dir);
+  mkdirSync(join(dir, 'in'));
+  mkdirSync(join(dir, 'outside'));
+  const target = join(dir, 'outside', 'w.txt');
+  const record = await openRecord({ path: join(dir, 'ledger.db'), now: Date.now });
+  const asks = await openAsks({ record, now: Date.now, deliver: () => undefined });
+  const sup = await openSupervisor({ record, asks, now: Date.now, settings: { asks: { unblock: { deadline_ms: 86_400_000 } } }, plant: 'reports-other-subsystem' });
+  try {
+    const started = await sup.start({ run: 'run:DENIED', argv: ['/usr/bin/touch', target], cwd: join(dir, 'in'), grant: { write: [join(dir, 'in')] } });
+    expect(started.status).toBe('started');
+    await sup.wait('run:DENIED');
+    expect(existsSync(target)).toBe(false);
+    const denied = async () => (await record.read({ after: 0, kinds: ['sandbox.denied'] })).filter((e) => (e.data as { run?: string; target?: string }).run === 'run:DENIED' && (e.data as { target?: string }).target === target);
+    const until = Date.now() + 15_000;
+    while (!(await denied()).length && Date.now() < until) await new Promise((done) => setTimeout(done, 100));
+    expect((await denied()).length, `a sandbox.denied for run:DENIED naming ${target}`).toBe(1);
+  } finally {
+    await sup.close();
+    await record.close();
+  }
+}, 90_000);

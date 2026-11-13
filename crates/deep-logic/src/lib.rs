@@ -4,12 +4,16 @@
 //! freeze only its item, with checkpoints, restores, continuation probes, traps by source line and
 //! logic.budget. #532 adds the checkpoint ring's byte budget, bake keys, seeks, goldens,
 //! logic.determinism, logic.budget's fixed cost, data assets and a live view whose seeks run
-//! across frames. `deep-logic` serves it as JSON lines (the #531 and #532 acceptance READMEs:
-//! deep-logic), and `web/logic.mjs` is the web player's runtime for the same rewritten bytes.
+//! across frames. #547 keeps a bake's arrays as each step's changed ranges with whole arrays at
+//! checkpoints (`bake`), and a session's keyframes every 10 s of play in a cache (`keyframes`).
+//! `deep-logic` serves it as JSON lines (the #531, #532 and #547 acceptance READMEs: deep-logic),
+//! and `web/logic.mjs` is the web player's runtime for the same rewritten bytes.
 
+pub mod bake;
 pub mod budget;
 pub mod checks;
 pub mod judder;
+pub mod keyframes;
 pub mod lane;
 pub mod lines;
 pub mod live;
@@ -21,6 +25,7 @@ use std::collections::BTreeMap;
 use std::rc::Rc;
 
 use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
+use deep_canvas::registry::{BuildSet, Registry};
 use deep_canvas_sandbox::rewrite;
 use serde_json::{json, Map, Value};
 
@@ -60,6 +65,10 @@ pub struct Planted {
     pub budget_holds_steps_to_fuel_budget: bool,
     pub budget_web_passes_from_fuel: bool,
     pub pipeline_draws_before_step_ends: bool,
+    pub ranges_drop_second_at_step_5000: bool,
+    pub ring_drops_oldest: bool,
+    pub keyframes_held_in_ring: bool,
+    pub store_fails_at_step_120: bool,
 }
 
 impl Planted {
@@ -74,6 +83,11 @@ impl Planted {
             "restore_copies_assets" => p.restore_copies_assets = true,
             "simulate_runs_all_steps" => p.simulate_runs_all_steps = true,
             "tracker_skips_memory_copy" => p.rewrite.skip_copy_pages = true,
+            "tracker_skips_memory_fill" => p.rewrite.skip_fill_pages = true,
+            "ranges_drop_second_at_step_5000" => p.ranges_drop_second_at_step_5000 = true,
+            "ring_drops_oldest" => p.ring_drops_oldest = true,
+            "keyframes_held_in_ring" => p.keyframes_held_in_ring = true,
+            "store_fails_at_step_120" => p.store_fails_at_step_120 = true,
             "runs_unchecked" => p.runs_unchecked = true,
             "digest_compares_total_sizes" => p.digest_total_sizes = true,
             "mapper_ignores_fuel_shift" => p.mapper_ignores_shift = true,
@@ -268,6 +282,18 @@ fn track(piece: &Piece, line: &Value, steps: i64) -> Option<Vec<Entry>> {
     Some(entries)
 }
 
+/// The runtime digest a golden carries: the seal's, of the set this crate's runner holds, the
+/// logic and sandbox modules (Registry and seal: runtime digest; #1920). Both are bit and
+/// canonical, so a new patch of the sandbox's engine leaves it as it was.
+fn runtime_digest() -> String {
+    Registry::new(BuildSet::Full)
+        .with(module())
+        .with(deep_canvas_sandbox::module::module())
+        .seal()
+        .expect("the logic and sandbox modules seal together")
+        .runtime_digest
+}
+
 /// The logic module in this process: its planted twin, the layouts each item ID has had, and
 /// the open sessions.
 #[derive(Default)]
@@ -368,9 +394,9 @@ fn seek(
     to: i64,
     probe_of: Option<&Fork>,
 ) -> Result<Value, Value> {
-    let from = straight
-        .nearest(to)
-        .ok_or_else(|| bad("seek: no checkpoint at or before it"))?;
+    let Some(from) = straight.nearest(to) else {
+        return Ok(json!({"to": to, "from": null, "error": "no_checkpoint"}));
+    };
     let next = straight
         .checkpoint_steps()
         .into_iter()
@@ -472,6 +498,8 @@ impl Logic {
                 Err(r) => r,
             },
             Some("bake") => self.bake(line).unwrap_or_else(|e| e),
+            Some("playback") => self.playback(line).unwrap_or_else(|e| e),
+            Some("seek") => self.seek(line).unwrap_or_else(|e| e),
             Some("web_plan") => self.web_plan(line).unwrap_or_else(|e| e),
             Some("metering") => self.metering().unwrap_or_else(|e| e),
             // sandbox@1's web runner first: its offset map, trap kinds and frames are the ones used.
@@ -572,10 +600,47 @@ impl Logic {
         let budgets = self.budgets(&piece, &entries, &rec)?;
         let keys = keys(&piece, &entries);
         Ok(json!({
-            "ok": true, "items": items(&piece), "keys": keys, "steps": rec.steps_json(&piece), "occurrences": rec.occurrences(&piece), "checkpoints": rec.checkpoints, "ranges": rec.ranges,
+            "ok": true, "items": items(&piece), "keys": keys, "steps": rec.steps_json(&piece), "occurrences": rec.occurrences(&piece), "checkpoints": rec.checkpoints, "ranges": rec.ranges_json(&piece), "ring": world.ring(),
             "traps": rec.traps, "budgets": budgets, "restores": restores_out, "probes": probes_out, "seeks": seeks_out, "peeks": peeks,
             "track": entries.iter().map(Entry::to_json).collect::<Vec<_>>(),
         }))
+    }
+
+    /// A bake kept as the logic module keeps it, and its arrays at the steps `at` rebuilt from it
+    /// alone: `stored`, the bytes it keeps for each item's arrays, and no step records.
+    fn playback(&mut self, line: &Value) -> Result<Value, Value> {
+        let piece = Rc::new(self.check(line)?);
+        let steps = line
+            .get("steps")
+            .and_then(Value::as_i64)
+            .filter(|n| *n >= 0)
+            .ok_or_else(|| bad("steps"))?;
+        let entries = track(&piece, line, steps).ok_or_else(|| bad("track"))?;
+        let at: Vec<i64> = line
+            .get("at")
+            .and_then(Value::as_array)
+            .and_then(|a| a.iter().map(Value::as_i64).collect())
+            .ok_or_else(|| bad("at"))?;
+        let mut rec = Record::default();
+        World::new(
+            piece.clone(),
+            track_of(&entries),
+            true,
+            self.planted,
+            &mut rec,
+            None,
+        )?
+        .run(steps, &mut rec, &mut |_, _| {});
+        let stored: Map<String, Value> = piece
+            .items
+            .iter()
+            .map(|i| (i.id.clone(), json!({"arrays": rec.stored(&i.id)})))
+            .collect();
+        let arrays: Vec<Value> = at
+            .iter()
+            .map(|k| json!({"step": k, "arrays": rec.arrays_at(&piece, *k)}))
+            .collect();
+        Ok(json!({"ok": true, "stored": stored, "arrays": arrays}))
     }
 
     /// The piece, its input track and the bake's step count, as `bake` reads them.
@@ -629,11 +694,11 @@ impl Logic {
     /// A golden of the piece's bake recorded on this host (Golden): the bake keys, the runtime
     /// digest, this machine, every step's hash and every checkpoint's full-state hash.
     fn golden(&mut self, line: &Value) -> Result<Value, Value> {
-        self.recorded(line).map(|(golden, _)| golden)
+        self.recorded(line).map(|(golden, _, _)| golden)
     }
 
     /// The golden of the piece's bake on this host, and the bake's record.
-    fn recorded(&mut self, line: &Value) -> Result<(Value, Record), Value> {
+    fn recorded(&mut self, line: &Value) -> Result<(Value, Record, Rc<Piece>), Value> {
         let (piece, entries, steps) = self.baked(line)?;
         let mut rec = Record::default();
         World::new(
@@ -646,10 +711,6 @@ impl Logic {
         )?
         .run(steps, &mut rec, &mut |_, _| {});
         let keys = keys(&piece, &entries);
-        let mut digest = format!("{VERSION}\nwasmtime {}\n", deep_sandbox_wasmtime::WASMTIME);
-        for i in &piece.items {
-            digest += &format!("{} {}\n", i.id, i.hash);
-        }
         // The occurrence lists' hash, when an item emits.
         let occurrences = rec.occurrences(&piece);
         let occurrences_hash = (!occurrences.is_empty()).then(|| {
@@ -665,12 +726,12 @@ impl Logic {
             "linux-x86_64"
         };
         let golden = json!({
-            "bake_key": keys, "runtime_digest": format!("{:016x}", piece::h64(digest.as_bytes())),
+            "bake_key": keys, "runtime_digest": runtime_digest(),
             "machine": {"os": std::env::consts::OS, "arch": std::env::consts::ARCH, "cpu": cpu()},
             "step_hashes": hashes(&piece, &rec), "checkpoint_hashes": rec.checkpoints.clone(), "occurrences_hash": occurrences_hash,
             "record_on": host, "verify_on": [other, "web"],
         });
-        Ok((golden, rec))
+        Ok((golden, rec, piece))
     }
 
     /// Replays the golden's bake on this host: PASS only when the bake keys match and every step
@@ -679,7 +740,7 @@ impl Logic {
     /// first array element that differs there (Golden: Report).
     fn golden_verify(&mut self, line: &Value) -> Result<Value, Value> {
         let golden = line.get("golden").cloned().ok_or_else(|| bad("golden"))?;
-        let (mine, rec) = self.recorded(line)?;
+        let (mine, rec, piece) = self.recorded(line)?;
         let first = mine["step_hashes"]
             .as_object()
             .into_iter()
@@ -705,8 +766,10 @@ impl Logic {
                 return json!({"first_step": k, "item": id, "field": null,
                     "note": "the recording bake is absent, so the step and item alone"});
             };
-            let mine = rec.rows().get(&k).map(|(_, a)| a);
-            let field = mine.into_iter().flatten().find_map(|(name, values)| {
+            // The step's rows, each array's values rebuilt from the bake.
+            let mut mine = rec.rows().get(&k).map(|(_, a)| a.clone()).unwrap_or_default();
+            mine.extend(rec.arrays_at(&piece, k));
+            let field = mine.iter().find_map(|(name, values)| {
                 let array = name.strip_prefix(&format!("{id}."))?;
                 let theirs = row["arrays"].get(name)?.as_array()?;
                 let values = values.as_array()?;
@@ -1005,14 +1068,27 @@ impl Logic {
         let piece = Rc::new(self.check(line)?);
         let entries = track(&piece, line, 0).ok_or_else(|| bad("track"))?;
         let mut rec = Record::default();
-        let world = World::new(
+        let mut world = World::new(
             piece.clone(),
             track_of(&entries),
-            false,
+            true,
             self.planted,
             &mut rec,
             None,
         )?;
+        // A recorded match's replay keeps a keyframe every 10 s of play in the cache (#547).
+        if let Some(c) = line
+            .get("cache")
+            .filter(|_| !self.planted.keyframes_held_in_ring)
+        {
+            let (Some(dir), Some(budget)) = (
+                c.get("dir").and_then(Value::as_str),
+                c.get("budget").and_then(Value::as_u64),
+            ) else {
+                return Err(bad("cache is {dir, budget}"));
+            };
+            world.cache = Some(keyframes::Cache::new(dir, budget, &piece)?);
+        }
         let session = format!("s{}", self.sessions.len() + 1);
         self.sessions.insert(session.clone(), world);
         Ok(json!({"ok": true, "session": session, "items": items(&piece)}))
@@ -1030,7 +1106,42 @@ impl Logic {
         let w = self.sessions.get_mut(s).ok_or_else(|| bad("session"))?;
         let mut rec = Record::default();
         w.run(to + 1, &mut rec, &mut |_, _| {});
-        Ok(json!({"ok": true, "step": to, "failed": w.failed()}))
+        Ok(json!({"ok": true, "step": to, "failed": w.failed(), "deep_hash": w.deep_hashes()}))
+    }
+
+    /// A session's seek to the state after step `to`: the nearest checkpoint its ring holds or
+    /// keyframe its cache holds at or before that state, restored into fresh instances and
+    /// stepped on to it, where the session then stands.
+    fn seek(&mut self, line: &Value) -> Result<Value, Value> {
+        let to = line
+            .get("to")
+            .and_then(Value::as_i64)
+            .filter(|k| *k >= 0)
+            .ok_or_else(|| bad("to"))?;
+        let s = line
+            .get("session")
+            .and_then(Value::as_str)
+            .ok_or_else(|| bad("session"))?;
+        let w = self.sessions.get_mut(s).ok_or_else(|| bad("session"))?;
+        let ring = w.nearest(to + 1);
+        let key = w.cache.as_ref().and_then(|c| c.nearest(to + 1));
+        let from = match (ring, key) {
+            (Some(r), Some(k)) if k > r => {
+                w.seek_keyframe(k)?;
+                k
+            }
+            (Some(r), _) => {
+                w.seek(r)?;
+                r
+            }
+            (None, Some(k)) => {
+                w.seek_keyframe(k)?;
+                k
+            }
+            (None, None) => return Err(bad("seek: no checkpoint or keyframe at or before it")),
+        };
+        w.run(to + 1, &mut Record::default(), &mut |_, _| {});
+        Ok(json!({"ok": true, "to": to, "from": from, "deep_hash": w.deep_hashes()}))
     }
 }
 
@@ -1055,5 +1166,16 @@ mod tests {
         });
         let got = rx.recv_timeout(std::time::Duration::from_secs(1));
         assert_eq!(got, Ok(vec![(-F, 1.0)]));
+    }
+
+    /// #1920: a golden carries the seal's runtime digest in place of the logic module's own. The
+    /// set this runner holds, logic and sandbox, has no measured or backend_bytes implementation,
+    /// so it is the d1 digest of no entry: the SHA-256 of `[]`.
+    #[test]
+    fn a_golden_carries_the_seals_runtime_digest() {
+        let line = json!({"call": "golden", "piece": {"seed": 0, "items": {}}, "steps": 1});
+        let golden = Logic::default().handle(&line)["golden"].clone();
+        let none = "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945";
+        assert_eq!(golden["runtime_digest"], json!(none));
     }
 }

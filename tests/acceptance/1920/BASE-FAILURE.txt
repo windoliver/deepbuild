@@ -1,0 +1,218 @@
+The #1920 suite run once at base commit f28d8777 ("Merge pull request #2229 …"; no implementation of #1920), in a
+checkout holding only these files (untracked) and node_modules from npm ci, on macOS arm64 with cargo 1.99.1, Node
+24.22.0 and vitest 5.0.5, through the repository's throttle:
+`NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 node scripts/throttle.mjs build --wait 60 -- npx vitest run --root tests/acceptance/1920 --no-file-parallelism`
+(2026-11-11T03:52Z; the checkout's path redacted to `<checkout>`; the base's `full`, `core,test-sim-a` and
+`core,test-sim-b` builds were warm, so the run took 16 s). Exit code: 1.
+
+8 of 8 tests fail, each at an assertion that names what the base lacks, none in the harness and none BLOCKED. Each
+line below was observed in this run, but for the one it marks as read:
+- ac1, test 1: the `full` build seals, and its `registry.modules` holds no `physics`
+  ("the full build holds the canvas module physics").
+- ac1, test 2: the `full` build's published plan carries no `runtime_digest`.
+- ac1, test 3: cargo refuses `full,test-physics-rapier-patch` ("none of the selected packages contains this feature"),
+  at "the binary builds".
+- ac1, test 4: `deep-show run --planted runtime_digest_omits_physics` answers `{"ok":false,"code":"bad_input"}` and
+  exits 2: the planted name is unknown.
+- ac2, test 1: the `core,test-sim-b` build's published plan carries no `runtime_digest`. The test meets that before
+  it asks for the `core,test-sim-b-1-0-1` build, so that build's refusal isn't in this output; it is read from the
+  base's `crates/deep-show/Cargo.toml`, which has no such feature.
+- ac2, test 2: cargo refuses `core,test-sim-b-pin-feature`, at "the binary builds".
+- ac2, test 3: cargo refuses `core,test-sim-a-1-0-1`, at "the binary builds". Before that, the test ran its judge of
+  kit fixture hashes on the base's real builds: the reference's hashes from `core,test-sim-a`, and `core,test-sim-b`
+  failing it, naming a fixture and an operator of `test.sim`, as it must (those two assertions pass at the base).
+- ac2, test 4: `deep-show run --planted runtime_digest_hashes_only_shapes` answers `bad_input` and exits 2.
+
+Checked apart from this run, at the base (README: Readings; Wrong programs and traps): the suite's `d1` reproduces the
+base's `set_digest` of `core,test-sim-a` from its `registry` reply; on the base's `core,test-sim-a` and
+`core,test-sim-b` binaries the two kit fixtures (`sim-small`, `sim-large`) evaluate, `test.sim.work` giving the same
+result in both and `test.sim.step` another in B's; and, with a stand-in for an implemented binary, the 8 tests pass,
+and each of 25 wrong stand-ins fails at least one. The type-check, `npx tsc -p tests/acceptance/1920/tsconfig.json`,
+exits 0.
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/1920
+
+ ❯ ac2-test-implementations.test.ts (4 tests | 4 failed) 5405ms
+   ❯ #1920.73d8b8e7 the runtime digest moves with B, measured with backend_bytes state, and never with A, bit and canonical (4)
+     × #1920.73d8b8e7 in a build with B, the runtime digest changes when B's version moves from 1.0.0 to 1.0.1 1421ms
+     × #1920.73d8b8e7 in a build with B, the runtime digest changes when one of B's pins changes a feature 1ms
+     × #1920.73d8b8e7 the runtime digest stays the same when A's version moves in a build with A whose kit fixtures still give the reference's hashes 1559ms
+     × #1920.73d8b8e7 the planted seal that hashes only registered shapes gives B's two versions one digest and fails this, naming B 13ms
+ ❯ ac1-physics-seal.test.ts (4 tests | 4 failed) 2330ms
+   ❯ #1920.d626ec86 the physics module seals as physics@1's measured, backend_bytes implementation, and the runtime digest covers it, its pins and nothing else (4)
+     × #1920.d626ec86 the shipped full set seals with the physics module, which names physics@1 and its implementation, declared measured with backend_bytes state and pinning Rapier 0.36.1 1485ms
+     × #1920.d626ec86 the runtime digest published with the sealed plan covers the physics implementation and its pins and nothing else 83ms
+     × #1920.d626ec86 a test build that changes only Rapier's pinned patch version changes the runtime digest, naming physics@1 1ms
+     × #1920.d626ec86 the planted seal that leaves the physics implementation out of the runtime digest gives both builds one digest and fails this, naming physics@1's implementation 15ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 8 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac1-physics-seal.test.ts > #1920.d626ec86 the physics module seals as physics@1's measured, backend_bytes implementation, and the runtime digest covers it, its pins and nothing else > #1920.d626ec86 the shipped full set seals with the physics module, which names physics@1 and its implementation, declared measured with backend_bytes state and pinning Rapier 0.36.1
+AssertionError: the full build holds the canvas module physics: expected [ 'building', 'cells', 'data', …(15) ] to include 'physics'
+ ❯ ac1-physics-seal.test.ts:48:73
+     46|     const p = plan(FULL);
+     47|     expect([p.buildSet, p.state], 'the full build seals').toEqual(['fu…
+     48|     expect(p.modules, 'the full build holds the canvas module physics'…
+       |                                                                         ^
+     49|     const physics = theInterface(p, PHYSICS);
+     50|     expect(physics.module, `${PHYSICS} is the physics module's interfa…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/8]⎯
+
+ FAIL  ac1-physics-seal.test.ts > #1920.d626ec86 the physics module seals as physics@1's measured, backend_bytes implementation, and the runtime digest covers it, its pins and nothing else > #1920.d626ec86 the runtime digest published with the sealed plan covers the physics implementation and its pins and nothing else
+AssertionError: deep-show full: the plan published at deep://schedule carries runtime_digest (Registry and seal: `runtime_digest: d1 digest`) is a string, got undefined: expected 'undefined' to be 'string' // Object.is equality
+
+Expected: "string"
+Received: "undefined"
+
+ ❯ str helpers.ts:64:59
+     62| }
+     63| export function str(v: JsonValue | undefined, what: string): string {
+     64|   expect(typeof v, `${what} is a string, got ${show(v)}`).toBe('string…
+       |                                                           ^
+     65|   return v as string;
+     66| }
+ ❯ sealOf helpers.ts:233:18
+ ❯ ac1-physics-seal.test.ts:60:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/8]⎯
+
+ FAIL  ac1-physics-seal.test.ts > #1920.d626ec86 the physics module seals as physics@1's measured, backend_bytes implementation, and the runtime digest covers it, its pins and nothing else > #1920.d626ec86 a test build that changes only Rapier's pinned patch version changes the runtime digest, naming physics@1
+AssertionError: the binary builds: deep-show with features full,test-physics-rapier-patch: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-show --no-default-features --features full,test-physics-rapier-patch failed:
++ error: none of the selected packages contains this feature: test-physics-rapier-patch
++ selected packages: deep-contracts, deep-canvas-seams, deep-canvas, deep-relay, deep-codecs, deep-hook, deep-app, deep-canvas-cells, deep-canvas-effects, deep-canvas-scene3d, deep … (the workspace's packages)
++
+
+ ❯ helpers.ts:121:100
+    119|     const entry = made.get(buildName(build));
+    120|     if (!entry) throw Error(`the file didn't list the build ${buildNam…
+    121|     expect(entry.error, `the binary builds: ${SHOW} with features ${fe…
+       |                                                                                                    ^
+    122|     return entry.bin;
+    123|   };
+ ❯ plan ac1-physics-seal.test.ts:40:71
+ ❯ ac1-physics-seal.test.ts:76:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/8]⎯
+
+ FAIL  ac1-physics-seal.test.ts > #1920.d626ec86 the physics module seals as physics@1's measured, backend_bytes implementation, and the runtime digest covers it, its pins and nothing else > #1920.d626ec86 the planted seal that leaves the physics implementation out of the runtime digest gives both builds one digest and fails this, naming physics@1's implementation
+AssertionError: deep-show full --planted runtime_digest_omits_physics: `run --planted runtime_digest_omits_physics` starts and exits 0; stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ run helpers.ts:159:149
+    157|   expect(code === 'ETIMEDOUT' ? 'timed out' : '', `${what}: \`${args.j…
+    158|   const stdout = r.stdout ?? '';
+    159|   expect(r.status, `${what}: \`${args.join(' ')}\` starts and exits 0;…
+       |                                                                                                                                                     ^
+    160|   const lines = stdout.split('\n').filter((l) => l !== '');
+    161|   expect(lines.length, `${what}: one answer line per scenario`).toBe(1…
+ ❯ published helpers.ts:210:27
+ ❯ plan ac1-physics-seal.test.ts:40:61
+ ❯ ac1-physics-seal.test.ts:100:28
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/8]⎯
+
+ FAIL  ac2-test-implementations.test.ts > #1920.73d8b8e7 the runtime digest moves with B, measured with backend_bytes state, and never with A, bit and canonical > #1920.73d8b8e7 in a build with B, the runtime digest changes when B's version moves from 1.0.0 to 1.0.1
+AssertionError: deep-show core,test-sim-b: the plan published at deep://schedule carries runtime_digest (Registry and seal: `runtime_digest: d1 digest`) is a string, got undefined: expected 'undefined' to be 'string' // Object.is equality
+
+Expected: "string"
+Received: "undefined"
+
+ ❯ str helpers.ts:64:59
+     62| }
+     63| export function str(v: JsonValue | undefined, what: string): string {
+     64|   expect(typeof v, `${what} is a string, got ${show(v)}`).toBe('string…
+       |                                                           ^
+     65|   return v as string;
+     66| }
+ ❯ sealOf helpers.ts:233:18
+ ❯ ac2-test-implementations.test.ts:59:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/8]⎯
+
+ FAIL  ac2-test-implementations.test.ts > #1920.73d8b8e7 the runtime digest moves with B, measured with backend_bytes state, and never with A, bit and canonical > #1920.73d8b8e7 in a build with B, the runtime digest changes when one of B's pins changes a feature
+AssertionError: the binary builds: deep-show with features core,test-sim-b-pin-feature: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-show --no-default-features --features core,test-sim-b-pin-feature failed:
++ error: none of the selected packages contains this feature: test-sim-b-pin-feature
++ selected packages: deep-contracts, deep-canvas-seams, deep-canvas, deep-relay, deep-codecs, deep-hook, deep-app, deep-canvas-cells, deep-canvas-effects, deep-canvas-scene3d, deep … (the workspace's packages)
++
+
+ ❯ helpers.ts:121:100
+    119|     const entry = made.get(buildName(build));
+    120|     if (!entry) throw Error(`the file didn't list the build ${buildNam…
+    121|     expect(entry.error, `the binary builds: ${SHOW} with features ${fe…
+       |                                                                                                    ^
+    122|     return entry.bin;
+    123|   };
+ ❯ plan ac2-test-implementations.test.ts:43:71
+ ❯ ac2-test-implementations.test.ts:79:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/8]⎯
+
+ FAIL  ac2-test-implementations.test.ts > #1920.73d8b8e7 the runtime digest moves with B, measured with backend_bytes state, and never with A, bit and canonical > #1920.73d8b8e7 the runtime digest stays the same when A's version moves in a build with A whose kit fixtures still give the reference's hashes
+AssertionError: the binary builds: deep-show with features core,test-sim-a-1-0-1: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-show --no-default-features --features core,test-sim-a-1-0-1 failed:
++ error: none of the selected packages contains this feature: test-sim-a-1-0-1
++ selected packages: deep-contracts, deep-canvas-seams, deep-canvas, deep-relay, deep-codecs, deep-hook, deep-app, deep-canvas-cells, deep-canvas-effects, deep-canvas-scene3d, deep … (the workspace's packages)
++
+
+ ❯ helpers.ts:121:100
+    119|     const entry = made.get(buildName(build));
+    120|     if (!entry) throw Error(`the file didn't list the build ${buildNam…
+    121|     expect(entry.error, `the binary builds: ${SHOW} with features ${fe…
+       |                                                                                                    ^
+    122|     return entry.bin;
+    123|   };
+ ❯ ac2-test-implementations.test.ts:107:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/8]⎯
+
+ FAIL  ac2-test-implementations.test.ts > #1920.73d8b8e7 the runtime digest moves with B, measured with backend_bytes state, and never with A, bit and canonical > #1920.73d8b8e7 the planted seal that hashes only registered shapes gives B's two versions one digest and fails this, naming B
+AssertionError: deep-show core,test-sim-b --planted runtime_digest_hashes_only_shapes: `run --planted runtime_digest_hashes_only_shapes` starts and exits 0; stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ run helpers.ts:159:149
+    157|   expect(code === 'ETIMEDOUT' ? 'timed out' : '', `${what}: \`${args.j…
+    158|   const stdout = r.stdout ?? '';
+    159|   expect(r.status, `${what}: \`${args.join(' ')}\` starts and exits 0;…
+       |                                                                                                                                                     ^
+    160|   const lines = stdout.split('\n').filter((l) => l !== '');
+    161|   expect(lines.length, `${what}: one answer line per scenario`).toBe(1…
+ ❯ published helpers.ts:210:27
+ ❯ plan ac2-test-implementations.test.ts:43:61
+ ❯ ac2-test-implementations.test.ts:132:24
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/8]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  8 failed (8)
+   Start at  19:52:27
+   Duration  7.91s (tests 100%)
+

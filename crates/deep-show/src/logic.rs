@@ -54,17 +54,23 @@ pub(crate) fn from_first_frame(form: &mut Value, first: i64) {
 
 impl Hub<'_> {
     /// Mark set columns that read a column source, resolved and narrowed by the core's column
-    /// view at `t` (#397), and those that read a logic array, baked for every frame (#535).
+    /// view at `t` (#397), and those that read a logic array, baked for every frame (#535); and
+    /// scene3d's readers of logic arrays, checked (#537).
     pub(crate) fn column_view(&self, form: &mut Value, t: i64) -> Vec<Issue> {
         let sealed = &self.startup.sealed;
         let entries = sealed.registry(deep_canvas::columns::REGISTRY);
-        deep_canvas::columns::view(form, entries.map_or(&[][..], |r| r.entries.as_slice()), t)
+        let entries = entries.map_or(&[][..], |r| r.entries.as_slice());
+        let mut issues = deep_canvas_scene3d::arrays::check(form, entries);
+        issues.extend(deep_canvas_scene3d::tints::check(form));
+        issues.extend(deep_canvas::columns::view(form, entries, t));
+        issues
     }
 
     /// Each logic item of `form` stepped on `track` over the transport's span, its program read
     /// from the evidence store, and its rows written to `occurrences.<logic ID>.occurrences`:
     /// `{t, step, kind, a, b}` and its declared fields by name, as Spawn and motion read a row.
-    pub(crate) fn inline_occurrences(&self, form: &mut Value, track: &[Value]) -> Result<(), Issue> {
+    pub(crate) fn inline_occurrences(&self, form: &mut Value, track: &[Value]) -> Result<(), Box<Issue>> {
+        self.inline_worlds(form)?;
         let items: Map<String, Value> = form
             .get("items")
             .and_then(Value::as_object)
@@ -127,7 +133,10 @@ impl Hub<'_> {
                 }
             }
         }
-        doc.insert("arrays".into(), Value::Object(arrays));
+        // #1918: beside the readings of the worlds the document lists.
+        if let Some(all) = doc.entry("arrays").or_insert_with(|| json!({})).as_object_mut() {
+            all.extend(arrays);
+        }
         Ok(())
     }
 }

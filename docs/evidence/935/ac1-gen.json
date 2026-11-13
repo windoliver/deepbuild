@@ -1,0 +1,117 @@
+{
+  "region": {
+    "samples": 1843200,
+    "seconds": 38.4
+  },
+  "short": {
+    "samples": 1833600,
+    "bars": 15.916666666666666
+  },
+  "loop": {
+    "state": "PASS",
+    "readings": {
+      "tempo": 100,
+      "loop": {
+        "start": 0,
+        "end": 1843200,
+        "seconds": 38.4,
+        "bar": 2.4,
+        "bars": 16
+      },
+      "seam": {
+        "at": 1843200,
+        "to": 0,
+        "step": 0.003930270671844482,
+        "step_p99": 0.093939870595932,
+        "flux": 161.82781780803612,
+        "flux_p99": 236.41364192153785
+      },
+      "residual": -171.823762045523,
+      "integrated": -23.00000000067033,
+      "target": -23,
+      "true_peak": -3.6728218381051407,
+      "lead": 0,
+      "duration": 38.4
+    },
+    "issues": [],
+    "blocked": []
+  },
+  "slow_loop": {
+    "state": "FAIL",
+    "readings": {
+      "tempo": 95.99619022447699,
+      "loop": {
+        "start": 0,
+        "end": 1843200,
+        "seconds": 38.4,
+        "bar": 2.4,
+        "bars": 16
+      },
+      "seam": {
+        "at": 1843200,
+        "to": 0,
+        "step": 0.024696096777915955,
+        "step_p99": 0.09280608594417572,
+        "flux": 161.97083344099482,
+        "flux_p99": 231.19686835654656
+      },
+      "integrated": -22.996136693686694,
+      "target": -23,
+      "true_peak": -4.192535038464819,
+      "lead": 0,
+      "duration": 38.4
+    },
+    "issues": [
+      {
+        "code": "audio.gen.tempo",
+        "path": "sounds/slow_loop/tempo",
+        "actual": {
+          "measured": 95.99619022447699,
+          "declared": 100,
+          "tolerance": 0.5
+        },
+        "what": "the pinned beat tracker reads 96.00 BPM, and the bed declares 100 BPM (±0.5)"
+      }
+    ],
+    "blocked": []
+  },
+  "short_loop": {
+    "state": "FAIL",
+    "readings": {
+      "tempo": 100,
+      "loop": {
+        "start": 0,
+        "end": 1833600,
+        "seconds": 38.2,
+        "bar": 2.4,
+        "bars": 15.916666666666668
+      },
+      "seam": {
+        "at": 1833600,
+        "to": 0,
+        "step": 0.0009223222732543945,
+        "step_p99": 0.09415669739246368,
+        "flux": 97.96645475241829,
+        "flux_p99": 236.41364192153785
+      },
+      "integrated": -23.00000000067033,
+      "target": -23,
+      "true_peak": -3.6728218381051407,
+      "lead": 0,
+      "duration": 38.4
+    },
+    "issues": [
+      {
+        "code": "audio.gen.bars",
+        "path": "sounds/short_loop/loop",
+        "actual": {
+          "bars": 15.916666666666668,
+          "seconds": 38.2,
+          "bar": 2.4
+        },
+        "what": "the loop region is 38.200 s, 15.92 bars of 2.4 s at 100 BPM, not within 1 ms of a whole number of bars"
+      }
+    ],
+    "blocked": []
+  }
+}

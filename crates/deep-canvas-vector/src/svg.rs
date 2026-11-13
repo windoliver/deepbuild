@@ -19,6 +19,8 @@ pub const MAX_BYTES: usize = 512 * 1024;
 
 const SVG_NS: &str = "http://www.w3.org/2000/svg";
 const XLINK_NS: &str = "http://www.w3.org/1999/xlink";
+/// The namespace of the typeset job's record in an SVG's `<metadata>` (#220).
+const TYPESET_NS: &str = "urn:deepbuild:typeset";
 
 /// How deep `<use>` may nest, so a use that reaches itself refuses instead of spinning.
 const USE_DEPTH: usize = 16;
@@ -160,11 +162,13 @@ pub struct Clip {
     pub parent: Option<usize>,
 }
 
-/// A part: an element with an id, or a class `parts` names, that draws; and the part it sits in.
+/// A part: an element with an id, or a class `parts` names, that draws; the part it sits in; and
+/// its source where the SVG gives one, as the typeset job's `data-source` does (#220).
 #[derive(Clone, Debug, PartialEq)]
 pub struct Part {
     pub id: String,
     pub parent: Option<usize>,
+    pub source: Option<String>,
 }
 
 /// What the import read, in paint order.
@@ -176,6 +180,9 @@ pub struct Svg {
     pub clips: Vec<Clip>,
     /// Each element or attribute the import didn't read, by name, once, in document order.
     pub unread: Vec<String>,
+    /// The typeset job's record when the job wrote the SVG (#220): its `<metadata>`'s
+    /// `deep:typeset` text, `{made_by, license}` as JSON.
+    pub typeset: Option<String>,
 }
 
 /// Which importer reads an SVG: the honest one, or a planted wrong program.
@@ -214,6 +221,13 @@ pub fn import(bytes: &[u8], classes: &[String], twin: Twin) -> Result<Svg, Refus
     let mut ids = BTreeMap::new();
     scan(root, &mut unread, &mut ids)?;
     let view_box = view_box(root);
+    let typeset = root
+        .children()
+        .filter(|n| n.has_tag_name((SVG_NS, "metadata")))
+        .flat_map(|m| m.children())
+        .find(|n| n.has_tag_name((TYPESET_NS, "typeset")))
+        .and_then(|n| n.text())
+        .map(str::to_string);
     let sheet = Sheet::read(root, &mut unread);
     let mut import = Import {
         ids,
@@ -238,6 +252,7 @@ pub fn import(bytes: &[u8], classes: &[String], twin: Twin) -> Result<Svg, Refus
         paths: import.paths,
         clips: import.clips,
         unread: import.unread,
+        typeset,
     })
 }
 
@@ -788,7 +803,12 @@ impl<'a, 'i> Import<'a, 'i, '_> {
             }));
         let own = match named {
             Some(id) if uses == 0 => {
-                self.parts.push(Part { id, parent: part });
+                let source = node.attribute("data-source").map(str::to_string);
+                self.parts.push(Part {
+                    id,
+                    parent: part,
+                    source,
+                });
                 Some(self.parts.len() - 1)
             }
             _ => None,

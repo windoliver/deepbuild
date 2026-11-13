@@ -20,9 +20,9 @@ import type { ExtensionHost } from '@deepbuild/extension-host';
 import type { PlanInput } from '@deepbuild/asks';
 import { freeBytes } from './disk.js';
 import { forbiddenLicense, Packs } from './packs.js';
+import { isRecord as isObj } from '@deepbuild/contracts';
 
 type Obj = Record<string, unknown>;
-const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 const sha256 = (b: Uint8Array | string): string => createHash('sha256').update(b).digest('hex');
 const BUNDLED_TERMS: Record<string, string> = { 'https://creativecommons.org/publicdomain/zero/1.0/': 'CC0-1.0', 'https://creativecommons.org/licenses/by/4.0/': 'CC-BY-4.0' };
 
@@ -249,7 +249,8 @@ export class Libraries {
   /** A deep_kinds fetch of a row a library gave: held on your answer, fetched, refused naming why, or BLOCKED with one unblock ask. */
   async fetch(library: string, id: string): Promise<FetchReply> {
     if (!this.saved.on.includes(library) || !this.registered(library)) {
-      return { status: 'refused', reason: `${library} is ${this.saved.on.includes(library) ? 'not loaded' : 'off'}, so nothing is fetched from it; turn it on to fetch ${id}` };
+      const on = this.saved.on.includes(library);
+      return { status: 'refused', reason: `${library} is ${on ? 'not loaded' : 'off'}, so nothing is fetched from it; turn it on to fetch ${id}${on ? '' : `: deep library on ${library}, from the person's own terminal`}` };
     }
     const key = `${library}#${id}`;
     const now = this.fetches.get(key);

@@ -1,0 +1,36 @@
+# Guards on what #1918 could move, recorded on this Mac at load 200 to 310
+
+## #2010's oracle round-trips and frame-rate key (before merging main)
+2010-oracle:  Test Files  3 passed (3)
+2010-oracle:       Tests  4 passed (4)
+2010 ac5-frame-rate-key:  Test Files  1 passed (1)
+2010 ac5-frame-rate-key:       Tests  1 passed (1)
+
+## The runtime digest and pins, before and after the motion dependency (identical)
+{"ok":true,"runtime_digest":"f14c2c920ef9a8f4d44414a30ff8d72074dde81977b8f9eb529d0eab65dc4023","backend":{"name":"rapier3d","version":"0.36.1","features":["alloc","dim3","enhanced-determinism","f32","serde-serialize","std"]},"pins":[{"name":"glam","version":"0.33.12","features":["approx","approx-05","f64","i32","libm","nostd-libm","scalar-math","serde","std","u32"]},{"name":"glamx","version":"0.3. ...
+cmp: identical
+
+## Canvas kit after merging main
+canvas kit: PASS over core, building, cells, data, effects, graph, input, logic, look, loop, marks2d, media, motion, physics, record, sandbox, scene3d, sheet, text, vector (seed 138)
+
+## #2011's suite after merging main (its sensor entries now come from #1918's list)
+2011 ac1-pairs:  Test Files  1 passed (1)
+2011 ac1-pairs:       Tests  2 passed (2)
+2011 ac3-roles:  Test Files  1 passed (1)
+2011 ac3-roles:       Tests  2 passed (2)
+2011 ac2-step-budget: not run (release builds timed natively and in headless Chrome; needs a quiet reference Mac)
+
+## wasm32: the lab baked 120 steps by node scripts/physics-wasm32.mjs and natively
+wasm32: ok true rows 7 occurrences_hash 1dff895c3cf8e16bf30efd010771a36b6fc480a541d4555a5200e337977ea0c9
+macOS:  ok true rows 7 occurrences_hash 1dff895c3cf8e16bf30efd010771a36b6fc480a541d4555a5200e337977ea0c9
+
+## Unit tests
+deep-canvas columns: test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 294 filtered out; finished in 0.00s
+deep-canvas-motion occurrence: test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 38 filtered out; finished in 0.00s
+deep-show physics:: and the schedule snapshot, after merging main: test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 32 filtered out; finished in 0.14s
+deep-show readings test against a mutant baked linear (read a step late): test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 28 filtered out; finished in 0.02s
+
+## Lints
+canvas-lint: 58 findings, none in deep-canvas-physics, deep-canvas/src/columns.rs or deep-canvas-motion/src/occurrence.rs (all predate this change)
+repo-rules: 15 findings, none naming a dependency, card or file this change adds; PASS physics-build: rapier3d 0.36.1 [alloc, dim3, enhanced-determinism, f32, serde-serialize, std], parry3d 0.31.1, none
+size-ratchet: every file this change touches that fails already fails on main at 04f44a4ba, the main this branch merged; against main, deep-show hub.rs and motion program.rs are unchanged, deep-show main.rs is 1 line shorter, deep-canvas-physics doc.rs 10 shorter, and deep-show frames.rs 3 longer (eval's paths)

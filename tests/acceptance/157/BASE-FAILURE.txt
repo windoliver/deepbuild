@@ -1,0 +1,64 @@
+#157: why each test fails at the base 35df4523f ("Merge pull request #2280"). A note, not a run.
+
+The suite was not run at the base and `deep-show` was not built: the surfaces it reads plainly don't exist there, and a
+deep-show build on this Mac, under a load above 200, takes a long time; each file would spend one to show it. What
+follows is read from the base's code (crates/deep-show/src/{main,export,media,narration}.rs, kit/export.rs,
+crates/deep-codecs/src/{lib,mov,export}.rs, crates/deep-canvas-media/src/{delivery,captions}.rs), not from its output.
+The suite parses and type-checks: `vitest list --root tests/acceptance/157` lists 46 tests in 13 files, and
+`tsc -p tests/acceptance/157/tsconfig.json` is clean.
+
+What the base has: #501's delivery `export` (frames hashed on the GPU, each written as a raw `.bgra` file under the
+temp folder, PCM held in memory, the file under a temporary name beside `out`, the receipt's size, rate, duration,
+frame and PCM hashes, `encoder`, `adapter {name, software}`, `shards` as a count), its refusal `export_size_odd`
+`{size}` when the call names an odd `size`, and no other guard; #502's loudness profiles `r128` and `none` only, its
+caption layout (min_dur and the 2-frame gap, no rule at cuts), its FAIL `{outcome: "failed", issues}`, and its
+narration BLOCKED `{outcome: "blocked", code: "narration.unshareable"}` with no `asks`; #501's `kit` with each entry's
+`failures` and no `parts`; the decode worker's probe `color {primaries, transfer, matrix, range, assumed}` with no
+`alpha`; the MOV/MP4 writer that already puts `moov` before `mdat`, writes `colr` nclx and `elst`, and uses a track
+timescale in the rate's own terms. Every planted name here is unknown to the base: the scenario's `planted` answers
+`{"ok": false, "code": "bad_input"}`, so every planted test fails at "deep-show run answers the scenario ok". The Cargo
+feature `test-export-guards` doesn't exist, so cargo refuses that build.
+
+Expected at the base, per test (each fails at its first missing surface; if the base's document check refuses a
+`checks` entry of kind film.blank or a `license.from`, the tests that write one fail one step earlier, at "the
+document is presented"):
+
+- AC1 (blank.test.ts, 1): the black frames are delivered: "film.blank: frame 24: the four black frames: frames 24 to
+  27 are blank, and the export was delivered".
+- AC27 (blank.test.ts, 2): the paper film is delivered: "film.blank: frame 24: the paper frames: … delivered"; the
+  planted test: bad_input for `blank_counts_dark_only`.
+- AC2, AC26 (finite.test.ts, 3): "the binary builds: deep-show with features full,test-export-guards" fails (cargo:
+  the package has no feature `test-export-guards`).
+- AC3 (color.test.ts, 2): delivered; "export.color: the receipt has no color_probe" (the colr box and FFmpeg's tags
+  likely already read BT.709 limited at the base); planted: bad_input.
+- AC13 (color.test.ts, 3): delivered; "receipt.fidelity is an object, got null"; planted: bad_input.
+- AC4, AC18 (fidelity.test.ts, 4): "receipt.fidelity is an object, got null"; planted: bad_input.
+- AC20 (fidelity.test.ts, 2): "video: export.fidelity: the kit's entry has no fidelity part"; planted: bad_input.
+- AC21 (fidelity.test.ts, 2): the clean test may pass at the base (its timescale is 24000 and its sound is trimmed by
+  its edit list), which is why the criterion names two planted muxers; each answers bad_input at the base.
+- AC5 (loudness.test.ts, 2): `loudness_profile: streaming` is refused `unknown_loudness_profile`: "the export wasn't
+  delivered: refused unknown_loudness_profile"; planted: bad_input.
+- AC11 (loudness.test.ts, 2): the 7 LU film is delivered at r128 (no short-form maximum): "the export FAILs: expected
+  'exported' to be 'failed'"; the captions read near.1 [72, 114) and first.1 [144, 174), not [72, 118) and [144, 177).
+- AC6 (licences.test.ts, 2): "receipt.licenses is an array, got undefined"; the narration film is BLOCKED with code
+  narration.unshareable but "the BLOCKED reply: asks is an array, got undefined".
+- AC7 (lease.test.ts, 2): both exports deliver; "receipt.lease is an object, got null".
+- AC15 (delivery.test.ts, 1): the call's 1921 × 1080 is refused export_size_odd with `size` but no `nearest_even`:
+  "the refusal names the nearest even size" fails (and the document's own 1921 × 1080 isn't refused at all).
+- AC16 (delivery.test.ts, 2): the clean test may pass at the base, whose muxer writes the header first; that is why
+  this job adds the twin `muxer_writes_moov_last`, which answers bad_input at the base.
+- AC17 (delivery.test.ts, 2): "receipt.chapters is an array, got undefined"; planted: bad_input.
+- AC19 (delivery.test.ts, 1): "receipt.warnings is an array, got undefined".
+- AC22 (shards.test.ts, 2): "3 shards: receipt.seams is an array, got undefined"; planted: bad_input.
+- AC25 (disk.test.ts, 4): BLOCKED off macOS; on macOS the base has no disk gate: on 20 MB it starts and fills the disk
+  writing raw frames under TMPDIR, so "export_disk_short: the export wasn't refused before its first frame"; on 10 GB
+  the watcher sees the `.bgra` files: "raw frames: the export wrote raw frames into the folder …"; planted: bad_input.
+- AC28 (wrap.test.ts, 4): the orbit and the ping_pong line pass at the base (delivered; the orbit's own MAD closes);
+  the line is delivered: "the line FAILs: expected 'exported' to be 'failed'"; planted: bad_input.
+- AC14 (budgets.test.ts, 2): "benchmarks/budgets.json has a task whose reason names #157.d2250c69" fails; the second
+  test is INCONCLUSIVE off a reference Mac, else "receipt.fidelity is an object" fails.
+- AC29 (taste.test.ts, 1): INCONCLUSIVE: docs/evidence/157/ holds none of the four pictures.
+
+Expected at the base: 46 tests; all fail or read INCONCLUSIVE except at most four clean tests the base already meets
+(AC16's header first, AC21's exact times, AC28's orbit and ping_pong), each of which names a planted twin that fails
+there on bad_input.

@@ -24,7 +24,7 @@ pub const KIND: &str = "tiles.terrain@1";
 pub struct Refusal {
     pub code: &'static str,
     pub path: String,
-    pub actual: Value,
+    pub actual: Box<Value>,
     pub message: String,
 }
 
@@ -41,7 +41,7 @@ fn bad(path: String) -> Refusal {
     Refusal {
         code: "bad_doc",
         path,
-        actual: Value::Null,
+        actual: Box::new(Value::Null),
         message: "the terrain recipe can't expand as its params say".into(),
     }
 }
@@ -94,7 +94,7 @@ pub fn expand(id: &str, item: &Value, planted: Planted) -> Result<(String, Value
         return Err(Refusal {
             code: "bad_doc",
             path: format!("{path}/rules"),
-            actual: json!(rules),
+            actual: Box::new(json!(rules)),
             message: if SQUARE_RULES.contains(&rules) {
                 format!("{rules} is a square grid's rule; a hex grid takes edges_6")
             } else {
@@ -193,7 +193,7 @@ pub fn expand(id: &str, item: &Value, planted: Planted) -> Result<(String, Value
             return Err(Refusal {
                 code: "ref_unresolved",
                 path: cells_at,
-                actual: json!({"cell": [cx, cy], "terrain": own, "labels": want}),
+                actual: Box::new(json!({"cell": [cx, cy], "terrain": own, "labels": want})),
                 message: format!(
                     "no tile matches cell ({cx}, {cy}): it wants terrain {own} with edges [{}]",
                     want.join(", ")
@@ -206,7 +206,7 @@ pub fn expand(id: &str, item: &Value, planted: Planted) -> Result<(String, Value
         if candidates.is_empty() {
             return Err(Refusal {
                 code: "ref_unresolved",
-                actual: json!({"cell": [cx, cy], "terrain": own}),
+                actual: Box::new(json!({"cell": [cx, cy], "terrain": own})),
                 message: format!("no tile has cell ({cx}, {cy})'s terrain {own}"),
                 ..bad(cells_at)
             });

@@ -5,9 +5,9 @@
 // revision it checked among its findings. A kind the build lacks is the core's BLOCKED `module_missing`, a missing run,
 // never skipped; `deep show --check` reads its result from these runs, so a document with none never reads PASS.
 import type { CheckResult, CheckSpec, RunOutcome } from '@deepbuild/conformance';
+import { isRecord as isObj } from '@deepbuild/contracts';
 
 type Obj = Record<string, unknown>;
-const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 
 /** A document check as a spec or definition names it: the kind, its check input, and the deliverable document. */
 export interface DocCheck { kind: string; doc: string; input: Obj }

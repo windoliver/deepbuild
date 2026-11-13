@@ -16,6 +16,9 @@ use vello_cpu::Pixmap;
 
 use crate::refused;
 
+/// An image as [`Kept::pixmap`] draws it: its pixmap, its size in px and the rect it covers.
+type Drawn = (Arc<Pixmap>, [u32; 2], [f64; 4]);
+
 /// The most the levels a frame draws may hold, B (Image `image@1`: cost).
 pub const CAP: u64 = 64 << 20;
 
@@ -71,6 +74,29 @@ pub fn sidecars(doc: &mut Map<String, Value>, store: Option<&Path>) -> Result<()
             let path = format!("items/{id}/params/columns/{name}/data");
             *data = Value::String(deep_canvas::base64::encode(&read(store, &hash, &path)?));
         }
+    }
+    Ok(())
+}
+
+/// #1965: every code item of `doc` whose `raw` is an asset (`{asset: sha256}`, the form bytes that
+/// aren't UTF-8 take), read from the store, checked and kept beside the hash as `base64`, which the
+/// code's readers take as its raw bytes.
+pub fn raws(doc: &mut Map<String, Value>, store: Option<&Path>) -> Result<(), Value> {
+    let Some(Value::Object(items)) = doc.get_mut("items") else {
+        return Ok(());
+    };
+    for (id, item) in items.iter_mut() {
+        let Some(Value::Object(raw)) = item.pointer_mut("/params/raw") else {
+            continue;
+        };
+        let Some(hash) = raw.get("asset").and_then(Value::as_str).map(str::to_string) else {
+            continue;
+        };
+        let bytes = read(store, &hash, &format!("items/{id}/params/raw"))?;
+        raw.insert(
+            "base64".into(),
+            Value::String(deep_canvas::base64::encode(&bytes)),
+        );
     }
     Ok(())
 }
@@ -205,7 +231,7 @@ impl Kept {
         (opacity, adjust): (f64, &Adjust),
         (bounds, fit, scale): ([f64; 4], ImageFit, f64),
         item: &str,
-    ) -> Result<(Arc<Pixmap>, [u32; 2], [f64; 4]), Value> {
+    ) -> Result<Drawn, Value> {
         let store = self.store(store);
         let ask = ask(&store, asset, (crop, tile), (bounds, fit), scale, item)?;
         self.levels.insert(item.to_string(), ask.key.level);

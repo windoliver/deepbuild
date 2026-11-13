@@ -1,4 +1,4 @@
-//! sandbox@1's engine in the app (#238): wasmtime =49.0.2 runs the bytes the sandbox module
+//! sandbox@1's engine in the app (#238): wasmtime =49.0.5 runs the bytes the sandbox module
 //! rewrote. Before each call the runner sets the rewrite's counters (fuel, stack in use, the stack's
 //! cap, the trap code); after a trap it reads the code the rewrite left, or maps the engine's own
 //! trap to its kind, and names the function and the offset in the program as written, through the
@@ -15,7 +15,7 @@ use deep_canvas_sandbox::trap::{raised, Trap};
 use wasmtime::{Config, Engine, Instance, Module, Store, Val, WasmBacktrace};
 
 /// The wasmtime this engine links.
-pub const WASMTIME: &str = "49.0.2";
+pub const WASMTIME: &str = "49.0.5";
 
 /// The native stack each call gets, past any cap the rewrite charges against (at most 2 MiB, the
 /// most wasmtime allows), so the rewrite's `stack` trap comes first.

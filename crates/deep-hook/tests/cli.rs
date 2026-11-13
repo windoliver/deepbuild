@@ -995,3 +995,46 @@ fn a_folder_is_cloned_copy_on_write_where_the_file_system_can_and_exits_3_where_
     assert_eq!(code, Some(3), "tmpfs makes no copy-on-write copy, so clone must exit 3: {err}");
     assert!(!left, "a clone that can't be copy-on-write leaves nothing at the target");
 }
+
+#[test]
+fn the_mcp_servers_facts_name_a_tools_path_arguments_only_for_a_server_loaded_as_they_describe_it() {
+    // #1848: the facts list GitHub's remote server's file tools with no local path argument, so a repo path one names
+    // passes the spec guard while your user config loads that server as the facts match it; a server loaded under the
+    // same name with another config has each whitespace-free string read as a path. DeepBuild's own deep_propose, which
+    // the spec guard's denial points to, is never read for a path.
+    let home = fresh_home(format!("/tmp/dh1848-{}", std::process::id()).into());
+    std::fs::write(home.join(".deepbuild/rules.json"), include_str!("../default-rules.json")).unwrap();
+    let repo = home.join("w");
+    std::fs::create_dir_all(&repo).unwrap();
+    let decide = |github: &str, tool: &str, input: &str| {
+        std::fs::write(home.join(".claude.json"), format!(r#"{{"mcpServers":{{"github":{github}}}}}"#)).unwrap();
+        let mut child = Command::new(env!("CARGO_BIN_EXE_deep-hook"))
+            .args(["claude-code", "PreToolUse"])
+            .env_clear()
+            .env("HOME", &home)
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .unwrap();
+        let payload = format!(
+            r#"{{"session_id":"s1848","hook_event_name":"PreToolUse","cwd":{},"tool_name":"{tool}","tool_input":{input}}}"#,
+            json_string(&repo.to_string_lossy()),
+        );
+        feed(&mut child, payload.as_bytes());
+        let output = child.wait_with_output().unwrap();
+        (output.status.code(), String::from_utf8_lossy(&output.stderr).to_string())
+    };
+    let official = r#"{"type":"http","url":"https://api.githubcopilot.com/mcp/"}"#;
+    let other = r#"{"type":"stdio","command":"github-files"}"#;
+    let spec = r#"{"owner":"o","repo":"r","path":".deepbuild/done.yaml","content":"x","message":"m","branch":"b"}"#;
+    let (code, said) = decide(official, "mcp__github__create_or_update_file", spec);
+    assert_eq!(code, Some(0), "the facts name no local path argument for GitHub's remote server: {said}");
+    let (code, said) = decide(other, "mcp__github__create_or_update_file", spec);
+    assert_eq!(code, Some(2), "a server the facts don't describe has its strings read as paths: {said}");
+    assert!(said.contains("no-deepbuild-spec-write") && said.contains("Its argument path names it"), "{said}");
+    let propose = r#"{"target":".deepbuild/done.yaml","change":"Add a criterion.","evidence":null}"#;
+    let (code, said) = decide(official, "mcp__deepbuild__deep_propose", propose);
+    assert_eq!(code, Some(0), "deep_propose is where the denial points: {said}");
+    let _ = std::fs::remove_dir_all(&home);
+}

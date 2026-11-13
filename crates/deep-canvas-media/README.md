@@ -9,8 +9,8 @@ The media module, `media@1` (#499; design: The media module): sound and video on
 - `src/module.rs`: the module's manifest, what it registers and its kit; `src/fixtures.rs`: its fixtures.
 - `src/mix.rs`: strips, buses, sends and the block loop; `src/eq.rs`, `src/reverb.rs`, `src/dynamics.rs` (compressor and limiter) and `src/delay.rs` (delay and pitch): the processors; `src/ring.rs`: the checkpoint ring.
 - `src/emitter.rs`: an emitter's gain and pan; `src/clock.rs`: the audio clock; `src/frames.rs`: a video's frame at t; `src/doc.rs`: the fields read from a document.
-- `src/analysis/`: the analysis bakes; `src/analysis/model.rs` (#1819): the tempo, speech spans and visemes read from a model's record, which a runner job makes and this crate never runs.
-- The acceptance tests are in `tests/acceptance/499`, `tests/acceptance/1818` and `tests/acceptance/1819`. Decoding is deep-codecs', and drawing a frame is deep-marks-render's, not this crate's.
+- `src/analysis/`: the analysis bakes; `src/analysis/model.rs` (#1819): the tempo, speech spans and visemes read from a model's record, which a runner job makes and this crate never runs; `src/analysis/generated.rs` (#935): audio.gen's measures (bars, seam, stems' residual, takes' distances, a short take's level, leading silence), which deep-show's `media_gen` holds to the design's limits.
+- The acceptance tests are in `tests/acceptance/499`, `tests/acceptance/1818`, `tests/acceptance/1819` and `tests/acceptance/935`. Decoding is deep-codecs', and drawing a frame is deep-marks-render's, not this crate's.
 
 ## What it may import
 

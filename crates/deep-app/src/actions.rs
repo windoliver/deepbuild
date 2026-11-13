@@ -211,12 +211,17 @@ pub fn session_items() -> Vec<&'static str> {
         "Open",
         "Pause",
         "Write to it",
+        "Rename",
         "Later",
         "Copy title",
         "Copy link",
     ];
     if cfg!(feature = "plant-no-later") {
         items.retain(|name| *name != "Later");
+    }
+    // #2018's planted app has no way to rename a session, in a build with the env-plants feature only.
+    if crate::plain::planted("no-rename") {
+        items.retain(|name| *name != "Rename");
     }
     items
 }
@@ -475,6 +480,13 @@ pub fn run(name: &str, window: &mut Window, cx: &mut App) {
                     "Pause".into(),
                     cx,
                 );
+            }
+        }
+        // Rename (#2018): the session's page, with the caret in its title; Return there saves the name.
+        "Rename" if !crate::plain::planted("no-rename") => {
+            if let Some(session) = session_of(&selected) {
+                crate::open::open(&Address::session(&session), window, cx).ok();
+                crate::views::rename(&session, window, cx);
             }
         }
         "Later" if !cfg!(feature = "plant-no-later") => {
