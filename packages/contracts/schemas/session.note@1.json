@@ -1,0 +1,101 @@
+{
+  "title": "session.note@1",
+  "description": "Your words for a session, sent from the app (#340), in the record before the hub says it has them (#1577): a crash before they reach the agent loses nothing, and a retry of the same request ID sends nothing again. The words go to the agent once, as the user.ask that names the same request ID. Only you write one, from the app.",
+  "x-since": "R1",
+  "x-stability": "stable",
+  "x-feeds": [],
+  "type": "object",
+  "properties": {
+    "v": {
+      "const": 1,
+      "description": "The kind's schema version."
+    },
+    "id": {
+      "type": "string",
+      "format": "ulid",
+      "description": "The event's ULID, its identity."
+    },
+    "kind": {
+      "const": "session.note"
+    },
+    "writer": {
+      "const": "app",
+      "description": "Only the app appends this kind, for you."
+    },
+    "actor": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The person behind it, from the credential."
+    },
+    "scope": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Who may see it."
+    },
+    "ts": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "Milliseconds since the Unix epoch."
+    },
+    "seq": {
+      "type": "string",
+      "format": "seq",
+      "description": "Order within the session: ns since the epoch when the hook started."
+    },
+    "log_pos": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991,
+      "description": "Its position in the event log, assigned by the hub at append."
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "session": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "The session the words are for, by the ID its hooks carry."
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "Your words, scrubbed of the values the hub holds."
+        },
+        "request": {
+          "type": "string",
+          "pattern": "^[0-9A-Za-z_-]{1,64}$",
+          "description": "The request ID the app sent them with: the agent reads it beside them, and a retry with it sends nothing again.",
+          "maxLength": 8192
+        }
+      },
+      "required": [
+        "session",
+        "text",
+        "request"
+      ],
+      "additionalProperties": false
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$",
+        "description": "A SHA-256, in lower-case hex."
+      }
+    }
+  },
+  "required": [
+    "v",
+    "id",
+    "kind",
+    "writer",
+    "actor",
+    "scope",
+    "ts",
+    "data"
+  ],
+  "additionalProperties": false
+}
