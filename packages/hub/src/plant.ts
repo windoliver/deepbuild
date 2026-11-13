@@ -198,6 +198,8 @@ export type Plant =
   // #323's: open items' normalizer that drops numbers, a gate that reads only the PR body, one that counts every
   // resolved review thread as closed, and one that closes an item the agent marked completed in its task list.
   | 'normalizer-drops-numbers' | 'pr-body-only' | 'resolved-counts-closed' | 'completed-closes-item'
+  // #1633's: a gate that opens again any item raised again, whatever closed it, your waiver or acceptance too.
+  | 'reopens-every-item'
   // #669's: a command check's runner that reads a masked exit as a clean pass, a stop reply whose line says PASS with no
   // verdict behind it, and a status question sent on to the model.
   | 'runner-passes-masked-exit' | 'line-pass-without-verdict' | 'status-from-model'
@@ -327,6 +329,7 @@ const PLANTS: readonly string[] = [
   'criteria-from-github-api', 'role-from-comment-text', 'every-author-collaborator', 'app-membership-as-collaborator',
   'spec-only-judges-early-claim', 'lint-number-only', 'lock-before-any-check',
   'normalizer-drops-numbers', 'pr-body-only', 'resolved-counts-closed', 'completed-closes-item',
+  'reopens-every-item',
   'runner-passes-masked-exit', 'line-pass-without-verdict', 'status-from-model',
   'jobserver-per-build', 'refills-while-running', 'share-ignores-running-build',
   'ask-covers-every-effect', 'reads-every-from', 'defaults-match-text', 'auto-merge-unpinned', 'holds-every-program',

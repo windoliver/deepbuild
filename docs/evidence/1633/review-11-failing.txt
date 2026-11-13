@@ -1,0 +1,17 @@
+ RUN  v5.0.5 /tmp/dh1633v2
+ ❯ packages/hub/test/reopened-items.test.ts (12 tests | 1 failed | 11 skipped) 77254ms
+   ❯ #1633 review rounds: a reopened review note and its ask (12)
+     × a note reopened while its resolver can't be told apart, then held by the session's own account, gets its new accept ask once the thread is unresolved 77154ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  packages/hub/test/reopened-items.test.ts > #1633 review rounds: a reopened review note and its ask > a note reopened while its resolver can't be told apart, then held by the session's own account, gets its new accept ask once the thread is unresolved
+AssertionError: it opened again, none is open for T and you never answered one, so its note gets one new accept ask, as when the account is known throughout: expected +0 to be 1 // Object.is equality
+- Expected
++ Received
+- 1
++ 0
+ ❯ packages/hub/test/reopened-items.test.ts:245:198
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+ Test Files  1 failed (1)
+      Tests  1 failed | 11 skipped (12)
+   Start at  21:37:49
+   Duration  77.38s (tests 100%)
