@@ -1043,12 +1043,12 @@ pub(crate) fn local_of(pos: Vec3, rot: Vec3, sc: Vec3, extra_scale: Vec3) -> Aff
 /// items carry their own transforms (`Program::evaluate_local`): motion's child-of parenting
 /// turns a child only about z, and composed here again it would add the parent twice.
 fn world(items: &Items<'_>, id: &str) -> Affine3 {
-    world_at(items, id, None)
+    world_moved(items, id, None)
 }
 
 /// [`world`], with the item's own position `pos` in place of its own where one is given (#226: a
 /// point a module's deform placed).
-pub(crate) fn world_at(items: &Items<'_>, id: &str, pos: Option<Vec3>) -> Affine3 {
+pub(crate) fn world_moved(items: &Items<'_>, id: &str, pos: Option<Vec3>) -> Affine3 {
     let Some((item, mut m)) = items.placed(id) else {
         return [
             [1.0, 0.0, 0.0, 0.0],
@@ -3562,7 +3562,7 @@ pub(crate) fn evaluate_compiled(
                 "mark.point@1" => {
                     let at = crate::contributed::place(&ask, &items, id, item)?;
                     let point =
-                        crate::cloud::point(id, params, &path, world_at(&items, id, at), look)?;
+                        crate::cloud::point(id, params, &path, world_moved(&items, id, at), look)?;
                     // A set from a depth video bounds its frustum, never its points (#503).
                     match &point.cloud {
                         Some(c) => bounds.extend(c.corners()),

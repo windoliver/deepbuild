@@ -328,7 +328,7 @@ pub(crate) fn drawn(
             format!("items/{id}/{}", r.path)
         },
     })?;
-    let world = crate::scene::world_at(items, id, None);
+    let world = crate::scene::world_moved(items, id, None);
     for mark in marks.into_iter().filter(|m| m.opacity > 0.0) {
         let sub = format!("{id}#{}", mark.sub);
         match mark.kind {
