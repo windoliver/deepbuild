@@ -258,7 +258,7 @@ const PIECES_KEPT: usize = 8;
 
 thread_local! {
     /// Checked pieces by the hash of the logic they hold: what each step reads, checked once.
-    static PIECES: RefCell<BTreeMap<String, Rc<Piece>>> = RefCell::new(BTreeMap::new());
+    static PIECES: RefCell<BTreeMap<String, Rc<Piece>>> = const { RefCell::new(BTreeMap::new()) };
 }
 
 /// The piece a document's logic items make, checked by the logic module (`piece::check`).
