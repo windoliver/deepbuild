@@ -286,3 +286,31 @@ impl Gpu3 {
         )
     }
 }
+
+/// #226: each point `doc` draws at `t`, by its item, in world metres: after its modifiers (the
+/// build's module deforms among them) and its parents' transforms.
+pub fn points_at(
+    doc: &Value,
+    t: i64,
+    palette: &Palette,
+    sealed: &deep_canvas::registry::Sealed,
+    planted: Option<&str>,
+) -> Result<std::collections::BTreeMap<String, [f64; 3]>, Unfit> {
+    let mut doc = doc.clone();
+    if doc.get("size").is_none() {
+        doc["size"] = json!([640, 360]);
+    }
+    let look = Look3::from_roles(palette.clone());
+    let fills = Fills::of(sealed, planted);
+    let scene =
+        evaluate_any(&doc, t, &look, &mut Labels::new(), None, fills).map_err(|r| Unfit {
+            code: r.code,
+            path: r.path,
+        })?;
+    Ok(scene
+        .layers
+        .iter()
+        .flat_map(|l| &l.points)
+        .map(|p| (p.id.clone(), p.pos))
+        .collect())
+}
