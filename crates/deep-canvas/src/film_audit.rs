@@ -446,7 +446,7 @@ mod tests {
     fn square(frames: usize, period: usize, region: &dyn Fn(usize, bool) -> f32) -> Vec<Vec<f32>> {
         (0..frames)
             .map(|k| {
-                let high = (k / (period / 2)) % 2 == 0;
+                let high = (k / (period / 2)).is_multiple_of(2);
                 (0..100).map(|i| region(i, high)).collect()
             })
             .collect()

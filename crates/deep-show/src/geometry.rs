@@ -30,6 +30,19 @@ pub struct Geometry {
     pub blocks: Option<usize>,
     /// How many corners each face of the builder's mesh is turned by before the stack (#440).
     pub rotate: usize,
+    /// Each item built afresh, with its steps' CPU times in milliseconds (#2017).
+    pub timings: bool,
+}
+
+/// Milliseconds on a monotonic clock since its first reading in this process: what `timings`
+/// read around each step (#2017).
+fn now_ms() -> f64 {
+    static EPOCH: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+    EPOCH
+        .get_or_init(std::time::Instant::now)
+        .elapsed()
+        .as_secs_f64()
+        * 1e3
 }
 
 pub fn parse(c: &Map<String, Value>) -> Option<Geometry> {
@@ -67,10 +80,15 @@ pub fn parse(c: &Map<String, Value>) -> Option<Geometry> {
         None => 0,
         Some(v) => v.as_u64()? as usize,
     };
+    let timings = match c.get("timings") {
+        None => false,
+        Some(v) => v.as_bool()?,
+    };
     Some(Geometry {
         at,
         blocks,
         rotate,
+        timings,
         doc: c.get("doc")?.as_str()?.to_string(),
         items,
         t: crate::time::eval_time(c.get("t"))?,
@@ -90,10 +108,23 @@ fn has_geometry(kind: &str) -> bool {
 const ASSET: &str = "mesh.asset@1";
 
 /// A `curve@1` row (#441): its length and closure, and at each u of `at` its point, frame and
-/// d²P/du².
-fn curve_row(id: &str, key: &str, item: &Value, at: &[f64], planted: Option<&str>) -> Value {
+/// d²P/du²; with `timings`, how long its arc-length table took (#2017).
+fn curve_row(
+    id: &str,
+    key: &str,
+    item: &Value,
+    at: &[f64],
+    planted: Option<&str>,
+    timings: bool,
+) -> Value {
+    use deep_canvas_scene3d::curve::Curve;
     let params = item.get("params").cloned().unwrap_or(json!({}));
-    let mut c = match deep_canvas_scene3d::curve::Curve::new(&params) {
+    let made = if timings {
+        Curve::timed(&params, now_ms).map(|(c, ms)| (c, Some(ms)))
+    } else {
+        Curve::new(&params).map(|c| (c, None))
+    };
+    let (mut c, arc_length_ms) = match made {
         Ok(c) => c,
         Err(path) => return json!({"code": "out_of_range", "path": format!("items/{id}/{path}")}),
     };
@@ -108,8 +139,12 @@ fn curve_row(id: &str, key: &str, item: &Value, at: &[f64], planted: Option<&str
                    "binormal": f.binormal(), "accel": c.accel(*u)})
         })
         .collect();
-    json!({"id": id, "kind": "curve@1", "key": key,
-           "outputs": {"length": c.length, "closure": c.closure.to_degrees()}, "at": rows})
+    let mut row = json!({"id": id, "kind": "curve@1", "key": key,
+           "outputs": {"length": c.length, "closure": c.closure.to_degrees()}, "at": rows});
+    if let Some(ms) = arc_length_ms {
+        row["arc_length_ms"] = json!(ms);
+    }
+    row
 }
 
 /// A `mesh.asset@1`'s mesh, its glTF read from the evidence store by sha256; or the refusal.
@@ -218,6 +253,7 @@ impl Hub<'_> {
                     blocks: g.blocks,
                     rotate: g.rotate,
                     outlines: outlines.clone(),
+                    clock: None,
                 };
                 let ctx = Ctx {
                     id: id.as_str(),
@@ -278,10 +314,7 @@ impl Hub<'_> {
                     .and_then(|n| n.values.first())
                     .and_then(Val::as_typed::<Built>)
                     .and_then(|b| b.mesh.clone());
-                let (Some(mesh), Some(kind)) = (
-                    mesh,
-                    EdgeKind::read(edges).ok(),
-                ) else {
+                let (Some(mesh), Some(kind)) = (mesh, EdgeKind::read(edges).ok()) else {
                     return json!({"code": "ref_unresolved", "path": format!("items/{id}/params/edges/of")});
                 };
                 let place = placement(items.get(target).unwrap_or(&Value::Null));
@@ -295,10 +328,14 @@ impl Hub<'_> {
             }
             // #2013: an instancer's row is its elements as its scatter (or its written columns)
             // feeds them, each point in world metres.
-            if items
+            if let Some(item) = items
                 .get(id)
-                .is_some_and(|i| i.get("kind").and_then(Value::as_str) == Some("instance@1"))
+                .filter(|i| i.get("kind").and_then(Value::as_str) == Some("instance@1"))
             {
+                // #2017: a scatter is laid out afresh on every call; with `timings`, the time
+                // from its document to the elements this row lists.
+                let started =
+                    (g.timings && item.pointer("/params/from/distribute").is_some()).then(now_ms);
                 let rows = match deep_canvas_scene3d::scene::elements_at(
                     &doc,
                     t,
@@ -308,6 +345,7 @@ impl Hub<'_> {
                     Ok(rows) => rows.unwrap_or_default(),
                     Err(r) => return json!({"code": r.code, "path": r.path}),
                 };
+                let distribute_ms = started.map(|s| now_ms() - s);
                 let world = worlds.get(id.as_str());
                 let elements: Vec<Value> = rows
                     .iter()
@@ -322,9 +360,12 @@ impl Hub<'_> {
                         e
                     })
                     .collect();
-                out.push(
-                    json!({"id": id, "kind": "instance@1", "elements": elements, "world": world}),
-                );
+                let mut row =
+                    json!({"id": id, "kind": "instance@1", "elements": elements, "world": world});
+                if let Some(ms) = distribute_ms {
+                    row["distribute_ms"] = json!(ms);
+                }
+                out.push(row);
                 continue;
             }
             let Some(node) = nodes.iter().find(|n| {
@@ -336,15 +377,16 @@ impl Hub<'_> {
                 .get(id)
                 .filter(|i| i.get("kind").and_then(Value::as_str) == Some("curve@1"))
             {
-                let row = curve_row(id, &node.key, item, &g.at, planted.as_deref());
+                let row = curve_row(id, &node.key, item, &g.at, planted.as_deref(), g.timings);
                 if row.get("code").is_some() {
                     return row;
                 }
                 out.push(row);
                 continue;
             }
-            // Asked for another block count or turned corners: built again so.
-            let rebuilt = (g.blocks.is_some() || g.rotate > 0)
+            // Asked for another block count or turned corners: built again so; with timings,
+            // built afresh with each step timed (#2017).
+            let rebuilt = (g.blocks.is_some() || g.rotate > 0 || g.timings)
                 .then(|| items.get(id))
                 .flatten()
                 .filter(|i| {
@@ -356,6 +398,7 @@ impl Hub<'_> {
                         blocks: g.blocks,
                         rotate: g.rotate,
                         outlines: outlines.clone(),
+                        clock: g.timings.then_some(now_ms as fn() -> f64),
                     };
                     let seconds = t as f64 / deep_canvas::camera::FLICKS_PER_SECOND as f64;
                     deep_canvas_scene3d::build::built(&doc, id, i, &run, seconds)
@@ -395,9 +438,16 @@ impl Hub<'_> {
             } else {
                 b.mesh.as_ref()
             };
-            let declared = if g.built
-                && spec_of(&b.kind).is_some_and(|_| builders::KINDS.contains(&b.kind.as_str()))
-            {
+            // A built row counts the builder's mesh: its vertices, and its welded points, edges
+            // and faces (#2017).
+            let builder = g.built
+                && spec_of(&b.kind).is_some_and(|_| builders::KINDS.contains(&b.kind.as_str()));
+            let welded = if builder {
+                b.built.as_ref().map(stack::welded)
+            } else {
+                b.welded
+            };
+            let declared = if builder {
                 let params = items
                     .get(id)
                     .and_then(|i| i.get("params"))
@@ -419,9 +469,15 @@ impl Hub<'_> {
             } else {
                 b.declared
             };
-            let mut row = json!({"id": id, "kind": b.kind, "declared": declared_json(declared, b.welded), "key": node.key,
+            let mut row = json!({"id": id, "kind": b.kind, "declared": declared_json(declared, welded), "key": node.key,
                                  "blocks": b.blocks,
-                                 "stack": b.rows.iter().map(stack::Row::to_json).collect::<Vec<_>>()});
+                                 "stack": b.rows.iter().map(|r| {
+                                     let mut step = r.to_json();
+                                     if let Some(ms) = r.ms {
+                                         step["ms"] = json!(ms);
+                                     }
+                                     step
+                                 }).collect::<Vec<_>>()});
             if let Some(m) = mesh {
                 if let (Value::Object(r), Value::Object(mut mj)) = (&mut row, m.to_json()) {
                     // A sweep's or a tube's rings stand on the row itself (#441).

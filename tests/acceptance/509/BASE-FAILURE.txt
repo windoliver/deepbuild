@@ -1,0 +1,25 @@
+Base: 0e377fbd7 (design only on top of 3b68c0f87). Not run there: the surfaces these tests drive don't exist at the
+base, read from its code (README: What was read). Every file loads there (vitest collects all 21 tests with no test
+selected) and type-checks: `node node_modules/typescript/bin/tsc -p tests/acceptance/509/tsconfig.json` exits 0.
+
+Expected at the base, each at an assertion, never at an import:
+
+- cut, names (Latin name), asks, recording (first test), tools (both), cost: `withPlugin` fails "the first-party plug-in
+  deepbuild/speech is at packages/jobs/speech (README: The surface): no deepbuild.json there" (recording.test.ts first
+  installs deepbuild/bakes, which exists, then fails there on deepbuild/speech).
+- blocked.test.ts, first test: the verdict holds no row with from: {default: "narration.transcript@1"} ("it holds 0").
+  Second test: no narration.polyphonic is raised (the base's script doesn't know `say` or a line's `locale`).
+- names.test.ts (Chinese), normalizer.test.ts: deep-show run has no `media_heard` call, so the scenario isn't answered ok.
+- say.test.ts: the base's script doesn't know `say` or `names`; the clean line isn't resolved or no say_not_text is raised.
+- mix.test.ts, speech ratio: no row with from: {default: "mix.speech_ratio"}. The silences leg may pass at the base:
+  #409's silences already renders the mix, reverb tail included (README: What isn't settled).
+- recording.test.ts, licence: may pass at the base (#502 and #157 BLOCK an export whose recording's asset licence isn't
+  shareable).
+- after.test.ts: the film with `after: intro` and no `t` isn't presented.
+- overlap.test.ts: no narration.overlap is raised (b presents and resolves); the 3 s section's export is delivered, not
+  FAILed with narration.fit.
+- budgets.test.ts: benchmarks/budgets.json has no task naming #509.39975b5a; the timed leg is INCONCLUSIVE off a reference
+  Mac (on one, withPlugin fails as above); the export's receipt has no `bakes`.
+
+Expected at the base: 21 tests; 19 to 21 failed for the missing surfaces (the licence and silences legs may pass), the
+timed leg among them as INCONCLUSIVE off a reference Mac.

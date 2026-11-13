@@ -294,7 +294,11 @@ pub fn tiles(
     let col = |name: &str| format!("{path}/columns/{name}");
     let mut out = Vec::new();
     for (i, key) in rows.keys.iter().enumerate() {
-        if rows.hidden.contains(&i) {
+        // #539: a row at opacity 0 (its common `opacity` column, as a fog array writes it)
+        // doesn't draw, as a hidden one doesn't.
+        let opacity =
+            column("opacity").and_then(|c| c.number(i)).unwrap_or(1.0) * rows.opacity_of(i);
+        if rows.hidden.contains(&i) || opacity <= 0.0 {
             continue;
         }
         let at = |name: &str, whole: bool| -> Result<f64, Refused> {

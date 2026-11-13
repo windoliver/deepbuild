@@ -190,7 +190,7 @@ impl Config {
     fn level(&self) -> Option<Level> {
         match self.simd {
             Simd::Scalar => Some(settings().level),
-            Simd::Neon => Level::new().as_neon().map(Level::Neon),
+            Simd::Neon => crate::neon::level(),
             Simd::Detected => Some(Level::new()),
         }
     }
@@ -1335,9 +1335,16 @@ fn fit_paint(frame: &scene::Frame, texts: &mut Map<String, Value>) -> Result<(),
             l.get(3)?.as_f64()?,
         ])
     };
-    let marks: Vec<&Drawn> = frame.layers.iter().flat_map(|l| l.marks.iter().map(|m| &**m)).collect();
+    let marks: Vec<&Drawn> = frame
+        .layers
+        .iter()
+        .flat_map(|l| l.marks.iter().map(|m| &**m))
+        .collect();
     for drawn in &marks {
-        let Mark::Text { item, spec, origin, .. } = &drawn.mark else {
+        let Mark::Text {
+            item, spec, origin, ..
+        } = &drawn.mark
+        else {
             continue;
         };
         if item.contains('#') {
@@ -1352,7 +1359,9 @@ fn fit_paint(frame: &scene::Frame, texts: &mut Map<String, Value>) -> Result<(),
             }
             // The copy's glyphs in the text's own frame: moved by where the copy sits from it.
             let at = marks.iter().find_map(|d| match &d.mark {
-                Mark::Text { item: i, origin: o, .. } if *i == format!("{item}#drop") => Some(*o),
+                Mark::Text {
+                    item: i, origin: o, ..
+                } if *i == format!("{item}#drop") => Some(*o),
                 _ => None,
             });
             if let (Some(o), Some(list)) = (at, copy["glyphs"].as_array_mut()) {
@@ -1374,12 +1383,18 @@ fn fit_paint(frame: &scene::Frame, texts: &mut Map<String, Value>) -> Result<(),
                 continue;
             }
             for s in &d.scopes {
-                if let Scope::Opacity { item: part_id, effect: Some(e), .. } = s {
+                if let Scope::Opacity {
+                    item: part_id,
+                    effect: Some(e),
+                    ..
+                } = s
+                {
                     if let (Some(part), true) = (&e.paint, seen.insert(part_id.clone())) {
                         let [l, t, r, b] = part.reach();
                         let own = texts[item]["bounds"].clone();
                         if let Some(o) = four(&own) {
-                            bounds = union(bounds, [o[0] - l, o[1] - t, o[2] + l + r, o[3] + t + b]);
+                            bounds =
+                                union(bounds, [o[0] - l, o[1] - t, o[2] + l + r, o[3] + t + b]);
                         }
                     }
                 }

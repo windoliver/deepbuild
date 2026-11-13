@@ -870,7 +870,20 @@ fn apply_op(
     };
     check_op_fields(j, fields, name)?;
     match name {
-        "create" => create(doc, writing.layer, j, op, done),
+        "create" => {
+            // A pack missing here or retired takes no new instance (#1958).
+            let item = member(op, "item");
+            let kind = item.and_then(kind_text).unwrap_or_default();
+            if let Some(gone) = packs::retired::no_new_instance(kind, resolved, writing.packs) {
+                let id = item.and_then(|i| member(i, "id")).and_then(Value::as_str);
+                return Err(Box::new(packs::retired::refusal(
+                    id.unwrap_or_default(),
+                    kind,
+                    gone,
+                )));
+            }
+            create(doc, writing.layer, j, op, done)
+        }
         "set" => set(doc, writing, j, op, done),
         "unset" => unset(doc, writing, j, op, done),
         "move" => move_to(doc, writing, j, op, done),
@@ -1069,7 +1082,13 @@ fn set_pin(
     Ok(())
 }
 
-fn set_strip(doc: &mut Value, id: &str, rest: &str, value: Value, op: &Value) -> Result<(), Refused> {
+fn set_strip(
+    doc: &mut Value,
+    id: &str,
+    rest: &str,
+    value: Value,
+    op: &Value,
+) -> Result<(), Refused> {
     let mut steps = rest.split('/');
     if steps.next() != Some(id) {
         return Err(Box::new(Issue::error(
@@ -1091,7 +1110,9 @@ fn set_strip(doc: &mut Value, id: &str, rest: &str, value: Value, op: &Value) ->
         let Value::Object(m) = at else {
             return Err(unresolved(id, op));
         };
-        at = m.entry((*step).to_string()).or_insert_with(|| Value::Object(Map::new()));
+        at = m
+            .entry((*step).to_string())
+            .or_insert_with(|| Value::Object(Map::new()));
     }
     let Value::Object(m) = at else {
         return Err(unresolved(id, op));

@@ -13,11 +13,11 @@ import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { gitEnv } from '@deepbuild/gate';
-import { repoOf, type AppKey } from '@deepbuild/github';
+import type { AppKey } from './forge-port.js';
 import type { Plant } from './plant.js';
+import { isRecord as isObj } from '@deepbuild/contracts';
 
 type Obj = Record<string, unknown>;
-const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 const letters = (s: string): string => s.replace(/[^0-9A-Za-z]/g, '');
 const SHA = /^[0-9a-f]{40}$/;
 /** The status context the gate's verdict goes under (#46), and the one the default branch requires (#1325). */
@@ -50,6 +50,7 @@ export interface Round {
 
 export interface LandingOptions {
   root: string;
+  repoOf(remote: string): string | undefined;
   /** The forge's REST root, and the token its reads and merges go with. */
   api: string;
   token(): Promise<string | undefined>;
@@ -153,7 +154,7 @@ export class Landing {
 
   private async repoOf(checkout: string): Promise<string> {
     const origin = await must(checkout, ['remote', 'get-url', 'origin']);
-    const repo = repoOf(origin.replace(/^https?:\/\/[^/]+\/(?=github\.com\/)/, 'https://'));
+    const repo = this.o.repoOf(origin.replace(/^https?:\/\/[^/]+\/(?=github\.com\/)/, 'https://'));
     if (!repo) throw Error(`${checkout}'s origin (${origin}) names no forge repository`);
     return repo;
   }
@@ -179,10 +180,18 @@ export class Landing {
     const repo = await this.repoOf(checkout);
     return this.inTurn(repo, () => this.judgeIn(checkout, repo));
   }
-  private async judgeIn(checkout: string, repo: string): Promise<Round> {
+  /** A work run's turn (#1332): only the pull requests that link its issues judged, then one round of landings. */
+  async work(checkout: string, issues: number[]): Promise<Round> {
+    const repo = await this.repoOf(checkout);
+    const judged = await this.inTurn(repo, () => this.judgeIn(checkout, repo, issues));
+    const round = await this.land(checkout);
+    const seen = (pr: number): boolean => round.landed.some((l) => l.pr === pr) || round.held.some((h) => h.pr === pr);
+    return { ...round, held: [...round.held, ...judged.held.filter((h) => !seen(h.pr))], sent_back: [...judged.sent_back, ...round.sent_back] };
+  }
+  private async judgeIn(checkout: string, repo: string, issues?: number[]): Promise<Round> {
     const s = this.load(repo);
     const round: Round = { landed: [], held: [], sent_back: [], stopped: mainWatch(await topOf(checkout)) };
-    const pulls = (await this.pulls(repo)).filter((p) => p.issue !== undefined);
+    const pulls = (await this.pulls(repo)).filter((p) => p.issue !== undefined && (!issues || issues.includes(p.issue)));
     await this.fetch(checkout, pulls.map((p) => p.branch));
     const main = await must(checkout, ['rev-parse', 'refs/remotes/origin/main']);
     for (const p of pulls) {
@@ -292,16 +301,28 @@ export class Landing {
     // The gate's own identity lands what it passed, once your settings name it; until then your login (#1325). The planted
     // wrong program merges with your login though the gate's app is named.
     const gate = this.o.gateApp() && this.o.plant !== 'lands-as-person' ? await this.o.landingToken(s.repo) : undefined;
+    const open = judged.requirements.filter((q) => q.outcome !== 'PASS' && q.settled_by === 'budget-window').map((q) => q.text);
+    // A change the budget window still settles part of leaves its issue open (#1332): its PR's closing words become
+    // `Part of` before the merge, and an issue the forge closed at the merge anyway is opened again.
+    if (open.length) {
+      const pr = await this.call('GET', `/repos/${s.repo}/pulls/${c.pr}`);
+      const body = isObj(pr.body) && typeof pr.body.body === 'string' ? pr.body.body : '';
+      const kept = body.replace(new RegExp(`\\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?):?(\\s+#${c.issue}\\b)`, 'gi'), 'Part of$1');
+      if (kept !== body) await this.call('PATCH', `/repos/${s.repo}/pulls/${c.pr}`, { body: kept }, gate);
+    }
     const merged = await this.call('PUT', `/repos/${s.repo}/pulls/${c.pr}/merge`, { sha: head, merge_method: 'merge' }, gate);
     if (merged.status !== 200) return undefined;
+    if (open.length) await this.call('PATCH', `/repos/${s.repo}/issues/${c.issue}`, { state: 'open' }, gate);
     const said = isObj(merged.body) && typeof merged.body.sha === 'string' ? merged.body.sha : '';
+    // Landed as the forge merged it, recorded at once (#1332): the forge may close the issue at the merge, and the
+    // record holds the landing as soon as it does. The read-back below stops landings if main holds another tree.
+    const took = SHA.test(said) ? said : null;
+    await this.step('landed', s.repo, c, { head, main: took, commit: took, tree: null, claim: judged.claim, outcome: judged.outcome, open });
+    delete s.changes[c.pr];
     await this.fetch(checkout, []);
     const main = await must(checkout, ['rev-parse', 'refs/remotes/origin/main']);
     // The planted wrong program takes the forge's merged state for the landed tree, with no read-back.
     const read = this.o.plant === 'trusts-forge-merged' ? judged.tree : await must(checkout, ['rev-parse', `${main}^{tree}`]);
-    const open = judged.requirements.filter((q) => q.outcome !== 'PASS' && q.settled_by === 'budget-window').map((q) => q.text);
-    await this.step('landed', s.repo, c, { head, main, commit: main, tree: read, claim: judged.claim, outcome: judged.outcome, open });
-    delete s.changes[c.pr];
     if (read !== judged.tree) {
       const files = (await must(checkout, ['diff', '--name-only', judged.tree, read])).split('\n').filter(Boolean);
       this.save(s);

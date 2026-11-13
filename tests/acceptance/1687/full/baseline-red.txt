@@ -1,0 +1,329 @@
+✖ AC2 #1687.f156a5ac Core is local composition; every method body, including constructor, is <=100 source lines (410.859ms)
+✔ AC2 structural oracle rejects oversized constructors/fields, inheritance, relocation and whole-Core mixins (1.991334ms)
+✖ AC1/AC2 transcript/backfill: old owner retains no policy body at the named source surface (195.478042ms)
+✖ AC1/AC2 delivery: old owner retains no policy body at the named source surface (87.958625ms)
+✖ AC1/AC2 stop hold/judging: old owner retains no policy body at the named source surface (126.471208ms)
+✖ AC1/AC2 MCP: old owner retains no policy body at the named source surface (86.036083ms)
+✖ AC1/AC2 Host sources: old owner retains no policy body at the named source surface (67.714542ms)
+✖ AC1/AC2 Host schedules: old owner retains no policy body at the named source surface (62.192333ms)
+✖ AC1/AC2 Host sends: old owner retains no policy body at the named source surface (85.321084ms)
+✖ AC1/AC2 Host jobs: old owner retains no policy body at the named source surface (38.4045ms)
+✖ AC1/AC2 asks gate/show/keys: old owner retains no policy body at the named source surface (28.44925ms)
+✔ AC3 #1687.2e07fefc recursive module graph introduces no cycle edge beyond the base (1456.997792ms)
+✖ AC3 #1687.2e07fefc Core and its reachable implementation modules do not import concrete extensions (1138.423333ms)
+✔ AC3 recursive cycle oracle rejects a three-hop cycle and a chord added to a base cycle (1.031417ms)
+ℹ tests 14
+ℹ suites 0
+ℹ pass 3
+ℹ fail 11
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 4241.935209
+
+✖ failing tests:
+
+test at tests/acceptance/1687/full/structure.test.mjs:37:1
+✖ AC2 #1687.f156a5ac Core is local composition; every method body, including constructor, is <=100 source lines (410.859ms)
+  AssertionError [ERR_ASSERTION]: Core retains oversized methods or evades composition
+  + actual - expected
+  
+  + [
+  +   'constructor:747: 190 body source lines > 100',
+  +   'init:943: 344 body source lines > 100',
+  +   'handleHook:1592: 296 body source lines > 100',
+  +   'buildReply:4518: 269 body source lines > 100',
+  +   'dispatch:5779: 168 body source lines > 100'
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (file://<repo>/tests/acceptance/1687/full/structure.test.mjs:38:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ 'constructor:747: 190 body source lines > 100', 'init:943: 344 body source lines > 100', 'handleHook:1592: 296 body source lines > 100', 'buildReply:4518: 269 body source lines > 100', 'dispatch:5779: 168 body source lines > 100' ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1687/full/structure.test.mjs:84:4
+✖ AC1/AC2 transcript/backfill: old owner retains no policy body at the named source surface (195.478042ms)
+  AssertionError [ERR_ASSERTION]: packages/hub/src/core.ts: move these bodies behind seams (forwarders allowed)
+  + actual - expected
+  
+  + [
+  +   'backfill',
+  +   'readTranscript'
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (file://<repo>/tests/acceptance/1687/full/structure.test.mjs:85:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ 'backfill', 'readTranscript' ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1687/full/structure.test.mjs:84:4
+✖ AC1/AC2 delivery: old owner retains no policy body at the named source surface (87.958625ms)
+  AssertionError [ERR_ASSERTION]: packages/hub/src/core.ts: move these bodies behind seams (forwarders allowed)
+  + actual - expected
+  
+  + [
+  +   'deliver',
+  +   'resent',
+  +   'unwoken',
+  +   'deliveryHeld'
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (file://<repo>/tests/acceptance/1687/full/structure.test.mjs:85:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ 'deliver', 'resent', 'unwoken', 'deliveryHeld' ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1687/full/structure.test.mjs:84:4
+✖ AC1/AC2 stop hold/judging: old owner retains no policy body at the named source surface (126.471208ms)
+  AssertionError [ERR_ASSERTION]: packages/hub/src/core.ts: move these bodies behind seams (forwarders allowed)
+  + actual - expected
+  
+  + [
+  +   'judged',
+  +   'stopHold',
+  +   'judging',
+  +   'judgeEnded'
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (file://<repo>/tests/acceptance/1687/full/structure.test.mjs:85:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ 'judged', 'stopHold', 'judging', 'judgeEnded' ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1687/full/structure.test.mjs:84:4
+✖ AC1/AC2 MCP: old owner retains no policy body at the named source surface (86.036083ms)
+  AssertionError [ERR_ASSERTION]: packages/hub/src/core.ts: move these bodies behind seams (forwarders allowed)
+  + actual - expected
+  
+  + [
+  +   'mcpCall',
+  +   'bind'
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (file://<repo>/tests/acceptance/1687/full/structure.test.mjs:85:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ 'mcpCall', 'bind' ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1687/full/structure.test.mjs:84:4
+✖ AC1/AC2 Host sources: old owner retains no policy body at the named source surface (67.714542ms)
+  AssertionError [ERR_ASSERTION]: packages/extension-host/src/host.ts: move these bodies behind seams (forwarders allowed)
+  + actual - expected
+  
+  + [
+  +   'readSource',
+  +   'readPolled',
+  +   'readStream',
+  +   'shownTick'
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (file://<repo>/tests/acceptance/1687/full/structure.test.mjs:85:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ 'readSource', 'readPolled', 'readStream', 'shownTick' ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1687/full/structure.test.mjs:84:4
+✖ AC1/AC2 Host schedules: old owner retains no policy body at the named source surface (62.192333ms)
+  AssertionError [ERR_ASSERTION]: packages/extension-host/src/host.ts: move these bodies behind seams (forwarders allowed)
+  + actual - expected
+  
+  + [
+  +   'runs',
+  +   'schedules',
+  +   'dispatchRun'
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (file://<repo>/tests/acceptance/1687/full/structure.test.mjs:85:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ 'runs', 'schedules', 'dispatchRun' ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1687/full/structure.test.mjs:84:4
+✖ AC1/AC2 Host sends: old owner retains no policy body at the named source surface (85.321084ms)
+  AssertionError [ERR_ASSERTION]: packages/extension-host/src/host.ts: move these bodies behind seams (forwarders allowed)
+  + actual - expected
+  
+  + [
+  +   'setSendRule'
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (file://<repo>/tests/acceptance/1687/full/structure.test.mjs:85:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ 'setSendRule' ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1687/full/structure.test.mjs:84:4
+✖ AC1/AC2 Host jobs: old owner retains no policy body at the named source surface (38.4045ms)
+  AssertionError [ERR_ASSERTION]: packages/extension-host/src/host.ts: move these bodies behind seams (forwarders allowed)
+  + actual - expected
+  
+  + [
+  +   'runJob',
+  +   'reach',
+  +   'answerOf'
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (file://<repo>/tests/acceptance/1687/full/structure.test.mjs:85:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ 'runJob', 'reach', 'answerOf' ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1687/full/structure.test.mjs:84:4
+✖ AC1/AC2 asks gate/show/keys: old owner retains no policy body at the named source surface (28.44925ms)
+  AssertionError [ERR_ASSERTION]: packages/asks/src/index.ts: move these bodies behind seams (forwarders allowed)
+  + actual - expected
+  
+  + [
+  +   'showNow',
+  +   'show',
+  +   'uncovered',
+  +   'subjectKey',
+  +   'foldKey',
+  +   'requestKey',
+  +   'blockKey'
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (file://<repo>/tests/acceptance/1687/full/structure.test.mjs:85:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ 'showNow', 'show', 'uncovered', 'subjectKey', 'foldKey', 'requestKey', 'blockKey' ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1687/full/structure.test.mjs:142:1
+✖ AC3 #1687.2e07fefc Core and its reachable implementation modules do not import concrete extensions (1138.423333ms)
+  AssertionError [ERR_ASSERTION]: inject extension capabilities at the composition boundary, not into core dependencies
+  + actual - expected
+  
+  + [
+  +   'packages/hub/src/core.ts -> packages/resolver-decisions/src/index.ts',
+  +   'packages/hub/src/core.ts -> packages/env-local/src/index.ts',
+  +   'packages/hub/src/acceptance.ts -> packages/checks-command/src/index.ts',
+  +   'packages/hub/src/runs.ts -> packages/checks-command/src/index.ts',
+  +   'packages/hub/src/kinds.ts -> packages/checks-command/src/index.ts',
+  +   'packages/hub/src/kinds.ts -> packages/checks-numbers/src/index.ts',
+  +   'packages/hub/src/kinds.ts -> packages/checks-review/src/index.ts',
+  +   'packages/hub/src/kinds.ts -> packages/checks-work/src/index.ts'
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (file://<repo>/tests/acceptance/1687/full/structure.test.mjs:153:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ 'packages/hub/src/core.ts -> packages/resolver-decisions/src/index.ts', 'packages/hub/src/core.ts -> packages/env-local/src/index.ts', 'packages/hub/src/acceptance.ts -> packages/checks-command/src/index.ts', 'packages/hub/src/runs.ts -> packages/checks-command/src/index.ts', 'packages/hub/src/kinds.ts -> packages/checks-command/src/index.ts', 'packages/hub/src/kinds.ts -> packages/checks-numbers/src/index.ts', 'packages/hub/src/kinds.ts -> packages/checks-review/src/index.ts', 'packages/hub/src/kinds.ts -> packages/checks-work/src/index.ts' ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }

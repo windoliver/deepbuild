@@ -21,13 +21,64 @@ use crate::bake::{self, Range};
 use crate::piece::{h64, step_seed, Item, Piece, Read, Ty, PAGE, PER_STEP};
 use crate::Planted;
 
+/// An entry's value: a number, or the row a pick wrote (Control: picks on rows and grid focus):
+/// its set's index in `rows` and its key, an integer key column's value and 0, a grid's
+/// `(cx, cy)` or a fed instancer's `(slot, gen)`.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Given {
+    Number(f64),
+    Pick { set: u32, key: [i64; 2] },
+}
+
+impl From<f64> for Given {
+    fn from(n: f64) -> Given {
+        Given::Number(n)
+    }
+}
+
+impl Given {
+    fn parse(v: &Value) -> Option<Given> {
+        if let Some(n) = v.as_f64() {
+            return Some(Given::Number(n));
+        }
+        let set = v.get("set")?.as_u64().filter(|s| *s < 8)? as u32;
+        match v.get("key")?.as_array()?.as_slice() {
+            [a, b] => Some(Given::Pick {
+                set,
+                key: [a.as_i64()?, b.as_i64()?],
+            }),
+            _ => None,
+        }
+    }
+    pub fn to_json(self) -> Value {
+        match self {
+            Given::Number(n) => json!(n),
+            Given::Pick { set, key } => json!({"set": set, "key": key}),
+        }
+    }
+    /// The value as its control's read region lays it out: an f64 (8 B), or a pick's `u32 set,
+    /// 4 zero bytes, i64 key[0], i64 key[1]` (24 B).
+    pub fn bytes(self) -> Vec<u8> {
+        match self {
+            Given::Number(n) => n.to_le_bytes().to_vec(),
+            Given::Pick { set, key } => {
+                let mut b = set.to_le_bytes().to_vec();
+                b.extend([0; 4]);
+                b.extend(key[0].to_le_bytes());
+                b.extend(key[1].to_le_bytes());
+                b
+            }
+        }
+    }
+}
+
 /// An entry on the input track (Input track entries).
 #[derive(Clone, Debug, PartialEq)]
 pub struct Entry {
     pub t: i64,
     pub seq: u32,
     pub control: String,
-    pub value: f64,
+    pub value: Given,
     pub writer: String,
     pub player: u32,
 }
@@ -38,7 +89,7 @@ impl Entry {
             t: v.get("t")?.as_i64()?,
             seq: v.get("seq").map_or(Some(0), Value::as_u64)? as u32,
             control: v.get("control")?.as_str()?.to_string(),
-            value: v.get("value")?.as_f64()?,
+            value: Given::parse(v.get("value")?)?,
             writer: v
                 .get("writer")
                 .map_or(Some("you"), Value::as_str)?
@@ -47,7 +98,7 @@ impl Entry {
         })
     }
     pub fn to_json(&self) -> Value {
-        json!({"t": self.t, "seq": self.seq, "control": self.control, "value": self.value, "writer": self.writer, "player": self.player})
+        json!({"t": self.t, "seq": self.seq, "control": self.control, "value": self.value.to_json(), "writer": self.writer, "player": self.player})
     }
 }
 
@@ -135,6 +186,9 @@ pub struct Record {
     pub traps: Vec<Value>,
     /// Each item's fuel at each step it ran.
     pub fuel: BTreeMap<usize, Vec<(i64, i64)>>,
+    /// #538: each item's comparison of its arrays after each step with their values before it,
+    /// as `(step, bytes compared, ms)`: a proof reading of the bake's cost, never part of a run.
+    pub compares: BTreeMap<String, Vec<(i64, usize, f64)>>,
 }
 
 impl Record {
@@ -808,13 +862,21 @@ impl World {
         for e in &item.layout.entries {
             let at = e.offset as usize;
             match &e.read {
+                // A text commit's bytes come with its control kind (#542).
+                Read::Control if e.ty == "text" => {}
                 Read::Control => {
+                    // Each entry a u32 player, 4 zero bytes, then its value as the control's
+                    // form lays it out; a value of another form leaves its bytes zero.
                     let list = &taken[e.name.as_str()];
+                    let stride = (e.size as usize - 8) / PER_STEP;
                     region[at..at + 4].copy_from_slice(&(list.len() as u32).to_le_bytes());
                     for (j, x) in list.iter().enumerate() {
-                        let o = at + 8 + 16 * j;
+                        let o = at + 8 + stride * j;
                         region[o..o + 4].copy_from_slice(&x.player.to_le_bytes());
-                        region[o + 8..o + 16].copy_from_slice(&x.value.to_le_bytes());
+                        let v = x.value.bytes();
+                        if v.len() == stride - 8 {
+                            region[o + 8..o + stride].copy_from_slice(&v);
+                        }
                     }
                 }
                 Read::Array { item: from, offset } => {
@@ -920,7 +982,10 @@ impl World {
         if self.planted.replay_changes_step_37 && k == 37 && i == 0 {
             changed(item, &mut fresh);
         }
+        let started = std::time::Instant::now();
         let mut changed = bake::ranges(item, k, &l.arrays, &fresh);
+        let ms = started.elapsed().as_secs_f64() * 1000.0;
+        rec.compares.entry(item.id.clone()).or_default().push((k, n, ms));
         if self.planted.ranges_drop_second_at_step_5000 && k == 5000 && changed.len() > 1 {
             changed.remove(1);
         }
@@ -1380,6 +1445,26 @@ pub fn drawn<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// #539: a pick entry's value is `u32 set, 4 zero bytes, i64 key[0], i64 key[1]`, read back
+    /// from its track form; a number stays an f64.
+    #[test]
+    fn a_pick_value_lays_out_as_24_bytes() {
+        let e =
+            Entry::parse(&json!({"t": 0, "control": "place", "value": {"set": 1, "key": [-7, 3]}}))
+                .expect("a pick entry");
+        let mut want = 1u32.to_le_bytes().to_vec();
+        want.extend([0; 4]);
+        want.extend((-7i64).to_le_bytes());
+        want.extend(3i64.to_le_bytes());
+        assert_eq!(e.value.bytes(), want);
+        assert_eq!(Entry::parse(&e.to_json()), Some(e));
+        assert_eq!(Given::from(0.5).bytes(), 0.5f64.to_le_bytes().to_vec());
+        assert_eq!(
+            Entry::parse(&json!({"t": 0, "control": "place", "value": {"set": 8, "key": [0, 0]}})),
+            None
+        );
+    }
 
     /// #535: a step's 100 changed runs reach the column view as 64 ranges, the last the span of
     /// the 37 past the 63rd; 64 or fewer reach it as they are.

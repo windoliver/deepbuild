@@ -9,6 +9,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use deep_canvas::document::packs::Resolved;
 use deep_canvas::document::{CheckResult, Expansion, Issue, Pack, Packs};
 use deep_canvas::registry::Sealed;
 use serde_json::{json, Map, Value};
@@ -30,7 +31,7 @@ pub type Vet<'v> =
 
 /// Reads a pack folder as one manifest: `pack.json`, its `id` set to `owner/name`, and each
 /// `recipes` entry's file inlined.
-fn load(id: &str, dir: &Path) -> Result<Value, Vec<Issue>> {
+pub(crate) fn load(id: &str, dir: &Path) -> Result<Value, Vec<Issue>> {
     let read = |path: &Path| -> Result<Value, Vec<Issue>> {
         let bytes = fs::read(path).map_err(|e| {
             vec![Issue::envelope(
@@ -116,6 +117,19 @@ thread_local! {
     static ADMITTED: RefCell<HashMap<(String, PathBuf), (Value, Pack)>> = RefCell::new(HashMap::new());
 }
 
+/// #1958: the store's sweep deleted `owner/name@version`: this process holds it no more.
+pub fn forget(key: &str) {
+    ADMITTED.with(|a| {
+        a.borrow_mut().retain(|_, (m, _)| {
+            format!(
+                "{}@{}",
+                m["id"].as_str().unwrap_or_default(),
+                m["version"].as_str().unwrap_or_default()
+            ) != key
+        })
+    });
+}
+
 /// #154: an admitted pack's manifest by its reference, `owner/name@version` or `name@version`, as
 /// a score's sampled instrument names its library.
 pub fn manifest_of(reference: &str) -> Option<Value> {
@@ -195,7 +209,9 @@ pub fn install(
         .find(|r| r.pack == id && r.version == version)
     {
         Some(row) => {
-            if row.state == "refused" && outcome == "installed" {
+            // #1958: a retired version offered again is installed again.
+            if matches!(row.state, "refused" | "retired") && outcome == "installed" {
+                packs.reinstate(&format!("{id}@{version}"));
                 row.state = outcome;
                 row.issues = issues.clone();
                 row.layouts = layouts.clone();
@@ -235,7 +251,7 @@ pub fn rows_reply(rows: &[Row], packs: &Packs) -> Value {
 /// call asked for it.
 pub fn reply(
     expansions: &[Expansion],
-    check_ms: Option<(f64, Option<f64>)>,
+    check_ms: Option<(f64, Option<Map<String, Value>>)>,
     timing: bool,
     reply: &mut Map<String, Value>,
 ) {
@@ -246,12 +262,11 @@ pub fn reply(
         Value::Array(rows.iter().map(|e| e.to_json()).collect()),
     );
     if timing {
-        if let Some((ms, rules)) = check_ms {
-            let mut t = json!({"check_ms": ms});
-            if let Some(rules) = rules {
-                t["kind_rules_ms"] = json!(rules);
-            }
-            reply.insert("timing".into(), t);
+        if let Some((ms, packs)) = check_ms {
+            let mut t = Map::new();
+            t.insert("check_ms".into(), json!(ms));
+            t.extend(packs.unwrap_or_default());
+            reply.insert("timing".into(), Value::Object(t));
         }
     }
 }
@@ -353,11 +368,36 @@ pub fn kind_meshes(pack: &Pack, sealed: &Sealed, evidence: &Path) -> Vec<Issue> 
     issues
 }
 
-/// `timing.kind_rules_ms` (#202): the core's `kind_rules` check over a checked revision, run
-/// again on its lowered items and timed here, since the core reads no clock.
-pub fn kind_rules_ms(doc: &Value, checked: &CheckResult, sealed: &Sealed, packs: &Packs) -> f64 {
+/// The pack timings of a checked revision, each part run again and timed here, since the core
+/// reads no clock: `kind_rules_ms` (#202), and `resolve_ms` and `migrate_ms` (#1958), resolving
+/// the document's pack graph and applying pack kinds' data migrations to its items at load.
+pub fn timings(
+    doc: &Value,
+    checked: &CheckResult,
+    sealed: &Sealed,
+    packs: &Packs,
+) -> Map<String, Value> {
     let mut ignored = Vec::new();
+    let started = std::time::Instant::now();
     let resolved = deep_canvas::document::packs::resolve(doc, packs, Some(sealed), &mut ignored);
+    let resolve_ms = started.elapsed().as_secs_f64() * 1000.0;
+    let mut items = doc["items"].as_object().cloned().unwrap_or_default();
+    let started = std::time::Instant::now();
+    deep_canvas::document::pack_kinds::at_load(&mut items, &resolved, &mut Vec::new());
+    let migrate_ms = started.elapsed().as_secs_f64() * 1000.0;
+    let mut out = Map::new();
+    out.insert(
+        "kind_rules_ms".into(),
+        json!(kind_rules_ms(doc, checked, &resolved, packs)),
+    );
+    out.insert("resolve_ms".into(), json!(resolve_ms));
+    out.insert("migrate_ms".into(), json!(migrate_ms));
+    out
+}
+
+/// `timing.kind_rules_ms` (#202): the core's `kind_rules` check over a checked revision, run
+/// again on its lowered items.
+fn kind_rules_ms(doc: &Value, checked: &CheckResult, resolved: &Resolved, packs: &Packs) -> f64 {
     let empty = Map::new();
     let items = checked
         .lowered
@@ -369,7 +409,7 @@ pub fn kind_rules_ms(doc: &Value, checked: &CheckResult, sealed: &Sealed, packs:
         doc,
         items,
         &checked.expansions,
-        &resolved,
+        resolved,
         packs.planted,
     );
     let ms = started.elapsed().as_secs_f64() * 1000.0;

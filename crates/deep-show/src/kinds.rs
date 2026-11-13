@@ -401,7 +401,8 @@ fn kind_rows(sealed: &Sealed, planted: Option<Planted>) -> Vec<KindRow> {
                 json!({"x-opaque": "params the drawing module reads; the kind registry holds no schema for them yet"})
             }
         };
-        let fields = version.map(|v| fields_of(v, planted)).unwrap_or_default();
+        let mut fields = version.map(|v| fields_of(v, planted)).unwrap_or_default();
+        fields.extend(crate::forms::of(&name));
         let description = kind
             .and_then(|k| k.description.clone())
             .unwrap_or_else(|| kind_description(&name, &module, version));
@@ -415,8 +416,10 @@ fn kind_rows(sealed: &Sealed, planted: Option<Planted>) -> Vec<KindRow> {
             "cost": Value::Null, "stability": stability, "available": stability != "retired",
             "description": description, "fields": fields,
         });
-        if let Some(t) = preview {
-            e["tracking"] = json!(t);
+        if let Some(p) = preview {
+            e["tracking"] = json!(p.tracking);
+            e["preview_since"] = json!(p.since);
+            e["decide_by"] = json!(p.decide_by);
         }
         if let Some((since, by)) = retired {
             e["deprecated_since"] = json!(since);
@@ -522,8 +525,10 @@ fn one_shape(e: &mut Value, row: &Value, sealed: &Sealed, planted: Option<Plante
         })
     });
     if o["stability"] == "preview" {
-        if let Some(t) = row.get("tracking") {
-            o.entry("tracking").or_insert_with(|| t.clone());
+        for field in ["tracking", "preview_since", "decide_by"] {
+            if let Some(t) = row.get(field) {
+                o.entry(field).or_insert_with(|| t.clone());
+            }
         }
     }
     o.entry("available").or_insert(json!(pass && !retired));
@@ -890,7 +895,9 @@ impl Hub<'_> {
                     .iter()
                     .map(|(word, a)| (word.clone(), a["target"].clone()))
                     .collect();
-                json!({"pack": p.id.id, "version": p.id.version.to_string(),
+                // #1958: a retired version stays listed, as retired.
+                let state = if self.packs.is_retired(&p.id.text()) { "retired" } else { "installed" };
+                json!({"pack": p.id.id, "version": p.id.version.to_string(), "state": state,
                        "origin": self.pack_origin(&p.id.text()), "recipes": recipes, "aliases": aliases})
             })
             .collect();
@@ -1318,6 +1325,7 @@ pub fn dump_value(sealed: &Sealed, planted: Option<Planted>) -> Value {
                             if let Some(o) = f.as_object_mut() {
                                 o.remove("grammar");
                                 o.remove("forms");
+                                o.remove("form");
                             }
                             f
                         })

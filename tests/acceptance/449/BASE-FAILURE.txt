@@ -1,0 +1,1144 @@
+The #449 suite run once at base commit cbd5e4f98 ("Merge pull request #2284 …"; no implementation of #449), on macOS
+arm64 (rustup 1.99.1, Node 24.22.2, vitest 5.0.5), with `PATH=/opt/homebrew/opt/rustup/bin:$PATH NO_COLOR=1
+CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 npx vitest run --root tests/acceptance/449 --testTimeout=600000
+--no-file-parallelism` (the checkout's path redacted to `<checkout>`; the base's deep-gpu and deep-physics were built
+just before, so each file's own cargo build was a no-op).
+
+All 30 tests of the 12 files fail, none BLOCKED and none in the harness:
+- Every `particles` call is refused by the base, `{"code": "bad_input", "reason": "unknown call"}`: ac1 (after its
+  independent deep-physics bake of the lab, whose list passes the fixture's guards: nine hits faster than 1 m/s, each
+  ball's more than 30 ms apart, the fastest 6.458 m/s), ac2, ac3 (its native half; the x86_64 build isn't reached),
+  ac4, ac5, ac6, ac7, ac8, ac9, ac10's containment tests and ac11.
+- `view3d` draws the fixtures but its frames hold no `particles` field: ac7 (seek, at the played run's frame 0) and
+  ac10 (culling, the emit-region film's frame 0).
+- Every `--planted` name of this suite is `bad_input` and deep-gpu exits 2 (the assertion reads "exited 0 … stdout:
+  {"ok":false,"code":"bad_input"}").
+
+taste.test.ts is recorded twice. In the one run below it failed before any taste call, because its impact scene's
+`mark.sphere@1` bead had no paint, which the base refuses (`ref_unresolved` at `items/bead/params/paint/fill/role`): a
+fault of the fixture, not of the criterion. The bead was given a fill role, and that one file alone was run again at
+the base (second output, below): the base draws all five pictures and the test is INCONCLUSIVE, as it stays until the
+owner's taste call is recorded in TASTE.json. No other file was run twice.
+
+The type-check, `npx tsc -p tests/acceptance/449/tsconfig.json`, exits 0. A scan of every file of the suite and of the
+commit message with scripts/public-text.mjs's rule (scripts/studied-names.json) finds no studied name.
+
+==== The suite, once ====
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/449
+
+ ❯ ac4-emit-shapes.test.ts (1 test | 1 failed) 4857ms
+   ❯ AC4 #449.00a9a9b4 emitted points lie inside or on each shape, pass a chi-squared bound at 99% per region, and adding a particle moves no other (1)
+     × AC4 #449.00a9a9b4 on parity/vfx/emit-shapes.film: every point inside (volume) or on (surface) its shape within 1e-9 m, its counts per region under the fixed 99% chi-squared bound, and a 4,097th particle moves none of the first 4,096 2377ms
+ ❯ ac7-landing.test.ts (5 tests | 5 failed) 6194ms
+   ❯ AC7 #449.3af744f9 particles land on a height map (5)
+     × AC7 #449.3af744f9 (rest) 4,096 particles land on the cube's top √(8 ÷ 9.81) s after birth and rest at y = 1 m, or on the floor √(10 ÷ 9.81) s after and rest at y = 0 2275ms
+     × AC7 #449.3af744f9 (seek) seeking to frames 37, 61, 100 and 150 equals playing to them by evaluated-data hash 1578ms
+     × AC7 #449.3af744f9 (bounce) with then: bounce and restitution 0.5, a particle landing on the cube's top rises to y = 2 m within 1e-3 m 123ms
+     × AC7 #449.3af744f9 (moving receiver) a cube that a channel moves is refused at check, naming it 119ms
+     × AC7 #449.3af744f9 (planted) a landing against the floor's plane alone rests the cube-top particles at y = 0 and fails, naming a particle 19ms
+ ❯ taste.test.ts (1 test | 1 failed) 6329ms
+   ❯ AC17 #449.3f28ed99 the screenshots and recordings, and the one taste call on them (1)
+     × AC17 #449.3f28ed99 the run writes sparks on impact, the bead in the six-plane box and the landing, and recordings of the sparks and the landing, from the canvas's own frames, and the recorded call on exactly those says they look right 4212ms
+ ❯ ac1-occurrence-bursts.test.ts (1 test | 1 failed) 4655ms
+   ❯ AC1 #449.0fcfd1ef bursts come only from a baked occurrence list, and a count past its cap is refused naming the peak (1)
+     × AC1 #449.0fcfd1ef every particle is born at a hit of the lab's baked list that passes where, 16 to each such hit and none elsewhere; a list no world bakes is refused at check naming the item; and a count expression that peaks past 256 is refused naming the peak 2461ms
+ ❯ ac6-six-plane-box.test.ts (4 tests | 4 failed) 4950ms
+   ❯ AC6 #449.6717a1ad six planes keep a particle in a box for max bounces (4)
+     × AC6 #449.6717a1ad (CPU) the bead bounces off x = 1, y = 1, x = −1 and y = −1 at 1/3, 1/2, 1 and 3/2 s and dies there, or rests at (0.5, −1, 0.75) m, and at 100 random times before 1.5 s sits on the folded free path within 1e-9 m 2443ms
+     × AC6 #449.6717a1ad (compute operator) at the same 100 times the captured columns hold the bead on the folded free path within 1e-4 m 210ms
+     × AC6 #449.6717a1ad (seven planes) a seventh plane is refused at check, naming the item 208ms
+     × AC6 #449.6717a1ad (planted) a solver that tests only the first two planes lets the bead out through y = 1 and fails, naming the particle and the time 20ms
+ ❯ ac9-drag-and-turbulence.test.ts (4 tests | 4 failed) 5085ms
+   ❯ AC9 #449.dd4fc4ae drag and gravity in closed form on the CPU, and turbulence that scales, vanishes and differs by seed (4)
+     × AC9 #449.dd4fc4ae (drag) a particle launched at (4, 6, 0) m/s with drag 2/s is at x = 2(1 − e^(−2t)), y = 5.4525(1 − e^(−2t)) − 4.905t at 100 random times within 1e-9 m on the CPU 2063ms
+     × AC9 #449.dd4fc4ae (drag, planted) a form that integrates drag by Euler at 1/120 s fails 25ms
+     × AC9 #449.dd4fc4ae (turbulence) doubling strength doubles every offset within 1e-9, strength 0 equals none bit for bit, and seeds 1 and 2 give different tables 251ms
+     × AC9 #449.dd4fc4ae (turbulence, planted) a table of zeros fails 19ms
+ ❯ ac5-counts-by-class.test.ts (3 tests | 3 failed) 4342ms
+   ❯ AC5 #449.3a94376c particle counts follow the budget class (3)
+     × AC5 #449.3a94376c 1,048,576 particles check in a showpiece and an export with 1,048,576 elements and 32 MiB of scratch in the estimate; a figure refuses them naming swarm, 1,048,576 and the cap of 65,536; a showpiece refuses 1,048,577 naming the cap of 1,048,576 2288ms
+     × AC5 #449.3a94376c the planted check that applies 65,536 to every class refuses the showpiece, and fails naming swarm 30ms
+     × AC5 #449.3a94376c the planted check that applies 1,048,576 to every class passes the figure, and fails naming swarm 25ms
+ ❯ ac10-bounds.test.ts (5 tests | 5 failed) 8962ms
+   ❯ AC10 #449.31a6c28c every live particle lies inside its item's closed-form bounds, and culling by them changes no pixel (5)
+     × AC10 #449.31a6c28c (emit regions) every live particle lies inside its item's bounds at 1,000 random times 2409ms
+     × AC10 #449.31a6c28c (bounce) every live particle lies inside its item's bounds at 1,000 random times 233ms
+     × AC10 #449.31a6c28c (turbulence) every live particle lies inside its item's bounds at 1,000 random times 172ms
+     × AC10 #449.31a6c28c (culling) on the three fixtures a view that culls by the bounds draws the same pixels as one that doesn't 4061ms
+     × AC10 #449.31a6c28c (planted) a bound taken from the emit region alone lets a ballistic spark leave it and fails, naming the item and the time 22ms
+ ❯ ac8-compute-columns.test.ts (2 tests | 2 failed) 4859ms
+   ❯ AC8 #449.21cedb6d the compute operator's columns match the CPU f64 evaluation within 1e-4 of the emitter's extent (2)
+     × AC8 #449.21cedb6d at 100 times, with two bursts, five bounce planes and turbulence on, every row of the captured columns matches the CPU's 2410ms
+     × AC8 #449.21cedb6d the planted kernel with first-order drag fails, naming the particle 30ms
+ ❯ ac11-emitter-stops.test.ts (2 tests | 2 failed) 7009ms
+   ❯ AC11 #449.776a76da an emitter that stops births only, and each particle lives out its own life (2)
+     × AC11 #449.776a76da an emitter whose span ends at 2 s and its twin whose rate a channel keys to 0 at 2 s bear no particle after 2 s, their particles live out 1.5 s, and the live count from 2 to 3.5 s is the closed form's at 100 times 2677ms
+     × AC11 #449.776a76da the planted emitter that hides every particle at the span's end fails, naming the time 73ms
+ ❯ ac2-spark-bounces.test.ts (1 test | 1 failed) 5399ms
+   ❯ AC2 #449.7930d605 a spark bounces off its declared planes at their closed-form times and never off anything else (1)
+     × AC2 #449.7930d605 64 sparks under gravity bounce off a floor and a wall at the quadratic roots this test solves, within 1e-9 s and m, die at their third bounce, and pass through an undeclared box 2226ms
+ ❯ ac3-turbulence-table.test.ts (1 test | 1 failed) 4759ms
+   ❯ AC3 #449.c614478f the turbulence table is the same on every machine, by hash (1)
+     × AC3 #449.c614478f each table's hash is the SHA-256 of its paths × steps × 12 bytes, seeds give different tables, and the x86_64 build under Rosetta 2 gives the same hashes as this arm64 build 2081ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 30 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac1-occurrence-bursts.test.ts > AC1 #449.0fcfd1ef bursts come only from a baked occurrence list, and a count past its cap is refused naming the peak > AC1 #449.0fcfd1ef every particle is born at a hit of the lab's baked list that passes where, 16 to each such hit and none elsewhere; a list no world bakes is refused at check naming the item; and a count expression that peaks past 256 is refused naming the peak
+AssertionError: the lab: the particles call answers (README: The surface under test) rather than refusing the call: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ checkOf helpers.ts:464:143
+    462| export function checkOf(reply: JsonObject, call: JsonObject, what: str…
+    463|   if (reply['code'] === 'unsupported_platform') inconclusive(`${what} …
+    464|   expect(reply['code'], `${what}: the particles call answers (README: …
+       |                                                                                                                                               ^
+    465|   const outcome = str(reply['outcome'], `${what}: outcome`);
+    466|   expect(['checked', 'refused'], `${what}: outcome is checked or refus…
+ ❯ passed helpers.ts:490:13
+ ❯ ac1-occurrence-bursts.test.ts:85:26
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/30]⎯
+
+ FAIL  ac10-bounds.test.ts > AC10 #449.31a6c28c every live particle lies inside its item's closed-form bounds, and culling by them changes no pixel > AC10 #449.31a6c28c (emit regions) every live particle lies inside its item's bounds at 1,000 random times
+AssertionError: emit regions: the particles call answers (README: The surface under test) rather than refusing the call: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ checkOf helpers.ts:464:143
+    462| export function checkOf(reply: JsonObject, call: JsonObject, what: str…
+    463|   if (reply['code'] === 'unsupported_platform') inconclusive(`${what} …
+    464|   expect(reply['code'], `${what}: the particles call answers (README: …
+       |                                                                                                                                               ^
+    465|   const outcome = str(reply['outcome'], `${what}: outcome`);
+    466|   expect(['checked', 'refused'], `${what}: outcome is checked or refus…
+ ❯ passed helpers.ts:490:13
+ ❯ containment ac10-bounds.test.ts:36:13
+ ❯ ac10-bounds.test.ts:58:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/30]⎯
+
+ FAIL  ac10-bounds.test.ts > AC10 #449.31a6c28c every live particle lies inside its item's closed-form bounds, and culling by them changes no pixel > AC10 #449.31a6c28c (bounce) every live particle lies inside its item's bounds at 1,000 random times
+AssertionError: bounce: the particles call answers (README: The surface under test) rather than refusing the call: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ checkOf helpers.ts:464:143
+    462| export function checkOf(reply: JsonObject, call: JsonObject, what: str…
+    463|   if (reply['code'] === 'unsupported_platform') inconclusive(`${what} …
+    464|   expect(reply['code'], `${what}: the particles call answers (README: …
+       |                                                                                                                                               ^
+    465|   const outcome = str(reply['outcome'], `${what}: outcome`);
+    466|   expect(['checked', 'refused'], `${what}: outcome is checked or refus…
+ ❯ passed helpers.ts:490:13
+ ❯ containment ac10-bounds.test.ts:36:13
+ ❯ ac10-bounds.test.ts:58:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/30]⎯
+
+ FAIL  ac10-bounds.test.ts > AC10 #449.31a6c28c every live particle lies inside its item's closed-form bounds, and culling by them changes no pixel > AC10 #449.31a6c28c (turbulence) every live particle lies inside its item's bounds at 1,000 random times
+AssertionError: turbulence: the particles call answers (README: The surface under test) rather than refusing the call: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ checkOf helpers.ts:464:143
+    462| export function checkOf(reply: JsonObject, call: JsonObject, what: str…
+    463|   if (reply['code'] === 'unsupported_platform') inconclusive(`${what} …
+    464|   expect(reply['code'], `${what}: the particles call answers (README: …
+       |                                                                                                                                               ^
+    465|   const outcome = str(reply['outcome'], `${what}: outcome`);
+    466|   expect(['checked', 'refused'], `${what}: outcome is checked or refus…
+ ❯ passed helpers.ts:490:13
+ ❯ containment ac10-bounds.test.ts:36:13
+ ❯ ac10-bounds.test.ts:58:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/30]⎯
+
+ FAIL  ac10-bounds.test.ts > AC10 #449.31a6c28c every live particle lies inside its item's closed-form bounds, and culling by them changes no pixel > AC10 #449.31a6c28c (culling) on the three fixtures a view that culls by the bounds draws the same pixels as one that doesn't
+AssertionError: emit regions, culled by bounds: frame 0: particles (README: view3d's particles field) is an object, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ obj helpers.ts:56:63
+     54| export const show = (v: unknown): string => JSON.stringify(v)?.slice(0…
+     55| export function obj(v: JsonValue | undefined, what: string): JsonObjec…
+     56|   expect(isObject(v), `${what} is an object, got ${show(v)}`).toBe(tru…
+       |                                                               ^
+     57|   return v as JsonObject;
+     58| }
+ ❯ helpers.ts:524:17
+ ❯ framesOf helpers.ts:519:50
+ ❯ ac10-bounds.test.ts:71:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/30]⎯
+
+ FAIL  ac10-bounds.test.ts > AC10 #449.31a6c28c every live particle lies inside its item's closed-form bounds, and culling by them changes no pixel > AC10 #449.31a6c28c (planted) a bound taken from the emit region alone lets a ballistic spark leave it and fails, naming the item and the time
+AssertionError: deep-gpu run --backend noop --planted bounds_emit_region_only exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ runGpu helpers.ts:229:151
+    227|   if (run.error) throw Error(`${what}: ${run.error.message}`);
+    228|   const stdout = run.stdout ?? '';
+    229|   expect(run.status, `${what} exited 0 (${run.signal ?? 'no signal'});…
+       |                                                                                                                                                       ^
+    230|   const lines = stdout.split('\n').filter((l) => l !== '');
+    231|   expect(lines.length, `${what}: one answer line for the one scenario …
+ ❯ containment ac10-bounds.test.ts:35:19
+ ❯ ac10-bounds.test.ts:88:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/30]⎯
+
+ FAIL  ac11-emitter-stops.test.ts > AC11 #449.776a76da an emitter that stops births only, and each particle lives out its own life > AC11 #449.776a76da an emitter whose span ends at 2 s and its twin whose rate a channel keys to 0 at 2 s bear no particle after 2 s, their particles live out 1.5 s, and the live count from 2 to 3.5 s is the closed form's at 100 times
+AssertionError: the emitters that stop: the particles call answers (README: The surface under test) rather than refusing the call: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ checkOf helpers.ts:464:143
+    462| export function checkOf(reply: JsonObject, call: JsonObject, what: str…
+    463|   if (reply['code'] === 'unsupported_platform') inconclusive(`${what} …
+    464|   expect(reply['code'], `${what}: the particles call answers (README: …
+       |                                                                                                                                               ^
+    465|   const outcome = str(reply['outcome'], `${what}: outcome`);
+    466|   expect(['checked', 'refused'], `${what}: outcome is checked or refus…
+ ❯ passed helpers.ts:490:13
+ ❯ stopProblems ac11-emitter-stops.test.ts:46:13
+ ❯ ac11-emitter-stops.test.ts:70:10
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/30]⎯
+
+ FAIL  ac11-emitter-stops.test.ts > AC11 #449.776a76da an emitter that stops births only, and each particle lives out its own life > AC11 #449.776a76da the planted emitter that hides every particle at the span's end fails, naming the time
+AssertionError: deep-gpu run --planted hides_at_span_end exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ runGpu helpers.ts:229:151
+    227|   if (run.error) throw Error(`${what}: ${run.error.message}`);
+    228|   const stdout = run.stdout ?? '';
+    229|   expect(run.status, `${what} exited 0 (${run.signal ?? 'no signal'});…
+       |                                                                                                                                                       ^
+    230|   const lines = stdout.split('\n').filter((l) => l !== '');
+    231|   expect(lines.length, `${what}: one answer line for the one scenario …
+ ❯ stopProblems ac11-emitter-stops.test.ts:45:19
+ ❯ ac11-emitter-stops.test.ts:75:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/30]⎯
+
+ FAIL  ac2-spark-bounces.test.ts > AC2 #449.7930d605 a spark bounces off its declared planes at their closed-form times and never off anything else > AC2 #449.7930d605 64 sparks under gravity bounce off a floor and a wall at the quadratic roots this test solves, within 1e-9 s and m, die at their third bounce, and pass through an undeclared box
+AssertionError: the sparks: the particles call answers (README: The surface under test) rather than refusing the call: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ checkOf helpers.ts:464:143
+    462| export function checkOf(reply: JsonObject, call: JsonObject, what: str…
+    463|   if (reply['code'] === 'unsupported_platform') inconclusive(`${what} …
+    464|   expect(reply['code'], `${what}: the particles call answers (README: …
+       |                                                                                                                                               ^
+    465|   const outcome = str(reply['outcome'], `${what}: outcome`);
+    466|   expect(['checked', 'refused'], `${what}: outcome is checked or refus…
+ ❯ passed helpers.ts:490:13
+ ❯ ac2-spark-bounces.test.ts:29:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/30]⎯
+
+ FAIL  ac3-turbulence-table.test.ts > AC3 #449.c614478f the turbulence table is the same on every machine, by hash > AC3 #449.c614478f each table's hash is the SHA-256 of its paths × steps × 12 bytes, seeds give different tables, and the x86_64 build under Rosetta 2 gives the same hashes as this arm64 build
+AssertionError: seed-1: the particles call answers (README: The surface under test) rather than refusing the call: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ checkOf helpers.ts:464:143
+    462| export function checkOf(reply: JsonObject, call: JsonObject, what: str…
+    463|   if (reply['code'] === 'unsupported_platform') inconclusive(`${what} …
+    464|   expect(reply['code'], `${what}: the particles call answers (README: …
+       |                                                                                                                                               ^
+    465|   const outcome = str(reply['outcome'], `${what}: outcome`);
+    466|   expect(['checked', 'refused'], `${what}: outcome is checked or refus…
+ ❯ passed helpers.ts:490:13
+ ❯ ac3-turbulence-table.test.ts:34:26
+ ❯ tables ac3-turbulence-table.test.ts:33:24
+ ❯ ac3-turbulence-table.test.ts:42:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/30]⎯
+
+ FAIL  ac4-emit-shapes.test.ts > AC4 #449.00a9a9b4 emitted points lie inside or on each shape, pass a chi-squared bound at 99% per region, and adding a particle moves no other > AC4 #449.00a9a9b4 on parity/vfx/emit-shapes.film: every point inside (volume) or on (surface) its shape within 1e-9 m, its counts per region under the fixed 99% chi-squared bound, and a 4,097th particle moves none of the first 4,096
+AssertionError: emit-shapes: the particles call answers (README: The surface under test) rather than refusing the call: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ checkOf helpers.ts:464:143
+    462| export function checkOf(reply: JsonObject, call: JsonObject, what: str…
+    463|   if (reply['code'] === 'unsupported_platform') inconclusive(`${what} …
+    464|   expect(reply['code'], `${what}: the particles call answers (README: …
+       |                                                                                                                                               ^
+    465|   const outcome = str(reply['outcome'], `${what}: outcome`);
+    466|   expect(['checked', 'refused'], `${what}: outcome is checked or refus…
+ ❯ passed helpers.ts:490:13
+ ❯ points ac4-emit-shapes.test.ts:153:13
+ ❯ ac4-emit-shapes.test.ts:163:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/30]⎯
+
+ FAIL  ac5-counts-by-class.test.ts > AC5 #449.3a94376c particle counts follow the budget class > AC5 #449.3a94376c 1,048,576 particles check in a showpiece and an export with 1,048,576 elements and 32 MiB of scratch in the estimate; a figure refuses them naming swarm, 1,048,576 and the cap of 65,536; a showpiece refuses 1,048,577 naming the cap of 1,048,576
+AssertionError: the showpiece of 1,048,576: the particles call answers (README: The surface under test) rather than refusing the call: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ checkOf helpers.ts:464:143
+    462| export function checkOf(reply: JsonObject, call: JsonObject, what: str…
+    463|   if (reply['code'] === 'unsupported_platform') inconclusive(`${what} …
+    464|   expect(reply['code'], `${what}: the particles call answers (README: …
+       |                                                                                                                                               ^
+    465|   const outcome = str(reply['outcome'], `${what}: outcome`);
+    466|   expect(['checked', 'refused'], `${what}: outcome is checked or refus…
+ ❯ ac5-counts-by-class.test.ts:51:15
+ ❯ classProblems ac5-counts-by-class.test.ts:50:9
+ ❯ ac5-counts-by-class.test.ts:73:10
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/30]⎯
+
+ FAIL  ac5-counts-by-class.test.ts > AC5 #449.3a94376c particle counts follow the budget class > AC5 #449.3a94376c the planted check that applies 65,536 to every class refuses the showpiece, and fails naming swarm
+AssertionError: deep-gpu run --backend noop --planted count_cap_65536_every_class exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ runGpu helpers.ts:229:151
+    227|   if (run.error) throw Error(`${what}: ${run.error.message}`);
+    228|   const stdout = run.stdout ?? '';
+    229|   expect(run.status, `${what} exited 0 (${run.signal ?? 'no signal'});…
+       |                                                                                                                                                       ^
+    230|   const lines = stdout.split('\n').filter((l) => l !== '');
+    231|   expect(lines.length, `${what}: one answer line for the one scenario …
+ ❯ classProblems ac5-counts-by-class.test.ts:48:19
+ ❯ ac5-counts-by-class.test.ts:77:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/30]⎯
+
+ FAIL  ac5-counts-by-class.test.ts > AC5 #449.3a94376c particle counts follow the budget class > AC5 #449.3a94376c the planted check that applies 1,048,576 to every class passes the figure, and fails naming swarm
+AssertionError: deep-gpu run --backend noop --planted count_cap_1048576_every_class exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ runGpu helpers.ts:229:151
+    227|   if (run.error) throw Error(`${what}: ${run.error.message}`);
+    228|   const stdout = run.stdout ?? '';
+    229|   expect(run.status, `${what} exited 0 (${run.signal ?? 'no signal'});…
+       |                                                                                                                                                       ^
+    230|   const lines = stdout.split('\n').filter((l) => l !== '');
+    231|   expect(lines.length, `${what}: one answer line for the one scenario …
+ ❯ classProblems ac5-counts-by-class.test.ts:48:19
+ ❯ ac5-counts-by-class.test.ts:81:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/30]⎯
+
+ FAIL  ac6-six-plane-box.test.ts > AC6 #449.6717a1ad six planes keep a particle in a box for max bounces > AC6 #449.6717a1ad (CPU) the bead bounces off x = 1, y = 1, x = −1 and y = −1 at 1/3, 1/2, 1 and 3/2 s and dies there, or rests at (0.5, −1, 0.75) m, and at 100 random times before 1.5 s sits on the folded free path within 1e-9 m
+AssertionError: the box, then: die: the particles call answers (README: The surface under test) rather than refusing the call: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ checkOf helpers.ts:464:143
+    462| export function checkOf(reply: JsonObject, call: JsonObject, what: str…
+    463|   if (reply['code'] === 'unsupported_platform') inconclusive(`${what} …
+    464|   expect(reply['code'], `${what}: the particles call answers (README: …
+       |                                                                                                                                               ^
+    465|   const outcome = str(reply['outcome'], `${what}: outcome`);
+    466|   expect(['checked', 'refused'], `${what}: outcome is checked or refus…
+ ❯ passed helpers.ts:490:13
+ ❯ box ac6-six-plane-box.test.ts:35:18
+ ❯ ac6-six-plane-box.test.ts:66:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/30]⎯
+
+ FAIL  ac6-six-plane-box.test.ts > AC6 #449.6717a1ad six planes keep a particle in a box for max bounces > AC6 #449.6717a1ad (compute operator) at the same 100 times the captured columns hold the bead on the folded free path within 1e-4 m
+AssertionError: the box, then: die: the particles call answers (README: The surface under test) rather than refusing the call: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ checkOf helpers.ts:464:143
+    462| export function checkOf(reply: JsonObject, call: JsonObject, what: str…
+    463|   if (reply['code'] === 'unsupported_platform') inconclusive(`${what} …
+    464|   expect(reply['code'], `${what}: the particles call answers (README: …
+       |                                                                                                                                               ^
+    465|   const outcome = str(reply['outcome'], `${what}: outcome`);
+    466|   expect(['checked', 'refused'], `${what}: outcome is checked or refus…
+ ❯ passed helpers.ts:490:13
+ ❯ box ac6-six-plane-box.test.ts:35:18
+ ❯ ac6-six-plane-box.test.ts:72:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/30]⎯
+
+ FAIL  ac6-six-plane-box.test.ts > AC6 #449.6717a1ad six planes keep a particle in a box for max bounces > AC6 #449.6717a1ad (seven planes) a seventh plane is refused at check, naming the item
+AssertionError: seven planes: the particles call answers (README: The surface under test) rather than refusing the call: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ checkOf helpers.ts:464:143
+    462| export function checkOf(reply: JsonObject, call: JsonObject, what: str…
+    463|   if (reply['code'] === 'unsupported_platform') inconclusive(`${what} …
+    464|   expect(reply['code'], `${what}: the particles call answers (README: …
+       |                                                                                                                                               ^
+    465|   const outcome = str(reply['outcome'], `${what}: outcome`);
+    466|   expect(['checked', 'refused'], `${what}: outcome is checked or refus…
+ ❯ ac6-six-plane-box.test.ts:86:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/30]⎯
+
+ FAIL  ac6-six-plane-box.test.ts > AC6 #449.6717a1ad six planes keep a particle in a box for max bounces > AC6 #449.6717a1ad (planted) a solver that tests only the first two planes lets the bead out through y = 1 and fails, naming the particle and the time
+AssertionError: deep-gpu run --backend noop --planted bounce_first_two_planes exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ runGpu helpers.ts:229:151
+    227|   if (run.error) throw Error(`${what}: ${run.error.message}`);
+    228|   const stdout = run.stdout ?? '';
+    229|   expect(run.status, `${what} exited 0 (${run.signal ?? 'no signal'});…
+       |                                                                                                                                                       ^
+    230|   const lines = stdout.split('\n').filter((l) => l !== '');
+    231|   expect(lines.length, `${what}: one answer line for the one scenario …
+ ❯ box ac6-six-plane-box.test.ts:34:19
+ ❯ ac6-six-plane-box.test.ts:92:29
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/30]⎯
+
+ FAIL  ac7-landing.test.ts > AC7 #449.3af744f9 particles land on a height map > AC7 #449.3af744f9 (rest) 4,096 particles land on the cube's top √(8 ÷ 9.81) s after birth and rest at y = 1 m, or on the floor √(10 ÷ 9.81) s after and rest at y = 0
+AssertionError: the landing: the particles call answers (README: The surface under test) rather than refusing the call: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ checkOf helpers.ts:464:143
+    462| export function checkOf(reply: JsonObject, call: JsonObject, what: str…
+    463|   if (reply['code'] === 'unsupported_platform') inconclusive(`${what} …
+    464|   expect(reply['code'], `${what}: the particles call answers (README: …
+       |                                                                                                                                               ^
+    465|   const outcome = str(reply['outcome'], `${what}: outcome`);
+    466|   expect(['checked', 'refused'], `${what}: outcome is checked or refus…
+ ❯ passed helpers.ts:490:13
+ ❯ rain ac7-landing.test.ts:49:18
+ ❯ ac7-landing.test.ts:75:26
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/30]⎯
+
+ FAIL  ac7-landing.test.ts > AC7 #449.3af744f9 particles land on a height map > AC7 #449.3af744f9 (seek) seeking to frames 37, 61, 100 and 150 equals playing to them by evaluated-data hash
+AssertionError: the landing, played: frame 0: particles (README: view3d's particles field) is an object, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ obj helpers.ts:56:63
+     54| export const show = (v: unknown): string => JSON.stringify(v)?.slice(0…
+     55| export function obj(v: JsonValue | undefined, what: string): JsonObjec…
+     56|   expect(isObject(v), `${what} is an object, got ${show(v)}`).toBe(tru…
+       |                                                               ^
+     57|   return v as JsonObject;
+     58| }
+ ❯ helpers.ts:524:17
+ ❯ framesOf helpers.ts:519:50
+ ❯ ac7-landing.test.ts:83:28
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[20/30]⎯
+
+ FAIL  ac7-landing.test.ts > AC7 #449.3af744f9 particles land on a height map > AC7 #449.3af744f9 (bounce) with then: bounce and restitution 0.5, a particle landing on the cube's top rises to y = 2 m within 1e-3 m
+AssertionError: the bouncing landing: the particles call answers (README: The surface under test) rather than refusing the call: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ checkOf helpers.ts:464:143
+    462| export function checkOf(reply: JsonObject, call: JsonObject, what: str…
+    463|   if (reply['code'] === 'unsupported_platform') inconclusive(`${what} …
+    464|   expect(reply['code'], `${what}: the particles call answers (README: …
+       |                                                                                                                                               ^
+    465|   const outcome = str(reply['outcome'], `${what}: outcome`);
+    466|   expect(['checked', 'refused'], `${what}: outcome is checked or refus…
+ ❯ passed helpers.ts:490:13
+ ❯ ac7-landing.test.ts:104:26
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[21/30]⎯
+
+ FAIL  ac7-landing.test.ts > AC7 #449.3af744f9 particles land on a height map > AC7 #449.3af744f9 (moving receiver) a cube that a channel moves is refused at check, naming it
+AssertionError: the moving cube: the particles call answers (README: The surface under test) rather than refusing the call: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ checkOf helpers.ts:464:143
+    462| export function checkOf(reply: JsonObject, call: JsonObject, what: str…
+    463|   if (reply['code'] === 'unsupported_platform') inconclusive(`${what} …
+    464|   expect(reply['code'], `${what}: the particles call answers (README: …
+       |                                                                                                                                               ^
+    465|   const outcome = str(reply['outcome'], `${what}: outcome`);
+    466|   expect(['checked', 'refused'], `${what}: outcome is checked or refus…
+ ❯ ac7-landing.test.ts:123:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[22/30]⎯
+
+ FAIL  ac7-landing.test.ts > AC7 #449.3af744f9 particles land on a height map > AC7 #449.3af744f9 (planted) a landing against the floor's plane alone rests the cube-top particles at y = 0 and fails, naming a particle
+AssertionError: deep-gpu run --backend noop --planted land_floor_plane_only exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ runGpu helpers.ts:229:151
+    227|   if (run.error) throw Error(`${what}: ${run.error.message}`);
+    228|   const stdout = run.stdout ?? '';
+    229|   expect(run.status, `${what} exited 0 (${run.signal ?? 'no signal'});…
+       |                                                                                                                                                       ^
+    230|   const lines = stdout.split('\n').filter((l) => l !== '');
+    231|   expect(lines.length, `${what}: one answer line for the one scenario …
+ ❯ rain ac7-landing.test.ts:48:19
+ ❯ ac7-landing.test.ts:129:33
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[23/30]⎯
+
+ FAIL  ac8-compute-columns.test.ts > AC8 #449.21cedb6d the compute operator's columns match the CPU f64 evaluation within 1e-4 of the emitter's extent > AC8 #449.21cedb6d at 100 times, with two bursts, five bounce planes and turbulence on, every row of the captured columns matches the CPU's
+AssertionError: the storm: the particles call answers (README: The surface under test) rather than refusing the call: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ checkOf helpers.ts:464:143
+    462| export function checkOf(reply: JsonObject, call: JsonObject, what: str…
+    463|   if (reply['code'] === 'unsupported_platform') inconclusive(`${what} …
+    464|   expect(reply['code'], `${what}: the particles call answers (README: …
+       |                                                                                                                                               ^
+    465|   const outcome = str(reply['outcome'], `${what}: outcome`);
+    466|   expect(['checked', 'refused'], `${what}: outcome is checked or refus…
+ ❯ passed helpers.ts:490:13
+ ❯ columnProblems ac8-compute-columns.test.ts:48:21
+ ❯ ac8-compute-columns.test.ts:76:10
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[24/30]⎯
+
+ FAIL  ac8-compute-columns.test.ts > AC8 #449.21cedb6d the compute operator's columns match the CPU f64 evaluation within 1e-4 of the emitter's extent > AC8 #449.21cedb6d the planted kernel with first-order drag fails, naming the particle
+AssertionError: deep-gpu run --planted drag_first_order exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ runGpu helpers.ts:229:151
+    227|   if (run.error) throw Error(`${what}: ${run.error.message}`);
+    228|   const stdout = run.stdout ?? '';
+    229|   expect(run.status, `${what} exited 0 (${run.signal ?? 'no signal'});…
+       |                                                                                                                                                       ^
+    230|   const lines = stdout.split('\n').filter((l) => l !== '');
+    231|   expect(lines.length, `${what}: one answer line for the one scenario …
+ ❯ columnProblems ac8-compute-columns.test.ts:47:19
+ ❯ ac8-compute-columns.test.ts:81:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[25/30]⎯
+
+ FAIL  ac9-drag-and-turbulence.test.ts > AC9 #449.dd4fc4ae drag and gravity in closed form on the CPU, and turbulence that scales, vanishes and differs by seed > AC9 #449.dd4fc4ae (drag) a particle launched at (4, 6, 0) m/s with drag 2/s is at x = 2(1 − e^(−2t)), y = 5.4525(1 − e^(−2t)) − 4.905t at 100 random times within 1e-9 m on the CPU
+AssertionError: the shot: the particles call answers (README: The surface under test) rather than refusing the call: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ checkOf helpers.ts:464:143
+    462| export function checkOf(reply: JsonObject, call: JsonObject, what: str…
+    463|   if (reply['code'] === 'unsupported_platform') inconclusive(`${what} …
+    464|   expect(reply['code'], `${what}: the particles call answers (README: …
+       |                                                                                                                                               ^
+    465|   const outcome = str(reply['outcome'], `${what}: outcome`);
+    466|   expect(['checked', 'refused'], `${what}: outcome is checked or refus…
+ ❯ passed helpers.ts:490:13
+ ❯ shotProblems ac9-drag-and-turbulence.test.ts:34:21
+ ❯ ac9-drag-and-turbulence.test.ts:83:10
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[26/30]⎯
+
+ FAIL  ac9-drag-and-turbulence.test.ts > AC9 #449.dd4fc4ae drag and gravity in closed form on the CPU, and turbulence that scales, vanishes and differs by seed > AC9 #449.dd4fc4ae (drag, planted) a form that integrates drag by Euler at 1/120 s fails
+AssertionError: deep-gpu run --backend noop --planted drag_euler_120 exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ runGpu helpers.ts:229:151
+    227|   if (run.error) throw Error(`${what}: ${run.error.message}`);
+    228|   const stdout = run.stdout ?? '';
+    229|   expect(run.status, `${what} exited 0 (${run.signal ?? 'no signal'});…
+       |                                                                                                                                                       ^
+    230|   const lines = stdout.split('\n').filter((l) => l !== '');
+    231|   expect(lines.length, `${what}: one answer line for the one scenario …
+ ❯ shotProblems ac9-drag-and-turbulence.test.ts:33:19
+ ❯ ac9-drag-and-turbulence.test.ts:87:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[27/30]⎯
+
+ FAIL  ac9-drag-and-turbulence.test.ts > AC9 #449.dd4fc4ae drag and gravity in closed form on the CPU, and turbulence that scales, vanishes and differs by seed > AC9 #449.dd4fc4ae (turbulence) doubling strength doubles every offset within 1e-9, strength 0 equals none bit for bit, and seeds 1 and 2 give different tables
+AssertionError: smoke none: the particles call answers (README: The surface under test) rather than refusing the call: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ checkOf helpers.ts:464:143
+    462| export function checkOf(reply: JsonObject, call: JsonObject, what: str…
+    463|   if (reply['code'] === 'unsupported_platform') inconclusive(`${what} …
+    464|   expect(reply['code'], `${what}: the particles call answers (README: …
+       |                                                                                                                                               ^
+    465|   const outcome = str(reply['outcome'], `${what}: outcome`);
+    466|   expect(['checked', 'refused'], `${what}: outcome is checked or refus…
+ ❯ passed helpers.ts:490:13
+ ❯ ac9-drag-and-turbulence.test.ts:55:64
+ ❯ turbulenceProblems ac9-drag-and-turbulence.test.ts:55:38
+ ❯ ac9-drag-and-turbulence.test.ts:91:10
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[28/30]⎯
+
+ FAIL  ac9-drag-and-turbulence.test.ts > AC9 #449.dd4fc4ae drag and gravity in closed form on the CPU, and turbulence that scales, vanishes and differs by seed > AC9 #449.dd4fc4ae (turbulence, planted) a table of zeros fails
+AssertionError: deep-gpu run --backend noop --planted turbulence_table_zeros exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ runGpu helpers.ts:229:151
+    227|   if (run.error) throw Error(`${what}: ${run.error.message}`);
+    228|   const stdout = run.stdout ?? '';
+    229|   expect(run.status, `${what} exited 0 (${run.signal ?? 'no signal'});…
+       |                                                                                                                                                       ^
+    230|   const lines = stdout.split('\n').filter((l) => l !== '');
+    231|   expect(lines.length, `${what}: one answer line for the one scenario …
+ ❯ turbulenceProblems ac9-drag-and-turbulence.test.ts:54:19
+ ❯ ac9-drag-and-turbulence.test.ts:95:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[29/30]⎯
+
+ FAIL  taste.test.ts > AC17 #449.3f28ed99 the screenshots and recordings, and the one taste call on them > AC17 #449.3f28ed99 the run writes sparks on impact, the bead in the six-plane box and the landing, and recordings of the sparks and the landing, from the canvas's own frames, and the recorded call on exactly those says they look right
+AssertionError: sparks-on-impact.png was drawn, not refused: {"code":"ref_unresolved","reason":"items/bead/params/paint/fill/role"}: expected 'ref_unresolved' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"ref_unresolved"
+
+ ❯ framesOf helpers.ts:518:75
+    516| export function framesOf(reply: JsonObject, what: string, items: reado…
+    517|   if (reply['code'] === 'unsupported_platform') inconclusive(`${what} …
+    518|   expect(reply['code'], `${what} was drawn, not refused: ${show(reply)…
+       |                                                                           ^
+    519|   return arr(reply['frames'], `${what}: frames`).map((v, i) => {
+    520|     const f = obj(v, `${what}: frames[${i}]`);
+ ❯ taste.test.ts:81:19
+ ❯ taste.test.ts:80:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[30/30]⎯
+
+
+ Test Files  12 failed (12)
+      Tests  30 failed (30)
+   Start at  12:08:43
+   Duration  70.71s (tests 98%, transform 1%, import 1%)
+
+
+==== taste.test.ts alone, after its fixture fix ====
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/449
+
+stdout | taste.test.ts > AC17 #449.3f28ed99 the screenshots and recordings, and the one taste call on them > AC17 #449.3f28ed99 the run writes sparks on impact, the bead in the six-plane box and the landing, and recordings of the sparks and the landing, from the canvas's own frames, and the recorded call on exactly those says they look right
+AC17 #449.3f28ed99: written from this run's frames:
+  target/acceptance/449/sparks-on-impact.png  e0f052bbcc9af8c1512f23987bdb0f0c5ea2b6f9906105aebbdfa97f2ff5c59c
+  target/acceptance/449/six-plane-box.png  00fd8a90a9ff06ae57fdd1e15fbf5f6db28ad61c75d9a5cb0cc6d438d2037962
+  target/acceptance/449/landing.png  57ad86d4f7d3676b766a8470615998d40facac140a95acf1c10d4fd19b8b8361
+  target/acceptance/449/sparks.apng  92b67c09ee75c7e6b05758e95f2ec12f50b46ffdb4a0a3232143e31e19b29d3a
+  target/acceptance/449/landing.apng  2f5b7027ece069dfb6aa169f3e0409be7cdb44743c396a8245521d4c668da130
+
+ ❯ taste.test.ts (1 test | 1 failed) 8256ms
+   ❯ AC17 #449.3f28ed99 the screenshots and recordings, and the one taste call on them (1)
+     × AC17 #449.3f28ed99 the run writes sparks on impact, the bead in the six-plane box and the landing, and recordings of the sparks and the landing, from the canvas's own frames, and the recorded call on exactly those says they look right 4362ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  taste.test.ts > AC17 #449.3f28ed99 the screenshots and recordings, and the one taste call on them > AC17 #449.3f28ed99 the run writes sparks on impact, the bead in the six-plane box and the landing, and recordings of the sparks and the landing, from the canvas's own frames, and the recorded call on exactly those says they look right
+AssertionError: INCONCLUSIVE: no taste call is recorded: show the owner
+  target/acceptance/449/sparks-on-impact.png  e0f052bbcc9af8c1512f23987bdb0f0c5ea2b6f9906105aebbdfa97f2ff5c59c
+  target/acceptance/449/six-plane-box.png  00fd8a90a9ff06ae57fdd1e15fbf5f6db28ad61c75d9a5cb0cc6d438d2037962
+  target/acceptance/449/landing.png  57ad86d4f7d3676b766a8470615998d40facac140a95acf1c10d4fd19b8b8361
+  target/acceptance/449/sparks.apng  92b67c09ee75c7e6b05758e95f2ec12f50b46ffdb4a0a3232143e31e19b29d3a
+  target/acceptance/449/landing.apng  2f5b7027ece069dfb6aa169f3e0409be7cdb44743c396a8245521d4c668da130
+and record the answer in tests/acceptance/449/TASTE.json (README: The taste call); this is not a pass
+ ❯ inconclusive helpers.ts:90:17
+     88| /** A test that can't be judged here fails with this, never passes. */
+     89| export function inconclusive(reason: string): never {
+     90|   return expect.fail(`INCONCLUSIVE: ${reason}; this is not a pass`);
+       |                 ^
+     91| }
+     92| /** A host or tool this machine lacks: the test fails with this messag…
+ ❯ taste.test.ts:91:29
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  12:10:21
+   Duration  8.40s (tests 100%)
+
+
+
+==== Criteria 12 to 16 (the second blind job), once ====
+
+The five new files (ac12 to ac16) run once at base commit cbd5e4f98 with this suite's first commit e97ea3607 on top
+(tests only), on macOS arm64 (rustup 1.99.1, Node 24.22.2, vitest 5.0.5), with `PATH=/opt/homebrew/opt/rustup/bin:$PATH
+NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 scripts/lease npx vitest run --root tests/acceptance/449
+--testTimeout=600000 --no-file-parallelism ac12 ac13 ac14 ac15 ac16` (the checkout's path redacted to `<checkout>`;
+scripts/lease found no `deep` and ran it unleased, its first line below; the base's deep-gpu was built just before, so
+each file's own cargo build was a no-op).
+
+All 13 tests of the 5 files fail, none BLOCKED and none in the harness:
+- Every `particles` call is refused by the base, `{"code": "bad_input", "reason": "unknown call"}`: ac12, ac13 (follow),
+  ac14 (velocity), ac15's three fixtures and ac16 (after it writes its 40 MB sheet of 1,048,577 triangles).
+- `view3d` draws the walker and the turntable (both `fixture.skin@1` documents, the turntable turned by its channel) but
+  its frames hold no `particles` field: ac13 (seek) and ac14 (seek), at the played run's frame 0.
+- Every `--planted` name these files add is `bad_input` and deep-gpu exits 2 (the assertion reads "exited 0 … stdout:
+  {"ok":false,"code":"bad_input"}"): ac12, ac13, ac14 and ac15 (planted).
+
+The type-check, `npx tsc -p tests/acceptance/449/tsconfig.json`, exits 0. A scan of the files these criteria add or
+append to, and of the commit message, with scripts/public-text.mjs's rule (scripts/studied-names.json) finds no studied
+name.
+
+scripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `npx vitest run --root tests/acceptance/449 --testTimeout=600000 --no-file-parallelism ac12 ac13 ac14 ac15 ac16` runs unleased
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/449
+
+ ❯ ac14-inherit-velocity.test.ts (3 tests | 3 failed) 11876ms
+   ❯ AC14 #449.a386d09b particles born on a turntable inherit its velocity at their birth point (3)
+     × AC14 #449.a386d09b (velocity) particles born 1 m from the axis of a turntable turning at 1 rad/s, with inherit.velocity 1, start at 1.000 m/s within 0.001 along the tangent 2846ms
+     × AC14 #449.a386d09b (seek) seeking the turntable to frames 20, 40, 55 and 70 equals playing to them, by pixel hash and evaluated-data hash 4385ms
+     × AC14 #449.a386d09b (planted) a velocity taken from the previous frame's position differs between a seek and a play and fails 24ms
+ ❯ ac13-follow-skin.test.ts (3 tests | 3 failed) 13265ms
+   ❯ AC13 #449.1855dc44 particles that follow a skinned character stay on their triangles, and seeking draws what playing does (3)
+     × AC13 #449.1855dc44 (follow) on the walker, 4,096 particles with follow on stay within 0.1 mm of their triangles at 50 sampled times 3137ms
+     × AC13 #449.1855dc44 (seek) seeking the walker to frames 7, 23, 41 and 58 gives the pixel hash playing to them does 4482ms
+     × AC13 #449.1855dc44 (planted) an emitter that reads the bind pose leaves the particles behind and fails, naming the particle 39ms
+ ❯ ac12-surface-sampling.test.ts (2 tests | 2 failed) 10046ms
+   ❯ AC12 #449.cedb9c33 particles born on a cube and a sphere lie on the surface, spread by face area, and adding one moves no other (2)
+     × AC12 #449.cedb9c33 65,536 particles lie within 1e-5 m of the surface, their counts per face pass the fixed 99% chi-squared bound against face area, and a 65,537th moves none of them 3658ms
+     × AC12 #449.cedb9c33 the planted sampler that picks triangles uniformly rather than by area fails the bound, naming the face 33ms
+ ❯ ac16-triangle-cap.test.ts (1 test | 1 failed) 10361ms
+   ❯ AC16 #449.8688e46a a mesh past 1,048,576 triangles named as a surface is refused at check (1)
+     × AC16 #449.8688e46a a mesh of 1,048,577 triangles named as a surface is refused at check, naming the item and the count 6165ms
+ ❯ ac15-surface-bounds.test.ts (4 tests | 4 failed) 6687ms
+   ❯ AC15 #449.bfe8ad15 every live particle of a surface emitter lies inside its item's closed-form bounds (4)
+     × AC15 #449.bfe8ad15 (cube and sphere) every live particle lies inside its item's bounds at 1,000 random times 2335ms
+     × AC15 #449.bfe8ad15 (walker) every live particle lies inside its item's bounds at 1,000 random times 267ms
+     × AC15 #449.bfe8ad15 (turntable) every live particle lies inside its item's bounds at 1,000 random times 443ms
+     × AC15 #449.bfe8ad15 (planted) a bound taken from the bind pose alone lets a particle on the walker leave it and fails 24ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 13 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac12-surface-sampling.test.ts > AC12 #449.cedb9c33 particles born on a cube and a sphere lie on the surface, spread by face area, and adding one moves no other > AC12 #449.cedb9c33 65,536 particles lie within 1e-5 m of the surface, their counts per face pass the fixed 99% chi-squared bound against face area, and a 65,537th moves none of them
+AssertionError: the cube and the sphere with 65536 particles: the particles call answers (README: The surface under test) rather than refusing the call: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ checkOf helpers.ts:464:143
+    462| export function checkOf(reply: JsonObject, call: JsonObject, what: str…
+    463|   if (reply['code'] === 'unsupported_platform') inconclusive(`${what} …
+    464|   expect(reply['code'], `${what}: the particles call answers (README: …
+       |                                                                                                                                               ^
+    465|   const outcome = str(reply['outcome'], `${what}: outcome`);
+    466|   expect(['checked', 'refused'], `${what}: outcome is checked or refus…
+ ❯ passed helpers.ts:490:13
+ ❯ ac12-surface-sampling.test.ts:34:20
+ ❯ samplingProblems ac12-surface-sampling.test.ts:32:32
+ ❯ ac12-surface-sampling.test.ts:67:10
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/13]⎯
+
+ FAIL  ac12-surface-sampling.test.ts > AC12 #449.cedb9c33 particles born on a cube and a sphere lie on the surface, spread by face area, and adding one moves no other > AC12 #449.cedb9c33 the planted sampler that picks triangles uniformly rather than by area fails the bound, naming the face
+AssertionError: deep-gpu run --backend noop --planted surface_triangles_uniform exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ runGpu helpers.ts:229:151
+    227|   if (run.error) throw Error(`${what}: ${run.error.message}`);
+    228|   const stdout = run.stdout ?? '';
+    229|   expect(run.status, `${what} exited 0 (${run.signal ?? 'no signal'});…
+       |                                                                                                                                                       ^
+    230|   const lines = stdout.split('\n').filter((l) => l !== '');
+    231|   expect(lines.length, `${what}: one answer line for the one scenario …
+ ❯ runGpuSurface helpers.ts:734:10
+ ❯ samplingProblems ac12-surface-sampling.test.ts:31:19
+ ❯ ac12-surface-sampling.test.ts:71:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/13]⎯
+
+ FAIL  ac13-follow-skin.test.ts > AC13 #449.1855dc44 particles that follow a skinned character stay on their triangles, and seeking draws what playing does > AC13 #449.1855dc44 (follow) on the walker, 4,096 particles with follow on stay within 0.1 mm of their triangles at 50 sampled times
+AssertionError: the walker: the particles call answers (README: The surface under test) rather than refusing the call: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ checkOf helpers.ts:464:143
+    462| export function checkOf(reply: JsonObject, call: JsonObject, what: str…
+    463|   if (reply['code'] === 'unsupported_platform') inconclusive(`${what} …
+    464|   expect(reply['code'], `${what}: the particles call answers (README: …
+       |                                                                                                                                               ^
+    465|   const outcome = str(reply['outcome'], `${what}: outcome`);
+    466|   expect(['checked', 'refused'], `${what}: outcome is checked or refus…
+ ❯ passed helpers.ts:490:13
+ ❯ followProblems ac13-follow-skin.test.ts:36:21
+ ❯ ac13-follow-skin.test.ts:75:10
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/13]⎯
+
+ FAIL  ac13-follow-skin.test.ts > AC13 #449.1855dc44 particles that follow a skinned character stay on their triangles, and seeking draws what playing does > AC13 #449.1855dc44 (seek) seeking the walker to frames 7, 23, 41 and 58 gives the pixel hash playing to them does
+AssertionError: the walker, played: frame 0: particles (README: view3d's particles field) is an object, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ obj helpers.ts:56:63
+     54| export const show = (v: unknown): string => JSON.stringify(v)?.slice(0…
+     55| export function obj(v: JsonValue | undefined, what: string): JsonObjec…
+     56|   expect(isObject(v), `${what} is an object, got ${show(v)}`).toBe(tru…
+       |                                                               ^
+     57|   return v as JsonObject;
+     58| }
+ ❯ helpers.ts:524:17
+ ❯ framesOf helpers.ts:519:50
+ ❯ ac13-follow-skin.test.ts:83:28
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/13]⎯
+
+ FAIL  ac13-follow-skin.test.ts > AC13 #449.1855dc44 particles that follow a skinned character stay on their triangles, and seeking draws what playing does > AC13 #449.1855dc44 (planted) an emitter that reads the bind pose leaves the particles behind and fails, naming the particle
+AssertionError: deep-gpu run --backend noop --planted surface_bind_pose exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ runGpu helpers.ts:229:151
+    227|   if (run.error) throw Error(`${what}: ${run.error.message}`);
+    228|   const stdout = run.stdout ?? '';
+    229|   expect(run.status, `${what} exited 0 (${run.signal ?? 'no signal'});…
+       |                                                                                                                                                       ^
+    230|   const lines = stdout.split('\n').filter((l) => l !== '');
+    231|   expect(lines.length, `${what}: one answer line for the one scenario …
+ ❯ runGpuSurface helpers.ts:734:10
+ ❯ followProblems ac13-follow-skin.test.ts:35:19
+ ❯ ac13-follow-skin.test.ts:100:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/13]⎯
+
+ FAIL  ac14-inherit-velocity.test.ts > AC14 #449.a386d09b particles born on a turntable inherit its velocity at their birth point > AC14 #449.a386d09b (velocity) particles born 1 m from the axis of a turntable turning at 1 rad/s, with inherit.velocity 1, start at 1.000 m/s within 0.001 along the tangent
+AssertionError: the turntable: the particles call answers (README: The surface under test) rather than refusing the call: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ checkOf helpers.ts:464:143
+    462| export function checkOf(reply: JsonObject, call: JsonObject, what: str…
+    463|   if (reply['code'] === 'unsupported_platform') inconclusive(`${what} …
+    464|   expect(reply['code'], `${what}: the particles call answers (README: …
+       |                                                                                                                                               ^
+    465|   const outcome = str(reply['outcome'], `${what}: outcome`);
+    466|   expect(['checked', 'refused'], `${what}: outcome is checked or refus…
+ ❯ passed helpers.ts:490:13
+ ❯ velocityProblems ac14-inherit-velocity.test.ts:34:21
+ ❯ ac14-inherit-velocity.test.ts:82:10
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/13]⎯
+
+ FAIL  ac14-inherit-velocity.test.ts > AC14 #449.a386d09b particles born on a turntable inherit its velocity at their birth point > AC14 #449.a386d09b (seek) seeking the turntable to frames 20, 40, 55 and 70 equals playing to them, by pixel hash and evaluated-data hash
+AssertionError: the turntable, played: frame 0: particles (README: view3d's particles field) is an object, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ obj helpers.ts:56:63
+     54| export const show = (v: unknown): string => JSON.stringify(v)?.slice(0…
+     55| export function obj(v: JsonValue | undefined, what: string): JsonObjec…
+     56|   expect(isObject(v), `${what} is an object, got ${show(v)}`).toBe(tru…
+       |                                                               ^
+     57|   return v as JsonObject;
+     58| }
+ ❯ helpers.ts:524:17
+ ❯ framesOf helpers.ts:519:50
+ ❯ seekProblems ac14-inherit-velocity.test.ts:62:26
+ ❯ ac14-inherit-velocity.test.ts:87:10
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/13]⎯
+
+ FAIL  ac14-inherit-velocity.test.ts > AC14 #449.a386d09b particles born on a turntable inherit its velocity at their birth point > AC14 #449.a386d09b (planted) a velocity taken from the previous frame's position differs between a seek and a play and fails
+AssertionError: deep-gpu run --planted inherit_previous_frame exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ runGpu helpers.ts:229:151
+    227|   if (run.error) throw Error(`${what}: ${run.error.message}`);
+    228|   const stdout = run.stdout ?? '';
+    229|   expect(run.status, `${what} exited 0 (${run.signal ?? 'no signal'});…
+       |                                                                                                                                                       ^
+    230|   const lines = stdout.split('\n').filter((l) => l !== '');
+    231|   expect(lines.length, `${what}: one answer line for the one scenario …
+ ❯ runGpuSurface helpers.ts:734:10
+ ❯ run ac14-inherit-velocity.test.ts:61:49
+ ❯ seekProblems ac14-inherit-velocity.test.ts:62:35
+ ❯ ac14-inherit-velocity.test.ts:92:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/13]⎯
+
+ FAIL  ac15-surface-bounds.test.ts > AC15 #449.bfe8ad15 every live particle of a surface emitter lies inside its item's closed-form bounds > AC15 #449.bfe8ad15 (cube and sphere) every live particle lies inside its item's bounds at 1,000 random times
+AssertionError: cube and sphere: the particles call answers (README: The surface under test) rather than refusing the call: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ checkOf helpers.ts:464:143
+    462| export function checkOf(reply: JsonObject, call: JsonObject, what: str…
+    463|   if (reply['code'] === 'unsupported_platform') inconclusive(`${what} …
+    464|   expect(reply['code'], `${what}: the particles call answers (README: …
+       |                                                                                                                                               ^
+    465|   const outcome = str(reply['outcome'], `${what}: outcome`);
+    466|   expect(['checked', 'refused'], `${what}: outcome is checked or refus…
+ ❯ passed helpers.ts:490:13
+ ❯ containment ac15-surface-bounds.test.ts:30:21
+ ❯ ac15-surface-bounds.test.ts:38:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/13]⎯
+
+ FAIL  ac15-surface-bounds.test.ts > AC15 #449.bfe8ad15 every live particle of a surface emitter lies inside its item's closed-form bounds > AC15 #449.bfe8ad15 (walker) every live particle lies inside its item's bounds at 1,000 random times
+AssertionError: walker: the particles call answers (README: The surface under test) rather than refusing the call: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ checkOf helpers.ts:464:143
+    462| export function checkOf(reply: JsonObject, call: JsonObject, what: str…
+    463|   if (reply['code'] === 'unsupported_platform') inconclusive(`${what} …
+    464|   expect(reply['code'], `${what}: the particles call answers (README: …
+       |                                                                                                                                               ^
+    465|   const outcome = str(reply['outcome'], `${what}: outcome`);
+    466|   expect(['checked', 'refused'], `${what}: outcome is checked or refus…
+ ❯ passed helpers.ts:490:13
+ ❯ containment ac15-surface-bounds.test.ts:30:21
+ ❯ ac15-surface-bounds.test.ts:38:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/13]⎯
+
+ FAIL  ac15-surface-bounds.test.ts > AC15 #449.bfe8ad15 every live particle of a surface emitter lies inside its item's closed-form bounds > AC15 #449.bfe8ad15 (turntable) every live particle lies inside its item's bounds at 1,000 random times
+AssertionError: turntable: the particles call answers (README: The surface under test) rather than refusing the call: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ checkOf helpers.ts:464:143
+    462| export function checkOf(reply: JsonObject, call: JsonObject, what: str…
+    463|   if (reply['code'] === 'unsupported_platform') inconclusive(`${what} …
+    464|   expect(reply['code'], `${what}: the particles call answers (README: …
+       |                                                                                                                                               ^
+    465|   const outcome = str(reply['outcome'], `${what}: outcome`);
+    466|   expect(['checked', 'refused'], `${what}: outcome is checked or refus…
+ ❯ passed helpers.ts:490:13
+ ❯ containment ac15-surface-bounds.test.ts:30:21
+ ❯ ac15-surface-bounds.test.ts:38:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/13]⎯
+
+ FAIL  ac15-surface-bounds.test.ts > AC15 #449.bfe8ad15 every live particle of a surface emitter lies inside its item's closed-form bounds > AC15 #449.bfe8ad15 (planted) a bound taken from the bind pose alone lets a particle on the walker leave it and fails
+AssertionError: deep-gpu run --backend noop --planted bounds_bind_pose exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ runGpu helpers.ts:229:151
+    227|   if (run.error) throw Error(`${what}: ${run.error.message}`);
+    228|   const stdout = run.stdout ?? '';
+    229|   expect(run.status, `${what} exited 0 (${run.signal ?? 'no signal'});…
+       |                                                                                                                                                       ^
+    230|   const lines = stdout.split('\n').filter((l) => l !== '');
+    231|   expect(lines.length, `${what}: one answer line for the one scenario …
+ ❯ runGpuSurface helpers.ts:734:10
+ ❯ containment ac15-surface-bounds.test.ts:29:19
+ ❯ ac15-surface-bounds.test.ts:43:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/13]⎯
+
+ FAIL  ac16-triangle-cap.test.ts > AC16 #449.8688e46a a mesh past 1,048,576 triangles named as a surface is refused at check > AC16 #449.8688e46a a mesh of 1,048,577 triangles named as a surface is refused at check, naming the item and the count
+AssertionError: the heavy surface: the particles call answers (README: The surface under test) rather than refusing the call: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ checkOf helpers.ts:464:143
+    462| export function checkOf(reply: JsonObject, call: JsonObject, what: str…
+    463|   if (reply['code'] === 'unsupported_platform') inconclusive(`${what} …
+    464|   expect(reply['code'], `${what}: the particles call answers (README: …
+       |                                                                                                                                               ^
+    465|   const outcome = str(reply['outcome'], `${what}: outcome`);
+    466|   expect(['checked', 'refused'], `${what}: outcome is checked or refus…
+ ❯ ac16-triangle-cap.test.ts:51:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/13]⎯
+
+
+ Test Files  5 failed (5)
+      Tests  13 failed (13)
+   Start at  12:52:37
+   Duration  56.45s (tests 98%, transform 1%, import 1%)
+
+
+[exited with code 1]

@@ -8,13 +8,16 @@
 //! target and writes the slot.
 
 pub mod ao;
-pub mod cull;
+mod backdrop;
+pub mod clouds;
 pub mod created;
+pub mod cull;
 mod diag;
 pub mod env;
 pub mod flare;
 mod glass;
 pub mod held;
+pub mod history;
 pub mod local;
 pub mod maps;
 mod mesh;
@@ -23,12 +26,14 @@ mod motion;
 mod oit;
 mod op;
 pub mod print;
+mod set;
 pub mod shadow;
 pub mod sss;
 pub mod status;
 pub mod surface;
 mod sway;
 pub mod targets;
+mod tint;
 pub mod water;
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -52,6 +57,7 @@ use deep_gpu::surface::FORMAT;
 
 pub use crate::diag::{draw_offscreen_diag, Diag, DiagCounts};
 use crate::mesh::Mesh;
+use crate::set::Set;
 use crate::surface::{Low, Surface, Upscale, LABEL_PASS, OUTLINE_PASS, SHARPEN_PASS, UPSCALE_PASS};
 
 /// The 3D writer layers' linear target: what the output pass reads.
@@ -67,7 +73,11 @@ const IDS_MS: wgpu::TextureFormat = wgpu::TextureFormat::Rg16Uint;
 /// The planted forward-Z twin's far plane.
 pub const FORWARD_FAR: f64 = 10_000.0;
 
-const SHADER: &str = include_str!("scene3d.wgsl");
+const SHADER: &str = concat!(
+    include_str!("scene3d.wgsl"),
+    include_str!("tint.wgsl"),
+    include_str!("caps.wgsl")
+);
 const MASK_DUMP: &str = include_str!("mask_dump.wgsl");
 /// The line that plants #425's per-band mask keys.
 const MASKS_SHARED: &str = "const MASKS_INDEPENDENT: bool = false;";
@@ -149,6 +159,8 @@ pub struct Planted {
     pub upscale: surface::Planted,
     /// #386: outlines draw at the internal size, before the upscale.
     pub outlines_before_upscale: bool,
+    /// #173: outlines draw into each window frame, before frame history's resolve.
+    pub outlines_in_history: bool,
     /// #386: status outlines draw at the internal size, before the upscale.
     pub status_before_upscale: bool,
     /// #386: status outlines draw with no depth test.
@@ -183,6 +195,8 @@ pub struct Planted {
     pub cascade_cache_keeps_stale: bool,
     /// #422: the environment prefiltered one roughness mip per frame from the session's first.
     pub prefilter_over_frames: bool,
+    /// #503: a video background's frame prefiltered into the environment, keyed per frame.
+    pub video_background_prefiltered: bool,
     /// #1174: screen-size labels draw in the geometry pass at the internal size, before the
     /// upscale, as the base drew them.
     pub labels_before_upscale: bool,
@@ -226,6 +240,8 @@ pub struct Planted {
     pub uploads_every_transform: bool,
     /// #1903: the warm-up at check makes a pipeline for each item, keyed by item, not by feature set.
     pub warms_per_item: bool,
+    /// #537: a terrain overlay keeps the grid it holds when a frame seeks to another step.
+    pub overlay_keeps_grid_on_seek: bool,
 }
 
 /// What one frame's preparation did (Render worker; Object; Dirty classes).
@@ -238,6 +254,8 @@ pub struct Counts {
     pub instances_written: u32,
     /// #1921: per instancer, the element IDs whose records this frame wrote to the GPU.
     pub element_uploads: BTreeMap<String, Vec<u32>>,
+    /// #537: per line, its segments (by place) whose records this frame wrote to the GPU.
+    pub segment_uploads: BTreeMap<String, Vec<u32>>,
     /// Compute culls run this frame: one per batch and view that changed (#484).
     pub culls: u32,
     /// Whether this frame built the camera's depth pyramid (#1637).
@@ -277,6 +295,12 @@ pub struct Counts {
     pub shadow_maps: Vec<(u64, f64, [f64; 16])>,
     /// Each shadowed local light's map this frame (#446).
     pub local_maps: Vec<local::Report>,
+    /// #537: per terrain overlay (`<plate>/<layer>`), the runs of rows this frame wrote.
+    pub overlay_rows: BTreeMap<String, Vec<[u32; 2]>>,
+    /// #538: per instancer fed by logic and per plate with overlays, the CPU time in ms from the
+    /// start of writing this frame's changed slot records (or overlay cells) to the return of the
+    /// queue's write of them: a proof reading of the upload's cost.
+    pub upload_ms: BTreeMap<String, f64>,
 }
 
 /// The key light's direction, toward the light: what the solids are shaded by and what casts the
@@ -1400,7 +1424,18 @@ fn culled(
     depth_stencil: Option<wgpu::DepthStencilState>,
     cull: Option<wgpu::Face>,
 ) -> wgpu::RenderPipeline {
-    specialized(d, samples, label, layout, module, (vs, buffers), fragment, depth_stencil, cull, &[])
+    specialized(
+        d,
+        samples,
+        label,
+        layout,
+        module,
+        (vs, buffers),
+        fragment,
+        depth_stencil,
+        cull,
+        &[],
+    )
 }
 
 /// [`culled`] with the module's pipeline-overridable `constants` set (#432: a feature set's
@@ -1480,175 +1515,6 @@ pub(crate) fn read_back(
     staging.slice(..).get_mapped_range().ok()
 }
 
-/// One family's instance records in a batch, in a buffer of their own. A frame gathers its
-/// records into `next` with [`Set::push`], kept from frame to frame, so a frame whose members
-/// hold allocates nothing; [`Set::finish`] writes what changed.
-#[derive(Default)]
-struct Set {
-    buffer: Option<wgpu::Buffer>,
-    /// Which allocation the buffer is: a new one is a new resource in the draw key.
-    generation: u64,
-    capacity: usize,
-    owners: Vec<String>,
-    /// The records, each `stride` bytes, end to end.
-    records: Vec<u8>,
-    stride: usize,
-    /// This frame's records and how many, and its owners once they differ from `owners`.
-    next: Vec<u8>,
-    count: usize,
-    new_owners: Option<Vec<String>>,
-    /// It holds a less detailed band's draw inside a margin (#425), which draws last.
-    lower: bool,
-    /// It holds a part whose subsurface spreads (#481), which the share pass draws again.
-    subsurface: bool,
-    /// Bumped whenever a record changes, which culls every view again (#484).
-    revision: u64,
-    /// An instancer's batch: its prototype's bounds, each record's row in the instancer, its
-    /// records' f64 models while the renderer draws from the CPU's cull, and its cull (#484).
-    bounds: [[f64; 3]; 2],
-    elements: Vec<u32>,
-    models: Vec<[[f64; 4]; 3]>,
-    cull: Option<cull::Culled>,
-    /// The records [`Set::write`] changed and hasn't uploaded: the first and one past the last.
-    run: Option<(usize, usize)>,
-    /// The records the last [`Set::finish`] wrote, by index (#1921).
-    uploaded: Vec<usize>,
-}
-
-impl Set {
-    fn begin(&mut self) {
-        self.next.clear();
-        self.count = 0;
-        self.new_owners = None;
-        self.lower = false;
-        self.subsurface = false;
-        self.elements.clear();
-        self.models.clear();
-    }
-
-    fn push(&mut self, owner: &str, record: &[u8]) {
-        self.stride = record.len();
-        if self.new_owners.is_none() && self.owners.get(self.count).is_none_or(|o| o != owner) {
-            self.new_owners = Some(self.owners[..self.count].to_vec());
-        }
-        if let Some(owners) = self.new_owners.as_mut() {
-            owners.push(owner.to_string());
-        }
-        self.next.extend_from_slice(record);
-        self.count += 1;
-    }
-
-    /// Writes the records that changed, or all of them when the set's members changed. True when
-    /// the members changed.
-    fn finish(&mut self, device: &Device, next_generation: &mut u64, written: &mut u32) -> bool {
-        if self.count != self.owners.len() && self.new_owners.is_none() {
-            self.new_owners = Some(self.owners[..self.count].to_vec());
-        }
-        let stride = self.stride.max(16);
-        let members_changed = self.new_owners.is_some() || self.buffer.is_none();
-        self.uploaded.clear();
-        if members_changed {
-            if self.buffer.is_none() || self.capacity < self.count {
-                self.capacity = self.count.max(1);
-                *next_generation += 1;
-                self.generation = *next_generation;
-                self.buffer = Some(device.device.create_buffer(&wgpu::BufferDescriptor {
-                    label: Some("scene3d instances"),
-                    size: (stride * self.capacity) as u64,
-                    // A culled batch's vertex stage reads its records from storage (#484).
-                    usage: wgpu::BufferUsages::VERTEX
-                        | wgpu::BufferUsages::STORAGE
-                        | wgpu::BufferUsages::COPY_DST,
-                    mapped_at_creation: false,
-                }));
-            }
-            let buffer = self.buffer.as_ref().expect("allocated above");
-            if self.count > 0 {
-                deep_gpu::alloc::outside(|| device.queue.write_buffer(buffer, 0, &self.next));
-            }
-            *written += self.count as u32;
-            self.uploaded.extend(0..self.count);
-            self.revision += 1;
-            if let Some(owners) = self.new_owners.take() {
-                self.owners = owners;
-            }
-        } else {
-            let buffer = self
-                .buffer
-                .as_ref()
-                .expect("a set with members has a buffer");
-            // Each run of adjacent changed records goes in one write: a write per record made
-            // a staging buffer per record, and a set that moves moves whole.
-            let n = (self.next.len() / stride).min(self.records.len() / stride);
-            let mut run: Option<usize> = None;
-            for i in 0..=n {
-                let at = i * stride..(i + 1) * stride;
-                if i < n && self.next[at.clone()] != self.records[at] {
-                    *written += 1;
-                    self.uploaded.push(i);
-                    self.revision += 1;
-                    run.get_or_insert(i);
-                } else if let Some(first) = run.take() {
-                    let bytes = &self.next[first * stride..i * stride];
-                    deep_gpu::alloc::outside(|| {
-                        device
-                            .queue
-                            .write_buffer(buffer, (first * stride) as u64, bytes)
-                    });
-                }
-            }
-        }
-        std::mem::swap(&mut self.records, &mut self.next);
-        members_changed
-    }
-
-    /// Takes record `i` when it changed, the set's members as they were. [`Set::flush`] uploads
-    /// it, with the neighbours that changed beside it in one write.
-    fn write(&mut self, device: &Device, i: usize, record: &[u8], written: &mut u32) {
-        let at = i * self.stride;
-        let Some(old) = self.records.get_mut(at..at + record.len()) else {
-            return;
-        };
-        if old != record {
-            old.copy_from_slice(record);
-            match self.run {
-                Some((first, end)) if end == i => self.run = Some((first, i + 1)),
-                _ => {
-                    self.flush(device);
-                    self.run = Some((i, i + 1));
-                }
-            }
-            *written += 1;
-            self.revision += 1;
-        }
-    }
-
-    /// Uploads the run of changed records [`Set::write`] gathered.
-    fn flush(&mut self, device: &Device) {
-        if let (Some((first, end)), Some(buffer)) = (self.run.take(), &self.buffer) {
-            let bytes = &self.records[first * self.stride..end * self.stride];
-            deep_gpu::alloc::outside(|| {
-                device
-                    .queue
-                    .write_buffer(buffer, (first * self.stride) as u64, bytes)
-            });
-        }
-    }
-
-    fn len(&self) -> u32 {
-        self.owners.len() as u32
-    }
-
-    /// The `<instancer>#<id>` owners of the records the last [`Set::finish`] wrote (#1921).
-    fn uploaded_elements(&self) -> impl Iterator<Item = (&str, u32)> {
-        let owners = self.uploaded.iter().filter_map(|i| self.owners.get(*i));
-        owners.filter_map(|o| {
-            let (item, e) = o.rsplit_once('#')?;
-            Some((item, e.parse().ok()?))
-        })
-    }
-}
-
 /// A solid's set key (shape, maps (0: none; #423), material operator (0: none; #429) and its
 /// instancer's (prototype, material) batch (0: none; #484)).
 type SetKey = (Shape, u32, u64, u32);
@@ -1674,6 +1540,8 @@ struct Batch {
     casters: BTreeMap<SetKey, Set>,
     lines: Set,
     points: Set,
+    /// Its point sets' records from a depth video (#503).
+    clouds: Vec<(wgpu::Buffer, u32)>,
     /// One record per inked glyph of its labels.
     labels: Set,
     bundle: Option<wgpu::RenderBundle>,
@@ -1904,14 +1772,20 @@ pub struct Renderer {
     shadow_mark: f32,
     /// The IES tables' atlas (#446).
     ies: local::Tables,
+    /// The terrain overlays' cells (#537).
+    tints: tint::Store,
     /// The light grid this frame, and the buffer its cells are in (#446).
     clusters: Option<clusters::Grid>,
     cluster_buffer: wgpu::Buffer,
     /// The environment's prefilter and cubes (#422).
     env: EnvState,
-    /// Whether this frame has a sky, which draws first; its pipeline once compiled (#422).
+    /// Whether this frame has a sky, which draws first; its pipeline once compiled (#422); the
+    /// video background that draws in its place (#503).
     sky: bool,
     sky_pipeline: Option<wgpu::RenderPipeline>,
+    backdrop: backdrop::Backdrop,
+    /// This frame's point sets from a depth video, as the effects wrote them (#503).
+    clouds: clouds::Clouds,
     /// This frame's puffs, back to front, and their pipeline once compiled (#422).
     puffs: Option<(wgpu::Buffer, u32)>,
     puff_records: Set,
@@ -2053,6 +1927,13 @@ pub struct Renderer {
     /// The GPU surface it draws through, and the upscale's pipelines once compiled (#386).
     pub surface: Surface,
     pub upscale: Option<Arc<Upscale>>,
+    /// Frame history resolves this frame (#173): lines 1 device px or thinner, outlines and
+    /// labels draw after it at display size, through the camera unjittered; `jitter` is its
+    /// window frame's offset, display px right and down, added to the scene's.
+    pub history: bool,
+    pub jitter: [f64; 2],
+    /// The window a view's frames draw into and what this frame does with it (#173).
+    pub frame_history: history::State,
     /// The key sun's cascade maps at this many times their size: 2 at the climb's top rung
     /// (#425), else 1.
     pub shadow_scale: u32,
@@ -2342,6 +2223,7 @@ fn lights_bind(
     locals: &wgpu::TextureView,
     ies: &local::Tables,
     grid: &wgpu::Buffer,
+    tints: &wgpu::Buffer,
 ) -> wgpu::BindGroup {
     let cube = env.cube.as_ref().map_or(&env.stub, |c| &c.view);
     let to = env.to.as_ref().map_or(&env.stub, |c| &c.view);
@@ -2370,6 +2252,7 @@ fn lights_bind(
             grid.as_entire_binding(),
             wgpu::BindingResource::TextureView(env.bg[0].as_ref().map_or(&env.stub, |c| &c.view)),
             wgpu::BindingResource::TextureView(env.bg[1].as_ref().map_or(&env.stub, |c| &c.view)),
+            tints.as_entire_binding(),
         ],
     )
 }
@@ -2414,7 +2297,16 @@ fn clear_pipeline(
     kind: usize,
     after_resolve: bool,
 ) -> wgpu::RenderPipeline {
-    shaded_clear_pipeline(d, samples, module, layout, planted, kind, after_resolve, "mesh_fs")
+    shaded_clear_pipeline(
+        d,
+        samples,
+        module,
+        layout,
+        planted,
+        kind,
+        after_resolve,
+        "mesh_fs",
+    )
 }
 
 /// A fade's two pipelines through a material operator's fragment stage (#432): its depth pass,
@@ -2674,7 +2566,11 @@ fn opaque_pipeline(
     specialized(
         d,
         samples,
-        if lobes { "scene3d.opaque_lobes" } else { "scene3d.opaque" },
+        if lobes {
+            "scene3d.opaque_lobes"
+        } else {
+            "scene3d.opaque"
+        },
         Some(layout),
         module,
         ("mesh_vs", buffers),
@@ -2733,40 +2629,6 @@ pub(crate) fn op_blend_pipeline(
     )
 }
 
-/// The sky's pipeline: a full-screen triangle at the far plane, behind everything, writing no
-/// depth and no object ID.
-fn sky_pipeline(
-    d: &deep_gpu::counted::Wgpu,
-    samples: u32,
-    module: &wgpu::ShaderModule,
-    layout: &wgpu::PipelineLayout,
-    forward_z: bool,
-) -> wgpu::RenderPipeline {
-    let depth = wgpu::DepthStencilState {
-        format: DEPTH,
-        depth_write_enabled: Some(false),
-        depth_compare: Some(if forward_z {
-            wgpu::CompareFunction::LessEqual
-        } else {
-            wgpu::CompareFunction::GreaterEqual
-        }),
-        stencil: Default::default(),
-        bias: Default::default(),
-    };
-    let targets = [target(LINEAR, None), target(IDS_MS, None)];
-    culled(
-        d,
-        samples,
-        SKY_PASS,
-        Some(layout),
-        module,
-        ("sky_vs", &[]),
-        Some(("sky_fs", &targets)),
-        Some(depth),
-        None,
-    )
-}
-
 /// The line, point and text pipelines, each compiled the first time a batch draws its family, so
 /// a patch that adds a family compiles a new pipeline and one that changes only values doesn't.
 struct Families {
@@ -2783,7 +2645,12 @@ struct Families {
 impl Families {
     /// Compiles the pipelines `layer` draws with that aren't yet, naming each in `names`; how
     /// many it compiled.
-    fn ensure(&mut self, d: &deep_gpu::counted::Wgpu, layer: &Layer3, names: &mut Vec<&'static str>) -> u32 {
+    fn ensure(
+        &mut self,
+        d: &deep_gpu::counted::Wgpu,
+        layer: &Layer3,
+        names: &mut Vec<&'static str>,
+    ) -> u32 {
         let mut made = 0;
         let (module, draw, text, fz, samples) = (
             &self.module,
@@ -2865,6 +2732,16 @@ impl Renderer {
     }
 
     pub fn new(device: &Device, planted: Planted) -> Renderer {
+        Renderer::sampled(
+            device,
+            planted,
+            if planted.single_sample { 1 } else { MSAA },
+        )
+    }
+
+    /// A renderer whose geometry pass draws `samples` samples a pixel: one under frame
+    /// history's temporal upscale, whose window rebuilds the pixels a box filter would blur (#173).
+    pub fn sampled(device: &Device, planted: Planted, samples: u32) -> Renderer {
         let d = &device.device;
         let module = d.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("scene3d"),
@@ -3046,6 +2923,7 @@ impl Renderer {
                     },
                     count: None,
                 },
+                tint::entry(),
             ],
         });
         let oit = oit::Oit::new(d);
@@ -3066,13 +2944,11 @@ impl Renderer {
             LOBE_ENTRIES * std::mem::size_of::<LobeEntry>(),
         );
         let lights_buffer = uniform_buffer("scene3d lights", std::mem::size_of::<LightsUniform>());
-        let dfg_buffer = d.create_buffer_init(
-            &wgpu::util::BufferInitDescriptor {
-                label: Some("scene3d dfg"),
-                contents: bytemuck::cast_slice(&dfg_table()),
-                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            },
-        );
+        let dfg_buffer = d.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("scene3d dfg"),
+            contents: bytemuck::cast_slice(&dfg_table()),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
         let env = EnvState {
             prefilter: env::Prefilter::new(d),
             buffer: uniform_buffer("scene3d env", std::mem::size_of::<EnvUniform>()),
@@ -3102,6 +2978,7 @@ impl Renderer {
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
+        let tints = tint::Store::new(d);
         let lights_bind = lights_bind(
             d,
             &lights_layout,
@@ -3113,6 +2990,7 @@ impl Renderer {
             &cascade_stub(d),
             &ies,
             &cluster_buffer,
+            &tints.buffer,
         );
         let ao = ao::Passes::new(device);
         let maps = maps::Store::new(d, &device.queue);
@@ -3131,7 +3009,6 @@ impl Renderer {
         let text_layout = layout(&[Some(&frame_layout), Some(&mask_layout)]);
         let output_pipeline_layout = layout(&[Some(&output_layout)]);
         let mesh_buffers = mesh_buffers();
-        let samples = if planted.single_sample { 1 } else { MSAA };
         let mesh = |cull| {
             opaque_pipeline(
                 d,
@@ -3401,11 +3278,14 @@ impl Renderer {
             locals: local::Locals::default(),
             shadow_mark,
             ies,
+            tints,
             clusters: None,
             cluster_buffer,
             env,
             sky: false,
             sky_pipeline: None,
+            backdrop: Default::default(),
+            clouds: Default::default(),
             puffs: None,
             puff_records: Set::default(),
             puff_pipeline: None,
@@ -3518,6 +3398,9 @@ impl Renderer {
             profiler: None,
             surface: Surface::default(),
             upscale: None,
+            history: false,
+            jitter: [0.0; 2],
+            frame_history: Default::default(),
             shadow_scale: 1,
             size: [0, 0],
             low: None,
@@ -3657,7 +3540,11 @@ impl Renderer {
     }
 
     /// The output pass's bind group: `linear` and the tone uniform.
-    fn output_bind(&self, d: &deep_gpu::counted::Wgpu, linear: &wgpu::TextureView) -> wgpu::BindGroup {
+    fn output_bind(
+        &self,
+        d: &deep_gpu::counted::Wgpu,
+        linear: &wgpu::TextureView,
+    ) -> wgpu::BindGroup {
         bind_group(
             d,
             "scene3d output",
@@ -3735,7 +3622,7 @@ impl Renderer {
 
     /// The internal size a frame of `size` draws at.
     pub fn internal_size(&self, size: [u32; 2]) -> [u32; 2] {
-        if self.surface.scale != 1.0 && self.upscale.is_some() {
+        if self.surface.scale != 1.0 && (self.upscale.is_some() || self.history) {
             surface::scaled(size, self.surface.scale)
         } else {
             size
@@ -4041,6 +3928,7 @@ impl Renderer {
             locals,
             &self.ies,
             &self.cluster_buffer,
+            &self.tints.buffer,
         );
         self.lights_generation += 1;
     }
@@ -4050,9 +3938,12 @@ impl Renderer {
     fn prepare_env(&mut self, device: &Device, scene: &Scene, camera: &[f64; 16]) {
         let mut u = EnvUniform::zeroed();
         u.moon[3] = 2.0;
+        // #503's planted video_background_prefiltered: the video's frame is the source.
+        let video = backdrop::planted_source(self.planted.video_background_prefiltered, scene);
         let wanted = scene.sky.as_ref().and_then(|s| {
             let e = s.environment.as_ref()?;
-            Some((env::key(s, &e.from, e.size), e))
+            let key = video.map_or_else(|| env::key(s, &e.from, e.size), |v| v.0);
+            Some((key, e))
         });
         let mut rebuilt = false;
         match wanted {
@@ -4068,7 +3959,8 @@ impl Renderer {
                 let partial = self.planted.prefilter_over_frames;
                 let behind = self.env.cube.as_ref().is_some_and(|c| c.filled < c.mips);
                 if self.env.cube.as_ref().map(|c| c.key) != Some(key) || (partial && behind) {
-                    let source = env::source(sky, &e.from);
+                    let source = (video.map(|v| backdrop::equirect(v.1)))
+                        .unwrap_or_else(|| env::source(sky, &e.from));
                     let filled = match (&self.env.cube, partial) {
                         (Some(c), true) if c.key == key => Some(c.filled + 1),
                         (_, true) => Some(1),
@@ -4306,7 +4198,12 @@ impl Renderer {
             }
         }
         for (k, &(i, weight)) in policy.shaded.iter().enumerate().take(SHADED) {
-            u.answers[k] = [weight as f32, f32::from_bits(op::light_hash(&scene.lights[i].id)), 0.0, 0.0];
+            u.answers[k] = [
+                weight as f32,
+                f32::from_bits(op::light_hash(&scene.lights[i].id)),
+                0.0,
+                0.0,
+            ];
         }
         if self.planted.lobes & PLANT_CALLS_CUT != 0 {
             u.answers[0][2] = policy.left_out.len() as f32;
@@ -4380,9 +4277,11 @@ impl Renderer {
         self.clusters = grid;
         self.counts.lights_left_out = policy.left_out;
         deep_gpu::alloc::outside(|| {
-            device
-                .queue
-                .write_changed(&self.lights_buffer, &self.written.lights, bytemuck::bytes_of(&u))
+            device.queue.write_changed(
+                &self.lights_buffer,
+                &self.written.lights,
+                bytemuck::bytes_of(&u),
+            )
         });
     }
 
@@ -4705,10 +4604,17 @@ impl Renderer {
             self.compiled += 1;
             self.names.push("scene3d.cut");
         }
+        // #537: the terrain overlays' changed rows, before the batches bind the lights' group.
+        let keep = self.planted.overlay_keeps_grid_on_seek;
+        if self.tints.upload(device, &scene.tints, keep) {
+            self.rebind_lights(device);
+        }
+        self.counts.upload_ms.extend(self.tints.upload_ms.clone());
         for layer in &scene.layers {
             self.prepare_batch(device, layer, &scene.camera);
         }
         self.sways.move_all(device, scene);
+        self.counts.overlay_rows = self.tints.table(device, &scene.tints, &self.picks);
         if !self.adjusts.is_empty() {
             deep_gpu::alloc::outside(|| {
                 device.queue.write_buffer(
@@ -4827,7 +4733,13 @@ impl Renderer {
                 .as_ref()
                 .is_some_and(|m| m.alpha_mode == AlphaMode::Mask)
         };
-        let casting = || scene.layers.iter().flat_map(|l| &l.solids).filter(|s| s.cast_shadow);
+        let casting = || {
+            scene
+                .layers
+                .iter()
+                .flat_map(|l| &l.solids)
+                .filter(|s| s.cast_shadow)
+        };
         self.mask_casts = casting().any(mask);
         let mut maps: Vec<String> = Vec::new();
         if let Some(sun) = scene.sun.as_ref().filter(|s| s.shadow) {
@@ -4849,7 +4761,11 @@ impl Renderer {
         }
         let target = maps.join(", ");
         for kind_mask in [false, true] {
-            let made = if kind_mask { self.shadow.mask.is_some() } else { self.shadow.pipeline.is_some() };
+            let made = if kind_mask {
+                self.shadow.mask.is_some()
+            } else {
+                self.shadow.pipeline.is_some()
+            };
             let casters: Vec<&Solid> = casting().filter(|s| mask(s) == kind_mask).collect();
             if made || casters.is_empty() {
                 continue;
@@ -4875,8 +4791,12 @@ impl Renderer {
             let mut sets: Vec<&str> = casters.iter().map(|s| created::caster_set(s)).collect();
             sets.sort_unstable();
             sets.dedup();
-            let items = casters.iter().map(|s| created::item_of(&s.id).to_string()).collect();
-            self.made_for.insert(name, (items, sets.join(","), target.clone()));
+            let items = casters
+                .iter()
+                .map(|s| created::item_of(&s.id).to_string())
+                .collect();
+            self.made_for
+                .insert(name, (items, sets.join(","), target.clone()));
             self.compiled += 1;
             self.names.push(name);
         }
@@ -4887,13 +4807,22 @@ impl Renderer {
         while self.logged < self.names.len() {
             let name = self.names[self.logged];
             let (mut items, set, target) = self.made_for.remove(name).unwrap_or_else(|| {
-                (Vec::new(), name.trim_start_matches("scene3d.").to_string(), "view".into())
+                (
+                    Vec::new(),
+                    name.trim_start_matches("scene3d.").to_string(),
+                    "view".into(),
+                )
             });
             let mut seen = BTreeSet::new();
             items.retain(|i| seen.insert(i.clone()));
             let samples = self.families.samples.to_le_bytes();
             self.log.push(created::Created {
-                key: created::key128(&[name.as_bytes(), set.as_bytes(), target.as_bytes(), &samples]),
+                key: created::key128(&[
+                    name.as_bytes(),
+                    set.as_bytes(),
+                    target.as_bytes(),
+                    &samples,
+                ]),
                 items,
                 feature_set: set,
                 target,
@@ -5101,7 +5030,12 @@ impl Renderer {
         let solids = || scene.layers.iter().flat_map(|l| &l.solids);
         if p.bind_group_per_item {
             for _ in solids() {
-                bind_group(d, "planted per item", &self.frame_layout, [self.frame_buffer.as_entire_binding()]);
+                bind_group(
+                    d,
+                    "planted per item",
+                    &self.frame_layout,
+                    [self.frame_buffer.as_entire_binding()],
+                );
             }
         }
         if p.uploads_every_transform {
@@ -5109,11 +5043,17 @@ impl Renderer {
                 .flat_map(|s| {
                     let m = s.model;
                     let rows = [m[0], m[1], m[2], [0.0, 0.0, 0.0, 1.0]];
-                    rows.into_iter().flatten().flat_map(|v| (v as f32).to_le_bytes())
+                    rows.into_iter()
+                        .flatten()
+                        .flat_map(|v| (v as f32).to_le_bytes())
                 })
                 .collect();
             let size = bytes.len().max(64) as u64;
-            if self.planted_transforms.as_ref().is_none_or(|b| b.size() < size) {
+            if self
+                .planted_transforms
+                .as_ref()
+                .is_none_or(|b| b.size() < size)
+            {
                 self.planted_transforms = Some(d.create_buffer(&wgpu::BufferDescriptor {
                     label: Some("planted transforms"),
                     size,
@@ -5405,7 +5345,12 @@ impl Renderer {
                 .order
                 .iter()
                 .filter_map(|id| self.batches.get(id))
-                .any(|b| b.solids.values().chain(b.casters.values()).any(|s| s.cull.is_some()));
+                .any(|b| {
+                    b.solids
+                        .values()
+                        .chain(b.casters.values())
+                        .any(|s| s.cull.is_some())
+                });
             if let Some(t) = self.targets.as_ref().filter(|_| culled) {
                 let samples = self.families.samples;
                 if self
@@ -5628,7 +5573,8 @@ impl Renderer {
                     .filter(|s| transmits(s) || s.op.as_ref().is_some_and(op::reads_backdrop))
                     .map(|s| created::item_of(&s.id).to_string())
                     .collect();
-                self.made_for.insert(glass::PASS, (items, "transmission".into(), "view".into()));
+                self.made_for
+                    .insert(glass::PASS, (items, "transmission".into(), "view".into()));
                 self.compiled += 1;
                 self.names.push(glass::PASS);
             }
@@ -5653,8 +5599,8 @@ impl Renderer {
         // Look: samples (#423): a sub-sample's offset moves the projection by a fraction of a
         // pixel, right and down.
         let [jx, jy] = [
-            2.0 * scene.jitter[0] / f64::from(scene.size[0].max(1)),
-            -2.0 * scene.jitter[1] / f64::from(scene.size[1].max(1)),
+            2.0 * (scene.jitter[0] + self.jitter[0]) / f64::from(scene.size[0].max(1)),
+            -2.0 * (scene.jitter[1] + self.jitter[1]) / f64::from(scene.size[1].max(1)),
         ];
         let w = rows[3];
         for (c, wc) in w.iter().enumerate() {
@@ -5703,7 +5649,7 @@ impl Renderer {
                 w as f32,
             ]
         };
-        let below = internal != scene.size;
+        let below = internal != scene.size || self.history;
         let forward = if self.planted.forward_z { 1.0 } else { 0.0 };
         let perspective = if cam.perspective { 1.0 } else { 0.0 };
         let frame = FrameUniform {
@@ -5749,7 +5695,13 @@ impl Renderer {
             frame.cap = v4(c.cap.unwrap_or([0.0; 3]), 1.0);
         }
         // The outline pass over the full-size slot, and over the internal size for the planted
-        // programs that draw there.
+        // programs that draw there; after frame history's resolve, unjittered.
+        let plain = cam.clip(depth);
+        let post = FrameUniform {
+            clip: std::array::from_fn(|c| std::array::from_fn(|r| plain[r][c] as f32)),
+            ..frame
+        };
+        let post = if self.history { post } else { frame };
         let display = FrameUniform {
             viewport: [
                 scene.size[0] as f32,
@@ -5757,19 +5709,28 @@ impl Renderer {
                 cam.scale as f32,
                 perspective,
             ],
-            px: [1.0, 2.0, k as f32, forward],
-            ..frame
+            // After frame history's resolve, lines test the display-size depth it writes.
+            px: [1.0, 2.0, if self.history { 0.0 } else { k as f32 }, forward],
+            ..post
         };
         let inside = FrameUniform {
             px: [1.0, 2.0, 1.0, forward],
-            ..frame
+            ..post
         };
         deep_gpu::alloc::outside(|| {
             let q = &device.queue;
             let w = &self.written;
             q.write_changed(&self.frame_buffer, &w.frame, bytemuck::bytes_of(&frame));
-            q.write_changed(&self.outlines.display, &w.display, bytemuck::bytes_of(&display));
-            q.write_changed(&self.outlines.internal, &w.internal, bytemuck::bytes_of(&inside));
+            q.write_changed(
+                &self.outlines.display,
+                &w.display,
+                bytemuck::bytes_of(&display),
+            );
+            q.write_changed(
+                &self.outlines.internal,
+                &w.internal,
+                bytemuck::bytes_of(&inside),
+            );
         });
         self.prepare_outlines(device, scene);
         // A scene of materials shades the key sun's shadow through its cascades (#422); one of
@@ -5803,7 +5764,7 @@ impl Renderer {
         self.sky = scene.sky.as_ref().is_some_and(|s| s.draws_background());
         self.prepare_puffs(device, scene);
         if self.sky && self.sky_pipeline.is_none() {
-            self.sky_pipeline = Some(sky_pipeline(
+            self.sky_pipeline = Some(backdrop::sky_pipeline(
                 &device.device,
                 self.families.samples,
                 &self.scene_module,
@@ -5812,6 +5773,12 @@ impl Renderer {
             ));
             self.compiled += 1;
             self.names.push(SKY_PASS);
+        }
+        let shader = (self.families.samples, self.planted.forward_z);
+        let view = (&camera, internal);
+        if (self.backdrop).prepare(device, scene, view, &self.row_groups, shader) {
+            self.compiled += 1;
+            self.names.push(backdrop::PASS);
         }
         self.prepare_lights(device, scene, policy, dropped);
         if let Some(m) = self.shadow.clip {
@@ -5865,9 +5832,11 @@ impl Renderer {
             power: rgb4(look.grade.power),
         };
         deep_gpu::alloc::outside(|| {
-            device
-                .queue
-                .write_changed(&self.tone_buffer, &self.written.tone, bytemuck::bytes_of(&tone))
+            device.queue.write_changed(
+                &self.tone_buffer,
+                &self.written.tone,
+                bytemuck::bytes_of(&tone),
+            )
         });
         self.ground = [
             decode(scene.ground[0]),
@@ -5968,8 +5937,18 @@ impl Renderer {
             };
             let wanted = layer.solids.iter().any(|s| of_kind(&s));
             if wanted && self.clear_pipelines[k].is_none() {
-                let items: Vec<String> = layer.solids.iter().filter(of_kind).map(|s| created::item_of(&s.id).to_string()).collect();
-                let set = layer.solids.iter().find(of_kind).map(created::feature_set).unwrap_or_default();
+                let items: Vec<String> = layer
+                    .solids
+                    .iter()
+                    .filter(of_kind)
+                    .map(|s| created::item_of(&s.id).to_string())
+                    .collect();
+                let set = layer
+                    .solids
+                    .iter()
+                    .find(of_kind)
+                    .map(created::feature_set)
+                    .unwrap_or_default();
                 self.made_for.insert(name, (items, set, "view".into()));
                 self.clear_pipelines[k] = Some(clear_pipeline(
                     &device.device,
@@ -5989,9 +5968,19 @@ impl Renderer {
         let glass = self.clear_pipelines[usize::from(GLASS)].is_some() || self.glass.is_some();
         for k in [BLEND, ADD].map(usize::from) {
             if glass && self.clear_pipelines[k].is_some() && self.late_pipelines[k].is_none() {
-                let items: Vec<String> = layer.solids.iter().filter(|s| clear(s) && usize::from(kind_of(s)) == k).map(|s| created::item_of(&s.id).to_string()).collect();
-                let set = if k == usize::from(ADD) { "add+over_glass" } else { "blend+over_glass" };
-                self.made_for.insert(LATE_NAMES[k], (items, set.into(), "view".into()));
+                let items: Vec<String> = layer
+                    .solids
+                    .iter()
+                    .filter(|s| clear(s) && usize::from(kind_of(s)) == k)
+                    .map(|s| created::item_of(&s.id).to_string())
+                    .collect();
+                let set = if k == usize::from(ADD) {
+                    "add+over_glass"
+                } else {
+                    "blend+over_glass"
+                };
+                self.made_for
+                    .insert(LATE_NAMES[k], (items, set.into(), "view".into()));
                 self.late_pipelines[k] = Some(clear_pipeline(
                     &device.device,
                     self.families.samples,
@@ -6043,8 +6032,20 @@ impl Renderer {
                 s,
                 clear(s) && !matches!(kind_of(s), BLEND | FADE | GLASS),
             );
+            // A terrain tile's pixels read its plate's full-detail normals (#2017).
+            let terrain = s.mesh.as_ref().and_then(|m| m.terrain.as_deref());
             let maps = match (&s.maps, &s.material) {
-                (Some(m), Some(_)) => self.maps.group(&device.device, &device.queue, m, taps),
+                (Some(m), Some(_)) => {
+                    self.maps
+                        .group(&device.device, &device.queue, m, taps, terrain)
+                }
+                _ if terrain.is_some() => self.maps.group(
+                    &device.device,
+                    &device.queue,
+                    &light::Maps::default(),
+                    taps,
+                    terrain,
+                ),
                 _ => 0,
             };
             // A material operator binds its inputs with the solid's maps, once per pair.
@@ -6074,6 +6075,7 @@ impl Renderer {
                     &device.queue,
                     source,
                     taps,
+                    terrain,
                     &m.layout,
                     m.entries(&refs),
                 );
@@ -6112,14 +6114,19 @@ impl Renderer {
                     &mesh_buffers(),
                     true,
                 ));
-                let name = ["scene3d.opaque_lobes", "scene3d.opaque_lobes_back", "scene3d.opaque_lobes_front"][cull as usize];
+                let name = [
+                    "scene3d.opaque_lobes",
+                    "scene3d.opaque_lobes_back",
+                    "scene3d.opaque_lobes_front",
+                ][cull as usize];
                 let items: Vec<String> = layer
                     .solids
                     .iter()
                     .filter(|x| !clear(x) && x.material.as_ref().is_some_and(|m| m.lobes.on()))
                     .map(|x| created::item_of(&x.id).to_string())
                     .collect();
-                self.made_for.insert(name, (items, created::feature_set(s), "view".into()));
+                self.made_for
+                    .insert(name, (items, created::feature_set(s), "view".into()));
                 self.compiled += 1;
                 self.names.push(name);
             }
@@ -6234,7 +6241,12 @@ impl Renderer {
             let set = sets.entry(slot.0).or_default();
             set.lower |= s.mask.is_some_and(|m| m.lower);
             set.subsurface |= spreads(s);
-            slot.1 = set.count as u32;
+            // #537: a fed instancer's record sits at its slot.
+            slot.1 = if layer.fed.contains_key(&s.batch) {
+                s.row
+            } else {
+                set.count as u32
+            };
             // A set's records share one mesh, so one set of bounds: an instancer's prototype's,
             // or the items' shape's (#1637).
             if set.count == 0 {
@@ -6243,7 +6255,7 @@ impl Renderer {
                     [b[0].map(f64::from), b[1].map(f64::from)]
                 });
             }
-            if slot.0.3 != 0 {
+            if slot.0 .3 != 0 {
                 set.elements.push(s.row);
             }
             if self.cpu_cull {
@@ -6266,11 +6278,28 @@ impl Renderer {
         }
         batch.clear.finish(device, &mut next, &mut written);
         batch.solid_slots = slots;
+        for (key, set) in batch.solids.iter_mut().chain(batch.casters.iter_mut()) {
+            if let Some(&n) = layer.fed.get(&key.3) {
+                set.lay(n as usize, std::mem::size_of::<SolidRecord>());
+            }
+        }
         batch.solids.retain(|_, set| set.count > 0);
         batch.casters.retain(|_, set| set.count > 0);
+        let mut fed_uploads: BTreeMap<String, BTreeSet<u32>> = BTreeMap::new();
         for (key, set) in batch.solids.iter_mut().chain(batch.casters.iter_mut()) {
+            let started = std::time::Instant::now();
             set.finish(device, &mut next, &mut written);
+            if layer.fed.contains_key(&key.3) {
+                let owner = set.owners.first().and_then(|o| o.split('#').next()).unwrap_or_default();
+                let ms = started.elapsed().as_secs_f64() * 1000.0;
+                *self.counts.upload_ms.entry(owner.to_string()).or_default() += ms;
+            }
             for (item, e) in set.uploaded_elements().filter(|_| key.3 != 0) {
+                // #537: a fed slot whose parts sit in several batches is one element.
+                if layer.fed.contains_key(&key.3) {
+                    fed_uploads.entry(item.to_string()).or_default().insert(e);
+                    continue;
+                }
                 let uploads = self.counts.element_uploads.entry(item.into());
                 uploads.or_default().push(e);
             }
@@ -6316,9 +6345,16 @@ impl Renderer {
                 _ => {}
             }
         }
+        for (item, slots) in fed_uploads {
+            self.counts
+                .element_uploads
+                .entry(item)
+                .or_default()
+                .extend(slots);
+        }
         batch.lines.begin();
         for l in &layer.lines {
-            for seg in &l.segments {
+            for (k, seg) in l.segments.iter().enumerate() {
                 let record = SegmentRecord {
                     a: v4(seg.a, seg.wa),
                     b: v4(seg.b, seg.wb),
@@ -6330,15 +6366,30 @@ impl Renderer {
                         | (u32::from(l.edges.is_some()) << 1)
                         | (u32::from(l.over) << 2)
                         | (u32::from(l.joined) << 3)
-                        | (u32::from(l.dash_world) << 4),
+                        | (u32::from(l.dash_world) << 4)
+                        | (u32::from(seg.hidden) << 5)
+                        | (deep_canvas_scene3d::points::cap_bits(l, k) << 6),
                     dash: half_bits(l.dash[0]) | (half_bits(l.dash[1]) << 16),
                 };
                 batch.lines.push(&l.id, bytemuck::bytes_of(&record));
             }
         }
         batch.lines.finish(device, &mut next, &mut written);
+        for (line, s) in batch.lines.uploaded_segments() {
+            self.counts
+                .segment_uploads
+                .entry(line.into())
+                .or_default()
+                .push(s);
+        }
         batch.points.begin();
-        for p in &layer.points {
+        // A set from a depth video draws its operator's records, never one of its own (#503).
+        let sets = layer
+            .points
+            .iter()
+            .filter_map(|p| self.clouds.get(&p.id).cloned());
+        batch.clouds = sets.collect();
+        for p in layer.points.iter().filter(|p| p.cloud.is_none()) {
             let shape = match p.shape {
                 PointShape::Dot => 0,
                 PointShape::Square => 1,
@@ -6415,6 +6466,7 @@ impl Renderer {
                     .extend([family, set.generation, u64::from(set.len())]);
             }
         }
+        batch.next_key.extend(clouds::key(&batch.clouds));
         if !batch.clear_draws.is_empty() {
             batch.next_key.extend([13, batch.clear.generation]);
             for ((shape, maps), kind) in &batch.clear_draws {
@@ -6756,6 +6808,7 @@ impl Renderer {
                 enc.draw(0..6, 0..set.len());
             }
         }
+        clouds::draw(&mut enc, self.families.point.as_ref(), &batch.clouds);
         if let (Some(buffer), Some(pipeline), true) = (
             &batch.labels.buffer,
             &self.families.text,
@@ -6807,7 +6860,9 @@ impl Renderer {
         })?;
         let m = &solid.model;
         let positions = bytemuck::cast_slice::<u8, f32>(&bytes)
-            .chunks_exact(mesh::FLOATS)
+            .as_chunks::<{ mesh::FLOATS }>()
+            .0
+            .iter()
             .map(|v| {
                 let p = [v[0], v[1], v[2]].map(f64::from);
                 [0, 1, 2].map(|r| m[r][0] * p[0] + m[r][1] * p[1] + m[r][2] * p[2] + m[r][3])
@@ -7158,7 +7213,9 @@ impl Renderer {
                             pass.set_pipeline(cut);
                             pass.set_bind_group(3, group, &[]);
                         }
-                        (None, _, Some(p), true) | (None, Some(p), _, false) => pass.set_pipeline(p),
+                        (None, _, Some(p), true) | (None, Some(p), _, false) => {
+                            pass.set_pipeline(p)
+                        }
                         // Its caster kind's pipeline isn't made: the prepare that would make it
                         // didn't run for this frame.
                         _ => continue,
@@ -7583,9 +7640,15 @@ impl Renderer {
         // the slot from it (#382). Below scale 1 the output and the guard write the internal
         // frame, which the upscale and sharpen return to the slot's size (#386).
         let size = t.size;
-        let below = self.ensure_low(device);
+        // A frame of the window draws into its layer, and frame history's resolve returns the
+        // window to the slot in place of the upscale (#173).
+        let window = self.frame_history.jobs.take();
+        let below = window.is_none() && self.ensure_low(device);
         let low_view = self.low.as_ref().filter(|_| below).map(|l| l.view.clone());
-        let framed = low_view.clone().unwrap_or_else(|| slot.clone());
+        let framed = match &window {
+            Some(w) => w.layer.clone(),
+            None => low_view.clone().unwrap_or_else(|| slot.clone()),
+        };
         let finished = after.is_some().then(|| self.finished(device, size));
         let (target, pipeline) = match &finished {
             Some(f) => (f.clone(), self.output_f32.clone()),
@@ -7656,6 +7719,36 @@ impl Renderer {
             .unwrap_or(after_jobs.len());
         let colors = after_jobs.split_off(colors_at);
         jobs.extend(after_jobs);
+        // Line marks after frame history's resolve test the display's depth it writes.
+        let resolved = window.as_ref().and_then(|w| w.resolve.clone());
+        let after = |d: OutlineDraw| match &resolved {
+            Some(r) => r.lines(d),
+            None => d,
+        };
+        if let Some(w) = window {
+            let early = self.outline_draw(true);
+            let (profiler, slot) = (self.profiler.clone(), slot.clone());
+            let resolves = w.resolve.is_some();
+            jobs.push((
+                history::RESOLVE_PASS.into(),
+                Box::new(move |encoder| {
+                    // The planted outlines_in_history draws them into the window's frame.
+                    if let Some(early) = &early {
+                        early.record(encoder, &w.layer, None);
+                    }
+                    w.copy.record(encoder);
+                    if let Some(r) = &w.resolve {
+                        timed(&profiler, history::RESOLVE_PASS, encoder, |e, ts| {
+                            r.record(e, &slot, ts)
+                        });
+                    }
+                }),
+            ));
+            // A window frame drawn before the frame at t shows nothing of its own.
+            if !resolves {
+                return jobs;
+            }
+        }
         if let Some(low) = low_view {
             let early = self.outline_draw(true);
             let [upscale, sharpen] = self.surface_steps(device, slot).expect("below scale 1");
@@ -7683,14 +7776,17 @@ impl Renderer {
             ));
         }
         // Status outlines draw as the status colors, where the frame has them, over the labels.
-        let (outlines, statuses) = match self.outline_draw(false) {
+        let (outlines, statuses) = match self.outline_draw(false).map(after) {
             Some(draw) if !colors.is_empty() => {
                 let (draw, statuses) = draw.split();
                 (Some(draw), statuses)
             }
             draw => (draw, None),
         };
-        for (name, draw) in [(OUTLINE_PASS, outlines), (LABEL_PASS, self.label_draw())] {
+        for (name, draw) in [
+            (OUTLINE_PASS, outlines),
+            (LABEL_PASS, self.label_draw().map(after)),
+        ] {
             let Some(draw) = draw else { continue };
             let (profiler, target) = (self.profiler.clone(), slot.clone());
             jobs.push((
@@ -7772,10 +7868,12 @@ impl Renderer {
         let o = &self.outlines;
         let t = self.targets.as_ref()?;
         let binds = o.binds.as_ref()?;
-        let below = self.internal() != self.size && self.upscale.is_some();
+        let upscaled = self.internal() != self.size && self.upscale.is_some();
+        let below = upscaled || self.history;
         let p = self.planted;
-        let strokes_early = below && p.outlines_before_upscale;
-        let statuses_early = below && p.status_before_upscale;
+        let strokes_early =
+            upscaled && p.outlines_before_upscale || self.history && p.outlines_in_history;
+        let statuses_early = upscaled && p.status_before_upscale;
         let mut sets = Vec::new();
         let mut statuses = Vec::new();
         let take = |set: &Set, into: &mut Vec<(wgpu::Buffer, u32)>| {
@@ -8192,21 +8290,6 @@ impl Renderer {
             .buffer
             .clone()
             .map(|buffer| (buffer, all.len() as u32));
-    }
-
-    /// The sky's draw this frame, when it has one (#422).
-    fn sky_draw(&self) -> Option<SkyDraw> {
-        let p = self.sky_pipeline.clone().filter(|_| self.sky)?;
-        Some((
-            p,
-            [
-                self.frame_bind.clone(),
-                self.lights_bind.clone(),
-                self.ao.shade().clone(),
-                // The solids' layout holds the maps' group 3 since #423.
-                self.maps.by_index(0).clone(),
-            ],
-        ))
     }
 
     /// The output pass, tone-mapping the linear target into `target`.
@@ -8885,6 +8968,10 @@ pub struct Shared {
     pub post: Option<Box<dyn Post>>,
     /// Passes after the finish: the status guard and the status colors, where status can show.
     pub after: Option<Box<dyn After>>,
+    /// The next frame's point sets from a depth video, as the driver's effects wrote them (#503).
+    pub clouds: clouds::Clouds,
+    /// Samples a pixel its renderer's geometry pass draws (#173: one under temporal upscaling).
+    pub samples: u32,
 }
 
 /// scene3d as the GPU layer's render module: one view's renderer.
@@ -8900,6 +8987,8 @@ impl Module3 {
             planted,
             post: None,
             after: None,
+            clouds: Default::default(),
+            samples: if planted.single_sample { 1 } else { MSAA },
         }));
         (
             Module3 {
@@ -8964,6 +9053,15 @@ impl RenderModule for Module3 {
             0.04,
             Determinism::LiveOnly,
         ));
+        // Or frame history's resolve, from the window into the slot (#173).
+        passes.push(pass(
+            history::RESOLVE_PASS,
+            1,
+            vec!["depth"],
+            vec!["slot"],
+            0.4,
+            Determinism::LiveOnly,
+        ));
         passes.push(pass(
             OUTLINE_PASS,
             2,
@@ -9004,7 +9102,7 @@ impl RenderModule for Module3 {
         let mut s = lock(&self.shared);
         let planted = s.planted;
         if !planted.builds_on_first_frame {
-            s.renderer = Some(Renderer::new(device, planted));
+            s.renderer = Some(Renderer::sampled(device, planted, s.samples));
         }
         Ok(())
     }
@@ -9020,22 +9118,25 @@ impl RenderModule for Module3 {
         };
         // The planted renderer compiles everything it draws with here, in the frame.
         if s.renderer.is_none() && s.planted.builds_on_first_frame {
-            s.renderer = Some(Renderer::new(device, s.planted));
+            s.renderer = Some(Renderer::sampled(device, s.planted, s.samples));
         }
         let Shared {
             renderer,
             post,
             after,
+            clouds,
             ..
         } = &mut *s;
         let Some(renderer) = renderer.as_mut() else {
             return Vec::new();
         };
+        renderer.clouds.clone_from(clouds);
         // The instances outputs the frame's instancers draw from (#484).
         if let Some(p) = post.as_deref_mut() {
             renderer.feed(p.sources(device));
         }
         renderer.prepare(device, &scene, &look);
+        renderer.stage_window(device, &scene);
         renderer.jobs(
             device,
             &target.view,

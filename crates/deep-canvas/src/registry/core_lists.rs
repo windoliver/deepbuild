@@ -1040,7 +1040,11 @@ fn outline_source() -> RegistryDef {
 
 /// The verdicts `judged` holds, by asset, for each sha256 in `at`; a missing one is an error.
 fn verdicts<'a>(v: &'a Value, at: &str, judged: &str) -> Result<Vec<(&'a str, &'a Value)>, String> {
-    let list = v.get(judged).and_then(Value::as_array).map(Vec::as_slice).unwrap_or(&[]);
+    let list = v
+        .get(judged)
+        .and_then(Value::as_array)
+        .map(Vec::as_slice)
+        .unwrap_or(&[]);
     strings(v, at)
         .into_iter()
         .map(|sha| {
@@ -1331,6 +1335,15 @@ pub fn entries(steps_elsewhere: bool) -> Vec<EntryDef> {
             "check.kind.doc@1",
             kind,
             json!({"codes": codes, "reads": ["document"]}),
+        ));
+    }
+    // #409: each craft@1 check a brief can name, stating its own description, threshold and fix.
+    for c in crate::craft::checks() {
+        out.push(entry(
+            "check.kind.doc@1",
+            &c.name,
+            json!({"codes": [], "reads": ["document"], "pack": crate::craft::PACK,
+                   "description": c.description, "threshold": c.threshold, "fix": c.fix}),
         ));
     }
     out

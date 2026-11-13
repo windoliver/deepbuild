@@ -176,13 +176,13 @@ function sceneDoc({ title, budgetClass, size, boxes }) {
 /** `deep-gpu run` with one live call per entry of `calls`, each over its own documents: the replies. */
 function liveCalls(dir, calls) {
   const look = JSON.parse(readFileSync(LOOK, 'utf8'));
-  const lines = calls.map(({ docs, surface, ...call }, c) => {
+  const lines = calls.map(({ docs, surface, history, ...call }, c) => {
     const sessions = docs.map((doc, i) => {
       const path = join(dir, `doc-${c}-${i}.json`);
       writeFileSync(path, JSON.stringify(doc));
       return { session: `s-${i}`, writer: `agent:bench-${i}`, doc: path, ...(surface ? { surface } : {}) };
     });
-    return { call: 'live', look, sessions, ...call };
+    return { call: 'live', look: history ? { ...look, history } : look, sessions, ...call };
   });
   const [answer] = run('deep-gpu', 'run', [JSON.stringify({ out: dir, calls: lines })]);
   const replies = answer.replies ?? [];
@@ -460,6 +460,26 @@ workloads.upscale = () => {
       return { frames: covered.length, upscale_p95_ms: p95(covered) };
     }).slice(1);
     console.log(JSON.stringify({ task: 'upscale', fingerprint: fingerprint(), runs }));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+};
+
+// #173: frame history's resolve over an 8-frame window on a 1080p view whose camera orbits: each frame's
+// `look.history` pass time by its timestamps, five runs of 90 frames after a warm-up one.
+workloads.history = () => {
+  const dir = mkdtempSync(join(tmpdir(), 'deep-canvas-bench-'));
+  try {
+    const doc = sceneDoc({ title: 'An orbit with frame history', budgetClass: 'showpiece', size: [1920, 1080], boxes: 48 });
+    doc.channels = { orbit: { target: 'items/cam/params/orbit/azimuth', type: 'f32', keys: { k0: { t: '0s', value: 30, interp: 'linear' }, k1: { t: '60s', value: 390, interp: 'linear' } } } };
+    const call = { docs: [doc], frames: 90, fps: 60, report: ['passes'], history: { mode: 'antialias', window: 8 } };
+    const runs = Array.from({ length: RUNS + 1 }, () => {
+      const [reply] = liveCalls(dir, [call]);
+      const ms = reply.frames.slice(WARM_UP).flatMap((f) => f.passes.filter((p) => p.name === 'look.history').map((p) => (p.end_ns - p.start_ns) / 1e6));
+      if (ms.length === 0) throw Error(`the resolve never ran: ${JSON.stringify(reply.frames.at(-1)).slice(0, 600)}`);
+      return { frames: ms.length, resolve_p95_ms: p95(ms) };
+    }).slice(1);
+    console.log(JSON.stringify({ task: 'history', fingerprint: fingerprint(), runs }));
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -904,6 +924,105 @@ workloads['water-shore'] = () => {
   }
 };
 
+// #2017: the modeling, scatter, terrain and wind task's budgets (#442) on release builds, one warm-up run and five,
+// each a fresh process per binary. `deep-show`'s `geometry` with `timings` reads a bevel with weighted normals on a
+// 10,000-face prop, two levels of subdivision of a 1,000-face mesh, distributing 100,000 points with pruning, and a
+// 1,000-span curve's arc-length table; a still scene (the terrain plate with its levels, a scattered lawn, the prop,
+// the mesh and a rail swept along a curve) counts the steps its frames after the first run: the operators the
+// scheduler runs past the same scene's without the task's items (one box), frame by frame, and `view3d`'s meshes
+// built, instances written, element uploads, batches encoded and terrain tiles selected; and
+// 10,000 instanced trees of 2,000 vertices at 1080p add the difference of the median `gpu_ms` with their sway on and
+// off, 300 frames a side. The fixtures are tests/acceptance/2017/helpers.ts's.
+const GROUND_SESSION = { s1: { thread: 'thread-a', name: 'agent-a', process: { pid: 4100, start: 1000 } } };
+const GROUND_PROCESSES = [{ pid: 1, ppid: 0, start: 0 }, { pid: 4100, ppid: 1, start: 1000 }];
+const VASE = [[0, 0], [0.3, 0.02], [0.34, 0.1], [0.36, 0.3], [0.3, 0.5], [0.2, 0.62], [0.16, 0.7], [0.18, 0.8], [0.22, 0.86], [0.2, 0.9], [0, 0.9]].map((p) => [...p, false]);
+const groundMaterial = (base, roughness = 0.8) => ({ kind: 'material@1', params: { base_color: [...base, 1], roughness, metallic: 0 } });
+const groundBox = (size, pos, material, more = {}) => ({ kind: 'mark.box@1', params: { size }, at: { pos }, material, ...more });
+const groundFlat = (size, pos, material) => ({ kind: 'plate@1', params: { grid: [1, 1], size }, at: { pos }, material });
+const groundCamera = (position, target) => ({ kind: 'camera@1', params: { projection: 'perspective', position, target, fov: 60, near: 0.5, far: 2000 } });
+const groundSun = { kind: 'light.sun@1', params: { illuminance: 3, color: [1, 1, 1], shadow: false }, at: { rot: [-35, 30, 0] } };
+const groundSky = { kind: 'sky@1', params: { top: [0.15, 0.3, 0.75, 1], low: [0.6, 0.7, 0.85, 1], ambient_top: [0.25, 0.25, 0.25], ambient_low: [0.1, 0.1, 0.1] } };
+const groundMaterials = () => ({ clay: groundMaterial([0.62, 0.4, 0.3], 0.6), leaves: groundMaterial([0.2, 0.42, 0.18], 0.9), petals: groundMaterial([0.85, 0.4, 0.55], 0.7), soil: groundMaterial([0.35, 0.28, 0.2], 1) });
+const groundProtos = () => ({ bush: groundBox([0.6, 0.6, 0.6], [0, 0.3, 0], 'leaves', { visible: false }), flower: groundBox([0.2, 0.2, 0.2], [0, 0.1, 0], 'petals', { visible: false }) });
+const groundProp = (segments, pos) => ({ kind: 'lathe@1', params: { outline: VASE, segments }, material: 'clay', at: { pos },
+  modifiers: [{ kind: 'mod.bevel@1', params: { width: 0.002, segments: 2 } }, { kind: 'mod.normals@1', params: { mode: 'weighted' } }] });
+const groundMesh = (segments, pos) => ({ kind: 'lathe@1', params: { outline: VASE, segments }, material: 'clay', at: { pos }, modifiers: [{ kind: 'mod.subdivide@1', params: { levels: 2 } }] });
+const groundPath = (spans, c) => ({ kind: 'curve@1', params: { mode: 'catmull_rom',
+  points: Array.from({ length: spans + 1 }, (_, k) => [c[0] + 20 * Math.cos(k * 0.05), c[1] + 0.01 * k, c[2] + 20 * Math.sin(k * 0.05)]) } });
+const groundScatter = (on, max) => ({ kind: 'instance@1', params: { of: ['bush', 'flower'],
+  from: { distribute: { on, mode: 'poisson', min_distance: 0.5, prune: 'larger_first', seed: 2017, ...(max === undefined ? {} : { max }) } } } });
+const GROUND_PLATE = { height: '0.03 * (1 - 4 * fract(position.x * 0.5)) + 6 * sin(position.x * 0.025) * cos(position.z * 0.019) + 2 * sin((position.x + position.z) * 0.07)',
+  size: [512, 512], spacing: 1, tile: 64, lod_levels: 6 };
+function groundDoc(id, size, items) {
+  let order = 0;
+  for (const [key, item] of Object.entries(items)) Object.assign(item, { id: key, name: key, order: `a${String(order++).padStart(4, '0')}`, layer: 'main' });
+  return { format: 1, id, profile: 'scene', title: id, description: `${id}: the #2017 budgets' fixture.`, size, camera: 'cam', seed: 2017,
+    requires: { modules: { scene3d: '^1' } }, budget: { class: 'work_product' }, layers: { main: { writer: 'agent:alpha', title: 'Main', order: 'a0' } }, items };
+}
+const groundStages = () => ({
+  budget: groundDoc('budgets-2017', [640, 360], { cam: groundCamera([0, 30, 150], [0, 0, 0]), sun: groundSun, ...groundMaterials(),
+    prop: groundProp(1000, [0, 0, 0]), mesh: groundMesh(100, [2, 0, 0]), field: groundFlat([200, 200], [0, 0, 0], 'soil'), ...groundProtos(),
+    scatter: groundScatter('field', 100_000), path: groundPath(1000, [0, 1, 0]) }),
+  bare: groundDoc('still-2017-bare', [640, 360], { cam: groundCamera([0, 25, 300], [0, 0, 0]), sky: groundSky, sun: groundSun, turf: groundMaterial([0.3, 0.42, 0.2], 0.9),
+    ...groundMaterials(), block: groundBox([1, 1, 1], [0, 12.5, 230], 'clay') }),
+  still: groundDoc('still-2017', [640, 360], { cam: groundCamera([0, 25, 300], [0, 0, 0]), sky: groundSky, sun: groundSun, turf: groundMaterial([0.3, 0.42, 0.2], 0.9),
+    ...groundMaterials(), ground: { kind: 'plate@1', params: { terrain: { ...GROUND_PLATE } }, material: 'turf' },
+    lawn: groundFlat([10, 10], [0, 12, 230], 'soil'), ...groundProtos(), shrubs: groundScatter('lawn'), prop: groundProp(64, [-6, 12, 240]), mesh: groundMesh(16, [6, 12, 240]),
+    path: groundPath(100, [0, 14, 200]),
+    rail: { kind: 'extrude@1', params: { outline: [[0, -0.05], [0.1, -0.05], [0.1, 0.05], [0, 0.05]], along: { curve: 'path', range: [0, 1], rings: 256 } }, material: 'clay' } }),
+  ...Object.fromEntries([true, false].map((swaying) => {
+    const pos = Array.from({ length: 10_000 }, (_, k) => [3 * (k % 100), 0, 3 * Math.floor(k / 100)]);
+    return [swaying ? 'forestOn' : 'forestOff', groundDoc(`forest-2017-${swaying}`, FLARE_SIZE, {
+      cam: groundCamera([148.5, 35, 360], [148.5, 0, 140]), sky: groundSky, sun: groundSun, needles: groundMaterial([0.18, 0.4, 0.2], 0.9), soil: groundMaterial([0.35, 0.28, 0.2], 1),
+      earth: groundFlat([320, 320], [148.5, 0, 148.5], 'soil'),
+      tree: { kind: 'lathe@1', params: { outline: [[0, 0, false], [0.25, 0.1, false], [0.25, 1, false], [1.2, 1.2, false], [0, 3.5, false]], segments: 249 }, material: 'needles', visible: false,
+        modifiers: [{ kind: 'mod.sway@1', enabled: swaying, params: { amount: 0.3, wind: { direction: 0, speed: 5, gust: { scale: 20 } }, seed: 7 } }] },
+      forest: { kind: 'instance@1', params: { of: ['tree'], ids: pos.map((_, k) => k), proto: pos.map(() => 0), pos, yaw: pos.map((_, k) => (k * 137.5) % 360), scale: pos.map(() => 1) } },
+    })];
+  })),
+});
+workloads.ground = () => {
+  const fingerprint = release('deep-show', 'deep-show');
+  release('deep-gpu-layer', 'deep-gpu');
+  const look2d = JSON.parse(readFileSync(join(root, 'tests', 'acceptance', '465', 'fixtures', 'look.json'), 'utf8'));
+  const look = { ...look2d, id: 'plain-2017', basis: 'physical', palette: { ...look2d.palette, night: '#101114', graphite: '#1b1d22', slate: '#8b8f97', white: '#ffffff' },
+    roles: { ...look2d.roles, ground: 'night', ink: 'graphite', muted: 'slate' }, tone_map: 'none', exposure: -Math.log2(1.2), finish: [], deband: 'none', bloom: 'none', ao: 'none', ground_3d: { kind: 'none' } };
+  const dir = mkdtempSync(join(tmpdir(), 'deep-canvas-bench-'));
+  try {
+    const stages = groundStages();
+    const path = (k) => { const p = join(dir, `${k}.json`); writeFileSync(p, JSON.stringify(stages[k])); return p; };
+    const [still, forestOn, forestOff] = ['still', 'forestOn', 'forestOff'].map(path);
+    const show = (stage, call) => {
+      const answer = once('deep-show', ['run'], { evidence: dir, sessions: GROUND_SESSION, processes: GROUND_PROCESSES, panels: { main: { rect: [0, 0, 1280, 720] } },
+        docs: { [DOC]: { panel: 'main' } }, calls: [{ call: 'deep_show', session: 's1', doc: DOC, document: stillAsAgent(stages[stage]) }, { doc: DOC, ...call }] });
+      if (answer.ok !== true || answer.replies[0]?.outcome !== 'presented' || answer.replies[1]?.code) throw Error(`deep-show answered ${JSON.stringify(answer).slice(0, 1500)}`);
+      return answer.replies[1];
+    };
+    const gpu = (calls) => {
+      const answer = once('deep-gpu', ['run'], { out: dir, calls });
+      if (answer.ok !== true || answer.replies.some((r) => r.code)) throw Error(`deep-gpu answered ${JSON.stringify(answer).slice(0, 1500)}`);
+      return answer.replies;
+    };
+    const median = (xs) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)];
+    const measured = runs(() => {
+      const rows = new Map(show('budget', { call: 'geometry', items: ['prop', 'mesh', 'scatter', 'path'], timings: true }).items.map((r) => [r.id, r]));
+      const [task, bare] = ['still', 'bare'].map((k) => show(k, { call: 'frames', count: 6 }).frames.map((f) => f.ran));
+      const ran = task.slice(1).reduce((n, r, k) => n + Math.max(0, r - bare[k + 1]), 0);
+      const [view] = gpu([{ call: 'view3d', doc: still, look, size: [640, 360], fps: 30, frames: 6, counts: true }]);
+      const viewed = view.frames.slice(1).reduce((n, f) => n + f.meshes_built + f.instances_written + f.terrain_tiles_selected + f.encoded.length
+        + Object.values(f.element_uploads).reduce((k, ids) => k + ids.length, 0), 0);
+      const side = (doc) => ({ call: 'view3d', doc, look, size: FLARE_SIZE, frames: 300, fps: 30, timings: true });
+      const [on, off] = gpu([side(forestOn), side(forestOff)]).map((r) => median(r.frames.map((f) => f.gpu_ms)));
+      const prop = rows.get('prop').stack;
+      return { bevel_ms: prop[0].ms + prop[1].ms, subdivide_ms: rows.get('mesh').stack[0].ms, distribute_ms: rows.get('scatter').distribute_ms,
+        arc_length_ms: rows.get('path').arc_length_ms, still_steps: ran + viewed, still_ran: ran, still_view_steps: viewed, sway_gpu_ms: Math.max(0, on - off), forest_gpu_ms: off };
+    });
+    console.log(JSON.stringify({ task: 'canvas-ground', fingerprint, runs: measured }));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+};
+
 // #896's two boards of a run, the 1,000-item one first; `null` for a run with any other boards.
 const pair = (r) => {
   const [small, large] = r.boards ?? [];
@@ -939,8 +1058,14 @@ const EFFICIENCY = {
   'canvas-water': { lake_gpu_ms: (r) => r.lake_gpu_ms, waves_vertex_ms: (r) => r.waves_vertex_ms },
   'canvas-occlusion': { gpu_fall: (r) => r.gpu_fall, pyramid_declared_error: (r) => r.pyramid_declared_error },
   'canvas-water-shore': { shore_lake_gpu_ms: (r) => r.shore_lake_gpu_ms },
+  'canvas-ground': {
+    bevel_ms: (r) => r.bevel_ms, subdivide_ms: (r) => r.subdivide_ms, distribute_ms: (r) => r.distribute_ms, arc_length_ms: (r) => r.arc_length_ms,
+    still_steps: (r) => r.still_steps, sway_gpu_ms: (r) => r.sway_gpu_ms,
+  },
+  // #538: each reading by its own name (benchmarks/game-state.mjs).
+  'canvas-game-state': Object.fromEntries(['compare_ms', 'remap_row_us', 'remap_layer_ms', 'upload_slots_ms', 'overlay_upload_ms', 'fit_check_ms', 'idle_steps'].map((k) => [k, (r) => r[k]])),
 };
-const COUNTS = new Set(['summary_tokens', 'page_rows', 'frames', 'upload_bytes_per_item', 'indexed_target_bytes']);
+const COUNTS = new Set(['summary_tokens', 'page_rows', 'frames', 'upload_bytes_per_item', 'indexed_target_bytes', 'still_steps', 'idle_steps']);
 
 /** The stage that took the most of a sample's time, as a reason names it (#896); none for a sample without stages. */
 const costliest = (s) => {
@@ -1306,6 +1431,50 @@ workloads['media-soak'] = () => {
     rmSync(evidence, { recursive: true, force: true });
   }
 };
+
+// #157: a 10 s 1920 × 1080 film at 60 fps (a ground and a bar moving a pixel a frame, a stereo tone) exported as H.264
+// with AAC by `deep-show run`; fails unless it was delivered, and prints the receipt's fidelity decode and colour probe
+// times.
+workloads['export-fidelity'] = () => {
+  const evidence = mkdtempSync(join(tmpdir(), 'deep-canvas-bench-'));
+  try {
+    const sr = 48_000, frames = 600, frame = SEC / 60;
+    const b = Buffer.alloc(44 + 10 * sr * 8);
+    b.write('RIFF', 0, 'ascii'); b.writeUInt32LE(36 + 10 * sr * 8, 4); b.write('WAVEfmt ', 8, 'ascii'); b.writeUInt32LE(16, 16);
+    b.writeUInt16LE(3, 20); b.writeUInt16LE(2, 22); b.writeUInt32LE(sr, 24); b.writeUInt32LE(sr * 8, 28); b.writeUInt16LE(8, 32);
+    b.writeUInt16LE(32, 34); b.write('data', 36, 'ascii'); b.writeUInt32LE(10 * sr * 8, 40);
+    for (let i = 0; i < 10 * sr; i++) for (const c of [0, 1]) b.writeFloatLE(0.2 * Math.sin((2 * Math.PI * (440 + 220 * c) * i) / sr), 44 + 8 * i + 4 * c);
+    const sha = createHash('sha256').update(b).digest('hex');
+    mkdirSync(join(evidence, sha.slice(0, 2)), { recursive: true });
+    writeFileSync(join(evidence, sha.slice(0, 2), sha.slice(2)), b);
+    const rect = (id, box, role, order) => ({ id, kind: 'rect@1', name: id, order, params: { box, paint: { fill: { role } } } });
+    const document = {
+      format: 1, id: 'bench-157', profile: 'film', title: 'Export fidelity bench', description: 'A bar crossing a 1080p60 frame.', size: [1920, 1080], camera: 'cam',
+      transport: { span: frames * frame, frame_rate: [60, 1], sample_rate: sr },
+      items: {
+        cam: { id: 'cam', kind: 'camera@1', name: 'cam', order: 'a0', params: { projection: 'orthographic', target: [960, 540, 0], view_width: 1920 } },
+        back: rect('back', [0, 0, 1920, 1080], 'muted', 'a1'), bar: rect('bar', [100, 0, 48, 1080], 'accent', 'a2'),
+      },
+      channels: { bar: { target: 'items/bar/params/box/0', type: 'f32', keys: { k0: { t: 0, value: 100, interp: 'linear' }, k1: { t: frames * frame, value: 100 + frames, interp: 'linear' } } } },
+      assets: { sound: { sha256: sha, license: { id: 'CC0-1.0', shareable: true, credit: 'Bench tone.' } } },
+      strips: { sound: { track: 1, src: sha, start: 0, in: 0, out: 10 * SEC, rate: 1 } },
+    };
+    const out = join(evidence, 'film.mp4');
+    const peer = { pid: 3002, start: 3_000 };
+    const processes = [{ pid: 1, ppid: 0, start: 0 }, { pid: 3000, ppid: 1, start: 100 }, { pid: 3001, ppid: 3000, start: 110 }, { pid: 3002, ppid: 3001, start: 3_000 }];
+    const calls = [{ call: 'deep show', peer, doc: DOC, document }, { call: 'export', doc: DOC, out, video: { codec: 'h264' }, audio: { codec: 'aac' } }];
+    const sc = { evidence, sessions: {}, processes, panels: { main: { rect: [0, 0, 1280, 720] } }, docs: { [DOC]: { panel: 'main' } }, calls };
+    const [answer] = run('deep-show', 'run', [JSON.stringify(sc)]);
+    const reply = answer.replies?.[1];
+    if (reply?.outcome !== 'exported') throw Error(`the export wasn't delivered: ${JSON.stringify(answer).slice(0, 2000)}`);
+    console.log(JSON.stringify({ task: 'export-fidelity', decode_seconds: reply.receipt.fidelity?.decode_seconds, probe_seconds: reply.receipt.color_probe?.seconds }));
+  } finally {
+    rmSync(evidence, { recursive: true, force: true });
+  }
+};
+
+// #538's budgets: live game state's compares, remaps, uploads and fit check (benchmarks/game-state.mjs).
+workloads['game-state'] = async () => (await import('./game-state.mjs')).gameState({ root, release, once, runs });
 
 const task = process.argv[2];
 if (!workloads[task]) throw Error(`Unknown task ${task}; one of: ${Object.keys(workloads).join(', ')}`);

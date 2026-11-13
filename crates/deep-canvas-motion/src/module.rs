@@ -107,25 +107,40 @@ pub fn cycle_through(kind: &str) -> Value {
     let constraint = |owner: &str, other: &str| match kind {
         "child_of" => json!({"owner": owner, "kind": kind, "parent": other}),
         "copy" => json!({"owner": owner, "kind": kind, "what": "location", "target": other}),
-        "reach2" => json!({"owner": owner, "kind": kind, "chain": [owner, other, other], "target": other}),
+        "reach2" => {
+            json!({"owner": owner, "kind": kind, "chain": [owner, other, other], "target": other})
+        }
         "follow_tip" => json!({"owner": owner, "kind": kind, "item": other}),
-        "limit" => json!({"owner": owner, "kind": kind, "what": "location", "bounds": [[0, 10], null, null]}),
-        "follow_path" => json!({"owner": owner, "kind": kind, "path": [[0, 0], [10, 0]], "fraction": 0.5}),
+        "limit" => {
+            json!({"owner": owner, "kind": kind, "what": "location", "bounds": [[0, 10], null, null]})
+        }
+        "follow_path" => {
+            json!({"owner": owner, "kind": kind, "path": [[0, 0], [10, 0]], "fraction": 0.5})
+        }
         "spring_chain" => json!({"owner": owner, "kind": kind, "bones": [owner]}),
         "rest_on" => json!({"owner": owner, "kind": kind}),
         _ => json!({"owner": owner, "kind": kind, "target": other}),
     };
     // b's position follows what a's constraint writes, so the constraint's read of b (or, for
     // a kind that reads no other item, a's position a third driver sets from b) closes a loop.
-    let written = if matches!(kind, "look_at" | "reach2") { "rot/2" } else { "pos/0" };
+    let written = if matches!(kind, "look_at" | "reach2") {
+        "rot/2"
+    } else {
+        "pos/0"
+    };
     constraints.insert("a".into(), constraint("a", "b"));
     drivers.insert("b".into(), json!({"target": "items/b/at/pos/0", "expr": "v + 1", "vars": {"v": format!("items/a/at/{written}")}}));
     if !reads_other {
-        drivers.insert("c".into(), json!({"target": "items/a/at/pos/1", "expr": "v", "vars": {"v": "items/b/at/pos/0"}}));
+        drivers.insert(
+            "c".into(),
+            json!({"target": "items/a/at/pos/1", "expr": "v", "vars": {"v": "items/b/at/pos/0"}}),
+        );
     }
     let doc = json!({"items": {"a": item("a", 1.0), "b": item("b", 2.0)},
                      "constraints": constraints, "drivers": drivers});
-    let Value::Object(doc) = doc else { return json!({}) };
+    let Value::Object(doc) = doc else {
+        return json!({});
+    };
     match Program::compile(&doc) {
         Err(r) if r.code == "cycle" => {
             // Each step reads `<entry> (<item>)`: the chain is its items.
@@ -198,6 +213,8 @@ fn register_compiling(
     .run(channels);
     register_arrange(r);
     register_score(r);
+    // #538: a flip by array in the frame the hub draws.
+    crate::held::register(r);
     r.code(
         "bad_doc",
         "A motion section, or a field of one, that isn't the shape motion reads.",
@@ -289,16 +306,18 @@ fn has_motion(doc: &Value, _: &str, _: &Value) -> bool {
 
 /// A `rest_on` that names `on` (#2013): it rests its owner on true shapes at check.
 pub fn rests_at_check(constraint: &Value) -> bool {
-    constraint.get("kind").and_then(Value::as_str) == Some("rest_on") && constraint.get("on").is_some()
+    constraint.get("kind").and_then(Value::as_str) == Some("rest_on")
+        && constraint.get("on").is_some()
 }
 
 /// A document with motion a frame's time can change: any section's entry but a rest solved at
 /// check, which alone gives a frame nothing to evaluate (Constraint: rest_on).
 fn has_clock(doc: &Value, _: &str, _: &Value) -> bool {
     SECTIONS.iter().any(|s| {
-        doc.get(*s)
-            .and_then(Value::as_object)
-            .is_some_and(|m| m.values().any(|entry| *s != "constraints" || !rests_at_check(entry)))
+        doc.get(*s).and_then(Value::as_object).is_some_and(|m| {
+            m.values()
+                .any(|entry| *s != "constraints" || !rests_at_check(entry))
+        })
     })
 }
 
@@ -306,7 +325,9 @@ fn has_clock(doc: &Value, _: &str, _: &Value) -> bool {
 fn is_target(doc: &Value, id: &str, item: &Value) -> bool {
     // #493: a parallax group moves with the camera's pose and its drift.
     if item.get("kind").and_then(Value::as_str) == Some("group@1")
-        && item.pointer("/params/parallax").is_some_and(Value::is_object)
+        && item
+            .pointer("/params/parallax")
+            .is_some_and(Value::is_object)
         && doc.get("camera").is_some()
     {
         return true;
@@ -364,16 +385,39 @@ fn reads_moving(doc: &Value, item: &Value) -> bool {
         return false;
     };
     let written = |slot: &str| {
-        let drivers = doc.get("drivers").and_then(Value::as_object).into_iter().flatten();
-        let set = doc.get("controls").and_then(Value::as_object).into_iter().flatten().flat_map(|(_, c)| {
-            c.get("stages").and_then(Value::as_object).into_iter().flatten().filter_map(|(_, s)| s.get("set")?.as_object())
-        });
-        drivers.into_iter().any(|(_, d)| d.get("target").and_then(Value::as_str) == Some(slot)) || set.into_iter().any(|s| s.contains_key(slot))
+        let drivers = doc
+            .get("drivers")
+            .and_then(Value::as_object)
+            .into_iter()
+            .flatten();
+        let set = doc
+            .get("controls")
+            .and_then(Value::as_object)
+            .into_iter()
+            .flatten()
+            .flat_map(|(_, c)| {
+                c.get("stages")
+                    .and_then(Value::as_object)
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|(_, s)| s.get("set")?.as_object())
+            });
+        drivers
+            .into_iter()
+            .any(|(_, d)| d.get("target").and_then(Value::as_str) == Some(slot))
+            || set.into_iter().any(|s| s.contains_key(slot))
     };
-    deep_canvas::template::parts(template).unwrap_or_default().into_iter().any(|p| match p {
-        deep_canvas::template::Part::Slot(s) => s.starts_with("controls/") || s.starts_with("assemblies/") || (s.starts_with("data/") && written(s)),
-        deep_canvas::template::Part::Words(_) => false,
-    })
+    deep_canvas::template::parts(template)
+        .unwrap_or_default()
+        .into_iter()
+        .any(|p| match p {
+            deep_canvas::template::Part::Slot(s) => {
+                s.starts_with("controls/")
+                    || s.starts_with("assemblies/")
+                    || (s.starts_with("data/") && written(s))
+            }
+            deep_canvas::template::Part::Words(_) => false,
+        })
 }
 
 /// The data value a counter's driver writes (`data/<name>`), which its text shows at t.
@@ -388,7 +432,10 @@ fn data_slots(template: &str) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     for part in deep_canvas::template::parts(template).unwrap_or_default() {
         if let deep_canvas::template::Part::Slot(slot) = part {
-            if let Some(name) = slot.strip_prefix("data/").filter(|n| !out.iter().any(|o| o == n)) {
+            if let Some(name) = slot
+                .strip_prefix("data/")
+                .filter(|n| !out.iter().any(|o| o == n))
+            {
                 out.push(name.to_string());
             }
         }
@@ -408,11 +455,16 @@ fn keyed_data(doc: &Value, item: &Value) -> Vec<(String, String)> {
     let channels = doc.get("channels").and_then(Value::as_object);
     let mut out = Vec::new();
     for part in parts {
-        let deep_canvas::template::Part::Slot(slot) = part else { continue };
-        let Some(name) = slot.strip_prefix("data/") else { continue };
-        let keyed = channels.into_iter().flatten().find(|(_, c)| {
-            c.get("target").and_then(Value::as_str) == Some(slot)
-        });
+        let deep_canvas::template::Part::Slot(slot) = part else {
+            continue;
+        };
+        let Some(name) = slot.strip_prefix("data/") else {
+            continue;
+        };
+        let keyed = channels
+            .into_iter()
+            .flatten()
+            .find(|(_, c)| c.get("target").and_then(Value::as_str) == Some(slot));
         if let Some((channel, _)) = keyed {
             if !out.iter().any(|(n, _)| n == name) {
                 out.push((name.to_string(), channel.clone()));
@@ -427,7 +479,11 @@ fn keyed_data(doc: &Value, item: &Value) -> Vec<(String, String)> {
 pub const UNDECLARED_KIND_ACCEPTED: &str = "undeclared_kind_accepted";
 
 /// #504's wrong programs a scenario names, each compiled into the program.
-pub const PLANTED: [&str; 3] = ["slider_entries_ignored", "stage_sets_nothing", "stage_shot_cuts"];
+pub const PLANTED: [&str; 3] = [
+    "slider_entries_ignored",
+    "stage_sets_nothing",
+    "stage_shot_cuts",
+];
 
 /// The revision's motion, compiled once at check.
 fn compile(v: &mut View<'_>) -> Result<(), OpError> {
@@ -446,9 +502,15 @@ fn compile(v: &mut View<'_>) -> Result<(), OpError> {
         Some("stage_shot_cuts") => crate::program::Planted::StageShotCuts,
         _ => Default::default(),
     };
-    let options = crate::program::Options { planted, ..Default::default() };
+    let options = crate::program::Options {
+        planted,
+        ..Default::default()
+    };
     // What a refusal names past its path (#544: the reader, the undeclared name, close names).
-    let program = Program::compile_with(doc, options).map_err(|r| OpError { actual: r.detail, ..OpError::new(r.code, r.path) })?;
+    let program = Program::compile_with(doc, options).map_err(|r| OpError {
+        actual: r.detail,
+        ..OpError::new(r.code, r.path)
+    })?;
     v.write("motion.program", Val::typed(Arc::new(program)))
 }
 
@@ -499,7 +561,11 @@ fn channels(v: &mut View<'_>) -> Result<(), OpError> {
         .map(str::to_string);
     for name in template.iter().flat_map(|t| data_slots(t)) {
         let owner = format!("data/{name}");
-        let keyed = program.motion.channels.iter().find(|c| c.target.owner == owner);
+        let keyed = program
+            .motion
+            .channels
+            .iter()
+            .find(|c| c.target.owner == owner);
         if let Some(x) = keyed.and_then(|c| program.channel_value(&state, &c.id)) {
             fields.push((vec!["params".into(), "data".into(), name], Datum::Num(x)));
         }
@@ -507,33 +573,71 @@ fn channels(v: &mut View<'_>) -> Result<(), OpError> {
     // #504: a slot on a data value a driver or a stage writes, on a control's value or on an
     // assembly's shows it at t too: data rides as `params/data/<name>`, a control's or an
     // assembly's as `params/shown/<section>/<id>/value`, which the template reads first.
-    for slot in template.iter().flat_map(|t| deep_canvas::template::parts(t).unwrap_or_default()) {
-        let deep_canvas::template::Part::Slot(slot) = slot else { continue };
+    for slot in template
+        .iter()
+        .flat_map(|t| deep_canvas::template::parts(t).unwrap_or_default())
+    {
+        let deep_canvas::template::Part::Slot(slot) = slot else {
+            continue;
+        };
         if let Some(name) = slot.strip_prefix("data/") {
-            let field = program.fields.iter().find(|f| f.written && f.data.as_deref() == Some(name));
-            if let Some(f) = field.filter(|_| !fields.iter().any(|(p, _)| p.last().map(String::as_str) == Some(name))) {
-                fields.push((vec!["params".into(), "data".into(), name.to_string()], Datum::Num(state.slots[f.slot])));
+            let field = program
+                .fields
+                .iter()
+                .find(|f| f.written && f.data.as_deref() == Some(name));
+            if let Some(f) = field.filter(|_| {
+                !fields
+                    .iter()
+                    .any(|(p, _)| p.last().map(String::as_str) == Some(name))
+            }) {
+                fields.push((
+                    vec!["params".into(), "data".into(), name.to_string()],
+                    Datum::Num(state.slots[f.slot]),
+                ));
             }
-        } else if let Some(id) = slot.strip_prefix("assemblies/").and_then(|r| r.strip_suffix("/value")) {
+        } else if let Some(id) = slot
+            .strip_prefix("assemblies/")
+            .and_then(|r| r.strip_suffix("/value"))
+        {
             if let Some(a) = program.assemblies.iter().find(|a| a.id == id) {
-                let path = ["params", "shown", "assemblies", id, "value"].map(String::from).to_vec();
+                let path = ["params", "shown", "assemblies", id, "value"]
+                    .map(String::from)
+                    .to_vec();
                 fields.push((path, Datum::Num(a.held(state.slots[a.slot]))));
             }
-        } else if let Some(id) = slot.strip_prefix("controls/").and_then(|r| r.strip_suffix("/value")) {
-            let last = program.options.input.iter().filter(|e| e.control == id && e.t <= t).max_by_key(|e| e.key());
+        } else if let Some(id) = slot
+            .strip_prefix("controls/")
+            .and_then(|r| r.strip_suffix("/value"))
+        {
+            let last = program
+                .options
+                .input
+                .iter()
+                .filter(|e| e.control == id && e.t <= t)
+                .max_by_key(|e| e.key());
             if let Some(x) = last.and_then(|e| e.value.as_f64()) {
-                let path = ["params", "shown", "controls", id, "value"].map(String::from).to_vec();
+                let path = ["params", "shown", "controls", id, "value"]
+                    .map(String::from)
+                    .to_vec();
                 fields.push((path, Datum::Num(x)));
             }
         }
     }
     // A counter on a driver of a data value shows it at t the same way.
-    let source = v.item()?.pointer("/params/text/counter/source").and_then(Value::as_str);
+    let source = v
+        .item()?
+        .pointer("/params/text/counter/source")
+        .and_then(Value::as_str);
     let driver = source.and_then(|d| program.motion.drivers.iter().find(|x| x.id == d));
     let name = driver.and_then(|d| d.target.owner.strip_prefix("data/"));
-    if let Some(field) = name.and_then(|n| program.fields.iter().find(|f| f.data.as_deref() == Some(n))) {
+    if let Some(field) =
+        name.and_then(|n| program.fields.iter().find(|f| f.data.as_deref() == Some(n)))
+    {
         let name = field.data.clone().unwrap_or_default();
-        fields.push((vec!["params".into(), "data".into(), name], Datum::Num(state.slots[field.slot])));
+        fields.push((
+            vec!["params".into(), "data".into(), name],
+            Datum::Num(state.slots[field.slot]),
+        ));
     }
     let set = |name: &str, from: usize| Edit {
         add: false,
@@ -669,7 +773,9 @@ fn register_arrange(r: &mut Registrar) {
 /// arrangement places.
 /// Whether the document holds an arrangement (asked once per document).
 fn has_arrangement(doc: &Value, _: &str, _: &Value) -> bool {
-    doc.get("items").and_then(Value::as_object).is_some_and(|items| items.values().any(crate::arrange::is_arrangement))
+    doc.get("items")
+        .and_then(Value::as_object)
+        .is_some_and(|items| items.values().any(crate::arrange::is_arrangement))
 }
 
 fn is_arranged(_: &Value, _: &str, item: &Value) -> bool {

@@ -291,10 +291,11 @@ impl Render for WordsBox {
             }
             None => send_control.on_click(cx.listener(|this, _, window, cx| this.send(window, cx))),
         };
-        // What the box and the card measure together on an ask's page.
+        // Where the box is drawn: the window's notices sit above it, and on an ask's page it measures with the card.
         let on_page = card.is_some();
         let measure = canvas(
-            move |bounds, _, _| {
+            move |bounds, window, _| {
+                crate::notice::box_drawn(bounds, window);
                 if on_page {
                     crate::card::box_measured(f32::from(bounds.size.height).ceil() as i64);
                 }

@@ -69,7 +69,11 @@ pub fn lobe_names(l: &deep_canvas_scene3d::light::Lobes) -> Vec<&'static str> {
 pub fn feature_set(s: &deep_canvas_scene3d::scene::Solid) -> String {
     use deep_canvas_scene3d::light::AlphaMode;
     let Some(m) = &s.material else {
-        return if s.per_pixel { "plain+per_pixel".into() } else { "plain".into() };
+        return if s.per_pixel {
+            "plain+per_pixel".into()
+        } else {
+            "plain".into()
+        };
     };
     let mut f: Vec<String> = vec![match m.alpha_mode {
         AlphaMode::Opaque => "opaque".into(),

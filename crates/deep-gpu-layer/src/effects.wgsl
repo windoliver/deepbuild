@@ -1,6 +1,6 @@
 // A live view's own passes (issue #379): below internal scale 1, the upscale's two passes (an
-// edge-adaptive upscale to full size, then a sharpen of 0.2); frame history's resolve over its
-// window; and the additive composite of an effect target into the linear target.
+// edge-adaptive upscale to full size, then a sharpen of 0.2); and the additive composite of an
+// effect target into the linear target. Frame history's resolve is the renderer's (#173).
 
 struct VOut {
     @builtin(position) pos: vec4f,
@@ -49,20 +49,6 @@ fn sharpen(v: VOut) -> @location(0) vec4f {
     let e = textureLoad(src, clamp(p + vec2i(1, 0), vec2i(0), dims - 1), 0);
     let sharp = c.rgb + 0.2 * (4.0 * c.rgb - n.rgb - s.rgb - w.rgb - e.rgb);
     return vec4f(clamp(sharp, vec3f(0.0), vec3f(c.a)), c.a);
-}
-
-@group(0) @binding(0) var history: texture_2d_array<f32>;
-@group(0) @binding(1) var<uniform> filled: vec4u;
-
-// The window's frames, averaged.
-@fragment
-fn resolve(v: VOut) -> @location(0) vec4f {
-    let p = vec2i(v.pos.xy);
-    var sum = vec4f(0.0);
-    for (var i = 0u; i < filled.x; i++) {
-        sum += textureLoad(history, p, i, 0);
-    }
-    return sum / f32(max(filled.x, 1u));
 }
 
 @fragment

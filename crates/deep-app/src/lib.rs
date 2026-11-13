@@ -40,6 +40,8 @@ pub mod hub;
 /// #1486: chrome thumbnails through the one image service.
 pub mod images;
 pub mod installed;
+/// #1606: the device key in the OS secret store.
+mod keystore;
 pub mod kinds;
 pub mod list;
 pub mod notice;
@@ -66,6 +68,7 @@ pub mod states;
 pub mod table;
 pub mod text;
 pub mod views;
+pub mod welcome;
 pub mod words;
 
 use std::{path::Path, rc::Rc, sync::atomic::AtomicU64};

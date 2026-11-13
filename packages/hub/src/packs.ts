@@ -4,11 +4,10 @@ import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { isAbsolute, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { canonicalize, type JsonValue } from '@deepbuild/contracts';
+import { canonicalize, isRecord as object, type JsonValue } from '@deepbuild/contracts';
 import { checkPacks, type Canvas } from './canvas.js';
 
 type Obj = Record<string, unknown>;
-const object = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 const hash = (v: string | Uint8Array) => createHash('sha256').update(v).digest('hex');
 const ID = /^[a-z0-9][a-z0-9_-]*\/[a-z0-9][a-z0-9_-]*$/;
 const VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
@@ -112,7 +111,6 @@ export class Packs {
   }
   /** The store's packs once `canvas` checked and installed the release's: what the canvas core holds. */
   async installed(canvas: Canvas): Promise<{ id: string; dir: string }[]> { await this.shipped(canvas); return this.all(); }
-  async has(ref: string, canvas: Canvas): Promise<boolean> { await this.shipped(canvas); return this.held.has(ref); }
   /**
    * Each pack the release ships, as the store holds it: installed, refused with its issues, or not checked yet. Given
    * the canvas core, a version the store has no check of is checked once, by its pack check, and installed if it

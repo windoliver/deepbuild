@@ -66,6 +66,8 @@ export interface HookMeta {
   /** The session this one replaced in the same process, where its agent says. */
   parent?: string;
   id: string;
+  /** The hook's original nanosecond stamp, shared by event and reply ownership classification. */
+  seq?: string;
   agent: string;
   event: string;
   session: string;
@@ -124,7 +126,7 @@ export interface HookMeta {
    * What the core joins to the transcript or reads loop facts from: the payload's prompt ID, prompt, error and
    * subagent, a stop's last message, Codex's turn, and a FileChanged hook's path.
    */
-  fields?: { prompt_id?: string; prompt?: string; error?: string; agent_id?: string; source?: string; last_assistant_message?: string; turn_id?: string; file_path?: string; session_title?: string };
+  fields?: { prompt_id?: string; prompt?: string; error?: string; agent_id?: string; source?: string; last_assistant_message?: string; turn_id?: string; file_path?: string; session_title?: string; model?: string };
   /**
    * A tool call's own fields, for a PreToolUse, a PermissionRequest or a PostToolUse (#23): the session's permission
    * mode, the tool, its input, and the options the agent offers in its own permission dialog.

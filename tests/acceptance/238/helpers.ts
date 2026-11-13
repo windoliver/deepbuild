@@ -34,8 +34,8 @@ const CARGO_ENV: NodeJS.ProcessEnv = {
 export const blocked = (why: string): never => { throw Error(`BLOCKED: ${why}`); };
 
 export const DIGEST = /^[0-9a-f]{64}$/;
-export const PATCH_49 = /^=?49\.0\.\d+$/;
-export const WASMTIME = '49.0.2';
+export const PATCH = /^=?\d+\.\d+\.\d+$/;
+export const WASMTIME = '49.0.5';
 export const MIB = 1024 * 1024;
 export const FOUR_MIB = 4 * MIB;
 
