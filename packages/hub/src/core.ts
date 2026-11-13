@@ -82,6 +82,7 @@ const PROMPTED = new Set(['claude-code', 'claude', 'codex', 'paseo']);
 
 import { Stacks } from './stacks.js';
 import { Starts } from './starts.js';
+import { Work } from './work.js';
 
 import { Replicas, REPLICA_LEASE } from './drive.js';
 import { plantedStop } from './plant.js';
@@ -176,7 +177,7 @@ export class Core {
     const readreplaying = () => this.replaying;
     const readblocked = () => this.blocked;
     const readjobs = () => this.jobs;
-    this.control = new HubControl({ settings: this.options, services: lazyServices({ wikiWritten: () => this.providers.knowledge.writtenOf, log: () => this.log, people: () => this.people, numbers: () => this.numbers, staging: () => this.staging, agents: () => this.agents, box: () => this.box, extensions: () => this.extensions, runs: () => this.runs, hosts: () => this.hosts, sessionStarts: () => this.sessionStarts, heavy: () => this.heavy, wikiBuild: () => this.wikiBuild, raw: () => this.raw, root: () => this.root, record: () => this.record, now: () => this.now, acceptance: () => this.acceptance, landing: () => this.landing, runner: () => this.runner, checkKinds: () => this.checkKinds, canvasSide: () => this.canvasSide, spaces: () => this.spaces, asks: () => this.asks, tasks: () => this.tasks, claudeSettings: () => this.claudeSettings, store: () => this.store, devices: () => this.devices, confirmer: () => this.confirmer, teardowns: () => this.teardowns, openItems: () => this.openItems, checkouts: () => this.checkouts, channels: () => this.channels, libraries: () => this.libraries, jobKinds: () => this.jobKinds, durable: () => this.durable, stacks: () => this.stacks }), delivery: () => this.delivery, judging: () => this.judging, state: () => this.state, memory: () => this.memory, mcp: () => this.mcp, transcripts: () => this.transcripts, events: { connection: (writer, extra) => this.connection(writer, extra), appendCore: (kind, data, extra) => this.appendCore(kind, data, extra), appendReading: (session, agent, reading, hook) => this.appendReading(session, agent, reading, hook), append: (connection, input, backfill) => this.append(connection, input, backfill) }, kernel: { get ready() { return readready(); }, get blocked() { return readblocked(); }, get jobs() { return readjobs(); } }, schedule: { testClock: (params) => this.testClock(params), replayLate: (kept) => this.replayLate(kept), get replaying() { return readreplaying(); }, queue: (work, starting) => this.queue(work, starting) } });
+    this.control = new HubControl({ settings: this.options, services: lazyServices({ wikiWritten: () => this.providers.knowledge.writtenOf, log: () => this.log, people: () => this.people, numbers: () => this.numbers, staging: () => this.staging, agents: () => this.agents, box: () => this.box, extensions: () => this.extensions, runs: () => this.runs, hosts: () => this.hosts, sessionStarts: () => this.sessionStarts, heavy: () => this.heavy, wikiBuild: () => this.wikiBuild, raw: () => this.raw, root: () => this.root, record: () => this.record, now: () => this.now, acceptance: () => this.acceptance, landing: () => this.landing, work: () => this.work, runner: () => this.runner, checkKinds: () => this.checkKinds, canvasSide: () => this.canvasSide, spaces: () => this.spaces, asks: () => this.asks, tasks: () => this.tasks, claudeSettings: () => this.claudeSettings, store: () => this.store, devices: () => this.devices, confirmer: () => this.confirmer, teardowns: () => this.teardowns, openItems: () => this.openItems, checkouts: () => this.checkouts, channels: () => this.channels, libraries: () => this.libraries, jobKinds: () => this.jobKinds, durable: () => this.durable, stacks: () => this.stacks }), delivery: () => this.delivery, judging: () => this.judging, state: () => this.state, memory: () => this.memory, mcp: () => this.mcp, transcripts: () => this.transcripts, events: { connection: (writer, extra) => this.connection(writer, extra), appendCore: (kind, data, extra) => this.appendCore(kind, data, extra), appendReading: (session, agent, reading, hook) => this.appendReading(session, agent, reading, hook), append: (connection, input, backfill) => this.append(connection, input, backfill) }, kernel: { get ready() { return readready(); }, get blocked() { return readblocked(); }, get jobs() { return readjobs(); } }, schedule: { testClock: (params) => this.testClock(params), replayLate: (kept) => this.replayLate(kept), get replaying() { return readreplaying(); }, queue: (work, starting) => this.queue(work, starting) } });
   }
 
   private transcriptReader!: TranscriptReader;
@@ -244,8 +245,9 @@ export class Core {
   private runner!: Runner;
   /** The blind acceptance job (#1328): the runner's one kind that writes, before an issue's first attempt. */
   private acceptance!: Acceptance;
-  /** Landing in turn (#1331): each repo's changes onto its default branch, one at a time. */
+  /** Landing in turn (#1331): each repo's changes onto its default branch, one at a time; and the work runs over it (#1332). */
   private landing!: Landing;
+  private work!: Work;
   /** Sessions started without your Send, under a run you approved (#1330). */
   private sessionStarts!: Starts;
   /** Setup's wiki build (#356). */
@@ -692,7 +694,6 @@ export class Core {
       }
       await this.delivery.continues();
     });
-
   }
 
   private async openResources(): Promise<ReturnType<EnvironmentProvider['resources']> & { leases: LeaseTable }> {
@@ -814,7 +815,6 @@ export class Core {
     this.every('supervisor', 1000, () => this.supervisor.tick());
     // Shared build products (#1017): the store's index, its guard entry and its watch; session starts wait for it.
     await this.products.open();
-
   }
 
   private async openRunner(): Promise<ProjectTrust> {
@@ -899,7 +899,6 @@ export class Core {
       // One installed before panel@1 ran at install has no kept verdict for its views: they run now, once.
       else await this.control.panelKits(pkg.id, true);
     }
-
   }
 
   private async recoverRecord(): Promise<void> {
@@ -936,7 +935,6 @@ export class Core {
     await this.staging.prune().catch(() => undefined);
     this.every('staging', HOUR, () => this.staging.prune());
     if (this.options.failJob) this.testJob(this.options.failJob);
-
   }
 
   private async startBackground(): Promise<void> {
@@ -985,10 +983,11 @@ export class Core {
     // The promised checks the record still holds wait on, armed again (#120).
     await this.delivery.restorePromises().catch(() => undefined);
     await this.acceptance.open();
+    // The work runs (#1332), once the starts are reconciled with what still runs: a pass every 2 s from the record and the forge.
+    (this.work = new Work({ api: this.options.forge ?? 'https://api.github.com', token: async () => process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN ?? await ghToken(), repoOf: (remote) => this.providers.forge.repoOf(remote), raw: (q, p) => this.record.raw(q, p), appendCore: (kind, data, extra) => this.appendCore(kind, data, extra), starts: () => this.sessionStarts, landing: () => this.landing, asks: () => this.asks, now: this.now, plant: this.options.plant })).open();
     // The session map and what its notices delivered, and the loop rule's count, read back (#352).
     await this.siblings.restore().catch(() => undefined);
     for (const timer of this.timers) timer.unref();
-
   }
 
   /** The github extension (#46): what it reads of the hub, and where its status lands. */
@@ -1367,7 +1366,7 @@ export class Core {
     if (early) return early;
     const verified = meta.watchOnly || await this.delivery.tokenTaken(meta) ? false : this.delivery.checked(meta, await this.state.verify(meta));
     // A session's first hook from under a run DeepBuild started (#1330): its start.session first, so its first event names the run.
-    if (meta.session) await this.sessionStarts.sessionOf(meta.session, meta.ppid, meta.agent).catch(() => undefined);
+    if (meta.session) await this.sessionStarts.sessionOf(meta.session, meta.ppid, meta.agent, meta.fields?.model).catch(() => undefined);
     const unread = Boolean(meta.watchOnly && meta.session && !this.state.versioned.has(meta.session));
     if (unread) {
       this.state.versioned.add(meta.session);
@@ -2584,6 +2583,7 @@ export class Core {
     plantedStop();
     for (const timer of this.timers) clearInterval(timer);
     this.siblings.stop();
+    this.work?.close();
     // The pool's pipe goes with the hub, as its socket does: left in the root with no writer, any read of it blocks.
     this.pool?.close(true);
     for (const live of this.state.live.values()) clearTimeout(live.quiet);

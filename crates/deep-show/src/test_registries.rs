@@ -36,6 +36,11 @@ pub fn modules() -> Vec<Module> {
     // Issue #412's test canvas modules.
     #[cfg(feature = "test-preview")]
     out.push(deep_canvas_test_modules::kinds::preview());
+    // Issue #1802's: the same module once it removed its preview kind, with a migration and without.
+    #[cfg(feature = "test-preview-removed")]
+    out.push(deep_canvas_test_modules::kinds::preview_removed());
+    #[cfg(feature = "test-preview-removed-bare")]
+    out.push(deep_canvas_test_modules::kinds::preview_removed_bare());
     #[cfg(feature = "test-cue")]
     out.push(deep_canvas_test_modules::kinds::cue());
     #[cfg(feature = "test-cue-span")]

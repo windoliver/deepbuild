@@ -439,6 +439,7 @@ impl deep_canvas::schedule::Canonical for Driver {
                     DriverInput::Rate(c) => (3u8, c).encode(out),
                     DriverInput::Remap(r, progress) => (4u8, r, *progress).encode(out),
                     DriverInput::Array(a) => (5u8, a).encode(out),
+                    DriverInput::Hover(h) => (6u8, h).encode(out),
                     DriverInput::List(f) => {
                         (2u8, &f.list, &f.kinds, (&f.a, &f.b)).encode(out);
                         (&f.tags, &f.where_).encode(out);
