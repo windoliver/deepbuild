@@ -27,13 +27,25 @@ pub(crate) struct Part {
 impl Part {
     /// Opens the job `ask` (its `frames`, `first` and `format` set here) for frames
     /// `first..first + n`.
-    pub(crate) fn open(tool: &mut Helper, mut ask: Value, path: PathBuf, first: i64, n: i64, nv12: bool) -> Result<Part, Value> {
+    pub(crate) fn open(
+        tool: &mut Helper,
+        mut ask: Value,
+        path: PathBuf,
+        first: i64,
+        n: i64,
+        nv12: bool,
+    ) -> Result<Part, Value> {
         ask["frames"] = json!(n);
         ask["first"] = json!(first);
         ask["out"] = json!(path);
         ask["format"] = json!(if nv12 { "nv12" } else { "bgra" });
         match tool.feed(&ask, &[], WAIT) {
-            Some(r) if r.get("ready").is_some() => Ok(Part { path, next: first, end: first + n, nv12 }),
+            Some(r) if r.get("ready").is_some() => Ok(Part {
+                path,
+                next: first,
+                end: first + n,
+                nv12,
+            }),
             Some(r) => Err(json!({"code": "writer_failed", "frame": first, "reply": r,
                 "what": format!("the encode tool refused the part starting at frame {first}")})),
             None => Err(stalled(first)),
@@ -41,7 +53,14 @@ impl Part {
     }
 
     /// Hands frame `k` (straight BGRA8 rows, `size`) to the tool; `key` asks for a key frame.
-    pub(crate) fn push(&mut self, tool: &mut Helper, k: i64, bgra: &[u8], size: [u32; 2], key: bool) -> Result<(), Value> {
+    pub(crate) fn push(
+        &mut self,
+        tool: &mut Helper,
+        k: i64,
+        bgra: &[u8],
+        size: [u32; 2],
+        key: bool,
+    ) -> Result<(), Value> {
         debug_assert_eq!(k, self.next);
         let nv12;
         let bytes: &[u8] = if self.nv12 {
@@ -50,7 +69,11 @@ impl Part {
         } else {
             bgra
         };
-        match tool.feed(&json!({"frame": k, "bytes": bytes.len(), "key": key}), bytes, WAIT) {
+        match tool.feed(
+            &json!({"frame": k, "bytes": bytes.len(), "key": key}),
+            bytes,
+            WAIT,
+        ) {
             Some(r) if r["frame"] == json!(k) => {
                 self.next += 1;
                 Ok(())

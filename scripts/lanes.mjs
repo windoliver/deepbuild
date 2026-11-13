@@ -530,6 +530,10 @@ alone.push('tests/acceptance/1606-redraft-ac5-ac9/');
 // #2324's files each build deep-show (with the planted engine build and sandbox.alt), deep-sandbox and deep-logic, run
 // them in Docker on linux/amd64 and drive headless Chrome, as #238's and #531's do.
 alone.push('tests/acceptance/2324/');
+// #2197's files each start a real hub and one or two agent processes, each with its own deep mcp; budget.test.ts times
+// deep_status against #26's 100 ms on the reference Mac.
+alone.push('tests/acceptance/2197/');
+timed.push('tests/acceptance/2197/budget.test.ts');
 // #1332's files each start their own hubs, a played forge and played agents, and run a work run to its landings.
 alone.push('tests/acceptance/1332/');
 

@@ -81,7 +81,11 @@ impl GpuLease {
                         let _ = std::fs::remove_file(&file);
                         continue;
                     }
-                    std::thread::sleep(std::time::Duration::from_millis(if tries.is_some() { 500 } else { 50 }));
+                    std::thread::sleep(std::time::Duration::from_millis(if tries.is_some() {
+                        500
+                    } else {
+                        50
+                    }));
                 }
             }
         }

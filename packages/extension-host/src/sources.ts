@@ -52,11 +52,15 @@ export class HostSources {
     const ext = this.workExt(source);
     const d = ext?.sources.get(source);
     if (!ext || d?.variant !== 'stream' || !d.work) throw Error(`no loaded package registers the work source ${source}`);
+    return this.sourceCall({ ext, source, work: d.work, noAnswer: false }, op, arg);
+  }
+  /** Work and library operations share the call lifetime and its recorded no-answer state. */
+  private async sourceCall(live: { ext: Ext; source: string; work: Omit<WorkDecl, 'delivers'>; library?: LibraryDecl; noAnswer: boolean }, op: string, arg: unknown): Promise<{ value: unknown; noAnswer: boolean }> {
+    const { ext, source } = live;
     const call = `work:${++this.workCount}`;
-    const live = { ext, source, work: d.work, noAnswer: false };
     this.workCalls.set(call, live);
     try {
-      const value = await within(WORK_CALL_MS, `${ext.entry.id}'s work source ${source}'s ${op}`, ext.ask!('work', { name: source, op, call, arg }));
+      const value = await within(WORK_CALL_MS, `${ext.entry.id}'s ${live.library ? 'library' : 'work source'} ${source}'s ${op}`, ext.ask!(live.library ? 'library' : 'work', { name: source, op, call, arg }));
       return { value, noAnswer: live.noAnswer };
     } catch (e) {
       throw Object.assign(e instanceof Error ? e : Error(String(e)), { noAnswer: live.noAnswer });
@@ -85,17 +89,7 @@ export class HostSources {
    */
   async libraryCall(name: string, op: 'search' | 'fetch', arg: unknown): Promise<{ value: unknown; noAnswer: boolean }> {
     const { ext, library } = this.libraryOf(name);
-    const call = `work:${++this.workCount}`;
-    const live = { ext, source: name, work: library, library, noAnswer: false };
-    this.workCalls.set(call, live);
-    try {
-      const value = await within(WORK_CALL_MS, `${ext.entry.id}'s library ${name}'s ${op}`, ext.ask!('library', { name, op, call, arg }));
-      return { value, noAnswer: live.noAnswer };
-    } catch (e) {
-      throw Object.assign(e instanceof Error ? e : Error(String(e)), { noAnswer: live.noAnswer });
-    } finally {
-      this.workCalls.delete(call);
-    }
+    return this.sourceCall({ ext, source: name, work: library, library, noAnswer: false }, op, arg);
   }
 
   /** A file a library's fetch named, downloaded through its source on its host by the hub, never by the package (#1731). */
@@ -457,7 +451,10 @@ export function declareSource(name: unknown, declared: unknown, own: { sources: 
   };
 }
 
-/** Node's fetch, never following a redirect, an answer cut at its cap. */
+/** An answer that exceeded its byte cap; callers retain their own refusal wording. */
+export class AnswerTooLarge extends Error {}
+
+/** Source transport, including the asset reachability probe. */
 export const nodeHttp: HttpClient = async (request, signal) => {
   // Reachability before an asset ask sends no HTTP request and reads no byte. It is still a Source call,
   // under its quota and timeout, recorded/replayed like the later authorized GETs.
@@ -467,6 +464,10 @@ export const nodeHttp: HttpClient = async (request, signal) => {
     socket.once('connect', () => { socket.destroy(); resolve({ status: 200, headers: {}, body: '' }); });
     socket.once('error', reject);
   });
+  return nodeFetch(request, signal);
+};
+/** Node's HTTP fetch, never following a redirect, an answer cut at its cap. */
+export const nodeFetch: HttpClient = async (request, signal) => {
   const res = await fetch(request.url, { method: request.method, headers: request.headers, redirect: 'manual', signal, ...(request.body === undefined ? {} : { body: request.body }) });
   const chunks: Uint8Array[] = [];
   let size = 0;
@@ -480,7 +481,7 @@ export const nodeHttp: HttpClient = async (request, signal) => {
   try {
     for await (const chunk of res.body ?? []) {
       size += chunk.byteLength;
-      if (size > cap) throw Error(`the answer from ${new URL(request.url).host} is over ${cap} bytes`);
+      if (size > cap) throw new AnswerTooLarge(`the answer from ${new URL(request.url).host} is over ${cap} bytes`);
       chunks.push(chunk);
     }
   } catch (e) {

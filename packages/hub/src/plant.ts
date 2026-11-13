@@ -253,7 +253,9 @@ export type Plant =
   // #1100's: a set-up line that says nothing of the guard entries that block, one written to stdout, and steps that never say what they're doing.
   | 'set-up-line-says-nothing-blocks' | 'set-up-line-to-stdout' | 'silent-steps'
   // #2043's: a parser pool that hears its workers' messages only, and one that replaces an ended worker but leaves its lines waiting.
-  | 'parser-pool-messages-only' | 'parser-pool-leaves-line-waiting';
+  | 'parser-pool-messages-only' | 'parser-pool-leaves-line-waiting'
+  // #2197's: a deep_status that lists every session's open asks.
+  | 'status-lists-every-ask';
 const PLANTS: readonly string[] = [
   'statusline-user-settings-only', 'window-unknown-as-zero', 'window-carried-from-other-repo', 'sends-block-whole',
   'box-applies-at-once', 'box-ignores-revision',
@@ -354,6 +356,7 @@ const PLANTS: readonly string[] = [
   'replay-keeps-place-by-id', 'asks-keep-place-by-id',
   'set-up-line-says-nothing-blocks', 'set-up-line-to-stdout', 'silent-steps',
   'parser-pool-messages-only', 'parser-pool-leaves-line-waiting',
+  'status-lists-every-ask',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {
   if (!value) return undefined;
