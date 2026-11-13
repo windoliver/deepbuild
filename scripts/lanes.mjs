@@ -575,6 +575,8 @@ alone.push('tests/acceptance/204-redraft-ac7/');
 // #204's gap test builds deep-show and reads the registries around a pack's install.
 alone.push('tests/acceptance/204-gaps/');
 byHand.push('tests/acceptance/204/export.test.ts');
+// #450's files each build deep-gpu and draw trails and ribbons on the Metal GPU.
+alone.push('tests/acceptance/450/');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
