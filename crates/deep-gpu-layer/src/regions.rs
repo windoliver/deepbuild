@@ -470,9 +470,17 @@ pub fn coverage(
         }
     };
     // Each side's base and its regions in view, with their keys.
+    // A region in view: its look's key, its mask's volume and inverse, and its edge.
+    struct InView<'a> {
+        key: usize,
+        r: &'a Region,
+        v: Volume,
+        inv: [[f64; 4]; 3],
+        edge: Edge,
+    }
     struct Part<'a> {
         base: usize,
-        regions: Vec<(usize, &'a Region, Volume, [[f64; 4]; 3], Edge)>,
+        regions: Vec<InView<'a>>,
         weight: f64,
     }
     let mut parts = Vec::new();
@@ -485,13 +493,13 @@ pub fn coverage(
                 continue;
             }
             let Some(inv) = inverse(&v.1) else { continue };
-            regions.push((
-                key_of(&mut keys, Some(r.look.clone())),
+            regions.push(InView {
+                key: key_of(&mut keys, Some(r.look.clone())),
                 r,
                 v,
                 inv,
-                timeline.edge(r),
-            ));
+                edge: timeline.edge(r),
+            });
         }
         parts.push(Part {
             base,
@@ -518,7 +526,14 @@ pub fn coverage(
             for part in &parts {
                 let mut c = vec![0f64; n];
                 c[part.base] = 1.0;
-                for (key, r, v, inv, edge) in &part.regions {
+                for InView {
+                    key,
+                    r,
+                    v,
+                    inv,
+                    edge,
+                } in &part.regions
+                {
                     // The world point the pixel sees, or on open ground the point at the mask's
                     // own depth.
                     let z = if vz.is_finite() && vz > 0.0 {

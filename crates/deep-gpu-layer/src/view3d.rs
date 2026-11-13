@@ -1822,7 +1822,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                             &args.states,
                             &mut text,
                         )?;
-                        kept_layer = Some(std::mem::replace(&mut lock(stage).layer, Some(layer)));
+                        kept_layer = Some(lock(stage).layer.replace(layer));
                     }
                     let d = session3::draw(
                         app,

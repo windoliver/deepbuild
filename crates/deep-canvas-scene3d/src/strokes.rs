@@ -294,7 +294,7 @@ fn unit_tris(shape: Shape) -> Vec<Tri> {
 /// A builder's mesh's triangles, u from its first texture coordinate where it has one.
 fn mesh_tris(m: &crate::geom::Mesh) -> Vec<Tri> {
     let mut out = Vec::new();
-    for t in m.indices.chunks_exact(3) {
+    for t in m.indices.as_chunks::<3>().0 {
         let i = [t[0] as usize, t[1] as usize, t[2] as usize];
         let Some(p) = i
             .iter()
@@ -391,7 +391,7 @@ fn blocks(s: &Solid, eye: V3, p: V3) -> bool {
             walls || caps
         }
         Shape::Built(_) => s.mesh.as_ref().is_some_and(|m| {
-            m.indices.chunks_exact(3).any(|t| {
+            m.indices.as_chunks::<3>().0.iter().any(|t| {
                 let v = |k: u32| m.positions.get(k as usize).copied();
                 let (Some(a), Some(b), Some(c)) = (v(t[0]), v(t[1]), v(t[2])) else {
                     return false;

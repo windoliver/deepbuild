@@ -73,10 +73,18 @@ pub struct Motif {
     pub by_item: bool,
 }
 
-/// A look's motifs bound to a document: each with its slot's members, in the collection's order.
+/// A motif with its slot's members, in the collection's order, and the spans it holds still in.
+#[derive(Clone, Debug)]
+struct Bound {
+    motif: Motif,
+    members: Vec<String>,
+    frozen: Vec<(i64, i64)>,
+}
+
+/// A look's motifs bound to a document.
 #[derive(Clone, Debug, Default)]
 pub struct Motifs {
-    bound: Vec<(Motif, Vec<String>, Vec<(i64, i64)>)>,
+    bound: Vec<Bound>,
     /// The reading holds, which a text item's motif skips.
     holds: Vec<(i64, i64)>,
     tempo: Option<Tempo>,
@@ -252,12 +260,16 @@ impl Motifs {
                     .map(|k| (k.start, k.end))
                     .collect(),
             );
-            bound.push((m, members, frozen));
+            bound.push(Bound {
+                motif: m,
+                members,
+                frozen,
+            });
         }
         if bound.is_empty() {
             return Ok(None);
         }
-        let tempo = if bound.iter().any(|(m, ..)| matches!(m.rate, Rate::Beats(_))) {
+        let tempo = if bound.iter().any(|b| matches!(b.motif.rate, Rate::Beats(_))) {
             match Ctx::timeline(doc, program.motion.frame_rate)?.tempo {
                 Some(t) => Some(t),
                 None => return refused("tempo_map_missing", "motifs: a rate in beats"),
@@ -286,7 +298,12 @@ impl Motifs {
         if reduced {
             return;
         }
-        for (m, members, frozen) in &self.bound {
+        for Bound {
+            motif: m,
+            members,
+            frozen,
+        } in &self.bound
+        {
             for (i, id) in members.iter().enumerate() {
                 let Some(item) = items.get_mut(id) else {
                     continue;
