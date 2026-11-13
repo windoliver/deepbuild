@@ -164,13 +164,25 @@ pub fn register(r: &mut Registrar) {
         "loop.quad_ratio",
         Some(gltf(&tri, &[], &[], &[0, 1, 2], true)),
     );
-    // One triangle whose uv1 reaches past the unit square; its uv0 may tile, so uv0 lies past it
-    // too and raises nothing.
+    // One triangle whose uv1, which its material's base color map reads, reaches past the unit
+    // square; its uv0 may tile, so uv0 lies past it too and raises nothing.
+    planted(r, "uv", "loop.uv", Some(past_unit(Some(1))));
+}
+
+/// One triangle whose uv0 and uv1 reach past the unit square, its material's base color map
+/// reading set `map` where given (none: no material).
+pub(crate) fn past_unit(map: Option<u64>) -> Vec<u8> {
+    let tri = [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]];
     let past = [[0.5, 0.5], [1.5, 0.5], [0.5, 1.5]];
-    planted(
-        r,
-        "uv",
-        "loop.uv",
-        Some(gltf(&tri, &[], &[&past, &past], &[0, 1, 2], false)),
-    );
+    let bytes = gltf(&tri, &[], &[&past, &past], &[0, 1, 2], false);
+    let Some(set) = map else {
+        return bytes;
+    };
+    let mut doc: Value = serde_json::from_slice(&bytes).expect("a glTF");
+    doc["meshes"][0]["primitives"][0]["material"] = json!(0);
+    doc["materials"] =
+        json!([{"pbrMetallicRoughness": {"baseColorTexture": {"index": 0, "texCoord": set}}}]);
+    doc["textures"] = json!([{"source": 0}]);
+    doc["images"] = json!([{"uri": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="}]);
+    serde_json::to_vec(&doc).expect("a glTF")
 }

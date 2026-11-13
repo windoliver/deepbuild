@@ -524,10 +524,40 @@ fn texcoords(prim: &Value) -> Vec<u64> {
         .collect()
 }
 
+/// One UV set of a primitive: a row per position, and whether a texture map of the primitive's
+/// material reads it (geometry.shading's `uv_when: map`).
+pub struct UvSet {
+    pub uv: Vec<[f64; 2]>,
+    pub mapped: bool,
+}
+
+/// The UV sets a material's texture maps read: each texture reference's `texCoord` (0 when it
+/// names none, `KHR_texture_transform`'s when that overrides it), in the core material and its
+/// extensions alike.
+fn mapped_sets(v: &Value, out: &mut Vec<u64>) {
+    match v {
+        Value::Object(m) => {
+            for (k, x) in m {
+                if k.ends_with("Texture") && x.get("index").is_some() {
+                    let set = x
+                        .pointer("/extensions/KHR_texture_transform/texCoord")
+                        .or_else(|| x.get("texCoord"))
+                        .and_then(Value::as_u64)
+                        .unwrap_or(0);
+                    out.push(set);
+                }
+                mapped_sets(x, out);
+            }
+        }
+        Value::Array(a) => a.iter().for_each(|x| mapped_sets(x, out)),
+        _ => {}
+    }
+}
+
 /// #1935: each UV set of node `node`'s primitives, in file order beside `primitives`: per
 /// primitive its `TEXCOORD_0`, `TEXCOORD_1`, … up to the first it lacks, one row per position;
 /// none for a primitive whose data a pinned tool must decode first.
-pub fn uv_sets(bytes: &[u8], node: &Value) -> Result<Vec<Vec<Vec<[f64; 2]>>>, Fault> {
+pub fn uv_sets(bytes: &[u8], node: &Value) -> Result<Vec<Vec<UvSet>>, Fault> {
     let (doc, bin) = split(bytes)?;
     let n = node_of(&doc, node)?;
     let mesh_i = doc
@@ -551,6 +581,10 @@ pub fn uv_sets(bytes: &[u8], node: &Value) -> Result<Vec<Vec<Vec<[f64; 2]>>>, Fa
             .pointer("/attributes/POSITION")
             .and_then(|a| doc.pointer(&format!("/accessors/{a}/count")))
             .and_then(Value::as_u64);
+        let mut maps = Vec::new();
+        if let Some(m) = prim.get("material").and_then(Value::as_u64) {
+            mapped_sets(&doc["materials"][m as usize], &mut maps);
+        }
         let mut sets = Vec::new();
         for (k, a) in texcoords(prim).into_iter().enumerate() {
             let rows = accessor(&doc, &bin, a as usize, 2)?;
@@ -559,7 +593,10 @@ pub fn uv_sets(bytes: &[u8], node: &Value) -> Result<Vec<Vec<Vec<[f64; 2]>>>, Fa
                     "TEXCOORD_{k} that doesn't match its positions"
                 )));
             }
-            sets.push(rows.into_iter().map(|r| [r[0], r[1]]).collect());
+            sets.push(UvSet {
+                uv: rows.into_iter().map(|r| [r[0], r[1]]).collect(),
+                mapped: maps.contains(&(k as u64)),
+            });
         }
         out.push(sets);
     }

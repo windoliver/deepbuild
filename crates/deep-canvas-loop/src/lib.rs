@@ -198,24 +198,29 @@ fn position_id(i: usize, read: &[(usize, Prim)]) -> String {
     String::new()
 }
 
-/// Each UV set's faces across the read primitives: set `k` holds the triangles of every
-/// primitive that carries `TEXCOORD_k`.
-fn uv_faces(read: &[(usize, Prim)], sets: &[Vec<Vec<[f64; 2]>>], c: &Counts) -> Vec<Vec<uv::Face>> {
+/// Each UV set's faces across the read primitives, and whether a texture map reads it: set `k`
+/// holds the triangles of every primitive that carries `TEXCOORD_k`.
+fn uv_faces(
+    read: &[(usize, Prim)],
+    sets: &[Vec<gltf::UvSet>],
+    c: &Counts,
+) -> Vec<(Vec<uv::Face>, bool)> {
     let n = read
         .iter()
         .map(|(p, _)| sets.get(*p).map_or(0, Vec::len))
         .max()
         .unwrap_or(0);
-    let mut out: Vec<Vec<uv::Face>> = (0..n).map(|_| Vec::new()).collect();
+    let mut out: Vec<(Vec<uv::Face>, bool)> = (0..n).map(|_| (Vec::new(), false)).collect();
     let (mut base, mut first) = (0usize, 0usize);
     for (p, prim) in read {
         let own = sets.get(*p).map_or(&[][..], Vec::as_slice);
         for (k, set) in own.iter().enumerate() {
+            out[k].1 |= set.mapped;
             for (t, tri) in prim.indices.as_chunks::<3>().0.iter().enumerate() {
                 let i = tri.map(|i| i as usize);
-                out[k].push(uv::Face {
+                out[k].0.push(uv::Face {
                     f: first + t,
-                    uv: i.map(|i| set[i]),
+                    uv: i.map(|i| set.uv[i]),
                     v: i.map(|i| c.vertices[base + i]),
                     area: c.areas[first + t],
                 });
@@ -260,6 +265,8 @@ pub fn report(lowered: &Value, input: &Value) -> Report {
         boxes: plants("uv_overlap_from_boxes"),
     };
     let (overlap_max, fill_min) = (limit("/uv_overlap_max"), limit("/uv_fill_min"));
+    // `uv_when: map` holds a UV set to its limits only when a texture map reads it.
+    let uv_always = input.get("uv_when").and_then(Value::as_str) == Some("always");
     let mut out = Report::default();
     let empty = Map::new();
     let items = lowered
@@ -345,10 +352,10 @@ pub fn report(lowered: &Value, input: &Value) -> Report {
             .enumerate()
             .filter_map(|(f, h)| h.then_some(f))
             .collect();
-        let readings: Vec<uv::Reading> = uv_faces(&read, &sets, &c)
+        let (readings, mapped): (Vec<uv::Reading>, Vec<bool>) = uv_faces(&read, &sets, &c)
             .iter()
-            .map(|faces| uv::read(faces, &uv_opts))
-            .collect();
+            .map(|(faces, mapped)| (uv::read(faces, &uv_opts), *mapped))
+            .unzip();
         let faces = |fs: &[usize]| -> Vec<String> {
             fs.iter().take(IDS).map(|f| face_id(*f, &read)).collect()
         };
@@ -413,7 +420,8 @@ pub fn report(lowered: &Value, input: &Value) -> Report {
                 "unpaired": unpaired,
                 "hidden_faces": faces(&hidden),
                 "unused_vertices": c.unused.iter().take(IDS).map(|i| position_id(*i, &read)).collect::<Vec<_>>(),
-                "smallest_island": faces(&c.smallest_island),
+                // The smallest island is named only beside another: one island is the whole mesh.
+                "smallest_island": if c.islands > 1 { faces(&c.smallest_island) } else { Vec::new() },
             },
             "signed_volume": c.volume,
             "quad_ratio": ratio,
@@ -472,8 +480,12 @@ pub fn report(lowered: &Value, input: &Value) -> Report {
             );
         }
         // #1935: uv0 may tile, so it never fails on overlap or on area outside the unit square;
-        // any other set fails on area outside it, and every set on a limit the input sets.
+        // any other set fails on area outside it, and every set on a limit the input sets, each
+        // only where `uv_when` holds it: always, or when a texture map reads the set.
         for (k, r) in readings.iter().enumerate() {
+            if !uv_always && !mapped[k] {
+                continue;
+            }
             let mut fail = |reading: &str, value: Value, limit: Value, ids: Vec<String>| {
                 raise(
                     "loop.uv",
@@ -519,4 +531,46 @@ pub fn report(lowered: &Value, input: &Value) -> Report {
         }
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The codes geometry.shading raises on one mesh asset of `bytes` under `input`.
+    fn codes(bytes: &[u8], input: Value) -> Vec<&'static str> {
+        let sha = deep_canvas::canon::sha256_hex(bytes);
+        let lowered = json!({"items": {"a": {"kind": "mesh.asset@1", "params": {"sha256": sha}}}});
+        let mut input = input;
+        input["assets"] = json!({sha: deep_canvas::base64::encode(bytes)});
+        report(&lowered, &input)
+            .raised
+            .into_iter()
+            .map(|(_, r, _)| r.code)
+            .collect()
+    }
+
+    #[test]
+    fn uv_when_map_holds_a_set_to_its_limits_only_when_a_map_reads_it() {
+        let input = json!({"kind": KIND});
+        // uv1 past the unit square, read by no map: a reading, never a failure.
+        assert_eq!(
+            codes(&fixtures::past_unit(None), input.clone()),
+            Vec::<&str>::new()
+        );
+        // A map reads uv0, which may tile: still nothing.
+        assert_eq!(
+            codes(&fixtures::past_unit(Some(0)), input.clone()),
+            Vec::<&str>::new()
+        );
+        // A map reads uv1, or the input says `uv_when: always`: uv1 fails.
+        assert_eq!(codes(&fixtures::past_unit(Some(1)), input), ["loop.uv"]);
+        assert_eq!(
+            codes(
+                &fixtures::past_unit(None),
+                json!({"kind": KIND, "uv_when": "always"})
+            ),
+            ["loop.uv"]
+        );
+    }
 }
