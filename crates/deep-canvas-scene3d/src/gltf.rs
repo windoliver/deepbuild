@@ -709,13 +709,13 @@ pub fn node_materials(bytes: &[u8], node: &Value) -> bool {
         .is_some_and(|ps| ps.iter().any(|p| p.get("material").is_some()))
 }
 
+/// What [`rig`] reads: each node by name, with its parent's name and its local matrix.
+type Rig = BTreeMap<String, (Option<String>, [[f64; 4]; 3])>;
+
 /// #537: every node of a file's scene `scene` by name (or its index where it has none), with its
 /// parent's name and its local matrix, so rigid part poses turn a node relative to its parent
 /// (Instance `instance@1`: logic columns).
-pub fn rig(
-    bytes: &[u8],
-    scene: usize,
-) -> Result<BTreeMap<String, (Option<String>, [[f64; 4]; 3])>, Fault> {
+pub fn rig(bytes: &[u8], scene: usize) -> Result<Rig, Fault> {
     let (doc, _) = split(bytes)?;
     let nodes = doc.get("nodes").and_then(Value::as_array);
     let name = |i: usize| -> String {

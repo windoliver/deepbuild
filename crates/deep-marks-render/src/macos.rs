@@ -607,7 +607,7 @@ fn resampled(
         .ok_or_else(|| refused("asset_undecodable", &path))?;
     let copy = Arc::new(RenderImage::new([image::Frame::new(frame)]));
     session.resamples += 1;
-    session.resampled.insert(key.clone(), copy.clone());
+    session.resampled.insert(*key, copy.clone());
     Ok(copy)
 }
 

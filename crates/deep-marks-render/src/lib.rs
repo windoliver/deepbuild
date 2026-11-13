@@ -460,7 +460,7 @@ fn check(
                 expansions.push(json!({"instance": id, "derived": {name: derived}}))
             }
             Err(r) => issues.push(deep_canvas::document::Issue::error(
-                r.code, id, r.path, r.actual, &r.message,
+                r.code, id, r.path, *r.actual, &r.message,
             )),
         }
     }

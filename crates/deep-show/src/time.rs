@@ -101,7 +101,9 @@ pub fn parse_call(name: &str, c: &Map<String, Value>) -> Option<Call> {
             doc: doc()?,
             text: c.get("text")?.as_str()?.to_string(),
         }),
-        "export" if c.contains_key("out") => crate::export::parse(c).map(Call::ExportRun),
+        "export" if c.contains_key("out") => {
+            crate::export::parse(c).map(|job| Call::ExportRun(Box::new(job)))
+        }
         "export" => {
             let frame_rate = optional(c.get("frame_rate"), pair)?;
             let sample_rate = optional(c.get("audio"), |a| whole(a.get("sample_rate")?))?;

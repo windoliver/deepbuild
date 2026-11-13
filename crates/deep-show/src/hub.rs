@@ -734,7 +734,7 @@ pub enum Call {
     /// An export of a document's current revision planned at its rates (#488).
     Export(crate::time::Export),
     /// #501: an export through a sealed `export.target@1` entry.
-    ExportRun(crate::export::Job),
+    ExportRun(Box<crate::export::Job>),
     /// #501: a document's session state, read or set.
     Session { doc: String, set: Option<Value> },
     /// #501: the export's GPU hash pass on given BGRA8 frames.
@@ -2313,7 +2313,7 @@ impl<'a> Hub<'a> {
                 issues.extend(crate::spawn::undeclared_issues(form));
             }
             if let Err(i) = self.inline_occurrences(form, &[]) {
-                issues.push(i);
+                issues.push(*i);
             }
         }
         // Mark set columns that read a column source, resolved and narrowed by the core's
