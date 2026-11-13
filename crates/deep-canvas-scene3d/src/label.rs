@@ -60,6 +60,9 @@ pub struct Labels {
     /// #381 AC1's wrong program (`deep-gpu run --planted label_mask`): the base's path, each label
     /// shaped at a fixed em for a mask of its own, with nothing placed in the atlas.
     pub fixed_em: bool,
+    /// #450: whole trails' samples, taken once at check and kept by their source chain's key for
+    /// the session that evaluates the scene, so a frame never takes them again.
+    pub(crate) trails: crate::trail::Held,
 }
 
 impl Default for Labels {
@@ -76,6 +79,7 @@ impl Labels {
             pages: Vec::new(),
             runs: BTreeMap::new(),
             fixed_em: false,
+            trails: BTreeMap::new(),
         }
     }
 

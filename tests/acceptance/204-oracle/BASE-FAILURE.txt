@@ -1,0 +1,21 @@
+Base: 4a0910cf4 (design(#204): the osc's waves, the shaper's curves and the crush's step, written out as laws).
+Built and run once there, Nov 12, 2026, on this Mac (toolchain 1.99.1-aarch64-apple-darwin, CARGO_INCREMENTAL=0
+CARGO_PROFILE_DEV_DEBUG=0), after `npm ci` and `npm run build --workspaces`:
+
+  node node_modules/vitest/vitest.mjs run --root tests/acceptance/204-oracle --testTimeout=3600000 --no-file-parallelism
+
+Test Files  2 failed (2)
+Tests  3 failed (3)
+Duration  69.84s (tests 97%, transform 2%, import 1%)
+vitest 204-oracle exit 1
+
+Every test fails for the missing feature: the clean ports at their first install (the base's pack check refuses a
+manifest with `presets`, unknown_field at path `presets`), the planted one at bad_input (the base doesn't know the
+name `spawn_synth_starts_next_block`). Each entry: the test, then its first assertion, cut.
+
+- AC1 #204.47d50ee6 osc-basic-waveform.test.ts: basic sine waveform, ported: the osc node's sine at 100, −100, 2 and 1 Hz over 256 samples at 44.1 kHz is b1 · sin(2πfk ÷ rate) within upstr …
+    AssertionError: the sine oscillator at four frequencies, 44.1 kHz: the pack test/tones: the pack check admits it (outcome installed, no issue); got {"outcome":"refused","pack":"test/tones","version":"1.0.0","issues":[{"check":"document.validate","code":"unknown_field","severity":"error","ids":[],"path":"presets","actual":{"tone@1":{"nodes":{"tone":{"kind":"osc","wave":"sine","hz":"hz"},"level":{"kind":"gain","gain":0 …
+- AC6 #204.9d525978 sample-accurate.test.ts: sample-accurate scheduling, ported: nine spawned synth voices at upstream's offsets each start on exactly their sample and nowhere earlier,  …
+    AssertionError: nine hits at upstream's offsets, 44.1 kHz: the pack test/clicks: the pack check admits it (outcome installed, no issue); got {"outcome":"refused","pack":"test/clicks","version":"1.0.0","issues":[{"check":"document.validate","code":"unknown_field","severity":"error","ids":[],"path":"presets","actual":{"click@1":{"nodes":{"tone":{"kind":"osc","wave":"square","hz":1000},"level":{"kind":"gain","gain":0.25 …
+- AC6 #204.9d525978 sample-accurate.test.ts: the planted Spawn that starts each voice at the first block after its occurrence fails the port, naming the first misplaced hit, hit 1 at of …
+    AssertionError: nine hits at upstream's offsets, 44.1 kHz (planted spawn_synth_starts_next_block): deep-show run answers the scenario ok (synth@1 on a strip or a Spawn template, presets in a pack's manifest, `install_pack`, `media_mix`'s `synths`, `taps`, `seek` and `seek_ms`, README: The surface under test, planted spawn_synth_starts_next_block); got {"ok":false,"code":"bad_input"}: expected false to be true // Obje …

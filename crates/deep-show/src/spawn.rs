@@ -177,6 +177,8 @@ struct Template {
     r#in: i64,
     out: i64,
     rate: (i64, i64),
+    /// #204: a synth template: its `src.synth`, its span (the gate) and its preset's tail.
+    synth: Option<(Value, i64, i64)>,
 }
 
 /// A time remap's map (parent flick → child flick), as keys.
@@ -226,6 +228,10 @@ impl Remap {
         }
     }
 }
+
+/// #204's planted spawns: a synth voice started at the next block, and a stolen voice's filters kept.
+pub(crate) const LATE_VOICE: &str = "spawn_synth_starts_next_block";
+pub(crate) const STEAL_KEEPS_FILTERS: &str = "steal_keeps_filter_state";
 
 /// One planned voice: its spawn, occurrence and index among the spawn's voices, the spawn-local
 /// index of the voice that stole it, its strip and its line in the reply.
@@ -360,14 +366,42 @@ impl Hub<'_> {
                 None => return Err(bad(format!("spawn {sid}: play"))),
             };
             let mut templates = Vec::new();
+            let plants = crate::mixdown::synth::Plants::now();
             for (t, _) in &entries {
-                let sha = doc::strip_asset(t)
-                    .ok_or_else(|| bad(format!("spawn {sid}: a template's src.asset")))?;
-                let source = source(sha)?;
                 let time = |k: &str| {
                     doc::time(d, t.get(k))
                         .ok_or_else(|| bad(format!("spawn {sid}: a template's {k}")))
                 };
+                // #204: a synth template plays its preset for its span (1 s unless it names one), then its tail.
+                if let Some(sy) = t.pointer("/src/synth") {
+                    let gate = if t.get("span").is_some() {
+                        time("span")?
+                    } else {
+                        FLICKS
+                    };
+                    let name = sy.get("preset").and_then(Value::as_str).unwrap_or_default();
+                    let (preset, _) = crate::mixdown::synth::preset_of(d, name)?;
+                    let tail = (deep_canvas_media::synth::check::tail(&preset, plants.half_tail)
+                        * FLICKS as f64)
+                        .ceil() as i64;
+                    let source = Arc::new(Source {
+                        rate: 48_000,
+                        channels: 1,
+                        samples: Vec::new(),
+                        loop_region: None,
+                    });
+                    templates.push(Template {
+                        source,
+                        r#in: 0,
+                        out: gate + tail,
+                        rate: (1, 1),
+                        synth: Some((sy.clone(), gate, tail)),
+                    });
+                    continue;
+                }
+                let sha = doc::strip_asset(t)
+                    .ok_or_else(|| bad(format!("spawn {sid}: a template's src.asset")))?;
+                let source = source(sha)?;
                 let r#in = time("in")?;
                 let out = if t.get("out").is_some() {
                     time("out")?
@@ -381,6 +415,7 @@ impl Hub<'_> {
                     r#in,
                     out,
                     rate,
+                    synth: None,
                 });
             }
             let pick = match sp.get("pick").and_then(Value::as_str).unwrap_or("weighted") {
@@ -560,10 +595,38 @@ impl Hub<'_> {
                     }),
                 });
                 let rate = rate_of(t);
+                // The planted spawn starts each voice at the first block after its occurrence.
+                let start = if planted(LATE_VOICE) && t.synth.is_some() {
+                    let block = deep_canvas_media::mix::BLOCK
+                        * (FLICKS
+                            / d.pointer("/transport/sample_rate")
+                                .and_then(Value::as_i64)
+                                .unwrap_or(48_000)
+                                .max(1));
+                    (v.start + block - 1).div_euclid(block) * block
+                } else {
+                    v.start
+                };
+                let synth = match &t.synth {
+                    Some((sy, gate, _)) => {
+                        let gate = (*gate).min(span);
+                        let spec = crate::mixdown::synth::spec_of(
+                            d,
+                            sid,
+                            sy,
+                            gate,
+                            index[v.occurrence] as u32,
+                            Some(row),
+                            plants,
+                        )?;
+                        Some(Arc::new(spec))
+                    }
+                    None => None,
+                };
                 let strip = Strip {
                     id: format!("{sid}.{n}"),
                     source: t.source.clone(),
-                    start: v.start,
+                    start,
                     r#in: t.r#in,
                     out: t.out,
                     rate,
@@ -581,6 +644,7 @@ impl Hub<'_> {
                         Vec::new()
                     },
                     emitter,
+                    synth,
                 };
                 let report = json!({"spawn": sid, "occurrence": index[v.occurrence],
                     "pair": [row.get("a").cloned().unwrap_or(Value::Null), row.get("b").cloned().unwrap_or(Value::Null)],
@@ -607,6 +671,14 @@ impl Hub<'_> {
             .iter()
             .map(|v| v.stolen_by.map(|k| global[&(v.spawn.as_str(), k)]))
             .collect();
+        // The planted steal: a synth voice takes on the filters of the voice it stole from.
+        if planted(STEAL_KEEPS_FILTERS) {
+            for (victim, by) in stolen.iter().enumerate() {
+                if let Some(Some(sp)) = by.map(|g| all[g].strip.synth.as_mut()) {
+                    Arc::make_mut(sp).inherits = Some(victim);
+                }
+            }
+        }
         let mut strips = Vec::new();
         let mut reports = Vec::new();
         for (mut v, stolen_by) in all.into_iter().zip(stolen) {

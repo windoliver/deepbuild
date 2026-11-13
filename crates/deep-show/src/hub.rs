@@ -607,6 +607,8 @@ pub struct Frames {
     pub paced: bool,
     pub revise: Option<(usize, Value)>,
     pub pixels: bool,
+    /// #538: each frame's compares and remap times.
+    pub timings: bool,
 }
 
 pub struct Show {
@@ -688,6 +690,7 @@ pub enum Call {
     Logic(Box<crate::picks::LogicCall>),
     /// #2014: rays met by a terrain plate's drawn triangles, its physics shape and a pick.
     TerrainRays(Box<crate::terrain::TerrainRays>),
+    PhysicsBake(Box<crate::physics::Bake>),
     /// #306: the pack store's rows.
     Packs,
     /// #306: one pack version installed mid-run; #200: through a session, which wrote it.
@@ -1161,6 +1164,8 @@ pub struct Hub<'a> {
     pub expansion_cache: BTreeMap<String, Expansion>,
     /// #544's planted start_on: each session's first evaluated time since its revision loaded.
     pub first_frames: BTreeMap<String, i64>,
+    /// #538's planted lookup: each copy table's key order in its document's first revision.
+    pub first_orders: BTreeMap<String, Vec<String>>,
     /// The displays, the windows on them and the card's placement (#400).
     pub placement: Placement,
     /// Terminals, streams and session pages (#402).
@@ -1331,6 +1336,7 @@ impl<'a> Hub<'a> {
             expansions: BTreeMap::new(),
             expansion_cache: BTreeMap::new(),
             first_frames: BTreeMap::new(),
+            first_orders: BTreeMap::new(),
             placement: Placement::open(
                 scenario.displays.clone(),
                 scenario.window,
@@ -1820,6 +1826,7 @@ impl<'a> Hub<'a> {
             Call::Spatial(s) => self.spatial(s),
             Call::Logic(l) => self.logic_call(l),
             Call::TerrainRays(r) => self.terrain_rays(r),
+            Call::PhysicsBake(b) => self.physics_bake(b),
             Call::SceneQuery(q) => self.scene_query(q),
             Call::Packs => self.packs_reply(),
             Call::InstallPack { id, dir, session } => {
@@ -2369,7 +2376,9 @@ impl<'a> Hub<'a> {
         // Mark set columns that read a column source, resolved and narrowed by the core's
         // column view at the frame's step (#397).
         if let Some(form) = drawn_form.as_mut() {
-            issues.extend(self.column_view(form, show.t));
+            // #538: and keyed copy's fit check, timed for `timing`.
+            let timing = fresh.as_mut().and_then(|(_, (_, t))| t.as_mut());
+            issues.extend(self.checked_view(&show.doc, form, show.t, timing));
         }
         if let Some(doc) = stamped
             .as_ref()

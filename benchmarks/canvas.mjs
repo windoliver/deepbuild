@@ -1062,8 +1062,10 @@ const EFFICIENCY = {
     bevel_ms: (r) => r.bevel_ms, subdivide_ms: (r) => r.subdivide_ms, distribute_ms: (r) => r.distribute_ms, arc_length_ms: (r) => r.arc_length_ms,
     still_steps: (r) => r.still_steps, sway_gpu_ms: (r) => r.sway_gpu_ms,
   },
+  // #538: each reading by its own name (benchmarks/game-state.mjs).
+  'canvas-game-state': Object.fromEntries(['compare_ms', 'remap_row_us', 'remap_layer_ms', 'upload_slots_ms', 'overlay_upload_ms', 'fit_check_ms', 'idle_steps'].map((k) => [k, (r) => r[k]])),
 };
-const COUNTS = new Set(['summary_tokens', 'page_rows', 'frames', 'upload_bytes_per_item', 'indexed_target_bytes', 'still_steps']);
+const COUNTS = new Set(['summary_tokens', 'page_rows', 'frames', 'upload_bytes_per_item', 'indexed_target_bytes', 'still_steps', 'idle_steps']);
 
 /** The stage that took the most of a sample's time, as a reason names it (#896); none for a sample without stages. */
 const costliest = (s) => {
@@ -1470,6 +1472,38 @@ workloads['export-fidelity'] = () => {
     rmSync(evidence, { recursive: true, force: true });
   }
 };
+
+// #162: the Lottie export of a 200-item title with 2,000 Bézier keys, its fidelity check included;
+// prints the receipt's timing.wall (under 1 s, which tests/acceptance/162/budgets.test.ts judges).
+workloads['lottie-export'] = () => {
+  const evidence = mkdtempSync(join(tmpdir(), 'deep-canvas-bench-'));
+  try {
+    const frame = SEC / 30;
+    const items = { cam: { id: 'cam', kind: 'camera@1', name: 'cam', order: 'a0', params: { projection: 'orthographic', target: [160, 90, 0], view_width: 320 } } };
+    const channels = {};
+    for (let i = 0; i < 200; i++) {
+      const id = `r${String(i).padStart(3, '0')}`;
+      items[id] = { id, kind: 'rect@1', name: `Rect ${i}`, order: `b${String(i).padStart(3, '0')}`, params: { box: [0, 0, 12, 12], paint: { fill: { role: i % 2 ? 'accent' : 'ink' } } }, at: { pos: [16 * (i % 20), 18 * Math.floor(i / 20), 0] } };
+      const keys = {};
+      for (let k = 0; k < 10; k++) keys[`k${k}`] = { t: Math.round(k * 0.4 * SEC), value: 16 * (i % 20) + (k % 2 ? 6 : 0), interp: { bezier: { x1: 0.4, y1: 0, x2: 0.2, y2: 1 } } };
+      channels[`x${i}`] = { target: `items/${id}/at/pos/0`, type: 'f32', keys };
+    }
+    const document = { format: 1, id: 'bench-162', profile: 'film', title: 'Lottie export bench', description: 'A 200-item title with 2,000 keys.', size: [320, 180], camera: 'cam', transport: { span: 120 * frame, frame_rate: [30, 1] }, items, channels };
+    const out = join(evidence, 'title.json');
+    const peer = { pid: 3002, start: 3_000 };
+    const processes = [{ pid: 1, ppid: 0, start: 0 }, { pid: 3000, ppid: 1, start: 100 }, { pid: 3001, ppid: 3000, start: 110 }, { pid: 3002, ppid: 3001, start: 3_000 }];
+    const calls = [{ call: 'deep show', peer, doc: DOC, document }, { call: 'export', doc: DOC, out, video: { codec: 'lottie' }, lottie: { container: 'json', images: 'embed' } }];
+    const sc = { evidence, sessions: {}, processes, panels: { main: { rect: [0, 0, 1280, 720] } }, docs: { [DOC]: { panel: 'main' } }, calls };
+    const [answer] = run('deep-show', 'run', [JSON.stringify(sc)]);
+    const reply = answer.replies?.[1];
+    if (reply?.outcome !== 'exported') throw Error(`the export wasn't delivered: ${JSON.stringify(reply ?? answer).slice(0, 2000)}`);
+    console.log(JSON.stringify({ task: 'lottie-export', wall_seconds: reply.receipt.timing?.wall }));
+  } finally {
+    rmSync(evidence, { recursive: true, force: true });
+  }
+};
+// #538's budgets: live game state's compares, remaps, uploads and fit check (benchmarks/game-state.mjs).
+workloads['game-state'] = async () => (await import('./game-state.mjs')).gameState({ root, release, once, runs });
 
 const task = process.argv[2];
 if (!workloads[task]) throw Error(`Unknown task ${task}; one of: ${Object.keys(workloads).join(', ')}`);

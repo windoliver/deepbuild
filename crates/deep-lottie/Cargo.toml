@@ -1,0 +1,17 @@
+[package]
+name = "deep-lottie"
+version = "0.0.0"
+edition = "2021"
+rust-version = "1.95"
+license = "Apache-2.0"
+publish = false
+
+# Issue #162: the import job's tool, a Lottie 1.0.1 file in and a checked canvas document, its
+# look and its issues out, built to WebAssembly by `node scripts/lottie-wasm.mjs` and run by
+# `packages/jobs/import/tool/lottie.mjs`, outside the canvas core.
+[dependencies]
+deep-canvas = { path = "../deep-canvas" }
+deep-canvas-marks = { path = "../deep-canvas-marks" }
+deep-canvas-motion = { path = "../deep-canvas-motion" }
+deep-text = { path = "../deep-text" }
+serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
