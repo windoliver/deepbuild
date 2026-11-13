@@ -112,3 +112,34 @@ it('a hub that stays up shows an ask waiting for its batch at the batch time, wi
   while (Date.now() < batch + 5000) await pause(250);
   expect((await batched()).map((e) => e.data.batch), `the ${new Date(batch).toISOString()} batch shows it within 5 s of its time`).toEqual([`batch:${new Date(batch).toISOString()}`]);
 }, 120_000);
+
+it("the hub's list holds an ask from the batch that shows it, not while it waits for that batch", async () => {
+  dir = realpathSync(mkdtempSync(join(tmpdir(), 'deep-hub-list-')));
+  const [home, root] = ['home', 'root'].map((p) => join(dir, p)) as [string, string];
+  for (const p of [home, root]) mkdirSync(p);
+  // Batches every minute: the ask, due in two days, waits for the next one.
+  draftAskSettings(root);
+  const config = JSON.parse(readFileSync(join(root, 'config.json'), 'utf8'));
+  config.asks.batch = { every: '1m', cap: 20 };
+  writeFileSync(join(root, 'config.json'), `${JSON.stringify(config)}\n`);
+  // Start at least 30 s before a batch time, so the ask is seen waiting first, even with a slow hub start.
+  while (Date.now() % 60_000 > 30_000) await pause(250);
+  const now = Date.now();
+  const batch = (Math.floor(now / 60_000) + 1) * 60_000;
+  const record = await openRecord({ path: join(root, 'ledger.db'), now: () => now });
+  const taste = askSources().find((row) => row.kind === 'taste')!.fixture.ask as Record<string, unknown>;
+  const ask = ulid(now);
+  await record.append({ writer: 'core', actor: 'you', scope: 'you' }, { v: 1, id: ask, kind: 'ask.created', ts: now, data: { ...structuredClone(taste), deadline: now + 2 * 86_400_000 } as never });
+  await record.close();
+  hub = spawn(process.execPath, [MAIN, 'hub', 'run', '--root', root], { stdio: ['ignore', 'pipe', 'inherit'], env: { PATH: '/usr/bin:/bin', HOME: home } });
+  const ready = await new Promise<{ socket: string }>((done) => hub!.stdout!.once('data', (d) => done(JSON.parse(String(d).split('\n')[0]!))));
+  const call = await cli(ready.socket, readFileSync(join(root, 'control.token'), 'utf8').trim());
+  // The list's rows every reader draws (#1463): whether the ask's row is in it, as its row.set events last said.
+  const listed = async () => ((await call('events.read', { after: 0, limit: 1000 })).events as { kind: string; data: { id?: string; listed?: boolean } }[])
+    .filter((e) => e.kind === 'row.set' && e.data.id === `ask:${ask}`).at(-1)?.data.listed ?? false;
+  // The hub's start runs a list pass; the 60 s pass is far off.
+  await pause(3000);
+  expect(await listed(), 'before its batch the ask has no row in the list').toBe(false);
+  while (Date.now() < batch + 5000) await pause(250);
+  expect(await listed(), `once the ${new Date(batch).toISOString()} batch shows it, the ask has its row`).toBe(true);
+}, 120_000);
