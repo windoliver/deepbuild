@@ -173,6 +173,15 @@ const REPLAY_PAGE = 5000;
 /** The kinds that record a decision: only the core appends them, and each commits FULL, in its own commit. */
 const CORE_ONLY = new Set(['verdict.made', 'verdict.stale', 'workspace.created', 'workspace.moved', 'state.read', 'work.read', 'work.delivery', 'definition.locked', 'definition.revised', 'definition.stood_in', 'definition.checked', 'decision.created', 'decision.applied', 'decision.revoked', 'decision.overruled', 'ask.answered', 'ask.defaulted', 'default.undone', 'deadline.moved',
   'spend.approved', 'spend.reserved', 'spend.charged', 'spend.asked', 'card_rule.set']);
+/**
+ * The evidence a verdict's requirements stand on: what its counted runs captured, synced before its commit as what
+ * its own list names is (#1410), but not cited by it, so retention lets it go as it does any run's output.
+ */
+function stoodOn(p: { input: EventInput; data: unknown }): string[] {
+  const requirements = p.input.kind === 'verdict.made' && isObj(p.data) ? p.data.requirements : undefined;
+  return Array.isArray(requirements) ? requirements.flatMap((r) => (isObj(r) && Array.isArray(r.evidence) ? r.evidence.filter((sha): sha is string => typeof sha === 'string') : [])) : [];
+}
+
 /** The evidence store's own events: only the core, which runs the store, appends them; they stream. */
 const STORE_ONLY = new Set(['evidence.stored', 'evidence.removed']);
 /** The core's check of a learned change: only the core appends it, in the change's own batch. */
@@ -647,7 +656,7 @@ class SqliteRecord implements RecordStore {
    * when there is nothing to wait for, so such a commit stays in this turn.
    */
   private evidenceSynced(items: readonly Prepared[], mode: Durability): Promise<void> | undefined {
-    const named = mode === 'full' && this.options.evidence ? items.flatMap((p) => p.evidence) : [];
+    const named = mode === 'full' && this.options.evidence ? items.flatMap((p) => [...p.evidence, ...stoodOn(p)]) : [];
     return named.length ? this.syncNamed(items, named) : undefined;
   }
   private async syncNamed(items: readonly Prepared[], named: string[]): Promise<void> {

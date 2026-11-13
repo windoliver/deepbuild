@@ -1,11 +1,11 @@
-# #1410: what the hub's own verdicts ask the evidence store to sync, Linux, 2026-11-13, on a8c36855 plus the verdict change committed next
-# How: one temporary line each in the built packages/verdicts/dist/record.js (at a verdict's recording) and packages/evidence/dist/index.js (at sync, per hash:
-# is the file in the store loose or packed), appending to a scratch file; both build outputs restored after. Then:
+# #1410: what the hub's own verdicts sync and what they list, Linux, 2026-11-13, on the commit that adds this file (code as committed)
+# How: one temporary line each in the built packages/record/dist/index.js (at a FULL commit's evidence sync: the events' kinds, how many hashes
+# each lists itself, how many are synced) and packages/evidence/dist/index.js (at sync, per hash: is the file in the store loose or packed),
+# appending to a scratch file; both build outputs restored after. Then:
 # npx vitest run --root packages/hub test/gate-runner.test.ts test/gate-stop.test.ts test/verdict-chat.test.ts test/verdict-stop.test.ts test/checks-not-started.test.ts
-# -> Test Files 5 passed (5), Tests 20 passed (20). Lines seen, counted (sort | uniq -c):
+# Lines seen, counted (sort | uniq -c):
+      6 commit kinds=verdict.made listed=0 synced=2
      12 sync loose=true packed=false
-      2 verdict FAIL reqs=1 evidence=2
-      1 verdict INVALID reqs=1 evidence=2
-      3 verdict PASS reqs=1 evidence=2
-# Six verdicts from real command runs, each naming its run's stdout and stderr; all 12 named files were in the store when synced.
-# Without the verdict change the same verdicts name no evidence (packages/verdicts/test/verdicts.test.ts, the #1410 test, fails: expected [] to equal the two hashes).
+# Six verdicts from real command runs: each lists no evidence of its own (so retention is as on main) and syncs its run's stdout and stderr;
+# all 12 files were in the store when synced.
+# The probed run had 19 of 20 tests pass (the failing test's name was not kept); the same five files without the probe passed 20 of 20, five times.
