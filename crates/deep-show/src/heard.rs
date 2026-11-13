@@ -46,7 +46,6 @@ pub(crate) fn heard_call(c: &serde_json::Map<String, Value>) -> Value {
     let (Some(expected), Some(said)) = (text("expected"), text("heard")) else {
         return json!({"code": "bad_input", "what": "expected and heard, as strings"});
     };
-    let locale = text("locale").unwrap_or("en");
     let names: Vec<String> = c
         .get("names")
         .and_then(Value::as_array)
@@ -55,15 +54,9 @@ pub(crate) fn heard_call(c: &serde_json::Map<String, Value>) -> Value {
         .filter_map(Value::as_str)
         .map(str::to_string)
         .collect();
-    let e = match Expected::of(expected, None, &names, locale) {
-        Ok(e) => e,
-        Err(heard::SayProblem::Polyphonic { ch, readings }) => {
-            return json!({"outcome": "refused", "code": "narration.polyphonic", "character": ch, "readings": readings});
-        }
-        Err(heard::SayProblem::NotText { text, say }) => {
-            return json!({"outcome": "refused", "code": "say_not_text", "text": text, "say": say})
-        }
-    };
+    // The comparison alone, the same for every locale: a polyphonic character's reading is a
+    // script line's say's to give, so here it matches any of its readings.
+    let e = Expected::plain(expected, &names);
     let toks = heard::normalize(said);
     let got = heard::compare(&e, &toks, &BTreeMap::new(), &BTreeMap::new(), 0);
     json!({"expected": e.say.iter().map(heard::Tok::shown).collect::<Vec<_>>(), "heard": toks.iter().map(heard::Tok::shown).collect::<Vec<_>>(),
