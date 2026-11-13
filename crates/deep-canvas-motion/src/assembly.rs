@@ -75,8 +75,8 @@ impl Assembly {
         };
         let mut m = matmul(&self.at, &moved);
         let share = share.clamp(0.0, 1.0);
-        for k in 0..3 {
-            m[k][3] += self.apart[k] * share;
+        for (row, apart) in m.iter_mut().zip(self.apart) {
+            row[3] += apart * share;
         }
         m
     }
