@@ -239,9 +239,8 @@ pub fn frame_at(converted: &Value, source: i64) -> Option<Value> {
     let keyframes = converted["keyframes"].as_array()?;
     let patches = converted["patches"].as_array()?;
     let source = source.max(0);
-    let k = usize::try_from(source / KEYFRAME_EVERY)
-        .unwrap_or(usize::MAX)
-        .min(keyframes.len().checked_sub(1)?);
+    let last = keyframes.len().checked_sub(1)?;
+    let k = usize::try_from(source / KEYFRAME_EVERY).map_or(last, |k| k.min(last));
     let key = &keyframes[k];
     let mut cells = key["cells"].as_array()?.clone();
     let mut revision = key["revision"].as_u64()?;

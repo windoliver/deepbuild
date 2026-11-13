@@ -33,7 +33,7 @@ import { refuse, Refused, refusal, ulid, type CoreOptions } from './wire.js';
 import { DAY, ghToken, SECRETS_TTL, type Obj, isObj, misjudged } from "./hub-shared.js";
 
 export interface HubReadingsOptions {
- settings: CoreOptions;
+ settings: CoreOptions & { forge: string };
  services: {
 readonly wikiWritten: KnowledgeProvider['writtenOf'];
 readonly root: Root;
@@ -151,7 +151,7 @@ export class HubReadings {
       const line = verdictLine(state.state);
       const url = await this.options.judging().prOf(state.session);
       const pr = url ? parsePrUrl(url) : undefined;
-      const forge = pr ? new Forge(this.options.settings.forge ?? 'https://api.github.com', process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN ?? await ghToken()) : undefined;
+      const forge = pr ? new Forge(this.options.settings.forge, process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN ?? await ghToken()) : undefined;
       const pulled = pr && forge ? await forge.pull(pr) : undefined;
       const files = state.session ? ((await this.options.services.record.raw(`SELECT path FROM session_files WHERE session = ? AND kind IN ('edit', 'write') ORDER BY last`, [state.session])) as { path: string }[]).map((r) => r.path) : [];
       const next_issue = pr && forge && pulled?.closes !== undefined && state.state.outcome === 'PASS' ? await forge.nextIssue(pr, pulled.closes) : null;

@@ -78,7 +78,10 @@ fn register(r: &mut Registrar, layout: fn(&mut View<'_>) -> Result<(), OpError>)
             versions: vec![Version {
                 major: 1,
                 minor: 0,
-                params: ["graph", "layout", "memory", "groups"].into_iter().map(field).collect(),
+                params: ["graph", "layout", "memory", "groups"]
+                    .into_iter()
+                    .map(field)
+                    .collect(),
             }],
             migrations: Vec::new(),
         },
@@ -117,12 +120,28 @@ fn drawn(params: &Value) -> Value {
     let mut d = String::new();
     if let Ok((_, view)) = crate::view::place(params, [0.0, 0.0]) {
         for [x, y, w, h] in view.nodes.values() {
-            d.push_str(&format!("M{x} {y} L{} {y} L{} {} L{x} {} Z ", x + w, x + w, y + h, y + h));
+            d.push_str(&format!(
+                "M{x} {y} L{} {y} L{} {} L{x} {} Z ",
+                x + w,
+                x + w,
+                y + h,
+                y + h
+            ));
         }
     }
     let mut out = params.as_object().cloned().unwrap_or_default();
-    out.insert("d".into(), json!(if d.is_empty() { "M0 0".to_string() } else { d.trim_end().to_string() }));
-    out.insert("paint".into(), json!({"stroke": {"role": "ink", "width": 2}}));
+    out.insert(
+        "d".into(),
+        json!(if d.is_empty() {
+            "M0 0".to_string()
+        } else {
+            d.trim_end().to_string()
+        }),
+    );
+    out.insert(
+        "paint".into(),
+        json!({"stroke": {"role": "ink", "width": 2}}),
+    );
     Value::Object(out)
 }
 

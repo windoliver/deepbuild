@@ -1061,8 +1061,9 @@ mod tests {
             "shapes": {"land": {"kind": "heightfield", "cols": 3, "rows": 3, "heights": heights, "scale": [2, 1, 2]}},
             "bodies": {"ground": {"kind": "static", "shapes": [{"shape": "land"}]}}
         });
-        let w = deep_canvas_physics::check::check(&doc, &RAPIER3D, &deep_canvas_physics::roles::TABLE)
-            .unwrap_or_else(|e| panic!("{e:?}"));
+        let w =
+            deep_canvas_physics::check::check(&doc, &RAPIER3D, &deep_canvas_physics::roles::TABLE)
+                .unwrap_or_else(|e| panic!("{e:?}"));
         let mut b = Rapier::default();
         b.build(&w).unwrap();
         let down = [0.0, -1.0, 0.0];

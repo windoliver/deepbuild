@@ -7,9 +7,9 @@ import { execFile } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parse as parseYaml } from 'yaml';
+import { isRecord as isObj } from '@deepbuild/contracts';
 
 type Obj = Record<string, unknown>;
-const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 
 /** What the repo's spec says of delivery: its release checks, by name, and where its switches and their deployed values live. */
 interface ReleaseSpec { checks: string[]; switches: { file: string; deployed: string } | null }

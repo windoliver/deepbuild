@@ -4,10 +4,10 @@
 // which scripts/skill.mjs generates from the design's Building blocks table with the skill.
 import { readFileSync } from 'node:fs';
 import { refuse } from './wire.js';
+import { isRecord as isObj } from '@deepbuild/contracts';
 
 type Obj = Record<string, unknown>;
 type Schema = Obj;
-const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 
 const str = (description?: string, pattern?: string): Schema => ({ type: 'string', ...(pattern ? { pattern } : {}), ...(description ? { description } : {}) });
 const maybe = (schema: Schema): Schema => ({ ...schema, type: [schema.type as string, 'null'] });

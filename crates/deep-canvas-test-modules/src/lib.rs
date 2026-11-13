@@ -47,7 +47,10 @@ fn manifest(name: &str, deps: &[(&str, bool)]) -> Manifest {
         feature: name.replace('.', "-"),
         license: "Apache-2.0".into(),
         implements: format!("{name}@1"),
-        implementation: deep_canvas::registry::Implementation::reference(name, Semver::parse("1.0.0").expect("a version")),
+        implementation: deep_canvas::registry::Implementation::reference(
+            name,
+            Semver::parse("1.0.0").expect("a version"),
+        ),
     }
 }
 
@@ -889,8 +892,20 @@ pub fn label() -> Module {
 }
 
 fn register_guards(r: &mut Registrar) {
-    r.kind(kind("test", "nonfinite", vec![json_param("frame"), json_param("pixel")]), &[], "");
-    r.kind(kind("test", "device_loss", vec![json_param("frame")]), &[], "");
+    r.kind(
+        kind(
+            "test",
+            "nonfinite",
+            vec![json_param("frame"), json_param("pixel")],
+        ),
+        &[],
+        "",
+    );
+    r.kind(
+        kind("test", "device_loss", vec![json_param("frame")]),
+        &[],
+        "",
+    );
     let redraw = ["box", "fill", "again", "frame"].map(json_param).to_vec();
     r.kind(kind("test", "redraw", redraw), &[], "");
 }

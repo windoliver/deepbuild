@@ -1,0 +1,3 @@
+# Issue #2149: every file here is a blind acceptance test or its redraft, which no one edits once its job has written
+# it (AGENTS.md, Proof); rustfmt leaves them as they are, so `cargo fmt --all -- --check` asks for no edit of one.
+disable_all_formatting = true
