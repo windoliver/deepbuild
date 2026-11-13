@@ -46,8 +46,11 @@ pub struct Sparks {
     /// #449: an item the closed-form kernel writes (closed.wgsl), its frame's uniform words, its
     /// bake's table words, and the surface it follows as evaluated this frame; none for the
     /// shipped graph.
-    pub closed: Option<(Vec<u32>, Arc<Vec<u32>>, Vec<f32>)>,
+    pub closed: Option<Closed>,
 }
+
+/// A closed-form item's frame uniform words, bake table words and surface (#449).
+type Closed = (Vec<u32>, Arc<Vec<u32>>, Vec<f32>);
 
 /// What the look, the document and the session turn on this frame, and each effect's values.
 #[derive(Clone, Debug, Default)]
