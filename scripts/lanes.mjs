@@ -594,6 +594,13 @@ alone.push('tests/acceptance/204-gaps/');
 byHand.push('tests/acceptance/204/export.test.ts');
 // #450's files each build deep-gpu and draw trails and ribbons on the Metal GPU.
 alone.push('tests/acceptance/450/');
+// #239's files each build deep-show or deep-gpu and draw, export or time both fixture films on the GPU, and its
+// look-type regression builds deep-show; seek-play,
+// budget and off-reference read this machine's fingerprint, budget its load too. exports (289 s) and checks (151 s)
+// were over two minutes on their recorded runs.
+alone.push('tests/acceptance/239/', 'tests/look-type.test.ts');
+timed.push('tests/acceptance/239/seek-play.test.ts', 'tests/acceptance/239/budget.test.ts', 'tests/acceptance/239/off-reference.test.ts');
+slow.push('tests/acceptance/239/exports.test.ts', 'tests/acceptance/239/checks.test.ts');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },

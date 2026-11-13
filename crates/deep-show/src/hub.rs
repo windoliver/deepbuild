@@ -1669,7 +1669,7 @@ impl<'a> Hub<'a> {
     pub(crate) fn new_session(&self) -> DocSession {
         let mut s = DocSession::new(
             self.scenario.epoch_start,
-            deep_canvas_marks::modules::tokens(&self.look.light),
+            deep_canvas_marks::modules::look_tokens(&self.look),
         );
         s.set_readings(self.readings());
         s
