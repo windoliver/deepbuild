@@ -593,6 +593,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         "kinds" => return Some(Call::KindSchemas),
         "spatial" => return spatial::parse(c).map(|s| Call::Spatial(Box::new(s))),
         "terrain_rays" => return terrain::parse(c).map(|r| Call::TerrainRays(Box::new(r))),
+        "physics_bake" => return physics::parse(c).map(|b| Call::PhysicsBake(Box::new(b))),
         "packs" => return Some(Call::Packs),
         "install_pack" => {
             return Some(Call::InstallPack {

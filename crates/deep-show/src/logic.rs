@@ -70,7 +70,7 @@ impl Hub<'_> {
     /// from the evidence store, and its rows written to `occurrences.<logic ID>.occurrences`:
     /// `{t, step, kind, a, b}` and its declared fields by name, as Spawn and motion read a row.
     pub(crate) fn inline_occurrences(&self, form: &mut Value, track: &[Value]) -> Result<(), Box<Issue>> {
-        self.inline_worlds(form)?;
+        self.inline_worlds(form, track)?;
         let items: Map<String, Value> = form
             .get("items")
             .and_then(Value::as_object)
