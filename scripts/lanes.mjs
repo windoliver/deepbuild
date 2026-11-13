@@ -496,6 +496,10 @@ timed.push('tests/acceptance/157/budgets.test.ts');
 // reference renderer; the import legs start a hub and run its import job; budgets.test.ts times both.
 alone.push('tests/acceptance/162/', 'tests/acceptance/162-oracle/');
 timed.push('tests/acceptance/162/budgets.test.ts');
+// #162's first-draft AC6 file keys a twist whose outline's corners all lie as far as the twist reaches, so its output never
+// changes (tests/acceptance/162-redraft-ac6/DISPUTE.md); its blind redraft runs in its place.
+alone.push('tests/acceptance/162-redraft-ac6/');
+byHand.push('tests/acceptance/162/repeater.test.ts');
 // #1183's files each build deep-show and judge 3D figures whose logic runs in the sandbox.
 alone.push('tests/acceptance/1183/');
 // #537's files build deep-gpu (most also deep-show, and #544's assembler), run logic programs and draw on the GPU;
