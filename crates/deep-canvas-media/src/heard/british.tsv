@@ -1,5 +1,6 @@
 # normalizer@1's British spellings to American: whisper/normalizers/english.json at openai/whisper
-# 31243bad24cc746f07d4c8bfdd2d974872cb1803, one pair per line.
+# 31243bad24cc746f07d4c8bfdd2d974872cb1803, one pair per line; one slang pair is left out, its American form being
+# a name the public-text lint refuses.
 # MIT License
 #
 # Copyright (c) 2022 OpenAI
@@ -158,7 +159,6 @@ belabouring	belaboring
 belabours	belabors
 bevelled	beveled
 bevvies	bevies
-bevvy	bevy
 biassed	biased
 biassing	biasing
 bingeing	binging
