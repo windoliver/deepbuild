@@ -4,7 +4,7 @@ Both fixture films run the whole spine on the reference Mac (Mac17,10, Apple M5 
 gate found two faults in the spine. Checking the pictures, video and sound afterwards turned up four more gaps. All
 six are fixed in this PR, and each code fix starts from a failing test.
 
-Base `53c0e72a3`, rebased onto `e5aa3923a`. The blind suite is `tests/acceptance/239/`, cherry-picked unchanged as
+Base `53c0e72a3`, rebased onto `e5aa3923a` and then `3b9cf8654`; after the last rebase every file below ran once more, with the results shown. The blind suite is `tests/acceptance/239/`, cherry-picked unchanged as
 the branch's first commit.
 
 ## The films
@@ -27,7 +27,7 @@ Each file was run once on its final code, and again only after code it covers ch
 | `seek-play.test.ts` | 2/2 | failed first on the camera film (fault 1), passed after the fix |
 | `exports.test.ts` | 2/2 | passed while the sound was silent too; it reads the AAC track, its sample count and per-frame hashes, not loudness |
 | `checks.test.ts` | 8/8 | 5/8 first: the tick twins need a film that lists its modules, and the camera title's hold under reduced motion |
-| `budget.test.ts` | the check reads PASS on both films; the test reads INCONCLUSIVE | the check's five runs PASS (GPU p95 0.29 ms of 10, CPU about 0.5 ms of 4), but the one-minute load was 85 to 92 on 18 cores, so the test counts it neither way; both over-budget twins FAIL naming the GPU limit; an earlier run was BLOCKED (fault 2) |
+| `budget.test.ts` | the check reads PASS on both films; the test reads INCONCLUSIVE | the check's five runs PASS (GPU p95 0.29 ms of 10, CPU about 0.5 ms of 4), but the one-minute load was 85 to 92 on 18 cores, so the test counts it neither way; after the rebase onto `3b9cf8654` the check read INCONCLUSIVE on this Mac's thermal state (fair), every reading inside its limits (GPU p95 0.39 to 0.57 ms of 10); both over-budget twins FAIL naming the GPU limit each time; an earlier run was BLOCKED (fault 2) |
 | `off-reference.test.ts` | 2/2 | |
 | `links.test.ts` | 2/2 | live links read Nov 13 |
 | `shown.test.ts` | 1/1 | on `TASTE.json`, re-recorded on the final files |
