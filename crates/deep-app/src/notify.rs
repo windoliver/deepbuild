@@ -589,14 +589,16 @@ mod tests {
         let ask = json!({"kind": "ask.created", "id": "a1", "session": "s1", "data": {
             "question": "Push?", "default": "no", "deadline": raised + 3_600_000,
             "options": [{"id": "no", "label": "No"}]}});
+        let shown = json!({"kind": "ask.batched", "id": "b1", "writer": "core", "data": {
+            "batch": "now:1970-01-01T00:00:01.000Z", "asks": [{"ask": "ask:a1"}]}});
         let mut notifier = Notifier::new(Duration::from_secs(1));
-        notifier.start(&view(std::slice::from_ref(&ask)), Vec::new());
+        notifier.start(&view(&[ask.clone(), shown.clone()]), Vec::new());
         let woke = raised + 9 * 3_600_000;
         let moved = woke + 3_600_000;
         let event = json!({"kind": "deadline.moved", "id": "m1", "writer": "core", "subject": "ask:a1",
                            "data": {"span": moved - (raised + 3_600_000), "deadline": moved, "because": "notice"}});
         notifier.saw(&event, woke);
-        let posted = notifier.due(&view(&[ask, event]), woke + 1_000, None, false);
+        let posted = notifier.due(&view(&[ask, shown, event]), woke + 1_000, None, false);
         let want = Local
             .timestamp_millis_opt(moved as i64)
             .unwrap()
@@ -609,5 +611,25 @@ mod tests {
             "{}",
             posted[0].text
         );
+    }
+
+    #[test]
+    fn an_ask_notifies_when_the_core_shows_it_not_when_it_is_raised() {
+        // #22: an ask waits for its batch, and the notification interrupts you only once it shows.
+        let ask = json!({"kind": "ask.created", "id": "a1", "session": "s1", "writer": "mcp:agent", "data": {
+            "question": "Push?", "default": "no", "deadline": 99_000_000,
+            "options": [{"id": "no", "label": "No"}]}});
+        let mut notifier = Notifier::new(Duration::from_secs(1));
+        notifier.start(&View::default(), Vec::new());
+        notifier.saw(&ask, 1_000);
+        let early = notifier.due(&view(std::slice::from_ref(&ask)), 5_000, None, false);
+        assert_eq!(early.len(), 0, "notified before its batch: {early:?}");
+
+        let shown = json!({"kind": "ask.batched", "id": "b1", "writer": "core", "data": {
+            "batch": "batch:1970-01-01T08:00:00.000Z", "asks": [{"ask": "ask:a1"}]}});
+        notifier.saw(&shown, 6_000);
+        let posted = notifier.due(&view(&[ask, shown]), 8_000, None, false);
+        let asks: Vec<Option<&str>> = posted.iter().map(|n| n.ask.as_deref()).collect();
+        assert_eq!(asks, [Some("ask:a1")], "{posted:?}");
     }
 }

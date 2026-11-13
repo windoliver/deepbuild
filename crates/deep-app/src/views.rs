@@ -2267,7 +2267,60 @@ mod tests {
             "question": "Open invoice\u{202e}txt.exe?", "default": "no", "deadline": 1_000,
             "options": [{"id": "no", "label": "No"}]}}),
         );
+        view.apply(
+            serde_json::json!({"kind": "ask.batched", "writer": "core", "data": {
+            "batch": "now:1970-01-01T00:00:00.000Z", "asks": [{"ask": "ask:a1"}]}}),
+        );
         let open = read(&view, Kind::NeedsYou).open;
         assert_eq!(open[0].2, "Open invoice\\u{202e}txt.exe?");
+    }
+
+    #[std::prelude::v1::test]
+    fn needs_you_shows_an_ask_once_the_core_shows_it_and_a_folded_one_inside_its_exception() {
+        // #22: Needs you reads the inbox projection the CLI reads, where an ask waits for its batch. Session sd asks
+        // five, the core raises its exception, and a sixth folds into it; sa asks one.
+        let mut view = crate::record::View::default();
+        let ask = |id: &str, kind: &str, writer: &str| {
+            let session = if id == "a1" { "sa" } else { "sd" };
+            serde_json::json!({"kind": "ask.created", "id": id, "session": session, "writer": writer,
+                               "data": {"kind": kind, "question": format!("{id}?")}})
+        };
+        for id in ["a1", "d1", "d2", "d3", "d4", "d5"] {
+            view.apply(ask(id, "taste", "mcp:agent"));
+        }
+        view.apply(ask("x", "exception", "core"));
+        view.apply(ask("d6", "taste", "mcp:agent"));
+        let rows = |view: &crate::record::View| -> Vec<(String, String)> {
+            read(view, Kind::NeedsYou)
+                .open
+                .into_iter()
+                .map(|(handle, _, _, status)| (handle, status))
+                .collect()
+        };
+        assert_eq!(
+            rows(&view),
+            Vec::<(String, String)>::new(),
+            "every ask waits for the batch"
+        );
+
+        let shown = ["a1", "d1", "d2", "d3", "d4", "d5", "x"];
+        view.apply(serde_json::json!({"kind": "ask.batched", "writer": "core", "data": {
+            "batch": "batch:1970-01-01T08:00:00.000Z",
+            "asks": shown.iter().map(|id| serde_json::json!({"ask": format!("ask:{id}")})).collect::<Vec<_>>()}}));
+        let want: Vec<(String, String)> = shown
+            .iter()
+            .map(|id| (format!("ask:{id}"), "shown".to_owned()))
+            .chain([("ask:d6".to_owned(), "folded".to_owned())])
+            .collect();
+        assert_eq!(
+            rows(&view),
+            want,
+            "the batch shows them, the sixth inside the exception"
+        );
+        let need = rows(&view)
+            .iter()
+            .filter(|(_, status)| status != "folded")
+            .count();
+        assert_eq!(asks_need_you(need), "7 asks need you");
     }
 }
