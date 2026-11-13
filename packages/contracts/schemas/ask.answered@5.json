@@ -3,6 +3,9 @@
   "description": "You answered an ask. Only the core appends it, from the trusted path. It says where the answer came from (the card, deep inbox answer, or text typed in the session, which is unverified), the revision the ask showed, which it is recorded as answered on, and the click token an approval bound. @3 adds steps: on a yes to a batch, the steps of the plan your switches left on, which alone the yes approves. @4 adds, from the question card, your words and the screenshot you sent with the answer (#327), kept beside its decision and never saved as one. @5 adds via channel (#65): an answer a channel returned with an account link you made, which answers that ask alone, never with authority, and is never saved as a decision.",
   "x-since": "R2",
   "x-stability": "preview",
+  "x-tracking": "#65",
+  "x-preview_since": "R2",
+  "x-decide_by": "R5",
   "$defs": {
     "pinned_to": {
       "oneOf": [
