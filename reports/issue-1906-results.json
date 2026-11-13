@@ -1036,16 +1036,33 @@
     "inconclusive": []
   },
   "loaderReview": {
-    "verdict": "BLOCKED; frozen review lock not refreshed",
-    "base": {
-      "pass": 19,
-      "fail": 2
+    "verdict": "PASS after independent provenance review; unchanged assertions and rejection oracles pass",
+    "beforeMaintenance": {
+      "base": { "pass": 19, "fail": 2 },
+      "work": { "pass": 19, "fail": 2 }
     },
-    "work": {
-      "pass": 19,
-      "fail": 2
+    "maintenance": {
+      "commit": "5909a30a1172a5cb8a3d37d1fd7ff09b3a857eba",
+      "reviewedCodeHead": "040e6aa6f2543c28ab82e9ae5a7e6da2c08df89b",
+      "receipt": "tests/acceptance/1687/ac3-redraft/ISSUE-1906-PROVENANCE-REVIEW.md",
+      "receiptSha256": "ffe0b45e17ea66715e7498e4cfac6324c45067fe73a6c28ee9b4b99e7985a2f6",
+      "metadataSha256Before": "917a1da658d2c36c66abbaea708e0278776dbfcf4f3d7ab4df3492f3d8f45d00",
+      "metadataSha256After": "8b8534e38c2d4766e2b4aa1a8394d9fe3714425fe7e472ae359a4eafdbeb8876",
+      "changedValues": "Six current input digests and two Host scope digests, independently reviewed against exact historical blobs",
+      "preserved": "Base evidence, nine loader expressions, origin/boundary/proof fields, caller inventories, checker, graph and all test assertions",
+      "independentRun": { "pass": 29, "fail": 0, "skip": 0 },
+      "independentTapSha256": "80264ba7932d6c2d0f7761e93f2b556e9c1134775512f4fd37e1f73365eb8cc8",
+      "integrationAffected": { "testsPassed": 10, "testsFailed": 0, "testsSkipped": 0, "verdict": "FAIL on inherited repository lint findings; no WIDE or INCONCLUSIVE lines" },
+      "signedApproval": "No signature or approval tag created; not a merge authorization",
+      "editGuard": {
+        "state": "PASS",
+        "exit": 0,
+        "commitsChecked": 22,
+        "message": "no guarded edit lacks its own approved proposal",
+        "logSha256": "16b6e832322b53b034048ecd57ae380051419db73d323cc44049a9bf29de90f5"
+      }
     },
-    "additionalReview": "Host whole-class/file digest changed; its actual loader and placement methods are unchanged",
+    "additionalReview": "Host whole-class/file identity changed, but independent review confirmed unchanged loader and placement semantics",
     "methodIdentity": [
       {
         "method": "start",
@@ -1084,7 +1101,7 @@
         "equal": true
       }
     ],
-    "realLoaderBoundary": "3/3 pass on base and work, included above; does not waive the frozen review lock"
+    "realLoaderBoundary": "3/3 pass on base and work, included above; reused alongside independent provenance maintenance and unchanged rejection tests"
   },
   "sourceFiles": [
     {

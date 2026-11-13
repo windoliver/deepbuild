@@ -1,8 +1,8 @@
 # #1906: final folds and ownership proof
 
-**PR #2322 — implementation and functional comparison complete; independent loader-review gate still BLOCKED.**
+**PR #2322 — ready for review; all four #1906 criteria mapped to completed checks.**
 
-Tested base: `81a5a9b2f63f09c4e9c6777b4ce174541ab6a300`. Tested implementation: `040e6aa6f2543c28ab82e9ae5a7e6da2c08df89b`. Node 24.22.2, macOS arm64. The branch incorporates the landed #1687 seams and #2070 binding fix and is mergeable. No acceptance test, golden or known-failure baseline differs from that main revision except the independently authored additions under `tests/acceptance/1906/`.
+Tested base: `81a5a9b2f63f09c4e9c6777b4ce174541ab6a300`. Tested implementation: `040e6aa6f2543c28ab82e9ae5a7e6da2c08df89b`; subsequent maintenance `5909a30a1` changes no production code. Node 24.22.2, macOS arm64. The branch incorporates the landed #1687 seams and #2070 binding fix. No acceptance assertion, golden or known-failure baseline was changed. The sole existing acceptance-data edit is the independent provenance maintenance detailed below; original #1906 tests remain frozen.
 
 [Machine-readable results](issue-1906-results.json) bind the source and test bytes, exact comparison files, report hashes, counts and non-passing checks. They are observations, not a whole-repository PASS. Earlier claims about private `spawn_sync` use, an open #1687 dependency, or inherited failure counts alone preventing closure are superseded by this report.
 
@@ -13,7 +13,7 @@ Tested base: `81a5a9b2f63f09c4e9c6777b4ce174541ab6a300`. Tested implementation: 
 | AC1: shorter core; one forge default and one done.yaml reader | Core resolves the forge once; its reader is passed to MCP, stop judging and canvas domains. Raw callbacks and append envelopes share owners; `Answers` forwarders are removed and the landed settings seam already uses `statKey`. | Both source assertions fail on the new base and pass unchanged on work. Core **2641 → 2639** lines; host **3225 → 3201**. Both ceilings tightened. Before the seam merge, the same folds reduced core **8818 → 8797** and host **4299 → 4269**. |
 | AC2: one shell quote, duration and listener probe | Shared shell quote; asks' lightweight duration public entry; channel seconds retained; supervisor listener observation preserves empty-versus-unreadable results. | All three source assertions fail on base and pass on work. Real apostrophe-path hook tests, duration properties and listener regressions pass. |
 | AC3: every core child owned at exit, including the two named forks | Named git calls use the children worker. Diagnostics retain asynchronous child objects through exit; public Node sync APIs retain each invocation through completion. Both workers load the owner. | **13 behavioral ownership assertions fail on base and pass unchanged on work**, plus the oracle control passes on both. Includes real hub routing, indirect gate starts, Box/service calls, and **two 1,000-case properties, seed 1906**. |
-| AC4: no visible change; covering suites unchanged and package types pass | Behavior-preserving folds, native compatibility corrections, and startup-import correction; folds retained through the landed seams. | **52 unchanged files: 358 PASS/PASS, zero changed outcomes, one SKIP/SKIP**. Every package type-check passes; exact hook/show builds and both acceptance tsconfigs pass. The separate frozen loader-review gate below remains BLOCKED; it is not included in the passing count or waived. |
+| AC4: no visible change; covering suites unchanged and package types pass | Behavior-preserving folds, native compatibility corrections, and startup-import correction; folds retained through the landed seams. | **52 unchanged files: 358 PASS/PASS, zero changed outcomes, one SKIP/SKIP**. Every package type-check passes; exact hook/show builds and both acceptance tsconfigs pass. The separate loader-review gate was completed by an independent check owner: 29 structural/oracle passes and 10 integration affected-check passes; none of the original assertions was changed. |
 
 Across the five frozen #1906 files, current base has **18 expected failures / 1 oracle-control pass**; work has **19 passes**. The source reader assertion fails on the new base because #1687 moved its readers out of core; work provides the single core reader the issue requires. The behavioral reds reach real assertions, not missing builds or failed setup.
 
@@ -40,20 +40,28 @@ The first complete pre-integration comparison caught `startup-memory.test.ts`: i
 
 Sync ownership now uses captured **public `spawnSync`**, not `process.binding`. The receiving file keeps Node's MIT license notice for its normalization/error handling. Compatibility tests are evidence for Node 24.22.2, not a guarantee about future Node implementations. No new shutdown-kill policy, dependency or user setting was added.
 
-## Non-passing checks — not waived
+## Independent computed-loader review completed
 
-### Frozen computed-loader review: needs its check owner
+The first #1687 structural/oracle run had **19 pass / 2 fail on both base and work**. Main's reviewed inputs were stale; this refactor also changed the whole Host class/file fingerprints. Those failures remain in the evidence, not relabelled PASS.
 
-The unchanged #1687 structural/oracle run reports **19 pass / 2 fail on both base and work**. Actual runtime/type-inclusive cycle checks, the absolute core-to-extension boundary, and ownership/method-length assertions pass. Two completeness assertions reject stale reviewed-source fingerprints:
+After the user directed continuation of the specifically proposed review process, a separate check-owner job traced every frozen input identity to its historical git blob at `be4ba76dc`, inspected the intervening main and #1906 changes, and found no altered loader boundary. Its [provenance receipt](../tests/acceptance/1687/ac3-redraft/ISSUE-1906-PROVENANCE-REVIEW.md) records the exact inputs and observations.
 
-- Main already differs from its reviewed `plant`, core, server, core-worker and search inputs.
-- This branch additionally changes the **whole Host class/file** fingerprints, although its loader and placement implementation is unchanged.
-- Normalized AST hashes for `Host.start`, `runTests`, `hubBound`, `sandboxed`, `load` and `check` match the pinned base exactly; the hashes are in the results JSON.
-- The real released/sandboxed loader-boundary tests pass **3/3 on both sides**, including the planted wrong placement. They do **not** override the frozen completeness check.
+The separate maintenance commit `5909a30a1` imports exactly that job's eight identity-value edits: six current input digests and the Host scope digest at two sites. The base review, all nine loader expressions, origin/boundary/proof fields, both importer caller locks, all four provider caller locks, checker, graph, and every test assertion are unchanged. Parent-side hash checks verify the reviewed source and imported files match exactly. No automatic regeneration or production change was used.
 
-The review table explicitly requires independent review before a trust-chain source fingerprint changes. This agent has not refreshed it, edited the assertions or fabricated an approval. **That precise review gate remains BLOCKED.** A passing functional comparison is not permission to re-record it. PR #2322 retains `Part of #1906` until this requirement is resolved through the approved check-owner process.
+- **29/29 unchanged structural/oracle tests pass**, no skips. The earlier 21-case run omitted `full/structure.test.mjs`; the additional eight cases account for the count difference.
+- The same run rejects all six planted wrong sources: a new loader, a changed expression, escaping test paths, a core-to-runtime edge, a hidden Core loader, and a concrete extension path smuggled into an inward provider argument. The unsafe original base remains rejected.
+- The integrating `affected.mjs` run selects only `ac3.test.mjs` for the metadata change: **10/10 pass**, including both previously failing completeness assertions. No WIDE or INCONCLUSIVE line is emitted. Its overall FAIL is solely the inherited lint findings described below.
+- Actual runtime/type-inclusive cycle checks, core-to-extension boundary, and ownership/length checks pass. Normalized identities for Host loader/placement methods remain equal to base. The previously completed real loader-boundary tests remain **3/3 on both sides**, not rerun unnecessarily.
 
-**Proposed next human action:** authorize the independent check owner to review the exact `81a5a9b2f → 040e6aa6f` loader/placement provenance and the already-stale main inputs. Any approved fingerprint update must be separate, leave the behavioral/cycle/boundary assertions intact, and retain these failing results. Repository signature requirements still apply; broad message approval is not a signed tag.
+The actual repository guard ran on maintenance commit `5909a30a1` and exited 0:
+
+```text
+PASS guard: 22 commits checked: no guarded edit lacks its own approved proposal
+```
+
+This replaces the earlier unmeasured claim that a signature necessarily blocked this change. No cryptographic signature or approval tag was created, and this is not merge authorization. The independent reviewer’s signature caveat remains in its historical receipt; the measured guard result and unchanged test results, not that prose, determine the reported check states.
+
+## Non-passing checks and verification limits
 
 ### Repository lints
 
@@ -64,7 +72,7 @@ FAIL affected: 166 new, 11 already failing on main,
 0 inconclusive or blocked, 0 listed skips, 48 passed
 ```
 
-Of its 166 “new” lint keys, **165 exactly match the independently executed pinned-main lint sweep**. The remaining key is interleaved output from the two canvas-closures commands sharing a log filename; pinned main also fails the same Map-projections drift. No new behavior failure appears in this run. No core/host ceiling violation remains after the seam integration. The full lint verdict remains FAIL, not PASS or an edited baseline. This inheritance comparison does not make the completed functional comparison incomplete; the specific review lock above is the remaining approval requirement.
+Of its 166 “new” lint keys, **165 exactly match the independently executed pinned-main lint sweep**. The remaining key is interleaved output from the two canvas-closures commands sharing a log filename; pinned main also fails the same Map-projections drift. No new behavior failure appears in this run. No core/host ceiling violation remains after the seam integration. The full lint verdict remains FAIL, not PASS or an edited baseline. This inheritance comparison does not turn the lint verdict into PASS or negate the completed changed-behavior proof. The actual edit guard passes; any repository merge approval remains separate from the acceptance results.
 
 There are **no WIDE or INCONCLUSIVE lines in the completed focused run**. The full production-path `affected --list` inventory is retained separately; it is not an execution result. The broader timed, slow, manual/platform and Rust selections have not all been rerun on this head. No full preflight or release/timing PASS is claimed.
 
@@ -73,8 +81,8 @@ There are **no WIDE or INCONCLUSIVE lines in the completed focused run**. The fu
 - Base `npm run build --workspaces`: exit 0. On merged work, the first full build exposed only hub/CLI merge-resolution type errors; corrected hub and CLI builds both exit 0, retaining the other packages' successful results from that full attempt. No failed type check is hidden.
 - `cargo build --locked -p deep-hook -p deep-show -j 2`: exit 0 independently at each side's own path. Relocated caches were revalidated, not treated as provenance.
 - `tsc -p tests/acceptance/1906/{exit,ownership}/tsconfig.json`: both exit 0 on final work.
-- `git diff --check 81a5a9b2f..040e6aa6f`: clean. Incoming main has whitespace in old acceptance evidence; it was retained unchanged, not “cleaned up” by editing frozen files.
-- All 13 frozen #1906 files retain their authors' bytes. No production import cycle or core-to-extension edge was introduced. Review prose is advisory, never a check result.
+- `git diff --check` against the pinned base is clean after the independent metadata maintenance. Incoming main has whitespace in old acceptance evidence; it was retained unchanged, not “cleaned up” by editing frozen files.
+- All 13 frozen #1906 files retain their authors' bytes. No production import cycle or core-to-extension edge was introduced. The independent review update preserves every existing assertion and its wrong-program qualifications; review prose alone is never a check result.
 
 Raw logs are retained locally under `/private/tmp/deep-1906-proof/`; paths and fixture process identities are not copied into committed evidence:
 
@@ -82,6 +90,7 @@ Raw logs are retained locally under `/private/tmp/deep-1906-proof/`; paths and f
 - `seams-base-1906.{log,jsonl}`, `seams-final-affected.log`, `seams-proof-jobs.json`, final acceptance typecheck logs.
 - `seams-base-build.log`, `seams-work-build-first.log`, `seams-hub-cli-build-corrected.log`, `seams-builds.json`, both Rust build logs.
 - `seams-base-lints.json`, `seams-lint-comparison.json`, `seams-base-structure.{log,jsonl}`, `seams-production-selection.log`.
+- `loader-owner-handoff.md`, `loader-owner-after.tap`, `loader-owner-equality-audit.json`, source/provenance diagnostics and exact hash inventory; `loader-maintenance-affected.log`, `loader-integration-checks.json`, and `loader-post-guard-completed.log` (exit 0).
 - The completed final affected report directory is named in `seams-final-affected.log`; the interrupted structure wrapper's completed test reports are retained separately. Its unfinished lint wrapper is INCONCLUSIVE, not a completed affected verdict.
 
 ## Deviations and earlier attempts
