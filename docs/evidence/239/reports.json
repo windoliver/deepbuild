@@ -1,0 +1,786 @@
+{
+  "strokes-and-paper": {
+    "document.determinism": {
+      "film": {
+        "id": "req:01JB239Q000000000000000001",
+        "kind": "document.determinism",
+        "issues": [],
+        "machines": "same",
+        "determinism": "exact",
+        "result": "PASS",
+        "timing": {
+          "render_ms": 35523.94737500003,
+          "hash_ms": 1610.9201229999999
+        }
+      },
+      "twin_unplanted": {
+        "id": "req:01JB239Q000000000000000001",
+        "kind": "document.determinism",
+        "issues": [],
+        "machines": "same",
+        "determinism": "exact",
+        "result": "PASS",
+        "timing": {
+          "render_ms": 261.932459,
+          "hash_ms": 193.01775
+        }
+      },
+      "twin": {
+        "id": "req:01JB239Q000000000000000001",
+        "kind": "document.determinism",
+        "issues": [
+          {
+            "check": "document.determinism",
+            "code": "seek_differs",
+            "severity": "error",
+            "ids": [],
+            "doc": "01JB239D000000000000000001",
+            "t": 352799999,
+            "what": "playing to 352799999 draws \"1619f050bb2d1a2076dfd9e405ae873e\", seeking to it \"d9c6af21acf60336bd9abdde98b7b5f1\""
+          }
+        ],
+        "machines": "same",
+        "determinism": "exact",
+        "result": "FAIL",
+        "timing": {
+          "render_ms": 296.368207,
+          "hash_ms": 191.10779200000002
+        }
+      }
+    },
+    "film.audit": {
+      "film": {
+        "id": "req:01JB239Q000000000000000002",
+        "kind": "film.audit",
+        "machines": "any",
+        "determinism": "exact",
+        "issues": [],
+        "not_run": [
+          "claims"
+        ],
+        "result": "PASS"
+      },
+      "twin": {
+        "id": "req:01JB239Q000000000000000001",
+        "kind": "film.audit",
+        "machines": "any",
+        "determinism": "exact",
+        "issues": [
+          {
+            "check": "film.audit",
+            "code": "film.hold_short",
+            "severity": "error",
+            "ids": [
+              "title"
+            ],
+            "t": 0,
+            "what": "`title` reads for 0.000 s from 0.000 s as made, short of the 13.500 s its graphemes need",
+            "fix": "hold the text, still and readable inside the safe area, at least as long as its graphemes need",
+            "item": "title",
+            "need": 13.5,
+            "held": 0,
+            "rendition": "as_made",
+            "doc": "01JB239D000000000000000001"
+          },
+          {
+            "check": "film.audit",
+            "code": "film.hold_short",
+            "severity": "error",
+            "ids": [
+              "title"
+            ],
+            "t": 0,
+            "what": "`title` reads for 0.000 s from 0.000 s reduced motion, short of the 13.500 s its graphemes need",
+            "fix": "hold the text, still and readable inside the safe area, at least as long as its graphemes need",
+            "item": "title",
+            "need": 13.5,
+            "held": 0,
+            "rendition": "reduced_motion",
+            "doc": "01JB239D000000000000000001"
+          }
+        ],
+        "not_run": [
+          "claims"
+        ],
+        "result": "FAIL"
+      }
+    },
+    "film.layout": {
+      "film": {
+        "id": "req:01JB239Q000000000000000003",
+        "kind": "film.layout",
+        "issues": [],
+        "machines": "any",
+        "determinism": "exact",
+        "result": "PASS",
+        "timing": {
+          "check_ms": 0.948209
+        }
+      },
+      "twin": {
+        "id": "req:01JB239Q000000000000000001",
+        "kind": "film.layout",
+        "issues": [
+          {
+            "check": "film.layout",
+            "code": "layout.cut",
+            "severity": "error",
+            "ids": [
+              "layout-twin"
+            ],
+            "t": 705600000,
+            "ts": [
+              705600000,
+              2681280000,
+              4656960000,
+              5221440000,
+              7056000000
+            ],
+            "what": "layout-twin is cut by the frame: left by 5217.427 u, right by 5215.845 u",
+            "fix": "Scale the text to the safe width.",
+            "item": "layout-twin",
+            "sides": [
+              {
+                "edge": "left",
+                "by": 5217.427
+              },
+              {
+                "edge": "right",
+                "by": 5215.845
+              }
+            ],
+            "fix_ops": [
+              {
+                "op": "set",
+                "id": "layout-twin",
+                "path": "items/layout-twin/at/pos",
+                "value": [
+                  -167.697958795737,
+                  180,
+                  0
+                ]
+              },
+              {
+                "op": "set",
+                "id": "layout-twin",
+                "path": "items/layout-twin/params/size",
+                "value": 18.932370883387982
+              },
+              {
+                "op": "set",
+                "id": "layout-twin",
+                "path": "items/layout-twin/params/box/w",
+                "value": 1615.5623153824413
+              },
+              {
+                "op": "set",
+                "id": "layout-twin",
+                "path": "items/layout-twin/params/box/h",
+                "value": 37.864741766775964
+              }
+            ],
+            "doc": "01JB239D000000000000000001"
+          },
+          {
+            "check": "film.layout",
+            "code": "layout.crossing",
+            "severity": "error",
+            "ids": [
+              "layout-twin",
+              "spiral"
+            ],
+            "t": 2681280000,
+            "ts": [
+              2681280000,
+              4656960000,
+              5221440000,
+              7056000000
+            ],
+            "what": "spiral crosses layout-twin",
+            "fix": "Give the text a 4 px halo in the look's paper (ground) role, or raise it above the stroke.",
+            "text": "layout-twin",
+            "stroke": "spiral",
+            "fix_ops": [
+              {
+                "op": "set",
+                "id": "layout-twin",
+                "path": "items/layout-twin/params/halo",
+                "value": [
+                  {
+                    "width": 4,
+                    "role": "ground"
+                  }
+                ]
+              }
+            ],
+            "doc": "01JB239D000000000000000001"
+          },
+          {
+            "check": "film.layout",
+            "code": "layout.crossing",
+            "severity": "error",
+            "ids": [
+              "layout-twin",
+              "house"
+            ],
+            "t": 4656960000,
+            "ts": [
+              4656960000,
+              5221440000,
+              7056000000
+            ],
+            "what": "house crosses layout-twin",
+            "fix": "Give the text a 4 px halo in the look's paper (ground) role, or raise it above the stroke.",
+            "text": "layout-twin",
+            "stroke": "house",
+            "fix_ops": [
+              {
+                "op": "set",
+                "id": "layout-twin",
+                "path": "items/layout-twin/params/halo",
+                "value": [
+                  {
+                    "width": 4,
+                    "role": "ground"
+                  }
+                ]
+              }
+            ],
+            "doc": "01JB239D000000000000000001"
+          },
+          {
+            "check": "film.layout",
+            "code": "layout.crossing",
+            "severity": "error",
+            "ids": [
+              "layout-twin",
+              "sun"
+            ],
+            "t": 4656960000,
+            "ts": [
+              4656960000,
+              5221440000,
+              7056000000
+            ],
+            "what": "sun crosses layout-twin",
+            "fix": "Give the text a 4 px halo in the look's paper (ground) role, or raise it above the stroke.",
+            "text": "layout-twin",
+            "stroke": "sun",
+            "fix_ops": [
+              {
+                "op": "set",
+                "id": "layout-twin",
+                "path": "items/layout-twin/params/halo",
+                "value": [
+                  {
+                    "width": 4,
+                    "role": "ground"
+                  }
+                ]
+              }
+            ],
+            "doc": "01JB239D000000000000000001"
+          }
+        ],
+        "machines": "any",
+        "determinism": "exact",
+        "result": "FAIL",
+        "timing": {
+          "check_ms": 1.288209
+        }
+      }
+    },
+    "frame_budget": {
+      "film": {
+        "verdict": "PASS",
+        "limits": {
+          "gpu": {
+            "limit_ms": 10,
+            "verdict": "PASS",
+            "runs": [
+              {
+                "p95_ms": 0.2856670022010803,
+                "invalid": []
+              },
+              {
+                "p95_ms": 0.28541702032089233,
+                "invalid": []
+              },
+              {
+                "p95_ms": 0.285457968711853,
+                "invalid": []
+              },
+              {
+                "p95_ms": 0.2855830192565918,
+                "invalid": []
+              },
+              {
+                "p95_ms": 0.28566598892211914,
+                "invalid": []
+              }
+            ],
+            "margin": 0.05,
+            "missing": null
+          },
+          "cpu": {
+            "limit_ms": 4,
+            "verdict": "PASS",
+            "runs": [
+              {
+                "p95_ms": 0.119709,
+                "invalid": []
+              },
+              {
+                "p95_ms": 0.208958,
+                "invalid": []
+              },
+              {
+                "p95_ms": 0.173375,
+                "invalid": []
+              },
+              {
+                "p95_ms": 0.11558299999999999,
+                "invalid": []
+              },
+              {
+                "p95_ms": 0.110084,
+                "invalid": []
+              }
+            ],
+            "margin": 0.05,
+            "missing": null
+          }
+        },
+        "fallback": null
+      },
+      "twin": {
+        "verdict": "FAIL",
+        "limits": {
+          "gpu": {
+            "limit_ms": 10,
+            "verdict": "FAIL",
+            "runs": [
+              {
+                "p95_ms": 100,
+                "invalid": []
+              },
+              {
+                "p95_ms": 100,
+                "invalid": []
+              },
+              {
+                "p95_ms": 100,
+                "invalid": []
+              },
+              {
+                "p95_ms": 100,
+                "invalid": []
+              },
+              {
+                "p95_ms": 100,
+                "invalid": []
+              }
+            ],
+            "margin": 0.05,
+            "missing": null
+          },
+          "cpu": {
+            "limit_ms": 4,
+            "verdict": "PASS",
+            "runs": [
+              {
+                "p95_ms": 0,
+                "invalid": []
+              },
+              {
+                "p95_ms": 0,
+                "invalid": []
+              },
+              {
+                "p95_ms": 0,
+                "invalid": []
+              },
+              {
+                "p95_ms": 0,
+                "invalid": []
+              },
+              {
+                "p95_ms": 0,
+                "invalid": []
+              }
+            ],
+            "margin": 0.05,
+            "missing": null
+          }
+        },
+        "fallback": null
+      }
+    }
+  },
+  "camera-and-transitions": {
+    "document.determinism": {
+      "film": {
+        "id": "req:01JB239Q000000000000000001",
+        "kind": "document.determinism",
+        "issues": [],
+        "machines": "same",
+        "determinism": "exact",
+        "result": "PASS",
+        "timing": {
+          "render_ms": 9224.090621000005,
+          "hash_ms": 1368.3708729999998
+        }
+      },
+      "twin_unplanted": {
+        "id": "req:01JB239Q000000000000000001",
+        "kind": "document.determinism",
+        "issues": [],
+        "machines": "same",
+        "determinism": "exact",
+        "result": "PASS",
+        "timing": {
+          "render_ms": 260.950875,
+          "hash_ms": 195.354375
+        }
+      },
+      "twin": {
+        "id": "req:01JB239Q000000000000000001",
+        "kind": "document.determinism",
+        "issues": [
+          {
+            "check": "document.determinism",
+            "code": "seek_differs",
+            "severity": "error",
+            "ids": [],
+            "doc": "01JB239D000000000000000001",
+            "t": 352799999,
+            "what": "playing to 352799999 draws \"88799baf830c1ea2b5edb9ea32c3c520\", seeking to it \"4ae2599b5029e31bb7c3f7eb767f48cf\""
+          }
+        ],
+        "machines": "same",
+        "determinism": "exact",
+        "result": "FAIL",
+        "timing": {
+          "render_ms": 296.545082,
+          "hash_ms": 197.04500100000004
+        }
+      }
+    },
+    "film.audit": {
+      "film": {
+        "id": "req:01JB239Q000000000000000002",
+        "kind": "film.audit",
+        "machines": "any",
+        "determinism": "exact",
+        "issues": [],
+        "not_run": [
+          "claims"
+        ],
+        "result": "PASS"
+      },
+      "twin": {
+        "id": "req:01JB239Q000000000000000001",
+        "kind": "film.audit",
+        "machines": "any",
+        "determinism": "exact",
+        "issues": [
+          {
+            "check": "film.audit",
+            "code": "film.hold_short",
+            "severity": "error",
+            "ids": [
+              "title"
+            ],
+            "t": 0,
+            "what": "`title` reads for 0.000 s from 0.000 s as made, short of the 13.500 s its graphemes need",
+            "fix": "hold the text, still and readable inside the safe area, at least as long as its graphemes need",
+            "item": "title",
+            "need": 13.5,
+            "held": 0,
+            "rendition": "as_made",
+            "doc": "01JB239D000000000000000001"
+          },
+          {
+            "check": "film.audit",
+            "code": "film.hold_short",
+            "severity": "error",
+            "ids": [
+              "title"
+            ],
+            "t": 0,
+            "what": "`title` reads for 0.000 s from 0.000 s reduced motion, short of the 13.500 s its graphemes need",
+            "fix": "hold the text, still and readable inside the safe area, at least as long as its graphemes need",
+            "item": "title",
+            "need": 13.5,
+            "held": 0,
+            "rendition": "reduced_motion",
+            "doc": "01JB239D000000000000000001"
+          }
+        ],
+        "not_run": [
+          "claims"
+        ],
+        "result": "FAIL"
+      }
+    },
+    "film.layout": {
+      "film": {
+        "id": "req:01JB239Q000000000000000003",
+        "kind": "film.layout",
+        "issues": [
+          {
+            "check": "film.layout",
+            "code": "layout.out_of_frame",
+            "severity": "notice",
+            "ids": [
+              "title"
+            ],
+            "t": 5292000000,
+            "ts": [
+              5292000000,
+              7056000000
+            ],
+            "what": "title is wholly out of frame",
+            "fix": "",
+            "item": "title",
+            "doc": "01JB239D000000000000000001"
+          }
+        ],
+        "machines": "any",
+        "determinism": "exact",
+        "result": "PASS",
+        "timing": {
+          "check_ms": 0.546749
+        }
+      },
+      "twin": {
+        "id": "req:01JB239Q000000000000000001",
+        "kind": "film.layout",
+        "issues": [
+          {
+            "check": "film.layout",
+            "code": "layout.cut",
+            "severity": "error",
+            "ids": [
+              "layout-twin"
+            ],
+            "t": 2822400000,
+            "ts": [
+              2822400000
+            ],
+            "what": "layout-twin is cut by the frame: left by 5217.427 u, right by 5215.845 u",
+            "fix": "Scale the text to the safe width.",
+            "item": "layout-twin",
+            "sides": [
+              {
+                "edge": "left",
+                "by": 5217.427
+              },
+              {
+                "edge": "right",
+                "by": 5215.845
+              }
+            ],
+            "fix_ops": [
+              {
+                "op": "set",
+                "id": "layout-twin",
+                "path": "items/layout-twin/at/pos",
+                "value": [
+                  -167.697958795737,
+                  180,
+                  0
+                ]
+              },
+              {
+                "op": "set",
+                "id": "layout-twin",
+                "path": "items/layout-twin/params/size",
+                "value": 18.932370883387982
+              },
+              {
+                "op": "set",
+                "id": "layout-twin",
+                "path": "items/layout-twin/params/box/w",
+                "value": 1615.5623153824413
+              },
+              {
+                "op": "set",
+                "id": "layout-twin",
+                "path": "items/layout-twin/params/box/h",
+                "value": 37.864741766775964
+              }
+            ],
+            "doc": "01JB239D000000000000000001"
+          },
+          {
+            "check": "film.layout",
+            "code": "layout.camera_framed",
+            "severity": "notice",
+            "ids": [
+              "layout-twin"
+            ],
+            "t": 5292000000,
+            "ts": [
+              5292000000,
+              7056000000
+            ],
+            "what": "layout-twin is cut while the camera has moved",
+            "fix": "",
+            "item": "layout-twin",
+            "doc": "01JB239D000000000000000001"
+          },
+          {
+            "check": "film.layout",
+            "code": "layout.out_of_frame",
+            "severity": "notice",
+            "ids": [
+              "title"
+            ],
+            "t": 5292000000,
+            "ts": [
+              5292000000,
+              7056000000
+            ],
+            "what": "title is wholly out of frame",
+            "fix": "",
+            "item": "title",
+            "doc": "01JB239D000000000000000001"
+          }
+        ],
+        "machines": "any",
+        "determinism": "exact",
+        "result": "FAIL",
+        "timing": {
+          "check_ms": 1.1434170000000001
+        }
+      }
+    },
+    "frame_budget": {
+      "film": {
+        "verdict": "INCONCLUSIVE",
+        "limits": {
+          "gpu": {
+            "limit_ms": 10,
+            "verdict": "INCONCLUSIVE",
+            "runs": [
+              {
+                "p95_ms": 0.2856670022010803,
+                "invalid": []
+              },
+              {
+                "p95_ms": 0.28554201126098633,
+                "invalid": []
+              },
+              {
+                "p95_ms": 0.2856670022010803,
+                "invalid": []
+              },
+              {
+                "p95_ms": 0.2857919931411743,
+                "invalid": []
+              },
+              {
+                "p95_ms": 0.28470802307128906,
+                "invalid": []
+              }
+            ],
+            "margin": 0.05,
+            "missing": null
+          },
+          "cpu": {
+            "limit_ms": 4,
+            "verdict": "INCONCLUSIVE",
+            "runs": [
+              {
+                "p95_ms": 0.150084,
+                "invalid": []
+              },
+              {
+                "p95_ms": 0.11675,
+                "invalid": []
+              },
+              {
+                "p95_ms": 0.08729200000000001,
+                "invalid": []
+              },
+              {
+                "p95_ms": 0.10562500000000001,
+                "invalid": []
+              },
+              {
+                "p95_ms": 0.086417,
+                "invalid": []
+              }
+            ],
+            "margin": 0.05,
+            "missing": null
+          }
+        },
+        "fallback": null
+      },
+      "twin": {
+        "verdict": "FAIL",
+        "limits": {
+          "gpu": {
+            "limit_ms": 10,
+            "verdict": "FAIL",
+            "runs": [
+              {
+                "p95_ms": 100,
+                "invalid": []
+              },
+              {
+                "p95_ms": 100,
+                "invalid": []
+              },
+              {
+                "p95_ms": 100,
+                "invalid": []
+              },
+              {
+                "p95_ms": 100,
+                "invalid": []
+              },
+              {
+                "p95_ms": 100,
+                "invalid": []
+              }
+            ],
+            "margin": 0.05,
+            "missing": null
+          },
+          "cpu": {
+            "limit_ms": 4,
+            "verdict": "PASS",
+            "runs": [
+              {
+                "p95_ms": 0,
+                "invalid": []
+              },
+              {
+                "p95_ms": 0,
+                "invalid": []
+              },
+              {
+                "p95_ms": 0,
+                "invalid": []
+              },
+              {
+                "p95_ms": 0,
+                "invalid": []
+              },
+              {
+                "p95_ms": 0,
+                "invalid": []
+              }
+            ],
+            "margin": 0.05,
+            "missing": null
+          }
+        },
+        "fallback": null
+      }
+    }
+  }
+}

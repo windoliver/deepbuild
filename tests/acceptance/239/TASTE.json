@@ -1,0 +1,17 @@
+{
+  "issue": 239,
+  "criterion": "#239.85750ec9",
+  "verdict": "looks_right",
+  "who": "Claude, on the owner's standing delegation of taste calls, restated in the #239 plan the owner approved; the owner can overrule it on the PR",
+  "when": "2026-11-13T08:42:16Z",
+  "screenshots": {
+    "strokes-and-paper-drawing.png": "0340625593f2c013302395f6c119ac505fefffebbc5ce15ff3433a568fc2e08c",
+    "strokes-and-paper-drawn.png": "eb57a7ab236295167395e496f1c50d112733b76e11d6f1307eb07d8be5160767",
+    "strokes-and-paper.mp4": "d221a6891fee5589822ff393a8368ef924052323b19677f80be411746cf283ba",
+    "camera-and-transitions-shot.png": "0cf18e4ad7851d3d3479f2956a0cd02b04fbd2c82844b3b8e8dc19adcaf2c356",
+    "camera-and-transitions-transition-1.png": "e6ee7b08c3f4c19a0859da8a29c96c4c407c2835940811ab57c90aa57aff891a",
+    "camera-and-transitions-transition-2.png": "7b588d121fff53b027d0eabe81784e44924bb50bcc5fe10ca3d4939b70c26b2b",
+    "camera-and-transitions.mp4": "0b97ea47f7ac3d573d592e3e1f2aacb5475ed53160d79476c8cccd9f13835f98"
+  },
+  "note": "Looked at each PNG at full size and both recordings' streams (300 H.264 frames at 1280 x 720, AAC 48 kHz stereo, 10 s). Strokes and paper: the underline drawn and the spiral half drawn on at 2.3 s; at 9.5 s every stroke drawn, the house on its index card, the pink sun and signature, on the notebook look's cream ground. The paper draws as the look's flat ground in an export: its rules, margin and tooth draw only in the live GPU view, a follow-up named in the PR. Camera and transitions: the pan across the bar chart at 5.8 s; the cross-fade at 4 s with the title card and the bars both showing; the wipe at 7.5 s from the bars to the ring, both sides showing."
+}
