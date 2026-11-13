@@ -142,11 +142,12 @@ impl Canonical for Ease {
 impl Canonical for Control {
     fn encode(&self, out: &mut Vec<u8>) {
         (&self.id, self.kind, &self.options, &self.default).encode(out);
-        // #504: a stage without a shot as usize::MAX, so every stage with one keys as it did.
+        // #504: a stage without a shot as u64::MAX, so every stage with one keys as it did; the
+        // same 8 bytes on every target, where a usize's MAX is narrower on wasm32 (#2144).
         self.shots
             .iter()
-            .map(|s| s.unwrap_or(usize::MAX))
-            .collect::<Vec<usize>>()
+            .map(|s| s.map_or(u64::MAX, |s| s as u64))
+            .collect::<Vec<u64>>()
             .encode(out);
     }
 }
@@ -438,6 +439,7 @@ impl deep_canvas::schedule::Canonical for Driver {
                     DriverInput::Rate(c) => (3u8, c).encode(out),
                     DriverInput::Remap(r, progress) => (4u8, r, *progress).encode(out),
                     DriverInput::Array(a) => (5u8, a).encode(out),
+                    DriverInput::Hover(h) => (6u8, h).encode(out),
                     DriverInput::List(f) => {
                         (2u8, &f.list, &f.kinds, (&f.a, &f.b)).encode(out);
                         (&f.tags, &f.where_).encode(out);

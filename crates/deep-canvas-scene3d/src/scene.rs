@@ -853,6 +853,16 @@ impl Scene {
                 .any(|s| s.material.is_some())
     }
 
+    /// #428's planted `drops_dispersion`, reachable only through `deep-gpu --planted`: every
+    /// material draws dispersion 0, as if its import had dropped KHR_materials_dispersion
+    /// ([`crate::gltf::drop_dispersion`]).
+    pub fn plant_drops_dispersion(&mut self) {
+        let solids = self.layers.iter_mut().flat_map(|l| &mut l.solids);
+        for m in solids.filter_map(|s| s.material.as_mut()) {
+            m.lobes.dispersion = 0.0;
+        }
+    }
+
     /// #268's wrong field, reachable only through `deep-gpu --planted`: the water's shore baked
     /// with each item's centre standing for where it meets the water.
     pub fn plant_shore_from_centre(&mut self, doc: &Value) -> Result<(), Refused> {
