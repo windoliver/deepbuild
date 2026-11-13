@@ -60,6 +60,9 @@ pub enum MixCall {
     Soak {
         media: Value,
         seconds: u64,
+        /// #525: scripted presses during a live play, each `(at, control, value)`: host flicks
+        /// after the play starts.
+        presses: Vec<(i64, String, Value)>,
     },
 }
 
@@ -97,6 +100,18 @@ pub fn parse_call(name: &str, c: &Map<String, Value>) -> Option<MixCall> {
         "soak" => MixCall::Soak {
             media: c.get("media").filter(|d| d.is_object())?.clone(),
             seconds: c.get("seconds")?.as_u64().filter(|s| *s > 0)?,
+            presses: c.get("presses").map_or(Some(Vec::new()), |p| {
+                p.as_array()?
+                    .iter()
+                    .map(|x| {
+                        Some((
+                            x.get("at")?.as_i64()?,
+                            x.get("control")?.as_str()?.to_string(),
+                            x.get("value").cloned().unwrap_or(json!(true)),
+                        ))
+                    })
+                    .collect()
+            })?,
         },
         _ => return None,
     })
@@ -443,7 +458,7 @@ impl Hub<'_> {
                 .ok_or_else(|| bad(format!("emitter {eid}: src.strip")))?;
             emits.insert(strip.to_string(), emitter(d, eid, e).map_err(bad)?);
         }
-        let mut strips = Vec::new();
+        let (mut strips, mut runs) = (Vec::new(), Vec::new());
         for (sid, s) in obj("strips") {
             let Some(sha) = doc::strip_asset(s) else {
                 return Err(bad(format!("strip {sid}: src.asset")));
@@ -542,13 +557,18 @@ impl Hub<'_> {
             if let Some(at) = spawn::aligned_start(d, sid, s, &strip).map_err(bad)? {
                 strip.start = at;
             }
-            strips.push(strip);
+            // #525: a strip with `start_on` plays once for each entry of the track it matches.
+            match s.get("start_on") {
+                Some(on) => runs.extend(crate::stepped::runs(d, &strip, on)),
+                None => strips.push(strip),
+            }
         }
         if let Some(s) = &script {
             strips.extend(
                 self.narration_strips(s, index("narration").or(index("master")).unwrap_or(0))?,
             );
         }
+        strips.extend(runs);
         let mut extra = Map::new();
         if d.get("cues").is_some() {
             extra.insert("cues".into(), Value::Object(spawn::cues(d, &mut strips)));
@@ -571,6 +591,13 @@ impl Hub<'_> {
                 track,
             } => {
                 let mut doc = doc.clone();
+                // #525: its recipes' strips, and the track its worlds' inputs and runs read.
+                if let Err(e) = crate::stepped::expand(&mut doc, &self.scenario.packs) {
+                    return e;
+                }
+                if !track.is_empty() {
+                    doc["track"] = json!(track);
+                }
                 if let Err(i) = self.inline_occurrences(&mut doc, track) {
                     return json!({"code": i.code, "issues": [i.to_json()]});
                 }
@@ -637,6 +664,9 @@ impl Hub<'_> {
             MixCall::Score(c) => self.score_plan(c),
             MixCall::Heard(c) => crate::narration::heard_back::heard_call(c),
             MixCall::Handed { panel, from, to } => {
+                if let Some(reply) = self.audio_handed(panel, *from, *to) {
+                    return reply;
+                }
                 let now = self.now;
                 let Some(live) = self.gate.live_of(panel, now) else {
                     return refused("not_playing");
@@ -659,13 +689,41 @@ impl Hub<'_> {
                 json!({"handed": {"sample_rate": rate, "channels": 2, "first": first, "frames": last - first,
                     "sha256": sha, "wav": w}})
             }
-            MixCall::Soak { media, seconds } => match self.mix_of(media) {
-                Ok(m) => crate::device::soak(
-                    Player::new(Arc::new(m), planted_of(self.scenario.planted, true)),
-                    *seconds,
-                ),
-                Err(e) => e,
-            },
+            MixCall::Soak {
+                media,
+                seconds,
+                presses,
+            } => {
+                // #525: a document with worlds plays them live, stepped ahead of the mixer's blocks.
+                let live = match crate::stepped::opened(media, &self.scenario.packs) {
+                    Ok(d) => d,
+                    Err(e) => return e,
+                };
+                let mix = match self.mix_of(&live) {
+                    Ok(m) => Arc::new(m),
+                    Err(e) => return e,
+                };
+                let master = mix.buses.iter().position(|b| b.id == "master").unwrap_or(0);
+                let worlds = match self.live_worlds(&live, master) {
+                    Ok(w) => w,
+                    Err(e) => return e,
+                };
+                let player = Player::new(mix, planted_of(self.scenario.planted, true));
+                let planted =
+                    |p: crate::stepped::Planted| self.scenario.planted == Some(Planted::Ahead(p));
+                let late = planted(crate::stepped::Planted::LateStepMovesVoice);
+                let at_frame = planted(crate::stepped::Planted::EntryStampedAtFrame);
+                match worlds {
+                    Some(w) => crate::device::soak_live(
+                        player,
+                        w,
+                        *seconds,
+                        presses.clone(),
+                        (late, at_frame),
+                    ),
+                    None => crate::device::soak(player, *seconds),
+                }
+            }
         }
     }
 }

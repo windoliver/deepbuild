@@ -1,0 +1,16 @@
+{
+  "#525.06f030c7": [
+    "voice_at_frame"
+  ],
+  "#525.bc91e6a4": [
+    "world_steps_on_frames",
+    "late_step_moves_voice"
+  ],
+  "#525.105c2755": [
+    "golden_compares_across_digests",
+    "receipt_omits_runtime_digest"
+  ],
+  "#525.316e3bea": [
+    "entry_stamped_at_frame"
+  ]
+}

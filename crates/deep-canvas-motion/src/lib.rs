@@ -20,6 +20,7 @@ pub mod doc;
 pub mod eval;
 pub mod follow;
 mod held;
+mod hover;
 pub mod input;
 pub mod insert;
 pub mod kit;

@@ -154,6 +154,7 @@ pub struct Emit {
     pub place: Arc<dyn Fn(i64) -> Place + Send + Sync>,
 }
 
+#[derive(Clone)]
 pub struct Strip {
     pub id: String,
     pub source: Arc<Source>,
@@ -757,6 +758,8 @@ pub struct Player {
     /// #509: each bus's power bake, its output after its fader and ducking, then the master's own
     /// strips; made only by [`Player::tapped`].
     power: Option<Vec<crate::analysis::loudness::Power>>,
+    /// #525: strips a live play adds as it goes, rendered after the mix's own, in their order.
+    added: Vec<Strip>,
 }
 
 impl Player {
@@ -831,6 +834,7 @@ impl Player {
                     .map(|_| crate::analysis::loudness::Power::new(rate, 2))
                     .collect()
             }),
+            added: Vec::new(),
         };
         p.seek_graph(lead);
         p.take_taps();
@@ -857,6 +861,18 @@ impl Player {
             self.read += n;
             at += n;
         }
+    }
+
+    /// #525: the strips a live play has added so far, in place of those it added before; a strip
+    /// sounds only in blocks rendered after it is added.
+    pub fn set_added(&mut self, strips: Vec<Strip>) {
+        self.added = strips;
+    }
+
+    /// #525: how far past the sample read next the graph has rendered, at most, in samples: a
+    /// strip must be added before the play reads within this of its start.
+    pub fn ahead(&self) -> i64 {
+        self.edges.lead + BLOCK
     }
 
     /// #157: sets the master's end limiter to an export's ceiling, dBTP (a profile's
@@ -1021,7 +1037,8 @@ impl Player {
         for b in &mut self.buses {
             b.iter_mut().for_each(|x| *x = 0.0);
         }
-        for s in &mix.strips {
+        let added = std::mem::take(&mut self.added);
+        for s in mix.strips.iter().chain(&added) {
             // A bus's strips arrive as late as its latest input.
             let t0 = (k * BLOCK - self.edges.strips[s.bus]) * step;
             if s.start + s.span <= t0 || s.start >= t0 + BLOCK * step {
@@ -1065,6 +1082,7 @@ impl Player {
                 out[2 * i as usize + 1] += gr;
             }
         }
+        self.added = added;
         if let Some(power) = self.power.as_mut() {
             let at = k * BLOCK - self.edges.strips[mix.master];
             power[mix.buses.len()].push(at, &self.buses[mix.master]);

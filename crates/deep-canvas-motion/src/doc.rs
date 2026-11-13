@@ -421,6 +421,8 @@ pub enum DriverInput {
     Remap(String, bool),
     /// `<module>.<name>`: a canvas module's array, such as one a stepping module writes (#497).
     Array(String),
+    /// #539: `controls/<id>/hover/<k>`, a pick control.s hover, keyed `<id>/hover/<k>` (crate::hover).
+    Hover(String),
 }
 
 /// Each axis's `[min, max]`, `None` for an axis a limit leaves free.
@@ -1410,6 +1412,10 @@ fn driver_of(id: &str, d: &Map<String, Value>) -> Result<Driver, Refused> {
         };
         if text == "time" {
             inputs.push((name.clone(), DriverInput::Time));
+            continue;
+        }
+        if let Some(h) = crate::hover::input(text) {
+            inputs.push((name.clone(), h));
             continue;
         }
         if let Some(c) = text
@@ -2566,6 +2572,7 @@ pub fn read_with(
             _ => 0.0,
         };
         control_defaults.push((id.clone(), default));
+        control_defaults.extend(crate::hover::defaults(id, c));
     }
     let mut limits = Vec::new();
     let mut constraints = Vec::new();
