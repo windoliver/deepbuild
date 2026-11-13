@@ -285,6 +285,7 @@ pub struct World {
     pub solve: Option<Solve>,
 }
 
+pub mod data;
 mod heightfield;
 mod inputs;
 mod reads;

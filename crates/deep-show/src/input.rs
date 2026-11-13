@@ -43,6 +43,8 @@ pub struct PanelScope {
     pressed: i64,
     /// #539: its pick controls' focus, hover and announcements, and the record of the play.
     pub(crate) picks: crate::picks::Viewer,
+    /// #540: its point controls' press, hover and the planted replays' pointers.
+    pub(crate) points: crate::points::Viewer,
 }
 
 pub fn point(v: &Value) -> Option<[f64; 2]> {
@@ -202,6 +204,7 @@ impl Hub<'_> {
                     viewer: None,
                     pressed: 0,
                     picks: Default::default(),
+                    points: Default::default(),
                 },
             );
             let first = self.seen(panel).ok_or_else(|| refused("not_presented"))?;
@@ -310,7 +313,7 @@ impl Hub<'_> {
     }
 
     /// `input`: one hardware input to a panel's canvas.
-    pub fn input(&mut self, panel: &str, event: &Event) -> Value {
+    pub fn input(&mut self, panel: &str, event: &Event, g: &crate::points::Gesture) -> Value {
         // #498: a panel that shows no canvas document still takes your input, so a press there
         // is a gesture (Play on its transport).
         if self.panel_document(panel).is_none() && self.slot(panel).is_some() {
@@ -351,6 +354,16 @@ impl Hub<'_> {
                     Err(e) => e,
                 };
             }
+        }
+        // #540: a press of a point control's button, and the drag and release it starts, are the
+        // control's entries and never the scope's pan or turn.
+        match self.point_pointer(panel, &doc, event, g, serial) {
+            Ok(Some(appended)) => {
+                return json!({"serial": serial, "state": self.state(panel), "picks": 0,
+                    "commits": [], "appended": appended})
+            }
+            Ok(None) => {}
+            Err(e) => return e,
         }
         // #539: a pointer event on a pick control's rows picks or hovers before the scope takes
         // it, whose press then meets none of the rows a pick control names.
