@@ -7,7 +7,7 @@
 use std::rc::Rc;
 
 use deep_canvas::document::Issue;
-use deep_logic::piece::{check_in, History};
+use deep_logic::piece::{check_in, History, Piece};
 use deep_logic::world::{track_of, Entry, Record, World};
 use serde_json::{json, Map, Value};
 
@@ -89,27 +89,9 @@ impl Hub<'_> {
         track: &[Value],
     ) -> Result<(), Box<Issue>> {
         self.inline_worlds(form)?;
-        let items: Map<String, Value> = form
-            .get("items")
-            .and_then(Value::as_object)
-            .into_iter()
-            .flatten()
-            .filter(|(_, i)| i.get("kind").and_then(Value::as_str) == Some("logic@1"))
-            .map(|(id, i)| (id.clone(), json!({"kind": "logic@1", "params": i.get("params").cloned().unwrap_or(json!({}))})))
-            .collect();
-        if items.is_empty() {
+        let Some(piece) = self.logic_piece(form)? else {
             return Ok(());
-        }
-        let piece = json!({
-            "seed": form.get("seed").and_then(Value::as_i64).unwrap_or(0),
-            "controls": form.get("controls").cloned().unwrap_or(json!({})),
-            "items": items,
-        });
-        let root = &self.scenario.evidence;
-        let piece = check_in(&piece, &Default::default(), &mut History::new(), &|sha| {
-            crate::evidence::read(root, sha)
-        })
-        .map_err(|r| refused(r.0))?;
+        };
         let entries: Vec<Entry> = track
             .iter()
             .map(Entry::parse)
@@ -188,5 +170,32 @@ impl Hub<'_> {
             all.extend(arrays);
         }
         Ok(())
+    }
+
+    /// `form`'s logic items as one piece with its seed and controls, checked by the logic module,
+    /// each program read from the evidence store; none when it has no logic item.
+    pub(crate) fn logic_piece(&self, form: &Value) -> Result<Option<Piece>, Box<Issue>> {
+        let items: Map<String, Value> = form
+            .get("items")
+            .and_then(Value::as_object)
+            .into_iter()
+            .flatten()
+            .filter(|(_, i)| i.get("kind").and_then(Value::as_str) == Some("logic@1"))
+            .map(|(id, i)| (id.clone(), json!({"kind": "logic@1", "params": i.get("params").cloned().unwrap_or(json!({}))})))
+            .collect();
+        if items.is_empty() {
+            return Ok(None);
+        }
+        let piece = json!({
+            "seed": form.get("seed").and_then(Value::as_i64).unwrap_or(0),
+            "controls": form.get("controls").cloned().unwrap_or(json!({})),
+            "items": items,
+        });
+        let root = &self.scenario.evidence;
+        let piece = check_in(&piece, &Default::default(), &mut History::new(), &|sha| {
+            crate::evidence::read(root, sha)
+        })
+        .map_err(|r| refused(r.0))?;
+        Ok(Some(piece))
     }
 }

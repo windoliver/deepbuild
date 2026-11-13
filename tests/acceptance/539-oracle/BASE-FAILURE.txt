@@ -1,0 +1,15 @@
+#539 Oracle lane at the base, 53c0e72a3 (Merge pull request #2356), on 2026-11-12, an arm64 Mac (Mac17,10, 18 cores,
+one-minute load about 160), deep-show built by the file (`cargo build --locked --bin deep-show`, toolchain from rustup)
+and #544's assembler into target/acceptance-539-wat:
+
+  PATH=/opt/homebrew/opt/rustup/bin:$PATH CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 NO_COLOR=1 \
+    scripts/lease npx vitest run tests/acceptance/539-oracle/focus-group.test.ts --testTimeout=600000
+
+Test Files 1 failed (1); Tests 4 failed (4). `npx tsc --noEmit -p tests/acceptance/539-oracle` exits 0. Every document
+was presented; every failure is an assertion on the focus, none a crash.
+
+focus-group.test.ts (4 failed)
+- Sequential navigation: Tab, Tab, Tab focus ["before", "group", "next"], not ["before", "strip#0,0", "next"]: the base
+  gives the control a stop of its own and its rows none; the arrows leave the focus on "group".
+- The grid's simple case, the grid with a non-focusable centre, and Home and End: every case's focus is "group" after
+  Tab and after each key, never a row (18 cases, each named in the failure).

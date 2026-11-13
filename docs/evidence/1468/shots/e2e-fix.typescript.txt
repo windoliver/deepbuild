@@ -1,0 +1,56 @@
+Script started on 2026-11-12 01:08:31-08:00 [COMMAND="bash ~/deepbuild/.claude/worktrees/determined-lewin-bc0143/docs/evidence/1468/shots.sh e2e" <not executed on terminal>]
+# 2026-11-12T09:08:31Z, Linux aarch64, 20 cores, load 2.63
+$ git rev-parse HEAD
+2d831aa2e705bd57db8e3df5b0e07f5317846dda
+[exit 0]
+$ git --no-pager log -1 --format=%s
+docs/evidence/1468/shots: the test move's wording names every change
+[exit 0]
+$ git status --short
+[exit 0]
+$ bash -c 'cargo build --locked -q -p deep-motion -p deep-show --bins 2>&1 | grep -E "^(warning|error)"; exit ${PIPESTATUS[0]}'
+warning: unused import: `std::cell::RefCell`
+warning: unused import: `std::rc::Rc`
+warning: unused import: `std::collections::BTreeMap`
+warning: unused import: `track_color`
+warning: unused variable: `key`
+warning: function `quality` is never used
+warning: constant `STARVED` is never used
+warning: function `hash_file` is never used
+warning: function `flatten` is never used
+warning: function `without_sei` is never used
+warning: function `planted_timescale` is never used
+warning: fields `bgra`, `matrix`, `range`, and `blocked` are never read
+warning: method `frame` is never used
+warning: unused import: `wgpu::util::DeviceExt`
+warning: constant `TARGET` is never used
+warning: constant `CHUNK` is never used
+warning: struct `Ring` is never constructed
+warning: associated items `new`, `free`, `push`, `pull`, and `counts` are never used
+[exit 0]
+$ bash -c 'cargo build --locked -q -p deep-marks-render --bin deep-canvas-render 2>&1 | grep -A3 "^error" | head -8; exit ${PIPESTATUS[0]}'
+error[E0004]: non-exhaustive patterns: `PrimitiveBatch::Chrome(_)` not covered
+    --> ~/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/gpui-pre-wgpu-0.3.9/src/wgpu_renderer.rs:1525:23
+     |
+1525 |                 match batch {
+--
+error: could not compile `gpui-pre-wgpu` (lib) due to 1 previous error
+[exit 101]
+$ sha256sum /tmp/tmp.ZZYbW8ElCx/deep-motion /tmp/tmp.ZZYbW8ElCx/deep-show
+adbe4e75233a9310f0fbbf9cfa15f3e36bde670812c5eb4d7f126ea49ad6ae77  /tmp/tmp.ZZYbW8ElCx/deep-motion
+db0f8cc6cbb4175d123ddb463f3909acb4fc29200c07f31d347e03ceef06fa10  /tmp/tmp.ZZYbW8ElCx/deep-show
+[exit 0]
+$ python3 -I ~/deepbuild/.claude/worktrees/determined-lewin-bc0143/docs/evidence/1468/e2e.py /tmp/tmp.ZZYbW8ElCx
+== driver: deep-motion eval
+reply 1 (1,000,000 parens): {"ok": false, "code": "bad_doc", "path": "drivers/deep/expr", "call": "((((((((((((((((((((((((((((((((((((((((…[a 2,000,001-char value, cut here by e2e.py]", "why": "nests past the cap of 64 levels"}
+reply 2 (1 paren): {"ok": true, "order": ["dot.driver", "dot.transform"], "frames": "[cut here by e2e.py]", "markers": {}, "cuts": [], "hash": "afdf36a4a303…"}
+exit 0
+== field: deep-canvas-render raster
+BLOCKED: deep-canvas-render isn't built here
+== pack rule: deep-show run install_pack
+reply 1 (1,000,000 parens): {"ok": true, "replies": [{"outcome": "refused", "pack": "test/deeprule", "version": "1.0.0", "issues": [{"check": "document.validate", "code": "out_of_range", "severity": "error", "ids": [], "path": "recipes/deeprule.probe@1/rules/0/expr", "actual": "{\"rule\":\"deeprule.holds\",\"call\":\"(((((((…[a 8,192-char value, cut here by e2e.py]", "what": "nests past the cap of 64 levels", "fix": "Give the field a value of its type inside its range."}], "layouts": [], "core": "core@0.0.0", "set_digest": "9ee47c18c9c5…"}]}
+reply 2 (1 paren): {"ok": true, "replies": [{"outcome": "installed", "pack": "test/shallowrule", "version": "1.0.0", "issues": [], "layouts": [], "core": "core@0.0.0", "set_digest": "9ee47c18c9c5…"}]}
+exit 0
+[exit 2]
+
+Script done on 2026-11-12 01:08:58-08:00 [COMMAND_EXIT_CODE="2"]
