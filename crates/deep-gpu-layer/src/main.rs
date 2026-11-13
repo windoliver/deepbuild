@@ -28,8 +28,8 @@ mod envelope;
 #[cfg(feature = "test-faults")]
 mod faults;
 mod fed;
-mod fix;
 mod film;
+mod fix;
 mod fixtures;
 mod flat;
 mod frames;

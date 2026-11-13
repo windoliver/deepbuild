@@ -78,7 +78,10 @@ pub(crate) fn tree(doc: &Value, hidden: &[String]) -> Vec<Value> {
                 "role": text(control.get("role")),
                 "name": text(control.get("label")),
             }));
-            for t in targets.iter().filter(|t| &t.control == id && draws.contains(&t.item)) {
+            for t in targets
+                .iter()
+                .filter(|t| &t.control == id && draws.contains(&t.item))
+            {
                 nodes.push(json!({"id": format!("{id}/{}", t.option), "role": "button", "name": t.label, "item": t.item}));
             }
         }
@@ -166,7 +169,9 @@ impl Hub<'_> {
                 continue;
             };
             let hidden = hidden_of(frame);
-            said.retain(|id, _| id.starts_with("card/") || revision.pointer(&format!("/items/{id}")).is_some());
+            said.retain(|id, _| {
+                id.starts_with("card/") || revision.pointer(&format!("/items/{id}")).is_some()
+            });
             // The readout as this frame shows it: its keyed values at the frame's time.
             let t = frame["t"].as_i64().unwrap_or(vsync);
             let shown = data_at(revision, program.as_ref(), t);

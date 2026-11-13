@@ -338,7 +338,12 @@ impl Plate<'_> {
                 // Neighbours at −X, +X, −Z and +Z; a skirt hangs from each shared edge by this
                 // tile's largest error and its neighbours', so no two levels leave a gap.
                 let sides = [i > 0, i + 1 < nx, j > 0, j + 1 < nz];
-                let near = [(i.wrapping_sub(1), j), (i + 1, j), (i, j.wrapping_sub(1)), (i, j + 1)];
+                let near = [
+                    (i.wrapping_sub(1), j),
+                    (i + 1, j),
+                    (i, j.wrapping_sub(1)),
+                    (i, j + 1),
+                ];
                 let around = sides
                     .iter()
                     .zip(near)
@@ -463,7 +468,10 @@ impl Plate<'_> {
             if !side || drop <= 0.0 {
                 continue;
             }
-            let low: Vec<u32> = edge.iter().map(|&(i, j)| take(&mut m, i, j, drop)).collect();
+            let low: Vec<u32> = edge
+                .iter()
+                .map(|&(i, j)| take(&mut m, i, j, drop))
+                .collect();
             for (k, w) in edge.windows(2).enumerate() {
                 let (a, b) = (at(w[0].0, w[0].1), at(w[1].0, w[1].1));
                 let (la, lb) = (low[k], low[k + 1]);

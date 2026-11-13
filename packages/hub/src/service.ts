@@ -6,7 +6,8 @@ import { mkdirSync, openSync, readFileSync, realpathSync, rmSync, writeFileSync 
 import net from 'node:net';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { hubAddress, installedPrograms, installedRoot, lastingNode, rootOf } from './paths.js';
+import { hubAddress, installedPrograms, installedRoot, lastingNode, rootOf, underTemp } from './paths.js';
+import { onPath } from './setup-steps.js';
 import { line } from './wire.js';
 
 const LABEL = 'com.deepbuild.hub';
@@ -161,6 +162,10 @@ function launch(file: string): string | undefined {
     return r.status === 0 ? undefined : `${launcher} exited ${r.status}: ${r.stderr}`;
   }
   if (process.platform === 'darwin') {
+    // A job outlives the run that loaded it and holds the one label every home shares, so a home under a temp folder
+    // (a test's, a throwaway run's) is never loaded into the real launchd (#2203). A launchctl that is itself under a
+    // temp folder is a test's stand-in, and loads as before.
+    if (underTemp(homedir()) && !underTemp(onPath('launchctl') ?? '')) return `a temp home gets no login service: ${homedir()} is under a temp folder, and its hub would hold ${LABEL}, the one label every home shares, after that folder is gone; run a dev hub there with deep hub start --root <folder>`;
     const domain = `gui/${process.getuid!()}`;
     const loaded = run('launchctl', ['bootstrap', domain, file]);
     if (loaded.status === 0) return undefined;

@@ -251,7 +251,9 @@ export type Plant =
   // #2043's: a parser pool that hears its workers' messages only, and one that replaces an ended worker but leaves its lines waiting.
   | 'parser-pool-messages-only' | 'parser-pool-leaves-line-waiting'
   // #1890's: a hub that keeps no background job's failure, so hub.health reads every job as not failing.
-  | 'drops-job-failure';
+  | 'drops-job-failure'
+  // #2197's: a deep_status that lists every session's open asks.
+  | 'status-lists-every-ask';
 const PLANTS: readonly string[] = [
   'statusline-user-settings-only', 'window-unknown-as-zero', 'window-carried-from-other-repo', 'sends-block-whole',
   'box-applies-at-once', 'box-ignores-revision',
@@ -352,6 +354,7 @@ const PLANTS: readonly string[] = [
   'set-up-line-says-nothing-blocks', 'set-up-line-to-stdout', 'silent-steps',
   'parser-pool-messages-only', 'parser-pool-leaves-line-waiting',
   'drops-job-failure',
+  'status-lists-every-ask',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {
   if (!value) return undefined;

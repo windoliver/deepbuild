@@ -477,7 +477,12 @@ impl Hub<'_> {
         let planted = self.scenario.planted;
         let now = self.now;
         match call {
-            GateCall::Open { panel, strips, media, piece } => {
+            GateCall::Open {
+                panel,
+                strips,
+                media,
+                piece,
+            } => {
                 if !self.scenario.panels.contains_key(panel) {
                     return refused("unknown_panel");
                 }
@@ -676,9 +681,11 @@ impl Hub<'_> {
                     "reserved": reserved().iter().map(|r| r.0).collect::<Vec<_>>(),
                 }})
             }
-            GateCall::Output { device: Some(device), from, to } => {
-                self.device_output(device, *from, *to)
-            }
+            GateCall::Output {
+                device: Some(device),
+                from,
+                to,
+            } => self.device_output(device, *from, *to),
             GateCall::Output { from, to, .. } => {
                 let (first, last) = (sample_at(*from), sample_at(*to));
                 let mut mix = vec![0f32; (last - first).max(0) as usize];

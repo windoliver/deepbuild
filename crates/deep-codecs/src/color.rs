@@ -405,7 +405,10 @@ mod tests {
         // Y = 16 + (47 · 255 + 128) >> 8 = 63; Cb = 128 + (−26 · 255 + 512) >> 10 = 122 (the
         // floor of −5.97); Cr = 128 + (112 · 255 + 512) >> 10 = 156.
         let red = [0u8, 0, 255, 255];
-        assert_eq!(frame([red, black, black, black]), [63, 16, 16, 16, 122, 156]);
+        assert_eq!(
+            frame([red, black, black, black]),
+            [63, 16, 16, 16, 122, 156]
+        );
     }
 
     /// #157: the probe's patches sit on 16-pixel edges, its bars are 75% and its ramps reach both

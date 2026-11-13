@@ -1,12 +1,11 @@
 
 import { readFileSync } from 'node:fs';
-import { parse as parseYaml } from 'yaml';
 import type { CheckResult } from '@deepbuild/conformance';
 import { canvasClaim, docCheckOf, docResult, revisionLine, shownResult, worst, type DocCheck, type DocSpec, type Revision } from './doc-checks.js';
 
 import { join } from 'node:path';
 
-import { type JsonValue } from '@deepbuild/contracts';
+import { isRecord as isObj, type JsonValue } from '@deepbuild/contracts';
 import { type Evidence, type EvidenceStore, type PutResult } from '@deepbuild/evidence';
 
 import { type Connection, type EventInput, type RecordStore } from '@deepbuild/record';
@@ -23,8 +22,8 @@ import { refuse, ulid } from './wire.js';
 
 import type { Session, CallContext } from './session-types.js';
 type Obj = Record<string, unknown>;
-const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 export interface HubCanvasOptions {
+  doneSpec(cwd: string): unknown;
   root: Root; now: () => number; plant: Plant | undefined;
   record: () => RecordStore; store: () => EvidenceStore; libraries: () => Libraries | undefined;
   sessions: () => ReadonlyMap<string, Session>;
@@ -298,8 +297,7 @@ export class HubCanvas {
 
   /** The document checks a worktree's spec names (#1723). */
   docChecksOf(worktree: string): Map<string, DocCheck> {
-    let spec: unknown;
-    try { spec = parseYaml(readFileSync(join(worktree, '.deepbuild', 'done.yaml'), 'utf8')); } catch { return new Map(); }
+    const spec = this.options.doneSpec(worktree);
     const checks = isObj(spec) && isObj(spec.checks) ? spec.checks : {};
     return new Map(Object.entries(checks).flatMap(([name, c]) => { const d = docCheckOf(c); return d ? [[name, d] as const] : []; }));
   }

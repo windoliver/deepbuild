@@ -46,7 +46,7 @@ import { TranscriptReader } from './transcript-reader.js';
 import { letters, ghToken, WAKE_GRACE, SHOWN_SOON, said, FOREIGN, placesItself, type Obj, isObj, asRefused, effectEntries, callOf, sendKey, PULL_LOOKUP_MS, OWN_TURN, continueText } from "./hub-shared.js";
 
 export interface AnswerDeliveryOptions {
-  settings: CoreOptions;
+  settings: CoreOptions & { forge: string };
   services: {
     readonly now: () => number;
     readonly asks: Asks;
@@ -461,27 +461,9 @@ export class AnswerDelivery {
     return isObj(continuation) && typeof continuation.cap === 'number' ? continuation.cap : CONTINUATION_CAP;
   }
 
-  /**
-   * The answers waiting for a session: answered asks of its thread (its ID and those `/clear`, `/compact` or a fork
-   * joined to it) not yet delivered, nor handed to its waiter and not yet seen in a turn; or, with `scope`, the
-   * answered asks it names.
-   */
-  async waitingFor(session: string, scope?: string): Promise<Answer[]> {
-    return this.answers.waitingFor(session, scope);
-  }
-
   /** The answers as the agent reads them, each naming its ask. */
   private answerText(rows: Answer[]): string {
     return answerText(rows, (ask) => this.switches.get(ask));
-  }
-
-  async outcome(ask: string, via: string, outcome: 'delivered' | 'stalled' | 'timed_out' | 'replaced' | 'waiting'): Promise<void> {
-    return this.answers.outcome(ask, via, outcome);
-  }
-
-  /** An answer to a Codex session that ended waits on its task, and only the same thread's resume hears it (#39). */
-  private async waitsOnTask(delivery: Delivery): Promise<void> {
-    await this.answers.waitsOnTask(delivery);
   }
 
   /**
@@ -493,7 +475,7 @@ export class AnswerDelivery {
     if (!rows.length) return undefined;
     // The planted wrong program records the answer delivered as the hub writes its reply.
     if (!hook || this.options.settings.plant === 'delivered-when-written') {
-      for (const row of rows) await this.outcome(row.id, via, 'delivered');
+      for (const row of rows) await this.answers.outcome(row.id, via, 'delivered');
       return this.answerText(rows);
     }
     // The planted wrong program keeps no answer in flight, so each later route sends it again without reading the session.
@@ -502,13 +484,13 @@ export class AnswerDelivery {
     // delivered as written, and one deep-hook had already given up on reads stalled and goes by the next route.
     if (this.options.state().sessions.get(hook.session)?.agent === 'codex') {
       const outcome = this.options.schedule.abandoned.has(hook.id) ? 'stalled' : 'delivered';
-      for (const row of rows) await this.outcome(row.id, via, outcome);
+      for (const row of rows) await this.answers.outcome(row.id, via, outcome);
       return outcome === 'delivered' ? this.answerText(rows) : undefined;
     }
     const shown = await this.shown(hook.session, rows.map((row) => said(row.id)));
     const fresh: Answer[] = [];
     for (const row of rows) {
-      if (shown?.has(said(row.id))) await this.outcome(row.id, via, 'delivered');
+      if (shown?.has(said(row.id))) await this.answers.outcome(row.id, via, 'delivered');
       else fresh.push(row);
     }
     if (!fresh.length) return undefined;
@@ -525,7 +507,7 @@ export class AnswerDelivery {
   async heardBy(ask: string): Promise<void> {
     const id = ask.replace(/^ask:/, '');
     if (this.handed.has(id) || (await this.options.services.record.raw(`SELECT 1 FROM deliveries WHERE delivery = ? AND outcome = 'delivered' LIMIT 1`, [id])).length) return;
-    await this.outcome(id, 'next_prompt', 'delivered');
+    await this.answers.outcome(id, 'next_prompt', 'delivered');
   }
 
   /** Answers still in flight that a turn now shows: delivered; the rest stay in flight (#906). */
@@ -535,7 +517,7 @@ export class AnswerDelivery {
       if (!handed || !await this.woken(handed.session, said(ask))) continue;
       clearTimeout(handed.timer);
       this.handed.delete(ask);
-      await this.outcome(ask, handed.via === 'wake' ? 'next_prompt' : handed.via, 'delivered');
+      await this.answers.outcome(ask, handed.via === 'wake' ? 'next_prompt' : handed.via, 'delivered');
     }
   }
 
@@ -553,7 +535,7 @@ export class AnswerDelivery {
     this.options.services.tasks.answered(delivery);
     this.options.services.acceptance?.answered(delivery);
     this.options.judging().delivery(delivery);
-    void this.waitsOnTask(delivery).catch(() => undefined);
+    void this.answers.waitsOnTask(delivery).catch(() => undefined);
     const asker = this.options.state().sessions.get(delivery.session);
     if (placesItself(asker?.agent) || this.routes.get(delivery.session)?.places) return void this.options.schedule.queue(() => this.placeOrRefuse(delivery.session)).catch(() => undefined);
     // Inside paseo, with neither deep-hook's waiter nor paseo's plugin there to take it, the answer waits on the row (#55).
@@ -597,7 +579,7 @@ export class AnswerDelivery {
         await this.options.events.appendReading(session, agent, 'The promised check\'s wake-up is handed to this session\'s waiter.').catch(() => undefined);
         return this.handPromise(session, p, r);
       }
-      const rows = await this.waitingFor(session);
+      const rows = await this.answers.waitingFor(session);
       const notes = this.notes.get(session) ?? [];
       if (!rows.length && !notes.length && !r.later.length) return;
       if (this.options.settings.plant === 'waiter-checks-every-5s') {
@@ -618,7 +600,7 @@ export class AnswerDelivery {
         this.handedNotes.set(note.request, { ...note, timer: setTimeout(() => void this.options.schedule.queue(async () => this.notWoken(note.request)).catch(() => undefined), WAKE_GRACE) });
       }
       if (this.options.settings.plant === 'delivered-on-waiter-exit' || this.options.settings.plant === 'wake-assumed' || this.options.settings.plant === 'delivered-to-dead-waiter') {
-        for (const row of rows) await this.outcome(row.id, 'next_prompt', 'delivered');
+        for (const row of rows) await this.answers.outcome(row.id, 'next_prompt', 'delivered');
         return;
       }
       // Delivered only once a turn shows it: the wake's prompt carries it, or the transcript does.
@@ -630,7 +612,7 @@ export class AnswerDelivery {
   /** The answers waiting for a session deep-hook gates inside paseo, handed to paseo's plugin, which prompts it once it reads idle. */
   private async relayAnswers(session: string, r: Routes): Promise<void> {
     const relay = r.relay;
-    const rows = (await this.waitingFor(session)).filter((row) => !this.handed.has(row.id));
+    const rows = (await this.answers.waitingFor(session)).filter((row) => !this.handed.has(row.id));
     if (!relay || !rows.length) return;
     r.relay = undefined;
     this.answerWaiting.delete(session);
@@ -759,7 +741,7 @@ export class AnswerDelivery {
       const [row] = (await this.options.services.record.raw(`SELECT branch FROM sessions WHERE id = ?`, [meta.session])) as { branch: string | null }[];
       const branch = row?.branch || await new Promise<string | undefined>((done) => execFile('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: meta.cwd, timeout: 2000 }, (error, out) => done(error ? undefined : out.trim())));
       if (!repo || !branch) return undefined;
-      const forge = new Forge(this.options.settings.forge ?? 'https://api.github.com', process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN ?? await ghToken());
+      const forge = new Forge(this.options.settings.forge, process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN ?? await ghToken());
       return forge.pullFor(repo, branch);
     };
     // Well inside the gate's hold, so the reply is never late for this: past it the result is unknown.
@@ -817,14 +799,14 @@ export class AnswerDelivery {
     if (woken) {
       const r = this.routes.get(session);
       if (r && wake) r.wakes = true;
-      return this.outcome(ask, via, 'delivered');
+      return this.answers.outcome(ask, via, 'delivered');
     }
     // A session that can't be read proves nothing either way (#27): timed out, and the next prompt reads it first.
     if (woken === undefined) {
       this.unread.set(ask, session);
-      return this.outcome(ask, via, 'timed_out');
+      return this.answers.outcome(ask, via, 'timed_out');
     }
-    await this.outcome(ask, via, 'stalled');
+    await this.answers.outcome(ask, via, 'stalled');
     if (!wake) {
       await this.options.events.appendReading(session, this.options.state().sessions.get(session)?.agent ?? 'claude-code', `DeepBuild's ${via === 'stop_hold' ? 'stop' : 'prompt'} reply carrying your answer to ask:${ask} didn't reach the agent: deep-hook had given up on it. The answer goes by the session's next route.`).catch(() => undefined);
       return;
@@ -844,7 +826,7 @@ export class AnswerDelivery {
       if (handed.session !== session) continue;
       clearTimeout(handed.timer);
       this.handed.delete(ask);
-      await this.outcome(ask, handed.via === 'stop_hold' ? 'stop_hold' : 'next_prompt', 'replaced');
+      await this.answers.outcome(ask, handed.via === 'stop_hold' ? 'stop_hold' : 'next_prompt', 'replaced');
     }
   }
 
@@ -910,9 +892,9 @@ export class AnswerDelivery {
     }
     if (params.poll === true) {
       // The planted Node waiter (waiter-polls) asks each time instead of being told.
-      const rows = !r.holding ? await this.options.schedule.queue(() => this.waitingFor(session)) : [];
+      const rows = !r.holding ? await this.options.schedule.queue(() => this.answers.waitingFor(session)) : [];
       if (!rows.length) return {};
-      for (const row of rows) await this.outcome(row.id, 'next_prompt', 'delivered');
+      for (const row of rows) await this.answers.outcome(row.id, 'next_prompt', 'delivered');
       return { session, text: this.answerText(rows) };
     }
     return new Promise((give) => {
@@ -946,12 +928,12 @@ export class AnswerDelivery {
     // A refusal is final: a session resumed later doesn't take what was refused for it.
     const refused = (await this.options.services.record.raw(`SELECT delivery FROM deliveries WHERE outcome = 'replaced'`)) as { delivery: string }[];
     // Its own: a fork shares its thread, and only the session that asked takes an answer or reports on it.
-    const rows = (await this.waitingFor(session)).filter((row) => row.session === session && !this.askWaits.has(row.id) && !refused.some((d) => d.delivery === row.id));
+    const rows = (await this.answers.waitingFor(session)).filter((row) => row.session === session && !this.askWaits.has(row.id) && !refused.some((d) => d.delivery === row.id));
     if (!rows.length) return;
     const successor = await this.replacedBy(session);
     const r = this.routes.get(successor && piAcceptsReplaced() ? successor : session);
     if (successor && !piAcceptsReplaced()) {
-      for (const row of rows) await this.outcome(row.id, 'next_prompt', 'replaced');
+      for (const row of rows) await this.answers.outcome(row.id, 'next_prompt', 'replaced');
       return;
     }
     if (!r?.places || !r.waiter) return;
@@ -984,7 +966,7 @@ export class AnswerDelivery {
       this.askWaits.delete(ask);
       const [done] = (await this.options.services.record.raw(`SELECT 1 AS yes FROM deliveries WHERE delivery = ? AND outcome IN ('delivered', 'replaced')`, [ask])) as unknown[];
       if (done) continue;
-      await this.outcome(ask, via as 'steer' | 'next_prompt', outcome as 'delivered' | 'replaced');
+      await this.answers.outcome(ask, via as 'steer' | 'next_prompt', outcome as 'delivered' | 'replaced');
     }
     return { reported: asks.length };
   }
