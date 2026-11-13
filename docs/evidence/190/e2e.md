@@ -110,17 +110,18 @@ wording is the issue's (its Acceptance criteria), not repeated here.
 - 4: the app-vs-headless-Chrome fixture test (ac04's second) passes in the acceptance suite
   (`acceptance-linux-9a02471b6.txt`). That test compares only the fixture's `deep_hashes`, the state before step 0, which the honest and the
   corner-cutting libraries share; the page's item-hash, route and moves comparison is what tells them apart, so the
-  browser half of 4 rests on the page too. The merged programs on macOS arm64 and Linux x86_64 are BLOCKED here
-  (ac04's first test). Its unblock ask: run ac04's first test on the reference Mac (the whole file also needs Chrome there, or `CHROME_BIN`,
-  for its second test) with Docker, the linux/amd64 image pulled
-  (`docker pull --platform linux/amd64 rust:1.99.1-slim-bookworm`) and amd64 emulation on (`helpers.ts`'
-  `linuxLogic` blocks on each). It hasn't run yet. So 4 is not proven.
+  browser half of 4 rests on the page too. The merged programs on macOS arm64 and Linux x86_64 are BLOCKED on this
+  host (ac04's first test) and proven on the Mac: at f55dc2e5a (this branch merged with main, 1c54f26d6) the whole
+  file ran there, on macOS 14.7.7 arm64 with Docker Desktop 4.65.0 and the linux/amd64 image pulled
+  (`mac/docker-pull.txt`), and both tests pass (`mac/ac04-f55dc2e5a.txt`, vitest exit 0): the two pieces' merged
+  programs byte for byte the same on the two machines, and the fixtures' hashes the same in the app and headless
+  Chrome there. The log's header carries the head, the merge base, `uname -a` and `docker version`; its host name is
+  redacted. The Mac was on battery, which no check of this file times. So 4 is proven.
 - 5: `swarm`'s fuel trap at step 0 names grid_path@1, its hash and `find_route` (line 7). The same offset on a second
-  machine is BLOCKED (ac05 in `acceptance-linux-9a02471b6.txt`): its
-  second machine is a linux/amd64 container, and its unblock ask has two steps: the image, `docker pull --platform
-  linux/amd64 rust:1.99.1-slim-bookworm`, which the suite doesn't pull; then amd64 emulation (binfmt), which this
-  host doesn't have registered (`/proc/sys/fs/binfmt_misc` lists only python3.12), or, after the same pull, the reference Mac's Docker. (helpers.ts's
-  message also offers an x86_64 host, but ac05 then fails its check that the two machines differ in CPU architecture.) So 5 is not proven.
+  machine is BLOCKED on this host (ac05 in `acceptance-linux-9a02471b6.txt`: no linux/amd64 emulation here, and an
+  x86_64 host fails ac05's check that the two machines differ in CPU architecture) and proven on the Mac: at
+  f55dc2e5a ac05 passes there (`mac/ac05-f55dc2e5a.txt`, vitest exit 0), its second machine the linux/amd64
+  container under the Mac's Docker, same header and redaction as ac04's log. So 5 is proven.
 - 6: INCONCLUSIVE with one approval ask from the agent's own pack, PASS from an installed one (lines 8, 9), and ac06's test, which holds both,
   passes (`acceptance-linux-9a02471b6.txt`).
 - 7: `plain` isn't linked (line 4) and the planted twin changes its hash (above). The same hash, bake key and goldens as
@@ -603,3 +604,9 @@ raw files, `gen.test.ts`, the code and the issue. It also ran its own BFS over t
   gaps, fixed here: the two import mutants' headers say the oracle folder was copied into the clone; the INCONCLUSIVE
   reading cites the oracle-tests README's tool-and-runner rule; and the parent README's old access ask is marked
   superseded.
+- **Mac run at f55dc2e5a** (2026-11-13, the owner's go at the Mac, ordered through the Mac runner): ac04 (2 tests) and
+  ac05 (1) pass on macOS 14.7.7 arm64; the logs are `mac/ac04-f55dc2e5a.txt` and `mac/ac05-f55dc2e5a.txt`, read
+  here before this bullet was written. f55dc2e5a is 487190352 merged with main (1c54f26d6); the merge's one conflict
+  was the sandbox crate's module list. Criterion 10 (ac10) and ac07's rerun on the Mac are still open: the Mac
+  rebooted onto macOS 27.2.1 before they ran, so their logs will name a different OS version than these two. On this
+  host ac07 fails against the stale local `main` (04f44a4ba) and passes in a clone whose `main` is 1c54f26d6.
