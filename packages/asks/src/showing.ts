@@ -36,7 +36,7 @@ export class Showing {
    * to wait for the only other time to show it is its deadline. Batches are your visits, one schedule across every
    * repo, so a repo's done.yaml doesn't change them.
    */
-  private batches(): Batches | undefined {
+  batches(): Batches | undefined {
     const batch = this.options.settings().batch;
     const every = isObj(batch) ? duration(batch.every) : undefined;
     return every && isObj(batch) && typeof batch.cap === 'number' ? { every, cap: batch.cap } : undefined;

@@ -745,7 +745,7 @@ class AsksCore implements Asks {
 
   nextBatch(): Promise<number | null> {
     return this.exclusive(async () => {
-      const batches = this.batches();
+      const batches = this.showing.batches();
       return batches ? (Math.floor(this.options.now() / batches.every) + 1) * batches.every : null;
     });
   }
