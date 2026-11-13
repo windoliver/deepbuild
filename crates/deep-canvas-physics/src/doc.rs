@@ -287,8 +287,8 @@ pub struct World {
 mod heightfield;
 mod inputs;
 mod reads;
-pub use inputs::{derived, Declared};
 pub use heightfield::HEIGHTFIELD_SAMPLES;
+pub use inputs::{derived, Declared};
 pub use reads::{probe_pose, probe_shape, Output, Read, Solve, READS};
 
 /// The world document's own fields; `kind` names it.

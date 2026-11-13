@@ -138,7 +138,9 @@ pub fn parse(v: Option<&Value>) -> Option<Option<Backend>> {
         .collect::<Option<_>>()?;
     let default = match v.get("default") {
         None | Some(Value::Null) => None,
-        Some(d) => Some(d.as_str()?.to_string()).filter(|d| devices.iter().any(|x| &x.spec.id == d)),
+        Some(d) => {
+            Some(d.as_str()?.to_string()).filter(|d| devices.iter().any(|x| &x.spec.id == d))
+        }
     };
     Some(Some(Backend { devices, default }))
 }
@@ -281,13 +283,25 @@ fn sound_from(mix: &Mix) -> i64 {
 }
 
 impl AudioPlay {
-    pub fn new(mix: Arc<Mix>, piece: Option<Rc<Piece>>, play_host: i64, grid: Grid) -> Result<AudioPlay, Value> {
+    pub fn new(
+        mix: Arc<Mix>,
+        piece: Option<Rc<Piece>>,
+        play_host: i64,
+        grid: Grid,
+    ) -> Result<AudioPlay, Value> {
         let rate = mix.rate;
         let from = sound_from(&mix);
         let logic = match piece {
             Some(piece) => {
                 let mut rec = Record::default();
-                let world = World::new(piece.clone(), track_of(&[]), true, Default::default(), &mut rec, None)?;
+                let world = World::new(
+                    piece.clone(),
+                    track_of(&[]),
+                    true,
+                    Default::default(),
+                    &mut rec,
+                    None,
+                )?;
                 Some(Logic { piece, world, rec })
             }
             None => None,
@@ -389,7 +403,8 @@ impl AudioPlay {
                 let d = b.device(&s.device)?;
                 let k = s.k0 + s.next * d.spec.buffer;
                 let pull = d.play_at(k) - (d.spec.latency + d.spec.buffer) * d.sample();
-                let gone = d.removed.is_some_and(|r| r <= pull) || s.closed.is_some_and(|c| c <= pull);
+                let gone =
+                    d.removed.is_some_and(|r| r <= pull) || s.closed.is_some_and(|c| c <= pull);
                 (!gone).then_some(pull)
             });
             match cb {
@@ -418,7 +433,11 @@ impl AudioPlay {
         if s.d0.is_none() {
             // The stream's first sample takes the t the display clock gives the host time it
             // plays at, so t never jumps; the planted clock restarts from 0 on a new device.
-            let t = if restart { 0 } else { self.t_ref + (reported - self.h_ref) };
+            let t = if restart {
+                0
+            } else {
+                self.t_ref + (reported - self.h_ref)
+            };
             let d0 = t.div_euclid(sample) + i64::from(t.rem_euclid(sample) * 2 >= sample);
             s.d0 = Some(d0);
             self.player.seek(d0);
@@ -478,7 +497,9 @@ impl AudioPlay {
         let sample = FLICKS / self.rate;
         let moved = |t: i64| match planted {
             Some(Planted::Ahead(Ahead::VoiceAtFrame)) => Some(self.frame_after(t)),
-            Some(Planted::Ahead(Ahead::LateStepMovesVoice)) => (t < first * sample).then_some(first * sample),
+            Some(Planted::Ahead(Ahead::LateStepMovesVoice)) => {
+                (t < first * sample).then_some(first * sample)
+            }
             _ => None,
         };
         if let Some(strips) = worlds.added(moved) {
@@ -488,7 +509,10 @@ impl AudioPlay {
 
     /// The silence played before stream position `p`, in samples.
     fn silence_before(&self, p: f64) -> f64 {
-        self.silent.iter().map(|&(s, n)| (p - s as f64).clamp(0.0, n as f64)).sum()
+        self.silent
+            .iter()
+            .map(|&(s, n)| (p - s as f64).clamp(0.0, n as f64))
+            .sum()
     }
 
     /// The t the audio clock gives host time `h`: the document position of the sample the
@@ -504,7 +528,10 @@ impl AudioPlay {
     /// (`voice_at_frame`'s and `entry_stamped_at_frame`'s reading).
     fn frame_after(&self, t: i64) -> i64 {
         let sample = FLICKS / self.rate;
-        let host = self.stream.as_ref().and_then(|s| s.pairing.host_of(t.div_euclid(sample) - s.d0?));
+        let host = self
+            .stream
+            .as_ref()
+            .and_then(|s| s.pairing.host_of(t.div_euclid(sample) - s.d0?));
         host.map_or(t, |h| self.frame_at(h))
     }
 
@@ -542,7 +569,8 @@ impl AudioPlay {
         let mut led = ("display", None);
         if let Some(s) = &self.stream {
             if let (Some(d0), Some(p)) = (s.d0, s.pairing.position(at)) {
-                let heard = ((d0 as f64 + p - self.silence_before(p)) * sample as f64).round() as i64;
+                let heard =
+                    ((d0 as f64 + p - self.silence_before(p)) * sample as f64).round() as i64;
                 if !self.audio && p >= 0.0 && heard >= self.sound_from {
                     self.audio = true;
                 }
@@ -562,7 +590,11 @@ impl AudioPlay {
             }
         }
         if let Some(l) = &mut self.logic {
-            let owed = if t < 0 { 0 } else { t.div_euclid(l.piece.items.first().map_or(FLICKS, |i| i.step.max(1))) + 1 };
+            let owed = if t < 0 {
+                0
+            } else {
+                t.div_euclid(l.piece.items.first().map_or(FLICKS, |i| i.step.max(1))) + 1
+            };
             let ids: Vec<String> = l.piece.items.iter().map(|i| i.id.clone()).collect();
             let steps = &mut self.steps;
             l.world.run(owed, &mut l.rec, &mut |_, k| {
@@ -581,7 +613,12 @@ impl AudioPlay {
                 self.worlds = Some(w);
             }
         }
-        self.frames.push(Frame { at, t, master: led.0, device: led.1 });
+        self.frames.push(Frame {
+            at,
+            t,
+            master: led.0,
+            device: led.1,
+        });
     }
 }
 
@@ -606,16 +643,31 @@ impl Hub<'_> {
     }
 
     /// Starts `panel`'s live play under the test backend: Play granted it.
-    pub(crate) fn start_audio(&mut self, panel: &str, mix: Arc<Mix>, piece: Option<Value>, doc: Option<Value>) -> Result<AudioPlay, Value> {
+    pub(crate) fn start_audio(
+        &mut self,
+        panel: &str,
+        mix: Arc<Mix>,
+        piece: Option<Value>,
+        doc: Option<Value>,
+    ) -> Result<AudioPlay, Value> {
         let grid = self
             .placement
             .pacing(panel)
             .map(|(_, d)| d.grid())
-            .or_else(|| self.scenario.clock.and_then(|c| c.refresh_hz).map(|hz| Grid { next_vsync: FLICKS / hz, period: FLICKS / hz }))
+            .or_else(|| {
+                self.scenario
+                    .clock
+                    .and_then(|c| c.refresh_hz)
+                    .map(|hz| Grid {
+                        next_vsync: FLICKS / hz,
+                        period: FLICKS / hz,
+                    })
+            })
             .ok_or_else(|| refused("no_display"))?;
         let piece = match piece {
             Some(p) => Some(Rc::new(
-                deep_logic::piece::check(&p, &Default::default(), &mut History::new()).map_err(|r| r.0)?,
+                deep_logic::piece::check(&p, &Default::default(), &mut History::new())
+                    .map_err(|r| r.0)?,
             )),
             None => None,
         };
@@ -623,7 +675,10 @@ impl Hub<'_> {
         let mut play = AudioPlay::new(mix, piece, self.now, grid)?;
         // #525: a media document's worlds play live, stepped ahead of the blocks.
         if let Some(d) = doc {
-            let (sources, planted) = (self.gate.sources.clone(), self.scenario.module_planted.clone());
+            let (sources, planted) = (
+                self.gate.sources.clone(),
+                self.scenario.module_planted.clone(),
+            );
             play.worlds = Worlds::new(&d, sources, master, planted, self.scenario.delays.clone())?;
         }
         if let Some(b) = self.backend() {
@@ -640,20 +695,36 @@ impl Hub<'_> {
         let now = self.now;
         let planted = self.scenario.planted;
         match call {
-            AudioCall::Device { add, default, remove } => {
+            AudioCall::Device {
+                add,
+                default,
+                remove,
+            } => {
                 self.backend();
                 let Some(b) = self.gate.backend.as_mut() else {
                     return refused("no_audio_backend");
                 };
                 if let Some(spec) = add {
                     b.devices.retain(|d| d.spec.id != spec.id);
-                    b.devices.push(Device { spec: spec.clone(), connected: now, removed: None });
+                    b.devices.push(Device {
+                        spec: spec.clone(),
+                        connected: now,
+                        removed: None,
+                    });
                 }
                 if let Some(d) = default {
-                    b.default = d.clone().filter(|d| b.devices.iter().any(|x| &x.spec.id == d && x.removed.is_none()));
+                    b.default = d.clone().filter(|d| {
+                        b.devices
+                            .iter()
+                            .any(|x| &x.spec.id == d && x.removed.is_none())
+                    });
                 }
                 if let Some(r) = remove {
-                    for d in b.devices.iter_mut().filter(|d| &d.spec.id == r && d.removed.is_none()) {
+                    for d in b
+                        .devices
+                        .iter_mut()
+                        .filter(|d| &d.spec.id == r && d.removed.is_none())
+                    {
                         d.removed = Some(now);
                     }
                     if b.default.as_deref() == Some(r.as_str()) {
@@ -719,9 +790,16 @@ impl Hub<'_> {
                 let Some(l) = self.gate.audio_play(panel).and_then(|p| p.logic.as_ref()) else {
                     return refused("not_playing");
                 };
-                let deep = l.rec.checkpoints.get(item).and_then(Value::as_array).and_then(|c| {
-                    c.iter().find(|c| c["step"].as_i64() == Some(*step)).map(|c| c["deep_hash"].clone())
-                });
+                let deep = l
+                    .rec
+                    .checkpoints
+                    .get(item)
+                    .and_then(Value::as_array)
+                    .and_then(|c| {
+                        c.iter()
+                            .find(|c| c["step"].as_i64() == Some(*step))
+                            .map(|c| c["deep_hash"].clone())
+                    });
                 let Some(deep) = deep else {
                     return refused("not_reached");
                 };
@@ -767,8 +845,10 @@ impl Hub<'_> {
             }
         }
         match evidence::put(&self.scenario.evidence, &float_wav(&pcm, 2, d.spec.rate)) {
-            Ok(sha) => json!({"output": {"device": device, "sample_rate": d.spec.rate, "channels": 2,
-                "first": first, "frames": n, "sha256": sha}}),
+            Ok(sha) => {
+                json!({"output": {"device": device, "sample_rate": d.spec.rate, "channels": 2,
+                "first": first, "frames": n, "sha256": sha}})
+            }
             Err(_) => refused("store_failed"),
         }
     }
@@ -779,12 +859,24 @@ impl Hub<'_> {
         self.advance_audio();
         let b = self.backend()?;
         let p = self.gate.audio_play(panel)?;
-        let state = if p.running(&b) { "running" } else { "interrupted" };
-        let notice = p.notice.as_ref().map_or(Value::Null, |(c, d)| json!({"code": c, "device": d}));
+        let state = if p.running(&b) {
+            "running"
+        } else {
+            "interrupted"
+        };
+        let notice = p
+            .notice
+            .as_ref()
+            .map_or(Value::Null, |(c, d)| json!({"code": c, "device": d}));
         let sample = FLICKS / p.rate;
-        let latency = p.stream.as_ref().and_then(|s| b.device(&s.device)).map_or(0, |d| d.spec.latency * sample);
+        let latency = p
+            .stream
+            .as_ref()
+            .and_then(|s| b.device(&s.device))
+            .map_or(0, |d| d.spec.latency * sample);
         let silent: i64 = p.silent.iter().map(|s| s.1).sum();
-        let stats = json!({"underruns": p.underruns, "underrun_time": silent * sample, "latency": latency});
+        let stats =
+            json!({"underruns": p.underruns, "underrun_time": silent * sample, "latency": latency});
         Some((state, notice, stats))
     }
 
@@ -794,17 +886,26 @@ impl Hub<'_> {
         self.advance_audio();
         let p = self.gate.audio_play(panel).filter(|p| p.worlds.is_some())?;
         let d0 = p.stream.as_ref().and_then(|s| s.d0)?;
-        let (first, last) = (crate::mixdown::sample_at(from, p.rate), crate::mixdown::sample_at(to, p.rate));
+        let (first, last) = (
+            crate::mixdown::sample_at(from, p.rate),
+            crate::mixdown::sample_at(to, p.rate),
+        );
         let rendered = (p.handed.len() / 2) as i64;
         if first < d0 || last > d0 + rendered || last < first {
             return Some(json!({"code": "not_handed", "handed": [d0, d0 + rendered]}));
         }
         let pcm = &p.handed[2 * (first - d0) as usize..2 * (last - d0) as usize];
-        let sha = crate::evidence::sha256_hex(&pcm.iter().flat_map(|x| x.to_le_bytes()).collect::<Vec<u8>>());
+        let sha = crate::evidence::sha256_hex(
+            &pcm.iter()
+                .flat_map(|x| x.to_le_bytes())
+                .collect::<Vec<u8>>(),
+        );
         let rate = p.rate;
         let wav = float_wav(pcm, 2, rate);
         Some(match evidence::put(&self.scenario.evidence, &wav) {
-            Ok(w) => json!({"handed": {"sample_rate": rate, "channels": 2, "first": first, "frames": last - first, "sha256": sha, "wav": w}}),
+            Ok(w) => {
+                json!({"handed": {"sample_rate": rate, "channels": 2, "first": first, "frames": last - first, "sha256": sha, "wav": w}})
+            }
             Err(_) => refused("store_failed"),
         })
     }
@@ -812,23 +913,48 @@ impl Hub<'_> {
     /// #525: your press of a control in a panel playing a live media document: one entry on the
     /// play's input track, stamped by the Input track's rule (`t` the event's own time), which
     /// starts each `start_on` strip it matches and derives the worlds' inputs from then on.
-    pub(crate) fn live_press(&mut self, panel: &str, event: &deep_canvas::scope::Event, t: Option<i64>) -> Result<(), Value> {
-        let deep_canvas::scope::Event::Control { control, value } = event else { return Ok(()) };
-        if self.gate.audio_play(panel).is_none_or(|p| p.worlds.is_none()) {
+    pub(crate) fn live_press(
+        &mut self,
+        panel: &str,
+        event: &deep_canvas::scope::Event,
+        t: Option<i64>,
+    ) -> Result<(), Value> {
+        let deep_canvas::scope::Event::Control { control, value } = event else {
+            return Ok(());
+        };
+        if self
+            .gate
+            .audio_play(panel)
+            .is_none_or(|p| p.worlds.is_none())
+        {
             return Ok(());
         }
         self.advance_audio();
         let (now, b) = (self.now, self.backend());
         let at_frame = self.scenario.planted == Some(Planted::Ahead(Ahead::EntryStampedAtFrame));
-        let (Some(b), Some(p)) = (b, self.gate.audio_play_mut(panel)) else { return Ok(()) };
+        let (Some(b), Some(p)) = (b, self.gate.audio_play_mut(panel)) else {
+            return Ok(());
+        };
         let stamp = p.stamp(&b, t.unwrap_or(now), now, at_frame);
-        let Some(w) = p.worlds.as_mut() else { return Ok(()) };
+        let Some(w) = p.worlds.as_mut() else {
+            return Ok(());
+        };
         let seq = w.track.len();
-        w.track.push(json!({"t": stamp, "seq": seq, "control": control, "value": value, "writer": "you"}));
+        w.track.push(
+            json!({"t": stamp, "seq": seq, "control": control, "value": value, "writer": "you"}),
+        );
         let played = w.played();
         let mut mix = self.mix_of(&played)?;
-        let runs = mix.strips.drain(..).filter(|s| s.id.contains('#')).collect();
-        if let Some(w) = self.gate.audio_play_mut(panel).and_then(|p| p.worlds.as_mut()) {
+        let runs = mix
+            .strips
+            .drain(..)
+            .filter(|s| s.id.contains('#'))
+            .collect();
+        if let Some(w) = self
+            .gate
+            .audio_play_mut(panel)
+            .and_then(|p| p.worlds.as_mut())
+        {
             w.set_runs(runs);
         }
         Ok(())

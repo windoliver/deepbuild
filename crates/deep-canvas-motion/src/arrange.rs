@@ -784,7 +784,12 @@ impl Search<'_> {
                         rb.c[1] + n[1] * (off + s + g) + t[1] * tau,
                     ];
                     let d = sub(c, ra.c);
-                    out.push([body.pos[0] + d[0], body.pos[1], body.pos[2] + d[1], body.yaw]);
+                    out.push([
+                        body.pos[0] + d[0],
+                        body.pos[1],
+                        body.pos[2] + d[1],
+                        body.yaw,
+                    ]);
                 }
             }
         }
@@ -1095,7 +1100,9 @@ impl Arranged {
             let Some(item) = items.get_mut(id).and_then(Value::as_object_mut) else {
                 continue;
             };
-            let at = item.entry("at").or_insert_with(|| Value::Object(Default::default()));
+            let at = item
+                .entry("at")
+                .or_insert_with(|| Value::Object(Default::default()));
             if let Some(at) = at.as_object_mut() {
                 at.insert("pos".into(), serde_json::json!(pos));
                 at.insert("rot".into(), serde_json::json!(rot));
@@ -1226,7 +1233,11 @@ pub fn audit(doc: &Value, at_of: &dyn Fn(&str, &Value) -> At) -> Vec<Value> {
         let item = items?.get(id)?;
         let mut params = item.get("params")?.clone();
         params.as_object_mut()?.remove("paint");
-        Some((item.get("kind")?.clone(), params, item.pointer("/at/scale").cloned()))
+        Some((
+            item.get("kind")?.clone(),
+            params,
+            item.pointer("/at/scale").cloned(),
+        ))
     };
     let mut twins = Vec::new();
     for i in 0..bodies.len() {
@@ -1286,9 +1297,7 @@ mod tests {
 
     /// A floor, a 1 m table at the origin and a 0.4 m stool at `stool`, the stool arranged by `rel`.
     fn room(stool: [f64; 3], rel: Value) -> Value {
-        let item = |size: [f64; 3], pos: [f64; 3]| {
-            json!({"kind": "mark.box@1", "params": {"size": size}, "at": {"pos": pos}})
-        };
+        let item = |size: [f64; 3], pos: [f64; 3]| json!({"kind": "mark.box@1", "params": {"size": size}, "at": {"pos": pos}});
         json!({"items": {
             "floor": item([10.0, 0.1, 10.0], [0.0, -0.05, 0.0]),
             "table": item([1.0, 0.75, 1.0], [0.0, 0.375, 0.0]),
@@ -1314,16 +1323,28 @@ mod tests {
 
     #[test]
     fn near_brings_a_far_item_within_its_distance() {
-        let doc = room([3.0, 0.25, 0.0], json!({"a": "stool", "rel": "near", "b": "table", "d": 0.5}));
+        let doc = room(
+            [3.0, 0.25, 0.0],
+            json!({"a": "stool", "rel": "near", "b": "table", "d": 0.5}),
+        );
         let g = gap(&doc);
-        assert!((-0.001..=0.501).contains(&g), "the stool stands within 0.5 m of the table, not in it: {g}");
+        assert!(
+            (-0.001..=0.501).contains(&g),
+            "the stool stands within 0.5 m of the table, not in it: {g}"
+        );
     }
 
     #[test]
     fn apart_moves_a_touching_item_at_least_its_distance_away() {
-        let doc = room([0.7, 0.25, 0.0], json!({"a": "stool", "rel": "apart", "b": "table", "d": 1.0}));
+        let doc = room(
+            [0.7, 0.25, 0.0],
+            json!({"a": "stool", "rel": "apart", "b": "table", "d": 1.0}),
+        );
         let g = gap(&doc);
-        assert!(g >= 0.999, "the stool stands at least 1 m from the table: {g}");
+        assert!(
+            g >= 0.999,
+            "the stool stands at least 1 m from the table: {g}"
+        );
     }
 
     #[test]
@@ -1339,13 +1360,32 @@ mod tests {
         }});
         let failures = audit(&doc, &|_, item| At::of(item.get("at")));
         let named = |check: &str| -> Vec<Value> {
-            failures.iter().filter(|f| f["check"] == check).map(|f| f["ids"].clone()).collect()
+            failures
+                .iter()
+                .filter(|f| f["check"] == check)
+                .map(|f| f["ids"].clone())
+                .collect()
         };
-        assert_eq!(named("coincident"), vec![json!(["chair_a", "chair_b"])], "{failures:?}");
+        assert_eq!(
+            named("coincident"),
+            vec![json!(["chair_a", "chair_b"])],
+            "{failures:?}"
+        );
         let fixes: Vec<_> = failures
             .iter()
             .filter(|f| f["check"] == "overlap")
-            .map(|f| (f["ids"].clone(), f["fix"].as_str().unwrap_or("").split(' ').next().unwrap_or("").to_owned()))
+            .map(|f| {
+                (
+                    f["ids"].clone(),
+                    f["fix"]
+                        .as_str()
+                        .unwrap_or("")
+                        .split(' ')
+                        .next()
+                        .unwrap_or("")
+                        .to_owned(),
+                )
+            })
             .collect();
         assert_eq!(
             fixes,

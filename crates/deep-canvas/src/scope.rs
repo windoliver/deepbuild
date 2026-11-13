@@ -229,7 +229,11 @@ pub struct PickTarget {
 pub fn pick_targets(doc: &Value, hidden: &[String]) -> Vec<PickTarget> {
     let items = member(doc, "items").and_then(Value::as_object);
     let mut out = Vec::new();
-    for (control, c) in member(doc, "controls").and_then(Value::as_object).into_iter().flatten() {
+    for (control, c) in member(doc, "controls")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten()
+    {
         let Some(targets) = member(c, "targets").and_then(Value::as_object) else {
             continue;
         };
@@ -238,12 +242,22 @@ pub fn pick_targets(doc: &Value, hidden: &[String]) -> Vec<PickTarget> {
             .filter_map(|(option, item)| {
                 let item = item.as_str()?;
                 let drawn = items?.get(item)?;
-                if member(drawn, "visible") == Some(&Value::Bool(false)) || hidden.iter().any(|h| h == item) {
+                if member(drawn, "visible") == Some(&Value::Bool(false))
+                    || hidden.iter().any(|h| h == item)
+                {
                     return None;
                 }
-                let order = member(drawn, "order").and_then(Value::as_str).unwrap_or("").to_string();
+                let order = member(drawn, "order")
+                    .and_then(Value::as_str)
+                    .unwrap_or("")
+                    .to_string();
                 let label = label_of(doc, c, option);
-                let t = PickTarget { control: control.clone(), option: option.clone(), item: item.into(), label };
+                let t = PickTarget {
+                    control: control.clone(),
+                    option: option.clone(),
+                    item: item.into(),
+                    label,
+                };
                 Some((format!("{order}\u{0}{item}"), t))
             })
             .collect();
@@ -257,14 +271,24 @@ pub fn pick_targets(doc: &Value, hidden: &[String]) -> Vec<PickTarget> {
 /// `label`, else the option's ID.
 fn label_of(doc: &Value, control: &Value, option: &str) -> String {
     fn named<'a>(list: Option<&'a Value>, option: &str) -> Option<&'a str> {
-        list?.as_array()?.iter().find(|o| member(o, "name").or_else(|| member(o, "id")).and_then(Value::as_str) == Some(option))
+        list?
+            .as_array()?
+            .iter()
+            .find(|o| {
+                member(o, "name")
+                    .or_else(|| member(o, "id"))
+                    .and_then(Value::as_str)
+                    == Some(option)
+            })
             .and_then(|o| member(o, "label")?.as_str())
     }
     let set = member(control, "variant").and_then(Value::as_str);
     member(control, "stages")
         .and_then(|s| member(s, option))
         .and_then(|s| member(s, "label")?.as_str())
-        .or_else(|| set.and_then(|set| named(member(doc, "variants")?.get(set)?.get("options"), option)))
+        .or_else(|| {
+            set.and_then(|set| named(member(doc, "variants")?.get(set)?.get("options"), option))
+        })
         .or_else(|| named(member(control, "options"), option))
         .unwrap_or(option)
         .to_string()
@@ -913,16 +937,28 @@ impl Scope {
         let Hit::Item(id) = hit else {
             return None;
         };
-        pick_targets(doc, &self.hidden(doc)).into_iter().find(|t| &t.item == id)
+        pick_targets(doc, &self.hidden(doc))
+            .into_iter()
+            .find(|t| &t.item == id)
     }
 
     /// The Tab stops in order: each control's own UI, then its targets that draw.
     fn stops(&self, doc: &Value) -> Vec<(String, Option<String>)> {
         let targets = pick_targets(doc, &self.hidden(doc));
         let mut out = Vec::new();
-        for control in member(doc, "controls").and_then(Value::as_object).into_iter().flatten().map(|(k, _)| k) {
+        for control in member(doc, "controls")
+            .and_then(Value::as_object)
+            .into_iter()
+            .flatten()
+            .map(|(k, _)| k)
+        {
             out.push((control.clone(), None));
-            out.extend(targets.iter().filter(|t| &t.control == control).map(|t| (control.clone(), Some(t.option.clone()))));
+            out.extend(
+                targets
+                    .iter()
+                    .filter(|t| &t.control == control)
+                    .map(|t| (control.clone(), Some(t.option.clone()))),
+            );
         }
         out
     }
@@ -930,7 +966,11 @@ impl Scope {
     /// Tab moves focus to the next stop, from the first after the last.
     fn tab(&mut self, doc: &Value) {
         let stops = self.stops(doc);
-        let next = match self.focus.as_ref().and_then(|f| stops.iter().position(|s| s == f)) {
+        let next = match self
+            .focus
+            .as_ref()
+            .and_then(|f| stops.iter().position(|s| s == f))
+        {
             Some(i) => i + 1,
             None => 0,
         };
@@ -941,7 +981,9 @@ impl Scope {
     fn focused_target(&self, doc: &Value) -> Option<PickTarget> {
         let (control, option) = self.focus.as_ref()?;
         let option = option.as_ref()?;
-        pick_targets(doc, &self.hidden(doc)).into_iter().find(|t| &t.control == control && &t.option == option)
+        pick_targets(doc, &self.hidden(doc))
+            .into_iter()
+            .find(|t| &t.control == control && &t.option == option)
     }
 
     fn hit(&self, doc: &Value, p: [f64; 2]) -> Hit {
@@ -1406,11 +1448,29 @@ mod tests {
             "stages": {"a": {"label": "Near"}, "b": {"label": "Far"}},
             "targets": {"a": "near", "b": "far"}}});
         let mut s = scope(&doc);
-        s.input(&doc, 0, 1, &Event::Down { pos: [400.0, 300.0], toggle: false });
+        s.input(
+            &doc,
+            0,
+            1,
+            &Event::Down {
+                pos: [400.0, 300.0],
+                toggle: false,
+            },
+        );
         let done = s.input(&doc, 60 * MS, 2, &Event::Up([400.0, 300.0]));
-        assert_eq!(done.pick.map(|p| (p.option, p.label)), Some(("a".into(), "Near".into())));
-        assert!(s.selection.is_empty() && s.details.is_none(), "a pick never selects or opens a panel");
-        let key = |k: &str| Event::Key { key: k.into(), cmd: false, alt: false };
+        assert_eq!(
+            done.pick.map(|p| (p.option, p.label)),
+            Some(("a".into(), "Near".into()))
+        );
+        assert!(
+            s.selection.is_empty() && s.details.is_none(),
+            "a pick never selects or opens a panel"
+        );
+        let key = |k: &str| Event::Key {
+            key: k.into(),
+            cmd: false,
+            alt: false,
+        };
         s.input(&doc, 120 * MS, 3, &key("Tab"));
         let done = s.input(&doc, 180 * MS, 4, &key("Enter"));
         assert_eq!(done.pick.map(|p| p.item), Some("far".into()));
@@ -1418,8 +1478,16 @@ mod tests {
         doc["items"]["far"]["visible"] = json!(false);
         assert_eq!(pick_targets(&doc, &[]).len(), 1);
         // The planted wrong program selects the target too.
-        let mut planted = Scope::new(&doc, [0.0, 0.0, 800.0, 600.0], [1600.0, 900.0],
-            Planted { pick_selects: true, ..Planted::default() }).expect("reads");
+        let mut planted = Scope::new(
+            &doc,
+            [0.0, 0.0, 800.0, 600.0],
+            [1600.0, 900.0],
+            Planted {
+                pick_selects: true,
+                ..Planted::default()
+            },
+        )
+        .expect("reads");
         click(&mut planted, &doc, 0, [400.0, 300.0]);
         assert_eq!(planted.selection, ["near"]);
     }

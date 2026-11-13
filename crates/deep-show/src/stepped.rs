@@ -51,7 +51,11 @@ pub struct Delay {
 pub fn delays(v: Option<&Value>) -> Option<Vec<Delay>> {
     let Some(v) = v else { return Some(Vec::new()) };
     let one = |d: &Value| {
-        Some(Delay { world: d.get("world")?.as_str()?.into(), step: d.get("step")?.as_u64()?, by: d.get("by")?.as_i64().filter(|b| *b >= 0)? })
+        Some(Delay {
+            world: d.get("world")?.as_str()?.into(),
+            step: d.get("step")?.as_u64()?,
+            by: d.get("by")?.as_i64().filter(|b| *b >= 0)?,
+        })
     };
     v.as_array()?.iter().map(one).collect()
 }
@@ -86,26 +90,61 @@ pub struct Worlds {
 
 impl Worlds {
     /// The live worlds of `doc` (opened: lists empty), or none when it lists no world.
-    pub fn new(doc: &Value, sources: BTreeMap<String, Arc<Source>>, master: usize, planted: Option<String>, delays: Vec<Delay>) -> Result<Option<Worlds>, Value> {
-        let Some(listed) = doc.get("worlds").and_then(Value::as_object).filter(|w| !w.is_empty()) else {
+    pub fn new(
+        doc: &Value,
+        sources: BTreeMap<String, Arc<Source>>,
+        master: usize,
+        planted: Option<String>,
+        delays: Vec<Delay>,
+    ) -> Result<Option<Worlds>, Value> {
+        let Some(listed) = doc
+            .get("worlds")
+            .and_then(Value::as_object)
+            .filter(|w| !w.is_empty())
+        else {
             return Ok(None);
         };
         let run = Run::new(None).expect("the unplanted runner");
-        let span = deep_canvas_media::doc::time(doc, doc.pointer("/transport/span")).unwrap_or(0).max(0);
+        let span = deep_canvas_media::doc::time(doc, doc.pointer("/transport/span"))
+            .unwrap_or(0)
+            .max(0);
         let mut worlds = Vec::new();
         for (id, w) in listed {
-            let live = run.live(&json!({"scene": doc, "world": id})).map_err(|e| json!({"code": "physics_refused", "world": id, "what": e}))?;
+            let live = run
+                .live(&json!({"scene": doc, "world": id}))
+                .map_err(|e| json!({"code": "physics_refused", "world": id, "what": e}))?;
             let h = live.step_flicks();
             let own = span_of(doc, w, span);
-            worlds.push(World { id: id.clone(), live, last: ((own + h - 1) / h) as u64, rows: Vec::new() });
+            worlds.push(World {
+                id: id.clone(),
+                live,
+                last: ((own + h - 1) / h) as u64,
+                rows: Vec::new(),
+            });
         }
         let doc = doc.clone();
-        Ok(Some(Worlds { worlds, doc, master, planted, sources, delays, pending: None, done: Vec::new(), planned: BTreeMap::new(), track: Vec::new(), runs: Vec::new(), dirty: false }))
+        Ok(Some(Worlds {
+            worlds,
+            doc,
+            master,
+            planted,
+            sources,
+            delays,
+            pending: None,
+            done: Vec::new(),
+            planned: BTreeMap::new(),
+            track: Vec::new(),
+            runs: Vec::new(),
+            dirty: false,
+        }))
     }
 
     /// Each world's time: its steps run times its step.
     pub fn times(&self) -> Vec<i64> {
-        self.worlds.iter().map(|w| w.live.steps as i64 * w.live.step_flicks()).collect()
+        self.worlds
+            .iter()
+            .map(|w| w.live.steps as i64 * w.live.step_flicks())
+            .collect()
     }
 
     pub fn ids(&self) -> impl Iterator<Item = &str> {
@@ -122,9 +161,15 @@ impl Worlds {
     pub fn step_to(&mut self, t: i64, host: i64) -> bool {
         for i in 0..self.worlds.len() {
             let h = self.worlds[i].live.step_flicks();
-            while self.worlds[i].live.steps < self.worlds[i].last && self.worlds[i].live.steps as i64 * h < t {
+            while self.worlds[i].live.steps < self.worlds[i].last
+                && self.worlds[i].live.steps as i64 * h < t
+            {
                 let k = self.worlds[i].live.steps + 1;
-                let delay = self.delays.iter().find(|d| d.world == self.worlds[i].id && d.step == k).map(|d| d.by);
+                let delay = self
+                    .delays
+                    .iter()
+                    .find(|d| d.world == self.worlds[i].id && d.step == k)
+                    .map(|d| d.by);
                 if let Some(by) = delay.filter(|_| !self.done.contains(&(i, k))) {
                     let ready = self.pending.map_or(host + by, |p| p.2);
                     if host < ready {
@@ -135,7 +180,9 @@ impl Worlds {
                     self.done.push((i, k));
                 }
                 // A step the backend refuses (an input it can't run) stops the world there.
-                let Ok(rows) = self.worlds[i].live.step() else { break };
+                let Ok(rows) = self.worlds[i].live.step() else {
+                    break;
+                };
                 self.dirty |= !rows.is_empty();
                 self.worlds[i].rows.extend(rows);
             }
@@ -145,7 +192,10 @@ impl Worlds {
 
     /// Each world's list as stepped: `<world ID>.occurrences`.
     pub fn lists(&self) -> Map<String, Value> {
-        self.worlds.iter().map(|w| (format!("{}.occurrences", w.id), json!(w.rows))).collect()
+        self.worlds
+            .iter()
+            .map(|w| (format!("{}.occurrences", w.id), json!(w.rows)))
+            .collect()
     }
 
     /// The document with the play's input track, as a replay renders it.
@@ -173,24 +223,41 @@ impl Worlds {
         }
         let mut d = self.doc.clone();
         for (i, w) in self.worlds.iter().enumerate() {
-            let rows: Vec<Value> = w.rows.iter().enumerate().map(|(r, row)| {
-                let t = row["t"].as_i64().unwrap_or(0);
-                let mut row = row.clone();
-                row["t"] = json!(*self.planned.entry((i, r)).or_insert_with(|| moved(t).unwrap_or(t)));
-                row
-            }).collect();
+            let rows: Vec<Value> = w
+                .rows
+                .iter()
+                .enumerate()
+                .map(|(r, row)| {
+                    let t = row["t"].as_i64().unwrap_or(0);
+                    let mut row = row.clone();
+                    row["t"] = json!(*self
+                        .planned
+                        .entry((i, r))
+                        .or_insert_with(|| moved(t).unwrap_or(t)));
+                    row
+                })
+                .collect();
             d["occurrences"][format!("{}.occurrences", w.id)] = json!(rows);
         }
         let sources = &self.sources;
-        let mut source = |sha: &str| sources.get(sha).cloned().ok_or_else(|| json!({"code": "unknown_asset", "asset": sha}));
-        let voices = crate::hub::Hub::voices(&d, self.master, self.planted.as_deref(), &mut source).map_or_else(|_| Vec::new(), |v| v.0);
+        let mut source = |sha: &str| {
+            sources
+                .get(sha)
+                .cloned()
+                .ok_or_else(|| json!({"code": "unknown_asset", "asset": sha}))
+        };
+        let voices = crate::hub::Hub::voices(&d, self.master, self.planted.as_deref(), &mut source)
+            .map_or_else(|_| Vec::new(), |v| v.0);
         Some(self.runs.iter().chain(&voices).cloned().collect())
     }
 }
 
 /// A world's span: its own, within the transport's (World: `span`).
 fn span_of(doc: &Value, world: &Value, transport: i64) -> i64 {
-    world.get("span").and_then(|s| deep_canvas_media::doc::time(doc, Some(s))).map_or(transport, |s| s.min(transport))
+    world
+        .get("span")
+        .and_then(|s| deep_canvas_media::doc::time(doc, Some(s)))
+        .map_or(transport, |s| s.min(transport))
 }
 
 /// The steps a world of `form` bakes over: its span's, within the transport's.
@@ -206,10 +273,22 @@ pub(crate) fn runs(d: &Value, strip: &Strip, on: &Value) -> Vec<Strip> {
     let change = on.get("each").and_then(Value::as_str) == Some("change");
     let mut last: Option<&Value> = None;
     let mut out = Vec::new();
-    for e in d.get("track").and_then(Value::as_array).into_iter().flatten().filter(|e| e.get("control") == control) {
+    for e in d
+        .get("track")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter(|e| e.get("control") == control)
+    {
         let changed = last.is_none_or(|l| l.get("value") != e.get("value"));
         last = Some(e);
-        let Some(t) = e.get("t").and_then(Value::as_i64).filter(|_| changed || !change) else { continue };
+        let Some(t) = e
+            .get("t")
+            .and_then(Value::as_i64)
+            .filter(|_| changed || !change)
+        else {
+            continue;
+        };
         let mut run = strip.clone();
         run.id = format!("{}#{}", strip.id, out.len());
         run.start = strip.start + t;
@@ -224,7 +303,11 @@ fn bound(v: &Value, inputs: &Map<String, Value>) -> Value {
     match v {
         Value::String(s) => inputs.get(s).cloned().unwrap_or_else(|| v.clone()),
         Value::Array(a) => Value::Array(a.iter().map(|x| bound(x, inputs)).collect()),
-        Value::Object(o) => Value::Object(o.iter().map(|(k, x)| (k.clone(), bound(x, inputs))).collect()),
+        Value::Object(o) => Value::Object(
+            o.iter()
+                .map(|(k, x)| (k.clone(), bound(x, inputs)))
+                .collect(),
+        ),
         _ => v.clone(),
     }
 }
@@ -233,28 +316,56 @@ fn bound(v: &Value, inputs: &Map<String, Value>) -> Value {
 /// steps write strips (Recipe): its `strip` steps become the strips `<instance>.<step>`, read
 /// from the pack the document lists and the scenario offers.
 pub(crate) fn expand(d: &mut Value, offered: &[(String, PathBuf)]) -> Result<(), Value> {
-    let listed: Vec<String> = d.get("packs").and_then(Value::as_array).into_iter().flatten().filter_map(|p| p.as_str().map(str::to_string)).collect();
-    let items = d.get("items").and_then(Value::as_object).cloned().unwrap_or_default();
+    let listed: Vec<String> = d
+        .get("packs")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|p| p.as_str().map(str::to_string))
+        .collect();
+    let items = d
+        .get("items")
+        .and_then(Value::as_object)
+        .cloned()
+        .unwrap_or_default();
     for (iid, item) in items {
         let kind = item.get("kind").and_then(Value::as_str).unwrap_or_default();
         let recipe = listed.iter().find_map(|p| {
             let (id, version) = p.split_once('@')?;
             let (_, dir) = offered.iter().find(|(o, _)| o == id)?;
             let manifest = crate::packs::load(id, dir).ok()?;
-            (manifest.get("version")?.as_str()? == version).then(|| manifest.get("recipes")?.get(kind).cloned())?
+            (manifest.get("version")?.as_str()? == version)
+                .then(|| manifest.get("recipes")?.get(kind).cloned())?
         });
         let Some(recipe) = recipe else {
-            return Err(json!({"code": "recipe_unresolved", "item": iid, "kind": kind, "packs": listed}));
+            return Err(
+                json!({"code": "recipe_unresolved", "item": iid, "kind": kind, "packs": listed}),
+            );
         };
         let mut inputs = Map::new();
-        for (name, decl) in recipe.get("inputs").and_then(Value::as_object).into_iter().flatten() {
-            if let Some(v) = item.pointer(&format!("/params/{name}")).or_else(|| decl.get("default")) {
+        for (name, decl) in recipe
+            .get("inputs")
+            .and_then(Value::as_object)
+            .into_iter()
+            .flatten()
+        {
+            if let Some(v) = item
+                .pointer(&format!("/params/{name}"))
+                .or_else(|| decl.get("default"))
+            {
                 inputs.insert(name.clone(), v.clone());
             }
         }
-        for (sid, step) in recipe.get("steps").and_then(Value::as_object).into_iter().flatten() {
+        for (sid, step) in recipe
+            .get("steps")
+            .and_then(Value::as_object)
+            .into_iter()
+            .flatten()
+        {
             if step.get("op").and_then(Value::as_str) != Some("strip") {
-                return Err(json!({"code": "bad_media", "what": format!("item {iid}: step {sid} of {kind} isn't a strip, the step a media document expands")}));
+                return Err(
+                    json!({"code": "bad_media", "what": format!("item {iid}: step {sid} of {kind} isn't a strip, the step a media document expands")}),
+                );
             }
             d["strips"][format!("{iid}.{sid}")] = bound(&step["params"], &inputs);
         }
@@ -267,7 +378,13 @@ pub(crate) fn expand(d: &mut Value, offered: &[(String, PathBuf)]) -> Result<(),
 pub(crate) fn opened(m: &Value, offered: &[(String, PathBuf)]) -> Result<Value, Value> {
     let mut d = m.clone();
     expand(&mut d, offered)?;
-    let ids: Vec<String> = d.get("worlds").and_then(Value::as_object).into_iter().flatten().map(|(id, _)| id.clone()).collect();
+    let ids: Vec<String> = d
+        .get("worlds")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten()
+        .map(|(id, _)| id.clone())
+        .collect();
     for id in ids {
         d["occurrences"][format!("{id}.occurrences")] = json!([]);
     }

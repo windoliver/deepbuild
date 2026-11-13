@@ -704,7 +704,10 @@ pub enum Call {
     /// #490: `fn`, one expression of the closed function list.
     Fn(Box<Map<String, Value>>),
     /// #490: `path`, an item's drawn path.
-    Path { doc: String, item: String },
+    Path {
+        doc: String,
+        item: String,
+    },
     /// #412: deep_kinds, its fields as the call gave them.
     Kinds(Value),
     /// #238: the sandbox module's counts of checks, links, rewrites and check-time runs.
@@ -712,7 +715,10 @@ pub enum Call {
     /// #238: the providers a document's current revision ran at check, with their output.
     Provided(String),
     /// #415: the check-time validation of one data asset in a layout of `data.layout@1`.
-    Validate { layout: String, path: PathBuf },
+    Validate {
+        layout: String,
+        path: PathBuf,
+    },
     /// #200: an entry of a registry by name, through a document's pinned packs, `runs` times.
     Lookup {
         doc: String,
@@ -739,9 +745,15 @@ pub enum Call {
     /// #501: an export through a sealed `export.target@1` entry.
     ExportRun(Box<crate::export::Job>),
     /// #501: a document's session state, read or set.
-    Session { doc: String, set: Option<Value> },
+    Session {
+        doc: String,
+        set: Option<Value>,
+    },
     /// #501: the export's GPU hash pass on given BGRA8 frames.
-    FrameHash { frames: Vec<([u32; 2], String)>, software: bool },
+    FrameHash {
+        frames: Vec<([u32; 2], String)>,
+        software: bool,
+    },
     /// #501: the cross-machine audio check on two float WAVs.
     CrossMachine([String; 2]),
     /// #1897: the GPU pixel hash on frames from the evidence store, beside its CPU twin.
@@ -888,7 +900,12 @@ pub enum Call {
     /// Every verdict made on a claim, `stale` as of now (#403).
     Verdicts(String),
     /// #405: an answer to the approval asks a geometry audit opened on a claim's requirement.
-    Answer { via: Option<Via>, claim: String, requirement: String, yes: bool },
+    Answer {
+        via: Option<Via>,
+        claim: String,
+        requirement: String,
+        yes: bool,
+    },
     /// A fixture's snapshot on a backend, judged against the golden store (#138).
     Golden {
         fixture: String,
@@ -1595,20 +1612,31 @@ impl<'a> Hub<'a> {
     /// `params.outline` (#398, #1162): what the vector kind draws as in a frame.
     /// The import's issues come back: an SVG the store doesn't hold is `asset_missing`.
     pub(crate) fn inline_vectors(&self, form: &mut Value) -> Vec<Issue> {
-        let Value::Object(map) = form else { return Vec::new() };
+        let Value::Object(map) = form else {
+            return Vec::new();
+        };
         let root = &self.scenario.evidence;
         let (issues, imported) = deep_canvas_vector::check(
             map,
-            |sha| (sha.len() == 64).then(|| std::fs::read(root.join(&sha[..2]).join(&sha[2..])).ok()).flatten(),
+            |sha| {
+                (sha.len() == 64)
+                    .then(|| std::fs::read(root.join(&sha[..2]).join(&sha[2..])).ok())
+                    .flatten()
+            },
             deep_canvas_vector::svg::Twin::Honest,
         );
-        let Some(Value::Object(items)) = map.get_mut("items") else { return issues };
+        let Some(Value::Object(items)) = map.get_mut("items") else {
+            return issues;
+        };
         for (id, found) in &imported {
             if let Some(item) = items.get_mut(id) {
                 let mut outline =
                     deep_canvas_vector::lower::outline(&found.svg, item, &found.colors);
                 // Its source too, which a frame mid-write lowers again at its progress (#1162).
-                let src = item.pointer("/params/src").and_then(Value::as_str).unwrap_or("");
+                let src = item
+                    .pointer("/params/src")
+                    .and_then(Value::as_str)
+                    .unwrap_or("");
                 if let Some(bytes) = (src.len() == 64)
                     .then(|| std::fs::read(root.join(&src[..2]).join(&src[2..])).ok())
                     .flatten()
@@ -1808,7 +1836,9 @@ impl<'a> Hub<'a> {
                 "checks": self.sandbox.checks, "links": self.sandbox.links,
                 "rewrites": self.sandbox.rewrites, "runs": self.sandbox.runs,
             }),
-            Call::Validate { layout, path } => self.sandbox.validate(&self.startup.sealed, layout, path),
+            Call::Validate { layout, path } => {
+                self.sandbox.validate(&self.startup.sealed, layout, path)
+            }
             Call::Provided(doc) => json!({
                 "doc": doc,
                 "provided": self.sandbox.provided.get(doc).cloned().unwrap_or_default(),
@@ -1887,7 +1917,10 @@ impl<'a> Hub<'a> {
             Call::Kit(k) => self.kit(k),
             Call::Input { panel, event, t } => match self.ring_input(panel, event) {
                 Some(reply) => reply,
-                None => self.live_press(panel, event, *t).err().unwrap_or_else(|| self.input(panel, event)),
+                None => self
+                    .live_press(panel, event, *t)
+                    .err()
+                    .unwrap_or_else(|| self.input(panel, event)),
             },
             Call::Scope(panel) => self.scope_reply(panel),
             Call::Presented(panel) => self.presented(panel),
@@ -1948,7 +1981,12 @@ impl<'a> Hub<'a> {
             Call::Catalog => self.catalog_reply(),
             Call::Verdict(claim) => self.verdict_call(claim),
             Call::Verdicts(claim) => self.verdicts_call(claim),
-            Call::Answer { via, claim, requirement, yes } => self.answer_call(via.as_ref(), claim, requirement, *yes),
+            Call::Answer {
+                via,
+                claim,
+                requirement,
+                yes,
+            } => self.answer_call(via.as_ref(), claim, requirement, *yes),
             Call::Golden { fixture, backend } => self.golden_reply(fixture, backend),
             Call::Record {
                 via,
@@ -2419,7 +2457,13 @@ impl<'a> Hub<'a> {
         }
         // #504: the session loads the played form: the drawn form with the document's input track
         // and the session's picks, shown at `t`.
-        let again = self.forms.insert(show.doc.clone(), drawn_form.clone().unwrap_or_else(|| doc.clone())).is_some();
+        let again = self
+            .forms
+            .insert(
+                show.doc.clone(),
+                drawn_form.clone().unwrap_or_else(|| doc.clone()),
+            )
+            .is_some();
         if again && self.planted(Planted::ReloadRebuildsEveryPart) {
             // Planted (#504): a revision presented again rebuilds every part, kept or cached.
             let startup = self.startup;
@@ -2486,7 +2530,11 @@ impl<'a> Hub<'a> {
                 .read(sched, "core.transform", Some(id))
                 .and_then(|(v, _)| {
                     v.as_typed::<deep_canvas::schedule::core_ops::Transform>()
-                        .map(|t| deep_canvas_motion::arrange::At { pos: t.pos, rot: t.rot, scale: t.scale })
+                        .map(|t| deep_canvas_motion::arrange::At {
+                            pos: t.pos,
+                            rot: t.rot,
+                            scale: t.scale,
+                        })
                 })
                 .unwrap_or_else(|| deep_canvas_motion::arrange::At::of(item.get("at")))
         };
@@ -2599,7 +2647,9 @@ impl<'a> Hub<'a> {
                                 snapshot::over(&mut rgba, &over);
                                 let scale = d.scale(size);
                                 boxes.extend(
-                                    d.boxes().into_iter().map(|(id, b)| (id, b.map(|v| v * scale))),
+                                    d.boxes()
+                                        .into_iter()
+                                        .map(|(id, b)| (id, b.map(|v| v * scale))),
                                 );
                             }
                             (rgba, size, boxes)
@@ -2645,7 +2695,10 @@ impl<'a> Hub<'a> {
                                 Some(d) => self.print_snapshot(show, d, size, &instanced),
                                 None => None,
                             };
-                            reply.insert("snapshots".into(), json!([entry].into_iter().chain(gpu).collect::<Vec<_>>()));
+                            reply.insert(
+                                "snapshots".into(),
+                                json!([entry].into_iter().chain(gpu).collect::<Vec<_>>()),
+                            );
                             reply.insert("visible".into(), rows);
                             // The instanced batches the 2D draw made: none for a 3D frame, which
                             // scene3d draws and reports on its own (#378).
@@ -2755,7 +2808,9 @@ pub(crate) fn export_noise(rgba: &mut [u8], t: i64) {
 }
 
 fn now_nanos() -> u64 {
-    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_nanos() as u64)
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_nanos() as u64)
 }
 
 fn seeded_noise(rgba: &mut [u8], seed: u64) {

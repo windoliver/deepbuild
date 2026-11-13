@@ -402,9 +402,11 @@ fn call(payload: &Value, classes: &[(String, String)]) -> Option<matcher::Call> 
             field("path").map(tool_paths::pi_path).into_iter().collect(),
             false,
         ),
-        "read" | "grep" | "find" | "ls" => {
-            (None, field("path").map(tool_paths::pi_path).into_iter().collect(), true)
-        }
+        "read" | "grep" | "find" | "ls" => (
+            None,
+            field("path").map(tool_paths::pi_path).into_iter().collect(),
+            true,
+        ),
         _ => (None, Vec::new(), false),
     };
     let cwd = match member(payload, "cwd") {
@@ -432,7 +434,15 @@ fn call(payload: &Value, classes: &[(String, String)]) -> Option<matcher::Call> 
     let (args, paths, names) = match tool_paths::mcp(tool, input, cwd.as_deref(), &home) {
         Some(mcp) => {
             let (args, paths) = mcp.into_iter().unzip();
-            (args, paths, if counts.as_deref() == Some("read") { Reads } else { Both })
+            (
+                args,
+                paths,
+                if counts.as_deref() == Some("read") {
+                    Reads
+                } else {
+                    Both
+                },
+            )
         }
         None => (Vec::new(), paths, if read { Reads } else { Writes }),
     };

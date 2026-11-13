@@ -246,7 +246,9 @@ pub fn build(kind: &str, params: &Value, ctx: &Ctx<'_>) -> Result<Mesh, Fault> {
         "tube@1" => tube_item(params, ctx)?,
         "ball@1" => ball(params, ctx.plants)?,
         "coil@1" => coil(params)?,
-        "plate@1" if crate::terrain::of_params(params).is_some() => crate::terrain::built(params, ctx.planted)?,
+        "plate@1" if crate::terrain::of_params(params).is_some() => {
+            crate::terrain::built(params, ctx.planted)?
+        }
         "plate@1" => plate(params)?,
         "display@1" => display(params)?,
         "hull@1" => crate::hull::hull(&hull_points(params, ctx)?, ctx.plants.hull)
@@ -405,7 +407,9 @@ fn by_angle(m: &Mesh, angle: f64) -> Mesh {
 }
 
 /// The vertices `kind` builds from `params`, counted without building it.
-pub fn estimate(kind: &str, params: &Value, ctx: &Ctx<'_>) -> Result<u64, Fault> { counts(kind, params, ctx).map(|c| c.0) }
+pub fn estimate(kind: &str, params: &Value, ctx: &Ctx<'_>) -> Result<u64, Fault> {
+    counts(kind, params, ctx).map(|c| c.0)
+}
 
 /// The vertices `kind` declares and the triangles it builds, counted from `params` alone.
 pub fn counts(kind: &str, params: &Value, ctx: &Ctx<'_>) -> Result<(u64, u64), Fault> {
@@ -435,7 +439,9 @@ pub fn counts(kind: &str, params: &Value, ctx: &Ctx<'_>) -> Result<(u64, u64), F
             let p = Sampled::bare(coil_path(params)?, false);
             tube_count(&coil_tube(params)?, &p)?
         }
-        "plate@1" if crate::terrain::of_params(params).is_some() => return crate::terrain::counted(params, ctx.planted),
+        "plate@1" if crate::terrain::of_params(params).is_some() => {
+            return crate::terrain::counted(params, ctx.planted)
+        }
         "plate@1" => plate_count(params)?,
         "display@1" => {
             display_size(params)?;

@@ -481,13 +481,22 @@ impl Hub<'_> {
         let planted = self.scenario.planted;
         let now = self.now;
         match call {
-            GateCall::Open { panel, strips, media, piece } => {
+            GateCall::Open {
+                panel,
+                strips,
+                media,
+                piece,
+            } => {
                 if !self.scenario.panels.contains_key(panel) {
                     return refused("unknown_panel");
                 }
                 self.advance_audio();
                 // #525: its recipes expanded, and its worlds' lists empty until a live play steps them.
-                let opened = match media.as_ref().map(|m| crate::stepped::opened(m, &self.scenario.packs)).transpose() {
+                let opened = match media
+                    .as_ref()
+                    .map(|m| crate::stepped::opened(m, &self.scenario.packs))
+                    .transpose()
+                {
                     Ok(o) => o,
                     Err(e) => return e,
                 };
@@ -675,7 +684,11 @@ impl Hub<'_> {
                 let running = o.is_some_and(|o| o.voices.iter().any(|v| v.stop.is_none()));
                 let (state, notice, stats) = match audio {
                     Some(a) => a,
-                    None => (if running { "running" } else { "suspended" }, Value::Null, Value::Null),
+                    None => (
+                        if running { "running" } else { "suspended" },
+                        Value::Null,
+                        Value::Null,
+                    ),
                 };
                 let mut reply = json!({"gate": {
                     "owner": self.owner_of(panel),
@@ -690,9 +703,11 @@ impl Hub<'_> {
                 }
                 reply
             }
-            GateCall::Output { device: Some(device), from, to } => {
-                self.device_output(device, *from, *to)
-            }
+            GateCall::Output {
+                device: Some(device),
+                from,
+                to,
+            } => self.device_output(device, *from, *to),
             GateCall::Output { from, to, .. } => {
                 let (first, last) = (sample_at(*from), sample_at(*to));
                 let mut mix = vec![0f32; (last - first).max(0) as usize];

@@ -15,7 +15,9 @@ use std::sync::Arc;
 use deep_canvas::ops;
 
 use crate::delay::{Delay, DelaySpec, DelayState, Pitch, PitchSpec, PitchState};
-use crate::dynamics::{Compressor, CompressorSpec, CompressorState, Limiter, LimiterSpec, LimiterState};
+use crate::dynamics::{
+    Compressor, CompressorSpec, CompressorState, Limiter, LimiterSpec, LimiterState,
+};
 use crate::emitter::{self, Cone, Distance, Model};
 use crate::eq;
 use crate::reverb::{self, Reverb};
@@ -175,7 +177,14 @@ pub struct Strip {
 
 impl Strip {
     /// The auto span: (out − in) ÷ rate, or to the transport's end for a looping strip.
-    pub fn auto_span(start: i64, r#in: i64, out: i64, rate: (i64, i64), looped: bool, end: i64) -> i64 {
+    pub fn auto_span(
+        start: i64,
+        r#in: i64,
+        out: i64,
+        rate: (i64, i64),
+        looped: bool,
+        end: i64,
+    ) -> i64 {
         if looped {
             return (end - start).max(0);
         }
@@ -184,12 +193,16 @@ impl Strip {
 
     /// The source time at `rel` flicks into the strip, wrapped by the loop region.
     pub fn source_at(&self, rel: i64) -> i64 {
-        let src = self.r#in as i128 + (rel as i128 * self.rate.0 as i128).div_euclid(self.rate.1.max(1) as i128);
+        let src = self.r#in as i128
+            + (rel as i128 * self.rate.0 as i128).div_euclid(self.rate.1.max(1) as i128);
         let src = src as i64;
         if !self.looped {
             return src;
         }
-        let (ls, le) = self.source.loop_region.unwrap_or((0, self.source.duration()));
+        let (ls, le) = self
+            .source
+            .loop_region
+            .unwrap_or((0, self.source.duration()));
         if le <= ls || src < le {
             return src;
         }
@@ -199,7 +212,8 @@ impl Strip {
     /// Whether the strip's end is its source's own end, where it needs no fade.
     fn ends_at_source_end(&self) -> bool {
         let dur = self.source.duration();
-        let end = self.r#in as i128 + (self.span as i128 * self.rate.0 as i128).div_euclid(self.rate.1.max(1) as i128);
+        let end = self.r#in as i128
+            + (self.span as i128 * self.rate.0 as i128).div_euclid(self.rate.1.max(1) as i128);
         let end = end as i64;
         if !self.looped {
             return end >= dur;
@@ -212,8 +226,12 @@ impl Strip {
     }
 
     fn fade_lengths(&self) -> (i64, Curve, i64, Curve) {
-        let (mut fi, ci) = self.fade_in.map_or((0, Curve::EqualPower), |f| (f.length, f.curve));
-        let (mut fo, co) = self.fade_out.map_or((0, Curve::EqualPower), |f| (f.length, f.curve));
+        let (mut fi, ci) = self
+            .fade_in
+            .map_or((0, Curve::EqualPower), |f| (f.length, f.curve));
+        let (mut fo, co) = self
+            .fade_out
+            .map_or((0, Curve::EqualPower), |f| (f.length, f.curve));
         if self.r#in != 0 {
             fi = fi.max(MIN_FADE);
         }
@@ -399,12 +417,25 @@ impl Mix {
         // Latencies, in order: a bus's inputs arrive at the latest of theirs.
         let (mut arrival, mut latency) = (vec![0i64; n], vec![0i64; n]);
         for &b in &order {
-            latency[b] = arrival[b] + buses[b].processors.iter().map(|p| p.kind.latency(rate)).sum::<i64>();
+            latency[b] = arrival[b]
+                + buses[b]
+                    .processors
+                    .iter()
+                    .map(|p| p.kind.latency(rate))
+                    .sum::<i64>();
             for &j in &feeds[b] {
                 arrival[j] = arrival[j].max(latency[b]);
             }
         }
-        Ok(Mix { rate, strips, buses, order, master, arrival, latency })
+        Ok(Mix {
+            rate,
+            strips,
+            buses,
+            order,
+            master,
+            arrival,
+            latency,
+        })
     }
 
     /// Flicks per sample.
@@ -485,10 +516,16 @@ impl Unit {
         match kind {
             ProcKind::Eq(bands) => Unit::Eq(eq::Eq::new(bands, rate)),
             ProcKind::Reverb(spec) => Unit::Reverb(Reverb::new(*spec, rate)),
-            ProcKind::Compressor(spec, _) => Unit::Compressor(Compressor::new(*spec, rate, planted.hard_knee)),
-            ProcKind::Limiter(spec) => Unit::Limiter(Limiter::new(*spec, rate, planted.limiter_sample_peaks)),
+            ProcKind::Compressor(spec, _) => {
+                Unit::Compressor(Compressor::new(*spec, rate, planted.hard_knee))
+            }
+            ProcKind::Limiter(spec) => {
+                Unit::Limiter(Limiter::new(*spec, rate, planted.limiter_sample_peaks))
+            }
             ProcKind::Delay(spec) => Unit::Delay(Delay::new(*spec, rate)),
-            ProcKind::Pitch(spec) => Unit::Pitch(Pitch::new(*spec, rate, planted.pitch_ignores_semitones)),
+            ProcKind::Pitch(spec) => {
+                Unit::Pitch(Pitch::new(*spec, rate, planted.pitch_ignores_semitones))
+            }
         }
     }
     fn process(&mut self, block: &mut [f32], key: Option<&[f32]>) {
@@ -515,12 +552,20 @@ impl Unit {
         match (self, s) {
             (Unit::Eq(e), UnitState::Eq(s)) => e.state.clone_from(s),
             (Unit::Reverb(r), UnitState::Reverb(s)) => {
-                r.state = if planted.restores_without_tail { s.without_tail() } else { s.clone() }
+                r.state = if planted.restores_without_tail {
+                    s.without_tail()
+                } else {
+                    s.clone()
+                }
             }
             (Unit::Compressor(c), UnitState::Compressor(s)) => c.state = *s,
             (Unit::Limiter(l), UnitState::Limiter(s)) => l.state.clone_from(s),
             (Unit::Delay(d), UnitState::Delay(s)) => {
-                d.state = if planted.delay_empties_at_seek { s.emptied() } else { s.clone() }
+                d.state = if planted.delay_empties_at_seek {
+                    s.emptied()
+                } else {
+                    s.clone()
+                }
             }
             (Unit::Pitch(p), UnitState::Pitch(s)) => p.state.clone_from(s),
             _ => {}
@@ -552,7 +597,10 @@ struct Line {
 
 impl Line {
     fn new(frames: i64) -> Line {
-        Line { buf: vec![0.0; 2 * frames.max(0) as usize], at: 0 }
+        Line {
+            buf: vec![0.0; 2 * frames.max(0) as usize],
+            at: 0,
+        }
     }
 
     /// Delays `block` in place by the line's length.
@@ -580,7 +628,11 @@ struct Own {
 
 impl Own {
     fn bytes(&self) -> usize {
-        self.lines.iter().map(|l| 4 * l.buf.len() + 8).sum::<usize>() + self.end.bytes()
+        self.lines
+            .iter()
+            .map(|l| 4 * l.buf.len() + 8)
+            .sum::<usize>()
+            + self.end.bytes()
     }
 }
 
@@ -642,14 +694,21 @@ impl Edges {
                 let d = delay(mix.arrival[o] - mix.latency[b]);
                 (d > 0).then(|| line(d))
             }));
-            sends.push(bus.sends.iter().map(|s| line(delay(mix.arrival[s.to] - mix.latency[b]))).collect());
+            sends.push(
+                bus.sends
+                    .iter()
+                    .map(|s| line(delay(mix.arrival[s.to] - mix.latency[b])))
+                    .collect(),
+            );
         }
         let mut keys = Vec::new();
         for &b in &mix.order {
             let mut before = 0;
             for p in &mix.buses[b].processors {
                 keys.push(match p.kind {
-                    ProcKind::Compressor(_, Some(k)) => Some((k, line(delay(mix.arrival[b] + before - mix.latency[k])))),
+                    ProcKind::Compressor(_, Some(k)) => {
+                        Some((k, line(delay(mix.arrival[b] + before - mix.latency[k]))))
+                    }
                     _ => None,
                 });
                 before += p.kind.latency(rate);
@@ -662,7 +721,11 @@ impl Edges {
             keys,
             strips: mix.arrival.iter().map(|a| delay(*a)).collect(),
             lengths,
-            lead: if comp { mix.latency[mix.master] + end } else { end },
+            lead: if comp {
+                mix.latency[mix.master] + end
+            } else {
+                end
+            },
         }
     }
 }
@@ -701,8 +764,16 @@ impl Player {
         let mut units = Vec::new();
         let mut rings = Vec::new();
         for (b, p) in mix.processors() {
-            units.push((b, p.id.clone(), p.every.max(1), Unit::new(&p.kind, mix.rate, &planted)));
-            rings.push(Ring::new(p.budget.unwrap_or(RING_BUDGET), planted.ring_drops_oldest));
+            units.push((
+                b,
+                p.id.clone(),
+                p.every.max(1),
+                Unit::new(&p.kind, mix.rate, &planted),
+            ));
+            rings.push(Ring::new(
+                p.budget.unwrap_or(RING_BUDGET),
+                planted.ring_drops_oldest,
+            ));
         }
         let n = 2 * BLOCK as usize;
         let edges = Edges::new(&mix, &planted);
@@ -712,7 +783,11 @@ impl Player {
             taps: units.iter().map(|_| sha2::Sha256::default()).collect(),
             buses: vec![vec![0.0; n]; mix.buses.len()],
             lines: edges.lengths.iter().map(|l| Line::new(*l)).collect(),
-            end: Limiter::new(LimiterSpec::default(), mix.rate, planted.limiter_sample_peaks),
+            end: Limiter::new(
+                LimiterSpec::default(),
+                mix.rate,
+                planted.limiter_sample_peaks,
+            ),
             end_spec: LimiterSpec::default(),
             own: Ring::new(RING_BUDGET, planted.ring_drops_oldest),
             edges,
@@ -772,7 +847,11 @@ impl Player {
     /// seeks.
     pub fn set_ceiling(&mut self, dbtp: f64) {
         self.end_spec.ceiling = dbtp;
-        self.end = Limiter::new(self.end_spec, self.mix.rate, self.planted.limiter_sample_peaks);
+        self.end = Limiter::new(
+            self.end_spec,
+            self.mix.rate,
+            self.planted.limiter_sample_peaks,
+        );
     }
 
     /// #502: whether the master's end limiter has cut since the last seek.
@@ -912,7 +991,10 @@ impl Player {
                 }
             }
             if self.own.wants(s) {
-                let st = Own { lines: self.lines.clone(), end: self.end.state.clone() };
+                let st = Own {
+                    lines: self.lines.clone(),
+                    end: self.end.state.clone(),
+                };
                 let bytes = st.bytes();
                 self.own.put(s, k * BLOCK, st, bytes);
             }
@@ -942,7 +1024,11 @@ impl Player {
             let out = &mut self.buses[s.bus];
             for i in 0..BLOCK {
                 let t = t0 + i * step;
-                let gain_t = if self.planted.holds_gain_per_block { t0 } else { t };
+                let gain_t = if self.planted.holds_gain_per_block {
+                    t0
+                } else {
+                    t
+                };
                 let env = s.envelope(t, gain_t, fades);
                 if env == 0.0 {
                     continue;
@@ -967,7 +1053,9 @@ impl Player {
         for &b in &mix.order {
             let bus = &mix.buses[b];
             let mut block = std::mem::take(&mut self.buses[b]);
-            for (u, ((ub, _, _, unit), o)) in self.units.iter_mut().zip(self.outs.iter_mut()).enumerate() {
+            for (u, ((ub, _, _, unit), o)) in
+                self.units.iter_mut().zip(self.outs.iter_mut()).enumerate()
+            {
                 if *ub != b {
                     continue;
                 }
@@ -1014,7 +1102,11 @@ impl Player {
                 }
             }
             for (send, &l) in bus.sends.iter().zip(&self.edges.sends[b]) {
-                let tap = if send.pre && !self.planted.sends_tap_post { &self.pre } else { &block };
+                let tap = if send.pre && !self.planted.sends_tap_post {
+                    &self.pre
+                } else {
+                    &block
+                };
                 let g = amp(send.gain_db);
                 for (e, x) in self.edge.iter_mut().zip(tap) {
                     *e = (f64::from(*x) * g) as f32;
@@ -1041,11 +1133,25 @@ impl Player {
     /// An emitter's gain and pan at `t`.
     fn emit_gain(&self, e: &Emit, t: i64) -> (f64, f64) {
         let p = (e.place)(t);
-        let d = [p.source[0] - p.listener[0], p.source[1] - p.listener[1], p.source[2] - p.listener[2]];
+        let d = [
+            p.source[0] - p.listener[0],
+            p.source[1] - p.listener[1],
+            p.source[2] - p.listener[2],
+        ];
         let dist = ops::sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
-        let model = if self.planted.inverse_only { Model::Inverse } else { e.distance.model };
+        let model = if self.planted.inverse_only {
+            Model::Inverse
+        } else {
+            e.distance.model
+        };
         let g = emitter::distance_gain(&e.distance, dist, model)
-            * emitter::cone_gain(&e.cone, p.forward, p.source, p.listener, self.planted.cone_reversed);
+            * emitter::cone_gain(
+                &e.cone,
+                p.forward,
+                p.source,
+                p.listener,
+                self.planted.cone_reversed,
+            );
         // W3C PannerNode's equal-power azimuth: in the listener's horizontal plane, a source behind
         // pans as its mirror in front, and the pan is azimuth ÷ 90°.
         let ahead = [p.right[2], 0.0, -p.right[0]];
@@ -1055,7 +1161,13 @@ impl Player {
             0.0
         } else {
             let az = ops::deg(ops::atan2(x, z));
-            let az = if az > 90.0 { 180.0 - az } else if az < -90.0 { -180.0 - az } else { az };
+            let az = if az > 90.0 {
+                180.0 - az
+            } else if az < -90.0 {
+                -180.0 - az
+            } else {
+                az
+            };
             az / 90.0
         };
         (g, pan)
@@ -1070,10 +1182,16 @@ fn balance(l: f32, r: f32, pan: f64) -> (f32, f32) {
     let pan = pan.clamp(-1.0, 1.0);
     if pan <= 0.0 {
         let x = (pan + 1.0) * ops::PI / 2.0;
-        ((l as f64 + r as f64 * ops::cos(x)) as f32, (r as f64 * ops::sin(x)) as f32)
+        (
+            (l as f64 + r as f64 * ops::cos(x)) as f32,
+            (r as f64 * ops::sin(x)) as f32,
+        )
     } else {
         let x = pan * ops::PI / 2.0;
-        ((l as f64 * ops::cos(x)) as f32, (r as f64 + l as f64 * ops::sin(x)) as f32)
+        (
+            (l as f64 * ops::cos(x)) as f32,
+            (r as f64 + l as f64 * ops::sin(x)) as f32,
+        )
     }
 }
 
@@ -1093,7 +1211,12 @@ mod tests {
                 [v, v]
             })
             .collect();
-        let source = Arc::new(Source { rate, channels: 2, samples, loop_region: None });
+        let source = Arc::new(Source {
+            rate,
+            channels: 2,
+            samples,
+            loop_region: None,
+        });
         let span = source.duration();
         let strip = Strip {
             id: "tone".into(),
@@ -1112,8 +1235,20 @@ mod tests {
             disabled: Vec::new(),
             emitter: None,
         };
-        let master = Bus { id: "master".into(), gain_db: 0.0, pan: 0.0, mute: false, processors: Vec::new(), out: None, sends: Vec::new(), duck: None };
-        let mut player = Player::new(Arc::new(Mix::new(rate, vec![strip], vec![master]).unwrap()), Planted::default());
+        let master = Bus {
+            id: "master".into(),
+            gain_db: 0.0,
+            pan: 0.0,
+            mute: false,
+            processors: Vec::new(),
+            out: None,
+            sends: Vec::new(),
+            duck: None,
+        };
+        let mut player = Player::new(
+            Arc::new(Mix::new(rate, vec![strip], vec![master]).unwrap()),
+            Planted::default(),
+        );
         if let Some(c) = ceiling {
             player.set_ceiling(c);
         }
@@ -1126,8 +1261,14 @@ mod tests {
     #[test]
     fn an_exports_ceiling_holds_the_masters_true_peak_under_it() {
         let set = master_true_peak(Some(-1.67));
-        assert!(set <= -1.67 + 0.05, "with the export's ceiling of −1.67 dBTP the master reads {set} dBTP");
+        assert!(
+            set <= -1.67 + 0.05,
+            "with the export's ceiling of −1.67 dBTP the master reads {set} dBTP"
+        );
         let default = master_true_peak(None);
-        assert!(default <= -1.0 + 0.05 && default > -1.67 + 0.05, "without it the master reads {default} dBTP");
+        assert!(
+            default <= -1.0 + 0.05 && default > -1.67 + 0.05,
+            "without it the master reads {default} dBTP"
+        );
     }
 }

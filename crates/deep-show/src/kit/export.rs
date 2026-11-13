@@ -33,8 +33,11 @@ fn fixture(ghost: bool) -> Value {
         g["visible"] = json!(false);
         items.insert("ghost".into(), g);
     }
-    items.insert("cut".into(), json!({"id": "cut", "kind": "cutaway@1", "layer": layer, "name": "cut", "order": "a4",
-        "params": {"planes": [{"normal": [1, 0, 0], "offset": 100}], "class": "view"}}));
+    items.insert(
+        "cut".into(),
+        json!({"id": "cut", "kind": "cutaway@1", "layer": layer, "name": "cut", "order": "a4",
+        "params": {"planes": [{"normal": [1, 0, 0], "offset": 100}], "class": "view"}}),
+    );
     json!({
         "format": 1, "profile": "film", "title": "export.target@1 kit", "size": [64, 36],
         "layers": {layer: {"writer": "kit", "title": "Kit", "order": "a0"}},
@@ -62,8 +65,15 @@ fn files_under(dir: &Path) -> Vec<(String, String)> {
             if p.is_dir() {
                 stack.push(p);
             } else if let Ok(bytes) = std::fs::read(&p) {
-                let rel = p.strip_prefix(dir).unwrap_or(&p).to_string_lossy().into_owned();
-                let sha: String = Sha256::digest(&bytes).iter().map(|b| format!("{b:02x}")).collect();
+                let rel = p
+                    .strip_prefix(dir)
+                    .unwrap_or(&p)
+                    .to_string_lossy()
+                    .into_owned();
+                let sha: String = Sha256::digest(&bytes)
+                    .iter()
+                    .map(|b| format!("{b:02x}"))
+                    .collect();
                 out.push((rel, sha));
             }
         }
@@ -78,15 +88,22 @@ impl Hub<'_> {
         let mut reports = Vec::new();
         for name in registries {
             if name != REGISTRY {
-                reports.push(json!({"registry": name, "verdict": "BLOCKED", "entries": [],
-                    "why": "no kit of its own; only export.target@1 has one"}));
+                reports.push(
+                    json!({"registry": name, "verdict": "BLOCKED", "entries": [],
+                    "why": "no kit of its own; only export.target@1 has one"}),
+                );
                 continue;
             }
             let targets: Vec<(String, Value)> = self
                 .startup
                 .sealed
                 .registry(REGISTRY)
-                .map(|r| r.entries.iter().map(|e| (e.name.clone(), e.value.clone())).collect())
+                .map(|r| {
+                    r.entries
+                        .iter()
+                        .map(|e| (e.name.clone(), e.value.clone()))
+                        .collect()
+                })
                 .unwrap_or_default();
             let mut entries = Vec::new();
             for (target, value) in targets {
@@ -103,7 +120,8 @@ impl Hub<'_> {
     /// One target's case; each failure names the target. #157: its parts, the fidelity part when
     /// the entry names export.fidelity: its fixture film's export through that check.
     fn target_case(&mut self, target: &str, entry: &Value) -> (Vec<String>, Vec<Value>) {
-        let dir = std::env::temp_dir().join(format!("deep-kit-export-{}-{target}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("deep-kit-export-{}-{target}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let codec = match target {
             "video" => "h264",
@@ -118,23 +136,37 @@ impl Hub<'_> {
         };
         let revisions = |hub: &Hub| -> Vec<(u64, String, &'static str)> {
             hub.revisions.get(KIT_DOC).map_or_else(Vec::new, |rows| {
-                rows.iter().map(|r| (r.rev, r.hash.clone(), r.state)).collect()
+                rows.iter()
+                    .map(|r| (r.rev, r.hash.clone(), r.state))
+                    .collect()
             })
         };
         let mut failures = Vec::new();
         let mut fidelity: Vec<String> = Vec::new();
-        let mut export = |hub: &mut Hub, doc: Value, name: &str| -> Option<(Vec<(String, String)>, Value)> {
-            let at = dir.join(name);
-            let _ = std::fs::create_dir_all(&at);
-            let reply = hub.export_doc(&job(&at.join("out")), doc);
-            if reply["outcome"] != "exported" {
-                let found = reply["issues"].as_array().into_iter().flatten().filter(|i| i["check"] == "export.fidelity");
-                fidelity.extend(found.map(|i| format!("{target}: export.fidelity: {}", i["what"].as_str().unwrap_or_default())));
-                failures.push(format!("{target}: the export {name} isn't delivered: {reply}"));
-                return None;
-            }
-            Some((files_under(&at), reply["receipt"].clone()))
-        };
+        let mut export =
+            |hub: &mut Hub, doc: Value, name: &str| -> Option<(Vec<(String, String)>, Value)> {
+                let at = dir.join(name);
+                let _ = std::fs::create_dir_all(&at);
+                let reply = hub.export_doc(&job(&at.join("out")), doc);
+                if reply["outcome"] != "exported" {
+                    let found = reply["issues"]
+                        .as_array()
+                        .into_iter()
+                        .flatten()
+                        .filter(|i| i["check"] == "export.fidelity");
+                    fidelity.extend(found.map(|i| {
+                        format!(
+                            "{target}: export.fidelity: {}",
+                            i["what"].as_str().unwrap_or_default()
+                        )
+                    }));
+                    failures.push(format!(
+                        "{target}: the export {name} isn't delivered: {reply}"
+                    ));
+                    return None;
+                }
+                Some((files_under(&at), reply["receipt"].clone()))
+            };
         // With the session state set; the revisions and the state are read around it.
         self.session_state.insert(KIT_DOC.into(), session());
         let before = revisions(self);
@@ -150,24 +182,44 @@ impl Hub<'_> {
             failures.push(format!("{target}: the export wrote a revision of the document: {before:?} became {after:?}"));
         }
         if state_after != Some(session()) {
-            failures.push(format!("{target}: the session state changed to {state_after:?}"));
+            failures.push(format!(
+                "{target}: the session state changed to {state_after:?}"
+            ));
         }
         if let (Some((a, _)), Some((b, receipt))) = (&with, &without) {
-            let a: Vec<_> = a.iter().map(|(p, h)| (p.replacen("with_session", "", 1), h)).collect();
-            let b: Vec<_> = b.iter().map(|(p, h)| (p.replacen("without_session", "", 1), h)).collect();
+            let a: Vec<_> = a
+                .iter()
+                .map(|(p, h)| (p.replacen("with_session", "", 1), h))
+                .collect();
+            let b: Vec<_> = b
+                .iter()
+                .map(|(p, h)| (p.replacen("without_session", "", 1), h))
+                .collect();
             if a != b {
                 failures.push(format!("{target}: the export with session state isn't byte-identical to the export with none"));
             }
             match entry["hidden"].as_str() {
                 Some("left_out") => {
-                    let c: Vec<_> = no_ghost.iter().flat_map(|(c, _)| c.iter().map(|(p, h)| (p.replacen("without_hidden", "", 1), h))).collect();
+                    let c: Vec<_> = no_ghost
+                        .iter()
+                        .flat_map(|(c, _)| {
+                            c.iter()
+                                .map(|(p, h)| (p.replacen("without_hidden", "", 1), h))
+                        })
+                        .collect();
                     if c != b {
                         failures.push(format!("{target}: it declares hidden items left out, but its export differs from the export without them"));
                     }
                 }
                 Some("listed") => {
-                    if !receipt["hidden"].as_array().is_some_and(|h| h.contains(&json!("ghost"))) {
-                        failures.push(format!("{target}: it declares hidden items listed, but its receipt lists {}", receipt["hidden"]));
+                    if !receipt["hidden"]
+                        .as_array()
+                        .is_some_and(|h| h.contains(&json!("ghost")))
+                    {
+                        failures.push(format!(
+                            "{target}: it declares hidden items listed, but its receipt lists {}",
+                            receipt["hidden"]
+                        ));
                     }
                 }
                 other => failures.push(format!("{target}: it declares hidden: {other:?}")),
@@ -176,12 +228,24 @@ impl Hub<'_> {
         // #157: the fidelity part: the fixture film's delivery through export.fidelity, when the
         // entry names it; any undelivered export fails the part, naming what stopped it.
         let mut parts = Vec::new();
-        if entry["fidelity"].as_array().is_some_and(|f| f.contains(&json!("export.fidelity"))) {
+        if entry["fidelity"]
+            .as_array()
+            .is_some_and(|f| f.contains(&json!("export.fidelity")))
+        {
             let delivered = with.is_some() && without.is_some() && no_ghost.is_some();
             if !delivered && fidelity.is_empty() {
-                fidelity.extend(failures.iter().filter(|f| f.contains("isn't delivered")).cloned());
+                fidelity.extend(
+                    failures
+                        .iter()
+                        .filter(|f| f.contains("isn't delivered"))
+                        .cloned(),
+                );
             }
-            let verdict = if delivered && fidelity.is_empty() { "PASS" } else { "FAIL" };
+            let verdict = if delivered && fidelity.is_empty() {
+                "PASS"
+            } else {
+                "FAIL"
+            };
             parts.push(json!({"part": "fidelity", "check": "export.fidelity", "verdict": verdict, "failures": fidelity}));
         }
         (failures, parts)

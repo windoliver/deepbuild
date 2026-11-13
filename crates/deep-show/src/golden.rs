@@ -22,8 +22,17 @@ pub enum GoldenCall {
 pub fn parse(name: &str, c: &Map<String, Value>) -> Option<GoldenCall> {
     let doc = c.get("doc")?.as_str()?.to_string();
     Some(match name {
-        "golden_record" => GoldenCall::Record { doc, steps: c.get("steps")?.as_u64().filter(|n| (1..=100_000).contains(n))? },
-        "golden_verify" => GoldenCall::Verify { doc, golden: c.get("golden").filter(|g| g.is_object())?.clone() },
+        "golden_record" => GoldenCall::Record {
+            doc,
+            steps: c
+                .get("steps")?
+                .as_u64()
+                .filter(|n| (1..=100_000).contains(n))?,
+        },
+        "golden_verify" => GoldenCall::Verify {
+            doc,
+            golden: c.get("golden").filter(|g| g.is_object())?.clone(),
+        },
         _ => return None,
     })
 }
@@ -36,7 +45,11 @@ fn hex(d: impl AsRef<[u8]>) -> String {
 /// versions (`null` where a list lacks it).
 fn differing(recorded: &[Value], here: &[Value]) -> (Value, [Value; 2]) {
     let of = |list: &[Value], name: &Value| list.iter().find(|e| &e["interface"] == name).cloned();
-    let mut names: Vec<&Value> = recorded.iter().chain(here).map(|e| &e["interface"]).collect();
+    let mut names: Vec<&Value> = recorded
+        .iter()
+        .chain(here)
+        .map(|e| &e["interface"])
+        .collect();
     names.sort_by_key(|n| n.as_str().unwrap_or_default().to_string());
     for name in names {
         let (a, b) = (of(recorded, name), of(here, name));
@@ -68,20 +81,42 @@ impl Hub<'_> {
     /// Each step's hash: the document evaluated clean at the step's time, over the results of
     /// the nodes of the digested implementations' modules, in node order.
     fn step_hashes(&mut self, doc: &str, steps: u64) -> Result<Vec<String>, Value> {
-        let modules: Vec<Value> = self.digested().iter().map(|e| e["module"].clone()).collect();
+        let modules: Vec<Value> = self
+            .digested()
+            .iter()
+            .map(|e| e["module"].clone())
+            .collect();
         let mut out = Vec::new();
         for k in 0..steps as i64 {
             let e = Eval {
-                doc: doc.into(), t: EvalTime::Flicks(k * STEP), view: Map::new(), clean: true, perturb: None, pixels: false,
-                film: false, size: None, debug_text: false, arrays: Vec::new(), paths: Vec::new(), track: None,
+                doc: doc.into(),
+                t: EvalTime::Flicks(k * STEP),
+                view: Map::new(),
+                clean: true,
+                perturb: None,
+                pixels: false,
+                film: false,
+                size: None,
+                debug_text: false,
+                arrays: Vec::new(),
+                paths: Vec::new(),
+                track: None,
             };
             let r = self.eval(&e);
             if r["outcome"] != "evaluated" {
                 return Err(json!({"code": "not_evaluated", "step": k, "eval": r}));
             }
             let mut h = Sha256::new();
-            for n in r["nodes"].as_array().into_iter().flatten().filter(|n| modules.contains(&n["module"])) {
-                h.update(format!("{}\0{}\0{}\n", n["operator"], n["item"], n["result"]));
+            for n in r["nodes"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter(|n| modules.contains(&n["module"]))
+            {
+                h.update(format!(
+                    "{}\0{}\0{}\n",
+                    n["operator"], n["item"], n["result"]
+                ));
             }
             out.push(hex(h.finalize()));
         }
@@ -90,7 +125,10 @@ impl Hub<'_> {
 
     /// A golden's bake key: the current revision's document and the step count.
     fn golden_key(&self, doc: &str, steps: usize) -> String {
-        let d = self.current(doc).map(|r| r.doc.to_string()).unwrap_or_default();
+        let d = self
+            .current(doc)
+            .map(|r| r.doc.to_string())
+            .unwrap_or_default();
         hex(Sha256::digest(format!("{d}\0{steps}")))
     }
 
@@ -98,16 +136,21 @@ impl Hub<'_> {
         let digest = self.startup.sealed.runtime_digest.clone();
         match call {
             GoldenCall::Record { doc, steps } => match self.step_hashes(doc, *steps) {
-                Ok(hashes) => json!({"golden": {"bake_key": self.golden_key(doc, hashes.len()), "runtime_digest": digest,
+                Ok(hashes) => {
+                    json!({"golden": {"bake_key": self.golden_key(doc, hashes.len()), "runtime_digest": digest,
                     "implementations": self.digested(), "steps": steps, "step_hashes": hashes,
-                    "machine": {"os": std::env::consts::OS, "arch": std::env::consts::ARCH}}}),
+                    "machine": {"os": std::env::consts::OS, "arch": std::env::consts::ARCH}}})
+                }
                 Err(e) => e,
             },
             GoldenCall::Verify { doc, golden } => {
                 let theirs = golden["runtime_digest"].clone();
                 let across = self.scenario.planted == Some(Planted::GoldenComparesAcrossDigests);
                 if theirs != json!(digest) && !across {
-                    let recorded = golden["implementations"].as_array().cloned().unwrap_or_default();
+                    let recorded = golden["implementations"]
+                        .as_array()
+                        .cloned()
+                        .unwrap_or_default();
                     let (interface, [a, b]) = differing(&recorded, &self.digested());
                     let reason = format!(
                         "BLOCKED before any step: the golden was recorded under runtime digest {} with {} at {}, and this build's runtime digest is {} with it at {}; a golden is never compared under another runtime digest",
@@ -116,7 +159,10 @@ impl Hub<'_> {
                     return json!({"verdict": "BLOCKED", "steps_run": 0, "report": null, "reason": reason,
                         "blocked": {"interface": interface, "versions": [a, b], "runtime_digests": [theirs, digest]}});
                 }
-                let recorded: Vec<Value> = golden["step_hashes"].as_array().cloned().unwrap_or_default();
+                let recorded: Vec<Value> = golden["step_hashes"]
+                    .as_array()
+                    .cloned()
+                    .unwrap_or_default();
                 let key = self.golden_key(doc, recorded.len());
                 if golden["bake_key"] != json!(key) {
                     let reason = format!("the golden's bake key {} isn't this document's, {key}: it is never compared", golden["bake_key"]);
@@ -128,8 +174,17 @@ impl Hub<'_> {
                 };
                 let first = (0..recorded.len()).find(|&k| recorded[k] != json!(mine[k]));
                 let (verdict, reason) = match first {
-                    None => ("PASS", format!("every one of {} steps hashes as recorded", mine.len())),
-                    Some(k) => ("FAIL", format!("step {k} hashes {} here, not the recorded {}", mine[k], recorded[k])),
+                    None => (
+                        "PASS",
+                        format!("every one of {} steps hashes as recorded", mine.len()),
+                    ),
+                    Some(k) => (
+                        "FAIL",
+                        format!(
+                            "step {k} hashes {} here, not the recorded {}",
+                            mine[k], recorded[k]
+                        ),
+                    ),
                 };
                 json!({"verdict": verdict, "steps_run": mine.len(), "blocked": null, "reason": reason,
                     "report": first.map(|k| json!({"first_step": k, "values": [recorded[k], mine[k]]}))})

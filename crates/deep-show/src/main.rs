@@ -8,27 +8,27 @@
 //! macOS it answers `{"ok":false,"code":"unsupported_platform"}`).
 
 mod access;
+mod ask;
 mod audio;
 mod bake;
-mod ask;
 mod capture;
 mod costs;
 mod determinism;
 mod efficiency;
-mod familiar;
 mod evidence;
 mod export;
+mod familiar;
 mod film;
 mod film_audit;
 mod film_layout;
-mod geometry_audit;
 mod film_viewer;
 mod frames;
 mod function;
 mod gate;
-mod golden;
 mod generated;
 mod geometry;
+mod geometry_audit;
+mod golden;
 mod host;
 mod hub;
 mod input;
@@ -43,30 +43,30 @@ mod mixdown;
 mod modes;
 mod narration;
 mod packs;
-mod retired;
 mod physics;
 mod placement;
+#[cfg(feature = "test-accent")]
+mod planted;
 mod played;
 mod print;
 mod probe;
-#[cfg(feature = "test-accent")]
-mod planted;
 mod query;
 mod registries;
-mod sandbox;
+mod retired;
 mod ring;
 mod runs;
+mod sandbox;
 mod scene3d;
 mod seams;
 mod serve;
 mod shaper;
 mod shared;
 mod snapshot;
+mod spatial;
 mod spawn;
 mod stepped;
-mod spatial;
-mod terrain;
 mod terminal;
+mod terrain;
 #[cfg(feature = "test-machines")]
 mod test_machines;
 mod test_registries;
@@ -249,7 +249,10 @@ fn tame_overflow(line: &str) -> Option<String> {
 }
 
 /// An optional field as `read` takes it: `Some(None)` when it's absent, `None` when `read` refuses it.
-pub(crate) fn optional<T>(value: Option<&Value>, read: impl FnOnce(&Value) -> Option<T>) -> Option<Option<T>> {
+pub(crate) fn optional<T>(
+    value: Option<&Value>,
+    read: impl FnOnce(&Value) -> Option<T>,
+) -> Option<Option<T>> {
     value.map_or(Some(None), |v| read(v).map(Some))
 }
 
@@ -456,7 +459,10 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         }
         "cross_machine" => {
             let a = c.get("audio")?.as_array().filter(|a| a.len() == 2)?;
-            return Some(Call::CrossMachine([a[0].as_str()?.to_string(), a[1].as_str()?.to_string()]));
+            return Some(Call::CrossMachine([
+                a[0].as_str()?.to_string(),
+                a[1].as_str()?.to_string(),
+            ]));
         }
         "input" => {
             return Some(Call::Input {
@@ -674,7 +680,9 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         "seam_suite" => return seams::parse(c),
         "relay_client" => return seams::parse_client(c),
         "schedule" => return Some(Call::Schedule),
-        "golden_record" | "golden_verify" => return golden::parse(name, c).map(Call::RuntimeGolden),
+        "golden_record" | "golden_verify" => {
+            return golden::parse(name, c).map(Call::RuntimeGolden)
+        }
         "rate" | "time" | "export" | "play" | "determinism" => {
             return crate::time::parse_call(name, c)
         }
@@ -1718,7 +1726,10 @@ impl CanvasSide {
             .enumerate()
             .map(|(i, c)| {
                 let mut c = c.clone();
-                let arrives = if ["deep_query", "geometry", "fn", "deep_kinds"].iter().any(|k| c["call"] == *k) {
+                let arrives = if ["deep_query", "geometry", "fn", "deep_kinds"]
+                    .iter()
+                    .any(|k| c["call"] == *k)
+                {
                     "arrives"
                 } else {
                     "at"
@@ -3006,21 +3017,27 @@ fn planted_named(twin: &str) -> Result<StartPlanted, ()> {
         "control_kind_recompute"
         | "control_kind_reads_modifiers"
         | "control_kind_no_keyboard"
-        | "control_kind_agent_input" => Ok(StartPlanted::ControlKind(
-            Box::leak(twin.trim_start_matches("control_kind_").to_string().into_boxed_str()),
-        )),
+        | "control_kind_agent_input" => Ok(StartPlanted::ControlKind(Box::leak(
+            twin.trim_start_matches("control_kind_")
+                .to_string()
+                .into_boxed_str(),
+        ))),
         "registries_without_slots" => Ok(StartPlanted::Listing(registries::Listing::WithoutSlots)),
         "slot_fill_as_entry" => Ok(StartPlanted::Listing(registries::Listing::FillAsEntry)),
         "validator_without_close" => Ok(StartPlanted::Seal(Fault::NoCloseNames)),
         "close_by_spelling" => Ok(StartPlanted::Seal(Fault::CloseBySpelling)),
-        "pages_capped_at_64mib" => Ok(StartPlanted::Layouts(deep_canvas_sandbox::layouts::Planted {
-            pages_pack_cap: true,
-            ..Default::default()
-        })),
-        "nav_graph_trusts_link_count" => Ok(StartPlanted::Layouts(deep_canvas_sandbox::layouts::Planted {
-            trusts_link_count: true,
-            ..Default::default()
-        })),
+        "pages_capped_at_64mib" => Ok(StartPlanted::Layouts(
+            deep_canvas_sandbox::layouts::Planted {
+                pages_pack_cap: true,
+                ..Default::default()
+            },
+        )),
+        "nav_graph_trusts_link_count" => Ok(StartPlanted::Layouts(
+            deep_canvas_sandbox::layouts::Planted {
+                trusts_link_count: true,
+                ..Default::default()
+            },
+        )),
         _ if kinds::Planted::named(twin).is_some() => {
             Ok(StartPlanted::Kinds(kinds::Planted::named(twin).ok_or(())?))
         }
@@ -3030,7 +3047,9 @@ fn planted_named(twin: &str) -> Result<StartPlanted, ()> {
                 name.to_string().into_boxed_str(),
             )))
         }
-        _ if export_planted(twin).is_some() => export_planted(twin).map(StartPlanted::Run).ok_or(()),
+        _ if export_planted(twin).is_some() => {
+            export_planted(twin).map(StartPlanted::Run).ok_or(())
+        }
         "fingerprint_without_sources" => Ok(StartPlanted::Run(Planted::FingerprintWithoutSources)),
         "key_hashes_raw_bytes" => Ok(StartPlanted::Run(Planted::KeyHashesRawBytes)),
         _ => seams::NetFault::named(twin)
@@ -3180,9 +3199,9 @@ fn main() {
 }
 
 #[cfg(target_os = "macos")]
-mod live;
-#[cfg(target_os = "macos")]
 mod idle;
+#[cfg(target_os = "macos")]
+mod live;
 #[cfg(target_os = "macos")]
 mod watch;
 #[cfg(target_os = "macos")]

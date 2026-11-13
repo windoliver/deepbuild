@@ -404,7 +404,14 @@ impl Run {
 
     /// The bake key of `world` at `rate` over `steps`, with what it reads of its scene (`[]` when
     /// nothing) and no input track; a golden's when `target` is `None`.
-    fn key(&self, world: &Value, reads: &Value, rate: &str, steps: u64, target: Option<&str>) -> String {
+    fn key(
+        &self,
+        world: &Value,
+        reads: &Value,
+        rate: &str,
+        steps: u64,
+        target: Option<&str>,
+    ) -> String {
         self.key_with(world, reads, &json!([]), rate, steps, target)
     }
 
@@ -597,7 +604,10 @@ impl Run {
                     guard: false,
                     ftz_at: None,
                     shift: None,
-                    track: call.get("track").and_then(Value::as_array).map_or(&[], Vec::as_slice),
+                    track: call
+                        .get("track")
+                        .and_then(Value::as_array)
+                        .map_or(&[], Vec::as_slice),
                 };
                 let with_checkpoints = call
                     .get("checkpoints")
@@ -1221,10 +1231,19 @@ pub struct Live {
 impl Run {
     /// The world a `{scene, world}` call names, built to step live.
     pub fn live(&self, call: &Value) -> Result<Live, Value> {
-        let (world, scene) = self.subject(call).unwrap_or_else(|| Err(json!({"ok": false, "code": "bad_input"})))?;
+        let (world, scene) = self
+            .subject(call)
+            .unwrap_or_else(|| Err(json!({"ok": false, "code": "bad_input"})))?;
         let (w, b) = self.build(&world)?;
         let rank = occurrence::ranks(&w);
-        Ok(Live { w, b, scene, rank, inputs: BTreeMap::new(), steps: 0 })
+        Ok(Live {
+            w,
+            b,
+            scene,
+            rank,
+            inputs: BTreeMap::new(),
+            steps: 0,
+        })
     }
 }
 
@@ -1242,9 +1261,14 @@ impl Live {
     /// The next step, and its rows as a bake's scene reads them, each stamped with its `t`.
     pub fn step(&mut self) -> Result<Vec<Value>, Value> {
         let k = self.steps + 1;
-        let targets = self.scene.as_ref().map_or_else(Targets::default, |s| s.targets(k));
+        let targets = self
+            .scene
+            .as_ref()
+            .map_or_else(Targets::default, |s| s.targets(k));
         let inputs = self.inputs.get(&k).map_or(&[][..], Vec::as_slice);
-        self.b.step(inputs, &targets).map_err(|r| json!({"ok": false, "issues": [issue(&r)]}))?;
+        self.b
+            .step(inputs, &targets)
+            .map_err(|r| json!({"ok": false, "issues": [issue(&r)]}))?;
         self.steps = k;
         let rows = occurrence::sorted(k as u32, self.b.occurrences(), &self.rank);
         Ok(occurrence::timed(&occurrence::listed(&rows), &self.w))
