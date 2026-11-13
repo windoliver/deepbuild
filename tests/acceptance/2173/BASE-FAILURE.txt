@@ -1,0 +1,126 @@
+Base source archive: 1c4d1f0e2aaad8c6a6573848823566d04ff73d17
+
+$ node --test --test-reporter=tap --test-name-pattern=AC1:|a Rust dependency fails in each section tests/acceptance/2173/repo-rules.test.mjs tests/acceptance/246/redraft/deps.test.mjs
+TAP version 13
+# Subtest: AC1: node scripts/repo-rules.mjs exits 0 on main
+not ok 1 - AC1: node scripts/repo-rules.mjs exits 0 on main
+  ---
+  duration_ms: 29683.640459
+  type: 'test'
+  location: '<repo>/tests/acceptance/2173/repo-rules.test.mjs:7:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    issue #2173 requires exit 0; see command output
+    
+    1 !== 0
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 0
+  actual: 1
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (file://<repo>/tests/acceptance/2173/repo-rules.test.mjs:12:10)
+    Test.runInAsyncScope (node:async_hooks:227:14)
+    Test.run (node:internal/test_runner/test:1402:25)
+    Test.start (node:internal/test_runner/test:1262:17)
+    startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17)
+  ...
+# exit 1\\nstdout:\\nFAIL secrets: tests/acceptance/1575-redraft-ac1/BASE-FAILURE.txt:11:14: home path\\n  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.\\nFAIL deps: crates/deep-codecs/Cargo.toml dependencies deep-canvas-cells * path=../deep-canvas-cells is not in scripts/repo-rules.json\\n  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.\\nFAIL deps: crates/deep-app/Cargo.toml dependencies deep-images * path=../deep-images is not in scripts/repo-rules.json\\n  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.\\nFAIL deps: crates/deep-app/Cargo.toml target.'cfg(target_os = "macos")'.dependencies accesskit_macos ^0.26 is not in scripts/repo-rules.json\\n  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.\\nFAIL deps: crates/deep-images/Cargo.toml dependencies deep-canvas * path=../deep-canvas is not in scripts/repo-rules.json\\n  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.\\nFAIL deps: crates/deep-images/Cargo.toml dependencies image ^0.25 is not in scripts/repo-rules.json\\n  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.\\nFAIL deps: crates/deep-images/Cargo.toml dependencies sha2 ^0.10 is not in scripts/repo-rules.json\\n  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.\\nFAIL deps: crates/deep-gpu-layer/Cargo.toml dependencies deep-canvas-physics * path=../deep-canvas-physics is not in scripts/repo-rules.json\\n  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.\\nFAIL deps: crates/deep-gpu-layer/Cargo.toml dependencies deep-logic * path=../deep-logic is not in scripts/repo-rules.json\\n  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.\\nFAIL deps: crates/deep-gpu-layer/Cargo.toml dependencies deep-physics-rapier * path=../deep-physics-rapier is not in scripts/repo-rules.json\\n  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.\\nFAIL deps: crates/deep-marks-render/Cargo.toml dependencies deep-images * path=../deep-images is not in scripts/repo-rules.json\\n  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.\\nFAIL deps: crates/deep-physics-rapier/Cargo.toml dev-dependencies simba =0.10.2 is not in scripts/repo-rules.json\\n  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.\\nFAIL deps: crates/deep-show/Cargo.toml dependencies deep-images * path=../deep-images is not in scripts/repo-rules.json\\n  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.\\nFAIL deps: crates/deep-typeset/Cargo.toml dependencies mitex * git+https://github.com/mitex-rs/mitex?rev=51f7210e026ab05d037125247e92d4d023d8a80d is not in scripts/repo-rules.json\\n  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.\\nFAIL deps: crates/deep-typeset/Cargo.toml dependencies mitex-spec-gen * git+https://github.com/mitex-rs/mitex?rev=51f7210e026ab05d037125247e92d4d023d8a80d is not in scripts/repo-rules.json\\n  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.\\nFAIL deps: crates/deep-typeset/Cargo.toml dependencies serde_json ^1 is not in scripts/repo-rules.json\\n  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.\\nFAIL deps: crates/deep-typeset/Cargo.toml dependencies ttf-parser ^0.25 is not in scripts/repo-rules.json\\n  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.\\nFAIL deps: crates/deep-typeset/Cargo.toml dependencies typst =0.15.1 is not in scripts/repo-rules.json\\n  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.\\nFAIL deps: crates/deep-typeset/Cargo.toml dependencies typst-layout =0.15.1 is not in scripts/repo-rules.json\\n  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.\\nFAIL deps: tests/acceptance/544/wat/Cargo.toml dependencies wasmparser =0.263.0 is not in scripts/repo-rules.json\\n  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.\\nFAIL deps: tests/acceptance/544/wat/Cargo.toml dependencies wat =1.263.0 is not in scripts/repo-rules.json\\n  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.\\nFAIL deps: tests/acceptance/545/wat/Cargo.toml dependencies wasmparser =0.263.0 is not in scripts/repo-rules.json\\n  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.\\nFAIL deps: tests/acceptance/545/wat/Cargo.toml dependencies wat =1.263.0 is not in scripts/repo-rules.json\\n  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.\\nFAIL cards: crates/deep-canvas-physics/README.md:29: a deviation names budget, which crates/deep-canvas-physics doesn't have\\n  Fix: Correct the deviation to the file it is about, or remove it if the file is gone.\\nFAIL cards: crates/deep-images has no README.md card\\n  Fix: Give the folder a README.md with the headings What it is for, Where new code goes, What it may import and Deviations.\\nPASS workflows: .github/workflows/ has no entries\\nPASS agent-hooks: no hooks, plugins or hook switch-off in .claude settings, no .codex/ folder\\nPASS physics-build: rapier3d 0.36.1 [alloc, dim3, enhanced-determinism, f32, serde-serialize, std], parry3d 0.31.1, none of simd8, parallel, block-solver, fem, unsync-callbacks, fast-math, and no rustflags with target-cpu=native or +fma\\nNOTE deps: vendor/accesskit_macos/Cargo.toml is a vendored upstream crate; its dependencies are upstream's\\nNOTE deps: vendor/gpui-pre-apple/Cargo.toml is a vendored upstream crate; its dependencies are upstream's\\nNOTE deps: vendor/gpui-pre-macos/Cargo.toml is a vendored upstream crate; its dependencies are upstream's\\nNOTE deps: vendor/gpui-pre/Cargo.toml is a vendored upstream crate; its dependencies are upstream's\\nNOTE deps: vendor/quickjs-jit-runtime/Cargo.toml is a vendored upstream crate; its dependencies are upstream's\\nNOTE size: not measured: no origin/main to compare with (git fetch origin main)\\n\\nstderr:\\n
+# Subtest: a Rust dependency fails in each section that declares it, and passes once listed with spec ^1
+not ok 2 - a Rust dependency fails in each section that declares it, and passes once listed with spec ^1
+  ---
+  duration_ms: 1930.586291
+  type: 'test'
+  location: '<repo>/tests/acceptance/246/redraft/deps.test.mjs:75:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    exit 1
+    stdout:
+    FAIL physics-build: it didn't run: node:internal/modules/cjs/loader:1568
+      throw err;
+      ^
+    
+    Error: Cannot find module '<temp>'
+        at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+        at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+        at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+        at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+        at Module._load (node:internal/modules/cjs/loader:1341:5)
+        at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+        at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+        at node:internal/main/run_main_module:33:47 {
+      code: 'MODULE_NOT_FOUND',
+      requireStack: []
+    }
+    
+    Node.js v24.22.2
+    
+      Fix: Remove the feature or flag the line names from the physics build: rapier3d stays at 0.36.1 with enhanced-determinism, without simd8 or parallel, built for the target's baseline features.
+    PASS workflows: .github/workflows/ has no entries
+    PASS agent-hooks: no hooks, plugins or hook switch-off in .claude settings, no .codex/ folder
+    PASS secrets: 6 files scanned, 0 lockfiles and 0 binary files skipped, 0 allowed
+    PASS deps: 1 package.json file and 1 crate match scripts/repo-rules.json
+    PASS cards: 0 packages and 1 crate have cards with the four headings; 0 deviations, each naming a file that exists
+    NOTE size: not measured: no origin/main to compare with (git fetch origin main)
+    
+    stderr:
+    
+    
+    1 !== 0
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 0
+  actual: 1
+  operator: 'strictEqual'
+  stack: |-
+    Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+    wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+    defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+    resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+    Module._load (node:internal/modules/cjs/loader:1341:5)
+    wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+    node:internal/main/run_main_module:33:47 {
+    assertPasses (file://<repo>/tests/acceptance/246/redraft/deps.test.mjs:47:10)
+    TestContext.<anonymous> (file://<repo>/tests/acceptance/246/redraft/deps.test.mjs:97:5)
+    Test.runInAsyncScope (node:async_hooks:227:14)
+    Test.run (node:internal/test_runner/test:1402:25)
+    Test.start (node:internal/test_runner/test:1262:17)
+    startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17)
+  ...
+1..2
+# tests 2
+# suites 0
+# pass 0
+# fail 2
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 29982.610667
+
+Exit: 1
+
+$ node scripts/affected.mjs tests/acceptance/2173/repo-rules.test.mjs
+node:internal/modules/package_json_reader:331
+  throw new ERR_MODULE_NOT_FOUND(packageName, fileURLToPath(base), null);
+        ^
+
+Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'typescript' imported from <repo>/scripts/affected.mjs
+    at Object.getPackageJSONURL (node:internal/modules/package_json_reader:331:9)
+    at packageResolve (node:internal/modules/esm/resolve:784:25)
+    at moduleResolve (node:internal/modules/esm/resolve:873:18)
+    at defaultResolve (node:internal/modules/esm/resolve:1006:11)
+    at #cachedDefaultResolve (node:internal/modules/esm/loader:705:20)
+    at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:725:38)
+    at ModuleLoader.resolveSync (node:internal/modules/esm/loader:763:56)
+    at #resolve (node:internal/modules/esm/loader:687:17)
+    at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:607:35)
+    at ModuleJob.syncLink (node:internal/modules/esm/module_job:276:33) {
+  code: 'ERR_MODULE_NOT_FOUND'
+}
+
+Node.js v24.22.2
+
+Exit: 1
