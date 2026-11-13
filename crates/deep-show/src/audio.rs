@@ -24,6 +24,10 @@ use crate::hub::{Hub, Planted};
 use crate::mixdown::float_wav;
 use crate::placement::Grid;
 use crate::refused;
+use crate::stepped::{Planted as Ahead, Worlds};
+
+/// One audio block (Sound and video on the picture's clock: Blocks).
+const BLOCK: i64 = 128;
 
 #[derive(Clone, Debug)]
 pub struct Spec {
@@ -163,6 +167,10 @@ pub enum AudioCall {
         item: String,
         step: i64,
     },
+    /// #525: each live world's occurrence list as the play has stepped it.
+    Occurrences(String),
+    /// #525: the play's recorded input track.
+    InputTrack(String),
 }
 
 pub fn parse_call(name: &str, c: &Map<String, Value>) -> Option<AudioCall> {
@@ -193,6 +201,8 @@ pub fn parse_call(name: &str, c: &Map<String, Value>) -> Option<AudioCall> {
             item: s("item")?,
             step: c.get("step")?.as_i64()?,
         },
+        "occurrences" => AudioCall::Occurrences(s("panel")?),
+        "input_track" => AudioCall::InputTrack(s("panel")?),
         _ => return None,
     })
 }
@@ -246,12 +256,25 @@ pub struct AudioPlay {
     stream: Option<Stream>,
     streams_opened: u32,
     /// Every buffer written, by device.
-    written: BTreeMap<String, Vec<Written>>,
+    output: BTreeMap<String, Vec<Written>>,
     frames: Vec<Frame>,
     steps: Vec<(String, i64, i64)>,
     logic: Option<Logic>,
     pub notice: Option<(&'static str, String)>,
     now: i64,
+    /// #525: the document's live worlds, stepped ahead of each block it renders.
+    pub(crate) worlds: Option<Worlds>,
+    /// #525: the first document sample not yet written.
+    written: i64,
+    /// #525: each block render: the host time of its callback, its first sample and each world's time.
+    blocks: Vec<(i64, i64, Vec<i64>)>,
+    /// #525: the samples the play rendered for the gate, in document order from the stream's first.
+    handed: Vec<f32>,
+    /// #525: stream samples played as silence because a block wasn't ready, as (first, frames);
+    /// the underruns among them (each a stretch of callbacks) and whether the last callback was one.
+    silent: Vec<(i64, i64)>,
+    underruns: u64,
+    in_underrun: bool,
 }
 
 /// The first document time any strip of `mix` sounds.
@@ -297,12 +320,19 @@ impl AudioPlay {
             sound_from: from,
             stream: None,
             streams_opened: 0,
-            written: BTreeMap::new(),
+            output: BTreeMap::new(),
             frames: Vec::new(),
             steps: Vec::new(),
             logic,
             notice: None,
             now: play_host,
+            worlds: None,
+            written: 0,
+            blocks: Vec::new(),
+            handed: Vec::new(),
+            silent: Vec::new(),
+            underruns: 0,
+            in_underrun: false,
         })
     }
 
@@ -358,7 +388,7 @@ impl AudioPlay {
         }
         self.audio = false;
         s.closed = Some(at);
-        if let Some(bufs) = self.written.get_mut(&s.device) {
+        if let Some(bufs) = self.output.get_mut(&s.device) {
             for b in bufs.iter_mut() {
                 b.2 = Some(b.2.map_or(at, |x| x.min(at)));
             }
@@ -411,13 +441,122 @@ impl AudioPlay {
             let d0 = t.div_euclid(sample) + i64::from(t.rem_euclid(sample) * 2 >= sample);
             s.d0 = Some(d0);
             self.player.seek(d0);
+            self.written = d0;
         }
         s.pairing.add(n, reported);
         s.next += 1;
         let device = s.device.clone();
+        let pull = d.play_at(k) - (d.spec.latency + d.spec.buffer) * d.sample();
         let mut out = vec![0f32; 2 * buf as usize];
-        self.player.read(&mut out);
-        self.written.entry(device).or_default().push((k, out, None));
+        self.render(&mut out, pull, n, planted);
+        self.output.entry(device).or_default().push((k, out, None));
+    }
+
+    /// #525: one callback's buffer, block by block, each live world stepped first until its time
+    /// is past what the block's render reaches (the block and the graph's lead); a step not
+    /// ready yet leaves the rest of the buffer silent, one underrun, and renders nothing of it.
+    fn render(&mut self, out: &mut [f32], host: i64, at: i64, planted: Option<Planted>) {
+        let Some(mut worlds) = self.worlds.take() else {
+            self.player.read(out);
+            return;
+        };
+        let sample = FLICKS / self.rate;
+        let ahead = |p: Ahead| planted == Some(Planted::Ahead(p));
+        let (frames, mut i, mut silent) = (out.len() / 2, 0, false);
+        while i < frames {
+            let first = self.written;
+            let n = (frames - i).min((BLOCK - first.rem_euclid(BLOCK)) as usize);
+            if !ahead(Ahead::WorldStepsOnFrames) {
+                let ready = worlds.step_to((first + n as i64 + self.player.ahead()) * sample, host);
+                if !ready && !ahead(Ahead::LateStepMovesVoice) {
+                    silent = true;
+                    break;
+                }
+                self.add(&mut worlds, first, planted);
+            }
+            self.blocks.push((host, first, worlds.times()));
+            let span = &mut out[2 * i..2 * (i + n)];
+            self.player.read(span);
+            self.handed.extend_from_slice(span);
+            self.written += n as i64;
+            i += n;
+        }
+        if silent {
+            out[2 * i..].fill(0.0);
+            self.silent.push((at + i as i64, (frames - i) as i64));
+            self.underruns += u64::from(!self.in_underrun);
+        }
+        self.in_underrun = silent;
+        self.worlds = Some(worlds);
+    }
+
+    /// #525: hands the player the strips the worlds' lists and the track add, when they changed;
+    /// a planted program moves a voice to the frame that shows its hit, or a late step's voices
+    /// to the block `first` the play renders next.
+    fn add(&mut self, worlds: &mut Worlds, first: i64, planted: Option<Planted>) {
+        let sample = FLICKS / self.rate;
+        let moved = |t: i64| match planted {
+            Some(Planted::Ahead(Ahead::VoiceAtFrame)) => Some(self.frame_after(t)),
+            Some(Planted::Ahead(Ahead::LateStepMovesVoice)) => {
+                (t < first * sample).then_some(first * sample)
+            }
+            _ => None,
+        };
+        if let Some(strips) = worlds.added(moved) {
+            self.player.set_added(strips);
+        }
+    }
+
+    /// The silence played before stream position `p`, in samples.
+    fn silence_before(&self, p: f64) -> f64 {
+        self.silent
+            .iter()
+            .map(|&(s, n)| (p - s as f64).clamp(0.0, n as f64))
+            .sum()
+    }
+
+    /// The t the audio clock gives host time `h`: the document position of the sample the
+    /// device plays then.
+    fn heard(&self, h: i64) -> Option<i64> {
+        let s = self.stream.as_ref()?;
+        let p = s.pairing.position(h)?;
+        let sample = (FLICKS / self.rate) as f64;
+        Some(((s.d0? as f64 + p - self.silence_before(p)) * sample).round() as i64)
+    }
+
+    /// The t of the first display frame at or after the one that plays document time `t`
+    /// (`voice_at_frame`'s and `entry_stamped_at_frame`'s reading).
+    fn frame_after(&self, t: i64) -> i64 {
+        let sample = FLICKS / self.rate;
+        let host = self
+            .stream
+            .as_ref()
+            .and_then(|s| s.pairing.host_of(t.div_euclid(sample) - s.d0?));
+        host.map_or(t, |h| self.frame_at(h))
+    }
+
+    /// The t of the first display frame at or after host time `h`.
+    fn frame_at(&self, h: i64) -> i64 {
+        let g = &self.grid;
+        let v = self.vsync((h - g.next_vsync + g.period - 1).div_euclid(g.period));
+        self.heard(v).unwrap_or_else(|| self.display_t(v))
+    }
+
+    /// #525: the flick an entry of your input takes (Input track): the first sample at or after
+    /// the position its event time `t` maps to, plus the write-ahead and one block, or the first
+    /// sample not yet written or step not yet run, whichever is later; the planted entry takes
+    /// the t of the first frame at or after its arrival `at`.
+    pub(crate) fn stamp(&self, b: &Backend, t: i64, at: i64, at_frame: bool) -> i64 {
+        if at_frame {
+            return self.frame_at(at);
+        }
+        let sample = FLICKS / self.rate;
+        let device = self.stream.as_ref().and_then(|s| b.device(&s.device));
+        let lead = device.map_or(0, |d| d.spec.latency + d.spec.buffer) + BLOCK;
+        let ceil = |f: i64| f.div_euclid(sample) + i64::from(f.rem_euclid(sample) != 0);
+        let pos = self.heard(t).unwrap_or_else(|| self.display_t(t));
+        let next = self.worlds.as_ref().map_or(0, Worlds::next_step);
+        (ceil(pos) + lead).max(self.written).max(ceil(next)) * sample
     }
 
     fn frame(&mut self, at: i64, planted: Option<Planted>) {
@@ -430,7 +569,8 @@ impl AudioPlay {
         let mut led = ("display", None);
         if let Some(s) = &self.stream {
             if let (Some(d0), Some(p)) = (s.d0, s.pairing.position(at)) {
-                let heard = ((d0 as f64 + p) * sample as f64).round() as i64;
+                let heard =
+                    ((d0 as f64 + p - self.silence_before(p)) * sample as f64).round() as i64;
                 if !self.audio && p >= 0.0 && heard >= self.sound_from {
                     self.audio = true;
                 }
@@ -464,6 +604,14 @@ impl AudioPlay {
                     }
                 }
             });
+        }
+        // #525's planted world steps at each frame up to its t, as a logic item does.
+        if planted == Some(Planted::Ahead(Ahead::WorldStepsOnFrames)) {
+            if let Some(mut w) = self.worlds.take() {
+                w.step_to(t, at);
+                self.add(&mut w, self.written, planted);
+                self.worlds = Some(w);
+            }
         }
         self.frames.push(Frame {
             at,
@@ -500,6 +648,7 @@ impl Hub<'_> {
         panel: &str,
         mix: Arc<Mix>,
         piece: Option<Value>,
+        doc: Option<Value>,
     ) -> Result<AudioPlay, Value> {
         let grid = self
             .placement
@@ -522,7 +671,12 @@ impl Hub<'_> {
             )),
             None => None,
         };
+        let master = mix.buses.iter().position(|b| b.id == "master").unwrap_or(0);
         let mut play = AudioPlay::new(mix, piece, self.now, grid)?;
+        // #525: a media document's worlds play live, stepped ahead of the blocks.
+        if let Some(d) = doc {
+            play.worlds = self.live_worlds(&d, master)?;
+        }
         if let Some(b) = self.backend() {
             play.open(&b, self.now);
         }
@@ -610,7 +764,23 @@ impl Hub<'_> {
                     .filter(|s| s.2 >= *from && s.2 < *to)
                     .map(|s| json!({"item": s.0, "step": s.1, "at": s.2}))
                     .collect();
-                json!({"transport": {"frames": frames, "steps": steps}})
+                let ids: Vec<&str> = p.worlds.iter().flat_map(Worlds::ids).collect();
+                let blocks: Vec<Value> = p
+                    .blocks
+                    .iter()
+                    .filter(|b| b.0 >= *from && b.0 < *to)
+                    .map(|b| json!({"at": b.0, "first": b.1, "stepped": ids.iter().zip(&b.2).map(|(i, t)| (i.to_string(), json!(t))).collect::<Map<String, Value>>()}))
+                    .collect();
+                json!({"transport": {"frames": frames, "steps": steps, "blocks": blocks}})
+            }
+            AudioCall::Occurrences(panel) | AudioCall::InputTrack(panel) => {
+                let Some(w) = self.gate.audio_play(panel).and_then(|p| p.worlds.as_ref()) else {
+                    return refused("not_playing");
+                };
+                match call {
+                    AudioCall::Occurrences(_) => json!({"occurrences": w.lists()}),
+                    _ => json!({"input_track": w.track}),
+                }
             }
             AudioCall::FullState { panel, item, step } => {
                 let Some(l) = self.gate.audio_play(panel).and_then(|p| p.logic.as_ref()) else {
@@ -657,7 +827,7 @@ impl Hub<'_> {
         let n = (last - first).max(0) as usize;
         let mut pcm = vec![0f32; 2 * n];
         for p in self.gate.audio_plays() {
-            for (k, buf, until) in p.written.get(device).into_iter().flatten() {
+            for (k, buf, until) in p.output.get(device).into_iter().flatten() {
                 let len = (buf.len() / 2) as i64;
                 for i in (first.max(*k))..(last.min(k + len)) {
                     let h = d.play_at(i);
@@ -679,8 +849,9 @@ impl Hub<'_> {
         }
     }
 
-    /// The gate's state for a panel played under the test backend, and its notice.
-    pub(crate) fn audio_gate(&mut self, panel: &str) -> Option<(&'static str, Value)> {
+    /// The gate's state for a panel played under the test backend, its notice and its stats
+    /// (#525: Device gate's `stats`, an underrun one stretch of callbacks filled with silence).
+    pub(crate) fn audio_gate(&mut self, panel: &str) -> Option<(&'static str, Value, Value)> {
         self.advance_audio();
         let b = self.backend()?;
         let p = self.gate.audio_play(panel)?;
@@ -693,6 +864,77 @@ impl Hub<'_> {
             .notice
             .as_ref()
             .map_or(Value::Null, |(c, d)| json!({"code": c, "device": d}));
-        Some((state, notice))
+        let sample = FLICKS / p.rate;
+        let latency = p
+            .stream
+            .as_ref()
+            .and_then(|s| b.device(&s.device))
+            .map_or(0, |d| d.spec.latency * sample);
+        let silent: i64 = p.silent.iter().map(|s| s.1).sum();
+        let stats =
+            json!({"underruns": p.underruns, "underrun_time": silent * sample, "latency": latency});
+        Some((state, notice, stats))
+    }
+
+    /// #525: what a live media play under the test backend rendered for the gate over document
+    /// time [from, to), each sample once, an underrun's silence not among them.
+    pub(crate) fn audio_handed(&mut self, panel: &str, from: i64, to: i64) -> Option<Value> {
+        self.advance_audio();
+        let p = self.gate.audio_play(panel).filter(|p| p.worlds.is_some())?;
+        let d0 = p.stream.as_ref().and_then(|s| s.d0)?;
+        let (first, last) = (
+            crate::mixdown::sample_at(from, p.rate),
+            crate::mixdown::sample_at(to, p.rate),
+        );
+        let rendered = (p.handed.len() / 2) as i64;
+        if first < d0 || last > d0 + rendered || last < first {
+            return Some(json!({"code": "not_handed", "handed": [d0, d0 + rendered]}));
+        }
+        let pcm = &p.handed[2 * (first - d0) as usize..2 * (last - d0) as usize];
+        let sha = crate::evidence::sha256_hex(
+            &pcm.iter()
+                .flat_map(|x| x.to_le_bytes())
+                .collect::<Vec<u8>>(),
+        );
+        let rate = p.rate;
+        let wav = float_wav(pcm, 2, rate);
+        Some(match evidence::put(&self.scenario.evidence, &wav) {
+            Ok(w) => {
+                json!({"handed": {"sample_rate": rate, "channels": 2, "first": first, "frames": last - first, "sha256": sha, "wav": w}})
+            }
+            Err(_) => refused("store_failed"),
+        })
+    }
+
+    /// #525: your press of a control in a panel playing a live media document: one entry on the
+    /// play's input track, stamped by the Input track's rule (`t` the event's own time), which
+    /// starts each `start_on` strip it matches and derives the worlds' inputs from then on.
+    pub(crate) fn live_press(
+        &mut self,
+        panel: &str,
+        event: &deep_canvas::scope::Event,
+        t: Option<i64>,
+    ) -> Result<(), Value> {
+        let deep_canvas::scope::Event::Control { control, value } = event else {
+            return Ok(());
+        };
+        if self
+            .gate
+            .audio_play(panel)
+            .is_none_or(|p| p.worlds.is_none())
+        {
+            return Ok(());
+        }
+        self.advance_audio();
+        let (now, b) = (self.now, self.backend());
+        let at_frame = self.scenario.planted == Some(Planted::Ahead(Ahead::EntryStampedAtFrame));
+        let (Some(b), Some(p)) = (b, self.gate.audio_play_mut(panel)) else {
+            return Ok(());
+        };
+        let stamp = p.stamp(&b, t.unwrap_or(now), now, at_frame);
+        if let Some(w) = p.worlds.as_mut() {
+            w.press(stamp, control, value);
+        }
+        Ok(())
     }
 }

@@ -31,7 +31,7 @@ pub type Vet<'v> =
 
 /// Reads a pack folder as one manifest: `pack.json`, its `id` set to `owner/name`, and each
 /// `recipes` entry's file inlined.
-fn load(id: &str, dir: &Path) -> Result<Value, Vec<Issue>> {
+pub(crate) fn load(id: &str, dir: &Path) -> Result<Value, Vec<Issue>> {
     let read = |path: &Path| -> Result<Value, Vec<Issue>> {
         let bytes = fs::read(path).map_err(|e| {
             vec![Issue::envelope(
