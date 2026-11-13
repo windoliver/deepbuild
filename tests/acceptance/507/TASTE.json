@@ -1,0 +1,14 @@
+{
+  "issue": 507,
+  "criterion": "#507.0ee140b7",
+  "verdict": "looks_right",
+  "who": "Claude, on the owner's standing delegation of taste calls; the owner can overrule it on the PR",
+  "when": "2026-11-13T07:48:50Z",
+  "screenshots": {
+    "stage-full-screen.png": "4b16437602607618e2191351899b5aab2022c13d458a4bd2f0b5f716af62c087",
+    "presenter-view.png": "b40979e6e87fc1fd717a1c0f65a7fb681c7c75829c2b0a7e874bdb3e114cbe5b",
+    "handout-page.png": "17d72dd63152327dd27a32bd060b158deb88687cdedd5a17366e25536cbd9f66",
+    "held-loop.apng": "385ea889fdaaf9722ea26f76f0e32432b85e744895b0203a4f19d4fc9bad8ce4"
+  },
+  "note": "Taken by docs/evidence/507/shoot.ts from deep-show run at the reference window (3024 × 1964 px), read at full size, the recording through a contact sheet of every 15th frame. Stage full screen: stage 3 of the nine-stage piece, its 16:9 frame letterboxed on the display. Presenter view: stage 3 of 9, Method, its notes, the elapsed 12.8 s and the next stage (4, Results) framed; the canvas draws these from the presenter call's own fields, since the app has no presenter window yet, and nothing of it is on the presented display. Handout page: page 3 rendered by poppler, the stage's still with its notes under it. Held loop: the timeline reaches stage s2 and holds, the block stepping between the span's frames at 4 s and 5 s each second. Plain blocks in the clean look: no art direction was asked for."
+}
