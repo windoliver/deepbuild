@@ -17,17 +17,15 @@
     "canvas-lint: crates/deep-text/src/cache.rs the pointer width (size_of), 32 on wasm32 and 64 on the reference Macs": 3,
     "canvas-lint: crates/deep-text/src/cache.rs use of a disallowed method `std::collections::HashMap::iter` (clippy::disallowed_methods)": 1,
     "canvas-lint: crates/deep-text/src/cache.rs use of a disallowed type `std::collections::HashMap` (clippy::disallowed_types)": 2,
+    "clippy: tests/acceptance/1141/app/bulk.rs manual implementation of `.is_multiple_of()`": 3,
+    "clippy: tests/acceptance/1141/app/environment.rs manual implementation of `.is_multiple_of()`": 1,
     "clippy: tests/acceptance/327/ac3_redraft.rs needlessly taken reference of both operands": 1,
     "clippy: tests/acceptance/327/card.rs this `map_or` can be simplified": 4,
     "clippy: tests/acceptance/327/card.rs unused import: `Phase`": 1,
     "clippy: tests/acceptance/327/card.rs unused variable: `card`": 1,
     "clippy: tests/acceptance/327/common.rs this `map_or` can be simplified": 1,
     "clippy: tests/acceptance/327/planted.rs this `map_or` can be simplified": 1,
-    "fmt: tests/acceptance/327/ac1_redraft.rs": 14,
-    "fmt: tests/acceptance/327/ac3_redraft.rs": 18,
-    "fmt: tests/acceptance/327/card.rs": 30,
-    "fmt: tests/acceptance/327/common.rs": 88,
-    "fmt: tests/acceptance/327/planted.rs": 17
+    "clippy: tests/acceptance/995/app/panel.rs this method takes 2 arguments but 1 argument was supplied": 1
   },
   "timing": [
     "tests/acceptance/348/budgets.test.ts › AC8 #348.b0d5cd73 loading an extension takes under 100 ms, and the host adds under 0.5 ms per event per subscribed extension, on the reference Mac, compared with the merge base › AC8 on the reference Mac, a load is under 100 ms and the host adds under 0.5 ms per event per subscribed extension, in the hub and in the sandbox (five bench runs each, by the timing rule)",

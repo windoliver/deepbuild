@@ -3,7 +3,7 @@
 // only what it can prove. The sandbox sits behind one seam whose backends each pass its suite: Seatbelt on
 // macOS, bubblewrap with Landlock and seccomp on Linux (#70), and an AppContainer on Windows later.
 export { bubblewrap } from './bubblewrap.js';
-export { alive, groupCpu, groupMembers, HELPER, openUnder } from './procs.js';
+export { alive, groupCpu, groupMembers, HELPER, listening, openUnder, processAlive } from './procs.js';
 export { seatbelt } from './seatbelt.js';
 export { plantedBackends, sandboxSuite, type SuiteFixtures, type SuiteResult } from './suite.js';
 export { openSupervisor } from './supervisor.js';

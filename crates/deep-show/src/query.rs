@@ -412,7 +412,9 @@ impl Hub<'_> {
             for (s, t) in sessions.iter().zip(&times) {
                 let read = match hidden_by {
                     Some(_) => None,
-                    None => self.text_at(s, &drawn, path, *t).or_else(|| self.read_path(s, &revision.doc, path)),
+                    None => self
+                        .text_at(s, &drawn, path, *t)
+                        .or_else(|| self.read_path(s, &revision.doc, path)),
                 };
                 match read {
                     Some((v, k)) => {
@@ -578,7 +580,9 @@ impl Hub<'_> {
     /// [`deep_canvas_motion::eval::shown_doc`] the 3D card and `see` fill from).
     fn text_at(&self, s: &DocSession, drawn: &Value, path: &str, t: i64) -> Option<(Value, Key)> {
         let id = path.strip_prefix("items/")?.strip_suffix("/params/text")?;
-        let template = drawn.pointer(&format!("/items/{id}/params/template"))?.as_str()?;
+        let template = drawn
+            .pointer(&format!("/items/{id}/params/template"))?
+            .as_str()?;
         let shown = match crate::film::program_of(&self.sched, s) {
             Some(program) if self.scenario.planted != Some(Planted::ReadoutReadsDefaults) => {
                 let mut state = program.state();
@@ -588,7 +592,10 @@ impl Hub<'_> {
             _ => drawn.clone(),
         };
         let text = deep_canvas::template::expand(&shown, template).ok()?;
-        let key = Hasher::of(self.sched.hash(), "deep_query.text").text(path).text(&text).finish();
+        let key = Hasher::of(self.sched.hash(), "deep_query.text")
+            .text(path)
+            .text(&text)
+            .finish();
         Some((json!(text), key))
     }
 
@@ -601,13 +608,18 @@ impl Hub<'_> {
             let value = match held_at(doc, path) {
                 Some(v) => v,
                 None if deep_canvas_media::planted("loudness_target_defaults_to_zero")
-                    && rest.split_once('/').is_some_and(|(bus, f)| f == "loudness_target" && doc["buses"].get(bus).is_some()) =>
+                    && rest.split_once('/').is_some_and(|(bus, f)| {
+                        f == "loudness_target" && doc["buses"].get(bus).is_some()
+                    }) =>
                 {
                     json!(0)
                 }
                 None => return None,
             };
-            let key = Hasher::of(self.sched.hash(), "deep_query.bus").text(path).text(&value.to_string()).finish();
+            let key = Hasher::of(self.sched.hash(), "deep_query.bus")
+                .text(path)
+                .text(&value.to_string())
+                .finish();
             return Some((value, key));
         }
         if let Some(t) = self.timeline_time(s, path) {
@@ -666,14 +678,27 @@ impl Hub<'_> {
             return BTreeMap::new();
         };
         let mut items = Map::new();
-        for id in doc.get("items").and_then(Value::as_object).into_iter().flatten().map(|(id, _)| id) {
-            let Some((fields, _)) = s.read(l, "core.fields", Some(id)) else { continue };
-            let Some(fields) = fields.as_typed::<Fields>() else { continue };
+        for id in doc
+            .get("items")
+            .and_then(Value::as_object)
+            .into_iter()
+            .flatten()
+            .map(|(id, _)| id)
+        {
+            let Some((fields, _)) = s.read(l, "core.fields", Some(id)) else {
+                continue;
+            };
+            let Some(fields) = fields.as_typed::<Fields>() else {
+                continue;
+            };
             let world = s
                 .read(l, "marks2d.at", Some(id))
                 .or_else(|| s.read(l, "core.world", Some(id)))
                 .and_then(|(w, _)| w.as_typed::<Transform>().map(|t| *t));
-            items.insert(id.clone(), deep_canvas_marks::modules::item_json(&fields, world.as_ref()));
+            items.insert(
+                id.clone(),
+                deep_canvas_marks::modules::item_json(&fields, world.as_ref()),
+            );
         }
         deep_canvas_marks::scene::item_boxes(doc, &items).unwrap_or_default()
     }
@@ -700,7 +725,11 @@ impl Hub<'_> {
             .into_iter()
             .flatten()
             .filter_map(|(_, i)| i.pointer("/at/place")?.as_object())
-            .flat_map(|p| ["beside", "onto"].into_iter().filter_map(|k| p.get(k)?.as_str()))
+            .flat_map(|p| {
+                ["beside", "onto"]
+                    .into_iter()
+                    .filter_map(|k| p.get(k)?.as_str())
+            })
             .map(|t| t.split('#').next().unwrap_or(t).to_string())
             .collect();
         let start = self.evaluated(drawn, 0);
@@ -709,7 +738,9 @@ impl Hub<'_> {
         for t in times {
             let mut stale = drawn.clone();
             for target in &targets {
-                let Some(b) = previous.get(target) else { continue };
+                let Some(b) = previous.get(target) else {
+                    continue;
+                };
                 let stand_in = format!("{target}-previous");
                 let layer = stale["items"][target.as_str()].get("layer").cloned();
                 let mut item = json!({"id": stand_in, "kind": "rect@1", "name": "Previous box",
@@ -718,9 +749,15 @@ impl Hub<'_> {
                     item["layer"] = layer;
                 }
                 stale["items"][stand_in.as_str()] = item;
-                for i in stale["items"].as_object_mut().into_iter().flat_map(|m| m.values_mut()) {
+                for i in stale["items"]
+                    .as_object_mut()
+                    .into_iter()
+                    .flat_map(|m| m.values_mut())
+                {
                     for k in ["beside", "onto"] {
-                        if i.pointer(&format!("/at/place/{k}")).and_then(Value::as_str) == Some(target) {
+                        if i.pointer(&format!("/at/place/{k}")).and_then(Value::as_str)
+                            == Some(target)
+                        {
                             i["at"]["place"][k] = json!(stand_in);
                         }
                     }

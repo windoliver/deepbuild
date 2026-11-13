@@ -154,13 +154,12 @@ pub fn behavior(hub: &mut Hub<'_>, ctx: &mut Ctx<'_>) -> Option<PartRun> {
                 })
                 .collect()
         });
-        let mut case = Case::new(format!("behavior:{}", f.name), Verdict::Pass)
-            .with("fixture", json!(f.name));
+        let mut case =
+            Case::new(format!("behavior:{}", f.name), Verdict::Pass).with("fixture", json!(f.name));
         let mut listed = Vec::new();
         for (a, got) in f.answers.iter().zip(got) {
             let answer = format!("{} {}", a.item, a.array);
-            let within =
-                got.is_some_and(|g| (g - a.value).abs() <= a.tolerance * a.value.abs());
+            let within = got.is_some_and(|g| (g - a.value).abs() <= a.tolerance * a.value.abs());
             listed.push(json!({"answer": answer, "expected": a.value, "got": got, "tolerance": a.tolerance}));
             if !within {
                 case.fail(

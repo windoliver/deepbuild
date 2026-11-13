@@ -691,28 +691,28 @@ pub fn source<'a>(
     id: &str,
     path: &str,
     form: &str,
-) -> Result<&'a Value, Issue> {
+) -> Result<&'a Value, Box<Issue>> {
     let world = world_source(worlds, form, entries);
     if world == Some(None) {
-        return Err(physics_missing(id, path.to_string(), form));
+        return Err(Box::new(physics_missing(id, path.to_string(), form)));
     }
     if world.is_none() && resolve(form, entries, true).is_none() {
-        return Err(Issue::error(
+        return Err(Box::new(Issue::error(
             "module_missing",
             id,
             path.to_string(),
             json!({"module": ARRAY_MODULE, "array": form}),
             &format!("this column reads an array the {ARRAY_MODULE} module fills, which this build lacks"),
-        ));
+        )));
     }
     arrays.get(form).ok_or_else(|| {
-        Issue::error(
+        Box::new(Issue::error(
             "ref_unresolved",
             id,
             path.to_string(),
             json!(form),
             "no logic item or world in the document writes this array",
-        )
+        ))
     })
 }
 
@@ -759,7 +759,7 @@ fn arrays_of(
         ) {
             Ok(baked) => baked,
             Err(issue) => {
-                issues.push(issue);
+                issues.push(*issue);
                 continue;
             }
         };

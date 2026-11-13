@@ -23,7 +23,6 @@ use vello_cpu::{
     Image, ImageSource, Pixmap, RasterizerSettings, RenderContext, RenderSettings, Resources,
 };
 
-
 /// Why a revision can't be drawn: the issue code and the path it names.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Unfit {
@@ -65,15 +64,26 @@ impl Drawn {
     /// those alone.
     pub fn part(&self, view: Option<Affine>, marks: bool, status: bool) -> Drawn {
         // The items a status mark draws are left out of the sides: their status draws once.
-        let bound: std::collections::BTreeSet<&str> = self.status.marks.iter().map(|m| m.mark.item.as_str()).collect();
+        let bound: std::collections::BTreeSet<&str> = self
+            .status
+            .marks
+            .iter()
+            .map(|m| m.mark.item.as_str())
+            .collect();
         let mut frame = self.frame.clone();
         if !status {
             for layer in &mut frame.layers {
-                if layer.marks.iter().any(|m| bound.contains(m.mark.item().split('#').next().unwrap_or_default())) {
+                if layer
+                    .marks
+                    .iter()
+                    .any(|m| bound.contains(m.mark.item().split('#').next().unwrap_or_default()))
+                {
                     let kept: Vec<_> = layer
                         .marks
                         .iter()
-                        .filter(|m| !bound.contains(m.mark.item().split('#').next().unwrap_or_default()))
+                        .filter(|m| {
+                            !bound.contains(m.mark.item().split('#').next().unwrap_or_default())
+                        })
                         .cloned()
                         .collect();
                     layer.marks = kept.into_iter().collect();
@@ -84,10 +94,22 @@ impl Drawn {
             frame: if marks {
                 frame
             } else {
-                scene::Frame { size: self.frame.size, ground: self.frame.ground, layers: Vec::new() }
+                scene::Frame {
+                    size: self.frame.size,
+                    ground: self.frame.ground,
+                    layers: Vec::new(),
+                }
             },
-            boxes: if marks { self.boxes.clone() } else { Vec::new() },
-            status: if status { self.status.clone() } else { Arc::new(StatusDrawing::default()) },
+            boxes: if marks {
+                self.boxes.clone()
+            } else {
+                Vec::new()
+            },
+            status: if status {
+                self.status.clone()
+            } else {
+                Arc::new(StatusDrawing::default())
+            },
             images: self.images.clone(),
             pictures: self.pictures.clone(),
             runs: self.runs.clone(),
@@ -101,8 +123,15 @@ impl Drawn {
     pub fn glyphs(&self) -> Map<String, Value> {
         let mut out = Map::new();
         for drawn in self.frame.layers.iter().flat_map(|l| &l.marks) {
-            let Mark::Text { item, spec, origin, .. } = &drawn.mark else { continue };
-            let Some(run) = self.runs.get(item).filter(|r| r.spec == *spec) else { continue };
+            let Mark::Text {
+                item, spec, origin, ..
+            } = &drawn.mark
+            else {
+                continue;
+            };
+            let Some(run) = self.runs.get(item).filter(|r| r.spec == *spec) else {
+                continue;
+            };
             let units = self.animated.get(item);
             let glyphs: Vec<Value> = run
                 .shaped
@@ -110,7 +139,8 @@ impl Drawn {
                 .iter()
                 .enumerate()
                 .map(|(k, g)| {
-                    let [lift, opacity] = units.and_then(|u| u.get(k)).copied().unwrap_or([0.0, 1.0]);
+                    let [lift, opacity] =
+                        units.and_then(|u| u.get(k)).copied().unwrap_or([0.0, 1.0]);
                     json!({"x": origin[0] + f64::from(g.x), "y": origin[1] + f64::from(g.y) + lift,
                            "opacity": opacity.clamp(0.0, 1.0)})
                 })
@@ -392,6 +422,9 @@ pub fn pixmap_of(rgba: Vec<u8>, w: u16, h: u16) -> Arc<Pixmap> {
     Arc::new(Pixmap::from_parts(rgba, w, h, meta))
 }
 
+/// What [`decode_all`] gives: each video frame by its asset, and the still pictures.
+type Decodings = (BTreeMap<String, Arc<Pixmap>>, Arc<Pictures>);
+
 /// Every image `frame` draws: a video's frame by its asset, and each still picture's request of
 /// the image service, its size read from its header (refused there when it couldn't be decoded
 /// within the caps) and its level at the document's own scale made, within the levels a frame may
@@ -400,14 +433,23 @@ fn decode_all(
     frame: &scene::Frame,
     evidence: &Path,
     videos: &BTreeMap<String, Arc<Pixmap>>,
-) -> Result<(BTreeMap<String, Arc<Pixmap>>, Arc<Pictures>), Unfit> {
+) -> Result<Decodings, Unfit> {
     let mut images = BTreeMap::new();
     let store = Arc::new(deep_images::Store::split(evidence));
     let mut keys = BTreeMap::new();
     let mut drawn = std::collections::HashSet::new();
     let mut held = 0;
     for d in frame.layers.iter().flat_map(|l| &l.marks) {
-        let Mark::Image { item, asset, bounds, fit, crop, tile, .. } = &d.mark else {
+        let Mark::Image {
+            item,
+            asset,
+            bounds,
+            fit,
+            crop,
+            tile,
+            ..
+        } = &d.mark
+        else {
             continue;
         };
         if let Some(frame) = videos.get(asset) {
@@ -428,14 +470,23 @@ fn decode_all(
         let Some(hash) = deep_images::hash_of(asset) else {
             return unfit("ref_unresolved", path());
         };
-        let size = deep_images::shared().size(&store, &hash).or_else(|r| unfit(code(r), path()))?;
+        let size = deep_images::shared()
+            .size(&store, &hash)
+            .or_else(|r| unfit(code(r), path()))?;
         // #1653: an atlas row shows its cell, turned by its flip bits (#535).
-        let cell = tile.as_ref().map(|t| t.rect(size).map(|r| r.map(|v| v as u32)));
+        let cell = tile
+            .as_ref()
+            .map(|t| t.rect(size).map(|r| r.map(|v| v as u32)));
         let Some(cut) = cell.unwrap_or_else(|| deep_images::crop_px(*crop, size)) else {
             continue;
         };
         let flip = tile.as_ref().map_or(0, |t| t.flip);
-        let mut key = deep_images::Key { hash, crop: cut, flip, level: 0 };
+        let mut key = deep_images::Key {
+            hash,
+            crop: cut,
+            flip,
+            level: 0,
+        };
         let to = fit.fitted(*bounds, key.shown());
         key.level = deep_images::level_for(key.shown(), [to[2], to[3]]);
         if drawn.insert(key) {
@@ -444,11 +495,19 @@ fn decode_all(
             if held > CAP {
                 return unfit("over_budget", path());
             }
-            deep_images::shared().wait(&store, key).or_else(|r| unfit(code(r), path()))?;
+            deep_images::shared()
+                .wait(&store, key)
+                .or_else(|r| unfit(code(r), path()))?;
         }
         keys.insert(item.clone(), key);
     }
-    Ok((images, Arc::new(Pictures { store: Some(store), keys })))
+    Ok((
+        images,
+        Arc::new(Pictures {
+            store: Some(store),
+            keys,
+        }),
+    ))
 }
 
 /// The scale `at` draws at, along x and along y.
@@ -460,13 +519,21 @@ fn scales(at: Affine) -> (f64, f64) {
 impl Renderer {
     /// `key`'s level from the image service as a pixmap, made once and kept while drawings draw
     /// it; `None` when the service can't make it.
-    fn level(&mut self, store: &Arc<deep_images::Store>, key: deep_images::Key) -> Option<Arc<Pixmap>> {
+    fn level(
+        &mut self,
+        store: &Arc<deep_images::Store>,
+        key: deep_images::Key,
+    ) -> Option<Arc<Pixmap>> {
         if let Some(p) = self.kept.get(&key) {
             return Some(p.clone());
         }
         let level = deep_images::shared().wait(store, key).ok()?;
         let [w, h] = level.size;
-        let pixmap = pixmap_of(level.rgba.clone(), u16::try_from(w).ok()?, u16::try_from(h).ok()?);
+        let pixmap = pixmap_of(
+            level.rgba.clone(),
+            u16::try_from(w).ok()?,
+            u16::try_from(h).ok()?,
+        );
         self.kept.insert(key, pixmap.clone());
         Some(pixmap)
     }
@@ -886,7 +953,11 @@ impl Renderer {
             } => {
                 // #1486: a still picture draws the level the drawing's scale takes, cut as its
                 // request is; a video's frame draws whole, cut by its crop.
-                let still = drawn.pictures.keys.get(item).zip(drawn.pictures.store.as_ref());
+                let still = drawn
+                    .pictures
+                    .keys
+                    .get(item)
+                    .zip(drawn.pictures.store.as_ref());
                 let (source, shown, cut) = match (drawn.images.get(asset), still) {
                     (Some(frame), _) => {
                         let size = [u32::from(frame.width()), u32::from(frame.height())];

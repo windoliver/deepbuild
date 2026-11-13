@@ -10,9 +10,10 @@ import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { strictObject, target, writeThrough } from './agent-files.js';
 import { HOLD_MARGIN_MS, readJson, words } from './claude-settings.js';
+import { shellQuote as q } from './shell.js';
+import { isRecord as isObj } from '@deepbuild/contracts';
 
 type Obj = Record<string, unknown>;
-const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 
 /** Codex's Stop hook timeout, set once at setup: its default is 600 s, with no ceiling. */
 const STOP_TIMEOUT_S = 45 * 60;
@@ -30,7 +31,6 @@ export const hasCodex = (): boolean => existsSync(home());
 export const codexHooks = (): string => join(home(), 'hooks.json');
 export const codexConfig = (): string => join(home(), 'config.toml');
 const recordFile = (root: string): string => join(root, 'codex-hooks.json');
-const q = (path: string): string => `'${path.replaceAll("'", `'\\''`)}'`;
 
 /** The path our entries name, which every update keeps: a link in the root that setup points at the built deep-hook. */
 export function fixedHook(root: string, built: string): string {

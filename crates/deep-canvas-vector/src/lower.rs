@@ -342,11 +342,18 @@ pub fn outline(svg: &Svg, item: &Value, colors: &BTreeMap<Color, String>) -> Val
     let role = svg
         .paths
         .iter()
-        .find_map(|p| p.fill.map(|f| f.color).or(p.stroke.as_ref().map(|s| s.paint.color)))
+        .find_map(|p| {
+            p.fill
+                .map(|f| f.color)
+                .or(p.stroke.as_ref().map(|s| s.paint.color))
+        })
         .and_then(|c| colors.get(&c))
         .map_or("ink", String::as_str);
     // #494: each part's outline too, so a path key `{of: ID#part}` and a match morph read it.
-    let parts: Map<String, Value> = parts(svg, &local).into_iter().map(|(id, _, verbs)| (id, json!(d_of(&verbs)))).collect();
+    let parts: Map<String, Value> = parts(svg, &local)
+        .into_iter()
+        .map(|(id, _, verbs)| (id, json!(d_of(&verbs))))
+        .collect();
     json!({"d": d_of(&verbs), "role": role, "parts": parts})
 }
 

@@ -14,7 +14,9 @@ fn bad(code: &str) -> Value {
 }
 
 fn run(line: &Map<String, Value>) -> Value {
-    let Some(doc) = line.get("doc") else { return bad("bad_input") };
+    let Some(doc) = line.get("doc") else {
+        return bad("bad_input");
+    };
     let num = |v: &Value| v.as_f64();
     let viewport = match line.get("viewport").and_then(Value::as_array) {
         Some(a) if a.len() == 2 => match (num(&a[0]), num(&a[1])) {
@@ -26,13 +28,19 @@ fn run(line: &Map<String, Value>) -> Value {
     };
     let fps = match line.get("fps").and_then(Value::as_array) {
         None => (60, 1),
-        Some(a) => match (a.first().and_then(Value::as_u64), a.get(1).and_then(Value::as_u64)) {
+        Some(a) => match (
+            a.first().and_then(Value::as_u64),
+            a.get(1).and_then(Value::as_u64),
+        ) {
             (Some(p), Some(q)) if p > 0 && q > 0 => (p as u32, q as u32),
             _ => return bad("bad_input"),
         },
     };
     // The app and the web player run the same module: the host changes nothing it computes.
-    if !matches!(line.get("host").and_then(Value::as_str), None | Some("app") | Some("web_player")) {
+    if !matches!(
+        line.get("host").and_then(Value::as_str),
+        None | Some("app") | Some("web_player")
+    ) {
         return bad("bad_input");
     }
     let planted = match line.get("planted").and_then(Value::as_str) {
@@ -42,7 +50,10 @@ fn run(line: &Map<String, Value>) -> Value {
             None => return bad("bad_input"),
         },
     };
-    let reduced = line.get("reduced_motion").and_then(Value::as_bool).unwrap_or(false);
+    let reduced = line
+        .get("reduced_motion")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
     let mut s = match Session::new(doc, viewport, fps, reduced, planted, &[]) {
         Ok(s) => s,
         Err(r) => return json!({"ok": false, "code": r.code, "path": r.path}),
@@ -55,12 +66,20 @@ fn run(line: &Map<String, Value>) -> Value {
         }
     }
     let mut results = Vec::new();
-    for op in line.get("ops").and_then(Value::as_array).into_iter().flatten() {
-        let Some(op) = op.as_object() else { return bad("bad_input") };
+    for op in line
+        .get("ops")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+    {
+        let Some(op) = op.as_object() else {
+            return bad("bad_input");
+        };
         let result = if op.get("op").and_then(Value::as_str) == Some("lookup") {
             lookup(&s, op)
         } else {
-            s.op(op).map_err(|r| json!({"ok": false, "code": r.code, "path": r.path}))
+            s.op(op)
+                .map_err(|r| json!({"ok": false, "code": r.code, "path": r.path}))
         };
         match result {
             Ok(r) => results.push(r),
@@ -68,7 +87,11 @@ fn run(line: &Map<String, Value>) -> Value {
         }
     }
     let mut out = json!({"ok": true, "hash": s.track.hash(), "fork_at": s.track.fork_at, "entries": s.track.len(), "results": results});
-    if !line.get("summary").and_then(Value::as_bool).unwrap_or(false) {
+    if !line
+        .get("summary")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+    {
         out["track"] = s.track.to_json();
     }
     out
