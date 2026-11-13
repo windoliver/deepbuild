@@ -276,15 +276,13 @@ fn extras(kind: &str) -> Vec<P> {
                 json!([0, 0, 1]),
             ),
         ],
-        "plate@1" => vec![p(
-            "height",
-            "field, m",
-            "m",
-            Value::Null,
-            G,
-            json!(0),
-            json!({"wave": {"amplitude": 0.1, "wavelength": 1}}),
-        )],
+        "plate@1" => vec![
+            p("height", "field, m", "m", Value::Null, G, json!(0), json!({"wave": {"amplitude": 0.1, "wavelength": 1}})),
+            // #2014: a terrain plate's height field, size and spacing (Builder plate: terrain).
+            p("terrain", "terrain", "m", Value::Null, G, json!({"height": 0, "size": [4, 4]}), json!({"height": "position.x * 0.25", "size": [4, 4], "spacing": 0.5})),
+            // #537: a terrain plate's overlays tint its cover and rebuild nothing (Builder plate: terrain overlays).
+            p("overlays", "[overlay] ≤ 2", "", Value::Null, S, Value::Null, json!([])),
+        ],
         _ => Vec::new(),
     }
 }
@@ -328,7 +326,7 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
     let line = || Spec {
         kind: "mark.line@1",
         module: "scene3d",
-        params: common(vec![
+        params: crate::points::params(common(vec![
             p(
                 "points",
                 "points | item IDs",
@@ -393,7 +391,7 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
                 json!("miter"),
                 json!("round"),
             ),
-        ]),
+        ])),
         reads: None,
         fixture: json!({"it": item("mark.line@1", json!({"points": [[0, 0, 0], [1, 1, 0]], "width": 2, "paint": {"fill": {"role": "ink"}}}))}),
     };
@@ -1110,7 +1108,7 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
         "instance@1" => Spec {
             kind: "instance@1",
             module: "scene3d",
-            params: vec![
+            params: crate::slots::params(vec![
                 p(
                     "of",
                     "[ID] ≤ 64",
@@ -1202,7 +1200,7 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
                     Value::Null,
                     Value::Null,
                 ),
-            ],
+            ]),
             reads: None,
             fixture: json!({}),
         },

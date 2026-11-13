@@ -38,8 +38,8 @@ pub const MODES: [(&str, &str); 20] = [
 ];
 
 /// The modes that need data no module in this build evaluates yet: skeleton with skinned
-/// playback (#130), physics shapes with the physics module (#97).
-const UNDRAWN: [&str; 2] = ["skeleton", "physics_shapes"];
+/// playback (#130).
+const UNDRAWN: [&str; 1] = ["skeleton"];
 
 /// The UV checker's cells per uv0 unit.
 const PER_UNIT: f64 = 8.0;
@@ -234,7 +234,10 @@ impl Hub<'_> {
             json!({"outcome": "refused", "code": "module_missing", "module": module,
                    "mode": mode, "issues": [], "snapshots": [], "drawn": []})
         };
+        // #1919's twin (`test-physics-shapes-empty`) draws physics shapes without the physics
+        // module: a snapshot of the frame with no shape on it.
         let built = module == "core"
+            || cfg!(feature = "test-physics-shapes-empty") && module == "physics"
             || self.startup.sealed.modules.iter().any(|m| m.name == module)
                 && (module == "scene3d"
                     || self
@@ -268,14 +271,9 @@ impl Hub<'_> {
                           "snapshots": [], "drawn": []});
         };
         reply["rev"] = json!(revision.rev);
-        // A document with a 3D layer, or one that requires scene3d, such as one of glTF meshes.
-        let three = deep_canvas_scene3d::scene::has_3d(&revision.drawn)
-            || revision
-                .drawn
-                .pointer("/requires/modules/scene3d")
-                .is_some();
+        let three = crate::probe::draws_3d(&revision.drawn);
         let drawn = if three {
-            let placed = self.arranged(&show.doc, &revision.drawn);
+            let placed = self.arranged(&show.doc, &self.with_outputs(&show.doc, &revision.drawn));
             match self.mode_3d(show, args, &placed, &mut reply) {
                 Ok(rows) => rows,
                 Err(refusal) => return refusal,
@@ -367,6 +365,7 @@ impl Hub<'_> {
             "pick_hierarchy" => pick_hierarchy(doc, show.t, args.depth.unwrap_or(usize::MAX))?,
             "probes" => self.probes(&scene),
             "sound_sources" => sound_sources(doc, show.t)?,
+            "physics_shapes" => physics_shapes(doc, show.t)?,
             "deviation" => {
                 let (read_out, per_vertex, top) =
                     self.deviation(&scene, args, planted(Planted::DeviationOneWay))?;
@@ -406,6 +405,7 @@ impl Hub<'_> {
                             b: *b,
                             wa: 1.5,
                             wb: 1.5,
+                            hidden: false,
                         })
                         .collect(),
                     world: false,
@@ -415,10 +415,9 @@ impl Hub<'_> {
                     joined: false,
                     dash: [0.0; 2],
                     dash_world: false,
+                    cap: Default::default(),
                 }],
-                points: Vec::new(),
-                labels: Vec::new(),
-                puffs: Vec::new(),
+                ..Default::default()
             });
         }
         let diag = diag.unwrap_or(deep_scene3d_render::Diag::Plain);
@@ -1033,4 +1032,207 @@ fn sound_sources(doc: &Value, t: i64) -> Result<Read, Value> {
         );
     }
     Ok(out)
+}
+
+/// A rotation `[x, y, z, w]`.
+type Q = [f64; 4];
+
+fn qmul(a: Q, b: Q) -> Q {
+    let (u, v) = ([a[0], a[1], a[2]], [b[0], b[1], b[2]]);
+    let xyz = add(add(mul(v, a[3]), mul(u, b[3])), cross(u, v));
+    [xyz[0], xyz[1], xyz[2], a[3] * b[3] - dot(u, v)]
+}
+
+/// `p` turned by `q`, then moved by `pos`.
+fn place((pos, q): (V3, Q), p: V3) -> V3 {
+    let u = [q[0], q[1], q[2]];
+    let t = mul(cross(u, p), 2.0);
+    add(pos, add(add(p, mul(t, q[3])), cross(u, t)))
+}
+
+/// A pose as written, after `at`: a body's pose then its shape use's offset (Rapier's Euler order).
+fn compose(at: (V3, Q), p: &deep_canvas_physics::doc::Pose) -> (V3, Q) {
+    use deep_canvas_physics::doc::Rot;
+    let q = match &p.rot {
+        Rot::Quat(q) => {
+            let n = q.iter().map(|x| x * x).sum::<f64>().sqrt();
+            q.map(|x| x / n)
+        }
+        Rot::Deg(d) => [0, 1, 2]
+            .map(|i| {
+                let a = d[i].to_radians() / 2.0;
+                let mut q = [0.0, 0.0, 0.0, a.cos()];
+                q[i] = a.sin();
+                q
+            })
+            .into_iter()
+            .fold([0.0, 0.0, 0.0, 1.0], qmul),
+    };
+    (place(at, p.pos), qmul(at.1, q))
+}
+
+/// The edges of the hull of `p`: each pair on a plane through a third point with every point on
+/// one side of it.
+fn hull_edges(p: &[V3]) -> Vec<(V3, V3)> {
+    let one_side = |i: usize, j: usize, k: usize| {
+        let n = cross(sub(p[j], p[i]), sub(p[k], p[i]));
+        let d = |q: &V3| dot(n, sub(*q, p[i]));
+        dot(n, n) > 1e-18 && (p.iter().all(|q| d(q) <= 1e-9) || p.iter().all(|q| d(q) >= -1e-9))
+    };
+    let n = p.len();
+    (0..n)
+        .flat_map(|i| (i + 1..n).map(move |j| (i, j)))
+        .filter(|&(i, j)| (0..n).any(|k| k != i && k != j && one_side(i, j, k)))
+        .map(|(i, j)| (p[i], p[j]))
+        .collect()
+}
+
+/// `shape`'s outline at `at` into `out`: a sphere's three great circles, a box's edges, a
+/// capsule's or a cylinder's rings and sides, a 2 m square of a plane, a hull's or a mesh's edges,
+/// and a compound's children at their poses.
+fn outline(
+    shapes: &std::collections::BTreeMap<String, deep_canvas_physics::doc::Shape>,
+    shape: &deep_canvas_physics::doc::Shape,
+    at: (V3, Q),
+    out: &mut Vec<(V3, V3)>,
+) {
+    use deep_canvas_physics::doc::Shape;
+    let (x, y, z, o) = ([1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0], [0.0; 3]);
+    let local: Vec<(V3, V3)> = match shape {
+        Shape::Sphere { radius } => [(x, y), (y, z), (z, x)]
+            .iter()
+            .flat_map(|(u, v)| circle(o, *u, *v, *radius))
+            .collect(),
+        Shape::Box { half } => box_edges(mul(*half, -1.0), *half),
+        Shape::Capsule {
+            half_height: h,
+            radius: r,
+        }
+        | Shape::Cylinder {
+            half_height: h,
+            radius: r,
+        } => {
+            let ends = [mul(y, -h), mul(y, *h)];
+            let mut l: Vec<(V3, V3)> = ends.iter().flat_map(|c| circle(*c, z, x, *r)).collect();
+            for d in [x, z, mul(x, -1.0), mul(z, -1.0)] {
+                l.push((add(ends[0], mul(d, *r)), add(ends[1], mul(d, *r))));
+            }
+            if matches!(shape, Shape::Capsule { .. }) {
+                for c in ends {
+                    l.extend(circle(c, x, y, *r));
+                    l.extend(circle(c, y, z, *r));
+                }
+            }
+            l
+        }
+        Shape::Plane { normal } => {
+            let (u, v) = basis(unit(*normal));
+            let c = [add(u, v), sub(u, v), mul(add(u, v), -1.0), sub(v, u)];
+            (0..4).map(|i| (c[i], c[(i + 1) % 4])).collect()
+        }
+        Shape::Convex { points, .. } => hull_edges(points),
+        // #2014's height field: its sample grid, rows along +Z and columns along +X, centred.
+        Shape::Heightfield {
+            cols,
+            rows,
+            heights,
+            scale,
+        } => {
+            let along = |i: usize, n: usize, s: f64| {
+                if n > 1 {
+                    s * (i as f64 / (n - 1) as f64 - 0.5)
+                } else {
+                    0.0
+                }
+            };
+            let at = |r: usize, c: usize| {
+                let h = heights.get(r * cols + c).copied().unwrap_or(0.0);
+                [
+                    along(c, *cols, scale[0]),
+                    h * scale[1],
+                    along(r, *rows, scale[2]),
+                ]
+            };
+            let mut l = Vec::new();
+            for (r, c) in (0..*rows).flat_map(|r| (0..*cols).map(move |c| (r, c))) {
+                if c + 1 < *cols {
+                    l.push((at(r, c), at(r, c + 1)));
+                }
+                if r + 1 < *rows {
+                    l.push((at(r, c), at(r + 1, c)));
+                }
+            }
+            l
+        }
+        Shape::Mesh {
+            vertices,
+            triangles,
+        } => triangles
+            .iter()
+            .flat_map(|t| {
+                [0, 1, 2].map(|i| (vertices[t[i] as usize], vertices[t[(i + 1) % 3] as usize]))
+            })
+            .collect(),
+        Shape::Compound { children } => {
+            for (id, p) in children {
+                if let Some(s) = shapes.get(id) {
+                    outline(shapes, s, compose(at, p), out);
+                }
+            }
+            return;
+        }
+    };
+    out.extend(local.into_iter().map(|(a, b)| (place(at, a), place(at, b))));
+}
+
+/// #1919: each body's collision shapes at its pose at t, as the physics module evaluates its world
+/// in the scene: a row per shape use, and its outline.
+fn physics_shapes(doc: &Value, t: i64) -> Result<Read, Value> {
+    let worlds = crate::physics::poses_at(doc, t).map_err(|e| {
+        json!({"outcome": "refused", "code": "physics_refused", "mode": "physics_shapes", "what": e,
+               "snapshots": [], "drawn": []})
+    })?;
+    let mut out = Read::default();
+    for (world, w, poses) in &worlds {
+        for (body, pose) in poses {
+            for (i, u) in w.bodies[body].shapes.iter().enumerate() {
+                let at = compose(*pose, &u.offset);
+                outline(&w.shapes, &w.shapes[&u.shape], at, &mut out.lines);
+                out.rows.push(
+                    json!({"id": body, "what": "shape", "world": world, "index": i,
+                                     "shape": u.shape, "pos": at.0, "rot": at.1}),
+                );
+            }
+        }
+    }
+    Ok(out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// #1919: physics shapes draws a body's shape at its pose at t as the physics module bakes
+    /// its world, not where the document places it: a 0.5 m ball dropped from 10 m, 0.5 s in.
+    #[test]
+    fn physics_shapes_draws_each_body_at_its_baked_pose_at_t() {
+        let world = json!({"kind": "physics.world@1", "capacity": {"bodies": 1, "shapes": 1, "joints": 0, "contacts": 0, "particles": 0},
+            "shapes": {"ball": {"kind": "sphere", "radius": 0.5}}, "contact_materials": {"m": {"density": 100}},
+            "bodies": {"ball": {"kind": "dynamic", "pose": {"pos": [0, 10, 0]}, "shapes": [{"shape": "ball", "contact_material": "m"}]}}});
+        let read =
+            physics_shapes(&json!({"worlds": {"lab": world}}), 705_600_000 / 2).expect("drawn");
+        let y = read.rows[0]["pos"][1].as_f64().expect("a position");
+        assert!(
+            (y - (10.0 - 0.5 * 9.81 * 0.25)).abs() < 0.05,
+            "fallen to {y} m at 0.5 s"
+        );
+        assert_eq!(read.lines.len(), 3 * 32, "three great circles");
+        let off = |p: V3| (dot(sub(p, [0.0, y, 0.0]), sub(p, [0.0, y, 0.0])).sqrt() - 0.5).abs();
+        assert!(
+            read.lines
+                .iter()
+                .all(|(a, b)| off(*a) < 1e-9 && off(*b) < 1e-9),
+            "on the ball at t"
+        );
+    }
 }

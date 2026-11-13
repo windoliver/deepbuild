@@ -90,6 +90,16 @@ pub enum Shape {
         vertices: Vec<[f64; 3]>,
         triangles: Vec<[u32; 3]>,
     },
+    /// #2014: `rows` × `cols` heights, row by row, row along +Z and column along +X, spanning
+    /// `scale[0]` × `scale[2]` m centred on the body with each height times `scale[1]`; each cell
+    /// splits along the diagonal from its (column, row + 1) corner to its (column + 1, row) one,
+    /// as a terrain plate draws it. Static only.
+    Heightfield {
+        cols: usize,
+        rows: usize,
+        heights: Vec<f64>,
+        scale: [f64; 3],
+    },
     /// Other shapes of the world by ID, each at its pose.
     Compound {
         children: Vec<(String, Pose)>,
@@ -272,8 +282,10 @@ pub struct World {
     pub solve: Option<Solve>,
 }
 
+mod heightfield;
 mod reads;
-pub use reads::{Output, Read, Solve, READS};
+pub use heightfield::HEIGHTFIELD_SAMPLES;
+pub use reads::{probe_pose, probe_shape, Output, Read, Solve, READS};
 
 /// The world document's own fields; `kind` names it.
 const WORLD_KEYS: &[&str] = &[
@@ -874,6 +886,10 @@ impl Reader {
                 "vertices",
                 "triangles",
                 "children",
+                "cols",
+                "rows",
+                "heights",
+                "scale",
             ],
         );
         let kind = s.get("kind").and_then(Value::as_str).unwrap_or("");
@@ -971,22 +987,13 @@ impl Reader {
                 }
                 Shape::Compound { children }
             }
-            "heightfield" => {
-                self.refuse(
-                    "physics.unsupported",
-                    join(p, "kind"),
-                    &s["kind"],
-                    "a heightfield shape isn't built by this backend interface yet; #927 brings it"
-                        .into(),
-                );
-                return None;
-            }
+            "heightfield" => self.heightfield(s, p)?,
             _ => {
                 self.refuse(
                     "out_of_range",
                     join(p, "kind"),
                     s.get("kind").unwrap_or(&Value::Null),
-                    "a shape's kind must be sphere, box, capsule, cylinder, plane, convex, mesh or compound".into(),
+                    "a shape's kind must be sphere, box, capsule, cylinder, plane, convex, mesh, heightfield or compound".into(),
                 );
                 return None;
             }
@@ -1030,12 +1037,17 @@ impl Reader {
                         &Value::from(child.as_str()),
                         format!("{child:?} is not a shape of this world"),
                     ),
-                    Some(Shape::Mesh { .. } | Shape::Plane { .. } | Shape::Compound { .. }) => {
+                    Some(
+                        Shape::Mesh { .. }
+                        | Shape::Plane { .. }
+                        | Shape::Compound { .. }
+                        | Shape::Heightfield { .. },
+                    ) => {
                         self.refuse(
                             "out_of_range",
                             at,
                             &Value::from(child.as_str()),
-                            format!("{child} is a mesh, a plane or a compound, which a compound can't hold"),
+                            format!("{child} is a mesh, a plane, a heightfield or a compound, which a compound can't hold"),
                         )
                     }
                     Some(_) => {}

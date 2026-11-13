@@ -45,8 +45,9 @@ pub struct Onset {
     pub strength: f64,
 }
 
-const FRAME: usize = 1024;
-const HOP: usize = 256;
+/// The spectral-flux frame (samples) and the hop between frames; audio.gen's seam reads flux on them too.
+pub(crate) const FRAME: usize = 1024;
+pub(crate) const HOP: usize = 256;
 const MEDIAN: usize = 8;
 const QUIET: f64 = 1e-10;
 
@@ -91,7 +92,10 @@ fn transient(x: &[f64], short: usize, long: usize, threshold: f64) -> Vec<(usize
     out
 }
 
-fn flux(x: &[f64], short: usize, long: usize, threshold: f64) -> Vec<(usize, f64)> {
+/// Each frame's half-wave rectified spectral flux, Σ max(0, |X_f(k)| − |X_{f−1}(k)|), and its
+/// Σ|X_f(k)|: frame f is the [`FRAME`] samples ending at sample [`HOP`]·f under a periodic Hann
+/// window, samples before the start read as 0, for f from 0 to ⌊len ÷ HOP⌋.
+pub(crate) fn spectral_flux(x: &[f64]) -> (Vec<f64>, Vec<f64>) {
     let hann: Vec<f64> = (0..FRAME).map(|i| 0.5 - 0.5 * ops::cos(ops::TAU * i as f64 / FRAME as f64)).collect();
     let frames = x.len() / HOP + 1;
     let (mut flux, mut total, mut prev) = (vec![0.0; frames], vec![0.0; frames], vec![0.0; FRAME / 2 + 1]);
@@ -110,6 +114,12 @@ fn flux(x: &[f64], short: usize, long: usize, threshold: f64) -> Vec<(usize, f64
             *p = m;
         }
     }
+    (flux, total)
+}
+
+fn flux(x: &[f64], short: usize, long: usize, threshold: f64) -> Vec<(usize, f64)> {
+    let (flux, total) = spectral_flux(x);
+    let frames = flux.len();
     let mut out = Vec::new();
     for f in 1..frames {
         let mut near = flux[f.saturating_sub(MEDIAN)..(f + MEDIAN + 1).min(frames)].to_vec();

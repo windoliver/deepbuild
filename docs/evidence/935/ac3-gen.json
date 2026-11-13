@@ -1,0 +1,91 @@
+{
+  "residual_dbfs": {
+    "clean": -171.82376204552293,
+    "late_drums": -27.503759423667322
+  },
+  "loop": {
+    "state": "BLOCKED",
+    "readings": {
+      "loop": {
+        "start": 0,
+        "end": 1843200,
+        "seconds": 38.4,
+        "bar": 2.4,
+        "bars": 16
+      },
+      "seam": {
+        "at": 1843200,
+        "to": 0,
+        "step": 0.003930270671844482,
+        "step_p99": 0.093939870595932,
+        "flux": 161.82781780803612,
+        "flux_p99": 236.41364192153785
+      },
+      "residual": -171.823762045523,
+      "integrated": -23.00000000067033,
+      "target": -23,
+      "true_peak": -3.6728218381051407,
+      "lead": 0,
+      "duration": 38.4
+    },
+    "issues": [],
+    "blocked": [
+      {
+        "input": "beats",
+        "path": "sounds/loop/beats",
+        "analyzer": "beat-this@1.1.0",
+        "pcm_sha256": "a5f66c0dd7fa327f494a8d8dd2ddfc7818c90b188e0b91a3eb82c9e3c3f313d1",
+        "job": "bake.beats",
+        "reason": "no record of beat-this@1.1.0 for the PCM a5f66c0dd7fa327f494a8d8dd2ddfc7818c90b188e0b91a3eb82c9e3c3f313d1: run bake.beats on beat-this@1.1.0 with the input pcm a5f66c0dd7fa327f494a8d8dd2ddfc7818c90b188e0b91a3eb82c9e3c3f313d1, sample_rate 48000 and channels 1"
+      }
+    ]
+  },
+  "late_stem": {
+    "state": "FAIL",
+    "readings": {
+      "loop": {
+        "start": 0,
+        "end": 1843200,
+        "seconds": 38.4,
+        "bar": 2.4,
+        "bars": 16
+      },
+      "seam": {
+        "at": 1843200,
+        "to": 0,
+        "step": 0.003930270671844482,
+        "step_p99": 0.093939870595932,
+        "flux": 161.82781780803612,
+        "flux_p99": 236.41364192153785
+      },
+      "residual": -27.503759423667322,
+      "integrated": -23.00000000067033,
+      "target": -23,
+      "true_peak": -3.6728218381051407,
+      "lead": 0,
+      "duration": 38.4
+    },
+    "issues": [
+      {
+        "code": "audio.gen.stems",
+        "path": "sounds/late_stem/stems/drums",
+        "actual": {
+          "stem": "drums",
+          "residual": -27.503759423667322,
+          "limit": -60
+        },
+        "what": "the stems sum to the mix with a residual of -27.50 dBFS RMS, over -60; stem drums correlates most with it"
+      }
+    ],
+    "blocked": [
+      {
+        "input": "beats",
+        "path": "sounds/late_stem/beats",
+        "analyzer": "beat-this@1.1.0",
+        "pcm_sha256": "a5f66c0dd7fa327f494a8d8dd2ddfc7818c90b188e0b91a3eb82c9e3c3f313d1",
+        "job": "bake.beats",
+        "reason": "no record of beat-this@1.1.0 for the PCM a5f66c0dd7fa327f494a8d8dd2ddfc7818c90b188e0b91a3eb82c9e3c3f313d1: run bake.beats on beat-this@1.1.0 with the input pcm a5f66c0dd7fa327f494a8d8dd2ddfc7818c90b188e0b91a3eb82c9e3c3f313d1, sample_rate 48000 and channels 1"
+      }
+    ]
+  }
+}

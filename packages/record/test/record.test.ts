@@ -1,13 +1,13 @@
 // Regression tests for the record (#14) beyond its acceptance suite: each one failed on the program it names.
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import Database from 'better-sqlite3';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fixtures } from '@deepbuild/contracts';
 import type { JsonValue } from '@deepbuild/contracts';
 import { openEvidenceStore } from '@deepbuild/evidence';
-import { openRecord, readSince, testStorage } from '../src/index.js';
+import { openRecord, openRecordReader, readSince, testStorage, writerGeneration } from '../src/index.js';
 import type { Connection, EventInput, RecordStore } from '../src/index.js';
 
 const T0 = 1_760_013_451_000;
@@ -1131,5 +1131,37 @@ describe("a write's receipt commits in one transaction with its event (#1577)", 
     const again = await r.append(core(S), kept, receipt(kept.id, T0 + 2));
     expect(again.existing, 'the same event').toBe(true);
     expect((await r.read({ after: 0, kinds: ['write.done'] })).length, 'one receipt').toBe(1);
+  });
+});
+
+describe('a read-only connection to the record', () => {
+  it("holds SQLite's 2 MB page cache, as the writer's does", async () => {
+    const path = join(tempRoot(), 'ledger.db');
+    await (await openRecord({ path, now: () => T0 })).close();
+    const capped: string[] = [];
+    const real = Database.prototype.pragma;
+    const pragma = vi.spyOn(Database.prototype, 'pragma').mockImplementation(function (this: Database.Database, source: string, options?: Database.PragmaOptions) {
+      if (this.readonly && source === 'cache_size = -2000') capped.push(this.name);
+      return real.call(this, source, options);
+    });
+    try {
+      expect(writerGeneration(path)).toBe(1);
+    } finally {
+      pragma.mockRestore();
+    }
+    // A reader left at better-sqlite3's default keeps up to 16 MB of a long record's pages while it reads.
+    expect(capped, 'the reader set its cache before it read').toEqual([path]);
+  });
+
+  it('opens on a file that is no database, and its first read says so', async () => {
+    const path = join(tempRoot(), 'ledger.db');
+    writeFileSync(path, 'not a database'.repeat(100));
+    // A reader that sets its cache with no guard throws here, at the open.
+    const reader = openRecordReader({ path });
+    try {
+      await expect(reader.archived()).rejects.toThrow(/not a database/);
+    } finally {
+      reader.close();
+    }
   });
 });

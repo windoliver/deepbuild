@@ -111,6 +111,18 @@ mod replica {
                 println!("{}", verdict.to_json());
                 return i32::from(!verdict.pass);
             }
+            // Issue #2029: `--words`, what each view draws for each closed-set code on stdin, with the core's text for it.
+            Some("--words") => {
+                let asked: serde_json::Value = match serde_json::from_reader(std::io::stdin()) {
+                    Ok(asked) => asked,
+                    Err(error) => {
+                        eprintln!("deep-replica: --words reads one JSON array of {{set, code, core}}: {error}");
+                        return 2;
+                    }
+                };
+                println!("{}", deep_app::codes::answer(&asked));
+                return 0;
+            }
             _ => {}
         }
         let (view, out, dark, bound, click, size) =
@@ -250,7 +262,7 @@ mod replica {
 
     /// #1556: clicks the button named `name` through the window, a mouse down and up on the thread that draws, then
     /// draws a frame each `FRAME` of wall time, the clock advanced by it, writing each to `frames.jsonl` as
-    /// `{"ms", "tree"}` until one shows what the click said: neither the button nor the line saying it's working.
+    /// `{"ms", "tree"}` until one shows what the click said: no longer working, or neither the button nor working.
     /// 0 once a frame does, 1 after `WATCH` without, 2 when the screen has no such button.
     fn click_and_watch(
         cx: &mut HeadlessAppContext,
@@ -308,6 +320,7 @@ mod replica {
             .expect("the window takes the click");
         }
         let mut drawn = clicked;
+        let mut seen_working = false;
         loop {
             let snapshot = cx
                 .update_window(handle, |_, window, cx| {
@@ -321,8 +334,10 @@ mod replica {
             let working = snapshot
                 .flatten()
                 .iter()
-                .any(|node| node.name.as_deref() == Some(deep_app::views::SETTING_UP));
-            if !working && button(&snapshot).is_none() {
+                .any(|node| node.name.as_deref() == Some(deep_app::welcome::SETTING_UP));
+            // A setup that stops gives the button back (#1100): what it said is the first frame no longer working.
+            seen_working |= working;
+            if !working && (seen_working || button(&snapshot).is_none()) {
                 return 0;
             }
             if clicked.elapsed() > WATCH {

@@ -1,0 +1,16 @@
+{
+  "issue": 2017,
+  "criterion": "#2017.44d27f48",
+  "verdict": "looks_right",
+  "who": "Claude, on the owner's delegation in the approved plan for #2017 (the owner may overrule)",
+  "when": "2026-11-11T22:15:00-08:00",
+  "screenshots": {
+    "scattered-field.png": "7bb40b46ae159035839c7985a3a4d0e61c77241e7c36e07393f76d85793797ef",
+    "vase-on-table.png": "39f275f497af91839312a52d113a256c376d4938dcad82d8066d12d6a4c8f69b",
+    "terrain-1080p.png": "363f2e0b9de3b73e246768256d1eda726986d076eec959056a25c08532661a35",
+    "terrain-4k.png": "a4e79fca238b30510c1e776ad35dffb188bf8d101c4094cf6f7f998fc6e0e739",
+    "trees-in-wind.png": "fab70ae52ebf08f86e38707f140adb0f3c9f9ed8cd5169fbb1c18b6759c718b2",
+    "wind-rolling.apng": "c977b41a612b6004c0d68433965e6a9575cca2a7313c63b44bafd62b05648d17"
+  },
+  "note": "The plate at 1080p and 4K reads as one smooth rolling field: no seam, crack or step at a tile edge (no sky-coloured pixel lies under the horizon in either picture), and the light rolls with the hills at both sizes. The garden's bushes and flowers stand apart with no overlap; the vase sits on the tilted top with its contact shadow; the 36 trees lean together downwind, and across the 49-frame recording the lean changes from tree to tree as gusts pass (frames 0 and 24 differ on 6.6% of pixels). The fixtures' plain boxes, cones and floating table top are the suite's stand-ins, not something this change draws."
+}

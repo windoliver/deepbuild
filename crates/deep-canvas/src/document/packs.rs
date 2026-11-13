@@ -27,6 +27,7 @@ use crate::schedule::{canonical, Hasher};
 
 pub mod deps;
 pub mod module_fields;
+pub mod retired;
 
 /// The most derived items one repeat makes (Recipe: cost).
 pub const MAX_REPEAT: u64 = 1024;
@@ -1379,6 +1380,8 @@ pub struct Packs {
     refused: BTreeMap<String, Vec<Issue>>,
     /// How often the pack check ran per `owner/name@version`: once, as a version is checked once.
     checks: BTreeMap<String, u32>,
+    /// The versions uninstalled while something names them: kept, and taking no new instance.
+    retired: BTreeSet<String>,
     pub planted: Planted,
 }
 
@@ -1398,6 +1401,7 @@ impl Packs {
     /// Takes back an admitted version a later half of its pack check refused (#238: its programs).
     pub fn withdraw(&mut self, key: &str) {
         self.by_id.remove(key);
+        self.retired.remove(key);
     }
 
     /// Runs the pack check and admits the version. A version already admitted with other
@@ -1488,6 +1492,8 @@ pub struct Resolved<'a> {
     /// The sealed modules' elements functions by builder kind (`family.name`), which a repeat
     /// over elements counts by (#2015).
     elements: BTreeMap<String, registry::Elements>,
+    /// The listed versions this build lacks, whose instances are kept and skipped (#1958).
+    pub missing: Vec<retired::Missing>,
 }
 
 impl<'a> Resolved<'a> {
@@ -1600,15 +1606,14 @@ pub fn resolve<'a>(
                 }
                 continue;
             }
-            let mut issue = Issue::envelope(
-                "pack_missing",
+            // The document still opens: the instances that need it are kept and skipped (#1958).
+            out.missing.push(retired::Missing {
+                pack: id.id.clone(),
+                name: id.name.clone(),
+                version: id.version.to_string(),
                 path,
-                json!({"pack": id.id, "version": id.version.to_string()}),
-                &format!("pack `{}` at version {} is not in this build; the document is refused whole, and never drawn with another version", id.id, id.version),
-            );
-            // The instances that need it.
-            issue.ids = deps::instances(doc, &id.name);
-            issues.push(issue);
+                ids: deps::instances(doc, &id.name),
+            });
             continue;
         };
         deps::modules(pack, text, &path, sealed, issues);
@@ -1945,8 +1950,21 @@ fn expand_one(
             return None;
         }
     };
+    // The instance's own stroke slot beside its inputs: each part it builds draws it (#173).
+    let stroke = params
+        .get("paint")
+        .filter(|_| !recipe.inputs.contains_key("paint"))
+        .filter(|p| {
+            p.as_object()
+                .is_some_and(|o| o.keys().all(|k| k == "stroke"))
+        })
+        .and_then(|p| p.get("stroke"))
+        .cloned();
     let mut ok = true;
     for (name, value) in &params {
+        if name == "paint" && stroke.is_some() {
+            continue;
+        }
         let Some(input) = recipe.inputs.get(name) else {
             issues.push(Issue::error(
                 "unknown_field",
@@ -2066,13 +2084,15 @@ fn expand_one(
     if let Some(fields) = items.get_mut(id).and_then(Value::as_object_mut) {
         fields.insert("params".into(), Value::Object(inputs.clone()));
     }
-    let key = Hasher::v1("recipe.key")
-        .text(&pack.id.text())
+    let mut key = Hasher::v1("recipe.key");
+    key.text(&pack.id.text())
         .text(&format!("{}@{}.{}", recipe.id, recipe.major, recipe.minor))
         .bytes(&canonical(&Value::Object(inputs.clone())))
-        .bytes(&canonical(&json!(broken_out)))
-        .finish()
-        .hex();
+        .bytes(&canonical(&json!(broken_out)));
+    if let Some(s) = &stroke {
+        key.bytes(&canonical(s));
+    }
+    let key = key.finish().hex();
     let mut env: Vec<(String, Value)> =
         inputs.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
     for (name, expr) in &recipe.lets {
@@ -2361,6 +2381,16 @@ fn expand_one(
             for key in ["visible", "pickable", "parent", "adjust", "material"] {
                 if let Some(v) = member(&item, key) {
                     fields.insert(key.into(), v.clone());
+                }
+            }
+            let mut params = params;
+            if let Some(s) = &stroke {
+                if let Some(p) = params
+                    .entry("paint")
+                    .or_insert_with(|| json!({}))
+                    .as_object_mut()
+                {
+                    p.insert("stroke".into(), s.clone());
                 }
             }
             fields.insert("params".into(), Value::Object(params));
@@ -3559,20 +3589,29 @@ mod tests {
     }
 
     #[test]
-    fn a_missing_pack_version_refuses_the_document_whole_and_two_of_a_name_are_refused() {
+    fn a_missing_pack_version_keeps_and_skips_its_instances_and_two_of_a_name_are_refused() {
         let packs = packs_with(&chart_pack(16));
         let mut doc = board(json!({"c1": instance("c1", 5)}));
         doc["packs"] = json!(["test/chart@2.0.0"]);
         let result = super::super::check_packed(&doc, &registry::core(), &packs);
+        // The document opens (#1958): no error, one notice naming the pack, the version and c1,
+        // and c1 neither expands with 1.0.0 nor draws.
+        assert!(
+            result.issues.iter().all(|i| i.severity != "error"),
+            "{:?}",
+            result.issues
+        );
         let missing = result
-            .issues
+            .notices
             .iter()
-            .find(|i| i.code == "pack_missing")
+            .find(|n| n.code == "pack_missing")
             .expect("pack_missing");
         assert_eq!(
             missing.actual,
             json!({"pack": "test/chart", "version": "2.0.0"})
         );
+        assert_eq!(missing.ids, vec!["c1"]);
+        assert!(result.notices.iter().all(|n| n.code != "unknown_kind"));
         assert!(result.expansions.is_empty() && result.draws.is_empty());
         doc["packs"] = json!(["test/chart@1.0.0", "other/chart@1.0.0"]);
         let result = super::super::check_packed(&doc, &registry::core(), &packs);

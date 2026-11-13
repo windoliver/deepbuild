@@ -254,6 +254,8 @@ pub fn knows(kind: &str) -> bool {
     deep_canvas_marks::scene::KINDS.contains(&kind)
         || deep_canvas_scene3d::scene::is_3d(kind)
         || kind == deep_canvas_scene3d::scene::OVERLAY
+        // A readout (#419), such as the overlay that discloses an exaggerated length (#1183).
+        || kind == "overlay.text@1"
         // The vector module's kind (#1162): an item the view draws, hears and points at.
         || kind == "vector@1"
         // A logic item (#544): baked at check into the occurrence lists its readers read; it draws nothing.
@@ -996,6 +998,18 @@ impl Hub<'_> {
             take_back(shared, &patched);
             return Outcome::Refused(refusals);
         }
+        // #935: a strip or spawn template naming a generated sound's asset before its audio.gen
+        // passes; only a document that declares `sounds` is read again.
+        if shared.doc.get("sounds").is_some() {
+            let now = shared.doc.clone();
+            let unpassed = self.unpassed_sounds(&now);
+            let shared = self.shared.get_mut(&call.doc).expect("open");
+            if !unpassed.is_empty() {
+                take_back(shared, &patched);
+                return Outcome::Refused(unpassed);
+            }
+        }
+        let shared = self.shared.get_mut(&call.doc).expect("open");
         let kept = carried(&issues, &allowed, planted);
         // The marks module checks what the patch wrote, and counts what it costs.
         let cost = match marks_check(
@@ -1454,8 +1468,8 @@ impl Hub<'_> {
             reply.insert("notices".into(), Value::Array(notices));
         }
         let timing = show.include.iter().any(|i| matches!(i, Include::Timing));
-        let rules_ms = timing
-            .then(|| crate::packs::kind_rules_ms(&doc, &result, &self.startup.sealed, &self.packs));
+        let rules_ms =
+            timing.then(|| crate::packs::timings(&doc, &result, &self.startup.sealed, &self.packs));
         crate::packs::reply(
             &result.expansions,
             Some((check_ms, rules_ms)),

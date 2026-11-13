@@ -27,6 +27,11 @@ pub struct Selection {
     fading: BTreeMap<String, (Vec<Show>, Instant)>,
     last_camera: Option<Camera>,
     shaded: Vec<String>,
+    /// What the last selection read (the view and every leveled solid) and what it chose: a frame
+    /// that reads the same keeps it, so a still view selects nothing (#2017).
+    last: Option<(u64, Vec<Choice>)>,
+    /// The terrain tiles this frame selected afresh (#2017: `counts`' `terrain_tiles_selected`).
+    pub tiles_selected: usize,
 }
 
 impl Selection {
@@ -40,7 +45,19 @@ impl Selection {
     /// The frame's choices and light cut: computed, drawn into `scene`, and returned for the
     /// report. `scale` is the internal scale the frame draws at; `noop` that no GPU draws it.
     pub fn apply(&mut self, scene: &mut Scene, scale: f64, noop: bool) -> (Vec<Choice>, Policy) {
-        let mut choices = lod::select(scene);
+        let key = read_by_selection(scene);
+        let mut choices = match &self.last {
+            Some((k, chosen)) if *k == key => {
+                self.tiles_selected = 0;
+                chosen.clone()
+            }
+            _ => {
+                let chosen = lod::select(scene);
+                self.tiles_selected = chosen.iter().filter(|c| c.tile.is_some()).count();
+                self.last = Some((key, chosen.clone()));
+                chosen
+            }
+        };
         let camera = scene.camera.clone();
         let solids: Vec<_> = scene
             .layers
@@ -79,6 +96,17 @@ impl Selection {
                     let e = errors_px(cam, &s.model, lod);
                     c.level = Some(level_at(&e, lod.lod_px));
                     c.errors_px = Some(e);
+                    c.triangles = c.level.map(|l| lod::triangles(c, lod, l));
+                }
+                // #2017's planted selection by distance alone: the level a 1920 × 1080 view from
+                // the same pose gives the tile, at every size; its errors stay as shipped.
+                Some(Planted::TerrainLodByDistance) if c.tile.is_some() => {
+                    let k = 1920.0 / camera.size[0].max(camera.size[1]);
+                    let mut hd = camera.clone();
+                    hd.scale *= k;
+                    hd.size = camera.size.map(|v| v * k);
+                    hd.centre = camera.centre.map(|v| v * k);
+                    c.level = Some(level_at(&errors_px(&hd, &s.model, lod), lod.lod_px));
                     c.triangles = c.level.map(|l| lod::triangles(c, lod, l));
                 }
                 Some(Planted::BlendLevelOnGpu) => {
@@ -145,11 +173,61 @@ impl Selection {
     }
 }
 
-/// The frame's `lod` rows (Assumed surfaces 1).
+/// A hash of what the selection reads: the view, and each leveled solid's place, levels, bounds,
+/// bands and lod_px (#2017).
+fn read_by_selection(scene: &Scene) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let c = &scene.camera;
+    let mut bits: Vec<u64> = Vec::new();
+    let mut f = |v: f64| bits.push(v.to_bits());
+    for v in c.size.iter().chain(&c.eye).chain(&c.right).chain(&c.up).chain(&c.forward) {
+        f(*v);
+    }
+    for v in c.centre.iter().chain(&c.roll) {
+        f(*v);
+    }
+    for v in [c.scale, c.near, c.far, f64::from(u8::from(c.perspective))] {
+        f(v);
+    }
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    for s in scene.layers.iter().flat_map(|l| &l.solids) {
+        let Some(lod) = &s.lod else { continue };
+        for v in s.model.iter().flatten().chain(lod.bounds.iter().flatten()) {
+            f(*v);
+        }
+        for v in [lod.lod_px, lod.margin, lod.extent] {
+            f(v);
+        }
+        for l in &lod.levels {
+            f(l.error);
+            l.hash.hash(&mut h);
+        }
+        for (below, _) in &lod.bands {
+            f(*below);
+        }
+        s.id.hash(&mut h);
+        lod.tile.hash(&mut h);
+        lod.bands.len().hash(&mut h);
+        lod.proxy.is_some().hash(&mut h);
+    }
+    bits.hash(&mut h);
+    h.finish()
+}
+
+/// The frame's `lod` rows (Assumed surfaces 1): one per leveled item, and one per terrain plate
+/// with each of its tiles' level and errors (#2017).
 pub fn rows(choices: &[Choice]) -> Value {
-    json!(choices
-        .iter()
-        .map(|c| json!({
+    let mut plates: Vec<(&str, Vec<Value>)> = Vec::new();
+    for c in choices {
+        let Some(tile) = c.tile else { continue };
+        let row = json!({"tile": tile, "level": c.level, "errors_px": c.errors_px});
+        match plates.iter_mut().find(|(id, _)| *id == c.item) {
+            Some((_, tiles)) => tiles.push(row),
+            None => plates.push((&c.item, vec![row])),
+        }
+    }
+    let items = choices.iter().filter(|c| c.tile.is_none()).map(|c| {
+        json!({
             "item": c.item,
             "bands": c.bands.iter().map(|b| b.name()).collect::<Vec<_>>(),
             "blend": c.blend.filter(|_| c.bands.len() == 2).map(|l| json!({"level": l, "of": OF})),
@@ -157,7 +235,50 @@ pub fn rows(choices: &[Choice]) -> Value {
             "errors_px": c.errors_px,
             "triangles": c.triangles,
             "shadow_level": c.shadow_level,
-        }))
+        })
+    });
+    let plates = plates
+        .into_iter()
+        .map(|(item, tiles)| json!({"item": item, "tiles": tiles}));
+    json!(items.chain(plates).collect::<Vec<_>>())
+}
+
+/// A terrain plate's tiles before the selection draws them: each its tile, its place and its
+/// levels (#2017).
+pub type Tiles = Vec<([u32; 2], deep_canvas_scene3d::scene::Affine3, std::sync::Arc<lod::Lod>)>;
+
+/// Plate `item`'s tiles in `scene`, before the selection resolves them.
+pub fn tiles_of(scene: &Scene, item: &str) -> Tiles {
+    scene
+        .layers
+        .iter()
+        .flat_map(|l| &l.solids)
+        .filter(|s| s.id == item)
+        .filter_map(|s| Some((s.lod.as_ref()?.tile?, s.model, s.lod.clone()?)))
+        .collect()
+}
+
+/// The frame's `ground_points` (#2017; Assumed surfaces 2): for each (x, z) asked, the tile of
+/// `item` that holds it, the level this frame draws that tile at, and the height of the surface
+/// it draws there, from the level's own triangles as the vertex stage places them.
+pub fn ground_points(item: &str, at: &[[f64; 2]], tiles: &Tiles, choices: &[Choice]) -> Value {
+    json!(at
+        .iter()
+        .map(|&[x, z]| {
+            let hit = tiles.iter().find_map(|(tile, model, lod)| {
+                let level = choices
+                    .iter()
+                    .find(|c| c.item == item && c.tile == Some(*tile))?
+                    .level?;
+                let mesh = &lod.levels.get(level)?.mesh;
+                let y = deep_canvas_scene3d::terrain::drawn_height(mesh, model, x, z)?;
+                Some((*tile, level, y))
+            });
+            match hit {
+                Some((tile, level, y)) => json!({"at": [x, z], "tile": tile, "level": level, "y": y}),
+                None => json!({"at": [x, z], "tile": null, "level": null, "y": null}),
+            }
+        })
         .collect::<Vec<_>>())
 }
 

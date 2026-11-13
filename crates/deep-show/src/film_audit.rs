@@ -22,6 +22,8 @@ use vello_cpu::kurbo::{Affine, Point};
 use crate::hub::{Claim, Hub, Planted};
 use crate::shared::FLICKS;
 
+pub(crate) mod craft;
+
 /// The shortest reading hold this build allows: the test build standing in for a new release's
 /// stricter rule raises it to 2 s (#407's criterion 9); a shipped build keeps the design's.
 const HOLD_FLOOR: Option<f64> = if cfg!(feature = "test-hold-min-2s") {
@@ -49,19 +51,19 @@ const CODES: [&str; 10] = [
 
 /// One text at one frame of a rendition.
 #[derive(Clone, Debug)]
-struct TextAt {
+pub(crate) struct TextAt {
     /// The item that draws it.
-    item: String,
-    text: String,
+    pub(crate) item: String,
+    pub(crate) text: String,
     /// Each glyph's box in the frame's pixels, `[x0, y0, x1, y1]`, and its opacity.
-    boxes: Vec<[f64; 4]>,
-    opacity: Vec<f64>,
-    color: [u8; 3],
+    pub(crate) boxes: Vec<[f64; 4]>,
+    pub(crate) opacity: Vec<f64>,
+    pub(crate) color: [u8; 3],
     /// The color it sits on: the topmost solid fill drawn before it under its glyphs' centre,
     /// else the frame's ground.
-    ground: [u8; 3],
+    pub(crate) ground: [u8; 3],
     /// Its size in the frame's pixels.
-    size: f64,
+    pub(crate) size: f64,
 }
 
 /// One frame of a rendition: its texts, and every item's extent in the frame's pixels.
@@ -624,15 +626,16 @@ impl Hub<'_> {
             }
             rows.push(row("cue", &id, issues));
         }
+        rows.extend(self.craft_rows(claim, c));
         rows
     }
 
     /// The flicker check on each requirement of the claim that names it, on every deliverable,
-    /// in both renditions: requirement ID → its issues, or why it couldn't run.
-    pub(crate) fn film_flicker_runs(
-        &mut self,
-        c: &Claim,
-    ) -> BTreeMap<String, Result<Vec<Value>, Value>> {
+    /// in both renditions: requirement ID → its issues, or why it couldn't run, beside its
+    /// counters per deliverable and rendition (#1399): the frames it judged and those it analyzed
+    /// from their own raster, its count of real evaluations. A frame judged on another frame's
+    /// analysis fails the check, naming the counter.
+    pub(crate) fn film_flicker_runs(&mut self, c: &Claim) -> BTreeMap<String, Flickered> {
         let count = if self.planted(Planted::FlickerCountsSingleChanges) {
             Count::Singles
         } else if self.planted(Planted::FlickerWholeViewMean) {
@@ -648,19 +651,32 @@ impl Hub<'_> {
         {
             let f = Flicker::from_input(&r.check);
             let mut issues = Vec::new();
+            let mut counters = Vec::new();
             let mut failed = None;
             for doc in &c.deliverables {
                 let Some(revision) = self.query_revision(doc, None) else {
                     continue;
                 };
                 for (rendition, reduced) in RENDITIONS {
-                    let Some((frames, per_second, frame, start)) =
-                        self.film_luminance(&revision.drawn, reduced)
+                    let Some(Lit {
+                        frames,
+                        per_second,
+                        frame,
+                        start,
+                        analyzed,
+                    }) = self.film_luminance(&revision.drawn, reduced)
                     else {
                         failed =
                             Some(json!({"code": "not_drawn", "doc": doc, "rendition": rendition}));
                         continue;
                     };
+                    counters.push(json!({"doc": doc, "rendition": rendition, "frames": frames.len(), "analyzed": analyzed}));
+                    if analyzed < frames.len() {
+                        issues.push(json!({"check": audit::FILM_FLICKER, "code": "film.unanalyzed", "severity": "error", "ids": [],
+                            "doc": doc, "t": start, "rendition": rendition, "counter": "analyzed", "frames": frames.len(), "analyzed": analyzed,
+                            "what": format!("{analyzed} of {} frames were analyzed from their own raster", frames.len()),
+                            "fix": "analyze every frame the check judges; a result served to other frames isn't theirs"}));
+                    }
                     for found in audit::flashes(&frames, per_second, &f, count) {
                         let t = start + found.first as i64 * frame;
                         let mut i = json!({"check": audit::FILM_FLICKER, "code": "film.flash", "severity": "error", "ids": [],
@@ -675,19 +691,16 @@ impl Hub<'_> {
                     }
                 }
             }
-            out.insert(r.id.clone(), failed.map_or(Ok(issues), Err));
+            out.insert(r.id.clone(), (failed.map_or(Ok(issues), Err), counters));
         }
         out
     }
 
     /// `drawn` played through every frame of its span in one rendition, each frame rastered on the
     /// CPU at [`FLICKER_WIDTH`] under the document's own look and read as relative luminance in
-    /// linear light; with the frames a second, flicks a frame and the first frame's time.
-    fn film_luminance(
-        &mut self,
-        drawn: &Value,
-        reduced: bool,
-    ) -> Option<(Vec<Vec<f32>>, usize, i64, i64)> {
+    /// linear light; with the frames a second, flicks a frame, the first frame's time and how
+    /// many frames were analyzed from their own raster.
+    fn film_luminance(&mut self, drawn: &Value, reduced: bool) -> Option<Lit> {
         let (p, q) = drawn
             .get("transport")
             .and_then(deep_canvas::document::frame_rate_of)
@@ -709,9 +722,16 @@ impl Hub<'_> {
         let mut view = deep_canvas::schedule::default_view(drawn);
         view[deep_canvas::schedule::REDUCED_MOTION] = Value::Bool(reduced);
         let program = crate::film::program_of(&self.sched, &session);
-        let mut out = Vec::with_capacity(count);
+        let mut out: Vec<Vec<f32>> = Vec::with_capacity(count);
         let mut ok = true;
+        let once = self.planted(Planted::FlickerAnalyzesOnce);
+        let mut analyzed = 0;
         for n in 0..count {
+            // Planted (#1399): one analysis served to every frame.
+            if once && n > 0 {
+                out.push(out[0].clone());
+                continue;
+            }
             let t = start + n as i64 * frame;
             session.frame(&mut self.sched, t, &view);
             let Some(painted) = crate::frames::drawing_of(&self.sched, &session) else {
@@ -723,7 +743,7 @@ impl Hub<'_> {
                 .and_then(|p| crate::film::sides(p, drawn, t, reduced));
             let rgba = match &sides {
                 Some(s) => self
-                    .film_rgba(&painted, Some(px), s, drawn, true)
+                    .film_rgba(&painted, Some(px), s, drawn, (true, None))
                     .map(|r| r.0),
                 None => self.canonical_rgba(&painted, Some(px), true).map(|r| r.0),
             };
@@ -738,13 +758,20 @@ impl Hub<'_> {
                     .map(|c| audit::luminance(c[0], c[1], c[2]))
                     .collect(),
             );
+            analyzed += 1;
         }
         if let Some((look, def)) = kept {
             self.look = look;
             self.look_def = def;
         }
         let per_second = (FLICKS as f64 / frame as f64).round().max(1.0) as usize;
-        ok.then_some((out, per_second, frame, start))
+        ok.then_some(Lit {
+            frames: out,
+            per_second,
+            frame,
+            start,
+            analyzed,
+        })
     }
 
     /// Show-time admission's film audit (#407): a film a claim's definition audits gets the film
@@ -849,6 +876,20 @@ pub(crate) fn audit_code(code: &str) -> bool {
 
 /// The width frames are rastered at for the flicker check: a share of the view is all it reads.
 const FLICKER_WIDTH: f64 = 192.0;
+
+/// A flicker check's issues, or why it couldn't run, beside its counters (#1399).
+pub(crate) type Flickered = (Result<Vec<Value>, Value>, Vec<Value>);
+
+/// A rendition's frames as relative luminance, with what the flicker check reads them by.
+struct Lit {
+    frames: Vec<Vec<f32>>,
+    per_second: usize,
+    /// Flicks a frame, and the first frame's time.
+    frame: i64,
+    start: i64,
+    /// #1399: the frames analyzed from their own raster.
+    analyzed: usize,
+}
 
 impl Hub<'_> {
     /// Sets the hub's look to the one `drawn` names by asset, as a show of it does; the look it
@@ -1006,7 +1047,7 @@ fn frame_of(
 
 /// Whether `text` reads at this frame, given where its glyphs were the frame before: every glyph
 /// still, opaque, in contrast, big enough and wholly inside the safe area.
-fn readable(
+pub(crate) fn readable(
     text: &TextAt,
     before: Option<&TextAt>,
     limits: &Readable,

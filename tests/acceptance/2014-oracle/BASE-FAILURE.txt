@@ -1,0 +1,8 @@
+At base 35df4523f (an arm64 Mac, 18 cores), on 2026-11-11, no Rust was built: the one-minute load was about 238 and `cargo` isn't on this shell's PATH. Lines marked "read" come from the base's code. Lines marked "observed" are what running the test file here, without cargo, showed.
+
+- triangles-at.test.ts
+  - Observed: the judges' self-checks (judgesFailTheirPlants) ran first and passed. Those are: the formula's default split passes; drawn default and met zigzag fails at 64 of 64 probes; a four-triangle cell fails; the #2014 suite's `anti` and `main` sets read as default and zigzag at all 16 cells. The test then failed at "the binary builds", with "cargo could not run: spawnSync cargo ENOENT".
+  - With cargo on PATH it fails at "deep-show run refused the scenario (its calls deep_show, geometry, terrain_rays)", the answer being {"ok": false, "code": "bad_input"}. Read: deep-show's `call()` doesn't know `terrain_rays`, so the scenario line is refused whole.
+  - Behind the call, read: plate@1 doesn't define `terrain`, so the show is refused with `unknown_field` at items/ground/params/terrain, and the physics module refuses a `heightfield` shape ("#927 brings it").
+
+Type-check (observed): `npx tsc -p tests/acceptance/2014-oracle/tsconfig.json` exits 0.

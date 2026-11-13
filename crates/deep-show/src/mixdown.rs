@@ -44,6 +44,8 @@ pub enum MixCall {
     },
     /// #500: one analysis bake of one asset.
     Bake(Value),
+    /// #935: one entry of a document's `sounds` held to audio.gen.
+    Gen { doc: Value, sound: String },
     /// #154: a score's render plan, `{doc, item}`.
     Score(Value),
     /// #501: a media document played live on the default output for `seconds` of real time.
@@ -71,6 +73,10 @@ pub fn parse_call(name: &str, c: &Map<String, Value>) -> Option<MixCall> {
             track: c.get("track").map_or(Some(Vec::new()), |t| t.as_array().cloned())?,
         },
         "media_bake" => MixCall::Bake(c.get("bake").filter(|b| b.is_object())?.clone()),
+        "media_gen" => MixCall::Gen {
+            doc: c.get("doc").filter(|d| d.is_object())?.clone(),
+            sound: c.get("sound")?.as_str()?.to_string(),
+        },
         "score_plan" => MixCall::Score(Value::Object(c.clone())),
         "handed" => MixCall::Handed {
             panel: c.get("panel")?.as_str()?.to_string(),
@@ -128,7 +134,8 @@ pub fn planted_of(p: Option<Planted>, live: bool) -> MixPlanted {
         // #1818's live in the media module's list, planted for the whole run.
         limiter_sample_peaks: deep_canvas_media::planted("limiter_holds_sample_peaks"),
         hard_knee: deep_canvas_media::planted("compressor_hard_knee"),
-        no_latency_compensation: deep_canvas_media::planted("mix_without_latency_compensation"),
+        no_latency_compensation: deep_canvas_media::planted("mix_without_latency_compensation")
+            || deep_canvas_media::planted("limiter_lookahead_uncompensated"),
         pitch_ignores_semitones: deep_canvas_media::planted("pitch_ignores_semitones"),
         sends_tap_post: deep_canvas_media::planted("send_always_post"),
         delay_empties_at_seek: deep_canvas_media::planted("delay_empties_line_at_seek"),
@@ -211,12 +218,6 @@ impl Hub<'_> {
         }
         let path = self.scenario.evidence.join(&sha[..2]).join(&sha[2..]);
         self.decoded_at(&path, sha)
-    }
-
-    /// The sound of the file at `path`, decoded in the decode worker, as [`Hub::pcm`] gives an
-    /// asset's; `sha` names it in a refusal.
-    pub(crate) fn pcm_at(&mut self, path: &std::path::Path, sha: &str) -> Result<(i64, usize, Vec<f32>), Value> {
-        self.decoded_at(path, sha).map(|(r, c, s, _)| (r, c, s))
     }
 
     fn decoded_at(&mut self, path: &std::path::Path, sha: &str) -> Result<(i64, usize, Vec<f32>, Option<(i64, i64)>), Value> {
@@ -528,6 +529,7 @@ impl Hub<'_> {
                 json!({"mix": reply})
             }
             MixCall::Bake(b) => self.bake_call(b),
+            MixCall::Gen { doc, sound } => self.gen_call(doc, sound),
             MixCall::Score(c) => self.score_plan(c),
             MixCall::Handed { panel, from, to } => {
                 let now = self.now;

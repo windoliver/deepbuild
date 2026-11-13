@@ -220,11 +220,13 @@ const TILT_WAY: u64 = 7;
 
 // ---- the area
 
-/// The faces with their running areas, so a draw picks a face by its area.
+/// The faces with their running areas, so a draw picks a face by its area, and the box they lie
+/// in.
 struct Area<'a> {
     tris: &'a [Tri],
     run: Vec<f64>,
     total: f64,
+    bounds: [V3; 2],
 }
 
 impl<'a> Area<'a> {
@@ -235,7 +237,13 @@ impl<'a> Area<'a> {
             total += t.area();
             run.push(total);
         }
-        Area { tris, run, total }
+        let bounds = bounds(tris.iter().flat_map(|t| t.p));
+        Area {
+            tris,
+            run,
+            total,
+            bounds,
+        }
     }
 
     /// Candidate `n`: a point drawn uniformly over the area, with its face.
@@ -260,17 +268,46 @@ impl<'a> Area<'a> {
     }
 }
 
+/// The most cells [`Cells`] lays out as a grid; past it, each cell is kept by its key.
+const GRID: usize = 1 << 22;
+
 /// The accepted points in cells one minimum distance wide: a point's neighbours within that
-/// distance lie in its cell and the 26 around it.
+/// distance lie in its cell and the 26 around it. The cells over the bounds the points lie in
+/// are a flat grid, each a list through `next` that carries each point with its position, and a
+/// look round starts at the point's own cell (#2017: a scatter's 3.4 million darts each look
+/// round); a point past the bounds, or every point where the grid would pass [`GRID`] cells, is
+/// kept by its cell's key.
 struct Cells {
     cell: f64,
-    map: HashMap<[i64; 3], Vec<u32>>,
+    /// The grid's least cell and its cells along each axis.
+    lo: [i64; 3],
+    size: [i64; 3],
+    /// Each grid cell's last point, plus 1 (0 for none), and each point's one before it in its
+    /// cell, plus 1, with its position.
+    head: Vec<u32>,
+    next: Vec<(u32, V3)>,
+    map: HashMap<[i64; 3], Vec<(u32, V3)>>,
 }
 
 impl Cells {
-    fn new(cell: f64) -> Cells {
+    /// Cells `cell` wide, laid out as a grid over the box `[lo, hi]`.
+    fn new(cell: f64, [lo, hi]: [V3; 2]) -> Cells {
+        let at = |p: V3| p.map(|x| (x / cell).floor() as i64);
+        let (a, b) = (at(lo), at(hi));
+        let size: [i64; 3] =
+            std::array::from_fn(|k| b[k].checked_sub(a[k]).map_or(0, |d| d.saturating_add(1)));
+        let count = size.iter().try_fold(1usize, |n, s| {
+            usize::try_from(*s).ok().and_then(|s| n.checked_mul(s))
+        });
         Cells {
             cell,
+            lo: a,
+            size,
+            head: match count {
+                Some(n) if n <= GRID => vec![0; n],
+                _ => Vec::new(),
+            },
+            next: Vec::new(),
             map: HashMap::new(),
         }
     }
@@ -279,33 +316,222 @@ impl Cells {
         p.map(|x| (x / self.cell).floor() as i64)
     }
 
-    fn insert(&mut self, i: u32, p: V3) {
-        self.map.entry(self.at(p)).or_default().push(i);
+    /// The grid's index of cell `c`; none past the grid.
+    fn slot(&self, c: [i64; 3]) -> Option<usize> {
+        if self.head.is_empty() {
+            return None;
+        }
+        let mut k = 0;
+        for a in 0..3 {
+            let d = c[a]
+                .checked_sub(self.lo[a])
+                .filter(|d| (0..self.size[a]).contains(d))?;
+            k = k * self.size[a] + d;
+        }
+        usize::try_from(k).ok()
     }
 
-    /// Each point in the cells around `p`.
-    fn around(&self, p: V3, mut visit: impl FnMut(u32)) {
+    fn insert(&mut self, i: u32, p: V3) {
         let c = self.at(p);
+        match self.slot(c) {
+            Some(k) => {
+                let at = i as usize;
+                if self.next.len() <= at {
+                    self.next.resize(at + 1, (0, [0.0; 3]));
+                }
+                self.next[at] = (self.head[k], p);
+                self.head[k] = i + 1;
+            }
+            None => self.map.entry(c).or_default().push((i, p)),
+        }
+    }
+
+    /// Whether `hit` holds for a point of grid cell `k`, with its position.
+    fn walk(&self, k: usize, hit: &mut impl FnMut(u32, V3) -> bool) -> bool {
+        let mut at = self.head[k];
+        while at != 0 {
+            let (before, q) = self.next[at as usize - 1];
+            if hit(at - 1, q) {
+                return true;
+            }
+            at = before;
+        }
+        false
+    }
+
+    /// Whether `hit` holds for a point in the cells around `p`, with its position: it stops at
+    /// the first that does.
+    fn any(&self, p: V3, mut hit: impl FnMut(u32, V3) -> bool) -> bool {
+        let c = self.at(p);
+        if !self.head.is_empty() {
+            let own = self.slot(c);
+            if own.is_some_and(|k| self.walk(k, &mut hit)) {
+                return true;
+            }
+            // The grid's other cells among the 27, by their offsets from its least cell.
+            let span = |a: usize| {
+                let from = c[a].saturating_sub(1).saturating_sub(self.lo[a]).max(0);
+                let to = c[a]
+                    .saturating_add(1)
+                    .saturating_sub(self.lo[a])
+                    .min(self.size[a] - 1);
+                from..=to
+            };
+            for x in span(0) {
+                for y in span(1) {
+                    let row = (x * self.size[1] + y) * self.size[2];
+                    for z in span(2) {
+                        let k = (row + z) as usize;
+                        if own != Some(k) && self.walk(k, &mut hit) {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+        if self.map.is_empty() {
+            return false;
+        }
         for dx in -1..=1 {
             for dy in -1..=1 {
                 for dz in -1..=1 {
-                    if let Some(list) = self.map.get(&[c[0] + dx, c[1] + dy, c[2] + dz]) {
-                        list.iter().for_each(|i| visit(*i));
+                    let n = [c[0] + dx, c[1] + dy, c[2] + dz];
+                    if self.slot(n).is_none() {
+                        if let Some(list) = self.map.get(&n) {
+                            if list.iter().any(|(i, q)| hit(*i, *q)) {
+                                return true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        false
+    }
+
+    /// Each point in the cells around `p`, with its position.
+    fn around(&self, p: V3, mut visit: impl FnMut(u32, V3)) {
+        self.any(p, |i, q| {
+            visit(i, q);
+            false
+        });
+    }
+
+    /// Whether a point lies closer to `p` than the distance whose square is `r2`.
+    fn crowded(&self, p: V3, r2: f64) -> bool {
+        self.any(p, |_, q| {
+            let d = sub(q, p);
+            dot(d, d) < r2
+        })
+    }
+}
+
+/// The most cubes [`Covered`] keeps a bit for; past it, it holds none.
+const COVERED: usize = 1 << 26;
+
+/// Cubes a quarter of `r` wide over the bounds the points lie in, each marked once every corner
+/// of it lies within `r` of a kept point, its square short of `r²` by a millionth: a point in a
+/// marked cube is closer than `r` to a kept one, so it is crowded without a look round (#2017:
+/// nine darts in ten of a 100,000-point scatter). The margin leaves no rounding that could mark
+/// a cube a look round would find room in.
+struct Covered {
+    r: f64,
+    side: f64,
+    lo: [i64; 3],
+    size: [i64; 3],
+    bits: Vec<u64>,
+}
+
+impl Covered {
+    fn new(r: f64, [lo, hi]: [V3; 2]) -> Covered {
+        let side = r / 4.0;
+        let at = |p: V3| p.map(|x| (x / side).floor() as i64);
+        let (a, b) = (at(lo), at(hi));
+        let size: [i64; 3] =
+            std::array::from_fn(|k| b[k].checked_sub(a[k]).map_or(0, |d| d.saturating_add(1)));
+        let count = size.iter().try_fold(1usize, |n, s| {
+            usize::try_from(*s).ok().and_then(|s| n.checked_mul(s))
+        });
+        let bits = match count {
+            Some(n) if r > 0.0 && n <= COVERED => vec![0; n.div_ceil(64)],
+            _ => Vec::new(),
+        };
+        Covered {
+            r,
+            side,
+            lo: a,
+            size,
+            bits,
+        }
+    }
+
+    /// The bit of the cube at index `c`; none past the bounds.
+    fn bit(&self, c: [i64; 3]) -> Option<usize> {
+        let mut k = 0;
+        for a in 0..3 {
+            let d = c[a]
+                .checked_sub(self.lo[a])
+                .filter(|d| (0..self.size[a]).contains(d))?;
+            k = k * self.size[a] + d;
+        }
+        usize::try_from(k).ok()
+    }
+
+    /// Whether `p` lies in a marked cube.
+    fn holds(&self, p: V3) -> bool {
+        if self.bits.is_empty() {
+            return false;
+        }
+        let c = p.map(|x| (x / self.side).floor() as i64);
+        self.bit(c)
+            .is_some_and(|k| (self.bits[k / 64] >> (k % 64)) & 1 == 1)
+    }
+
+    /// Marks each cube `q` now covers.
+    fn add(&mut self, q: V3) {
+        if self.bits.is_empty() {
+            return;
+        }
+        let reach = self.r * self.r * (1.0 - 1e-6);
+        // The cubes the ball's box meets, within the bounds.
+        let span = |a: usize| {
+            let from = ((q[a] - self.r) / self.side).floor() as i64;
+            let to = ((q[a] + self.r) / self.side).floor() as i64;
+            from.max(self.lo[a])..=to.min(self.lo[a].saturating_add(self.size[a] - 1))
+        };
+        for x in span(0) {
+            for y in span(1) {
+                for z in span(2) {
+                    let Some(k) = self.bit([x, y, z]) else {
+                        continue;
+                    };
+                    // The cube's corner furthest from q, axis by axis.
+                    let least = [x, y, z].map(|i| i as f64 * self.side);
+                    let mut d2 = 0.0;
+                    for a in 0..3 {
+                        let (low, high) = (least[a] - q[a], least[a] + self.side - q[a]);
+                        let d = low.abs().max(high.abs());
+                        d2 += d * d;
+                    }
+                    if d2 < reach {
+                        self.bits[k / 64] |= 1 << (k % 64);
                     }
                 }
             }
         }
     }
+}
 
-    /// Whether a point of `pts` lies closer to `p` than the distance whose square is `r2`.
-    fn crowded(&self, pts: &[(V3, u32)], p: V3, r2: f64) -> bool {
-        let mut near = false;
-        self.around(p, |i| {
-            let d = sub(pts[i as usize].0, p);
-            near |= dot(d, d) < r2;
-        });
-        near
+/// The box that holds every point of `pts`.
+fn bounds(pts: impl IntoIterator<Item = V3>) -> [V3; 2] {
+    let mut b = [[f64::INFINITY; 3], [f64::NEG_INFINITY; 3]];
+    for p in pts {
+        for k in 0..3 {
+            b[0][k] = b[0][k].min(p[k]);
+            b[1][k] = b[1][k].max(p[k]);
+        }
     }
+    b
 }
 
 /// An edge by its two ends' bits, the lesser first.
@@ -358,15 +584,23 @@ struct Sampler<'a> {
 impl Sampler<'_> {
     /// Uniform darts, each kept where it is allowed and crowds no earlier one: `count` of them, or
     /// as many as `tries` darts leave.
-    fn darts(&self, count: usize, tries: u64, out: &mut Vec<(V3, u32)>, cells: &mut Cells) {
+    fn darts(
+        &self,
+        count: usize,
+        tries: u64,
+        out: &mut Vec<(V3, u32)>,
+        cells: &mut Cells,
+        covered: &mut Covered,
+    ) {
         let r2 = self.min * self.min;
         for n in 0..tries {
             if out.len() >= count {
                 break;
             }
             let (p, t) = self.area.candidate(self.key, n);
-            if (self.keep)(p) && !(self.min > 0.0 && cells.crowded(out, p, r2)) {
+            if (self.keep)(p) && !(self.min > 0.0 && (covered.holds(p) || cells.crowded(p, r2))) {
                 cells.insert(out.len() as u32, p);
+                covered.add(p);
                 out.push((p, t));
             }
         }
@@ -378,9 +612,10 @@ impl Sampler<'_> {
     fn poisson(&self) -> Vec<(V3, u32)> {
         let r = self.min;
         let mut out = Vec::new();
-        let mut cells = Cells::new(r);
+        let mut cells = Cells::new(r, self.area.bounds);
+        let mut covered = Covered::new(r, self.area.bounds);
         let tries = ((DARTS * self.area.total / (r * r)).ceil() as u64).min(MOST);
-        self.darts(self.max, tries, &mut out, &mut cells);
+        self.darts(self.max, tries, &mut out, &mut cells, &mut covered);
         let h = r * FILL;
         let mut budget = MOST;
         for (t, tri) in self.area.tris.iter().enumerate() {
@@ -389,8 +624,9 @@ impl Sampler<'_> {
                     return false;
                 }
                 budget -= 1;
-                if (self.keep)(p) && !cells.crowded(&out, p, r * r) {
+                if (self.keep)(p) && !(covered.holds(p) || cells.crowded(p, r * r)) {
                     cells.insert(out.len() as u32, p);
+                    covered.add(p);
                     out.push((p, t as u32));
                 }
                 true
@@ -403,12 +639,14 @@ impl Sampler<'_> {
     fn random(&self, spacing: f64) -> Vec<(V3, u32)> {
         let count = ((self.area.total / (spacing * spacing)).floor() as usize).min(self.max);
         let mut out = Vec::new();
-        let mut cells = Cells::new(self.min.max(spacing));
+        let mut cells = Cells::new(self.min.max(spacing), self.area.bounds);
+        let mut covered = Covered::new(self.min, self.area.bounds);
         self.darts(
             count,
             (count as u64).saturating_mul(4).min(MOST),
             &mut out,
             &mut cells,
+            &mut covered,
         );
         out
     }
@@ -505,12 +743,12 @@ impl Sampler<'_> {
             }
         }
         let mut out = Vec::new();
-        let mut cells = Cells::new(self.min.max(spacing));
+        let mut cells = Cells::new(self.min.max(spacing), bounds(found.values().map(|f| f.1)));
         for (_, p, t) in found.into_values() {
             if out.len() >= self.max {
                 break;
             }
-            if (self.keep)(p) && !(self.min > 0.0 && cells.crowded(&out, p, self.min * self.min)) {
+            if (self.keep)(p) && !(self.min > 0.0 && cells.crowded(p, self.min * self.min)) {
                 cells.insert(out.len() as u32, p);
                 out.push((p, t));
             }
@@ -593,7 +831,7 @@ fn eliminate(pts: &[V3], target: usize, d: f64, area: f64) -> Vec<bool> {
     let ratio = (target as f64 / m as f64).min(1.0);
     let floor = reach * (1.0 - ratio * sqrt(ratio)) * 0.65;
     let search = reach.max(d);
-    let mut cells = Cells::new(search);
+    let mut cells = Cells::new(search, bounds(pts.iter().copied()));
     for (i, p) in pts.iter().enumerate() {
         cells.insert(i as u32, *p);
     }
@@ -601,8 +839,8 @@ fn eliminate(pts: &[V3], target: usize, d: f64, area: f64) -> Vec<bool> {
     // Each point's neighbours with the weight they add and whether they are too close.
     let mut near: Vec<Vec<(u32, f64, bool)>> = vec![Vec::new(); m];
     for (i, p) in pts.iter().enumerate() {
-        cells.around(*p, |j| {
-            let dist = length(sub(pts[j as usize], *p));
+        cells.around(*p, |j, q| {
+            let dist = length(sub(q, *p));
             if j as usize != i && dist < search {
                 near[i].push((j, if dist < reach { weight(dist) } else { 0.0 }, dist < d));
             }
@@ -711,6 +949,7 @@ fn ray(shape: &Shape, o: V3, d: V3) -> Option<(f64, V3)> {
                 .flatten()
                 .min_by(|x, y| x.0.total_cmp(&y.0))
         }
+        Shape::Heights(h) => h.ray(o, d),
     }
 }
 
@@ -1072,14 +1311,12 @@ fn pruned(rows: Vec<Row>, prune: Prune, protos: &[[V3; 2]]) -> Vec<Row> {
         .flat_map(|b| (0..3).map(|k| b[1][k] - b[0][k]))
         .fold(1e-9, f64::max);
     let centre = |i: usize| scale(add(boxes[i][0], boxes[i][1]), 0.5);
-    let mut cells = Cells::new(widest);
+    let mut cells = Cells::new(widest, bounds((0..rows.len()).map(centre)));
     let mut kept = vec![false; rows.len()];
     for i in order {
-        let mut clear = true;
-        cells.around(centre(i), |j| {
+        let clear = !cells.any(centre(i), |j, _| {
             let j = j as usize;
-            clear &=
-                !(0..3).all(|k| boxes[i][0][k] < boxes[j][1][k] && boxes[j][0][k] < boxes[i][1][k]);
+            (0..3).all(|k| boxes[i][0][k] < boxes[j][1][k] && boxes[j][0][k] < boxes[i][1][k])
         });
         if clear {
             kept[i] = true;

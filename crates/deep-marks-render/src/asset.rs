@@ -75,6 +75,29 @@ pub fn sidecars(doc: &mut Map<String, Value>, store: Option<&Path>) -> Result<()
     Ok(())
 }
 
+/// #1965: every code item of `doc` whose `raw` is an asset (`{asset: sha256}`, the form bytes that
+/// aren't UTF-8 take), read from the store, checked and kept beside the hash as `base64`, which the
+/// code's readers take as its raw bytes.
+pub fn raws(doc: &mut Map<String, Value>, store: Option<&Path>) -> Result<(), Value> {
+    let Some(Value::Object(items)) = doc.get_mut("items") else {
+        return Ok(());
+    };
+    for (id, item) in items.iter_mut() {
+        let Some(Value::Object(raw)) = item.pointer_mut("/params/raw") else {
+            continue;
+        };
+        let Some(hash) = raw.get("asset").and_then(Value::as_str).map(str::to_string) else {
+            continue;
+        };
+        let bytes = read(store, &hash, &format!("items/{id}/params/raw"))?;
+        raw.insert(
+            "base64".into(),
+            Value::String(deep_canvas::base64::encode(&bytes)),
+        );
+    }
+    Ok(())
+}
+
 /// Every mark set column of `doc` that reads a table, inlined from the evidence store
 /// (`deep_marks_vello::tables`).
 pub fn tables(doc: &mut Map<String, Value>, evidence: Option<&Path>) -> Result<(), Value> {

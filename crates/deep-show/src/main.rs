@@ -26,6 +26,7 @@ mod film_viewer;
 mod frames;
 mod function;
 mod gate;
+mod generated;
 mod geometry;
 mod host;
 mod hub;
@@ -34,15 +35,19 @@ mod jobs;
 mod kept;
 mod kinds;
 mod kit;
+mod lengths;
 mod logic;
 mod media;
 mod mixdown;
 mod modes;
 mod narration;
 mod packs;
+mod retired;
 mod physics;
 mod placement;
 mod played;
+mod print;
+mod probe;
 #[cfg(feature = "test-accent")]
 mod planted;
 mod query;
@@ -58,10 +63,13 @@ mod shared;
 mod snapshot;
 mod spawn;
 mod spatial;
+mod terrain;
 mod terminal;
 #[cfg(feature = "test-machines")]
 mod test_machines;
 mod test_registries;
+#[cfg(feature = "test-sim")]
+mod test_sim;
 #[cfg(feature = "test-threads")]
 mod test_threads;
 mod time;
@@ -576,6 +584,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
                 .filter(|t| *t >= 0)?,
                 rev: c.get("rev")?.as_u64()?,
                 size: px_size(c.get("size"), |n| *n > 0)?,
+                probes: probe::parse(c)?,
             });
         }
         "screen" => return Some(Call::Screen),
@@ -583,12 +592,19 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         "geometry" => return geometry::parse(c).map(|g| Call::Geometry(Box::new(g))),
         "kinds" => return Some(Call::KindSchemas),
         "spatial" => return spatial::parse(c).map(|s| Call::Spatial(Box::new(s))),
+        "terrain_rays" => return terrain::parse(c).map(|r| Call::TerrainRays(Box::new(r))),
         "packs" => return Some(Call::Packs),
         "install_pack" => {
             return Some(Call::InstallPack {
                 id: c.get("id")?.as_str()?.to_string(),
                 dir: PathBuf::from(c.get("dir")?.as_str()?),
                 session: optional(c.get("session"), |s| Some(s.as_str()?.to_string()))?,
+            })
+        }
+        "uninstall_pack" => {
+            return Some(Call::UninstallPack {
+                id: c.get("id")?.as_str()?.to_string(),
+                version: c.get("version")?.as_str()?.to_string(),
             })
         }
         "registries" => return Some(Call::Registries),
@@ -1210,6 +1226,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 || deep_canvas_motion::arrange::PLANTED.contains(p)
                 || *p == deep_canvas_motion::module::UNDECLARED_KIND_ACCEPTED
                 || deep_canvas_motion::module::PLANTED.contains(p)
+                || *p == deep_canvas_motion::lengths::ONE_VALUE
                 || deep_canvas_marks::arrays::PLANTED.contains(p)
                 // #1967's wrong programs live in the cells module's playback and conversion.
                 || deep_canvas_cells::recording::PLANTED.contains(p)
@@ -1233,6 +1250,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
             }
             None if export_planted(p).is_some() => export_planted(p),
             None if geometry_audit::planted(p).is_some() => geometry_audit::planted(p),
+            None if physics::planted(p).is_some() => physics::planted(p),
             None => Some(match p {
                 "presents_unnamed_removal" => Planted::PresentsUnnamedRemoval,
                 "diffs_items_only" => Planted::DiffsItemsOnly,
@@ -1295,6 +1313,8 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "box_sends_every_id" => Planted::BoxSendsEveryId,
                 "resolver_only_ref_unresolved" => Planted::ResolverOnlyRefUnresolved,
                 "resolver_closes_task" => Planted::ResolverClosesTask,
+                "probe_from_depth" => Planted::ProbeFromDepth,
+                "probe_nearest_item" => Planted::ProbeNearestItem,
                 "verdict_keyed_by_doc" => Planted::VerdictKeyedByDoc,
                 "checks_skip_unknown_kind" => Planted::ChecksSkipUnknownKind,
                 "missing_kind_inconclusive" => Planted::MissingKindInconclusive,
@@ -1302,6 +1322,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "verdict_counts_new_issues" => Planted::VerdictCountsNewIssues,
                 "flicker_counts_single_changes" => Planted::FlickerCountsSingleChanges,
                 "flicker_whole_view_mean" => Planted::FlickerWholeViewMean,
+                "flicker_analyzes_once" => Planted::FlickerAnalyzesOnce,
                 "cites_empty_passes" => Planted::CitesEmptyPasses,
                 "seeds_by_expansion_order" => Planted::SeedsByExpansionOrder,
                 "each_seeds_by_element_count" => Planted::EachSeedsByElementCount,
@@ -1314,6 +1335,8 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 }
                 "pack_check_skips_requires_modules" => Planted::PackCheckSkipsRequiresModules,
                 "packs_keyed_by_name" => Planted::PacksKeyedByName,
+                "store_sweep_deletes_named" => Planted::StoreSweepDeletesNamed,
+                "loader_draws_missing_with_installed" => Planted::LoaderDrawsMissingWithInstalled,
                 "counts_agent_rule_as_cover" => Planted::OwnRuleCountsAsCover,
                 "recipe_rules_twice" => Planted::RulesEvaluatedTwice,
                 "kit_tests_defaults_only" => Planted::KitDefaultsOnly,
@@ -1846,6 +1869,9 @@ const TEST_BUILD: bool = cfg!(any(
     feature = "test-sim-b-false-bit",
     feature = "test-sim-b-off",
     feature = "test-sim-c",
+    feature = "test-sim-a-1-0-1",
+    feature = "test-sim-b-1-0-1",
+    feature = "test-sim-b-pin-feature",
     feature = "test-gpu-second-backend",
     feature = "test-scene3d-tie-by-order",
     feature = "test-scene3d-reads-vector",
@@ -1962,7 +1988,7 @@ fn modules(set: BuildSet) -> Vec<Module> {
         });
         // Issue #308: controls and the input track's handling, with control@1; #535: logic's arrays.
         out.extend([deep_canvas_input::module::module(), deep_logic::module()]);
-        out.push(physics::module());
+        out.extend(physics::module());
     }
     // Issue #238: the sandbox module, on core alone; `test-sandbox-alt` seals the test
     // implementation `sandbox.alt` in its place, and `test-sandbox-needs-logic` plants a manifest
@@ -2098,23 +2124,11 @@ fn modules(set: BuildSet) -> Vec<Module> {
     out.push(deep_canvas_test_modules::checks());
     #[cfg(feature = "test-glyph-label")]
     out.push(deep_canvas_test_modules::label());
-    // Issue #185: test.sim@1's implementations, and test module c.
-    #[cfg(feature = "test-sim-a")]
-    out.push(deep_canvas_test_modules::sim::a());
-    #[cfg(feature = "test-sim-b")]
-    out.push(deep_canvas_test_modules::sim::b());
-    #[cfg(feature = "test-sim-b-f64")]
-    out.push(deep_canvas_test_modules::sim::b_f64());
-    #[cfg(feature = "test-sim-b-private-renamed")]
-    out.push(deep_canvas_test_modules::sim::b_private_renamed());
-    #[cfg(feature = "test-sim-b-public-renamed")]
-    out.push(deep_canvas_test_modules::sim::b_public_renamed());
-    #[cfg(feature = "test-sim-b-false-bit")]
-    out.push(deep_canvas_test_modules::sim::b_false_bit());
-    #[cfg(feature = "test-sim-b-off")]
-    out.push(deep_canvas_test_modules::sim::b_off());
-    #[cfg(feature = "test-sim-c")]
-    out.push(deep_canvas_test_modules::sim::c());
+    #[cfg(feature = "test-export-guards")]
+    out.push(deep_canvas_test_modules::guards());
+    // Issues #185 and #1920: test.sim@1's implementations and their variants, and test module c.
+    #[cfg(feature = "test-sim")]
+    out.extend(test_sim::modules());
     out.extend(kit::modules::built());
     #[cfg(feature = "test-leave-out-logic")]
     out.retain(|m| m.manifest.name != "logic");
@@ -2954,6 +2968,8 @@ fn planted_named(twin: &str) -> Result<StartPlanted, ()> {
         "admits_frame_json" => Ok(StartPlanted::Seal(Fault::AdmitsFrameJson)),
         "digest_hashes_private" => Ok(StartPlanted::Seal(Fault::DigestHashesPrivate)),
         "digest_covers_pins" => Ok(StartPlanted::Seal(Fault::DigestCoversPins)),
+        "runtime_digest_omits_physics" => Ok(StartPlanted::Seal(Fault::RuntimeOmitsPhysics)),
+        "runtime_digest_hashes_only_shapes" => Ok(StartPlanted::Seal(Fault::RuntimeOnlyShapes)),
         "orders_steps_by_name" => Ok(StartPlanted::StepsByName),
         "starts_without_look" => Ok(StartPlanted::StartsWithoutLook),
         "shapes_on_ui_thread" => Ok(StartPlanted::ShapesOnUiThread),
@@ -3011,25 +3027,7 @@ fn planted_named(twin: &str) -> Result<StartPlanted, ()> {
     }
 }
 
-/// #501's wrong programs, and #1897's, by the names their acceptance suites give them.
-fn export_planted(name: &str) -> Option<Planted> {
-    Some(match name {
-        "hash_xors_without_position" => Planted::HashXorsWithoutPosition,
-        "span_rounds_each_frame" => Planted::SpanRoundsEachFrame,
-        "span_rounds_start" => Planted::SpanRoundsStart,
-        "chunk_tree_wrong_order" => Planted::ChunkTreeWrongOrder,
-        "range_restarts_timecode" => Planted::RangeRestartsTimecode,
-        "export_starts_then_stops" => Planted::ExportStartsThenStops,
-        "target_exports_selection" => Planted::TargetExportsSelection,
-        "target_writes_baked_channel" => Planted::TargetWritesBakedChannel,
-        "target_reader_is_writer" => Planted::TargetReaderIsWriter,
-        "mixer_linux_one_step" => Planted::MixerLinuxOneStep,
-        "drop_frame_every_tenth_minute" => Planted::DropFrameEveryTenthMinute,
-        "timecode_track_zero" => Planted::TimecodeTrackZero,
-        "png_premultiplies_straight" => Planted::PngPremultipliesStraight,
-        _ => return None,
-    })
-}
+use export::planted as export_planted;
 
 /// A hash version by its name: `hash@1` or `hash@2`.
 fn hash_named(name: &str) -> Option<HashVersion> {

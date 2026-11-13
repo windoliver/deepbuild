@@ -40,7 +40,7 @@ pub use check::{
     check, check_costed, check_in, check_packed, check_with, duration, frame_of, frame_rate_of,
     literal_forms, recheck, recheck_skipping_referrers, recheck_with, CheckResult, Referrers,
 };
-pub use close::undeclared;
+pub use close::{field_names, kind_names, owners, undeclared};
 pub use merge::{merge, Merged};
 pub use order::key_between;
 pub use packs::{Expansion, Pack, PackId, Packs, Planted as PackPlanted};
@@ -109,6 +109,8 @@ pub const ENVELOPE_KEYS: &[&str] = &[
     // #502: the media module's ducking entries (Ducking), each a bus's gain under speech spans.
     "ducking",
     "tempo_map",
+    // #935: the media module's generated sounds, each held to audio.gen before an item names it.
+    "sounds",
 ];
 
 /// An item's keys (Item and kind), in this slice.
@@ -279,8 +281,9 @@ impl Issue {
         if self.code == "bad_unit" {
             out.insert("forms".into(), json!(self.forms));
         }
-        // The column view's issue names its reader, column, row, value and step (#397).
-        if self.code == "column.out_of_range" {
+        // The column view's issue names its reader, column, row, value and step (#397); a terrain
+        // overlay's its array, cell, value and step (#537).
+        if matches!(self.code, "column.out_of_range" | "terrain.overlay_range") {
             if let Value::Object(fields) = &self.actual {
                 for (k, v) in fields {
                     out.entry(k.clone()).or_insert_with(|| v.clone());
@@ -367,6 +370,10 @@ impl Notice {
         }
         if !self.close.is_empty() {
             out.insert("close".into(), json!(self.close));
+        }
+        // `pack_missing {pack, version, ids}` (Pack: retired and missing).
+        if self.code == "pack_missing" {
+            packs::retired::fields(&self.actual, &mut out);
         }
         Value::Object(out)
     }

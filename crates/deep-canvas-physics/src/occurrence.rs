@@ -76,12 +76,28 @@ pub struct Row {
     pub raw: Raw,
 }
 
+/// A stable ID's place in canonical order (#1921): by ID, an element address `<body>#<element id>`
+/// by its body's ID and then its element ID as a number, so `crate#2` comes before `crate#10`.
+pub fn id_order(id: &str) -> (&str, Option<u32>) {
+    match id.rsplit_once('#') {
+        Some((body, e)) if e.bytes().all(|b| b.is_ascii_digit()) => (body, e.parse().ok()),
+        _ => (id, None),
+    }
+}
+
+/// The world's body IDs in the order the backend builds them: by [`id_order`].
+pub fn built_order(w: &World) -> Vec<&String> {
+    let mut ids: Vec<&String> = w.bodies.keys().collect();
+    ids.sort_by_key(|id| id_order(id));
+    ids
+}
+
 /// Each ID's rank in canonical order, (priority, ID) over the world's bodies, then its joints by
 /// ID (A timeline as data over a pinned backend: order is canonical by (priority, ID)).
 pub fn ranks(w: &World) -> BTreeMap<String, u32> {
-    let mut bodies: Vec<(i64, &String)> = w.bodies.iter().map(|(id, b)| (b.priority, id)).collect();
-    bodies.sort();
-    let ids = bodies.into_iter().map(|(_, id)| id).chain(w.joints.keys());
+    let mut bodies: Vec<&String> = w.bodies.keys().collect();
+    bodies.sort_by_key(|id| (w.bodies[*id].priority, id_order(id)));
+    let ids = bodies.into_iter().chain(w.joints.keys());
     ids.enumerate()
         .map(|(i, id)| (id.clone(), i as u32))
         .collect()

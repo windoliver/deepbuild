@@ -21,7 +21,8 @@ import { run } from './children.js';
 import { gitDirs, headOf } from './session-facts.js';
 import type { Draft, HookMeta, Hunk } from './wire.js';
 
-type Kind = 'interface' | 'dependency' | 'behavior' | 'test' | 'configuration';
+// A repeat is a turn's last calls failing alike (#2019), told to that session alone.
+type Kind = 'interface' | 'dependency' | 'behavior' | 'test' | 'configuration' | 'repeat';
 type Obj = Record<string, unknown>;
 const letters = (id: string): string => id.replace(/[^0-9A-Za-z]/g, '');
 const handle = (id: string): string => `session:${letters(id)}`;
@@ -376,7 +377,8 @@ export class Siblings {
       const ts = this.o.now();
       const id = ulid(ts);
       await this.o.append(m.id, m.agent, {
-        v: 1, id, kind: 'notice.delivered', ts, subject: handle(m.id),
+        // A repeat, or a failed call's reply that carries one, is notice.delivered@2's (#2019).
+        v: n.type === 'repeat' || via === 'PostToolUseFailure' ? 2 : 1, id, kind: 'notice.delivered', ts, subject: handle(m.id),
         data: { notice: `notice:${id}`, type: n.type, source: n.source, target: handle(m.id), files: n.files, pr: n.pr, key: n.key, version: n.version, via, text: n.text },
       }).catch((error: unknown) => {
         // What wasn't recorded waits for the next hook again, behind anything newer on its subject.
@@ -420,6 +422,14 @@ export class Siblings {
   }
 
   // ---- Notices.
+  /**
+   * A notice for the session a hook names, built from facts, waiting for its next hook or this one's reply (#2019):
+   * once by its key and version, as every notice.
+   */
+  async tell(meta: HookMeta, n: Notice): Promise<void> {
+    const m = await this.mapped(meta.session, meta.agent, meta.cwd);
+    if (m) this.queue(m, n);
+  }
   private queue(target: Mapped, n: Notice | undefined): void {
     if (!n || target.ended) return;
     // One a restart read back is news only to a session never told of its subject.

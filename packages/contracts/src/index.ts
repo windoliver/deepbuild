@@ -14,4 +14,5 @@ export { HANDLE_SCHEMES, parseHandle, printHandle, type Handle } from './handles
 export { contextBoundFor, joinHookReplies, negotiateFeatures, type HookContribution, type JoinedHookReply } from './hook.js';
 export { checkManifest } from './manifest.js';
 export { extensionApi, hubSlots, type ApiEntry, type HubSlot } from './slots.js';
+export { codeWords } from './words.js';
 export { LIFECYCLE_OBJECTS, lifecycleGaps, machineProblems, machines, type Machine, type MachineMove } from './lifecycle.js';

@@ -248,9 +248,15 @@ fn closed(events: &[serde_json::Value], handle: &str) -> Option<String> {
     let question = ask["data"]["question"].as_str().unwrap_or_default();
     let end = events.iter().find(|event| states::closes(event, handle))?;
     let kind = end["kind"].as_str().unwrap_or_default();
+    // The machine's word for how it closed is the core's text; the outcome it names has words of its own (#2029).
     let how = match kind {
         "decision.applied" => "decided",
         other => other.strip_prefix("ask.").unwrap_or(other),
+    };
+    let outcome = if kind == "decision.applied" {
+        "decided_for_you"
+    } else {
+        how
     };
     let answer = end["data"]["answer"].as_str().map(|id| {
         let options = ask["data"]["options"].as_array();
@@ -274,9 +280,13 @@ fn closed(events: &[serde_json::Value], handle: &str) -> Option<String> {
         Some(via) => format!(" through {via}"),
         None => String::new(),
     };
+    // What the approved step did once it ran, from its call's own records (#2029).
+    let receipt = crate::codes::receipt(events, handle)
+        .map(|receipt| format!(" {receipt}."))
+        .unwrap_or_default();
     Some(format!(
-        "{question} {how_capital}{answer}{at}{through}. Nothing is left to answer.",
-        how_capital = capital(how),
+        "{question} {how}{answer}{at}{through}.{receipt} Nothing is left to answer.",
+        how = crate::codes::outcome(outcome, &capital(how)),
         answer = answer.unwrap_or_default(),
     ))
 }
@@ -455,6 +465,9 @@ fn show(address: &Address, window: &mut Window, cx: &mut App) -> Result<Address,
         }
         Target::Gone(words) => return say(words, window, cx),
     };
+    if selection(cx).shown.region != Some(region) {
+        hand_keys(region, window, cx);
+    }
     let changed = selection(cx).shown.address.as_ref() != Some(&full);
     selection(cx).shown = Shown {
         region: Some(region),
@@ -467,6 +480,26 @@ fn show(address: &Address, window: &mut Window, cx: &mut App) -> Result<Address,
     window.refresh();
     cx.refresh_windows();
     Ok(full)
+}
+
+/// The page region now draws `region`: what had the keyboard on the page it left, such as that ask's card, is drawn no
+/// more, so a shipped page takes it, as F6 gives it the page, and ⌘[ and ⌘] reach it (#1460). The list and the box
+/// keep it, since every page draws them, and an ask's card takes it at its next frame (#1462).
+fn hand_keys(region: Region, window: &mut Window, cx: &mut App) {
+    let Region::Shipped(kind) = region else {
+        return;
+    };
+    if views::list_has_keys(window) || crate::words::focused(window) {
+        return;
+    }
+    let Some(dock) = dock(cx) else {
+        return;
+    };
+    let keys = panel_named(&dock, kind.name(), cx)
+        .and_then(|id| dock.read(cx).panel(id).map(|panel| panel.focus_handle(cx)));
+    if let Some(keys) = keys {
+        window.focus(&keys, cx);
+    }
 }
 
 /// Makes `address` the last address you opened, with nothing forward of it.
@@ -641,7 +674,8 @@ pub fn open_first(window: &mut Window, cx: &mut App) {
         return;
     }
     // First launch is its own page until Set up finishes; before the record is read, the home page says so.
-    if crate::setup::needed() {
+    // #1100's planted app stays on the first-launch page after a Set up that works.
+    if crate::setup::needed() || crate::plain::planted("stays-on-first-launch") {
         return show_page(Kind::Welcome, "welcome", window, cx);
     }
     if !record::read_yet() {

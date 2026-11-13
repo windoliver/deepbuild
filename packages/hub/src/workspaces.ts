@@ -10,12 +10,12 @@ import { cpSync, existsSync, mkdirSync, readdirSync, realpathSync, renameSync, r
 import { dirname, isAbsolute, join, normalize, sep } from 'node:path';
 import type { StateItem, StateSource } from '@deepbuild/conformance';
 import type { JsonValue } from '@deepbuild/contracts';
-import { ulid, type Connection, type EventInput, type RecordStore } from '@deepbuild/record';
+import { ulid, type Connection } from '@deepbuild/record';
 import { markStale, type Verdict } from '@deepbuild/verdicts';
 import { diffOf, keepWork, makeWorkspace, reading, revertCommit, sourceOf, WORKSPACE_FILE, workspaceFile, type Touch } from '@deepbuild/workspaces';
 import type { StatePin } from './gate-runner.js';
 import { nameWorkspace, repoOf } from './paths.js';
-import type { Plant } from './plant.js';
+import type { WorkspaceDeps } from './workspaces-port.js';
 
 type Obj = Record<string, unknown>;
 type Source = Omit<StateSource, 'fixture'>;
@@ -23,26 +23,6 @@ interface Space { id: string; folder: string; name: string }
 interface Read { touch: string; source: string; digest: string }
 interface Reads { req: string; check: string | null; touches: string[] }
 interface StateRead { workspace: string; task_ref: string; claim: string | null; readings: Read[]; reads: Reads[] }
-interface WorkspaceDeps {
-  root: string;
-  now(): number;
-  plant?: Plant | undefined;
-  record(): RecordStore;
-  raw(query: string, params?: readonly (string | number | bigint | null)[]): Promise<unknown[]>;
-  append(connection: Connection, input: EventInput): Promise<void>;
-  connection(extra?: Partial<Connection>): Connection;
-  keep(bytes: Uint8Array, source: string): Promise<string>;
-  fetch(sha256: string): Promise<Uint8Array>;
-  /** You made it, so its checks run with no trust question. */
-  trust(folder: string): Promise<void>;
-  /** A plug-in's state source, for a touch that names none of the shipped four. */
-  plugin(name: string): Promise<Source>;
-  /** From now on a session's events are in this project. */
-  adopted(session: string, id: string): void;
-  /** Words for a session's agent, carried by this prompt's reply. */
-  told(session: string, cwd: string, text: string): void;
-  rerun(claim: string, checks: readonly string[], state: StatePin): boolean;
-}
 const TOUCH = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 const letters = (s: string): string => s.replace(/[^0-9A-Za-z]/g, '');
 const stateFile = (touch: string): string => `.deepbuild/state/${touch}.json`;

@@ -12,6 +12,19 @@ type Obj = Record<string, unknown>;
 /** A request ID: 1 to 64 letters, digits, - or _, as session.note has always taken (#340). */
 const REQUEST = /^[0-9A-Za-z_-]{1,64}$/;
 
+/**
+ * A write names the view it was made from (#1577): an undo, an overrule or a staged undo carries `view`, the log_pos of
+ * what you were shown. When its target changed after that, it's refused naming the change, so no write silently undoes
+ * a newer one. `changed` reads the newest change to the target after the view, in words, or undefined.
+ */
+export async function fromView(params: Obj, target: string, changed: (after: number) => Promise<string | undefined>): Promise<void> {
+  const { view } = params;
+  if (view === undefined) return;
+  if (!Number.isSafeInteger(view) || (view as number) < 0) throw new Refused(refusal('type', '/params/view', 'Give the view the write was made from as the log_pos its read returned.', view));
+  const change = await changed(view as number);
+  if (change) throw new Refused(refusal('not_found', '/params/view', `${target} changed after the view at log position ${String(view)} this write was made from: ${change}. Nothing was done; read it again and choose from what it shows now.`, view));
+}
+
 /** The write's own event: the first it appends that this names, which its receipt commits with and its log_pos is. */
 export type Effect = (input: EventInput) => boolean;
 /** That event as the record holds it. */

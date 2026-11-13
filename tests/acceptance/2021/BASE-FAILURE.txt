@@ -1,0 +1,92 @@
+#2021's acceptance suite on the base commit 35df4523f7adcf2058fbd1270e9b840e961a8534 (#1461, #1462, #992, #2018, #2026
+and #2028 merged), before any #2021 code.
+
+Machine:   Mac17,10, 18 cores, macOS 27.2, logged in.
+Toolchain: Node v24.22; cargo 1.99.1 (5f94df478 2026-08-27).
+Prepared:  npm ci --ignore-scripts; npm run build --workspaces; then, through scripts/lease at nice 10,
+           CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0:
+           cargo build --locked -q -p deep-hook --bin deep-hook
+           cargo build --locked -q -p deep-replica --bin deep-drive --features env-plants,deep-app/test-confirm
+           cargo build --locked -q -p deep-replica --bin deep-drive --features deep-app/test-confirm
+           08:54 to 09:06 PST, load average about 275 at the start.
+Command:   NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/2021 --testTimeout=600000 \
+             --no-file-parallelism keys mark motion line
+           node node_modules/typescript/bin/tsc -p tests/acceptance/2021/tsconfig.json   (clean, exit 0)
+
+## The run at the base: the four files, once, 09:34:33 to 09:39:42 PST (309 s)
+
+uptime at start: load averages 18.81 14.71 44.98; at end: 26.14 22.53 39.55.
+Totals: 13 tests, 12 failed, 1 passed. No test was edited after this run.
+
+keys.test.ts (AC3 #2021.6db64bd1), 5.5 s: 2 failed.
+  The shipped app: F6 put the keyboard on the open project's heading, Up and Down took it to docs' first row, and Down
+  walked docs' ten rows, shop's heading and ten rows, web's heading and five rows, each read with its title and state
+  word in its accessible name ("↻ Deploy check · working", "○ Release notes · queued", ...). Then:
+    nothing is drawn below session:716642f5-… ("Sign-up form") with 25 of 30 rows walked, so Down can't walk on in
+    drawn order (Down put the keyboard on "session:716642f5-…")
+  The list at the base doesn't scroll (views.rs: the list is overflow_hidden): 25 of the 30 rows fit the reference
+  window and the last five aren't drawn. Typing "shop" and Return passed at the base.
+  rows-take-no-focus: failed on its first assertion, the shipped run holding the same failure ("the shipped app must
+  pass this judge first, or a plant it fails proves nothing"); its planted run wasn't made.
+
+mark.test.ts (AC1 #2021.cf07389f), 41.7 s: 2 failed.
+  The shipped app, 31 failures:
+    29 of the form: session:… ("Product grid"): its event at 2 s (PreToolUse of a Read) didn't move its working mark:
+    it was drawn the same before it and 1 to 100 frames after   (every event, 2 s to 58 s: the base's mark is a still
+    square in the status color, views.rs list_row)
+    session:… ("Image build"): its tool call sent nothing for 60 s and its working mark moved at 34.1, 34.1, 34.3,
+    34.5, 35.1, 35.7, 36, 36, … s after the call began (103 of its pictures from 2 s on differ from the one at 2 s)
+    session:… ("Image build") reads "quiet" 60 s into its call, not working
+  The last two are the base hub: 30 s after a working session's last hook, with its transcript not grown since it last
+  read it, it reads the session unknown (core.ts quiet) and the state table reads that quiet (status.ts), so the row's
+  mark and its place change while the call is still running (README, Pinned 4; Disputes 9).
+  mark-on-timer: failed on its first assertion, the shipped run holding the same 31 failures.
+
+motion.test.ts (AC2 #2021.4ccecc58), 177 s: 1 failed, 60 failures, none BLOCKED.
+  All twenty sessions read working at the window's start and end. With reduce motion on, no mark moved (no failure of
+  that kind), and for each of the twenty:
+    with reduce motion on, session:… ("Cart totals")'s row didn't say when its last event came: its time read "1 min"
+    before its event at 0.32 s and "1 min" just after
+    with reduce motion on, session:… ("Cart totals")'s row reads "1 min" at the window's end, 9.7 s after its last event
+  (the base's time slot is the time in its state, "1 min", "42 s", ..., which an event in the same state doesn't move).
+  With reduce motion off, for each of the twenty:
+    with reduce motion off, session:… ("Cart totals")'s working mark didn't move at its event at 0.32 s
+  and no mark moved with no event of its own.
+
+line.test.ts (AC4 #2021.71cb584f, AC5 #2021.9b270501, AC6 #2021.a6469f5a), 83.9 s: 7 failed, 1 passed.
+  AC4, the shipped app, 14 failures: at each of the seven readings Cart totals' page has no line (session-doing reads
+  null) and its row's accessible name lacks the step:
+    session:… ("Cart totals"): turn: right after the Edit of cart/total.ts ended, its page's line (session-doing) reads
+    null, not "Edited cart/total.ts", alone or with its time
+    session:… ("Cart totals"): turn: right after the Edit of cart/total.ts ended, its row's accessible name reads
+    "↻ Cart totals · working", without "Edited cart/total.ts"
+    … "Running npm", "Running npm · 40 s" (from 40.0 to 41.0 s: [null,null,null,null]), "Couldn't run npm" twice, and
+    "Waiting for you to allow: run npm" twice, the row reading "! Cart totals · needs you" then (#992's needs you held).
+  line-reads-message, line-keeps-running: each failed on its first assertion, the shipped run holding the same 14.
+  AC5, the shipped app, 8 failures: no line on Deploy check's page at "right after the curl began", "2 s into the curl",
+    "right after the curl ended" and at 10 min 5 s, and its name ("↻ Deploy check · working") without "Running curl"
+    or "Ran curl". No form of the hub's control token was in any reading of the row (the hub scrubs the command on the
+    way in), and nothing said stuck, stalled or idle; the session read working through the ten minutes.
+  line-whole-command, line-stalls-on-timer: each failed on its first assertion, the shipped run holding the same 8.
+  AC6, the shipped app: passed. Every row drawn before the press on Cart totals kept its bounds after it.
+  selected-second-line: failed, "selected-second-line wasn't caught: expected '' to match /selecting session:\S+
+    \("Cart totals"\) made the selected row …/": the base has no such plant, so its planted run is the shipped app.
+
+So every criterion's test fails at the base except AC6's shipped-app test, which passes because the base already has
+the property (its row is one line, selected or not); AC6's plant is what its test fails on there. Every plant's test
+fails at the base: on the shipped run where that run already fails the judge, else (AC6) on the plant not being caught.
+
+## Earlier runs at the base, of this suite's harness before two fixes (the judges unchanged)
+
+09:22:45 to 09:26:18 PST, the four files: keys and line as above. mark threw `a picture of session:…:mark:
+{"code":"locate.none"}`: the replica's clock ran a frame each 60th inside AC1's window, slower than the wall clock the
+hub's runs on, so the hub read Image build quiet early and its row moved to the end of the list, out of the window.
+motion stopped BLOCKED: "Cart totals reads "quiet" before the window, not working": starting twenty turns took
+minutes of wall time with no growth in their transcripts, so the hub read the first ones quiet.
+Fixed: inside AC1's and AC2's windows the clock runs to each moment in a frame or two (step_ms); a mark not drawn is a
+picture of its own, unlike any drawn; a hook's events are fed once its own event is in (no fixed second's wait); agents
+at work write thinking entries to their transcripts (README, The surface).
+
+09:28:43 to 09:33:33 PST, mark, motion and line: mark and line as above. motion ran, but five of shop's working rows read
+no time and drew no mark: the list draws its projects in their names' order, and the finished repo, then `search`, came
+between docs and shop and pushed them out of the reference window. Fixed: the finished repo is `web`, after both.

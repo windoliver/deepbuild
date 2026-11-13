@@ -28,6 +28,7 @@ pub mod chrome;
 pub mod chrome_fixture;
 pub mod chrome_fx;
 pub mod chrome_gallery;
+pub mod codes;
 pub mod commands;
 pub mod confirm;
 pub mod device;
@@ -65,6 +66,7 @@ pub mod states;
 pub mod table;
 pub mod text;
 pub mod views;
+pub mod welcome;
 pub mod words;
 
 use std::{path::Path, rc::Rc, sync::atomic::AtomicU64};

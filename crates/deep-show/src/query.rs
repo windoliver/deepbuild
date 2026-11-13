@@ -144,7 +144,12 @@ pub(crate) fn values(
 ) -> Value {
     let read = |p: &String| {
         let (id, field) = item_path(p)?;
-        item_value(sched, s, id, field).map(|(v, _)| v)
+        // #1921: a field the core's lowered form doesn't hold, such as a 3D kind's params, reads
+        // as the frame's document holds it, an instancer's columns a world writes included.
+        let drawn = || at_field(s.document()?.get("items")?.get(id)?, field).cloned();
+        item_value(sched, s, id, field)
+            .map(|(v, _)| v)
+            .or_else(drawn)
     };
     Value::Object(
         paths
@@ -247,14 +252,21 @@ impl Hub<'_> {
     /// What a document draws: its recipe instances expanded and kept, items of a kind this build
     /// doesn't know left out, and its tables and vectors inlined; with its expansions.
     pub(crate) fn drawn_of(&self, document: &Value) -> (Value, Vec<Expansion>) {
-        let result = check_packed(document, &self.startup.sealed, &self.packs);
-        let skipped = crate::verdict::unknown_items(&result.notices);
-        let mut drawn =
-            crate::verdict::without(&crate::packs::drawn(document, &result.expansions), &skipped);
-        self.keep_instances(document, &result.expansions, &mut drawn);
+        let (mut drawn, expansions) = self.drawing_form(document);
+        self.keep_instances(document, &expansions, &mut drawn);
         let _ = self.inline_tables(&mut drawn);
         let _ = self.inline_vectors(&mut drawn);
-        (drawn, result.expansions)
+        (drawn, expansions)
+    }
+
+    /// The form a document's frames draw from, as the hub's own session loads it: each recipe
+    /// instance's derived items in its place, less the items of a kind this build doesn't know.
+    pub(crate) fn drawing_form(&self, document: &Value) -> (Value, Vec<Expansion>) {
+        let result = check_packed(document, &self.startup.sealed, &self.packs);
+        let skipped = crate::verdict::unknown_items(&result.notices);
+        let form =
+            crate::verdict::without(&crate::packs::drawn(document, &result.expansions), &skipped);
+        (form, result.expansions)
     }
 
     /// Puts each recipe instance back beside its derived items, its params filled with its
@@ -596,6 +608,13 @@ impl Hub<'_> {
             let key = Hasher::of(self.sched.hash(), "deep_query.bus").text(path).text(&value.to_string()).finish();
             return Some((value, key));
         }
+        if let Some(t) = self.timeline_time(s, path) {
+            let key = Hasher::of(self.sched.hash(), "deep_query.time")
+                .text(path)
+                .text(&t.to_string())
+                .finish();
+            return Some((json!(t), key));
+        }
         let (id, field) = item_path(path)?;
         if field == "bounds" {
             return self.bounds(s, id);
@@ -611,6 +630,30 @@ impl Hub<'_> {
         }
         let (value, keys) = item_value(&self.sched, s, id, field)?;
         Some((value, one_key(&keys, s.hash())))
+    }
+
+    /// #1163: a timeline time as the motion program resolved it, in flicks: `shots/<id>/start`
+    /// or `end`, `placements/<id>/start`, `markers/<id>/t`, whatever form the document wrote.
+    fn timeline_time(&self, s: &DocSession, path: &str) -> Option<i64> {
+        let program = crate::film::program_of(&self.sched, s)?;
+        let motion = &program.motion;
+        match path.split('/').collect::<Vec<_>>()[..] {
+            ["shots", id, field @ ("start" | "end")] => {
+                let shot = program.shots.as_ref()?.shots.iter().find(|x| x.id == id)?;
+                Some(if field == "start" {
+                    shot.start
+                } else {
+                    shot.end
+                })
+            }
+            ["placements", id, "start"] => motion
+                .placements
+                .iter()
+                .find(|p| p.id == id)
+                .map(|p| p.start),
+            ["markers", id, "t"] => motion.markers.iter().find(|m| m.id == id).map(|m| m.start),
+            _ => None,
+        }
     }
 
     /// Every 2D item's evaluated box in an evaluated session (#1162): its fields at its world

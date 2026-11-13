@@ -13,18 +13,28 @@ use deep_canvas_physics::check::check;
 use deep_canvas_physics::doc::{Read, World};
 use deep_canvas_physics::module::changed;
 use deep_canvas_physics::occurrence::{step_flicks, timed};
+use deep_canvas_physics::written;
 use deep_physics_rapier::runner::Run;
 use serde_json::{json, Map, Value};
 
 use crate::hub::Hub;
 
-/// The physics module the full set seals; `test-physics-hands-no-changes` seals #1918's planted
-/// one, whose readings entry hands the column view no changed ranges.
-pub(crate) fn module() -> Module {
-    if cfg!(feature = "test-physics-hands-no-changes") {
-        deep_canvas_physics::module::hands_no_changes()
+/// The physics module the full set seals, on the Rapier backend this build links, its pins as
+/// cargo resolved them (#1920); `test-physics-hands-no-changes` seals #1918's planted one, whose
+/// readings entry hands the column view no changed ranges; `test-physics-rapier-patch` the same
+/// module with rapier3d's pin moved one patch and nothing else changed; #1919's
+/// `test-leave-out-physics` seals none.
+pub(crate) fn module() -> Option<Module> {
+    let mut build = deep_physics_rapier::build();
+    if cfg!(feature = "test-physics-rapier-patch") {
+        build.backend.version = "0.36.2".into();
+    }
+    if cfg!(feature = "test-leave-out-physics") {
+        None
+    } else if cfg!(feature = "test-physics-hands-no-changes") {
+        Some(deep_canvas_physics::module::hands_no_changes(&build))
     } else {
-        deep_canvas_physics::module::module()
+        Some(deep_canvas_physics::module::module(&build))
     }
 }
 
@@ -43,6 +53,24 @@ pub(crate) fn motion() -> Module {
         };
     }
     m
+}
+
+/// #1921's wrong programs for a world's outputs, by the names its acceptance suite gives them.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Planted {
+    /// An output to an item's `at` writes the body's whole transform: its position, its rotation
+    /// and a scale of 1, so the item's own scale is reset.
+    WholeTransform,
+    /// A `<body>#*` output writes, at each frame, the columns of the frame its session drew before.
+    PreviousColumns,
+}
+
+pub(crate) fn planted(name: &str) -> Option<crate::hub::Planted> {
+    Some(crate::hub::Planted::Physics(match name {
+        "output_writes_whole_transform" => Planted::WholeTransform,
+        "output_keeps_previous_columns" => Planted::PreviousColumns,
+        _ => return None,
+    }))
 }
 
 fn refused(id: &str, what: Value) -> Issue {
@@ -107,16 +135,19 @@ fn keyed(target: String, values: Vec<[f64; 3]>) -> Value {
 }
 
 /// The channels a world's outputs write in its scene, each `to` an item's `at` (a pose: its
-/// position and rotation) or a vec3 field (a position), keyed at every frame of the span.
+/// position and rotation, never its scale) or a vec3 field (a position), keyed at every frame of
+/// the span; a `<body>#*` output writes an instancer's columns instead (#1921: written.rs).
+/// `whole`: #1921's planted output, which writes a scale of 1 with the pose.
 fn output_channels(
     id: &str,
     w: &World,
     bodies: &Value,
     frames: &[i64],
+    whole: bool,
     out: &mut Map<String, Value>,
 ) -> Result<(), Value> {
     let step = step_flicks(w);
-    for (oid, o) in &w.outputs {
+    for (oid, o) in w.outputs.iter().filter(|(_, o)| !o.from.ends_with("#*")) {
         let Some(to) = &o.to else { continue };
         let states = bodies[&o.from].as_array().cloned().unwrap_or_default();
         let poses: Vec<_> = frames
@@ -140,6 +171,10 @@ fn output_channels(
                         poses.iter().map(|p| euler(p.1)).collect(),
                     ),
                 );
+                if whole {
+                    let ones = vec![[1.0; 3]; poses.len()];
+                    out.insert(name("scale"), keyed(format!("{item}/at/scale"), ones));
+                }
             }
             (Read::Pose | Read::Position, _) => {
                 let to = to
@@ -226,6 +261,44 @@ fn readings(
     Ok(out)
 }
 
+/// A world a scene lists, its reading and each body's pose at a time.
+pub(crate) type Posed = (String, World, Vec<(String, ([f64; 3], [f64; 4]))>);
+
+/// #1919: each world `form` lists, baked in its scene up to `t` flicks, with each body's pose at
+/// `t` by Physics output's rule, so the physics shapes mode draws the frame the physics module
+/// evaluates; or what refuses a world, naming it.
+pub(crate) fn poses_at(form: &Value, t: i64) -> Result<Vec<Posed>, Value> {
+    let run = Run::new(None).expect("the unplanted runner");
+    let mut out = Vec::new();
+    for (id, doc) in form
+        .get("worlds")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten()
+    {
+        let refuse = |what: Value| json!({"code": "physics_refused", "world": id, "what": what});
+        let w = check(doc, &RAPIER3D, &deep_canvas_physics::roles::TABLE)
+            .map_err(|e| refuse(json!(e.iter().map(|r| &r.what).collect::<Vec<_>>())))?;
+        let step = step_flicks(&w);
+        let call =
+            json!({"call": "bake", "scene": form, "world": id, "steps": t.max(0) / step + 1});
+        let reply = run.answer(&call).unwrap_or(Value::Null);
+        if reply["ok"] != json!(true) {
+            return Err(refuse(reply));
+        }
+        let poses = w
+            .bodies
+            .keys()
+            .filter_map(|b| {
+                let states = reply["bodies"][b].as_array()?;
+                Some((b.clone(), pose_at(states, t.max(0), step, false)?))
+            })
+            .collect();
+        out.push((id.clone(), w, poses));
+    }
+    Ok(out)
+}
+
 impl Hub<'_> {
     /// Each world `form` lists under `worlds`, baked over the transport's span in its scene: its
     /// occurrence list, each row stamped with its step's time, written through the core's column
@@ -251,8 +324,11 @@ impl Hub<'_> {
             .collect();
         let run = Run::new(None).expect("the unplanted runner");
         let (mut lists, mut channels, mut arrays) = (Map::new(), Map::new(), Map::new());
+        let whole = self.planted(crate::hub::Planted::Physics(Planted::WholeTransform));
         for (id, doc) in &worlds {
-            let w = check(doc, &RAPIER3D, &deep_canvas_physics::roles::TABLE).map_err(|e| {
+            let w = deep_physics_rapier::bound::expand(Some(form), doc);
+            let w = w.and_then(|d| check(&d, &RAPIER3D, &deep_canvas_physics::roles::TABLE));
+            let w = w.map_err(|e| {
                 refused(
                     id,
                     json!(e
@@ -270,9 +346,10 @@ impl Hub<'_> {
             }
             let rows = reply["occurrences"].as_array().cloned().unwrap_or_default();
             lists.insert(format!("{id}.occurrences"), json!(timed(&rows, &w)));
-            output_channels(id, &w, &reply["bodies"], &frames, &mut channels)
+            output_channels(id, &w, &reply["bodies"], &frames, whole, &mut channels)
                 .map_err(|e| refused(id, e))?;
             arrays.extend(readings(form, id, &w, &reply["bodies"]).map_err(|e| refused(id, e))?);
+            arrays.extend(written::arrays(id, &w, form, &reply["bodies"]));
         }
         let entries = self.startup.sealed.registry(deep_canvas::columns::REGISTRY);
         let entries = entries.map_or(&[][..], |r| r.entries.as_slice());
@@ -290,6 +367,19 @@ impl Hub<'_> {
             }
         }
         Ok(())
+    }
+
+    /// #2293: `document` with the channels of the form `doc`'s session loads, which hold each
+    /// output its worlds write to an item path ([`Hub::inline_worlds`] is the only thing that adds
+    /// any): what a 3D frame or a 3D mode draws, so each item stands where the session's frame at
+    /// the same time puts it, as `eval` reads it.
+    pub(crate) fn with_outputs(&self, doc: &str, document: &Value) -> Value {
+        let mut out = document.clone();
+        let channels = self.forms.get(doc).and_then(|f| f.get("channels"));
+        if let (Some(channels), Some(map)) = (channels, out.as_object_mut()) {
+            map.insert("channels".into(), channels.clone());
+        }
+        out
     }
 }
 
