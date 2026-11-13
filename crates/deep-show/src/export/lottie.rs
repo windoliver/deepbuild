@@ -617,7 +617,7 @@ impl Hub<'_> {
         let mut ids: Vec<&String> = turned.iter().flatten().map(|(id, _)| id).collect();
         ids.sort();
         ids.dedup();
-        excluded.extend(ids.into_iter().map(|id| json!({"item": id, "box": "its box at each frame, drawn and turned", "why": "a turn the 2D frames don't draw yet"})));
+        excluded.extend(ids.into_iter().map(|id| json!({"item": id, "box": "its box at each frame, drawn and turned", "why": "a text's turn, which the 2D frames don't draw yet"})));
         out.insert("excluded".into(), Value::Array(excluded));
         out.insert("samples".into(), Value::Array(rows));
         if let Some(r) = readback {

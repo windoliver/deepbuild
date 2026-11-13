@@ -18,6 +18,6 @@ A canvas module crate. It reaches the core through `deep-canvas`, the 2D marks t
 
 - The writer places each channel-written field at the program's own field path, since the evaluator's item JSON writes a channel on a list entry one level off (`ops[0].trim.trim.end`); a follow-up fixes the evaluator.
 - The file draws what the 2D frames draw, where those differ from the document: strokes with butt ends and miter joins (the 2D stroke has no other cap or join), and a halo only on text.
-- The 2D frames draw no item's turn about z yet, while the file turns it as the document says; the fidelity check leaves out, at each sampled frame, the box a turned item covers turned and unturned, and the receipt lists each such item under `fidelity.excluded`.
+- The 2D frames draw no text's turn about z yet, while the file turns it as the document says; the fidelity check leaves out, at each sampled frame, the box a turned text covers turned and unturned, and the receipt lists each such text under `fidelity.excluded`. Every other drawn item turns in both.
 - The fidelity check passes a sampled frame at the floor's PSNR-Y, or at SSIM 0.98 on the standard floor, as export.fidelity's floor reads (Check input: export kinds): two renderers draw sub-pixel edges apart, which PSNR alone reads as a difference across a frame of many moving edges.
 - A masked item's transform goes on a group around its shapes, so its layer's own transform stays the identity and its mask stays where the document draws it.

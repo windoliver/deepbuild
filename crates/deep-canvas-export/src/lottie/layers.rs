@@ -457,8 +457,8 @@ fn opacity(ctx: &mut Ctx, id: &str, field: &[&str]) -> Prop {
 }
 
 /// The item's transform: anchor at its pivot, position where the pivot sits, scale, rotation
-/// about z and opacity. A baked item's paths already sit where they draw, scaled and moved, so
-/// only its rotation about the pivot stays.
+/// about z and opacity. A baked item's paths already sit where they draw, scaled, moved and
+/// turned, so only its opacity stays.
 pub(crate) fn transform(ctx: &mut Ctx, id: &str, item: &Value, baked: bool) -> Map<String, Value> {
     let c = pivot(item);
     let mut ks = Map::new();
@@ -476,15 +476,11 @@ pub(crate) fn transform(ctx: &mut Ctx, id: &str, item: &Value, baked: bool) -> M
         r = wrapped(r, ctx.frames.n);
     }
     if baked {
-        // The anchor and position both at the pivot where it draws, so only the turn applies.
-        let read = move |i: &Value| {
-            let (s, o) = place_of(i, None);
-            Some(vec![s[0] * c[0] + o[0], s[1] * c[1] + o[1]])
-        };
-        let p = prop(ctx, id, "at/pos", &read, &[]);
-        ks.insert("a".into(), p.json(false));
-        ks.insert("p".into(), p.json(false));
+        // The paths sit where they draw, turn and all.
+        ks.insert("a".into(), json!({"a": 0, "k": [0, 0]}));
+        ks.insert("p".into(), json!({"a": 0, "k": [0, 0]}));
         ks.insert("s".into(), json!({"a": 0, "k": [100, 100]}));
+        r = Prop::Static(vec![0.0]);
     } else {
         ks.insert("a".into(), json!({"a": 0, "k": [num(c[0]), num(c[1])]}));
         let split = channel(ctx, id, &["at", "pos"]).is_none()
@@ -577,12 +573,8 @@ fn mask_property(ctx: &mut Ctx, id: &str, item: &Value) -> Option<Value> {
             let b = placed(local, place_of(m, Some(local)));
             return Some(deep_canvas_marks::outline::rect(b, 0.0));
         }
-        let it = items.get(&shape)?;
-        let kind = it.get("kind").and_then(Value::as_str)?;
-        let params = it.get("params").and_then(Value::as_object)?;
-        let verbs = deep_canvas_marks::scene::base_verbs(kind, params)?;
-        let (s, o) = place_of(it, own_box(kind, params));
-        Some(verbs.into_iter().map(|v| shapes::place(v, s, o)).collect())
+        // A path-shaped mask clips by the path's outline where it draws, turn and all.
+        deep_canvas_marks::scene::item_outline(items, &shape)
     };
     let frames: Option<Vec<Vec<deep_canvas_marks::path::Verb>>> =
         ctx.evals.iter().map(read_shape).collect();

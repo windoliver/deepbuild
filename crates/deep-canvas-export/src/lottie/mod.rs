@@ -127,8 +127,8 @@ pub struct Written {
     pub lottie: Value,
     pub warnings: Vec<Warning>,
     pub boxes: Vec<(String, Option<[f64; 4]>)>,
-    /// Per export frame, each item turned about z there, with its box as drawn unturned and as
-    /// turned: the 2D frames draw no item's turn yet, so the fidelity check can't compare those
+    /// Per export frame, each text turned about z there, with its box as drawn unturned and as
+    /// turned: the 2D frames draw no text's turn yet, so the fidelity check can't compare those
     /// pixels.
     pub turned: Vec<Vec<(String, [f64; 4])>>,
 }
@@ -570,15 +570,20 @@ fn orders_that_change(items: &Map<String, Value>, evals: &[Map<String, Value>]) 
     out
 }
 
-/// Per export frame, each item whose evaluated turn about z isn't 0 there, with its box as
+/// Per export frame, each text whose evaluated turn about z isn't 0 there, with its box as
 /// drawn unturned and as turned about its origin, where its pivot sits by default.
 fn turned_boxes(ctx: &Ctx) -> Vec<Vec<(String, [f64; 4])>> {
     ctx.evals
         .iter()
-        .map(|items| {
+        .enumerate()
+        .map(|(j, items)| {
             items
                 .iter()
-                .filter(|(_, i)| i.get("visible") != Some(&Value::Bool(false)))
+                // The 2D frames turn every drawn item but text, whose glyphs draw unturned yet.
+                .filter(|(_, i)| {
+                    i.get("visible") != Some(&Value::Bool(false))
+                        && i.get("kind").and_then(Value::as_str) == Some("text@1")
+                })
                 .filter_map(|(id, item)| {
                     let rot = item
                         .pointer("/at/rot/2")
@@ -587,22 +592,12 @@ fn turned_boxes(ctx: &Ctx) -> Vec<Vec<(String, [f64; 4])>> {
                     if rot == 0.0 {
                         return None;
                     }
-                    // Where it draws unturned: every copy of its path, else its own box.
-                    let report = deep_canvas_marks::scene::path_report(
-                        ctx.doc,
-                        items,
-                        (ctx.palette, ctx.ty),
-                        id,
-                        deep_canvas_marks::scene::Planted::None,
-                    )
-                    .ok()
-                    .flatten();
-                    let copies = report.and_then(|r| {
-                        let all: Vec<deep_canvas_marks::path::Verb> =
-                            r.placed.into_iter().flatten().collect();
-                        deep_canvas_marks::relations::tight(&all)
-                    });
-                    let drawn = copies.or_else(|| layers::world_box(item))?;
+                    // Where it draws unturned: its glyphs at this frame.
+                    let drawn = ctx
+                        .texts
+                        .get(j)
+                        .and_then(|t| t.get(id))
+                        .and_then(|g| text::bounds(g))?;
                     let r = deep_canvas::ops::rad(rot);
                     let pos = [
                         item.pointer("/at/pos/0")
