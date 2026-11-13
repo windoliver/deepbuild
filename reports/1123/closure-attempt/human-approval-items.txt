@@ -1,5 +1,5 @@
 Base: 092754bb14a75cd07157e623e21b0d9e7a51677a
-First establish .deepbuild/approvers on main by a person’s own push, using a presence-requiring key. Rebase onto that trust root before signing.
+First establish .deepbuild/approvers on main by a person’s own push, using a presence-requiring key. Merge that trust root before signing, preserving the reviewed commit IDs; regenerate this list if any are rewritten.
 
 Commit 76ddd340bd040f0f295d350d38444dbf2c8305e3 fix(proof): build per-run binary snapshots for each checkout
 Approves: reports/1123/base-capture-current.txt
@@ -30,3 +30,7 @@ Approves: scripts/proof-binaries.mjs
 Commit 2edfcdbbe8adc5abc5291c8963637530772e2a54 fix(proof): await recorded build cleanup before reclaiming bays
 Approves: scripts/bays.mjs
 Approves: scripts/proof-bin-build.mjs
+
+Commit 7e5f7555600e06d7aec183019733ecade0f0974d fix(proof): batch ownership scans and reject malformed process evidence
+Approves: scripts/proof-bin-build.mjs
+Approves: tests/proof-binaries-malformed-scan.test.mjs

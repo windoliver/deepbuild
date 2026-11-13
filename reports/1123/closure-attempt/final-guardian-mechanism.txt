@@ -1,9 +1,9 @@
 ✔ #1123.07de86fd before runs the base binary as the wrong program and never shares it with the change (59882.474334ms)
-ℹ BAY claim {"index":1,"role":"base","use":"before","bay":"<scratch>/home/deepbuild-bays/1/base","base":"e1529c981f27ebf2a1133cd866e0b604e4ab5551","tree":"fb87e50b1d7e22c0a7fb4f1c03734e7e774f4e09","bundle":null,"untracked":null,"overlay":{"files":1,"hash":"3f692a5c2dc7db819066fab05321c55195d486ef260c2505a62841cf8fb59b0c"},"sealedTree":null,"seal":"none","cold":true,"stopped":false,"installed":true,"written":107,"deleted":0,"crates":["deep-hook"]}
-BAY claim {"index":1,"role":"change","use":"before","bay":"<scratch>/home/deepbuild-bays/1/change","tree":"f69732fbc93ffcabe99da5f9abae09bf6b5dcb3d","bundle":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","untracked":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","untrackedFiles":[],"overlay":null,"sealedTree":null,"seal":"none","cold":true,"stopped":false,"installed":true,"written":108,"deleted":0,"crates":["deep-hook"]}
+ℹ BAY claim {"index":1,"role":"base","use":"before","bay":"<bay-root>/1/base","base":"e1529c981f27ebf2a1133cd866e0b604e4ab5551","tree":"fb87e50b1d7e22c0a7fb4f1c03734e7e774f4e09","bundle":null,"untracked":null,"overlay":{"files":1,"hash":"3f692a5c2dc7db819066fab05321c55195d486ef260c2505a62841cf8fb59b0c"},"sealedTree":null,"seal":"none","cold":true,"stopped":false,"installed":true,"written":107,"deleted":0,"crates":["deep-hook"]}
+BAY claim {"index":1,"role":"change","use":"before","bay":"<bay-root>/1/change","tree":"f69732fbc93ffcabe99da5f9abae09bf6b5dcb3d","bundle":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","untracked":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","untrackedFiles":[],"overlay":null,"sealedTree":null,"seal":"none","cold":true,"stopped":false,"installed":true,"written":108,"deleted":0,"crates":["deep-hook"]}
 PASS before: tests/acceptance/1123/binary.test.mjs › #1123.07de86fd binary result: failed on the merge base at its assertion
-BAY release {"index":1,"role":"base","bay":"<scratch>/home/deepbuild-bays/1/base","status":null,"targetBytes":1060857,"touched":0}
-BAY release {"index":1,"role":"change","bay":"<scratch>/home/deepbuild-bays/1/change","status":null,"targetBytes":1060907,"touched":0}
+BAY release {"index":1,"role":"base","bay":"<bay-root>/1/base","status":null,"targetBytes":1060857,"touched":0}
+BAY release {"index":1,"role":"change","bay":"<bay-root>/1/change","status":null,"targetBytes":1060907,"touched":0}
 proof: wall time 45.2 s
 
 ✔ #1123.cd6b3dd8 lanes.mjs uses its own run-private build, not the shell or mutable target (98148.851208ms)
