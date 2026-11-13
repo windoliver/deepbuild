@@ -68,3 +68,15 @@ canvas-lint exit 1 FAILs 47
 clippy exit 0
 unit exit 0
 canvas-lint: none of its lines is in a file this change touches (main's own).
+
+## Rebased onto origin/main 9b77cd2cd to clear merge conflicts (Nov 13, 2026)
+
+Blind suite:
+ Test Files  5 passed (5)
+      Tests  11 passed (11)
+
+fmt exit 0
+canvas-lint FAILs 48
+clippy exit 0
+unit exit 0
+canvas-lint: none of its lines is in a file this change touches (main's own).
