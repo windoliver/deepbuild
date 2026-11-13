@@ -20,6 +20,8 @@ export async function recordVerdict(record: RecordStore, verdict: Verdict, at: n
   const why = verdict.why?.length ? { why: verdict.why.map((w) => ({ reason: w.reason, text: cut(w.text) })) } : {};
   const { log_pos } = await record.append(CORE, {
     v: verdict.why?.length ? 2 : 1, id, kind: 'verdict.made', ts: at, subject: verdict.claim,
+    // What its counted runs captured: the record syncs the evidence a verdict names before its commit (#1410).
+    evidence: [...new Set(verdict.requirements.flatMap((r) => r.evidence))].sort(),
     data: {
       outcome: verdict.outcome, verdict: handle, claim: verdict.claim,
       reasons: verdict.reasons.map(cut), ...why,

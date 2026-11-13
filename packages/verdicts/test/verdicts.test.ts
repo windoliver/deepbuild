@@ -261,6 +261,26 @@ describe('a check with a numeric contract', () => {
 });
 
 describe('recording a verdict', () => {
+  it('names the evidence of the runs it counted, which the record syncs before a verdict\'s commit (#1410)', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'deep-verdicts-'));
+    try {
+      const record = await openRecord({ path: join(dir, 'record.db'), now: () => 1 });
+      const c = check('unit', { runs: 2 });
+      const [log, shot] = ['a'.repeat(64), 'b'.repeat(64)];
+      const runs = [
+        run(c, 'passed', { evidence: [{ slot: 'log', state: 'captured', sha256: log }, { slot: 'trace', state: 'not_requested' }] }),
+        run(c, 'passed', { evidence: [{ slot: 'log', state: 'captured', sha256: log }, { slot: 'screenshot', state: 'captured', sha256: shot }] }),
+      ];
+      const v = verdict(claim({ claim: 'claim:01K74G1Z3X5V7T9R1P3N5M7K9N', checks: [c], runs }));
+      expect(v.outcome).toBe('PASS');
+      const { id } = await recordVerdict(record, v, 2);
+      const [made] = (await record.raw(`SELECT evidence FROM events WHERE id = ?`, [id])) as { evidence: string | null }[];
+      expect(JSON.parse(made!.evidence ?? '[]')).toEqual([log, shot]);
+      await record.close();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
   it('holds a clean count past 65535 within verdict.made\'s u16 field', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'deep-verdicts-'));
     try {
