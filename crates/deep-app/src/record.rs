@@ -26,6 +26,12 @@ use crate::states::{closes, handle, Table};
 /// Once a session holds this many open asks, its further asks fold into one exception.
 pub const FOLD_AFTER: usize = 5;
 
+/// Whether the row is an exception that asks fold into: one the core raised, or, for a row from the hub's inbox read,
+/// any exception.
+fn holds(row: &Value) -> bool {
+    row["holder"] == true || (row["holder"].is_null() && row["kind"] == "exception")
+}
+
 /// The kinds that close an ask, and the outcome the inbox shows for each, as the asks core names them.
 const CLOSING: [(&str, &str); 7] = [
     ("decision.applied", "decided_for_you"),
@@ -151,6 +157,23 @@ impl View {
         Ok(())
     }
 
+    /// The rows Needs you draws, oldest first: each open ask the core has shown, and one folded into its session's
+    /// exception while that shows. An ask waiting for its batch isn't one (#22).
+    pub fn needs_you(&self) -> Vec<&Value> {
+        let shown = |row: &Value| {
+            !["closed", "queued", "folded"].contains(&row["status"].as_str().unwrap_or_default())
+        };
+        self.inbox
+            .iter()
+            .filter(|row| match row["status"].as_str() {
+                Some("folded") => self.inbox.iter().any(|holder| {
+                    holds(holder) && holder["session"] == row["session"] && shown(holder)
+                }),
+                _ => shown(row),
+            })
+            .collect()
+    }
+
     /// Applies one event the view doesn't have yet.
     pub fn apply(&mut self, event: Value) {
         self.log_pos = event["log_pos"].as_u64().unwrap_or(self.log_pos);
@@ -158,21 +181,33 @@ impl View {
         if kind == "ask.created" {
             let ask = format!("ask:{}", event["id"].as_str().unwrap_or_default());
             if !self.inbox.iter().any(|row| row["ask"] == ask.as_str()) {
-                // Past a session's fifth open ask, it folds, as in the core.
-                let mine = self
-                    .inbox
-                    .iter()
-                    .filter(|row| row["session"] == event["session"] && row["status"] != "closed");
-                let status = if mine.count() < FOLD_AFTER {
-                    "shown"
-                } else {
-                    "folded"
-                };
+                // As in the core: it folds while its session has an open exception the core raised, which never folds
+                // itself; otherwise it waits for the core to show it, at its batch or at once (#22).
+                let holder = event["writer"] == "core" && event["data"]["kind"] == "exception";
+                let held = !holder
+                    && self.inbox.iter().any(|row| {
+                        row["session"] == event["session"]
+                            && holds(row)
+                            && row["status"] != "closed"
+                    });
+                let status = if held { "folded" } else { "queued" };
                 self.inbox.push(json!({
                     "ask": ask, "kind": event["data"]["kind"], "session": event["session"],
                     "status": status, "outcome": "unanswered", "owner": event["data"]["owner"],
-                    "question": event["data"]["question"],
+                    "question": event["data"]["question"], "holder": holder,
                 }));
+            }
+        } else if kind == "ask.batched" && event["writer"] == "core" {
+            // Shown, at a batch or at once, or again when its Later ends; a folded ask shows inside its exception.
+            let asks = event["data"]["asks"]
+                .as_array()
+                .cloned()
+                .unwrap_or_default();
+            for row in self.inbox.iter_mut().filter(|row| {
+                (row["status"] == "queued" || row["status"] == "later")
+                    && asks.iter().any(|item| item["ask"] == row["ask"])
+            }) {
+                row["status"] = json!("shown");
             }
         } else if kind == "ask.later" {
             for row in self

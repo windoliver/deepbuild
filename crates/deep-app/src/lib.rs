@@ -184,18 +184,17 @@ pub fn deepbuild_module() -> HostModule {
 /// them are folded or in Later, and the asks that left the list. It reads the one record reader, which holds the hub's
 /// record in the app and the fixture's in a replica, so a panel gets the same answer in both (#1459).
 fn needs_you() -> Result<HostValue, HostError> {
-    let (log_pos, inbox) = record::with_view(|view| (view.log_pos, view.inbox.clone()))
-        .ok_or_else(|| HostError::new("the app hasn't read the record from the hub yet"))?;
+    // The rows are those Needs you draws: an ask waiting for its batch isn't one (#22).
+    let (log_pos, inbox, open) = record::with_view(|view| {
+        let open: Vec<serde_json::Value> = view.needs_you().into_iter().cloned().collect();
+        (view.log_pos, view.inbox.clone(), open)
+    })
+    .ok_or_else(|| HostError::new("the app hasn't read the record from the hub yet"))?;
     let text =
         |row: &serde_json::Value, key: &str| row[key].as_str().unwrap_or_default().to_owned();
-    let open: Vec<&serde_json::Value> = inbox
-        .iter()
-        .filter(|row| row["status"] != "closed")
-        .collect();
-    let handles = |keep: &dyn Fn(&serde_json::Value) -> bool| {
+    let handles = |rows: &[serde_json::Value], keep: &dyn Fn(&serde_json::Value) -> bool| {
         HostValue::Array(
-            inbox
-                .iter()
+            rows.iter()
                 .filter(|row| keep(row))
                 .map(|row| HostValue::Str(text(row, "ask")))
                 .collect(),
@@ -204,7 +203,7 @@ fn needs_you() -> Result<HostValue, HostError> {
     Ok(HostValue::Object(vec![
         ("now".into(), HostValue::Number(views::now() as f64)),
         ("log_pos".into(), HostValue::Number(log_pos as f64)),
-        ("rows".into(), handles(&|row| row["status"] != "closed")),
+        ("rows".into(), handles(&open, &|_| true)),
         (
             "asks".into(),
             HostValue::Array(
@@ -218,13 +217,22 @@ fn needs_you() -> Result<HostValue, HostError> {
                     .collect(),
             ),
         ),
-        ("folded".into(), handles(&|row| row["status"] == "folded")),
-        ("later".into(), handles(&|row| row["status"] == "later")),
+        (
+            "folded".into(),
+            handles(&open, &|row| row["status"] == "folded"),
+        ),
+        (
+            "later".into(),
+            handles(&open, &|row| row["status"] == "later"),
+        ),
         (
             "superseded".into(),
-            handles(&|row| row["outcome"] == "superseded"),
+            handles(&inbox, &|row| row["outcome"] == "superseded"),
         ),
-        ("moot".into(), handles(&|row| row["outcome"] == "moot")),
+        (
+            "moot".into(),
+            handles(&inbox, &|row| row["outcome"] == "moot"),
+        ),
         (
             "held".into(),
             // The hub records no event for a hold yet, so only a replica's fixture names one (#1454), and the shipped

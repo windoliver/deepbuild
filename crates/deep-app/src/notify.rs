@@ -214,7 +214,8 @@ impl Notifier {
     /// The app starts on the record's `view` with what Notification Center still holds from it: nothing already
     /// in the record notifies, since you could have seen it before.
     pub fn start(&mut self, view: &View, delivered: Vec<Notification>) {
-        self.read.extend(view.unseen.iter().filter_map(opening));
+        self.read
+            .extend(view.unseen.iter().flat_map(openings).map(|(key, _)| key));
         self.delivered = delivered;
         // A run that had ended already was told, or could have been seen.
         self.told
@@ -224,18 +225,14 @@ impl Notifier {
 
     /// An event reached the app at `now`.
     pub fn saw(&mut self, event: &Value, now: u64) {
-        if let Some(id) = opening(event) {
-            if self.read.insert(id) {
-                let handle = match event["kind"].as_str() {
-                    Some("ask.created") => states::handle(event),
-                    _ => event["subject"].as_str().unwrap_or_default().to_owned(),
-                };
-                if !self.waiting.iter().any(|(waiting, _)| *waiting == handle) {
-                    self.waiting
-                        .push((handle, now + self.after.as_millis() as u64));
-                }
+        for (key, handle) in openings(event) {
+            if self.read.insert(key) && !self.waiting.iter().any(|(waiting, _)| *waiting == handle)
+            {
+                self.waiting
+                    .push((handle, now + self.after.as_millis() as u64));
             }
-        } else if event["kind"] == "notice.sent" {
+        }
+        if event["kind"] == "notice.sent" {
             self.notices
                 .push(event["session"].as_str().unwrap_or_default().to_owned());
         }
@@ -332,11 +329,20 @@ impl Notifier {
                 sound: None,
             });
         }
-        // The open asks are read only for a tick with an ask come due.
+        // The open asks are read only for a tick with an ask come due; one waiting for its batch notifies nothing (#22).
         let open = if due.is_empty() {
             Vec::new()
         } else {
-            table.open_asks(None)
+            let shown = view.needs_you();
+            table
+                .open_asks(None)
+                .into_iter()
+                .filter(|ask| {
+                    shown
+                        .iter()
+                        .any(|row| row["ask"] == states::handle(ask).as_str())
+                })
+                .collect()
         };
         for (handle, _) in due {
             let Some(ask) = open.iter().find(|ask| states::handle(ask) == handle) else {
@@ -394,17 +400,32 @@ impl Notifier {
 
 /// Whether the notifier reads the event: it opens an ask, gives it a new deadline or sends a notice.
 pub fn reads(event: &Value) -> bool {
-    opening(event).is_some() || event["kind"] == "notice.sent"
+    !openings(event).is_empty() || event["kind"] == "notice.sent"
 }
 
-/// The id of the event, if it opens an ask or gives it a new deadline: its creation, the core's undo of its
-/// default, or the core moving its deadline (#908), so the notification names the time its default applies.
-fn opening(event: &Value) -> Option<String> {
-    let opens = event["kind"] == "ask.created"
-        || ((event["kind"] == "default.undone" || event["kind"] == "deadline.moved")
-            && event["writer"] == "core"
-            && event["data"]["deadline"].is_u64());
-    opens.then(|| event["id"].as_str().unwrap_or_default().to_owned())
+/// Each ask the event puts in front of you, keyed by the event and the ask: the core showing it, at its batch or at
+/// once (#22), the core's undo of its default, or the core moving its deadline (#908), so the notification names the
+/// time its default applies.
+fn openings(event: &Value) -> Vec<(String, String)> {
+    let id = event["id"].as_str().unwrap_or_default();
+    if event["writer"] != "core" {
+        return Vec::new();
+    }
+    if event["kind"] == "ask.batched" {
+        return event["data"]["asks"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|item| item["ask"].as_str())
+            .map(|ask| (format!("{id} {ask}"), ask.to_owned()))
+            .collect();
+    }
+    let reopens = (event["kind"] == "default.undone" || event["kind"] == "deadline.moved")
+        && event["data"]["deadline"].is_u64();
+    match event["subject"].as_str() {
+        Some(ask) if reopens => vec![(id.to_owned(), ask.to_owned())],
+        _ => Vec::new(),
+    }
 }
 
 /// The notification a session's state posts: DeepBuild and the session's task, then its mark and its state's words.

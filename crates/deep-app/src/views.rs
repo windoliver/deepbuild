@@ -721,7 +721,12 @@ pub fn sidebar() -> Vec<(String, String, states::State)> {
 
 /// The one count, as the record the views draw stands: the window and the menu bar both read it (#1172).
 pub fn count() -> usize {
-    crate::record::with_view(|view| states::count(&view.table())).unwrap_or(0)
+    crate::record::with_view(|view| needing(&view.needs_you())).unwrap_or(0)
+}
+
+/// How many asks need you among Needs you's rows: an ask folded into an exception counts as that exception (#22).
+fn needing(rows: &[&serde_json::Value]) -> usize {
+    rows.iter().filter(|row| row["status"] != "folded").count()
 }
 
 fn record(kind: Kind) -> Record {
@@ -732,9 +737,8 @@ fn record(kind: Kind) -> Record {
 /// What the view `kind` draws of `view`.
 fn read(view: &crate::record::View, kind: Kind) -> Record {
     let open: Vec<(String, String, String, String)> = view
-        .inbox
-        .iter()
-        .filter(|row| row["status"] != "closed")
+        .needs_you()
+        .into_iter()
         .map(|row| {
             let text = |key: &str| row[key].as_str().unwrap_or_default().to_owned();
             // The row draws the question as the card does, its controls and direction marks shown (#1510).
@@ -992,7 +996,11 @@ impl Render for Shipped {
         let record = record(self.kind);
         let reach = crate::notify::reach();
         let now = now();
-        let open = record.open.len();
+        let open = record
+            .open
+            .iter()
+            .filter(|(.., status)| status != "folded")
+            .count();
         let page = div()
             .id(ElementId::Name(format!("view:{}", self.kind.name()).into()))
             .size_full()
