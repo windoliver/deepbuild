@@ -2289,7 +2289,7 @@ mod tests {
             let drawn = super::axis(
                 "a",
                 &axis,
-                all.as_object().unwrap(),
+                (all.as_object().unwrap(), None),
                 &palette,
                 [0.0, 0.0],
                 [640.0, 480.0],
