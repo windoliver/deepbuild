@@ -1,7 +1,7 @@
 {
   "id": "deepbuild/import",
   "version": "1.0.0",
-  "digest": "d1:e4fa5fad236c7c2a7dd5b57d9cf9356290e5438c58e5cb2c3e078cf9049295b8",
+  "digest": "d1:8fb7886bb7379869e52b92cf43fdc0a33c984675ae074a2b8457bb6eeeff8cc9",
   "checks": [
     "import.document",
     "import.colors_mapped",
