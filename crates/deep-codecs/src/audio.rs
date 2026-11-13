@@ -472,10 +472,10 @@ fn mp3(data: &[u8]) -> Option<Track> {
 
 /// A native FLAC file: STREAMINFO, and every frame as one packet.
 fn flac(data: &[u8]) -> Option<Track> {
-    let (streaminfo, _, frames) = crate::flac::native(data)?;
-    let i = crate::flac::info(streaminfo)?;
-    let mut t = Track::new(Codec::Flac, i.rate, i.channels, streaminfo.to_vec());
-    t.packets = vec![frames.to_vec()];
+    let n = crate::flac::native(data)?;
+    let i = crate::flac::info(n.streaminfo)?;
+    let mut t = Track::new(Codec::Flac, i.rate, i.channels, n.streaminfo.to_vec());
+    t.packets = vec![n.frames.to_vec()];
     t.frames = (i.frames > 0).then_some(i.frames);
     Some(t)
 }

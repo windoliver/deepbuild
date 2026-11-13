@@ -25,9 +25,18 @@ pub fn info(b: &[u8]) -> Option<Info> {
     })
 }
 
-/// A native FLAC file (after `fLaC`): its STREAMINFO body, its Vorbis comment body if it has
-/// one, and the bytes of its frames.
-pub fn native(data: &[u8]) -> Option<(&[u8], Option<&[u8]>, &[u8])> {
+/// A native FLAC file's parts, after `fLaC`.
+pub struct Native<'a> {
+    /// STREAMINFO's body.
+    pub streaminfo: &'a [u8],
+    /// The Vorbis comment's body, if it has one.
+    pub comment: Option<&'a [u8]>,
+    /// The bytes of its frames.
+    pub frames: &'a [u8],
+}
+
+/// A native FLAC file's metadata blocks walked to its frames.
+pub fn native(data: &[u8]) -> Option<Native<'_>> {
     let (mut at, mut streaminfo, mut comment) = (4, None, None);
     loop {
         let head = data.get(at..at + 4)?;
@@ -39,7 +48,11 @@ pub fn native(data: &[u8]) -> Option<(&[u8], Option<&[u8]>, &[u8])> {
         }
         at += 4 + len;
         if head[0] & 0x80 != 0 {
-            return Some((streaminfo?, comment, data.get(at..)?));
+            return Some(Native {
+                streaminfo: streaminfo?,
+                comment,
+                frames: data.get(at..)?,
+            });
         }
     }
 }
@@ -83,18 +96,18 @@ pub fn parse(data: &[u8]) -> Option<Flac> {
     if !data.starts_with(b"fLaC") {
         return None;
     }
-    let (streaminfo, comment, frames) = native(data)?;
-    let i = info(streaminfo)?;
+    let n = native(data)?;
+    let i = info(n.streaminfo)?;
     if i.rate == 0 {
         return None;
     }
-    let mut ints = decode(&i, frames).ok()?;
+    let mut ints = decode(&i, n.frames).ok()?;
     let nch = i.channels as usize;
     if i.frames > 0 {
         ints.truncate(i.frames as usize * nch);
     }
     let scale = (1u64 << (i.bits - 1)) as f32;
-    let tags = comment.map(comments).unwrap_or_default();
+    let tags = n.comment.map(comments).unwrap_or_default();
     let tag = |k: &str| {
         tags.iter()
             .find(|(key, _)| key == k)
