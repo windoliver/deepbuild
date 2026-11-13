@@ -2,7 +2,7 @@
   "uri": "deep://schedule/core@0.0.0",
   "core": "core@0.0.0",
   "build_set": "core",
-  "set_digest": "defa634b84644ee6ea91f1230b7fd2af60627bbc219950d8b4cabc7bcd1294be",
+  "set_digest": "cdd1046d9f7dd0c09ee69b7908a399c6bb518cd21cf21a444e4f81f4d1b891d6",
   "runtime_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
   "interfaces": {
     "look@1": {
@@ -35,7 +35,7 @@
       }
     },
     "text@1": {
-      "digest": "d0fa45f80320dad79a56bf5abe27513ede63bb9084ab6ac0c87c56f9de47048f",
+      "digest": "adc297495eb1a9be4918d0a7e9620be4f459deb800ea168ecd3ca5a995d98350",
       "reference": "text",
       "kit": [
         "fixtures",
@@ -156,6 +156,38 @@
         "per": "item"
       },
       {
+        "operator": "text.copy_columns",
+        "module": "text",
+        "version": "1.0.0",
+        "reads": [
+          "self",
+          "refs",
+          "t",
+          "view(locale)",
+          "table:text.plurals"
+        ],
+        "writes": [
+          "text.columns"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "text.copy",
+        "module": "text",
+        "version": "1.0.0",
+        "reads": [
+          "core.fields",
+          "refs",
+          "t",
+          "view(locale)",
+          "table:text.plurals"
+        ],
+        "writes": [
+          "text.copy"
+        ],
+        "per": "item"
+      },
+      {
         "operator": "text.counter",
         "module": "text",
         "version": "1.0.0",
@@ -163,7 +195,8 @@
           "core.fields",
           "refs",
           "reading",
-          "view(locale)"
+          "view(locale)",
+          "text.copy"
         ],
         "writes": [
           "text.counter"
@@ -221,6 +254,9 @@
     ]
   },
   "contributions": {
+    "core.fields": [
+      "text.columns"
+    ],
     "core.status": [
       "look.status"
     ]
