@@ -11,6 +11,45 @@ pub struct Wav {
     data: (usize, usize),
 }
 
+/// #503: a WAVE format tag as ffprobe names its codec, for a stream the worker refuses.
+pub fn tag_name(tag: u16) -> String {
+    match tag {
+        0x0002 => "adpcm_ms".into(),
+        0x0006 => "pcm_alaw".into(),
+        0x0007 => "pcm_mulaw".into(),
+        0x0011 => "adpcm_ima_wav".into(),
+        0x0031 => "gsm_ms".into(),
+        0x0050 => "mp2".into(),
+        0x0055 => "mp3".into(),
+        0x0160 => "wmav1".into(),
+        0x0161 => "wmav2".into(),
+        0x0162 => "wmapro".into(),
+        0x0163 => "wmalossless".into(),
+        0x2000 => "ac3".into(),
+        0x2001 => "dts".into(),
+        t => format!("wav tag {t:#06x}"),
+    }
+}
+
+/// #503: the format tag of a WAVE file's `fmt ` chunk.
+pub fn tag(b: &[u8]) -> Option<u16> {
+    let mut at = 12;
+    while let Some(size) = b.get(at + 4..at + 8) {
+        let size = u32::from_le_bytes(size.try_into().ok()?) as usize;
+        if b.get(at..at + 4) == Some(b"fmt ") {
+            let tag = u16::from_le_bytes(b.get(at + 8..at + 10)?.try_into().ok()?);
+            return match tag {
+                0xfffe => Some(u16::from_le_bytes(
+                    b.get(at + 32..at + 34)?.try_into().ok()?,
+                )),
+                t => Some(t),
+            };
+        }
+        at = at.checked_add(8 + size + size % 2)?;
+    }
+    None
+}
+
 pub fn parse(b: &[u8]) -> Option<Wav> {
     let le16 = |o: usize| Some(u16::from_le_bytes([*b.get(o)?, *b.get(o + 1)?]));
     let le32 = |o: usize| Some(u32::from_le_bytes(b.get(o..o + 4)?.try_into().ok()?));

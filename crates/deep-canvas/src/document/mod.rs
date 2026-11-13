@@ -108,6 +108,8 @@ pub const ENVELOPE_KEYS: &[&str] = &[
     "spawns",
     // #502: the media module's ducking entries (Ducking), each a bus's gain under speech spans.
     "ducking",
+    // #503: the media module's bakes (Analysis bake), each baked at check into its array.
+    "bakes",
     "tempo_map",
     // #935: the media module's generated sounds, each held to audio.gen before an item names it.
     "sounds",
@@ -282,8 +284,11 @@ impl Issue {
             out.insert("forms".into(), json!(self.forms));
         }
         // The column view's issue names its reader, column, row, value and step (#397); a terrain
-        // overlay's its array, cell, value and step (#537).
-        if matches!(self.code, "column.out_of_range" | "terrain.overlay_range") {
+        // overlay's its array, cell, value and step (#537); a bake's empty bands, theirs (#503).
+        if matches!(
+            self.code,
+            "column.out_of_range" | "terrain.overlay_range" | "spectrum_band_empty"
+        ) {
             if let Value::Object(fields) = &self.actual {
                 for (k, v) in fields {
                     out.entry(k.clone()).or_insert_with(|| v.clone());

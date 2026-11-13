@@ -80,14 +80,22 @@ impl Hub<'_> {
         issues
     }
 
-    /// Each logic item of `form` stepped on `track` over the transport's span, its program read
-    /// from the evidence store, and its rows written to `occurrences.<logic ID>.occurrences`:
-    /// `{t, step, kind, a, b}` and its declared fields by name, as Spawn and motion read a row.
+    /// The arrays and lists `form`'s readers read: its logic items' (below), then its spectra's
+    /// bands from the bakes kept at check (#503).
     pub(crate) fn inline_occurrences(
         &self,
         form: &mut Value,
         track: &[Value],
     ) -> Result<(), Box<Issue>> {
+        let logic = self.inline_logic(form, track);
+        self.inline_spectra(form);
+        logic
+    }
+
+    /// Each logic item of `form` stepped on `track` over the transport's span, its program read
+    /// from the evidence store, and its rows written to `occurrences.<logic ID>.occurrences`:
+    /// `{t, step, kind, a, b}` and its declared fields by name, as Spawn and motion read a row.
+    fn inline_logic(&self, form: &mut Value, track: &[Value]) -> Result<(), Box<Issue>> {
         self.inline_worlds(form)?;
         let Some(piece) = self.logic_piece(form)? else {
             return Ok(());

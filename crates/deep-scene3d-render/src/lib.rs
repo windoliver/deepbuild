@@ -8,6 +8,8 @@
 //! target and writes the slot.
 
 pub mod ao;
+mod backdrop;
+pub mod clouds;
 pub mod created;
 pub mod cull;
 mod diag;
@@ -193,6 +195,8 @@ pub struct Planted {
     pub cascade_cache_keeps_stale: bool,
     /// #422: the environment prefiltered one roughness mip per frame from the session's first.
     pub prefilter_over_frames: bool,
+    /// #503: a video background's frame prefiltered into the environment, keyed per frame.
+    pub video_background_prefiltered: bool,
     /// #1174: screen-size labels draw in the geometry pass at the internal size, before the
     /// upscale, as the base drew them.
     pub labels_before_upscale: bool,
@@ -1532,6 +1536,8 @@ struct Batch {
     casters: BTreeMap<SetKey, Set>,
     lines: Set,
     points: Set,
+    /// Its point sets' records from a depth video (#503).
+    clouds: Vec<(wgpu::Buffer, u32)>,
     /// One record per inked glyph of its labels.
     labels: Set,
     bundle: Option<wgpu::RenderBundle>,
@@ -1769,9 +1775,13 @@ pub struct Renderer {
     cluster_buffer: wgpu::Buffer,
     /// The environment's prefilter and cubes (#422).
     env: EnvState,
-    /// Whether this frame has a sky, which draws first; its pipeline once compiled (#422).
+    /// Whether this frame has a sky, which draws first; its pipeline once compiled (#422); the
+    /// video background that draws in its place (#503).
     sky: bool,
     sky_pipeline: Option<wgpu::RenderPipeline>,
+    backdrop: backdrop::Backdrop,
+    /// This frame's point sets from a depth video, as the effects wrote them (#503).
+    clouds: clouds::Clouds,
     /// This frame's puffs, back to front, and their pipeline once compiled (#422).
     puffs: Option<(wgpu::Buffer, u32)>,
     puff_records: Set,
@@ -2615,40 +2625,6 @@ pub(crate) fn op_blend_pipeline(
     )
 }
 
-/// The sky's pipeline: a full-screen triangle at the far plane, behind everything, writing no
-/// depth and no object ID.
-fn sky_pipeline(
-    d: &deep_gpu::counted::Wgpu,
-    samples: u32,
-    module: &wgpu::ShaderModule,
-    layout: &wgpu::PipelineLayout,
-    forward_z: bool,
-) -> wgpu::RenderPipeline {
-    let depth = wgpu::DepthStencilState {
-        format: DEPTH,
-        depth_write_enabled: Some(false),
-        depth_compare: Some(if forward_z {
-            wgpu::CompareFunction::LessEqual
-        } else {
-            wgpu::CompareFunction::GreaterEqual
-        }),
-        stencil: Default::default(),
-        bias: Default::default(),
-    };
-    let targets = [target(LINEAR, None), target(IDS_MS, None)];
-    culled(
-        d,
-        samples,
-        SKY_PASS,
-        Some(layout),
-        module,
-        ("sky_vs", &[]),
-        Some(("sky_fs", &targets)),
-        Some(depth),
-        None,
-    )
-}
-
 /// The line, point and text pipelines, each compiled the first time a batch draws its family, so
 /// a patch that adds a family compiles a new pipeline and one that changes only values doesn't.
 struct Families {
@@ -3304,6 +3280,8 @@ impl Renderer {
             env,
             sky: false,
             sky_pipeline: None,
+            backdrop: Default::default(),
+            clouds: Default::default(),
             puffs: None,
             puff_records: Set::default(),
             puff_pipeline: None,
@@ -3956,9 +3934,12 @@ impl Renderer {
     fn prepare_env(&mut self, device: &Device, scene: &Scene, camera: &[f64; 16]) {
         let mut u = EnvUniform::zeroed();
         u.moon[3] = 2.0;
+        // #503's planted video_background_prefiltered: the video's frame is the source.
+        let video = backdrop::planted_source(self.planted.video_background_prefiltered, scene);
         let wanted = scene.sky.as_ref().and_then(|s| {
             let e = s.environment.as_ref()?;
-            Some((env::key(s, &e.from, e.size), e))
+            let key = video.map_or_else(|| env::key(s, &e.from, e.size), |v| v.0);
+            Some((key, e))
         });
         let mut rebuilt = false;
         match wanted {
@@ -3974,7 +3955,8 @@ impl Renderer {
                 let partial = self.planted.prefilter_over_frames;
                 let behind = self.env.cube.as_ref().is_some_and(|c| c.filled < c.mips);
                 if self.env.cube.as_ref().map(|c| c.key) != Some(key) || (partial && behind) {
-                    let source = env::source(sky, &e.from);
+                    let source = (video.map(|v| backdrop::equirect(v.1)))
+                        .unwrap_or_else(|| env::source(sky, &e.from));
                     let filled = match (&self.env.cube, partial) {
                         (Some(c), true) if c.key == key => Some(c.filled + 1),
                         (_, true) => Some(1),
@@ -5777,7 +5759,7 @@ impl Renderer {
         self.sky = scene.sky.as_ref().is_some_and(|s| s.draws_background());
         self.prepare_puffs(device, scene);
         if self.sky && self.sky_pipeline.is_none() {
-            self.sky_pipeline = Some(sky_pipeline(
+            self.sky_pipeline = Some(backdrop::sky_pipeline(
                 &device.device,
                 self.families.samples,
                 &self.scene_module,
@@ -5786,6 +5768,12 @@ impl Renderer {
             ));
             self.compiled += 1;
             self.names.push(SKY_PASS);
+        }
+        let shader = (self.families.samples, self.planted.forward_z);
+        let view = (&camera, internal);
+        if (self.backdrop).prepare(device, scene, view, &self.row_groups, shader) {
+            self.compiled += 1;
+            self.names.push(backdrop::PASS);
         }
         self.prepare_lights(device, scene, policy, dropped);
         if let Some(m) = self.shadow.clip {
@@ -6384,7 +6372,13 @@ impl Renderer {
                 .push(s);
         }
         batch.points.begin();
-        for p in &layer.points {
+        // A set from a depth video draws its operator's records, never one of its own (#503).
+        let sets = layer
+            .points
+            .iter()
+            .filter_map(|p| self.clouds.get(&p.id).cloned());
+        batch.clouds = sets.collect();
+        for p in layer.points.iter().filter(|p| p.cloud.is_none()) {
             let shape = match p.shape {
                 PointShape::Dot => 0,
                 PointShape::Square => 1,
@@ -6461,6 +6455,7 @@ impl Renderer {
                     .extend([family, set.generation, u64::from(set.len())]);
             }
         }
+        batch.next_key.extend(clouds::key(&batch.clouds));
         if !batch.clear_draws.is_empty() {
             batch.next_key.extend([13, batch.clear.generation]);
             for ((shape, maps), kind) in &batch.clear_draws {
@@ -6802,6 +6797,7 @@ impl Renderer {
                 enc.draw(0..6, 0..set.len());
             }
         }
+        clouds::draw(&mut enc, self.families.point.as_ref(), &batch.clouds);
         if let (Some(buffer), Some(pipeline), true) = (
             &batch.labels.buffer,
             &self.families.text,
@@ -8285,21 +8281,6 @@ impl Renderer {
             .map(|buffer| (buffer, all.len() as u32));
     }
 
-    /// The sky's draw this frame, when it has one (#422).
-    fn sky_draw(&self) -> Option<SkyDraw> {
-        let p = self.sky_pipeline.clone().filter(|_| self.sky)?;
-        Some((
-            p,
-            [
-                self.frame_bind.clone(),
-                self.lights_bind.clone(),
-                self.ao.shade().clone(),
-                // The solids' layout holds the maps' group 3 since #423.
-                self.maps.by_index(0).clone(),
-            ],
-        ))
-    }
-
     /// The output pass, tone-mapping the linear target into `target`.
     pub fn record_output(
         &self,
@@ -8976,6 +8957,8 @@ pub struct Shared {
     pub post: Option<Box<dyn Post>>,
     /// Passes after the finish: the status guard and the status colors, where status can show.
     pub after: Option<Box<dyn After>>,
+    /// The next frame's point sets from a depth video, as the driver's effects wrote them (#503).
+    pub clouds: clouds::Clouds,
     /// Samples a pixel its renderer's geometry pass draws (#173: one under temporal upscaling).
     pub samples: u32,
 }
@@ -8993,6 +8976,7 @@ impl Module3 {
             planted,
             post: None,
             after: None,
+            clouds: Default::default(),
             samples: if planted.single_sample { 1 } else { MSAA },
         }));
         (
@@ -9129,11 +9113,13 @@ impl RenderModule for Module3 {
             renderer,
             post,
             after,
+            clouds,
             ..
         } = &mut *s;
         let Some(renderer) = renderer.as_mut() else {
             return Vec::new();
         };
+        renderer.clouds.clone_from(clouds);
         // The instances outputs the frame's instancers draw from (#484).
         if let Some(p) = post.as_deref_mut() {
             renderer.feed(p.sources(device));
