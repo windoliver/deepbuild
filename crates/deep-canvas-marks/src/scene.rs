@@ -40,12 +40,12 @@ use deep_canvas::template;
 /// The kinds [`frame`] reads: every other kind is one the marks module doesn't know.
 pub const KINDS: &[&str] = &[
     "rect@1", "circle@1", "path@1", "text@1", "image@1", "marks@1", "axis@1", "scale@1", "mask@1",
-    "group@1", "star@1", "frame@1", "series@1", "matte@1",
+    "group@1", "star@1", "frame@1", "series@1", "matte@1", "axes3d@1",
 ];
 
 /// The kinds of [`KINDS`] the data module owns: R1's mark sets, scales and axes, which marks2d
 /// draws for it (the data module's manifest). A build without the data module lacks them.
-pub const DATA_KINDS: &[&str] = &["marks@1", "axis@1", "scale@1"];
+pub const DATA_KINDS: &[&str] = &["marks@1", "axis@1", "scale@1", "axes3d@1"];
 
 /// The canvas module that owns one of [`KINDS`]: the data module's, or marks2d's.
 pub fn module_of(kind: &str) -> &'static str {
@@ -4293,13 +4293,13 @@ pub fn frame_planted(
     )
 }
 
-/// The draw list for evaluated `items`, with what each bound value and counter shows already
-/// formatted (the text module's counters, in the view's locale); `record` gives the readings
-/// bound to mark sets' rows.
+/// The draw list for evaluated `items` in a look's palette and type (#239: text set in the look's
+/// font roles), with what each bound value and counter shows already formatted (the text module's
+/// counters, in the view's locale); `record` gives the readings bound to mark sets' rows.
 pub fn frame_with(
     doc: &Map<String, Value>,
     items: &Map<String, Value>,
-    palette: &Palette,
+    (palette, ty): (&Palette, &Type),
     zoom: f64,
     bound: &BTreeMap<String, Shown>,
     record: &Record,
@@ -4308,7 +4308,7 @@ pub fn frame_with(
     frame_shown(
         doc,
         items,
-        (palette, &Type::default()),
+        (palette, ty),
         zoom,
         Planted::None,
         bound,
@@ -4864,7 +4864,7 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
         // A logic item (#544) steps and emits occurrences, and a score (#154) sounds: neither draws.
         // A readout (#419, #1183) draws over the frame, in scene3d's view.
         "mask@1" | "matte@1" | "group@1" | "camera@1" | "graph@1" | "salience@1" | "sheet@1"
-        | "logic@1" | "score.music@1" | "overlay.text@1" => return Ok(None),
+        | "axes3d@1" | "logic@1" | "score.music@1" | "overlay.text@1" => return Ok(None),
         "star@1" => {
             let p = |k: &str| num(params.get(k));
             let star = Star {
@@ -5005,7 +5005,8 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
             drawing.marks
         }
         "axis@1" => {
-            let drawing = data::axis(id, item, ctx.items, ctx.palette, pos, ctx.size)?;
+            let channels = ctx.paints.doc.get("channels");
+            let drawing = data::axis(id, item, (ctx.items, channels), ctx.palette, pos, ctx.size)?;
             fades = drawing.fades;
             drawing.marks
         }
@@ -5563,7 +5564,7 @@ fn shaded(
 pub fn item_placed(
     id: &str,
     item: &Value,
-    palette: &Palette,
+    (palette, ty): (&Palette, &Type),
     shown: Option<&Shown>,
 ) -> Option<Placed> {
     let kind = item.get("kind").and_then(Value::as_str)?;
@@ -5600,7 +5601,7 @@ pub fn item_placed(
         items: &empty,
         size: [0.0; 2],
         palette,
-        ty: &Type::default(),
+        ty,
         paints: &paints,
         scopes: &scopes,
         bound: &bound,
@@ -5619,7 +5620,7 @@ pub fn item_placed(
 pub fn frame_prebuilt(
     doc: &Map<String, Value>,
     items: &Map<String, Value>,
-    palette: &Palette,
+    (palette, ty): (&Palette, &Type),
     zoom: f64,
     bound: &BTreeMap<String, Shown>,
     record: &Record,
@@ -5629,7 +5630,7 @@ pub fn frame_prebuilt(
     let (frame, wants_boxes, places) = build(
         doc,
         (items, prebuilt),
-        (palette, &Type::default()),
+        (palette, ty),
         (bound, &row_readings),
         zoom,
         Planted::None,

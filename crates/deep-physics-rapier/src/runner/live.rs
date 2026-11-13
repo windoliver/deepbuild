@@ -72,6 +72,8 @@ impl Run {
             keeps_replaced: self.keeps_replaced,
             late_forks: self.late_forks,
             all_steps: self.all_steps,
+            declared_masses_only: self.declared_masses_only,
+            twin: self.twin,
             views: std::cell::RefCell::default(),
         }
     }
@@ -190,7 +192,7 @@ impl Session {
         ring.drops_oldest = run.ring_drops_oldest;
         let mut s = Session {
             rank: occurrence::ranks(&w),
-            hashes: vec![run.hash(&b.canonical())],
+            hashes: vec![run.hash(&b.canonical(), &b.joints())],
             run,
             world,
             w,
@@ -450,7 +452,7 @@ impl Session {
             k,
             occurrence::sorted(k as u32, self.b.occurrences(), &self.rank),
         );
-        let hash = self.run.hash(&self.b.canonical());
+        let hash = self.run.hash(&self.b.canonical(), &self.b.joints());
         self.hashes.truncate(k as usize);
         self.hashes.push(hash.clone());
         if self.ring.due(k) {

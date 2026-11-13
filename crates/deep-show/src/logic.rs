@@ -148,6 +148,7 @@ impl Hub<'_> {
         };
         let entries: Vec<Entry> = track
             .iter()
+            .filter(|e| e.get("present").is_none())
             .map(Entry::parse)
             .collect::<Option<_>>()
             .ok_or_else(|| refused(json!({"code": "bad_input", "what": "track: each entry is {t, control, value}"})))?;

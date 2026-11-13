@@ -1,7 +1,7 @@
 // `deep library on | off | rule`: the commands that send library.on, library.off and library.rule, which the hub takes
 // only from your own terminal (#1731). Before them a library could be installed and never turned on, so deep_kinds'
 // asset search had no library to search. #1731's world is reused by path: its fill is installed, and off.
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, it } from 'vitest';
@@ -16,6 +16,12 @@ it('deep library on puts an installed library in the search, rule fetches its li
   const unknown = await deep(w.home, w.work, ['library', 'on', 'ext.none.library']);
   expect(unknown.code, unknown.stderr).toBe(2);
   expect(unknown.stderr).toContain('ext.none.library');
+
+  writeFileSync(join(w.tmp, 'confirm'), 'cancelled\n');
+  const unconfirmed = await deep(w.home, w.work, ['library', 'on', LIB]);
+  expect(unconfirmed.code, unconfirmed.stderr).toBe(3);
+  expect(libraryRows((await search(w)).rows), 'not confirmed by the OS, an installed library stays off').toEqual([]);
+  writeFileSync(join(w.tmp, 'confirm'), 'confirmed\n');
 
   const on = await deep(w.home, w.work, ['library', 'on', LIB]);
   expect(on.code, on.stderr).toBe(0);
