@@ -158,14 +158,31 @@ fn luma(px: &[u8], ground: [u8; 3]) -> f64 {
 /// over 8 × 8 windows 4 apart whose centre is compared (two renderers draw sub-pixel edges apart,
 /// which export.fidelity's floor allows for: PSNR-Y ≥ 40 dB or SSIM ≥ 0.98), and how many pixels
 /// it read.
-fn compare(a: &[u8], b: &[u8], size: [u16; 2], ground: [u8; 3], skip: &[[f64; 4]]) -> (f64, f64, usize) {
+fn compare(
+    a: &[u8],
+    b: &[u8],
+    size: [u16; 2],
+    ground: [u8; 3],
+    skip: &[[f64; 4]],
+) -> (f64, f64, usize) {
     let (w, h) = (usize::from(size[0]), usize::from(size[1]));
     let skipped = |x: usize, y: usize| {
         let (cx, cy) = (x as f64 + 0.5, y as f64 + 0.5);
-        skip.iter().any(|b| cx >= b[0] && cx <= b[0] + b[2] && cy >= b[1] && cy <= b[1] + b[3])
+        skip.iter()
+            .any(|b| cx >= b[0] && cx <= b[0] + b[2] && cy >= b[1] && cy <= b[1] + b[3])
     };
-    let la: Vec<f64> = (0..w * h).map(|i| luma(&a[i * 4..i * 4 + 4], ground)).collect();
-    let lb: Vec<f64> = (0..w * h).map(|i| if skipped(i % w, i / w) { la[i] } else { luma(&b[i * 4..i * 4 + 4], ground) }).collect();
+    let la: Vec<f64> = (0..w * h)
+        .map(|i| luma(&a[i * 4..i * 4 + 4], ground))
+        .collect();
+    let lb: Vec<f64> = (0..w * h)
+        .map(|i| {
+            if skipped(i % w, i / w) {
+                la[i]
+            } else {
+                luma(&b[i * 4..i * 4 + 4], ground)
+            }
+        })
+        .collect();
     let (mut sum, mut n) = (0.0, 0usize);
     for i in 0..w * h {
         if !skipped(i % w, i / w) {
@@ -173,8 +190,15 @@ fn compare(a: &[u8], b: &[u8], size: [u16; 2], ground: [u8; 3], skip: &[[f64; 4]
             n += 1;
         }
     }
-    let psnr = if n == 0 || sum == 0.0 { f64::INFINITY } else { 10.0 * deep_canvas::ops::log10(255.0 * 255.0 / (sum / n as f64)) };
-    let (c1, c2) = ((0.01 * 255.0_f64) * (0.01 * 255.0), (0.03 * 255.0_f64) * (0.03 * 255.0));
+    let psnr = if n == 0 || sum == 0.0 {
+        f64::INFINITY
+    } else {
+        10.0 * deep_canvas::ops::log10(255.0 * 255.0 / (sum / n as f64))
+    };
+    let (c1, c2) = (
+        (0.01 * 255.0_f64) * (0.01 * 255.0),
+        (0.03 * 255.0_f64) * (0.03 * 255.0),
+    );
     let (mut total, mut windows) = (0.0, 0usize);
     let mut y = 0;
     while y + 8 <= h {
@@ -200,14 +224,19 @@ fn compare(a: &[u8], b: &[u8], size: [u16; 2], ground: [u8; 3], skip: &[[f64; 4]
                     }
                 }
                 let (va, vb, cov) = (va / 63.0, vb / 63.0, cov / 63.0);
-                total += ((2.0 * ma * mb + c1) * (2.0 * cov + c2)) / ((ma * ma + mb * mb + c1) * (va + vb + c2));
+                total += ((2.0 * ma * mb + c1) * (2.0 * cov + c2))
+                    / ((ma * ma + mb * mb + c1) * (va + vb + c2));
                 windows += 1;
             }
             x += 4;
         }
         y += 4;
     }
-    let ssim = if windows == 0 { 1.0 } else { total / windows as f64 };
+    let ssim = if windows == 0 {
+        1.0
+    } else {
+        total / windows as f64
+    };
     (psnr, ssim, n)
 }
 

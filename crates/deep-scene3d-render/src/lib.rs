@@ -8,8 +8,8 @@
 //! target and writes the slot.
 
 pub mod ao;
-pub mod cull;
 pub mod created;
+pub mod cull;
 mod diag;
 pub mod env;
 pub mod flare;
@@ -1416,7 +1416,18 @@ fn culled(
     depth_stencil: Option<wgpu::DepthStencilState>,
     cull: Option<wgpu::Face>,
 ) -> wgpu::RenderPipeline {
-    specialized(d, samples, label, layout, module, (vs, buffers), fragment, depth_stencil, cull, &[])
+    specialized(
+        d,
+        samples,
+        label,
+        layout,
+        module,
+        (vs, buffers),
+        fragment,
+        depth_stencil,
+        cull,
+        &[],
+    )
 }
 
 /// [`culled`] with the module's pipeline-overridable `constants` set (#432: a feature set's
@@ -2272,7 +2283,16 @@ fn clear_pipeline(
     kind: usize,
     after_resolve: bool,
 ) -> wgpu::RenderPipeline {
-    shaded_clear_pipeline(d, samples, module, layout, planted, kind, after_resolve, "mesh_fs")
+    shaded_clear_pipeline(
+        d,
+        samples,
+        module,
+        layout,
+        planted,
+        kind,
+        after_resolve,
+        "mesh_fs",
+    )
 }
 
 /// A fade's two pipelines through a material operator's fragment stage (#432): its depth pass,
@@ -2532,7 +2552,11 @@ fn opaque_pipeline(
     specialized(
         d,
         samples,
-        if lobes { "scene3d.opaque_lobes" } else { "scene3d.opaque" },
+        if lobes {
+            "scene3d.opaque_lobes"
+        } else {
+            "scene3d.opaque"
+        },
         Some(layout),
         module,
         ("mesh_vs", buffers),
@@ -2641,7 +2665,12 @@ struct Families {
 impl Families {
     /// Compiles the pipelines `layer` draws with that aren't yet, naming each in `names`; how
     /// many it compiled.
-    fn ensure(&mut self, d: &deep_gpu::counted::Wgpu, layer: &Layer3, names: &mut Vec<&'static str>) -> u32 {
+    fn ensure(
+        &mut self,
+        d: &deep_gpu::counted::Wgpu,
+        layer: &Layer3,
+        names: &mut Vec<&'static str>,
+    ) -> u32 {
         let mut made = 0;
         let (module, draw, text, fz, samples) = (
             &self.module,
@@ -2935,13 +2964,11 @@ impl Renderer {
             LOBE_ENTRIES * std::mem::size_of::<LobeEntry>(),
         );
         let lights_buffer = uniform_buffer("scene3d lights", std::mem::size_of::<LightsUniform>());
-        let dfg_buffer = d.create_buffer_init(
-            &wgpu::util::BufferInitDescriptor {
-                label: Some("scene3d dfg"),
-                contents: bytemuck::cast_slice(&dfg_table()),
-                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            },
-        );
+        let dfg_buffer = d.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("scene3d dfg"),
+            contents: bytemuck::cast_slice(&dfg_table()),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
         let env = EnvState {
             prefilter: env::Prefilter::new(d),
             buffer: uniform_buffer("scene3d env", std::mem::size_of::<EnvUniform>()),
@@ -3531,7 +3558,11 @@ impl Renderer {
     }
 
     /// The output pass's bind group: `linear` and the tone uniform.
-    fn output_bind(&self, d: &deep_gpu::counted::Wgpu, linear: &wgpu::TextureView) -> wgpu::BindGroup {
+    fn output_bind(
+        &self,
+        d: &deep_gpu::counted::Wgpu,
+        linear: &wgpu::TextureView,
+    ) -> wgpu::BindGroup {
         bind_group(
             d,
             "scene3d output",
@@ -4181,7 +4212,12 @@ impl Renderer {
             }
         }
         for (k, &(i, weight)) in policy.shaded.iter().enumerate().take(SHADED) {
-            u.answers[k] = [weight as f32, f32::from_bits(op::light_hash(&scene.lights[i].id)), 0.0, 0.0];
+            u.answers[k] = [
+                weight as f32,
+                f32::from_bits(op::light_hash(&scene.lights[i].id)),
+                0.0,
+                0.0,
+            ];
         }
         if self.planted.lobes & PLANT_CALLS_CUT != 0 {
             u.answers[0][2] = policy.left_out.len() as f32;
@@ -4255,9 +4291,11 @@ impl Renderer {
         self.clusters = grid;
         self.counts.lights_left_out = policy.left_out;
         deep_gpu::alloc::outside(|| {
-            device
-                .queue
-                .write_changed(&self.lights_buffer, &self.written.lights, bytemuck::bytes_of(&u))
+            device.queue.write_changed(
+                &self.lights_buffer,
+                &self.written.lights,
+                bytemuck::bytes_of(&u),
+            )
         });
     }
 
@@ -4708,7 +4746,13 @@ impl Renderer {
                 .as_ref()
                 .is_some_and(|m| m.alpha_mode == AlphaMode::Mask)
         };
-        let casting = || scene.layers.iter().flat_map(|l| &l.solids).filter(|s| s.cast_shadow);
+        let casting = || {
+            scene
+                .layers
+                .iter()
+                .flat_map(|l| &l.solids)
+                .filter(|s| s.cast_shadow)
+        };
         self.mask_casts = casting().any(mask);
         let mut maps: Vec<String> = Vec::new();
         if let Some(sun) = scene.sun.as_ref().filter(|s| s.shadow) {
@@ -4730,7 +4774,11 @@ impl Renderer {
         }
         let target = maps.join(", ");
         for kind_mask in [false, true] {
-            let made = if kind_mask { self.shadow.mask.is_some() } else { self.shadow.pipeline.is_some() };
+            let made = if kind_mask {
+                self.shadow.mask.is_some()
+            } else {
+                self.shadow.pipeline.is_some()
+            };
             let casters: Vec<&Solid> = casting().filter(|s| mask(s) == kind_mask).collect();
             if made || casters.is_empty() {
                 continue;
@@ -4756,8 +4804,12 @@ impl Renderer {
             let mut sets: Vec<&str> = casters.iter().map(|s| created::caster_set(s)).collect();
             sets.sort_unstable();
             sets.dedup();
-            let items = casters.iter().map(|s| created::item_of(&s.id).to_string()).collect();
-            self.made_for.insert(name, (items, sets.join(","), target.clone()));
+            let items = casters
+                .iter()
+                .map(|s| created::item_of(&s.id).to_string())
+                .collect();
+            self.made_for
+                .insert(name, (items, sets.join(","), target.clone()));
             self.compiled += 1;
             self.names.push(name);
         }
@@ -4768,13 +4820,22 @@ impl Renderer {
         while self.logged < self.names.len() {
             let name = self.names[self.logged];
             let (mut items, set, target) = self.made_for.remove(name).unwrap_or_else(|| {
-                (Vec::new(), name.trim_start_matches("scene3d.").to_string(), "view".into())
+                (
+                    Vec::new(),
+                    name.trim_start_matches("scene3d.").to_string(),
+                    "view".into(),
+                )
             });
             let mut seen = BTreeSet::new();
             items.retain(|i| seen.insert(i.clone()));
             let samples = self.families.samples.to_le_bytes();
             self.log.push(created::Created {
-                key: created::key128(&[name.as_bytes(), set.as_bytes(), target.as_bytes(), &samples]),
+                key: created::key128(&[
+                    name.as_bytes(),
+                    set.as_bytes(),
+                    target.as_bytes(),
+                    &samples,
+                ]),
                 items,
                 feature_set: set,
                 target,
@@ -4982,7 +5043,12 @@ impl Renderer {
         let solids = || scene.layers.iter().flat_map(|l| &l.solids);
         if p.bind_group_per_item {
             for _ in solids() {
-                bind_group(d, "planted per item", &self.frame_layout, [self.frame_buffer.as_entire_binding()]);
+                bind_group(
+                    d,
+                    "planted per item",
+                    &self.frame_layout,
+                    [self.frame_buffer.as_entire_binding()],
+                );
             }
         }
         if p.uploads_every_transform {
@@ -4990,11 +5056,17 @@ impl Renderer {
                 .flat_map(|s| {
                     let m = s.model;
                     let rows = [m[0], m[1], m[2], [0.0, 0.0, 0.0, 1.0]];
-                    rows.into_iter().flatten().flat_map(|v| (v as f32).to_le_bytes())
+                    rows.into_iter()
+                        .flatten()
+                        .flat_map(|v| (v as f32).to_le_bytes())
                 })
                 .collect();
             let size = bytes.len().max(64) as u64;
-            if self.planted_transforms.as_ref().is_none_or(|b| b.size() < size) {
+            if self
+                .planted_transforms
+                .as_ref()
+                .is_none_or(|b| b.size() < size)
+            {
                 self.planted_transforms = Some(d.create_buffer(&wgpu::BufferDescriptor {
                     label: Some("planted transforms"),
                     size,
@@ -5286,7 +5358,12 @@ impl Renderer {
                 .order
                 .iter()
                 .filter_map(|id| self.batches.get(id))
-                .any(|b| b.solids.values().chain(b.casters.values()).any(|s| s.cull.is_some()));
+                .any(|b| {
+                    b.solids
+                        .values()
+                        .chain(b.casters.values())
+                        .any(|s| s.cull.is_some())
+                });
             if let Some(t) = self.targets.as_ref().filter(|_| culled) {
                 let samples = self.families.samples;
                 if self
@@ -5509,7 +5586,8 @@ impl Renderer {
                     .filter(|s| transmits(s) || s.op.as_ref().is_some_and(op::reads_backdrop))
                     .map(|s| created::item_of(&s.id).to_string())
                     .collect();
-                self.made_for.insert(glass::PASS, (items, "transmission".into(), "view".into()));
+                self.made_for
+                    .insert(glass::PASS, (items, "transmission".into(), "view".into()));
                 self.compiled += 1;
                 self.names.push(glass::PASS);
             }
@@ -5656,8 +5734,16 @@ impl Renderer {
             let q = &device.queue;
             let w = &self.written;
             q.write_changed(&self.frame_buffer, &w.frame, bytemuck::bytes_of(&frame));
-            q.write_changed(&self.outlines.display, &w.display, bytemuck::bytes_of(&display));
-            q.write_changed(&self.outlines.internal, &w.internal, bytemuck::bytes_of(&inside));
+            q.write_changed(
+                &self.outlines.display,
+                &w.display,
+                bytemuck::bytes_of(&display),
+            );
+            q.write_changed(
+                &self.outlines.internal,
+                &w.internal,
+                bytemuck::bytes_of(&inside),
+            );
         });
         self.prepare_outlines(device, scene);
         // A scene of materials shades the key sun's shadow through its cascades (#422); one of
@@ -5753,9 +5839,11 @@ impl Renderer {
             power: rgb4(look.grade.power),
         };
         deep_gpu::alloc::outside(|| {
-            device
-                .queue
-                .write_changed(&self.tone_buffer, &self.written.tone, bytemuck::bytes_of(&tone))
+            device.queue.write_changed(
+                &self.tone_buffer,
+                &self.written.tone,
+                bytemuck::bytes_of(&tone),
+            )
         });
         self.ground = [
             decode(scene.ground[0]),
@@ -5856,8 +5944,18 @@ impl Renderer {
             };
             let wanted = layer.solids.iter().any(|s| of_kind(&s));
             if wanted && self.clear_pipelines[k].is_none() {
-                let items: Vec<String> = layer.solids.iter().filter(of_kind).map(|s| created::item_of(&s.id).to_string()).collect();
-                let set = layer.solids.iter().find(of_kind).map(created::feature_set).unwrap_or_default();
+                let items: Vec<String> = layer
+                    .solids
+                    .iter()
+                    .filter(of_kind)
+                    .map(|s| created::item_of(&s.id).to_string())
+                    .collect();
+                let set = layer
+                    .solids
+                    .iter()
+                    .find(of_kind)
+                    .map(created::feature_set)
+                    .unwrap_or_default();
                 self.made_for.insert(name, (items, set, "view".into()));
                 self.clear_pipelines[k] = Some(clear_pipeline(
                     &device.device,
@@ -5877,9 +5975,19 @@ impl Renderer {
         let glass = self.clear_pipelines[usize::from(GLASS)].is_some() || self.glass.is_some();
         for k in [BLEND, ADD].map(usize::from) {
             if glass && self.clear_pipelines[k].is_some() && self.late_pipelines[k].is_none() {
-                let items: Vec<String> = layer.solids.iter().filter(|s| clear(s) && usize::from(kind_of(s)) == k).map(|s| created::item_of(&s.id).to_string()).collect();
-                let set = if k == usize::from(ADD) { "add+over_glass" } else { "blend+over_glass" };
-                self.made_for.insert(LATE_NAMES[k], (items, set.into(), "view".into()));
+                let items: Vec<String> = layer
+                    .solids
+                    .iter()
+                    .filter(|s| clear(s) && usize::from(kind_of(s)) == k)
+                    .map(|s| created::item_of(&s.id).to_string())
+                    .collect();
+                let set = if k == usize::from(ADD) {
+                    "add+over_glass"
+                } else {
+                    "blend+over_glass"
+                };
+                self.made_for
+                    .insert(LATE_NAMES[k], (items, set.into(), "view".into()));
                 self.late_pipelines[k] = Some(clear_pipeline(
                     &device.device,
                     self.families.samples,
@@ -6013,14 +6121,19 @@ impl Renderer {
                     &mesh_buffers(),
                     true,
                 ));
-                let name = ["scene3d.opaque_lobes", "scene3d.opaque_lobes_back", "scene3d.opaque_lobes_front"][cull as usize];
+                let name = [
+                    "scene3d.opaque_lobes",
+                    "scene3d.opaque_lobes_back",
+                    "scene3d.opaque_lobes_front",
+                ][cull as usize];
                 let items: Vec<String> = layer
                     .solids
                     .iter()
                     .filter(|x| !clear(x) && x.material.as_ref().is_some_and(|m| m.lobes.on()))
                     .map(|x| created::item_of(&x.id).to_string())
                     .collect();
-                self.made_for.insert(name, (items, created::feature_set(s), "view".into()));
+                self.made_for
+                    .insert(name, (items, created::feature_set(s), "view".into()));
                 self.compiled += 1;
                 self.names.push(name);
             }
@@ -6149,7 +6262,7 @@ impl Renderer {
                     [b[0].map(f64::from), b[1].map(f64::from)]
                 });
             }
-            if slot.0.3 != 0 {
+            if slot.0 .3 != 0 {
                 set.elements.push(s.row);
             }
             if self.cpu_cull {
@@ -7093,7 +7206,9 @@ impl Renderer {
                             pass.set_pipeline(cut);
                             pass.set_bind_group(3, group, &[]);
                         }
-                        (None, _, Some(p), true) | (None, Some(p), _, false) => pass.set_pipeline(p),
+                        (None, _, Some(p), true) | (None, Some(p), _, false) => {
+                            pass.set_pipeline(p)
+                        }
                         // Its caster kind's pipeline isn't made: the prepare that would make it
                         // didn't run for this frame.
                         _ => continue,

@@ -29,6 +29,7 @@ readonly log: LogReads;
 readonly store: EvidenceStore;
 readonly durable: Durable;
 readonly record: RecordStore;
+readonly raw: RecordStore['raw'];
 readonly checkouts: Checkouts;
 readonly now: () => number;
 readonly spaces: WorkspaceService;
@@ -117,7 +118,7 @@ export class EvidenceAccess {
   /** The retention pass (retention.ts). */
   async retain(): Promise<void> {
     await retain({
-      raw: (query) => this.options.services.record.raw(query), store: this.options.services.store, checkouts: this.options.services.checkouts, cited: async () => new Set([...await citedEvidence(this.options.services.record, this.options.services.now()), ...await this.options.services.spaces.pinned()]), keepNothing: this.options.settings.plant === 'empty-cited',
+      raw: this.options.services.raw, store: this.options.services.store, checkouts: this.options.services.checkouts, cited: async () => new Set([...await citedEvidence(this.options.services.record, this.options.services.now()), ...await this.options.services.spaces.pinned()]), keepNothing: this.options.settings.plant === 'empty-cited',
       removed: (sha256) => this.options.events.appendCore('evidence.removed', { sha256 }),
     });
   }

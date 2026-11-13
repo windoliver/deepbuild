@@ -110,7 +110,11 @@ pub fn child_of(parent: &Pose, own: &Pose, ops_: &mut Ops) -> Pose {
 
 /// Whether an aim at `target` has no heading: zero, or parallel to the up axis.
 pub fn aimless(own: &Pose, target: Vec3) -> bool {
-    let d = [target[0] - own.pos[0], target[1] - own.pos[1], target[2] - own.pos[2]];
+    let d = [
+        target[0] - own.pos[0],
+        target[1] - own.pos[1],
+        target[2] - own.pos[2],
+    ];
     let flat = ops::hypot(d[0], d[1]);
     flat <= 1e-9 * (flat + d[2].abs()) || flat == 0.0
 }
@@ -126,7 +130,10 @@ pub fn look_at(own: &Pose, target: Vec3, ops_: &mut Ops) -> Pose {
     let flat = ops::hypot(d[0], d[1]);
     ops_.n(10);
     if aimless(own, target) {
-        return Pose { rot: [own.rot[0], 0.0, 0.0], ..*own };
+        return Pose {
+            rot: [own.rot[0], 0.0, 0.0],
+            ..*own
+        };
     }
     Pose {
         rot: [
@@ -212,10 +219,7 @@ impl ArcTable {
         }
         let total = self.lengths[n - 1];
         let want = fraction.clamp(0.0, 1.0) * total;
-        let i = self
-            .lengths
-            .partition_point(|l| *l <= want)
-            .clamp(1, n - 1);
+        let i = self.lengths.partition_point(|l| *l <= want).clamp(1, n - 1);
         // A binary search over n points takes ⌈log2 n⌉ comparisons whatever it looks for.
         ops_.n(u64::from(u64::BITS - (n as u64).leading_zeros()) + 12);
         let (a, b) = (self.points[i - 1], self.points[i]);
@@ -252,7 +256,11 @@ impl Fraction {
                 (1, Some(name)) if !name.is_empty() => Ok(Fraction::Data(name.to_string())),
                 _ => Err("bad_doc"),
             },
-            Some(v) => v.as_f64().filter(|f| f.is_finite()).map(Fraction::Fixed).ok_or("out_of_range"),
+            Some(v) => v
+                .as_f64()
+                .filter(|f| f.is_finite())
+                .map(Fraction::Fixed)
+                .ok_or("out_of_range"),
         }
     }
 }
@@ -268,15 +276,32 @@ pub struct PathRead {
 impl PathRead {
     /// The table of `points`, and the slot of the keyed data value `fraction` names among the
     /// program's `fields`; refused `ref_unresolved` at `path` when nothing keys that value.
-    pub fn compile(points: &[[f64; 2]], fraction: &Fraction, fields: &[crate::program::Field], path: &str) -> Result<PathRead, crate::doc::Refused> {
+    pub fn compile(
+        points: &[[f64; 2]],
+        fraction: &Fraction,
+        fields: &[crate::program::Field],
+        path: &str,
+    ) -> Result<PathRead, crate::doc::Refused> {
         let from = match fraction {
             Fraction::Fixed(_) => None,
-            Fraction::Data(name) => match fields.iter().find(|f| f.data.as_deref() == Some(name.as_str())) {
+            Fraction::Data(name) => match fields
+                .iter()
+                .find(|f| f.data.as_deref() == Some(name.as_str()))
+            {
                 Some(f) => Some(f.slot),
-                None => return Err(crate::doc::Refused { code: "ref_unresolved", path: format!("{path}/fraction/data"), detail: None }),
+                None => {
+                    return Err(crate::doc::Refused {
+                        code: "ref_unresolved",
+                        path: format!("{path}/fraction/data"),
+                        detail: None,
+                    })
+                }
             },
         };
-        Ok(PathRead { table: ArcTable::new(points.to_vec()), from })
+        Ok(PathRead {
+            table: ArcTable::new(points.to_vec()),
+            from,
+        })
     }
 
     /// The fraction at this frame: the fixed one, or its data value's slot.
@@ -310,7 +335,14 @@ pub fn follow_path(
 
 /// A pen's tip: `own` rides the point of `tip` (where the pen draws at this time), plus
 /// `offset`, turned to the stroke's heading when `rotate`.
-pub fn follow_tip(own: &Pose, tip: [f64; 2], heading: f64, offset: [f64; 2], rotate: bool, ops_: &mut Ops) -> Pose {
+pub fn follow_tip(
+    own: &Pose,
+    tip: [f64; 2],
+    heading: f64,
+    offset: [f64; 2],
+    rotate: bool,
+    ops_: &mut Ops,
+) -> Pose {
     let mut out = *own;
     out.pos[0] = tip[0] + offset[0];
     out.pos[1] = tip[1] + offset[1];
@@ -337,7 +369,14 @@ pub struct Reach {
 /// Two-bone reach from `root` toward `target`, analytically by the law of cosines, its bend side
 /// fixed by `bend` (1 or −1) at every frame; with `cartoon`, both bones scale by
 /// max(1, d ÷ (l1 + l2)) instead of falling short.
-pub fn reach2(root: [f64; 2], lengths: [f64; 2], target: [f64; 2], bend: f64, cartoon: bool, ops_: &mut Ops) -> Reach {
+pub fn reach2(
+    root: [f64; 2],
+    lengths: [f64; 2],
+    target: [f64; 2],
+    bend: f64,
+    cartoon: bool,
+    ops_: &mut Ops,
+) -> Reach {
     let [l1, l2] = lengths;
     let (dx, dy) = (target[0] - root[0], target[1] - root[1]);
     let d = ops::hypot(dx, dy);
@@ -355,14 +394,20 @@ pub fn reach2(root: [f64; 2], lengths: [f64; 2], target: [f64; 2], bend: f64, ca
     let side = if bend < 0.0 { -1.0 } else { 1.0 };
     let upper = aim + side * ops::acos(cos_root);
     let elbow = [root[0] + a * ops::cos(upper), root[1] + a * ops::sin(upper)];
-    let end_aim = [root[0] + span * ops::cos(aim), root[1] + span * ops::sin(aim)];
+    let end_aim = [
+        root[0] + span * ops::cos(aim),
+        root[1] + span * ops::sin(aim),
+    ];
     let lower = ops::atan2(end_aim[1] - elbow[1], end_aim[0] - elbow[0]);
     ops_.n(40);
     Reach {
         upper: ops::deg(upper),
         lower: ops::deg(lower),
         elbow,
-        end: [elbow[0] + b * ops::cos(lower), elbow[1] + b * ops::sin(lower)],
+        end: [
+            elbow[0] + b * ops::cos(lower),
+            elbow[1] + b * ops::sin(lower),
+        ],
         stretch,
         short: !cartoon && d > reach,
     }
@@ -370,7 +415,14 @@ pub fn reach2(root: [f64; 2], lengths: [f64; 2], target: [f64; 2], bend: f64, ca
 
 /// Rests `own` on the ground plane `ground` along −Y: its lowest point, `bottom` below its
 /// position, touches the plane, unless that drop is more than `max_drop`.
-pub fn rest_on(own: &Pose, bottom: f64, ground: f64, offset: f64, max_drop: f64, ops_: &mut Ops) -> Option<Pose> {
+pub fn rest_on(
+    own: &Pose,
+    bottom: f64,
+    ground: f64,
+    offset: f64,
+    max_drop: f64,
+    ops_: &mut Ops,
+) -> Option<Pose> {
     let low = own.pos[1] - bottom;
     let drop = low - ground;
     ops_.n(4);
@@ -395,7 +447,13 @@ pub struct SpringBake {
 impl SpringBake {
     /// Bakes one bone swinging behind `drive` (its parent's angle in degrees at a time in
     /// seconds) over `[0, seconds]`, a damped spring of `hz` and `damping_ratio`.
-    pub fn bake(drive: impl Fn(f64) -> f64, seconds: f64, hz: f64, damping_ratio: f64, max_swing: f64) -> SpringBake {
+    pub fn bake(
+        drive: impl Fn(f64) -> f64,
+        seconds: f64,
+        hz: f64,
+        damping_ratio: f64,
+        max_swing: f64,
+    ) -> SpringBake {
         let step = 1.0 / 120.0;
         let n = (seconds / step).ceil() as usize + 1;
         let spring = Spring::from_freq(hz, damping_ratio);
@@ -406,7 +464,8 @@ impl SpringBake {
             let t = k as f64 * step;
             // The parent's angular acceleration over the step, by its second difference: the
             // swing feels it as a constant force, so the step's solve is exact.
-            let accel = (drive(t + step) - 2.0 * drive(t) + drive((t - step).max(0.0))) / (step * step);
+            let accel =
+                (drive(t + step) - 2.0 * drive(t) + drive((t - step).max(0.0))) / (step * step);
             let shift = -accel / (spring.w0 * spring.w0);
             let m = spring.at(e - shift, v, step);
             e = shift + m.e;
@@ -453,14 +512,28 @@ mod tests {
         let doc = along(serde_json::json!({"data": "along"}));
         let program = crate::program::Program::compile(&doc).expect("the document compiles");
         let at = |s: f64| {
-            let f = crate::eval::frame(&doc, &program, (s * 705_600_000.0) as i64, crate::eval::Validity::Full);
+            let f = crate::eval::frame(
+                &doc,
+                &program,
+                (s * 705_600_000.0) as i64,
+                crate::eval::Validity::Full,
+            );
             let pos = &f.items["dot"]["at"]["pos"];
             [pos[0].as_f64().unwrap(), pos[1].as_f64().unwrap()]
         };
         // Half the time is half the 120 u: 30 u along the first side and 30 down the second.
-        for (s, want) in [(0.0, [0.0, 0.0]), (0.125, [15.0, 0.0]), (0.5, [30.0, 30.0]), (0.75, [30.0, 60.0]), (1.0, [30.0, 90.0])] {
+        for (s, want) in [
+            (0.0, [0.0, 0.0]),
+            (0.125, [15.0, 0.0]),
+            (0.5, [30.0, 30.0]),
+            (0.75, [30.0, 60.0]),
+            (1.0, [30.0, 90.0]),
+        ] {
             let got = at(s);
-            assert!((got[0] - want[0]).abs() < 1e-9 && (got[1] - want[1]).abs() < 1e-9, "at {s} s: {got:?}, not {want:?}");
+            assert!(
+                (got[0] - want[0]).abs() < 1e-9 && (got[1] - want[1]).abs() < 1e-9,
+                "at {s} s: {got:?}, not {want:?}"
+            );
         }
     }
 
@@ -468,9 +541,18 @@ mod tests {
     fn a_fraction_naming_no_keyed_data_value_is_refused() {
         let doc = along(serde_json::json!({"data": "nothing"}));
         let refused = crate::program::Program::compile(&doc).expect_err("refused");
-        assert_eq!((refused.code, refused.path.as_str()), ("ref_unresolved", "constraints/go/fraction/data"));
-        assert_eq!(Fraction::of(Some(&serde_json::json!({"data": 3}))), Err("bad_doc"));
-        assert_eq!(Fraction::of(Some(&serde_json::json!(0.25))), Ok(Fraction::Fixed(0.25)));
+        assert_eq!(
+            (refused.code, refused.path.as_str()),
+            ("ref_unresolved", "constraints/go/fraction/data")
+        );
+        assert_eq!(
+            Fraction::of(Some(&serde_json::json!({"data": 3}))),
+            Err("bad_doc")
+        );
+        assert_eq!(
+            Fraction::of(Some(&serde_json::json!(0.25))),
+            Ok(Fraction::Fixed(0.25))
+        );
     }
 
     #[test]

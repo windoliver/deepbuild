@@ -148,12 +148,12 @@ pub fn anchored(anchor: Anchor, target: [f64; 4], w: f64, h: f64, offset: f64) -
 
 /// The bucket of a zoom: buckets are √2 apart, bucket 0 holding the base zoom.
 pub fn bucket(zoom: f64, base: f64) -> i32 {
-    ((zoom / base).log2() * 2.0 + 1e-9).floor() as i32
+    (deep_canvas::ops::log2(zoom / base) * 2.0 + 1e-9).floor() as i32
 }
 
 /// A bucket's zoom, the one it is placed at.
 pub fn bucket_zoom(bucket: i32, base: f64) -> f64 {
-    base * 2f64.powf(f64::from(bucket) / 2.0)
+    base * deep_canvas::ops::pow(2.0, f64::from(bucket) / 2.0)
 }
 
 /// The occupancy bitmap: rows of 32-bit words, one bit per cell.
@@ -329,7 +329,7 @@ pub const FADE_MARGIN: f64 = 0.125;
 /// the bucket's last [`FADE_MARGIN`] of log-zoom. It reads the zoom only, never the time.
 pub fn opacity(here: &Spot, next: &Spot, zoom: f64, base: f64) -> f64 {
     let visible = |s: &Spot| f64::from(u8::from(matches!(s, Spot::At { .. })));
-    let pos = (zoom / base).log2() * 2.0;
+    let pos = deep_canvas::ops::log2(zoom / base) * 2.0;
     let into = pos - pos.floor();
     let (a, b) = (visible(here), visible(next));
     if into < 1.0 - FADE_MARGIN || a == b {

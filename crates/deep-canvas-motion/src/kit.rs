@@ -45,7 +45,13 @@ struct Carried(Option<Pose>);
 
 /// The fixture's spring chain, baked once at check as the kind bakes it, and read at each time.
 fn bake() -> SpringBake {
-    SpringBake::bake(|s| 40.0 * deep_canvas::ops::sin(3.0 * s), 1.0, 2.0, 0.5, 60.0)
+    SpringBake::bake(
+        |s| 40.0 * deep_canvas::ops::sin(3.0 * s),
+        1.0,
+        2.0,
+        0.5,
+        60.0,
+    )
 }
 
 /// The fixture's target at time `t` (0 to 49) and the param `p` that scales how far it is.
@@ -68,10 +74,20 @@ fn own_at(t: u32) -> Pose {
 }
 
 /// One solve of kind `name` at time `t` with param `p`: the pose, the reads in order and the ops.
-fn run(name: &str, t: u32, p: f64, planted: Planted, carried: &mut Carried, bake: &SpringBake) -> (Pose, Vec<&'static str>, u64) {
+fn run(
+    name: &str,
+    t: u32,
+    p: f64,
+    planted: Planted,
+    carried: &mut Carried,
+    bake: &SpringBake,
+) -> (Pose, Vec<&'static str>, u64) {
     let mut ops = Ops::default();
     let mut order = Vec::new();
-    let reads = KINDS.iter().find(|(n, _)| *n == name).map_or(&[][..], |(_, r)| *r);
+    let reads = KINDS
+        .iter()
+        .find(|(n, _)| *n == name)
+        .map_or(&[][..], |(_, r)| *r);
     let target = target_at(t, p);
     let own = own_at(t);
     // The fixture evaluates every read the kind declares, in its order, before the solve.
@@ -81,7 +97,12 @@ fn run(name: &str, t: u32, p: f64, planted: Planted, carried: &mut Carried, bake
     let pose = match name {
         "child_of" => constraint::child_of(&target, &own, &mut ops),
         "follow_path" => {
-            let table = ArcTable::new(vec![[0.0, 0.0], [40.0, 0.0], [40.0, 30.0 + p], [90.0, 30.0]]);
+            let table = ArcTable::new(vec![
+                [0.0, 0.0],
+                [40.0, 0.0],
+                [40.0, 30.0 + p],
+                [90.0, 30.0],
+            ]);
             constraint::follow_path(&own, &table, tf / 49.0, true, [0.0, 2.0], &mut ops)
         }
         "look_at" => match planted {
@@ -112,7 +133,14 @@ fn run(name: &str, t: u32, p: f64, planted: Planted, carried: &mut Carried, bake
             constraint::limit(&moved, What::Location, &bounds, &mut ops)
         }
         "reach2" => {
-            let r = constraint::reach2([0.0, 0.0], [30.0, 20.0], [target.pos[0] * 0.2, target.pos[1] * 0.2], 1.0, true, &mut ops);
+            let r = constraint::reach2(
+                [0.0, 0.0],
+                [30.0, 20.0],
+                [target.pos[0] * 0.2, target.pos[1] * 0.2],
+                1.0,
+                true,
+                &mut ops,
+            );
             Pose {
                 pos: [r.end[0], r.end[1], 0.0],
                 rot: [0.0, r.upper, r.lower],
@@ -150,8 +178,20 @@ fn digest(poses: &BTreeMap<u32, Pose>) -> String {
 
 /// Kind `name`'s fixture, from its solve (or the planted one) run for real.
 pub fn fixture(name: &str, planted: Planted, cycle: Value) -> Value {
-    let planted = if name == PLANTED_KIND { planted } else { Planted::None };
-    let baked = if name == "spring_chain" { bake() } else { SpringBake { step: 1.0, swings: vec![0.0], max_swing: 0.0 } };
+    let planted = if name == PLANTED_KIND {
+        planted
+    } else {
+        Planted::None
+    };
+    let baked = if name == "spring_chain" {
+        bake()
+    } else {
+        SpringBake {
+            step: 1.0,
+            swings: vec![0.0],
+            max_swing: 0.0,
+        }
+    };
     let run = |t: u32, p: f64, carried: &mut Carried| run(name, t, p, planted, carried, &baked);
     let (_, order, _) = run(7, 16.0, &mut Carried::default());
     let ops: Vec<u64> = [0.0, 16.0, 64.0]
@@ -191,7 +231,10 @@ pub fn entries(planted: Planted, cycle: impl Fn(&str) -> Value) -> Vec<(&'static
                 declared.push("earlier(self.rotation)");
             }
             let fixture = fixture(name, planted, cycle(name));
-            (*name, json!({"reads": declared, "writes": ["self.transform"], "fixture": fixture}))
+            (
+                *name,
+                json!({"reads": declared, "writes": ["self.transform"], "fixture": fixture}),
+            )
         })
         .collect()
 }

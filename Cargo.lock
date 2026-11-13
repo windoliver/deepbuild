@@ -2770,6 +2770,7 @@ dependencies = [
 name = "deep-text"
 version = "0.0.0"
 dependencies = [
+ "deep-canvas",
  "deep-canvas-seams",
  "fearless_simd 0.7.0",
  "icu_properties",
