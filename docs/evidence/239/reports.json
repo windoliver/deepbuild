@@ -9,8 +9,8 @@
         "determinism": "exact",
         "result": "PASS",
         "timing": {
-          "render_ms": 35523.94737500003,
-          "hash_ms": 1610.9201229999999
+          "render_ms": 61433.479301000014,
+          "hash_ms": 2583.887174
         }
       },
       "twin_unplanted": {
@@ -21,8 +21,8 @@
         "determinism": "exact",
         "result": "PASS",
         "timing": {
-          "render_ms": 261.932459,
-          "hash_ms": 193.01775
+          "render_ms": 776.472709,
+          "hash_ms": 616.8382080000001
         }
       },
       "twin": {
@@ -36,15 +36,15 @@
             "ids": [],
             "doc": "01JB239D000000000000000001",
             "t": 352799999,
-            "what": "playing to 352799999 draws \"1619f050bb2d1a2076dfd9e405ae873e\", seeking to it \"d9c6af21acf60336bd9abdde98b7b5f1\""
+            "what": "playing to 352799999 draws \"b8abbc9482b801bb0199f1bd7702a91d\", seeking to it \"40011a27040564c544129acde92e4de2\""
           }
         ],
         "machines": "same",
         "determinism": "exact",
         "result": "FAIL",
         "timing": {
-          "render_ms": 296.368207,
-          "hash_ms": 191.10779200000002
+          "render_ms": 591.7342910000001,
+          "hash_ms": 415.715874
         }
       }
     },
@@ -114,7 +114,7 @@
         "determinism": "exact",
         "result": "PASS",
         "timing": {
-          "check_ms": 0.948209
+          "check_ms": 1.2351249999999998
         }
       },
       "twin": {
@@ -136,17 +136,17 @@
               5221440000,
               7056000000
             ],
-            "what": "layout-twin is cut by the frame: left by 5217.427 u, right by 5215.845 u",
+            "what": "layout-twin is cut by the frame: left by 3996.17 u, right by 4049.991 u",
             "fix": "Scale the text to the safe width.",
             "item": "layout-twin",
             "sides": [
               {
                 "edge": "left",
-                "by": 5217.427
+                "by": 3996.17
               },
               {
                 "edge": "right",
-                "by": 5215.845
+                "by": 4049.991
               }
             ],
             "fix_ops": [
@@ -155,7 +155,7 @@
                 "id": "layout-twin",
                 "path": "items/layout-twin/at/pos",
                 "value": [
-                  -167.697958795737,
+                  -378.09454241154134,
                   180,
                   0
                 ]
@@ -164,19 +164,19 @@
                 "op": "set",
                 "id": "layout-twin",
                 "path": "items/layout-twin/params/size",
-                "value": 18.932370883387982
+                "value": 23.77827321152385
               },
               {
                 "op": "set",
                 "id": "layout-twin",
                 "path": "items/layout-twin/params/box/w",
-                "value": 1615.5623153824413
+                "value": 2029.079314050035
               },
               {
                 "op": "set",
                 "id": "layout-twin",
                 "path": "items/layout-twin/params/box/h",
-                "value": 37.864741766775964
+                "value": 47.5565464230477
               }
             ],
             "doc": "01JB239D000000000000000001"
@@ -286,36 +286,36 @@
         "determinism": "exact",
         "result": "FAIL",
         "timing": {
-          "check_ms": 1.288209
+          "check_ms": 3.310251
         }
       }
     },
     "frame_budget": {
       "film": {
-        "verdict": "PASS",
+        "verdict": "INCONCLUSIVE",
         "limits": {
           "gpu": {
             "limit_ms": 10,
-            "verdict": "PASS",
+            "verdict": "INCONCLUSIVE",
             "runs": [
               {
-                "p95_ms": 0.2856670022010803,
+                "p95_ms": 0.2894589900970459,
                 "invalid": []
               },
               {
-                "p95_ms": 0.28541702032089233,
+                "p95_ms": 0.28637492656707764,
                 "invalid": []
               },
               {
-                "p95_ms": 0.285457968711853,
+                "p95_ms": 0.28666698932647705,
                 "invalid": []
               },
               {
-                "p95_ms": 0.2855830192565918,
+                "p95_ms": 0.2882080078125,
                 "invalid": []
               },
               {
-                "p95_ms": 0.28566598892211914,
+                "p95_ms": 0.28945791721343994,
                 "invalid": []
               }
             ],
@@ -324,26 +324,26 @@
           },
           "cpu": {
             "limit_ms": 4,
-            "verdict": "PASS",
+            "verdict": "INCONCLUSIVE",
             "runs": [
               {
-                "p95_ms": 0.119709,
+                "p95_ms": 0.367959,
                 "invalid": []
               },
               {
-                "p95_ms": 0.208958,
+                "p95_ms": 0.303167,
                 "invalid": []
               },
               {
-                "p95_ms": 0.173375,
+                "p95_ms": 0.304458,
                 "invalid": []
               },
               {
-                "p95_ms": 0.11558299999999999,
+                "p95_ms": 0.32375,
                 "invalid": []
               },
               {
-                "p95_ms": 0.110084,
+                "p95_ms": 0.363709,
                 "invalid": []
               }
             ],
@@ -427,8 +427,8 @@
         "determinism": "exact",
         "result": "PASS",
         "timing": {
-          "render_ms": 9224.090621000005,
-          "hash_ms": 1368.3708729999998
+          "render_ms": 18651.043872000006,
+          "hash_ms": 2744.692039999999
         }
       },
       "twin_unplanted": {
@@ -439,8 +439,8 @@
         "determinism": "exact",
         "result": "PASS",
         "timing": {
-          "render_ms": 260.950875,
-          "hash_ms": 195.354375
+          "render_ms": 287.819959,
+          "hash_ms": 207.441458
         }
       },
       "twin": {
@@ -461,8 +461,8 @@
         "determinism": "exact",
         "result": "FAIL",
         "timing": {
-          "render_ms": 296.545082,
-          "hash_ms": 197.04500100000004
+          "render_ms": 295.94879099999997,
+          "hash_ms": 193.19758499999998
         }
       }
     },
@@ -550,7 +550,7 @@
         "determinism": "exact",
         "result": "PASS",
         "timing": {
-          "check_ms": 0.546749
+          "check_ms": 0.5649160000000001
         }
       },
       "twin": {
@@ -652,7 +652,7 @@
         "determinism": "exact",
         "result": "FAIL",
         "timing": {
-          "check_ms": 1.1434170000000001
+          "check_ms": 0.946042
         }
       }
     },
@@ -665,23 +665,23 @@
             "verdict": "INCONCLUSIVE",
             "runs": [
               {
-                "p95_ms": 0.2856670022010803,
+                "p95_ms": 0.2859170436859131,
                 "invalid": []
               },
               {
-                "p95_ms": 0.28554201126098633,
+                "p95_ms": 0.2860419750213623,
                 "invalid": []
               },
               {
-                "p95_ms": 0.2856670022010803,
+                "p95_ms": 0.28587496280670166,
                 "invalid": []
               },
               {
-                "p95_ms": 0.2857919931411743,
+                "p95_ms": 0.2853749990463257,
                 "invalid": []
               },
               {
-                "p95_ms": 0.28470802307128906,
+                "p95_ms": 0.28550004959106445,
                 "invalid": []
               }
             ],
@@ -693,23 +693,23 @@
             "verdict": "INCONCLUSIVE",
             "runs": [
               {
-                "p95_ms": 0.150084,
+                "p95_ms": 0.272625,
                 "invalid": []
               },
               {
-                "p95_ms": 0.11675,
+                "p95_ms": 0.281709,
                 "invalid": []
               },
               {
-                "p95_ms": 0.08729200000000001,
+                "p95_ms": 0.228167,
                 "invalid": []
               },
               {
-                "p95_ms": 0.10562500000000001,
+                "p95_ms": 0.137709,
                 "invalid": []
               },
               {
-                "p95_ms": 0.086417,
+                "p95_ms": 0.129542,
                 "invalid": []
               }
             ],

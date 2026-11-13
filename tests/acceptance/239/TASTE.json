@@ -2,16 +2,16 @@
   "issue": 239,
   "criterion": "#239.85750ec9",
   "verdict": "looks_right",
-  "who": "Claude, on the owner's standing delegation of taste calls, restated in the #239 plan the owner approved; the owner can overrule it on the PR",
-  "when": "2026-11-13T08:42:16Z",
+  "who": "Claude, on the owner's standing delegation of taste calls, restated in the #239 plan the owner approved and asked again on Nov 13 to validate the pictures and close the gaps; the owner can overrule it on the PR",
+  "when": "2026-11-13T20:43:13Z",
   "screenshots": {
-    "strokes-and-paper-drawing.png": "0340625593f2c013302395f6c119ac505fefffebbc5ce15ff3433a568fc2e08c",
-    "strokes-and-paper-drawn.png": "eb57a7ab236295167395e496f1c50d112733b76e11d6f1307eb07d8be5160767",
-    "strokes-and-paper.mp4": "d221a6891fee5589822ff393a8368ef924052323b19677f80be411746cf283ba",
-    "camera-and-transitions-shot.png": "0cf18e4ad7851d3d3479f2956a0cd02b04fbd2c82844b3b8e8dc19adcaf2c356",
-    "camera-and-transitions-transition-1.png": "e6ee7b08c3f4c19a0859da8a29c96c4c407c2835940811ab57c90aa57aff891a",
-    "camera-and-transitions-transition-2.png": "7b588d121fff53b027d0eabe81784e44924bb50bcc5fe10ca3d4939b70c26b2b",
-    "camera-and-transitions.mp4": "0b97ea47f7ac3d573d592e3e1f2aacb5475ed53160d79476c8cccd9f13835f98"
+    "strokes-and-paper-drawing.png": "1b81b74b370231c4df7f8037e6235234aaf7fabe1af2b19a851230d57a0a28c2",
+    "strokes-and-paper-drawn.png": "250390b900cef9b7687613abee78dbb8aa0c23560e2b110b1770c4336b88129c",
+    "strokes-and-paper.mp4": "4abc5119162e9ddd5951915387e8ad9629096ad74ddcbc8653d932f72bb4498b",
+    "camera-and-transitions-shot.png": "d60c2cd38cd43d1bb1c7340ba3547b4afe0a7be5ec424943e0e56fc56162c812",
+    "camera-and-transitions-transition-1.png": "bdcc90c747246391bffb0473c225bcde32a0bf658fd5f01542efcf3b9f158e97",
+    "camera-and-transitions-transition-2.png": "1b45fae0cfe51de4ebc2c47a1c45158109b2e4d0d5289231a71e985e5be5410f",
+    "camera-and-transitions.mp4": "02dd61ea3c474b8456ee6b5db0d22db5d7543a22b28ddb2da6365492077052de"
   },
-  "note": "Looked at each PNG at full size and both recordings' streams (300 H.264 frames at 1280 x 720, AAC 48 kHz stereo, 10 s). Strokes and paper: the underline drawn and the spiral half drawn on at 2.3 s; at 9.5 s every stroke drawn, the house on its index card, the pink sun and signature, on the notebook look's cream ground. The paper draws as the look's flat ground in an export: its rules, margin and tooth draw only in the live GPU view, a follow-up named in the PR. Camera and transitions: the pan across the bar chart at 5.8 s; the cross-fade at 4 s with the title card and the bars both showing; the wipe at 7.5 s from the bars to the ring, both sides showing."
+  "note": "Looked at each PNG at full size, every 25th frame of both recordings, and their sound (300 H.264 frames at 1280 x 720; AAC 48 kHz stereo at -30.7 dBFS RMS in every second, peak -19.6 dBFS). Strokes and paper: the title in the look's hand face, as the live view sets it; the spiral half drawn on at 2.3 s; at 9.5 s every stroke drawn, the house on its index card, the pink sun and signature, on the notebook look's cream ground. The paper is a flat cream ground in the live view and the export alike: no renderer draws a look's ruled lines, margin or pencil texture yet (#2439). Camera and transitions: the pan across the bar chart at 5.8 s, sweeping evenly around the panel; the cross-fade at 4 s with the title card and the bars both showing; the wipe at 7.5 s from the bars to the ring, both sides showing (the faint marks left of the ring are at most 4 code values off the card, encoder noise)."
 }
