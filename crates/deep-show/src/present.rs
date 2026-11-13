@@ -151,6 +151,7 @@ pub(crate) fn clocked(
                     .map(|&(a, b)| (moved(a), moved(b)))
                     .collect(),
                 emitter: s.emitter.clone(),
+                synth: s.synth.clone(),
             });
         }
     }
