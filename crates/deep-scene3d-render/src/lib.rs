@@ -8,13 +8,14 @@
 //! target and writes the slot.
 
 pub mod ao;
-pub mod cull;
 pub mod created;
+pub mod cull;
 mod diag;
 pub mod env;
 pub mod flare;
 mod glass;
 pub mod held;
+pub mod history;
 pub mod local;
 pub mod maps;
 mod mesh;
@@ -156,6 +157,8 @@ pub struct Planted {
     pub upscale: surface::Planted,
     /// #386: outlines draw at the internal size, before the upscale.
     pub outlines_before_upscale: bool,
+    /// #173: outlines draw into each window frame, before frame history's resolve.
+    pub outlines_in_history: bool,
     /// #386: status outlines draw at the internal size, before the upscale.
     pub status_before_upscale: bool,
     /// #386: status outlines draw with no depth test.
@@ -1413,7 +1416,18 @@ fn culled(
     depth_stencil: Option<wgpu::DepthStencilState>,
     cull: Option<wgpu::Face>,
 ) -> wgpu::RenderPipeline {
-    specialized(d, samples, label, layout, module, (vs, buffers), fragment, depth_stencil, cull, &[])
+    specialized(
+        d,
+        samples,
+        label,
+        layout,
+        module,
+        (vs, buffers),
+        fragment,
+        depth_stencil,
+        cull,
+        &[],
+    )
 }
 
 /// [`culled`] with the module's pipeline-overridable `constants` set (#432: a feature set's
@@ -1899,6 +1913,13 @@ pub struct Renderer {
     /// The GPU surface it draws through, and the upscale's pipelines once compiled (#386).
     pub surface: Surface,
     pub upscale: Option<Arc<Upscale>>,
+    /// Frame history resolves this frame (#173): lines 1 device px or thinner, outlines and
+    /// labels draw after it at display size, through the camera unjittered; `jitter` is its
+    /// window frame's offset, display px right and down, added to the scene's.
+    pub history: bool,
+    pub jitter: [f64; 2],
+    /// The window a view's frames draw into and what this frame does with it (#173).
+    pub frame_history: history::State,
     /// The key sun's cascade maps at this many times their size: 2 at the climb's top rung
     /// (#425), else 1.
     pub shadow_scale: u32,
@@ -2262,7 +2283,16 @@ fn clear_pipeline(
     kind: usize,
     after_resolve: bool,
 ) -> wgpu::RenderPipeline {
-    shaded_clear_pipeline(d, samples, module, layout, planted, kind, after_resolve, "mesh_fs")
+    shaded_clear_pipeline(
+        d,
+        samples,
+        module,
+        layout,
+        planted,
+        kind,
+        after_resolve,
+        "mesh_fs",
+    )
 }
 
 /// A fade's two pipelines through a material operator's fragment stage (#432): its depth pass,
@@ -2522,7 +2552,11 @@ fn opaque_pipeline(
     specialized(
         d,
         samples,
-        if lobes { "scene3d.opaque_lobes" } else { "scene3d.opaque" },
+        if lobes {
+            "scene3d.opaque_lobes"
+        } else {
+            "scene3d.opaque"
+        },
         Some(layout),
         module,
         ("mesh_vs", buffers),
@@ -2631,7 +2665,12 @@ struct Families {
 impl Families {
     /// Compiles the pipelines `layer` draws with that aren't yet, naming each in `names`; how
     /// many it compiled.
-    fn ensure(&mut self, d: &deep_gpu::counted::Wgpu, layer: &Layer3, names: &mut Vec<&'static str>) -> u32 {
+    fn ensure(
+        &mut self,
+        d: &deep_gpu::counted::Wgpu,
+        layer: &Layer3,
+        names: &mut Vec<&'static str>,
+    ) -> u32 {
         let mut made = 0;
         let (module, draw, text, fz, samples) = (
             &self.module,
@@ -2713,6 +2752,16 @@ impl Renderer {
     }
 
     pub fn new(device: &Device, planted: Planted) -> Renderer {
+        Renderer::sampled(
+            device,
+            planted,
+            if planted.single_sample { 1 } else { MSAA },
+        )
+    }
+
+    /// A renderer whose geometry pass draws `samples` samples a pixel: one under frame
+    /// history's temporal upscale, whose window rebuilds the pixels a box filter would blur (#173).
+    pub fn sampled(device: &Device, planted: Planted, samples: u32) -> Renderer {
         let d = &device.device;
         let module = d.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("scene3d"),
@@ -2915,13 +2964,11 @@ impl Renderer {
             LOBE_ENTRIES * std::mem::size_of::<LobeEntry>(),
         );
         let lights_buffer = uniform_buffer("scene3d lights", std::mem::size_of::<LightsUniform>());
-        let dfg_buffer = d.create_buffer_init(
-            &wgpu::util::BufferInitDescriptor {
-                label: Some("scene3d dfg"),
-                contents: bytemuck::cast_slice(&dfg_table()),
-                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            },
-        );
+        let dfg_buffer = d.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("scene3d dfg"),
+            contents: bytemuck::cast_slice(&dfg_table()),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
         let env = EnvState {
             prefilter: env::Prefilter::new(d),
             buffer: uniform_buffer("scene3d env", std::mem::size_of::<EnvUniform>()),
@@ -2982,7 +3029,6 @@ impl Renderer {
         let text_layout = layout(&[Some(&frame_layout), Some(&mask_layout)]);
         let output_pipeline_layout = layout(&[Some(&output_layout)]);
         let mesh_buffers = mesh_buffers();
-        let samples = if planted.single_sample { 1 } else { MSAA };
         let mesh = |cull| {
             opaque_pipeline(
                 d,
@@ -3370,6 +3416,9 @@ impl Renderer {
             profiler: None,
             surface: Surface::default(),
             upscale: None,
+            history: false,
+            jitter: [0.0; 2],
+            frame_history: Default::default(),
             shadow_scale: 1,
             size: [0, 0],
             low: None,
@@ -3509,7 +3558,11 @@ impl Renderer {
     }
 
     /// The output pass's bind group: `linear` and the tone uniform.
-    fn output_bind(&self, d: &deep_gpu::counted::Wgpu, linear: &wgpu::TextureView) -> wgpu::BindGroup {
+    fn output_bind(
+        &self,
+        d: &deep_gpu::counted::Wgpu,
+        linear: &wgpu::TextureView,
+    ) -> wgpu::BindGroup {
         bind_group(
             d,
             "scene3d output",
@@ -3587,7 +3640,7 @@ impl Renderer {
 
     /// The internal size a frame of `size` draws at.
     pub fn internal_size(&self, size: [u32; 2]) -> [u32; 2] {
-        if self.surface.scale != 1.0 && self.upscale.is_some() {
+        if self.surface.scale != 1.0 && (self.upscale.is_some() || self.history) {
             surface::scaled(size, self.surface.scale)
         } else {
             size
@@ -4159,7 +4212,12 @@ impl Renderer {
             }
         }
         for (k, &(i, weight)) in policy.shaded.iter().enumerate().take(SHADED) {
-            u.answers[k] = [weight as f32, f32::from_bits(op::light_hash(&scene.lights[i].id)), 0.0, 0.0];
+            u.answers[k] = [
+                weight as f32,
+                f32::from_bits(op::light_hash(&scene.lights[i].id)),
+                0.0,
+                0.0,
+            ];
         }
         if self.planted.lobes & PLANT_CALLS_CUT != 0 {
             u.answers[0][2] = policy.left_out.len() as f32;
@@ -4233,9 +4291,11 @@ impl Renderer {
         self.clusters = grid;
         self.counts.lights_left_out = policy.left_out;
         deep_gpu::alloc::outside(|| {
-            device
-                .queue
-                .write_changed(&self.lights_buffer, &self.written.lights, bytemuck::bytes_of(&u))
+            device.queue.write_changed(
+                &self.lights_buffer,
+                &self.written.lights,
+                bytemuck::bytes_of(&u),
+            )
         });
     }
 
@@ -4686,7 +4746,13 @@ impl Renderer {
                 .as_ref()
                 .is_some_and(|m| m.alpha_mode == AlphaMode::Mask)
         };
-        let casting = || scene.layers.iter().flat_map(|l| &l.solids).filter(|s| s.cast_shadow);
+        let casting = || {
+            scene
+                .layers
+                .iter()
+                .flat_map(|l| &l.solids)
+                .filter(|s| s.cast_shadow)
+        };
         self.mask_casts = casting().any(mask);
         let mut maps: Vec<String> = Vec::new();
         if let Some(sun) = scene.sun.as_ref().filter(|s| s.shadow) {
@@ -4708,7 +4774,11 @@ impl Renderer {
         }
         let target = maps.join(", ");
         for kind_mask in [false, true] {
-            let made = if kind_mask { self.shadow.mask.is_some() } else { self.shadow.pipeline.is_some() };
+            let made = if kind_mask {
+                self.shadow.mask.is_some()
+            } else {
+                self.shadow.pipeline.is_some()
+            };
             let casters: Vec<&Solid> = casting().filter(|s| mask(s) == kind_mask).collect();
             if made || casters.is_empty() {
                 continue;
@@ -4734,8 +4804,12 @@ impl Renderer {
             let mut sets: Vec<&str> = casters.iter().map(|s| created::caster_set(s)).collect();
             sets.sort_unstable();
             sets.dedup();
-            let items = casters.iter().map(|s| created::item_of(&s.id).to_string()).collect();
-            self.made_for.insert(name, (items, sets.join(","), target.clone()));
+            let items = casters
+                .iter()
+                .map(|s| created::item_of(&s.id).to_string())
+                .collect();
+            self.made_for
+                .insert(name, (items, sets.join(","), target.clone()));
             self.compiled += 1;
             self.names.push(name);
         }
@@ -4746,13 +4820,22 @@ impl Renderer {
         while self.logged < self.names.len() {
             let name = self.names[self.logged];
             let (mut items, set, target) = self.made_for.remove(name).unwrap_or_else(|| {
-                (Vec::new(), name.trim_start_matches("scene3d.").to_string(), "view".into())
+                (
+                    Vec::new(),
+                    name.trim_start_matches("scene3d.").to_string(),
+                    "view".into(),
+                )
             });
             let mut seen = BTreeSet::new();
             items.retain(|i| seen.insert(i.clone()));
             let samples = self.families.samples.to_le_bytes();
             self.log.push(created::Created {
-                key: created::key128(&[name.as_bytes(), set.as_bytes(), target.as_bytes(), &samples]),
+                key: created::key128(&[
+                    name.as_bytes(),
+                    set.as_bytes(),
+                    target.as_bytes(),
+                    &samples,
+                ]),
                 items,
                 feature_set: set,
                 target,
@@ -4960,7 +5043,12 @@ impl Renderer {
         let solids = || scene.layers.iter().flat_map(|l| &l.solids);
         if p.bind_group_per_item {
             for _ in solids() {
-                bind_group(d, "planted per item", &self.frame_layout, [self.frame_buffer.as_entire_binding()]);
+                bind_group(
+                    d,
+                    "planted per item",
+                    &self.frame_layout,
+                    [self.frame_buffer.as_entire_binding()],
+                );
             }
         }
         if p.uploads_every_transform {
@@ -4968,11 +5056,17 @@ impl Renderer {
                 .flat_map(|s| {
                     let m = s.model;
                     let rows = [m[0], m[1], m[2], [0.0, 0.0, 0.0, 1.0]];
-                    rows.into_iter().flatten().flat_map(|v| (v as f32).to_le_bytes())
+                    rows.into_iter()
+                        .flatten()
+                        .flat_map(|v| (v as f32).to_le_bytes())
                 })
                 .collect();
             let size = bytes.len().max(64) as u64;
-            if self.planted_transforms.as_ref().is_none_or(|b| b.size() < size) {
+            if self
+                .planted_transforms
+                .as_ref()
+                .is_none_or(|b| b.size() < size)
+            {
                 self.planted_transforms = Some(d.create_buffer(&wgpu::BufferDescriptor {
                     label: Some("planted transforms"),
                     size,
@@ -5264,7 +5358,12 @@ impl Renderer {
                 .order
                 .iter()
                 .filter_map(|id| self.batches.get(id))
-                .any(|b| b.solids.values().chain(b.casters.values()).any(|s| s.cull.is_some()));
+                .any(|b| {
+                    b.solids
+                        .values()
+                        .chain(b.casters.values())
+                        .any(|s| s.cull.is_some())
+                });
             if let Some(t) = self.targets.as_ref().filter(|_| culled) {
                 let samples = self.families.samples;
                 if self
@@ -5487,7 +5586,8 @@ impl Renderer {
                     .filter(|s| transmits(s) || s.op.as_ref().is_some_and(op::reads_backdrop))
                     .map(|s| created::item_of(&s.id).to_string())
                     .collect();
-                self.made_for.insert(glass::PASS, (items, "transmission".into(), "view".into()));
+                self.made_for
+                    .insert(glass::PASS, (items, "transmission".into(), "view".into()));
                 self.compiled += 1;
                 self.names.push(glass::PASS);
             }
@@ -5512,8 +5612,8 @@ impl Renderer {
         // Look: samples (#423): a sub-sample's offset moves the projection by a fraction of a
         // pixel, right and down.
         let [jx, jy] = [
-            2.0 * scene.jitter[0] / f64::from(scene.size[0].max(1)),
-            -2.0 * scene.jitter[1] / f64::from(scene.size[1].max(1)),
+            2.0 * (scene.jitter[0] + self.jitter[0]) / f64::from(scene.size[0].max(1)),
+            -2.0 * (scene.jitter[1] + self.jitter[1]) / f64::from(scene.size[1].max(1)),
         ];
         let w = rows[3];
         for (c, wc) in w.iter().enumerate() {
@@ -5562,7 +5662,7 @@ impl Renderer {
                 w as f32,
             ]
         };
-        let below = internal != scene.size;
+        let below = internal != scene.size || self.history;
         let forward = if self.planted.forward_z { 1.0 } else { 0.0 };
         let perspective = if cam.perspective { 1.0 } else { 0.0 };
         let frame = FrameUniform {
@@ -5608,7 +5708,13 @@ impl Renderer {
             frame.cap = v4(c.cap.unwrap_or([0.0; 3]), 1.0);
         }
         // The outline pass over the full-size slot, and over the internal size for the planted
-        // programs that draw there.
+        // programs that draw there; after frame history's resolve, unjittered.
+        let plain = cam.clip(depth);
+        let post = FrameUniform {
+            clip: std::array::from_fn(|c| std::array::from_fn(|r| plain[r][c] as f32)),
+            ..frame
+        };
+        let post = if self.history { post } else { frame };
         let display = FrameUniform {
             viewport: [
                 scene.size[0] as f32,
@@ -5616,19 +5722,28 @@ impl Renderer {
                 cam.scale as f32,
                 perspective,
             ],
-            px: [1.0, 2.0, k as f32, forward],
-            ..frame
+            // After frame history's resolve, lines test the display-size depth it writes.
+            px: [1.0, 2.0, if self.history { 0.0 } else { k as f32 }, forward],
+            ..post
         };
         let inside = FrameUniform {
             px: [1.0, 2.0, 1.0, forward],
-            ..frame
+            ..post
         };
         deep_gpu::alloc::outside(|| {
             let q = &device.queue;
             let w = &self.written;
             q.write_changed(&self.frame_buffer, &w.frame, bytemuck::bytes_of(&frame));
-            q.write_changed(&self.outlines.display, &w.display, bytemuck::bytes_of(&display));
-            q.write_changed(&self.outlines.internal, &w.internal, bytemuck::bytes_of(&inside));
+            q.write_changed(
+                &self.outlines.display,
+                &w.display,
+                bytemuck::bytes_of(&display),
+            );
+            q.write_changed(
+                &self.outlines.internal,
+                &w.internal,
+                bytemuck::bytes_of(&inside),
+            );
         });
         self.prepare_outlines(device, scene);
         // A scene of materials shades the key sun's shadow through its cascades (#422); one of
@@ -5724,9 +5839,11 @@ impl Renderer {
             power: rgb4(look.grade.power),
         };
         deep_gpu::alloc::outside(|| {
-            device
-                .queue
-                .write_changed(&self.tone_buffer, &self.written.tone, bytemuck::bytes_of(&tone))
+            device.queue.write_changed(
+                &self.tone_buffer,
+                &self.written.tone,
+                bytemuck::bytes_of(&tone),
+            )
         });
         self.ground = [
             decode(scene.ground[0]),
@@ -5827,8 +5944,18 @@ impl Renderer {
             };
             let wanted = layer.solids.iter().any(|s| of_kind(&s));
             if wanted && self.clear_pipelines[k].is_none() {
-                let items: Vec<String> = layer.solids.iter().filter(of_kind).map(|s| created::item_of(&s.id).to_string()).collect();
-                let set = layer.solids.iter().find(of_kind).map(created::feature_set).unwrap_or_default();
+                let items: Vec<String> = layer
+                    .solids
+                    .iter()
+                    .filter(of_kind)
+                    .map(|s| created::item_of(&s.id).to_string())
+                    .collect();
+                let set = layer
+                    .solids
+                    .iter()
+                    .find(of_kind)
+                    .map(created::feature_set)
+                    .unwrap_or_default();
                 self.made_for.insert(name, (items, set, "view".into()));
                 self.clear_pipelines[k] = Some(clear_pipeline(
                     &device.device,
@@ -5848,9 +5975,19 @@ impl Renderer {
         let glass = self.clear_pipelines[usize::from(GLASS)].is_some() || self.glass.is_some();
         for k in [BLEND, ADD].map(usize::from) {
             if glass && self.clear_pipelines[k].is_some() && self.late_pipelines[k].is_none() {
-                let items: Vec<String> = layer.solids.iter().filter(|s| clear(s) && usize::from(kind_of(s)) == k).map(|s| created::item_of(&s.id).to_string()).collect();
-                let set = if k == usize::from(ADD) { "add+over_glass" } else { "blend+over_glass" };
-                self.made_for.insert(LATE_NAMES[k], (items, set.into(), "view".into()));
+                let items: Vec<String> = layer
+                    .solids
+                    .iter()
+                    .filter(|s| clear(s) && usize::from(kind_of(s)) == k)
+                    .map(|s| created::item_of(&s.id).to_string())
+                    .collect();
+                let set = if k == usize::from(ADD) {
+                    "add+over_glass"
+                } else {
+                    "blend+over_glass"
+                };
+                self.made_for
+                    .insert(LATE_NAMES[k], (items, set.into(), "view".into()));
                 self.late_pipelines[k] = Some(clear_pipeline(
                     &device.device,
                     self.families.samples,
@@ -5902,8 +6039,20 @@ impl Renderer {
                 s,
                 clear(s) && !matches!(kind_of(s), BLEND | FADE | GLASS),
             );
+            // A terrain tile's pixels read its plate's full-detail normals (#2017).
+            let terrain = s.mesh.as_ref().and_then(|m| m.terrain.as_deref());
             let maps = match (&s.maps, &s.material) {
-                (Some(m), Some(_)) => self.maps.group(&device.device, &device.queue, m, taps),
+                (Some(m), Some(_)) => {
+                    self.maps
+                        .group(&device.device, &device.queue, m, taps, terrain)
+                }
+                _ if terrain.is_some() => self.maps.group(
+                    &device.device,
+                    &device.queue,
+                    &light::Maps::default(),
+                    taps,
+                    terrain,
+                ),
                 _ => 0,
             };
             // A material operator binds its inputs with the solid's maps, once per pair.
@@ -5933,6 +6082,7 @@ impl Renderer {
                     &device.queue,
                     source,
                     taps,
+                    terrain,
                     &m.layout,
                     m.entries(&refs),
                 );
@@ -5971,14 +6121,19 @@ impl Renderer {
                     &mesh_buffers(),
                     true,
                 ));
-                let name = ["scene3d.opaque_lobes", "scene3d.opaque_lobes_back", "scene3d.opaque_lobes_front"][cull as usize];
+                let name = [
+                    "scene3d.opaque_lobes",
+                    "scene3d.opaque_lobes_back",
+                    "scene3d.opaque_lobes_front",
+                ][cull as usize];
                 let items: Vec<String> = layer
                     .solids
                     .iter()
                     .filter(|x| !clear(x) && x.material.as_ref().is_some_and(|m| m.lobes.on()))
                     .map(|x| created::item_of(&x.id).to_string())
                     .collect();
-                self.made_for.insert(name, (items, created::feature_set(s), "view".into()));
+                self.made_for
+                    .insert(name, (items, created::feature_set(s), "view".into()));
                 self.compiled += 1;
                 self.names.push(name);
             }
@@ -6107,7 +6262,7 @@ impl Renderer {
                     [b[0].map(f64::from), b[1].map(f64::from)]
                 });
             }
-            if slot.0.3 != 0 {
+            if slot.0 .3 != 0 {
                 set.elements.push(s.row);
             }
             if self.cpu_cull {
@@ -6698,7 +6853,9 @@ impl Renderer {
         })?;
         let m = &solid.model;
         let positions = bytemuck::cast_slice::<u8, f32>(&bytes)
-            .chunks_exact(mesh::FLOATS)
+            .as_chunks::<{ mesh::FLOATS }>()
+            .0
+            .iter()
             .map(|v| {
                 let p = [v[0], v[1], v[2]].map(f64::from);
                 [0, 1, 2].map(|r| m[r][0] * p[0] + m[r][1] * p[1] + m[r][2] * p[2] + m[r][3])
@@ -7049,7 +7206,9 @@ impl Renderer {
                             pass.set_pipeline(cut);
                             pass.set_bind_group(3, group, &[]);
                         }
-                        (None, _, Some(p), true) | (None, Some(p), _, false) => pass.set_pipeline(p),
+                        (None, _, Some(p), true) | (None, Some(p), _, false) => {
+                            pass.set_pipeline(p)
+                        }
                         // Its caster kind's pipeline isn't made: the prepare that would make it
                         // didn't run for this frame.
                         _ => continue,
@@ -7474,9 +7633,15 @@ impl Renderer {
         // the slot from it (#382). Below scale 1 the output and the guard write the internal
         // frame, which the upscale and sharpen return to the slot's size (#386).
         let size = t.size;
-        let below = self.ensure_low(device);
+        // A frame of the window draws into its layer, and frame history's resolve returns the
+        // window to the slot in place of the upscale (#173).
+        let window = self.frame_history.jobs.take();
+        let below = window.is_none() && self.ensure_low(device);
         let low_view = self.low.as_ref().filter(|_| below).map(|l| l.view.clone());
-        let framed = low_view.clone().unwrap_or_else(|| slot.clone());
+        let framed = match &window {
+            Some(w) => w.layer.clone(),
+            None => low_view.clone().unwrap_or_else(|| slot.clone()),
+        };
         let finished = after.is_some().then(|| self.finished(device, size));
         let (target, pipeline) = match &finished {
             Some(f) => (f.clone(), self.output_f32.clone()),
@@ -7547,6 +7712,36 @@ impl Renderer {
             .unwrap_or(after_jobs.len());
         let colors = after_jobs.split_off(colors_at);
         jobs.extend(after_jobs);
+        // Line marks after frame history's resolve test the display's depth it writes.
+        let resolved = window.as_ref().and_then(|w| w.resolve.clone());
+        let after = |d: OutlineDraw| match &resolved {
+            Some(r) => r.lines(d),
+            None => d,
+        };
+        if let Some(w) = window {
+            let early = self.outline_draw(true);
+            let (profiler, slot) = (self.profiler.clone(), slot.clone());
+            let resolves = w.resolve.is_some();
+            jobs.push((
+                history::RESOLVE_PASS.into(),
+                Box::new(move |encoder| {
+                    // The planted outlines_in_history draws them into the window's frame.
+                    if let Some(early) = &early {
+                        early.record(encoder, &w.layer, None);
+                    }
+                    w.copy.record(encoder);
+                    if let Some(r) = &w.resolve {
+                        timed(&profiler, history::RESOLVE_PASS, encoder, |e, ts| {
+                            r.record(e, &slot, ts)
+                        });
+                    }
+                }),
+            ));
+            // A window frame drawn before the frame at t shows nothing of its own.
+            if !resolves {
+                return jobs;
+            }
+        }
         if let Some(low) = low_view {
             let early = self.outline_draw(true);
             let [upscale, sharpen] = self.surface_steps(device, slot).expect("below scale 1");
@@ -7574,14 +7769,17 @@ impl Renderer {
             ));
         }
         // Status outlines draw as the status colors, where the frame has them, over the labels.
-        let (outlines, statuses) = match self.outline_draw(false) {
+        let (outlines, statuses) = match self.outline_draw(false).map(after) {
             Some(draw) if !colors.is_empty() => {
                 let (draw, statuses) = draw.split();
                 (Some(draw), statuses)
             }
             draw => (draw, None),
         };
-        for (name, draw) in [(OUTLINE_PASS, outlines), (LABEL_PASS, self.label_draw())] {
+        for (name, draw) in [
+            (OUTLINE_PASS, outlines),
+            (LABEL_PASS, self.label_draw().map(after)),
+        ] {
             let Some(draw) = draw else { continue };
             let (profiler, target) = (self.profiler.clone(), slot.clone());
             jobs.push((
@@ -7663,10 +7861,12 @@ impl Renderer {
         let o = &self.outlines;
         let t = self.targets.as_ref()?;
         let binds = o.binds.as_ref()?;
-        let below = self.internal() != self.size && self.upscale.is_some();
+        let upscaled = self.internal() != self.size && self.upscale.is_some();
+        let below = upscaled || self.history;
         let p = self.planted;
-        let strokes_early = below && p.outlines_before_upscale;
-        let statuses_early = below && p.status_before_upscale;
+        let strokes_early =
+            upscaled && p.outlines_before_upscale || self.history && p.outlines_in_history;
+        let statuses_early = upscaled && p.status_before_upscale;
         let mut sets = Vec::new();
         let mut statuses = Vec::new();
         let take = |set: &Set, into: &mut Vec<(wgpu::Buffer, u32)>| {
@@ -8776,6 +8976,8 @@ pub struct Shared {
     pub post: Option<Box<dyn Post>>,
     /// Passes after the finish: the status guard and the status colors, where status can show.
     pub after: Option<Box<dyn After>>,
+    /// Samples a pixel its renderer's geometry pass draws (#173: one under temporal upscaling).
+    pub samples: u32,
 }
 
 /// scene3d as the GPU layer's render module: one view's renderer.
@@ -8791,6 +8993,7 @@ impl Module3 {
             planted,
             post: None,
             after: None,
+            samples: if planted.single_sample { 1 } else { MSAA },
         }));
         (
             Module3 {
@@ -8855,6 +9058,15 @@ impl RenderModule for Module3 {
             0.04,
             Determinism::LiveOnly,
         ));
+        // Or frame history's resolve, from the window into the slot (#173).
+        passes.push(pass(
+            history::RESOLVE_PASS,
+            1,
+            vec!["depth"],
+            vec!["slot"],
+            0.4,
+            Determinism::LiveOnly,
+        ));
         passes.push(pass(
             OUTLINE_PASS,
             2,
@@ -8895,7 +9107,7 @@ impl RenderModule for Module3 {
         let mut s = lock(&self.shared);
         let planted = s.planted;
         if !planted.builds_on_first_frame {
-            s.renderer = Some(Renderer::new(device, planted));
+            s.renderer = Some(Renderer::sampled(device, planted, s.samples));
         }
         Ok(())
     }
@@ -8911,7 +9123,7 @@ impl RenderModule for Module3 {
         };
         // The planted renderer compiles everything it draws with here, in the frame.
         if s.renderer.is_none() && s.planted.builds_on_first_frame {
-            s.renderer = Some(Renderer::new(device, s.planted));
+            s.renderer = Some(Renderer::sampled(device, s.planted, s.samples));
         }
         let Shared {
             renderer,
@@ -8927,6 +9139,7 @@ impl RenderModule for Module3 {
             renderer.feed(p.sources(device));
         }
         renderer.prepare(device, &scene, &look);
+        renderer.stage_window(device, &scene);
         renderer.jobs(
             device,
             &target.view,

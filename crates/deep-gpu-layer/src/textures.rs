@@ -165,6 +165,7 @@ pub fn imports(
     licenses: &BTreeMap<String, Value>,
     store: Option<&PathBuf>,
     paths: &mut BTreeMap<String, PathBuf>,
+    drops_dispersion: bool,
 ) -> Result<Vec<Value>, Value> {
     let mut out = Vec::new();
     for (id, item) in doc["items"].as_object().into_iter().flatten() {
@@ -190,11 +191,14 @@ pub fn imports(
             .pointer("/params/node/scene")
             .and_then(Value::as_u64)
             .unwrap_or(0) as usize;
-        let im = match deep_canvas_scene3d::gltf::import(&bytes, sha, scene, read) {
+        let mut im = match deep_canvas_scene3d::gltf::import(&bytes, sha, scene, read) {
             Ok(im) => im,
             Err(p) if whole => return Err(refused("out_of_range", format!("items/{id}/{p}"))),
             Err(_) => continue,
         };
+        if drops_dispersion {
+            deep_canvas_scene3d::gltf::drop_dispersion(&mut im);
+        }
         let license = licenses.get(sha).cloned().unwrap_or(Value::Null);
         let mut textures = Vec::new();
         let dir = std::env::temp_dir().join(format!("deep-gpu-images-{}", std::process::id()));

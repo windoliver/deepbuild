@@ -24,7 +24,7 @@ pub const KIND: &str = "tiles.terrain@1";
 pub struct Refusal {
     pub code: &'static str,
     pub path: String,
-    pub actual: Value,
+    pub actual: Box<Value>,
     pub message: String,
 }
 
@@ -41,7 +41,7 @@ fn bad(path: String) -> Refusal {
     Refusal {
         code: "bad_doc",
         path,
-        actual: Value::Null,
+        actual: Box::new(Value::Null),
         message: "the terrain recipe can't expand as its params say".into(),
     }
 }
@@ -56,7 +56,9 @@ fn square_neighbors(rules: &str) -> Vec<[i64; 2]> {
     match rules {
         "sides" => sides.to_vec(),
         "corners" => corners.to_vec(),
-        _ => vec![sides[0], corners[0], sides[1], corners[1], sides[2], corners[2], sides[3], corners[3]],
+        _ => vec![
+            sides[0], corners[0], sides[1], corners[1], sides[2], corners[2], sides[3], corners[3],
+        ],
     }
 }
 
@@ -76,7 +78,10 @@ pub fn expand(id: &str, item: &Value, planted: Planted) -> Result<(String, Value
         .get("params")
         .and_then(Value::as_object)
         .ok_or_else(|| bad(path.clone()))?;
-    let grid = params.get("grid").and_then(Value::as_object).ok_or_else(|| bad(format!("{path}/grid")))?;
+    let grid = params
+        .get("grid")
+        .and_then(Value::as_object)
+        .ok_or_else(|| bad(format!("{path}/grid")))?;
     let on_hex = grid.get("shape").and_then(Value::as_str) == Some("hex");
     // #536: a hex grid's layout gives each cell's six neighbours (Mark set: hex grid).
     let hex = match on_hex {
@@ -89,12 +94,16 @@ pub fn expand(id: &str, item: &Value, planted: Planted) -> Result<(String, Value
     let rules = params
         .get("rules")
         .and_then(Value::as_str)
-        .unwrap_or(if on_hex { "edges_6" } else { "corners_and_sides" });
+        .unwrap_or(if on_hex {
+            "edges_6"
+        } else {
+            "corners_and_sides"
+        });
     if on_hex && rules != "edges_6" {
         return Err(Refusal {
             code: "bad_doc",
             path: format!("{path}/rules"),
-            actual: json!(rules),
+            actual: Box::new(json!(rules)),
             message: if SQUARE_RULES.contains(&rules) {
                 format!("{rules} is a square grid's rule; a hex grid takes edges_6")
             } else {
@@ -126,13 +135,25 @@ pub fn expand(id: &str, item: &Value, planted: Planted) -> Result<(String, Value
         .enumerate()
     {
         let at = format!("{path}/tiles/{i}");
-        let tile = t.get("tile").and_then(Value::as_u64).ok_or_else(|| bad(format!("{at}/tile")))?;
-        let terrain = t.get("terrain").and_then(Value::as_str).unwrap_or("").to_string();
+        let tile = t
+            .get("tile")
+            .and_then(Value::as_u64)
+            .ok_or_else(|| bad(format!("{at}/tile")))?;
+        let terrain = t
+            .get("terrain")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_string();
         let labels: Vec<String> = t
             .get("edges")
             .or_else(|| t.get("labels"))
             .and_then(Value::as_array)
-            .map(|l| l.iter().filter_map(Value::as_str).map(str::to_string).collect())
+            .map(|l| {
+                l.iter()
+                    .filter_map(Value::as_str)
+                    .map(str::to_string)
+                    .collect()
+            })
             .unwrap_or_default();
         tiles.push((tile, terrain, labels));
     }
@@ -151,7 +172,10 @@ pub fn expand(id: &str, item: &Value, planted: Planted) -> Result<(String, Value
     };
     for (i, c) in list.iter().enumerate() {
         let at = format!("{cells_at}/{i}");
-        let l = c.as_array().filter(|l| l.len() == 3).ok_or_else(|| bad(at.clone()))?;
+        let l = c
+            .as_array()
+            .filter(|l| l.len() == 3)
+            .ok_or_else(|| bad(at.clone()))?;
         let (Some(cx), Some(cy), Some(terrain)) = (
             num(l.first()).map(|v| v as i64),
             num(l.get(1)).map(|v| v as i64),
@@ -170,7 +194,10 @@ pub fn expand(id: &str, item: &Value, planted: Planted) -> Result<(String, Value
                 vec![r, u, u, l, d, d]
             }
             Some(six) => six.to_vec(),
-            None => square_neighbors(rules).iter().map(|[dx, dy]| [cx + dx, cy + dy]).collect(),
+            None => square_neighbors(rules)
+                .iter()
+                .map(|[dx, dy]| [cx + dx, cy + dy])
+                .collect(),
         };
         let want: Vec<&str> = around
             .iter()
@@ -186,14 +213,16 @@ pub fn expand(id: &str, item: &Value, planted: Planted) -> Result<(String, Value
             .collect();
         let mut candidates: Vec<u64> = tiles
             .iter()
-            .filter(|(_, t, labels)| t == own && labels.iter().map(String::as_str).eq(want.iter().copied()))
+            .filter(|(_, t, labels)| {
+                t == own && labels.iter().map(String::as_str).eq(want.iter().copied())
+            })
             .map(|(tile, ..)| *tile)
             .collect();
         if candidates.is_empty() && on_hex {
             return Err(Refusal {
                 code: "ref_unresolved",
                 path: cells_at,
-                actual: json!({"cell": [cx, cy], "terrain": own, "labels": want}),
+                actual: Box::new(json!({"cell": [cx, cy], "terrain": own, "labels": want})),
                 message: format!(
                     "no tile matches cell ({cx}, {cy}): it wants terrain {own} with edges [{}]",
                     want.join(", ")
@@ -201,12 +230,16 @@ pub fn expand(id: &str, item: &Value, planted: Planted) -> Result<(String, Value
             });
         }
         if candidates.is_empty() {
-            candidates = tiles.iter().filter(|(_, t, _)| t == own).map(|(tile, ..)| *tile).collect();
+            candidates = tiles
+                .iter()
+                .filter(|(_, t, _)| t == own)
+                .map(|(tile, ..)| *tile)
+                .collect();
         }
         if candidates.is_empty() {
             return Err(Refusal {
                 code: "ref_unresolved",
-                actual: json!({"cell": [cx, cy], "terrain": own}),
+                actual: Box::new(json!({"cell": [cx, cy], "terrain": own})),
                 message: format!("no tile has cell ({cx}, {cy})'s terrain {own}"),
                 ..bad(cells_at)
             });
@@ -223,7 +256,10 @@ pub fn expand(id: &str, item: &Value, planted: Planted) -> Result<(String, Value
         }
     }
     set.insert("n".into(), json!(xs.len()));
-    set.insert("columns".into(), json!({"cx": xs, "cy": ys, "tile": picked}));
+    set.insert(
+        "columns".into(),
+        json!({"cx": xs, "cy": ys, "tile": picked}),
+    );
     let mut derived = json!({"kind": "marks@1", "params": set});
     for key in ["layer", "order", "parent", "at"] {
         if let Some(v) = item.get(key) {
@@ -273,8 +309,14 @@ mod tests {
                 .unwrap();
             c["tile"][i].clone()
         };
-        let (_, before) = expand("floor", &floor(&[[0, 0], [1, 0], [0, 1]]), Planted::None).unwrap();
-        let (_, after) = expand("floor", &floor(&[[5, 5], [0, 0], [1, 0], [0, 1]]), Planted::None).unwrap();
+        let (_, before) =
+            expand("floor", &floor(&[[0, 0], [1, 0], [0, 1]]), Planted::None).unwrap();
+        let (_, after) = expand(
+            "floor",
+            &floor(&[[5, 5], [0, 0], [1, 0], [0, 1]]),
+            Planted::None,
+        )
+        .unwrap();
         for [x, y] in [[0, 0], [1, 0], [0, 1]] {
             assert_eq!(tile_of(&before, x, y), tile_of(&after, x, y));
         }

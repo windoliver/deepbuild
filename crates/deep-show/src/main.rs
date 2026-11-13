@@ -8,26 +8,26 @@
 //! macOS it answers `{"ok":false,"code":"unsupported_platform"}`).
 
 mod access;
+mod ask;
 mod audio;
 mod bake;
-mod ask;
 mod capture;
 mod costs;
 mod determinism;
 mod efficiency;
-mod familiar;
 mod evidence;
 mod export;
+mod familiar;
 mod film;
 mod film_audit;
 mod film_layout;
-mod geometry_audit;
 mod film_viewer;
 mod frames;
 mod function;
 mod gate;
 mod generated;
 mod geometry;
+mod geometry_audit;
 mod host;
 mod hub;
 mod input;
@@ -42,29 +42,30 @@ mod mixdown;
 mod modes;
 mod narration;
 mod packs;
-mod retired;
 mod physics;
+mod picks;
 mod placement;
+#[cfg(feature = "test-accent")]
+mod planted;
 mod played;
 mod print;
 mod probe;
-#[cfg(feature = "test-accent")]
-mod planted;
 mod query;
 mod registries;
-mod sandbox;
+mod retired;
 mod ring;
 mod runs;
+mod sandbox;
 mod scene3d;
 mod seams;
 mod serve;
 mod shaper;
 mod shared;
 mod snapshot;
-mod spawn;
 mod spatial;
-mod terrain;
+mod spawn;
 mod terminal;
+mod terrain;
 #[cfg(feature = "test-machines")]
 mod test_machines;
 mod test_registries;
@@ -247,7 +248,10 @@ fn tame_overflow(line: &str) -> Option<String> {
 }
 
 /// An optional field as `read` takes it: `Some(None)` when it's absent, `None` when `read` refuses it.
-pub(crate) fn optional<T>(value: Option<&Value>, read: impl FnOnce(&Value) -> Option<T>) -> Option<Option<T>> {
+pub(crate) fn optional<T>(
+    value: Option<&Value>,
+    read: impl FnOnce(&Value) -> Option<T>,
+) -> Option<Option<T>> {
     value.map_or(Some(None), |v| read(v).map(Some))
 }
 
@@ -454,7 +458,10 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         }
         "cross_machine" => {
             let a = c.get("audio")?.as_array().filter(|a| a.len() == 2)?;
-            return Some(Call::CrossMachine([a[0].as_str()?.to_string(), a[1].as_str()?.to_string()]));
+            return Some(Call::CrossMachine([
+                a[0].as_str()?.to_string(),
+                a[1].as_str()?.to_string(),
+            ]));
         }
         "input" => {
             return Some(Call::Input {
@@ -592,6 +599,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         "geometry" => return geometry::parse(c).map(|g| Call::Geometry(Box::new(g))),
         "kinds" => return Some(Call::KindSchemas),
         "spatial" => return spatial::parse(c).map(|s| Call::Spatial(Box::new(s))),
+        "logic" => return picks::parse(c).map(|l| Call::Logic(Box::new(l))),
         "terrain_rays" => return terrain::parse(c).map(|r| Call::TerrainRays(Box::new(r))),
         "packs" => return Some(Call::Packs),
         "install_pack" => {
@@ -1230,6 +1238,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 || deep_canvas_marks::arrays::PLANTED.contains(p)
                 // #1967's wrong programs live in the cells module's playback and conversion.
                 || deep_canvas_cells::recording::PLANTED.contains(p)
+                || deep_canvas_input::rows::PLANTED.contains(p)
         })
         .map(str::to_string);
     // #433's wrong programs are twins of the familiar@1 pack.
@@ -1712,7 +1721,10 @@ impl CanvasSide {
             .enumerate()
             .map(|(i, c)| {
                 let mut c = c.clone();
-                let arrives = if ["deep_query", "geometry", "fn", "deep_kinds"].iter().any(|k| c["call"] == *k) {
+                let arrives = if ["deep_query", "geometry", "fn", "deep_kinds"]
+                    .iter()
+                    .any(|k| c["call"] == *k)
+                {
                     "arrives"
                 } else {
                     "at"
@@ -1992,12 +2004,18 @@ fn modules(set: BuildSet) -> Vec<Module> {
     }
     // Issue #238: the sandbox module, on core alone; `test-sandbox-alt` seals the test
     // implementation `sandbox.alt` in its place, and `test-sandbox-needs-logic` plants a manifest
-    // that requires logic.
+    // that requires logic. Issue #2324: sandbox.alt pins another release outside every advisory
+    // 49.0.2 was inside, and the planted engine build, whose kit differs from the reference's, is
+    // no bit implementation, so the runtime digest names it.
     if set >= BuildSet::Full {
         out.push(if cfg!(feature = "test-sandbox-alt") {
-            deep_canvas_sandbox::module::implementation("sandbox.alt", "=49.0.1")
+            deep_canvas_sandbox::module::implementation("sandbox.alt", "=50.0.1")
         } else if cfg!(feature = "test-sandbox-needs-logic") {
             sandbox_needs_logic()
+        } else if cfg!(feature = "plant-engine-differs") {
+            let mut m = deep_canvas_sandbox::module::module();
+            m.manifest.implementation.equivalence = deep_canvas::registry::Equivalence::Measured;
+            m
         } else {
             deep_canvas_sandbox::module::module()
         });
@@ -2994,21 +3012,27 @@ fn planted_named(twin: &str) -> Result<StartPlanted, ()> {
         "control_kind_recompute"
         | "control_kind_reads_modifiers"
         | "control_kind_no_keyboard"
-        | "control_kind_agent_input" => Ok(StartPlanted::ControlKind(
-            Box::leak(twin.trim_start_matches("control_kind_").to_string().into_boxed_str()),
-        )),
+        | "control_kind_agent_input" => Ok(StartPlanted::ControlKind(Box::leak(
+            twin.trim_start_matches("control_kind_")
+                .to_string()
+                .into_boxed_str(),
+        ))),
         "registries_without_slots" => Ok(StartPlanted::Listing(registries::Listing::WithoutSlots)),
         "slot_fill_as_entry" => Ok(StartPlanted::Listing(registries::Listing::FillAsEntry)),
         "validator_without_close" => Ok(StartPlanted::Seal(Fault::NoCloseNames)),
         "close_by_spelling" => Ok(StartPlanted::Seal(Fault::CloseBySpelling)),
-        "pages_capped_at_64mib" => Ok(StartPlanted::Layouts(deep_canvas_sandbox::layouts::Planted {
-            pages_pack_cap: true,
-            ..Default::default()
-        })),
-        "nav_graph_trusts_link_count" => Ok(StartPlanted::Layouts(deep_canvas_sandbox::layouts::Planted {
-            trusts_link_count: true,
-            ..Default::default()
-        })),
+        "pages_capped_at_64mib" => Ok(StartPlanted::Layouts(
+            deep_canvas_sandbox::layouts::Planted {
+                pages_pack_cap: true,
+                ..Default::default()
+            },
+        )),
+        "nav_graph_trusts_link_count" => Ok(StartPlanted::Layouts(
+            deep_canvas_sandbox::layouts::Planted {
+                trusts_link_count: true,
+                ..Default::default()
+            },
+        )),
         _ if kinds::Planted::named(twin).is_some() => {
             Ok(StartPlanted::Kinds(kinds::Planted::named(twin).ok_or(())?))
         }
@@ -3018,7 +3042,9 @@ fn planted_named(twin: &str) -> Result<StartPlanted, ()> {
                 name.to_string().into_boxed_str(),
             )))
         }
-        _ if export_planted(twin).is_some() => export_planted(twin).map(StartPlanted::Run).ok_or(()),
+        _ if export_planted(twin).is_some() => {
+            export_planted(twin).map(StartPlanted::Run).ok_or(())
+        }
         "fingerprint_without_sources" => Ok(StartPlanted::Run(Planted::FingerprintWithoutSources)),
         "key_hashes_raw_bytes" => Ok(StartPlanted::Run(Planted::KeyHashesRawBytes)),
         _ => seams::NetFault::named(twin)
@@ -3168,9 +3194,9 @@ fn main() {
 }
 
 #[cfg(target_os = "macos")]
-mod live;
-#[cfg(target_os = "macos")]
 mod idle;
+#[cfg(target_os = "macos")]
+mod live;
 #[cfg(target_os = "macos")]
 mod watch;
 #[cfg(target_os = "macos")]

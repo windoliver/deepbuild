@@ -10654,6 +10654,35 @@ export interface WikiRead {
   evidence?: Array<string>;
 }
 
+/** work.attempt@1 */
+export interface WorkAttempt {
+  v: 1;
+  id: string;
+  kind: "work.attempt";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    ask: string;
+    step: "started" | "ended";
+    issue: number;
+    attempt: number;
+    run: string;
+    agent: string;
+    model: string | null;
+    worktree: string | null;
+    branch: string | null;
+    reason: string | null;
+    cause: "none" | "PASS" | "landed with the budget window open" | "gave up its slot" | "replaced by you" | "sent back past its rounds" | "stalled" | "context full" | "plan window or spend cap" | "crashed or interrupted";
+    verdict: string | null;
+  };
+  evidence?: Array<string>;
+}
+
 /** work.broke@1 */
 export interface WorkBroke {
   v: 1;
@@ -10741,6 +10770,48 @@ export interface WorkRead {
     source: string;
     position: string | null;
     state: unknown;
+  };
+  evidence?: Array<string>;
+}
+
+/** work.run@1 */
+export interface WorkRun {
+  v: 1;
+  id: string;
+  kind: "work.run";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    ask: string;
+    step: "asked" | "paused";
+    scope: string;
+  };
+  evidence?: Array<string>;
+}
+
+/** work.state@1 */
+export interface WorkState {
+  v: 1;
+  id: string;
+  kind: "work.state";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    ask: string;
+    issue: number;
+    word: "queued" | "working" | "says done" | "PASS" | "sent back" | "BLOCKED" | "INVALID" | "INCONCLUSIVE" | "needs you" | "stale" | "finished" | "closed" | "closed before the gate";
+    waits_on: string | null;
+    why: string;
   };
   evidence?: Array<string>;
 }

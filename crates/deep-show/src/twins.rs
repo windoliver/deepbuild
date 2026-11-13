@@ -16,9 +16,8 @@ use serde_json::Value;
 pub(crate) fn scene3d_tie_by_order() -> deep_canvas::registry::Module {
     let mut m = deep_canvas_scene3d::module::module();
     m.manifest.implementation.name = "scene3d.tie_by_order".into();
-    m.register = |r| {
-        deep_canvas_scene3d::module::register_with(r, deep_canvas_scene3d::light::Tie::Order)
-    };
+    m.register =
+        |r| deep_canvas_scene3d::module::register_with(r, deep_canvas_scene3d::light::Tie::Order);
     m
 }
 
@@ -62,7 +61,10 @@ pub(crate) fn test_manifest(name: &str, feature: &str) -> Manifest {
         feature: feature.into(),
         license: "Apache-2.0".into(),
         implements: format!("{name}@1"),
-        implementation: deep_canvas::registry::Implementation::reference(name, Semver::parse("1.0.0").expect("a version")),
+        implementation: deep_canvas::registry::Implementation::reference(
+            name,
+            Semver::parse("1.0.0").expect("a version"),
+        ),
     }
 }
 

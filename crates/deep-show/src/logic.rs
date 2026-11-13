@@ -7,7 +7,7 @@
 use std::rc::Rc;
 
 use deep_canvas::document::Issue;
-use deep_logic::piece::{check_in, History};
+use deep_logic::piece::{check_in, History, Piece};
 use deep_logic::world::{track_of, Entry, Record, World};
 use serde_json::{json, Map, Value};
 
@@ -15,12 +15,22 @@ use crate::hub::Hub;
 
 /// A refusal of the logic module as the revision's issue, on the item it names.
 fn refused(r: Value) -> Issue {
-    let item = r.get("item").and_then(Value::as_str).unwrap_or_default().to_string();
+    let item = r
+        .get("item")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_string();
     let what = "the logic module refuses this logic item";
     if item.is_empty() {
         Issue::envelope("logic_refused", String::new(), r, what)
     } else {
-        Issue::error("logic_refused", &item, format!("items/{item}/params"), r, what)
+        Issue::error(
+            "logic_refused",
+            &item,
+            format!("items/{item}/params"),
+            r,
+            what,
+        )
     }
 }
 
@@ -35,7 +45,11 @@ fn logic_lists(form: &mut Value) -> Vec<&mut Value> {
         .map(|(id, _)| format!("{id}.occurrences"))
         .collect();
     match form.get_mut("occurrences").and_then(Value::as_object_mut) {
-        Some(lists) => lists.iter_mut().filter(|(k, _)| logic.contains(k)).map(|(_, v)| v).collect(),
+        Some(lists) => lists
+            .iter_mut()
+            .filter(|(k, _)| logic.contains(k))
+            .map(|(_, v)| v)
+            .collect(),
         None => Vec::new(),
     }
 }
@@ -69,39 +83,44 @@ impl Hub<'_> {
     /// Each logic item of `form` stepped on `track` over the transport's span, its program read
     /// from the evidence store, and its rows written to `occurrences.<logic ID>.occurrences`:
     /// `{t, step, kind, a, b}` and its declared fields by name, as Spawn and motion read a row.
-    pub(crate) fn inline_occurrences(&self, form: &mut Value, track: &[Value]) -> Result<(), Issue> {
+    pub(crate) fn inline_occurrences(
+        &self,
+        form: &mut Value,
+        track: &[Value],
+    ) -> Result<(), Box<Issue>> {
         self.inline_worlds(form)?;
-        let items: Map<String, Value> = form
-            .get("items")
-            .and_then(Value::as_object)
-            .into_iter()
-            .flatten()
-            .filter(|(_, i)| i.get("kind").and_then(Value::as_str) == Some("logic@1"))
-            .map(|(id, i)| (id.clone(), json!({"kind": "logic@1", "params": i.get("params").cloned().unwrap_or(json!({}))})))
-            .collect();
-        if items.is_empty() {
+        let Some(piece) = self.logic_piece(form)? else {
             return Ok(());
-        }
-        let piece = json!({
-            "seed": form.get("seed").and_then(Value::as_i64).unwrap_or(0),
-            "controls": form.get("controls").cloned().unwrap_or(json!({})),
-            "items": items,
-        });
-        let root = &self.scenario.evidence;
-        let piece = check_in(&piece, &Default::default(), &mut History::new(), &|sha| crate::evidence::read(root, sha))
-            .map_err(|r| refused(r.0))?;
+        };
         let entries: Vec<Entry> = track
             .iter()
             .map(Entry::parse)
             .collect::<Option<_>>()
             .ok_or_else(|| refused(json!({"code": "bad_input", "what": "track: each entry is {t, control, value}"})))?;
-        let span = deep_canvas_media::doc::time(form, form.pointer("/transport/span")).unwrap_or(0).max(0);
-        let steps = piece.items.iter().map(|i| (span + i.step - 1) / i.step.max(1)).max().unwrap_or(0);
+        let span = deep_canvas_media::doc::time(form, form.pointer("/transport/span"))
+            .unwrap_or(0)
+            .max(0);
+        let steps = piece
+            .items
+            .iter()
+            .map(|i| (span + i.step - 1) / i.step.max(1))
+            .max()
+            .unwrap_or(0);
         let piece = Rc::new(piece);
         let mut rec = Record::default();
-        let mut world = World::new(piece.clone(), track_of(&entries), false, Default::default(), &mut rec, None).map_err(refused)?;
+        let mut world = World::new(
+            piece.clone(),
+            track_of(&entries),
+            false,
+            Default::default(),
+            &mut rec,
+            None,
+        )
+        .map_err(refused)?;
         world.run(steps, &mut rec, &mut |_, _| {});
-        let Some(doc) = form.as_object_mut() else { return Ok(()) };
+        let Some(doc) = form.as_object_mut() else {
+            return Ok(());
+        };
         let lists = doc.entry("occurrences").or_insert_with(|| json!({}));
         for (id, rows) in rec.occurrences(&piece) {
             let flat: Vec<Value> = rows
@@ -110,8 +129,17 @@ impl Hub<'_> {
                 .flatten()
                 .filter_map(Value::as_object)
                 .map(|r| {
-                    let mut out: Map<String, Value> = r.iter().filter(|(k, _)| *k != "fields").map(|(k, v)| (k.clone(), v.clone())).collect();
-                    out.extend(r.get("fields").and_then(Value::as_object).cloned().unwrap_or_default());
+                    let mut out: Map<String, Value> = r
+                        .iter()
+                        .filter(|(k, _)| *k != "fields")
+                        .map(|(k, v)| (k.clone(), v.clone()))
+                        .collect();
+                    out.extend(
+                        r.get("fields")
+                            .and_then(Value::as_object)
+                            .cloned()
+                            .unwrap_or_default(),
+                    );
                     Value::Object(out)
                 })
                 .collect();
@@ -134,9 +162,40 @@ impl Hub<'_> {
             }
         }
         // #1918: beside the readings of the worlds the document lists.
-        if let Some(all) = doc.entry("arrays").or_insert_with(|| json!({})).as_object_mut() {
+        if let Some(all) = doc
+            .entry("arrays")
+            .or_insert_with(|| json!({}))
+            .as_object_mut()
+        {
             all.extend(arrays);
         }
         Ok(())
+    }
+
+    /// `form`'s logic items as one piece with its seed and controls, checked by the logic module,
+    /// each program read from the evidence store; none when it has no logic item.
+    pub(crate) fn logic_piece(&self, form: &Value) -> Result<Option<Piece>, Box<Issue>> {
+        let items: Map<String, Value> = form
+            .get("items")
+            .and_then(Value::as_object)
+            .into_iter()
+            .flatten()
+            .filter(|(_, i)| i.get("kind").and_then(Value::as_str) == Some("logic@1"))
+            .map(|(id, i)| (id.clone(), json!({"kind": "logic@1", "params": i.get("params").cloned().unwrap_or(json!({}))})))
+            .collect();
+        if items.is_empty() {
+            return Ok(None);
+        }
+        let piece = json!({
+            "seed": form.get("seed").and_then(Value::as_i64).unwrap_or(0),
+            "controls": form.get("controls").cloned().unwrap_or(json!({})),
+            "items": items,
+        });
+        let root = &self.scenario.evidence;
+        let piece = check_in(&piece, &Default::default(), &mut History::new(), &|sha| {
+            crate::evidence::read(root, sha)
+        })
+        .map_err(|r| refused(r.0))?;
+        Ok(Some(piece))
     }
 }

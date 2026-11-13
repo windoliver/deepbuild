@@ -44,7 +44,7 @@ mapping and first touches cost about 1.9 ms a step at p50: the same order.
 | File | What it is |
 |---|---|
 | `steer.wat` | The 8,000-agent steering fixture at 60 Hz with 8 blocks, which #212 reuses. Its header has the memory layout and the `parallel` fields #212 declares for it. |
-| `src/main.rs` | The harness: the fixture through sandbox@1's check, the logic role's check and the logic rewrite (`Mode::Logic`: fuel, page bitmap, exported globals), on wasmtime 49.0.2 with deep-sandbox-wasmtime's engine settings, in both forms. |
+| `src/main.rs` | The harness: the fixture through sandbox@1's check, the logic role's check and the logic rewrite (`Mode::Logic`: fuel, page bitmap, exported globals), on wasmtime 49.0.5 with deep-sandbox-wasmtime's engine settings, in both forms. |
 | `record.mjs` | Builds the harness, runs both forms, reads the host through `scripts/benchmark.mjs`'s `fingerprint()` and stores `record.json` with the verdict from `rule.mjs`. It stores nothing when the 1-minute load is above the core count. |
 | `rule.mjs` | The rule as a pure function `verdict(record)`: what the logic module's build reads (#212). |
 | `record.json` | The reference Mac's run: host, fixture hash, every step's wall time and overhead in both forms, and the verdict. |

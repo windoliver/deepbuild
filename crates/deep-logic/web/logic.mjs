@@ -236,10 +236,25 @@ class World {
     const region = new Uint8Array(size);
     const d = new DataView(region.buffer);
     for (const e of item.regions) {
-      if (e.read === 'control') {
+      if (e.read === 'control' && e.type === 'text') {
+        // A text commit's bytes come with its control kind (#542).
+      } else if (e.read === 'control') {
         const list = taken.get(e.name);
         d.setUint32(e.offset, list.length, true);
-        list.forEach((x, j) => { d.setUint32(e.offset + 8 + 16 * j, x.player, true); d.setFloat64(e.offset + 16 + 16 * j, x.value, true); });
+        // Each entry a u32 player, 4 zero bytes and its value as the control's form lays it
+        // out: a number's f64, or a pick's u32 set, 4 zero bytes, i64 key[0], i64 key[1].
+        const stride = (e.size - 8) / PER_STEP;
+        list.forEach((x, j) => {
+          const o = e.offset + 8 + stride * j;
+          d.setUint32(o, x.player, true);
+          const pick = typeof x.value === 'object' && x.value !== null;
+          if (!pick && stride === 16) d.setFloat64(o + 8, x.value, true);
+          if (pick && stride === 32) {
+            d.setUint32(o + 8, x.value.set, true);
+            d.setBigInt64(o + 16, BigInt(x.value.key[0]), true);
+            d.setBigInt64(o + 24, BigInt(x.value.key[1]), true);
+          }
+        });
       } else if (e.read === 'array') {
         region.set(snapshot[e.from].subarray(e.from_offset, e.from_offset + e.size), e.offset);
       } else if (e.read === 'seed') {

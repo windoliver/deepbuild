@@ -1,0 +1,78 @@
+#1468 unit tests in crates/deep-canvas/src/expr.rs, run on the base ede4b367 with only the tests added (debug, Linux aarch64), before the fix.
+
+test expr::tests::every_level_counts_against_the_nesting_cap ... FAILED
+thread 'expr::tests::every_level_counts_against_the_nesting_cap' (2523886) panicked at crates/deep-canvas/src/expr.rs:2603:54:
+called `Result::unwrap_err()` on an `Ok` value: 1.0
+    expr::tests::every_level_counts_against_the_nesting_cap
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 264 filtered out; finished in 0.00s
+error: test failed, to rerun pass `-p deep-canvas --lib`
+thread '<unknown>' (2524199) has overflowed its stack
+fatal runtime error: stack overflow, aborting
+error: test failed, to rerun pass `-p deep-canvas --lib`
+Caused by:
+  process didn't exit successfully: `<checkout>/target/debug/deps/deep_canvas-a26bdb700a551842 'expr::tests::a_long_chain_is_refused_before_it_binds'` (signal: 6, SIGABRT: process abort signal)
+test expr::tests::a_refusal_reads_no_further_than_it_needs ... FAILED
+thread 'expr::tests::a_refusal_reads_no_further_than_it_needs' (2524949) panicked at crates/deep-canvas/src/expr.rs:2622:9:
+`(((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((1$`: unexpected `$`
+    expr::tests::a_refusal_reads_no_further_than_it_needs
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 264 filtered out; finished in 0.00s
+error: test failed, to rerun pass `-p deep-canvas --lib`
+
+crates/deep-canvas/src/document/packs.rs's test, on the base with only the test added:
+test document::packs::tests::a_recipe_expression_nests_at_most_64_levels_and_takes_at_most_1024_tokens ... FAILED
+thread 'document::packs::tests::a_recipe_expression_nests_at_most_64_levels_and_takes_at_most_1024_tokens' (2590182) panicked at crates/deep-canvas/src/document/packs.rs:3113:42:
+called `Result::unwrap_err()` on an `Ok` value: Num(1.0)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 265 filtered out; finished in 0.00s
+error: test failed, to rerun pass `-p deep-canvas --lib`
+
+Review round 1's regressions, each run on 59cd7829 (the first fix) with only its test added:
+
+packs.rs: a recipe value past a cap read as text
+test document::packs::tests::a_recipe_value_past_a_cap_is_refused_not_read_as_text ... FAILED
+thread 'document::packs::tests::a_recipe_value_past_a_cap_is_refused_not_read_as_text' (524742) panicked at crates/deep-canvas/src/document/packs.rs:3161:63:
+called `Result::unwrap_err()` on an `Ok` value: String("((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((n))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))")
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 266 filtered out; finished in 0.00s
+
+expr.rs: a dotted name read with no bound (the 50 ms budget missed), then, with that fixed, a char after the refusal replacing it
+test expr::tests::a_dotted_name_counts_against_the_nodes_and_the_cap_wins_over_what_follows ... FAILED
+thread 'expr::tests::a_dotted_name_counts_against_the_nodes_and_the_cap_wins_over_what_follows' (544425) panicked at crates/deep-canvas/src/expr.rs:2742:9:
+255.184677ms
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 267 filtered out; finished in 0.28s
+test expr::tests::a_dotted_name_counts_against_the_nodes_and_the_cap_wins_over_what_follows ... FAILED
+thread 'expr::tests::a_dotted_name_counts_against_the_nodes_and_the_cap_wins_over_what_follows' (553073) panicked at crates/deep-canvas/src/expr.rs:2753:9:
+`((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((($`: unexpected `$`
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 267 filtered out; finished in 0.00s
+
+Review round 2's regressions, each run on bb126f47 with only its test added:
+test expr::tests::a_dotted_table_name_counts_once ... FAILED
+test document::packs::tests::long_text_that_is_no_expression_stays_a_literal ... FAILED
+thread 'expr::tests::a_dotted_table_name_counts_once' (792646) panicked at crates/deep-canvas/src/expr.rs:2769:54:
+called `Result::unwrap()` on an `Err` value: Refusal { call: "table(p.t, x) + … (171 terms)", why: "takes more than 1024 nodes as written, twice the cap of 512", missing: None }
+thread 'document::packs::tests::long_text_that_is_no_expression_stays_a_literal' (792645) panicked at crates/deep-canvas/src/document/packs.rs:3213:13:
+assertion `left == right` failed: M 0 0 L 10.5 20.25 L 10.5 20.25 L 10.5 2
+  left: Err("runs past the cap of 1024 tokens")
+test result: FAILED. 0 passed; 2 failed; 0 ignored; 0 measured; 268 filtered out; finished in 0.00s
+
+Review round 3's: the dotted-name test against a mutant that counts every part (it must fail), and the flat check on c3337583:
+test expr::tests::a_dotted_table_name_counts_once ... FAILED
+test document::packs::tests::long_text_that_is_no_expression_stays_a_literal ... FAILED
+thread 'expr::tests::a_dotted_table_name_counts_once' (1210205) panicked at crates/deep-canvas/src/expr.rs:2772:54:
+called `Result::unwrap()` on an `Err` value: Refusal { call: "table(p.t, … (7 towers of 63)
+thread 'document::packs::tests::long_text_that_is_no_expression_stays_a_literal' (1210204) panicked at crates/deep-canvas/src/document/packs.rs:3314:13:
+assertion `left == right` failed: ((0, 0), (0, 0), (0, 0), (0, 0), (0, 0),
+  left: Err("runs past the cap of 1024 tokens")
+test result: FAILED. 0 passed; 2 failed; 0 ignored; 0 measured; 268 filtered out; finished in 0.01s
+
+## Review round 13 (on main 96b462a6, before the fix): a number's name followed by `(` was read as a call by the flat check
+cargo test --locked -p deep-canvas --lib document::packs::
+test document::packs::tests::long_text_that_is_no_expression_stays_a_literal ... FAILED
+test document::packs::tests::a_recipe_value_past_a_cap_is_refused_not_read_as_text ... ok
+test document::packs::tests::the_flat_check_reads_each_rule_of_the_grammar ... ok
+--
+thread 'document::packs::tests::long_text_that_is_no_expression_stays_a_literal' (44040) panicked at crates/deep-canvas/src/document/packs.rs:3445:13:
+assertion `left == right` failed: pi(1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1
+  left: Err("runs past the cap of 1024 tokens")
+--
+test result: FAILED. 19 passed; 1 failed; 0 ignored; 0 measured; 254 filtered out; finished in 0.70s
+

@@ -30,7 +30,16 @@ pub enum Judged {
 /// 10,000,000; memory the asset plus 4 MiB), with the asset at `in_at`.
 pub fn judge(sandbox: &Sandbox, rewritten: &Rewritten, input: &[u8]) -> Result<Judged, String> {
     let budget = Budget::of("validator", None, input.len());
-    let ran = sandbox.run(&rewritten.bytes, "validator", 0, &budget, &[], input, DEADLINE, Offsets::Written)?;
+    let ran = sandbox.run(
+        &rewritten.bytes,
+        "validator",
+        0,
+        &budget,
+        &[],
+        input,
+        DEADLINE,
+        Offsets::Written,
+    )?;
     Ok(match (ran.trap, ran.result) {
         (Some(t), _) => Judged::Trap(trap_json(&Some(t))),
         (None, Some(-1)) => Judged::Valid,
@@ -60,7 +69,12 @@ pub fn judged() -> Value {
         let run = |assets: Vec<Vec<u8>>| -> Vec<Value> {
             assets
                 .iter()
-                .map(|a| verdict(a, &judge(&sandbox, &rw, a).expect("a first-party validator runs")))
+                .map(|a| {
+                    verdict(
+                        a,
+                        &judge(&sandbox, &rw, a).expect("a first-party validator runs"),
+                    )
+                })
                 .collect()
         };
         out.insert(
@@ -80,16 +94,26 @@ mod tests {
     #[test]
     fn first_party_validators_give_the_recorded_answers() {
         let now = judged();
-        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../deep-canvas-sandbox/layouts/judged.json");
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../deep-canvas-sandbox/layouts/judged.json"
+        );
         if std::env::var_os("DEEP_LAYOUTS_WRITE").is_some() {
-            std::fs::write(path, format!("{}\n", serde_json::to_string_pretty(&now).unwrap())).unwrap();
+            std::fs::write(
+                path,
+                format!("{}\n", serde_json::to_string_pretty(&now).unwrap()),
+            )
+            .unwrap();
         }
         let recorded: Value = serde_json::from_str(deep_canvas_sandbox::layouts::JUDGED).unwrap();
         assert_eq!(recorded, now);
         for (name, l) in now.as_object().unwrap() {
             for t in l["twins"].as_array().unwrap() {
                 assert_eq!(t["valid"], false, "{name} refuses its twin {t}");
-                assert!(t.get("trap").is_none(), "{name}'s twin is refused, not trapped: {t}");
+                assert!(
+                    t.get("trap").is_none(),
+                    "{name}'s twin is refused, not trapped: {t}"
+                );
             }
             for f in l["fixtures"].as_array().unwrap() {
                 assert_eq!(f["valid"], true, "{name} admits its fixture {f}");
@@ -103,15 +127,35 @@ mod tests {
         let sandbox = Sandbox::default();
         let want = [
             ("fn.table@1", vec!["x[2]"]),
-            ("nav.graph@1", vec!["links[0].b", "header.link_count", "nodes[0].floor", "nodes[0].vertex_count"]),
-            ("nav.graph@2", vec!["links[0].b", "header.link_count", "nodes[0].floor", "nodes[0].vertex_count", "nodes[0].tags", "links[2].face"]),
+            (
+                "nav.graph@1",
+                vec![
+                    "links[0].b",
+                    "header.link_count",
+                    "nodes[0].floor",
+                    "nodes[0].vertex_count",
+                ],
+            ),
+            (
+                "nav.graph@2",
+                vec![
+                    "links[0].b",
+                    "header.link_count",
+                    "nodes[0].floor",
+                    "nodes[0].vertex_count",
+                    "nodes[0].tags",
+                    "links[2].face",
+                ],
+            ),
             ("pages@1", vec!["pages[2].number"]),
             ("table.layout@1", vec!["tables[0].columns[3].values[1]"]),
         ];
         for (name, fields) in want {
             let l = deep_canvas_sandbox::layouts::named(name).unwrap();
             let bytes = program(&l, Planted::default());
-            let (rw, _) = sandbox.rewrite(&bytes, "validator", &Budget::of("validator", None, 0)).unwrap();
+            let (rw, _) = sandbox
+                .rewrite(&bytes, "validator", &Budget::of("validator", None, 0))
+                .unwrap();
             let got: Vec<String> = (l.twins)()
                 .iter()
                 .map(|t| match judge(&sandbox, &rw, t).unwrap() {

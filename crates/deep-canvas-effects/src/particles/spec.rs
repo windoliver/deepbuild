@@ -38,7 +38,7 @@ pub struct Refusal {
     pub code: &'static str,
     pub path: String,
     pub what: String,
-    pub actual: Value,
+    pub actual: Box<Value>,
     pub also: Vec<String>,
 }
 
@@ -48,14 +48,14 @@ impl Refusal {
             code,
             path: path.into(),
             what: what.into(),
-            actual: Value::Null,
+            actual: Box::new(Value::Null),
             also: Vec::new(),
         }
     }
 
     /// The same refusal with the value it refused.
     pub fn with(mut self, actual: Value) -> Self {
-        self.actual = actual;
+        *self.actual = actual;
         self
     }
 

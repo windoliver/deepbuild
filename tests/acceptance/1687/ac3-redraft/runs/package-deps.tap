@@ -1,0 +1,22 @@
+TAP version 13
+# Subtest: every @deepbuild package a package's source imports is in its package.json dependencies
+ok 1 - every @deepbuild package a package's source imports is in its package.json dependencies
+  ---
+  duration_ms: 90.328541
+  type: 'test'
+  ...
+# Subtest: no package's source imports another package's files by a relative path
+ok 2 - no package's source imports another package's files by a relative path
+  ---
+  duration_ms: 29.805833
+  type: 'test'
+  ...
+1..2
+# tests 2
+# suites 0
+# pass 2
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 194.240709

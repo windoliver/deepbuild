@@ -214,7 +214,10 @@ pub fn bytes(sky: &Sky) -> u64 {
     let cubes = 1 + u64::from(e.mix.is_some());
     let blur = sky.background_blur as f32;
     let background = if blur > 0.0 {
-        cube((e.size >> (blur * (mips(e.size) - 1) as f32) as u32).max(1), 1)
+        cube(
+            (e.size >> (blur * (mips(e.size) - 1) as f32) as u32).max(1),
+            1,
+        )
     } else {
         0
     };

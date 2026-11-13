@@ -53,8 +53,16 @@ pub const AGX_OUTSET: [[f64; 3]; 3] = [
         -0.11060664309660323,
         -0.016493938717834573,
     ],
-    [-0.1413297634984383, 1.157823702216272, -0.016493938717834257],
-    [-0.14132976349843826, -0.11060664309660294, 1.2519364065950405],
+    [
+        -0.1413297634984383,
+        1.157823702216272,
+        -0.016493938717834257,
+    ],
+    [
+        -0.14132976349843826,
+        -0.11060664309660294,
+        1.2519364065950405,
+    ],
 ];
 
 pub type Mat3 = [[f64; 3]; 3];
@@ -71,9 +79,21 @@ fn inverse(m: &Mat3) -> Mat3 {
     let [[a, b, c], [d, e, f], [g, h, i]] = *m;
     let det = a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g);
     [
-        [(e * i - f * h) / det, (c * h - b * i) / det, (b * f - c * e) / det],
-        [(f * g - d * i) / det, (a * i - c * g) / det, (c * d - a * f) / det],
-        [(d * h - e * g) / det, (b * g - a * h) / det, (a * e - b * d) / det],
+        [
+            (e * i - f * h) / det,
+            (c * h - b * i) / det,
+            (b * f - c * e) / det,
+        ],
+        [
+            (f * g - d * i) / det,
+            (a * i - c * g) / det,
+            (c * d - a * f) / det,
+        ],
+        [
+            (d * h - e * g) / det,
+            (b * g - a * h) / det,
+            (a * e - b * d) / det,
+        ],
     ]
 }
 
@@ -90,7 +110,11 @@ pub fn read_tone_map(v: Option<&Value>) -> Result<ToneMap, String> {
                 contrast: 1.25,
             },
             "neutral" => ToneMap::Neutral,
-            other => return Err(format!("tone_map: {other} is not none, filmic, agx or neutral")),
+            other => {
+                return Err(format!(
+                    "tone_map: {other} is not none, filmic, agx or neutral"
+                ))
+            }
         },
         Some(Value::Object(o)) if o.contains_key("agx") => ToneMap::Agx {
             white: o["agx"]["white"].as_f64().unwrap_or(16.29),

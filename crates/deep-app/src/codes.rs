@@ -8,9 +8,12 @@ use std::sync::OnceLock;
 
 use serde_json::{json, Value};
 
+/// A set, the view that shows its codes and the function that view draws one with.
+type View = (&'static str, &'static str, fn(&str, &str) -> String);
+
 /// Each set, the view that shows its codes and the function that view draws one with: what `deep-replica --words`
 /// asks of the views.
-const VIEWS: [(&str, &str, fn(&str, &str) -> String); 3] = [
+const VIEWS: [View; 3] = [
     ("ask.outcome", "ask page", outcome),
     ("stop.cause", "session page", stopped),
     ("verdict.reason", "session page", reason),
@@ -214,5 +217,5 @@ fn said_last(session: &str) -> Option<String> {
                 .unwrap_or_default()
         })
         .filter_map(|block| block["text"].as_str().map(str::to_owned))
-        .last()
+        .next_back()
 }

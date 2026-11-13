@@ -1,0 +1,119 @@
+Script started on 2026-11-12 00:30:43-08:00 [COMMAND="bash ~/deepbuild/.claude/worktrees/determined-lewin-bc0143/docs/evidence/1468/shots.sh acceptance" <not executed on terminal>]
+# 2026-11-12T08:30:43Z, Linux aarch64, 20 cores, load 5.24
+$ git rev-parse HEAD
+1abbcf086aed054d148666447cbc134a2e7ba0e3
+[exit 0]
+$ git --no-pager log -1 --format=%s
+Merge pull request #2320 from windoliver/issue-1920-physics-seal-runtime-digest
+[exit 0]
+$ git status --short
+ M crates/deep-motion/Cargo.toml
+?? target
+?? tests/acceptance/1468/
+[exit 0]
+$ cargo test --locked -p deep-motion --test acceptance_1468 -- --test-threads=1 --nocapture
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.14s
+     Running ../../tests/acceptance/1468/depth.rs (target/debug/deps/acceptance_1468-6929e83beb00ed61)
+
+running 15 tests
+test ac1_a_million_abs_calls_are_refused_in_a_child_in_under_50_ms ... AC1 #1468.ded1c18b 1000000 repeats of `abs(`: the child `ac1:abs:real` died by signal 6 (SIGABRT, as a Rust stack overflow aborts); stderr: thread '<unknown>' (27200) has overflowed its stack | fatal runtime error: stack overflow, aborting []
+
+thread 'ac1_a_million_abs_calls_are_refused_in_a_child_in_under_50_ms' (27197) panicked at crates/deep-motion/../../tests/acceptance/1468/depth.rs:556:31:
+AC1 #1468.ded1c18b 1000000 repeats of `abs(`: the child `ac1:abs:real` died by signal 6 (SIGABRT, as a Rust stack overflow aborts); stderr: thread '<unknown>' (27200) has overflowed its stack | fatal runtime error: stack overflow, aborting
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+FAILED
+test ac1_a_million_bangs_are_refused_in_a_child_in_under_50_ms ... AC1 #1468.ded1c18b 1000000 repeats of `!`: the child `ac1:not:real` died by signal 6 (SIGABRT, as a Rust stack overflow aborts); stderr: thread '<unknown>' (27249) has overflowed its stack | fatal runtime error: stack overflow, aborting []
+
+thread 'ac1_a_million_bangs_are_refused_in_a_child_in_under_50_ms' (27246) panicked at crates/deep-motion/../../tests/acceptance/1468/depth.rs:556:31:
+AC1 #1468.ded1c18b 1000000 repeats of `!`: the child `ac1:not:real` died by signal 6 (SIGABRT, as a Rust stack overflow aborts); stderr: thread '<unknown>' (27249) has overflowed its stack | fatal runtime error: stack overflow, aborting
+FAILED
+test ac1_a_million_conditionals_are_refused_in_a_child_in_under_50_ms ... AC1 #1468.ded1c18b 1000000 repeats of `x ? y : `: the child `ac1:cond:real` died by signal 6 (SIGABRT, as a Rust stack overflow aborts); stderr: thread '<unknown>' (27295) has overflowed its stack | fatal runtime error: stack overflow, aborting []
+
+thread 'ac1_a_million_conditionals_are_refused_in_a_child_in_under_50_ms' (27292) panicked at crates/deep-motion/../../tests/acceptance/1468/depth.rs:556:31:
+AC1 #1468.ded1c18b 1000000 repeats of `x ? y : `: the child `ac1:cond:real` died by signal 6 (SIGABRT, as a Rust stack overflow aborts); stderr: thread '<unknown>' (27295) has overflowed its stack | fatal runtime error: stack overflow, aborting
+FAILED
+test ac1_a_million_minus_signs_are_refused_in_a_child_in_under_50_ms ... AC1 #1468.ded1c18b 1000000 repeats of `-`: the child `ac1:minus:real` died by signal 6 (SIGABRT, as a Rust stack overflow aborts); stderr: thread '<unknown>' (28367) has overflowed its stack | fatal runtime error: stack overflow, aborting []
+
+thread 'ac1_a_million_minus_signs_are_refused_in_a_child_in_under_50_ms' (28364) panicked at crates/deep-motion/../../tests/acceptance/1468/depth.rs:556:31:
+AC1 #1468.ded1c18b 1000000 repeats of `-`: the child `ac1:minus:real` died by signal 6 (SIGABRT, as a Rust stack overflow aborts); stderr: thread '<unknown>' (28367) has overflowed its stack | fatal runtime error: stack overflow, aborting
+FAILED
+test ac1_a_million_opening_parens_are_refused_in_a_child_in_under_50_ms ... AC1 #1468.ded1c18b 1000000 repeats of `(`: the child `ac1:paren:real` died by signal 6 (SIGABRT, as a Rust stack overflow aborts); stderr: thread '<unknown>' (28526) has overflowed its stack | fatal runtime error: stack overflow, aborting []
+
+thread 'ac1_a_million_opening_parens_are_refused_in_a_child_in_under_50_ms' (28522) panicked at crates/deep-motion/../../tests/acceptance/1468/depth.rs:556:31:
+AC1 #1468.ded1c18b 1000000 repeats of `(`: the child `ac1:paren:real` died by signal 6 (SIGABRT, as a Rust stack overflow aborts); stderr: thread '<unknown>' (28526) has overflowed its stack | fatal runtime error: stack overflow, aborting
+FAILED
+test ac1_a_planted_parser_with_no_cap_dies_by_signal_and_fails ... ok
+test ac2_depth_64_parses_and_evaluates_on_a_1_mb_thread_in_a_debug_build ... ok
+test ac2_depth_65_is_refused_naming_the_cap ... 
+thread 'ac2_depth_65_is_refused_naming_the_cap' (29130) panicked at crates/deep-motion/../../tests/acceptance/1468/depth.rs:654:5:
+AC2 #1468.a5827afe depth 65 is refused, naming the cap:
+  paren at depth 65: parsed; it must be refused
+  minus at depth 65: parsed; it must be refused
+  not at depth 65: parsed; it must be refused
+  abs at depth 65: parsed; it must be refused
+  cond at depth 65: parsed; it must be refused
+  pow at depth 65: parsed; it must be refused
+FAILED
+test ac3_a_planted_parser_with_no_cap_dies_on_the_tower_and_fails ... ok
+test ac3_a_power_tower_of_10000_terms_is_refused_the_same_way ... AC3 #1468.ba3528c4 `2^2^2…` at 10000 terms: the child `ac3:real` died by signal 6 (SIGABRT, as a Rust stack overflow aborts); stderr: thread '<unknown>' (29320) has overflowed its stack | fatal runtime error: stack overflow, aborting []
+
+thread 'ac3_a_power_tower_of_10000_terms_is_refused_the_same_way' (29317) panicked at crates/deep-motion/../../tests/acceptance/1468/depth.rs:556:31:
+AC3 #1468.ba3528c4 `2^2^2…` at 10000 terms: the child `ac3:real` died by signal 6 (SIGABRT, as a Rust stack overflow aborts); stderr: thread '<unknown>' (29320) has overflowed its stack | fatal runtime error: stack overflow, aborting
+FAILED
+test ac4_a_driver_holding_a_million_parens_is_refused_naming_its_path_and_deep_motion_stays_up ... 
+thread 'ac4_a_driver_holding_a_million_parens_is_refused_naming_its_path_and_deep_motion_stays_up' (29384) panicked at crates/deep-motion/../../tests/acceptance/1468/depth.rs:733:5:
+AC4 #1468.b22b517b driver: the process stays up: deep-motion eval died by signal 6 (SIGABRT, as a Rust stack overflow aborts); stderr: thread 'main' (29385) has overflowed its stack | fatal runtime error: stack overflow, aborting
+FAILED
+test ac4_a_field_holding_a_million_parens_is_refused_naming_its_path_and_the_process_stays_up ... 
+thread 'ac4_a_field_holding_a_million_parens_is_refused_naming_its_path_and_the_process_stays_up' (29520) panicked at crates/deep-motion/../../tests/acceptance/1468/depth.rs:748:5:
+AC4 #1468.b22b517b field: the process stays up: the child `field:deep` died by signal 6 (SIGABRT, as a Rust stack overflow aborts); stderr: thread '<unknown>' (29524) has overflowed its stack | fatal runtime error: stack overflow, aborting
+FAILED
+test ac4_a_pack_rule_holding_a_million_parens_is_refused_naming_its_path_and_the_process_stays_up ... 
+thread 'ac4_a_pack_rule_holding_a_million_parens_is_refused_naming_its_path_and_the_process_stays_up' (29754) panicked at crates/deep-motion/../../tests/acceptance/1468/depth.rs:764:5:
+AC4 #1468.b22b517b pack rule: the process stays up: the child `pack:deep` died by signal 6 (SIGABRT, as a Rust stack overflow aborts); stderr: thread '<unknown>' (29757) has overflowed its stack | fatal runtime error: stack overflow, aborting
+FAILED
+test ac4_the_same_documents_with_a_shallow_expression_evaluate ... ok
+test child ... ignored, the child process the #1468 tests run; it does nothing without DEEP_1468_CHILD
+
+failures:
+
+failures:
+    ac1_a_million_abs_calls_are_refused_in_a_child_in_under_50_ms
+    ac1_a_million_bangs_are_refused_in_a_child_in_under_50_ms
+    ac1_a_million_conditionals_are_refused_in_a_child_in_under_50_ms
+    ac1_a_million_minus_signs_are_refused_in_a_child_in_under_50_ms
+    ac1_a_million_opening_parens_are_refused_in_a_child_in_under_50_ms
+    ac2_depth_65_is_refused_naming_the_cap
+    ac3_a_power_tower_of_10000_terms_is_refused_the_same_way
+    ac4_a_driver_holding_a_million_parens_is_refused_naming_its_path_and_deep_motion_stays_up
+    ac4_a_field_holding_a_million_parens_is_refused_naming_its_path_and_the_process_stays_up
+    ac4_a_pack_rule_holding_a_million_parens_is_refused_naming_its_path_and_the_process_stays_up
+
+test result: FAILED. 4 passed; 10 failed; 1 ignored; 0 measured; 0 filtered out; finished in 19.11s
+
+error: test failed, to rerun pass `-p deep-motion --test acceptance_1468`
+[exit 101]
+$ env DEEP_1468_CHILD=ac1:paren:planted cargo test --locked -q -p deep-motion --test acceptance_1468 -- --ignored --exact child
+
+running 1 test
+
+thread '<unknown>' (29819) has overflowed its stack
+fatal runtime error: stack overflow, aborting
+error: test failed, to rerun pass `-p deep-motion --test acceptance_1468`
+
+Caused by:
+  process didn't exit successfully: `<scratchpad>/blind1468/target/debug/deps/acceptance_1468-6929e83beb00ed61 --ignored --exact child --quiet` (signal: 6, SIGABRT: process abort signal)
+[exit 101]
+$ env DEEP_1468_CHILD=ac3:planted cargo test --locked -q -p deep-motion --test acceptance_1468 -- --ignored --exact child
+
+running 1 test
+
+thread '<unknown>' (29870) has overflowed its stack
+fatal runtime error: stack overflow, aborting
+error: test failed, to rerun pass `-p deep-motion --test acceptance_1468`
+
+Caused by:
+  process didn't exit successfully: `<scratchpad>/blind1468/target/debug/deps/acceptance_1468-6929e83beb00ed61 --ignored --exact child --quiet` (signal: 6, SIGABRT: process abort signal)
+[exit 101]
+
+Script done on 2026-11-12 00:31:05-08:00 [COMMAND_EXIT_CODE="101"]
