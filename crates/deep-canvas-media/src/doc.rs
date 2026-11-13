@@ -60,6 +60,15 @@ pub fn time(doc: &Value, v: Option<&Value>) -> Option<i64> {
     }
 }
 
+/// The source time, in flicks, an item's `frames` shows at `t`: before start, its first frame's.
+/// Every host that draws a video's frame at t reads it here (#499, #503).
+pub fn source_time(doc: &Value, frames: &Value, t: i64) -> i64 {
+    let start = time(doc, frames.get("start")).unwrap_or(0);
+    let r#in = time(doc, frames.get("in")).unwrap_or(0);
+    let rate = rate(frames.get("rate")).unwrap_or((1, 1));
+    crate::frames::source_time(t.max(start), start, r#in, rate)
+}
+
 /// The value of `field` (start, in or rate) a picture's `frames` or a strip holds, as compared.
 pub fn link_value(doc: &Value, obj: &Value, field: &str) -> Value {
     match field {

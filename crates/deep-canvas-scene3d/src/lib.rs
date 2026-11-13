@@ -5,6 +5,7 @@ pub mod bevel;
 pub mod build;
 pub mod builders;
 pub mod building;
+pub mod cloud;
 pub mod clusters;
 pub mod curve;
 pub mod cut;
@@ -49,6 +50,7 @@ pub mod stack;
 pub mod sweep;
 pub mod terrain;
 pub mod tints;
+pub mod trail;
 pub mod uv;
 pub mod water;
 

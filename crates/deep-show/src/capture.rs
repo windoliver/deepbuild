@@ -362,7 +362,14 @@ fn redaction(planted: Option<Planted>) -> &'static str {
 }
 
 /// Appends one event to the record in `state` (#96's line shape).
-fn append(state: &Path, session: &str, kind: &str, subject: &str, data: Value, files: &[&str]) {
+pub(crate) fn append(
+    state: &Path,
+    session: &str,
+    kind: &str,
+    subject: &str,
+    data: Value,
+    files: &[&str],
+) {
     let record = state.join("record.jsonl");
     let log_pos = fs::read_to_string(&record).map_or(0, |t| t.lines().count()) + 1;
     let ts = std::time::SystemTime::now()

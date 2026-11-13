@@ -705,7 +705,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cd84020bf440612079c6ddb372d4c293a91e7f1cbc055f2cbacc1fc943b88667"
 dependencies = [
  "basisu_wasm_libcxx",
- "bindgen",
+ "bindgen 0.72.1",
  "bitflags 2.13.2",
  "cc",
  "spin 0.12.3",
@@ -748,6 +748,26 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b1f45e9417d87227c7a56d22e471c6206462cba514c7590c09aff4cf6d1ddcad"
 dependencies = [
  "serde",
+]
+
+[[package]]
+name = "bindgen"
+version = "0.71.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5f58bf3d7db68cfbac37cfc485a8d711e87e064c3d0fe0435b92f7a407f9d6b3"
+dependencies = [
+ "bitflags 2.13.2",
+ "cexpr",
+ "clang-sys",
+ "itertools 0.13.0",
+ "log",
+ "prettyplease",
+ "proc-macro2",
+ "quote",
+ "regex",
+ "rustc-hash 2.1.3",
+ "shlex 1.3.0",
+ "syn 2.0.119",
 ]
 
 [[package]]
@@ -2262,6 +2282,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "deep-canvas-export"
+version = "0.0.0"
+dependencies = [
+ "deep-canvas",
+ "deep-canvas-marks",
+ "deep-canvas-motion",
+ "deep-text",
+ "serde_json",
+]
+
+[[package]]
 name = "deep-canvas-graph"
 version = "0.0.0"
 dependencies = [
@@ -2308,6 +2339,7 @@ dependencies = [
  "deep-canvas-scene3d",
  "serde_json",
  "sha2 0.10.9",
+ "unicode-normalization",
 ]
 
 [[package]]
@@ -2405,8 +2437,12 @@ dependencies = [
  "deep-canvas-cells",
  "image",
  "libc",
+ "libm",
+ "opus-rs",
+ "rusty_aac",
  "serde_json",
  "sha2 0.10.9",
+ "symphonia",
 ]
 
 [[package]]
@@ -2455,6 +2491,7 @@ dependencies = [
  "deep-canvas-graph",
  "deep-canvas-input",
  "deep-canvas-marks",
+ "deep-canvas-media",
  "deep-canvas-motion",
  "deep-canvas-physics",
  "deep-canvas-record",
@@ -2527,6 +2564,24 @@ dependencies = [
  "wasmparser 0.258.3",
  "wasmtime",
  "wat",
+]
+
+[[package]]
+name = "deep-lottie"
+version = "0.0.0"
+dependencies = [
+ "deep-canvas",
+ "deep-canvas-marks",
+ "deep-canvas-motion",
+ "deep-text",
+ "serde_json",
+]
+
+[[package]]
+name = "deep-lottie-reader"
+version = "0.0.0"
+dependencies = [
+ "thorvg",
 ]
 
 [[package]]
@@ -2674,6 +2729,7 @@ dependencies = [
  "deep-canvas",
  "deep-canvas-cells",
  "deep-canvas-effects",
+ "deep-canvas-export",
  "deep-canvas-graph",
  "deep-canvas-input",
  "deep-canvas-loop",
@@ -2693,6 +2749,7 @@ dependencies = [
  "deep-gpu",
  "deep-images",
  "deep-logic",
+ "deep-lottie-reader",
  "deep-marks-vello",
  "deep-physics-rapier",
  "deep-relay",
@@ -2713,6 +2770,14 @@ dependencies = [
  "sha2 0.10.9",
  "vello_cpu 0.3.0",
  "wgpu 30.0.1",
+]
+
+[[package]]
+name = "deep-synth-job"
+version = "0.0.0"
+dependencies = [
+ "deep-canvas-media",
+ "serde_json",
 ]
 
 [[package]]
@@ -7916,6 +7981,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "04744f49eae99ab78e0d5c0b603ab218f515ea8cfe5a456d7629ad883a3b6e7d"
 
 [[package]]
+name = "opus-rs"
+version = "0.1.42"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bafbcaf2ed381cdf68ced4ed8d16517de90ffd7424e36f0b9e45d67fbe30b1f9"
+dependencies = [
+ "libm",
+]
+
+[[package]]
 name = "ordered-float"
 version = "5.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -9363,6 +9437,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "regex-lite"
+version = "0.1.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cab834c73d247e67f4fae452806d17d3c7501756d98c8808d7c9c7aa7d18f973"
+
+[[package]]
 name = "regex-syntax"
 version = "0.8.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -9806,6 +9886,12 @@ dependencies = [
  "tempfile",
  "wait-timeout",
 ]
+
+[[package]]
+name = "rusty_aac"
+version = "2.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "93388483e43ffd3bb3c347794a849edb204438258d8642b8449992a56433798a"
 
 [[package]]
 name = "rustybuzz"
@@ -10617,6 +10703,89 @@ dependencies = [
 ]
 
 [[package]]
+name = "symphonia"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a7edef6a96b696d4e0cab5ee9ebb7ca155ed95f30a6b45bbb8b97d2727f02424"
+dependencies = [
+ "lazy_static",
+ "symphonia-bundle-mp3",
+ "symphonia-codec-alac",
+ "symphonia-codec-vorbis",
+ "symphonia-core",
+ "symphonia-metadata",
+]
+
+[[package]]
+name = "symphonia-bundle-mp3"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "98ea5ffc8716bff677dfb3b01b420c7b758de901a72b8c330bf2040ab74b4add"
+dependencies = [
+ "lazy_static",
+ "log",
+ "symphonia-core",
+]
+
+[[package]]
+name = "symphonia-codec-alac"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "920a78f96f3cf62932d0c497959c0cc2100ef36b03c7ca1417b260f432a482d8"
+dependencies = [
+ "log",
+ "symphonia-common",
+ "symphonia-core",
+]
+
+[[package]]
+name = "symphonia-codec-vorbis"
+version = "0.6.1"
+dependencies = [
+ "log",
+ "symphonia-common",
+ "symphonia-core",
+]
+
+[[package]]
+name = "symphonia-common"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2acc3fcc18ec9b8cdd48614e259c4cf0d27b71d41e5d9b120b42c5adab12d7c4"
+dependencies = [
+ "log",
+ "symphonia-core",
+ "symphonia-metadata",
+]
+
+[[package]]
+name = "symphonia-core"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "01c412864d599d4750d0c3d684d7e093ec05e5309681ef5252cc1096a437f6e0"
+dependencies = [
+ "bitflags 2.13.2",
+ "bytemuck",
+ "lazy_static",
+ "log",
+ "num-complex",
+ "smallvec",
+]
+
+[[package]]
+name = "symphonia-metadata"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "83713a97705d77bdef7cdbc0768fd6e5a54e4cd7e48d60a806ae85639e2c87c6"
+dependencies = [
+ "lazy_static",
+ "log",
+ "regex-lite",
+ "smallvec",
+ "symphonia-core",
+]
+
+[[package]]
 name = "syn"
 version = "1.0.109"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -10909,6 +11078,27 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 3.0.9",
+]
+
+[[package]]
+name = "thorvg"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1d9b8161002409c059a3c18fdd29f979c37d2d541bb9b090adb3b9da3ead0f43"
+dependencies = [
+ "libm",
+ "thorvg-sys",
+]
+
+[[package]]
+name = "thorvg-sys"
+version = "0.4.0+thorvg-1.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e3f2a32e7360873852631ae72bd805fbe6b4c961a6b7b9c607785b20404a8b54"
+dependencies = [
+ "bindgen 0.71.1",
+ "cc",
+ "pkg-config",
 ]
 
 [[package]]

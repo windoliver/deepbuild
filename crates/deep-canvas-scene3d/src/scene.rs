@@ -326,6 +326,8 @@ pub struct Line {
     pub dash_world: bool,
     /// How its free ends end (#537; Marks in 3D: lines `cap`).
     pub cap: crate::points::Cap,
+    /// What its trail draws at t (#450), or `None` for a line of its own points.
+    pub trail: Option<Arc<crate::trail::Drawn>>,
 }
 
 /// A mesh-edge line's mesh, its kind, the matrix that places the mesh, and the edges it draws.
@@ -380,6 +382,8 @@ pub struct Point {
     pub world: bool,
     pub shape: PointShape,
     pub color: [u8; 3],
+    /// Its set from a depth video (#503), whose points the GPU writes: the point is its item.
+    pub cloud: Option<Arc<crate::cloud::Cloud>>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1068,7 +1072,7 @@ fn world(items: &Items<'_>, id: &str) -> Affine3 {
 /// The document's items at a time, as [`eval::items`] gives them, without copying the document:
 /// an item a field names is its copy in `written`, and every other item is the document's own,
 /// its `at` the three numbers of each group in its slots.
-struct Items<'a> {
+pub(crate) struct Items<'a> {
     doc: &'a Map<String, Value>,
     written: &'a Map<String, Value>,
     /// Each item as evaluated, and for an object nothing writes, its index in the program: its
@@ -1117,7 +1121,7 @@ impl<'a> Items<'a> {
         }
     }
 
-    fn get(&self, id: &str) -> Option<&'a Value> {
+    pub(crate) fn get(&self, id: &str) -> Option<&'a Value> {
         self.entries.get(id).map(|e| e.0)
     }
 
@@ -1487,11 +1491,11 @@ impl Index<&str> for Items<'_> {
     }
 }
 
-fn origin(m: &Affine3) -> Vec3 {
+pub(crate) fn origin(m: &Affine3) -> Vec3 {
     [m[0][3], m[1][3], m[2][3]]
 }
 
-fn paint(look: &Look3, params: &Value, path: &str) -> Result<[u8; 3], Refused> {
+pub(crate) fn paint(look: &Look3, params: &Value, path: &str) -> Result<[u8; 3], Refused> {
     // #149: a noise fill's first stop, or a line's own role, or the ink a named fill leaves out.
     let drawn = params
         .pointer("/paint/fill/noise/stops/0/role")
@@ -1662,6 +1666,7 @@ fn line(
         dash: [0.0; 2],
         dash_world: false,
         cap: crate::points::cap(params, &path)?,
+        trail: None,
     })
 }
 
@@ -1972,6 +1977,7 @@ fn edge_line(
         dash,
         dash_world: world,
         cap: Default::default(),
+        trail: None,
     })
 }
 
@@ -3401,29 +3407,60 @@ pub(crate) fn evaluate_compiled(
                     }
                 }
                 "mark.line@1" => {
-                    let mut l = line(&items, id, params, look, (map, t))?;
+                    let mut l = match crate::trail::read(params, &path)? {
+                        // #450: a trail reads its source at earlier times, through `trail::path_at`.
+                        Some(tr) => {
+                            let at = |times: &[i64]| {
+                                crate::trail::path_at(
+                                    map,
+                                    program,
+                                    &items,
+                                    &tr.of,
+                                    times,
+                                    &format!("{path}/trail/of"),
+                                )
+                            };
+                            let mut drawn = crate::trail::drawn(
+                                &tr,
+                                (map, program, t),
+                                (id, &path),
+                                &at,
+                                &mut labels.trails,
+                            )?;
+                            crate::trail::ride(
+                                &tr,
+                                &mut drawn,
+                                |p, at| world_at(map, program, p, at),
+                                map,
+                                t,
+                            );
+                            let world =
+                                params.get("size_space").and_then(Value::as_str) == Some("world");
+                            let cap = crate::points::cap(params, &path)?;
+                            crate::trail::line(
+                                id,
+                                &tr,
+                                drawn,
+                                paint(look, params, &path)?,
+                                world,
+                                cap,
+                            )
+                        }
+                        None => line(&items, id, params, look, (map, t))?,
+                    };
                     let under = strokes(map, id, item, &mut l, look, seconds)?;
                     bounds.extend(crate::points::ends(&l));
                     layer.lines.extend(under);
                     layer.lines.push(l);
                 }
                 "mark.point@1" => {
-                    let pos = origin(&world(&items, id));
-                    bounds.push(pos);
-                    let shape = match params.get("shape").and_then(Value::as_str) {
-                        None | Some("dot") => PointShape::Dot,
-                        Some("square") => PointShape::Square,
-                        Some("diamond") => PointShape::Diamond,
-                        Some(_) => return refused("out_of_range", format!("{path}/shape")),
-                    };
-                    layer.points.push(Point {
-                        id: id.clone(),
-                        pos,
-                        size: num(params.get("size")).unwrap_or(4.0),
-                        world: params.get("size_space").and_then(Value::as_str) == Some("world"),
-                        shape,
-                        color: paint(look, params, &path)?,
-                    });
+                    let point = crate::cloud::point(id, params, &path, world(&items, id), look)?;
+                    // A set from a depth video bounds its frustum, never its points (#503).
+                    match &point.cloud {
+                        Some(c) => bounds.extend(c.corners()),
+                        None => bounds.push(point.pos),
+                    }
+                    layer.points.push(point);
                 }
                 "mark.text@1" => {
                     let text = params.get("text").and_then(Value::as_str).unwrap_or("");
@@ -3890,7 +3927,9 @@ pub(crate) fn evaluate_compiled(
             let step = frame_interval(map);
             wake.step = step as f64 / deep_canvas::camera::FLICKS_PER_SECOND as f64;
             let times = crate::water::wake_times(t, step, wake.span);
-            wake.path = wake_path(map, program, &items, &w.material, &wake.item, &times)?;
+            let path = format!("items/{}/params/water/wake/item", w.material);
+            let at = crate::trail::path_at(map, program, &items, &wake.item, &times, &path)?;
+            wake.path = at.iter().map(|p| [p[0], p[2]]).collect();
         }
         // #268: the shore's field, baked once per key.
         if let Some(shore) = &mut w.shore {
@@ -3913,57 +3952,6 @@ pub(crate) fn evaluate_compiled(
     Ok(scene)
 }
 
-/// #166: where a wake's item stood in the water's plane (x, z) at each of `times`, read through
-/// the chain a trail reads: its channels and parents, or a physics bake's output kept through the
-/// world's span, never an earlier frame ([`crate::water::logic_moved`] refuses an item a logic
-/// array moves before this).
-fn wake_path(
-    map: &Map<String, Value>,
-    program: &Program,
-    items: &Items<'_>,
-    material: &str,
-    item: &str,
-    times: &[i64],
-) -> Result<Vec<[f64; 2]>, Refused> {
-    let unresolved = || {
-        refused(
-            "ref_unresolved",
-            format!("items/{material}/params/water/wake/item"),
-        )
-    };
-    // A body of a baked world: `<world>#<body>`.
-    if let Some((owner, body)) = item.split_once('#') {
-        let Some(world) = items
-            .get(owner)
-            .filter(|w| w.get("kind").and_then(Value::as_str) == Some("fixture.world@1"))
-        else {
-            return unresolved();
-        };
-        let params = world.get("params").cloned().unwrap_or(Value::Null);
-        let bake = crate::fixtures::bake(&params, &format!("items/{owner}/params"))?;
-        let Some(k) = bake.bodies.iter().position(|b| b.id == body) else {
-            return unresolved();
-        };
-        return Ok(times
-            .iter()
-            .map(|&at| {
-                let p = bake.at(at)[k];
-                [p[0], p[2]]
-            })
-            .collect());
-    }
-    if items.get(item).is_none() {
-        return unresolved();
-    }
-    Ok(times
-        .iter()
-        .map(|&at| {
-            let o = origin_at(map, program, item, at);
-            [o[0], o[2]]
-        })
-        .collect())
-}
-
 /// The document's frame interval in flicks: its transport's `frame_rate`, 60/1 by default.
 fn frame_interval(map: &Map<String, Value>) -> i64 {
     let (p, q) = map
@@ -3976,7 +3964,12 @@ fn frame_interval(map: &Map<String, Value>) -> i64 {
 
 /// Item `id`'s world origin at `t`, through the chain its channels and parents give: what a
 /// wake reads at an earlier time, never an earlier frame.
-fn origin_at(map: &Map<String, Value>, program: &Program, id: &str, t: i64) -> Vec3 {
+pub(crate) fn origin_at(map: &Map<String, Value>, program: &Program, id: &str, t: i64) -> Vec3 {
+    origin(&world_at(map, program, id, t))
+}
+
+/// Item `id`'s world transform at `t`, evaluated afresh (#450: a local trail's parent then).
+pub(crate) fn world_at(map: &Map<String, Value>, program: &Program, id: &str, t: i64) -> Affine3 {
     let mut state = program.state();
     program.evaluate_local(t, eval::Validity::Full, &mut state);
     let empty = Map::new();
@@ -3995,7 +3988,7 @@ fn origin_at(map: &Map<String, Value>, program: &Program, id: &str, t: i64) -> V
         Rests::All,
         &mut Vec::new(),
     );
-    origin(&world(&items, id))
+    world(&items, id)
 }
 
 /// The document's light probes, each captured or baked from what it sees (#427). Figures and

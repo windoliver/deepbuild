@@ -174,6 +174,8 @@ pub enum Planted {
     Audit(crate::geometry_audit::Planted),
     /// #1921's: a world's outputs' wrong programs, which the physics host names.
     Physics(crate::physics::Planted),
+    /// #525's live worlds' wrong programs.
+    Ahead(crate::stepped::Planted),
     /// #202: a kind_rules requirement counts the working agent's own pack rule as its cover.
     OwnRuleCountsAsCover,
     /// #202: the kind_rules check evaluates a pack kind's recipe rules a second time.
@@ -379,6 +381,9 @@ pub enum Planted {
     BackendKeepsRemovedDevice,
     /// #499: after a device change the clock counts t from the new stream's sample 0.
     ClockRestartsFromSample0,
+    /// #525: a golden is compared under another runtime digest; an export's receipt leaves it out.
+    GoldenComparesAcrossDigests,
+    ReceiptOmitsRuntimeDigest,
     /// #421: a view keeps an item only when its bounds' centre is inside.
     CullByCenter,
     /// #421: a node's hierarchy bounds union only its direct children's own bounds.
@@ -602,6 +607,8 @@ pub struct Frames {
     pub paced: bool,
     pub revise: Option<(usize, Value)>,
     pub pixels: bool,
+    /// #538: each frame's compares and remap times.
+    pub timings: bool,
 }
 
 pub struct Show {
@@ -683,6 +690,7 @@ pub enum Call {
     Logic(Box<crate::picks::LogicCall>),
     /// #2014: rays met by a terrain plate's drawn triangles, its physics shape and a pick.
     TerrainRays(Box<crate::terrain::TerrainRays>),
+    PhysicsBake(Box<crate::physics::Bake>),
     /// #306: the pack store's rows.
     Packs,
     /// #306: one pack version installed mid-run; #200: through a session, which wrote it.
@@ -802,6 +810,8 @@ pub enum Call {
     Input {
         panel: String,
         event: deep_canvas::scope::Event,
+        /// #525: the platform's timestamp of the event, when it carries one.
+        t: Option<i64>,
     },
     /// A panel's interaction scope, with no input (#383).
     Scope(String),
@@ -948,6 +958,8 @@ pub enum Call {
     Mix(Box<crate::mixdown::MixCall>),
     /// #499: the test audio backend's devices, the transport log and a logic item's state.
     Audio(Box<crate::audio::AudioCall>),
+    /// #525: a golden of a document's evaluation, recorded or verified on this build.
+    RuntimeGolden(crate::golden::GoldenCall),
 }
 
 /// `eval`'s `t` (#488): a flick count, or a time literal resolved against the document's frame
@@ -1044,6 +1056,8 @@ pub struct Scenario {
     pub decode_caps: deep_codecs::Caps,
     /// #499: the test audio backend, which replaces the platform's output at its boundary.
     pub audio: Option<crate::audio::Backend>,
+    /// #525: steps of live worlds that take host time on purpose.
+    pub delays: Vec<crate::stepped::Delay>,
     /// The packs installed in the store before the first call (#306), each `(owner/name, dir)`.
     pub packs: Vec<(String, PathBuf)>,
     /// #1961: your notes the hub holds when the run starts, each `{note, doc, item, …}`.
@@ -1150,6 +1164,8 @@ pub struct Hub<'a> {
     pub expansion_cache: BTreeMap<String, Expansion>,
     /// #544's planted start_on: each session's first evaluated time since its revision loaded.
     pub first_frames: BTreeMap<String, i64>,
+    /// #538's planted lookup: each copy table's key order in its document's first revision.
+    pub first_orders: BTreeMap<String, Vec<String>>,
     /// The displays, the windows on them and the card's placement (#400).
     pub placement: Placement,
     /// Terminals, streams and session pages (#402).
@@ -1320,6 +1336,7 @@ impl<'a> Hub<'a> {
             expansions: BTreeMap::new(),
             expansion_cache: BTreeMap::new(),
             first_frames: BTreeMap::new(),
+            first_orders: BTreeMap::new(),
             placement: Placement::open(
                 scenario.displays.clone(),
                 scenario.window,
@@ -1809,6 +1826,7 @@ impl<'a> Hub<'a> {
             Call::Spatial(s) => self.spatial(s),
             Call::Logic(l) => self.logic_call(l),
             Call::TerrainRays(r) => self.terrain_rays(r),
+            Call::PhysicsBake(b) => self.physics_bake(b),
             Call::SceneQuery(q) => self.scene_query(q),
             Call::Packs => self.packs_reply(),
             Call::InstallPack { id, dir, session } => {
@@ -1907,9 +1925,12 @@ impl<'a> Hub<'a> {
                 json!({"bands": self.bands().iter().map(|b| b.to_json()).collect::<Vec<_>>()})
             }
             Call::Kit(k) => self.kit(k),
-            Call::Input { panel, event } => match self.ring_input(panel, event) {
+            Call::Input { panel, event, t } => match self.ring_input(panel, event) {
                 Some(reply) => reply,
-                None => self.input(panel, event),
+                None => self
+                    .live_press(panel, event, *t)
+                    .err()
+                    .unwrap_or_else(|| self.input(panel, event)),
             },
             Call::Scope(panel) => self.scope_reply(panel),
             Call::Presented(panel) => self.presented(panel),
@@ -2001,6 +2022,7 @@ impl<'a> Hub<'a> {
             Call::Gate(g) => self.gate_call(g),
             Call::Mix(m) => self.mix_call(m),
             Call::Audio(a) => self.audio_call(a),
+            Call::RuntimeGolden(g) => self.golden_call(g),
             Call::Term(t) => self.term_call(t),
         };
         for shaping in deep_text::cache::take_log() {
@@ -2349,14 +2371,14 @@ impl<'a> Hub<'a> {
             if !deep_canvas_media::planted("undeclared_field_reads_zero") {
                 issues.extend(crate::spawn::undeclared_issues(form));
             }
-            if let Err(i) = self.inline_occurrences(form, &[]) {
-                issues.push(*i);
-            }
+            issues.extend(self.inline_baked(form));
         }
         // Mark set columns that read a column source, resolved and narrowed by the core's
         // column view at the frame's step (#397).
         if let Some(form) = drawn_form.as_mut() {
-            issues.extend(self.column_view(form, show.t));
+            // #538: and keyed copy's fit check, timed for `timing`.
+            let timing = fresh.as_mut().and_then(|(_, (_, t))| t.as_mut());
+            issues.extend(self.checked_view(&show.doc, form, show.t, timing));
         }
         if let Some(doc) = stamped
             .as_ref()

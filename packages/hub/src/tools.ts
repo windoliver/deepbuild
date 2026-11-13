@@ -167,7 +167,7 @@ const SCHEMAS: Readonly<Record<string, Schema>> = {
     path: maybe(str('field: kind@major.field for one field, or kind@major for every field of that kind.')),
   }),
   deep_job: object({
-    op: { type: 'string', enum: ['list', 'run'], description: 'list the job kinds, each with its qualified tools and their builds; run a kind on one pinned tool, returning its outputs by hash with a receipt.' },
+    op: { type: 'string', enum: ['list', 'run'], description: 'list the job kinds, each with its qualified tools, their builds and each one\'s cost: {usd} a run, 0 when free; run a kind on one pinned tool, returning its outputs by hash with a receipt.' },
     kind: maybe(str('run: the job kind, as the list names it.')),
     tool: maybe(str('run: the tool, pinned by name@version as the list names it.')),
     params: maybe(str('run: the kind\'s params as JSON text; null for its defaults.')),

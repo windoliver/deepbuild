@@ -278,6 +278,7 @@ fn sparks_of(
         draw,
         half: draw == 2 && p["resolution"].as_str() != Some("full"),
         closed: None,
+        ribbon: None,
     }
 }
 

@@ -218,13 +218,21 @@ impl Index {
         let mut corners: Vec<Vec3> = Vec::new();
         for (id, item, world) in &placed {
             let kind = item.get("kind").and_then(Value::as_str).unwrap_or("");
-            let bounds =
-                matches!(kind, "mark.box@1" | "mark.cylinder@1" | "mark.sphere@1").then(|| {
+            let c = match kind {
+                "mark.box@1" | "mark.cylinder@1" | "mark.sphere@1" => {
                     let size = vec3(item.pointer("/params/size")).unwrap_or([1.0; 3]);
-                    let c = corners8(&model(world, size));
-                    corners.extend(c);
-                    Aabb::of(&c)
-                });
+                    Some(corners8(&model(world, size)))
+                }
+                // A set from a depth video: its frustum's box, never its points (#503).
+                "mark.point@1" => {
+                    let params = item.get("params").unwrap_or(&Value::Null);
+                    let path = format!("items/{id}/params");
+                    crate::cloud::parse(params, &path, *world)?.map(|c| c.corners())
+                }
+                _ => None,
+            };
+            corners.extend(c.iter().flatten());
+            let bounds = c.map(|c| Aabb::of(&c));
             if let Some(p) = item.get("parent").and_then(Value::as_str) {
                 parents.push((p.to_string(), id.clone()));
             }

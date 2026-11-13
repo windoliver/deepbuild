@@ -22,12 +22,14 @@ mod film;
 mod film_audit;
 mod film_layout;
 mod film_viewer;
+mod forms;
 mod frames;
 mod function;
 mod gate;
 mod generated;
 mod geometry;
 mod geometry_audit;
+mod golden;
 mod host;
 mod hub;
 mod input;
@@ -64,6 +66,7 @@ mod shared;
 mod snapshot;
 mod spatial;
 mod spawn;
+mod stepped;
 mod terminal;
 mod terrain;
 #[cfg(feature = "test-machines")]
@@ -74,13 +77,15 @@ mod test_sim;
 #[cfg(feature = "test-threads")]
 mod test_threads;
 mod time;
+mod timings;
 #[cfg(any(
     feature = "test-json",
     feature = "test-debug-digest",
     feature = "test-accent",
     feature = "test-threads",
     feature = "test-scene3d-tie-by-order",
-    feature = "test-scene3d-reads-vector"
+    feature = "test-scene3d-reads-vector",
+    feature = "test-data-reads-logic-array"
 ))]
 mod twins;
 mod verdict;
@@ -467,6 +472,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
             return Some(Call::Input {
                 panel: c.get("panel")?.as_str()?.to_string(),
                 event: input::event(c.get("event")?)?,
+                t: optional(c.get("event")?.get("t"), Value::as_i64)?,
             })
         }
         "scope" => return Some(Call::Scope(c.get("panel")?.as_str()?.to_string())),
@@ -601,6 +607,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         "spatial" => return spatial::parse(c).map(|s| Call::Spatial(Box::new(s))),
         "logic" => return picks::parse(c).map(|l| Call::Logic(Box::new(l))),
         "terrain_rays" => return terrain::parse(c).map(|r| Call::TerrainRays(Box::new(r))),
+        "physics_bake" => return physics::parse(c).map(|b| Call::PhysicsBake(Box::new(b))),
         "packs" => return Some(Call::Packs),
         "install_pack" => {
             return Some(Call::InstallPack {
@@ -679,6 +686,9 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         "seam_suite" => return seams::parse(c),
         "relay_client" => return seams::parse_client(c),
         "schedule" => return Some(Call::Schedule),
+        "golden_record" | "golden_verify" => {
+            return golden::parse(name, c).map(Call::RuntimeGolden)
+        }
         "rate" | "time" | "export" | "play" | "determinism" => {
             return crate::time::parse_call(name, c)
         }
@@ -722,6 +732,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
                 paced: flag("paced")?,
                 revise,
                 pixels: flag("pixels")?,
+                timings: flag("timings")?,
             })));
         }
         "settle" => {
@@ -1238,7 +1249,12 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 || deep_canvas_marks::arrays::PLANTED.contains(p)
                 // #1967's wrong programs live in the cells module's playback and conversion.
                 || deep_canvas_cells::recording::PLANTED.contains(p)
+                || deep_canvas_export::lottie::PLANTED.contains(p)
                 || deep_canvas_input::rows::PLANTED.contains(p)
+                // #538's in the cells, text and motion modules.
+                || *p == deep_canvas_cells::module::GRID_WRAPS_INDEX
+                || deep_canvas_marks::copy::PLANTED.contains(p)
+                || *p == deep_canvas_motion::held::FLIP_HOLDS_LAST
         })
         .map(str::to_string);
     // #433's wrong programs are twins of the familiar@1 pack.
@@ -1260,6 +1276,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
             None if export_planted(p).is_some() => export_planted(p),
             None if geometry_audit::planted(p).is_some() => geometry_audit::planted(p),
             None if physics::planted(p).is_some() => physics::planted(p),
+            None if stepped::planted(p).is_some() => stepped::planted(p),
             None => Some(match p {
                 "presents_unnamed_removal" => Planted::PresentsUnnamedRemoval,
                 "diffs_items_only" => Planted::DiffsItemsOnly,
@@ -1626,6 +1643,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
         devices: capture::Devices::parse(input)?,
         decode_caps: media::caps(input)?,
         audio: audio::parse(input.get("audio"))?,
+        delays: stepped::delays(input.get("delays"))?,
     })
 }
 
@@ -1868,6 +1886,8 @@ fn build_set() -> BuildSet {
 const TEST_BUILD: bool = cfg!(any(
     feature = "test-a",
     feature = "test-preview",
+    feature = "test-preview-removed",
+    feature = "test-preview-removed-bare",
     feature = "test-cue",
     feature = "test-cue-span",
     feature = "test-ring-a",
@@ -1911,6 +1931,7 @@ const TEST_BUILD: bool = cfg!(any(
     feature = "test-check-kind",
     feature = "test-glyph-label",
     feature = "test-leave-out-logic",
+    feature = "test-data-reads-logic-array",
     feature = "test-leave-out-data",
     feature = "test-leave-out-sandbox",
     feature = "test-mesh-item",
@@ -1944,7 +1965,13 @@ fn modules(set: BuildSet) -> Vec<Module> {
             if cfg!(feature = "test-data-m4-drops-last") {
                 deep_canvas_marks::modules::data_m4_drops_last()
             } else {
-                deep_canvas_marks::modules::data()
+                // #538: `test-data-reads-logic-array` seals the planted data module that reads a
+                // logic array itself.
+                #[cfg(feature = "test-data-reads-logic-array")]
+                let data = twins::data_reads_logic_array();
+                #[cfg(not(feature = "test-data-reads-logic-array"))]
+                let data = deep_canvas_marks::modules::data();
+                data
             },
             if cfg!(feature = "test-graph-tie-by-registration") {
                 deep_canvas_graph::module::tie_by_registration()
@@ -1999,7 +2026,7 @@ fn modules(set: BuildSet) -> Vec<Module> {
             deep_canvas_media::module::module()
         });
         // Issue #308: controls and the input track's handling, with control@1; #535: logic's arrays.
-        out.extend([deep_canvas_input::module::module(), deep_logic::module()]);
+        out.extend([deep_canvas_input::module::module(), deep_logic::module(), deep_canvas_export::module::module()]);
         out.extend(physics::module());
     }
     // Issue #238: the sandbox module, on core alone; `test-sandbox-alt` seals the test
@@ -3099,6 +3126,8 @@ fn main() {
         "encode-tool" => {
             std::process::exit(deep_codecs::serve(deep_codecs::ENCODE_TOOL, &args[1..]))
         }
+        // #162: this binary's copy as the Lottie export's reference reader.
+        "lottie-reader" => std::process::exit(deep_lottie_reader::serve(&args[1..])),
         _ => {}
     }
     let stdout = io::stdout();

@@ -60,6 +60,7 @@ pub(crate) fn planted3(p: Option<Planted>) -> Planted3 {
         drops_clouds: p == Some(Planted::DropsClouds),
         cascade_cache_keeps_stale: p == Some(Planted::CascadeCacheKeepsStale),
         prefilter_over_frames: p == Some(Planted::PrefilterOverFrames),
+        video_background_prefiltered: p == Some(Planted::VideoBackgroundPrefiltered),
         add_writes_depth: p == Some(Planted::AddWritesDepth),
         add_without_depth_test: p == Some(Planted::AddWithoutDepthTest),
         ids_by_draw_position: p == Some(Planted::IdsByDrawPosition),

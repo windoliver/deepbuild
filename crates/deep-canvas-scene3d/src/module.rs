@@ -240,7 +240,12 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
     r.kind(
         kind(
             "point",
-            common(vec![json_param("size"), str_param("shape", "dot")]),
+            common(vec![
+                json_param("size"),
+                str_param("shape", "dot"),
+                // A set from a depth video's frame at t (Marks in 3D: from video; #503).
+                json_param("from"),
+            ]),
         ),
         &[],
         "",

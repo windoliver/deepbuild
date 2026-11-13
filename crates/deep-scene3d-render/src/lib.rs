@@ -8,6 +8,8 @@
 //! target and writes the slot.
 
 pub mod ao;
+mod backdrop;
+pub mod clouds;
 pub mod created;
 pub mod cull;
 mod diag;
@@ -31,6 +33,7 @@ pub mod status;
 pub mod surface;
 mod sway;
 pub mod targets;
+mod ties;
 mod tint;
 pub mod water;
 
@@ -193,6 +196,8 @@ pub struct Planted {
     pub cascade_cache_keeps_stale: bool,
     /// #422: the environment prefiltered one roughness mip per frame from the session's first.
     pub prefilter_over_frames: bool,
+    /// #503: a video background's frame prefiltered into the environment, keyed per frame.
+    pub video_background_prefiltered: bool,
     /// #1174: screen-size labels draw in the geometry pass at the internal size, before the
     /// upscale, as the base drew them.
     pub labels_before_upscale: bool,
@@ -293,6 +298,10 @@ pub struct Counts {
     pub local_maps: Vec<local::Report>,
     /// #537: per terrain overlay (`<plate>/<layer>`), the runs of rows this frame wrote.
     pub overlay_rows: BTreeMap<String, Vec<[u32; 2]>>,
+    /// #538: per instancer fed by logic and per plate with overlays, the CPU time in ms from the
+    /// start of writing this frame's changed slot records (or overlay cells) to the return of the
+    /// queue's write of them: a proof reading of the upload's cost.
+    pub upload_ms: BTreeMap<String, f64>,
 }
 
 /// The key light's direction, toward the light: what the solids are shaded by and what casts the
@@ -835,7 +844,12 @@ struct SegmentRecord {
     flags: u32,
     /// A mesh-edge line's dash and gap in its size space, as two f16 (#1640), or 0.
     dash: u32,
+    /// Its alpha at each end, as two f16: a trail's fade (#450), else 1 and 1.
+    fade: u32,
 }
+
+/// Two f16 ones: a segment drawn at its full alpha.
+const OPAQUE_ENDS: u32 = 0x3c00_3c00;
 
 /// `x` ≥ 0 as an IEEE half's bits, its mantissa cut toward zero and capped at the largest half;
 /// 0 below the smallest normal half, which `unpack2x16float` reads back.
@@ -959,77 +973,6 @@ fn solid_record(
         specular,
         op,
     }
-}
-
-/// Each solid's tie rank (#421, #428): only solids whose bounds overlap can share a face, so
-/// each takes, in ID order, the least rank no overlapping solid of an earlier ID holds. Two
-/// solids that could tie always differ and keep their order every frame, while the depth push
-/// stays a few ranks deep, so a thin part just in front of another is never pushed behind it.
-fn tie_ranks<'a>(solids: impl Iterator<Item = &'a Solid>) -> BTreeMap<String, u32> {
-    const TOUCH: f64 = 1e-5;
-    let mut list: Vec<(&str, [f64; 3], [f64; 3])> = solids
-        .map(|s| {
-            let corners = match &s.mesh {
-                Some(m) => {
-                    let [lo, hi] = m.bounds();
-                    (0..8)
-                        .map(|c| {
-                            let p = [0, 1, 2].map(|k| if c >> k & 1 == 0 { lo[k] } else { hi[k] });
-                            [0, 1, 2].map(|r| {
-                                let m = &s.model[r];
-                                m[0] * p[0] + m[1] * p[1] + m[2] * p[2] + m[3]
-                            })
-                        })
-                        .collect::<Vec<_>>()
-                }
-                None => deep_canvas_scene3d::scene::corners(&s.model),
-            };
-            let mut lo = [f64::INFINITY; 3];
-            let mut hi = [f64::NEG_INFINITY; 3];
-            for c in corners {
-                for k in 0..3 {
-                    lo[k] = lo[k].min(c[k] - TOUCH);
-                    hi[k] = hi[k].max(c[k] + TOUCH);
-                }
-            }
-            (s.id.as_str(), lo, hi)
-        })
-        .collect();
-    list.sort_unstable_by(|a, b| a.0.cmp(b.0));
-    let n = list.len();
-    let mut by_x: Vec<usize> = (0..n).collect();
-    by_x.sort_unstable_by(|a, b| list[*a].1[0].total_cmp(&list[*b].1[0]));
-    let mut earlier: Vec<Vec<usize>> = vec![Vec::new(); n];
-    let mut active: Vec<usize> = Vec::new();
-    for &i in &by_x {
-        active.retain(|&j| list[j].2[0] >= list[i].1[0]);
-        for &j in &active {
-            if (1..3).all(|k| list[i].1[k] <= list[j].2[k] && list[j].1[k] <= list[i].2[k]) {
-                earlier[i.max(j)].push(i.min(j));
-            }
-        }
-        active.push(i);
-    }
-    let mut ranks = vec![0u32; n];
-    let mut used = Vec::new();
-    for i in 0..n {
-        used.clear();
-        used.extend(earlier[i].iter().map(|&j| ranks[j]));
-        used.sort_unstable();
-        let mut r = 0;
-        for &u in &used {
-            if u == r {
-                r += 1;
-            } else if u > r {
-                break;
-            }
-        }
-        ranks[i] = r;
-    }
-    list.iter()
-        .zip(ranks)
-        .map(|((id, ..), r)| (id.to_string(), r))
-        .collect()
 }
 
 /// A record's flag: a cast-only level drawn inside its surface by its inset (#425).
@@ -1532,6 +1475,8 @@ struct Batch {
     casters: BTreeMap<SetKey, Set>,
     lines: Set,
     points: Set,
+    /// Its point sets' records from a depth video (#503).
+    clouds: Vec<(wgpu::Buffer, u32)>,
     /// One record per inked glyph of its labels.
     labels: Set,
     bundle: Option<wgpu::RenderBundle>,
@@ -1769,9 +1714,13 @@ pub struct Renderer {
     cluster_buffer: wgpu::Buffer,
     /// The environment's prefilter and cubes (#422).
     env: EnvState,
-    /// Whether this frame has a sky, which draws first; its pipeline once compiled (#422).
+    /// Whether this frame has a sky, which draws first; its pipeline once compiled (#422); the
+    /// video background that draws in its place (#503).
     sky: bool,
     sky_pipeline: Option<wgpu::RenderPipeline>,
+    backdrop: backdrop::Backdrop,
+    /// This frame's point sets from a depth video, as the effects wrote them (#503).
+    clouds: clouds::Clouds,
     /// This frame's puffs, back to front, and their pipeline once compiled (#422).
     puffs: Option<(wgpu::Buffer, u32)>,
     puff_records: Set,
@@ -1801,8 +1750,9 @@ pub struct Renderer {
     /// a frame draws a per-pixel item.
     oit: oit::Oit,
     oit_pipelines: Option<[wgpu::RenderPipeline; 2]>,
-    /// Each solid's rank by ID; and which way the planted ties_by_submission submits this frame.
-    ties: BTreeMap<String, u32>,
+    /// Each solid's rank by ID (#421), ranked again each frame (#450); and which way the planted
+    /// ties_by_submission submits this frame.
+    ties: crate::ties::Ties,
     flip: bool,
     tone_buffer: wgpu::Buffer,
     /// What each per-frame uniform last uploaded (#1903).
@@ -2154,8 +2104,8 @@ const SEGMENT: [wgpu::VertexAttribute; 5] = wgpu::vertex_attr_array![
     0 => Float32x4, 1 => Float32x4, 2 => Uint32, 3 => Uint32, 4 => Uint32
 ];
 /// A line's segment records, with its dash (#1640).
-const LINE: [wgpu::VertexAttribute; 6] = wgpu::vertex_attr_array![
-    0 => Float32x4, 1 => Float32x4, 2 => Uint32, 3 => Uint32, 4 => Uint32, 5 => Uint32
+const LINE: [wgpu::VertexAttribute; 7] = wgpu::vertex_attr_array![
+    0 => Float32x4, 1 => Float32x4, 2 => Uint32, 3 => Uint32, 4 => Uint32, 5 => Uint32, 6 => Uint32
 ];
 const POINT: [wgpu::VertexAttribute; 4] =
     wgpu::vertex_attr_array![0 => Float32x4, 1 => Uint32, 2 => Uint32, 3 => Uint32];
@@ -2610,40 +2560,6 @@ pub(crate) fn op_blend_pipeline(
         module,
         ("mesh_vs", &mesh_buffers()),
         Some(("op_mesh_fs", &targets)),
-        Some(depth),
-        None,
-    )
-}
-
-/// The sky's pipeline: a full-screen triangle at the far plane, behind everything, writing no
-/// depth and no object ID.
-fn sky_pipeline(
-    d: &deep_gpu::counted::Wgpu,
-    samples: u32,
-    module: &wgpu::ShaderModule,
-    layout: &wgpu::PipelineLayout,
-    forward_z: bool,
-) -> wgpu::RenderPipeline {
-    let depth = wgpu::DepthStencilState {
-        format: DEPTH,
-        depth_write_enabled: Some(false),
-        depth_compare: Some(if forward_z {
-            wgpu::CompareFunction::LessEqual
-        } else {
-            wgpu::CompareFunction::GreaterEqual
-        }),
-        stencil: Default::default(),
-        bias: Default::default(),
-    };
-    let targets = [target(LINEAR, None), target(IDS_MS, None)];
-    culled(
-        d,
-        samples,
-        SKY_PASS,
-        Some(layout),
-        module,
-        ("sky_vs", &[]),
-        Some(("sky_fs", &targets)),
         Some(depth),
         None,
     )
@@ -3304,6 +3220,8 @@ impl Renderer {
             env,
             sky: false,
             sky_pipeline: None,
+            backdrop: Default::default(),
+            clouds: Default::default(),
             puffs: None,
             puff_records: Set::default(),
             puff_pipeline: None,
@@ -3322,7 +3240,7 @@ impl Renderer {
             sheen_written: false,
             oit,
             oit_pipelines: None,
-            ties: BTreeMap::new(),
+            ties: Default::default(),
             flip: false,
             tone_buffer,
             written: Uniforms::default(),
@@ -3956,9 +3874,12 @@ impl Renderer {
     fn prepare_env(&mut self, device: &Device, scene: &Scene, camera: &[f64; 16]) {
         let mut u = EnvUniform::zeroed();
         u.moon[3] = 2.0;
+        // #503's planted video_background_prefiltered: the video's frame is the source.
+        let video = backdrop::planted_source(self.planted.video_background_prefiltered, scene);
         let wanted = scene.sky.as_ref().and_then(|s| {
             let e = s.environment.as_ref()?;
-            Some((env::key(s, &e.from, e.size), e))
+            let key = video.map_or_else(|| env::key(s, &e.from, e.size), |v| v.0);
+            Some((key, e))
         });
         let mut rebuilt = false;
         match wanted {
@@ -3974,7 +3895,8 @@ impl Renderer {
                 let partial = self.planted.prefilter_over_frames;
                 let behind = self.env.cube.as_ref().is_some_and(|c| c.filled < c.mips);
                 if self.env.cube.as_ref().map(|c| c.key) != Some(key) || (partial && behind) {
-                    let source = env::source(sky, &e.from);
+                    let source = (video.map(|v| backdrop::equirect(v.1)))
+                        .unwrap_or_else(|| env::source(sky, &e.from));
                     let filled = match (&self.env.cube, partial) {
                         (Some(c), true) if c.key == key => Some(c.filled + 1),
                         (_, true) => Some(1),
@@ -4329,6 +4251,7 @@ impl Renderer {
                     pick: 0,
                     flags,
                     dash: 0,
+                    fade: OPAQUE_ENDS,
                 };
                 set.push(&s.id, bytemuck::bytes_of(&record));
             }
@@ -4579,20 +4502,10 @@ impl Renderer {
             self.names
                 .extend(["scene3d.resolve", "scene3d.per_pixel_sorted"]);
         }
-        // Each solid's rank by ID across the frame: coplanar opaque ties go to the first (#421).
-        // Ranked again only when the frame's solids change, so a frame that moves them allocates
-        // nothing.
-        // A culled batch's elements tie by index order alone, the later on top (#484).
-        let solids = scene
-            .layers
-            .iter()
-            .flat_map(|l| &l.solids)
-            .filter(|s| s.batch == 0);
-        let same = solids.clone().count() == self.ties.len()
-            && solids.clone().all(|s| self.ties.contains_key(&s.id));
-        // Under a drawn look a rank reads the frame alone, so seeking equals playing (#149).
-        if (!same || look.drawn.is_some()) && !self.planted.ties_by_submission {
-            self.ties = tie_ranks(solids);
+        // Each solid's rank by ID across the frame: coplanar opaque ties go to the first (#421),
+        // ranked from where the solids stand this frame, so seeking equals playing (#149, #450).
+        if !self.planted.ties_by_submission {
+            self.ties.rank(scene, None);
         }
         self.flip = !self.flip;
         self.adjusts.clear();
@@ -4623,6 +4536,7 @@ impl Renderer {
         if self.tints.upload(device, &scene.tints, keep) {
             self.rebind_lights(device);
         }
+        self.counts.upload_ms.extend(self.tints.upload_ms.clone());
         for layer in &scene.layers {
             self.prepare_batch(device, layer, &scene.camera);
         }
@@ -5121,27 +5035,11 @@ impl Renderer {
         {
             return self.prepare(device, scene, look);
         }
-        // Under a drawn look a tie rank is a function of the frame, so a part the move changed
-        // rewrites too, and a frame draws the same however it was reached (#149).
+        // A tie rank is a function of the frame, so a part whose rank the move changed rewrites
+        // too, and a frame draws the same however it was reached (#149, #450).
         let mut moved = moved.to_vec();
-        let ties = look.drawn.as_ref().map(|_| {
-            tie_ranks(
-                scene
-                    .layers
-                    .iter()
-                    .flat_map(|l| &l.solids)
-                    .filter(|s| s.batch == 0),
-            )
-        });
-        if let Some(ties) = ties.filter(|t| *t != self.ties) {
-            for (l, layer) in scene.layers.iter().enumerate() {
-                for (i, s) in layer.solids.iter().enumerate() {
-                    if ties.get(&s.id) != self.ties.get(&s.id) && !moved.contains(&(l, i)) {
-                        moved.push((l, i));
-                    }
-                }
-            }
-            self.ties = ties;
+        if !self.planted.ties_by_submission {
+            self.ties.rank(scene, Some(&mut moved));
         }
         let moved = moved.as_slice();
         // A moved part keeps its lobes' entry in the frame's lobe table (#428); one whose lobes
@@ -5179,7 +5077,7 @@ impl Renderer {
             else {
                 continue;
             };
-            let tie = self.ties.get(&s.id).copied().unwrap_or(0);
+            let tie = self.ties.ranks.get(&s.id).copied().unwrap_or(0);
             if let Some(set) = batch.solids.get_mut(&set_key) {
                 let record = solid_record(
                     s,
@@ -5777,7 +5675,7 @@ impl Renderer {
         self.sky = scene.sky.as_ref().is_some_and(|s| s.draws_background());
         self.prepare_puffs(device, scene);
         if self.sky && self.sky_pipeline.is_none() {
-            self.sky_pipeline = Some(sky_pipeline(
+            self.sky_pipeline = Some(backdrop::sky_pipeline(
                 &device.device,
                 self.families.samples,
                 &self.scene_module,
@@ -5786,6 +5684,12 @@ impl Renderer {
             ));
             self.compiled += 1;
             self.names.push(SKY_PASS);
+        }
+        let shader = (self.families.samples, self.planted.forward_z);
+        let view = (&camera, internal);
+        if (self.backdrop).prepare(device, scene, view, &self.row_groups, shader) {
+            self.compiled += 1;
+            self.names.push(backdrop::PASS);
         }
         self.prepare_lights(device, scene, policy, dropped);
         if let Some(m) = self.shadow.clip {
@@ -6031,7 +5935,7 @@ impl Renderer {
                 Some(m) => self.built_mesh(device, s.shape, m),
                 None => self.mesh(device, s.shape),
             }
-            let tie = self.ties.get(&s.id).copied().unwrap_or(0);
+            let tie = self.ties.ranks.get(&s.id).copied().unwrap_or(0);
             // A see-through part blends through its material operator (#431); the other
             // see-through kinds still refuse one.
             let op = self.material_op(
@@ -6294,7 +6198,13 @@ impl Renderer {
         batch.casters.retain(|_, set| set.count > 0);
         let mut fed_uploads: BTreeMap<String, BTreeSet<u32>> = BTreeMap::new();
         for (key, set) in batch.solids.iter_mut().chain(batch.casters.iter_mut()) {
+            let started = std::time::Instant::now();
             set.finish(device, &mut next, &mut written);
+            if layer.fed.contains_key(&key.3) {
+                let owner = set.owners.first().and_then(|o| o.split('#').next()).unwrap_or_default();
+                let ms = started.elapsed().as_secs_f64() * 1000.0;
+                *self.counts.upload_ms.entry(owner.to_string()).or_default() += ms;
+            }
             for (item, e) in set.uploaded_elements().filter(|_| key.3 != 0) {
                 // #537: a fed slot whose parts sit in several batches is one element.
                 if layer.fed.contains_key(&key.3) {
@@ -6371,6 +6281,11 @@ impl Renderer {
                         | (u32::from(seg.hidden) << 5)
                         | (deep_canvas_scene3d::points::cap_bits(l, k) << 6),
                     dash: half_bits(l.dash[0]) | (half_bits(l.dash[1]) << 16),
+                    fade: l
+                        .trail
+                        .as_ref()
+                        .and_then(|d| d.alpha.get(k))
+                        .map_or(OPAQUE_ENDS, |a| half_bits(a[0]) | (half_bits(a[1]) << 16)),
                 };
                 batch.lines.push(&l.id, bytemuck::bytes_of(&record));
             }
@@ -6384,7 +6299,13 @@ impl Renderer {
                 .push(s);
         }
         batch.points.begin();
-        for p in &layer.points {
+        // A set from a depth video draws its operator's records, never one of its own (#503).
+        let sets = layer
+            .points
+            .iter()
+            .filter_map(|p| self.clouds.get(&p.id).cloned());
+        batch.clouds = sets.collect();
+        for p in layer.points.iter().filter(|p| p.cloud.is_none()) {
             let shape = match p.shape {
                 PointShape::Dot => 0,
                 PointShape::Square => 1,
@@ -6461,6 +6382,7 @@ impl Renderer {
                     .extend([family, set.generation, u64::from(set.len())]);
             }
         }
+        batch.next_key.extend(clouds::key(&batch.clouds));
         if !batch.clear_draws.is_empty() {
             batch.next_key.extend([13, batch.clear.generation]);
             for ((shape, maps), kind) in &batch.clear_draws {
@@ -6802,6 +6724,7 @@ impl Renderer {
                 enc.draw(0..6, 0..set.len());
             }
         }
+        clouds::draw(&mut enc, self.families.point.as_ref(), &batch.clouds);
         if let (Some(buffer), Some(pipeline), true) = (
             &batch.labels.buffer,
             &self.families.text,
@@ -8285,21 +8208,6 @@ impl Renderer {
             .map(|buffer| (buffer, all.len() as u32));
     }
 
-    /// The sky's draw this frame, when it has one (#422).
-    fn sky_draw(&self) -> Option<SkyDraw> {
-        let p = self.sky_pipeline.clone().filter(|_| self.sky)?;
-        Some((
-            p,
-            [
-                self.frame_bind.clone(),
-                self.lights_bind.clone(),
-                self.ao.shade().clone(),
-                // The solids' layout holds the maps' group 3 since #423.
-                self.maps.by_index(0).clone(),
-            ],
-        ))
-    }
-
     /// The output pass, tone-mapping the linear target into `target`.
     pub fn record_output(
         &self,
@@ -8976,6 +8884,8 @@ pub struct Shared {
     pub post: Option<Box<dyn Post>>,
     /// Passes after the finish: the status guard and the status colors, where status can show.
     pub after: Option<Box<dyn After>>,
+    /// The next frame's point sets from a depth video, as the driver's effects wrote them (#503).
+    pub clouds: clouds::Clouds,
     /// Samples a pixel its renderer's geometry pass draws (#173: one under temporal upscaling).
     pub samples: u32,
 }
@@ -8993,6 +8903,7 @@ impl Module3 {
             planted,
             post: None,
             after: None,
+            clouds: Default::default(),
             samples: if planted.single_sample { 1 } else { MSAA },
         }));
         (
@@ -9129,11 +9040,13 @@ impl RenderModule for Module3 {
             renderer,
             post,
             after,
+            clouds,
             ..
         } = &mut *s;
         let Some(renderer) = renderer.as_mut() else {
             return Vec::new();
         };
+        renderer.clouds.clone_from(clouds);
         // The instances outputs the frame's instancers draw from (#484).
         if let Some(p) = post.as_deref_mut() {
             renderer.feed(p.sources(device));

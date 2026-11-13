@@ -2946,6 +2946,7 @@ fn line_vs(
     @location(3) pick: u32,
     @location(4) flags: u32,
     @location(5) dash: u32,
+    @location(6) fade: u32,
 ) -> LineOut {
     var out: LineOut;
     let ca = frame.clip * vec4<f32>(a.xyz, 1.0);
@@ -2978,8 +2979,8 @@ fn line_vs(
         out.pos = OFF;
         return out;
     }
-    // A width under one device px draws at one px, its alpha scaled by the width.
-    out.alpha = min(w, vec2<f32>(1.0));
+    // A width under one device px draws at one px, its alpha scaled by the width and a trail's fade.
+    out.alpha = min(w, vec2<f32>(1.0)) * unpack2x16float(fade);
     out.r = max(w, vec2<f32>(1.0)) * 0.5;
     out.a = pa;
     out.b = pb;
