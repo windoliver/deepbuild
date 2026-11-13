@@ -392,6 +392,9 @@ timed.push('tests/acceptance/724-redraft-1405/');
 // reader beside one replaying 100,000 events, as #34's stream budget is timed.
 alone.push('tests/acceptance/1575/', 'tests/acceptance/1575-redraft-ac1/');
 timed.push('tests/acceptance/1575/budgets.test.ts', 'tests/acceptance/1575-redraft-ac1/budgets.test.ts');
+// #1577's files each start a hub with the OS stand-in and pair two devices; AC4 and AC7 kill it mid-write and start it
+// again on the same record.
+alone.push('tests/acceptance/1577/');
 // #1964's files build deep-canvas-render and draw styled runs with Vello CPU.
 alone.push('tests/acceptance/1964/');
 // #1963's files each build deep-canvas-render and check quoted code and formulas against stored sources.

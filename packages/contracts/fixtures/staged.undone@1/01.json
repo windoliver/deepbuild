@@ -1,0 +1,14 @@
+{
+  "v": 1,
+  "id": "01KB1577SD0000000000000001",
+  "kind": "staged.undone",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1800000000000,
+  "data": {
+    "staged": "staged:01KB1577ST0000000000000001",
+    "folders": ["/work/shop/cache"],
+    "files": []
+  }
+}

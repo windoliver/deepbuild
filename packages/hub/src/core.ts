@@ -47,6 +47,7 @@ import { countMcp } from './mcp-servers.js';
 import { opensOf, Questions, type Sorted } from './questions.js';
 import { couldDo, reachOf, struck, type Reach, type ReachTool } from './could-do.js';
 import { Staging } from './staging.js';
+import { Requests, type Caller, type Effect, type Landed, type Receipt } from './requests.js';
 import { CAN_RUN, CANT_RUN, describe, RUN_BY, unrunnable } from './hook-programs.js';
 import { SLASH_COMMAND, adapterOf, coveredBy, loopFact, registry, toolClasses, versionOf } from './hookmap.js';
 import { continueLine, fit, type Part, type Piece } from './context-fit.js';
@@ -153,6 +154,8 @@ const CALL_GRACE = 2_000;
 const COMMITS = /(?:^|[\s;&|(])git(?:\s+-[Cc]\s+\S+|\s+--?[\w-]+(?:=\S+)?)*\s+(?:commit|merge|cherry-pick|am|revert|rebase)\b/;
 /** How long a handed answer has to show in a turn before its delivery reads stalled and goes by the next route. */
 const WAKE_GRACE = 10_000;
+/** The trusted-path writes that keep a receipt (#1577): a retry of one follows its request ID, not its spent once-only ID. */
+const RECEIPTED = new Set(['ask.answer', 'ask.undo', 'decision.overrule', 'offer.save']);
 /** Completion prompts in a row a session gets for stops that did work and ended on an empty message, before the claim stalls (#82). */
 const COMPLETION_PROMPTS = 3;
 /** A gap between two of the 1 s beats, on the wall clock, longer than this is time the Mac slept with the hub up (#908). */
@@ -435,6 +438,13 @@ export class Core {
   private readonly raw: RecordStore['raw'] = (sql, params) => this.record.raw(sql, params);
   /** The log's pages, read-ahead and stream; a read waits for the appends in flight, and the owner's stream reads what the owner may see (#1337). */
   private readonly log = new LogReads({ raw: this.raw, settled: () => Promise.allSettled([...this.inflight]), ownerSeen: () => this.seenBy(OWNER), emit: (sub, json, caught) => this.emit(sub, json, caught) });
+  /** The writes with an effect (#1577): each one's request ID, the receipt that commits with its event, and the log_pos it landed at. */
+  private readonly requests = new Requests({
+    now: () => this.now(),
+    receipt: (device, request) => this.receiptOf(device, request),
+    append: async (receipt) => (await this.record.append(this.connection('core'), receipt)).log_pos,
+    end: async () => Number(((await this.record.raw('SELECT coalesce(max(log_pos), 0) AS end FROM events')) as { end: number }[])[0]?.end ?? 0),
+  });
   private asks!: Asks;
   /** Online model libraries (#1731): which are on, your standing rules, searches and fetches. */
   private libraries?: Libraries;
@@ -962,12 +972,15 @@ export class Core {
     // Each event its own commit: the durable write points a run makes depend only on the events it appends,
     // never on how many arrived together, so a cut at any one can be replayed.
     this.record = await openRecord({ path: this.root.ledger, now: this.now, evidence: this.store, commitEach: true, ...(storage ? { storage } : {}), ...(this.options.plant === 'turn-closes-at-child-stop' ? { plant: this.options.plant } : {}) });
+    // A write's receipt commits with its own event, whoever appends that event: the hub, the asks core or a run (#1577).
+    this.record = receipted(this.record, this.requests);
     if (process.env.DEEP_HUB_TEST_CRASH) this.record = crashing(this.record, process.env.DEEP_HUB_TEST_CRASH);
     if (process.env.DEEP_HUB_TEST_READS) this.record = readsLogged(this.record, process.env.DEEP_HUB_TEST_READS);
     // Every append reaches the stream, whoever appends it: the hub, the asks core, the supervisor or the leases.
     this.record = streamed(this.record, ({ kind, subject, data }, connection) => {
       this.log.stream();
-      if (kind !== 'session.state' && kind !== 'row.set') {
+      // A receipt kept alone changes no session's state (#1577).
+      if (kind !== 'session.state' && kind !== 'row.set' && kind !== 'write.done') {
         // The next state pass reads the sessions appended to since the last; an event of no session, every session.
         if (this.touched !== 'all') { if (connection.session) this.touched.add(connection.session); else this.touched = 'all'; }
         this.stateSoon();
@@ -1015,6 +1028,8 @@ export class Core {
       errorTurnHook: (agent) => adapterOf(agent)?.caps.errorTurnHook === true,
     });
     await this.continues();
+    // Your words the last hub said it had and no prompt has shown yet go on their way again (#1577).
+    await this.notesOwed();
     this.askingSoon();
     // The results every session's claims share (#1018): each kept run's key, from its finish, read once at start.
     const kept = (await this.record.raw(`SELECT data FROM events WHERE kind = 'run.finished' AND json_extract(data, '$.key') IS NOT NULL ORDER BY log_pos`)) as { data: string }[];
@@ -2479,12 +2494,16 @@ export class Core {
       // Recorded as the session reads them, with their request ID, so the same words typed are never the note.
       return { msg: 0, text: `${text} (request ${note.request})`, tasks: [], from: 'app', request: note.request };
     };
-    const woke = [...this.handedNotes.values()].filter((n) => n.session === session && String(prompt.data.text).includes(`(request ${n.request})`));
-    for (const note of woke) {
+    const shows = (n: Note) => String(prompt.data.text).includes(`(request ${n.request})`);
+    const handed = [...this.handedNotes.values()].filter((n) => n.session === session && shows(n));
+    for (const note of handed) {
       clearTimeout(note.timer);
       this.handedNotes.delete(note.request);
     }
-    const waiting = this.notes.get(session)?.splice(0) ?? [];
+    // A note a waiter handed over before a restart is owed again since (#1577): the wake's prompt that shows it is its own.
+    const owed = this.notes.get(session)?.splice(0) ?? [];
+    const woke: Note[] = [...handed, ...owed.filter(shows)];
+    const waiting = owed.filter((n) => !shows(n));
     if (waiting.length) this.carried.set(session, [...(this.carried.get(session) ?? []), ...waiting]);
     const asks = waiting.map((note): Draft => {
       const ts = this.now();
@@ -2518,22 +2537,42 @@ export class Core {
   private noteText(notes: Note[]): string {
     return `DeepBuild delivers your words, sent from the app:\n${notes.map((n) => `(request ${n.request}) ${n.text}`).join('\n')}`;
   }
-  /** session.note, from the app: your words into a session, by the route its flags allow, as an answer goes (#25). */
-  private note(params: Obj): Obj {
+  /**
+   * session.note, from the app: your words into a session, by the route its flags allow, as an answer goes (#25). They
+   * are in the record before the reply says the hub has them (#1577): a write that fails refuses the send, and after
+   * a restart a note no prompt has shown yet goes on its way again. Its request ID applies once, a note delivered
+   * included, so a late retry sends nothing.
+   */
+  private async note(params: Obj): Promise<Obj> {
     const { session, text, request } = params;
     if (typeof session !== 'string' || !session) throw refuse('type', '/params/session', 'Name the session by its ID, as its hooks carry it.', session);
     if (typeof text !== 'string' || !text.trim() || text.length > 8192) throw refuse('type', '/params/text', 'Send the note\'s words as a string of 1 to 8192 characters.', text);
     if (typeof request !== 'string' || !/^[0-9A-Za-z_-]{1,64}$/.test(request)) throw refuse('type', '/params/request', 'Give the delivery\'s request ID: 1 to 64 letters, digits, - or _.', request);
     if (!this.live.has(session)) throw refuse('not_found', '/params/session', `No session ${session} has reached the hub; send the note to one deep status lists.`, session);
-    // A request ID applies once: a retried send changes nothing.
+    // A request ID applies once: a retried send changes nothing; one delivered is known by its receipt (#1577).
     const known = [...(this.notes.get(session) ?? []), ...this.handedNotes.values()].some((n) => n.request === request);
     if (!known) {
+      // The words are no sign of the session, as a name given to it isn't (#2018): recorded about it, not as one of its events.
+      const project = this.projects.get(session), actor = this.sessionPeople.get(session);
+      const ts = this.now();
+      await this.append(this.connection('core', { ...(project ? { project } : {}), ...(actor ? { actor } : {}) }), { v: 1, id: ulid(ts), kind: 'session.noted', ts, subject: `session:${letters(session)}`, data: { session, text, request } });
       this.notes.set(session, [...(this.notes.get(session) ?? []), { session, text, request }]);
       // Your words, sent while a turn runs or between turns: the next green turn end starts a loop's held checks (#965).
-      if (this.options.plant !== 'words-only-at-turn-start') this.live.get(session)!.words = 'words';
+      // The session may have ended while they were recorded.
+      const live = this.live.get(session);
+      if (live && this.options.plant !== 'words-only-at-turn-start') live.words = 'words';
       this.offer(session);
     }
     return { session, request };
+  }
+  /**
+   * The notes the record holds that no prompt has shown yet (#1577), each waiting again for its session's route: what
+   * a hub that stopped after saying it had them still owes.
+   */
+  private async notesOwed(): Promise<void> {
+    const rows = (await this.record.raw(`SELECT json_extract(n.data, '$.session') AS session, json_extract(n.data, '$.text') AS text, json_extract(n.data, '$.request') AS request FROM events n
+      WHERE n.kind = 'session.noted' AND NOT EXISTS (SELECT 1 FROM events u WHERE u.kind = 'user.ask' AND u.session_id = json_extract(n.data, '$.session') AND u.log_pos > n.log_pos AND json_extract(u.data, '$.request') = json_extract(n.data, '$.request')) ORDER BY n.log_pos`)) as Note[];
+    for (const note of rows) this.notes.set(note.session, [...(this.notes.get(note.session) ?? []), note]);
   }
 
   /**
@@ -5825,7 +5864,7 @@ export class Core {
       case 'session.wait': return this.waitAnswer(params, context);
       case 'session.delivered': return this.placed(params, context);
       case 'session.stop_waiting': return this.stopWaiting(context);
-      case 'session.note': return this.note(params);
+      case 'session.note': return this.writeOnce('session.note', params, context, (e) => e.kind === 'session.noted', () => this.note(params), () => ({ session: params.session, request: params.request }));
       case 'test.send_back': return this.sendBack(params);
       case 'test.verdict': return this.testVerdict(params);
       case 'test.clock': return this.testClock(params);
@@ -5856,13 +5895,13 @@ export class Core {
       case 'numbers.sample': await this.notAnAgent(context, method); return this.numbers.sample(Number(params.before), typeof params.manifest === 'string' ? params.manifest : undefined);
       case 'changes.read': return this.change(params);
       case 'evidence.read': return this.evidence(params);
-      case 'ask.answer': return this.answer(params, context);
+      case 'ask.answer': return this.writeOnce('ask.answer', params, context, (e) => (e.kind === 'ask.answered' || e.kind === 'answer.refused') && e.subject === params.ask, () => this.answer(params, context), (e) => this.answeredAgain(String(params.ask), e, params.option));
       case 'ask.card': return this.askCard(params);
-      case 'decision.overrule': return this.overrule(params, context);
-      case 'ask.undo': return this.undo(params, context);
+      case 'decision.overrule': return this.writeOnce('decision.overrule', params, context, (e) => e.kind === 'decision.overruled' && e.subject === params.decision, () => this.overrule(params, context), () => ({ overruled: params.decision }));
+      case 'ask.undo': return this.writeOnce('ask.undo', params, context, (e) => e.kind === 'default.undone' && e.subject === params.ask, () => this.undo(params, context), (e) => ({ ask: params.ask, deadline: e.data.deadline ?? null }));
       case 'ask.take_over': return this.takeOver(params, context);
-      case 'offer.save': return this.saveOffered(params, context);
-      case 'staged.undo': return this.staging.undo(params);
+      case 'offer.save': return this.writeOnce('offer.save', params, context, (e) => e.kind === 'decision.created', () => this.saveOffered(params, context), (e) => ({ offer: params.offer, ask: e.subject, decision: `decision:${e.id}`, scope: e.data.scope ?? null }));
+      case 'staged.undo': return this.writeOnce('staged.undo', params, context, (e) => e.kind === 'staged.undone', () => this.stagedUndo(params), (e) => ({ staged: e.data.staged, folders: e.data.folders, files: e.data.files }));
       case 'agents.propose': await this.ready; return this.agents.propose(params);
       case 'agents.read': return this.agents.read();
       case 'box.say': await this.ready; return this.box.say(String(params.words ?? ''), typeof params.repo === 'string' ? params.repo : undefined);
@@ -5908,7 +5947,7 @@ export class Core {
         return this.statesSettled().then(() => this.queue(() => this.seeRow(String(params.id))));
       case 'guard.add': return this.addGuard(params, context);
       case 'evidence.paste': return this.paste(params);
-      case 'run.start': return this.runs.start(params);
+      case 'run.start': return this.writeOnce('run.start', params, context, (e) => e.kind === 'run.started', () => this.runs.start(params), (e) => ({ run: e.subject }));
       case 'run.output': return this.runs.output(params);
       case 'host.list': return { hosts: this.hosts.names().map((name) => ({ name })) };
       case 'host.facts': return this.hosts.facts(params.host, params.refresh === true);
@@ -6196,6 +6235,51 @@ export class Core {
   }
 
   /**
+   * Who a write with a request ID comes from (#1577): the paired device whose signature holds, else, unsigned, the
+   * connection's role, the app or the CLI, which the control token proves. Undefined for a write sent with no request
+   * ID, and for one whose signature doesn't hold, which the trusted path then refuses: it never gets a first result.
+   */
+  private callerOf(method: string, params: Obj, context: CallContext): Caller | undefined {
+    const request = Requests.of(params);
+    if (request === undefined) return undefined;
+    if (params.signature === undefined) return { device: context.role === 'app' ? 'app' : 'cli', request };
+    const device = this.devices.signer(params.signature, { method, hub: this.hubId(), params, now: this.now() });
+    return device ? { device, request } : undefined;
+  }
+  /** The receipt of a request from a device, as the record holds it: the write's own event, or the result it kept alone. */
+  private async receiptOf(device: string, request: string): Promise<Receipt | undefined> {
+    const [row] = (await this.record.raw(`SELECT r.log_pos AS at, r.data AS receipt, e.id AS id, e.kind AS kind, e.subject AS subject, e.data AS data, e.log_pos AS log_pos FROM events r LEFT JOIN events e ON e.id = json_extract(r.data, '$.event')
+      WHERE r.kind = 'write.done' AND json_extract(r.data, '$.device') = ? AND json_extract(r.data, '$.request') = ? ORDER BY r.log_pos LIMIT 1`, [device, request])) as { at: number; receipt: string; id: string | null; kind: string | null; subject: string | null; data: string | null; log_pos: number | null }[];
+    if (!row) return undefined;
+    const d = JSON.parse(row.receipt) as { method: string; params: string; result?: Obj };
+    const event: Landed | undefined = row.id === null ? undefined : { id: row.id, kind: String(row.kind), subject: row.subject, data: JSON.parse(row.data ?? '{}') as Obj, log_pos: Number(row.log_pos) };
+    return { method: d.method, params: d.params, ...(event ? { event } : { result: d.result ?? {} }), log_pos: event?.log_pos ?? Number(row.at) };
+  }
+  /**
+   * A write names the view it was made from (#1577): an undo, an overrule or a staged undo carries the log_pos of what
+   * you were shown. When its target changed after that, it's refused naming the change, so no write silently undoes a
+   * newer one. `changed` reads the newest change to the target after the view, in words, or undefined.
+   */
+  private async fromView(params: Obj, target: string, changed: (after: number) => Promise<string | undefined>): Promise<void> {
+    const { view } = params;
+    if (view === undefined) return;
+    if (!Number.isSafeInteger(view) || (view as number) < 0) throw new Refused(refusal('type', '/params/view', 'Give the view the write was made from as the log_pos its read returned.', view));
+    const change = await changed(view as number);
+    if (change) throw new Refused(refusal('not_found', '/params/view', `${target} changed after the view at log position ${String(view)} this write was made from: ${change}. Nothing was done; read it again and choose from what it shows now.`, view));
+  }
+  /** The newest change to an ask after a log position, in words: an answer, a default, an undo, a close. */
+  private async askChanged(handle: string, after: number): Promise<string | undefined> {
+    const [row] = (await this.record.raw(`SELECT kind, log_pos, json_extract(data, '$.answer') AS answer FROM events WHERE subject = ? AND log_pos > ? AND kind IN ('ask.answered', 'ask.defaulted', 'default.undone', 'ask.escalated', 'ask.cancelled', 'ask.superseded', 'ask.moot') ORDER BY log_pos DESC LIMIT 1`, [handle, after])) as { kind: string; log_pos: number; answer: string | null }[];
+    if (!row) return undefined;
+    const at = `at log position ${row.log_pos}`;
+    const what: Record<string, string> = {
+      'ask.answered': `it was answered ${String(row.answer)} ${at}, and that answer stands`, 'ask.defaulted': `it took its default ${String(row.answer)} ${at}`, 'default.undone': `its default was undone ${at}`,
+      'ask.escalated': `it was escalated ${at}`, 'ask.cancelled': `it was cancelled ${at}`, 'ask.superseded': `a newer ask superseded it ${at}`, 'ask.moot': `it went moot ${at}`,
+    };
+    return what[row.kind] ?? `${row.kind} ${at}`;
+  }
+
+  /**
    * Whether an answer may count: a paired device's valid signature for this method, this hub and these params (#1579),
    * from any role; otherwise, from the CLI alone, the OS confirming you with a prompt that names what you answer. The
    * control token and the peer check alone never make one count, and a deep command run inside an agent's process
@@ -6203,7 +6287,9 @@ export class Core {
    */
   private async trusted(method: string, params: Obj, context: CallContext, what: string, handle: string, revision: string): Promise<void> {
     if (params.signature !== undefined) {
-      const why = this.devices.verify(params.signature, { method, hub: this.hubId(), params, now: this.now() }, { skipsTime: this.options.plant === 'signature-skips-time' });
+      // A write with a request ID follows that ID (#1577): its receipt, not the spent once-only ID, makes a retry count
+      // once. Only the writes that keep a receipt: any other signed call still counts once by its once-only ID.
+      const why = this.devices.verify(params.signature, { method, hub: this.hubId(), params, now: this.now(), retry: RECEIPTED.has(method) && Requests.of(params) !== undefined }, { skipsTime: this.options.plant === 'signature-skips-time' });
       if (!why) return;
       const signed = (params.signature as { signed?: Obj }).signed;
       throw new Refused(refusal('credential', why.field === 'signature' ? '/params/signature/sig' : `/params/signature/signed/${why.field}`, `${handle} stays open: the signature's ${why.field} doesn't hold (${why.reason}). Sign it again with a device you paired, for ${method} on this hub, over exactly the params it sends.`, signed?.[why.field] ?? why.field));
@@ -6338,12 +6424,50 @@ export class Core {
   }
 
   /**
+   * One write with an effect (#1577), on the trusted path or not: its request ID, if any, makes a retry from the same
+   * device with the same params get the first result back and write nothing, and its result carries the log_pos it
+   * landed at. `effect` names the write's own event, which its receipt commits with; `again` reads the first result
+   * back from that event, for a retry.
+   */
+  private async writeOnce(method: string, params: Obj, context: CallContext, effect: Effect, body: () => Promise<Obj>, again: (event: Landed) => Obj | Promise<Obj>): Promise<Obj> {
+    const caller = this.callerOf(method, params, context);
+    const done = await this.requests.write(method, params, caller, effect, body, async (e) => again(e));
+    // What the write's event set off lands first (a state pass, a row), so a read at its log_pos and a retry find them
+    // written, and a retry writes nothing of its own.
+    if (caller) await this.statesSettled();
+    return done;
+  }
+  /**
+   * An answer's first result, for its retry: the answer the event holds, and the scope its decision was saved at. A late
+   * answer to a closed ask got a refusal, which the answer.refused it recorded holds: its retry gets that refusal again.
+   */
+  private async answeredAgain(handle: string, e: Landed, option: unknown): Promise<Obj> {
+    if (e.kind === 'answer.refused') {
+      const first = e.data.outcome === 'answered' ? await this.firstAnswer(handle) : undefined;
+      // As the asks core refused it, for an ask that closed with no answer.
+      throw first ? this.stands(handle, first, option) : new Refused(refusal('not_found', '/params/ask', `${handle} closed as ${String(e.data.outcome)} at ${new Date(Number(e.data.closed_at)).toISOString()}`, handle));
+    }
+    const [saved] = (await this.record.raw(`SELECT data FROM events WHERE kind = 'decision.created' AND subject = ? AND log_pos > ? ORDER BY log_pos LIMIT 1`, [handle, e.log_pos])) as { data: string }[];
+    return { ask: handle, answer: e.data.answer, scope: saved ? String((JSON.parse(saved.data) as Obj).scope) : null };
+  }
+  /** `deep undo staged:<id>`: the copy put back, recorded as staged.undone, once the staging the view showed is as it was. */
+  private async stagedUndo(params: Obj): Promise<Obj> {
+    const handle = params.staged;
+    if (typeof handle === 'string') await this.fromView(params, handle, async (after) => {
+      const [row] = (await this.record.raw(`SELECT log_pos FROM events WHERE kind = 'staged.undone' AND json_extract(data, '$.staged') = ? AND log_pos > ? ORDER BY log_pos DESC LIMIT 1`, [handle, after])) as { log_pos: number }[];
+      return row ? `it was undone already, at log position ${row.log_pos}` : undefined;
+    });
+    const done = await this.staging.undo(params);
+    await this.appendCore('staged.undone', { staged: done.staged, folders: done.folders, files: done.files });
+    return done;
+  }
+  /**
    * asks/:id/answer, from the app or `deep inbox answer`: once the trusted path allows it, the asks core records it
    * and the core saves it as a decision for the ask's repo, or its session; an ask with neither, and a block's task
    * (#85), saves none.
    */
   private async answer(params: Obj, context: CallContext, channel?: { channel: string; proof: 'device' | 'account_link'; plan_hash: string | null }): Promise<Obj> {
-    const { ask: handle, device: _device, signature: _signature, revision, ...input } = params;
+    const { ask: handle, device: _device, signature: _signature, revision, request: _request, ...input } = params;
     if (typeof handle !== 'string' || !/^ask:[0-9A-Za-z]+$/.test(handle)) throw new Refused(refusal('handle_syntax', '/params/ask', 'Name the ask by its handle, ask:<id>, as deep inbox lists it.', handle));
     const [row] = (await this.record.raw(`SELECT e.session_id AS session, e.project_id AS project, e.data AS data, a.status AS status FROM events e JOIN asks a ON a.id = e.id WHERE e.id = ? AND e.kind = 'ask.created'`, [handle.slice(4)])) as { session: string | null; project: string | null; data: string; status: string }[];
     if (!row) throw new Refused(refusal('not_found', '/params/ask', `No ask ${handle}; answer an ask deep inbox lists.`, handle));
@@ -6360,7 +6484,7 @@ export class Core {
         return { ask: handle, answer: input.option, scope: null };
       }
       await answered().catch((error: unknown) => { if (!first) throw error; });
-      throw new Refused(refusal('not_found', '/params/ask', first ? `${handle} was already answered ${first.answer} ${first.where}; the first answer stands, so ${String(input.option ?? 'this answer')} counts for nothing.` : `${handle} is closed.`, handle));
+      throw first ? this.stands(handle, first, input.option) : new Refused(refusal('not_found', '/params/ask', `${handle} is closed.`, handle));
     }
     const ask = JSON.parse(row.data) as { key: string; question: string; options: { id: string; label: string; decision?: string }[]; pinned_to?: { ref?: string } };
     const chosen = ask.options.find((o) => o.id === input.option);
@@ -6485,6 +6609,8 @@ export class Core {
     if (typeof handle !== 'string' || !/^ask:[0-9A-Za-z]+$/.test(handle)) throw new Refused(refusal('handle_syntax', '/params/ask', 'Name the ask by its handle, ask:<id>.', handle));
     const [row] = (await this.record.raw(`SELECT question, status, pinned_to FROM asks WHERE id = ?`, [handle.slice(4)])) as { question: string; status: string; pinned_to: string | null }[];
     if (!row) throw new Refused(refusal('not_found', '/params/ask', `No ask ${handle}; undo the default of an ask the inbox holds.`, handle));
+    // The view the undo was made from: an answer or a close since then stands, and the undo is refused naming it.
+    await this.fromView(params, handle, (after) => this.askChanged(handle, after));
     if (row.status !== 'defaulted') throw new Refused(refusal('not_found', '/params/ask', `${handle} didn't take its default (it's ${row.status}), so there's nothing to undo.`, handle));
     // A definition that locked on the default stands: a different answer now would change nothing but the record of it.
     const locked = await this.tasks.lockedOn(handle);
@@ -6500,6 +6626,11 @@ export class Core {
     if (!id) throw new Refused(refusal('pattern', '/params/decision', 'Name the decision as decision:<id>.', params.decision));
     const [row] = (await this.record.raw(`SELECT key, answer, state FROM decisions WHERE id = ?`, [id.slice(9)])) as { key: string; answer: string; state: string }[];
     if (!row) throw new Refused(refusal('not_found', '/params/decision', `No decision ${id} in the record.`, id));
+    // The view the overrule was made from: an overrule or a revoke since then is the change it names.
+    await this.fromView(params, id, async (after) => {
+      const [newer] = (await this.record.raw(`SELECT kind, log_pos FROM events WHERE kind IN ('decision.overruled', 'decision.revoked') AND subject = ? AND log_pos > ? ORDER BY log_pos DESC LIMIT 1`, [id, after])) as { kind: string; log_pos: number }[];
+      return newer ? `it was ${newer.kind === 'decision.revoked' ? 'revoked' : 'overruled'} already, at log position ${newer.log_pos}` : undefined;
+    });
     if (row.state === 'revoked') return { overruled: id };
     await this.trusted('decision.overrule', params, context, `overrule the saved decision ${row.answer}`, id, row.state);
     // First: a retry finds a revoked decision done, so a guard left behind would never go.
@@ -6546,6 +6677,10 @@ export class Core {
     if (!first) return undefined;
     const [by] = (await this.record.raw(`SELECT json_extract(data, '$.channel') AS channel FROM events WHERE kind = 'channel.answered' AND subject = ? AND json_extract(data, '$.answer') = ? ORDER BY log_pos LIMIT 1`, [handle, first.answer])) as { channel: string }[];
     return { answer: first.answer, where: by ? `on the ${by.channel} channel` : first.via === 'inbox' ? 'from deep inbox' : first.via === 'session' ? 'in the session' : 'in the app' };
+  }
+  /** The refusal of a late answer to an answered ask (#65): the first answer stands, named with where it came from. */
+  private stands(handle: string, first: { answer: string; where: string }, option: unknown): Refused {
+    return new Refused(refusal('not_found', '/params/ask', `${handle} was already answered ${first.answer} ${first.where}; the first answer stands, so ${String(option ?? 'this answer')} counts for nothing.`, handle));
   }
   /** The asks as the channels render them (#65): the inbox's state of each, with its words, options and answer. */
   private async channelAsks(): Promise<ChannelAsk[]> {
@@ -8542,16 +8677,29 @@ function readsLogged(record: RecordStore, file: string): RecordStore {
 
 /** The record, calling `appended` after each append it took, and waiting for what it returns. */
 function streamed(record: RecordStore, appended: (input: EventInput, connection: Connection) => Promise<unknown> | undefined): RecordStore {
-  return withAppend(record, async (connection, input) => {
-    const event = await record.append(connection, input);
+  return withAppend(record, async (connection, input, receipt) => {
+    const event = await record.append(connection, input, receipt);
     await appended(input, connection);
     return event;
   });
 }
 
+/** The record, with a write's receipt committed beside the first event of it the write's effect names (#1577). */
+function receipted(record: RecordStore, requests: Requests): RecordStore {
+  return withAppend(record, (connection, input, given) => {
+    const taking = given ? undefined : requests.receiptFor(input);
+    // An append that takes no receipt is the record's own promise: no step is added to the hook's path.
+    if (!taking) return record.append(connection, input, given);
+    return record.append(connection, input, taking.receipt).then(
+      (appended) => { taking.landed(appended); return appended; },
+      (error: unknown) => { taking.landed(undefined); throw error; },
+    );
+  });
+}
+
 function crashing(record: RecordStore, point: string): RecordStore {
   const jobs = new Set<string>();
-  const append: RecordStore['append'] = async (connection, input) => {
+  const append: RecordStore['append'] = async (connection, input, receipt) => {
     // `before:<kind>`: the hub dies before it appends an event of that kind, after what the call that appends it does next.
     if (point === `before:${input.kind}`) {
       await new Promise((done) => setTimeout(done, 50));
@@ -8559,7 +8707,7 @@ function crashing(record: RecordStore, point: string): RecordStore {
     }
     // `slow:<kind>`: an event of that kind takes 300 ms to append.
     if (point === `slow:${input.kind}`) await new Promise((done) => setTimeout(done, 300));
-    const event = await record.append(connection, input);
+    const event = await record.append(connection, input, receipt);
     const run = isObj(input.data) ? String(input.data.job ?? input.data.run) : '';
     if (input.kind === 'job.recorded') jobs.add(run);
     if ((point === 'job.recorded' && input.kind === 'job.recorded') || (point === 'job.started' && input.kind === 'process.tracked' && jobs.has(run))) process.kill(process.pid, 'SIGKILL');

@@ -1098,3 +1098,38 @@ describe('readSince follows the log for a fold', () => {
     expect(again).toEqual([head + 1]);
   });
 });
+
+describe("a write's receipt commits in one transaction with its event (#1577)", () => {
+  const receipt = (event: string, at: number): EventInput => ({ v: 1, id: ulidAt(at), kind: 'write.done', ts: at, data: { ...(data('write.done') as Record<string, JsonValue>), event } });
+  const noted = (S: string, at: number): EventInput => ({ ...event('session.noted', at, undefined), subject: `session:${S}`, data: { session: S, text: 'Also add a dark mode toggle.', request: 'req-1577' } });
+
+  it('a cut after the commit keeps both, and a receipt the record refuses keeps its event out too', async () => {
+    const storage = testStorage();
+    let r = await openRecord({ path: 'record.db', now: () => T0, storage, commitEach: true });
+    const S = ulidAt(T0 - 1000);
+    await r.append(hook(S), event('session.start', T0 - 1000, undefined));
+    const kept = noted(S, T0);
+    const done = receipt(kept.id, T0 + 1);
+    const { log_pos } = await r.append(core(S), kept, done);
+    storage.cutPower();
+    r = await openRecord({ path: 'record.db', now: () => T0 + 10, storage, commitEach: true });
+    open.push(r);
+    const after = await r.read({ after: 0 });
+    // A record that drops the receipt loses it.
+    expect(after.filter((e) => e.kind === 'write.done').map((e) => [e.id, (e.data as { event: string }).event, e.writer]), 'the receipt survives the cut beside its event').toEqual([[done.id, kept.id, 'core']]);
+    expect(after.find((e) => e.id === done.id)?.log_pos, 'right after its event').toBe(log_pos + 1);
+    // One transaction: a record that commits the event first and its receipt apart keeps the event without it.
+    const lost = noted(S, T0 + 20);
+    await expect(r.append(core(S), lost, { ...receipt(lost.id, T0 + 21), data: { request: 'req-1577' } })).rejects.toMatchObject({ code: 'schema' });
+    expect((await r.read({ after: log_pos + 1 })).map((e) => e.kind), 'neither the event nor its receipt').toEqual([]);
+  });
+
+  it('a retry of an event the log holds writes no second receipt', async () => {
+    const { record: r, S } = await record();
+    const kept = noted(S, T0);
+    await r.append(core(S), kept, receipt(kept.id, T0 + 1));
+    const again = await r.append(core(S), kept, receipt(kept.id, T0 + 2));
+    expect(again.existing, 'the same event').toBe(true);
+    expect((await r.read({ after: 0, kinds: ['write.done'] })).length, 'one receipt').toBe(1);
+  });
+});

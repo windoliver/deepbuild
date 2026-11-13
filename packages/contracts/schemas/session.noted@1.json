@@ -1,0 +1,107 @@
+{
+  "title": "session.noted@1",
+  "description": "Your words sent from the app into a session (session.note, #1577), in the record before the hub says it has them; a write that fails refuses the send. A note with no user.ask of its session carrying its request ID yet is still on its way, after a restart too, and one delivered stays known, so a late retry sends nothing. Only the core appends it.",
+  "x-since": "R1",
+  "x-stability": "stable",
+  "x-feeds": [],
+  "type": "object",
+  "properties": {
+    "v": {
+      "const": 1,
+      "description": "The kind's schema version."
+    },
+    "id": {
+      "type": "string",
+      "format": "ulid",
+      "description": "The event's ULID, its identity."
+    },
+    "kind": {
+      "const": "session.noted"
+    },
+    "subject": {
+      "type": "string",
+      "pattern": "^(task|ask|claim|verdict|run|req|decision|plan|lease|reading|notice|doc|ev|session):[0-9A-Za-z]+(#[A-Za-z0-9][A-Za-z0-9._-]*)?$",
+      "description": "The record object this event is about."
+    },
+    "writer": {
+      "const": "core",
+      "description": "Only the core appends this kind."
+    },
+    "actor": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The person behind it, from the credential."
+    },
+    "scope": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Who may see it."
+    },
+    "ts": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "Milliseconds since the Unix epoch."
+    },
+    "seq": {
+      "type": "string",
+      "format": "seq",
+      "description": "Order within the session: ns since the epoch when the hook started."
+    },
+    "log_pos": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991,
+      "description": "Its position in the event log, assigned by the hub at append."
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "session": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "The session the words go to, by its ID, as its hooks carry it."
+        },
+        "text": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 8192,
+          "description": "The note's words, scrubbed, as the session will read them."
+        },
+        "request": {
+          "type": "string",
+          "pattern": "^[0-9A-Za-z_-]{1,64}$",
+          "maxLength": 8192,
+          "description": "The delivery's request ID, as the app sent it: the user.ask that delivers the note carries the same one (#340)."
+        }
+      },
+      "required": [
+        "session",
+        "text",
+        "request"
+      ],
+      "additionalProperties": false
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$",
+        "description": "A SHA-256, in lower-case hex."
+      }
+    }
+  },
+  "required": [
+    "v",
+    "id",
+    "kind",
+    "writer",
+    "actor",
+    "scope",
+    "ts",
+    "data",
+    "subject"
+  ],
+  "additionalProperties": false
+}

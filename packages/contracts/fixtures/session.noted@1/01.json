@@ -1,0 +1,15 @@
+{
+  "v": 1,
+  "id": "01KB1577SN0000000000000001",
+  "kind": "session.noted",
+  "subject": "session:7c4d5e601577422283334444555514aa",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1800000000000,
+  "data": {
+    "session": "7c4d5e60-1577-4222-8333-4444555514aa",
+    "text": "Also add a dark mode toggle to the settings page.",
+    "request": "req-4XkQ2b9Zp1Lm7Rt0Vw3Yz8"
+  }
+}

@@ -21,8 +21,11 @@ const SIGNED_FIELDS = ['device', 'method', 'hub', 'at', 'once', 'params'] as con
 const ONCE = /^[A-Za-z0-9_-]{16,128}$/;
 /** Why a signature doesn't count, naming the field. */
 interface Unsigned { field: string; reason: string }
-/** What a call expects its signature to cover. */
-interface Expect { method: string; hub: string; params: Obj; now: number }
+/**
+ * What a call expects its signature to cover. `retry`: a write with a request ID (#1577), whose retry follows the ID,
+ * so a once-only ID already spent doesn't refuse it; its receipt makes it apply once.
+ */
+interface Expect { method: string; hub: string; params: Obj; now: number; retry?: boolean }
 /** The planted wrong programs a verifier can be: #65's, which keeps an unpaired key, and #1579's, which skips the time. */
 interface Lapses { unpairedToo?: boolean; skipsTime?: boolean }
 
@@ -99,6 +102,19 @@ export class Devices {
    * before the ID is spent. Otherwise why not, naming the field.
    */
   verify(signature: unknown, expect: Expect, lapses: Lapses = {}, more?: () => Unsigned | undefined): Unsigned | undefined {
+    const checked = this.check(signature, expect, lapses);
+    if ('field' in checked) return checked;
+    const why = more?.();
+    if (why) return why;
+    if (!this.spend(checked.device, checked.once, checked.at, expect.now) && !expect.retry) return { field: 'once', reason: `its once-only ID ${checked.once} was spent already, so it counts once` };
+    return undefined;
+  }
+  /** The paired device whose signature this is, every field holding but its once-only ID, which stays unspent: who a retry comes from (#1577). */
+  signer(signature: unknown, expect: Expect): string | undefined {
+    const checked = this.check(signature, expect, {});
+    return 'field' in checked ? undefined : checked.device;
+  }
+  private check(signature: unknown, expect: Expect, lapses: Lapses): Unsigned | { device: string; once: string; at: number } {
     const s = (typeof signature === 'object' && signature !== null ? signature : {}) as { signed?: unknown; sig?: unknown };
     const signed = (typeof s.signed === 'object' && s.signed !== null ? s.signed : {}) as Obj;
     for (const field of SIGNED_FIELDS) if (signed[field] === undefined) return { field, reason: `the signature leaves out ${field}, so it covers too little to count` };
@@ -113,10 +129,7 @@ export class Devices {
     if (typeof signed.at !== 'number' || (!lapses.skipsTime && Math.abs(expect.now - signed.at) > SIGNED_WITHIN_MS)) return { field: 'at', reason: `it was signed at ${String(signed.at)}, more than 10 minutes from now` };
     if (typeof signed.once !== 'string' || !ONCE.test(signed.once)) return { field: 'once', reason: 'its once-only ID is not 16 to 128 base64url characters' };
     if (signed.params !== paramsHash(expect.params)) return { field: 'params', reason: 'it signs other params than the ones sent' };
-    const why = more?.();
-    if (why) return why;
-    if (!this.spend(device, signed.once, signed.at, expect.now)) return { field: 'once', reason: `its once-only ID ${signed.once} was spent already, so it counts once` };
-    return undefined;
+    return { device, once: signed.once, at: signed.at };
   }
 
   /** Spends a once-only ID: false when it was spent already. IDs past their 10 minutes go, as none of them can count. */

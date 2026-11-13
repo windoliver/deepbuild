@@ -1,0 +1,16 @@
+{
+  "v": 1,
+  "id": "01KB1577WD0000000000000002",
+  "kind": "write.done",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1800000000000,
+  "data": {
+    "method": "ask.answer",
+    "request": "req-4XkQ2b9Zp1Lm7Rt0Vw3Yz8",
+    "device": "device:01KB1577DV0000000000000001",
+    "params": "9f2c4b6a8d0e1f3a5c7b9d1e3f5a7c9b1d3e5f7a9c1b3d5e7f9a1c3b5d7e9f1a",
+    "event": "01KB1577WD0000000000000001"
+  }
+}

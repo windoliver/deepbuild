@@ -108,7 +108,11 @@ export interface TurnView { turn: number | null; stopped: boolean; events: strin
 export interface SessionView { id: string; status: string; readings: string[]; turns: TurnView[] }
 
 export interface RecordStore {
-  append(connection: Connection, event: EventInput): Promise<Appended>;
+  /**
+   * Appends one event. `receipt`, the core's write.done for the write that appends it (#1577), commits in the same
+   * FULL commit, right after it: a crash leaves both or neither. A retry the log already holds writes no receipt.
+   */
+  append(connection: Connection, event: EventInput, receipt?: EventInput): Promise<Appended>;
   /** Events after a log position, in log order; `kinds`: only those kinds, the rest never decoded. */
   read(query: { after: number; limit?: number; kinds?: readonly string[] }): Promise<Event[]>;
   table(name: string): Promise<Table>;
@@ -187,7 +191,7 @@ const SCHEMA_VERSION = 1;
 const REPLAY_PAGE = 5000;
 /** The kinds that record a decision: only the core appends them, and each commits FULL, in its own commit. */
 const CORE_ONLY = new Set(['verdict.made', 'verdict.stale', 'workspace.created', 'workspace.moved', 'state.read', 'work.read', 'work.delivery', 'definition.locked', 'definition.revised', 'definition.stood_in', 'definition.checked', 'decision.created', 'decision.applied', 'decision.revoked', 'decision.overruled', 'ask.answered', 'ask.defaulted', 'default.undone', 'deadline.moved',
-  'spend.approved', 'spend.reserved', 'spend.charged', 'spend.asked', 'card_rule.set']);
+  'spend.approved', 'spend.reserved', 'spend.charged', 'spend.asked', 'card_rule.set', 'write.done', 'session.noted', 'staged.undone']);
 /** The evidence store's own events: only the core, which runs the store, appends them; they stream. */
 const STORE_ONLY = new Set(['evidence.stored', 'evidence.removed']);
 /** The core's check of a learned change: only the core appends it, in the change's own batch. */
@@ -196,7 +200,7 @@ const LEARN_CHECK = 'learn_check.made';
 const PLUGIN_KIND = /^ext\.([a-z0-9_-]+)\.[a-z][a-z0-9_]*$/;
 const STORE_ITEM = 'store.item@1';
 /** The text field each kind keeps of a hook payload: scrubbed, then cut. */
-const TEXT_FIELD: Readonly<Record<string, string>> = { 'tool.before': 'command', 'tool.after': 'command', 'permission.request': 'command', 'user.ask': 'text', 'task.completed': 'title' };
+const TEXT_FIELD: Readonly<Record<string, string>> = { 'tool.before': 'command', 'tool.after': 'command', 'permission.request': 'command', 'user.ask': 'text', 'task.completed': 'title', 'session.noted': 'text' };
 /** What content-free mode keeps of each text field: nothing its schema allows. */
 const BLANK: Readonly<Record<string, string | null>> = { command: null, text: '', title: '-' };
 /** The fields of a run's spec a run.started carries since v3 (#996): what it runs, its folder, environment and grant. */
@@ -515,14 +519,14 @@ class SqliteRecord implements RecordStore {
     return p;
   }
 
-  async append(connection: Connection, input: EventInput): Promise<Appended> {
+  async append(connection: Connection, input: EventInput, receipt?: EventInput): Promise<Appended> {
     if (this.closing) throw new RecordError('closed', 'the record is closed');
     // Counted from here until it is in the log or refused, so a close waits for it.
     this.inFlight++;
     try {
       const key = String(input.id);
       const before = this.byId.get(key);
-      const run = (before ? before.catch(() => undefined) : Promise.resolve()).then(() => this.appendNow(connection, input));
+      const run = (before ? before.catch(() => undefined) : Promise.resolve()).then(() => this.appendNow(connection, input, receipt));
       this.byId.set(key, run);
       try {
         const appended = await run;
@@ -538,8 +542,10 @@ class SqliteRecord implements RecordStore {
       this.inFlight--;
     }
   }
-  private async appendNow(connection: Connection, input: EventInput): Promise<Appended> {
+  private async appendNow(connection: Connection, input: EventInput, receipt?: EventInput): Promise<Appended> {
     const prepared = this.prepare(connection, input);
+    // The receipt is the core's, of no session: checked before anything of the event is kept.
+    const sealedReceipt = receipt && this.sealed(this.prepare({ writer: 'core', actor: connection.actor, scope: connection.scope }, receipt));
     if (prepared.whole !== undefined) {
       const bytes = Buffer.from(prepared.whole, 'utf8');
       // An event the log already holds needs no store: its retry is the same event, or a conflict.
@@ -576,8 +582,10 @@ class SqliteRecord implements RecordStore {
       }
     }
     this.sealed(prepared);
-    if (CORE_ONLY.has(input.kind) || this.options.commitEach) {
-      const [outcome] = this.commit([prepared], CORE_ONLY.has(input.kind) || this.resumes([prepared]) ? 'full' : 'normal');
+    if (CORE_ONLY.has(input.kind) || this.options.commitEach || sealedReceipt) {
+      // A receipt commits FULL with its event, and only with an event the log didn't hold already.
+      const items = sealedReceipt && !this.stmt('SELECT 1 FROM events WHERE id = ?').get(input.id) ? [prepared, sealedReceipt] : [prepared];
+      const [outcome] = this.commit(items, CORE_ONLY.has(input.kind) || items.length > 1 || this.resumes([prepared]) ? 'full' : 'normal');
       if (!outcome!.ok) throw outcome!.error;
       return outcome!.appended;
     }

@@ -7635,6 +7635,26 @@ export interface SessionNeverStarted {
   evidence?: Array<string>;
 }
 
+/** session.noted@1 */
+export interface SessionNoted {
+  v: 1;
+  id: string;
+  kind: "session.noted";
+  subject: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    session: string;
+    text: string;
+    request: string;
+  };
+  evidence?: Array<string>;
+}
+
 /** session.paused@1 */
 export interface SessionPaused {
   v: 1;
@@ -8082,6 +8102,26 @@ export interface StackWaiting {
     check: string;
     wait_ms: number;
     expected_ms: number;
+  };
+  evidence?: Array<string>;
+}
+
+/** staged.undone@1 */
+export interface StagedUndone {
+  v: 1;
+  id: string;
+  kind: "staged.undone";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    staged: string;
+    folders: Array<string>;
+    files: Array<string>;
   };
   evidence?: Array<string>;
 }
@@ -9495,6 +9535,29 @@ export interface WorktreeRemoved {
     path: string;
     branch: string | null;
     owner: string;
+  };
+  evidence?: Array<string>;
+}
+
+/** write.done@1 */
+export interface WriteDone {
+  v: 1;
+  id: string;
+  kind: "write.done";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    method: string;
+    request: string;
+    device: string;
+    params: string;
+    event?: string;
+    result?: unknown;
   };
   evidence?: Array<string>;
 }
