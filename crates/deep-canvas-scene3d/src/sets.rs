@@ -7,6 +7,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, Mutex};
 
 use deep_canvas::budget::Class;
+use deep_canvas::ops;
 use serde_json::{Map, Value};
 
 use crate::ies::{self, Distribution};
@@ -101,7 +102,7 @@ pub fn read_light(
         // The reader took the default's 800 lm; the range follows the lumens the file states.
         l.intensity *= table.lumens / DEFAULT_LUMENS;
         if params.get("range").is_none() {
-            l.range *= (table.lumens / DEFAULT_LUMENS).sqrt();
+            l.range *= ops::sqrt(table.lumens / DEFAULT_LUMENS);
         }
     }
     // A spot clips the table to its cone and keeps its flux inside it; an area's face sends its
@@ -124,7 +125,7 @@ pub fn read_light(
     let turn = num(params.get("distribution_rotation"))
         .unwrap_or(0.0)
         .to_radians();
-    let (c, s) = (turn.cos(), turn.sin());
+    let (c, s) = (ops::cos(turn), ops::sin(turn));
     let [x, y] = l.axes;
     l.axes = [
         std::array::from_fn(|k| c * x[k] + s * y[k]),

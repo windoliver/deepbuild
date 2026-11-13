@@ -10,6 +10,7 @@
 
 use std::collections::BTreeSet;
 
+use deep_canvas::ops;
 use serde_json::Value;
 
 use crate::scene::{Layer3, Refused};
@@ -36,7 +37,7 @@ impl Wave {
 
     /// Its angular frequency by deep water's dispersion.
     pub fn omega(&self) -> f64 {
-        (G * self.k()).sqrt()
+        ops::sqrt(G * self.k())
     }
 
     /// Its phase at rest point `x` and `t` s.
@@ -103,7 +104,7 @@ impl Water {
         if self.rain <= 0.0 {
             return (1.0, 1.0, 0);
         }
-        let cell = (1.0 / (self.rain * RING_LIFE).sqrt()).max(2.0 * RING_SPEED * RING_LIFE);
+        let cell = (1.0 / ops::sqrt(self.rain * RING_LIFE)).max(2.0 * RING_SPEED * RING_LIFE);
         let slot = 1.0 / (self.rain * cell * cell);
         (cell, slot, (RING_LIFE / slot - 1e-9).ceil() as u32)
     }
@@ -124,7 +125,7 @@ const WIND: [(f64, f64, f64, f64); 4] = [
 /// along +z and 90° along +x.
 pub fn heading(deg: f64) -> [f64; 2] {
     let r = deg.to_radians();
-    [r.sin(), r.cos()]
+    [ops::sin(r), ops::cos(r)]
 }
 
 /// The four waves a wind of `speed` m/s toward `direction` deg picks.

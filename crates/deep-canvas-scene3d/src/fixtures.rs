@@ -3,6 +3,7 @@
 //! module's baked worlds (#97) and `mesh.sequence@1` in its per-frame glTF form (#529). Each is a
 //! pure function of its params and t: a pre-skin per time, a bake read at t, a frame by t.
 
+use deep_canvas::ops;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
@@ -84,17 +85,17 @@ fn bone_local(pos: V3, rot: V3) -> M34 {
     let [x, y, z] = rot.map(f64::to_radians);
     let rx = [
         [1.0, 0.0, 0.0, 0.0],
-        [0.0, x.cos(), -x.sin(), 0.0],
-        [0.0, x.sin(), x.cos(), 0.0],
+        [0.0, ops::cos(x), -ops::sin(x), 0.0],
+        [0.0, ops::sin(x), ops::cos(x), 0.0],
     ];
     let ry = [
-        [y.cos(), 0.0, y.sin(), 0.0],
+        [ops::cos(y), 0.0, ops::sin(y), 0.0],
         [0.0, 1.0, 0.0, 0.0],
-        [-y.sin(), 0.0, y.cos(), 0.0],
+        [-ops::sin(y), 0.0, ops::cos(y), 0.0],
     ];
     let rz = [
-        [z.cos(), -z.sin(), 0.0, 0.0],
-        [z.sin(), z.cos(), 0.0, 0.0],
+        [ops::cos(z), -ops::sin(z), 0.0, 0.0],
+        [ops::sin(z), ops::cos(z), 0.0, 0.0],
         [0.0, 0.0, 1.0, 0.0],
     ];
     let mut m = mul(&rz, &mul(&ry, &rx));

@@ -9,6 +9,7 @@ use serde_json::Value;
 
 use crate::look::Look3;
 use deep_canvas::camera::Vec3;
+use deep_canvas::ops;
 
 use crate::scene::{num, Camera, Depth, Refused};
 
@@ -270,7 +271,8 @@ fn map_slot(v: &Value, field: &str) -> Result<MapSlot, Refused> {
         None => 0.0,
         Some(r) => num(Some(r)).ok_or_else(|| bad("transform/rotation"))?,
     };
-    let (sn, cs) = rotation.to_radians().sin_cos();
+    let rad = rotation.to_radians();
+    let (sn, cs) = (ops::sin(rad), ops::cos(rad));
     let wrap = match o.get("wrap") {
         None => [Wrap::Repeat; 2],
         Some(Value::Array(a)) if a.len() == 2 => [
@@ -438,12 +440,7 @@ fn color3(v: Option<&Value>) -> Option<Vec3> {
 }
 
 fn srgb_decode(c: u8) -> f64 {
-    let c = f64::from(c) / 255.0;
-    if c <= 0.04045 {
-        c / 12.92
-    } else {
-        ((c + 0.055) / 1.055).powf(2.4)
-    }
+    deep_canvas::color::srgb_decode(f64::from(c) / 255.0)
 }
 
 /// The `material@1` item `item` names in its `material` field, read from `params` at t: `None`
@@ -614,7 +611,7 @@ fn lobes(p: &serde_json::Map<String, Value>, base: Vec3) -> Result<Lobes, &'stat
     let distance = num(att.and_then(|a| a.get("distance"))).unwrap_or(f64::INFINITY);
     let attenuation = att_color.map(|c| {
         if distance.is_finite() && distance > 0.0 {
-            -c.max(1e-6).ln() / distance
+            -ops::log(c.max(1e-6)) / distance
         } else {
             0.0
         }
@@ -654,10 +651,7 @@ fn lobes(p: &serde_json::Map<String, Value>, base: Vec3) -> Result<Lobes, &'stat
         flakes: color("flakes").ok_or("flakes/color")?,
         flake_weight: flake_w,
         flake_size: at("flakes", "size", 0.001).max(1e-5),
-        flake_cos_tilt: at("flakes", "tilt", 15.0)
-            .clamp(0.0, 90.0)
-            .to_radians()
-            .cos(),
+        flake_cos_tilt: ops::cos(at("flakes", "tilt", 15.0).clamp(0.0, 90.0).to_radians()),
         tinted: color3(p.get("specular_color")).is_some_and(|c| c != [1.0; 3]),
         subsurface: unit(at("subsurface", "weight", 0.0), "subsurface/weight")?,
         subsurface_color: match sub("subsurface", "color") {
@@ -722,13 +716,13 @@ fn seed(v: &Value) -> u32 {
 pub fn temperature(kelvin: f64) -> Vec3 {
     let lobe = |l: f64, mu: f64, s1: f64, s2: f64| {
         let t = (l - mu) / if l < mu { s1 } else { s2 };
-        (-0.5 * t * t).exp()
+        ops::exp(-0.5 * t * t)
     };
     let t = kelvin.clamp(1000.0, 40_000.0);
     let mut xyz = [0.0; 3];
     for nm in 380..=780 {
         let l = f64::from(nm);
-        let b = 1.0 / ((l * 1e-9).powi(5) * ((1.4388e-2 / (l * 1e-9 * t)).exp() - 1.0));
+        let b = 1.0 / (ops::powi(l * 1e-9, 5) * (ops::exp(1.4388e-2 / (l * 1e-9 * t)) - 1.0));
         xyz[0] += b
             * (1.056 * lobe(l, 599.8, 37.9, 31.0) + 0.362 * lobe(l, 442.0, 16.0, 26.7)
                 - 0.065 * lobe(l, 501.1, 20.4, 26.2));
@@ -784,13 +778,13 @@ pub fn light(
         LightKind::Sun => (at("illuminance", 10_000.0), f64::INFINITY),
         _ => {
             let power = at("power", 800.0).max(0.0);
-            let auto = (power / (4.0 * PI * THRESHOLD)).sqrt();
+            let auto = ops::sqrt(power / (4.0 * PI * THRESHOLD));
             (power / (4.0 * PI), at("range", auto))
         }
     };
     // `inner` and `outer` are the cone's half angles, measured from its axis as the tools whose
     // words the familiar-names packs carry measure them (#433).
-    let half = |k: &str, d: f64| at(k, d).clamp(0.0, 90.0).to_radians().cos();
+    let half = |k: &str, d: f64| ops::cos(at(k, d).clamp(0.0, 90.0).to_radians());
     let outer = half("outer", 45.0);
     Some(Light {
         id: id.to_string(),
@@ -972,7 +966,7 @@ pub fn policy_by(lights: &[Light], camera: &Camera, tie: Tie) -> Policy {
         if score > 0.0 {
             // Eight buckets per stop: a light's rank moves only when its score does.
             scored.push((
-                -(score.log2() * 8.0).floor() as i64,
+                -(ops::log2(score) * 8.0).floor() as i64,
                 &lights[i].id,
                 i,
                 score,
@@ -1015,14 +1009,14 @@ pub fn scores(lights: &[Light], camera: &Camera) -> Vec<f64> {
                     let d2 = dot(d, d);
                     let inside = planes
                         .iter()
-                        .all(|(n, w)| dot(*n, l.pos) + w >= -l.range * dot(*n, *n).sqrt());
+                        .all(|(n, w)| dot(*n, l.pos) + w >= -l.range * ops::sqrt(dot(*n, *n)));
                     if !inside {
                         0.0
                     } else {
                         l.intensity * 4.0 * PI / d2.max(l.radius * l.radius)
                     }
                 }
-            }) * l.priority.exp2()
+            }) * ops::pow(2.0, l.priority)
         })
         .collect()
 }

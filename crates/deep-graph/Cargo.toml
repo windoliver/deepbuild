@@ -1,0 +1,15 @@
+[package]
+name = "deep-graph"
+version = "0.0.0"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+
+# Issues #394 and #399: the graph module's proof binary, `deep-graph layout`: JSON lines in, one
+# answer per line. Outside the deep-canvas* crates because a line that lays new nodes into a kept
+# picture carries its layout's wall time, `ms` (#399), and the canvas lint keeps the clock out of
+# checked code; the layout itself, which a check reads, is deep-canvas-graph's.
+
+[dependencies]
+deep-canvas-graph = { path = "../deep-canvas-graph" }
+serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }

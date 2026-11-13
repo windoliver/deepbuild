@@ -117,9 +117,9 @@ pub fn r2(k: u32) -> [f64; 2] {
 
 /// A four-term Blackman–Harris window at x in [0, 1].
 fn blackman_harris(x: f64) -> f64 {
+    use deep_canvas::ops::cos;
     use std::f64::consts::TAU;
-    0.35875 - 0.48829 * (TAU * x).cos() + 0.14128 * (2.0 * TAU * x).cos()
-        - 0.01168 * (3.0 * TAU * x).cos()
+    0.35875 - 0.48829 * cos(TAU * x) + 0.14128 * cos(2.0 * TAU * x) - 0.01168 * cos(3.0 * TAU * x)
 }
 
 /// The `n` sub-samples of a frame, `pixel` of them jittered across the pixel (the look's own

@@ -8,6 +8,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, Mutex};
 
+use deep_canvas::ops;
 use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
 
@@ -51,9 +52,14 @@ pub struct Field {
     /// the outline's distance over `reach`, the high 16 the footprint's signed distance over
     /// [`COVER_REACH`] cells, offset by half (below half is inside).
     pub cells: Vec<u32>,
-    /// How long the bake took, ms: a reading, not part of the field.
-    pub bake_ms: f64,
+    /// How long the bake took, ms, by the host's [`Clock`]: a reading, not part of the field;
+    /// `None` when its caller gave no clock.
+    pub bake_ms: Option<f64>,
 }
+
+/// The host's clock, in ms from any fixed point, that times a bake: the core never reads the
+/// clock itself, and nothing a check reads comes from it.
+pub type Clock<'a> = &'a dyn Fn() -> f64;
 
 impl Field {
     /// How far past its zero the footprint's signed distance is kept, in m.
@@ -353,8 +359,9 @@ fn primitive(shape: Shape) -> (Vec<[f64; 3]>, Vec<u32>) {
             let n = 48u32;
             for k in 0..n {
                 let a = TAU * f64::from(k) / f64::from(n);
-                p.push([0.5 * a.cos(), -0.5, 0.5 * a.sin()]);
-                p.push([0.5 * a.cos(), 0.5, 0.5 * a.sin()]);
+                let (s, c) = (ops::sin(a), ops::cos(a));
+                p.push([0.5 * c, -0.5, 0.5 * s]);
+                p.push([0.5 * c, 0.5, 0.5 * s]);
             }
             p.push([0.0, -0.5, 0.0]);
             p.push([0.0, 0.5, 0.0]);
@@ -371,9 +378,9 @@ fn primitive(shape: Shape) -> (Vec<[f64; 3]>, Vec<u32>) {
                 for k in 0..=segs {
                     let th = TAU * f64::from(k) / f64::from(segs);
                     p.push([
-                        0.5 * phi.sin() * th.cos(),
-                        0.5 * phi.cos(),
-                        0.5 * phi.sin() * th.sin(),
+                        0.5 * ops::sin(phi) * ops::cos(th),
+                        0.5 * ops::cos(phi),
+                        0.5 * ops::sin(phi) * ops::sin(th),
                     ]);
                 }
             }
@@ -487,7 +494,7 @@ fn seg_distance(s: &Seg, q: [f64; 2]) -> f64 {
         0.0
     };
     let (dx, dz) = (q[0] - a[0] - h * ab[0], q[1] - a[1] - h * ab[1]);
-    (dx * dx + dz * dz).sqrt()
+    ops::sqrt(dx * dx + dz * dz)
 }
 
 /// The grid a field lays over the water's plates.
@@ -612,7 +619,9 @@ const KEPT: usize = 8;
 
 /// The field for `shore` over the plates `plates` ([min x, min z, max x, max z] at rest) at
 /// `level`, from the solids of `layers` the shore's collection holds: baked, or the one already
-/// baked under its key. A field past [`MAX_SIDE`] cells a side is refused, naming the count.
+/// baked under its key, timed by `clock` when the bake runs. A field past [`MAX_SIDE`] cells a side
+/// is refused, naming the count.
+#[allow(clippy::too_many_arguments)]
 pub fn field(
     doc: &Map<String, Value>,
     material: &str,
@@ -621,6 +630,7 @@ pub fn field(
     plates: &[[f64; 4]],
     level: f64,
     planted: Planted,
+    clock: Option<Clock<'_>>,
 ) -> Result<Arc<Field>, Refused> {
     let set = members(doc, material, &shore.collection)?;
     let mut lo = [f64::INFINITY; 2];
@@ -660,7 +670,7 @@ pub fn field(
             return Ok(f.clone());
         }
     }
-    let f = Arc::new(bake(&grid, level, reach, &solids, key, planted));
+    let f = Arc::new(bake(&grid, level, reach, &solids, key, planted, clock));
     let mut baked = BAKED.lock().unwrap_or_else(|e| e.into_inner());
     if baked.len() >= KEPT {
         baked.remove(0);
@@ -677,8 +687,9 @@ fn bake(
     solids: &[&Solid],
     key: String,
     planted: Planted,
+    clock: Option<Clock<'_>>,
 ) -> Field {
-    let start = std::time::Instant::now();
+    let start = clock.map(|now| now());
     let mut outline: Vec<Seg> = Vec::new();
     let mut polys: Vec<Vec<[f64; 2]>> = Vec::new();
     for s in solids {
@@ -728,7 +739,7 @@ fn bake(
             for k in 0..p.len() {
                 let (a, b) = (p[k], p[(k + 1) % p.len()]);
                 let (dx, dz) = (b[0] - a[0], b[1] - a[1]);
-                let l = (dx * dx + dz * dz).sqrt();
+                let l = ops::sqrt(dx * dx + dz * dz);
                 if l <= 0.0 {
                     continue;
                 }
@@ -759,6 +770,6 @@ fn bake(
         level,
         reach,
         cells,
-        bake_ms: start.elapsed().as_secs_f64() * 1e3,
+        bake_ms: clock.zip(start).map(|(now, start)| now() - start),
     }
 }

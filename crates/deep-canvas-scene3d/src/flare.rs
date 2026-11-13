@@ -5,6 +5,7 @@
 //! Everything is a pure function of the scene at t, so seeking equals playing.
 
 use deep_canvas::camera::Vec3;
+use deep_canvas::ops;
 use serde_json::Value;
 
 use crate::light::LightKind;
@@ -77,7 +78,7 @@ pub fn parse(id: &str, params: &Value, look: &Look3) -> Result<Flare, Refused> {
         Some(Value::String(s)) if s == "lights" => None,
         Some(v) => match v.get("emissive").and_then(Value::as_f64) {
             // EV100 as a luminance: L = 2^EV × K ÷ 100, K = 12.5.
-            Some(ev) if ev.is_finite() => Some(2f64.powf(ev) * 0.125),
+            Some(ev) if ev.is_finite() => Some(ops::pow(2.0, ev) * 0.125),
             _ => return Err(bad("out_of_range", at("from"))),
         },
     };
@@ -193,7 +194,7 @@ pub fn sources(scene: &Scene, flare: &Flare, look: &Look3) -> Vec<Source> {
         if share <= 0.0 {
             return;
         }
-        let area = std::f64::consts::PI * radius.max(0.5).powi(2);
+        let area = std::f64::consts::PI * ops::powi(radius.max(0.5), 2);
         let k = look.exposure * area * flare.intensity * GAIN;
         let color: Vec3 = std::array::from_fn(|c| radiance[c] * flare.tint[c] * k);
         let weight = color.iter().sum::<f64>();
@@ -218,11 +219,11 @@ pub fn sources(scene: &Scene, flare: &Flare, look: &Look3) -> Vec<Source> {
         let (point, radius_m, radiance) = match l.kind {
             LightKind::Sun => {
                 let half = (l.angle.max(0.53) / 2.0).to_radians();
-                let solid = std::f64::consts::PI * half.sin().powi(2);
+                let solid = std::f64::consts::PI * ops::powi(ops::sin(half), 2);
                 let toward = l.dir.map(|v| -v);
                 let far = std::array::from_fn(|c| cam.eye[c] + toward[c] * 1e6);
                 let Some(p) = cam.project(far) else { continue };
-                let r = cam.px_per_m(p[2]) * 1e6 * half.tan();
+                let r = cam.px_per_m(p[2]) * 1e6 * ops::tan(half);
                 push(
                     [p[0], p[1]],
                     r,
@@ -234,10 +235,10 @@ pub fn sources(scene: &Scene, flare: &Flare, look: &Look3) -> Vec<Source> {
             LightKind::Area => {
                 // Its axes are half its size long.
                 let a = l.area.as_ref().map_or(0.0, |a| {
-                    let side = |x: Vec3| dot(x, x).sqrt();
+                    let side = |x: Vec3| ops::sqrt(dot(x, x));
                     side(a.right) * side(a.up) * if a.disk { std::f64::consts::PI } else { 4.0 }
                 });
-                let r = (a / std::f64::consts::PI).sqrt();
+                let r = ops::sqrt(a / std::f64::consts::PI);
                 // Its face's radiance: Φ ÷ (π A), with intensity = Φ ÷ 4π.
                 (
                     l.pos,
@@ -250,7 +251,7 @@ pub fn sources(scene: &Scene, flare: &Flare, look: &Look3) -> Vec<Source> {
                 let mut cone = 1.0;
                 if l.kind == LightKind::Spot {
                     let to_eye: Vec3 = std::array::from_fn(|c| cam.eye[c] - l.pos[c]);
-                    let len = dot(to_eye, to_eye).sqrt().max(1e-9);
+                    let len = ops::sqrt(dot(to_eye, to_eye)).max(1e-9);
                     let cos = dot(to_eye, l.dir) / len;
                     let [outer, inner] = l.cone;
                     cone = ((cos - outer) / (inner - outer).max(1e-6)).clamp(0.0, 1.0);

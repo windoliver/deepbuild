@@ -8,7 +8,7 @@
 //! between corner samples and joined across cells into sub-paths. Past the cap the cells left
 //! draw from their corner samples as an estimate, and the box they cover is named.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 
 use deep_canvas::interval::Iv;
 
@@ -190,7 +190,7 @@ type Edge = (u32, bool, u64, u64);
 /// Marching squares over `cells` (each on its own level's grid), with crossings by a secant
 /// between corner samples, joined into sub-paths where cells share an edge.
 fn march(grid: &Grid, cells: &[Cell], g: &dyn Fn(f64, f64) -> f64) -> Vec<Vec<[f64; 2]>> {
-    let mut values: HashMap<(u32, u64, u64), f64> = HashMap::new();
+    let mut values: BTreeMap<(u32, u64, u64), f64> = BTreeMap::new();
     let mut value = |level: u32, i: u64, j: u64| -> f64 {
         *values.entry((level, i, j)).or_insert_with(|| {
             let p = grid.at(level, i, j);
@@ -248,7 +248,7 @@ fn march(grid: &Grid, cells: &[Cell], g: &dyn Fn(f64, f64) -> f64) -> Vec<Vec<[f
 
 /// Segments joined end to end into sub-paths; a closed one repeats its first point at its end.
 fn join(segments: &[(Edge, Edge)], points: &BTreeMap<Edge, [f64; 2]>) -> Vec<Vec<[f64; 2]>> {
-    let mut at: HashMap<Edge, Vec<usize>> = HashMap::new();
+    let mut at: BTreeMap<Edge, Vec<usize>> = BTreeMap::new();
     for (k, (a, b)) in segments.iter().enumerate() {
         at.entry(*a).or_default().push(k);
         at.entry(*b).or_default().push(k);

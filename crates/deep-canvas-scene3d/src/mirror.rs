@@ -10,6 +10,7 @@
 use std::collections::BTreeSet;
 
 use deep_canvas::camera::Vec3;
+use deep_canvas::ops;
 use serde_json::Value;
 
 use crate::scene::{Layer3, Refused, Scene, Shape};
@@ -148,7 +149,7 @@ fn plane_of(part: &crate::scene::Solid, eye: Vec3) -> Option<(Vec3, f64)> {
     };
     let axis = |k: usize| [m[0][k], m[1][k], m[2][k]];
     let mut sides: Vec<(f64, usize)> = (0..3)
-        .map(|k| (dot(axis(k), axis(k)).sqrt() * (hi[k] - lo[k]), k))
+        .map(|k| (ops::sqrt(dot(axis(k), axis(k))) * (hi[k] - lo[k]), k))
         .collect();
     sides.sort_by(|a, b| a.0.total_cmp(&b.0));
     let (thin, k) = sides[0];
@@ -162,7 +163,7 @@ fn plane_of(part: &crate::scene::Solid, eye: Vec3) -> Option<(Vec3, f64)> {
         a[2] * b[0] - a[0] * b[2],
         a[0] * b[1] - a[1] * b[0],
     ];
-    let len = dot(n, n).sqrt();
+    let len = ops::sqrt(dot(n, n));
     if len <= 0.0 {
         return None;
     }

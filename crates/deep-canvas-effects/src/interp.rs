@@ -120,9 +120,13 @@ impl Image {
     /// At uv with the level its uv gradients give: log2 of the longer gradient in texels.
     pub fn sample_grad(&self, uv: [f64; 2], dx: [f64; 2], dy: [f64; 2]) -> [f64; 4] {
         let (w, h) = (f64::from(self.w), f64::from(self.h));
-        let len2 = |d: [f64; 2]| (d[0] * w).powi(2) + (d[1] * h).powi(2);
+        let len2 = |d: [f64; 2]| ops::powi(d[0] * w, 2) + ops::powi(d[1] * h, 2);
         let rho2 = len2(dx).max(len2(dy));
-        let lod = if rho2 > 0.0 { 0.5 * rho2.log2() } else { 0.0 };
+        let lod = if rho2 > 0.0 {
+            0.5 * ops::log2(rho2)
+        } else {
+            0.0
+        };
         self.sample_level(uv, lod)
     }
 }

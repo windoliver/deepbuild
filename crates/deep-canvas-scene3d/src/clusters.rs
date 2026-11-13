@@ -4,6 +4,7 @@
 //! pure function of this frame's lights and view: nothing is carried from an earlier frame.
 
 use deep_canvas::camera::Vec3;
+use deep_canvas::ops;
 
 use crate::light::{Light, LightKind, Policy};
 use crate::scene::Camera;
@@ -23,7 +24,7 @@ pub struct Grid {
 
 /// A slice's near depth: slices grow by a fixed ratio from the near plane to the far one.
 fn slice_near(s: usize, near: f64, far: f64) -> f64 {
-    near * (far / near).powf(s as f64 / SLICES as f64)
+    near * ops::pow(far / near, s as f64 / SLICES as f64)
 }
 
 /// Whether a light reaches every pixel however far it is: a sun, or an area light, which doesn't
@@ -160,7 +161,7 @@ mod tests {
         // At every pixel of a lamp's sphere the lamp's bit is set.
         for (bit, l) in lights.iter().enumerate() {
             let [x, y, z] = camera().project(l.pos).unwrap();
-            let s = ((z / 0.1).ln() / (g.far / 0.1).ln() * SLICES as f64) as usize;
+            let s = (ops::log(z / 0.1) / ops::log(g.far / 0.1) * SLICES as f64) as usize;
             if (0.0..160.0).contains(&x) {
                 let (tx, ty) = (x as usize * TILES[0] / 160, y as usize * TILES[1] / 90);
                 assert_ne!(g.cells[(s * TILES[1] + ty) * TILES[0] + tx] & (1 << bit), 0);

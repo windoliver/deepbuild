@@ -6,7 +6,7 @@
 
 use std::cell::Cell;
 use std::collections::hash_map::DefaultHasher;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 use std::hash::{Hash, Hasher};
 use std::sync::{Arc, LazyLock, Mutex, MutexGuard};
 
@@ -17,8 +17,9 @@ use crate::shape::{Glyph, Shaped, Span, Spec};
 pub const BOUND: usize = 32 << 20;
 
 /// A run's key: the text and everything its shape depends on. `fitted` marks a text's run cut to
-/// its box with an ellipsis, kept apart from the run of the whole text.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+/// its box with an ellipsis, kept apart from the run of the whole text. Ordered, so the cache's
+/// runs iterate in one order in every process.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Key {
     text: Box<str>,
     font: u64,
@@ -136,7 +137,7 @@ struct Entry {
 
 #[derive(Default)]
 struct Cache {
-    runs: HashMap<Arc<Key>, Entry>,
+    runs: BTreeMap<Arc<Key>, Entry>,
     /// Runs by their last use, the least recent first.
     order: BTreeMap<u64, Arc<Key>>,
     bytes: usize,

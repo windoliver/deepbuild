@@ -1361,7 +1361,7 @@ fn dashed(line: &[[f64; 2]], dash: &[f64]) -> String {
     let (mut k, mut left, mut on) = (0, dash[0], true);
     for w in line.windows(2) {
         let (a, b) = (w[0], w[1]);
-        let len = ((b[0] - a[0]).powi(2) + (b[1] - a[1]).powi(2)).sqrt();
+        let len = ops::sqrt(ops::powi(b[0] - a[0], 2) + ops::powi(b[1] - a[1], 2));
         let at = |f: f64| [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f];
         let mut done = 0.0;
         while done < len {
