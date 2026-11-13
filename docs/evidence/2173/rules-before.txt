@@ -1,0 +1,63 @@
+Main base: 96a56e885e36360a569859e7d7ef63bebf634870
+Command: node scripts/repo-rules.mjs
+Exit: 1
+
+FAIL secrets: tests/acceptance/1575-redraft-ac1/BASE-FAILURE.txt:11:14: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL deps: crates/deep-codecs/Cargo.toml dependencies deep-canvas-cells * path=../deep-canvas-cells is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: crates/deep-app/Cargo.toml dependencies deep-images * path=../deep-images is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: crates/deep-app/Cargo.toml target.'cfg(target_os = "macos")'.dependencies accesskit_macos ^0.26 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: crates/deep-images/Cargo.toml dependencies deep-canvas * path=../deep-canvas is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: crates/deep-images/Cargo.toml dependencies image ^0.25 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: crates/deep-images/Cargo.toml dependencies sha2 ^0.10 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: crates/deep-gpu-layer/Cargo.toml dependencies deep-canvas-physics * path=../deep-canvas-physics is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: crates/deep-gpu-layer/Cargo.toml dependencies deep-logic * path=../deep-logic is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: crates/deep-gpu-layer/Cargo.toml dependencies deep-physics-rapier * path=../deep-physics-rapier is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: crates/deep-marks-render/Cargo.toml dependencies deep-images * path=../deep-images is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: crates/deep-physics-rapier/Cargo.toml dev-dependencies simba =0.10.2 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: crates/deep-show/Cargo.toml dependencies deep-images * path=../deep-images is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: crates/deep-typeset/Cargo.toml dependencies mitex * git+https://github.com/mitex-rs/mitex?rev=51f7210e026ab05d037125247e92d4d023d8a80d is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: crates/deep-typeset/Cargo.toml dependencies mitex-spec-gen * git+https://github.com/mitex-rs/mitex?rev=51f7210e026ab05d037125247e92d4d023d8a80d is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: crates/deep-typeset/Cargo.toml dependencies serde_json ^1 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: crates/deep-typeset/Cargo.toml dependencies ttf-parser ^0.25 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: crates/deep-typeset/Cargo.toml dependencies typst =0.15.1 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: crates/deep-typeset/Cargo.toml dependencies typst-layout =0.15.1 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/544/wat/Cargo.toml dependencies wasmparser =0.263.0 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/544/wat/Cargo.toml dependencies wat =1.263.0 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/545/wat/Cargo.toml dependencies wasmparser =0.263.0 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/545/wat/Cargo.toml dependencies wat =1.263.0 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL cards: crates/deep-canvas-physics/README.md:29: a deviation names budget, which crates/deep-canvas-physics doesn't have
+  Fix: Correct the deviation to the file it is about, or remove it if the file is gone.
+FAIL cards: crates/deep-images has no README.md card
+  Fix: Give the folder a README.md with the headings What it is for, Where new code goes, What it may import and Deviations.
+PASS workflows: .github/workflows/ has no entries
+PASS agent-hooks: no hooks, plugins or hook switch-off in .claude settings, no .codex/ folder
+PASS physics-build: rapier3d 0.36.1 [alloc, dim3, enhanced-determinism, f32, serde-serialize, std], parry3d 0.31.1, none of simd8, parallel, block-solver, fem, unsync-callbacks, fast-math, and no rustflags with target-cpu=native or +fma
+NOTE deps: vendor/accesskit_macos/Cargo.toml is a vendored upstream crate; its dependencies are upstream's
+NOTE deps: vendor/gpui-pre-apple/Cargo.toml is a vendored upstream crate; its dependencies are upstream's
+NOTE deps: vendor/gpui-pre-macos/Cargo.toml is a vendored upstream crate; its dependencies are upstream's
+NOTE deps: vendor/gpui-pre/Cargo.toml is a vendored upstream crate; its dependencies are upstream's
+NOTE deps: vendor/quickjs-jit-runtime/Cargo.toml is a vendored upstream crate; its dependencies are upstream's
+NOTE size: +0 -0 handwritten lines against merge base 96a56e885, lockfiles and binary files excluded (guideline: about 400)
