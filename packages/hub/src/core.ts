@@ -414,6 +414,7 @@ export class Core {
       connection: (extra) => this.connection('core', extra), keep: (bytes, source) => this.control.keep(bytes, source), fetch: (sha256) => this.store.read(sha256),
       trust: (folder) => this.trust.answer(this.connection('app'), folder, true), plugin: (name) => this.extensions!.stateSource(name),
       adopted: (session, id) => { this.state.projects.set(session, id); }, told: (session, cwd, text) => this.delivery.later(session, cwd, text), rerun: (claim, checks, state) => this.gate.rerun(claim, checks, state),
+      forge: options.forge ?? 'https://api.github.com', token: async () => process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN ?? await ghToken(), repoOf: (remote) => this.providers.forge.repoOf(remote),
     });
     this.tasks = new AskTasks({
       spaces: this.spaces, renamedSince: this.providers.workspaces.renamedSince,
@@ -978,7 +979,7 @@ export class Core {
     await this.delivery.restore();
     await this.acceptance.open();
     // The work runs (#1332), once the starts are reconciled with what still runs: a pass every 2 s from the record and the forge.
-    (this.work = new Work({ api: this.options.forge ?? 'https://api.github.com', token: async () => process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN ?? await ghToken(), repoOf: (remote) => this.providers.forge.repoOf(remote), raw: (q, p) => this.record.raw(q, p), appendCore: (kind, data, extra) => this.appendCore(kind, data, extra), starts: () => this.sessionStarts, landing: () => this.landing, asks: () => this.asks, now: this.now, plant: this.options.plant })).open();
+    (this.work = new Work({ api: this.options.forge ?? 'https://api.github.com', token: async () => process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN ?? await ghToken(), repoOf: (remote) => this.providers.forge.repoOf(remote), raw: (q, p) => this.record.raw(q, p), appendCore: (kind, data, extra) => this.appendCore(kind, data, extra), starts: () => this.sessionStarts, landing: () => this.landing, asks: () => this.asks, now: this.now, plant: this.options.plant, spaces: () => this.spaces, judgeTask: (r) => this.judging.judgeTask(r) })).open();
     // The session map and what its notices delivered, and the loop rule's count, read back (#352).
     await this.siblings.restore().catch(() => undefined);
     for (const timer of this.timers) timer.unref();

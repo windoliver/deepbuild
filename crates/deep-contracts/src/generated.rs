@@ -86285,6 +86285,250 @@ impl Contract for WorkspaceMoved {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct WorkspaceTaskV;
+
+impl Contract for WorkspaceTaskV {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "1").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("1").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct WorkspaceTaskKind;
+
+impl Contract for WorkspaceTaskKind {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "\"workspace.task\"").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("\"workspace.task\"").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct WorkspaceTaskWriter;
+
+impl Contract for WorkspaceTaskWriter {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "\"core\"").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("\"core\"").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WorkspaceTaskDataStep {
+    Entered,
+    Finished,
+    Filed,
+}
+
+impl Contract for WorkspaceTaskDataStep {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        match deep_contracts::string(value, at)? {
+            "entered" => Ok(Self::Entered),
+            "finished" => Ok(Self::Finished),
+            "filed" => Ok(Self::Filed),
+            other => Err(format!("{at}: {other:?} is not one of the listed values")),
+        }
+    }
+    fn to_json(&self) -> Value {
+        Value::String(match self {
+            Self::Entered => "entered",
+            Self::Finished => "finished",
+            Self::Filed => "filed",
+        }.to_string())
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WorkspaceTaskDataAuthorsItemRole {
+    Owner,
+    Collaborator,
+    Outside,
+}
+
+impl Contract for WorkspaceTaskDataAuthorsItemRole {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        match deep_contracts::string(value, at)? {
+            "owner" => Ok(Self::Owner),
+            "collaborator" => Ok(Self::Collaborator),
+            "outside" => Ok(Self::Outside),
+            other => Err(format!("{at}: {other:?} is not one of the listed values")),
+        }
+    }
+    fn to_json(&self) -> Value {
+        Value::String(match self {
+            Self::Owner => "owner",
+            Self::Collaborator => "collaborator",
+            Self::Outside => "outside",
+        }.to_string())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct WorkspaceTaskDataAuthorsItem {
+    pub handle: String,
+    pub role: WorkspaceTaskDataAuthorsItemRole,
+}
+
+impl Contract for WorkspaceTaskDataAuthorsItem {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["handle", "role"])?;
+        deep_contracts::check_member(members, at, "handle", &RULE_6)?;
+        Ok(Self {
+            handle: deep_contracts::required(members, at, "handle")?,
+            role: deep_contracts::required(members, at, "role")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("handle".to_string(), self.handle.to_json()));
+        members.push(("role".to_string(), self.role.to_json()));
+        Value::Object(members)
+    }
+}
+
+static RULE_340: deep_contracts::Rule = deep_contracts::Rule::Array { min: None, max: None, items: Some(&RULE_5) };
+
+static RULE_341: deep_contracts::Rule = deep_contracts::Rule::Nullable(&RULE_111);
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct WorkspaceTaskData {
+    pub workspace: String,
+    pub task: i64,
+    pub step: WorkspaceTaskDataStep,
+    pub source_id: String,
+    pub link: String,
+    pub title: String,
+    pub body: String,
+    pub criteria: Vec<String>,
+    pub authors: Vec<WorkspaceTaskDataAuthorsItem>,
+    pub updated: String,
+    pub blocked_by: Vec<i64>,
+    pub issue: Option<i64>,
+    pub commit: Option<String>,
+    pub kept: Option<String>,
+}
+
+impl Contract for WorkspaceTaskData {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["workspace", "task", "step", "source_id", "link", "title", "body", "criteria", "authors", "updated", "blocked_by", "issue", "commit", "kept"])?;
+        deep_contracts::check_member(members, at, "workspace", &RULE_313)?;
+        deep_contracts::check_member(members, at, "task", &RULE_5)?;
+        deep_contracts::check_member(members, at, "source_id", &RULE_6)?;
+        deep_contracts::check_member(members, at, "link", &RULE_6)?;
+        deep_contracts::check_member(members, at, "title", &RULE_15)?;
+        deep_contracts::check_member(members, at, "body", &RULE_6)?;
+        deep_contracts::check_member(members, at, "criteria", &RULE_13)?;
+        deep_contracts::check_member(members, at, "updated", &RULE_6)?;
+        deep_contracts::check_member(members, at, "blocked_by", &RULE_340)?;
+        deep_contracts::check_member(members, at, "issue", &RULE_37)?;
+        deep_contracts::check_member(members, at, "commit", &RULE_341)?;
+        deep_contracts::check_member(members, at, "kept", &RULE_341)?;
+        Ok(Self {
+            workspace: deep_contracts::required(members, at, "workspace")?,
+            task: deep_contracts::required(members, at, "task")?,
+            step: deep_contracts::required(members, at, "step")?,
+            source_id: deep_contracts::required(members, at, "source_id")?,
+            link: deep_contracts::required(members, at, "link")?,
+            title: deep_contracts::required(members, at, "title")?,
+            body: deep_contracts::required(members, at, "body")?,
+            criteria: deep_contracts::required(members, at, "criteria")?,
+            authors: deep_contracts::required(members, at, "authors")?,
+            updated: deep_contracts::required(members, at, "updated")?,
+            blocked_by: deep_contracts::required(members, at, "blocked_by")?,
+            issue: deep_contracts::required(members, at, "issue")?,
+            commit: deep_contracts::required(members, at, "commit")?,
+            kept: deep_contracts::required(members, at, "kept")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("workspace".to_string(), self.workspace.to_json()));
+        members.push(("task".to_string(), self.task.to_json()));
+        members.push(("step".to_string(), self.step.to_json()));
+        members.push(("source_id".to_string(), self.source_id.to_json()));
+        members.push(("link".to_string(), self.link.to_json()));
+        members.push(("title".to_string(), self.title.to_json()));
+        members.push(("body".to_string(), self.body.to_json()));
+        members.push(("criteria".to_string(), self.criteria.to_json()));
+        members.push(("authors".to_string(), self.authors.to_json()));
+        members.push(("updated".to_string(), self.updated.to_json()));
+        members.push(("blocked_by".to_string(), self.blocked_by.to_json()));
+        members.push(("issue".to_string(), self.issue.to_json()));
+        members.push(("commit".to_string(), self.commit.to_json()));
+        members.push(("kept".to_string(), self.kept.to_json()));
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct WorkspaceTask {
+    pub v: WorkspaceTaskV,
+    pub id: String,
+    pub kind: WorkspaceTaskKind,
+    pub writer: WorkspaceTaskWriter,
+    pub actor: String,
+    pub scope: String,
+    pub ts: i64,
+    pub seq: Option<deep_contracts::Seq>,
+    pub log_pos: Option<i64>,
+    pub data: WorkspaceTaskData,
+    pub evidence: Option<Vec<String>>,
+}
+
+impl Contract for WorkspaceTask {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["v", "id", "kind", "writer", "actor", "scope", "ts", "seq", "log_pos", "data", "evidence"])?;
+        deep_contracts::check_member(members, at, "id", &RULE_0)?;
+        deep_contracts::check_member(members, at, "actor", &RULE_3)?;
+        deep_contracts::check_member(members, at, "scope", &RULE_3)?;
+        deep_contracts::check_member(members, at, "ts", &RULE_4)?;
+        deep_contracts::check_member(members, at, "log_pos", &RULE_5)?;
+        deep_contracts::check_member(members, at, "evidence", &RULE_9)?;
+        Ok(Self {
+            v: deep_contracts::required(members, at, "v")?,
+            id: deep_contracts::required(members, at, "id")?,
+            kind: deep_contracts::required(members, at, "kind")?,
+            writer: deep_contracts::required(members, at, "writer")?,
+            actor: deep_contracts::required(members, at, "actor")?,
+            scope: deep_contracts::required(members, at, "scope")?,
+            ts: deep_contracts::required(members, at, "ts")?,
+            seq: deep_contracts::optional(members, at, "seq")?,
+            log_pos: deep_contracts::optional(members, at, "log_pos")?,
+            data: deep_contracts::required(members, at, "data")?,
+            evidence: deep_contracts::optional(members, at, "evidence")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("v".to_string(), self.v.to_json()));
+        members.push(("id".to_string(), self.id.to_json()));
+        members.push(("kind".to_string(), self.kind.to_json()));
+        members.push(("writer".to_string(), self.writer.to_json()));
+        members.push(("actor".to_string(), self.actor.to_json()));
+        members.push(("scope".to_string(), self.scope.to_json()));
+        members.push(("ts".to_string(), self.ts.to_json()));
+        if let Some(value) = &self.seq {
+            members.push(("seq".to_string(), value.to_json()));
+        }
+        if let Some(value) = &self.log_pos {
+            members.push(("log_pos".to_string(), value.to_json()));
+        }
+        members.push(("data".to_string(), self.data.to_json()));
+        if let Some(value) = &self.evidence {
+            members.push(("evidence".to_string(), value.to_json()));
+        }
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct WorktreeCreatedV;
 
 impl Contract for WorktreeCreatedV {
@@ -86845,6 +87089,7 @@ pub fn roundtrip(schema: &str, json: &str) -> Result<String, String> {
         "work.state@1" => <WorkState as Contract>::from_json(&value, "")?.to_json(),
         "workspace.created@1" => <WorkspaceCreated as Contract>::from_json(&value, "")?.to_json(),
         "workspace.moved@1" => <WorkspaceMoved as Contract>::from_json(&value, "")?.to_json(),
+        "workspace.task@1" => <WorkspaceTask as Contract>::from_json(&value, "")?.to_json(),
         "worktree.created@1" => <WorktreeCreated as Contract>::from_json(&value, "")?.to_json(),
         "worktree.removed@1" => <WorktreeRemoved as Contract>::from_json(&value, "")?.to_json(),
         _ => return Err(format!("no generated type for {schema}")),

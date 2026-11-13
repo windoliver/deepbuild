@@ -10893,6 +10893,39 @@ export interface WorkspaceMoved {
   evidence?: Array<string>;
 }
 
+/** workspace.task@1 */
+export interface WorkspaceTask {
+  v: 1;
+  id: string;
+  kind: "workspace.task";
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    workspace: string;
+    task: number;
+    step: "entered" | "finished" | "filed";
+    source_id: string;
+    link: string;
+    title: string;
+    body: string;
+    criteria: Array<string>;
+    authors: Array<{
+      handle: string;
+      role: "owner" | "collaborator" | "outside";
+    }>;
+    updated: string;
+    blocked_by: Array<number>;
+    issue: number | null;
+    commit: string | null;
+    kept: string | null;
+  };
+  evidence?: Array<string>;
+}
+
 /** worktree.created@1 */
 export interface WorktreeCreated {
   v: 1;
