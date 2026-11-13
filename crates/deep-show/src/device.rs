@@ -5,10 +5,12 @@
 //! that callback counts: nothing is estimated. macOS only (CoreAudio's default output unit);
 //! elsewhere `soak` answers `no_output`.
 
-use std::sync::atomic::{AtomicU32, AtomicU64, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicUsize, Ordering};
 
 use deep_canvas_media::mix::Player;
 use serde_json::{json, Value};
+
+use crate::stepped::Worlds;
 
 /// The ring's fill in frames, what the mixer keeps ahead of the device: about 43 ms at 48 kHz.
 const TARGET: usize = 2048;
@@ -24,6 +26,12 @@ pub struct Ring {
     underruns: AtomicU64,
     short_frames: AtomicU64,
     taken_frames: AtomicU64,
+    /// #525: stretches of consecutive short pulls, and whether the last pull was short; the
+    /// most frames one pull asked for; and the mixer thread each pull wakes.
+    stretches: AtomicU64,
+    short: AtomicBool,
+    biggest: AtomicUsize,
+    waker: std::sync::OnceLock<std::thread::Thread>,
 }
 
 impl Ring {
@@ -35,6 +43,10 @@ impl Ring {
             underruns: AtomicU64::new(0),
             short_frames: AtomicU64::new(0),
             taken_frames: AtomicU64::new(0),
+            stretches: AtomicU64::new(0),
+            short: AtomicBool::new(false),
+            biggest: AtomicUsize::new(0),
+            waker: std::sync::OnceLock::new(),
         }
     }
 
@@ -69,6 +81,16 @@ impl Ring {
             self.short_frames
                 .fetch_add(((out.len() - n) / 2) as u64, Ordering::Relaxed);
         }
+        if n < out.len() && !self.short.swap(true, Ordering::Relaxed) {
+            self.stretches.fetch_add(1, Ordering::Relaxed);
+        }
+        if n == out.len() {
+            self.short.store(false, Ordering::Relaxed);
+        }
+        self.biggest.fetch_max(out.len() / 2, Ordering::Relaxed);
+        if let Some(mixer) = self.waker.get() {
+            mixer.unpark();
+        }
     }
 
     /// Underruns so far, the frames of silence they filled, and the frames the consumer took.
@@ -88,6 +110,131 @@ pub fn soak(_player: Player, _seconds: u64) -> Value {
     json!({"outcome": "refused", "code": "no_output"})
 }
 
+/// #525: plays a live media document on the default output.
+#[cfg(not(target_os = "macos"))]
+pub fn soak_live(
+    _: Player,
+    _: Worlds,
+    _: u64,
+    _: Vec<(i64, String, Value)>,
+    _: (bool, bool),
+) -> Value {
+    json!({"outcome": "refused", "code": "no_output"})
+}
+
+/// #525: what a live play keeps written ahead of the device, and the IO buffer it asks the device
+/// for: 512 and 256 frames, about 10.7 and 5.3 ms at 48 kHz, as the test backend's device writes
+/// ahead (Phase: a step not ready in time is an underrun, which a long ring would hide).
+const LIVE: usize = 512;
+const LIVE_BUFFER: u32 = 256;
+/// One audio block (Sound and video on the picture's clock: Blocks).
+const BLOCK: usize = 128;
+
+/// #525: plays a media document whose worlds are live on the default output for `seconds` of
+/// real time. Before each block the mixer renders, every world steps past it and the graph's
+/// lead, and the spawns' voices are planned from the lists as stepped, as the test backend's play
+/// does; a step not ready (one the scenario's `delays` hold) leaves the mixer waiting, so the
+/// device's callback finds the ring short, which counts. Answers the gate's stats (an underrun
+/// one stretch of short callbacks), the blocks rendered and how many found a world behind, and
+/// the SHA-256 of the samples rendered from the document's 0, which a replay renders alike.
+/// Each scripted press `(at, control, value)` arrives `at` host flicks after the play starts and
+/// is an entry on the track at the first sample at or after the one the device plays then, plus
+/// the write-ahead and one block, or the first sample not yet written or step not yet run,
+/// whichever is later (Input track); the reply lists each with that first sample not yet written.
+/// `planted`: #525's transport that renders a block whose step isn't ready, and its entry that
+/// takes the t the clock shows at its arrival, the sample the device plays.
+#[cfg(target_os = "macos")]
+pub fn soak_live(
+    mut player: Player,
+    mut worlds: Worlds,
+    seconds: u64,
+    mut presses: Vec<(i64, String, Value)>,
+    (late_renders, at_frame): (bool, bool),
+) -> Value {
+    use sha2::{Digest, Sha256};
+    use std::time::{Duration, Instant};
+    let rate = player.mix.rate;
+    let sample = crate::shared::FLICKS / rate;
+    let Some(device) = mac::default_output() else {
+        return json!({"outcome": "refused", "code": "no_output"});
+    };
+    let ring = Ring::new(LIVE);
+    let begun = Instant::now();
+    let host =
+        || (begun.elapsed().as_nanos() * crate::shared::FLICKS as u128 / 1_000_000_000) as i64;
+    let (mut written, mut blocks, mut behind) = (0i64, 0u64, 0u64);
+    let mut hash = Sha256::new();
+    let mut chunk = vec![0f32; 2 * BLOCK];
+    let delay = (device.latency() * rate as f64).round() as i64;
+    let mut arrived = Vec::new();
+    let mut fill = |player: &mut Player, worlds: &mut Worlds| {
+        while presses.first().is_some_and(|p| host() >= p.0) {
+            let (at, control, value) = presses.remove(0);
+            let playing = (ring.counts().2 as i64 - delay).max(0);
+            let next = worlds.next_step().div_euclid(sample)
+                + i64::from(worlds.next_step().rem_euclid(sample) != 0);
+            let lead = (LIVE + LIVE_BUFFER as usize + BLOCK) as i64;
+            let t = if at_frame {
+                playing
+            } else {
+                (playing + lead).max(written).max(next)
+            };
+            worlds.press(t * sample, &control, &value);
+            arrived
+                .push(json!({"at": at, "control": control, "t": t * sample, "unwritten": written}));
+        }
+        while ring.free() >= BLOCK {
+            let first = written;
+            let need = (first + BLOCK as i64 + player.ahead()) * sample;
+            if !worlds.step_to(need, host()) && !late_renders {
+                return;
+            }
+            let moved = |t: i64| (late_renders && t < first * sample).then_some(first * sample);
+            if let Some(strips) = worlds.added(moved) {
+                player.set_added(strips);
+            }
+            blocks += 1;
+            behind += u64::from(worlds.behind((first + BLOCK as i64) * sample));
+            player.read(&mut chunk);
+            ring.push(&chunk);
+            chunk.iter().for_each(|x| hash.update(x.to_le_bytes()));
+            written += BLOCK as i64;
+        }
+    };
+    // A live mixer writes 10 ms ahead, so it runs as the device's own IO thread does: on a
+    // time-constraint schedule of one device buffer, never starved by other work on the machine.
+    mac::realtime(LIVE_BUFFER as f64 / rate as f64);
+    let cpu = mac::thread_cpu();
+    let _ = ring.waker.set(std::thread::current());
+    fill(&mut player, &mut worlds);
+    let unit = match mac::Unit::start(&ring, rate, Some(LIVE_BUFFER)) {
+        Ok(u) => u,
+        Err(status) => {
+            return json!({"outcome": "refused", "code": "device_failed", "status": status})
+        }
+    };
+    let deadline = begun + Duration::from_secs(seconds);
+    // Each pull wakes the mixer, which refills at once; the timeout only bounds a missed wake.
+    while Instant::now() < deadline {
+        fill(&mut player, &mut worlds);
+        std::thread::park_timeout(Duration::from_millis(2));
+    }
+    let played = begun.elapsed().as_secs_f64();
+    drop(unit);
+    let (_, short, taken) = ring.counts();
+    if (taken as f64) < (played - 1.0) * rate as f64 {
+        return json!({"outcome": "refused", "code": "interrupted", "frames": taken, "played": played});
+    }
+    let digest: String = hash.finalize().iter().map(|b| format!("{b:02x}")).collect();
+    json!({"outcome": "played", "seconds": seconds, "stats": {
+        "underruns": ring.stretches.load(Ordering::Relaxed),
+        "underrun_time": short as f64 / rate as f64,
+        "latency": device.latency() + LIVE as f64 / rate as f64,
+    }, "blocks": {"rendered": blocks, "behind": behind}, "handed": {"frames": written, "sha256": digest},
+        "presses": arrived, "input_track": worlds.track,
+        "device": {"buffer": ring.biggest.load(Ordering::Relaxed)}, "mixer": {"cpu": mac::thread_cpu() - cpu, "played": played}})
+}
+
 /// Plays `player` on the default output for `seconds` of real time and answers the gate's stats.
 #[cfg(target_os = "macos")]
 pub fn soak(mut player: Player, seconds: u64) -> Value {
@@ -105,7 +252,7 @@ pub fn soak(mut player: Player, seconds: u64) -> Value {
         }
     };
     fill(&mut player);
-    let unit = match mac::Unit::start(&ring, rate) {
+    let unit = match mac::Unit::start(&ring, rate, None) {
         Ok(u) => u,
         Err(status) => {
             return json!({"outcome": "refused", "code": "device_failed", "status": status})
@@ -313,7 +460,8 @@ mod mac {
 
     impl Unit {
         /// Opens the default output at `rate`, float32 stereo interleaved, pulling from `ring`.
-        pub fn start(ring: &Ring, rate: i64) -> Result<Unit, i32> {
+        /// #525: `buffer` asks the device for an IO buffer of that many frames.
+        pub fn start(ring: &Ring, rate: i64, buffer: Option<u32>) -> Result<Unit, i32> {
             let desc = ComponentDescription {
                 kind: code(b"auou"),
                 sub_kind: code(b"def "),
@@ -366,6 +514,17 @@ mod mac {
                     (&raw const callback).cast(),
                     size(std::mem::size_of::<RenderCallback>()),
                 ))?;
+                // kAudioDevicePropertyBufferFrameSize, global scope (0): this process's IO buffer.
+                if let Some(frames) = buffer {
+                    ok(AudioUnitSetProperty(
+                        unit.0,
+                        code(b"fsiz"),
+                        0,
+                        0,
+                        (&raw const frames).cast(),
+                        size(std::mem::size_of::<u32>()),
+                    ))?;
+                }
                 ok(AudioUnitInitialize(unit.0))?;
                 ok(AudioOutputUnitStart(unit.0))?;
                 Ok(unit)
@@ -382,6 +541,57 @@ mod mac {
                 AudioComponentInstanceDispose(self.0);
             }
         }
+    }
+
+    /// #525: puts the calling thread on a time-constraint schedule of one `period` (seconds), with a
+    /// fifth of it to compute in and half of it to finish by, as an audio IO thread runs.
+    pub fn realtime(period: f64) {
+        #[repr(C)]
+        struct Timebase {
+            numer: u32,
+            denom: u32,
+        }
+        /// thread_time_constraint_policy_data_t.
+        #[repr(C)]
+        struct TimeConstraint {
+            period: u32,
+            computation: u32,
+            constraint: u32,
+            preemptible: i32,
+        }
+        extern "C" {
+            fn mach_timebase_info(info: *mut Timebase) -> i32;
+            fn mach_thread_self() -> u32;
+            fn thread_policy_set(thread: u32, flavor: u32, policy: *mut i32, count: u32) -> i32;
+        }
+        /// THREAD_TIME_CONSTRAINT_POLICY, and its count of 32-bit fields.
+        const POLICY: u32 = 2;
+        const COUNT: u32 = 4;
+        let mut base = Timebase { numer: 0, denom: 0 };
+        // SAFETY: writes only `base`; then sets only the calling thread's policy, from a policy
+        // of the size COUNT names.
+        unsafe {
+            mach_timebase_info(&mut base);
+            let ticks = |s: f64| (s * 1e9 * base.denom as f64 / base.numer.max(1) as f64) as u32;
+            let mut policy = TimeConstraint {
+                period: ticks(period),
+                computation: ticks(period / 5.0),
+                constraint: ticks(period / 2.0),
+                preemptible: 1,
+            };
+            thread_policy_set(mach_thread_self(), POLICY, (&raw mut policy).cast(), COUNT);
+        }
+    }
+
+    /// The calling thread's CPU time, in seconds (#525: what the live mixer spent).
+    pub fn thread_cpu() -> f64 {
+        let mut t = libc::timespec {
+            tv_sec: 0,
+            tv_nsec: 0,
+        };
+        // SAFETY: writes only `t`.
+        unsafe { libc::clock_gettime(libc::CLOCK_THREAD_CPUTIME_ID, &mut t) };
+        t.tv_sec as f64 + t.tv_nsec as f64 / 1e9
     }
 
     /// Runs the calling thread at the user-interactive QoS, as a mixer feeding the device does.

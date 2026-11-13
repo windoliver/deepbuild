@@ -363,6 +363,13 @@ alone.push('tests/acceptance/1819/');
 // #502's files each build deep-show, export films through the GPU and the encode tool and speak their fixture with
 // `say`; onsets.test.ts also starts a hub and the model host on its fixed port 8719: one file at a time.
 alone.push('tests/acceptance/502/', 'tests/acceptance/502-oracle/');
+// #503's files each build deep-show or deep-gpu, draw on the GPU, decode every listed audio format in the decode worker
+// and rebake a spectrum in a linux/amd64 container; its oracle lane fetches and decodes the FATE audio samples; so does
+// the blind redraft of AC1's bar chart, which builds deep-show and plays and seeks the chart's 600 frames.
+alone.push('tests/acceptance/503/', 'tests/acceptance/503-oracle/', 'tests/acceptance/503-redraft-ac1/');
+// #503's blind redraft of AC4's lossy test is kept by hand, as the record of its dispute: it also failed on the work
+// (FFmpeg's arm64 Vorbis decode and its HE-AAC v2 decode at 32k), so the first draft stands and runs in its place.
+byHand.push('tests/acceptance/503-redraft-ac4/');
 // #935's files each build deep-show and run audio.gen on 38.4 s beds and the EBU loudness set; tempo.test.ts also starts
 // a hub and the model host on its fixed port 8719: one file at a time.
 alone.push('tests/acceptance/935/', 'tests/acceptance/935-oracle/');
@@ -461,6 +468,10 @@ alone.push('tests/acceptance/407/', 'tests/acceptance/407-oracle/');
 alone.push('tests/acceptance/2014/', 'tests/acceptance/2014-oracle/');
 // #1956's files each build deep-show (r1) and install the shelf pack's versions in order.
 alone.push('tests/acceptance/1956/');
+// #1802's ac4 and ac6 files each build deep-show with a test canvas module's features.
+alone.push('tests/acceptance/1802/');
+// #139's preview tests that publish an undated preview entry are redrafted after #1802; the redraft runs as #139's suite does.
+alone.push('tests/acceptance/139-redraft-1802/');
 // #154's files each start hubs that render stems through the supervisor, and build deep-show once; AC9 times a 60 s
 // six-stem render against the reference Mac.
 alone.push('tests/acceptance/154/', 'tests/acceptance/154-oracle/');
@@ -506,6 +517,12 @@ alone.push('tests/acceptance/1183/');
 // ac4-budget times 2,000 units at 1080p against the showpiece class's GPU budget.
 alone.push('tests/acceptance/537/', 'tests/acceptance/537-oracle/');
 timed.push('tests/acceptance/537/ac4-budget.test.ts');
+// #539's files each build deep-show and #544's assembler, run logic programs, export on the GPU and draw the app's window.
+alone.push('tests/acceptance/539/');
+// #539's first-draft Oracle lane takes the upstream answer for Up and Down past a cell that can't take focus, where the
+// design's grid rule gives another (tests/acceptance/539-oracle-redraft/DISPUTE.md); its blind redraft runs in its place.
+alone.push('tests/acceptance/539-oracle-redraft/');
+byHand.push('tests/acceptance/539-oracle/');
 // #1920's files build deep-show seven times, in the full and core sets, and read each build's published plan.
 alone.push('tests/acceptance/1920/');
 // #1863's files each start a real hub and a session through deep-hook; the speed file times five 5 s and 6 s waits a
@@ -544,6 +561,14 @@ alone.push('tests/acceptance/2197/');
 timed.push('tests/acceptance/2197/budget.test.ts');
 // #2144's AC1 runs the canvas lint on the checkout, a cargo clippy over every scope crate in its target/.
 alone.push('tests/acceptance/2144/');
+// #1332's files each start their own hubs, a played forge and played agents, and run a work run to its landings.
+alone.push('tests/acceptance/1332/');
+// #525's files each build deep-show (criterion 3 also the test.sim B builds) and play a live lab ten minutes long.
+alone.push('tests/acceptance/525/');
+// Its device gap test plays the labs out loud on this Mac's default output in real time, 10 minutes for the first.
+alone.push('tests/acceptance/525-device/');
+timed.push('tests/acceptance/525-device/device.test.ts');
+slow.push('tests/acceptance/525-device/device.test.ts');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },

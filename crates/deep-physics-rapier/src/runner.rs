@@ -19,7 +19,7 @@ use deep_canvas_physics::backend::{
 use deep_canvas_physics::bake::{self, Build, Parts};
 use deep_canvas_physics::caps::{Caps, RAPIER3D};
 use deep_canvas_physics::check::{check, fix};
-use deep_canvas_physics::doc::{Read, Refusal, World};
+use deep_canvas_physics::doc::{derived, Read, Refusal, World};
 use deep_canvas_physics::golden;
 use deep_canvas_physics::occurrence;
 use deep_canvas_physics::pairs::{pairs, Brief};
@@ -259,6 +259,8 @@ struct Plan<'a> {
     ftz_at: Option<u64>,
     /// After this step, moves `(body, field, ulps)` before its hash and checkpoint are taken.
     shift: Option<(u64, String, usize, i64)>,
+    /// #525: the scene's input track, whose entries derive the world's declared inputs.
+    track: &'a [Value],
 }
 
 /// What a run took.
@@ -401,7 +403,7 @@ impl Run {
     }
 
     /// The bake key of `world` at `rate` over `steps`, with what it reads of its scene (`[]` when
-    /// nothing); a golden's when `target` is `None`. Worlds take no input yet (#522).
+    /// nothing) and no input track; a golden's when `target` is `None`.
     fn key(
         &self,
         world: &Value,
@@ -410,10 +412,23 @@ impl Run {
         steps: u64,
         target: Option<&str>,
     ) -> String {
+        self.key_with(world, reads, &json!([]), rate, steps, target)
+    }
+
+    /// [`Run::key`] over the scene's input track too (#525: a bake's inputs derive from it).
+    fn key_with(
+        &self,
+        world: &Value,
+        reads: &Value,
+        track: &Value,
+        rate: &str,
+        steps: u64,
+        target: Option<&str>,
+    ) -> String {
         let parts = Parts {
             world,
             reads,
-            track: &json!([]),
+            track,
             frame_rate: if self.key_without_rate { "" } else { rate },
             steps,
         };
@@ -478,6 +493,7 @@ impl Run {
     fn run(&self, b: &mut Rapier, w: &World, plan: &Plan, t: &mut Trace) -> Result<(), Stop> {
         let start = b.read().step;
         let rank = occurrence::ranks(w);
+        let inputs = derived(&w.inputs, occurrence::step_flicks(w), plan.track);
         self.take(b, w, plan, t, start, start);
         for k in start + 1..=start + plan.steps {
             if plan.ftz_at == Some(k) {
@@ -490,7 +506,7 @@ impl Run {
                 }
             }
             let targets = plan.scene.map_or_else(Targets::default, |s| s.targets(k));
-            b.step(&[], &targets)
+            b.step(inputs.get(&k).map_or(&[], Vec::as_slice), &targets)
                 .map_err(|r| Stop::Refused(json!({"ok": false, "issues": [issue(&r)]})))?;
             if self.engine_order {
                 t.occurrences
@@ -530,9 +546,10 @@ impl Run {
             Stop::Refused(v) => v,
             Stop::Register(step, what) => json!({"ok": false, "code": "physics.fp_control", "step": step, "register": fp::REGISTER, "what": what}),
         })?;
-        let key = self.key(
+        let key = self.key_with(
             world,
             &reads(plan, steps),
+            &json!(plan.track),
             &rate,
             steps,
             Some(&self.build.target),
@@ -587,6 +604,10 @@ impl Run {
                     guard: false,
                     ftz_at: None,
                     shift: None,
+                    track: call
+                        .get("track")
+                        .and_then(Value::as_array)
+                        .map_or(&[], Vec::as_slice),
                 };
                 let with_checkpoints = call
                     .get("checkpoints")
@@ -600,9 +621,10 @@ impl Run {
                         Ok(r) => r,
                         Err(e) => return Some(e),
                     };
-                    let key = self.key(
+                    let key = self.key_with(
                         &world,
                         &reads(&plan, plan.steps),
+                        &json!(plan.track),
                         &rate,
                         plan.steps,
                         Some(&self.build.target),
@@ -650,6 +672,7 @@ impl Run {
                     guard: false,
                     ftz_at: None,
                     shift: None,
+                    track: &[],
                 };
                 let (w, mut b) = match self.build(&world) {
                     Ok(x) => x,
@@ -713,6 +736,7 @@ impl Run {
                     guard: true,
                     ftz_at: None,
                     shift: None,
+                    track: &[],
                 };
                 let (rate, _) = match rate(call) {
                     Ok(r) => r,
@@ -981,6 +1005,7 @@ impl Run {
                     guard: false,
                     ftz_at: None,
                     shift: None,
+                    track: &[],
                 };
                 if let Err(Stop::Refused(v)) = self.run(&mut b, &w, &plan, &mut Trace::default()) {
                     return Some(v);
@@ -1060,6 +1085,7 @@ impl Run {
                 .map(Value::as_u64)
                 .map_or(Some(None), |s| s.map(Some))?,
             shift,
+            track: &[],
         };
         let dir = call
             .get("store")
@@ -1186,5 +1212,65 @@ mod wasm {
         };
         let n = reply.len();
         (leak(reply.into_bytes()) as u64) << 32 | n as u64
+    }
+}
+
+/// #525: a world its scene steps one step at a time while sound plays, each step the bake's own
+/// (its scene's targets, the inputs its track derives, its rows sorted), so a live world's list
+/// is the bake's whenever the track is the same.
+pub struct Live {
+    w: World,
+    b: Rapier,
+    scene: Option<Scene>,
+    rank: BTreeMap<String, u32>,
+    inputs: BTreeMap<u64, Vec<deep_canvas_physics::backend::Input>>,
+    /// Steps run.
+    pub steps: u64,
+}
+
+impl Run {
+    /// The world a `{scene, world}` call names, built to step live.
+    pub fn live(&self, call: &Value) -> Result<Live, Value> {
+        let (world, scene) = self
+            .subject(call)
+            .unwrap_or_else(|| Err(json!({"ok": false, "code": "bad_input"})))?;
+        let (w, b) = self.build(&world)?;
+        let rank = occurrence::ranks(&w);
+        Ok(Live {
+            w,
+            b,
+            scene,
+            rank,
+            inputs: BTreeMap::new(),
+            steps: 0,
+        })
+    }
+}
+
+impl Live {
+    /// Its step length, in flicks.
+    pub fn step_flicks(&self) -> i64 {
+        occurrence::step_flicks(&self.w)
+    }
+
+    /// The inputs `track` derives, which the steps not yet run take.
+    pub fn track(&mut self, track: &[Value]) {
+        self.inputs = derived(&self.w.inputs, self.step_flicks(), track);
+    }
+
+    /// The next step, and its rows as a bake's scene reads them, each stamped with its `t`.
+    pub fn step(&mut self) -> Result<Vec<Value>, Value> {
+        let k = self.steps + 1;
+        let targets = self
+            .scene
+            .as_ref()
+            .map_or_else(Targets::default, |s| s.targets(k));
+        let inputs = self.inputs.get(&k).map_or(&[][..], Vec::as_slice);
+        self.b
+            .step(inputs, &targets)
+            .map_err(|r| json!({"ok": false, "issues": [issue(&r)]}))?;
+        self.steps = k;
+        let rows = occurrence::sorted(k as u32, self.b.occurrences(), &self.rank);
+        Ok(occurrence::timed(&occurrence::listed(&rows), &self.w))
     }
 }

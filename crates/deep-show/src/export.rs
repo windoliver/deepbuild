@@ -103,6 +103,9 @@ pub(crate) fn planted(name: &str) -> Option<Planted> {
         "png_premultiplies_straight" => Planted::PngPremultipliesStraight,
         "video_drops_frame_300" => Planted::VideoDropsFrame300,
         "range_starts_one_frame_late" => Planted::RangeStartsOneFrameLate,
+        // #525's, reached by `--planted`: a golden verifier and a receipt writer.
+        "golden_compares_across_digests" => Planted::GoldenComparesAcrossDigests,
+        "receipt_omits_runtime_digest" => Planted::ReceiptOmitsRuntimeDigest,
         "limiter_without_codec_margin" => Planted::Export(G::NoCodecMargin),
         "shard_rounds_first_sample" => Planted::Export(G::ShardStartRounds),
         "export_without_disk_gate" => Planted::Export(G::NoDiskGate),
@@ -541,6 +544,10 @@ impl Hub<'_> {
         }
         match result {
             Ok(mut receipt) => {
+                // #525: the receipt names the runtime digest, so two backends' evidence never mixes.
+                if self.scenario.planted != Some(Planted::ReceiptOmitsRuntimeDigest) {
+                    receipt["runtime_digest"] = json!(self.startup.sealed.runtime_digest);
+                }
                 let readback = receipt.as_object_mut().and_then(|r| r.remove("readback"));
                 let mut reply = json!({"outcome": "exported", "receipt": receipt});
                 if let Some(r) = readback {
@@ -689,6 +696,10 @@ impl Hub<'_> {
             }
         }
         doc = crate::played::with_track(&doc, &track);
+        if self.scenario.module_planted.as_deref() == Some("export_keeps_live_hover") {
+            // Planted (#539): the frames evaluate hover as the panel's live hover, not none.
+            self.hover_into(&job.doc, &mut doc);
+        }
         let _ = self.inline_tables(&mut doc);
         let _ = self.inline_vectors(&mut doc);
         self.inline_occurrences(&mut doc, &job.track)

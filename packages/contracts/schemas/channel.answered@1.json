@@ -3,6 +3,9 @@
   "description": "An answer a channel returned counted, once the hub checked its proof: a paired device's signature, which is the trusted path, or an account link you made. It names the channel, so a later answer is refused naming it. Only the core appends it (#65).",
   "x-since": "R2",
   "x-stability": "preview",
+  "x-tracking": "#65",
+  "x-preview_since": "R2",
+  "x-decide_by": "R5",
   "x-feeds": [],
   "type": "object",
   "properties": {
