@@ -7484,14 +7484,21 @@ For: sound that follows the picture: an engine whose pitch follows a car's speed
 - **Preset fields.** A node's numeric field takes a number or the name of one of the preset's params. Ranges and defaults are in the field's own unit: Hz, seconds, dB for a biquad's gain and a shaper's drive, bits for crush, a plain amplitude for `gain`, a fraction for feedback and mix.
 - **Edges.** An edge `[from, to, input]` feeds `from`'s output into `to`'s `in`, which every node but osc, noise and env takes, and `mix` sums every edge into it whatever its input's name. An edge into an osc's `hz` adds its signal in Hz, and one into a gain's `gain` adds its signal to that field, so an envelope into `gain` shapes a voice. Any other input is refused, naming the edge. A node with no edge into it reads silence on `in`.
 - **Nodes.**
-  - `osc {wave, hz}` writes ±1, its phase a u64 fraction of a cycle advanced each sample by the mean of that sample's frequency and the next one's.
+  - `osc {wave, hz}` writes ±1, its phase a u64 fraction of a cycle advanced each sample by the mean of that sample's frequency and the next one's. The phase p in [0, 1) starts at 0 when the voice starts, and the waves are:
+    - sine: sin 2πp;
+    - saw: 2p − 1;
+    - square: 1 below p = ½, −1 from it;
+    - triangle: 1 − 4|p − ½|, shifted by a quarter cycle so it starts at 0 rising.
   - `noise {color}` is white in [−1, 1) from hash(seed, synth ID, voice, sample index from the voice's start); pink is that through a fixed three-pole filter; brown is its leaky integral.
   - `modes {ratios, t60s, hz}` is one two-pole resonator per ratio at hz × ratio, excited by `in`.
   - `string {hz, damping}` is a delay line one period long with a two-tap lowpass, `damping` in [0, 1), excited by `in`.
   - `env {attack, hold, decay, sustain, release}` writes a level in [0, 1]. It opens at the voice's start, runs linearly through attack, hold and decay to sustain, and falls linearly to 0 over release from its level when the span ends.
   - `biquad {type, freq, q, gain}` has the Processor row's types and cookbook formulas, recomputed per block.
-  - `shaper {curve, drive, mix}` has the processor's curves. It is memoryless with tail 0, so its oversampling is not built.
-  - `crush {bits, hold_hz, mix}` quantizes mid-tread, so silence stays 0.
+  - `shaper {curve, drive, mix}` has the processor's curves. It is memoryless with tail 0, so its oversampling is not built. With g = 10^(drive ÷ 20) and u = g·x, it writes (1 − mix)·x + mix·c(u), unnormalized, where c is:
+    - tanh: tanh u;
+    - soft_clip: 1.5u − 0.5u³ for |u| ≤ 1, and the sign of u past it;
+    - fold: u folded back into [−1, 1] at ±1.
+  - `crush {bits, hold_hz, mix}` quantizes mid-tread to the nearest multiple of q = 2^(1 − bits), halves rounded away from 0, so silence stays 0. With `hold_hz` above 0 it holds each quantized sample for rate ÷ hold_hz samples. It writes (1 − mix)·x + mix·the held value.
   - `delay {time, feedback, mix}` holds up to 2 s.
   - `gain {gain}` multiplies `in` by `gain`.
 - **The block rule.** A param's expression is evaluated once per block of 128 samples, at the instant just before the block's first sample. Inside block k the value moves linearly from that block's reading to the next block's, so a value that holds stays flat and a change ramps across one block. A step that lands exactly on a block's first sample ramps inside that block and is whole from the next. Block k's first sample is the graph's sample k × 128 less its bus's latency, the same grid live, after a seek and in export.
