@@ -46,3 +46,15 @@ it('deep host list names the hosts your SSH config names, and deep host facts re
     }
   }, { PATH: `${dir}:${process.env.PATH}` });
 }, 120_000);
+
+// The refusal's last sentence was "Name one of: none.", which an agent reads as a host to name.
+it('a host refused when your SSH config names none says so, and offers no name to give', async () => {
+  dir = mkdtempSync(join(tmpdir(), 'deep-hosts-'));
+  await withHub(async (_root, home) => {
+    const unnamed = await deep(home, home, ['host', 'facts', 'nas']);
+    expect(unnamed.code, unnamed.stdout).toBe(1);
+    expect(unnamed.stderr).toContain("nas isn't a host your SSH config");
+    expect(unnamed.stderr).toContain('It names no host.');
+    expect(unnamed.stderr).not.toContain('Name one of');
+  });
+}, 120_000);
