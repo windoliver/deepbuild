@@ -565,6 +565,10 @@ alone.push('tests/acceptance/525/');
 alone.push('tests/acceptance/525-device/');
 timed.push('tests/acceptance/525-device/device.test.ts');
 slow.push('tests/acceptance/525-device/device.test.ts');
+// #226's files each build deep-gpu, deep-show (full and without data) or deep-canvas-render and draw on the Metal GPU;
+// ac7-budgets judges the task's budgets on the reference Mac.
+alone.push('tests/acceptance/226/', 'tests/acceptance/226-oracle/');
+timed.push('tests/acceptance/226/ac7-budgets.test.ts');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
