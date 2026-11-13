@@ -4,7 +4,8 @@
 the blind suite's drop lab (`tests/acceptance/525/helpers.ts`: The lab) made into a film: a camera, a floor and a ball
 item that the world `lab` moves through its output to `items/ball/at`, the bed on the left and a clack on each hit on
 the right. `export.mjs` builds the document and runs the export (`node export.mjs <deep-show> <out dir>`); made on
-Nov 13, 2026 on a Mac17,10 with the change at 4f61e840f.
+Nov 13, 2026 on a Mac17,10 with a build of this branch from before its press support (8c10132cb), whose
+export and mix paths that commit leaves as they were.
 
 `first-hit.png` shows the first hit: the export's own lossless PNG frames 26 to 29 (a `png_seq` export of the same
 document, cropped and zoomed 2×) above the right channel of the file, on one time axis.
