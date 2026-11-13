@@ -8,6 +8,7 @@
 
 use std::collections::BTreeSet;
 
+use deep_canvas::schedule::Scheduler;
 use deep_canvas::scope::Event;
 use deep_canvas_input::track::{Entry, Writer};
 use deep_canvas_media::mix::{Gain, Strip};
@@ -401,21 +402,73 @@ pub(crate) struct Presenting {
 
 /// The shell's present-mode calls.
 pub(crate) enum PresentCall {
-    /// `present {panel}`: what present mode shows on the panel's display.
-    State(String),
-    /// `presenter`: what the presenter view shows.
-    Presenter,
+    /// `present {panel, pixels?, size?}`: what present mode shows on the panel's display, and
+    /// with `pixels` that display drawn at `size` pixels.
+    State {
+        panel: String,
+        pixels: Option<[u16; 2]>,
+    },
+    /// `presenter {pixels?, size?}`: what the presenter view shows, and with `pixels` the view
+    /// drawn.
+    Presenter { pixels: Option<[u16; 2]> },
     /// `menu_bar`: the menu bar's count of asks.
     MenuBar,
 }
 
+/// The reference window in pixels: 1512 × 982 points at 2× (How we know version 0 works).
+const REFERENCE: [u16; 2] = [3024, 1964];
+
+/// A call's `pixels: true`, drawn at its `size` or the reference window's; `None` without it.
+fn pixels_of(c: &Map<String, Value>) -> Option<Option<[u16; 2]>> {
+    if c.get("pixels") != Some(&Value::Bool(true)) {
+        return Some(None);
+    }
+    match c.get("size").and_then(Value::as_array).map(Vec::as_slice) {
+        None => Some(Some(REFERENCE)),
+        Some([w, h]) => Some(Some([
+            u16::try_from(w.as_u64()?).ok()?,
+            u16::try_from(h.as_u64()?).ok()?,
+        ])),
+        Some(_) => None,
+    }
+}
+
 pub(crate) fn parse_call(name: &str, c: &Map<String, Value>) -> Option<PresentCall> {
     match name {
-        "present" => Some(PresentCall::State(c.get("panel")?.as_str()?.to_string())),
-        "presenter" => Some(PresentCall::Presenter),
+        "present" => Some(PresentCall::State {
+            panel: c.get("panel")?.as_str()?.to_string(),
+            pixels: pixels_of(c)?,
+        }),
+        "presenter" => Some(PresentCall::Presenter {
+            pixels: pixels_of(c)?,
+        }),
         "menu_bar" => Some(PresentCall::MenuBar),
         _ => None,
     }
+}
+
+/// `size` pixels of one color, RGBA.
+fn filled(size: [u16; 2], rgba: [u8; 4]) -> Vec<u8> {
+    rgba.repeat(usize::from(size[0]) * usize::from(size[1]))
+}
+
+/// `img` (`at` pixels, RGBA) laid over `canvas` with its top-left corner at `(x, y)`, clipped.
+fn paste(canvas: &mut [u8], size: [u16; 2], img: &[u8], at: [u16; 2], x: usize, y: usize) {
+    let (w, h) = (usize::from(size[0]), usize::from(size[1]));
+    let (iw, ih) = (usize::from(at[0]), usize::from(at[1]));
+    let n = iw.min(w.saturating_sub(x)) * 4;
+    for row in 0..ih.min(h.saturating_sub(y)) {
+        let to = ((y + row) * w + x) * 4;
+        canvas[to..to + n].copy_from_slice(&img[row * iw * 4..row * iw * 4 + n]);
+    }
+}
+
+/// The largest even size with `doc`'s aspect that fits in `room`, so a film letterboxes.
+fn fit(doc: &Value, room: [u16; 2]) -> [u16; 2] {
+    let w = doc["size"][0].as_f64().unwrap_or(16.0).max(1.0);
+    let h = doc["size"][1].as_f64().unwrap_or(9.0).max(1.0);
+    let s = (f64::from(room[0]) / w).min(f64::from(room[1]) / h);
+    [((w * s) as u16) & !1, ((h * s) as u16) & !1]
 }
 
 /// The viewer keys present mode holds while it runs, which the keymap check names as shadowed.
@@ -606,7 +659,7 @@ impl Hub<'_> {
 
     pub(crate) fn present_call(&mut self, call: &PresentCall) -> Value {
         match call {
-            PresentCall::State(panel) => {
+            PresentCall::State { panel, pixels } => {
                 let Some(p) = self.present.as_ref().filter(|p| p.panel == *panel) else {
                     return json!({"present": {"on": false, "display": null, "stage": null, "number": null, "blank": false, "notice": null}});
                 };
@@ -614,10 +667,14 @@ impl Hub<'_> {
                 let (display, blank, notice) = (p.display.clone(), p.blank, p.notice.clone());
                 let path = self.present_path().unwrap_or_default();
                 let stage = Self::stage_of(&path, self.now);
-                json!({"present": {"on": on, "display": display, "stage": stage.map(|s| s.marker.clone()), "number": stage.and_then(|s| s.stage),
-                    "blank": on && blank, "notice": notice}})
+                let mut out = json!({"present": {"on": on, "display": display, "stage": stage.map(|s| s.marker.clone()), "number": stage.and_then(|s| s.stage),
+                    "blank": on && blank, "notice": notice}});
+                if let Some(size) = pixels {
+                    out["present"]["picture"] = self.presented_picture(*size);
+                }
+                out
             }
-            PresentCall::Presenter => self.presenter_view(),
+            PresentCall::Presenter { pixels } => self.presenter_view(*pixels),
             PresentCall::MenuBar => {
                 // The asks open now: the card's, from its creation until it's answered.
                 let open = self.card_json().is_some_and(|c| c.answer.is_none());
@@ -629,7 +686,7 @@ impl Hub<'_> {
     /// The presenter view: on the display present mode doesn't show the piece on, the held
     /// stage's notes, the next stage's first frame (hashed as the export hashes frames), the stage
     /// number and name and the time since present mode began; never an ask.
-    fn presenter_view(&mut self) -> Value {
+    fn presenter_view(&mut self, pixels: Option<[u16; 2]>) -> Value {
         let Some(p) = self.presenting() else {
             return json!({"presenter": null});
         };
@@ -651,15 +708,22 @@ impl Hub<'_> {
             .iter()
             .find(|s| s.stage.is_some() && s.stage > stage.stage)
             .cloned();
-        let hash = match (&next, self.current_doc(&doc)) {
-            (Some(n), Ok(d)) => self
-                .frame_hashes(&d, &[n.at])
+        let current = self.current_doc(&doc).ok();
+        let hash = match (&next, &current) {
+            (Some(n), Some(d)) => self
+                .frame_hashes(d, &[n.at])
                 .ok()
                 .and_then(|h| h.into_iter().next()),
             _ => None,
         };
-        json!({"presenter": {"display": display, "stage": stage.marker, "number": stage.stage, "name": stage.name, "notes": stage.notes,
-            "next": next.map(|n| json!({"stage": n.marker, "hash": hash})), "elapsed": self.now - since}})
+        let mut out = json!({"presenter": {"display": display, "stage": stage.marker, "number": stage.stage, "name": stage.name, "notes": stage.notes,
+            "next": next.as_ref().map(|n| json!({"stage": n.marker, "hash": hash})), "elapsed": self.now - since}});
+        if let (Some(size), Some(d)) = (pixels, &current) {
+            let stages = path.stops.iter().filter(|s| s.stage.is_some()).count();
+            out["presenter"]["picture"] =
+                self.presenter_picture(&out["presenter"], stages, next.as_ref(), d, size);
+        }
+        out
     }
 
     /// The card as it stands, with `deadline_at`: the clock its default applies at, counted
@@ -688,6 +752,153 @@ impl Hub<'_> {
             _ => Value::Null,
         };
         out
+    }
+
+    /// `doc`'s frame at clock `t`, drawn at `size` as an export draws it, from a fresh session.
+    fn frame_at(&mut self, doc: &Value, t: i64, size: [u16; 2]) -> Option<(Vec<u8>, [u16; 2])> {
+        let mut sched = Scheduler::new(&self.startup.sealed, self.options());
+        let mut session = self.new_session();
+        session.load(&mut sched, doc);
+        self.export_frame(&mut sched, &mut session, doc, t, Some(size), true)
+            .ok()
+    }
+
+    /// RGBA rows stored as a PNG in the evidence store, as a snapshot names them.
+    fn stored_picture(&self, rgba: Vec<u8>, size: [u16; 2]) -> Value {
+        self.put_png(rgba, size).map_or(
+            Value::Null,
+            |sha| json!({"sha256": sha, "w": size[0], "h": size[1]}),
+        )
+    }
+
+    /// What present mode shows on its display now, `size` pixels: the piece at the clock,
+    /// letterboxed in black, or black while blanked.
+    fn presented_picture(&mut self, size: [u16; 2]) -> Value {
+        let Some(p) = self.present.as_ref() else {
+            return Value::Null;
+        };
+        let (doc, blank) = (p.doc.clone(), p.blank && p.ended.is_none());
+        let mut out = filled(size, [0, 0, 0, 255]);
+        if !blank {
+            let Some(form) = self.played_form(&doc) else {
+                return Value::Null;
+            };
+            let now = self.now;
+            if let Some((rgba, at)) = self.frame_at(&form, now, fit(&form, size)) {
+                let (x, y) = ((size[0] - at[0]) / 2, (size[1] - at[1]) / 2);
+                paste(&mut out, size, &rgba, at, usize::from(x), usize::from(y));
+            }
+        }
+        self.stored_picture(out, size)
+    }
+
+    /// The presenter view drawn at `size` pixels (points at 2×): its stage's number and name, the
+    /// elapsed time and the notes as text the canvas lays out, and the next stage's first frame,
+    /// framed, beside them. Nothing of an ask is in it.
+    fn presenter_picture(
+        &mut self,
+        view: &Value,
+        stages: usize,
+        next: Option<&Stop>,
+        doc: &Value,
+        size: [u16; 2],
+    ) -> Value {
+        let (w, h) = (f64::from(size[0]) / 2.0, f64::from(size[1]) / 2.0);
+        let column = w * 0.45;
+        // Names, not readings: the digits a stage's number and the clock show are its labels.
+        let text = |id: &str, words: String, pt: f64, x: f64, y: f64, lines: f64| {
+            json!({"id": id, "kind": "text@1", "name": id, "order": format!("a{id}"), "at": {"pos": [x, y, 0]},
+                "params": {"text": words, "name": true, "font": "body", "size": pt, "box": {"w": column, "h": pt * 1.5 * lines}, "align": "start"}})
+        };
+        let number = view["number"].as_u64().unwrap_or(0);
+        let seconds = view["elapsed"].as_i64().unwrap_or(0) as f64
+            / deep_canvas::grammar::FLICKS_PER_SECOND as f64;
+        let mut items = vec![
+            json!({"id": "ground", "kind": "rect@1", "name": "Ground", "order": "a0", "params": {"box": [0, 0, w, h], "paint": {"fill": {"role": "ground"}}}}),
+            text(
+                "number",
+                format!("Stage {number} of {stages}"),
+                22.0,
+                48.0,
+                48.0,
+                1.0,
+            ),
+            text(
+                "title",
+                view["name"].as_str().unwrap_or_default().to_string(),
+                44.0,
+                48.0,
+                88.0,
+                1.0,
+            ),
+            text(
+                "elapsed",
+                format!("Elapsed {seconds:.1} s"),
+                22.0,
+                48.0,
+                168.0,
+                1.0,
+            ),
+            text("notes_label", "Notes".to_string(), 18.0, 48.0, 248.0, 1.0),
+            text(
+                "notes",
+                view["notes"].as_str().unwrap_or_default().to_string(),
+                28.0,
+                48.0,
+                280.0,
+                8.0,
+            ),
+        ];
+        if let Some(n) = next {
+            let label = format!("Next: stage {}, {}", n.stage.unwrap_or(0), n.name);
+            items.push(text("next_label", label, 18.0, w * 0.52, 248.0, 1.0));
+        }
+        let items: Map<String, Value> = items
+            .into_iter()
+            .map(|i| (i["id"].as_str().unwrap_or_default().to_string(), i))
+            .collect();
+        let board = json!({"format": 1, "id": "presenter-view", "profile": "board", "title": "The presenter view",
+            "description": "What the presenter sees on the other display while a stage holds.", "size": [w, h], "items": items});
+        let writer = deep_canvas::show::Writer {
+            kind: deep_canvas::show::WriterKind::Shell,
+            id: "presenter".into(),
+        };
+        let Ok(stamped) =
+            deep_canvas::show::stamp(board, "presenter-view", &writer, "Presenter view")
+        else {
+            return Value::Null;
+        };
+        let (form, _) = self.drawing_form(&stamped);
+        let session = self.evaluated(&form, 0);
+        let Some(painted) = crate::frames::drawing_of(&self.sched, &session) else {
+            return Value::Null;
+        };
+        let Ok((mut rgba, _, size)) = self.canonical_rgba(&painted, Some(size), true) else {
+            return Value::Null;
+        };
+        if let Some(n) = next {
+            let room = [
+                (f64::from(size[0]) * 0.45) as u16,
+                (f64::from(size[1]) * 0.45) as u16,
+            ];
+            if let Some((frame, at)) = self.frame_at(doc, n.at, fit(doc, room)) {
+                let (x, y) = (
+                    (f64::from(size[0]) * 0.52) as usize,
+                    (f64::from(size[1]) * 0.3) as usize,
+                );
+                let border = [at[0] + 8, at[1] + 8];
+                paste(
+                    &mut rgba,
+                    size,
+                    &filled(border, [120, 120, 128, 255]),
+                    border,
+                    x - 4,
+                    y - 4,
+                );
+                paste(&mut rgba, size, &frame, at, x, y);
+            }
+        }
+        self.stored_picture(rgba, size)
     }
 
     /// The keymap check's present-mode rows: each film-viewer key present mode holds while it

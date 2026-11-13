@@ -32,9 +32,13 @@ pub(crate) struct ReadPage {
 }
 
 /// The notes' type size and leading, in points, and the most characters on one line.
-const TEXT: f64 = 11.0;
-const LEADING: f64 = 14.0;
-const MARGIN: f64 = 24.0;
+const TEXT: f64 = 14.0;
+const LEADING: f64 = 18.0;
+const MARGIN: f64 = 36.0;
+
+/// A page's width in points (10 in): the still is placed across it at its own pixels, so a reader
+/// extracts it losslessly while the page prints at a handout's size.
+const PAGE: f64 = 720.0;
 
 /// `rgb` as the zlib stream of a PNG's IDAT chunks: rows with PNG filters, as PDF's Flate
 /// filter with predictor 15 reads them.
@@ -123,7 +127,7 @@ fn write_pages(pages: &[&Page]) -> Result<Vec<u8>, String> {
     );
     for (i, page) in pages.iter().enumerate() {
         let [w, h] = page.size;
-        let (wf, hf) = (f64::from(w), f64::from(h));
+        let (wf, hf) = (PAGE, f64::from(h) * PAGE / f64::from(w).max(1.0));
         let text = page
             .notes
             .as_deref()
