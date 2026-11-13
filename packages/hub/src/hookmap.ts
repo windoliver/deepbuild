@@ -231,12 +231,13 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
     return { kind: 'refused', id, error: { ...issue, remediation: issue.path === '/seq' ? SEQ_WHY : issue.remediation } };
   }
   const request = value as unknown as HookRequestLine;
-  const name = ADAPTERS[request.agent];
+  // A table's own entries only: a name every object has, such as constructor, is no agent and no event (#2043).
+  const name = Object.hasOwn(ADAPTERS, request.agent) ? ADAPTERS[request.agent] : undefined;
   if (!name) return { kind: 'refused', id, error: refusal('enum', '/agent', `No adapter maps ${request.agent}; send one of ${Object.keys(ADAPTERS).join(', ')}.`, request.agent) };
   if (!isObj(request.payload)) return { kind: 'refused', id, error: refusal('type', '/payload', "Send the agent's hook JSON object as the payload.", request.payload) };
   const payload = request.payload;
   const moments = MOMENTS[name];
-  const event = moments?.[request.event] ?? request.event;
+  const event = moments && Object.hasOwn(moments, request.event) ? moments[request.event]! : request.event;
   // Who is calling: a payload that carries another tool's own fields is that tool's, whatever command or variable
   // named it; a name its fields contradict is recorded as a reading (#993), and a tool that isn't Claude Code is kept.
   const said = name === 'claude' ? payloadCaller(payload) : undefined;
@@ -244,7 +245,7 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
   const agent = said && said !== 'claude-code' ? said : request.agent;
   const scrub = (text: string) => scrubText(text, { held });
   const meta: HookMeta = {
-    id: request.id, agent, event, session: str(payload.session_id), cwd: str(payload.cwd),
+    id: request.id, seq: request.seq, agent, event, session: str(payload.session_id), cwd: str(payload.cwd),
     transcript: str(payload.transcript_path), pid: request.pid, ppid: request.ppid, matched: request.matched,
   };
   if (said && said !== named) meta.caller = `deep-hook named this hook's caller ${named}, but its payload's own fields say ${said} (${said === 'cursor' ? 'cursor_version' : `transcript_path ${str(payload.transcript_path)}`}); it is recorded under ${agent}.`;

@@ -1,4 +1,3 @@
-// The settings duration reader, independent of the asks core so the hub's event loop loads no record store.
 import type { JsonValue } from '@deepbuild/contracts';
 
 const UNITS: Readonly<Record<string, number>> = { m: 60_000, h: 3_600_000, d: 86_400_000 };

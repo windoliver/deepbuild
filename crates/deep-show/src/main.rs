@@ -35,6 +35,7 @@ mod jobs;
 mod kept;
 mod kinds;
 mod kit;
+mod lengths;
 mod logic;
 mod media;
 mod mixdown;
@@ -45,6 +46,7 @@ mod retired;
 mod physics;
 mod placement;
 mod played;
+mod print;
 mod probe;
 #[cfg(feature = "test-accent")]
 mod planted;
@@ -66,6 +68,8 @@ mod terminal;
 #[cfg(feature = "test-machines")]
 mod test_machines;
 mod test_registries;
+#[cfg(feature = "test-sim")]
+mod test_sim;
 #[cfg(feature = "test-threads")]
 mod test_threads;
 mod time;
@@ -1222,6 +1226,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 || deep_canvas_motion::arrange::PLANTED.contains(p)
                 || *p == deep_canvas_motion::module::UNDECLARED_KIND_ACCEPTED
                 || deep_canvas_motion::module::PLANTED.contains(p)
+                || *p == deep_canvas_motion::lengths::ONE_VALUE
                 || deep_canvas_marks::arrays::PLANTED.contains(p)
                 // #1967's wrong programs live in the cells module's playback and conversion.
                 || deep_canvas_cells::recording::PLANTED.contains(p)
@@ -1864,6 +1869,9 @@ const TEST_BUILD: bool = cfg!(any(
     feature = "test-sim-b-false-bit",
     feature = "test-sim-b-off",
     feature = "test-sim-c",
+    feature = "test-sim-a-1-0-1",
+    feature = "test-sim-b-1-0-1",
+    feature = "test-sim-b-pin-feature",
     feature = "test-gpu-second-backend",
     feature = "test-scene3d-tie-by-order",
     feature = "test-scene3d-reads-vector",
@@ -1984,12 +1992,18 @@ fn modules(set: BuildSet) -> Vec<Module> {
     }
     // Issue #238: the sandbox module, on core alone; `test-sandbox-alt` seals the test
     // implementation `sandbox.alt` in its place, and `test-sandbox-needs-logic` plants a manifest
-    // that requires logic.
+    // that requires logic. Issue #2324: sandbox.alt pins another release outside every advisory
+    // 49.0.2 was inside, and the planted engine build, whose kit differs from the reference's, is
+    // no bit implementation, so the runtime digest names it.
     if set >= BuildSet::Full {
         out.push(if cfg!(feature = "test-sandbox-alt") {
-            deep_canvas_sandbox::module::implementation("sandbox.alt", "=49.0.1")
+            deep_canvas_sandbox::module::implementation("sandbox.alt", "=50.0.1")
         } else if cfg!(feature = "test-sandbox-needs-logic") {
             sandbox_needs_logic()
+        } else if cfg!(feature = "plant-engine-differs") {
+            let mut m = deep_canvas_sandbox::module::module();
+            m.manifest.implementation.equivalence = deep_canvas::registry::Equivalence::Measured;
+            m
         } else {
             deep_canvas_sandbox::module::module()
         });
@@ -2116,23 +2130,11 @@ fn modules(set: BuildSet) -> Vec<Module> {
     out.push(deep_canvas_test_modules::checks());
     #[cfg(feature = "test-glyph-label")]
     out.push(deep_canvas_test_modules::label());
-    // Issue #185: test.sim@1's implementations, and test module c.
-    #[cfg(feature = "test-sim-a")]
-    out.push(deep_canvas_test_modules::sim::a());
-    #[cfg(feature = "test-sim-b")]
-    out.push(deep_canvas_test_modules::sim::b());
-    #[cfg(feature = "test-sim-b-f64")]
-    out.push(deep_canvas_test_modules::sim::b_f64());
-    #[cfg(feature = "test-sim-b-private-renamed")]
-    out.push(deep_canvas_test_modules::sim::b_private_renamed());
-    #[cfg(feature = "test-sim-b-public-renamed")]
-    out.push(deep_canvas_test_modules::sim::b_public_renamed());
-    #[cfg(feature = "test-sim-b-false-bit")]
-    out.push(deep_canvas_test_modules::sim::b_false_bit());
-    #[cfg(feature = "test-sim-b-off")]
-    out.push(deep_canvas_test_modules::sim::b_off());
-    #[cfg(feature = "test-sim-c")]
-    out.push(deep_canvas_test_modules::sim::c());
+    #[cfg(feature = "test-export-guards")]
+    out.push(deep_canvas_test_modules::guards());
+    // Issues #185 and #1920: test.sim@1's implementations and their variants, and test module c.
+    #[cfg(feature = "test-sim")]
+    out.extend(test_sim::modules());
     out.extend(kit::modules::built());
     #[cfg(feature = "test-leave-out-logic")]
     out.retain(|m| m.manifest.name != "logic");
@@ -2972,6 +2974,8 @@ fn planted_named(twin: &str) -> Result<StartPlanted, ()> {
         "admits_frame_json" => Ok(StartPlanted::Seal(Fault::AdmitsFrameJson)),
         "digest_hashes_private" => Ok(StartPlanted::Seal(Fault::DigestHashesPrivate)),
         "digest_covers_pins" => Ok(StartPlanted::Seal(Fault::DigestCoversPins)),
+        "runtime_digest_omits_physics" => Ok(StartPlanted::Seal(Fault::RuntimeOmitsPhysics)),
+        "runtime_digest_hashes_only_shapes" => Ok(StartPlanted::Seal(Fault::RuntimeOnlyShapes)),
         "orders_steps_by_name" => Ok(StartPlanted::StepsByName),
         "starts_without_look" => Ok(StartPlanted::StartsWithoutLook),
         "shapes_on_ui_thread" => Ok(StartPlanted::ShapesOnUiThread),
@@ -3029,27 +3033,7 @@ fn planted_named(twin: &str) -> Result<StartPlanted, ()> {
     }
 }
 
-/// #501's wrong programs, and #1897's, by the names their acceptance suites give them.
-fn export_planted(name: &str) -> Option<Planted> {
-    Some(match name {
-        "hash_xors_without_position" => Planted::HashXorsWithoutPosition,
-        "span_rounds_each_frame" => Planted::SpanRoundsEachFrame,
-        "span_rounds_start" => Planted::SpanRoundsStart,
-        "chunk_tree_wrong_order" => Planted::ChunkTreeWrongOrder,
-        "range_restarts_timecode" => Planted::RangeRestartsTimecode,
-        "export_starts_then_stops" => Planted::ExportStartsThenStops,
-        "target_exports_selection" => Planted::TargetExportsSelection,
-        "target_writes_baked_channel" => Planted::TargetWritesBakedChannel,
-        "target_reader_is_writer" => Planted::TargetReaderIsWriter,
-        "mixer_linux_one_step" => Planted::MixerLinuxOneStep,
-        "drop_frame_every_tenth_minute" => Planted::DropFrameEveryTenthMinute,
-        "timecode_track_zero" => Planted::TimecodeTrackZero,
-        "png_premultiplies_straight" => Planted::PngPremultipliesStraight,
-        "video_drops_frame_300" => Planted::VideoDropsFrame300,
-        "range_starts_one_frame_late" => Planted::RangeStartsOneFrameLate,
-        _ => return None,
-    })
-}
+use export::planted as export_planted;
 
 /// A hash version by its name: `hash@1` or `hash@2`.
 fn hash_named(name: &str) -> Option<HashVersion> {

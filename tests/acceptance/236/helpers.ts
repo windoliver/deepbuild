@@ -156,19 +156,27 @@ export function bins(): Bins {
   };
   cc('probe', [join(FIXTURES, 'probe.c')]);
   cc('tree', [join(FIXTURES, 'tree.c')]);
-  cc('devices', ['-fobjc-arc', join(FIXTURES, 'devices.m'), '-framework', 'Foundation', '-framework', 'AVFoundation', '-framework', 'AudioToolbox', '-framework', 'CoreGraphics']);
-  built = { dir, probe: join(dir, 'probe'), tree: join(dir, 'tree'), devices: join(dir, 'devices') };
+  let devices = false;
+  built = {
+    dir, probe: join(dir, 'probe'), tree: join(dir, 'tree'),
+    get devices() {
+      if (!devices) cc('devices', ['-fobjc-arc', join(FIXTURES, 'devices.m'), '-framework', 'Foundation', '-framework', 'AVFoundation', '-framework', 'AudioToolbox', '-framework', 'CoreGraphics', '-framework', 'ScreenCaptureKit']);
+      devices = true;
+      return join(dir, 'devices');
+    },
+  };
   return built;
 }
 /** Copies the probes into a run's own folder (for a run whose grant names only that folder). */
 export function binsIn(dir: string): Bins {
   const b = bins();
   const to = sub(dir, 'bin');
-  for (const name of ['probe', 'tree', 'devices'] as const) {
+  const copy = (name: 'probe' | 'tree' | 'devices'): string => {
     copyFileSync(b[name], join(to, name));
     chmodSync(join(to, name), 0o755);
-  }
-  return { dir: to, probe: join(to, 'probe'), tree: join(to, 'tree'), devices: join(to, 'devices') };
+    return join(to, name);
+  };
+  return { dir: to, probe: copy('probe'), tree: copy('tree'), get devices() { return copy('devices'); } };
 }
 
 // ---- What a probe wrote: one JSON line per try.

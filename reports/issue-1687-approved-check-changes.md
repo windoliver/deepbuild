@@ -1,0 +1,9 @@
+# User-approved #1687 check/setup changes
+
+In this API conversation, the person explicitly replied: "STILL ITS HOWS Part of #1687 , PELAE CLOSE THE GAPS THAT CLOSE TH EISUSE YES, APPROVE" to the scoped proposal at reports/issue-1687-boundary-proposal.md. This authorizes the described setup/ownership/loader review edits, not relaxation of behavior, tolerance, test cases, or the absolute core boundary. No cryptographic approval tag is claimed or fabricated.
+
+Approved setup changes: #822 loads synchronous createCore from the outer runtime shared by production instead of bare Core construction. Seven case bodies, expected values, real record/supervisor/sandbox/process behavior, fake-clock sequencing and cleanup retained. Independent source audit: 21 expect-call expressions and seven test case bodies byte-identical. Regression unit constructors for AskTasks supply the real existing renamedSince function as a now-required inward capability; their assertions remain byte-identical too.
+
+Approved adjudications: only the original selected-variable-name ownership oracle was replaced with the already-frozen blind retained-algorithm oracle/inventory. Max100, anti-relocation, no-cycle and absolute dependency checks remain. Computed-loader completeness now uses independently reviewed, frozen origins/guards/digests, adds resolvable edges, refuses any new/changed/unreviewed loader, escape, caller change, or core reach to outer provider loader. Real loader tests and planted violation proof retained.
+
+Actual recorded checks (not agent assertion): source-only structural25/25 and final graph10/10; existing real loaders11/11, selected package-loader cases3/3 and new genuine loader-boundary3/3. Detailed check-owner receipts /tmp/deep-1687-check-owner-*; these do not replace #822 runtime or full affected proof. Signed guard approval mechanism, if required, must still verify a real person's signature; this human-message authorization record is not such a signature.

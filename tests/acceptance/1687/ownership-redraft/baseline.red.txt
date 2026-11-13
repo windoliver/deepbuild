@@ -1,0 +1,379 @@
+Base: c52f1c66d22886c336189d41237265e82843c34a
+Node: v24.22.2
+Command: node --test --test-reporter=tap tests/acceptance/1687/ownership-redraft/oracle.test.mjs tests/acceptance/1687/ownership-redraft/structure.test.mjs
+Exit status: 1
+TAP version 13
+# Subtest: ownership oracle: retained, renamed, nested and module-level bodies fail; fixture behavior stays equal
+ok 1 - ownership oracle: retained, renamed, nested and module-level bodies fail; fixture behavior stays equal
+  ---
+  duration_ms: 112.10325
+  type: 'test'
+  ...
+# Subtest: ownership oracle: real movement allows arbitrary destination names, aliases, forwarding and re-exports
+ok 2 - ownership oracle: real movement allows arbitrary destination names, aliases, forwarding and re-exports
+  ---
+  duration_ms: 12.981917
+  type: 'test'
+  ...
+# Subtest: ownership oracle: comments, strings, interfaces and call sites are not implementations
+ok 3 - ownership oracle: comments, strings, interfaces and call sites are not implementations
+  ---
+  duration_ms: 4.254667
+  type: 'test'
+  ...
+# Subtest: ownership oracle: expression-bodied functions and the actual send branch are captured
+ok 4 - ownership oracle: expression-bodied functions and the actual send branch are captured
+  ---
+  duration_ms: 7.607042
+  type: 'test'
+  ...
+# Subtest: length oracle: every callable form passes at 100 and fails at 101, with executable twins
+ok 5 - length oracle: every callable form passes at 100 and fails at 101, with executable twins
+  ---
+  duration_ms: 116.549542
+  type: 'test'
+  ...
+# Subtest: length oracle: includes blank lines, internal comments, multiline signatures and nested callbacks, not leading docs
+ok 6 - length oracle: includes blank lines, internal comments, multiline signatures and nested callbacks, not leading docs
+  ---
+  duration_ms: 4.115375
+  type: 'test'
+  ...
+# Subtest: missing, malformed or ambiguous surfaces cannot masquerade as proof
+ok 7 - missing, malformed or ambiguous surfaces cannot masquerade as proof
+  ---
+  duration_ms: 2.931416
+  type: 'test'
+  ...
+# Subtest: AC1/AC2 partial structural proof: selected responsibilities no longer implemented in packages/hub/src/core.ts
+not ok 8 - AC1/AC2 partial structural proof: selected responsibilities no longer implemented in packages/hub/src/core.ts
+  ---
+  duration_ms: 797.992334
+  type: 'test'
+  location: '<repo>/tests/acceptance/1687/ownership-redraft/structure.test.mjs:10:3'
+  failureType: 'testCodeFailure'
+  error: |-
+    Retained source ownership (not destination naming):
+    spool replay coordination: Core.replayLate retained at line 1551
+    transcript reading and backfill: Core.turnFrom retained at line 2517
+    transcript reading and backfill: Core.tail retained at line 3574
+    transcript reading and backfill: Core.readTranscript retained at line 5439
+    transcript reading and backfill: Core.backfill retained at line 8156
+    transcript reading and backfill: Core.saveCursors retained at line 5572
+    transcript reading and backfill: Core.writeCursors retained at line 5577
+    delivery: Core.deliver retained at line 3158
+    delivery: Core.deliveryHeld retained at line 3795
+    delivery: Core.unwoken retained at line 3502
+    delivery: Core.resent retained at line 3413
+    stop hold and judging: Core.stopHold retained at line 4933
+    stop hold and judging: Core.slowStop retained at line 4882
+    stop hold and judging: Core.laneOf retained at line 4841
+    stop hold and judging: Core.judging retained at line 5145
+    stop hold and judging: Core.judgeEnded retained at line 5207
+    stop hold and judging: Core.judge retained at line 5527
+    MCP calls: Core.mcpCall retained at line 6813
+    MCP calls: Core.bind retained at line 6862
+    MCP calls: Core.forAgent retained at line 6848
+    + actual - expected
+    
+    + [
+    +   'spool replay coordination: Core.replayLate retained at line 1551',
+    +   'transcript reading and backfill: Core.turnFrom retained at line 2517',
+    +   'transcript reading and backfill: Core.tail retained at line 3574',
+    +   'transcript reading and backfill: Core.readTranscript retained at line 5439',
+    +   'transcript reading and backfill: Core.backfill retained at line 8156',
+    +   'transcript reading and backfill: Core.saveCursors retained at line 5572',
+    +   'transcript reading and backfill: Core.writeCursors retained at line 5577',
+    +   'delivery: Core.deliver retained at line 3158',
+    +   'delivery: Core.deliveryHeld retained at line 3795',
+    +   'delivery: Core.unwoken retained at line 3502',
+    +   'delivery: Core.resent retained at line 3413',
+    +   'stop hold and judging: Core.stopHold retained at line 4933',
+    +   'stop hold and judging: Core.slowStop retained at line 4882',
+    +   'stop hold and judging: Core.laneOf retained at line 4841',
+    +   'stop hold and judging: Core.judging retained at line 5145',
+    +   'stop hold and judging: Core.judgeEnded retained at line 5207',
+    +   'stop hold and judging: Core.judge retained at line 5527',
+    +   'MCP calls: Core.mcpCall retained at line 6813',
+    +   'MCP calls: Core.bind retained at line 6862',
+    +   'MCP calls: Core.forAgent retained at line 6848'
+    + ]
+    - []
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+  actual:
+    0: 'spool replay coordination: Core.replayLate retained at line 1551'
+    1: 'transcript reading and backfill: Core.turnFrom retained at line 2517'
+    2: 'transcript reading and backfill: Core.tail retained at line 3574'
+    3: 'transcript reading and backfill: Core.readTranscript retained at line 5439'
+    4: 'transcript reading and backfill: Core.backfill retained at line 8156'
+    5: 'transcript reading and backfill: Core.saveCursors retained at line 5572'
+    6: 'transcript reading and backfill: Core.writeCursors retained at line 5577'
+    7: 'delivery: Core.deliver retained at line 3158'
+    8: 'delivery: Core.deliveryHeld retained at line 3795'
+    9: 'delivery: Core.unwoken retained at line 3502'
+    10: 'delivery: Core.resent retained at line 3413'
+    11: 'stop hold and judging: Core.stopHold retained at line 4933'
+    12: 'stop hold and judging: Core.slowStop retained at line 4882'
+    13: 'stop hold and judging: Core.laneOf retained at line 4841'
+    14: 'stop hold and judging: Core.judging retained at line 5145'
+    15: 'stop hold and judging: Core.judgeEnded retained at line 5207'
+    16: 'stop hold and judging: Core.judge retained at line 5527'
+    17: 'MCP calls: Core.mcpCall retained at line 6813'
+    18: 'MCP calls: Core.bind retained at line 6862'
+    19: 'MCP calls: Core.forAgent retained at line 6848'
+  operator: 'deepStrictEqual'
+  stack: |-
+    TestContext.<anonymous> (file://<repo>/tests/acceptance/1687/ownership-redraft/structure.test.mjs:13:12)
+    Test.runInAsyncScope (node:async_hooks:227:14)
+    Test.run (node:internal/test_runner/test:1402:25)
+    Test.start (node:internal/test_runner/test:1262:17)
+    startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17)
+  ...
+# Subtest: AC1/AC2 partial structural proof: selected responsibilities no longer implemented in packages/extension-host/src/host.ts
+not ok 9 - AC1/AC2 partial structural proof: selected responsibilities no longer implemented in packages/extension-host/src/host.ts
+  ---
+  duration_ms: 292.801208
+  type: 'test'
+  location: '<repo>/tests/acceptance/1687/ownership-redraft/structure.test.mjs:10:3'
+  failureType: 'testCodeFailure'
+  error: |-
+    Retained source ownership (not destination naming):
+    sources: Host.readSource retained at line 1839
+    sources: Host.readPolled retained at line 1845
+    sources: Host.readStream retained at line 1917
+    sources: Host.readNow retained at line 1985
+    sources: Host.shownTick retained at line 1954
+    sources: Host.sourceShown retained at line 1974
+    schedules: Host.schedules retained at line 2006
+    schedules: Host.runs retained at line 2014
+    schedules: Host.blockedRun retained at line 3652
+    schedules: Host.dispatchRun retained at line 3662
+    schedules: Host.judged retained at line 3683
+    sends: Host.setSendRule retained at line 2078
+    jobs: Host.runJob retained at line 3230
+    jobs: Host.reach retained at line 3271
+    sends: Host.dispatchNow case deep.send retained at line 3155
+    + actual - expected
+    
+    + [
+    +   'sources: Host.readSource retained at line 1839',
+    +   'sources: Host.readPolled retained at line 1845',
+    +   'sources: Host.readStream retained at line 1917',
+    +   'sources: Host.readNow retained at line 1985',
+    +   'sources: Host.shownTick retained at line 1954',
+    +   'sources: Host.sourceShown retained at line 1974',
+    +   'schedules: Host.schedules retained at line 2006',
+    +   'schedules: Host.runs retained at line 2014',
+    +   'schedules: Host.blockedRun retained at line 3652',
+    +   'schedules: Host.dispatchRun retained at line 3662',
+    +   'schedules: Host.judged retained at line 3683',
+    +   'sends: Host.setSendRule retained at line 2078',
+    +   'jobs: Host.runJob retained at line 3230',
+    +   'jobs: Host.reach retained at line 3271',
+    +   'sends: Host.dispatchNow case deep.send retained at line 3155'
+    + ]
+    - []
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+  actual:
+    0: 'sources: Host.readSource retained at line 1839'
+    1: 'sources: Host.readPolled retained at line 1845'
+    2: 'sources: Host.readStream retained at line 1917'
+    3: 'sources: Host.readNow retained at line 1985'
+    4: 'sources: Host.shownTick retained at line 1954'
+    5: 'sources: Host.sourceShown retained at line 1974'
+    6: 'schedules: Host.schedules retained at line 2006'
+    7: 'schedules: Host.runs retained at line 2014'
+    8: 'schedules: Host.blockedRun retained at line 3652'
+    9: 'schedules: Host.dispatchRun retained at line 3662'
+    10: 'schedules: Host.judged retained at line 3683'
+    11: 'sends: Host.setSendRule retained at line 2078'
+    12: 'jobs: Host.runJob retained at line 3230'
+    13: 'jobs: Host.reach retained at line 3271'
+    14: 'sends: Host.dispatchNow case deep.send retained at line 3155'
+  operator: 'deepStrictEqual'
+  stack: |-
+    TestContext.<anonymous> (file://<repo>/tests/acceptance/1687/ownership-redraft/structure.test.mjs:13:12)
+    Test.runInAsyncScope (node:async_hooks:227:14)
+    Test.run (node:internal/test_runner/test:1402:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+    Test.postRun (node:internal/test_runner/test:1542:19)
+    Test.run (node:internal/test_runner/test:1467:12)
+    async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3)
+  ...
+# Subtest: AC1/AC2 partial structural proof: selected responsibilities no longer implemented in packages/asks/src/index.ts
+not ok 10 - AC1/AC2 partial structural proof: selected responsibilities no longer implemented in packages/asks/src/index.ts
+  ---
+  duration_ms: 141.493667
+  type: 'test'
+  location: '<repo>/tests/acceptance/1687/ownership-redraft/structure.test.mjs:10:3'
+  failureType: 'testCodeFailure'
+  error: |-
+    Retained source ownership (not destination naming):
+    resolver gate: AsksCore.consult retained at line 1233
+    resolver gate: AsksCore.uncovered retained at line 1601
+    resolver gate: AsksCore.scopeCovers retained at line 1590
+    resolver gate: AsksCore.covering retained at line 1616
+    show rules: AsksCore.batches retained at line 1385
+    show rules: AsksCore.show retained at line 1471
+    show rules: AsksCore.showNow retained at line 1443
+    show rules: AsksCore.appendBatch retained at line 1451
+    show rules: AsksCore.dueBy retained at line 1507
+    show rules: AsksCore.showBy retained at line 1512
+    show rules: AsksCore.inFold retained at line 1427
+    show rules: AsksCore.visible retained at line 1433
+    show rules: AsksCore.inSight retained at line 1438
+    decision keys: <module>.subjectKey retained at line 2477
+    decision keys: <module>.nearOf retained at line 2490
+    decision keys: <module>.foldKey retained at line 2505
+    decision keys: <module>.requestKey retained at line 2511
+    decision keys: <module>.blockKey retained at line 2514
+    + actual - expected
+    
+    + [
+    +   'resolver gate: AsksCore.consult retained at line 1233',
+    +   'resolver gate: AsksCore.uncovered retained at line 1601',
+    +   'resolver gate: AsksCore.scopeCovers retained at line 1590',
+    +   'resolver gate: AsksCore.covering retained at line 1616',
+    +   'show rules: AsksCore.batches retained at line 1385',
+    +   'show rules: AsksCore.show retained at line 1471',
+    +   'show rules: AsksCore.showNow retained at line 1443',
+    +   'show rules: AsksCore.appendBatch retained at line 1451',
+    +   'show rules: AsksCore.dueBy retained at line 1507',
+    +   'show rules: AsksCore.showBy retained at line 1512',
+    +   'show rules: AsksCore.inFold retained at line 1427',
+    +   'show rules: AsksCore.visible retained at line 1433',
+    +   'show rules: AsksCore.inSight retained at line 1438',
+    +   'decision keys: <module>.subjectKey retained at line 2477',
+    +   'decision keys: <module>.nearOf retained at line 2490',
+    +   'decision keys: <module>.foldKey retained at line 2505',
+    +   'decision keys: <module>.requestKey retained at line 2511',
+    +   'decision keys: <module>.blockKey retained at line 2514'
+    + ]
+    - []
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+  actual:
+    0: 'resolver gate: AsksCore.consult retained at line 1233'
+    1: 'resolver gate: AsksCore.uncovered retained at line 1601'
+    2: 'resolver gate: AsksCore.scopeCovers retained at line 1590'
+    3: 'resolver gate: AsksCore.covering retained at line 1616'
+    4: 'show rules: AsksCore.batches retained at line 1385'
+    5: 'show rules: AsksCore.show retained at line 1471'
+    6: 'show rules: AsksCore.showNow retained at line 1443'
+    7: 'show rules: AsksCore.appendBatch retained at line 1451'
+    8: 'show rules: AsksCore.dueBy retained at line 1507'
+    9: 'show rules: AsksCore.showBy retained at line 1512'
+    10: 'show rules: AsksCore.inFold retained at line 1427'
+    11: 'show rules: AsksCore.visible retained at line 1433'
+    12: 'show rules: AsksCore.inSight retained at line 1438'
+    13: 'decision keys: <module>.subjectKey retained at line 2477'
+    14: 'decision keys: <module>.nearOf retained at line 2490'
+    15: 'decision keys: <module>.foldKey retained at line 2505'
+    16: 'decision keys: <module>.requestKey retained at line 2511'
+    17: 'decision keys: <module>.blockKey retained at line 2514'
+  operator: 'deepStrictEqual'
+  stack: |-
+    TestContext.<anonymous> (file://<repo>/tests/acceptance/1687/ownership-redraft/structure.test.mjs:13:12)
+    Test.runInAsyncScope (node:async_hooks:227:14)
+    Test.run (node:internal/test_runner/test:1402:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+    Test.postRun (node:internal/test_runner/test:1542:19)
+    Test.run (node:internal/test_runner/test:1467:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:974:7)
+  ...
+# Subtest: AC2: no callable implementation in core.ts exceeds 100 physical source lines
+not ok 11 - AC2: no callable implementation in core.ts exceeds 100 physical source lines
+  ---
+  duration_ms: 109.704291
+  type: 'test'
+  location: '<repo>/tests/acceptance/1687/ownership-redraft/structure.test.mjs:17:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Over 100 source lines:
+    constructor at 747: 190 lines
+    init at 943: 344 lines
+    handleHook at 1592: 296 lines
+    buildReply at 4518: 269 lines
+    dispatch at 5779: 168 lines
+    + actual - expected
+    
+    + [
+    +   {
+    +     lines: 190,
+    +     name: 'constructor',
+    +     start: 747
+    +   },
+    +   {
+    +     lines: 344,
+    +     name: 'init',
+    +     start: 943
+    +   },
+    +   {
+    +     lines: 296,
+    +     name: 'handleHook',
+    +     start: 1592
+    +   },
+    +   {
+    +     lines: 269,
+    +     name: 'buildReply',
+    +     start: 4518
+    +   },
+    +   {
+    +     lines: 168,
+    +     name: 'dispatch',
+    +     start: 5779
+    +   }
+    + ]
+    - []
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+  actual:
+    0:
+      name: 'constructor'
+      start: 747
+      lines: 190
+    1:
+      name: 'init'
+      start: 943
+      lines: 344
+    2:
+      name: 'handleHook'
+      start: 1592
+      lines: 296
+    3:
+      name: 'buildReply'
+      start: 4518
+      lines: 269
+    4:
+      name: 'dispatch'
+      start: 5779
+      lines: 168
+  operator: 'deepStrictEqual'
+  stack: |-
+    TestContext.<anonymous> (file://<repo>/tests/acceptance/1687/ownership-redraft/structure.test.mjs:22:10)
+    Test.runInAsyncScope (node:async_hooks:227:14)
+    Test.run (node:internal/test_runner/test:1402:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+    Test.postRun (node:internal/test_runner/test:1542:19)
+    Test.run (node:internal/test_runner/test:1467:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:974:7)
+  ...
+1..11
+# tests 11
+# suites 0
+# pass 7
+# fail 4
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1665.0185

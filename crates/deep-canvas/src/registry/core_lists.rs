@@ -1333,6 +1333,15 @@ pub fn entries(steps_elsewhere: bool) -> Vec<EntryDef> {
             json!({"codes": codes, "reads": ["document"]}),
         ));
     }
+    // #409: each craft@1 check a brief can name, stating its own description, threshold and fix.
+    for c in crate::craft::checks() {
+        out.push(entry(
+            "check.kind.doc@1",
+            &c.name,
+            json!({"codes": [], "reads": ["document"], "pack": crate::craft::PACK,
+                   "description": c.description, "threshold": c.threshold, "fix": c.fix}),
+        ));
+    }
     out
 }
 

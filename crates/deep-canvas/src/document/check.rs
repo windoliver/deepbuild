@@ -2174,7 +2174,7 @@ fn check_assemblies(doc: &Value, issues: &mut Vec<Issue>) {
         };
         for field in fields.keys() {
             match field.as_str() {
-                "parent" | "at" | "motion" | "value" | "apart" | "order" => {}
+                "parent" | "at" | "motion" | "value" | "apart" | "order" | "shown_at" => {}
                 "repeat" => bad("out_of_range", field, fields[field].clone(), "not in this build"),
                 _ => bad("unknown_field", field, fields[field].clone(), "not a field of an assembly"),
             }
@@ -2474,6 +2474,7 @@ const CHANNEL_FIELDS: &[&str] = &[
     "morph",
     // Follow: a `mode: follow` channel's source, model, outputs and stagger.
     "follow",
+    "exaggerate", // #1183: a measured length mapped at another ratio than its `shown_at`.
 ];
 
 /// A bound value's fields (Bound value).

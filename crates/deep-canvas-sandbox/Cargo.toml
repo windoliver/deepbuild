@@ -8,7 +8,7 @@ publish = false
 # Issue #238: the sandbox canvas module (canvas primitives: Logic: sandbox), `sandbox@1`: the logic
 # subset's check, the rewrite with its fuel, stack and NaN rules, the trap kinds and the check-time
 # runner's contract, shared by logic items, providers, validators and registry program entries. It
-# parses and writes WebAssembly with the parser wasmtime 49.0.2 itself uses; the engine that runs
+# parses and writes WebAssembly with the parser wasmtime 49.0.5 itself uses; the engine that runs
 # the rewritten bytes is deep-sandbox-wasmtime in the app and the browser's own in the web player.
 [dependencies]
 deep-canvas = { path = "../deep-canvas" }

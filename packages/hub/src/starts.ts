@@ -12,7 +12,7 @@ import { basename, delimiter, isAbsolute, join } from 'node:path';
 import type { JsonObject } from '@deepbuild/adapters';
 import { isRecord as isObj, canonicalize, sha256Hex, type JsonValue } from '@deepbuild/contracts';
 import type { Asks } from '@deepbuild/asks';
-import { repoOf, revoke, sessionToken, type AppKey } from '@deepbuild/github';
+import type { AppKey, SessionCredentials } from './forge-port.js';
 import { TERMINAL_PROTOCOL } from '@deepbuild/extension-host';
 import { HELPER, type Supervisor } from '@deepbuild/supervisor';
 import { parents } from './children.js';
@@ -62,6 +62,7 @@ interface StartsOptions {
   windowUsed(agent: string, home: string): number | undefined;
   /** The forge's REST root, the agents' app a session's own credential comes from, and the gate's token (#1325). */
   forge: string;
+  credentials: SessionCredentials;
   agentsApp(): AppKey | undefined;
   gateToken(repo: string): Promise<string | undefined>;
 }
@@ -385,11 +386,11 @@ export class Starts {
   private async credential(repo: string, env: Record<string, string>): Promise<Credential | undefined> {
     const app = this.o.agentsApp();
     const origin = await exec('git', ['-C', repo, 'remote', 'get-url', 'origin']).catch(() => '');
-    const slug = repoOf(origin.trim());
+    const slug = this.o.credentials.repoOf(origin.trim());
     // The planted wrong program: the gate's own token in the session's environment.
     if (this.o.plant === 'passes-gate-credential' && slug) { const gate = await this.o.gateToken(slug).catch(() => undefined); if (gate) env.DEEP_GATE_TOKEN = gate; }
     if (!app || !slug) return undefined;
-    const made = await sessionToken(this.o.forge, app, slug, this.o.plant === 'agent-credential-posts-statuses').catch((error: Error) => error);
+    const made = await this.o.credentials.sessionToken(this.o.forge, app, slug, this.o.plant === 'agent-credential-posts-statuses').catch((error: Error) => error);
     if (made instanceof Error) { process.stderr.write(`deep hub: no credential of the agents' app for ${slug}: ${made.message}\n`); return undefined; }
     env.GH_TOKEN = made.token;
     if (made.login) this.agentLogins.add(made.login);
@@ -403,7 +404,7 @@ export class Starts {
     const token = s.token;
     if (!token) return;
     delete s.token;
-    void revoke(this.o.forge, token).then(() => { if (s.dir) rmSync(join(s.dir, 'credential'), { force: true }); },
+    void this.o.credentials.revoke(this.o.forge, token).then(() => { if (s.dir) rmSync(join(s.dir, 'credential'), { force: true }); },
       (error: Error) => process.stderr.write(`deep hub: ${s.run}'s forge credential wasn't revoked (${error.message}); it expires within the hour\n`));
   }
 

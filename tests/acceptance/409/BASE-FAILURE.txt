@@ -1,0 +1,44 @@
+At base cbd5e4f98 (main; Mac17,10, 18 cores, one-minute load about 180 to 270), on 2026-11-11, deep-show was built with `cargo build --locked --bin deep-show --no-default-features --features full` (cold, about 70 minutes on the loaded machine) and the suite run once:
+
+    $ node node_modules/typescript/bin/tsc -p tests/acceptance/409/tsconfig.json        (exit 0)
+    $ node scripts/throttle.mjs test --wait 3 -- node node_modules/vitest/vitest.mjs run --root tests/acceptance/409 --testTimeout=600000 --no-file-parallelism
+     Test Files  5 failed (5)
+          Tests  28 failed (28)
+       Duration  86.66s
+
+No test reached a BLOCKED line: every film was presented by the agent's deep_show, the fixture film by your deep show, and every sound film exported to an MP4 (silences, sound_coverage, sound_bridges, mix.balance and accents, parity and twin), so each test failed at its criterion's assertion or, for a planted program, at the scenario naming it. The base's claims take the brief and ignore `craft`, so every verdict is INCONCLUSIVE with no rows.
+
+craft.test.ts (AC1 #409.1b284d72), 20 failed:
+- Each of the 16 checks (shot_length, camera_grammar, ends, text_led, look_lock, recipes, numbers_in_script, caption_band, motion_share, accents, not_example, silences, sound_coverage, sound_bridges, mix.balance, sound_lock):
+    AssertionError: <check>'s parity fixture and twin:
+      <check>'s parity fixture: 0 rows come from the brief's craft check <check>, not one: []
+      <check>'s twin: 0 rows come from the brief's craft check <check>, not one: []
+- "a brief with no craft check gets no craft row, and one naming ends gets ends's row alone": the no-craft leg holds at the base (no rows, no craft code, INCONCLUSIVE); the ends leg fails:
+      the film under a brief naming ends: 0 rows come from the brief's craft check ends, not one: []
+- "the agent's own checks lowering shot_length's minimum ...": the agent's film is presented (its own `checks` accepted), then
+      the agent's film that lowers shot_length's minimum itself: 0 rows come from the brief's craft check shot_length, not one: []
+- The two planted tests (craft_runs_every_check, craft_threshold_from_agent):
+    AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}
+  (the base's planted match doesn't know the names).
+
+camera.test.ts (AC4 #409.063c7b10), 5 failed:
+- the jump cut and its twins: "the cut 12° apart at equal height: 0 rows come from the brief's craft check camera_grammar, not one: []", and the same for the 35° and 1.5× twins.
+- the line: "the third shot orbiting across the line: 0 rows come from the brief's craft check camera_grammar, not one: []", and the same for the one in front.
+- the keyed push: "the keyed shot 20% closer: 0 rows come from the brief's craft check camera_grammar, not one: []" (measureOf).
+- craft_jump_cut_angle_only, craft_camera_by_label: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}.
+
+example.test.ts (AC5 #409.0dc34e08), 1 failed:
+    the film matching its example on 3 of 6: 0 rows come from the brief's craft check not_example, not one: []
+    the film differing on 4 of 6: 0 rows come from the brief's craft check not_example, not one: []
+
+takes.test.ts (AC6 #409.c2d0c9cf), 1 failed:
+    the film with one 18 s take: 0 rows come from the brief's craft check shot_length, not one: []
+    the film with a second 18 s take: 0 rows come from the brief's craft check shot_length, not one: []
+
+skill.test.ts (AC3 #409.b866029a), 1 failed, at the checks' own statements, before the skill is read:
+    AssertionError: the craft@1 checks' own statements (deep_kinds):
+      shot_length: 0 entries of check.kind.doc@1 from the craft@1 pack name it, not one: []
+      … the same for each of the 16 checks (the base's check.kind.doc@1 lists the core's 12 kinds only).
+  The skill (skills/deepbuild/SKILL.md) names no craft check either.
+
+Before that run, a scratch scenario (not kept) presented every fixture at the base and found three the base's document check refused, each fixed in the fixtures, not the tests: a literal "42 cups" (number_unsourced: now a story number through a template), score event lengths written as strings (score.bad_duration: now beats as numbers), and the 3D films' mark.box@1 without `requires.modules.scene3d` (out_of_range: now required, ^1). After the fixes every film was presented.

@@ -7,7 +7,7 @@ import { existsSync, realpathSync } from 'node:fs';
 import { isAbsolute } from 'node:path';
 import { scrubText } from '@deepbuild/evidence';
 import type { LeaseTable } from '@deepbuild/leases';
-import type { Keys, Serving, upStack, Stack, Take, Up, WarmStack } from '@deepbuild/env-local';
+import type { Serving, Stack, Take, Up, WarmStack, StackEnvironment } from './environment-port.js';
 import { attributeStack, environmentFindings, type RunFacts, type StackRecords } from '@deepbuild/gate';
 import { alive, listening as listeners, type Supervisor } from '@deepbuild/supervisor';
 import { downLeaving } from './leftover.js';
@@ -17,19 +17,6 @@ type Obj = Record<string, unknown>;
 type Rows = (query: string, params?: readonly (string | number | bigint | null)[]) => Promise<unknown[]>;
 /** Where a refusal points for the caller's surface, and what starts a stack there. */
 interface At { path: string; remedy: string }
-
-/** The runtime stack lifecycle supplied by the composition root; stack policy never selects a concrete provider. */
-interface StackEnvironment {
-  newRun(at: number): string;
-  up(options: Parameters<typeof upStack>[1]): Promise<Up>;
-  down(run: string): Promise<void>;
-  healthy(stack: Stack): Promise<boolean>;
-  /** A warm stack for a check, whose per-session keys its `take` leases (#580). */
-  warm(o: { take: Take; scrub: (values: string[]) => void }): WarmStack;
-  /** Whether the folder's done.yaml has an environment block, so a journey there needs a stack. */
-  wanted(folder: string): boolean;
-  keys(folder: string): Promise<Keys>;
-}
 
 interface StacksOptions {
   raw: Rows;

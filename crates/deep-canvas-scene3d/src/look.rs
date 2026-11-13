@@ -71,6 +71,8 @@ pub struct Look3 {
     pub samples: crate::samples::Samples,
     /// Motion blur (#419), `None` with it off.
     pub blur: Option<crate::samples::Blur>,
+    /// Frame history (#173), a live view's alone.
+    pub history: crate::history::History,
     /// A drawing look's drawn fields (#149): its light, paper, lines and fills.
     pub drawn: Option<std::sync::Arc<deep_canvas_drawn::spec::Look>>,
     /// #464: its separations and print finishes, which the print pass draws after the output.
@@ -109,6 +111,7 @@ impl Look3 {
             live_samples: 1,
             samples: crate::samples::Samples::default(),
             blur: None,
+            history: crate::history::History::default(),
             drawn: None,
             print: Default::default(),
         }
@@ -171,6 +174,7 @@ impl Look3 {
         out.samples = crate::samples::read_samples(look)?;
         out.live_samples = out.samples.live;
         out.blur = crate::samples::read_blur(look)?;
+        out.history = crate::history::read_history(look)?;
         out.ao = match look.get("ao") {
             None | Some(Value::Null) => None,
             Some(Value::String(s)) if s == "none" => None,
