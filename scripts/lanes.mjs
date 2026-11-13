@@ -1097,7 +1097,11 @@ export function runLanes(lanes, { cwd = root } = {}) {
       let found = run.found;
       if (result.status !== 0 && !run.explained) {
         const lines = output.split('\n').map((line) => line.trim()).filter(Boolean);
+        // A test run's first error is its first failing test, as its runner's report names it: an output line can't
+        // stand in, since a coloured assertion misses the pattern and a line the lease prints matches the fallback (#12).
+        const failed = results?.failures?.find(({ state }) => state === 'FAIL');
         const error = result.error?.message
+          ?? (failed && `${failed.id}${failed.message ? `: ${failed.message}` : ''}`)
           ?? lines.find((line) => /\b(?:[a-z]*error(?:\[[^\]]+\])?|fatal):|\berror TS\d+:|panicked at/i.test(line))
           ?? lines.find((line) => /\berror\b|AssertionError|panicked|\bFAIL\b|\bBLOCKED\b|\bINVALID\b|\bINCONCLUSIVE\b/i.test(line))
           ?? lines[0] ?? `${command} exited ${result.signal ?? result.status}`;

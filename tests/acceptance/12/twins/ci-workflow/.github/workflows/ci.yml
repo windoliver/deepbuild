@@ -1,0 +1,9 @@
+# Planted wrong program (#12 twin ci-workflow): a workflow that runs the checks on every push and pull request.
+name: checks
+on: [push, pull_request]
+jobs:
+  preflight:
+    runs-on: macos-latest
+    steps:
+      - run: npm ci
+      - run: scripts/preflight

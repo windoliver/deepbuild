@@ -1,0 +1,115 @@
+#12 acceptance suite on the base 9b77cd2cdde54ba66b6fcdd4f9cbcda1829c51ca, 2026-11-13, macOS on the reference Mac
+Mac17,10, Node 24.22.0, at a load of 90 to 360 on 18 cores (other sessions' builds). Workspaces and
+target/debug/deep-hook were built in the checkout; no test reads them. Local paths shortened to <tmp> and <box>.
+
+Each file, run once on the base from the checkout:
+
+  PATH=$HOME/.local/share/fnm/node-versions/v24.22.0/installation/bin:/opt/homebrew/opt/rustup/bin:$PATH \
+    npx vitest run --root tests/acceptance/12 <file>.test.ts --no-file-parallelism --testTimeout=600000
+
+Each twin, checked once: a temporary copy of this checkout (the files git lists, tracked or new, as on disk) made a git
+repository of its own, its node_modules a folder of links to this checkout's packages, the twin's files laid over it,
+then from the copy:
+
+  node node_modules/vitest/vitest.mjs run --root tests/acceptance/12 <file>.test.ts --no-file-parallelism --testTimeout=600000 [-t <pattern>]
+
+Every failure below is vitest's own AssertionError from an expect in the test file, its message starting with the
+test's tag.
+
+AC1 #12.f47db3bd  clean-checkout.test.ts
+  Passes on the base (95 s): npm install exits 0 on the clean checkout, the preflight there exits 0 with every lane
+  PASS and its unit lane's markers written, and with rustfmt's check blocked it reports the lint lane below PASS and
+  exits non-zero.
+  Fails on twin exit-zero (78 s) at
+    AC1 #12.f47db3bd a preflight with a lane blocked exits non-zero: exit 0 ...: expected +0 not to be +0
+  Fails on twin blocked-lane-passes (55 s) at
+    AC1 #12.f47db3bd a preflight with a lane blocked exits non-zero: exit 0 ...: expected +0 not to be +0
+  Fails on twin unit-reported-unrun (33 s) at
+    AC1 #12.f47db3bd the unit lane ran the fixture's vitest test: exit 0 after 7.8 s ...: expected false to be true
+  (Its first base run passed the test in 536 s at load 200 to 360, but the file failed in afterAll: removing the
+  clean checkout outran vitest's default 10 s hook timeout. Every afterAll now has a 10-minute timeout; the 95 s run
+  above is that version.)
+
+AC2 #12.2bd67310  failing-test.test.ts
+  Passes on the base (30 s): the unit lane reads FAIL, every other check lane PASS, exit 1.
+  Fails on twin exit-zero (78 s) at
+    AC2 #12.2bd67310 scripts/preflight exits non-zero with a deliberately failing test: exit 0 after 68.8 s ...:
+    expected +0 not to be +0
+  Fails on twin test-failures-explained (59 s) at
+    AC2 #12.2bd67310 the unit lane fails on the deliberately failing test: exit 0 after 49.6 s ...:
+    expected undefined to be 'FAIL'
+
+AC3 #12.db1eb90a  workflows.test.ts
+  Passes on the base (12 s): .github/ holds ISSUE_TEMPLATE/ and pull_request_template.md, no workflows/.
+  Fails on twin ci-workflow (9 s) at
+    AC3 #12.db1eb90a git lists no file under .github/workflows/: expected [ '.github/workflows/ci.yml' ] to deeply equal []
+
+AC4 #12.df90b3f0  lanes.test.ts
+  Fails on the base (38 s) at
+    AC4 #12.df90b3f0 the unit lane's report names its first error: exit 1 after 33.5 s ...:
+    expected 'FAIL unit: scripts/lease: no deep on …' to match /first failing test|expected 2 to be 3/
+  Every assertion before it holds on the base: the five lanes start, lint's and parity's checks run after typecheck
+  failed, every started lane ends in a result, and typecheck (broken.ts(1,14): error TS2322), lint and parity quick
+  name their first error and a Fix line. The unit lane names a line of the lease script instead of the failing test:
+    FAIL unit: scripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `<node> node_modules/vitest/
+    vitest.mjs run --reporter=default ... --exclude tests/acceptance/874/invalid.test.ts ...` runs unleased
+  On a checkout with nothing built, scripts/lease prints that line before each command. vitest colours its
+  `AssertionError: expected 2 to be 3` line, so the lane's error pattern (`<word>error:`) misses it, and its fallback
+  pattern takes the first line holding a state word, here the lease line, through the path `.../874/invalid.test.ts`.
+  An earlier draft whose failing tests' messages held the word "error:" passed on the base (166 s); the test now
+  plants plain assertions, as a failing test usually has.
+
+AC5 #12.f9ab1605  perf-regression.test.ts (2 tests, 254 s)
+  First test fails on the base at
+    AC5 #12.f9ab1605 an estimated budget moved once, with its reason recorded, is not refused: exit 1 after 80.4 s ...:
+    expected [ Array(1) ] to deeply equal []
+  the refusal being
+    BLOCKED perf: Budget estimated changed or disappeared; restore its frozen definition
+  Second test passes on the base: it refuses both moves the same way, naming moved-twice and no-reason.
+  Fails on twin budgets-move-freely (47 s, -t 'moves only once') at
+    AC5 #12.f9ab1605 the second move of an estimated budget is refused, naming moved-twice: exit 1 after 44.8 s ...:
+    expected [] to not deeply equal []
+  (perf judged moved-twice against 800 MB; its only line was INCONCLUSIVE perf: moved-twice: peakBytes: a reading,
+  not a budget result: off the reference Macs ... thermal state ...)
+  In a separate prototype run of the same fixture without the moved budget, the base failed `regressed` at
+    FAIL perf: regressed: p50Ms 738.66 regressed beyond base 32.98 + 50%
+  passed `tail` (p95 1036.6 ms against 37.8 ms, p50 32.9 against 32.6), and ran each task 21 times a side.
+
+AC6 #12.80d47cb4  budget-report.test.ts
+  Fails on the base (106 s) at
+    AC6 #12.80d47cb4 the report states its sample count, 20 a side: {"task":"sampled",...,"status":"PASS",
+    "current":{"p50Ms":60.50,"p95Ms":164.44,"peakBytes":49872896,"instructions":[...20 counts...],...},
+    "base":{"p50Ms":61.99,"p95Ms":138.58,"peakBytes":50020352,...},...}: expected [] to include 20
+  Every assertion before it holds on the base: over a 1 ms budget it prints `FAIL preflight budget: checks took ...`
+  and exits 1, and the task's report gives p50, p95 and peak memory for both sides.
+  (A first draft ran both halves in one fixture and failed earlier, at "the benchmark harness reports the budget's
+  task": with a 1 ms preflight budget perf gives the merge base's checks a 1.5 ms allowance and stops with
+  `BLOCKED perf: The value of "timeout" is out of range. It must be an unsigned integer. Received 1.5`. The test now
+  runs the two halves in two fixtures.)
+
+AC7 #12.f81e4f9f  release.test.ts
+  Passes on the base (52 s): the local run passes, printing 14 lanes as skipped (verdict proofs and config eval, which
+  read no file the fixture's change touches, and the 12 release lanes), and npm run release:check starts every local
+  lane and those 14, each ending in a result, every check it ran seeing DEEP_PREFLIGHT=release.
+  Fails on twin release-drops-parity (56 s) at
+    AC7 #12.f81e4f9f the release check runs every lane the local run runs: exit 0 after 27.6 s ...:
+    expected [ 'parity quick' ] to deeply equal []
+  Fails on twin release-check-local (36 s) at
+    AC7 #12.f81e4f9f the release check runs the lanes the local run printed as skipped: exit 0 after 14.0 s ...:
+    expected [ 'verdict proofs', …(13) ] to deeply equal []
+
+AC8 #12.444f9722  quick-start.test.ts
+  Passes on the base (132 s, at load about 90): the README's quick start runs npm install, npm run build and npm link
+  in that order; on the clean checkout npm install and npm run build exit 0, every emitting workspace package has its
+  dist/, target/debug/deep-hook is built and runs --version, npm link exits 0, and deep is found in the prefix's bin
+  and prints its usage.
+  Fails on twin build-without-cargo (84 s) at
+    AC8 #12.444f9722 npm run build builds crates/deep-hook into target/debug/deep-hook: exit 0 after 65.9 s ...:
+    expected false to be true
+  Fails on twin no-deep-bin (113 s) at
+    AC8 #12.444f9722 npm link puts deep on the PATH, in the npm prefix's bin: exit 1 after 0.0 s ...:
+    expected false to be true
+  (Its first base run failed for the fixture's sake, at "npm run build exits 0 on a clean checkout": exit 101,
+  `error: could not execute process \`rustc -vV\` (never executed)`, since the box's PATH held the cargo stand-in but
+  not rustup's folder. The test now puts rustup's proxies on PATH behind it, as on a machine with Rust; the 132 s run
+  above is that version.)
