@@ -1,0 +1,17 @@
+Merged main: fd2238528867966d24c35c16edc5fdb747369e9a (PR #2421)
+Command: node scripts/repo-rules.mjs
+Exit: 0
+Tracked working tree unchanged before and after.
+
+PASS workflows: .github/workflows/ has no entries
+PASS agent-hooks: no hooks, plugins or hook switch-off in .claude settings, no .codex/ folder
+PASS secrets: 12303 files scanned, 18 lockfiles and 552 binary files skipped, 41 allowed
+PASS deps: 191 package.json files and 55 crates match scripts/repo-rules.json
+PASS cards: 39 packages and 43 crates have cards with the four headings; 113 deviations, each naming a file that exists
+PASS physics-build: rapier3d 0.36.1 [alloc, dim3, enhanced-determinism, f32, serde-serialize, std], parry3d 0.31.1, none of simd8, parallel, block-solver, fem, unsync-callbacks, fast-math, and no rustflags with target-cpu=native or +fma
+NOTE deps: vendor/accesskit_macos/Cargo.toml is a vendored upstream crate; its dependencies are upstream's
+NOTE deps: vendor/gpui-pre-apple/Cargo.toml is a vendored upstream crate; its dependencies are upstream's
+NOTE deps: vendor/gpui-pre-macos/Cargo.toml is a vendored upstream crate; its dependencies are upstream's
+NOTE deps: vendor/gpui-pre/Cargo.toml is a vendored upstream crate; its dependencies are upstream's
+NOTE deps: vendor/quickjs-jit-runtime/Cargo.toml is a vendored upstream crate; its dependencies are upstream's
+NOTE size: +0 -0 handwritten lines against merge base fd2238528, lockfiles and binary files excluded (guideline: about 400)
