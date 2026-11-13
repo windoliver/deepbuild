@@ -3102,6 +3102,9 @@ impl Program {
                     });
                 }
                 doc::DriverInput::Time => CoreInput::Time,
+                doc::DriverInput::Hover(key) => {
+                    crate::hover::read(&self.motion.control_defaults, key)
+                }
                 doc::DriverInput::Rate(id) => {
                     let Some(c) = self.motion.channels.iter().position(|c| c.id == *id) else {
                         return Err(Refused {

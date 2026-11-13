@@ -498,6 +498,12 @@ alone.push('tests/acceptance/1183/');
 // ac4-budget times 2,000 units at 1080p against the showpiece class's GPU budget.
 alone.push('tests/acceptance/537/', 'tests/acceptance/537-oracle/');
 timed.push('tests/acceptance/537/ac4-budget.test.ts');
+// #539's files each build deep-show and #544's assembler, run logic programs, export on the GPU and draw the app's window.
+alone.push('tests/acceptance/539/');
+// #539's first-draft Oracle lane takes the upstream answer for Up and Down past a cell that can't take focus, where the
+// design's grid rule gives another (tests/acceptance/539-oracle-redraft/DISPUTE.md); its blind redraft runs in its place.
+alone.push('tests/acceptance/539-oracle-redraft/');
+byHand.push('tests/acceptance/539-oracle/');
 // #1920's files build deep-show seven times, in the full and core sets, and read each build's published plan.
 alone.push('tests/acceptance/1920/');
 // #1863's files each start a real hub and a session through deep-hook; the speed file times five 5 s and 6 s waits a
