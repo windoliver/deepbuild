@@ -13,7 +13,7 @@ use std::collections::BTreeMap;
 
 use deep_canvas::document::variants;
 use deep_canvas::schedule::{Scheduler, Session as DocSession};
-use deep_canvas_input::track::{Entry, Track, Writer};
+use deep_canvas_input::track::{Entry, Writer};
 use serde_json::{json, Value};
 
 use crate::hub::Hub;
@@ -63,8 +63,7 @@ pub(crate) fn picks_at(form: &Value, t: i64) -> BTreeMap<String, String> {
                 // Entries stay in time order, so the last one at or before `t` is the pick.
                 entries?
                     .iter()
-                    .filter(|e| e["control"] == id.as_str() && e["t"].as_i64().is_some_and(|et| et <= t))
-                    .next_back()
+                    .rfind(|e| e["control"] == id.as_str() && e["t"].as_i64().is_some_and(|et| et <= t))
             })
             .flatten();
         let pick = entry.map(|e| &e["value"]).or_else(|| c.get("default"));
@@ -209,7 +208,7 @@ impl Hub<'_> {
                     serial: Some(serial as u32),
                 };
                 appended = Some(entry.to_json());
-                self.tracks.entry(doc.to_string()).or_insert_with(Track::default).append(entry);
+                self.tracks.entry(doc.to_string()).or_default().append(entry);
             }
             "view" if self.planted(crate::hub::Planted::VariantPickWritesRevision) && c.get("variant").is_some() => {
                 // Planted (#504): the pick written into the document as a revision.

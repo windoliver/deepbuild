@@ -392,7 +392,11 @@ impl Sandbox {
                 if e.get("refusals").is_none() {
                     match self.run(&rw.bytes, &f.role, 0, &f.budget, &f.reads, &[], KIT_DEADLINE, Offsets::Rewritten) {
                         Err(msg) => fail("kind", want_kind(e), json!(msg), None),
-                        Ok(r) => {
+                        Ok(mut r) => {
+                            // The planted engine build (#2324) gives `pass.subset` another result.
+                            if cfg!(feature = "plant-engine-differs") && name == "pass.subset" {
+                                r.result = r.result.map(|v| v.wrapping_add(1));
+                            }
                             let trap = trap_json(&r.trap);
                             out["trap"] = trap.clone();
                             out["result"] = json!(r.result);

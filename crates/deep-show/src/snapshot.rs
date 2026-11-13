@@ -392,6 +392,9 @@ pub fn pixmap_of(rgba: Vec<u8>, w: u16, h: u16) -> Arc<Pixmap> {
     Arc::new(Pixmap::from_parts(rgba, w, h, meta))
 }
 
+/// What [`decode_all`] gives: each video frame by its asset, and the still pictures.
+type Decodings = (BTreeMap<String, Arc<Pixmap>>, Arc<Pictures>);
+
 /// Every image `frame` draws: a video's frame by its asset, and each still picture's request of
 /// the image service, its size read from its header (refused there when it couldn't be decoded
 /// within the caps) and its level at the document's own scale made, within the levels a frame may
@@ -400,7 +403,7 @@ fn decode_all(
     frame: &scene::Frame,
     evidence: &Path,
     videos: &BTreeMap<String, Arc<Pixmap>>,
-) -> Result<(BTreeMap<String, Arc<Pixmap>>, Arc<Pictures>), Unfit> {
+) -> Result<Decodings, Unfit> {
     let mut images = BTreeMap::new();
     let store = Arc::new(deep_images::Store::split(evidence));
     let mut keys = BTreeMap::new();

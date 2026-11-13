@@ -19,6 +19,9 @@ use deep_codecs::DECODE_WORKER;
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 
+/// A decoded audio asset: its rate, channels, samples and loop points in samples.
+type Decoded = (i64, usize, Vec<f32>, Option<(i64, i64)>);
+
 use crate::evidence;
 use crate::hub::{Hub, Planted};
 use crate::refused;
@@ -212,7 +215,7 @@ impl Hub<'_> {
     }
 
     /// [`Hub::pcm`] with the asset's loop points in samples, which a score stem carries (#154).
-    fn decoded(&mut self, sha: &str) -> Result<(i64, usize, Vec<f32>, Option<(i64, i64)>), Value> {
+    fn decoded(&mut self, sha: &str) -> Result<Decoded, Value> {
         if sha.len() < 3 || evidence::read(&self.scenario.evidence, sha).is_none() {
             return Err(json!({"code": "unknown_asset", "asset": sha}));
         }
@@ -220,7 +223,7 @@ impl Hub<'_> {
         self.decoded_at(&path, sha)
     }
 
-    fn decoded_at(&mut self, path: &std::path::Path, sha: &str) -> Result<(i64, usize, Vec<f32>, Option<(i64, i64)>), Value> {
+    fn decoded_at(&mut self, path: &std::path::Path, sha: &str) -> Result<Decoded, Value> {
         let out = std::env::temp_dir().join(format!("deep-mix-{}-{}", std::process::id(), &sha[..sha.len().min(16)]));
         let (reply, _) = self.media_job(DECODE_WORKER, json!({"op": "decode", "path": path, "out": out, "video_frames": 0}));
         let stream = reply["decoded"]["streams"]

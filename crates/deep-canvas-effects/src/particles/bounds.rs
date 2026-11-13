@@ -147,9 +147,11 @@ pub fn bounds(b: &Baked, t: f64) -> Option<Box3> {
             } + push;
             if turns {
                 let r = fastest * k1 + len(*gravity) * k2;
-                for k in 0..3 {
-                    bx[0][k] -= r;
-                    bx[1][k] += r;
+                for v in &mut bx[0] {
+                    *v -= r;
+                }
+                for v in &mut bx[1] {
+                    *v += r;
                 }
                 for p in s.bounce.iter().flat_map(|b| &b.planes) {
                     clamp_by(&mut bx, &e, p, false);
@@ -176,9 +178,11 @@ pub fn bounds(b: &Baked, t: f64) -> Option<Box3> {
             ];
         }
         Motion::Drift { amplitude, .. } => {
-            for k in 0..3 {
-                bx[0][k] -= amplitude;
-                bx[1][k] += amplitude;
+            for v in &mut bx[0] {
+                *v -= amplitude;
+            }
+            for v in &mut bx[1] {
+                *v += amplitude;
             }
         }
     }
@@ -204,9 +208,11 @@ pub fn bounds(b: &Baked, t: f64) -> Option<Box3> {
     }
     if let (Some(table), Some(tb)) = (&b.turbulence, s.turbulence) {
         let r = tb.strength * table.reach();
-        for k in 0..3 {
-            bx[0][k] -= r;
-            bx[1][k] += r;
+        for v in &mut bx[0] {
+            *v -= r;
+        }
+        for v in &mut bx[1] {
+            *v += r;
         }
     }
     Some(bx)

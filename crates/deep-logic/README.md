@@ -15,7 +15,7 @@ The logic module, `logic@1` (#531, #532; design: The logic module): a logic item
 
 ## What it may import
 
-`deep-canvas` for a step rate's step length and the canvas module's manifest and registry entry, `deep-canvas-sandbox` for the check and the rewrite, `deep-sandbox-wasmtime` for the pinned engine's version and the web runner, `wasmtime` at `=49.0.2` and `wasmparser` at the versions those two pin, `addr2line` and `gimli` for source lines, `wat` for the calibration programs, `libc` for thread CPU time, and `base64`, `serde_json` and `sha2`. Like deep-sandbox-wasmtime it is outside the canvas lint's scope: every value a check reads is what the rewritten program computes, never this crate's own arithmetic.
+`deep-canvas` for a step rate's step length and the canvas module's manifest and registry entry, `deep-canvas-sandbox` for the check and the rewrite, `deep-sandbox-wasmtime` for the pinned engine's version and the web runner, `wasmtime` at `=49.0.5` and `wasmparser` at the versions those two pin, `addr2line` and `gimli` for source lines, `wat` for the calibration programs, `libc` for thread CPU time, and `base64`, `serde_json` and `sha2`. Like deep-sandbox-wasmtime it is outside the canvas lint's scope: every value a check reads is what the rewritten program computes, never this crate's own arithmetic.
 
 ## Deviations
 

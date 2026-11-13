@@ -1992,12 +1992,18 @@ fn modules(set: BuildSet) -> Vec<Module> {
     }
     // Issue #238: the sandbox module, on core alone; `test-sandbox-alt` seals the test
     // implementation `sandbox.alt` in its place, and `test-sandbox-needs-logic` plants a manifest
-    // that requires logic.
+    // that requires logic. Issue #2324: sandbox.alt pins another release outside every advisory
+    // 49.0.2 was inside, and the planted engine build, whose kit differs from the reference's, is
+    // no bit implementation, so the runtime digest names it.
     if set >= BuildSet::Full {
         out.push(if cfg!(feature = "test-sandbox-alt") {
-            deep_canvas_sandbox::module::implementation("sandbox.alt", "=49.0.1")
+            deep_canvas_sandbox::module::implementation("sandbox.alt", "=50.0.1")
         } else if cfg!(feature = "test-sandbox-needs-logic") {
             sandbox_needs_logic()
+        } else if cfg!(feature = "plant-engine-differs") {
+            let mut m = deep_canvas_sandbox::module::module();
+            m.manifest.implementation.equivalence = deep_canvas::registry::Equivalence::Measured;
+            m
         } else {
             deep_canvas_sandbox::module::module()
         });

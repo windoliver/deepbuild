@@ -27,8 +27,8 @@ import { commitsBetween, headOf } from './session-facts.js';
 import { GateRunner } from './gate-runner.js';
 import { Siblings } from './siblings.js';
 
-import { argsOf, parents, startOf } from './children.js';
-import { type Root } from './paths.js';
+import { argsOf, parentOf, parents, peerOf, startOf } from './children.js';
+import { deepHook, type Root } from './paths.js';
 import { OWNER, People } from './people.js';
 
 import { UNREAD_WINDOW } from './status.js';
@@ -811,18 +811,29 @@ export class SessionState {
     }
   }
 
-  /** Binds a deep mcp to the one live session whose checked hooks came from its parent process, or to none. */
-  mcpHello(parent: { pid: number; start: string } | undefined, paseo?: string): Promise<string | null> {
+  /**
+   * Binds a deep mcp to the one live session whose checked hooks came from its parent process, or to none, and names
+   * the parent its calls bind by. That parent is read from the process the OS reports at the other end of its
+   * connection `fd`, by PID and start time, never from its hello (#2070): the session's agent process itself, as the
+   * pi package runs inside pi, or else that process's parent. Where the OS reports no peer, it binds to none here and
+   * each call binds by the PreToolUse stamped for it, as a shared process's do.
+   */
+  async mcpHello(fd: number | undefined, claimed: { pid: number; start: string } | undefined, paseo?: string): Promise<{ session: string | null; parent?: { pid: number; start: string } }> {
+    let hook: string | undefined;
+    try { hook = deepHook(); } catch { /* no deep-hook here to ask the OS: no peer */ }
+    const peer = hook && fd !== undefined && fd >= 0 ? await peerOf(hook, fd) : undefined;
+    const at = async (pid: number | undefined) => { const start = pid === undefined ? undefined : await this.startOf(pid, true); return start ? { pid: pid!, start } : undefined; };
+    const serves = (p: { pid: number; start: string } | undefined) => p !== undefined && [...this.sessions.values()].some((s) => s.pid === p.pid && s.start === p.start && !s.ended);
+    const own = peer !== undefined && [...this.sessions.values()].some((s) => s.pid === peer) ? await at(peer) : undefined;
+    const parent = peer === undefined ? claimed : serves(own) ? own : await at(await parentOf(peer));
     return this.options.schedule.queue(async () => {
-      // A server paseo's plugin added names its agent's session by the token the plugin's lines carry (#55).
+      // A server paseo's plugin added names its agent's session by the token the plugin's checked lines carry (#55).
       const bound = paseo ? this.options.delivery().binds.get(paseo) : undefined;
-      if (bound && !this.sessions.get(bound)?.ended) return bound;
-      if (!parent) return null;
-      const actual = await this.startOf(parent.pid, true);
-      if (!actual || actual !== parent.start) return null;
-      const served = [...this.sessions.values()].filter((s) => s.pid === parent.pid && s.start === actual && !s.ended);
+      if (bound && !this.sessions.get(bound)?.ended) return { session: bound };
+      if (peer === undefined || !parent) return { session: null, ...(parent ? { parent } : {}) };
+      const served = [...this.sessions.values()].filter((s) => s.pid === parent.pid && s.start === parent.start && !s.ended);
       // A Codex process may run another thread at any time: each of its calls binds by its own stamp.
-      return served.length === 1 && !manyThreads(served[0]!.agent) ? served[0]!.id : null;
+      return { session: served.length === 1 && !manyThreads(served[0]!.agent) ? served[0]!.id : null, parent };
     });
   }
 

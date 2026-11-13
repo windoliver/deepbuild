@@ -41,8 +41,10 @@ pub struct Tables {
 /// The bake's tables, as words.
 pub fn tables(b: &Baked) -> Tables {
     let mut w: Vec<u32> = vec![0; 4];
-    let mut out = Tables::default();
-    out.curve = w.len() as u32;
+    let mut out = Tables {
+        curve: w.len() as u32,
+        ..Tables::default()
+    };
     for p in &b.curve {
         w.extend(p.iter().map(|x| f(*x)));
     }
@@ -83,11 +85,7 @@ pub fn tables(b: &Baked) -> Tables {
     }
     out.map = w.len() as u32;
     if let Some(m) = b.map.as_ref() {
-        w.extend(
-            m.heights
-                .iter()
-                .map(|h| h.map_or(EMPTY.to_bits(), |y| f(y))),
-        );
+        w.extend(m.heights.iter().map(|h| h.map_or(EMPTY.to_bits(), f)));
     }
     out.births = w.len() as u32;
     for p in b.births.iter().flat_map(|bt| &bt.pieces) {
