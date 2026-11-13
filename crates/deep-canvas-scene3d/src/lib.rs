@@ -33,6 +33,7 @@ pub mod mirror;
 pub mod modifiers;
 pub mod module;
 pub mod overlay;
+pub mod pointer;
 pub mod points;
 pub mod poly;
 pub mod probe;
