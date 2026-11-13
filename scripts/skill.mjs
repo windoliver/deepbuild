@@ -16,7 +16,7 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 /** When an agent uses each tool, and what its result does not prove. */
 const TOOLS = {
   deep_status: {
-    use: 'Read where your session stands: the hub\'s gates, and each of your claims with its runs, its verdict and any run that contradicts what you predicted.',
+    use: 'Read where your session stands: the hub\'s gates; the checks the repo\'s spec names; your open asks, each with its state, its default and its deadline; your open items; and each of your claims with its runs, its verdict and any run that contradicts what you predicted.',
     proves: 'Its result does not prove your work is done: only a verdict the checks reached says so, and a claim with no verdict is still open.',
   },
   deep_search: {
