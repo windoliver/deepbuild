@@ -32,3 +32,15 @@ the floor's edge differently when played from 0 s than when sought (`633adab4…
 with no trail in the document at all): the renderer ranked coplanar ties (#421) only when the frame's set of solids
 changed, so a play kept the ranks of t = 0, where the ball touches the floor, and a seek ranked where the solids stood.
 Ranks are now taken from every frame's solids, in kept buffers so a frame allocates nothing once warm.
+
+## Review videos (not a criterion's pictures)
+
+`review/` holds videos and contact sheets made for the owner's review on Nov 13, from the canvas's own frames. None is a criterion's picture, and no test reads them:
+
+- `throws-wide.mp4`: the suite's thrown ball with a fourth cue (75° at 6 s), seen from farther back so nothing is cropped, 0 to 8 s at 24 fps.
+- `wheel-wide.mp4`: the rolling wheel's whole trail, wider, 0 to 4 s at 30 fps.
+- `ribbons.mp4`: the AC1 storm's particle ribbons, 0 to 3 s at 30 fps.
+- `flat-trail.mp4`: a 2D `path@1` trailing a dot through a 2D writer layer (the GPU layer's 2D draw), 0 to 2 s at 30 fps.
+- `sheet-*.png`: nine frames of each, in a grid.
+
+Reviewing the ribbons found resting sparks drawn as nothing: a still particle's ribbon has no length, so it covered no pixel. A ribbon's newest segment now rounds at the particle, so a still particle draws a dot of the ribbon's width.
