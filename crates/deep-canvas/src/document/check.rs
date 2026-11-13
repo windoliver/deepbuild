@@ -2,6 +2,7 @@
 //! lowered form, which is returned with the issues, the notices and the draw list.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::Mutex;
 
 use serde_json::{json, Map, Value};
 
@@ -20,6 +21,7 @@ use crate::kinds::{
     lookup, parse_kind, parse_required, Entry, Lookup, ParamType, Registry, Version,
 };
 use crate::registry::{self, core_name, Cost, Range, Rule, Sealed, SealedModule};
+use crate::schedule::Pool;
 
 /// The closed list of item roles.
 const ROLES: &[&str] = &["part", "control", "label", "data", "decoration"];
@@ -117,7 +119,10 @@ fn check_by(
     let mut issues = Vec::new();
     let mut notices = Vec::new();
     let mut draws = Vec::new();
-    let mut lowered = copy_of(doc);
+    // The host's worker threads, which the check's options lend it (#857's pool): the check
+    // starts none and reads no machine.
+    let pool = packs.pool.as_deref();
+    let mut lowered = copy_of(doc, pool);
     // `fw` and `fh` read the document's design size (Units and axes).
     if let (Some(size), Some(Value::Object(items))) = (frame_of(doc), lowered.get_mut("items")) {
         for item in items.values_mut() {
@@ -251,7 +256,7 @@ fn check_by(
             // Each item checks on its own, so a big document's items check in chunks across the
             // cores, and the chunks' findings join in item order, as one pass would list them.
             let mut entries: Vec<(&String, &mut Value)> = items.iter_mut().collect();
-            let checked = in_chunks(&mut entries, |chunk| {
+            let checked = in_chunks(pool, &mut entries, |chunk| {
                 let (mut issues, mut notices, mut draws) = (Vec::new(), Vec::new(), Vec::new());
                 for (key, item) in chunk.iter_mut() {
                     if check_item(key, item, &ctx, &mut issues, &mut notices) {
@@ -296,12 +301,18 @@ fn check_by(
         .is_some_and(|items| items.len() >= SPLIT_FROM);
     let mut tail = [Tail::Modules, Tail::Budget, Tail::Document];
     let threads = if big { tail.len() } else { 1 };
-    let found = in_threads(&mut tail, threads, |part| {
+    let found = in_threads(pool, &mut tail, threads, |part| {
         let (mut issues, mut notices) = (Vec::new(), Vec::new());
         for step in part.iter() {
             match step {
-                Tail::Modules => module_checks(&lowered, sealed, &mut issues, &mut notices),
-                Tail::Budget => budget_check(&lowered, sealed, coefficients, &mut issues),
+                Tail::Modules => module_checks(
+                    &lowered,
+                    sealed,
+                    packs.planted.module,
+                    &mut issues,
+                    &mut notices,
+                ),
+                Tail::Budget => budget_check(&lowered, sealed, coefficients, pool, &mut issues),
                 Tail::Document => {
                     check_id_maps(&lowered, &mut issues);
                     check_controls(&lowered, sealed, &mut issues);
@@ -312,7 +323,7 @@ fn check_by(
                     check_targets(&lowered, "channels", false, kinds, sealed, &mut issues);
                     check_targets(&lowered, "bound_values", true, kinds, sealed, &mut issues);
                     super::rules::check(&lowered, &mut issues, |entries, work| {
-                        in_chunks(entries, work)
+                        in_chunks(pool, entries, work)
                     });
                 }
             }
@@ -345,15 +356,24 @@ fn check_by(
 /// 10,000-item document checks in under 50 ms); below it, threads cost more than they save.
 const SPLIT_FROM: usize = 2048;
 
-/// Runs `work` over `entries` in one chunk per core, on scoped threads once there are
-/// [`SPLIT_FROM`] or more, and returns each chunk's result in order.
-fn in_chunks<T: Send, R: Send>(entries: &mut [T], work: impl Fn(&mut [T]) -> R + Sync) -> Vec<R> {
+/// The most chunks a big document's per-item work splits into.
+const MOST_CHUNKS: usize = 8;
+
+/// Runs `work` over `entries` in chunks once there are [`SPLIT_FROM`] or more (one per thread
+/// `pool` lends, its performance cores up to [`MOST_CHUNKS`]; with no pool, [`MOST_CHUNKS`] in
+/// turn), and in one chunk below that, and returns each chunk's result in order. Each chunk's
+/// work is the same whatever runs it, so the results joined in order are the same for any count.
+fn in_chunks<T: Send, R: Send>(
+    pool: Option<&dyn Pool>,
+    entries: &mut [T],
+    work: impl Fn(&mut [T]) -> R + Sync,
+) -> Vec<R> {
     let threads = if entries.len() < SPLIT_FROM {
         1
     } else {
-        std::thread::available_parallelism().map_or(1, |n| n.get().min(8))
+        pool.map_or(MOST_CHUNKS, |p| p.performance_cores().clamp(1, MOST_CHUNKS))
     };
-    in_threads(entries, threads, work)
+    in_threads(pool, entries, threads, work)
 }
 
 /// The steps of a check after its items, in their order.
@@ -364,9 +384,11 @@ enum Tail {
     Document,
 }
 
-/// Runs `work` over `entries` in `threads` chunks, each on a scoped thread when there are two or
-/// more, and returns each chunk's result in order.
+/// Runs `work` over `entries` in `threads` chunks, on `pool`'s threads when there are two or
+/// more, and returns each chunk's result in order; with no pool, the chunks run in turn on the
+/// caller's thread.
 fn in_threads<T: Send, R: Send>(
+    pool: Option<&dyn Pool>,
     entries: &mut [T],
     threads: usize,
     work: impl Fn(&mut [T]) -> R + Sync,
@@ -374,22 +396,32 @@ fn in_threads<T: Send, R: Send>(
     if threads <= 1 {
         return vec![work(entries)];
     }
-    let size = entries.len().div_ceil(threads);
-    let work = &work;
-    std::thread::scope(|s| {
-        let handles: Vec<_> = entries
-            .chunks_mut(size)
-            .map(|chunk| s.spawn(move || work(chunk)))
-            .collect();
-        handles
-            .into_iter()
-            .map(|h| h.join().unwrap_or_else(|e| std::panic::resume_unwind(e)))
-            .collect()
-    })
+    let size = entries.len().div_ceil(threads).max(1);
+    let Some(pool) = pool else {
+        return entries.chunks_mut(size).map(&work).collect();
+    };
+    // Each chunk and its result in a slot of its own, which one job alone locks.
+    let slots: Vec<Mutex<(&mut [T], Option<R>)>> = entries
+        .chunks_mut(size)
+        .map(|chunk| Mutex::new((chunk, None)))
+        .collect();
+    pool.run(threads, slots.len(), &|k, _| {
+        let mut slot = slots[k].lock().unwrap_or_else(|e| e.into_inner());
+        let (chunk, out) = &mut *slot;
+        *out = Some(work(chunk));
+    });
+    // A chunk a pool left unrun runs here, so no chunk's findings are ever missing.
+    slots
+        .into_iter()
+        .map(|s| {
+            let (chunk, out) = s.into_inner().unwrap_or_else(|e| e.into_inner());
+            out.unwrap_or_else(|| work(chunk))
+        })
+        .collect()
 }
 
-/// A copy of `doc` to lower: its items copied in chunks across the cores, in their order.
-fn copy_of(doc: &Value) -> Value {
+/// A copy of `doc` to lower: its items copied in chunks across `pool`'s threads, in their order.
+fn copy_of(doc: &Value, pool: Option<&dyn Pool>) -> Value {
     let Some(Value::Object(items)) = member(doc, "items") else {
         return doc.clone();
     };
@@ -397,7 +429,7 @@ fn copy_of(doc: &Value) -> Value {
         return doc.clone();
     };
     let mut entries: Vec<(&String, &Value)> = items.iter().collect();
-    let parts = in_chunks(&mut entries, |chunk| {
+    let parts = in_chunks(pool, &mut entries, |chunk| {
         chunk
             .iter()
             .map(|(k, v)| ((*k).clone(), (*v).clone()))
@@ -424,10 +456,12 @@ pub const FRAME_CPU_MS: f64 = 16.0;
 
 /// The checks canvas modules register over their kinds' items, and the budget estimate over
 /// the costs they register: a module's code carries its catalog's fix, and the estimate past
-/// the frame's CPU is `over_budget`, naming the items that cost.
+/// the frame's CPU is `over_budget`, naming the items that cost. Each check reads `planted`, the
+/// module's planted wrong program the check's options name.
 fn module_checks(
     lowered: &Value,
     sealed: &Sealed,
+    planted: Option<&str>,
     issues: &mut Vec<Issue>,
     notices: &mut Vec<Notice>,
 ) {
@@ -451,7 +485,7 @@ fn module_checks(
             continue;
         };
         for &(module, rule) in rules.iter() {
-            for r in rule(lowered, id, item) {
+            for r in rule(lowered, id, item, planted) {
                 // The value refused at the issue's path, as the document holds it.
                 let actual = lowered
                     .pointer(&format!("/{}", r.path))
@@ -565,6 +599,7 @@ fn budget_check(
     lowered: &Value,
     sealed: &Sealed,
     coefficients: Option<&Coefficients>,
+    pool: Option<&dyn Pool>,
     issues: &mut Vec<Issue>,
 ) {
     lights_check(lowered, issues);
@@ -573,7 +608,7 @@ fn budget_check(
     };
     let coefficients = coefficients.unwrap_or(&sealed.costs);
     let e = crate::cost::estimate_by(lowered, sealed, coefficients, |entries, work| {
-        in_chunks(entries, work)
+        in_chunks(pool, entries, work)
     });
     let over: Vec<String> = [
         ("CPU", e.cpu_ms, limits.cpu_ms, "ms"),
@@ -626,7 +661,7 @@ pub fn recheck(
     changed: &BTreeSet<String>,
     sealed: &Sealed,
 ) -> Option<Vec<Issue>> {
-    recheck_by(doc, prev_issues, changed, sealed, Reach::Scan)
+    recheck_by(doc, prev_issues, changed, sealed, Reach::Scan, None)
 }
 
 /// [`recheck`], finding the items that hang from the changed ones or name one by `referrers`
@@ -641,7 +676,26 @@ pub fn recheck_with(
     sealed: &Sealed,
     referrers: &Referrers,
 ) -> Option<Vec<Issue>> {
-    recheck_by(doc, prev_issues, changed, sealed, Reach::Index(referrers))
+    recheck_with_module(doc, prev_issues, changed, sealed, referrers, None)
+}
+
+/// The indexed recheck with the same module plant as the full check's options.
+pub fn recheck_with_module(
+    doc: &Value,
+    prev_issues: &[Issue],
+    changed: &BTreeSet<String>,
+    sealed: &Sealed,
+    referrers: &Referrers,
+    module: Option<&'static str>,
+) -> Option<Vec<Issue>> {
+    recheck_by(
+        doc,
+        prev_issues,
+        changed,
+        sealed,
+        Reach::Index(referrers),
+        module,
+    )
 }
 
 /// Each string an item's params hold, at any depth, with the items that hold it, and each
@@ -706,7 +760,7 @@ pub fn recheck_skipping_referrers(
     changed: &BTreeSet<String>,
     sealed: &Sealed,
 ) -> Option<Vec<Issue>> {
-    recheck_by(doc, prev_issues, changed, sealed, Reach::ChangedOnly)
+    recheck_by(doc, prev_issues, changed, sealed, Reach::ChangedOnly, None)
 }
 
 fn recheck_by(
@@ -715,6 +769,7 @@ fn recheck_by(
     changed: &BTreeSet<String>,
     sealed: &Sealed,
     reach: Reach<'_>,
+    module: Option<&'static str>,
 ) -> Option<Vec<Issue>> {
     let after = doc.as_object()?;
     let maps_empty = ID_MAPS.iter().all(|m| {
@@ -827,7 +882,12 @@ fn recheck_by(
         .filter_map(|id| Some((id.clone(), items.get(id)?.clone())))
         .collect();
     reduced.insert("items".into(), Value::Object(subset));
-    let fresh = check_in(&Value::Object(reduced), sealed).issues;
+    let options = Packs::new(packs::Planted {
+        module,
+        ..Default::default()
+    });
+    let reduced = Value::Object(reduced);
+    let fresh = check_by(&reduced, sealed, sealed.kinds_ref(), None, &options).issues;
     let touches = |i: &Issue| i.ids.iter().any(|id| affected.contains(id));
     let mut out: Vec<Issue> = prev_issues
         .iter()

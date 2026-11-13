@@ -425,13 +425,14 @@ fn distance_issue(look: &Look, min: Option<f64>) -> Option<Issue> {
 }
 
 /// Each text's graphemes no face can draw in a theme's type (#417): its font's, then the look's
-/// fallback faces in order. (Keyed copy, whose every key in every locale this would read, lands
-/// with the logic module.)
-fn glyph_issues(items: &Map<String, Value>, ty: &Type, issues: &mut Vec<Issue>) {
-    thread_local! {
-        static SHAPER: std::cell::RefCell<deep_text::Shaper> =
-            std::cell::RefCell::new(deep_text::Shaper::new());
-    }
+/// fallback faces in order, shaped by `shaper`, the host's. (Keyed copy, whose every key in every
+/// locale this would read, lands with the logic module.)
+fn glyph_issues(
+    items: &Map<String, Value>,
+    ty: &Type,
+    shaper: &mut deep_text::Shaper,
+    issues: &mut Vec<Issue>,
+) {
     for (id, item) in items {
         if item.get("kind").and_then(Value::as_str) != Some("text@1") {
             continue;
@@ -443,7 +444,7 @@ fn glyph_issues(items: &Map<String, Value>, ty: &Type, issues: &mut Vec<Issue>) 
         let Some(shaper_spec) = spec.shaper_spec() else {
             continue;
         };
-        let missing = SHAPER.with(|s| s.borrow_mut().missing(&shaper_spec, &spec.text));
+        let missing = shaper.missing(&shaper_spec, &spec.text);
         for grapheme in missing {
             let found = |i: &Issue| {
                 i.code == "text.glyph_missing"
@@ -578,8 +579,14 @@ fn story_issues(items: &Map<String, Value>) -> Vec<Issue> {
 }
 
 /// The module's issues for `doc`, which the core check passed, in `look`; `min` stands in for the
-/// look's status distance (#417 AC9's planted wrong check).
-pub fn check(doc: &Map<String, Value>, look: &Look, min: Option<f64>) -> Vec<Issue> {
+/// look's status distance (#417 AC9's planted wrong check). Its texts are shaped by `shaper`, the
+/// host's, whose run cache keeps them for its frames.
+pub fn check(
+    doc: &Map<String, Value>,
+    look: &Look,
+    min: Option<f64>,
+    shaper: &mut deep_text::Shaper,
+) -> Vec<Issue> {
     let items = object_or_empty(doc.get("items"));
     let mut issues = roles_apart(items, look);
     issues.extend(numbers(doc).1);
@@ -670,9 +677,9 @@ pub fn check(doc: &Map<String, Value>, look: &Look, min: Option<f64>) -> Vec<Iss
     issues.extend(halo_contrast(items, look));
     // #1653: no repeated status, and no status badge a y sort can slide under.
     issues.extend(crate::fields::status_issues(doc));
-    glyph_issues(items, &look.light_type, &mut issues);
+    glyph_issues(items, &look.light_type, shaper, &mut issues);
     if look.dark_type != look.light_type {
-        glyph_issues(items, &look.dark_type, &mut issues);
+        glyph_issues(items, &look.dark_type, shaper, &mut issues);
     }
     issues
 }

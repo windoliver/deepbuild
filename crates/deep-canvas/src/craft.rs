@@ -7,17 +7,43 @@
 //! classed by what the camera does; whether a cut between two shots that keep one item turns or
 //! resizes it enough; and which side of a line a camera is on.
 
-use std::sync::OnceLock;
-
 use serde_json::Value;
 
 /// The pack's name, as its checks' registry entries give it.
 pub const PACK: &str = "craft@1";
 
+/// The table's text, compiled in: the crate's own data, read wherever a check is listed.
+const TABLE: &str = include_str!("craft.json");
+
+/// A check's name, as the table's text spells it: borrowed from that text, so a name outlives
+/// the parsed table it was read with.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Name(&'static str);
+
+impl Name {
+    /// The name.
+    pub fn as_str(self) -> &'static str {
+        self.0
+    }
+}
+
+impl std::fmt::Display for Name {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.0)
+    }
+}
+
+impl std::ops::Deref for Name {
+    type Target = str;
+    fn deref(&self) -> &str {
+        self.0
+    }
+}
+
 /// One craft@1 check as `craft.json` states it.
 #[derive(Clone, Debug)]
 pub struct Check {
-    pub name: String,
+    pub name: Name,
     /// Its fields at their defaults, which a brief's entry overrides.
     pub defaults: Value,
     pub description: String,
@@ -25,30 +51,34 @@ pub struct Check {
     pub fix: String,
 }
 
-/// Every craft@1 check, in the table's order.
-pub fn checks() -> &'static [Check] {
-    static TABLE: OnceLock<Vec<Check>> = OnceLock::new();
-    TABLE.get_or_init(|| {
-        let table: Value = serde_json::from_str(include_str!("craft.json")).unwrap_or_default();
-        let text = |c: &Value, k: &str| c[k].as_str().unwrap_or_default().to_string();
-        table["checks"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .map(|c| Check {
-                name: text(c, "name"),
-                defaults: c["defaults"].clone(),
-                description: text(c, "description"),
-                threshold: text(c, "threshold"),
-                fix: text(c, "fix"),
-            })
-            .collect()
-    })
+/// Every craft@1 check, in the table's order, parsed from the table on each call: a caller
+/// that reads the table more than once holds what this returns.
+pub fn checks() -> Vec<Check> {
+    let table: Value = serde_json::from_str(TABLE).unwrap_or_default();
+    let text = |c: &Value, k: &str| c[k].as_str().unwrap_or_default().to_string();
+    // A name is a plain string in the table (no escapes), so its quoted spelling there is it.
+    let name = |c: &Value| {
+        let name = c["name"].as_str().unwrap_or_default();
+        let at = TABLE.find(&format!("\"{name}\"")).map_or(0, |i| i + 1);
+        Name(TABLE.get(at..at + name.len()).unwrap_or_default())
+    };
+    table["checks"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(|c| Check {
+            name: name(c),
+            defaults: c["defaults"].clone(),
+            description: text(c, "description"),
+            threshold: text(c, "threshold"),
+            fix: text(c, "fix"),
+        })
+        .collect()
 }
 
 /// The check `name`, if craft@1 has it.
-pub fn check(name: &str) -> Option<&'static Check> {
-    checks().iter().find(|c| c.name == name)
+pub fn check(name: &str) -> Option<Check> {
+    checks().into_iter().find(|c| *c.name == *name)
 }
 
 /// The analysis rate and width of the motion share (frame differences at 12 fps, 320 px wide).

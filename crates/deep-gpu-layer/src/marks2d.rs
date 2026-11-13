@@ -188,7 +188,7 @@ fn evaluate(app: &App, call: &Value) -> Result<Evaluated, Value> {
     let gpu = match look3 {
         Some((look, themed)) => {
             let whole = Value::Object(doc.clone());
-            let scene = evaluate3(&whole, t, &look, &mut Labels::new())
+            let scene = evaluate3(&whole, t, &look, &mut Labels::sharing(app.memo.clone()))
                 .map_err(|r| refused(r.code, r.path))?;
             let seed = doc.get("seed").and_then(Value::as_u64).unwrap_or(0);
             let settings = effects::settings(

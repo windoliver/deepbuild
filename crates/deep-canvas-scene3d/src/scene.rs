@@ -865,7 +865,11 @@ impl Scene {
 
     /// #268's wrong field, reachable only through `deep-gpu --planted`: the water's shore baked
     /// with each item's centre standing for where it meets the water.
-    pub fn plant_shore_from_centre(&mut self, doc: &Value) -> Result<(), Refused> {
+    pub fn plant_shore_from_centre(
+        &mut self,
+        doc: &Value,
+        memo: &crate::memo::Memo,
+    ) -> Result<(), Refused> {
         let (Some(map), Some(water)) = (doc.as_object(), self.water.as_mut()) else {
             return Ok(());
         };
@@ -880,6 +884,7 @@ impl Scene {
                 &plates,
                 w.level,
                 crate::shore::Planted::FromCentre,
+                memo,
             )?);
         }
         Ok(())
@@ -888,7 +893,13 @@ impl Scene {
     /// #420 AC6's wrong programs, reachable only through `deep-gpu --planted`: mesh-edge lines
     /// read from the unwelded mesh, or drawn over what is in front of them; and #1640's
     /// (`crease_below_angle`, `edges_derive_every_frame`, `edges_dash_other_space`).
-    pub fn plant_edges(&mut self, unwelded: bool, over: bool, planted: Option<&str>) {
+    pub fn plant_edges(
+        &mut self,
+        unwelded: bool,
+        over: bool,
+        planted: Option<&str>,
+        memo: &crate::memo::Memo,
+    ) {
         for line in self.layers.iter_mut().flat_map(|l| &mut l.lines) {
             let Some(edges) = line.edges.clone() else {
                 continue;
@@ -897,7 +908,7 @@ impl Scene {
                 (edges.kind, planted)
             {
                 if matches!(name, "crease_below_angle" | "edges_derive_every_frame") {
-                    let (list, derived) = edges.mesh.crease_set(angle, border, planted);
+                    let (list, derived) = edges.mesh.crease_set(angle, border, planted, memo);
                     let source = EdgesOf {
                         list,
                         derived,
@@ -1886,6 +1897,7 @@ fn edge_line(
     seconds: f64,
     outlines: Outlines<'_>,
     assets: Option<Assets<'_>>,
+    memo: &crate::memo::Memo,
 ) -> Result<Line, Refused> {
     let path = format!("items/{id}/params");
     let edges = &params["edges"];
@@ -1949,7 +1961,9 @@ fn edge_line(
         mesh = only;
     }
     let (list, derived) = match kind {
-        crate::geom::EdgeKind::Crease { angle, border } => mesh.crease_set(angle, border, None),
+        crate::geom::EdgeKind::Crease { angle, border } => {
+            mesh.crease_set(angle, border, None, memo)
+        }
         _ => (Arc::new(mesh.edge_list(kind, None)), true),
     };
     let source = EdgesOf {
@@ -2725,6 +2739,7 @@ fn lod_of(
     bounds: [Vec3; 2],
     mesh: Option<(&crate::geom::Mesh, u64)>,
     doc: &Map<String, Value>,
+    memo: &crate::memo::Memo,
 ) -> Result<Option<Arc<crate::lod::Lod>>, Refused> {
     let bands = crate::lod::bands_of(item, path.trim_end_matches("/params"))?;
     let leveled = mesh.filter(|(m, _)| !m.lods.is_empty());
@@ -2746,7 +2761,7 @@ fn lod_of(
     };
     // A mesh without levels takes its proxy from the simplify step, once per content key.
     let proxy_mesh = match (proxy, mesh) {
-        (Some(p), Some((m, h))) if levels.is_empty() => crate::lod::proxy_of(m, h, p),
+        (Some(p), Some((m, h))) if levels.is_empty() => crate::lod::proxy_of(m, h, p, memo),
         _ => None,
     };
     Ok(Some(Arc::new(crate::lod::Lod {
@@ -2961,6 +2976,8 @@ pub(crate) fn evaluate_compiled(
     assets: Option<Assets<'_>>,
     outlines: Outlines<'_>,
 ) -> Result<Scene, Refused> {
+    // What evaluation derives once per content key, kept in the host's memo the labels carry.
+    let memo = labels.memo().clone();
     tones(map)?;
     let mut state = program.state();
     program.evaluate_local(t, eval::Validity::Full, &mut state);
@@ -3143,7 +3160,7 @@ pub(crate) fn evaluate_compiled(
                             &path,
                         )?,
                         mesh: None,
-                        lod: lod_of(item, &path, [[-0.5; 3], [0.5; 3]], None, map)?,
+                        lod: lod_of(item, &path, [[-0.5; 3], [0.5; 3]], None, map, &memo)?,
                         mask: None,
                         cast_only: false,
                         receiver_sets: 0,
@@ -3166,7 +3183,9 @@ pub(crate) fn evaluate_compiled(
                 }
                 "mark.line@1" if params.get("edges").is_some_and(|e| !e.is_null()) => {
                     let doc = doc_value.get_or_insert_with(|| Value::Object(map.clone()));
-                    let l = edge_line(doc, &items, id, params, look, seconds, outlines, assets)?;
+                    let l = edge_line(
+                        doc, &items, id, params, look, seconds, outlines, assets, &memo,
+                    )?;
                     bounds.extend(l.segments.iter().flat_map(|s| [s.a, s.b]));
                     layer.lines.push(l);
                 }
@@ -3338,7 +3357,7 @@ pub(crate) fn evaluate_compiled(
                             Shape::Built(hash),
                             &path,
                         )?,
-                        lod: lod_of(item, &path, mesh.bounds(), Some((&mesh, hash)), map)?,
+                        lod: lod_of(item, &path, mesh.bounds(), Some((&mesh, hash)), map, &memo)?,
                         mesh: Some(Arc::new(mesh)),
                         mask: None,
                         cast_only: false,
@@ -3364,7 +3383,7 @@ pub(crate) fn evaluate_compiled(
                     if k == "plate@1" && uniform(&model) {
                         let plate = layer.solids.last().expect("just pushed");
                         let built = plate.mesh.as_ref().expect("a built mesh");
-                        if let Some(tiles) = crate::terrain::tiles(params, built, hash) {
+                        if let Some(tiles) = crate::terrain::tiles(params, built, hash, &memo) {
                             let plate = layer.solids.pop().expect("just pushed");
                             let lod_px = crate::lod::lod_px(map);
                             for t in tiles.iter() {
@@ -3494,13 +3513,14 @@ pub(crate) fn evaluate_compiled(
                         axes(&m),
                         flicker,
                     ));
-                    crate::sets::read_light(
+                    crate::sets::read_light_in(
                         lights.last_mut(),
                         params,
                         &path,
                         map,
                         &mut tables,
                         assets,
+                        &memo,
                     )?;
                     sun = Some(Sun {
                         id: id.clone(),
@@ -3529,13 +3549,14 @@ pub(crate) fn evaluate_compiled(
                         axes(&m),
                         flicker,
                     ));
-                    crate::sets::read_light(
+                    crate::sets::read_light_in(
                         lights.last_mut(),
                         params,
                         &path,
                         map,
                         &mut tables,
                         assets,
+                        &memo,
                     )?;
                 }
                 // A material draws nothing itself; the objects naming it read it (#418). A group
@@ -3903,6 +3924,7 @@ pub(crate) fn evaluate_compiled(
                 &plates,
                 w.level,
                 crate::shore::Planted::None,
+                &memo,
             )?);
         }
         if scene.mirror.is_none() {

@@ -10,6 +10,7 @@
 
 use std::cell::RefCell;
 use std::collections::BTreeMap;
+use std::sync::Arc;
 use std::time::Instant;
 
 use deep_canvas::cost::counts;
@@ -89,10 +90,11 @@ fn board(segments: usize, glyphs: usize) -> Value {
 /// Per operator: its mean ns per node, and its nodes' mean vertices and glyphs.
 type Reading = BTreeMap<usize, (f64, f64, f64)>;
 
-/// A board's reading: `cold` empties the shaped-run cache before each run, so every text is
-/// shaped; otherwise the runs the cache holds are reused.
+/// A board's reading: `cold` empties the shaped-run cache `shaped` before each run, so every
+/// text is shaped; otherwise the runs the cache holds are reused.
 fn read_board(
     startup: &Startup,
+    shaped: &Arc<deep_text::RunCache>,
     doc: &Value,
     readings: &BTreeMap<String, Value>,
     tokens: &deep_canvas::schedule::Tokens,
@@ -102,7 +104,7 @@ fn read_board(
     let mut runs: Vec<Reading> = Vec::new();
     for _ in 0..RUNS {
         if cold {
-            deep_text::cache::clear();
+            shaped.clear();
         }
         CLOCK.with(|c| c.borrow_mut().1.clear());
         let mut sched = Scheduler::new(
@@ -111,6 +113,10 @@ fn read_board(
                 timing: Some(timing),
                 ..Options::default()
             },
+        );
+        sched.lend_table(
+            "text.fonts",
+            deep_canvas_marks::modules::fonts_sharing(shaped.clone()),
         );
         let mut session = DocSession::new(0, tokens.clone());
         session.set_readings(readings.clone());
@@ -168,8 +174,9 @@ pub fn build() -> Value {
     json!({"profile": env!("DEEP_PROFILE"), "toolchain": env!("DEEP_TOOLCHAIN")})
 }
 
-/// The `costs` call: each operator's fitted terms, by key.
-pub fn measure(startup: &Startup) -> Value {
+/// The `costs` call: each operator's fitted terms, by key, its boards shaped through `runs`, the
+/// hub's shaped-run cache.
+pub fn measure(startup: &Startup, runs: &Arc<deep_text::RunCache>) -> Value {
     let writer = Writer {
         kind: WriterKind::Agent,
         id: "cost-bench".into(),
@@ -191,7 +198,7 @@ pub fn measure(startup: &Startup) -> Value {
         };
         // Cold, then warm: the cold reading's last run leaves the board's runs in the cache.
         for (cold, out) in [(true, &mut readings), (false, &mut warm)] {
-            match read_board(startup, &doc, &BTreeMap::new(), &tokens, cold) {
+            match read_board(startup, runs, &doc, &BTreeMap::new(), &tokens, cold) {
                 Ok(r) => out.push(r),
                 Err(e) => return json!({"code": "refused", "reason": e}),
             }
@@ -215,7 +222,7 @@ pub fn measure(startup: &Startup) -> Value {
             .and_then(Value::as_object)
             .map(|r| r.iter().map(|(k, v)| (k.clone(), v.clone())).collect())
             .unwrap_or_default();
-        if let Ok(r) = read_board(startup, &doc, &record, &tokens, true) {
+        if let Ok(r) = read_board(startup, runs, &doc, &record, &tokens, true) {
             for (op, x) in r {
                 fixtures.entry(op).or_insert(x);
             }

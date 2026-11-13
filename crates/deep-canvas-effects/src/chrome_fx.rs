@@ -19,9 +19,6 @@ use crate::check::{read_and_check, Checked};
 use crate::graph::{self, From, Functions, Issue, Ty};
 use crate::interp::{self, Env, Image};
 
-/// The pack's manifest as it ships.
-pub const PACK: &str = include_str!("../../../packs/chrome-fx-1.0.0/pack.json");
-
 /// The 24 operators the pack ships, in the issue's order.
 pub const NAMES: [&str; 24] = [
     "halo.soft",
@@ -167,11 +164,11 @@ pub fn read_entry(name: &str, entry: &Value, functions: &Functions) -> Result<Op
     })
 }
 
-/// The shipped pack's operators, in the issue's order. The shipped pack passes its check (a test
-/// holds it to that), so a refusal here is a build that shipped a broken pack.
-pub fn library() -> Vec<Operator> {
-    let pack: Value = serde_json::from_str(PACK).expect("chrome-fx@1's manifest is JSON");
-    let functions = functions(&pack);
+/// The operators of `pack`, the manifest the host ships (`packs/chrome-fx-1.0.0/pack.json`), in
+/// the issue's order. The shipped pack passes its check (a test holds it to that), so a refusal
+/// here is a build that shipped a broken pack.
+pub fn library(pack: &Value) -> Vec<Operator> {
+    let functions = functions(pack);
     NAMES
         .iter()
         .filter_map(|name| read_entry(name, &pack["operators"][*name], &functions).ok())

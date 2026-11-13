@@ -260,8 +260,9 @@ pub fn call(app: &mut App, call: &Value) -> Value {
         Err(e) => return e,
     };
     let planted = app.planted;
+    let memo = app.memo.clone();
     app.worker.call(move |state| {
-        let mut labels = Labels::new();
+        let mut labels = Labels::sharing(memo);
         let a = match admitted(&args, &mut labels) {
             Ok(a) => a,
             Err(e) => return e,

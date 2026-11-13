@@ -12,6 +12,8 @@ use wasmparser::{
     ValType, Validator, WasmFeatures,
 };
 
+use crate::operators::classify;
+
 /// A program's largest size.
 pub const MAX_PROGRAM: u64 = 4 * 1024 * 1024;
 /// A table's most entries.
@@ -118,19 +120,6 @@ impl Default for Limits {
         }
     }
 }
-
-/// The proposal and the visit name of each operator, from the parser's own list.
-macro_rules! define_classify {
-    ($( @$proposal:ident $op:ident $({ $($arg:ident: $argty:ty),* })? => $visit:ident ($($ann:tt)*) )*) => {
-        fn classify(op: &Operator<'_>) -> (&'static str, &'static str) {
-            match op {
-                $( Operator::$op { .. } => (stringify!($proposal), stringify!($visit)), )*
-                _ => ("unknown", "visit_unknown"),
-            }
-        }
-    };
-}
-wasmparser::for_each_operator!(define_classify);
 
 /// The parser feature a proposal's operators need; an unknown one needs every feature.
 fn feature(proposal: &str) -> WasmFeatures {

@@ -1167,6 +1167,9 @@ pub struct Hub<'a> {
     pub vias: BTreeMap<String, Via>,
     /// The times the shaper shaped each run's key in this process (#856).
     pub shapings: HashMap<Arc<deep_text::cache::Key>, u32>,
+    /// The shaped-run cache the hub owns (#856): its scheduler's text shapers, its renderer's and
+    /// the shaping worker keep their runs in it, so every document it serves shares them.
+    pub runs: Arc<deep_text::RunCache>,
     /// What answered the card: the option and the release's platform stamp (#327).
     pub card_answer: Option<(String, i64)>,
     /// The sandbox module's check-time work (#238).
@@ -1273,7 +1276,19 @@ impl<'a> Hub<'a> {
             migration_first_fault: scenario.planted == Some(Planted::MigrationFirstFault),
             walk_inputs: (scenario.planted == Some(Planted::ExpandsInHashOrder))
                 .then_some(walk_in_hash_order as deep_canvas::document::packs::WalkInputs),
+            // #499: the media module's check reads its planted wrong program from the check's options.
+            module: deep_canvas_media::PLANTED
+                .into_iter()
+                .find(|p| scenario.module_planted.as_deref() == Some(*p)),
         };
+        let mut packs = Packs::new(pack_planted);
+        // #306 AC8: a big document's check splits across the scheduler's worker threads.
+        packs.pool = sched.options.pool.clone();
+        let runs = Arc::new(deep_text::RunCache::default());
+        sched.lend_table(
+            "text.fonts",
+            deep_canvas_marks::modules::fonts_sharing(runs.clone()),
+        );
         let mut hub = Hub {
             scenario,
             startup,
@@ -1289,7 +1304,7 @@ impl<'a> Hub<'a> {
             session_state: BTreeMap::new(),
             tracks: BTreeMap::new(),
             forms: BTreeMap::new(),
-            renderer: Renderer::new().turning_about_corner(
+            renderer: Renderer::sharing(runs.clone()).turning_about_corner(
                 scenario.module_planted.as_deref() == Some("turns_about_corner"),
             ),
             sched,
@@ -1312,7 +1327,7 @@ impl<'a> Hub<'a> {
             asks: BTreeMap::new(),
             verdicts_made: BTreeMap::new(),
             audit_asks: BTreeMap::new(),
-            packs: Packs::new(pack_planted),
+            packs,
             pack_rows: Vec::new(),
             pack_authors: BTreeMap::new(),
             expansions: BTreeMap::new(),
@@ -1341,8 +1356,9 @@ impl<'a> Hub<'a> {
             sandbox: crate::sandbox::Host::planted(startup.layouts),
             vias: BTreeMap::new(),
             shapings: HashMap::new(),
+            runs,
         };
-        deep_text::cache::record();
+        hub.runs.record();
         // The store's packs, each checked once here and never on a document's open.
         for (id, dir) in &scenario.packs {
             hub.install_pack(id, dir, None);
@@ -1785,7 +1801,7 @@ impl<'a> Hub<'a> {
             if let Some(doc) = doc {
                 let mut h = std::collections::hash_map::DefaultHasher::new();
                 std::hash::Hash::hash(doc, &mut h);
-                deep_text::cache::scope(std::hash::Hasher::finish(&h) | 1);
+                self.runs.scope(std::hash::Hasher::finish(&h) | 1);
             }
         }
         if let Call::Show(show) = call {
@@ -1838,7 +1854,7 @@ impl<'a> Hub<'a> {
                 name,
                 runs,
             } => self.lookup_reply(doc, registry, name, *runs),
-            Call::Costs => crate::costs::measure(self.startup),
+            Call::Costs => crate::costs::measure(self.startup, &self.runs),
             Call::NetworkSuite(s) => crate::seams::suite(s, self.startup.network),
             Call::RelayClient(c) => crate::seams::relay_client(c, self.startup.network),
             Call::Migrate(to) => self.migrate(*to),
@@ -2000,7 +2016,7 @@ impl<'a> Hub<'a> {
             Call::Audio(a) => self.audio_call(a),
             Call::Term(t) => self.term_call(t),
         };
-        for shaping in deep_text::cache::take_log() {
+        for shaping in self.runs.take_log() {
             *self.shapings.entry(shaping.key).or_default() += 1;
         }
         self.stamp(&mut reply);
@@ -2342,7 +2358,7 @@ impl<'a> Hub<'a> {
             issues.extend(self.inline_vectors(form));
             // #544: a spawn's reads of a logic item's occurrences, checked against its emits
             // before any step runs; then the logic items baked into the lists their readers read.
-            if !deep_canvas_media::planted("undeclared_field_reads_zero") {
+            if self.scenario.module_planted.as_deref() != Some("undeclared_field_reads_zero") {
                 issues.extend(crate::spawn::undeclared_issues(form));
             }
             if let Err(i) = self.inline_occurrences(form, &[]) {

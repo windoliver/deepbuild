@@ -247,7 +247,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
     let opened = session3::open(app, size, false, true)?;
     let fx = opened.fx.clone();
     let mut text = status::Text::default();
-    let mut labels = Labels::new();
+    let mut labels = Labels::sharing(app.memo.clone());
     let mut cache: HashMap<String, Cached> = HashMap::new();
     let mut frames = Vec::new();
     let mut report = (Value::Array(Vec::new()), Value::Array(Vec::new()));

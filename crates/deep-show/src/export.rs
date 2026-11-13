@@ -219,7 +219,14 @@ impl Hub<'_> {
     ) -> (Vec<String>, bool) {
         let hz = mix.rate as u32;
         let span = |k: i64| self.span_start(k, shard.frame, hz);
-        let mut player = Player::new(mix.clone(), planted_of(self.scenario.planted, false));
+        let mut player = Player::new(
+            mix.clone(),
+            planted_of(
+                self.scenario.planted,
+                self.scenario.module_planted.as_deref(),
+                false,
+            ),
+        );
         player.delivery = amp(shard.gain);
         if let Some(db) = shard.ceiling {
             player.set_ceiling(db);
@@ -553,6 +560,9 @@ impl Hub<'_> {
         if job.software {
             return Err(no_software_adapter());
         }
+        // #502's planted normalizer and sidecar writer, from the scenario.
+        let module = self.scenario.module_planted.as_deref();
+        let (rides_gain, sidecar_24) = (module == Some(NORMALIZER), module == Some(SIDECAR_24));
         let target = job.target().to_string();
         // The target, as this build sealed it.
         let entry = self
@@ -773,7 +783,11 @@ impl Hub<'_> {
                 self.span_start(frames.start, frame, hz),
                 self.span_start(frames.end, frame, hz),
             );
-            let planted = planted_of(self.scenario.planted, false);
+            let planted = planted_of(
+                self.scenario.planted,
+                self.scenario.module_planted.as_deref(),
+                false,
+            );
             let pass = |db: f64| {
                 let mut player = Player::new(mix.clone(), planted);
                 player.delivery = amp(db);
@@ -790,10 +804,7 @@ impl Hub<'_> {
             };
             let (master, _) = pass(0.0);
             // Planted: no static gain; the normalizer rides the master instead.
-            if let Some(g) = profile
-                .gain(master.integrated)
-                .filter(|_| !deep_canvas_media::planted(NORMALIZER))
-            {
+            if let Some(g) = profile.gain(master.integrated).filter(|_| !rides_gain) {
                 let (read, cut) = pass(g);
                 gain = if cut && !profile.holds(read.integrated) {
                     g + target_lufs - read.integrated
@@ -872,7 +883,7 @@ impl Hub<'_> {
                 pcm_hashes.extend(hashes);
                 cut |= c;
             }
-            if before.is_some() && deep_canvas_media::planted(NORMALIZER) {
+            if before.is_some() && rides_gain {
                 ride_gain(&mut pcm, hz);
             }
             let samples: Vec<f32> = pcm
@@ -1020,7 +1031,7 @@ impl Hub<'_> {
         let mut sidecars: Vec<(PathBuf, PathBuf)> = Vec::new();
         if let Some(l) = &laid {
             for kind in &job.captions.files {
-                let cues = sidecar_cues(&l.captions, frame);
+                let cues = sidecar_cues(&l.captions, frame, sidecar_24);
                 let text = if kind == "srt" {
                     captions::srt(&cues)
                 } else {
@@ -1395,10 +1406,10 @@ const SIDECAR_24: &str = "sidecar_times_at_24fps";
 /// The planted normalizer (#502): it rides gain to −23 LUFS.
 const NORMALIZER: &str = "normalizer_rides_gain";
 
-/// The captions as a sidecar writes them: as they are, or, planted, each time's frame count
-/// at 1/24 s a frame.
-fn sidecar_cues(captions: &[Caption], frame: i64) -> Vec<Caption> {
-    if !deep_canvas_media::planted(SIDECAR_24) {
+/// The captions as a sidecar writes them: as they are, or, when `planted`, each time's frame
+/// count at 1/24 s a frame.
+fn sidecar_cues(captions: &[Caption], frame: i64, planted: bool) -> Vec<Caption> {
+    if !planted {
         return captions.to_vec();
     }
     let at_24 = |t: i64| t / frame * (deep_canvas::grammar::FLICKS_PER_SECOND / 24);

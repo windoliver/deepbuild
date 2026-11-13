@@ -1046,13 +1046,14 @@ pub fn opens(app: &mut App, call: &Value) -> Value {
         Err(e) => return e,
     };
     let planted = app.planted;
+    let memo = app.memo.clone();
     app.worker.call(move |state| {
         let device = match state.gpu.recover() {
             Ok(d) => d,
             Err(e) => return refused("no_device", e),
         };
         let plants = Plants::of(planted);
-        let mut labels = Labels::new();
+        let mut labels = Labels::sharing(memo);
         if let Some(ms) = delay {
             device.device.delay_next_pipeline(ms);
         }
@@ -1120,13 +1121,14 @@ pub fn call(app: &mut App, out: &str, call: &Value) -> Value {
         None
     };
     let planted = app.planted;
+    let memo = app.memo.clone();
     app.worker.call(move |state| {
         let device = match state.gpu.recover() {
             Ok(d) => d,
             Err(e) => return refused("no_device", e),
         };
         let plants = Plants::of(planted);
-        let mut labels = Labels::new();
+        let mut labels = Labels::sharing(memo);
         let environment = args.environment.clone().unwrap_or_else(this_machine);
         let reference = is_reference(&environment);
         let device_id = json!({"model": environment["model"], "chip": environment["chip"]});
@@ -1260,13 +1262,14 @@ pub fn counts(app: &mut App, call: &Value) -> Value {
         }
     }
     let planted = app.planted;
+    let memo = app.memo.clone();
     app.worker.call(move |state| {
         let device = match state.gpu.recover() {
             Ok(d) => d,
             Err(e) => return refused("no_device", e),
         };
         let plants = Plants::of(planted);
-        let mut labels = Labels::new();
+        let mut labels = Labels::sharing(memo);
         let counted = || device.device.counts().read();
         let before = counted();
         let (_, a) = match checked(

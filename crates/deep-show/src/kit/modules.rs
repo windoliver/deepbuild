@@ -236,7 +236,7 @@ fn noisy_with(r: &mut Registrar, weight: f64, hint: bool) {
         "rect@1",
     )
     .drawn(ink_box);
-    r.rule("test.kit.noisy", noisy_rule)
+    r.rule("test.kit.noisy", |d, i, it, _| noisy_rule(d, i, it))
         .cost("test.kit.noisy", noisy_cost);
     r.code(
         "test.kit.noisy.bad",
@@ -433,15 +433,15 @@ fn fixer_with(r: &mut Registrar, rule: deep_canvas::registry::Rule, unproved: bo
 }
 
 fn register_fixer(r: &mut Registrar) {
-    fixer_with(r, fixer_rule, false);
+    fixer_with(r, |d, i, it, _| fixer_rule(d, i, it), false);
 }
 
 fn register_fixer_dangles(r: &mut Registrar) {
-    fixer_with(r, fixer_rule_dangles, false);
+    fixer_with(r, |d, i, it, _| fixer_rule_dangles(d, i, it), false);
 }
 
 fn register_fixer_unproved(r: &mut Registrar) {
-    fixer_with(r, fixer_rule, true);
+    fixer_with(r, |d, i, it, _| fixer_rule(d, i, it), true);
 }
 
 pub fn fixer() -> Module {
@@ -484,7 +484,7 @@ fn rogue_rule(_doc: &Value, id: &str, item: &Value) -> Vec<Raised> {
 fn rogue_with(r: &mut Registrar, listed: bool) {
     r.kind(kind("rogue", vec![boxed(), flag("odd")]), &[], "rect@1")
         .drawn(ink_box);
-    r.rule("test.kit.rogue", rogue_rule);
+    r.rule("test.kit.rogue", |d, i, it, _| rogue_rule(d, i, it));
     if listed {
         r.code(
             "test.kit.rogue.unlisted",

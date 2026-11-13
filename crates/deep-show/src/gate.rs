@@ -475,6 +475,8 @@ impl Hub<'_> {
 
     pub fn gate_call(&mut self, call: &GateCall) -> Value {
         let planted = self.scenario.planted;
+        let mix_planted =
+            crate::mixdown::planted_of(planted, self.scenario.module_planted.as_deref(), true);
         let now = self.now;
         match call {
             GateCall::Open {
@@ -645,7 +647,7 @@ impl Hub<'_> {
                     o.live = Some(Live {
                         rate: mix.rate,
                         start: sample_at(now),
-                        player: Player::new(mix, crate::mixdown::planted_of(planted, true)),
+                        player: Player::new(mix, mix_planted),
                         handed: Vec::new(),
                     });
                 }

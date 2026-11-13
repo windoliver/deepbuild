@@ -60,6 +60,9 @@ pub struct Planted {
     pub orphan_drops: bool,
     /// #1961: that load hands the broken-out ID to the new expansion, which writes it.
     pub orphan_hands_id: bool,
+    /// A canvas module's planted wrong program, which that module's checks read (#499's
+    /// `av_link_start_only`): the check's options carry it, so no module keeps a switch of its own.
+    pub module: Option<&'static str>,
 }
 
 /// A planted expander's walk over an instance's inputs (#202).
@@ -1383,6 +1386,9 @@ pub struct Packs {
     /// The versions uninstalled while something names them: kept, and taking no new instance.
     retired: BTreeSet<String>,
     pub planted: Planted,
+    /// The worker threads the host lends the check (#857's pool; #306 AC8 splits a big
+    /// document's per-item work across them); with none, the check runs on the caller's thread.
+    pub pool: Option<std::sync::Arc<dyn crate::schedule::Pool>>,
 }
 
 impl Packs {

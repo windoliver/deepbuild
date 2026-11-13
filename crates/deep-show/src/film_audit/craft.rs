@@ -172,7 +172,7 @@ fn raise<S: AsRef<str>>(
     t: i64,
     what: String,
 ) -> Value {
-    let fix = measure::check(check).map_or("", |c| c.fix.as_str());
+    let fix = measure::check(check).map(|c| c.fix).unwrap_or_default();
     let shots: Vec<&str> = shots.iter().map(AsRef::as_ref).collect();
     let mut i = json!({"check": audit::FILM_AUDIT, "craft": check, "code": code, "severity": severity,
                        "ids": shots, "t": t, "what": what, "fix": fix});
@@ -213,7 +213,7 @@ fn named(brief: &Value, every: bool) -> Vec<(String, Map<String, Value>)> {
                     .iter()
                     .copied()
                     .find(|e| e.get("check").and_then(Value::as_str) == Some(c.name.as_str()));
-                (c.name.clone(), fields(&c.name, entry))
+                (c.name.to_string(), fields(&c.name, entry))
             })
             .collect();
     }

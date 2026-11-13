@@ -185,7 +185,7 @@ fn register(r: &mut Registrar) {
     )
     .applies(is_grid)
     .run(grid);
-    r.rule("cells", fields_rule);
+    r.rule("cells", |d, i, it, _| fields_rule(d, i, it));
     r.fixture("grid", board(), None).sidecar(json!({
         "checks": [{"kind": "document.validate"}],
         "oracles": ["analytic"],

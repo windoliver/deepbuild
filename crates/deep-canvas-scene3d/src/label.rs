@@ -8,8 +8,10 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use deep_text::{face_of, raster_size, Atlas, Page, Placed, Role, Shaped, Shaper, Spec, PHASES};
+use deep_text::{raster_size, Atlas, Page, Placed, Role, Shaped, Shaper, Spec, PHASES};
 pub use deep_text::{PAGE, PAGES};
+
+use crate::memo::Memo;
 
 /// The em a world-size label's run is shaped at: its size is in meters, so its glyphs scale.
 pub const WORLD_EM_PX: f32 = 64.0;
@@ -50,7 +52,9 @@ impl PartialEq for AtlasPage {
     }
 }
 
-/// The labels' shaper, their runs (shaped once per text, role and size) and the core's atlas.
+/// The labels' shaper, their runs (shaped once per text, role and size) and the core's atlas; and
+/// the memo of what evaluation derives once per content key, which the host owns and may share
+/// between its labels.
 pub struct Labels {
     shaper: Shaper,
     atlas: Atlas,
@@ -60,6 +64,7 @@ pub struct Labels {
     /// #381 AC1's wrong program (`deep-gpu run --planted label_mask`): the base's path, each label
     /// shaped at a fixed em for a mask of its own, with nothing placed in the atlas.
     pub fixed_em: bool,
+    memo: Arc<Memo>,
 }
 
 impl Default for Labels {
@@ -70,13 +75,26 @@ impl Default for Labels {
 
 impl Labels {
     pub fn new() -> Self {
+        Self::sharing(Arc::default())
+    }
+
+    /// Labels whose evaluations keep what they derive in `memo`, which the host shares with
+    /// its other labels, so a crease set, a proxy, an IES table, a shore field or a plate's tiles
+    /// derived for one is read by every other.
+    pub fn sharing(memo: Arc<Memo>) -> Self {
         Labels {
-            shaper: Shaper::new(),
+            shaper: Shaper::sharing(memo.text.clone()),
             atlas: Atlas::new(),
             pages: Vec::new(),
             runs: BTreeMap::new(),
             fixed_em: false,
+            memo,
         }
+    }
+
+    /// The memo evaluations keep what they derive in.
+    pub fn memo(&self) -> &Arc<Memo> {
+        &self.memo
     }
 
     /// The atlas pages, as the frame's glyphs sample them.
@@ -132,7 +150,7 @@ impl Labels {
             .glyphs
             .iter()
             .map(|g| Glyph {
-                file: face_of(&g.font).map_or("", |f| f.file),
+                file: g.face().map_or("", |f| f.file),
                 size: g.size,
                 id: g.id,
                 x: g.x,

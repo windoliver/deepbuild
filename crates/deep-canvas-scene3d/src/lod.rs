@@ -493,14 +493,11 @@ fn proxy_level(lod: &Lod, level: Option<usize>) -> Option<&Level> {
 }
 
 /// The proxy of `mesh` (keyed by `hash`) that keeps `p.ratio` of its triangles within `p.error`,
-/// made once per content key by meshoptimizer and stored by hash, never per frame.
-pub fn proxy_of(mesh: &Mesh, hash: u64, p: Proxy) -> Option<Level> {
-    use std::collections::HashMap;
-    use std::sync::{Mutex, OnceLock};
-    type Key = (u64, u64, u64);
-    static MADE: OnceLock<Mutex<HashMap<Key, Option<Level>>>> = OnceLock::new();
+/// made once per content key by meshoptimizer and stored by hash in `memo`, the host's, never
+/// per frame.
+pub fn proxy_of(mesh: &Mesh, hash: u64, p: Proxy, memo: &crate::memo::Memo) -> Option<Level> {
     let key = (hash, p.ratio.to_bits(), p.error.unwrap_or(-1.0).to_bits());
-    let made = MADE.get_or_init(Default::default);
+    let made = &memo.proxies;
     if let Some(l) = made.lock().ok()?.get(&key) {
         return l.clone();
     }

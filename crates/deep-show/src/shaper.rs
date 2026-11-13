@@ -12,6 +12,7 @@ use std::sync::{Arc, LazyLock, Mutex};
 use std::thread;
 
 use deep_text::shape::{Shaper, Span, Spec};
+use deep_text::RunCache;
 
 /// A text handed to the worker: ready once its run is in the shaped-run cache.
 #[derive(Clone, Debug)]
@@ -32,6 +33,8 @@ struct Job {
     spans: Vec<Span>,
     spec: Spec<'static>,
     done: Arc<AtomicBool>,
+    /// The shaped-run cache the run lands in: its host's.
+    runs: Arc<RunCache>,
 }
 
 static WORKER: LazyLock<Mutex<Sender<Job>>> = LazyLock::new(|| {
@@ -39,9 +42,8 @@ static WORKER: LazyLock<Mutex<Sender<Job>>> = LazyLock::new(|| {
     thread::Builder::new()
         .name("deep-text shaper".into())
         .spawn(move || {
-            let mut shaper = Shaper::new();
             for job in jobs {
-                shaper.shape(&Spec {
+                Shaper::sharing(job.runs).shape(&Spec {
                     text: &job.text,
                     fallback: &job.fallback,
                     lang: job.lang.as_deref(),
@@ -55,8 +57,8 @@ static WORKER: LazyLock<Mutex<Sender<Job>>> = LazyLock::new(|| {
     Mutex::new(send)
 });
 
-/// Shapes `spec` on the worker; its run lands in the shaped-run cache.
-pub fn shape_later(spec: &Spec<'_>) -> Pending {
+/// Shapes `spec` on the worker; its run lands in `runs`, the host's shaped-run cache.
+pub fn shape_later(spec: &Spec<'_>, runs: &Arc<RunCache>) -> Pending {
     let done = Arc::new(AtomicBool::new(false));
     // Every family is a bundled face's, so the worker holds each by the face's own name.
     let bundled = |name: &str| {
@@ -87,6 +89,7 @@ pub fn shape_later(spec: &Spec<'_>) -> Pending {
             spans: &[],
         },
         done: done.clone(),
+        runs: runs.clone(),
     };
     let sent = WORKER.lock().unwrap_or_else(|e| e.into_inner()).send(job);
     // A worker that is gone leaves nothing pending: the text shapes where it is drawn.

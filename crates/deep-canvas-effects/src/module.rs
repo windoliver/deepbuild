@@ -686,11 +686,13 @@ fn register(r: &mut Registrar) {
     for (name, kind) in OPERATOR_KINDS {
         r.kind(operator_entry(name), &[], "")
             .described("A GPU operator as data: typed inputs, steps from the closed list, typed outputs, checked, costed and classed before it runs.");
-        r.rule(&kind[..kind.len() - 2], operator_rule);
+        r.rule(&kind[..kind.len() - 2], |d, i, it, _| {
+            operator_rule(d, i, it)
+        });
     }
-    r.rule("group", group_rule);
+    r.rule("group", |d, i, it, _| group_rule(d, i, it));
     // #449: a particles@1 item's count against its budget class's cap, wherever the check runs.
-    r.rule("particles", particles_rule);
+    r.rule("particles", |d, i, it, _| particles_rule(d, i, it));
     for (code, meaning) in [
         ("not_exact", "An operator declared exact computes as less, or a check that holds on any machine reads an operator that isn't exact."),
         ("operator_budget_class", "The document's budget class doesn't run this operator's kind."),

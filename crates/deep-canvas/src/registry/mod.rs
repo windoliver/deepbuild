@@ -427,8 +427,8 @@ pub struct Raised {
 }
 
 /// A canvas module's check over one item of its kinds: `(document, item ID, item as the check
-/// lowered it)`.
-pub type Rule = fn(&Value, &str, &Value) -> Vec<Raised>;
+/// lowered it, the module's planted wrong program the check's options name, if any)`.
+pub type Rule = fn(&Value, &str, &Value, Option<&str>) -> Vec<Raised>;
 
 /// One item's CPU time per frame, in ms, for the budget estimate (`document.budget`).
 pub type Cost = fn(&Value) -> f64;

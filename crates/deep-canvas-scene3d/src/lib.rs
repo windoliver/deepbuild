@@ -28,6 +28,7 @@ pub mod light;
 pub mod lod;
 pub mod look;
 pub mod measures;
+pub mod memo;
 pub mod mirror;
 pub mod modifiers;
 pub mod module;

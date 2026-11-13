@@ -69,8 +69,9 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
     let args = Arc::new(budget::parse(call)?);
     let planted = app.planted;
     let a = Arc::clone(&args);
+    let memo = app.memo.clone();
     let (doc, judged) = app.worker.call(move |_| {
-        let admitted = budget::admitted(&a, &mut Labels::new())?;
+        let admitted = budget::admitted(&a, &mut Labels::sharing(memo))?;
         let environment = a.environment.clone().unwrap_or_else(budget::this_machine);
         let mut doc = admitted.doc;
         doc["size"] = json!(a.size);

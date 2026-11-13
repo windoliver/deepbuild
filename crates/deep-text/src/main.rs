@@ -13,7 +13,7 @@ use std::io::{self, BufRead, Write};
 
 use serde_json::{json, Map, Value};
 
-use deep_text::cache::{self, Planted};
+use deep_text::cache::{Planted, RunCache};
 use deep_text::{unicode, Align, Dir, Role, Shaper, Spec, FACES};
 
 fn bad_input() -> Value {
@@ -151,13 +151,15 @@ fn shaped_reply(shaper: &mut Shaper, input: &Map<String, Value>) -> Value {
         Ok(read) => read,
         Err(refusal) => return refusal,
     };
-    cache::take_log();
+    let cache = shaper.cache().clone();
+    cache.take_log();
     let shaped = shaper.shape(&spec);
-    let log: Vec<Value> = cache::take_log()
+    let log: Vec<Value> = cache
+        .take_log()
         .iter()
         .map(|s| json!({"text": s.key.text(), "glyphs": s.glyphs}))
         .collect();
-    let (entries, bytes, bound) = cache::stats();
+    let (entries, bytes, bound) = cache.stats();
     json!({
         "ok": true,
         "glyphs": shaped.glyphs.len(),
@@ -268,12 +270,14 @@ fn main() {
     let command = args.get(1).cloned().unwrap_or_default();
     let stdout = io::stdout();
     let mut out = stdout.lock();
+    // The process's shaped-run cache, which its one shaper keeps its runs in.
+    let cache = std::sync::Arc::new(RunCache::default());
     match args.get(2..).unwrap_or_default() {
         [] => {}
         [flag, name] if flag == "--planted" => match name.as_str() {
-            "no_cache" => cache::plant(Planted::NoCache),
-            "reshaping_fit" => cache::plant(Planted::ReshapingFit),
-            "evicts_oldest" => cache::plant(Planted::EvictsOldest),
+            "no_cache" => cache.plant(Planted::NoCache),
+            "reshaping_fit" => cache.plant(Planted::ReshapingFit),
+            "evicts_oldest" => cache.plant(Planted::EvictsOldest),
             _ => {
                 writeln!(out, "{}", bad_input()).expect("stdout");
                 std::process::exit(2);
@@ -284,8 +288,8 @@ fn main() {
             std::process::exit(2);
         }
     }
-    cache::record();
-    let mut shaper = Shaper::new();
+    cache.record();
+    let mut shaper = Shaper::sharing(cache);
     let stdin = io::stdin();
     for line in stdin.lock().lines() {
         let Ok(line) = line else { break };

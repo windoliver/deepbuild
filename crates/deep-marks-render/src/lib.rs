@@ -580,7 +580,10 @@ fn check(
         let min = distance_0_03.then_some(0.03);
         // #467 AC6's wrong check compares a band's offsets without the repeat's modulo.
         let unwrapped = twin_parallax;
-        let checked = deep_canvas_marks::check::check(&drawn, look, min);
+        // Its texts shape through this thread's shaper, whose cache the line's runs are counted in.
+        let checked = deep_text_gpui::with_shaper(|shaper| {
+            deep_canvas_marks::check::check(&drawn, look, min, shaper)
+        });
         let checked = checked
             .into_iter()
             .filter(|i| !(unwrapped && i.code == "parallax_loop_jump"));
@@ -1078,8 +1081,9 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
         };
         let mut request = request;
         // #496: the runs this line shapes, its check included, counted from here.
-        deep_text::cache::record();
-        let _ = deep_text::cache::take_log();
+        let runs = deep_text_gpui::with_shaper(|shaper| shaper.cache().clone());
+        runs.record();
+        let _ = runs.take_log();
         raster::preshape(&request);
         let (checked, vectors) = check(
             &request.doc,
@@ -1091,7 +1095,7 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
         request.vectors = vectors;
         let mut answer = refused_by_check(&checked).unwrap_or_else(|| raster::answer(request));
         if answer.get("ok") == Some(&Value::Bool(true)) {
-            answer["shaped"] = json!(deep_text::cache::take_log().len());
+            answer["shaped"] = json!(runs.take_log().len());
         }
         return Some(Answer::Now(answer));
     }

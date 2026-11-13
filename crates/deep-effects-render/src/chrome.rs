@@ -171,9 +171,12 @@ impl Operator {
     }
 }
 
+/// The chrome-fx@1 manifest this build ships, which the pack's reader takes as its input.
+const PACK: &str = include_str!("../../../packs/chrome-fx-1.0.0/pack.json");
+
 /// A chrome-fx@1 operator from the shipped pack.
 fn pack_operator(name: &str) -> Result<chrome_fx::Operator, String> {
-    let pack: Value = serde_json::from_str(chrome_fx::PACK).map_err(|e| e.to_string())?;
+    let pack: Value = serde_json::from_str(PACK).map_err(|e| e.to_string())?;
     chrome_fx::read_entry(name, &pack["operators"][name], &chrome_fx::functions(&pack))
         .map_err(|r| r.to_string())
 }

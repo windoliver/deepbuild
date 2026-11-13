@@ -96,7 +96,7 @@ impl Hub<'_> {
         let s = doc
             .get("script")
             .filter(|s| s.get("lines").is_some_and(Value::is_object))?;
-        let late = deep_canvas_media::planted("words_bake_200ms_late");
+        let late = self.scenario.module_planted.as_deref() == Some("words_bake_200ms_late");
         let key = hex(Sha256::digest(format!(
             "{s}\n{}\n{late}",
             doc.get("assets").unwrap_or(&Value::Null)

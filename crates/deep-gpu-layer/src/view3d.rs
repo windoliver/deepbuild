@@ -1048,7 +1048,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
         p.pairs_newest = app.planted == Some(Planted::PairsNewestSlot);
         p.ui = Some(ui.clone());
     }
-    let mut labels = Labels::new();
+    let mut labels = Labels::sharing(app.memo.clone());
     labels.fixed_em = app.planted == Some(Planted::LabelMask);
     let mut frames = Vec::new();
     // Whether any frame drew an object's outline.
@@ -1272,11 +1272,12 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 app.planted == Some(Planted::EdgesUnwelded),
                 app.planted == Some(Planted::EdgesSkipDepth),
                 edge_plant,
+                &app.memo,
             );
             // #268's wrong field: the shore measured from each item's centre.
             if app.planted == Some(Planted::ShoreFieldFromCentre) {
                 scene
-                    .plant_shore_from_centre(&composed)
+                    .plant_shore_from_centre(&composed, &app.memo)
                     .map_err(|r| refused(r.code, r.path))?;
             }
             // #2017's planted plate: each tile shades from its level's own vertex normals.
@@ -1471,7 +1472,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 sc.texels.clone_from(&scene.texels);
                 sc.ground = scene.ground;
                 sc.set_cutaway(scene.cutaway.clone());
-                sc.plant_edges(edges.0, edges.1, edges.2);
+                sc.plant_edges(edges.0, edges.1, edges.2, labels.memo());
                 if let Some(status) = status.as_ref().filter(|_| bound) {
                     status::strokes(&mut sc, status, &bindings, &args.states)?;
                 }

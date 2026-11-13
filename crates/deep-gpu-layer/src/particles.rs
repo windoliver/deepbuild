@@ -121,8 +121,8 @@ fn answer(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
         return Ok(json!({"outcome": "refused", "issues": issues_json(&early)}));
     }
     let look = Look3::read(&closed::neutral_look(&doc)).map_err(|e| bad(&format!("look: {e}")))?;
-    let scene =
-        evaluate(&doc, 0, &look, &mut Labels::new()).map_err(|r| refused(r.code, r.path))?;
+    let scene = evaluate(&doc, 0, &look, &mut Labels::sharing(app.memo.clone()))
+        .map_err(|r| refused(r.code, r.path))?;
     let held = match checked(&doc, &scene, plants, every) {
         Ok(h) => h,
         Err(issues) => return Ok(json!({"outcome": "refused", "issues": issues_json(&issues)})),
@@ -158,7 +158,7 @@ fn answer(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 Some(sf) if h.0.spec.follow => times
                     .iter()
                     .map(|t| {
-                        evaluate(&doc, *t, &look, &mut Labels::new())
+                        evaluate(&doc, *t, &look, &mut Labels::sharing(app.memo.clone()))
                             .map(|sc| Some(sf.now(&sc)))
                             .map_err(|r| refused(r.code, r.path))
                     })

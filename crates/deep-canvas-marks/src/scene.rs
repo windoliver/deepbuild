@@ -19,7 +19,7 @@
 //! item's box, then with them.
 
 use std::borrow::Cow;
-use std::cell::{Cell, RefCell};
+use std::cell::Cell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, OnceLock};
 
@@ -4128,17 +4128,14 @@ fn cover(built: &mut [(&str, Placed)], items: &Map<String, Value>) {
     }
 }
 
-thread_local! {
-    /// The shaper auto layout measures text leaves with (#375).
-    static LAYOUT_SHAPER: RefCell<deep_text::Shaper> = RefCell::new(deep_text::Shaper::new());
-}
-
 /// `items` with their frames' auto layout applied (#375): each frame that lays out, and each item
 /// one lays out, moved to its solved box, and a frame or a boxed mark sized to it. A text keeps its
-/// own box, which the layout measured it by.
+/// own box, which the layout measured it by: with `shaper`, the host's, else a shaper of its own
+/// made when a frame lays out.
 pub(crate) fn laid_out<'a>(
     doc: &Map<String, Value>,
     items: &'a Map<String, Value>,
+    shaper: Option<&mut deep_text::Shaper>,
 ) -> Result<Cow<'a, Map<String, Value>>, Refused> {
     let lays_out = |id: &str| {
         items.get(id).is_some_and(|i| {
@@ -4152,12 +4149,14 @@ pub(crate) fn laid_out<'a>(
         return Ok(Cow::Borrowed(items));
     }
     let input = json!({"items": items, "bound_values": doc.get("bound_values")});
-    let boxes = LAYOUT_SHAPER
-        .with(|s| crate::layout::solve(&input, &mut s.borrow_mut()))
-        .map_err(|r| Refused {
-            code: r.code,
-            path: format!("items/{}", r.item),
-        })?;
+    let boxes = match shaper {
+        Some(shaper) => crate::layout::solve(&input, shaper),
+        None => crate::layout::solve(&input, &mut deep_text::Shaper::new()),
+    }
+    .map_err(|r| Refused {
+        code: r.code,
+        path: format!("items/{}", r.item),
+    })?;
     let mut out = items.clone();
     let mut moved: BTreeMap<String, [f64; 2]> = BTreeMap::new();
     for (id, [x, y, w, h]) in boxes {
@@ -4242,7 +4241,7 @@ pub fn item_boxes(
 ) -> Result<BTreeMap<String, [f64; 4]>, Refused> {
     let mut items = items.clone();
     as_written(doc, &mut items);
-    let items = laid_out(doc, &items)?;
+    let items = laid_out(doc, &items, None)?;
     let mut out = BTreeMap::new();
     for (id, item) in items.iter() {
         let kind = item.get("kind").and_then(Value::as_str).unwrap_or_default();
@@ -4262,7 +4261,7 @@ pub fn laid_out_boxes(
     doc: &Map<String, Value>,
     items: &Map<String, Value>,
 ) -> Result<BTreeMap<String, [f64; 4]>, Refused> {
-    let laid = laid_out(doc, items)?;
+    let laid = laid_out(doc, items, None)?;
     let mut out = BTreeMap::new();
     if let Cow::Owned(laid) = laid {
         for (id, item) in &laid {
@@ -5750,7 +5749,7 @@ fn build(
     planted: Planted,
     boxes: Option<&BTreeMap<String, [f64; 4]>>,
 ) -> Result<(Frame, bool, Places), Refused> {
-    let items = laid_out(doc, items)?;
+    let items = laid_out(doc, items, None)?;
     let items = &*anchored(items)?;
     let size = pair(doc.get("size")).ok_or(Refused {
         code: "bad_doc",

@@ -4,7 +4,7 @@
 //! so the light loop skips a light with one AND and a shadow pass culls by one test.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use deep_canvas::budget::Class;
 use serde_json::{Map, Value};
@@ -13,6 +13,7 @@ use crate::ies::{self, Distribution};
 use crate::light::{
     Contact, LampTable, Light, LightKind, Shadowing, Soft, MOST_POINTS, MOST_SPOTS,
 };
+use crate::memo::Memo;
 use crate::scene::{num, Assets, Layer3, Refused};
 
 const DEFAULT_LUMENS: f64 = 800.0;
@@ -55,6 +56,20 @@ pub fn read_light(
     tables: &mut Vec<Arc<Distribution>>,
     assets: Option<Assets<'_>>,
 ) -> Result<(), Refused> {
+    let memo = Memo::default();
+    read_light_in(light, params, path, doc, tables, assets, &memo)
+}
+
+/// [`read_light`], a distribution's table parsed once per hash in `memo`, the host's.
+pub(crate) fn read_light_in(
+    light: Option<&mut Light>,
+    params: &Value,
+    path: &str,
+    doc: &Map<String, Value>,
+    tables: &mut Vec<Arc<Distribution>>,
+    assets: Option<Assets<'_>>,
+    memo: &Memo,
+) -> Result<(), Refused> {
     let Some(l) = light else { return Ok(()) };
     let field = |k: &str| format!("{path}/{k}");
     l.receivers = names(params.get("receivers"), &field("receivers"))?;
@@ -83,7 +98,8 @@ pub fn read_light(
             let Some(bytes) = assets.and_then(|a| a(sha)) else {
                 return refused("asset_missing", field("distribution"));
             };
-            let table = parsed(sha, &bytes).or(refused("out_of_range", field("distribution")))?;
+            let table =
+                parsed(sha, &bytes, memo).or(refused("out_of_range", field("distribution")))?;
             let cap = doc
                 .get("budget")
                 .and_then(|b| b.get("distributions"))
@@ -133,10 +149,9 @@ pub fn read_light(
     Ok(())
 }
 
-/// `bytes` parsed once per hash, however many frames read them.
-fn parsed(sha: &str, bytes: &[u8]) -> Result<Arc<Distribution>, &'static str> {
-    static SEEN: Mutex<BTreeMap<String, Arc<Distribution>>> = Mutex::new(BTreeMap::new());
-    let mut seen = SEEN.lock().unwrap_or_else(|e| e.into_inner());
+/// `bytes` parsed once per hash in `memo`, however many frames read them.
+fn parsed(sha: &str, bytes: &[u8], memo: &Memo) -> Result<Arc<Distribution>, &'static str> {
+    let mut seen = memo.ies.lock().unwrap_or_else(|e| e.into_inner());
     if let Some(t) = seen.get(sha) {
         return Ok(t.clone());
     }

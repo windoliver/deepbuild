@@ -710,6 +710,9 @@ pub struct App {
     pub vello: marks2d::Gate,
     /// The run's decode worker and the maps it made (#423).
     pub made: textures::Made,
+    /// What scene evaluation derives once per content key (#1640's crease sets, #425's proxies,
+    /// #268's shore fields, #2017's tiles), kept for the run and shared by its views.
+    pub memo: Arc<deep_canvas_scene3d::memo::Memo>,
 }
 
 pub fn refused(code: &str, reason: impl Into<String>) -> Value {
@@ -1145,6 +1148,7 @@ fn main() {
         validation,
         vello,
         made: Default::default(),
+        memo: Arc::default(),
     };
     serve(|out, call| app.call(out, call));
 }

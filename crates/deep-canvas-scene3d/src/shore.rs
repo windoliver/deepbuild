@@ -6,7 +6,7 @@
 //! renderer reads it for a foam band, calmer waves near the items and shade under them.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
@@ -606,13 +606,15 @@ fn key_of(grid: &Grid, level: f64, reach: f64, solids: &[&Solid], planted: Plant
     h.finalize().iter().map(|b| format!("{b:02x}")).collect()
 }
 
-/// Fields baked, by key, so a frame never bakes again what an earlier one did.
-static BAKED: Mutex<Vec<Arc<Field>>> = Mutex::new(Vec::new());
-const KEPT: usize = 8;
+/// The most fields a memo keeps baked, by key, so a frame never bakes again what an earlier one
+/// did.
+pub(crate) const KEPT: usize = 8;
 
 /// The field for `shore` over the plates `plates` ([min x, min z, max x, max z] at rest) at
 /// `level`, from the solids of `layers` the shore's collection holds: baked, or the one already
-/// baked under its key. A field past [`MAX_SIDE`] cells a side is refused, naming the count.
+/// baked under its key in `memo`, the host's. A field past [`MAX_SIDE`] cells a side is refused,
+/// naming the count.
+#[allow(clippy::too_many_arguments)]
 pub fn field(
     doc: &Map<String, Value>,
     material: &str,
@@ -621,6 +623,7 @@ pub fn field(
     plates: &[[f64; 4]],
     level: f64,
     planted: Planted,
+    memo: &crate::memo::Memo,
 ) -> Result<Arc<Field>, Refused> {
     let set = members(doc, material, &shore.collection)?;
     let mut lo = [f64::INFINITY; 2];
@@ -655,13 +658,13 @@ pub fn field(
     let solids = shore_solids(doc, layers, &set);
     let key = key_of(&grid, level, reach, &solids, planted);
     {
-        let baked = BAKED.lock().unwrap_or_else(|e| e.into_inner());
+        let baked = memo.shore.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(f) = baked.iter().find(|f| f.key == key) {
             return Ok(f.clone());
         }
     }
     let f = Arc::new(bake(&grid, level, reach, &solids, key, planted));
-    let mut baked = BAKED.lock().unwrap_or_else(|e| e.into_inner());
+    let mut baked = memo.shore.lock().unwrap_or_else(|e| e.into_inner());
     if baked.len() >= KEPT {
         baked.remove(0);
     }

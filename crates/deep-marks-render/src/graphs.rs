@@ -5,7 +5,6 @@
 //! names no item, the named item moved to its node's place, a titled frame per group and a path per
 //! route. Labels place last, against every mark the frame draws, by the graph module's placement.
 
-use std::cell::RefCell;
 use std::collections::BTreeMap;
 
 use deep_canvas_graph::labels::{self, Anchor, Avoid, Fold, Label, Placement, Spot, NODE_ANCHORS};
@@ -20,10 +19,6 @@ pub(crate) type Graphs = BTreeMap<String, Drawn>;
 
 /// What a route keeps clear of a node, a node label or a title by default (Route: clearance).
 const CLEARANCE: f64 = 8.0;
-
-thread_local! {
-    static SHAPER: RefCell<deep_text::Shaper> = RefCell::new(deep_text::Shaper::new());
-}
 
 fn refused(code: &str, path: &str) -> Value {
     json!({"ok": false, "code": code, "path": path})
@@ -135,9 +130,10 @@ fn sizes(
     vectors: &crate::Vectors,
 ) -> BTreeMap<String, [f64; 2]> {
     let input = json!({"items": items, "bound_values": doc.get("bound_values")});
-    let solved = SHAPER
-        .with(|s| deep_canvas_marks::layout::solve(&input, &mut s.borrow_mut()))
-        .unwrap_or_default();
+    // Measured by this thread's shaper, whose cache the line's runs are counted in (#496).
+    let solved =
+        deep_text_gpui::with_shaper(|shaper| deep_canvas_marks::layout::solve(&input, shaper))
+            .unwrap_or_default();
     let mut out = BTreeMap::new();
     for g in items.values().filter(|i| kind(i) == "graph@1") {
         let nodes = g["params"]["graph"]["nodes"]

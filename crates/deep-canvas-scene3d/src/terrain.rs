@@ -252,12 +252,15 @@ pub struct Tile {
 }
 
 /// #2017: a plate's tiles from its full-detail mesh `full` (keyed by `hash`), made once per
-/// content key; none where the plate draws at full detail only: `lod_levels` under 2, or a mesh
+/// content key and kept in `memo`, the host's; none where the plate draws at full detail only: `lod_levels` under 2, or a mesh
 /// that is no longer one vertex per sample (a stack or flat shading changed it).
-pub fn tiles(params: &Value, full: &Mesh, hash: u64) -> Option<std::sync::Arc<Vec<Tile>>> {
-    use std::sync::{Arc, Mutex, OnceLock};
-    type Made = Vec<((u64, usize, usize), Arc<Vec<Tile>>)>;
-    static MADE: OnceLock<Mutex<Made>> = OnceLock::new();
+pub fn tiles(
+    params: &Value,
+    full: &Mesh,
+    hash: u64,
+    memo: &crate::memo::Memo,
+) -> Option<std::sync::Arc<Vec<Tile>>> {
+    use std::sync::Arc;
     let levels = lod_levels(params);
     let t = of_params(params)?;
     let (_, [cols, rows]) = grid(t, false).ok()?;
@@ -271,7 +274,7 @@ pub fn tiles(params: &Value, full: &Mesh, hash: u64) -> Option<std::sync::Arc<Ve
         tc *= 2;
     }
     let key = (hash, tc, levels);
-    let made = MADE.get_or_init(Default::default);
+    let made = &memo.tiles;
     if let Some((_, tiles)) = made.lock().ok()?.iter().find(|(k, _)| *k == key) {
         return Some(tiles.clone());
     }

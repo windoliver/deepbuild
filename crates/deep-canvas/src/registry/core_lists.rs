@@ -1341,7 +1341,7 @@ pub fn entries(steps_elsewhere: bool) -> Vec<EntryDef> {
     for c in crate::craft::checks() {
         out.push(entry(
             "check.kind.doc@1",
-            &c.name,
+            c.name.as_str(),
             json!({"codes": [], "reads": ["document"], "pack": crate::craft::PACK,
                    "description": c.description, "threshold": c.threshold, "fix": c.fix}),
         ));

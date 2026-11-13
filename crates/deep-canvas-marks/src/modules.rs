@@ -21,7 +21,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use deep_canvas::registry::{Dependency, Manifest, Module, Range, Registrar, Semver, TableValue};
 use deep_canvas::schedule::core_ops::{Datum, Edits, Fields, StatusBase, Transform};
 use deep_canvas::schedule::{canonical, Canonical, Hasher, Key, OpError, Outside, Val, View};
-use deep_text::{Role, Shaped, Shaper};
+use deep_text::{Role, RunCache, Shaped, Shaper};
 use serde_json::{json, Map, Value};
 
 use crate::look::Status;
@@ -246,7 +246,8 @@ impl Canonical for Run {
 
 /// The text module's shapers: a fixed count, never one taken from the machine, so texts shaping
 /// on several of the scheduler's threads don't wait on one (#857). Each holds only the bundled
-/// fonts, so any of them shapes a spec to the same glyphs.
+/// fonts, so any of them shapes a spec to the same glyphs, and all keep their runs in one
+/// shaped-run cache (#856).
 struct Shapers(Vec<Mutex<Shaper>>);
 
 /// How many shapers the text module holds: the most threads a live view's class sets.
@@ -262,9 +263,19 @@ impl Shapers {
     }
 }
 
+/// The text module's shapers over a run cache of their own: the table a scheduler builds when
+/// its host lent it none.
 fn fonts() -> TableValue {
+    fonts_sharing(Arc::default())
+}
+
+/// The text module's `text.fonts` table keeping its runs in `cache`, its host's, which the host
+/// lends its schedulers (`Scheduler::lend_table`) so they and its other shapers share one cache.
+pub fn fonts_sharing(cache: Arc<RunCache>) -> TableValue {
     Arc::new(Shapers(
-        (0..SHAPERS).map(|_| Mutex::new(Shaper::new())).collect(),
+        (0..SHAPERS)
+            .map(|_| Mutex::new(Shaper::sharing(cache.clone())))
+            .collect(),
     ))
 }
 
@@ -1704,9 +1715,14 @@ fn relations_op(v: &mut View<'_>) -> Result<(), OpError> {
     // placed beside a frame's child reads the child's laid-out box (#1162).
     let mut items = placed_items(v)?;
     scene::as_written(object_or_empty(Some(doc)), &mut items);
-    let mut items = scene::laid_out(object_or_empty(Some(doc)), &items)
-        .map_err(refused)?
-        .into_owned();
+    let fonts = v.table::<Shapers>("text.fonts")?;
+    let mut items = scene::laid_out(
+        object_or_empty(Some(doc)),
+        &items,
+        fonts.lock().as_deref_mut(),
+    )
+    .map_err(refused)?
+    .into_owned();
     // Each item's own `at.pos`, before its parents: what a relation adds after it.
     let offsets: BTreeMap<String, [f64; 2]> = v
         .every("core.transform")?
@@ -1727,7 +1743,6 @@ fn relations_op(v: &mut View<'_>) -> Result<(), OpError> {
         .filter(|(_, s)| s.as_typed::<Option<Shown>>().is_some_and(|s| s.is_some()))
         .map(|(id, _)| id.to_string())
         .collect();
-    let fonts = v.table::<Shapers>("text.fonts")?;
     let before: BTreeMap<String, Value> = items
         .iter()
         .map(|(id, i)| (id.clone(), i["at"]["pos"].clone()))

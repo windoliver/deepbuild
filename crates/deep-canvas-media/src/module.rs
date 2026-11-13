@@ -169,9 +169,13 @@ fn strips_of<'d>(doc: &'d Value, asset: &str) -> Vec<(String, &'d Value)> {
     out
 }
 
-/// The fields a picture and its sound must agree on, as the check compares them.
-fn linked_fields() -> &'static [&'static str] {
-    if crate::planted("av_link_compares_start_only") || crate::planted("av_link_start_only") {
+/// The fields a picture and its sound must agree on, as the check compares them; `planted`, the
+/// module's planted wrong program, compares `start` alone.
+fn linked_fields(planted: Option<&str>) -> &'static [&'static str] {
+    if matches!(
+        planted,
+        Some("av_link_compares_start_only" | "av_link_start_only")
+    ) {
         &["start"]
     } else {
         &["start", "in", "rate"]
@@ -179,7 +183,7 @@ fn linked_fields() -> &'static [&'static str] {
 }
 
 /// av_unlinked from a strip item's side: against each picture of its asset.
-fn av_link_strip(doc: &Value, id: &str, item: &Value) -> Vec<Raised> {
+fn av_link_strip(doc: &Value, id: &str, item: &Value, planted: Option<&str>) -> Vec<Raised> {
     let Some(asset) = crate::doc::strip_asset(&item["params"]) else {
         return Vec::new();
     };
@@ -197,7 +201,7 @@ fn av_link_strip(doc: &Value, id: &str, item: &Value) -> Vec<Raised> {
         if a != asset {
             continue;
         }
-        for f in linked_fields() {
+        for f in linked_fields(planted) {
             if crate::doc::link_value(doc, frames, f)
                 != crate::doc::link_value(doc, &item["params"], f)
             {
@@ -253,7 +257,7 @@ fn restore_without_tail(cp: &Value) -> Value {
 
 /// `av_unlinked`: a picture of a video asset and a sound strip of the same asset agree on start,
 /// in and rate unless the strip declares an `offset`.
-fn av_link(doc: &Value, id: &str, item: &Value) -> Vec<Raised> {
+fn av_link(doc: &Value, id: &str, item: &Value, planted: Option<&str>) -> Vec<Raised> {
     let Some(frames) = item.pointer("/params/frames") else {
         return Vec::new();
     };
@@ -265,7 +269,7 @@ fn av_link(doc: &Value, id: &str, item: &Value) -> Vec<Raised> {
         if strip.get("offset").is_some() {
             continue;
         }
-        for f in linked_fields() {
+        for f in linked_fields(planted) {
             if crate::doc::link_value(doc, frames, f) != crate::doc::link_value(doc, strip, f) {
                 out.push(Raised {
                     code: "av_unlinked",

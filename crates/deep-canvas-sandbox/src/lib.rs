@@ -9,6 +9,7 @@ pub mod check;
 pub mod kit;
 pub mod layouts;
 pub mod module;
+mod operators;
 pub mod rewrite;
 pub mod trap;
 

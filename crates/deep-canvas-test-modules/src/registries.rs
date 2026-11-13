@@ -256,7 +256,7 @@ fn mode_shapes(
     r.operator("code", "items", &["self"], &["test.mode.code"])
         .applies(|_, _, item| item["kind"] == "test.swatch@1")
         .run(code);
-    r.rule("test.swatch", mode_rule);
+    r.rule("test.swatch", |d, i, it, _| mode_rule(d, i, it));
     r.code(
         "test_mode_unknown",
         "A swatch whose mode is not one of the closed list a | b.",

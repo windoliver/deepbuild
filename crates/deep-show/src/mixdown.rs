@@ -131,8 +131,9 @@ pub fn float_wav(samples: &[f32], channels: u16, rate: i64) -> Vec<u8> {
     b
 }
 
-/// The mix's planted wrong programs, from the scenario's; `live` plants the live mixer's too.
-pub fn planted_of(p: Option<Planted>, live: bool) -> MixPlanted {
+/// The mix's planted wrong programs, from the scenario's `planted` and its module's `module`;
+/// `live` plants the live mixer's too.
+pub fn planted_of(p: Option<Planted>, module: Option<&str>, live: bool) -> MixPlanted {
     MixPlanted {
         restores_without_tail: p == Some(Planted::ReverbRestoresWithoutTail),
         ring_drops_oldest: p == Some(Planted::RingDropsOldest),
@@ -140,13 +141,13 @@ pub fn planted_of(p: Option<Planted>, live: bool) -> MixPlanted {
         inverse_only: p == Some(Planted::EmitterAlwaysInverse),
         cone_reversed: p == Some(Planted::ConeSignReversed),
         // #1818's live in the media module's list, planted for the whole run.
-        limiter_sample_peaks: deep_canvas_media::planted("limiter_holds_sample_peaks"),
-        hard_knee: deep_canvas_media::planted("compressor_hard_knee"),
-        no_latency_compensation: deep_canvas_media::planted("mix_without_latency_compensation")
-            || deep_canvas_media::planted("limiter_lookahead_uncompensated"),
-        pitch_ignores_semitones: deep_canvas_media::planted("pitch_ignores_semitones"),
-        sends_tap_post: deep_canvas_media::planted("send_always_post"),
-        delay_empties_at_seek: deep_canvas_media::planted("delay_empties_line_at_seek"),
+        limiter_sample_peaks: module == Some("limiter_holds_sample_peaks"),
+        hard_knee: module == Some("compressor_hard_knee"),
+        no_latency_compensation: module == Some("mix_without_latency_compensation")
+            || module == Some("limiter_lookahead_uncompensated"),
+        pitch_ignores_semitones: module == Some("pitch_ignores_semitones"),
+        sends_tap_post: module == Some("send_always_post"),
+        delay_empties_at_seek: module == Some("delay_empties_line_at_seek"),
     }
 }
 
@@ -576,7 +577,14 @@ impl Hub<'_> {
                     Err(e) => return e,
                 };
                 let rate = mix.rate;
-                let mut player = Player::new(mix, planted_of(self.scenario.planted, false));
+                let mut player = Player::new(
+                    mix,
+                    planted_of(
+                        self.scenario.planted,
+                        self.scenario.module_planted.as_deref(),
+                        false,
+                    ),
+                );
                 let mut at = 0i64;
                 let mut out = Vec::new();
                 for (from, to, write) in segments {
@@ -657,7 +665,14 @@ impl Hub<'_> {
             }
             MixCall::Soak { media, seconds } => match self.mix_of(media) {
                 Ok(m) => crate::device::soak(
-                    Player::new(Arc::new(m), planted_of(self.scenario.planted, true)),
+                    Player::new(
+                        Arc::new(m),
+                        planted_of(
+                            self.scenario.planted,
+                            self.scenario.module_planted.as_deref(),
+                            true,
+                        ),
+                    ),
                     *seconds,
                 ),
                 Err(e) => e,

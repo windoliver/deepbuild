@@ -12,8 +12,8 @@ use parley::{
 };
 use skrifa::raw::TableProvider;
 
-use crate::cache::{self, Key, Planted};
-use crate::fonts::{self, Role, FACES};
+use crate::cache::{Key, Planted, RunCache};
+use crate::fonts::{Face, Role, FACES};
 use crate::unicode::is_default_ignorable;
 use crate::unicode::{grapheme_starts, LineBreaks};
 
@@ -171,6 +171,16 @@ pub struct Glyph {
     /// #1964: the slant in degrees an italic span is drawn at where its face has no italic (0:
     /// upright), leaning forward as y rises.
     pub skew: f32,
+    /// The bundled face the glyph is set in, by its index in [`FACES`]: known from the blob the
+    /// shaper registered for that face, never by comparing bytes.
+    pub face: Option<usize>,
+}
+
+impl Glyph {
+    /// The bundled face the glyph is set in.
+    pub fn face(&self) -> Option<&'static Face> {
+        FACES.get(self.face?)
+    }
 }
 
 /// #1964: an underline or a strike of a styled span: `[x, y, w, h]` in logical pixels from the
@@ -213,10 +223,12 @@ pub struct Fit {
     pub overflow: &'static str,
 }
 
-/// The shaper: a font collection of the bundled faces and parley's layout context.
+/// The shaper: a font collection of the bundled faces, parley's layout context and the
+/// shaped-run cache it keeps its runs in.
 pub struct Shaper {
     pub(crate) fonts: FontContext,
     pub(crate) layout: LayoutContext<()>,
+    cache: Arc<RunCache>,
 }
 
 impl Default for Shaper {
@@ -226,14 +238,21 @@ impl Default for Shaper {
 }
 
 impl Shaper {
-    /// A shaper over the bundled fonts and nothing else: no system fonts are loaded.
+    /// A shaper over the bundled fonts and nothing else (no system fonts are loaded), with a
+    /// shaped-run cache of its own.
     pub fn new() -> Self {
+        Self::sharing(Arc::default())
+    }
+
+    /// A shaper over the bundled fonts that keeps its runs in `cache`, its host's: every shaper
+    /// the host lends the cache to shares its runs.
+    pub fn sharing(cache: Arc<RunCache>) -> Self {
         let mut collection = Collection::new(CollectionOptions {
             shared: false,
             system_fonts: false,
         });
-        for face in FACES {
-            collection.register_fonts(fonts::blob(face), None);
+        for blob in cache.blobs() {
+            collection.register_fonts(blob.clone(), None);
         }
         Shaper {
             fonts: FontContext {
@@ -241,7 +260,13 @@ impl Shaper {
                 source_cache: SourceCache::default(),
             },
             layout: LayoutContext::new(),
+            cache,
         }
+    }
+
+    /// The shaped-run cache the shaper keeps its runs in.
+    pub fn cache(&self) -> &Arc<RunCache> {
+        &self.cache
     }
 
     /// The family names the shaper knows: the bundled ones.
@@ -353,7 +378,7 @@ impl Shaper {
         layout
     }
 
-    fn collect(layout: &Layout<()>, max_lines: Option<u16>, shown: &str) -> Shaped {
+    fn collect(&self, layout: &Layout<()>, max_lines: Option<u16>, shown: &str) -> Shaped {
         let mut shaped = Shaped {
             shown: shown.to_owned(),
             ..Shaped::default()
@@ -373,6 +398,11 @@ impl Shaper {
                     continue;
                 };
                 let font = run.run().font().clone();
+                let face = self
+                    .cache
+                    .blobs()
+                    .iter()
+                    .position(|b| b.id() == font.data.id());
                 let size = run.run().font_size();
                 let coords: Arc<[i16]> = run
                     .run()
@@ -422,6 +452,7 @@ impl Shaper {
                         grapheme: grapheme(byte),
                         coords: coords.clone(),
                         skew,
+                        face,
                     });
                 }
             }
@@ -432,34 +463,28 @@ impl Shaper {
     /// `text` shaped in the spec's style, whole (no line limit applied): from the shaped-run
     /// cache, or shaped now and kept there.
     fn run(&mut self, spec: &Spec<'_>, text: &str) -> Arc<Shaped> {
-        let key = Key::of(spec, text, false);
-        if let Some(run) = cache::get(&key) {
+        let key = Key::of(&self.cache, spec, text, false);
+        if let Some(run) = self.cache.get(&key) {
             return run;
         }
         let run = self.shape_now(spec, text, &key);
-        cache::put(key, run)
+        self.cache.put(key, run)
     }
 
     /// `text` shaped in the spec's style, past the cache, the shaping recorded.
     fn shape_now(&mut self, spec: &Spec<'_>, text: &str, key: &Key) -> Shaped {
         let layout = self.layout(spec, text);
-        let run = Self::collect(&layout, None, text);
-        cache::shaped(key, run.glyphs.len());
+        let run = self.collect(&layout, None, text);
+        self.cache.shaped(key, run.glyphs.len());
         run
-    }
-
-    /// Whether `spec`'s run is in the shaped-run cache, so shaping it now costs a lookup.
-    pub fn is_cached(spec: &Spec<'_>) -> bool {
-        cache::holds(&Key::of(spec, spec.text, true))
-            || cache::holds(&Key::of(spec, spec.text, false))
     }
 
     /// Shapes `spec.text`, once per run: a run the shaped-run cache holds is shared, not shaped
     /// again. Text that overflows its box or line limit is cut to fit with an ellipsis; a bound
     /// value or masked text never is, and is drawn whole.
     pub fn shape(&mut self, spec: &Spec<'_>) -> Arc<Shaped> {
-        let fitted = Key::of(spec, spec.text, true);
-        if let Some(run) = cache::get(&fitted) {
+        let fitted = Key::of(&self.cache, spec, spec.text, true);
+        if let Some(run) = self.cache.get(&fitted) {
             return run;
         }
         let whole = self.run(spec, spec.text);
@@ -470,7 +495,7 @@ impl Shaper {
         if !overflows || spec.bound || spec.mask {
             return whole;
         }
-        let reshaping = cache::planted() == Some(Planted::ReshapingFit);
+        let reshaping = self.cache.planted() == Some(Planted::ReshapingFit);
         // The longest prefix, by character, whose run with an ellipsis fits. Each candidate's
         // run comes through the cache, so no prefix is shaped twice; a candidate that fits its
         // line limit has no line past it, so its whole run is the one drawn.
@@ -479,7 +504,7 @@ impl Shaper {
         let mut best: Option<Arc<Shaped>> = None;
         while low < high {
             if reshaping {
-                let key = Key::of(spec, spec.text, false);
+                let key = Key::of(&self.cache, spec, spec.text, false);
                 self.shape_now(spec, spec.text, &key);
             }
             let mid = (low + high).div_ceil(2);
@@ -507,7 +532,7 @@ impl Shaper {
             None => Shaped::clone(&self.run(spec, "…")),
         };
         best.ellipsized = true;
-        cache::put(fitted, best)
+        self.cache.put(fitted, best)
     }
 
     /// #417: the graphemes of `text` that neither the spec's family nor any of its fallbacks can

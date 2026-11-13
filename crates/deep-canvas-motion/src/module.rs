@@ -843,7 +843,7 @@ fn placed_op(v: &mut View<'_>) -> Result<(), OpError> {
 /// tempo map and markers; and the `samples` a library pack lists its presets in.
 fn register_score(r: &mut Registrar) {
     // The kind is the core's (`score.music@1`), its fields this module's: the rule here checks it.
-    r.rule("score.music", crate::score::rule);
+    r.rule("score.music", |d, i, it, _| crate::score::rule(d, i, it));
     r.pack_field("samples", samples_field);
     r.check(
         "sound_lock",

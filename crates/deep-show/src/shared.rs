@@ -22,8 +22,8 @@ use std::rc::Rc;
 use std::time::Instant;
 
 use deep_canvas::document::{
-    apply_ops, canonical_in, check_packed, pack_kinds, recheck_with, rollback, store_migrations,
-    touched_in, Issue, Packs, Patched, Referrers, Writing, ID_MAPS,
+    apply_ops, canonical_in, check_packed, pack_kinds, recheck_with_module, rollback,
+    store_migrations, touched_in, Issue, Packs, Patched, Referrers, Writing, ID_MAPS,
 };
 use deep_canvas::grammar::{Path as FieldPath, Section};
 use deep_canvas::kinds::{lookup, registry, Lookup};
@@ -956,12 +956,13 @@ impl Hub<'_> {
                 shared.referrers = Some((cur, Referrers::of(&shared.doc)));
             }
             let (_, referrers) = shared.referrers.as_ref().expect("made above");
-            recheck_with(
+            recheck_with_module(
                 &shared.doc,
                 &last,
                 &changed,
                 &self.startup.sealed,
                 referrers,
+                self.packs.planted.module,
             )
         }
         .unwrap_or_else(|| {
@@ -1681,8 +1682,6 @@ impl Hub<'_> {
     /// their `at`; each writer's patches wait in its own queue, and one checker takes them in
     /// turn across writers, one at a time, so one writer's flood never delays another's patch.
     pub fn run_calls(&mut self) -> Vec<Value> {
-        // #499: the media module's own check reads its planted wrong program from here.
-        deep_canvas_media::plant(self.scenario.module_planted.as_deref());
         self.open_shared();
         let calls = &self.scenario.calls;
         let Some(clock) = self.scenario.clock else {

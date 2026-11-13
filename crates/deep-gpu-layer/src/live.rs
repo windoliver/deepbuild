@@ -999,12 +999,13 @@ pub fn call(app: &mut App, out: &str, call: &Value) -> Value {
     let plants = Plants::of(app.planted);
     let path = app.decision.path;
     let noop = app.backend == Backend::Noop;
+    let memo = app.memo.clone();
     app.worker.call(move |state| {
         let device = match state.gpu.recover() {
             Ok(d) => d,
             Err(e) => return refused("no_device", e),
         };
-        Live::new(state.gpu.clone(), device, args, plants, path, noop).run()
+        Live::new(state.gpu.clone(), device, args, plants, path, noop, memo).run()
     })
 }
 
@@ -1080,6 +1081,7 @@ impl Live {
         plants: Plants,
         path: Path,
         noop: bool,
+        memo: Arc<deep_canvas_scene3d::memo::Memo>,
     ) -> Live {
         let most = 1 + args
             .events
@@ -1102,7 +1104,7 @@ impl Live {
             kit,
             compile,
             warming,
-            labels: Labels::new(),
+            labels: Labels::sharing(memo),
             results: Cache::new(plants.cache),
             retired: Vec::new(),
             last_bound: BTreeMap::new(),
@@ -3053,12 +3055,13 @@ pub fn canonical(app: &mut App, out: &str, call: &Value) -> Value {
     };
     let (final_, linear) = (wants("final"), wants("linear"));
     let out = (final_ || linear).then(|| out.to_string());
+    let memo = app.memo.clone();
     app.worker.call(move |state| {
         let device = match state.gpu.recover() {
             Ok(d) => d,
             Err(e) => return refused("no_device", e),
         };
-        let mut labels = Labels::new();
+        let mut labels = Labels::sharing(memo);
         let admitted = read_payload(&doc).and_then(|payload| {
             admit(
                 payload,

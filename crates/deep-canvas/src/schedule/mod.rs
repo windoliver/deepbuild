@@ -592,6 +592,18 @@ impl<'s> Scheduler<'s> {
         Some((value, key))
     }
 
+    /// Lends the scheduler the value of the table `name` builds at check, which its host made, in
+    /// place of building it the first time an operator reads it: a host shares one value (the
+    /// text module's shapers and their shaped-run cache) between its schedulers. A name the
+    /// sealed set builds no table under is left alone.
+    pub fn lend_table(&mut self, name: &str, value: TableValue) {
+        let Some(t) = self.sealed.tables.get(name).filter(|t| t.make.is_some()) else {
+            return;
+        };
+        let key = table_key(self.options.hash, name, &t.owner);
+        self.tables.insert(name.into(), (value, key));
+    }
+
     /// The hash content keys and result digests are computed with.
     pub fn hash(&self) -> HashVersion {
         self.options.hash

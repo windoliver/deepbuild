@@ -532,32 +532,30 @@ impl Mesh {
                 _ => self.edges(false, true),
             },
             EdgeKind::Crease { angle, border } => {
-                self.crease_set(angle, border, planted).0.as_ref().clone()
+                self.creases(angle, border, planted == Some("crease_below_angle"))
             }
         }
     }
 
     /// The crease set and whether this call derived it: derived once per content key (its
-    /// positions and triangles, the angle and `border`) and kept while the process runs, at most
+    /// positions and triangles, the angle and `border`) and kept in `memo`, the host's, at most
     /// 64 sets. #1640's planted readers: `crease_below_angle` keeps the edges under the angle,
-    /// `edges_derive_every_frame` skips the cache.
+    /// `edges_derive_every_frame` skips the memo.
     pub fn crease_set(
         &self,
         angle: f64,
         border: bool,
         planted: Option<&str>,
+        memo: &crate::memo::Memo,
     ) -> (std::sync::Arc<Vec<[V3; 2]>>, bool) {
-        use std::collections::HashMap;
-        use std::sync::{Arc, Mutex, OnceLock};
-        type Made = HashMap<[u8; 16], Arc<Vec<[V3; 2]>>>;
-        static MADE: OnceLock<Mutex<Made>> = OnceLock::new();
+        use std::sync::Arc;
         let below = planted == Some("crease_below_angle");
         let mut h = deep_canvas::schedule::Hasher::new("scene3d.creases");
         h.bytes(&(&self.positions, &self.indices).canonical_bytes())
             .bytes(&angle.to_le_bytes())
             .int(i64::from(border) | (i64::from(below) << 1));
         let key = h.finish().0;
-        let made = MADE.get_or_init(Default::default);
+        let made = &memo.creases;
         let cached = planted != Some("edges_derive_every_frame");
         if let Some(set) = cached
             .then(|| made.lock().ok()?.get(&key).cloned())

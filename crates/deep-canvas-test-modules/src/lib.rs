@@ -724,7 +724,7 @@ fn title_rule(_doc: &Value, id: &str, item: &Value) -> Vec<Raised> {
 }
 
 fn register_title_cap(r: &mut Registrar) {
-    r.rule("text", title_rule);
+    r.rule("text", |d, i, it, _| title_rule(d, i, it));
     r.code(
         "title_too_long",
         "A text item over 20 characters, which this release's stricter rule refuses.",

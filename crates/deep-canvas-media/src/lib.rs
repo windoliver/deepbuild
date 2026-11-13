@@ -41,7 +41,8 @@ pub const FLICKS: i64 = 705_600_000;
 /// gain to −23 LUFS, a words bake read 200 ms late, and a sidecar writer that times cues at 24 fps;
 /// #935's, which deep-show's check reads: a refusal of a generated sound's asset only when
 /// its audio.gen FAILs, so a BLOCKED one plays; and #157's, a master limiter whose lookahead the
-/// mix doesn't compensate against the picture.
+/// mix doesn't compensate against the picture. A scenario names one: the module's check reads it
+/// from the check's options, and deep-show from its scenario.
 pub const PLANTED: [&str; 23] = [
     "av_link_compares_start_only",
     "av_link_start_only",
@@ -67,16 +68,3 @@ pub const PLANTED: [&str; 23] = [
     "unpassed_on_fail_only",
     "limiter_lookahead_uncompensated",
 ];
-
-static PLANTED_NOW: std::sync::Mutex<Option<&'static str>> = std::sync::Mutex::new(None);
-
-/// Plants one of [`PLANTED`] for the checks that follow, or none.
-pub fn plant(name: Option<&str>) {
-    let found = name.and_then(|n| PLANTED.iter().find(|p| **p == n).copied());
-    *PLANTED_NOW.lock().unwrap_or_else(|e| e.into_inner()) = found;
-}
-
-/// Whether `name` is planted.
-pub fn planted(name: &str) -> bool {
-    *PLANTED_NOW.lock().unwrap_or_else(|e| e.into_inner()) == Some(name)
-}

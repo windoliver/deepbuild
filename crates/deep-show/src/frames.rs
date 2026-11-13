@@ -615,7 +615,7 @@ impl<'a> Hub<'a> {
                 let shaping = if self.startup.shapes_on_ui_thread {
                     Vec::new()
                 } else {
-                    shape_ahead(document)
+                    shape_ahead(document, &self.runs)
                 };
                 pending = Some((document, shaping));
             }
@@ -732,7 +732,7 @@ impl<'a> Hub<'a> {
     /// #856: the shaped-run cache's runs of `text`: the times this process shaped each one's key,
     /// and the documents whose current revision draws it, each evaluated at its frame.
     pub fn shaped_runs(&mut self, text: &str) -> Value {
-        for shaping in deep_text::cache::take_log() {
+        for shaping in self.runs.take_log() {
             *self.shapings.entry(shaping.key).or_default() += 1;
         }
         let mut drawn: Vec<(String, Arc<deep_text::Shaped>)> = Vec::new();
@@ -753,7 +753,9 @@ impl<'a> Hub<'a> {
                 }
             }
         }
-        let runs: Vec<Value> = deep_text::cache::runs_of(text)
+        let runs: Vec<Value> = self
+            .runs
+            .runs_of(text)
             .into_iter()
             .map(|(key, run)| {
                 let docs: Vec<&String> = drawn
@@ -843,7 +845,7 @@ fn thread_cpu_ns() -> u64 {
 
 /// Hands the render worker each text of `document` whose shaping the cost model estimates past
 /// 1 ms, cold, and whose run the shaped-run cache doesn't hold yet; what to wait for.
-fn shape_ahead(document: &Value) -> Vec<Pending> {
+fn shape_ahead(document: &Value, runs: &Arc<deep_text::RunCache>) -> Vec<Pending> {
     let terms = deep_canvas::cost::Coefficients::reference().get("text.shape");
     let mut out = Vec::new();
     for (id, item) in document["items"].as_object().into_iter().flatten() {
@@ -863,8 +865,8 @@ fn shape_ahead(document: &Value) -> Vec<Pending> {
         let Some(spec) = spec.shaper_spec() else {
             continue;
         };
-        if !deep_text::Shaper::is_cached(&spec) {
-            out.push(crate::shaper::shape_later(&spec));
+        if !runs.is_cached(&spec) {
+            out.push(crate::shaper::shape_later(&spec, runs));
         }
     }
     out

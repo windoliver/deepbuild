@@ -61,100 +61,127 @@ pub struct Face {
     pub bytes: &'static [u8],
 }
 
-/// Every bundled face, in the order they register: one static, so a face's bytes have one
-/// address wherever they are read.
-pub static FACES: &[Face] = &[
-    Face {
-        family: "Inter",
-        weight: 400,
-        file: "Inter-Regular.ttf",
-        license: "OFL-1.1",
-        license_file: "LICENSE-Inter.txt",
-        bytes: include_bytes!("../fonts/Inter-Regular.ttf"),
-    },
-    Face {
-        family: "Inter",
-        weight: 500,
-        file: "Inter-Medium.ttf",
-        license: "OFL-1.1",
-        license_file: "LICENSE-Inter.txt",
-        bytes: include_bytes!("../fonts/Inter-Medium.ttf"),
-    },
-    Face {
-        family: "Inter",
-        weight: 600,
-        file: "Inter-SemiBold.ttf",
-        license: "OFL-1.1",
-        license_file: "LICENSE-Inter.txt",
-        bytes: include_bytes!("../fonts/Inter-SemiBold.ttf"),
-    },
-    // #496: the variable face, a weight axis from 100 to 900, for text whose weight a channel
-    // drives; every weight it takes is shaped from these bytes, never snapped to a static face.
-    Face {
-        family: "Inter Variable",
-        weight: 400,
-        file: "InterVariable.ttf",
-        license: "OFL-1.1",
-        license_file: "LICENSE-Inter.txt",
-        bytes: include_bytes!("../fonts/InterVariable.ttf"),
-    },
-    Face {
-        family: "JetBrains Mono",
-        weight: 400,
-        file: "JetBrainsMono-Regular.ttf",
-        license: "OFL-1.1",
-        license_file: "LICENSE-JetBrainsMono.txt",
-        bytes: include_bytes!("../fonts/JetBrainsMono-Regular.ttf"),
-    },
-    Face {
-        family: "JetBrains Mono",
-        weight: 500,
-        file: "JetBrainsMono-Medium.ttf",
-        license: "OFL-1.1",
-        license_file: "LICENSE-JetBrainsMono.txt",
-        bytes: include_bytes!("../fonts/JetBrainsMono-Medium.ttf"),
-    },
-    Face {
-        family: "STIX Two Math",
-        weight: 400,
-        file: "STIXTwoMath-Regular.ttf",
-        license: "OFL-1.1",
-        license_file: "LICENSE-STIXTwoMath.txt",
-        bytes: include_bytes!("../fonts/STIXTwoMath-Regular.ttf"),
-    },
-    Face {
-        family: "Caveat",
-        weight: 400,
-        file: "Caveat-Regular.ttf",
-        license: "OFL-1.1",
-        license_file: "LICENSE-Caveat.txt",
-        bytes: include_bytes!("../fonts/Caveat-Regular.ttf"),
-    },
-    Face {
-        family: "Noto Sans SC",
-        weight: 400,
-        file: "NotoSansSC-Regular.otf",
-        license: "OFL-1.1",
-        license_file: "LICENSE-NotoSansSC.txt",
-        bytes: include_bytes!("../fonts/NotoSansSC-Regular.otf"),
-    },
-    Face {
-        family: "Noto Sans Arabic",
-        weight: 400,
-        file: "NotoSansArabic-Regular.ttf",
-        license: "OFL-1.1",
-        license_file: "LICENSE-NotoSansArabic.txt",
-        bytes: include_bytes!("../fonts/NotoSansArabic-Regular.ttf"),
-    },
-    Face {
-        family: "Noto Emoji",
-        weight: 400,
-        file: "NotoEmoji-Regular.ttf",
-        license: "OFL-1.1",
-        license_file: "LICENSE-NotoEmoji.txt",
-        bytes: include_bytes!("../fonts/NotoEmoji-Regular.ttf"),
-    },
-];
+/// Every bundled face, in the order they register: a handle to the one table, which reads as the
+/// slice of faces (`FACES.iter()`, `for face in FACES`).
+pub const FACES: Faces = Faces;
+
+/// The handle [`FACES`] is.
+#[derive(Clone, Copy, Debug)]
+pub struct Faces;
+
+impl std::ops::Deref for Faces {
+    type Target = [Face];
+    fn deref(&self) -> &[Face] {
+        table()
+    }
+}
+
+impl IntoIterator for Faces {
+    type Item = &'static Face;
+    type IntoIter = std::slice::Iter<'static, Face>;
+    fn into_iter(self) -> Self::IntoIter {
+        table().iter()
+    }
+}
+
+/// The table itself, compiled once into this crate: never inlined into a caller, so the faces'
+/// bytes are in the build once, however many crates read them.
+#[inline(never)]
+fn table() -> &'static [Face] {
+    const TABLE: &[Face] = &[
+        Face {
+            family: "Inter",
+            weight: 400,
+            file: "Inter-Regular.ttf",
+            license: "OFL-1.1",
+            license_file: "LICENSE-Inter.txt",
+            bytes: include_bytes!("../fonts/Inter-Regular.ttf"),
+        },
+        Face {
+            family: "Inter",
+            weight: 500,
+            file: "Inter-Medium.ttf",
+            license: "OFL-1.1",
+            license_file: "LICENSE-Inter.txt",
+            bytes: include_bytes!("../fonts/Inter-Medium.ttf"),
+        },
+        Face {
+            family: "Inter",
+            weight: 600,
+            file: "Inter-SemiBold.ttf",
+            license: "OFL-1.1",
+            license_file: "LICENSE-Inter.txt",
+            bytes: include_bytes!("../fonts/Inter-SemiBold.ttf"),
+        },
+        // #496: the variable face, a weight axis from 100 to 900, for text whose weight a channel
+        // drives; every weight it takes is shaped from these bytes, never snapped to a static face.
+        Face {
+            family: "Inter Variable",
+            weight: 400,
+            file: "InterVariable.ttf",
+            license: "OFL-1.1",
+            license_file: "LICENSE-Inter.txt",
+            bytes: include_bytes!("../fonts/InterVariable.ttf"),
+        },
+        Face {
+            family: "JetBrains Mono",
+            weight: 400,
+            file: "JetBrainsMono-Regular.ttf",
+            license: "OFL-1.1",
+            license_file: "LICENSE-JetBrainsMono.txt",
+            bytes: include_bytes!("../fonts/JetBrainsMono-Regular.ttf"),
+        },
+        Face {
+            family: "JetBrains Mono",
+            weight: 500,
+            file: "JetBrainsMono-Medium.ttf",
+            license: "OFL-1.1",
+            license_file: "LICENSE-JetBrainsMono.txt",
+            bytes: include_bytes!("../fonts/JetBrainsMono-Medium.ttf"),
+        },
+        Face {
+            family: "STIX Two Math",
+            weight: 400,
+            file: "STIXTwoMath-Regular.ttf",
+            license: "OFL-1.1",
+            license_file: "LICENSE-STIXTwoMath.txt",
+            bytes: include_bytes!("../fonts/STIXTwoMath-Regular.ttf"),
+        },
+        Face {
+            family: "Caveat",
+            weight: 400,
+            file: "Caveat-Regular.ttf",
+            license: "OFL-1.1",
+            license_file: "LICENSE-Caveat.txt",
+            bytes: include_bytes!("../fonts/Caveat-Regular.ttf"),
+        },
+        Face {
+            family: "Noto Sans SC",
+            weight: 400,
+            file: "NotoSansSC-Regular.otf",
+            license: "OFL-1.1",
+            license_file: "LICENSE-NotoSansSC.txt",
+            bytes: include_bytes!("../fonts/NotoSansSC-Regular.otf"),
+        },
+        Face {
+            family: "Noto Sans Arabic",
+            weight: 400,
+            file: "NotoSansArabic-Regular.ttf",
+            license: "OFL-1.1",
+            license_file: "LICENSE-NotoSansArabic.txt",
+            bytes: include_bytes!("../fonts/NotoSansArabic-Regular.ttf"),
+        },
+        Face {
+            family: "Noto Emoji",
+            weight: 400,
+            file: "NotoEmoji-Regular.ttf",
+            license: "OFL-1.1",
+            license_file: "LICENSE-NotoEmoji.txt",
+            bytes: include_bytes!("../fonts/NotoEmoji-Regular.ttf"),
+        },
+    ];
+    TABLE
+}
 
 /// #496: the family a text at `weight` is set in: `family` itself when it has a face at that
 /// weight or no variable twin, else its variable twin, so a weight between or past the static
@@ -185,19 +212,4 @@ pub fn static_of(family: &'static str) -> &'static str {
 /// A face's bytes as the blob the font collection and the rasterizer share.
 pub fn blob(face: &Face) -> Blob<u8> {
     Blob::new(Arc::new(face.bytes))
-}
-
-/// The bundled face a shaped glyph's font is, by its bytes.
-pub fn face_of(font: &parley::FontData) -> Option<&'static Face> {
-    let data = font.data.data();
-    // By address first: a run's glyphs are read every frame, and comparing a face's bytes costs
-    // a pass over the whole file. Then by value, for bytes that came from elsewhere.
-    FACES
-        .iter()
-        .find(|f| std::ptr::eq(f.bytes, data))
-        .or_else(|| {
-            FACES
-                .iter()
-                .find(|f| f.bytes.len() == data.len() && f.bytes == data)
-        })
 }

@@ -562,6 +562,13 @@ pub fn shape(label: &Label) -> Arc<Shaped> {
     TEXT.with(|text| text.borrow_mut().shape(label))
 }
 
+/// Runs `f` with this thread's shaper, whose shaped-run cache keeps every run this thread's
+/// labels shape (#856): a host lends it to the canvas's checks and layouts, so their runs and
+/// its labels' share one cache and one log.
+pub fn with_shaper<R>(f: impl FnOnce(&mut Shaper) -> R) -> R {
+    TEXT.with(|text| f(&mut text.borrow_mut().shaper))
+}
+
 /// Starts, or stops, recording the bitmap size of each glyph the atlas rasterizes, for the proof
 /// binary's report; [`take_new_glyphs`] drains it.
 pub fn watch_new_glyphs(on: bool) {

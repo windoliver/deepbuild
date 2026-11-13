@@ -605,7 +605,8 @@ impl Hub<'_> {
         if let Some(rest) = path.strip_prefix("buses/") {
             let value = match held_at(doc, path) {
                 Some(v) => v,
-                None if deep_canvas_media::planted("loudness_target_defaults_to_zero")
+                None if self.scenario.module_planted.as_deref()
+                    == Some("loudness_target_defaults_to_zero")
                     && rest.split_once('/').is_some_and(|(bus, f)| {
                         f == "loudness_target" && doc["buses"].get(bus).is_some()
                     }) =>

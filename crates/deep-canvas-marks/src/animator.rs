@@ -1405,6 +1405,7 @@ pub fn lay_out(input: &Input<'_>, host: &mut dyn Host) -> Result<Laid, Refused> 
                 if let Some(s) = shaped.glyphs.first() {
                     out.id = s.id;
                     out.font = s.font.clone();
+                    out.face = s.face;
                     out.coords = s.coords.clone();
                 }
             }

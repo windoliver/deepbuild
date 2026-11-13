@@ -146,11 +146,15 @@ pub const WORKING_VIEWS: [&str; 3] = ["needs-you", "sidebar", "session"];
 /// prompts.
 pub const FIXED_ROLES: [&str; 3] = ["status_mark", "card", "prompt"];
 
+/// The chrome-fx@1 manifest the app ships, which the pack's reader takes as its input.
+const PACK: &str = include_str!("../../../packs/chrome-fx-1.0.0/pack.json");
+
 /// The pack's operators, checked once.
 fn operators() -> &'static BTreeMap<String, pack::Operator> {
     static OPS: OnceLock<BTreeMap<String, pack::Operator>> = OnceLock::new();
     OPS.get_or_init(|| {
-        pack::library()
+        let manifest: Value = serde_json::from_str(PACK).expect("chrome-fx@1's manifest is JSON");
+        pack::library(&manifest)
             .into_iter()
             .map(|o| (o.name.clone(), o))
             .collect()

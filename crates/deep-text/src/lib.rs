@@ -2,8 +2,9 @@
 //! canvas's text on every platform (the stack Vello uses: parley over HarfRust and skrifa,
 //! rasterized by Vello CPU), and where GPUI draws a 2D writer layer its glyphs come from the
 //! atlas here, through the GPUI patch's tinted mask sprite, never from GPUI's text system.
-//! Issue #856: its runs are kept in one shaped-run cache per process, and a long text shapes on
-//! the render worker, which its host runs (#140: this crate starts no thread).
+//! Issue #856: its runs are kept in the shaped-run cache its host owns and lends to every shaper
+//! it makes, and a long text shapes on the render worker, which its host runs (#140: this crate
+//! starts no thread).
 
 pub mod atlas;
 pub mod cache;
@@ -15,7 +16,8 @@ pub mod unicode;
 pub use atlas::{
     raster_size, Atlas, Page, Placed, Rect, MAX_DEVICE_SIZE, PAGE, PAGES, PHASES, RING,
 };
-pub use fonts::{face_of, Face, Role, FACES};
+pub use cache::RunCache;
+pub use fonts::{Face, Faces, Role, FACES};
 pub use parley::FontData;
 pub use shape::{Align, Decoration, Fit, Glyph, Shaped, Shaper, Shift, Span, Spec};
 pub use unicode::{Bidi, Dir};

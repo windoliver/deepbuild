@@ -546,8 +546,13 @@ impl Renderer {
     }
 
     pub fn new() -> Self {
+        Self::sharing(Arc::default())
+    }
+
+    /// A renderer whose shaper keeps its runs in `runs`, its host's shaped-run cache (#856).
+    pub fn sharing(runs: Arc<deep_text::RunCache>) -> Self {
         Renderer {
-            shaper: Shaper::new(),
+            shaper: Shaper::sharing(runs),
             resources: Resources::new(),
             videos: BTreeMap::new(),
             caption: None,

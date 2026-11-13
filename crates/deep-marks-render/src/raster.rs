@@ -368,7 +368,9 @@ fn shaped_apart(label: &deep_text_gpui::Label, runs: &[scene::TextRun]) -> deep_
 /// A glyph of a text's run as `texts` reports it, in document units (#381), with (#417) the
 /// language its run was shaped in; the app's frame reports its runs the same way (#140).
 pub(crate) fn glyph_row(g: &deep_text::Glyph, role: Option<&str>, lang: Option<&str>) -> Value {
-    let font = deep_text::face_of(&g.font).map(|f| format!("crates/deep-text/fonts/{}", f.file));
+    let font = g
+        .face()
+        .map(|f| format!("crates/deep-text/fonts/{}", f.file));
     json!({
         "font": font, "size": g.size, "id": g.id, "x": g.x, "y": g.y,
         "grapheme": g.grapheme, "role": role, "lang": lang,

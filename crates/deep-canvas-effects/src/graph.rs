@@ -996,8 +996,9 @@ fn input(name: &str, v: &Value, issues: &mut Vec<Issue>) -> Option<Input> {
 pub fn read(v: &Value) -> Result<Operator, Vec<Issue>> {
     // A call to a step function scene3d ships, such as core.bump@1, is inlined first (#486), on
     // every path that reads an operator.
-    if calls_shipped(&v["steps"]) {
-        return read(&inline_functions(v, &Functions::new(), true)?);
+    let shipped = Shipped::default();
+    if calls_shipped(&v["steps"], &shipped) {
+        return read(&inline_with(v, &Functions::new(), &shipped, true)?);
     }
     let mut issues = Vec::new();
     let Some(o) = v.as_object() else {
@@ -1600,32 +1601,44 @@ fn read_responses(
 }
 
 /// The step functions canvas modules ship (#486: scene3d's `core.bump@1`), which any operator
-/// calls by name as it calls a pack's.
-fn shipped() -> &'static Functions {
-    static SHIPPED: std::sync::OnceLock<Functions> = std::sync::OnceLock::new();
-    SHIPPED.get_or_init(|| deep_canvas_scene3d::gpu::functions().into_iter().collect())
+/// calls by name as it calls a pack's: built by the read or the inlining that first looks one
+/// up, and held by it, so an operator that calls none never builds them.
+#[derive(Default)]
+struct Shipped(std::cell::OnceCell<Functions>);
+
+impl Shipped {
+    fn get(&self, name: &str) -> Option<&Value> {
+        self.0
+            .get_or_init(|| deep_canvas_scene3d::gpu::functions().into_iter().collect())
+            .get(name)
+    }
 }
 
 /// The step function `name`: a pack's, else a shipped one.
-fn function<'a>(functions: &'a Functions, name: &str) -> Option<&'a Value> {
-    functions.get(name).or_else(|| shipped().get(name))
+fn function<'a>(functions: &'a Functions, shipped: &'a Shipped, name: &str) -> Option<&'a Value> {
+    functions.get(name).or_else(|| shipped.get(name))
 }
 
 /// Whether `steps`, or a repeat's body among them, calls a shipped step function.
-fn calls_shipped(steps: &Value) -> bool {
+fn calls_shipped(steps: &Value, shipped: &Shipped) -> bool {
     steps.as_object().into_iter().flatten().any(|(_, s)| {
         (s["op"] == "use@1"
             && s["args"]["name"]
                 .as_str()
-                .is_some_and(|n| shipped().contains_key(n)))
-            || calls_shipped(&s["args"]["body"])
+                .is_some_and(|n| shipped.get(n).is_some()))
+            || calls_shipped(&s["args"]["body"], shipped)
     })
 }
 
 /// Whether a step function's body takes implicit derivatives, its own or through a function it
 /// calls: `ddx`, `ddy`, `fwidth`, `triplanar` or a `sample` with no `lod`.
-fn holds_derivative(f: &Value, functions: &Functions, depth: usize) -> bool {
-    fn any(steps: &Map<String, Value>, functions: &Functions, depth: usize) -> bool {
+fn holds_derivative(f: &Value, functions: &Functions, shipped: &Shipped, depth: usize) -> bool {
+    fn any(
+        steps: &Map<String, Value>,
+        functions: &Functions,
+        shipped: &Shipped,
+        depth: usize,
+    ) -> bool {
         steps.values().any(|s| {
             let op = s["op"].as_str().unwrap_or("");
             matches!(op, "ddx@1" | "ddy@1" | "fwidth@1" | "triplanar@1")
@@ -1634,16 +1647,16 @@ fn holds_derivative(f: &Value, functions: &Functions, depth: usize) -> bool {
                     && depth < USE_DEPTH
                     && s["args"]["name"]
                         .as_str()
-                        .and_then(|n| function(functions, n))
-                        .is_some_and(|g| holds_derivative(g, functions, depth + 1)))
+                        .and_then(|n| function(functions, shipped, n))
+                        .is_some_and(|g| holds_derivative(g, functions, shipped, depth + 1)))
                 || s["args"]["body"]
                     .as_object()
-                    .is_some_and(|b| any(b, functions, depth))
+                    .is_some_and(|b| any(b, functions, shipped, depth))
         })
     }
     f["steps"]
         .as_object()
-        .is_some_and(|s| any(s, functions, depth))
+        .is_some_and(|s| any(s, functions, shipped, depth))
 }
 
 /// Each `use@1` step inlined (#431): a call `{op: "use@1", args: {name, <in port>: arg}}` becomes
@@ -1657,9 +1670,21 @@ pub fn inline_functions(
     functions: &Functions,
     rule: bool,
 ) -> Result<Value, Vec<Issue>> {
+    inline_with(op, functions, &Shipped::default(), rule)
+}
+
+/// [`inline_functions`] with the shipped step functions `shipped` holds.
+fn inline_with(
+    op: &Value,
+    functions: &Functions,
+    shipped: &Shipped,
+    rule: bool,
+) -> Result<Value, Vec<Issue>> {
+    #[allow(clippy::too_many_arguments)]
     fn expand(
         steps: &mut Map<String, Value>,
         functions: &Functions,
+        shipped: &Shipped,
         rule: bool,
         divergent: bool,
         depth: usize,
@@ -1679,6 +1704,7 @@ pub fn inline_functions(
                         expand(
                             body,
                             functions,
+                            shipped,
                             rule,
                             divergent || stop,
                             depth,
@@ -1692,7 +1718,7 @@ pub fn inline_functions(
                 _ => continue,
             }
             let name = step["args"]["name"].as_str().unwrap_or("");
-            let Some(f) = function(functions, name).filter(|_| depth < USE_DEPTH) else {
+            let Some(f) = function(functions, shipped, name).filter(|_| depth < USE_DEPTH) else {
                 issues.push(Issue::at_step(
                     "operator_unknown_op",
                     &id,
@@ -1702,7 +1728,7 @@ pub fn inline_functions(
             };
             if rule
                 && (divergent || step.get("when").is_some())
-                && holds_derivative(f, functions, 0)
+                && holds_derivative(f, functions, shipped, 0)
             {
                 issues.push(Issue {
                     reason: Some("derivative_in_divergent_flow"),
@@ -1748,6 +1774,7 @@ pub fn inline_functions(
             expand(
                 &mut inlined,
                 functions,
+                shipped,
                 rule,
                 divergent,
                 depth + 1,
@@ -1773,7 +1800,16 @@ pub fn inline_functions(
     let mut renames = Vec::new();
     let mut issues = Vec::new();
     if let Some(steps) = op.get_mut("steps").and_then(Value::as_object_mut) {
-        expand(steps, functions, rule, false, 0, &mut renames, &mut issues);
+        expand(
+            steps,
+            functions,
+            shipped,
+            rule,
+            false,
+            0,
+            &mut renames,
+            &mut issues,
+        );
     }
     if !issues.is_empty() {
         return Err(issues);
