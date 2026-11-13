@@ -16,6 +16,9 @@ use vello_cpu::Pixmap;
 
 use crate::refused;
 
+/// An image as [`Kept::pixmap`] draws it: its pixmap, its size in px and the rect it covers.
+type Drawn = (Arc<Pixmap>, [u32; 2], [f64; 4]);
+
 /// The most the levels a frame draws may hold, B (Image `image@1`: cost).
 pub const CAP: u64 = 64 << 20;
 
@@ -104,7 +107,6 @@ pub fn tables(doc: &mut Map<String, Value>, evidence: Option<&Path>) -> Result<(
     deep_marks_vello::tables::tables(doc, evidence).map_err(|r| refused(r.code, &r.path))
 }
 
-
 /// An image mark as the service asks for it: its key at the level its drawn size takes, the rect
 /// its fit draws it in, u, and its level's bytes.
 pub struct Ask {
@@ -118,7 +120,9 @@ pub struct Ask {
 pub fn refusal(r: Refused, asset: &str, item: &str, tile: bool) -> Value {
     let set = item.split('#').next().unwrap_or(item);
     match r.code {
-        "out_of_range" if tile => refused("out_of_range", &format!("items/{set}/params/columns/tile")),
+        "out_of_range" if tile => {
+            refused("out_of_range", &format!("items/{set}/params/columns/tile"))
+        }
         _ if r.on_crop => refused("out_of_range", &format!("items/{item}/params/crop")),
         code @ ("asset_missing" | "asset_mismatch") => {
             refused(code, &format!("items/{item}/params/asset: {asset}"))
@@ -148,12 +152,15 @@ pub fn ask(
     let size = images().size(store, &hash).map_err(no)?;
     let (cut, flip) = match tile {
         Some(tile) => {
-            let cell = tile.rect(size).map(|r| r.map(|v| v as u32)).ok_or_else(|| {
-                no(Refused {
-                    code: "out_of_range",
-                    on_crop: false,
-                })
-            })?;
+            let cell = tile
+                .rect(size)
+                .map(|r| r.map(|v| v as u32))
+                .ok_or_else(|| {
+                    no(Refused {
+                        code: "out_of_range",
+                        on_crop: false,
+                    })
+                })?;
             (cell, tile.flip)
         }
         None => (
@@ -228,13 +235,16 @@ impl Kept {
         (opacity, adjust): (f64, &Adjust),
         (bounds, fit, scale): ([f64; 4], ImageFit, f64),
         item: &str,
-    ) -> Result<(Arc<Pixmap>, [u32; 2], [f64; 4]), Value> {
+    ) -> Result<Drawn, Value> {
         let store = self.store(store);
         let ask = ask(&store, asset, (crop, tile), (bounds, fit), scale, item)?;
         self.levels.insert(item.to_string(), ask.key.level);
         if self.drawn.insert(ask.key) {
             if self.plant != Plant::CapCountsCopiesOnly && self.drawn_bytes + ask.bytes > CAP {
-                return Err(refused("over_budget", &format!("items/{item}/params/asset")));
+                return Err(refused(
+                    "over_budget",
+                    &format!("items/{item}/params/asset"),
+                ));
             }
             self.drawn_bytes += ask.bytes;
         }
@@ -252,10 +262,19 @@ impl Kept {
             .map_err(|r| refusal(r, asset, item, tile.is_some()))?;
         let [w, h] = level.size;
         let (Ok(pw), Ok(ph)) = (u16::try_from(w), u16::try_from(h)) else {
-            return Err(refused("asset_undecodable", &format!("items/{item}/params/asset")));
+            return Err(refused(
+                "asset_undecodable",
+                &format!("items/{item}/params/asset"),
+            ));
         };
-        let pixmap = Arc::new(deep_marks_vello::image(level.rgba.clone(), [pw, ph], opacity, adjust));
-        self.made.insert(ask.key, (opacity, adjust.clone(), pixmap.clone()));
+        let pixmap = Arc::new(deep_marks_vello::image(
+            level.rgba.clone(),
+            [pw, ph],
+            opacity,
+            adjust,
+        ));
+        self.made
+            .insert(ask.key, (opacity, adjust.clone(), pixmap.clone()));
         Ok((pixmap, level.size, ask.to))
     }
 

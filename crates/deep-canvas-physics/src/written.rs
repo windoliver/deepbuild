@@ -107,7 +107,7 @@ fn at(array: &Value, t: i64, width: usize) -> Vec<Value> {
                 .zip(y)
                 .map(|(p, q)| p + alpha * (sign * q - p))
                 .collect();
-            let len = v.iter().map(|c| c * c).sum::<f64>().sqrt();
+            let len = deep_canvas::ops::sqrt(v.iter().map(|c| c * c).sum::<f64>());
             if width == 4 && len > 0.0 {
                 v.iter_mut().for_each(|c| *c /= len);
             }

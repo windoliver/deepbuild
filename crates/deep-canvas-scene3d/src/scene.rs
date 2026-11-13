@@ -161,7 +161,12 @@ fn rest_of(s: &Solid, h: u64) -> Option<(Arc<crate::geom::Mesh>, u64)> {
 /// its time: each point moves along the wind by amount × its height share × the lean at the
 /// place, as the GPU sway moves each vertex, which for weights by height is p + s (p.y − lo) ÷
 /// span, s the lean's move in the mesh's own space. It applies before `model`.
-fn shear_of(model: &Affine3, sway: &crate::stack::Sway, rest: &crate::geom::Mesh, at: Swaying) -> Affine3 {
+fn shear_of(
+    model: &Affine3,
+    sway: &crate::stack::Sway,
+    rest: &crate::geom::Mesh,
+    at: Swaying,
+) -> Affine3 {
     let [lo, hi] = rest.bounds();
     let span = hi[1] - lo[1];
     let (dx, dz) = (cos(rad(sway.direction)), sin(rad(sway.direction)));
@@ -210,7 +215,12 @@ fn sway_lean(sway: &crate::stack::Sway, place: [f64; 2], d: [f64; 2], at: Swayin
     let (wx, wz) = (spline(q[0] - c[0]), spline(q[1] - c[1]));
     let (ix, iz) = (c[0] as i32 - 1, c[1] as i32 - 1);
     let gust: f64 = (0..4)
-        .map(|a| wz[a] * (0..4).map(|b| wx[b] * lattice(ix + b as i32, iz + a as i32)).sum::<f64>())
+        .map(|a| {
+            wz[a]
+                * (0..4)
+                    .map(|b| wx[b] * lattice(ix + b as i32, iz + a as i32))
+                    .sum::<f64>()
+        })
         .sum();
     let slow = sin(std::f64::consts::TAU * (sway.hz * t).fract() + sway.phase);
     ((1.0 - sway.strength) * slow + sway.strength * gust).clamp(-1.0, 1.0)
@@ -843,6 +853,16 @@ impl Scene {
                 .any(|s| s.material.is_some())
     }
 
+    /// #428's planted `drops_dispersion`, reachable only through `deep-gpu --planted`: every
+    /// material draws dispersion 0, as if its import had dropped KHR_materials_dispersion
+    /// ([`crate::gltf::drop_dispersion`]).
+    pub fn plant_drops_dispersion(&mut self) {
+        let solids = self.layers.iter_mut().flat_map(|l| &mut l.solids);
+        for m in solids.filter_map(|s| s.material.as_mut()) {
+            m.lobes.dispersion = 0.0;
+        }
+    }
+
     /// #268's wrong field, reachable only through `deep-gpu --planted`: the water's shore baked
     /// with each item's centre standing for where it meets the water.
     pub fn plant_shore_from_centre(&mut self, doc: &Value) -> Result<(), Refused> {
@@ -1066,7 +1086,12 @@ impl<'a> Items<'a> {
     /// `doc`'s items, with `written` from [`eval::written`] of its program at `state`. The
     /// program's items are the document's in its order, so item `i`'s transform is its
     /// `TRANSFORM` slots from `i * TRANSFORM`.
-    fn new(doc: &'a Map<String, Value>, written: &'a Map<String, Value>, state: &'a State, program: &Program) -> Self {
+    fn new(
+        doc: &'a Map<String, Value>,
+        written: &'a Map<String, Value>,
+        state: &'a State,
+        program: &Program,
+    ) -> Self {
         let mut entries = HashMap::with_capacity(doc.len());
         let mut copies = written.iter().peekable();
         for (i, (id, item)) in doc.iter().enumerate() {
@@ -1352,7 +1377,13 @@ fn rest(
             .get(owner)
             .and_then(|i| i.get("parent"))
             .and_then(Value::as_str)
-            .map(|p| items.assemblies.get(p).copied().unwrap_or_else(|| world(items, p)));
+            .map(|p| {
+                items
+                    .assemblies
+                    .get(p)
+                    .copied()
+                    .unwrap_or_else(|| world(items, p))
+            });
         let origin = match &parent {
             Some(p) => apply(p, pos),
             None => pos,
@@ -1462,13 +1493,15 @@ fn origin(m: &Affine3) -> Vec3 {
 
 fn paint(look: &Look3, params: &Value, path: &str) -> Result<[u8; 3], Refused> {
     // #149: a noise fill's first stop, or a line's own role, or the ink a named fill leaves out.
-    let drawn = params.pointer("/paint/fill/noise/stops/0/role").or_else(|| {
-        params
-            .pointer("/paint/fill/role")
-            .is_none()
-            .then(|| params.pointer("/paint/stroke/role"))
-            .flatten()
-    });
+    let drawn = params
+        .pointer("/paint/fill/noise/stops/0/role")
+        .or_else(|| {
+            params
+                .pointer("/paint/fill/role")
+                .is_none()
+                .then(|| params.pointer("/paint/stroke/role"))
+                .flatten()
+        });
     if let Some(c) = drawn.and_then(Value::as_str).and_then(|r| look.role(r)) {
         return Ok(c);
     }
@@ -1875,8 +1908,13 @@ fn edge_line(
     // Its dash and gap in its size space; one length dashes as long as it gaps.
     let dash = match params.get("dash") {
         None | Some(Value::Null) => [0.0; 2],
-        Some(v) => match v.as_array().map(|a| a.iter().map(|x| num(Some(x))).collect()) {
-            Some(Some::<Vec<f64>>(d)) if d.iter().all(|x| *x >= 0.0) && matches!(d.len(), 1 | 2) => {
+        Some(v) => match v
+            .as_array()
+            .map(|a| a.iter().map(|x| num(Some(x))).collect())
+        {
+            Some(Some::<Vec<f64>>(d))
+                if d.iter().all(|x| *x >= 0.0) && matches!(d.len(), 1 | 2) =>
+            {
                 [d[0], d[d.len() - 1]]
             }
             _ => return refused("out_of_range", format!("{path}/dash")),
@@ -1940,11 +1978,18 @@ fn edge_line(
 /// A drawing look's key: its `dir` around the page, and its `elevation` toward the viewer.
 fn drawn_light(look: &Look3) -> Option<Sun> {
     let l = look.drawn.as_ref()?.light.as_ref()?;
-    let (dir, up) = (deep_canvas::ops::rad(l.dir), deep_canvas::ops::rad(l.elevation));
+    let (dir, up) = (
+        deep_canvas::ops::rad(l.dir),
+        deep_canvas::ops::rad(l.elevation),
+    );
     let (c, s) = (deep_canvas::ops::cos(up), deep_canvas::ops::sin(up));
     Some(Sun {
         id: "look.light".into(),
-        toward: [c * deep_canvas::ops::cos(dir), c * deep_canvas::ops::sin(dir), s],
+        toward: [
+            c * deep_canvas::ops::cos(dir),
+            c * deep_canvas::ops::sin(dir),
+            s,
+        ],
         illuminance: std::f64::consts::PI,
         shadow: l.cast.is_some(),
         cascades: Cascades::default(),
@@ -3605,8 +3650,8 @@ pub(crate) fn evaluate_compiled(
         }
         // #2017: a prototype whose sway weighs each vertex by its height, batched on the GPU,
         // sways as a shear of each element's place, so every element keeps the one rest mesh.
-        let mut sheared: HashMap<(usize, usize), Option<(Arc<crate::geom::Mesh>, u64)>> =
-            HashMap::new();
+        type Sheared = HashMap<(usize, usize), Option<(Arc<crate::geom::Mesh>, u64)>>;
+        let mut sheared: Sheared = HashMap::new();
         for e in elements {
             let Some(solids) = protos.get(&of[e.proto]) else {
                 return refused("ref_unresolved", format!("{path}/of"));
@@ -3627,7 +3672,11 @@ pub(crate) fn evaluate_compiled(
                     _ => None,
                 };
                 if let (Some((rest, h)), Some(at)) = (shear, s.sway) {
-                    let sway = s.mesh.as_ref().and_then(|m| m.sway.as_ref()).expect("swaying");
+                    let sway = s
+                        .mesh
+                        .as_ref()
+                        .and_then(|m| m.sway.as_ref())
+                        .expect("swaying");
                     let shear = shear_of(&matmul(&place, &s.model), sway, &rest, at);
                     s.model = matmul(&s.model, &shear);
                     s.mesh = Some(rest);
@@ -3704,7 +3753,8 @@ pub(crate) fn evaluate_compiled(
 
     // A readout sits in the view's top-left corner, its text the template's (#419), filled from
     // the values that move the parts at t; a figure's card stacks its lines below (#504).
-    let shown = (!readout_items.is_empty() || map.contains_key("card")).then(|| eval::shown_doc(map, program, &state));
+    let shown = (!readout_items.is_empty() || map.contains_key("card"))
+        .then(|| eval::shown_doc(map, program, &state));
     let card: Vec<(String, Value)> = shown
         .as_ref()
         .map(|s| {
@@ -4366,7 +4416,11 @@ mod tests {
         let doc = crate::module::garden();
         let placed = placed_at(&doc, 0).unwrap();
         let vase = placed.iter().find(|(id, _, _)| id == "vase").unwrap();
-        assert!((vase.2[1][3] - 0.75).abs() < 1e-8 && vase.2[0][3] == 0.2, "{:?}", vase.2);
+        assert!(
+            (vase.2[1][3] - 0.75).abs() < 1e-8 && vase.2[0][3] == 0.2,
+            "{:?}",
+            vase.2
+        );
         let rows = elements_at(&doc, 0, "shrubs", None).unwrap().unwrap();
         assert!(rows.len() > 40, "{}", rows.len());
         // An element's bounds on the ground: its prototype's square, turned by its yaw.
@@ -4376,32 +4430,66 @@ mod tests {
         };
         assert!(rows.iter().any(|r| r.proto == 0) && rows.iter().any(|r| r.proto == 1));
         for (i, a) in rows.iter().enumerate() {
-            assert!(a.pos[0].abs() <= 4.5 && a.pos[2].abs() <= 4.5 && a.pos[1] == 0.0, "{:?}", a.pos);
-            assert!(a.pos[0].abs() > 0.6 || a.pos[2].abs() > 0.4, "in the table: {:?}", a.pos);
+            assert!(
+                a.pos[0].abs() <= 4.5 && a.pos[2].abs() <= 4.5 && a.pos[1] == 0.0,
+                "{:?}",
+                a.pos
+            );
+            assert!(
+                a.pos[0].abs() > 0.6 || a.pos[2].abs() > 0.4,
+                "in the table: {:?}",
+                a.pos
+            );
             for b in &rows[i + 1..] {
                 let d = [(a.pos[0] - b.pos[0]).abs(), (a.pos[2] - b.pos[2]).abs()];
                 assert!(d[0] * d[0] + d[1] * d[1] >= 0.25);
                 let clear = half(a) + half(b) - 1e-9;
-                assert!(d[0] >= clear || d[1] >= clear, "{} and {} pass into each other", a.id, b.id);
+                assert!(
+                    d[0] >= clear || d[1] >= clear,
+                    "{} and {} pass into each other",
+                    a.id,
+                    b.id
+                );
             }
         }
         let mut reversed = doc.clone();
-        let items: Vec<(String, Value)> = doc["items"].as_object().unwrap().iter().rev().map(|(k, v)| (k.clone(), v.clone())).collect();
+        let items: Vec<(String, Value)> = doc["items"]
+            .as_object()
+            .unwrap()
+            .iter()
+            .rev()
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
         reversed["items"] = Value::Object(items.into_iter().collect());
-        assert_eq!(elements_at(&reversed, 0, "shrubs", None).unwrap().unwrap(), rows);
+        assert_eq!(
+            elements_at(&reversed, 0, "shrubs", None).unwrap().unwrap(),
+            rows
+        );
         // A rest with nothing under it reports no support and leaves its owner where it was.
         let mut lost = doc.clone();
         lost["items"]["vase"]["at"]["pos"] = serde_json::json!([4.0, 2.0, 4.0]);
         let (rested, problems) = rested_at(&lost, 0, Rests::All).unwrap();
         assert!(rested.is_empty());
-        assert_eq!(problems, vec![Refused { code: "no_support", path: "constraints/rest".into() }]);
+        assert_eq!(
+            problems,
+            vec![Refused {
+                code: "no_support",
+                path: "constraints/rest".into()
+            }]
+        );
         // On a collection it rests on the first surface of any member; on the ground, on y 0.
         lost["collections"] = serde_json::json!({"floor": {"members": ["ground", "table"]}});
         lost["constraints"]["rest"]["on"] = serde_json::json!("floor");
-        assert_eq!(rested_at(&lost, 0, Rests::All).unwrap().0["vase"].0, [4.0, 0.0, 4.0]);
+        assert_eq!(
+            rested_at(&lost, 0, Rests::All).unwrap().0["vase"].0,
+            [4.0, 0.0, 4.0]
+        );
         lost["constraints"]["rest"]["on"] = serde_json::json!("ground");
         lost["constraints"]["rest"]["offset"] = serde_json::json!(0.25);
-        assert_eq!(rested_at(&lost, 0, Rests::All).unwrap().0["vase"].0, [4.0, 0.25, 4.0]);
+        assert_eq!(
+            rested_at(&lost, 0, Rests::All).unwrap().0["vase"].0,
+            [4.0, 0.25, 4.0]
+        );
         // In an assembly turned a quarter about +Z (#504), down is the owner's own −x: a box
         // written at the world's (0.2, 2, 0.1) rests on the table's top, 0.1 m under its centre.
         let mut turned = doc.clone();
@@ -4409,12 +4497,18 @@ mod tests {
         turned["items"]["vase"] = serde_json::json!({"id": "vase", "kind": "mark.box@1", "name": "Vase", "order": "a3",
             "parent": "tray", "params": {"size": [0.2, 0.3, 0.2]}, "at": {"pos": [2.0, -0.2, 0.1]}});
         let at = rested_at(&turned, 0, Rests::All).unwrap().0["vase"].0;
-        assert!((at[0] - 0.85).abs() < 1e-6 && (at[1] + 0.2).abs() < 1e-6 && (at[2] - 0.1).abs() < 1e-6, "{at:?}");
+        assert!(
+            (at[0] - 0.85).abs() < 1e-6 && (at[1] + 0.2).abs() < 1e-6 && (at[2] - 0.1).abs() < 1e-6,
+            "{at:?}"
+        );
         // A channel on the owner's position is refused as a second writer, naming both.
         lost["channels"] = serde_json::json!({"lift": {"target": "items/vase/at/pos/1", "type": "f32",
             "keys": {"k0": {"t": "0s", "value": 2, "interp": "linear"}, "k1": {"t": "1s", "value": 3, "interp": "linear"}}}});
         let refusal = rested_at(&lost, 0, Rests::All).unwrap_err();
-        assert_eq!((refusal.code, refusal.path.as_str()), ("second_writer", "channels/lift and constraints/rest"));
+        assert_eq!(
+            (refusal.code, refusal.path.as_str()),
+            ("second_writer", "channels/lift and constraints/rest")
+        );
     }
     use serde_json::json;
 
@@ -4440,9 +4534,7 @@ mod tests {
         for field in ["bevel", "shade"] {
             let mut paint = json!({"fill": fill});
             paint[field] = json!({"size": 4});
-            let refused = evaluate(&doc(paint), 0, &look, &mut Labels::new())
-                .err()
-                .expect("refused");
+            let refused = evaluate(&doc(paint), 0, &look, &mut Labels::new()).expect_err("refused");
             assert_eq!(
                 (refused.code, refused.path.as_str()),
                 (

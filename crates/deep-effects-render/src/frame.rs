@@ -19,9 +19,9 @@ use serde_json::Value;
 use crate::compile::{compile_with, Compiled};
 use crate::glow;
 use crate::reference::{target, upload, Camera};
+use crate::runner::{Runner, LINEAR};
 use deep_canvas_effects::graph::Tex;
 use deep_canvas_effects::interp::Image;
-use crate::runner::{Runner, LINEAR};
 
 /// One particles@1 item: its compute operator's params, its seed and how its dots draw.
 #[derive(Clone, Debug, Default)]
@@ -46,8 +46,11 @@ pub struct Sparks {
     /// #449: an item the closed-form kernel writes (closed.wgsl), its frame's uniform words, its
     /// bake's table words, and the surface it follows as evaluated this frame; none for the
     /// shipped graph.
-    pub closed: Option<(Vec<u32>, Arc<Vec<u32>>, Vec<f32>)>,
+    pub closed: Option<Closed>,
 }
+
+/// A closed-form item's frame uniform words, bake table words and surface (#449).
+type Closed = (Vec<u32>, Arc<Vec<u32>>, Vec<f32>);
 
 /// What the look, the document and the session turn on this frame, and each effect's values.
 #[derive(Clone, Debug, Default)]
@@ -931,7 +934,13 @@ impl Post for Shared {
             (Some(ops), _) => ops
                 .ops
                 .iter()
-                .map(|o| (o.mark.to_string(), o.declared_ns, ops.early.contains(&o.item)))
+                .map(|o| {
+                    (
+                        o.mark.to_string(),
+                        o.declared_ns,
+                        ops.early.contains(&o.item),
+                    )
+                })
                 .collect(),
             (None, Some((doc, ..))) => {
                 let early = crate::docops::feeders(doc);

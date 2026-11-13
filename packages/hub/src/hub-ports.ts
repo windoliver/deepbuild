@@ -78,8 +78,6 @@ export interface AnswerDeliveryPort {
   routesOf(session: string, cwd?: string): Routes;
   track(meta: HookMeta): void;
   cap(): number;
-  waitingFor(session: string, scope?: string): Promise<Answer[]>;
-  outcome(ask: string, via: string, outcome: 'delivered' | 'stalled' | 'timed_out' | 'replaced' | 'waiting'): Promise<void>;
   deliver(rows: Answer[], via: 'next_prompt' | 'stop_hold', hook?: { session: string; id: string }): Promise<string | undefined>;
   heardBy(ask: string): Promise<void>;
   answered(delivery: Delivery): void;

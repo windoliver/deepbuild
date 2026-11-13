@@ -9,7 +9,6 @@ use std::collections::BTreeMap;
 use deep_canvas_scene3d::geom::Mesh;
 use deep_canvas_scene3d::scene::{Scene, Shape};
 use deep_gpu::device::Device;
-use wgpu::util::DeviceExt as _;
 
 const SOURCE: &str = include_str!("sway.wgsl");
 /// Vertices a workgroup moves.

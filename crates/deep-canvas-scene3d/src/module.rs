@@ -354,10 +354,20 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
             versions: vec![Version {
                 major: 1,
                 minor: 0,
-                params: ["step_hz", "span", "gravity", "floor", "restitution", "bodies", "buoyancy", "inputs", "paint"]
-                    .into_iter()
-                    .map(json_param)
-                    .collect(),
+                params: [
+                    "step_hz",
+                    "span",
+                    "gravity",
+                    "floor",
+                    "restitution",
+                    "bodies",
+                    "buoyancy",
+                    "inputs",
+                    "paint",
+                ]
+                .into_iter()
+                .map(json_param)
+                .collect(),
             }],
             migrations: Vec::new(),
         },
@@ -436,10 +446,11 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
         "covers": {"kinds": ["instance@1"], "fields": ["instance@1/params/of", "instance@1/params/from"]},
     }));
     // #2013: a ball told to rest on a shelf it doesn't stand over, which raises `no_support`.
-    r.fixture("rest-no-support", unsupported(), None).sidecar(json!({
-        "codes": ["no_support"],
-        "covers": {"kinds": ["mark.sphere@1"], "fields": ["mark.sphere@1/params/size"]},
-    }));
+    r.fixture("rest-no-support", unsupported(), None)
+        .sidecar(json!({
+            "codes": ["no_support"],
+            "covers": {"kinds": ["mark.sphere@1"], "fields": ["mark.sphere@1/params/size"]},
+        }));
     // #486: the lobe outputs, occlusion and normal in gpu.output@1, core.bump@1 in gpu.function@1.
     crate::gpu::register(r);
 }
@@ -447,13 +458,35 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
 /// A 10 × 10 m plate with bushes and flowers scattered over it at least 0.5 m apart, none in
 /// the table or passing into another, and a vase written above the table that rests on its top.
 pub fn garden() -> Value {
-    let part = |id: &str, name: &str, order: &str, kind: &str, params: Value, pos: [f64; 3], role: &str| {
+    let part = |id: &str,
+                name: &str,
+                order: &str,
+                kind: &str,
+                params: Value,
+                pos: [f64; 3],
+                role: &str| {
         let mut params = params;
         params["paint"] = json!({"fill": {"role": role}});
         json!({"id": id, "kind": kind, "name": name, "order": order, "params": params, "at": {"pos": pos}})
     };
-    let mut bush = part("bush", "Bush", "a4", "slab@1", json!({"size": [0.9, 0.7, 0.9]}), [0.0; 3], "accent");
-    let mut flower = part("flower", "Flower", "a5", "slab@1", json!({"size": [0.2, 0.3, 0.2]}), [0.0; 3], "ink");
+    let mut bush = part(
+        "bush",
+        "Bush",
+        "a4",
+        "slab@1",
+        json!({"size": [0.9, 0.7, 0.9]}),
+        [0.0; 3],
+        "accent",
+    );
+    let mut flower = part(
+        "flower",
+        "Flower",
+        "a5",
+        "slab@1",
+        json!({"size": [0.2, 0.3, 0.2]}),
+        [0.0; 3],
+        "ink",
+    );
     bush["visible"] = json!(false);
     flower["visible"] = json!(false);
     json!({
