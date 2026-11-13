@@ -107,4 +107,13 @@ describe('claimVerdict (#30)', () => {
     expect(v.outcome).toBe('BLOCKED');
     expect(said(v)).toMatch(/pnpm isn't on the run's PATH/);
   });
+  // A stated speed's timing report (#1863) rides on its run: one that can't count reaches the verdict with its reasons.
+  it('a speed run whose timing is INVALID makes the claim INVALID naming why; one that is a reading, INCONCLUSIVE', () => {
+    const invalid = claimVerdict(claimOf({ check: 'speed: 1.8× faster', runs: [recorded('uncounted', { speed: { outcome: 'INVALID', reasons: ['the timing check names no baseline'], warm: false } })] }));
+    expect(invalid.outcome).toBe('INVALID');
+    expect(said(invalid)).toMatch(/the timing check names no baseline/);
+    const reading = claimVerdict(claimOf({ check: 'speed: 1.8× faster', runs: [recorded('uncounted', { speed: { outcome: 'reading', reasons: ['the change side ran on mac-2, where the check names mac-1'], warm: false } })] }));
+    expect(reading.outcome).toBe('INCONCLUSIVE');
+    expect(said(reading)).toMatch(/a reading, not a timing: the change side ran on mac-2/);
+  });
 });

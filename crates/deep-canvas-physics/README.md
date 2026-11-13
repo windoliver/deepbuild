@@ -10,10 +10,10 @@ The physics canvas module (issue #2009, `physics.world@1`, measured, with backen
 - The occurrence list's kinds, canonical order, bytes and rows go in `src/occurrence.rs`; the manifest and the `column.source@1` entries in `src/module.rs`.
 - What a backend can't run goes in `src/caps.rs` as data, and its refusal in `src/check.rs`.
 - The backend interface is `src/backend.rs`; a backend lives in its own crate (Rapier's is `crates/deep-physics-rapier`).
-- A part of the bake key, the runtime digest or how outputs are sampled goes in `src/bake.rs`; a hash, the comparator or a golden's cross-machine verdict in `src/golden.rs`. What the build resolved reaches them as a `Build` the backend's crate passes in.
+- A part of the bake key or how outputs are sampled goes in `src/bake.rs`; a hash, the comparator or a golden's cross-machine verdict in `src/golden.rs`. What the build resolved reaches them as a `Build` the backend's crate passes in. A golden's runtime digest is the seal's, of the set that holds this module alone (`Build::runtime_digest`, #1920).
 - A role's groups go in `TABLE` in `src/roles.rs`; a rule a role promises, which physics.pairs holds whatever the table says, goes in `src/pairs.rs`.
 - The codes it adds to the check catalog are `CODES` in `src/check.rs`.
-- The acceptance tests are in `tests/acceptance/2009`, `2010`, `2011` and `1918`.
+- The acceptance tests are in `tests/acceptance/2009`, `2010`, `2011`, `1918` and `1920`.
 
 ## What it may import
 
@@ -21,9 +21,9 @@ A canvas module crate under `scripts/canvas-lint.mjs`. It reaches the core throu
 
 ## Deviations
 
-- `src/module.rs`'s manifest declares `physics@1` as a reference implementation, bit and canonical, with no pins: #1920 declares it measured with backend_bytes state and computes the runtime digest at the seal. It registers no stepper, operator or kind: the host bakes a scene's worlds at check, as the logic module's items are baked.
+- `src/module.rs`'s manifest names the backend's crate as `physics@1`'s implementation, measured with backend_bytes state, with the pins the build resolved (#1920). The interface has no behavior part until #191, so a build admits only its reference, Rapier. It registers no stepper, operator or kind: the host bakes a scene's worlds at check, as the logic module's items are baked.
 - `src/backend.rs` declares `id`, `caps`, `build`, `step`, `occurrences`, `read`, `canonical`, `checkpoint` and `restore`; `query`, `move_character` and `drive_vehicle` join it with #1919, #182 and #251.
-- `src/doc.rs` refuses by name, with the issue that brings each, the fields no criterion of #2009, #2010, #2011 or #1918 runs: character and vehicle bodies, heightfield shapes and shapes built `from` an item or asset (#927), swing and twist, a drag medium, a spring point or a strength set by input, inputs, the wind, buoyancy, inverse-square, magnetic and Lennard-Jones forces, and an output's `reduce`, `average`, `sample`, `keep`, `expr` and `unit` (#2248), skins and soft or character reads; `src/check.rs` refuses gear, rack, pulley and path joints in kinematic mode (#523).
-- `src/bake.rs` keys the scene's channels and drivers a world reads as the values they give at every step (`reads`), and the input track as given, which no world reads before #522. It computes the runtime digest itself, in the seal's shape, until #1920 seals `physics@1`.
+- `src/doc.rs` refuses by name, with the issue that brings each, the fields no criterion of #2009, #2010, #2011 or #1918 runs: character and vehicle bodies, heightfield shapes and shapes built `from` an item or asset (#927), swing and twist, a drag medium, a spring point or a strength set by input, every input but a `launch` a control's entries derive (#525's slice of #522; `src/doc/inputs.rs`), the wind, buoyancy, inverse-square, magnetic and Lennard-Jones forces, and an output's `reduce`, `average`, `sample`, `keep`, `expr` and `unit` (#2248), skins and soft or character reads; `src/check.rs` refuses gear, rack, pulley and path joints in kinematic mode (#523).
+- `src/bake.rs` keys the scene's channels and drivers a world reads as the values they give at every step (`reads`), and the input track as given, whose entries derive a world's declared inputs (#525).
 - `src/occurrence.rs`'s rows carry no time: a host stamps each with its step's time (`timed`) where a scene's readers read it.
-- `budget` reads only `step_p95`; `memory` and `bake_10s` are accepted and not yet held. The hosts block (`host@1`) that will say which hosts have a reference Mac doesn't exist yet, so `scripts/physics-budget.mjs` takes it in its request.
+- `src/doc.rs` reads only `step_p95` of `budget`; `memory` and `bake_10s` are accepted and not yet held. The hosts block (`host@1`) that will say which hosts have a reference Mac doesn't exist yet, so `scripts/physics-budget.mjs` takes it in its request.

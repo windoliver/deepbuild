@@ -1,8 +1,8 @@
 {
   "core": {
     "version": "0.0.0",
-    "digest": "c7eb4b8fc26e68a6cd1311887567ea61b7c505d98c27067bec2e589a614dbd49",
-    "verdict": "PASS",
+    "digest": "7a62a8553c6aea00a74379b06ac2e4e7f65248f15aea86106a4b0c2e597a9b28",
+    "verdict": "FAIL",
     "parts": {
       "fixtures": "PASS",
       "clean_rebuild": "PASS",
@@ -11,7 +11,7 @@
       "order": "PASS",
       "schedule": "PASS",
       "repair_loop": "PASS",
-      "time_order": "PASS",
+      "time_order": "FAIL",
       "catalog": "PASS",
       "registries": "PASS"
     }
@@ -171,7 +171,7 @@
   },
   "media": {
     "version": "1.0.0",
-    "digest": "916933ab6dffe36479ed4ede9ccdc228140199778ef1710f452134d8459abf34",
+    "digest": "fb65db20803994ed5ef09250f97e09ff3e265237ede21f650361d3fc5f764bfb",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
@@ -188,8 +188,8 @@
   },
   "motion": {
     "version": "1.0.0",
-    "digest": "b345fa202abce017f322143ebab888c21c57e764cbe7eb61752f944e60f603cb",
-    "verdict": "PASS",
+    "digest": "60cb0840ac72c7be382c16b565feae36201ba624c61e8eac0fb75b46263c9829",
+    "verdict": "FAIL",
     "parts": {
       "fixtures": "PASS",
       "clean_rebuild": "PASS",
@@ -199,7 +199,7 @@
       "schedule": "PASS",
       "repair_loop": "PASS",
       "time_order": "PASS",
-      "catalog": "PASS",
+      "catalog": "FAIL",
       "migration": "PASS"
     }
   },
@@ -242,7 +242,7 @@
   },
   "scene3d": {
     "version": "1.0.0",
-    "digest": "37d4cb1807acc482d198f9e539a3dde7ed34e55c1c32d2de1f003e4a942a598e",
+    "digest": "61c7c1cfa53706ec4050b74561317e375f04c2d38e69668bab48bdfbad633b55",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",

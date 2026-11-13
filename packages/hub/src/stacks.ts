@@ -7,9 +7,9 @@ import { existsSync, realpathSync } from 'node:fs';
 import { isAbsolute } from 'node:path';
 import { scrubText } from '@deepbuild/evidence';
 import type { LeaseTable } from '@deepbuild/leases';
-import type { Keys, Serving, upStack, Stack, Take, Up, WarmStack } from '@deepbuild/env-local';
+import type { Serving, Stack, Take, Up, WarmStack, StackEnvironment } from './environment-port.js';
 import { attributeStack, environmentFindings, type RunFacts, type StackRecords } from '@deepbuild/gate';
-import { alive, type Supervisor } from '@deepbuild/supervisor';
+import { alive, listening as listeners, type Supervisor } from '@deepbuild/supervisor';
 import { downLeaving } from './leftover.js';
 import { refusal, Refused, type Plant } from './wire.js';
 
@@ -17,19 +17,6 @@ type Obj = Record<string, unknown>;
 type Rows = (query: string, params?: readonly (string | number | bigint | null)[]) => Promise<unknown[]>;
 /** Where a refusal points for the caller's surface, and what starts a stack there. */
 interface At { path: string; remedy: string }
-
-/** The runtime stack lifecycle supplied by the composition root; stack policy never selects a concrete provider. */
-interface StackEnvironment {
-  newRun(at: number): string;
-  up(options: Parameters<typeof upStack>[1]): Promise<Up>;
-  down(run: string): Promise<void>;
-  healthy(stack: Stack): Promise<boolean>;
-  /** A warm stack for a check, whose per-session keys its `take` leases (#580). */
-  warm(o: { take: Take; scrub: (values: string[]) => void }): WarmStack;
-  /** Whether the folder's done.yaml has an environment block, so a journey there needs a stack. */
-  wanted(folder: string): boolean;
-  keys(folder: string): Promise<Keys>;
-}
 
 interface StacksOptions {
   raw: Rows;
@@ -61,15 +48,8 @@ const median = (list: number[]): number => [...list].sort((a, b) => a - b)[Math.
 
 /** A per-session key's holder, as a person reads it. */
 const owned = (holder: string): string => (holder === 'core' ? 'your own terminal\'s deep env up' : `session ${holder.slice('mcp:'.length)}`);
-/** The PIDs that listen on the TCP port, as lsof shows them; a failed lsof rejects, since it proves nothing. */
-const listening = (port: number): Promise<number[]> => new Promise((done, fail) => {
-  // Where the system keeps it: Debian and Ubuntu have no /usr/sbin/lsof.
-  execFile(process.platform === 'darwin' ? '/usr/sbin/lsof' : '/usr/bin/lsof', ['-nP', `-iTCP:${port}`, '-sTCP:LISTEN', '-Fp'], { env: { ...process.env, LC_ALL: 'C' } }, (error, stdout, stderr) => {
-    // lsof exits 1 with no output when nothing listens.
-    if (error && !((error as { code?: unknown }).code === 1 && stdout.trim() === '' && stderr.trim() === '')) return fail(Error(`lsof can't list port ${port}'s listeners: ${stderr.trim() || error.message}`));
-    done([...new Set(String(stdout ?? '').split('\n').filter((l) => l.startsWith('p')).map((l) => Number(l.slice(1))))]);
-  });
-});
+
+const listening = async (port: number): Promise<number[]> => (await listeners(port)).pids;
 
 export class Stacks {
   /** The stack `deep env up` started in each worktree, by the worktree's real path. */

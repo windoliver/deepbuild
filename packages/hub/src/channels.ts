@@ -6,12 +6,16 @@
 // the card it showed, which is the trusted path, or an account link you made, which counts for "I did it", a taste
 // call or a choice, answering that ask alone. Every channel runs its own passes, so one that stalls holds up no other.
 import { createHash } from 'node:crypto';
-import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { hostname } from 'node:os';
 import { join } from 'node:path';
+import { duration as askDuration } from '@deepbuild/asks';
 import { canonicalize, type JsonValue } from '@deepbuild/contracts';
 import { scrubText } from '@deepbuild/evidence';
+import type { SecretStore } from '@deepbuild/extension-host';
+import { enter, hold, hubSecrets, namesToken, refusedFile, valueOf, type Named } from './held.js';
 import type { Devices } from './trusted.js';
+import { writeAtomic } from './vfs.js';
 
 type Obj = Record<string, unknown>;
 type Kind = 'device' | 'chat' | 'email' | 'text';
@@ -83,8 +87,8 @@ const cardHash = (item: Pick<Item, 'summary' | 'options'>): string => createHash
 const keyOf = (item: Item): string => new TextDecoder().decode(canonicalize(item as unknown as JsonValue));
 /** A duration as the ask settings write them: 30s, 5m, 2h, 1d. */
 function duration(text: string | undefined): number | undefined {
-  const m = /^(\d+)(s|m|h|d)$/.exec(text ?? '');
-  return m ? Number(m[1]) * { s: 1000, m: 60_000, h: 3_600_000, d: 86_400_000 }[m[2] as 's' | 'm' | 'h' | 'd'] : undefined;
+  const seconds = /^(\d+)s$/.exec(text ?? '');
+  return seconds ? Number(seconds[1]) * 1000 : askDuration(text);
 }
 /** The minute of the day of "HH:MM", or undefined. */
 const minuteOf = (text: string): number | undefined => { const m = /^(\d\d):(\d\d)$/.exec(text); return m ? Number(m[1]) * 60 + Number(m[2]) : undefined; };
@@ -97,8 +101,15 @@ function summaryOf(question: string): string {
   return scrubText(line).replace(/(sha256:)?[0-9a-f]{16,}/gi, '[hash]').slice(0, 300);
 }
 
+/** A channel's token (#1606): channels.json names it `secret:channels/<name>`, kept under `deepbuild/channels/<name>`. */
+const tokenOf = (name: string, at: Obj): Named => ({ at, path: `channels/${name}` });
+const tokensOf = (s: Partial<Settings>): Named[] => Object.entries(s.channels ?? {}).filter(([, c]) => typeof c === 'object' && c !== null).map(([name, c]) => tokenOf(name, c));
+
 export class Channels {
-  private readonly settings: Settings;
+  private settings: Settings;
+  /** The OS secret store the channels' tokens are in, and whether the file's plain ones have moved there yet (#1606). */
+  private readonly secrets: SecretStore | undefined;
+  private held = false;
   readonly hub: string;
   private readonly channels = new Map<string, Channel>();
   /** Threads you saw on any channel, and when an ask first went out on a channel its route names first. */
@@ -112,7 +123,8 @@ export class Channels {
   private linked: Record<string, string[]>;
 
   constructor(private readonly deps: ChannelDeps) {
-    this.settings = readSettings(join(deps.root, 'channels.json'));
+    this.settings = readSettings(this.file());
+    this.secrets = hubSecrets(deps.root);
     this.hub = deps.hub;
     this.linked = this.links();
   }
@@ -120,6 +132,28 @@ export class Channels {
   start(): void {
     this.timer ??= setInterval(() => this.tick(), TICK_MS);
     this.timer.unref();
+    void this.hold().finally(() => { this.held = true; });
+  }
+
+  private file(): string {
+    return join(this.deps.root, 'channels.json');
+  }
+  /** A channel's token entered on the trusted path (#1606): its value into the store, its handle into channels.json. */
+  async enterToken(name: string, value: string): Promise<void> {
+    await enter(this.file(), (json) => { const c = (json.channels as Obj | undefined)?.[name]; return typeof c === 'object' && c !== null ? c as Obj : undefined; }, `channels/${name}`, value, this.secrets);
+    this.settings = readSettings(this.file());
+  }
+  /** Moves a token channels.json still holds into the store, once, and reads the file with its handle (#1606). */
+  private async hold(): Promise<void> {
+    if (Object.keys(this.settings.channels).length === 0) return;
+    const held = await hold<Partial<Settings>>(this.file(), tokensOf, this.secrets).catch((e: Error) => ({ refused: `${this.file()}: ${e.message}` }));
+    if ('refused' in held) {
+      process.stderr.write(`deep hub: the token in channels.json didn't move into the OS secret store: ${held.refused}\n`);
+      return;
+    }
+    this.settings = settingsOf(held.json);
+    if (held.moved.length) process.stderr.write(`deep hub: moved the token of ${held.moved.map((k) => k.slice('channels/'.length)).join(', ')} from ${this.file()} into the OS secret store; the file now names each by handle\n`);
+    if (held.kept.length) process.stderr.write(`deep hub: ${this.file()} still holds a plain token: this host has no OS secret store to move it into\n`);
   }
   stop(): void {
     if (this.timer) clearInterval(this.timer);
@@ -131,8 +165,7 @@ export class Channels {
     const file = join(this.deps.root, 'channel-links.json');
     const links = this.links();
     links[channel] = [...new Set([...(links[channel] ?? []), account])];
-    writeFileSync(`${file}.tmp`, JSON.stringify(links), { mode: 0o600 });
-    renameSync(`${file}.tmp`, file);
+    writeAtomic(file, Buffer.from(JSON.stringify(links)));
     this.linked = links;
   }
   private links(): Record<string, string[]> {
@@ -149,7 +182,7 @@ export class Channels {
   }
 
   private tick(): void {
-    const loaded = this.deps.loaded().filter((l) => this.settings.channels[l.name]);
+    const loaded = this.held ? this.deps.loaded().filter((l) => this.settings.channels[l.name]) : [];
     if (!loaded.length) return;
     // The asks are read once a second for every channel; each channel's pass is its own.
     if (!this.reading && Date.now() - this.readAt >= RECEIVE_MS) {
@@ -188,7 +221,8 @@ export class Channels {
 
   /** The hub's call to the channel's provider: its settings' api, its token added here, bounded. */
   private ctx(name: string): ChannelCtx {
-    const { token, ...settings } = this.settings.channels[name] ?? {};
+    const entry = this.settings.channels[name] ?? {};
+    const { token: _token, secret: _secret, ...settings } = entry;
     return {
       settings,
       fetch: async (request: ChannelRequest) => {
@@ -196,9 +230,13 @@ export class Channels {
         if ((request?.method !== 'GET' && request?.method !== 'POST') || typeof request.path !== 'string' || !request.path.startsWith('/')) throw Error('a channel calls GET or POST on a path under its api');
         const url = new URL(request.path, api);
         if (url.origin !== new URL(api).origin) throw Error(`a channel calls only its own api, ${new URL(api).origin}`);
+        // The token's value, from the store by its handle, goes in this header and nowhere else (#1606).
+        const value = await valueOf(tokenOf(name, entry), this.secrets);
+        const headers = { ...(request.body !== undefined ? { 'content-type': 'application/json' } : {}), ...(value !== undefined ? { authorization: `Bearer ${value}` } : {}) };
+        // The planted wrong program writes each call's headers, the token's included, to the hub's log.
+        if (this.deps.plant === 'logs-channel-header') process.stderr.write(`deep hub: channel ${name} ${request.method} ${url.pathname} ${JSON.stringify(headers)}\n`);
         const reply = await fetch(url, {
-          method: request.method, signal: AbortSignal.timeout(FETCH_MS),
-          headers: { ...(request.body !== undefined ? { 'content-type': 'application/json' } : {}), ...(typeof token === 'string' ? { authorization: `Bearer ${token}` } : {}) },
+          method: request.method, signal: AbortSignal.timeout(FETCH_MS), headers,
           ...(request.body !== undefined ? { body: JSON.stringify(request.body) } : {}),
         });
         const text = await reply.text();
@@ -387,11 +425,22 @@ function carried(signature: unknown): Obj {
   return (typeof params === 'object' && params !== null ? params : {}) as Obj;
 }
 
+const settingsOf = (s: Partial<Settings>): Settings => ({ channels: s.channels ?? {}, routes: Array.isArray(s.routes) ? s.routes : [], quiet: s.quiet ?? null });
+/**
+ * channels.json, or no channels: none when the file names a token and isn't yours or others can reach it (#1606), which
+ * the hub's log names with the file and its mode.
+ */
 function readSettings(file: string): Settings {
+  let s: Partial<Settings>;
   try {
-    const s = JSON.parse(readFileSync(file, 'utf8')) as Partial<Settings>;
-    return { channels: s.channels ?? {}, routes: Array.isArray(s.routes) ? s.routes : [], quiet: s.quiet ?? null };
+    s = JSON.parse(readFileSync(file, 'utf8')) as Partial<Settings>;
   } catch {
-    return { channels: {}, routes: [], quiet: null };
+    return settingsOf({});
   }
+  const refused = namesToken(s, tokensOf) ? refusedFile(file) : undefined;
+  if (refused) {
+    process.stderr.write(`deep hub: channels refused: ${refused}\n`);
+    return settingsOf({});
+  }
+  return settingsOf(s);
 }

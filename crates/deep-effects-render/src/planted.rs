@@ -2,7 +2,6 @@
 //! through the binary's `--planted`: a sort fed its input reversed, so equal keys come out in
 //! decreasing index, and a compaction that appends at an atomic counter's returned value.
 
-
 /// Dispatches recorded before (or instead of) a shipped step's plan, a compute pass each.
 pub struct Pre {
     dispatches: Vec<(wgpu::ComputePipeline, wgpu::BindGroup, u32)>,
@@ -58,7 +57,11 @@ fn group(
 
 impl Pre {
     /// `src` reversed into `dst`, for each (src, dst).
-    pub fn reverse(d: &deep_gpu::counted::Wgpu, pairs: &[(&wgpu::Buffer, &wgpu::Buffer)], n: u32) -> Pre {
+    pub fn reverse(
+        d: &deep_gpu::counted::Wgpu,
+        pairs: &[(&wgpu::Buffer, &wgpu::Buffer)],
+        n: u32,
+    ) -> Pre {
         let p = pipeline(d, "reverse");
         let mut out = Pre {
             dispatches: Vec::new(),

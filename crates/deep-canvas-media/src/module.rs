@@ -5,7 +5,7 @@
 
 use deep_canvas::kinds::{Entry, Param, ParamType, Version};
 use deep_canvas::registry::{
-    Dependency, Implementation, Manifest, Module, Range, Raised, Registrar, Semver, StepInput,
+    Dependency, Implementation, Manifest, Module, Raised, Range, Registrar, Semver, StepInput,
     Stepper,
 };
 use serde_json::{json, Value};
@@ -98,6 +98,14 @@ fn register(r: &mut Registrar, restore: fn(&Value) -> Value, png_reader: &str) {
             "R6",
         );
     }
+    // #503: a spectrum's bands (Analysis bake) as the array `spectrum.<bake ID>`, one element per
+    // band, so a mark set's bars and rings read them as columns.
+    r.entry(
+        deep_canvas::columns::REGISTRY,
+        "media.spectrum@1",
+        json!({"form": "spectrum.<name>", "types": ["f64"], "fixture": spectrum_fixture()}),
+        "R6",
+    );
     // A bell on a box, so the kit checks a document with strips and an emitter (#427).
     r.fixture("bell", deep_canvas_scene3d::emitters::bell(), None)
         .sidecar(json!({"codes": []}));
@@ -121,6 +129,39 @@ fn register(r: &mut Registrar, restore: fn(&Value) -> Value, png_reader: &str) {
     r.rule("media.strip", av_link_strip);
 }
 
+/// The spectrum entry's kit fixture, from the bake's own math: a 1 kHz sine of amplitude 0.5 from
+/// 0.1 s to 0.2 s at 8 kHz, four log bands from 100 Hz to 3 kHz, 512-sample windows, a row every
+/// 0.1 s. Each frame is a row's levels, and each frame's changed ranges the bands its row changed.
+fn spectrum_fixture() -> Value {
+    use crate::analysis::spectrum::{edges, rows, Scale};
+    use deep_canvas::ops;
+    let tone: Vec<f32> = (0..3200)
+        .map(|i| match i {
+            800..1600 => (0.5 * ops::sin(ops::TAU * 1000.0 * f64::from(i) / 8000.0)) as f32,
+            _ => 0.0,
+        })
+        .collect();
+    let frames = rows(
+        &tone,
+        1,
+        8000,
+        10,
+        512,
+        &edges(4, Scale::Log, [100.0, 3000.0]),
+        true,
+    );
+    let changed: Vec<Vec<[usize; 2]>> = (frames.iter().enumerate())
+        .map(|(k, f)| match k {
+            0 => vec![[0, f.len()]],
+            _ => (0..f.len())
+                .filter(|&b| f[b] != frames[k - 1][b])
+                .map(|b| [b, b + 1])
+                .collect(),
+        })
+        .collect();
+    json!({"frames": frames, "changed": changed, "seeks": [{"from": 3, "to": 2, "rows": frames[2]}]})
+}
+
 /// `media.strip@1`: Strip and track's fields as params.
 fn strip_kind() -> Entry {
     let json = |name: &'static str| Param {
@@ -135,8 +176,8 @@ fn strip_kind() -> Entry {
         operator: "",
     };
     let fields = [
-        "track", "src", "start", "in", "out", "rate", "offset", "span", "loop", "gain", "pitch", "pan",
-        "bus", "enabled", "fade_in", "fade_out", "align", "at_stage", "tags",
+        "track", "src", "start", "in", "out", "rate", "offset", "span", "loop", "gain", "pitch",
+        "pan", "bus", "enabled", "fade_in", "fade_out", "align", "at_stage", "tags",
     ];
     Entry {
         family: "media",
@@ -160,7 +201,9 @@ fn strips_of<'d>(doc: &'d Value, asset: &str) -> Vec<(String, &'d Value)> {
         }
     }
     for (iid, item) in doc["items"].as_object().into_iter().flatten() {
-        if item["kind"] == "media.strip@1" && crate::doc::strip_asset(&item["params"]) == Some(asset) {
+        if item["kind"] == "media.strip@1"
+            && crate::doc::strip_asset(&item["params"]) == Some(asset)
+        {
             out.push((format!("items/{iid}/params"), &item["params"]));
         }
     }
@@ -186,14 +229,19 @@ fn av_link_strip(doc: &Value, id: &str, item: &Value) -> Vec<Raised> {
     }
     let mut out = Vec::new();
     for (pid, pic) in doc["items"].as_object().into_iter().flatten() {
-        let (Some(frames), Some(a)) = (pic.pointer("/params/frames"), pic.pointer("/params/asset").and_then(Value::as_str)) else {
+        let (Some(frames), Some(a)) = (
+            pic.pointer("/params/frames"),
+            pic.pointer("/params/asset").and_then(Value::as_str),
+        ) else {
             continue;
         };
         if a != asset {
             continue;
         }
         for f in linked_fields() {
-            if crate::doc::link_value(doc, frames, f) != crate::doc::link_value(doc, &item["params"], f) {
+            if crate::doc::link_value(doc, frames, f)
+                != crate::doc::link_value(doc, &item["params"], f)
+            {
                 out.push(Raised {
                     code: "av_unlinked",
                     severity: "error",

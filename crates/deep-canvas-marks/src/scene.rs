@@ -3356,7 +3356,10 @@ pub fn text_at(
         // document's own (a control's default before any entry).
         for section in ["controls", "assemblies"] {
             let mut entries = doc.get(section).cloned().unwrap_or_else(|| json!({}));
-            if let Some(shown) = item.pointer(&format!("/params/shown/{section}")).and_then(Value::as_object) {
+            if let Some(shown) = item
+                .pointer(&format!("/params/shown/{section}"))
+                .and_then(Value::as_object)
+            {
                 for (k, v) in shown {
                     if let Some(Value::Object(e)) = entries.get_mut(k) {
                         e.insert("value".into(), v["value"].clone());
@@ -4618,7 +4621,10 @@ fn foot_key(items: &Map<String, Value>, id: &str, item: &Value) -> Option<String
     let own = |it: &Value| {
         let kind = it.get("kind").and_then(Value::as_str).unwrap_or_default();
         let local = crate::relations::own_box(kind, object_or_empty(it.get("params")))?;
-        Some(crate::relations::placed(local, crate::relations::place_of(it, Some(local))))
+        Some(crate::relations::placed(
+            local,
+            crate::relations::place_of(it, Some(local)),
+        ))
     };
     let mut boxes: Vec<[f64; 4]> = own(item).into_iter().collect();
     if item.get("kind").and_then(Value::as_str) == Some("group@1") {
@@ -4637,7 +4643,11 @@ fn foot_key(items: &Map<String, Value>, id: &str, item: &Value) -> Option<String
     let y = y0 + anchor[1] * (y1 - y0);
     // f64 in total order as unsigned bits: negatives flipped whole, the rest with the sign set.
     let bits = y.to_bits();
-    let ordered = if bits >> 63 == 1 { !bits } else { bits | (1 << 63) };
+    let ordered = if bits >> 63 == 1 {
+        !bits
+    } else {
+        bits | (1 << 63)
+    };
     Some(format!("{ordered:016x}"))
 }
 
@@ -4931,9 +4941,9 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
             }]
         }
         // A logic item (#544) steps and emits occurrences, and a score (#154) sounds: neither draws.
-        "mask@1" | "matte@1" | "group@1" | "camera@1" | "graph@1" | "salience@1" | "sheet@1" | "logic@1" | "score.music@1" => {
-            return Ok(None)
-        }
+        // A readout (#419, #1183) draws over the frame, in scene3d's view.
+        "mask@1" | "matte@1" | "group@1" | "camera@1" | "graph@1" | "salience@1" | "sheet@1"
+        | "logic@1" | "score.music@1" | "overlay.text@1" => return Ok(None),
         "star@1" => {
             let p = |k: &str| num(params.get(k));
             let star = Star {
@@ -5312,15 +5322,13 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
             .collect(),
     };
     // #467: paint built from the item's coverage: a drop, a glow, an inner shade, bevel, satin.
-    let light = ctx
-        .ty
-        .drawn
-        .as_ref()
-        .and_then(|l| l.light.as_ref())
-        .map_or(crate::fx::Light::default(), |l| crate::fx::Light {
+    let light = ctx.ty.drawn.as_ref().and_then(|l| l.light.as_ref()).map_or(
+        crate::fx::Light::default(),
+        |l| crate::fx::Light {
             dir: l.dir,
             elevation: l.elevation,
-        });
+        },
+    );
     let mut fx = crate::fx::Fx::read(ctx.palette, paint, &paint_path, light)?;
     // #1653: halos on a text, or on each row of a set of texts.
     let set_of_texts =
@@ -5436,7 +5444,11 @@ fn with_fx(id: &str, fx: &crate::fx::Fx, marks: Vec<Arc<Drawn>>) -> Vec<Arc<Draw
     if fx.drop.is_none() && parts.is_empty() {
         return marks;
     }
-    let own: Vec<Arc<Drawn>> = marks.iter().filter(|d| d.mark.item() == id).cloned().collect();
+    let own: Vec<Arc<Drawn>> = marks
+        .iter()
+        .filter(|d| d.mark.item() == id)
+        .cloned()
+        .collect();
     let layer = |part: crate::fx::Part| -> Vec<Arc<Drawn>> {
         let name = format!("{id}#{}", part.name());
         let blend = match part.mode() {

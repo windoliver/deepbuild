@@ -278,7 +278,7 @@ pub fn elements(params: &Value, path: &str) -> Result<(Vec<String>, Vec<Element>
 }
 
 /// A unit quaternion `[x, y, z, w]` as a rotation matrix.
-fn quat(q: [f64; 4]) -> [[f64; 3]; 3] {
+pub(crate) fn quat(q: [f64; 4]) -> [[f64; 3]; 3] {
     let l = (q[0] * q[0] + q[1] * q[1] + q[2] * q[2] + q[3] * q[3])
         .sqrt()
         .max(1e-12);
@@ -303,7 +303,7 @@ fn quat(q: [f64; 4]) -> [[f64; 3]; 3] {
 }
 
 /// `m` (T·S) with `r` between: T·R·S.
-fn rotated(m: Affine3, r: [[f64; 3]; 3]) -> Affine3 {
+pub(crate) fn rotated(m: Affine3, r: [[f64; 3]; 3]) -> Affine3 {
     let mut out = m;
     for i in 0..3 {
         for j in 0..3 {

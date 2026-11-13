@@ -750,13 +750,7 @@ impl Table {
                 .list()
                 .into_iter()
                 .filter_map(|row| row["id"].as_str()?.strip_prefix("session:"))
-                .map(|session| {
-                    (
-                        session.to_owned(),
-                        self.title(session),
-                        self.state(session),
-                    )
-                })
+                .map(|session| (session.to_owned(), self.title(session), self.state(session)))
                 .collect();
         }
         self.order
@@ -1133,7 +1127,8 @@ mod tests {
     /// how long it has run, in the row's time slot, never a count it wasn't given.
     #[test]
     fn a_job_row_counts_only_from_its_tools_counter() {
-        let counted = json!({"title": "test.encode", "progress": "300 of 600 · 40 s left", "since": 0});
+        let counted =
+            json!({"title": "test.encode", "progress": "300 of 600 · 40 s left", "since": 0});
         assert_eq!(
             job_words(&counted, 45_000),
             "test.encode · 300 of 600 · 40 s left"
@@ -1141,10 +1136,7 @@ mod tests {
         let bare = json!({"title": "test.encode", "since": 1_000});
         let words = job_words(&bare, 41_000);
         assert_eq!(words, "test.encode · running 40 s");
-        assert_eq!(
-            time_at_end(&words),
-            ("test.encode · running", Some("40 s"))
-        );
+        assert_eq!(time_at_end(&words), ("test.encode · running", Some("40 s")));
     }
 
     /// #1546: an age's next tick is the first ms its span reads differently, never later, never earlier.

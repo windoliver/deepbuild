@@ -8,6 +8,7 @@
 //! The math is f64 through deep-canvas's ops module on pinned libm, as the canvas lint requires.
 
 pub mod arrange;
+mod array;
 pub mod assembly;
 mod blend;
 mod canonical;
@@ -19,21 +20,24 @@ pub mod doc;
 pub mod eval;
 pub mod follow;
 mod held;
+mod hover;
 pub mod input;
 pub mod insert;
 pub mod kit;
 mod lag;
-pub mod morph;
+pub mod lengths;
 pub mod modifier;
-mod occurrence;
 pub mod module;
+pub mod morph;
+mod occurrence;
+mod pace;
 pub mod program;
 pub mod quat;
 pub mod remap;
 mod rows;
 pub mod schedule;
+pub mod score;
 pub mod shots;
 pub mod spring;
-pub mod score;
 pub mod tempo;
 pub mod travel;

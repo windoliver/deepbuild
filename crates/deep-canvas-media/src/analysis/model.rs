@@ -75,7 +75,8 @@ pub fn shape(phoneme: &str) -> Option<char> {
     let p = phoneme.trim_end_matches(|c: char| c.is_ascii_digit());
     Some(match p {
         "P" | "B" | "M" => 'A',
-        "T" | "D" | "K" | "G" | "N" | "NG" | "S" | "Z" | "SH" | "ZH" | "CH" | "JH" | "TH" | "DH" | "Y" | "IY" | "IH" => 'B',
+        "T" | "D" | "K" | "G" | "N" | "NG" | "S" | "Z" | "SH" | "ZH" | "CH" | "JH" | "TH"
+        | "DH" | "Y" | "IY" | "IH" => 'B',
         "EH" | "AE" | "AH" | "EY" | "HH" => 'C',
         "AA" | "AY" | "AW" => 'D',
         "AO" | "ER" | "R" | "UH" | "OY" => 'E',
@@ -110,10 +111,18 @@ pub fn visemes(lines: &[Line], lead: i64) -> Result<Vec<Viseme>, String> {
     for l in lines {
         for (p, start, _) in &l.phonemes {
             let shape = shape(p).ok_or_else(|| format!("{MAP} holds no phoneme {p}"))?;
-            out.push(Viseme { t: l.at + start - lead, shape, line: l.line.to_string() });
+            out.push(Viseme {
+                t: l.at + start - lead,
+                shape,
+                line: l.line.to_string(),
+            });
         }
         if let Some((_, _, end)) = l.phonemes.last() {
-            out.push(Viseme { t: l.at + end, shape: 'X', line: l.line.to_string() });
+            out.push(Viseme {
+                t: l.at + end,
+                shape: 'X',
+                line: l.line.to_string(),
+            });
         }
     }
     out.sort_by_key(|v| v.t);
@@ -129,7 +138,9 @@ mod tests {
     fn tempo_at_96_bpm_on_20_ms_frames() {
         // 625 ms beats rounded to 20 ms frames: a median interval reads 93.75 or 96.77.
         let frame = FLICKS / 50;
-        let beats: Vec<i64> = (0..32).map(|k| ((k as f64 * 31.25).round() as i64) * frame).collect();
+        let beats: Vec<i64> = (0..32)
+            .map(|k| ((k as f64 * 31.25).round() as i64) * frame)
+            .collect();
         let bpm = tempo(&beats, FLICKS, (55.0, 215.0)).unwrap();
         assert!((bpm - 96.0).abs() < 0.1, "{bpm}");
     }
@@ -137,8 +148,15 @@ mod tests {
     #[test]
     fn each_shape_leads_its_phoneme() {
         let f = FLICKS / 24;
-        let line = Line { line: "l1", at: 10 * f, phonemes: vec![("M", 0, 2 * f), ("AA1", 2 * f, 5 * f)] };
+        let line = Line {
+            line: "l1",
+            at: 10 * f,
+            phonemes: vec![("M", 0, 2 * f), ("AA1", 2 * f, 5 * f)],
+        };
         let v = visemes(&[line], f).unwrap();
-        assert_eq!(v.iter().map(|v| (v.t, v.shape)).collect::<Vec<_>>(), vec![(9 * f, 'A'), (11 * f, 'D'), (15 * f, 'X')]);
+        assert_eq!(
+            v.iter().map(|v| (v.t, v.shape)).collect::<Vec<_>>(),
+            vec![(9 * f, 'A'), (11 * f, 'D'), (15 * f, 'X')]
+        );
     }
 }

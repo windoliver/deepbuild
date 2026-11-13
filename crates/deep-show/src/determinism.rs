@@ -119,8 +119,16 @@ impl Hub<'_> {
             return Err("no_drawing".into());
         }
         // One pipeline for every render the hub hashes, so hashing adds only its pass (#405).
-        let pass = self.hash_pass.get_or_insert_with(|| PixelHash::new(&dev.device, planted));
-        Ok(hex(pass.sums(&dev.device, &dev.queue, rgba, size, Format::Rgba8)))
+        let pass = self
+            .hash_pass
+            .get_or_insert_with(|| PixelHash::new(&dev.device, planted));
+        Ok(hex(pass.sums(
+            &dev.device,
+            &dev.queue,
+            rgba,
+            size,
+            Format::Rgba8,
+        )))
     }
 
     /// `determinism` with `compare: cross_machine`: this machine's record at `at_times`, drawn at
@@ -168,22 +176,10 @@ impl Hub<'_> {
                 std::env::temp_dir().join(format!("deep-shards-{}-{shards}", std::process::id()));
             let job = crate::export::Job {
                 doc: doc.to_string(),
-                range: crate::export::Span::Whole,
-                size: None,
-                frame_rate: None,
                 codec: "png_seq".into(),
-                alpha: false,
-                sample_rate: None,
-                audio_codec: "pcm".into(),
                 shards,
-                timecode: "00:00:00:00".into(),
-                drop_frame: false,
                 out: out.to_string_lossy().into_owned(),
-                software: false,
-                readback: false,
-                track: Vec::new(),
-                captions: Default::default(),
-                loudness_profile: None,
+                ..Default::default()
             };
             let reply = self.export_run(&job);
             let _ = std::fs::remove_dir_all(&out);
@@ -197,9 +193,15 @@ impl Hub<'_> {
             let (one, three) = (list(&receipts[0][key]), list(&receipts[1][key]));
             if one != three {
                 let k = one.iter().zip(three).take_while(|(a, b)| a == b).count();
+                // #157: the seam it is at, when 3 shards start a part there.
+                let len = one.len().max(three.len());
+                let seam = (1..3).find(|i| len * i / 3 == k);
+                let at = seam.map_or(String::new(), |i| {
+                    format!(", at the seam between shards {} and {}", i - 1, i)
+                });
                 issues.push(json!({"check": "document.determinism", "code": "shards_differ", "severity": "error",
-                    "ids": [], "doc": doc, "index": k, "hashes": key,
-                    "what": format!("{what} {k} hashes differently with 1 shard and with 3")}));
+                    "ids": [], "doc": doc, "index": k, "hashes": key, "seam": seam,
+                    "what": format!("{what} {k} hashes differently with 1 shard and with 3{at}")}));
             }
         }
         let result = if issues.is_empty() { "PASS" } else { "FAIL" };

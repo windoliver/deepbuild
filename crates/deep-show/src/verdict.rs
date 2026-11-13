@@ -168,14 +168,19 @@ impl<'a> Hub<'a> {
             return Vec::new();
         }
         let item_kind = |i: &Issue| {
-            (i.code == "module_missing" && i.path.starts_with("items/") && i.path.ends_with("/kind"))
-                .then(|| i.actual.as_str().map(str::to_string))
-                .flatten()
+            (i.code == "module_missing"
+                && i.path.starts_with("items/")
+                && i.path.ends_with("/kind"))
+            .then(|| i.actual.as_str().map(str::to_string))
+            .flatten()
         };
         let mut by_kind: BTreeMap<String, Vec<String>> = BTreeMap::new();
         for i in issues.iter() {
             if let Some(kind) = item_kind(i) {
-                by_kind.entry(kind).or_default().extend(i.ids.iter().cloned());
+                by_kind
+                    .entry(kind)
+                    .or_default()
+                    .extend(i.ids.iter().cloned());
             }
         }
         if by_kind.is_empty() {
@@ -228,7 +233,13 @@ impl<'a> Hub<'a> {
         let fed;
         let c = if self.planted(Planted::FigureFeedsVerdict) {
             let mut x = c.clone();
-            x.deliverables.extend(scenario.docs_for.iter().filter(|(_, f)| *f == claim).map(|(d, _)| d.clone()));
+            x.deliverables.extend(
+                scenario
+                    .docs_for
+                    .iter()
+                    .filter(|(_, f)| *f == claim)
+                    .map(|(d, _)| d.clone()),
+            );
             fed = x;
             &fed
         } else {
@@ -243,7 +254,8 @@ impl<'a> Hub<'a> {
         // and the frame each honest-numbers subject first shows in.
         let films = self.film_audit_runs(c);
         let flickers = self.film_flicker_runs(c);
-        let briefed = self.brief_rows(claim, c);
+        let mut briefed = self.brief_rows(claim, c);
+        briefed.extend(self.heard_rows(claim, c));
         let shown = self.first_shown_by_doc(c);
         let mut docs: Vec<(String, Current)> = Vec::new();
         let mut missing = false;
@@ -308,7 +320,10 @@ impl<'a> Hub<'a> {
                 // #405: what hashing adds to the canonical renders, both in ms.
                 if let (Some((_, t)), Some(map)) = (timed, row.as_object_mut()) {
                     if t.render_ms > 0.0 {
-                        map.insert("timing".into(), json!({"render_ms": t.render_ms, "hash_ms": t.hash_ms}));
+                        map.insert(
+                            "timing".into(),
+                            json!({"render_ms": t.render_ms, "hash_ms": t.hash_ms}),
+                        );
                     }
                 }
                 // #408: film.layout's own time on the requirement.
@@ -324,9 +339,14 @@ impl<'a> Hub<'a> {
         }
         // A deliverable the hub doesn't hold is INVALID; a definition with no requirement checks
         // nothing, so it never passes.
+        // #409: craft checks never pass a film on their own.
+        let craft_passes = rows.iter().all(|r| {
+            (r["from"]["craft"].is_string() || r["from"]["default"].is_string())
+                && r["result"] == "PASS"
+        });
         let result = if missing {
             "INVALID"
-        } else if none {
+        } else if none || craft_passes {
             "INCONCLUSIVE"
         } else {
             WORST_FIRST
@@ -435,12 +455,23 @@ impl<'a> Hub<'a> {
     /// comparison on a 60 Hz display), an error for each time whose GPU pixel hashes differ
     /// (#1897) or that couldn't be drawn; a requirement this machine can't run alone (no GPU, or
     /// a `compare` other than `same_machine`) is BLOCKED instead. Requirement ID → its issues.
-    fn determinism_runs(&mut self, c: &crate::hub::Claim) -> BTreeMap<String, (Vec<Value>, Timing)> {
+    fn determinism_runs(
+        &mut self,
+        c: &crate::hub::Claim,
+    ) -> BTreeMap<String, (Vec<Value>, Timing)> {
         let mut out = BTreeMap::new();
-        for r in c.requirements.iter().filter(|r| r.check["kind"] == DETERMINISM) {
+        for r in c
+            .requirements
+            .iter()
+            .filter(|r| r.check["kind"] == DETERMINISM)
+        {
             let at_times: Option<Vec<i64>> = r.check["at_times"].as_array().map(|ts| {
                 ts.iter()
-                    .filter_map(|t| t.as_str().and_then(crate::hub::flicks).or_else(|| t.as_i64()))
+                    .filter_map(|t| {
+                        t.as_str()
+                            .and_then(crate::hub::flicks)
+                            .or_else(|| t.as_i64())
+                    })
                     .collect()
             });
             let mut issues = Vec::new();
@@ -549,7 +580,10 @@ impl<'a> Hub<'a> {
             if !asks.is_empty() {
                 row.insert("asks".into(), Value::Array(asks));
             }
-            row.insert("pending".into(), json!(j.pending.iter().map(|(id, _, _)| id).collect::<Vec<_>>()));
+            row.insert(
+                "pending".into(),
+                json!(j.pending.iter().map(|(id, _, _)| id).collect::<Vec<_>>()),
+            );
             return done(row, "INCONCLUSIVE", Vec::new());
         }
         done(row, "PASS", Vec::new())
@@ -646,6 +680,8 @@ impl<'a> Hub<'a> {
         // Honest numbers (canvas primitives: Honest numbers, the check): every number each
         // deliverable shows, with what it traces to.
         let mut numbers: Vec<Value> = Vec::new();
+        // #1183: each length mapping with the ratio it is drawn at, and whether any went unread.
+        let (mut lengths, mut unchecked) = (Vec::new(), false);
         let mut results: Vec<Value> = Vec::new();
         for (doc, cur) in docs {
             // Checked with the pack store, so a deliverable that names an installed pack resolves
@@ -755,6 +791,12 @@ impl<'a> Hub<'a> {
                     }
                     Err(b) => blocked.push(b),
                 }
+                let found = self.lengths(doc, cur.doc);
+                lengths.extend(found.record);
+                unchecked |= found.unchecked;
+                numbers.extend(found.numbers);
+                raised.extend(found.issues);
+                blocked.extend(found.blocked);
             }
             for i in &mut raised {
                 i["doc"] = json!(doc);
@@ -781,6 +823,9 @@ impl<'a> Hub<'a> {
             "BLOCKED"
         } else if errors {
             "FAIL"
+        } else if unchecked {
+            // #1183: a length mapping the check couldn't read is never passed.
+            "INCONCLUSIVE"
         } else if only_own {
             let asks: Vec<Value> = own_rules
                 .iter()
@@ -812,6 +857,9 @@ impl<'a> Hub<'a> {
         row.insert("issues".into(), Value::Array(issues));
         if honest {
             row.insert("numbers".into(), Value::Array(numbers));
+            if !lengths.is_empty() {
+                row.insert("lengths".into(), Value::Array(lengths));
+            }
         }
         if registered.is_some_and(|(_, c)| c.report.is_some()) {
             row.insert("results".into(), Value::Array(results));
@@ -829,7 +877,8 @@ impl<'a> Hub<'a> {
             return Err(json!({"code": r.code, "kind": HONEST, "ids": [], "path": r.path}));
         }
         let empty = serde_json::Map::new();
-        let (mut numbers, issues) = deep_canvas_marks::check::numbers(doc.as_object().unwrap_or(&empty));
+        let (mut numbers, issues) =
+            deep_canvas_marks::check::numbers(doc.as_object().unwrap_or(&empty));
         // #1967: a cell grid that plays a recording quotes it, so its digits are quotation.
         for (id, item) in doc["items"].as_object().into_iter().flatten() {
             let played = (item["kind"] == "cells@1")

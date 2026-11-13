@@ -541,6 +541,17 @@
       "initialReason": "Issue #386 first measurement: the merge base draws no live view through a chosen internal scale. One process draws a 1080p frame of 48 labels of 12 px text and 24 thin diagonal lines in `deep-gpu`'s live window at internal scale 0.5 through the edge-adaptive upscale and sharpen, five runs of 90 frames after a warm-up one, reading each frame's time the two passes cover by their timestamps; p50 includes Node's and the binary's start. The issue's 0.3 ms for the two passes stays in tests/acceptance/386/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
     },
     {
+      "id": "canvas-frame-history",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "history"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #173 first measurement: the merge base resolves no window of frames by reprojection. One process draws a 1080p live view of 48 boxes whose camera orbits, with frame history's 8-frame antialias window, in `deep-gpu`'s live window, five runs of 90 frames after a warm-up one, reading each frame's `look.history` pass by its timestamps; p50 includes Node's and the binary's start. The issue's 1 ms resolve, 50 ms jump and 100 MB window stay in tests/acceptance/173/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
       "id": "canvas-class-core-view",
       "command": [
         "node",
@@ -1033,6 +1044,28 @@
       ]
     },
     {
+      "id": "canvas-ground",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "ground"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "bevel_ms": 20,
+        "subdivide_ms": 50,
+        "distribute_ms": 200,
+        "arc_length_ms": 2,
+        "still_steps": 0,
+        "sway_gpu_ms": 0.5
+      },
+      "initialReason": "Issue #2017 first measurement: the merge base times none of #442's steps and has no such task. Release deep-show's geometry call with timings reads a bevel with weighted normals on a 10,000-face prop, two levels of subdivision of a 1,000-face mesh, distributing 100,000 points with pruning and a 1,000-span curve's arc-length table, each step timed in the process; a still scene with the terrain plate and its levels counts the steps its frames after the first run (the scheduler's ran, and view3d's meshes built, instances written, element uploads, batches encoded and terrain tiles selected); and release deep-gpu draws 10,000 instanced trees of 2,000 vertices at 1080p, 300 frames with their sway on and 300 off, the cost the difference of the sides' median GPU time. Five runs after a warm-up one, each a fresh process per binary. canvas.mjs judge holds the times on a reference Mac and the count anywhere. p50 and peak memory of the whole command get a 50% margin against the merge base once main has this task.",
+      "criteria": [
+        "#2017.751f674c"
+      ]
+    },
+    {
       "id": "replica-cold-start",
       "command": [
         "node",
@@ -1390,6 +1423,33 @@
       "margin": 0.5,
       "limits": {},
       "initialReason": "Issue #154 first measurement: the merge base has no score renderer. Six 60 s stems of one score (two sampled, two plucked, two synth) render at once, each in its own score-render@1.0.0 process given its params on stdin as the hub gives them; p50 is the wall time from the first start to the last exit, Node's starts included. The issue's 60 s limit on the reference Mac and the cached stems that start no process stay in tests/acceptance/154/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "export-fidelity",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "export-fidelity"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #157 first measurement (#157.d2250c69): the merge base reads no delivery back. One `deep-show run` exports a 10 s 1920 × 1080 film at 60 fps (600 frames, a bar moving a pixel a frame) as H.264 with AAC, which now checks the delivery from its own bytes in a fresh decode worker and encodes the colour probe; it prints the receipt's fidelity.decode_seconds (at most 1.25 s, 8x real time) and color_probe.seconds (under 1 s), which tests/acceptance/157/budgets.test.ts judges on a reference Mac. p50 and peak memory get a 50% margin against the merge base once main has this task.",
+      "criteria": [
+        "#157.d2250c69"
+      ]
+    },
+    {
+      "id": "narration-transcript",
+      "command": [
+        "node",
+        "benchmarks/narration.mjs"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #509 first measurement (#509.39975b5a): the merge base has no transcriber. A 60 s narrated film, twelve kokoro@0.9.4 lines over a quiet bed in a 48 kHz mix, has each line's own audio and its mix window (t − 0.15 s to t + its length + 0.25 s) transcribed by whisper-cpp@1.9.5 on the speech plug-in's model host, already running on 127.0.0.1:8720, as narration.transcript's tool takes them, a call per four cores at once; the lines are spoken once and kept by hash in the temp folder, so p50 is the 24 transcriptions with Node's start. The issue's 60 s limit on the reference Mac's CPU and the power bakes' 800 B/s per channel stay with the issue's budget tests. p50 and peak memory get a 50% margin against the merge base once main has this task.",
+      "criteria": [
+        "#509.39975b5a"
+      ]
     }
   ]
 }

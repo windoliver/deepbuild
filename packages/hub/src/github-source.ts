@@ -9,9 +9,9 @@
 // API's answers are recorded (DEEP_HUB_TEST_GITHUB): nothing is fetched from the network.
 import { readFile } from 'node:fs/promises';
 import type { Plant } from './plant.js';
+import { isRecord as isObj } from '@deepbuild/contracts';
 
 type Obj = Record<string, unknown>;
-const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 
 /** One answer the API gave: its status, headers (`link` for paging) and JSON body. */
 export interface Answer { status: number; headers: Record<string, string>; body: unknown }

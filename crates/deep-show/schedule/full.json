@@ -2,7 +2,8 @@
   "uri": "deep://schedule/core@0.0.0",
   "core": "core@0.0.0",
   "build_set": "full",
-  "set_digest": "932c82ee183d8b226f33c5a137ff599209cf2c537e5cda6e877ba94b341421b9",
+  "set_digest": "7a62a8553c6aea00a74379b06ac2e4e7f65248f15aea86106a4b0c2e597a9b28",
+  "runtime_digest": "b0d9637fcffe5b58be4a3025853302613578659fa143fc9ca6bd110364894ab8",
   "interfaces": {
     "building@1": {
       "digest": "0d13ed593138e9ee44e857752ef4b2a0392f03bc17c10b4f99b48746f6d580e1",
@@ -295,7 +296,7 @@
       }
     },
     "media@1": {
-      "digest": "916933ab6dffe36479ed4ede9ccdc228140199778ef1710f452134d8459abf34",
+      "digest": "fb65db20803994ed5ef09250f97e09ff3e265237ede21f650361d3fc5f764bfb",
       "reference": "media",
       "kit": [
         "fixtures",
@@ -324,7 +325,7 @@
       }
     },
     "motion@1": {
-      "digest": "b345fa202abce017f322143ebab888c21c57e764cbe7eb61752f944e60f603cb",
+      "digest": "60cb0840ac72c7be382c16b565feae36201ba624c61e8eac0fb75b46263c9829",
       "reference": "motion",
       "kit": [
         "fixtures",
@@ -354,7 +355,7 @@
     },
     "physics@1": {
       "digest": "8071ab44e877e00d90807062cf69c0c913d493ffcd131a1e27e50b78dd6c1242",
-      "reference": "physics",
+      "reference": "deep-physics-rapier",
       "kit": [
         "fixtures",
         "clean_rebuild",
@@ -374,11 +375,95 @@
       "behavior": "none",
       "module": "physics",
       "implementation": {
-        "name": "physics",
-        "version": "1.0.0",
-        "pins": {},
-        "equivalence": "bit",
-        "state": "canonical"
+        "name": "deep-physics-rapier",
+        "version": "0.0.0",
+        "pins": {
+          "glam": {
+            "version": "0.33.12",
+            "features": [
+              "approx",
+              "approx-05",
+              "f64",
+              "i32",
+              "libm",
+              "nostd-libm",
+              "scalar-math",
+              "serde",
+              "std",
+              "u32"
+            ]
+          },
+          "glamx": {
+            "version": "0.3.1",
+            "features": [
+              "approx",
+              "glamx-serde",
+              "i32",
+              "libm",
+              "nalgebra",
+              "nostd-libm",
+              "scalar-math",
+              "serde",
+              "std"
+            ]
+          },
+          "libm": {
+            "version": "0.2.16",
+            "features": [
+              "arch",
+              "default"
+            ]
+          },
+          "parry3d": {
+            "version": "0.31.1",
+            "features": [
+              "alloc",
+              "dim3",
+              "downcast-rs",
+              "ena",
+              "enhanced-determinism",
+              "f32",
+              "hashbrown",
+              "indexmap",
+              "required-features",
+              "rstar",
+              "serde",
+              "serde-serialize",
+              "serde_arrays",
+              "slab",
+              "smallvec",
+              "std"
+            ]
+          },
+          "rapier3d": {
+            "version": "0.36.1",
+            "features": [
+              "alloc",
+              "dim3",
+              "enhanced-determinism",
+              "f32",
+              "serde-serialize",
+              "std"
+            ]
+          },
+          "simba": {
+            "version": "0.10.2",
+            "features": [
+              "libm",
+              "libm_force",
+              "std",
+              "wide"
+            ]
+          },
+          "wide": {
+            "version": "1.7.1",
+            "features": [
+              "std"
+            ]
+          }
+        },
+        "equivalence": "measured",
+        "state": "backend_bytes"
       }
     },
     "record@1": {
@@ -437,7 +522,7 @@
         "version": "1.0.0",
         "pins": {
           "wasmtime": {
-            "version": "=49.0.2",
+            "version": "=49.0.5",
             "features": [
               "addr2line",
               "cranelift",
@@ -451,7 +536,7 @@
       }
     },
     "scene3d@1": {
-      "digest": "37d4cb1807acc482d198f9e539a3dde7ed34e55c1c32d2de1f003e4a942a598e",
+      "digest": "61c7c1cfa53706ec4050b74561317e375f04c2d38e69668bab48bdfbad633b55",
       "reference": "scene3d",
       "kit": [
         "fixtures",
@@ -538,7 +623,7 @@
       }
     },
     "vector@1": {
-      "digest": "2b0f07530c67f0a57f36cc513e85d204d613ea8ea819a928a9015b078c42f418",
+      "digest": "f717e7c51b21a2e1afbd6af9237dfca270f86117be776bb9f4e04b568428c4a1",
       "reference": "vector",
       "kit": [
         "fixtures",

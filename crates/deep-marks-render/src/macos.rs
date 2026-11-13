@@ -395,7 +395,10 @@ fn image_of(
         if session.plant != crate::asset::Plant::CapCountsCopiesOnly
             && held(session) + bytes > crate::asset::CAP
         {
-            return Err(refused("over_budget", &format!("items/{item}/params/asset")));
+            return Err(refused(
+                "over_budget",
+                &format!("items/{item}/params/asset"),
+            ));
         }
         session.drawn_bytes += bytes;
     }
@@ -417,7 +420,9 @@ fn image_of(
                 None => (None, None),
             },
         };
-        session.frame_levels.insert(item.to_string(), (asked, drawn));
+        session
+            .frame_levels
+            .insert(item.to_string(), (asked, drawn));
         match level {
             Some(level) => level,
             None => return Ok(None),
@@ -475,7 +480,10 @@ fn resample_at(
 /// The part of `a` inside `b`.
 fn intersect(a: [f64; 4], b: [f64; 4]) -> [f64; 4] {
     let (x0, y0) = (a[0].max(b[0]), a[1].max(b[1]));
-    let (x1, y1) = ((a[0] + a[2]).min(b[0] + b[2]), (a[1] + a[3]).min(b[1] + b[3]));
+    let (x1, y1) = (
+        (a[0] + a[2]).min(b[0] + b[2]),
+        (a[1] + a[3]).min(b[1] + b[3]),
+    );
     [x0, y0, (x1 - x0).max(0.0), (y1 - y0).max(0.0)]
 }
 
@@ -485,7 +493,16 @@ fn intersect(a: [f64; 4], b: [f64; 4]) -> [f64; 4] {
 fn sprite_exact(to: [f64; 4], bounds: [f64; 4], size: [u32; 2], zoom: f64) -> bool {
     let whole = |v: f64| (v - v.round()).abs() < 1e-3;
     let c = intersect(bounds, to);
-    let edges = [to[0], to[1], to[0] + to[2], to[1] + to[3], c[0], c[1], c[0] + c[2], c[1] + c[3]];
+    let edges = [
+        to[0],
+        to[1],
+        to[0] + to[2],
+        to[1] + to[3],
+        c[0],
+        c[1],
+        c[0] + c[2],
+        c[1] + c[3],
+    ];
     let texels = [
         (c[0] - to[0]) / to[2] * f64::from(size[0]),
         (c[1] - to[1]) / to[3] * f64::from(size[1]),
@@ -504,7 +521,11 @@ fn placed_copy(
     bounds: [f64; 4],
     zoom: f64,
 ) -> Result<(Arc<RenderImage>, [f64; 4]), Value> {
-    let key = ((p.sha256, opacity.to_bits()), p.to.map(f64::to_bits), bounds.map(f64::to_bits));
+    let key = (
+        (p.sha256, opacity.to_bits()),
+        p.to.map(f64::to_bits),
+        bounds.map(f64::to_bits),
+    );
     let frame = session.frame_no;
     if let Some((image, hull, seen)) = session.placed.get_mut(&key) {
         *seen = frame;
@@ -512,7 +533,10 @@ fn placed_copy(
     }
     let c = intersect(bounds, p.to).map(|v| v * zoom);
     let (x0, y0) = (c[0].floor(), c[1].floor());
-    let (x1, y1) = ((c[0] + c[2]).ceil().max(x0 + 1.0), (c[1] + c[3]).ceil().max(y0 + 1.0));
+    let (x1, y1) = (
+        (c[0] + c[2]).ceil().max(x0 + 1.0),
+        (c[1] + c[3]).ceil().max(y0 + 1.0),
+    );
     let to = p.to.map(|v| v * zoom);
     let narrow = |v: f64| u16::try_from(v as i64).ok();
     let (Some(ow), Some(oh), Ok(sw), Ok(sh)) = (
@@ -525,7 +549,10 @@ fn placed_copy(
     };
     // The sprite's straight BGRA, its opacity in alpha, back to RGBA.
     let mut rgba = p.image.as_bytes(0).unwrap_or_default().to_vec();
-    rgba.as_chunks_mut::<4>().0.iter_mut().for_each(|px| px.swap(0, 2));
+    rgba.as_chunks_mut::<4>()
+        .0
+        .iter_mut()
+        .for_each(|px| px.swap(0, 2));
     let shift = |r: [f64; 4]| [r[0] - x0, r[1] - y0, r[2], r[3]];
     let mut out = deep_marks_vello::placed(
         rgba,
@@ -534,7 +561,10 @@ fn placed_copy(
         (shift(to), shift(c)),
         [ow, oh],
     );
-    out.as_chunks_mut::<4>().0.iter_mut().for_each(|px| px.swap(0, 2));
+    out.as_chunks_mut::<4>()
+        .0
+        .iter_mut()
+        .for_each(|px| px.swap(0, 2));
     let frame_image = image::RgbaImage::from_raw(u32::from(ow), u32::from(oh), out)
         .ok_or_else(|| refused("asset_undecodable", ""))?;
     let image = Arc::new(RenderImage::new([image::Frame::new(frame_image)]));
@@ -607,7 +637,7 @@ fn resampled(
         .ok_or_else(|| refused("asset_undecodable", &path))?;
     let copy = Arc::new(RenderImage::new([image::Frame::new(frame)]));
     session.resamples += 1;
-    session.resampled.insert(key.clone(), copy.clone());
+    session.resampled.insert(*key, copy.clone());
     Ok(copy)
 }
 
@@ -1499,7 +1529,10 @@ impl Renderer {
                         // The sprite sampler is linear, so the copy is drawn 1:1 on whole pixels.
                         let key = (p.sha256, opacity.to_bits());
                         let (key, at) = resample_at(key, *sampling, p.to, zoom);
-                        (resampled(session, &key, &p.image, p.size, (item, asset))?, at)
+                        (
+                            resampled(session, &key, &p.image, p.size, (item, asset))?,
+                            at,
+                        )
                     };
                     push(Draw::Picture {
                         image,
@@ -1979,7 +2012,12 @@ impl Renderer {
             }
         }
         let images = crate::asset::images();
-        images.pass_ended([-f64::MAX / 4.0, -f64::MAX / 4.0, f64::MAX / 2.0, f64::MAX / 2.0]);
+        images.pass_ended([
+            -f64::MAX / 4.0,
+            -f64::MAX / 4.0,
+            f64::MAX / 2.0,
+            f64::MAX / 2.0,
+        ]);
         session.settling = images.settling();
         Ok(())
     }
@@ -2323,7 +2361,9 @@ impl Renderer {
     fn live(&mut self, run: crate::Live) -> Value {
         let images = crate::asset::images();
         let class = deep_canvas::budget::of(&Value::Object(run.doc.clone()))
-            .map_or(deep_images::BUDGET, |(_, l)| l.gpu_bytes.min(deep_images::BUDGET));
+            .map_or(deep_images::BUDGET, |(_, l)| {
+                l.gpu_bytes.min(deep_images::BUDGET)
+            });
         images.configure(run.budget.unwrap_or(class), deep_images::ENTRIES, run.plant);
         let [_, _, w, h] = run.rect;
         let mut session = Self::new_session();
@@ -2374,14 +2414,21 @@ impl Renderer {
                     match shot {
                         crate::Shot::Every(dir) => {
                             let _ = std::fs::create_dir_all(dir);
-                            me.capture(session, &dir.join(format!("{k}.png")).display().to_string())?
+                            me.capture(
+                                session,
+                                &dir.join(format!("{k}.png")).display().to_string(),
+                            )?
                         }
-                        crate::Shot::One(Some(i), out) if *i == index => me.capture(session, out)?,
+                        crate::Shot::One(Some(i), out) if *i == index => {
+                            me.capture(session, out)?
+                        }
                         _ => {}
                     }
                 }
                 let levels: Map<String, Value> = (session.frame_levels.iter())
-                    .map(|(id, (asked, drawn))| (id.clone(), json!({"asked": asked, "drawn": drawn})))
+                    .map(|(id, (asked, drawn))| {
+                        (id.clone(), json!({"asked": asked, "drawn": drawn}))
+                    })
                     .collect();
                 let settling = (session.frame_levels.values()).any(|(a, d)| *d != Some(*a));
                 let started = session.started;
@@ -2453,7 +2500,9 @@ impl Renderer {
                            "frame": (j.frame - base).min(count.saturating_sub(1))})
                 })
                 .collect();
-            Ok(json!({"ok": true, "frames": frames, "jobs": jobs, "stats": stats_json(&images.stats())}))
+            Ok(
+                json!({"ok": true, "frames": frames, "jobs": jobs, "stats": stats_json(&images.stats())}),
+            )
         })();
         self.close(session);
         result.unwrap_or_else(|refusal| refusal)

@@ -65,12 +65,14 @@ test-camera-in-scene3d = []
 # Issue #238: the sandbox module's test builds (the #238 acceptance README: Test features of
 # deep-show): the full set without sandbox; test.mesh, whose kind takes a provider's mesh at check;
 # test.prog, whose registry packs fill with programs; a planted sandbox module that requires logic;
-# and the test implementation sandbox.alt, pinning another wasmtime 49.0 patch.
+# and the test implementation sandbox.alt, pinning another wasmtime release with the fixes (#2324).
 test-leave-out-sandbox = []
 test-mesh-item = ["dep:deep-canvas-test-modules"]
 test-prog-registry = ["dep:deep-canvas-test-modules"]
 test-sandbox-needs-logic = []
 test-sandbox-alt = []
+# Issue #2324: the planted engine build, whose engine gives one kit fixture another result.
+plant-engine-differs = ["deep-sandbox-wasmtime/plant-engine-differs"]
 # Issue #387: the test canvas modules of the #387 acceptance README. `test-accent`'s planted
 # operator reads the look's accent role from a static, which the canvas lint keeps out of every
 # deep-canvas* crate, so it lives in this binary.
@@ -86,10 +88,16 @@ test-json = []
 test-debug-alt = []
 test-debug-digest = []
 test-peek = ["dep:deep-canvas-test-modules"]
+# Issue #157: `test.guards`, whose kinds plant a NaN in a frame's float target, lose the device at
+# a frame, and draw a frame differently the second time it is drawn.
+test-export-guards = ["dep:deep-canvas-test-modules"]
 # Issue #412: the #412 acceptance README's test canvas modules: a preview kind, a registry of cue
 # kinds with the cue list that plays it (pop_in's default span 0.5 s, or 0.8 s), the ring at
 # fixture digests A and B, and a kind whose one-liner overruns the sheet.
 test-preview = ["dep:deep-canvas-test-modules"]
+# Issue #1802: `test.preview` once it removed its preview kind, with a migration and, planted, without.
+test-preview-removed = ["dep:deep-canvas-test-modules"]
+test-preview-removed-bare = ["dep:deep-canvas-test-modules"]
 test-cue = ["dep:deep-canvas-test-modules"]
 test-cue-span = ["dep:deep-canvas-test-modules"]
 test-ring-a = ["dep:deep-canvas-test-modules"]
@@ -178,6 +186,13 @@ test-sim-b-off = ["test-sim"]
 test-sim-behavior = ["test-sim"]
 test-sim-c = ["test-sim"]
 test-gpu-second-backend = []
+# Issue #1920: A and B at version 1.0.1 and B with its pin's feature changed, each built in its
+# implementation's place, and the full set with the physics module's rapier3d pin moved one patch
+# (tests/acceptance/1920/README.md: Names this suite chooses).
+test-sim-a-1-0-1 = ["test-sim"]
+test-sim-b-1-0-1 = ["test-sim"]
+test-sim-b-pin-feature = ["test-sim"]
+test-physics-rapier-patch = []
 # Issue #421: a planted implementation of scene3d@1, declared bit, whose light policy breaks a tie
 # by registration order instead of by ID; the kit fails it and a release build refuses it.
 test-scene3d-tie-by-order = []
