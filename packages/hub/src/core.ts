@@ -1093,7 +1093,7 @@ export class Core {
     } catch (error) {
       const at = this.now();
       const last = this.jobs.get(name);
-      this.jobs.set(name, { failures: (last?.failures ?? 0) + 1, since: last?.since ?? at, at, error: error instanceof Error ? error.message : String(error) });
+      this.jobs.set(name, this.options.plant === 'drops-job-failure' ? null : { failures: (last?.failures ?? 0) + 1, since: last?.since ?? at, at, error: error instanceof Error ? error.message : String(error) });
     }
   }
   /** The test job (#909): one run per line a test appends to `file`, `fail` a failed run and `ok` a clean one. */
