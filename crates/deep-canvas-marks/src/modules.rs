@@ -810,8 +810,7 @@ impl deep_canvas::schedule::Canonical for LookValue {
         if self.ty.fonts.is_empty() {
             deep_canvas::schedule::Canonical::encode(&(&self.palette, &self.status), out);
         } else {
-            let fonts: Vec<(&String, &str)> =
-                self.ty.fonts.iter().map(|(k, v)| (k, *v)).collect();
+            let fonts: Vec<(&String, &str)> = self.ty.fonts.iter().map(|(k, v)| (k, *v)).collect();
             deep_canvas::schedule::Canonical::encode(&(&self.palette, &self.status, &fonts), out);
         }
     }
@@ -1035,7 +1034,10 @@ pub fn look_tokens(look: &crate::look::Look) -> BTreeMap<String, Value> {
 /// The type a session's tokens set text in: [`TYPE_TOKEN`]'s font roles over the bundled ones.
 fn type_of(tokens: &BTreeMap<String, Value>) -> scene::Type {
     let mut ty = scene::Type::default();
-    let fonts = tokens.get(TYPE_TOKEN).and_then(|t| t.get("fonts")).and_then(Value::as_object);
+    let fonts = tokens
+        .get(TYPE_TOKEN)
+        .and_then(|t| t.get("fonts"))
+        .and_then(Value::as_object);
     for (role, family) in fonts.into_iter().flatten() {
         let face = family
             .as_str()
@@ -1073,7 +1075,14 @@ fn palette(v: &mut View<'_>) -> Result<(), OpError> {
         )),
     )?;
     let ty = type_of(tokens);
-    v.write("look.palette", Val::typed(LookValue { palette, status, ty }))
+    v.write(
+        "look.palette",
+        Val::typed(LookValue {
+            palette,
+            status,
+            ty,
+        }),
+    )
 }
 
 fn roles_board() -> Value {
@@ -2054,27 +2063,35 @@ fn frame(v: &mut View<'_>) -> Result<(), OpError> {
             bound.insert(id.clone(), shown);
         }
     }
-    let (frame, basis) =
-        match scene::frame_prebuilt(doc, &items, (&look.palette, &look.ty), 1.0, &bound, &record, &placed)
-            .map_err(refused)?
-        {
-            // A list of items that each placed their own marks is one the next frame can
-            // replace marks in.
-            Some((frame, places)) => (
-                frame,
-                items.is_empty().then_some(Basis { envelope, places }),
-            ),
-            // A paint spanning boxes reads every item's: the frame builds them all.
-            None => {
-                let all: Map<String, Value> = fields
-                    .iter()
-                    .map(|(id, f)| (id.to_string(), item_json(f, world(id).as_deref())))
-                    .collect();
-                let frame = scene::frame_with(doc, &all, (&look.palette, &look.ty), 1.0, &bound, &record)
+    let (frame, basis) = match scene::frame_prebuilt(
+        doc,
+        &items,
+        (&look.palette, &look.ty),
+        1.0,
+        &bound,
+        &record,
+        &placed,
+    )
+    .map_err(refused)?
+    {
+        // A list of items that each placed their own marks is one the next frame can
+        // replace marks in.
+        Some((frame, places)) => (
+            frame,
+            items.is_empty().then_some(Basis { envelope, places }),
+        ),
+        // A paint spanning boxes reads every item's: the frame builds them all.
+        None => {
+            let all: Map<String, Value> = fields
+                .iter()
+                .map(|(id, f)| (id.to_string(), item_json(f, world(id).as_deref())))
+                .collect();
+            let frame =
+                scene::frame_with(doc, &all, (&look.palette, &look.ty), 1.0, &bound, &record)
                     .map_err(refused)?;
-                (frame, None)
-            }
-        };
+            (frame, None)
+        }
+    };
     for drawn in frame.layers.iter().flat_map(|l| &l.marks) {
         check_font(drawn)?;
     }
