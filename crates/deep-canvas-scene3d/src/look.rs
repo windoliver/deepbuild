@@ -77,6 +77,8 @@ pub struct Look3 {
     pub drawn: Option<std::sync::Arc<deep_canvas_drawn::spec::Look>>,
     /// #464: its separations and print finishes, which the print pass draws after the output.
     pub print: std::sync::Arc<deep_canvas_marks::print::Print>,
+    /// #462: strokes laid on its surfaces (Look `look@1`: strokes on surfaces).
+    pub strokes: Option<std::sync::Arc<crate::strokes::Strokes>>,
 }
 
 /// The EV100 whose exposure scale is 1, a look's default.
@@ -114,6 +116,7 @@ impl Look3 {
             history: crate::history::History::default(),
             drawn: None,
             print: Default::default(),
+            strokes: None,
         }
     }
 
@@ -132,6 +135,7 @@ impl Look3 {
             }
         }
         let mut out = Look3::from_roles(roles);
+        out.strokes = crate::strokes::read(look)?.map(std::sync::Arc::new);
         if let Value::Object(def) = look {
             if def.get("basis").and_then(Value::as_str) == Some("drawing") {
                 let mut lowered = look.clone();

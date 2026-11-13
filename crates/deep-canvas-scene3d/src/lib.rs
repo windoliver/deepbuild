@@ -47,6 +47,7 @@ pub mod slots;
 pub mod spatial;
 pub mod spec;
 pub mod stack;
+pub mod strokes;
 pub mod sweep;
 pub mod terrain;
 pub mod tints;

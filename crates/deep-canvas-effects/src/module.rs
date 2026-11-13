@@ -13,6 +13,8 @@ use crate::graph::{self, Class, Kind, Origin};
 pub const GRID: &str = "effects.grid";
 pub const SHADOW: &str = "effects.shadow";
 pub const SPARKS: &str = "effects.particles";
+/// #462: a look's strokes on surfaces, drawn before the particles.
+pub const STROKES: &str = "effects.strokes";
 pub const OUTLINE: &str = "effects.outline";
 pub const GLOW: &str = "effects.glow";
 
@@ -21,6 +23,7 @@ pub const GLOW: &str = "effects.glow";
 pub const PASSES: &[(&str, &str)] = &[
     (GRID, "effects"),
     (SHADOW, "effects"),
+    (STROKES, "effects"),
     (SPARKS, "effects"),
     (OUTLINE, "effects"),
     (GLOW, "bloom"),

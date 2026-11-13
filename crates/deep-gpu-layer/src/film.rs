@@ -29,6 +29,7 @@ use deep_canvas_marks::drawn::{self, View};
 use deep_canvas_marks::look::{self, Distance};
 use deep_canvas_marks::scene::{self, Drawn, Palette, Record, Rgb, Type};
 use deep_canvas_motion::eval;
+use deep_canvas_motion::motif::Motifs;
 use deep_canvas_motion::program::{Program, State};
 use deep_gpu::ring::Mark as RingMark;
 use serde_json::{json, Map, Value};
@@ -94,9 +95,14 @@ fn marks_at(
     t: i64,
     (palette, ty): &(Palette, Type),
     snap: Option<f64>,
+    motifs: Option<(&Motifs, bool)>,
 ) -> Result<Marked, Value> {
     program.evaluate(t, eval::Validity::Full, state);
     let mut items = eval::items(doc, program, state);
+    // #462: the look's motifs move the evaluated items a scene binds, never the document.
+    if let Some((m, reduced)) = motifs {
+        m.apply(&mut items, t, reduced);
+    }
     let lamps = match &ty.drawn {
         Some(look) => {
             drawn::screen_lamps(look, &items, palette).map_err(|r| refused(r.code, r.path))?
@@ -252,6 +258,9 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
     let mut events = events.into_iter().peekable();
     let mut look = look_of(app, &call["look"], &doc)?;
     let mut def = def_of(&call["look"])?;
+    // #462: the document's revision hash as the film opened it, and the document it holds.
+    let opened_hash = revision(&doc)?;
+    let mut held = doc.clone();
     let capture: Vec<u64> = call["capture"]
         .as_array()
         .into_iter()
@@ -264,6 +273,14 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
 
     // Compiled once: no look enters the motion program.
     let program = Program::compile(&doc).map_err(|r| refused(r.code, r.path))?;
+    // #462: each look's motifs bound through the document's slots, refused at check.
+    let motifs_of =
+        |def: &Value| Motifs::compile(def, &doc, &program).map_err(|r| refused(r.code, r.path));
+    let mut motifs = motifs_of(&def)?;
+    for (_, (_, d)) in events.clone() {
+        motifs_of(&d)?;
+    }
+    let writes_document = app.planted == Some(Planted::MotifsWriteDocument);
     let mut state = program.state();
     let at = |n: u64| n as i64 * FLICKS_PER_SECOND / fps;
     let roles = |look: &(Palette, Type)| -> Arc<BTreeMap<String, [f64; 3]>> {
@@ -332,8 +349,15 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
     };
     let snap =
         |ix: &Option<deep_canvas_marks::print::Indexed>| ix.as_ref().map(|i| f64::from(i.scale));
-    let (first, ground, view, lamps, items) =
-        marks_at(&doc, &program, &mut state, at(from), &look, snap(&ix))?;
+    let (first, ground, view, lamps, items) = marks_at(
+        &doc,
+        &program,
+        &mut state,
+        at(from),
+        &look,
+        snap(&ix),
+        motifs.as_ref().map(|m| (m, reduced_motion)),
+    )?;
     let first_print = printing_at(from, &def, &look, &items, view.as_ref(), ground)?;
     let first_index = index_frame(&ix, &first, &items);
     // The paper's fields hold still; only where the pixels land moves with the camera.
@@ -416,10 +440,22 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 }
                 (look, def) = next;
                 ix = indexed(&def, &look)?;
+                motifs = motifs_of(&def)?;
             }
             let started = Instant::now();
-            let (drawn, ground, view, lamps, items) =
-                marks_at(&doc, &program, &mut state, at(n), &look, snap(&ix))?;
+            let (drawn, ground, view, lamps, items) = marks_at(
+                &doc,
+                &program,
+                &mut state,
+                at(n),
+                &look,
+                snap(&ix),
+                motifs.as_ref().map(|m| (m, reduced_motion)),
+            )?;
+            // #462's planted twin writes each moved item's evaluated place into the document.
+            if writes_document && motifs.is_some() {
+                write_places(&mut held, &items);
+            }
             let print = printing_at(n, &def, &look, &items, view.as_ref(), ground)?;
             let index = index_frame(&ix, &drawn, &items);
             let page = page
@@ -503,7 +539,8 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
     ui.record(false);
     close2(app, &ui);
     played?;
-    let mut reply = json!({"size": size, "frames": listed, "switches": switches});
+    let mut reply = json!({"size": size, "frames": listed, "switches": switches,
+        "document": {"opened": opened_hash, "played": revision(&held)?}});
     if let Some(ix) = &ix {
         let palette: Vec<&str> = ix.palette.iter().map(|(r, _)| r.as_str()).collect();
         reply["indexed"] = json!({"operator": crate::indexed::OPERATOR,
@@ -517,6 +554,25 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
         reply["export"] = movie.finish()?;
     }
     Ok(reply)
+}
+
+/// The canvas core's revision hash of a document (`deep-canvas canonical`'s `sha256`).
+fn revision(doc: &Map<String, Value>) -> Result<String, Value> {
+    deep_canvas::document::canonical(&Value::Object(doc.clone()))
+        .map(|c| c.sha256)
+        .map_err(|e| refused("out_of_range", e.path))
+}
+
+/// The planted wrong program's write: each item's evaluated `at` copied into the document.
+fn write_places(doc: &mut Map<String, Value>, items: &Map<String, Value>) {
+    for (id, item) in items {
+        if let (Some(at), Some(Value::Object(own))) = (
+            item.get("at"),
+            doc.get_mut("items").and_then(|i| i.get_mut(id)),
+        ) {
+            own.insert("at".into(), at.clone());
+        }
+    }
 }
 
 /// A captured frame's linear target, `<sha256>.f32`: the print finish's, read back, or the
