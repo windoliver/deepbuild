@@ -265,10 +265,10 @@ impl VorbisDecoder {
             };
 
             for (m, a) in magnitude_ch.residue[..n2].iter_mut().zip(&mut angle_ch.residue[..n2]) {
-                // DeepBuild patch (#503): a magnitude of +0.0 takes the positive branch, as FFmpeg's
-                // decode on arm64 reads it (its coupling tests the sign bit), where the spec's
-                // `M > 0` takes the negative one. Only a stream with a zero magnitude beside a
-                // non-zero angle, as FFmpeg's own encoder writes, decodes differently.
+                // DeepBuild patch (windoliver/deepbuild#503): a magnitude of +0.0 takes the positive
+                // branch, as FFmpeg's arm64 decode reads it (its coupling tests the sign bit), where
+                // the spec's `M > 0` takes the negative one. Only a stream with a zero magnitude beside
+                // a non-zero angle, as FFmpeg's own encoder writes, decodes differently.
                 let (new_m, new_a) = if m.is_sign_positive() {
                     if *a > 0.0 { (*m, *m - *a) } else { (*m + *a, *m) }
                 }
