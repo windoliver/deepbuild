@@ -38,7 +38,9 @@ import type { JsonValue } from '@deepbuild/contracts';
 import { asCore, ulid } from '@deepbuild/record';
 import type { Connection, Event, RecordStore } from '@deepbuild/record';
 import { KINDS, place, remotesOf, targetsOf, UNCOVERED, type CardTarget, type Target } from './targets.js';
+import { duration } from './duration.js';
 
+export { duration };
 export type { CardTarget, Target, TargetOrigin } from './targets.js';
 
 export type AskKind = 'authority' | 'unblock' | 'taste' | 'exception' | 'choice' | 'definition';
@@ -425,13 +427,7 @@ function yamlScalar(text: string, unread: () => Error, nested = false): JsonValu
   return text.replace(/^(["'])(.*)\1$/, '$2');
 }
 
-const UNITS: Readonly<Record<string, number>> = { m: 60_000, h: 3_600_000, d: 86_400_000 };
-/** A duration as the settings write it: a whole number and m, h or d. */
-export const duration = (value: JsonValue | undefined): number | undefined => {
-  const m = typeof value === 'string' ? /^(\d+)([mhd])$/.exec(value) : null;
-  return m ? Number(m[1]) * UNITS[m[2]!]! : undefined;
-};
-const DAY = UNITS.d!;
+const DAY = 86_400_000;
 
 let sources: AskSource[] | undefined;
 /** The ask.sources@1 table, as data beside the package. */

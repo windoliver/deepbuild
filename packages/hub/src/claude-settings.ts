@@ -4,7 +4,7 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { duration } from '@deepbuild/asks';
+import { duration } from '@deepbuild/asks/duration';
 import { shellQuote } from './shell.js';
 import { writeThrough } from './agent-files.js';
 import { activePlant } from './plant.js';

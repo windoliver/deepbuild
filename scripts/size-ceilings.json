@@ -44,7 +44,7 @@
   "crates/deep-show/src/kit/modules.rs": 1523,
   "crates/deep-show/src/main.rs": 3104,
   "crates/deep-show/src/shared.rs": 2169,
-  "packages/asks/src/index.ts": 2554,
+  "packages/asks/src/index.ts": 2553,
   "packages/extension-host/src/host.ts": 4269,
   "packages/hub/src/core.ts": 8263,
   "tests/acceptance/1407/twins/allow-noted/crates/deep-hook/src/main.rs": 1904,
