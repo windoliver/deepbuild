@@ -151,7 +151,7 @@ if (command === 'list') {
   let all = true;
   for (const [issue, commit] of SPINE.filter(([n]) => !only.length || only.includes(n))) {
     const j = judge(issue, commit);
-    if (j.verdict !== 'PASS') { all = false; reopen(j); }
+    if (j.verdict !== 'PASS') { all = false; if (j.reopen) reopen(j); }
     console.log(JSON.stringify(j));
   }
   process.exitCode = all ? 0 : 1;
