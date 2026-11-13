@@ -87,8 +87,8 @@ export class McpOperations {
   /** Unspent PreToolUse stamps: a call that binds to one spends it, and SessionEnd spends its session's. */
   stamps: Stamp[] = [];
 
-  /** The ask each plug-in change or send waits on, by its session and request ID (#363). */
-  private readonly actionAsks = new Map<string, string>();
+  /** A held request's exact call and ask; reserve both before raising the ask yields (#2072). */
+  private readonly actionAsks = new Map<string, { digest: string; ask: Promise<string> }>();
 
   /** The test's index@1 fill for the wiki, if it named one; the ledger's own index otherwise. */
   index!: Promise<IndexFill | undefined>;
@@ -209,29 +209,38 @@ export class McpOperations {
     } catch {
       throw refuse('type', '/params/arguments/input', 'Give the input as one string holding its JSON text.', args.input);
     }
+    const target = { handle: `ext:${listed.extension}`, version: listed.version };
+    const digest = sha256Hex(canonicalize({ action: name, target, input: input as JsonValue }));
+    const key = `${session}|${request}`;
+    let approval = this.actionAsks.get(key);
+    // Compare before reading the answer or reaching the host, even if the retry names a read action.
+    if (approval && approval.digest !== digest) throw refuse('unavailable', '/params/arguments/request', `The request ID ${request} belongs to another call; nothing ran or was written. Retry the original action, plug-in version and input.`, request);
     const held = schemas([{ name, schema: listed.input as Schema }]).validate(name, input);
     if (!held.ok) throw refuse('type', `/params/arguments/input${held.issues[0]!.path}`, `Give input that ${name}'s input schema takes: ${held.issues[0]!.remediation}`, input);
     if (listed.declares !== 'read') {
       const s = this.options.state().sessions.get(session)!;
-      const key = `${session}|${request}`;
-      let ask = this.actionAsks.get(key);
-      if (!ask) {
+      if (!approval) {
+        const text = JSON.stringify(input);
+        const preview = text.length > 500 ? `${text.slice(0, 500)}… (cut; ${text.length} characters)` : text;
         // A send's ask names its request, so no saved decision ever answers it; a change's is answered by a standing rule.
         const about: About = {
           source: `action.${listed.declares}`,
           subject: { effect: `action.${listed.declares}`, target: { kind: 'action', ref: listed.declares === 'send' ? `${name}#${request}` : name, owner: listed.extension }, change: null },
-          question: `Let this session ${listed.declares === 'send' ? 'send with' : 'change your data with'} ${listed.extension}'s ${name}, given ${JSON.stringify(input).slice(0, 500)}?`,
+          question: `Let this session ${listed.declares === 'send' ? 'send with' : 'change your data with'} ${listed.extension}@${listed.version}'s ${name}, given ${preview}?`,
           options: [listed.declares === 'send' ? 'Send it' : 'Change it', 'Don\'t'],
         };
-        ask = (await this.options.services.holds.asked({ session, agent: s.agent, cwd: s.cwd }, about)).ask;
-        this.actionAsks.set(key, ask);
+        const ask = this.options.services.holds.asked({ session, agent: s.agent, cwd: s.cwd }, about)
+          .then(({ ask }) => ask).catch((error: unknown) => { this.actionAsks.delete(key); throw error; });
+        approval = { digest, ask };
+        this.actionAsks.set(key, approval);
       }
+      const ask = await approval.ask;
       const [row] = (await this.options.services.record.raw('SELECT decision FROM asks WHERE id = ?', [ask.slice(4)])) as { decision: string | null }[];
       if (row?.decision === 'deny') return { status: 'declined', ask };
       if (row?.decision !== 'allow') return { status: 'held', ask, reason: `DeepBuild is holding ${name}: it waits for your answer to ${ask}; once you say yes, call it again with the same request ID.` };
     }
     const result = await this.options.services.extensions!.callAction({
-      action: name, target: { handle: `ext:${listed.extension}`, version: listed.version }, input, caller: this.agentConnection(session), request,
+      action: name, target, input, caller: this.agentConnection(session), request,
     });
     // Refused before its handler started, it did not run; one that started and failed reaches the agent as an error,
     // with what the hub wrote for it on record as unverified.
