@@ -1,6 +1,6 @@
 # #533 manual end-to-end evidence
 
-Each run went through the surfaces the issue names: `deep-logic` as a JSON-lines process, and `deep-show run` as a scenario. The programs are the acceptance suite's (`tests/acceptance/533/programs.ts`), assembled by its wat helper. The scenarios' evidence store held the flock and quiz programs by sha256. Its path is redacted to `<evidence>`, scratch paths to `<scratch>` and the checkout to `<repo>`. Builds are named by features: `full,test-leave-out-physics` is the binary `deep-show-full+test-leave-out-physics`. `e2e/outputs.sh <scratch>` regenerates every `*.out.json(l)` from its input through the built binaries. The `ms` and `frame_ms` timing fields differ from run to run. They were last made on head `6e3a2e3bc`, where `full` holds physics (#1920).
+Each run went through the surfaces the issue names: `deep-logic` as a JSON-lines process, and `deep-show run` as a scenario. The programs are the acceptance suite's (`tests/acceptance/533/programs.ts`), assembled by its wat helper. The scenarios' evidence store held the flock and quiz programs by sha256. Its path is redacted to `<evidence>`, scratch paths to `<scratch>` and the checkout to `<repo>`. Builds are named by features: `full,test-leave-out-physics` is the binary `deep-show-full+test-leave-out-physics`. `e2e/outputs.sh <scratch>` regenerates every `*.out.json(l)` from its input through the built binaries. The `ms` and `frame_ms` timing fields differ from run to run. They were made on head `6e3a2e3bc`, where `full` holds physics (#1920), and the four seal and no-physics outputs again after merging #2324, which moved sandbox@1's wasmtime pin to `=49.0.5`: only that pin and each schedule's sha256 changed, no digest or array.
 
 ## Criterion 1 (`#533.1487ce3d`): readings recorded at the first step not yet run
 
@@ -28,7 +28,7 @@ Two players each press at step 3 with the same seq. The piece's `first` item wri
 
 | Build | Result |
 |---|---|
-| `full` (`seal-shipped.out.json`) | logic@1, digest `1ebdcefc…`, implementation logic 1.0.0, bit, canonical, wasmtime `=49.0.2` (sandbox@1's pin). Kit PASS on every part that ran. `contribution` and `migration` run no case for logic, and the kit reports `interface: {truth: false, missing: ["logic@1"]}`: no logic fixture has an outside expected value (`expected_from`). This is the kit's interface-truth report, not a failed part. |
+| `full` (`seal-shipped.out.json`) | logic@1, digest `1ebdcefc…`, implementation logic 1.0.0, bit, canonical, wasmtime `=49.0.5` (sandbox@1's pin since #2324; the issue's `=49.0.2`). Kit PASS on every part that ran. `contribution` and `migration` run no case for logic, and the kit reports `interface: {truth: false, missing: ["logic@1"]}`: no logic fixture has an outside expected value (`expected_from`). This is the kit's interface-truth report, not a failed part. |
 | `full,test-logic-patch` (`seal-patch.out.json`) | Implementation 1.0.1 seals with the same digest `1ebdcefc…`. Kit PASS, including the `bit` part. |
 | `full --planted digest_covers_version` (`seal-shipped-planted.out.json`) | Implementation 1.0.0, the reference's own version, still seals. Every interface digest changes, since the twin hashes the version, and logic@1's becomes `9ac613af…`. |
 | `full,test-logic-patch --planted digest_covers_version` (`seal-patch-planted.out.json`) | Exits 2: `seal_refused`, `interface_digest`, naming logic@1 ("version differs from the reference"). |
@@ -64,7 +64,7 @@ This evidence does not show the time order of logic and physics steps. The issue
 
 ## Screenshots, and the agents' check of them
 
-`screens/` holds the end-to-end screenshots, made on head `6e3a2e3bc` by the scripts in `e2e/`. Paths print as `<scratch>` and `<evidence>`.
+`screens/` holds the end-to-end screenshots, made on head `6e3a2e3bc` by the scripts in `e2e/`. After the #2324 merge `capture.sh` ran again: the four captures that print the pin (`c3-seal-shipped`, `c3-seal-patch`, `c3-seal-planted-control`, `c4-no-physics-seal`) changed, and the other eleven came out byte-identical. `screens.test.ts` ran again on wasmtime 49.0.5 and passed, and its six frames and manifest came out byte-identical. Paths print as `<scratch>` and `<evidence>`.
 
 - **Terminal captures:** `e2e/capture.sh <scratch>` runs each criterion's command through the built binaries and saves `$ command`, its output and its exit status (`bash -o pipefail`) as a PNG.
   - Criterion 1: `c1-readings.png`.
@@ -109,3 +109,8 @@ This evidence does not show the time order of logic and physics steps. The issue
   - It reproduced the outputs, apart from the timing fields.
   - It found no personal paths or secrets.
   - Its cosmetic notes are fixed here, or are the stated limit of criterion 4.
+- **Round 8, after the #2324 merge:** one agent, over the four recaptured captures and their earlier versions.
+  - All four are legible and complete, and match a fresh run of their commands, filtered and unfiltered.
+  - Pixel-diffed against the earlier captures, each differs in one character cell, the pin's "2" → "5"; every logic digest is unchanged.
+  - The unfiltered kit reports hide no failing part; their only FAIL verdicts are planted twins the kit caught.
+  - It found no personal paths or secrets.
