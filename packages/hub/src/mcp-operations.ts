@@ -12,6 +12,7 @@ import { AskRefused, duration, type Asks } from '@deepbuild/asks';
 import { canonicalize, registry as schemas, sha256Hex, type JsonValue, type Schema } from '@deepbuild/contracts';
 import { scrubText } from '@deepbuild/evidence';
 import { type ExtensionHost } from '@deepbuild/extension-host';
+import type { Checkouts } from '@deepbuild/gate';
 import { RecordError, type Connection, type RecordStore } from '@deepbuild/record';
 
 import { predictionContradictions, type Prediction, type RunOutcome } from '@deepbuild/verdicts';
@@ -35,6 +36,7 @@ import { aboutSessions, pageClaims, search, type IndexFill } from './search.js';
 
 import { slackConfig, slackThread } from './reach.js';
 
+import { DEPENDENCIES } from './gate-runner.js';
 import { Runs } from './runs.js';
 
 import { Stacks } from './stacks.js';
@@ -68,10 +70,11 @@ export interface McpOperationsOptions {
     readonly raw: RecordStore['raw'];
     readonly runs: Runs;
     readonly stacks: Stacks;
+    readonly checkouts: Checkouts;
   };
   control: () => Pick<HubControlPort, "attach" | "job">;
   state: () => Pick<SessionStatePort, "live" | "rows" | "sessions">;
-  judging: () => Pick<StopJudgingPort, "claimed" | "reachOfSession">;
+  judging: () => Pick<StopJudgingPort, "claimed" | "reachOfSession" | "projectTrusted" | "runApproved">;
   delivery: () => Pick<AnswerDeliveryPort, "askWaits" | "deliver" | "routes" | "settling" | "waitingFor">;
   events: Pick<HubEvents, "connection" | "appendReading" | "append">;
 kernel: Pick<HubRuntime, "blocked" | "stopping">;
@@ -570,12 +573,21 @@ export class McpOperations {
     const which = args.claim === null ? '' : `AND id = '${sql(String(args.claim).slice(6))}'`;
     const [claim] = (await this.options.services.record.raw(`SELECT id, data FROM events WHERE session_id = ? AND kind = 'claim.made' ${which} ORDER BY log_pos DESC LIMIT 1`, [session])) as { id: string; data: string }[];
     if (!claim) throw refuse('not_found', '/params/arguments/claim', 'Run a check for a claim this session made: claim first with deep_claim.', args.claim);
+    if (!await this.options.judging().projectTrusted(cwd)) {
+      throw refuse('unconfirmed', '/params/arguments/check', `${cwd} isn't a project you trust, so ${String(args.check)} didn't run: its spec checks run only once you trust it, by your answer in the app or by Claude Code's or Codex's own trust of it.`, args.check);
+    }
     const commit = String((JSON.parse(claim.data) as Obj).commit);
     // A document check runs on its current revision (#1723); a host check runs at your remote home (#1942).
     const at = doc && await this.options.services.canvasSide.docRevision(doc.doc);
-    const { run } = doc
-      ? await this.options.services.runs.start({ check: args.check, claim: `claim:${claim.id}`, commit, argv: ['/bin/sh', '-c', docCommand(doc, at)], command: docCommand(doc, at), spec: docSpec(doc, at) as unknown as Obj, cwd })
-      : await this.options.services.runs.start({ check: args.check, claim: `claim:${claim.id}`, commit, argv: ['/bin/sh', '-c', check!.run], ...(check!.host === undefined ? { cwd } : { host: check!.host }) }, deadline);
+    let run: unknown;
+    if (doc) ({ run } = await this.options.services.runs.start({ check: args.check, claim: `claim:${claim.id}`, commit, argv: ['/bin/sh', '-c', docCommand(doc, at)], command: docCommand(doc, at), spec: docSpec(doc, at) as unknown as Obj, cwd }));
+    else if (check!.host !== undefined) ({ run } = await this.options.services.runs.start({ check: args.check, claim: `claim:${claim.id}`, commit, argv: ['/bin/sh', '-c', check!.run], host: check!.host }, deadline));
+    else {
+      const tree = await this.options.services.checkouts.checkout({ worktree: cwd, commit, dependencies: DEPENDENCIES, runs: [`claim:${claim.id}`] });
+      const started = this.options.judging().runApproved({ claim: `claim:${claim.id}`, check: String(args.check), approved: null, command: check!.run, commit, cwd: tree.dir, deadline_ms: deadline ?? null });
+      void started.then((ran) => this.options.services.runs.ended(ran)).catch(() => undefined).then(() => this.options.services.checkouts.ended(tree, `claim:${claim.id}`)).catch(() => undefined);
+      run = await started;
+    }
     // A run on a host is long work, such as a model download: it answers once started there, and the claim waits for it.
     if (check?.host !== undefined) return { run, claim: `claim:${claim.id}`, outcome: 'running', evidence: [] };
     // The run's outcome once it finishes, so the agent needn't poll; past the wait, that it's still running.
