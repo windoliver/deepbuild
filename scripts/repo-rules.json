@@ -780,6 +780,10 @@
           "spec": "* path=../deep-canvas-seams",
           "why": "Issue #140: the fonts backend names itself with the seams' backend type."
         },
+        "deep-canvas": {
+          "spec": "* path=../deep-canvas",
+          "why": "Issue #2144: a slanted glyph's tan through the ops module on pinned libm; already beneath deep-canvas-seams."
+        },
         "skrifa": {
           "spec": "^0.44",
           "why": "Issue #443: the glyph outlines of a shaped run, read unscaled from the face the shaper set each glyph in; the reader parley and Vello CPU already use."

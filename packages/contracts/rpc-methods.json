@@ -343,6 +343,24 @@
     "tracking": "#1331"
   },
   {
+    "method": "work.approve",
+    "since": "R1",
+    "stability": "preview",
+    "tracking": "#1332"
+  },
+  {
+    "method": "work.pause",
+    "since": "R1",
+    "stability": "preview",
+    "tracking": "#1332"
+  },
+  {
+    "method": "work.show",
+    "since": "R1",
+    "stability": "preview",
+    "tracking": "#1332"
+  },
+  {
     "method": "job.submit",
     "since": "R1",
     "stability": "preview",
