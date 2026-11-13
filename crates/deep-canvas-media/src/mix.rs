@@ -755,12 +755,39 @@ pub struct Player {
     taps: Vec<sha2::Sha256>,
     /// #502: an export's delivery gain, as an amplitude, on the master ahead of its end limiter.
     pub delivery: f64,
+    /// #509: each bus's power bake, its output after its fader and ducking, then the master's own
+    /// strips; made only by [`Player::tapped`].
+    power: Option<Vec<crate::analysis::loudness::Power>>,
     /// #525: strips a live play adds as it goes, rendered after the mix's own, in their order.
     added: Vec<Strip>,
 }
 
 impl Player {
     pub fn new(mix: Arc<Mix>, planted: Planted) -> Player {
+        Player::built(mix, planted, false)
+    }
+
+    /// #509: a player that keeps each bus's power bake from sample 0 as it renders: one entry per
+    /// bus, then one for the strips that play straight on the master.
+    pub fn tapped(mix: Arc<Mix>, planted: Planted) -> Player {
+        Player::built(mix, planted, true)
+    }
+
+    /// The power bakes [`Player::tapped`] keeps.
+    pub fn power(&self) -> Option<&[crate::analysis::loudness::Power]> {
+        self.power.as_deref()
+    }
+
+    /// Each bus's ID, and the index of the bus its output feeds.
+    pub fn routes(&self) -> Vec<(String, Option<usize>)> {
+        self.mix
+            .buses
+            .iter()
+            .map(|b| (b.id.clone(), b.out))
+            .collect()
+    }
+
+    fn built(mix: Arc<Mix>, planted: Planted, tapped: bool) -> Player {
         let mut units = Vec::new();
         let mut rings = Vec::new();
         for (b, p) in mix.processors() {
@@ -776,6 +803,7 @@ impl Player {
             ));
         }
         let n = 2 * BLOCK as usize;
+        let (mix_buses, rate) = (mix.buses.len(), mix.rate);
         let edges = Edges::new(&mix, &planted);
         let lead = edges.lead;
         let mut p = Player {
@@ -801,6 +829,11 @@ impl Player {
             read: n,
             planted,
             delivery: 1.0,
+            power: tapped.then(|| {
+                (0..=mix_buses)
+                    .map(|_| crate::analysis::loudness::Power::new(rate, 2))
+                    .collect()
+            }),
             added: Vec::new(),
         };
         p.seek_graph(lead);
@@ -1050,6 +1083,10 @@ impl Player {
             }
         }
         self.added = added;
+        if let Some(power) = self.power.as_mut() {
+            let at = k * BLOCK - self.edges.strips[mix.master];
+            power[mix.buses.len()].push(at, &self.buses[mix.master]);
+        }
         for &b in &mix.order {
             let bus = &mix.buses[b];
             let mut block = std::mem::take(&mut self.buses[b]);
@@ -1115,6 +1152,9 @@ impl Player {
                 for (d, x) in self.buses[send.to].iter_mut().zip(&self.edge) {
                     *d += x;
                 }
+            }
+            if let Some(power) = self.power.as_mut() {
+                power[b].push(k * BLOCK - mix.latency[b], &block);
             }
             self.buses[b] = block;
         }

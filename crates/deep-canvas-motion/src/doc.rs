@@ -2916,8 +2916,8 @@ pub(crate) fn markers_of(
     doc: &Map<String, Value>,
     ctx: &mut Ctx,
 ) -> Result<(Vec<Marker>, Vec<First>), Refused> {
-    let mut pending = Vec::new();
-    let mut firsts = Vec::new();
+    let (mut pending, mut firsts) = (Vec::new(), Vec::new());
+    crate::pace::seed(doc, ctx);
     for (id, m) in section(doc, "markers")? {
         let path = format!("markers/{id}");
         let kind = m.get("kind").and_then(Value::as_str).unwrap_or("cue");
@@ -2969,7 +2969,7 @@ pub(crate) fn markers_of(
     let (pins, moved) = crate::cue::align(doc, &done, ctx.tempo.as_ref())?;
     if !pins.is_empty() {
         let notices = ctx.notices.borrow().len();
-        ctx.markers.clear();
+        crate::pace::reseed(doc, ctx);
         done = resolve_markers(pending, ctx, &pins)?;
         crate::cue::landed(doc, &done, ctx.tempo.as_ref(), &pins)?;
         ctx.notices.borrow_mut().truncate(notices);
@@ -3106,7 +3106,7 @@ fn first_of(marker: Marker, f: &Map<String, Value>, path: &str) -> Result<First,
 }
 
 /// A placement's start before series are resolved: its own time, or after another placement.
-enum Start {
+pub(crate) enum Start {
     At(i64),
     After { placement: String, offset: i64 },
 }
@@ -3205,7 +3205,7 @@ fn placement_of(
         }
     };
     timing.trim = flick("in")?.unwrap_or(0);
-    timing.span = flick("span")?;
+    timing.span = crate::pace::span(p, &start, flick("span")?, ctx, &path)?;
     timing.hold_at = flick("hold_at")?;
     if let Some(rate) = p.get("rate") {
         timing.rate = ratio_of(rate, &format!("{path}/rate"))?;
