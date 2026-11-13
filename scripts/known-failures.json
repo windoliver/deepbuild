@@ -416,6 +416,30 @@
       "note": "",
       "reason": "retired by #1958, whose Scope replaces the whole-document refusal #306 describes: 306-redraft-1958/missing.test.ts is AC3's test",
       "approval": "#1958 Scope (the owner's touch-key tag on this commit)"
+    },
+    {
+      "id": "tests/acceptance/139/preview.test.ts › #139.607ef4f7 a preview method reshaped passes the diff; a stable package that calls it is refused at install; the same method stable fails; a stable method no shipped piece calls fails › AC3 a preview method reshaped between two releases passes the contract diff with no break file",
+      "note": "",
+      "reason": "retired by #1802, whose first criterion fails a preview entry with no decide_by: 139-redraft-1802/preview.test.ts is its test",
+      "approval": "#1802 criterion 1 (the owner's touch-key tag on this commit)"
+    },
+    {
+      "id": "tests/acceptance/139/preview.test.ts › #139.607ef4f7 a preview method reshaped passes the diff; a stable package that calls it is refused at install; the same method stable fails; a stable method no shipped piece calls fails › AC3 (wrong program) a contract step that diffs preview entries asks for a break file, and this test fails it",
+      "note": "",
+      "reason": "retired by #1802, whose first criterion fails a preview entry with no decide_by: 139-redraft-1802/preview.test.ts is its test",
+      "approval": "#1802 criterion 1 (the owner's touch-key tag on this commit)"
+    },
+    {
+      "id": "tests/acceptance/139/preview.test.ts › #139.607ef4f7 a preview method reshaped passes the diff; a stable package that calls it is refused at install; the same method stable fails; a stable method no shipped piece calls fails › AC3 a stable method that no shipped piece of its release calls fails the preflight, naming it; called by a shipped piece, or published as preview, it passes",
+      "note": "",
+      "reason": "retired by #1802, whose first criterion fails a preview entry with no decide_by: 139-redraft-1802/preview.test.ts is its test",
+      "approval": "#1802 criterion 1 (the owner's touch-key tag on this commit)"
+    },
+    {
+      "id": "tests/acceptance/139/preview.test.ts › #139.b9c5c209 a preview entry names its tracking issue, and is used only by name: a package or a document lists it in requires.preview, or it is refused with preview_unrequested › AC13 a preview entry with no tracking issue fails the preflight, naming it; with one it passes",
+      "note": "",
+      "reason": "retired by #1802, whose first criterion fails a preview entry with no decide_by: 139-redraft-1802/preview.test.ts is its test",
+      "approval": "#1802 criterion 1 (the owner's touch-key tag on this commit)"
     }
   ]
 }
