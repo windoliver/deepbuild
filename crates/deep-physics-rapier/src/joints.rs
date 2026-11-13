@@ -139,6 +139,10 @@ impl Rapier {
     /// motor's, over the substep they came from.
     pub(crate) fn load(&self, h: ImpulseJointHandle) -> Option<(f32, f32)> {
         let j = self.world.impulse_joints.get(h)?;
+        // A broken or inactive joint holds nothing; Rapier keeps the impulses of its last step.
+        if !j.data.is_enabled() {
+            return Some((0.0, 0.0));
+        }
         let p = &self.world.integration_parameters;
         let substep = match self.twin {
             Twin::ForcePerStep => p.dt,
