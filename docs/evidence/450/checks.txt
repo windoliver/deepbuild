@@ -80,3 +80,7 @@ canvas-lint FAILs 48
 clippy exit 0
 unit exit 0
 canvas-lint: none of its lines is in a file this change touches (main's own).
+
+## Rebased onto origin/main 9c9d7e7d8 to clear merge conflicts (Nov 13, 2026)
+
+Main's 11 new commits change motion's logic arrays (array.rs) and music score (score.rs) and make array public; none of the scene, renderer or GPU-layer code the trails use, so the blind suite's 11/11 on 9b77cd2cd stands. Rerun here: cargo fmt --check clean; clippy -D warnings clean on motion, scene3d and deep-gpu-layer; motion and scene3d tests all pass (trails_450 4/4).
