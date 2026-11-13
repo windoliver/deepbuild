@@ -27,31 +27,41 @@
     "method": "views.installed",
     "since": "R1",
     "stability": "preview",
-    "tracking": "#1454"
+    "tracking": "#1454",
+    "preview_since": "R1",
+    "decide_by": "R4"
   },
   {
     "method": "command.run",
     "since": "R1",
     "stability": "preview",
-    "tracking": "#1454"
+    "tracking": "#1454",
+    "preview_since": "R1",
+    "decide_by": "R4"
   },
   {
     "method": "ask.later",
     "since": "R1",
     "stability": "preview",
-    "tracking": "#1462"
+    "tracking": "#1462",
+    "preview_since": "R1",
+    "decide_by": "R4"
   },
   {
     "method": "session.pause",
     "since": "R1",
     "stability": "preview",
-    "tracking": "#1462"
+    "tracking": "#1462",
+    "preview_since": "R1",
+    "decide_by": "R4"
   },
   {
     "method": "ask.confirm",
     "since": "R1",
     "stability": "preview",
-    "tracking": "#1454"
+    "tracking": "#1454",
+    "preview_since": "R1",
+    "decide_by": "R4"
   },
   {
     "method": "inbox.read",
@@ -63,31 +73,41 @@
     "method": "sessions.read",
     "since": "R1",
     "stability": "preview",
-    "tracking": "#329"
+    "tracking": "#329",
+    "preview_since": "R1",
+    "decide_by": "R4"
   },
   {
     "method": "changes.read",
     "since": "R1",
     "stability": "preview",
-    "tracking": "#578"
+    "tracking": "#578",
+    "preview_since": "R1",
+    "decide_by": "R4"
   },
   {
     "method": "evidence.read",
     "since": "R1",
     "stability": "preview",
-    "tracking": "#395"
+    "tracking": "#395",
+    "preview_since": "R1",
+    "decide_by": "R4"
   },
   {
     "method": "numbers.read",
     "since": "R1",
     "stability": "preview",
-    "tracking": "#330"
+    "tracking": "#330",
+    "preview_since": "R1",
+    "decide_by": "R4"
   },
   {
     "method": "decision.overrule",
     "since": "R1",
     "stability": "preview",
-    "tracking": "#328"
+    "tracking": "#328",
+    "preview_since": "R1",
+    "decide_by": "R4"
   },
   {
     "method": "ask.undo",
@@ -99,31 +119,41 @@
     "method": "ask.take_over",
     "since": "R2",
     "stability": "preview",
-    "tracking": "#1580"
+    "tracking": "#1580",
+    "preview_since": "R2",
+    "decide_by": "R5"
   },
   {
     "method": "device.pair",
     "since": "R1",
     "stability": "preview",
-    "tracking": "#65"
+    "tracking": "#65",
+    "preview_since": "R1",
+    "decide_by": "R4"
   },
   {
     "method": "device.unpair",
     "since": "R2",
     "stability": "preview",
-    "tracking": "#65"
+    "tracking": "#65",
+    "preview_since": "R2",
+    "decide_by": "R5"
   },
   {
     "method": "channel.link",
     "since": "R2",
     "stability": "preview",
-    "tracking": "#65"
+    "tracking": "#65",
+    "preview_since": "R2",
+    "decide_by": "R5"
   },
   {
     "method": "confirm.enroll",
     "since": "R1",
     "stability": "preview",
-    "tracking": "#880"
+    "tracking": "#880",
+    "preview_since": "R1",
+    "decide_by": "R4"
   },
   {
     "method": "offer.save",
@@ -177,13 +207,17 @@
     "method": "row.why",
     "since": "R1",
     "stability": "preview",
-    "tracking": "#2018"
+    "tracking": "#2018",
+    "preview_since": "R1",
+    "decide_by": "R4"
   },
   {
     "method": "session.rename",
     "since": "R1",
     "stability": "preview",
-    "tracking": "#2018"
+    "tracking": "#2018",
+    "preview_since": "R1",
+    "decide_by": "R4"
   },
   {
     "method": "hub.stop",
@@ -195,13 +229,17 @@
     "method": "run.start",
     "since": "R1",
     "stability": "preview",
-    "tracking": "#322"
+    "tracking": "#322",
+    "preview_since": "R1",
+    "decide_by": "R4"
   },
   {
     "method": "test.load",
     "since": "R1",
     "stability": "preview",
-    "tracking": "#570"
+    "tracking": "#570",
+    "preview_since": "R1",
+    "decide_by": "R4"
   },
   {
     "method": "env.up",
@@ -244,13 +282,17 @@
     "since": "R6",
     "stability": "preview",
     "tracking": "#1820",
+    "preview_since": "R6",
+    "decide_by": "R9",
     "called_by": "deep pack rule"
   },
   {
     "method": "canvas.export",
     "since": "R6",
     "stability": "preview",
-    "tracking": "#1820"
+    "tracking": "#1820",
+    "preview_since": "R6",
+    "decide_by": "R9"
   },
   {
     "method": "guard.add",
@@ -268,7 +310,9 @@
     "method": "test.verdict",
     "since": "R1",
     "stability": "preview",
-    "tracking": "#570"
+    "tracking": "#570",
+    "preview_since": "R1",
+    "decide_by": "R4"
   },
   {
     "method": "mcp.call",
@@ -280,13 +324,17 @@
     "method": "mcp.cancel",
     "since": "R6",
     "stability": "preview",
-    "tracking": "#1923"
+    "tracking": "#1923",
+    "preview_since": "R6",
+    "decide_by": "R9"
   },
   {
     "method": "evidence.paste",
     "since": "R1",
     "stability": "preview",
-    "tracking": "#38"
+    "tracking": "#38",
+    "preview_since": "R1",
+    "decide_by": "R4"
   },
   {
     "method": "wiki.build",
@@ -304,43 +352,57 @@
     "method": "acceptance.start",
     "since": "R1",
     "stability": "preview",
-    "tracking": "#1328"
+    "tracking": "#1328",
+    "preview_since": "R1",
+    "decide_by": "R4"
   },
   {
     "method": "acceptance.status",
     "since": "R1",
     "stability": "preview",
-    "tracking": "#1328"
+    "tracking": "#1328",
+    "preview_since": "R1",
+    "decide_by": "R4"
   },
   {
     "method": "acceptance.dispute",
     "since": "R1",
     "stability": "preview",
-    "tracking": "#1328"
+    "tracking": "#1328",
+    "preview_since": "R1",
+    "decide_by": "R4"
   },
   {
     "method": "acceptance.ended",
     "since": "R1",
     "stability": "preview",
-    "tracking": "#1328"
+    "tracking": "#1328",
+    "preview_since": "R1",
+    "decide_by": "R4"
   },
   {
     "method": "land.judge",
     "since": "R1",
     "stability": "preview",
-    "tracking": "#1331"
+    "tracking": "#1331",
+    "preview_since": "R1",
+    "decide_by": "R4"
   },
   {
     "method": "land.round",
     "since": "R1",
     "stability": "preview",
-    "tracking": "#1331"
+    "tracking": "#1331",
+    "preview_since": "R1",
+    "decide_by": "R4"
   },
   {
     "method": "work.once",
     "since": "R1",
     "stability": "preview",
-    "tracking": "#1331"
+    "tracking": "#1331",
+    "preview_since": "R1",
+    "decide_by": "R4"
   },
   {
     "method": "work.approve",
@@ -364,25 +426,33 @@
     "method": "job.submit",
     "since": "R1",
     "stability": "preview",
-    "tracking": "#366"
+    "tracking": "#366",
+    "preview_since": "R1",
+    "decide_by": "R4"
   },
   {
     "method": "job.status",
     "since": "R1",
     "stability": "preview",
-    "tracking": "#366"
+    "tracking": "#366",
+    "preview_since": "R1",
+    "decide_by": "R4"
   },
   {
     "method": "job.list",
     "since": "R1",
     "stability": "preview",
-    "tracking": "#366"
+    "tracking": "#366",
+    "preview_since": "R1",
+    "decide_by": "R4"
   },
   {
     "method": "job.output",
     "since": "R1",
     "stability": "preview",
-    "tracking": "#366"
+    "tracking": "#366",
+    "preview_since": "R1",
+    "decide_by": "R4"
   },
   {
     "method": "windows.report",
@@ -394,19 +464,25 @@
     "method": "notifications.report",
     "since": "R1",
     "stability": "preview",
-    "tracking": "#994"
+    "tracking": "#994",
+    "preview_since": "R1",
+    "decide_by": "R4"
   },
   {
     "method": "views.shown",
     "since": "R2",
     "stability": "preview",
-    "tracking": "#262"
+    "tracking": "#262",
+    "preview_since": "R2",
+    "decide_by": "R5"
   },
   {
     "method": "views.hidden",
     "since": "R2",
     "stability": "preview",
-    "tracking": "#262"
+    "tracking": "#262",
+    "preview_since": "R2",
+    "decide_by": "R5"
   },
   {
     "method": "session.wait",
@@ -418,25 +494,33 @@
     "method": "session.note",
     "since": "R1",
     "stability": "preview",
-    "tracking": "#578"
+    "tracking": "#578",
+    "preview_since": "R1",
+    "decide_by": "R4"
   },
   {
     "method": "test.send_back",
     "since": "R1",
     "stability": "preview",
-    "tracking": "#570"
+    "tracking": "#570",
+    "preview_since": "R1",
+    "decide_by": "R4"
   },
   {
     "method": "test.clock",
     "since": "R1",
     "stability": "preview",
-    "tracking": "#965"
+    "tracking": "#965",
+    "preview_since": "R1",
+    "decide_by": "R4"
   },
   {
     "method": "work.fix",
     "since": "R2",
     "stability": "preview",
     "tracking": "#66",
+    "preview_since": "R2",
+    "decide_by": "R5",
     "called_by": "deep fix"
   },
   {
@@ -444,6 +528,8 @@
     "since": "R2",
     "stability": "preview",
     "tracking": "#67",
+    "preview_since": "R2",
+    "decide_by": "R5",
     "called_by": "deep workspace new"
   },
   {
@@ -451,6 +537,8 @@
     "since": "R2",
     "stability": "preview",
     "tracking": "#67",
+    "preview_since": "R2",
+    "decide_by": "R5",
     "called_by": "deep workspace move"
   },
   {
@@ -458,6 +546,8 @@
     "since": "R2",
     "stability": "preview",
     "tracking": "#67",
+    "preview_since": "R2",
+    "decide_by": "R5",
     "called_by": "deep workspace revert"
   },
   {
@@ -465,6 +555,8 @@
     "since": "R2",
     "stability": "preview",
     "tracking": "#67",
+    "preview_since": "R2",
+    "decide_by": "R5",
     "called_by": "deep workspace diff"
   },
   {
@@ -472,19 +564,25 @@
     "since": "R2",
     "stability": "preview",
     "tracking": "#67",
+    "preview_since": "R2",
+    "decide_by": "R5",
     "called_by": "deep workspace drift"
   },
   {
     "method": "project.views",
     "since": "R2",
     "stability": "preview",
-    "tracking": "#67"
+    "tracking": "#67",
+    "preview_since": "R2",
+    "decide_by": "R5"
   },
   {
     "method": "agents.propose",
     "since": "R2",
     "stability": "preview",
     "tracking": "#148",
+    "preview_since": "R2",
+    "decide_by": "R5",
     "called_by": "the app's Agents page"
   },
   {
@@ -492,6 +590,8 @@
     "since": "R2",
     "stability": "preview",
     "tracking": "#148",
+    "preview_since": "R2",
+    "decide_by": "R5",
     "called_by": "the app's Agents page"
   },
   {
@@ -499,6 +599,8 @@
     "since": "R2",
     "stability": "preview",
     "tracking": "#148",
+    "preview_since": "R2",
+    "decide_by": "R5",
     "called_by": "the app's Agents page"
   },
   {
@@ -506,6 +608,8 @@
     "since": "R2",
     "stability": "preview",
     "tracking": "#148",
+    "preview_since": "R2",
+    "decide_by": "R5",
     "called_by": "deep undo sync:<id>"
   },
   {
@@ -513,6 +617,8 @@
     "since": "R2",
     "stability": "preview",
     "tracking": "#148",
+    "preview_since": "R2",
+    "decide_by": "R5",
     "called_by": "deep mcp-exec"
   },
   {
@@ -520,6 +626,8 @@
     "since": "R1",
     "stability": "preview",
     "tracking": "#1334",
+    "preview_since": "R1",
+    "decide_by": "R4",
     "called_by": "deep hub promote"
   },
   {
@@ -527,6 +635,8 @@
     "since": "R1",
     "stability": "preview",
     "tracking": "#1334",
+    "preview_since": "R1",
+    "decide_by": "R4",
     "called_by": "deep hub promote"
   },
   {
@@ -534,6 +644,8 @@
     "since": "R1",
     "stability": "preview",
     "tracking": "#1334",
+    "preview_since": "R1",
+    "decide_by": "R4",
     "called_by": "deep hub promote"
   }
 ]

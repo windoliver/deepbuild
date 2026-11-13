@@ -100,6 +100,9 @@ test-export-guards = ["dep:deep-canvas-test-modules"]
 # kinds with the cue list that plays it (pop_in's default span 0.5 s, or 0.8 s), the ring at
 # fixture digests A and B, and a kind whose one-liner overruns the sheet.
 test-preview = ["dep:deep-canvas-test-modules"]
+# Issue #1802: `test.preview` once it removed its preview kind, with a migration and, planted, without.
+test-preview-removed = ["dep:deep-canvas-test-modules"]
+test-preview-removed-bare = ["dep:deep-canvas-test-modules"]
 test-cue = ["dep:deep-canvas-test-modules"]
 test-cue-span = ["dep:deep-canvas-test-modules"]
 test-ring-a = ["dep:deep-canvas-test-modules"]

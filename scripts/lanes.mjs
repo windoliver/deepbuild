@@ -463,6 +463,10 @@ alone.push('tests/acceptance/407/', 'tests/acceptance/407-oracle/');
 alone.push('tests/acceptance/2014/', 'tests/acceptance/2014-oracle/');
 // #1956's files each build deep-show (r1) and install the shelf pack's versions in order.
 alone.push('tests/acceptance/1956/');
+// #1802's ac4 and ac6 files each build deep-show with a test canvas module's features.
+alone.push('tests/acceptance/1802/');
+// #139's preview tests that publish an undated preview entry are redrafted after #1802; the redraft runs as #139's suite does.
+alone.push('tests/acceptance/139-redraft-1802/');
 // #154's files each start hubs that render stems through the supervisor, and build deep-show once; AC9 times a 60 s
 // six-stem render against the reference Mac.
 alone.push('tests/acceptance/154/', 'tests/acceptance/154-oracle/');
