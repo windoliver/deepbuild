@@ -1416,7 +1416,7 @@ mod tests {
                     .collect(),
             };
             let (got, _, rate, channels) =
-                audio(&track, 48_000, &data, &Planted::default()).unwrap();
+                audio::mp4_track(&track, 48_000, &data, &Planted::default()).unwrap();
             assert_eq!(
                 (got, rate, channels),
                 (want.clone(), 48_000, 2),
@@ -1428,7 +1428,7 @@ mod tests {
 
     #[test]
     fn an_audio_sample_past_the_end_of_the_file_reads_as_empty() {
-        let got = audio(&track_past_the_end(), 1, &[], &Planted::default());
+        let got = audio::mp4_track(&track_past_the_end(), 1, &[], &Planted::default());
         assert!(got.is_err_and(|e| e.starts_with("no decoder for")));
     }
 
