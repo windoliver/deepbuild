@@ -302,7 +302,8 @@ fn has_clock(doc: &Value, _: &str, _: &Value) -> bool {
     })
 }
 
-/// An item a document channel or driver targets, a limit constraint holds or a placement binds.
+/// An item a document channel or driver targets, a constraint moves (but a rest solved at check)
+/// or a placement binds.
 fn is_target(doc: &Value, id: &str, item: &Value) -> bool {
     // #493: a parallax group moves with the camera's pose and its drift.
     if item.get("kind").and_then(Value::as_str) == Some("group@1")
@@ -328,15 +329,14 @@ fn is_target(doc: &Value, id: &str, item: &Value) -> bool {
         || !keyed_data(doc, item).is_empty()
         || counter_data(doc, item).is_some()
         || reads_moving(doc, item);
+    // #162: every constraint's owner, not only a limit's, so an item a follow_path or a child_of
+    // alone moves draws where the program puts it.
     let held = doc
         .get("constraints")
         .and_then(Value::as_object)
         .into_iter()
         .flatten()
-        .any(|(_, c)| {
-            c.get("kind").and_then(Value::as_str) == Some("limit")
-                && c.get("owner").and_then(Value::as_str) == Some(id)
-        });
+        .any(|(_, c)| c.get("owner").and_then(Value::as_str) == Some(id) && !rests_at_check(c));
     let bound = doc
         .get("placements")
         .and_then(Value::as_object)

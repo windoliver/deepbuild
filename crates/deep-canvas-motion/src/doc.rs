@@ -435,7 +435,7 @@ pub struct Limit {
 #[derive(Clone, Debug, PartialEq)]
 pub enum Kind {
     ChildOf { parent: String },
-    FollowPath { points: Vec<[f64; 2]>, fraction: f64, orient: bool, offset: [f64; 2] },
+    FollowPath { points: Vec<[f64; 2]>, fraction: crate::constraint::Fraction, orient: bool, offset: [f64; 2] },
     LookAt { target: String },
     Copy { what: What, target: String },
     /// Bones `[upper, lower, end]`, each the next one's parent.
@@ -1547,7 +1547,7 @@ fn constraint_of(id: &str, c: &Map<String, Value>) -> Result<Constraint, Refused
             }
             Kind::FollowPath {
                 points,
-                fraction: num_or("fraction", 0.0)?,
+                fraction: crate::constraint::Fraction::of(c.get("fraction")).or_else(|code| refuse(code, at("fraction")))?,
                 orient: flag("orient"),
                 offset: pair(c.get("offset"), &at("offset"))?,
             }

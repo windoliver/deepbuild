@@ -232,6 +232,63 @@ impl ArcTable {
     }
 }
 
+/// How far along its path a `follow_path` puts its owner: a fixed share of the path's length, or
+/// a keyed data value's, read each frame (`fraction: {data: <name>}`), so an owner keyed by time
+/// moves along its curve by arc length (#162: a Lottie position with spatial tangents).
+#[derive(Clone, Debug, PartialEq)]
+pub enum Fraction {
+    Fixed(f64),
+    Data(String),
+}
+
+impl Fraction {
+    /// A constraint's `fraction`: none is 0, a number is itself and `{data: <name>}` names a data
+    /// value; the refusal's code otherwise.
+    pub fn of(v: Option<&serde_json::Value>) -> Result<Fraction, &'static str> {
+        use serde_json::Value;
+        match v {
+            None => Ok(Fraction::Fixed(0.0)),
+            Some(Value::Object(o)) => match (o.len(), o.get("data").and_then(Value::as_str)) {
+                (1, Some(name)) if !name.is_empty() => Ok(Fraction::Data(name.to_string())),
+                _ => Err("bad_doc"),
+            },
+            Some(v) => v.as_f64().filter(|f| f.is_finite()).map(Fraction::Fixed).ok_or("out_of_range"),
+        }
+    }
+}
+
+/// A `follow_path` compiled: its path's arc-length table, and the slot of the data value its
+/// fraction reads, which the schedule runs it after.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PathRead {
+    pub table: ArcTable,
+    pub from: Option<usize>,
+}
+
+impl PathRead {
+    /// The table of `points`, and the slot of the keyed data value `fraction` names among the
+    /// program's `fields`; refused `ref_unresolved` at `path` when nothing keys that value.
+    pub fn compile(points: &[[f64; 2]], fraction: &Fraction, fields: &[crate::program::Field], path: &str) -> Result<PathRead, crate::doc::Refused> {
+        let from = match fraction {
+            Fraction::Fixed(_) => None,
+            Fraction::Data(name) => match fields.iter().find(|f| f.data.as_deref() == Some(name.as_str())) {
+                Some(f) => Some(f.slot),
+                None => return Err(crate::doc::Refused { code: "ref_unresolved", path: format!("{path}/fraction/data"), detail: None }),
+            },
+        };
+        Ok(PathRead { table: ArcTable::new(points.to_vec()), from })
+    }
+
+    /// The fraction at this frame: the fixed one, or its data value's slot.
+    pub fn fraction(&self, fraction: &Fraction, slots: &[f64]) -> f64 {
+        match (fraction, self.from) {
+            (Fraction::Fixed(f), _) => *f,
+            (Fraction::Data(_), Some(s)) => slots[s],
+            (Fraction::Data(_), None) => 0.0,
+        }
+    }
+}
+
 /// Puts `own` at `fraction` along the path, plus `offset`, turned to its heading when `orient`.
 pub fn follow_path(
     own: &Pose,
@@ -376,6 +433,45 @@ impl SpringBake {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A dot following a 30 + 90 u path by a data value keyed 0 → 1 over a second.
+    fn along(fraction: serde_json::Value) -> serde_json::Map<String, serde_json::Value> {
+        let doc = serde_json::json!({
+            "format": 1, "id": "along", "profile": "figure", "title": "Along", "description": "A dot along a path.",
+            "size": [200, 200], "transport": {"span": "1s"},
+            "layers": {"main": {"writer": "agent-a", "title": "Main", "order": "a0"}},
+            "items": {"dot": {"id": "dot", "kind": "circle@1", "layer": "main", "name": "dot", "order": "a0", "params": {"center": [0, 0], "r": 2}}},
+            "data": {"along": 0},
+            "channels": {"along": {"target": "data/along", "type": "f32", "keys": {"k0": {"t": "0s", "value": 0}, "k1": {"t": "1s", "value": 1}}}},
+            "constraints": {"go": {"owner": "dot", "kind": "follow_path", "path": [[0, 0], [30, 0], [30, 90]], "fraction": fraction}},
+        });
+        doc.as_object().cloned().unwrap()
+    }
+
+    #[test]
+    fn a_fraction_read_from_a_keyed_data_value_moves_the_owner_by_arc_length() {
+        let doc = along(serde_json::json!({"data": "along"}));
+        let program = crate::program::Program::compile(&doc).expect("the document compiles");
+        let at = |s: f64| {
+            let f = crate::eval::frame(&doc, &program, (s * 705_600_000.0) as i64, crate::eval::Validity::Full);
+            let pos = &f.items["dot"]["at"]["pos"];
+            [pos[0].as_f64().unwrap(), pos[1].as_f64().unwrap()]
+        };
+        // Half the time is half the 120 u: 30 u along the first side and 30 down the second.
+        for (s, want) in [(0.0, [0.0, 0.0]), (0.125, [15.0, 0.0]), (0.5, [30.0, 30.0]), (0.75, [30.0, 60.0]), (1.0, [30.0, 90.0])] {
+            let got = at(s);
+            assert!((got[0] - want[0]).abs() < 1e-9 && (got[1] - want[1]).abs() < 1e-9, "at {s} s: {got:?}, not {want:?}");
+        }
+    }
+
+    #[test]
+    fn a_fraction_naming_no_keyed_data_value_is_refused() {
+        let doc = along(serde_json::json!({"data": "nothing"}));
+        let refused = crate::program::Program::compile(&doc).expect_err("refused");
+        assert_eq!((refused.code, refused.path.as_str()), ("ref_unresolved", "constraints/go/fraction/data"));
+        assert_eq!(Fraction::of(Some(&serde_json::json!({"data": 3}))), Err("bad_doc"));
+        assert_eq!(Fraction::of(Some(&serde_json::json!(0.25))), Ok(Fraction::Fixed(0.25)));
+    }
 
     #[test]
     fn a_cartoon_reach_past_its_length_stretches_both_bones_by_the_same_share() {

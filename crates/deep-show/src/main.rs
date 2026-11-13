@@ -1230,6 +1230,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 || deep_canvas_marks::arrays::PLANTED.contains(p)
                 // #1967's wrong programs live in the cells module's playback and conversion.
                 || deep_canvas_cells::recording::PLANTED.contains(p)
+                || deep_canvas_export::lottie::PLANTED.contains(p)
         })
         .map(str::to_string);
     // #433's wrong programs are twins of the familiar@1 pack.
@@ -1987,7 +1988,7 @@ fn modules(set: BuildSet) -> Vec<Module> {
             deep_canvas_media::module::module()
         });
         // Issue #308: controls and the input track's handling, with control@1; #535: logic's arrays.
-        out.extend([deep_canvas_input::module::module(), deep_logic::module()]);
+        out.extend([deep_canvas_input::module::module(), deep_logic::module(), deep_canvas_export::module::module()]);
         out.extend(physics::module());
     }
     // Issue #238: the sandbox module, on core alone; `test-sandbox-alt` seals the test
@@ -3079,6 +3080,8 @@ fn main() {
         "encode-tool" => {
             std::process::exit(deep_codecs::serve(deep_codecs::ENCODE_TOOL, &args[1..]))
         }
+        // #162: this binary's copy as the Lottie export's reference reader.
+        "lottie-reader" => std::process::exit(deep_lottie_reader::serve(&args[1..])),
         _ => {}
     }
     let stdout = io::stdout();

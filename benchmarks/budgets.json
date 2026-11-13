@@ -1437,6 +1437,20 @@
       "criteria": [
         "#157.d2250c69"
       ]
+    },
+    {
+      "id": "lottie-export",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "lottie-export"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #162 first measurement (#162.30ea626f): the merge base has no Lottie target. One `deep-show run` exports a 200-item title with 2,000 Bézier keys (ten on each rect's x over 4 s, 30 fps) to Lottie, its fidelity check reading 20 sampled frames back through the pinned reference renderer; it prints the receipt's timing.wall (under 1 s), which tests/acceptance/162/budgets.test.ts judges on a reference Mac with the 1 MB import's time and memory. p50 and peak memory get a 50% margin against the merge base once main has this task.",
+      "criteria": [
+        "#162.30ea626f"
+      ]
     }
   ]
 }
