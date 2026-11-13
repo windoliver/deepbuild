@@ -7,8 +7,9 @@
 //! - `run:<program> [<arg>…]`: a program the call runs, through any wrapper or nested shell, is `<program>`,
 //!   and its arguments that aren't options match the `<arg>` globs in order; an `<arg>` that starts with `-`
 //!   matches any of its arguments instead.
-//! - `write:<path>…`: the call writes a path matching one of the globs, by Edit, Write, a patch or a
-//!   recognizable shell write, the path as written and as its links and `..` resolve, against each glob and
+//! - `write:<path>…`: the call writes a path matching one of the globs, by Edit, Write, a patch, a
+//!   recognizable shell write or an MCP call that names it (#1848), unless its tool counts as read, the path as
+//!   written and as its links and `..` resolve, against each glob and
 //!   the file it links to. `~` is the home folder, `*` matches any run, slashes included, a glob that
 //!   doesn't start with `/` or `~` matches a path's end, and a glob after `!` takes the paths it matches out.
 //! - `kill:by-name`: a kill by name or port: pkill, killall, `fuser -k`, kill-port, or `kill` fed from a
@@ -19,7 +20,7 @@
 //! - `git:other-checkout`: git aimed at a worktree of the session's repository other than its own, by `cd`,
 //!   `-C`, `--git-dir`, `--work-tree`, `GIT_DIR` or `GIT_WORK_TREE`.
 //! - `read:<path>…`: the call reads a path matching one of the globs, as `write:` reads them: by Read or Grep,
-//!   a redirection, or any shell run that names the path among its arguments.
+//!   a redirection, any shell run that names the path among its arguments, or an MCP call that names it.
 //! - `hub:stop`: `deep hub stop` of the installed hub: with no `--root`, or one that is `~/.deepbuild`.
 //! - `hub:service`: a stop, unload, removal or edit of the hub's login service (launchd's `com.deepbuild.hub`,
 //!   systemd's `deepbuild-hub.service`), or a change to the environment systemd's manager gives it.
@@ -69,6 +70,9 @@ pub struct Call {
     /// The run each write and each read comes from, by its index in `runs`, and whether by a redirection; None
     /// for a file tool's path.
     by: (Vec<From>, Vec<From>),
+    /// The argument that names each path an MCP call names, and its value, in the order those paths lead `writes`
+    /// and `reads`; empty for any other call (#1848).
+    args: Vec<(String, String)>,
     pub cwd: Option<PathBuf>,
     pub home: PathBuf,
     /// The hub's socket, whose peer is the hub's process.
@@ -79,6 +83,15 @@ pub struct Call {
 
 /// The run a path comes from, by its index, and whether by a redirection.
 type From = Option<(usize, bool)>;
+
+/// Whether a call reads the paths it names outright, writes them, or both: an MCP call reads the paths its arguments
+/// name, and writes them too unless its tool counts as read (#1848).
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Names {
+    Reads,
+    Writes,
+    Both,
+}
 
 /// What a match found: the entry matched, with what a person needs to act on it, when there's more to say.
 pub struct Hit {
@@ -144,12 +157,13 @@ pub fn known(pattern: &str) -> bool {
 }
 
 impl Call {
-    /// A call as deep-hook reads it: a shell command (`tool_input.command`), a file tool's path, or a patch;
-    /// `read` says the paths are read, not written.
+    /// A call as deep-hook reads it: a shell command (`tool_input.command`), a file tool's path, a patch, or the
+    /// paths an MCP call's arguments name, `args` naming the argument of each; `names` says whether they are read,
+    /// written or both.
     pub fn new(
         tool: &str,
         command: Option<&str>,
-        (paths, read): (&[String], bool),
+        (paths, args, names): (&[String], &[String], Names),
         cwd: Option<&Path>,
         home: &Path,
         hub: &Path,
@@ -170,12 +184,15 @@ impl Call {
                 cwd.map(|c| c.join(path))
             }
         };
-        let named: Vec<PathBuf> = paths.iter().filter_map(|p| at(p)).collect();
-        let (mut writes, mut reads) = if read {
-            (Vec::new(), named)
-        } else {
-            (named, Vec::new())
-        };
+        let (mut named, mut kept) = (Vec::new(), Vec::new());
+        for (k, p) in paths.iter().enumerate() {
+            if let Some(path) = at(p) {
+                named.push(path);
+                kept.extend(args.get(k).map(|arg| (arg.clone(), p.clone())));
+            }
+        }
+        let mut writes = if names == Names::Reads { Vec::new() } else { named.clone() };
+        let mut reads = if names == Names::Writes { Vec::new() } else { named };
         let mut by = (vec![None; writes.len()], vec![None; reads.len()]);
         for (k, run) in runs.iter().enumerate() {
             reads.extend(run.reads.iter().cloned());
@@ -211,6 +228,7 @@ impl Call {
             writes,
             reads,
             by,
+            args: kept,
             cwd: cwd.map(Path::to_path_buf),
             home: home.to_path_buf(),
             hub: hub.to_path_buf(),
@@ -350,9 +368,11 @@ impl Call {
                         )
                 })?;
                 // A redirection isn't one of its run's words, so the call's own line names it.
-                let ran = match (by[k], &self.command) {
-                    (Some((_, true)), Some(line)) => format!(" It runs: {line}"),
-                    (Some((r, _)), _) => format!(" It runs: {}", command_of(&self.runs[r])),
+                let ran = match (by[k], &self.command, self.args.get(k)) {
+                    (Some((_, true)), Some(line), _) => format!(" It runs: {line}"),
+                    (Some((r, _)), _, _) => format!(" It runs: {}", command_of(&self.runs[r])),
+                    // An MCP call's path leads its lists: the argument that names it, as it names it (#1848).
+                    (None, _, Some((arg, value))) => format!(" Its argument {arg} names it: {value}"),
                     _ => String::new(),
                 };
                 Some(Hit {
@@ -1948,7 +1968,7 @@ mod tests {
         Call::new(
             "Bash",
             Some(line),
-            (&[], false),
+            (&[], &[], Names::Writes),
             Some(Path::new("/w")),
             Path::new("/h"),
             Path::new("/h/.deepbuild/hub.sock"),
@@ -1967,7 +1987,7 @@ mod tests {
             let call = Call::new(
                 "Write",
                 None,
-                (&[path.to_string()], false),
+                (&[path.to_string()], &[], Names::Writes),
                 Some(Path::new("/w")),
                 Path::new("/h"),
                 Path::new("/h/.deepbuild/hub.sock"),
@@ -2415,7 +2435,7 @@ mod tests {
             Call::new(
                 "Bash",
                 Some(line),
-                (&[], false),
+                (&[], &[], Names::Writes),
                 Some(&repo),
                 Path::new("/h"),
                 Path::new("/h/s"),
@@ -2448,7 +2468,7 @@ mod tests {
         let call = Call::new(
             "apply_patch",
             None,
-            (&paths, false),
+            (&paths, &[], Names::Writes),
             Some(Path::new("/repo")),
             Path::new("/h"),
             Path::new("/h/.deepbuild/hub.sock"),
@@ -2575,7 +2595,7 @@ mod tests {
         Call::new(
             "Bash",
             Some(line),
-            (&[], false),
+            (&[], &[], Names::Writes),
             Some(cwd),
             home,
             &home.join(".deepbuild/hub.sock"),
