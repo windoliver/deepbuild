@@ -2218,6 +2218,7 @@ dependencies = [
  "pollster 0.4.0",
  "quickjs-jit-runtime",
  "raw-window-handle",
+ "security-framework",
  "serde",
  "serde_json",
  "sha2 0.10.9",

@@ -28,6 +28,7 @@ import type { Hosts } from './hosts.js';
 import { couldDo, struck } from './could-do.js';
 
 import { repoOf, type Root } from './paths.js';
+import { OWNER } from './people.js';
 
 import { type About } from './standing.js';
 
@@ -285,11 +286,16 @@ export class McpOperations {
     const worktree = session ? this.options.state().sessions.get(session)?.cwd : this.worktreeAt(context.cwd);
     const everyone = !session && this.options.settings.plant === 'unbound-reads-all';
     // A claim reaches a session at its own scope, its repo's or everywhere's; a call bound to no session reads every repo's.
-    const [project] = session ? (await this.options.services.record.raw(`SELECT project_id FROM sessions WHERE id = ?`, [session])) as { project_id: string | null }[] : [];
+    // A session is the person's whose connection first sent its hooks (#1337).
+    const [project] = session ? (await this.options.services.record.raw(`SELECT project_id, (SELECT actor FROM events WHERE session_id = ? ORDER BY log_pos LIMIT 1) AS person FROM sessions WHERE id = ?`, [session, session])) as { project_id: string | null; person: string | null }[] : [];
     const scopes = new Set(session ? [`session:${letters(session)}`, 'all', ...(project?.project_id ? [`repo:${letters(project.project_id)}`] : [])] : []);
     const covers = (scope: string): boolean => everyone || (session ? scopes.has(scope) : scope === 'all' || scope.startsWith('repo:'));
+    // A person's session reads the decisions saved at its own scope or its project's (#1840): one saved for all repos is
+    // its saver's personal scope. The planted wrong program reads every decision.
+    const person = project?.person && project.person !== OWNER && this.options.settings.plant !== 'search-decisions-unfiltered';
     return search({
       query, index: await this.wikiIndex(), raw: (q, params) => this.options.services.record.raw(q, params), worktree, session: everyone ? { everyone: true } : session, covers,
+      ...(person ? { decides: (scope: string) => scope !== 'all' && scopes.has(scope) } : {}),
       trustsIndex: this.options.settings.plant === 'trusts-index',
       readings: (q) => this.options.services.numbers.search(q, everyone ? { everyone: true } : session),
       ...(session ? { past: await this.pastSessions(project?.project_id ?? null, file, worktree) } : {}),
@@ -357,7 +363,7 @@ export class McpOperations {
       const thread = args.thread as { link: string; expect: string } | null | undefined;
       if (thread) {
         if (!slackThread(thread.link)) throw refuse('format', '/params/arguments/thread/link', 'Give a Slack thread link: https://<workspace>.slack.com/archives/<channel>/p<timestamp>.', thread.link);
-        if (!slackConfig(this.options.services.root.dir)) throw refuse('required', '/params/arguments/thread', 'No Slack connector: put your bot token and user ID in the hub\'s slack.json, mode 0600, to read this thread.', null);
+        if (!slackConfig(this.options.services.root.dir)) throw refuse('required', '/params/arguments/thread', 'No Slack connector: put your Slack user ID in the hub\'s slack.json as {"you": "U…"}, mode 0600, and enter your bot token with deep secret add slack token, to read this thread.', null);
       } else {
         need('check', 'Name the check in the repo\'s spec that will prove the task done; a task without one is refused, since nobody could tell it was done.');
         if (!this.checksOf(s.cwd).has(String(args.check))) throw this.unknownCheck(s.cwd, args.check);
