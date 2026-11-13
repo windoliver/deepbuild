@@ -138,10 +138,10 @@
       "fail_closed": true
     },
     "no-control-token-read": {
-      "match": "read:~/.deepbuild/control.token",
+      "match": "read:~/.deepbuild/control.token ~/.deepbuild/channels.json ~/.deepbuild/slack.json ~/.deepbuild/app ~/.deepbuild/app/*",
       "scope": "all_repos",
       "mode": "block",
-      "reason": "~/.deepbuild/control.token is the CLI's credential to the hub, so an agent never reads it, by any tool.",
+      "reason": "~/.deepbuild/control.token is the CLI's credential to the hub, channels.json and slack.json name the tokens the hub sends as you, and ~/.deepbuild/app/ is the app's, which answers for you, so an agent never reads them, by any tool.",
       "next_step": "Run the deep command you need yourself in your own terminal.",
       "fail_closed": true
     },
