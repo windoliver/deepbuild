@@ -174,6 +174,8 @@ pub enum Planted {
     Audit(crate::geometry_audit::Planted),
     /// #1921's: a world's outputs' wrong programs, which the physics host names.
     Physics(crate::physics::Planted),
+    /// #525's live worlds' wrong programs.
+    Ahead(crate::stepped::Planted),
     /// #202: a kind_rules requirement counts the working agent's own pack rule as its cover.
     OwnRuleCountsAsCover,
     /// #202: the kind_rules check evaluates a pack kind's recipe rules a second time.
@@ -379,6 +381,9 @@ pub enum Planted {
     BackendKeepsRemovedDevice,
     /// #499: after a device change the clock counts t from the new stream's sample 0.
     ClockRestartsFromSample0,
+    /// #525: a golden is compared under another runtime digest; an export's receipt leaves it out.
+    GoldenComparesAcrossDigests,
+    ReceiptOmitsRuntimeDigest,
     /// #421: a view keeps an item only when its bounds' centre is inside.
     CullByCenter,
     /// #421: a node's hierarchy bounds union only its direct children's own bounds.
@@ -788,6 +793,8 @@ pub enum Call {
     Input {
         panel: String,
         event: deep_canvas::scope::Event,
+        /// #525: the platform's timestamp of the event, when it carries one.
+        t: Option<i64>,
     },
     /// A panel's interaction scope, with no input (#383).
     Scope(String),
@@ -929,6 +936,8 @@ pub enum Call {
     Mix(Box<crate::mixdown::MixCall>),
     /// #499: the test audio backend's devices, the transport log and a logic item's state.
     Audio(Box<crate::audio::AudioCall>),
+    /// #525: a golden of a document's evaluation, recorded or verified on this build.
+    RuntimeGolden(crate::golden::GoldenCall),
 }
 
 /// `eval`'s `t` (#488): a flick count, or a time literal resolved against the document's frame
@@ -1025,6 +1034,8 @@ pub struct Scenario {
     pub decode_caps: deep_codecs::Caps,
     /// #499: the test audio backend, which replaces the platform's output at its boundary.
     pub audio: Option<crate::audio::Backend>,
+    /// #525: steps of live worlds that take host time on purpose.
+    pub delays: Vec<crate::stepped::Delay>,
     /// The packs installed in the store before the first call (#306), each `(owner/name, dir)`.
     pub packs: Vec<(String, PathBuf)>,
     /// #1961: your notes the hub holds when the run starts, each `{note, doc, item, …}`.
@@ -1874,9 +1885,9 @@ impl<'a> Hub<'a> {
                 json!({"bands": self.bands().iter().map(|b| b.to_json()).collect::<Vec<_>>()})
             }
             Call::Kit(k) => self.kit(k),
-            Call::Input { panel, event } => match self.ring_input(panel, event) {
+            Call::Input { panel, event, t } => match self.ring_input(panel, event) {
                 Some(reply) => reply,
-                None => self.input(panel, event),
+                None => self.live_press(panel, event, *t).err().unwrap_or_else(|| self.input(panel, event)),
             },
             Call::Scope(panel) => self.scope_reply(panel),
             Call::Presented(panel) => self.presented(panel),
@@ -1963,6 +1974,7 @@ impl<'a> Hub<'a> {
             Call::Gate(g) => self.gate_call(g),
             Call::Mix(m) => self.mix_call(m),
             Call::Audio(a) => self.audio_call(a),
+            Call::RuntimeGolden(g) => self.golden_call(g),
             Call::Term(t) => self.term_call(t),
         };
         for shaping in deep_text::cache::take_log() {

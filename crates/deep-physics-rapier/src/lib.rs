@@ -847,17 +847,18 @@ impl Backend for Rapier {
 
     fn step(&mut self, inputs: &[Input], targets: &Targets) -> Result<(), Box<Refusal>> {
         tally("step");
-        // A world declares no inputs yet (the reader refuses `inputs`), so none can arrive.
-        if let Some(i) = inputs.first() {
-            return Err(Box::new(refusal(
-                "physics.unsupported",
-                "inputs/kind".into(),
-                json!(i.kind),
-                format!(
-                    "the input {} isn't run by this backend interface yet; #522 brings it",
-                    i.kind
-                ),
-            )));
+        // #525: a launch sets its body's velocities at the start of its step; the reader
+        // refuses every other kind (#522).
+        for i in inputs {
+            let body = self.bodies.iter().find(|(b, _)| *b == i.target).map(|(_, h)| *h);
+            let (Some(h), "launch") = (body, i.kind.as_str()) else {
+                let what = format!("the input {} on {} isn't run by this backend interface yet; #522 brings it", i.kind, i.target);
+                return Err(Box::new(refusal("physics.unsupported", "inputs/kind".into(), json!(i.kind), what)));
+            };
+            let v = |k: &str| -> [f64; 3] { serde_json::from_value(i.data[k].clone()).unwrap_or([0.0; 3]) };
+            let rb = &mut self.world.bodies[h];
+            rb.set_linvel(v3(v("linear")), true);
+            rb.set_angvel(v3(v("angular")) * (PI / 180.0), true);
         }
         let before = self.before();
         self.aim(targets);
