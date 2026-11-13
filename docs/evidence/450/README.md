@@ -8,7 +8,7 @@ the issue, the design and base `53c0e72a3` by a job that saw no implementation, 
 | `three-traces.png` | 5 | The thrown ball's three traces at 6 s (cues at 0, 2 and 4 s, at 30°, 45° and 60°), 640 × 360. |
 | `wheel-trail.png` | 5 | The rolling wheel's whole trail at 3.75 s, baked at 60 Hz from 0 s. |
 | `traces-24fps.apng`, `traces-60fps.apng` | 5 | The thrown ball's traces from 0 to 6 s at 24 and at 60 fps, 320 × 180, the canvas's own frames unchanged. |
-| `checks.txt` | 1 to 5 | The blind suite on the change rebased onto main (10 of 11 tests pass; the taste call reads INCONCLUSIVE until it is made), the touched crates' unit tests, #421's coplanar ties, #379's allocation count here and on the base, and the canvas kit, as run. |
+| `checks.txt` | 1 to 5 | The blind suite on the change rebased onto main (11 of 11 once the taste call was recorded), the touched crates' unit tests, #421's coplanar ties, #379's allocation count here and on the base, and the canvas kit, as run. |
 
 Every picture is the check run's own (`taste.test.ts` writes them to `target/acceptance/450/`; they are copied here
 byte for byte). SHA-256:
@@ -20,8 +20,10 @@ byte for byte). SHA-256:
 68eb5076f1443dd1cc9917168b26dad86bbc4438e13da72e52a9bebdb6ac99d4  traces-60fps.apng
 ```
 
-Whether they look right is the owner's one taste call (criterion 5), recorded in `tests/acceptance/450/TASTE.json`;
-until it is, `taste.test.ts` reads INCONCLUSIVE.
+Whether they look right is one taste call (criterion 5), recorded in `tests/acceptance/450/TASTE.json`: looks right,
+made on the owner's delegation in session. Besides the stills, the recordings' frames at 0, 1, 2 (the second cue), 3,
+4, 5 and 6 s at 24 and 60 fps were checked. The fixture's camera (horizontal fov 50° at 28 m) crops the first throw's
+start, the ball at 0 s and 6 s, and the wheel's rim at 3.75 s; that framing is the test's own.
 
 ## Seek against play: a fix the criterion needed
 

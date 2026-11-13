@@ -33,3 +33,26 @@ base:
 core: FAIL {"code":"twin_passed","module":"core","part":"time_order","case":"parity/framework/code-pack-missing.board#time_order"}
 motion: FAIL {"code":"failed_case","module":"motion","part":"catalog","case":"code:score.pad_too_low"} {"code":"unproved","module":"motion","part":"catalog","case":"code:score.pad_too_low","probe":"planted_fixture","issue_code":"score.pad_too_low"} {"code":"unproved","module":"motion","part":"catalo
 canvas kit: FAIL over core, building, cells, data, effects, graph, input, logic, look, loop, marks2d, media, motion, physics, record, sandbox, scene3d, sheet, text, vector (seed 138)
+
+## After the gaps closed: rebased onto origin/main e5aa3923a (Nov 13, 2026)
+
+Blind suite:
+ Test Files  5 passed (5)
+      Tests  11 passed (11)
+
+Motion's #450 tests (crates/deep-canvas-motion/tests/trails_450.rs) and the motion and scene3d unit tests:
+   2 test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; 
+   1 test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; 
+   2 test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; 
+   1 test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; 
+   1 test result: ok. 49 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; 
+   1 test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; 
+   1 test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; 
+   1 test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; 
+   1 test result: ok. 99 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; 
+
+fmt exit 0
+canvas-lint exit 1 FAILs 46
+clippy exit 0
+unit exit 0
+canvas-lint: none of its lines is in a file this change touches (main's own).
