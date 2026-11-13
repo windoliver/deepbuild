@@ -30,4 +30,15 @@ canvas kit (media PASS with its new `registries` part; core's `time_order` FAIL 
 motion's catalog FAIL are main's, the first unchanged with media's registry taken out); canvas-lint, size-ratchet,
 plant-lint, canvas-closures and public-text report nothing in this change's files.
 
+A gap past the criteria, inside the Scope: `tests/acceptance/204-gaps/registry.test.ts` (implementer's) holds that an
+installed pack's presets are entries of `synth.preset@1` in `deep://registries`. It failed on the host before the fix
+(`expected [] to deeply equal [ …(2) ]`) and passes after it.
+
+A demo film, exported and checked outside the suites: a car speeds from 0 to 30 m/s over 4 s, holds, brakes to 8 m/s
+and holds, with an engine preset (a saw at 45 + 3 × speed Hz, a sub sine an octave below, brown noise, a lowpass that
+opens with speed) and a horn strip at 6.5 s. Exported as H.264 with AAC (640 × 360, 30 fps, 10 s). In its mix, the
+engine's fundamental (the sub's period) follows 22.5 + 1.5 × speed within 0.95% over 89 windows of 100 ms, reading
+67.50 Hz at 30 m/s and 34.50 Hz at 8 m/s; the horn's 415 Hz is 10,000 times stronger in its window than before it;
+the master peaks at −8.5 dBFS.
+
 Not run: neighbouring suites, `node scripts/affected.mjs`, the preflight, and the perf lane's merge-base comparison.
