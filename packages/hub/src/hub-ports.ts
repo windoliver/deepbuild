@@ -238,7 +238,7 @@ export interface SessionStatePort {
   startOf(pid: number, fresh?: boolean): Promise<string | undefined>;
   verify(meta: HookMeta): Promise<boolean>;
   forgetEnded(): void;
-  mcpHello(parent: { pid: number; start: string } | undefined, paseo?: string): Promise<string | null>;
+  mcpHello(fd: number | undefined, claimed: { pid: number; start: string } | undefined, paseo?: string): Promise<{ session: string | null; parent?: { pid: number; start: string } }>;
   sessionRows(seen?: string): Promise<Record<string, unknown>[]>;
   rowsSeen(role: string, detail: boolean): Promise<Obj>;
   renameSession(params: Obj): Promise<Obj>;

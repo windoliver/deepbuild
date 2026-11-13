@@ -27,6 +27,7 @@ use deep_hook::matcher;
 mod actions;
 mod heavy;
 mod remote;
+mod tool_paths;
 
 /// How long the hub has to acknowledge a request, from the hook's start: the 20 ms the hub has to acknowledge
 /// once it reads it. The rest of the design's 50 ms is for the process to start, decide, spool and exit.
@@ -370,64 +371,10 @@ const READ_TOOLS: &[&str] = &[
     "Grep",
 ];
 
-/// A path as pi's file tools open it (pi's `normalizePath`): its unicode spaces plain, without one leading `@`, a bare
-/// `~` the home folder, and a `file://` URL the path it names.
-fn pi_path(path: &str) -> String {
-    let spaced: String = path
-        .chars()
-        .map(|c| match c {
-            '\u{00A0}' | '\u{2000}'..='\u{200A}' | '\u{202F}' | '\u{205F}' | '\u{3000}' => ' ',
-            c => c,
-        })
-        .collect();
-    let bare = spaced.strip_prefix('@').unwrap_or(&spaced);
-    if bare == "~" {
-        return "~/".to_string();
-    }
-    match bare.strip_prefix("file://") {
-        Some(url) => file_url_path(url),
-        None => bare.to_string(),
-    }
-}
-
-/// What Node's `fileURLToPath` makes of a `file://` URL's rest: the URL parser ends it at a `?` or `#`, drops tabs and
-/// newlines and what trails it and reads `\` as `/`; then it is percent-decoded. Any host is passed over: Node opens the
-/// path under one that decodes to `localhost` however it is spelled, and throws on the rest, so nothing else opens.
-fn file_url_path(url: &str) -> String {
-    let clean: String = url
-        .trim_end_matches(|c: char| c <= ' ')
-        .chars()
-        .filter(|c| !matches!(c, '\t' | '\n' | '\r'))
-        .map(|c| if c == '\\' { '/' } else { c })
-        .collect();
-    let path = clean.split(['?', '#']).next().unwrap_or("");
-    let path = path.find('/').map_or(path, |slash| &path[slash..]);
-    let bytes = path.as_bytes();
-    let mut out = Vec::with_capacity(bytes.len());
-    let mut i = 0;
-    while i < bytes.len() {
-        let hex = (bytes[i] == b'%')
-            .then(|| path.get(i + 1..i + 3))
-            .flatten()
-            .and_then(|h| u8::from_str_radix(h, 16).ok());
-        match hex {
-            Some(byte) => {
-                out.push(byte);
-                i += 3;
-            }
-            None => {
-                out.push(bytes[i]);
-                i += 1;
-            }
-        }
-    }
-    String::from_utf8_lossy(&out).into_owned()
-}
-
 /// The call a tool hook makes, as guards read it: a shell command (Bash's `tool_input.command`), a file tool's
-/// path (Edit, MultiEdit, Write, NotebookEdit; Read and Grep read theirs) or a patch's (Codex's apply_patch), and
-/// for every tool, what it counts as: the class `classes` gives it, else change, and destructive for a tool whose
-/// name starts with `delete_`, whatever it is given. None for a payload that names no tool.
+/// path (Edit, MultiEdit, Write, NotebookEdit; Read and Grep read theirs), a patch's (Codex's apply_patch) or an MCP
+/// call's path arguments (#1848), and for every tool, what it counts as: the class `classes` gives it, else change, and
+/// destructive for a tool whose name starts with `delete_`, whatever it is given. None for a payload that names no tool.
 fn call(payload: &Value, classes: &[(String, String)]) -> Option<matcher::Call> {
     let Some(Value::String(tool)) = member(payload, "tool_name") else {
         return None;
@@ -452,11 +399,11 @@ fn call(payload: &Value, classes: &[(String, String)]) -> Option<matcher::Call> 
         "bash" => (field("command"), Vec::new(), false),
         "edit" | "write" => (
             None,
-            field("path").map(pi_path).into_iter().collect(),
+            field("path").map(tool_paths::pi_path).into_iter().collect(),
             false,
         ),
         "read" | "grep" | "find" | "ls" => {
-            (None, field("path").map(pi_path).into_iter().collect(), true)
+            (None, field("path").map(tool_paths::pi_path).into_iter().collect(), true)
         }
         _ => (None, Vec::new(), false),
     };
@@ -465,16 +412,8 @@ fn call(payload: &Value, classes: &[(String, String)]) -> Option<matcher::Call> 
         _ => None,
     };
     let home = PathBuf::from(env::var_os("HOME").unwrap_or_default());
-    let mut call = matcher::Call::new(
-        tool,
-        command,
-        (&paths, read),
-        cwd.as_deref(),
-        &home,
-        &address(),
-    );
     let named = tool.rsplit("__").next().unwrap_or(tool);
-    call.counts =
+    let counts =
         if cfg!(feature = "plant-listed-kinds-only") && !READ_TOOLS.contains(&tool.as_str()) {
             None
         } else if named.starts_with("delete_") {
@@ -488,6 +427,24 @@ fn call(payload: &Value, classes: &[(String, String)]) -> Option<matcher::Call> 
                     .to_string(),
             )
         };
+    // An MCP call reads the paths its arguments name, and writes them too unless its tool counts as read.
+    use matcher::Names::{Both, Reads, Writes};
+    let (args, paths, names) = match tool_paths::mcp(tool, input, cwd.as_deref(), &home) {
+        Some(mcp) => {
+            let (args, paths) = mcp.into_iter().unzip();
+            (args, paths, if counts.as_deref() == Some("read") { Reads } else { Both })
+        }
+        None => (Vec::new(), paths, if read { Reads } else { Writes }),
+    };
+    let mut call = matcher::Call::new(
+        tool,
+        command,
+        (&paths, &args, names),
+        cwd.as_deref(),
+        &home,
+        &address(),
+    );
+    call.counts = counts;
     Some(call)
 }
 
@@ -521,6 +478,17 @@ fn heavy_call(
         }
     };
     hit.map(|hit| (hit, command.clone()))
+}
+
+/// `deep-hook peer`: the PID of the process at the other end of the Unix socket on stdin, by the OS's peer
+/// credentials, or `null` where the OS reports none. The hub hands it a deep mcp's connection to learn who opened
+/// it (#2070); stdin is never read.
+fn peer() -> ExitCode {
+    match deep_hook::matcher::peer_of(0) {
+        Some(pid) => println!("{pid}"),
+        None => println!("null"),
+    }
+    ExitCode::SUCCESS
 }
 
 /// `deep-hook heavy`: the heavy.command@1 entry a command line on stdin matches in the current folder (#1016), as
@@ -2024,11 +1992,12 @@ fn main() -> ExitCode {
     match args.as_slice() {
         [arg] if arg == "--version" => println!("{}", env!("CARGO_PKG_VERSION")),
         [arg] if arg == "--help" => println!(
-            "Usage: deep-hook [--help | --version]\n       deep-hook <agent> <event>    the hook's JSON on stdin\n       deep-hook statusline         Claude Code's status line JSON on stdin\n       deep-hook <agent> waiter     the background Stop entry: the hook's JSON on stdin\n       deep-hook mcp actions        the deep-actions MCP server, on stdin and stdout\n       deep-hook check              an entry and a call as JSON on stdin: whether the entry matches\n       deep-hook match              a tool hook's JSON per line on stdin: what guards match, per line\n       deep-hook heavy              a command line on stdin: the heavy command entry it matches here\n       deep-hook clone <from> <to>  a copy-on-write clone, for staging a destructive command"
+            "Usage: deep-hook [--help | --version]\n       deep-hook <agent> <event>    the hook's JSON on stdin\n       deep-hook statusline         Claude Code's status line JSON on stdin\n       deep-hook <agent> waiter     the background Stop entry: the hook's JSON on stdin\n       deep-hook mcp actions        the deep-actions MCP server, on stdin and stdout\n       deep-hook check              an entry and a call as JSON on stdin: whether the entry matches\n       deep-hook match              a tool hook's JSON per line on stdin: what guards match, per line\n       deep-hook heavy              a command line on stdin: the heavy command entry it matches here\n       deep-hook peer               a Unix socket on stdin: the PID at its other end\n       deep-hook clone <from> <to>  a copy-on-write clone, for staging a destructive command"
         ),
         [arg] if arg == "statusline" => return statusline(),
         [arg] if arg == "check" => return check(),
         [arg] if arg == "heavy" => return heavy_entry(),
+        [arg] if arg == "peer" => return peer(),
         [arg] if arg == "match" => return matching(),
         [arg, from, to] if arg == "clone" => return clone(Path::new(from), Path::new(to)),
         [arg, line] if arg == "statusline-send" => {
@@ -2056,7 +2025,7 @@ fn main() -> ExitCode {
 #[cfg(test)]
 mod tests {
     use super::append;
-    use super::pi_path;
+    use crate::tool_paths::pi_path;
     use deep_hook::shell::glob;
     use std::fs::{self, DirBuilder};
     use std::os::unix::fs::DirBuilderExt;

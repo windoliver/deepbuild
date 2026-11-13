@@ -85,7 +85,9 @@ pub fn analysis_height(w: f64, h: f64) -> usize {
 /// A frame's gray levels as an export carries them: BT.709 luma in limited range, read back in
 /// full range.
 pub fn gray(rgba: &[u8]) -> Vec<u8> {
-    rgba.chunks_exact(4)
+    rgba.as_chunks::<4>()
+        .0
+        .iter()
         .map(|p| {
             let y = 0.2126 * f64::from(p[0]) + 0.7152 * f64::from(p[1]) + 0.0722 * f64::from(p[2]);
             let coded = (16.0 + 219.0 * y / 255.0).round().clamp(16.0, 235.0);
@@ -644,9 +646,7 @@ mod tests {
             .map(|k| {
                 let mut f = vec![0u8; 128];
                 for row in f.chunks_mut(32) {
-                    for x in (2 * k % 28)..(2 * k % 28 + 4) {
-                        row[x] = 255;
-                    }
+                    row[2 * k % 28..2 * k % 28 + 4].fill(255);
                 }
                 f
             })

@@ -65,12 +65,14 @@ test-camera-in-scene3d = []
 # Issue #238: the sandbox module's test builds (the #238 acceptance README: Test features of
 # deep-show): the full set without sandbox; test.mesh, whose kind takes a provider's mesh at check;
 # test.prog, whose registry packs fill with programs; a planted sandbox module that requires logic;
-# and the test implementation sandbox.alt, pinning another wasmtime 49.0 patch.
+# and the test implementation sandbox.alt, pinning another wasmtime release with the fixes (#2324).
 test-leave-out-sandbox = []
 test-mesh-item = ["dep:deep-canvas-test-modules"]
 test-prog-registry = ["dep:deep-canvas-test-modules"]
 test-sandbox-needs-logic = []
 test-sandbox-alt = []
+# Issue #2324: the planted engine build, whose engine gives one kit fixture another result.
+plant-engine-differs = ["deep-sandbox-wasmtime/plant-engine-differs"]
 # Issue #387: the test canvas modules of the #387 acceptance README. `test-accent`'s planted
 # operator reads the look's accent role from a static, which the canvas lint keeps out of every
 # deep-canvas* crate, so it lives in this binary.

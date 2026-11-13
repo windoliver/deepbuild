@@ -304,7 +304,7 @@ impl Hub<'_> {
     /// occurrence list, each row stamped with its step's time, written through the core's column
     /// view into `occurrences` (`<world ID>.occurrences`), and its outputs' channels into
     /// `channels`. A world or a scene the physics module refuses is the revision's issue.
-    pub(crate) fn inline_worlds(&self, form: &mut Value) -> Result<(), Issue> {
+    pub(crate) fn inline_worlds(&self, form: &mut Value) -> Result<(), Box<Issue>> {
         let Some(worlds) = form.get("worlds").and_then(Value::as_object).cloned() else {
             return Ok(());
         };
@@ -342,7 +342,7 @@ impl Hub<'_> {
             let call = json!({"call": "bake", "scene": form, "world": id, "steps": steps, "frame_rate": rate});
             let reply = run.answer(&call).unwrap_or(Value::Null);
             if reply["ok"] != json!(true) {
-                return Err(refused(id, reply));
+                return Err(Box::new(refused(id, reply)));
             }
             let rows = reply["occurrences"].as_array().cloned().unwrap_or_default();
             lists.insert(format!("{id}.occurrences"), json!(timed(&rows, &w)));
@@ -357,7 +357,7 @@ impl Hub<'_> {
             .into_iter()
             .next()
         {
-            return Err(i);
+            return Err(Box::new(i));
         }
         if let Some(doc) = form.as_object_mut() {
             for (key, add) in [("channels", channels), ("arrays", arrays)] {

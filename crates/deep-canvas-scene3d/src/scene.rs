@@ -3605,8 +3605,8 @@ pub(crate) fn evaluate_compiled(
         }
         // #2017: a prototype whose sway weighs each vertex by its height, batched on the GPU,
         // sways as a shear of each element's place, so every element keeps the one rest mesh.
-        let mut sheared: HashMap<(usize, usize), Option<(Arc<crate::geom::Mesh>, u64)>> =
-            HashMap::new();
+        type Sheared = HashMap<(usize, usize), Option<(Arc<crate::geom::Mesh>, u64)>>;
+        let mut sheared: Sheared = HashMap::new();
         for e in elements {
             let Some(solids) = protos.get(&of[e.proto]) else {
                 return refused("ref_unresolved", format!("{path}/of"));
@@ -4440,9 +4440,7 @@ mod tests {
         for field in ["bevel", "shade"] {
             let mut paint = json!({"fill": fill});
             paint[field] = json!({"size": 4});
-            let refused = evaluate(&doc(paint), 0, &look, &mut Labels::new())
-                .err()
-                .expect("refused");
+            let refused = evaluate(&doc(paint), 0, &look, &mut Labels::new()).expect_err("refused");
             assert_eq!(
                 (refused.code, refused.path.as_str()),
                 (
