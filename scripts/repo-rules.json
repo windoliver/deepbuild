@@ -1950,11 +1950,11 @@
         },
         "wasmparser": {
           "spec": "=0.258.3",
-          "why": "Issue #238: the subset check's parser and validator, on an allowlist of WebAssembly 2.0 features; the version wasmtime 49.0.2 itself parses with, so Cargo.lock holds one."
+          "why": "Issue #238: the subset check's parser and validator, on an allowlist of WebAssembly 2.0 features; the version wasmtime 49.0.5 itself parses with, so Cargo.lock holds one."
         },
         "wasm-encoder": {
           "spec": "=0.258.3",
-          "why": "Issue #238: writes the rewritten program, through its reencoder of wasmparser's operators; the version wasmtime 49.0.2 uses."
+          "why": "Issue #238: writes the rewritten program, through its reencoder of wasmparser's operators; the version wasmtime 49.0.5 uses."
         }
       }
     },
@@ -1965,7 +1965,7 @@
           "why": "Issue #238: the check, the rewrite and the kit this engine runs, with no copy of its own."
         },
         "wasmtime": {
-          "spec": "=49.0.2",
+          "spec": "=49.0.5",
           "why": "Issue #238: sandbox@1's engine in the app, the version the design pins (Logic: sandbox), cranelift and runtime only."
         },
         "base64": {
@@ -1978,7 +1978,7 @@
         },
         "wat": {
           "spec": "=1.263.0",
-          "why": "Issue #238: assembles sandbox@1's kit programs from their text; the version wasmtime 49.0.2 already pulls in."
+          "why": "Issue #238: assembles sandbox@1's kit programs from their text; the version wasmtime 49.0.5 already pulls in."
         }
       }
     },
@@ -2029,12 +2029,12 @@
           "why": "Spike #245: the fixture through sandbox@1's check and logic rewrite, as deep-logic runs a program."
         },
         "wasmtime": {
-          "spec": "=49.0.2",
+          "spec": "=49.0.5",
           "why": "Spike #245: the app's engine at the version the design pins, so both forms run what the app would."
         },
         "wat": {
           "spec": "=1.263.0",
-          "why": "Spike #245: assembles steer.wat; the version wasmtime 49.0.2 already pulls in."
+          "why": "Spike #245: assembles steer.wat; the version wasmtime 49.0.5 already pulls in."
         },
         "libc": {
           "spec": "^0.2",
@@ -2177,7 +2177,7 @@
           "why": "Issue #531: the pinned wasmtime's version, named in a bake key and a report, and sandbox@1's web runner, served before the logic runtime."
         },
         "wasmtime": {
-          "spec": "=49.0.2",
+          "spec": "=49.0.5",
           "why": "Issue #531: runs the rewritten program; the version deep-sandbox-wasmtime pins, cranelift and runtime only."
         },
         "wasmparser": {
