@@ -492,6 +492,10 @@ alone.push('tests/acceptance/306-redraft-1958/');
 // budgets.test.ts reads the machine's load.
 alone.push('tests/acceptance/157/', 'tests/acceptance/157-oracle/');
 timed.push('tests/acceptance/157/budgets.test.ts');
+// #162's files each build deep-show (atomic.test.ts with test-export-guards) and export to Lottie through the pinned
+// reference renderer; the import legs start a hub and run its import job; budgets.test.ts times both.
+alone.push('tests/acceptance/162/', 'tests/acceptance/162-oracle/');
+timed.push('tests/acceptance/162/budgets.test.ts');
 // #1183's files each build deep-show and judge 3D figures whose logic runs in the sandbox.
 alone.push('tests/acceptance/1183/');
 // #537's files build deep-gpu (most also deep-show, and #544's assembler), run logic programs and draw on the GPU;
