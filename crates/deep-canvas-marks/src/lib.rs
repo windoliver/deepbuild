@@ -14,6 +14,7 @@
 pub mod animator;
 pub mod arrays;
 pub mod atlas;
+pub mod axes3d;
 pub mod check;
 pub mod code;
 pub mod copy;
@@ -23,6 +24,7 @@ pub mod drawn;
 pub mod ends;
 pub mod fields;
 pub mod finish;
+pub mod follow;
 pub mod function;
 pub mod functions;
 pub mod fx;

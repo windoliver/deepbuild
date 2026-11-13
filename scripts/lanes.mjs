@@ -601,6 +601,16 @@ alone.push('tests/acceptance/450/');
 alone.push('tests/acceptance/239/', 'tests/look-type.test.ts');
 timed.push('tests/acceptance/239/seek-play.test.ts', 'tests/acceptance/239/budget.test.ts', 'tests/acceptance/239/off-reference.test.ts');
 slow.push('tests/acceptance/239/exports.test.ts', 'tests/acceptance/239/checks.test.ts');
+// #507's files each build deep-show with cargo; ac6 reads PDFs with poppler, ac3 renders a 50 s session's sound.
+alone.push('tests/acceptance/507/', 'tests/acceptance/507-oracle/');
+// #226's files each build deep-gpu, deep-show (full and without data) or deep-canvas-render and draw on the Metal GPU;
+// ac7-budgets judges the task's budgets on the reference Mac.
+alone.push('tests/acceptance/226/');
+timed.push('tests/acceptance/226/ac7-budgets.test.ts');
+// #226's first-draft Oracle lane needs a tick at every whole number on [−4, 4], where axis@1's rule ticks every other
+// one (tests/acceptance/226-oracle-redraft/DISPUTE.md); its blind redraft runs in its place.
+alone.push('tests/acceptance/226-oracle-redraft/');
+byHand.push('tests/acceptance/226-oracle/');
 // #462's files each build deep-gpu (and deep-canvas) and draw looks, regions and strokes on the Metal GPU.
 alone.push('tests/acceptance/462/');
 

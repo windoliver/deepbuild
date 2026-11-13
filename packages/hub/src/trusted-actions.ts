@@ -388,9 +388,11 @@ export class TrustedActions {
   async packRule(params: Obj, context: CallContext): Promise<Obj> {
     const { pack, licenses } = params;
     if (typeof pack !== 'string' || !Array.isArray(licenses) || !licenses.every((l) => typeof l === 'string' && l)) throw refuse('type', '/params', 'Name pack as owner/name and list its allowed license IDs.', params);
+    const libraries = this.options.services.libraries;
+    if (!libraries) throw refuse('unavailable', '', 'The hub is not ready.', pack, true);
+    if (!libraries.packs.named(pack)) throw refuse('not_found', '/params/pack', `No pack ${pack} is installed; deep install <pack folder> installs one.`, pack);
     await this.asYou(context, 'pack.rule', `allow ${pack} to fetch assets under ${licenses.join(', ') || 'no license'}`, `pack:${pack}`, JSON.stringify(licenses));
-    if (!this.options.services.libraries) throw refuse('unavailable', '', 'The hub is not ready.', pack, true);
-    return this.options.services.libraries.packRule(pack, licenses as string[]);
+    return libraries.packRule(pack, licenses as string[]);
   }
 
   /** `job.rule` (#1922): your standing rule for a paid tool, from your own terminal once the OS confirms you: the most a run may cost with no ask. */
@@ -416,12 +418,15 @@ export class TrustedActions {
     if (context.role !== 'cli') throw new Refused(refusal('role', '/method', 'A library is turned on or off, and its rule set, from your own terminal, once the OS confirms you.', method));
     const agent = await this.options.state().agentAbove(context.peer);
     if (agent) throw new Refused(refusal('role', '/method', `Nothing changed: this deep command runs inside agent session ${agent}'s process tree, and no agent changes a library. Run it from your own terminal.`, method));
+    const libraries = this.options.services.libraries;
+    if (!libraries) throw new Refused(refusal('unavailable', '', 'The hub has no extension host yet; try again once it is ready.', method, true));
+    const unchangeable = libraries.unchangeable(library, method === 'library.off');
+    if (unchangeable) throw new Refused(refusal('not_found', '/params/library', `${unchangeable}.`, library));
     const what = method === 'library.rule' ? `let ${library} fetch under ${(licenses as string[]).join(', ') || 'no license'} with no ask` : `turn ${library} ${method === 'library.on' ? 'on' : 'off'}`;
     const why = await this.options.services.confirmer.you(what, { handle: `library:${library}`, revision: what });
     if (why) throw new Refused(refusal('unconfirmed', '/method', `${what} changed nothing: the OS didn't confirm you (${why}).`, method, true));
-    if (!this.options.services.libraries) throw new Refused(refusal('unavailable', '', 'The hub has no extension host yet; try again once it is ready.', method, true));
     try {
-      return method === 'library.rule' ? { ...this.options.services.libraries.rule(library, licenses as string[]) } : { ...this.options.services.libraries.turn(library, method === 'library.on') };
+      return method === 'library.rule' ? { ...libraries.rule(library, licenses as string[]) } : { ...libraries.turn(library, method === 'library.on') };
     } catch (e) {
       if (e instanceof LibraryRefused) throw new Refused(refusal('not_found', '/params/library', `${e.message}.`, library));
       throw e;
