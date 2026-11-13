@@ -7,9 +7,9 @@ import { accessSync, constants, existsSync, readdirSync, readFileSync } from 'no
 import { homedir } from 'node:os';
 import { basename, delimiter, join } from 'node:path';
 import { readFacts } from '@deepbuild/adapters';
+import { isRecord as isObj } from '@deepbuild/contracts';
 
 type Obj = Record<string, unknown>;
-const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 
 interface ModsFacts {
   since: { terminal: string; desktop: string };

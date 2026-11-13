@@ -1,0 +1,19 @@
+{
+  "tracks": [
+    {
+      "bpm": 100,
+      "asset": "2d9be2737a39b4b3122a04c0c562ce08c680b27cc3d26714a71233aa751dba9a",
+      "record": "f73e0bab2be694e292a61d2254310ff4a40dd616dbf7a2af26e48e22705ab70e"
+    },
+    {
+      "bpm": 96,
+      "asset": "6d5865366467cff00842d69066cfb15e5995bd50b8860d4b9ba065e3d89e4f07",
+      "record": "4bf8dc2154200923494053a192963a8f656210f6417af364438211572c7abd7c"
+    }
+  ],
+  "tempos": [
+    99.9924775567104,
+    95.94417490474497
+  ],
+  "failures": []
+}

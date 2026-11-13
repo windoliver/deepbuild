@@ -1,0 +1,41 @@
+{
+  "v": 1,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6W",
+  "kind": "review.settled",
+  "subject": "claim:01K74FKZVK8Q2X5R7M3N9P4T6V",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "data": {
+    "pr": "https://github.com/acme/shop/pull/21",
+    "claim": "claim:01K74FKZVK8Q2X5R7M3N9P4T6V",
+    "commit": "2222222222222222222222222222222222222222",
+    "outcomes": [
+      {
+        "rule": "off-by-one",
+        "sites": [
+          {
+            "file": "src/cart.ts",
+            "line": 10,
+            "quote": "for (let i = 0; i <= items.length; i++) total += items[i].price;"
+          }
+        ],
+        "ended": "fixed",
+        "commit": "2222222222222222222222222222222222222222"
+      },
+      {
+        "rule": "swallowed-error",
+        "sites": [
+          {
+            "file": "src/cart.ts",
+            "line": 40,
+            "quote": "} catch {}"
+          }
+        ],
+        "ended": "left",
+        "commit": "2222222222222222222222222222222222222222"
+      }
+    ]
+  }
+}

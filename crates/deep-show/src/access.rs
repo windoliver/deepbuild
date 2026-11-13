@@ -67,6 +67,10 @@ pub(crate) fn tree(doc: &Value, hidden: &[String]) -> Vec<Value> {
         let name = text(alt.or(item.get("name")));
         nodes.push(json!({"id": id, "role": item["role"], "name": name}));
     }
+    // #504: a control's targets that draw follow it, each a button named by its option's or
+    // stage's label, in the Tab order's reading order (Control: targets).
+    let draws = crate::shared::draws(doc);
+    let targets = deep_canvas::scope::pick_targets(doc, hidden);
     if let Some(controls) = doc.get("controls").and_then(Value::as_object) {
         for (id, control) in controls {
             nodes.push(json!({
@@ -74,6 +78,12 @@ pub(crate) fn tree(doc: &Value, hidden: &[String]) -> Vec<Value> {
                 "role": text(control.get("role")),
                 "name": text(control.get("label")),
             }));
+            for t in targets
+                .iter()
+                .filter(|t| &t.control == id && draws.contains(&t.item))
+            {
+                nodes.push(json!({"id": format!("{id}/{}", t.option), "role": "button", "name": t.label, "item": t.item}));
+            }
         }
     }
     nodes
@@ -94,43 +104,33 @@ pub(crate) fn hidden_of(frame: &Value) -> Vec<String> {
 /// the document's values (Text `text@1`; Overlay: "a readout and the parts it describes come
 /// from one model"), expanded as the frame shows it.
 pub(crate) fn readouts(doc: &Value, hidden: &[String]) -> BTreeMap<String, String> {
-    heard(doc, hidden)
+    let mut out: BTreeMap<String, String> = heard(doc, hidden)
         .into_iter()
         .filter_map(|(id, item)| {
             let template = item.pointer("/params/template")?.as_str()?;
             let text = template::expand(doc, template).ok()?;
             Some((id.clone(), text))
         })
-        .collect()
-}
-
-/// `doc` with each data value a channel keys (`data/<name>`, motion@1) as it stands at `t`: what
-/// a readout's template fills from in the frame that shows `t` (#1162).
-pub(crate) fn data_at(doc: &Value, program: Option<&Program>, t: i64) -> Value {
-    let mut out = doc.clone();
-    let (Some(program), Some(channels)) = (program, doc.get("channels").and_then(Value::as_object))
-    else {
-        return out;
-    };
-    let mut state = program.state();
-    program.evaluate(t, Validity::Full, &mut state);
-    for (id, c) in channels {
-        let target = c.get("target").and_then(Value::as_str);
-        let Some(name) = target.and_then(|t| t.strip_prefix("data/")) else {
-            continue;
-        };
-        let Some(x) = program.channel_value(&state, id) else {
-            continue;
-        };
-        match out.pointer_mut(&format!("/data/{name}")) {
-            Some(Value::Object(entry)) => {
-                entry.insert("value".into(), json!(x));
-            }
-            Some(bare) => *bare = json!(x),
-            None => {}
+        .collect();
+    // #504: a figure's card lines, read as its readouts are.
+    for (field, t) in template::card_lines(doc) {
+        if let Ok(text) = template::expand(doc, t) {
+            out.insert(format!("card/{field}"), text);
         }
     }
     out
+}
+
+/// `doc` with the values that move its parts as they stand at `t` (data values a channel, a
+/// driver or a stage writes, each assembly's value and each control's): what a readout's template
+/// fills from in the frame that shows `t` (#1162, #504), the same values the 3D card draws.
+pub(crate) fn data_at(doc: &Value, program: Option<&Program>, t: i64) -> Value {
+    let (Some(program), Some(map)) = (program, doc.as_object()) else {
+        return doc.clone();
+    };
+    let mut state = program.state();
+    program.evaluate(t, Validity::Full, &mut state);
+    deep_canvas_motion::eval::shown_doc(map, program, &state)
 }
 
 impl Hub<'_> {
@@ -159,7 +159,8 @@ impl Hub<'_> {
             let Some((revision, program)) = by_rev
                 .entry(rev)
                 .or_insert_with(|| {
-                    let d = self.revision(&doc, rev)?;
+                    // #504: the revision played, so a readout shows what the input track moved.
+                    let d = self.played(&doc, &self.revision(&doc, rev)?);
                     let p = d.as_object().and_then(|m| Program::compile(m).ok());
                     Some((d, p))
                 })
@@ -168,7 +169,9 @@ impl Hub<'_> {
                 continue;
             };
             let hidden = hidden_of(frame);
-            said.retain(|id, _| revision.pointer(&format!("/items/{id}")).is_some());
+            said.retain(|id, _| {
+                id.starts_with("card/") || revision.pointer(&format!("/items/{id}")).is_some()
+            });
             // The readout as this frame shows it: its keyed values at the frame's time.
             let t = frame["t"].as_i64().unwrap_or(vsync);
             let shown = data_at(revision, program.as_ref(), t);

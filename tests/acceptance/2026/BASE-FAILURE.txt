@@ -1,0 +1,73 @@
+#2026's acceptance suite on the base commit 6e55e58412f3d4c554314e5bc9b31ed9fc4fa335, before any #2026 code.
+
+Machine:  Mac17,10 (Apple M5 Max), macOS 27.2, logged in with the display unlocked (deep-live's windows showed).
+Toolchain: Node v24.22.2; cargo 1.99.1 (5f94df478 2026-08-27).
+Prepared: npm ci --ignore-scripts; npm run build --workspaces; then, under `node scripts/throttle.mjs build`,
+          cargo build -p deep-hook, -p deep-replica --features env-plants (deep-replica, deep-live), and plain
+          (CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0), 14:03 to 14:26 PST, load average 166 to 366 on 18 cores.
+Commands: NO_COLOR=1 npx vitest run --root tests/acceptance/2026 --no-file-parallelism --testTimeout=600000 --silent=false [file]
+          node node_modules/typescript/bin/tsc -p tests/acceptance/2026/tsconfig.json   (clean, exit 0)
+
+Runs (each file's last run is after its last edit; none was edited after the run reported for it):
+  Run A, all five files, 14:29:45 to 14:34:33 PST (287 s).
+    uptime at start: load averages 62.70 165.69 198.67; at end: 301.20 209.03 203.88.
+    It is the reported run for load, replay, one-number and outage.
+  Run B, count.test.ts alone, 14:35:52 to 14:36:50 PST (57 s), after its generator was changed to deal every fate
+    into each record (the earlier generator drew too few closes to cover them).
+    uptime at start: load averages 272.32 225.07 210.69; at end: 271.90 229.84 213.18.
+  Totals over the reported runs: 11 tests, 8 failed, 3 passed. Nothing failed on a missing build or a test-side error.
+
+load.test.ts (AC1 #2026.2baf6583): 1 failed, INCONCLUSIVE.
+  The month seeded (#26's seedMonth) and a real hub served it. On each of five timed launches, after one untimed, the
+  first screen had Needs you read: its count 99, 99, 99, 98, 98 (the hub defaulting the last day's asks as their
+  deadlines passed), its rows all open asks. Spawn to first frame: 5146, 4281, 11079, 7787, 19279 ms against 1000.
+    AssertionError: INCONCLUSIVE: thermal state not nominal (NSProcessInfo.thermalState 1); 99, 99, 99, 98, 98 open
+    asks among 30 days of history; ms from spawn to the first frame, with Needs you read: 5146, 4281, 11079, 7787,
+    19279 (limit 1000)
+  Over the limit on a machine #1551's gate doesn't count, so INCONCLUSIVE, not FAIL. The base reads the whole log
+  before its first frame (crates/deep-app/src/record.rs `fold_before`); the failing reading the issue's Proof asks for
+  has to be taken on a quiet reference Mac.
+
+count.test.ts (AC2 #2026.e51f5486): 1 passed (on purpose: the base's list, menu bar and deep inbox agree).
+  #2026 AC2 record 2026: 14 open, 8 closed (ask.moot, ask.escalated, ask.defaulted, ask.cancelled, ask.superseded, ask.answered, decision.applied); 0 wrong
+  #2026 AC2 record 2027: 7 open, 8 closed (ask.answered, decision.applied, ask.moot, ask.superseded, ask.defaulted, ask.cancelled, ask.escalated); 0 wrong
+  #2026 AC2 record 2028: 14 open, 8 closed (ask.moot, ask.defaulted, ask.answered, ask.cancelled, decision.applied, ask.escalated, ask.superseded); 0 wrong
+  #2026 AC2 record 2029: 7 open, 8 closed (ask.escalated, ask.moot, ask.superseded, ask.answered, ask.cancelled, decision.applied, ask.defaulted); 0 wrong
+  #2026 AC2 record 2030: 14 open, 8 closed (ask.escalated, ask.moot, ask.answered, decision.applied, ask.defaulted, ask.superseded, ask.cancelled); 0 wrong
+  The judge was held to record 2026 with its oldest open ask taken out of Needs you's rows, and named it.
+
+replay.test.ts (AC3 #2026.8e76ad64): 2 failed.
+  The scenario ran on the real window up to the replay: deep-hook spooled A's PermissionRequest with the hub stopped,
+  the hub started, the app reconnected (a frame at the hub's new log_pos), B's 20 hooks landed, each newer than the
+  spooled request by ID and seq, the app's frames reached the 20th's log_pos, the spool went back and the hub's
+  stream showed the replayed request by its ID. Then:
+    AssertionError: expected [ Array(1) ] to deeply equal []
+    + "the replayed permission request of session a30712ae-024a-4695-8eeb-c6c80c3c3a46 (npm publish --tag next) raised
+       no ask: the record holds no ask.created for it, so Needs you has nothing to show"
+  At the base a Claude Code permission request shown in the terminal raises no ask (packages/hub/src/core.ts
+  `permission`: not covered, so it waits as pending and answers none). A probe of the hub alone at the base, with no
+  app, saw the replay append permission.request under the spooled ID, then session.state and row.set under new IDs,
+  1.1 s after the spool landed, and no ask.created.
+  The plant's test fails on its premise:
+    AssertionError: the clean run already fails AC3, so the plant can't be told from it (the same failure)
+
+one-number.test.ts (AC4 #2026.44fb65f8): 2 failed, 1 passed.
+  The fixture test passed: the fixture closes an ask each way the issue names and holds 11 open asks; the menu bar
+  ("11 asks need you"), Home (the heading valued 11, "11 asks need you") and deep inbox ("11 asks need you") agree,
+  and Needs you's rows and deep inbox's are exactly the 11.
+  home-skips-decision-close:
+    AssertionError: the planted count that leaves out a decision's close wasn't caught, naming Home: []
+  menu-bar-counts-sessions:
+    AssertionError: the planted count of sessions wasn't caught, naming the menu bar: []
+  The base knows neither plant name, so the planted build draws as the plain one.
+
+outage.test.ts (AC5 #2026.3529e9fd): 3 failed, BLOCKED.
+  deep-live --watch showed its window and wrote its ready line and frame lines, with no snapshot:
+    Error: BLOCKED: deep-live --watch's frame lines carry no snapshot of the window (README, Pinned 1):
+    {"frame":0,"at":1794350007354,"log_pos":12,"names":[]}
+  (`names` is empty, as read from the source: since #1461 the list draws Needs you's section itself, so nothing is
+  drawn under the element view:deepbuild/needs-you that `names` reads.)
+  Each plant's test runs the clean scenario first as its premise and stops at the same line. From the base's source,
+  not a run: its watch never publishes what the app can reach (crates/deep-replica/src/live.rs, `watch::run`), and
+  with the hub down its menu bar reads "The hub isn't answering" with no time (crates/deep-app/src/notify.rs
+  `Reach::short`), so AC5 would fail there on the menu bar's since-when once the snapshot is in place.

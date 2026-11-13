@@ -1,0 +1,242 @@
+Base commit: 74d867d2 (74d867d25a5ebae674b6ceede6059f849d51a091, "design(#935): audio.gen's declaration, call, rules and
+check-time refusal"), the brief's base: main plus the design row; #1819's beats bake and model host, #500's loudness
+bake and #499's media.strip@1 are there, no implementation of #935.
+Built first: npm ci; npm run build --workspaces; cargo build --locked -p deep-hook && cargo build --locked --bin
+deep-show (rustup's toolchain, CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0), through node scripts/throttle.mjs build
+-- scripts/lease (its first 30-minute wait for a build grant ran out on a busy machine; the second, with a longer wait,
+got one).
+Command: NO_COLOR=1 scripts/lease npx vitest run tests/acceptance/935 --testTimeout=600000 --no-file-parallelism
+(the path also matches tests/acceptance/935-oracle/, so this one run holds both folders; that folder's
+BASE-FAILURE.txt points here).
+Date: 2026-11-11  Machine: macOS 27.2 (Apple silicon)  Node: v24.22.2  vitest 5.0.5. Paths below: <repo> is the worktree.
+Result: Test Files 6 failed (6); Tests 7 failed (7); about 40 s. Short on purpose: the surfaces don't exist.
+
+No test passed at the base, and each failed for the expected reason, at a named assertion:
+
+  AC1 (tempo.test.ts), AC2 (seam.test.ts), AC3 (stems.test.ts), AC4 (variants.test.ts), and the Oracle lane's
+  TEST_GLOBAL_LOUDNESS and TEST_MAX_TRUE_PEAK (935-oracle/loudness.test.ts): helpers.ts runShow's expect
+  "<what>: deep-show run answers the scenario ok (media_gen and the media document's `sounds`, ...)", got
+  {"ok":false,"code":"bad_input"}: the base's deep-show run knows no media_gen call. <what> is the first media_gen
+  scenario of each: "the clean bed with no beats record" (AC1), "the clean and the cut bed" (AC2), "the bed with its
+  stems, and with its drums 1 ms late" (AC3), "the coin pickup's takes" (AC4), "TEST_GLOBAL_LOUDNESS" and
+  "TEST_MAX_TRUE_PEAK". Before it, in every test, the fixtures were synthesized and put in the evidence store and
+  deep-show built; in AC1 the hub also started (deep hub run, ready) with deep mcp answering initialize, and its
+  model host was never started; in the Oracle lane the EBU set was read from its cache and its signals' hashes
+  matched.
+
+  AC5 (unpassed.test.ts): its expect "the strips naming unpassed results are refused, naming their assets, and the
+  one naming a passed take applies" got 8 failures: the base applied all three strips (revisions 1, 2 and 3), the one
+  naming the BLOCKED bed and the one naming the take at +0.4 dBTP included, with no audio.gen.unpassed issue; the only
+  issue each reply carried was revision 0's own `unknown_field` at `sounds` (document.validate), carried, so it
+  refused nothing. The planted leg wasn't reached; read from crates/deep-show/src/main.rs instead, the base answers
+  a scenario naming `unpassed_on_fail_only` {"ok":false,"code":"bad_input"} (an unknown plant), which fails that
+  leg's runShow expect the same way.
+
+Checked once by hand, not part of the suite: node node_modules/typescript/bin/tsc -p tests/acceptance/935/tsconfig.json
+and -p tests/acceptance/935-oracle/tsconfig.json exit 0; node scripts/public-text.mjs passes. The fixtures were also
+measured by hand against the design's rules and run through the pinned beat tracker outside the suite (README: The
+fixtures, Checked once by hand): the clean bed reads 100.000 BPM and the 96 BPM bed 95.996.
+
+The run's output follows.
+------------------------------------------------------------------------------------------------------------------------
+deep lease: DeepBuild isn't set up here (no hub token), so `npx vitest run tests/acceptance/935 --testTimeout=600000 --no-file-parallelism` runs unleased
+
+ RUN  v5.0.5 <repo>
+
+stderr | tests/acceptance/935/unpassed.test.ts
+vitest-setup: stopping 3 process(es) this file left running:
+  50234 (node)
+  50275 (node)
+  50276 (node)
+
+ ❯ tests/acceptance/935/unpassed.test.ts (1 test | 1 failed) 5931ms
+   ❯ AC5 an item can't name a result before its audio.gen passes (1)
+     × AC5 #935.94f4cb46 strips naming a BLOCKED bed and a FAILed take are refused with audio.gen.unpassed naming each asset, revision 0 stays current, a strip naming a passed take applies; the planted unpassed_on_fail_only lets the BLOCKED bed through and fails, naming its asset 2797ms
+ ❯ tests/acceptance/935-oracle/loudness.test.ts (2 tests | 2 failed) 6917ms
+   ❯ the upstream loudness meter's test/tests.c (67b33abe15) lines 257-347 on audio.gen's readings (2)
+     × AC4 #935.003bdbdb TEST_GLOBAL_LOUDNESS (lines 266-284): seven files read integrated loudness within 0.1 of gr[], as audio.gen.level names it 3476ms
+     × AC4 #935.003bdbdb TEST_MAX_TRUE_PEAK (lines 329-346): signals 15 to 23 read their maximum true peak within +0.2/−0.4 dB, as audio.gen.peak names it 323ms
+ ❯ tests/acceptance/935/tempo.test.ts (1 test | 1 failed) 8354ms
+   ❯ AC1 a music bed passes audio.gen on its measured tempo and whole bars (1)
+     × AC1 #935.dd5d077f a 100 BPM 4/4 bed with a 16-bar region of 38.400 s, read 100 ± 0.5 BPM by the pinned tracker, passes; a bed generated at 96 BPM fails naming the measured tempo; a region of 38.2 s fails naming 15.917 bars 5460ms
+ ❯ tests/acceptance/935/variants.test.ts (1 test | 1 failed) 4492ms
+   ❯ AC4 a sound's takes stay one class and differ from each other (1)
+     × AC4 #935.003bdbdb 12 takes in 3 levels on target, under −1 dBTP, within ±20% of the median and distinct pass; one file repeated 12 times fails naming the 66 pairs; a take at +0.4 dBTP fails naming it 2203ms
+stderr | tests/acceptance/935/stems.test.ts
+vitest-setup: stopping 3 process(es) this file left running:
+  56779 (node)
+  56781 (node)
+  56782 (node)
+
+ ❯ tests/acceptance/935/stems.test.ts (1 test | 1 failed) 6736ms
+   ❯ AC3 a bed's stems sum to its mix (1)
+     × AC3 #935.4f2d6eac the clean bed's drums, bass and pad sum to its mix (no audio.gen.stems); with its drum stem shifted by 1 ms it fails audio.gen.stems, naming drums and the residual 3086ms
+ ❯ tests/acceptance/935/seam.test.ts (1 test | 1 failed) 5702ms
+   ❯ AC2 a bed's loop seam is no rougher than the bed itself (1)
+     × AC2 #935.1099168d the clean bed's join stays within its own 99th percentiles (no audio.gen.seam); the bed with its last 10 ms cut fails audio.gen.seam, naming the seam's sample offset 1842720 3187ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 7 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/935/seam.test.ts > AC2 a bed's loop seam is no rougher than the bed itself > AC2 #935.1099168d the clean bed's join stays within its own 99th percentiles (no audio.gen.seam); the bed with its last 10 ms cut fails audio.gen.seam, naming the seam's sample offset 1842720
+AssertionError: the clean and the cut bed: deep-show run answers the scenario ok (media_gen and the media document's `sounds`, README: The surface under test); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow tests/acceptance/935/helpers.ts:113:190
+    111|   const answer = obj(JSON.parse(out[0]!) as JsonValue, `${what}: the a…
+    112|   const planted = typeof scenario['planted'] === 'string' ? `, planted…
+    113|   expect(answer['ok'], `${what}: deep-show run answers the scenario ok…
+       |                                                                                                                                                                                              ^
+    114|   const replies = arr(answer['replies'], `${what}: replies`).map((v, i…
+    115|   expect(replies.length, `${what}: one reply per call`).toBe(arr(scena…
+ ❯ gens tests/acceptance/935/helpers.ts:155:19
+ ❯ tests/acceptance/935/seam.test.ts:25:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/7]⎯
+
+ FAIL  tests/acceptance/935/stems.test.ts > AC3 a bed's stems sum to its mix > AC3 #935.4f2d6eac the clean bed's drums, bass and pad sum to its mix (no audio.gen.stems); with its drum stem shifted by 1 ms it fails audio.gen.stems, naming drums and the residual
+AssertionError: the bed with its stems, and with its drums 1 ms late: deep-show run answers the scenario ok (media_gen and the media document's `sounds`, README: The surface under test); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow tests/acceptance/935/helpers.ts:113:190
+    111|   const answer = obj(JSON.parse(out[0]!) as JsonValue, `${what}: the a…
+    112|   const planted = typeof scenario['planted'] === 'string' ? `, planted…
+    113|   expect(answer['ok'], `${what}: deep-show run answers the scenario ok…
+       |                                                                                                                                                                                              ^
+    114|   const replies = arr(answer['replies'], `${what}: replies`).map((v, i…
+    115|   expect(replies.length, `${what}: one reply per call`).toBe(arr(scena…
+ ❯ gens tests/acceptance/935/helpers.ts:155:19
+ ❯ tests/acceptance/935/stems.test.ts:33:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/7]⎯
+
+ FAIL  tests/acceptance/935/tempo.test.ts > AC1 a music bed passes audio.gen on its measured tempo and whole bars > AC1 #935.dd5d077f a 100 BPM 4/4 bed with a 16-bar region of 38.400 s, read 100 ± 0.5 BPM by the pinned tracker, passes; a bed generated at 96 BPM fails naming the measured tempo; a region of 38.2 s fails naming 15.917 bars
+AssertionError: the clean bed with no beats record: deep-show run answers the scenario ok (media_gen and the media document's `sounds`, README: The surface under test); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow tests/acceptance/935/helpers.ts:113:190
+    111|   const answer = obj(JSON.parse(out[0]!) as JsonValue, `${what}: the a…
+    112|   const planted = typeof scenario['planted'] === 'string' ? `, planted…
+    113|   expect(answer['ok'], `${what}: deep-show run answers the scenario ok…
+       |                                                                                                                                                                                              ^
+    114|   const replies = arr(answer['replies'], `${what}: replies`).map((v, i…
+    115|   expect(replies.length, `${what}: one reply per call`).toBe(arr(scena…
+ ❯ gens tests/acceptance/935/helpers.ts:155:19
+ ❯ tests/acceptance/935/tempo.test.ts:32:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/7]⎯
+
+ FAIL  tests/acceptance/935/unpassed.test.ts > AC5 an item can't name a result before its audio.gen passes > AC5 #935.94f4cb46 strips naming a BLOCKED bed and a FAILed take are refused with audio.gen.unpassed naming each asset, revision 0 stays current, a strip naming a passed take applies; the planted unpassed_on_fail_only lets the BLOCKED bed through and fails, naming its asset
+AssertionError: the strips naming unpassed results are refused, naming their assets, and the one naming a passed take applies: expected [ …(8) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the strip naming the bed 5c5308066a0eb41132269fa54306042b218ba2606a0137a85d8b9647ee1f1349, whose audio.gen is BLOCKED (no beats record): `outcome` is \"applied\"; the check must refuse it with audio.gen.unpassed naming 5c5308066a0eb41132269fa54306042b218ba2606a0137a85d8b9647ee1f1349 (reply {\"cost_delta\":{\"cpu_ms\":0.01236764,\"gpu_ms\":0,\"vertices\":0,\"lights\":0,\"gpu_mb\":0},\"outcome\":\"applied\",\"rev\":1,\"ids\":{},\"achieved\":{\"created\":{\"media.strip@1\":1},\"updated\":0,\"deleted\":{},\"unchanged\":false},\"issues\":[{\"check\":\"document.validate\",\"code\":\"unknown_field\",\"severity\":\"error\",\"ids\":[],\"path\":\"sounds\",\"actual\":{\"bed\":{\"kind\":\"music\",\"asset\":\"5c5308066a0eb41132269fa54306042b218ba2606a0137a85d8b9647ee1f1349\",\"tempo\":100,\"meter\":\"4/4\",\"loop\":{\"start\":0,\"end\":460800},\"bus\":\"music\"},\"coin\":{\"kind\":\"sound\",\"variants\":[{\"target\":-28,\"takes\":[\"f355be58fa129ce848c20a8646b2b6dfa354c2b1d6f8f7d01a91baed0c49c2b1\",\"ad733409b4d74d129b87bb75e4d5f5265c96ea63e6a45a8ca9e508dec9827877\",\"13c86f438b3c7175806a099fd7a61eda1900e33b404f2e41dcf169c815820ce7\",\"cbd26fe0818c63f1b4d13d87676bf0aea72bab827f198b4ec0fb8962eded6b5c\"]},{\"target\":-22,\"takes\":[\"13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f3678)",
++   "the strip naming the bed 5c5308066a0eb41132269fa54306042b218ba2606a0137a85d8b9647ee1f1349, whose audio.gen is BLOCKED (no beats record): `rev` is 1; revision 0, the one before it, must stay current",
++   "the strip naming the bed 5c5308066a0eb41132269fa54306042b218ba2606a0137a85d8b9647ee1f1349, whose audio.gen is BLOCKED (no beats record): no audio.gen.unpassed issue naming the asset 5c5308066a0eb41132269fa54306042b218ba2606a0137a85d8b9647ee1f1349 among [{\"check\":\"document.validate\",\"code\":\"unknown_field\",\"severity\":\"error\",\"ids\":[],\"path\":\"sounds\",\"actual\":{\"bed\":{\"kind\":\"music\",\"asset\":\"5c5308066a0eb41132269fa54306042b218ba2606a0137a85d8b9647ee1f1349\",\"tempo\":100,\"meter\":\"4/4\",\"loop\":{\"start\":0,\"end\":460800},\"bus\":\"music\"},\"coin\":{\"kind\":\"sound\",\"variants\":[{\"target\":-28,\"takes\":[\"f355be58fa129ce848c20a8646b2b6dfa354c2b1d6f8f7d01a91baed0c49c2b1\",\"ad733409b4d74d129b87bb75e4d5f5265c96ea63e6a45a8ca9e508dec9827877\",\"13c86f438b3c7175806a099fd7a61eda1900e33b404f2e41dcf169c815820ce7\",\"cbd26fe0818c63f1b4d13d87676bf0aea72bab827f198b4ec0fb8962eded6b5c\"]},{\"target\":-22,\"takes\":[\"13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa\",\"997739980328e3b315f0016f83c3d9d57c6e7cd01fbe77ca16e54843aa63d898\",\"2087b7f9cc5d4ca82f14b402a7385ae5a56fad7f0011604c5ac3fee19d177610\",\"208655de011ec646d5a3f6aad2388be9b2386f926f58aa2dc549259a864a193a\"]},{\"",
++   "the strip naming the take at +0.4 dBTP bb664b945ea305baa59549ac4e99e4dd762e2f8709aca16e3ece0f34c69cdcb3, whose audio.gen FAILs: `outcome` is \"applied\"; the check must refuse it with audio.gen.unpassed naming bb664b945ea305baa59549ac4e99e4dd762e2f8709aca16e3ece0f34c69cdcb3 (reply {\"cost_delta\":{\"cpu_ms\":0.01236764,\"gpu_ms\":0,\"vertices\":0,\"lights\":0,\"gpu_mb\":0},\"outcome\":\"applied\",\"rev\":2,\"ids\":{},\"achieved\":{\"created\":{\"media.strip@1\":1},\"updated\":0,\"deleted\":{},\"unchanged\":false},\"issues\":[{\"check\":\"document.validate\",\"code\":\"unknown_field\",\"severity\":\"error\",\"ids\":[],\"path\":\"sounds\",\"actual\":{\"bed\":{\"kind\":\"music\",\"asset\":\"5c5308066a0eb41132269fa54306042b218ba2606a0137a85d8b9647ee1f1349\",\"tempo\":100,\"meter\":\"4/4\",\"loop\":{\"start\":0,\"end\":460800},\"bus\":\"music\"},\"coin\":{\"kind\":\"sound\",\"variants\":[{\"target\":-28,\"takes\":[\"f355be58fa129ce848c20a8646b2b6dfa354c2b1d6f8f7d01a91baed0c49c2b1\",\"ad733409b4d74d129b87bb75e4d5f5265c96ea63e6a45a8ca9e508dec9827877\",\"13c86f438b3c7175806a099fd7a61eda1900e33b404f2e41dcf169c815820ce7\",\"cbd26fe0818c63f1b4d13d87676bf0aea72bab827f198b4ec0fb8962eded6b5c\"]},{\"target\":-22,\"takes\":[\"13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f3678)",
++   "the strip naming the take at +0.4 dBTP bb664b945ea305baa59549ac4e99e4dd762e2f8709aca16e3ece0f34c69cdcb3, whose audio.gen FAILs: `rev` is 2; revision 1, the one before it, must stay current",
++   "the strip naming the take at +0.4 dBTP bb664b945ea305baa59549ac4e99e4dd762e2f8709aca16e3ece0f34c69cdcb3, whose audio.gen FAILs: no audio.gen.unpassed issue naming the asset bb664b945ea305baa59549ac4e99e4dd762e2f8709aca16e3ece0f34c69cdcb3 among [{\"check\":\"document.validate\",\"code\":\"unknown_field\",\"severity\":\"error\",\"ids\":[],\"path\":\"sounds\",\"actual\":{\"bed\":{\"kind\":\"music\",\"asset\":\"5c5308066a0eb41132269fa54306042b218ba2606a0137a85d8b9647ee1f1349\",\"tempo\":100,\"meter\":\"4/4\",\"loop\":{\"start\":0,\"end\":460800},\"bus\":\"music\"},\"coin\":{\"kind\":\"sound\",\"variants\":[{\"target\":-28,\"takes\":[\"f355be58fa129ce848c20a8646b2b6dfa354c2b1d6f8f7d01a91baed0c49c2b1\",\"ad733409b4d74d129b87bb75e4d5f5265c96ea63e6a45a8ca9e508dec9827877\",\"13c86f438b3c7175806a099fd7a61eda1900e33b404f2e41dcf169c815820ce7\",\"cbd26fe0818c63f1b4d13d87676bf0aea72bab827f198b4ec0fb8962eded6b5c\"]},{\"target\":-22,\"takes\":[\"13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f367839e9eaa\",\"997739980328e3b315f0016f83c3d9d57c6e7cd01fbe77ca16e54843aa63d898\",\"2087b7f9cc5d4ca82f14b402a7385ae5a56fad7f0011604c5ac3fee19d177610\",\"208655de011ec646d5a3f6aad2388be9b2386f926f58aa2dc549259a864a193a\"]},{\"",
++   "the strip naming the clean take f355be58fa129ce848c20a8646b2b6dfa354c2b1d6f8f7d01a91baed0c49c2b1, whose audio.gen passes: `outcome` \"applied\" `rev` 3; it must apply as revision 1 (reply {\"cost_delta\":{\"cpu_ms\":0.01236764,\"gpu_ms\":0,\"vertices\":0,\"lights\":0,\"gpu_mb\":0},\"outcome\":\"applied\",\"rev\":3,\"ids\":{},\"achieved\":{\"created\":{\"media.strip@1\":1},\"updated\":0,\"deleted\":{},\"unchanged\":false},\"issues\":[{\"check\":\"document.validate\",\"code\":\"unknown_field\",\"severity\":\"error\",\"ids\":[],\"path\":\"sounds\",\"actual\":{\"bed\":{\"kind\":\"music\",\"asset\":\"5c5308066a0eb41132269fa54306042b218ba2606a0137a85d8b9647ee1f1349\",\"tempo\":100,\"meter\":\"4/4\",\"loop\":{\"start\":0,\"end\":460800},\"bus\":\"music\"},\"coin\":{\"kind\":\"sound\",\"variants\":[{\"target\":-28,\"takes\":[\"f355be58fa129ce848c20a8646b2b6dfa354c2b1d6f8f7d01a91baed0c49c2b1\",\"ad733409b4d74d129b87bb75e4d5f5265c96ea63e6a45a8ca9e508dec9827877\",\"13c86f438b3c7175806a099fd7a61eda1900e33b404f2e41dcf169c815820ce7\",\"cbd26fe0818c63f1b4d13d87676bf0aea72bab827f198b4ec0fb8962eded6b5c\"]},{\"target\":-22,\"takes\":[\"13be4ac78efe139d188b0ab9af2265d75491b3cf182bfed1c6d2f3678)",
++   "after the three patches `revisions` has [3] current; revision 1, the clean take's strip, must be (reply {\"revisions\":[{\"rev\":0,\"base_rev\":0,\"writer\":null,\"hash\":\"6c974548b8799fd15d74a014cfb5e589157c1e727e1fbc4dd56c3a2101e35a35\",\"state\":\"superseded\",\"patches\":[]},{\"rev\":1,\"base_rev\":0,\"writer\":{\"kind\":\"agent\",\"id\":\"thread-alpha\"},\"hash\":\"ca29c41b59e5fff5efe1a90b52390a3763fc3f4f2a24f517d07efff39d0169e0\",\"state\":\"superseded\",\"patches\":[\"01JB935P000000000000000001\"]},{\"rev\":2,\"base_rev\":0,\"writer\":{\"kind\":\"agent\",\"id\":\"thread-alpha\"},\"hash\":\"2e5ca41f27161ef3bc137e49cd935fca228fe647f798813209ea9e37c21143eb\",\"state\":\"superseded\",\"patches\":[\"01JB935P000000000000000002\"]},{\"rev\":3,\"base_rev\":0,\"writer\":)",
++ ]
+
+ ❯ tests/acceptance/935/unpassed.test.ts:116:158
+    114|     const j = judge(replies, a);
+    115|     proof('ac5-real.json', { assets: a, replies, failures: j });
+    116|     expect([...j.bed, ...j.hot, ...j.rest], 'the strips naming unpasse…
+       |                                                                                                                                                              ^
+    117|
+    118|     const plant: Planted = 'unpassed_on_fail_only';
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/7]⎯
+
+ FAIL  tests/acceptance/935/variants.test.ts > AC4 a sound's takes stay one class and differ from each other > AC4 #935.003bdbdb 12 takes in 3 levels on target, under −1 dBTP, within ±20% of the median and distinct pass; one file repeated 12 times fails naming the 66 pairs; a take at +0.4 dBTP fails naming it
+AssertionError: the coin pickup's takes: deep-show run answers the scenario ok (media_gen and the media document's `sounds`, README: The surface under test); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow tests/acceptance/935/helpers.ts:113:190
+    111|   const answer = obj(JSON.parse(out[0]!) as JsonValue, `${what}: the a…
+    112|   const planted = typeof scenario['planted'] === 'string' ? `, planted…
+    113|   expect(answer['ok'], `${what}: deep-show run answers the scenario ok…
+       |                                                                                                                                                                                              ^
+    114|   const replies = arr(answer['replies'], `${what}: replies`).map((v, i…
+    115|   expect(replies.length, `${what}: one reply per call`).toBe(arr(scena…
+ ❯ gens tests/acceptance/935/helpers.ts:155:19
+ ❯ tests/acceptance/935/variants.test.ts:31:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/7]⎯
+
+ FAIL  tests/acceptance/935-oracle/loudness.test.ts > the upstream loudness meter's test/tests.c (67b33abe15) lines 257-347 on audio.gen's readings > AC4 #935.003bdbdb TEST_GLOBAL_LOUDNESS (lines 266-284): seven files read integrated loudness within 0.1 of gr[], as audio.gen.level names it
+AssertionError: TEST_GLOBAL_LOUDNESS: deep-show run answers the scenario ok (media_gen and the media document's `sounds`, README: The surface under test); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow tests/acceptance/935/helpers.ts:113:190
+    111|   const answer = obj(JSON.parse(out[0]!) as JsonValue, `${what}: the a…
+    112|   const planted = typeof scenario['planted'] === 'string' ? `, planted…
+    113|   expect(answer['ok'], `${what}: deep-show run answers the scenario ok…
+       |                                                                                                                                                                                              ^
+    114|   const replies = arr(answer['replies'], `${what}: replies`).map((v, i…
+    115|   expect(replies.length, `${what}: one reply per call`).toBe(arr(scena…
+ ❯ gens tests/acceptance/935/helpers.ts:155:19
+ ❯ run tests/acceptance/935-oracle/loudness.test.ts:52:13
+ ❯ tests/acceptance/935-oracle/loudness.test.ts:113:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/7]⎯
+
+ FAIL  tests/acceptance/935-oracle/loudness.test.ts > the upstream loudness meter's test/tests.c (67b33abe15) lines 257-347 on audio.gen's readings > AC4 #935.003bdbdb TEST_MAX_TRUE_PEAK (lines 329-346): signals 15 to 23 read their maximum true peak within +0.2/−0.4 dB, as audio.gen.peak names it
+AssertionError: TEST_MAX_TRUE_PEAK: deep-show run answers the scenario ok (media_gen and the media document's `sounds`, README: The surface under test); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow tests/acceptance/935/helpers.ts:113:190
+    111|   const answer = obj(JSON.parse(out[0]!) as JsonValue, `${what}: the a…
+    112|   const planted = typeof scenario['planted'] === 'string' ? `, planted…
+    113|   expect(answer['ok'], `${what}: deep-show run answers the scenario ok…
+       |                                                                                                                                                                                              ^
+    114|   const replies = arr(answer['replies'], `${what}: replies`).map((v, i…
+    115|   expect(replies.length, `${what}: one reply per call`).toBe(arr(scena…
+ ❯ gens tests/acceptance/935/helpers.ts:155:19
+ ❯ run tests/acceptance/935-oracle/loudness.test.ts:52:13
+ ❯ tests/acceptance/935-oracle/loudness.test.ts:126:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/7]⎯
+
+
+ Test Files  6 failed (6)
+      Tests  7 failed (7)
+   Start at  01:43:27
+   Duration  39.94s (tests 98%, transform 1%)
+
+

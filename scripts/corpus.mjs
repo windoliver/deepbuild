@@ -111,6 +111,36 @@ function modsFactsCase(claude) {
   return missing.length ? [[`the Claude Code facts' mods entry (claude-code.facts.json) lacks ${missing.join(', ')}`, fix]] : [];
 }
 
+/**
+ * The adapter-facts case for Claude Code's context-output entry (#1296): the cap on a hook's injected text, the preview
+ * past it, the versions they hold for and their source, and per hook event where each output goes. The hub reads the
+ * cap to keep what it injects inside it, and the kit reads the channels; a file without them fails, naming the field.
+ */
+function contextOutputFactsCase(claude) {
+  if (!claude) return [];
+  const entry = claude.contextOutput;
+  const fix = "Give adapters/claude-code.facts.json its contextOutput entry: capChars, previewChars, versions, source, and per hook event where additionalContext, systemMessage, stdout, stderr and stderrOnBlock go, as Claude Code's hooks reference states them.";
+  if (!entry || typeof entry !== 'object') return [["the Claude Code facts (claude-code.facts.json) have no contextOutput entry, the context-output entry, so no core rule knows the cap on a hook's injected output or which outputs reach the model", fix]];
+  const missing = ['capChars', 'previewChars', 'versions', 'source', 'events'].filter((field) => entry[field] === undefined).map((field) => `contextOutput.${field}`);
+  const outputs = ['additionalContext', 'systemMessage', 'stdout', 'stderr', 'stderrOnBlock'];
+  for (const [event, reach] of Object.entries(entry.events ?? {})) for (const output of outputs) if (reach?.[output] === undefined) missing.push(`contextOutput.events.${event}.${output}`);
+  return missing.length ? [[`the Claude Code facts' context-output entry (claude-code.facts.json) lacks ${missing.join(', ')}`, fix]] : [];
+}
+
+/**
+ * The adapter-facts case for Claude Code's retry records (#2019): the entry that marks a model call the agent retries,
+ * its attempt, its most, its time, its identity, the causes its error names and the reply that ends them. A row reads
+ * retrying from these alone; a file without them fails, naming the field.
+ */
+function retriesFactsCase(claude) {
+  if (!claude) return [];
+  const entry = claude.retries;
+  const fix = "Give adapters/claude-code.facts.json its retries entry: match, attempt, max, at, id, cause and reply, as its transcripts record a model call it retries.";
+  if (!entry || typeof entry !== 'object') return [["the Claude Code facts (claude-code.facts.json) have no retries entry, so no core rule reads a model call it retries", fix]];
+  const missing = ['match', 'attempt', 'max', 'at', 'id', 'cause', 'reply'].filter((field) => entry[field] === undefined).map((field) => `retries.${field}`);
+  return missing.length ? [[`the Claude Code facts' retries entry (claude-code.facts.json) lacks ${missing.join(', ')}`, fix]] : [];
+}
+
 async function replayCommand(options) {
   const started = performance.now();
   let failed = false;
@@ -137,6 +167,8 @@ async function checkCommand(options) {
   }
   failures.push(...loopFactsCase(facts.loops?.facts, options.corpus));
   failures.push(...modsFactsCase(facts['claude-code']?.facts));
+  failures.push(...contextOutputFactsCase(facts['claude-code']?.facts));
+  failures.push(...retriesFactsCase(facts['claude-code']?.facts));
   const bytes = size(options.corpus);
   say({ type: 'size', bytes, limit: LIMIT });
   if (bytes >= LIMIT) failures.push([`the corpus is ${bytes} bytes, over the 200 MB limit (${LIMIT} bytes)`, 'Trim transcripts or drop sessions that add no event, version or tag.']);
@@ -437,7 +469,7 @@ async function recordCommand(options) {
   const only = options.scenarios?.split(',');
   const results = agent === 'codex' ? await recordCodex(scratch, bin, facts) : await recordClaude(scratch, bin, facts, only);
   const redact = redactor();
-  for (const { scenario, dir, blocked, payloads } of results) {
+  for (const { scenario, blocked, payloads } of results) {
     if (!payloads.length) { say({ type: 'session', scenario, blocked: blocked ?? 'no payload was recorded' }); continue; }
     const target = join(out, agent, version, scenario);
     mkdirSync(target, { recursive: true });

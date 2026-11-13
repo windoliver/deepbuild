@@ -1,0 +1,36 @@
+# The #1116 suites on this branch
+
+## tests/acceptance/1116-redraft-1874 (the blind redraft), once
+
+✔ a window that gets no grant at a load above the cores measures nothing, reopens, and leaves its commit for the next (21683.073459ms)
+✔ a window killed mid-sample reopens, closes nothing, and leaves its commit for the next (20924.284584ms)
+✔ budget-window.mjs run by hand, with a forged DEEP_THROTTLE, measures nothing and closes nothing (21422.612542ms)
+✔ #1116.dead61b9 a planted 2× regression in one of three commits leaves only that issue open, naming that commit, with one budget follow-up (93997.31125ms)
+✔ #1116.5aa02a5a a commit merged during a window is measured in the next one, and till then its issue stays open (7.607458ms)
+ℹ tests 5
+ℹ pass 5
+ℹ fail 0
+
+## tests/acceptance/1116 (the originals) and tests/budget-window.test.mjs, once
+
+The five failures marked (redrafted) are the tests tests/acceptance/1116-redraft-1874/REDRAFT.md lists, failing here at
+the close they wait for: their fixture task names no criterion. The guard test failed on this worktree before npm ci
+(ERR_MODULE_NOT_FOUND: typescript from scripts/proof-change.mjs); it is rerun below with node_modules in place.
+
+✖ budget-window.mjs joins the guard regex: an unsigned change to it fails the guard (745.762958ms)
+✔ a window off the reference Macs is a reading: its record is INCONCLUSIVE and its issue stays open (33717.022416ms)
+✖ a window that gets no grant at a load above the cores measures nothing, reopens, and leaves its commit for the next (37292.24925ms)  (redrafted)
+✖ a window killed mid-sample reopens, closes nothing, and leaves its commit for the next (30675.869375ms)  (redrafted)
+✖ budget-window.mjs run by hand, with a forged DEEP_THROTTLE, measures nothing and closes nothing (24672.4005ms)  (redrafted)
+✔ a commit that raises its own margin to hide a 2× regression doesn't pass: budget numbers stay unchanged (3204.932666ms)
+✔ #1116.8a08ae16 a window drains every slot before its first sample and reopens after its last (137267.087ms)
+✔ #1116.8e06730a three commits merged between windows get three records, each against its own merge base, with 20 samples a side (63.531416ms)
+✖ #1116.dead61b9 a planted 2× regression in one of three commits leaves only that issue open, naming that commit, with one budget follow-up (3.264584ms)  (redrafted)
+✖ #1116.5aa02a5a a commit merged during a window is measured in the next one, and till then its issue stays open (5.782375ms)  (redrafted)
+✔ a pass leaves its issue open while another of its criteria isn't proven (2.089667ms)
+✔ #1116.96a59f57 an agent's build requested during a window starts within a minute of the window ending (2.0275ms)
+✔ a build whose grant wait is shorter than the window still starts when the window ends (18404.435917ms)
+✔ a pass leaves its issue open while a later commit of that issue waits in the same window, and the miss keeps it open (66207.422ms)
+ℹ tests 14
+ℹ pass 8
+ℹ fail 6

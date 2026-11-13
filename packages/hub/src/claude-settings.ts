@@ -1,14 +1,16 @@
 // Claude Code's user settings, where DeepBuild's hook entries live in R1 (#18): `deep setup` merges them in beside
 // yours, the timing relations read them (design: Numbers, timing relations), and the core puts a removed or weakened
 // entry of ours back. Our entries are the ones setup recorded in <root>/claude-hooks.json, by their exact command.
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, statSync, watch, writeFileSync, type FSWatcher } from 'node:fs';
 import { homedir } from 'node:os';
-import { dirname, join } from 'node:path';
-import { writeThrough } from './agent-files.js';
-import { activePlant } from './plant.js';
+import { dirname, join, resolve } from 'node:path';
+import { duration } from '@deepbuild/asks/duration';
+import { shellQuote } from './shell.js';
+import { statKey, writeThrough } from './agent-files.js';
+import { activePlant, type Plant } from './plant.js';
+import { isRecord as isObj } from '@deepbuild/contracts';
 
 type Obj = Record<string, unknown>;
-const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 
 /** The longest a stop is held, and how long before the Stop hook's timeout a hold must end. */
 export const STOP_HOLD_MS = 60_000;
@@ -52,6 +54,29 @@ export function writeJson(file: string, value: Obj): void {
   renameSync(next, file);
 }
 
+/** The repo a folder is in: the nearest folder up holding `.git`, else the folder itself. */
+export function topLevel(cwd: string): string {
+  for (let dir = cwd; ; dir = dirname(dir)) {
+    if (existsSync(join(dir, '.git'))) return dir;
+    if (dirname(dir) === dir) return cwd;
+  }
+}
+/** The status line command of DeepBuild's forwarder, as setup writes it. */
+export const FORWARDER = /deep-hook\S*'? statusline$/;
+/**
+ * The repo's own settings files that set a status line, which overrides the user-level forwarder there (#1296):
+ * Claude Code reads a project value over a user one, so no plan window is read in that repo. Only read, never written.
+ */
+export function shadowedBy(repo: string): { file: string; key: string }[] {
+  return ['settings.json', 'settings.local.json'].flatMap((name) => {
+    const file = join(repo, '.claude', name);
+    const line = readJson(file)?.statusLine;
+    if (line === undefined) return [];
+    const command = isObj(line) && typeof line.command === 'string' ? line.command : '';
+    return FORWARDER.test(command) ? [] : [{ file, key: command ? 'statusLine.command' : 'statusLine' }];
+  });
+}
+
 /** What setup installed, or undefined before any setup. */
 export const installed = (root: string): Installed | undefined => {
   const value = readJson(installedFile(root));
@@ -64,7 +89,7 @@ export const commands = (record: Installed): Set<string> => new Set(Object.value
  * runs it with `/bin/sh -c`, and `exec` makes deep-hook the agent's own child, whose parent the hub checks a hook by:
  * dash runs a lone command in a child of the shell, a new process for every hook.
  */
-export const claudeCommand = (deepHook: string, arg: string): string => `exec '${deepHook.replaceAll("'", `'\\''`)}' claude-code ${arg}`;
+export const claudeCommand = (deepHook: string, arg: string): string => `exec ${shellQuote(deepHook)} claude-code ${arg}`;
 
 /** Our groups: one entry per hook, plus the waiter under Stop and under StopFailure. Each runs deep-hook, or the deep CLI's waiter. */
 export function ourGroups(deepHook: string, waiter: string, waiterTimeoutS: number): Record<string, Obj[]> {
@@ -148,6 +173,95 @@ export function restore(record: Installed, flag = false): void {
   writeJson(file, next);
 }
 
+interface ClaudeSettingsOptions {
+  root: string;
+  plant: Plant | undefined;
+  raw(query: string, params?: readonly (string | number | bigint | null)[]): Promise<unknown[]>;
+  queue(work: () => Promise<void>): Promise<void>;
+  /** Calls still running or within the core's recent-call grace period. */
+  running(): { id: string; agent: string; what: string }[];
+  reading(session: string, agent: string, text: string): Promise<void>;
+}
+
+/** The settings watch and session-start recheck, with their readings (#18, #1687). */
+export class ClaudeSettings {
+  private watcher: FSWatcher | undefined;
+  private key = '';
+  readonly readings: string[] = [];
+
+  constructor(private readonly o: ClaudeSettingsOptions) {}
+
+  /** Starts the watch; the core owns the returned poll timer with its other timers. */
+  watch(): NodeJS.Timeout | undefined {
+    if (this.o.plant === 'restores-at-session-start-only') return;
+    const file = claudeSettings();
+    this.key = statKey(file);
+    const check = () => void this.o.queue(() => this.settingsChanged()).catch(() => undefined);
+    try {
+      this.watcher = watch(resolve(file, '..'), (_, name) => { if (!name || String(name) === 'settings.json') check(); });
+      this.watcher.unref();
+    } catch {
+      // No folder yet: the poll finds the file once setup writes it.
+    }
+    return setInterval(check, 500);
+  }
+  /**
+   * The settings changed between session starts: an entry of ours removed or weakened while an agent's call was
+   * running goes back at once, with a reading naming the call; a change with none running is yours, and stays.
+   */
+  private async settingsChanged(): Promise<void> {
+    const file = claudeSettings();
+    const key = statKey(file);
+    if (key === this.key) return;
+    this.key = key;
+    const record = installed(this.o.root);
+    const changed = record ? tampered(readJson(file), record) : [];
+    if (!record || !changed.length) return;
+    const running = this.o.running();
+    if (!running.length) return;
+    restore(record);
+    this.key = statKey(file);
+    for (const r of running) {
+      const text = `DeepBuild's hook entries in ${file} were removed or changed (${changed.join('; ')}) while the ${r.what} was running; they were put back at once.`;
+      this.readings.push(text);
+      await this.o.reading(r.id, r.agent, text).catch(() => undefined);
+    }
+  }
+  /**
+   * The recheck at a session's start: our entries changed, or Claude Code's hooks turned off, by a recorded agent call
+   * that wrote the settings file, is tampering, and goes back with a reading naming the call; a change no recorded
+   * call made is yours, and stays.
+   */
+  async recheck(): Promise<void> {
+    const record = installed(this.o.root);
+    if (!record) return;
+    const file = claudeSettings();
+    const settings = readJson(file);
+    const flag = settings?.disableAllHooks === true;
+    const changed = tampered(settings, record);
+    if (!flag && !changed.length) return;
+    if (this.o.plant === 'restores-at-session-start-only') {
+      if (changed.length) restore(record);
+      return;
+    }
+    const since = Math.floor(statSync(join(this.o.root, 'claude-hooks.json')).mtimeMs) - 1000;
+    const rows = (await this.o.raw(`SELECT id, session_id, agent, data FROM events WHERE kind IN ('tool.before', 'tool.after') AND ts >= ? AND session_id IS NOT NULL AND (instr(data, ?) > 0 OR instr(data, '.claude/settings.json') > 0) ORDER BY log_pos`, [since, file])) as { id: string; session_id: string; agent: string | null; data: string }[];
+    if (!rows.length) return;
+    restore(record, flag);
+    this.key = statKey(file);
+    const what = [flag ? 'turned Claude Code\'s hooks off (disableAllHooks)' : '', changed.length ? `changed DeepBuild's entries (${changed.join('; ')})` : ''].filter(Boolean).join(' and ');
+    for (const session of new Set(rows.map((r) => r.session_id))) {
+      const mine = rows.filter((r) => r.session_id === session);
+      const calls = [...new Set(mine.map((r) => (JSON.parse(r.data) as Obj).call).filter((c): c is string => typeof c === 'string'))];
+      const text = `An agent call ${calls.join(', ') || mine[0]!.id} (events ${mine.map((r) => r.id).join(', ')}) wrote ${file} and ${what}; at this session start DeepBuild put its entries back${flag ? ' and took the flag out' : ''}.`;
+      this.readings.push(text);
+      await this.o.reading(session, mine[0]!.agent ?? 'claude-code', text).catch(() => undefined);
+    }
+  }
+
+  close(): void { this.watcher?.close(); }
+}
+
 // ---- Timing relations (design: Numbers version 0 has to hold): each with both values, in the words a person reads.
 
 export interface Relation { name: 'stop hold' | 'waiter' | 'deep_ask' | 'stop continuations' | 'asks and batches'; holds: boolean; text: string; timeoutS: number }
@@ -166,12 +280,11 @@ export function words(ms: number): string {
   }
   return `${Math.round(ms / 1000)} s`;
 }
-const UNITS: Record<string, number> = { m: 60_000, h: 3_600_000, d: 86_400_000 };
 /** The longest ask deadline in your settings (config.json's asks block, as setup drafts it), in ms. */
 export function longestDeadline(root: string): number | undefined {
   const config = readJson(join(root, 'config.json'));
   const deadlines = config && isObj(config.asks) && isObj(config.asks.deadline) ? Object.values(config.asks.deadline) : [];
-  const ms = deadlines.map((v) => (typeof v === 'string' ? /^(\d+)([mhd])$/.exec(v) : null)).filter((m) => m !== null).map((m) => Number(m![1]) * UNITS[m![2]!]!);
+  const ms = deadlines.map((v) => duration(typeof v === 'string' ? v : undefined)).filter((v): v is number => v !== undefined);
   return ms.length ? Math.max(...ms) : undefined;
 }
 const entriesOf = (settings: Obj | undefined, event: string, ours: Set<string>): Obj[] => {

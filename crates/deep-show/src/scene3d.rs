@@ -14,14 +14,37 @@ use serde_json::{json, Value};
 
 use crate::snapshot::Unfit;
 
+/// #1401: what a frame's object-ID pass and depth target hold, at their own size: each pixel's
+/// pick (u32, 0 where nothing drew), the item each pick stands for, and, for the planted depth
+/// reader alone, each pixel's view depth in m (f32).
+pub struct Targets {
+    pub size: [u32; 2],
+    pub ids: Vec<u8>,
+    pub picks: std::collections::BTreeMap<u32, String>,
+    pub view_depth: Option<Vec<u8>>,
+}
+
 pub struct Gpu3 {
     _gpu: Arc<Gpu>,
     device: Arc<Device>,
     renderer: Renderer,
     labels: Labels,
+    /// The print pass, built on first use and kept: an export prints every frame (#157).
+    printer: Option<deep_scene3d_render::print::Printer>,
 }
 
 impl Gpu3 {
+    /// The device it draws on, for the export's frame hashes (#501).
+    pub fn device(&self) -> &Arc<Device> {
+        &self.device
+    }
+
+    /// #157's planted lost device: the device is lost now, as the platform would lose it.
+    #[cfg(feature = "test-export-guards")]
+    pub fn force_loss(&self) {
+        self.device.force_loss();
+    }
+
     /// The app's GPU, or `None` where there is none to draw 3D on.
     pub fn open() -> Option<Gpu3> {
         let gpu = Gpu::open(Backend::Gpu).ok()?;
@@ -32,6 +55,7 @@ impl Gpu3 {
             device,
             renderer,
             labels: Labels::new(),
+            printer: None,
         })
     }
 
@@ -86,6 +110,34 @@ impl Gpu3 {
                     path: r.path,
                 })?;
         Ok((scene, look))
+    }
+
+    /// #1401: an evaluated scene drawn offscreen as render-back draws it: straight RGBA, rows
+    /// top-down, with the targets its probes read; the view depth only when `depth` asks.
+    pub fn draw_scene(
+        &mut self,
+        scene: &Scene,
+        look: &Look3,
+        depth: bool,
+    ) -> Option<(Vec<u8>, Targets)> {
+        let mut bytes = draw_offscreen(&self.device, &mut self.renderer, scene, look, None)?;
+        for p in bytes.as_chunks_mut::<4>().0 {
+            p.swap(0, 2);
+        }
+        let r = &self.renderer;
+        let size = r.internal_size(scene.size);
+        let (_, ids) = r.read_targets(&self.device)?;
+        let targets = Targets {
+            size,
+            ids,
+            picks: r.picks().iter().map(|(id, p)| (*p, id.clone())).collect(),
+            view_depth: if depth {
+                Some(r.read_view_depth(&self.device)?)
+            } else {
+                None
+            },
+        };
+        Some((bytes, targets))
     }
 
     /// #427: an evaluated scene drawn offscreen in a diagnostic view: straight RGBA, rows
@@ -166,7 +218,7 @@ impl Gpu3 {
         });
         let view = out.create_view(&Default::default());
         let mut encoder = d.create_command_encoder(&Default::default());
-        Printer::new(d).record(
+        self.printer.get_or_insert_with(|| Printer::new(d)).record(
             d,
             &mut encoder,
             params,

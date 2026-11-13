@@ -92,7 +92,7 @@ fn pair(v: Option<&Value>, default: [f64; 2]) -> [f64; 2] {
 }
 
 /// Where an item stands in world metres: a solid's origin, another module's item's, or none.
-fn item_pos(scene: &Scene, id: &str) -> Option<[f64; 3]> {
+pub(crate) fn item_pos(scene: &Scene, id: &str) -> Option<[f64; 3]> {
     let id = id.split('#').next().unwrap_or(id);
     scene
         .layers
@@ -105,7 +105,7 @@ fn item_pos(scene: &Scene, id: &str) -> Option<[f64; 3]> {
 
 /// A curve's samples resampled to [`shipped::CURVE_POINTS`] points evenly by arc length, and
 /// its length.
-fn resampled(points: &[[f64; 3]]) -> (Vec<[f64; 3]>, f64) {
+pub(crate) fn resampled(points: &[[f64; 3]]) -> (Vec<[f64; 3]>, f64) {
     let n = shipped::CURVE_POINTS as usize;
     let seg = |a: [f64; 3], b: [f64; 3]| {
         ops::sqrt((b[0] - a[0]).powi(2) + (b[1] - a[1]).powi(2) + (b[2] - a[2]).powi(2))
@@ -277,26 +277,8 @@ fn sparks_of(
         stops,
         draw,
         half: draw == 2 && p["resolution"].as_str() != Some("full"),
+        closed: None,
     }
-}
-
-/// A particles@1 item whose count is past its class's limit (Particles `particles@1`:
-/// `count: u32 ≤ 65,536`, or ≤ 1,048,576 in a showpiece or an export), by its path.
-pub fn count_refusal(scene: &Scene, class: Option<&str>) -> Option<String> {
-    let limit = match class {
-        Some("showpiece" | "export") => shipped::MAX_PARTICLES_SHOWPIECE,
-        _ => shipped::MAX_PARTICLES,
-    };
-    scene
-        .others
-        .iter()
-        .filter(|o| o.kind == "particles@1")
-        .find(|o| {
-            o.params["count"]
-                .as_u64()
-                .is_some_and(|c| c > u64::from(limit))
-        })
-        .map(|o| format!("items/{}/params/count", o.id))
 }
 
 /// The wrong programs the effects run under (frame::Planted).
@@ -814,7 +796,7 @@ fn run_once(device: &Device, c: &Compiled, reached: &mut Reached) -> Result<(), 
 }
 
 /// A linear render target of `size` that nothing reads back.
-fn output(d: &wgpu::Device, label: &str, [width, height]: [u32; 2]) -> wgpu::Texture {
+fn output(d: &deep_gpu::counted::Wgpu, label: &str, [width, height]: [u32; 2]) -> wgpu::Texture {
     d.create_texture(&wgpu::TextureDescriptor {
         label: Some(label),
         size: wgpu::Extent3d {

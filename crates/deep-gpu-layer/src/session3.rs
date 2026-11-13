@@ -35,6 +35,7 @@ pub(crate) fn planted3(p: Option<Planted>) -> Planted3 {
         builds_on_first_frame: p == Some(Planted::CompilesOnFirstFrame),
         upscale: upscale_planted(p),
         outlines_before_upscale: p == Some(Planted::OutlinesBeforeUpscale),
+        outlines_in_history: p == Some(Planted::OutlinesInHistory),
         status_before_upscale: p == Some(Planted::StatusBeforeUpscale),
         status_without_depth: p == Some(Planted::StatusWithoutDepth),
         winding_ignores_determinant: p == Some(Planted::WindingIgnoresDeterminant),
@@ -62,6 +63,7 @@ pub(crate) fn planted3(p: Option<Planted>) -> Planted3 {
         add_writes_depth: p == Some(Planted::AddWritesDepth),
         add_without_depth_test: p == Some(Planted::AddWithoutDepthTest),
         ids_by_draw_position: p == Some(Planted::IdsByDrawPosition),
+        overlay_keeps_grid_on_seek: p == Some(Planted::OverlayKeepsGridOnSeek),
         ids_ignore_mask: p == Some(Planted::IdsIgnoreMask),
         cuts_color_only: p == Some(Planted::CutsColorOnly),
         local: deep_scene3d_render::local::Planted {
@@ -100,6 +102,18 @@ pub(crate) fn planted3(p: Option<Planted>) -> Planted3 {
             // #481's.
             Planted::SubsurfaceAcrossParts,
             Planted::SubsurfaceAddsToDiffuse,
+            // #486's.
+            Planted::LobeOutputScalesField,
+            Planted::OcclusionScalesDirect,
+            Planted::BumpIgnoresHandedness,
+            Planted::CoatNormalBendsBase,
+            // #485's.
+            Planted::LightDropsFresnel,
+            Planted::AmbientAddsNz,
+            Planted::LoopShadowOne,
+            Planted::LoopCallsCutLights,
+            Planted::LoopWorldNormal,
+            Planted::LoopViewAway,
         ]
         .iter()
         .position(|q| p == Some(*q))
@@ -117,6 +131,10 @@ pub(crate) fn msaa_planted(p: Option<Planted>) -> Planted3 {
             Some(Planted::SingleSampleTargets | Planted::ClaimsMsaaOverSingleSample)
         ),
         resolve_accumulates: p == Some(Planted::ResolveAccumulatesFrames),
+        missing_lobe_turned_on: p == Some(Planted::MissingLobeTurnedOn),
+        bind_group_per_item: p == Some(Planted::BindGroupPerItem),
+        uploads_every_transform: p == Some(Planted::UploadsEveryTransform),
+        warms_per_item: p == Some(Planted::WarmsPerItem),
         ..Default::default()
     }
 }
@@ -153,19 +171,21 @@ pub fn open(
 }
 
 /// [`open`] for a document whose composed operators (#429) the effects chain runs: their passes
-/// are the view's from its first frame.
+/// are the view's from its first frame; with `samples`, its geometry pass draws that many a
+/// pixel (#173: one under frame history's temporal upscale).
 pub fn open_doc(
     app: &mut App,
     size: [u32; 2],
     timings: bool,
     with_stage: bool,
     doc: &Value,
+    samples: Option<u32>,
 ) -> Result<Opened, Value> {
     let (options, planted) = effects::operator_plants(app.planted);
     let hooks = effects::operator_hooks(app.planted);
     let doc = doc.clone();
     let on = On::of(app);
-    open_with(&on, size, timings, with_stage, move |fx| {
+    open_with(&on, size, timings, with_stage, samples, move |fx| {
         fx.op_doc = Some((doc, options, planted));
         fx.op_hooks = hooks;
     })
@@ -193,7 +213,7 @@ impl On<'_> {
 
 /// [`open`] on `on`.
 pub fn open_on(on: &On, size: [u32; 2], timings: bool, with_stage: bool) -> Result<Opened, Value> {
-    open_with(on, size, timings, with_stage, |_| {})
+    open_with(on, size, timings, with_stage, None, |_| {})
 }
 
 fn open_with(
@@ -201,6 +221,7 @@ fn open_with(
     size: [u32; 2],
     timings: bool,
     with_stage: bool,
+    samples: Option<u32>,
     setup: impl FnOnce(&mut Effects) + Send + 'static,
 ) -> Result<Opened, Value> {
     let planted = planted3(on.planted);
@@ -212,6 +233,9 @@ fn open_with(
     on.worker
         .call(move |state| -> Result<Opened, String> {
             let (module, shared) = Module3::new(planted);
+            if let Some(n) = samples {
+                lock(&shared).samples = n;
+            }
             // The shipped effects run between scene3d's geometry and its output (#380).
             let mut effects = Effects::new(Default::default(), fx_planted);
             setup(&mut effects);
@@ -279,6 +303,33 @@ pub fn surface(app: &mut App, surface: Surface) -> Result<(), Value> {
             if surface.scale < 1.0 && renderer.upscale.is_none() {
                 renderer.upscale = Some(Arc::new(Upscale::new(&device)));
             }
+            Ok(())
+        })
+        .map_err(|e| refused("no_session", e))
+}
+
+/// What the session's next frame does with frame history (#173): with `frame`, it draws into a
+/// layer of the window at `surface`'s scale, jittered by the frame's offset, lines and labels
+/// after the resolve; without, it draws as any frame does through `surface`.
+pub fn history(
+    app: &mut App,
+    frame: Option<deep_scene3d_render::history::Frame>,
+    surface: Surface,
+    size: [u32; 2],
+) -> Result<(), Value> {
+    app.worker
+        .call(move |state| -> Result<(), String> {
+            let s = state.scene3d.as_mut().ok_or("no session")?;
+            let mut shared = lock(&s.shared);
+            let r = shared.renderer.as_mut().ok_or("no renderer")?;
+            r.surface = surface;
+            r.history = frame.is_some();
+            let internal = r.internal_size(size);
+            r.jitter = frame.as_ref().map_or([0.0; 2], |f| {
+                let k = |i: usize| f64::from(size[i]) / f64::from(internal[i].max(1));
+                [f.jitter[0] * k(0), f.jitter[1] * k(1)]
+            });
+            r.frame_history.frame = frame;
             Ok(())
         })
         .map_err(|e| refused("no_session", e))
@@ -382,6 +433,37 @@ pub fn kept(app: &mut App) -> Vec<deep_scene3d_render::KeptRow> {
     })
 }
 
+/// What the GPU drew for each of `ids` in the frame just drawn (#2016): the gust its sway used,
+/// with one, and its mesh's vertices in world m; none for an item with no solid.
+pub fn sway(
+    app: &mut App,
+    scene: Arc<Scene>,
+    ids: Vec<String>,
+) -> Vec<(String, Option<f32>, Vec<[f64; 3]>)> {
+    app.worker.call(move |state| {
+        let Some(s) = state.scene3d.as_ref() else {
+            return Vec::new();
+        };
+        let device = s.view.device().clone();
+        let shared = lock(&s.shared);
+        let Some(r) = shared.renderer.as_ref() else {
+            return Vec::new();
+        };
+        let solids: Vec<&deep_canvas_scene3d::scene::Solid> =
+            scene.layers.iter().flat_map(|l| &l.solids).collect();
+        ids.into_iter()
+            .map(|id| {
+                let read = solids
+                    .iter()
+                    .find(|s| s.id == id)
+                    .and_then(|s| r.read_sway(&device, s));
+                let (gust, positions) = read.unwrap_or_default();
+                (id, gust, positions)
+            })
+            .collect()
+    })
+}
+
 /// The pipelines the session's renderer compiled so far, by name (#854).
 pub fn pipelines(app: &mut App) -> Vec<&'static str> {
     app.worker.call(|state| {
@@ -432,6 +514,7 @@ pub fn close_on(worker: &Worker) {
 }
 
 /// What the render thread answers for one frame.
+#[derive(Clone)]
 pub struct Drawn {
     pub slot: usize,
     /// The frame reports settling: uploads were still pending when it drew (#140).
@@ -550,6 +633,12 @@ pub fn draw_on(
                     s.view.wait_free();
                 };
                 s.view.wait_done(drawn.slot);
+            }
+            // #485: the light responses that returned a negative or non-finite value.
+            if !noop {
+                if let Some(r) = lock(&s.shared).renderer.as_mut() {
+                    r.check_responses(&device);
+                }
             }
             // The frame's GPU time, as its passes' timestamp queries measured it.
             let timing = profiler2.as_ref().map(|p| {

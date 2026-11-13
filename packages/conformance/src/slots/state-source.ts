@@ -4,7 +4,7 @@
 // undo. A `cannot` ends the case, an honest answer; a plan is carried out on the fixture and a last read must match the
 // first, so a change called undoable is one that was undone.
 import type { JsonValue } from '@deepbuild/contracts';
-import { fail } from '../slot-types.js';
+import { fail, Finding } from '../slot-types.js';
 import type { Fixture, PlantedFill, SlotCase, SlotFill, SlotKitImpl, SlotRule } from '../slot-types.js';
 import { list, object, same, text } from './shared.js';
 
@@ -89,6 +89,8 @@ const valueOf = (read: StateItem[], id: string): JsonValue | undefined => read.f
 function* judge(fill: StateSourceFill, _case: SlotCase): Generator<() => unknown, void, unknown> {
   // Each change on a fresh fixture, so one a source can't undo leaves nothing behind for the next.
   const changes = list('start', yield () => fill.fixture.start()) as StateChange[];
+  // With no change to try, no rule below runs: that is not a pass.
+  if (!changes.length) throw new Finding('BLOCKED', "the source's fixture offers no change to try, so the kit held nothing", []);
   for (const [i, change] of changes.entries()) {
     if (i) yield () => fill.fixture.start();
     const first = items('read', yield () => fill.read());

@@ -50,7 +50,7 @@ pub struct Kit {
 }
 
 impl Kit {
-    pub fn new(d: &wgpu::Device) -> Kit {
+    pub fn new(d: &deep_gpu::counted::Wgpu) -> Kit {
         let layout = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some(PASS),
             entries: &[texture_entry()],
@@ -83,7 +83,7 @@ pub fn levels(size: [u32; 2]) -> u32 {
 }
 
 impl Glass {
-    pub fn new(d: &wgpu::Device, size: [u32; 2], kit: &Kit) -> Glass {
+    pub fn new(d: &deep_gpu::counted::Wgpu, size: [u32; 2], kit: &Kit) -> Glass {
         let count = levels(size);
         let texture = d.create_texture(&wgpu::TextureDescriptor {
             label: Some(PASS),

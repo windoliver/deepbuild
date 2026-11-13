@@ -16,7 +16,7 @@ use std::{
 
 use deep_canvas_marks::path::{self, Verb};
 use deep_text::outlines::{outline_of, Cmd};
-use deep_text::{Align, Atlas, Glyph, Placed, Shaper, Spec, MAX_DEVICE_SIZE, PAGE, PHASES};
+use deep_text::{Align, Atlas, Glyph, Placed, Shaper, Span, Spec, MAX_DEVICE_SIZE, PAGE, PHASES};
 pub use deep_text::{Role, Shaped};
 use gpui_kit::*;
 
@@ -50,6 +50,8 @@ pub struct Label {
     pub align: Align,
     /// A bound value or counter: tabular figures, never cut short.
     pub bound: bool,
+    /// #1964: text@1 `runs`' styled spans of the one shaped run.
+    pub spans: Vec<Span>,
 }
 
 impl Label {
@@ -66,6 +68,7 @@ impl Label {
             mask: false,
             align: Align::Start,
             bound: false,
+            spans: Vec::new(),
         }
     }
 
@@ -84,6 +87,7 @@ impl Label {
             bound: self.bound,
             tabular: self.bound,
             mask: self.mask,
+            spans: &self.spans,
         }
     }
 }
@@ -102,6 +106,7 @@ struct ShapeKey {
     mask: bool,
     align: u8,
     bound: bool,
+    spans: Vec<Span>,
 }
 
 impl ShapeKey {
@@ -118,6 +123,7 @@ impl ShapeKey {
             mask: label.mask,
             align: label.align as u8,
             bound: label.bound,
+            spans: label.spans.clone(),
         }
     }
 }
@@ -162,6 +168,7 @@ struct OutlineKey {
     glyph: u32,
     size: u32,
     coords: Arc<[i16]>,
+    skew: u32,
     bucket: i32,
 }
 
@@ -453,6 +460,7 @@ impl Text {
             glyph: glyph.id,
             size: glyph.size.to_bits(),
             coords: glyph.coords.clone(),
+            skew: glyph.skew.to_bits(),
             bucket: path::bucket(f64::from(scale)),
         };
         if let Some(found) = self.outlines.get(&key) {
@@ -508,7 +516,7 @@ impl Text {
                     let (x, px) = pen(at[0]);
                     let (y, py) = pen(at[1]);
                     self.atlas
-                        .glyph_at(&glyph.font, glyph.id, device, [px, py])
+                        .glyph_at(&glyph.font, glyph.id, device, [px, py], glyph.skew)
                         .map(|place| Shown::Sprite {
                             place,
                             at: [(x + place.left) as f32, (y + place.top) as f32],
@@ -663,6 +671,7 @@ pub fn paint_runs(
         // Every glyph placed first, so the label's pages are final before any is uploaded.
         let at = [f32::from(origin.x) * scale, f32::from(origin.y) * scale];
         let shown = text.place(label, at, scale);
+        let decorations = text.shape(label).decorations.clone();
         let Text {
             atlas,
             uploaded,
@@ -859,6 +868,15 @@ pub fn paint_runs(
                     None => painted.pages.push((place.page, 1)),
                 }
             }
+        }
+        // #1964: underlines and strikes over the glyphs, in their span's color.
+        for d in decorations {
+            let [x, y, w, h] = d.rect;
+            let bounds = Bounds {
+                origin: point(origin.x + px(x), origin.y + px(y)),
+                size: size(px(w), px(h)),
+            };
+            window.paint_quad(gpui_kit::fill(bounds, color_of(d.grapheme)));
         }
         painted
     })

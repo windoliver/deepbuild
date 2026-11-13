@@ -1,0 +1,15 @@
+{
+  "issue": 1163,
+  "criterion": "#1163.28f11e13",
+  "verdict": "looks_right",
+  "who": "Claude (claude-opus-5-5), judging at the owner's request in the session (\"validate screenshot and fix whever you think is approporiate\"); not the owner's own call, which can overrule it on the PR",
+  "when": "2026-11-12T01:16:45.955Z",
+  "screenshots": {
+    "push.png": "0f2d0027da8296b694ce944d955d18a72d10dccfb2532e057752ce58a277b307",
+    "pan-cross-fade.png": "26f1f4fb30a2c25219e99fef00036308fe0cf01eb636c36f009d487a43e86525",
+    "pull-back.png": "58cc8dac965a492be13ea9ce7550799267ef04c41b4ad1654711172a9a9603cd",
+    "viewer-step.png": "95a7224c30a7282407a5bbc6210a7615a2db207250509130e645dacab739f674",
+    "film-recording.mp4": "e1b06882d074962acfca48a267ff03a827c293ab07b0ba33a7cd729e4e4e57ce"
+  },
+  "note": "Judged on the second capture. The first viewer picture was two H.264 decodes side by side with a white gap on white and no labels, so the frames ran together; it is now the export's lossless frames, each checked equal by hash to the viewer's frame and the whole export's, framed in grey, with a caption strip under them that the canvas draws. The shots: at 5 s the push is in, the title shows and the dot is at the top of its bounce; at 6 s the cross-fade is at its middle, both framings at half strength, as a cross-fade between two framings is; at 17 s the pull back is wide, the title held and the dot resting on the floor. The recording plays 20 s at 30 fps with the bed audible to the end: the push narrows to 6 s, the dot bounces from 2 s to 10 s, the title fades in at 4 s, the pan travels to 14 s, then a cut to the widening pull back. Weak points, from the fixture rather than #1163: the dot jumps from the floor to the top of its bounce at 2 s and back at 10 s, since the bounce clip starts at its top and the placement holds nothing after its last repeat."
+}

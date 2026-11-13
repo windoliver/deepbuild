@@ -37,12 +37,20 @@ import { canonicalize, sha256Hex, validate } from '@deepbuild/contracts';
 import type { JsonValue } from '@deepbuild/contracts';
 import { asCore, ulid } from '@deepbuild/record';
 import type { Connection, Event, RecordStore } from '@deepbuild/record';
-import { KINDS, place, remotesOf, targetsOf, UNCOVERED, type CardTarget, type Target } from './targets.js';
+import { KINDS, place, remotesOf, targetsOf, type CardTarget } from './targets.js';
+import { AskRefused, bare, CANT_UNDO, isObj, letters } from './model.js';
+import type { Ask, AskKind, AsksPlant, BatchCard, BudgetLeft, Card, Decision, HeldDecision, InboxStatus, Missing, Obj, Option, PlanStep, Refusal, Resolver, ResolverAsk, RuleState, Subject } from './model.js';
+import { blockKey, BLOCK_SOURCE, boundFor, DecisionKeys, foldKey, FOLD_SOURCE, linesOf, nearOf, needsPerson, requestKey, REQUEST_SOURCE, subjectKey, SUBJECT_KINDS } from './decision-keys.js';
+import { ResolverGate } from './resolver-gate.js';
+import { Showing } from './showing.js';
+import { duration } from './duration.js';
+export { duration } from './duration.js';
+
+export { AskRefused, CANT_UNDO } from './model.js';
+export type { AskKind, AsksPlant, BatchCard, BudgetLeft, Card, Change, Decision, EffectSubject, InboxStatus, Missing, PlanStep, PointSubject, Refusal, Resolver, ResolverAnswer, ResolverAsk, RuleState, Subject, TasteSubject } from './model.js';
+export { subjectKey } from './decision-keys.js';
 
 export type { CardTarget, Target, TargetOrigin } from './targets.js';
-
-export type AskKind = 'authority' | 'unblock' | 'taste' | 'exception' | 'choice' | 'definition';
-export type Decision = 'allow' | 'deny' | 'none';
 
 /** One row of ask.sources@1: a place that raises asks, the one kind it raises, and its fixture. */
 export interface AskSource {
@@ -50,20 +58,10 @@ export interface AskSource {
   kind: AskKind;
   fixture: { ask: JsonValue; at_deadline: { decision: Decision } };
 }
-/** A plan's step: what it does, what it changes, its undo (null when it has none) and its cost in USD. */
-export interface PlanStep {
-  does: string; changes: string[]; undo: string | null; public: boolean; cost: number;
-  /** Every place the step goes to that leaves the machine (#1098): the core places where each came from. */
-  targets?: Target[];
-}
 /** plan.proposed@1's data, less the ask and the digest the core computes. */
 export interface PlanInput { steps: PlanStep[]; diff: string }
-/** What the core marks a step with no undo, in the plan it records and shows (#69). */
-export const CANT_UNDO = "can't undo";
 /** Whether a run may take a step of an authority ask's plan; when it may not, the ask it waits on. */
 export type StepCheck = { run: true } | { run: false; ask: string };
-/** A batch as its card shows it: every step of every plan in it, each with its switch as it starts. */
-export interface BatchCard { batch: string; steps: { ask: string; step: number; does: string; undo: string; on: boolean }[] }
 /** A step the agent is about to take; whether it leaves the machine comes from the guard engine. */
 export interface Step { leaves_machine: boolean }
 
@@ -83,8 +81,6 @@ export interface Delivery {
   /** For a paid run's request answered by naming a budget: that budget, and what's left in it once the run's price is reserved. null otherwise. */
   budget: BudgetLeft | null;
 }
-/** A budget you approved, and what's left in it, counting runs reserved and not yet charged. */
-export interface BudgetLeft { budget: string; left_usd: number }
 /** What a standing rule is judged on: cases decided, and how many of them later broke. */
 export interface Tally { cases: number; broke: number }
 /** A standing rule's judgment. Rates are fractions: one-sided 95% Clopper-Pearson bounds, yours at its upper bound. */
@@ -97,100 +93,10 @@ export interface Judgment {
   /** When it can't decide, the fewest more cases with no breakage that would let it widen; null otherwise. */
   more: number | null;
 }
-/** A standing rule's state: active can widen, frozen keeps deciding at its scope but can't widen, revoked answers nothing. */
-export type RuleState = 'active' | 'frozen' | 'revoked';
-/** The change a push or a merge carries: its kind (fix, feature, …), its size in changed lines, and the paths it touches, relative to the repo root. */
-export interface Change { kind: string; lines: number; paths: string[] }
-/** An authority ask's subject: the effect class (push, merge, …), its target, and the change it carries. */
-export interface EffectSubject { effect: string; target: { kind: string; ref: string; owner: string }; change: Change | null }
-/** A taste call's subject: the screen or journey step, and the element's stable name. */
-export interface TasteSubject { screen: string; element: string }
-/** A choice's or a definition's subject: the requirement or decision point it is pinned to. */
-export interface PointSubject { point: string }
-export type Subject = EffectSubject | TasteSubject | PointSubject;
-/**
- * A resolver's answer: the option it chooses and what covers the ask, a decision handle (`decision:<ULID>`), or null
- * for nothing; and, when decisions that cover the ask disagree, each of the others in `also`, so none is applied.
- */
-export interface ResolverAnswer {
-  answer: string; because: string | null; also?: { answer: string; because: string }[];
-  /**
-   * For a paid run's request, the budget the resolver named to the ledger (#86) and what's left in it: once the
-   * ledger applied the answer, the agent is told; when it refused, the card names it.
-   */
-  budget?: BudgetLeft;
-}
-/** A resolver's read of an ask: the card less what it says it saves and its receipt, which a resolver never sees. */
-export type ResolverAsk = Omit<Card, 'saves' | 'receipt'> & { session: string; key: string; repo: string | null; subject: Subject | null };
-export type Resolver = (ask: ResolverAsk) => ResolverAnswer | undefined | Promise<ResolverAnswer | undefined>;
-/** One refusal the core made of a resolver's answer. */
-export interface Refusal { ask: string; resolver: string; decision: string | null; reason: string }
-/**
- * The planted wrong cores the criteria name; tests only. decision-exists-only applies any answer naming a decision
- * that exists. #1098's: a target's origin from the agent's messages, every target of a step at its first one's
- * origin, a decision covering whatever its targets' origins, every remote read as the repo's, and a card with a
- * target only the agent read saving your answer as wide as any other.
- */
-export type AsksPlant = 'decision-exists-only'
-  | 'origin-from-agent-message' | 'first-recipient-origin' | 'rule-by-recipient-kind' | 'push-target-as-repo' | 'wider-scope-offered';
 /** The scopes a decision is saved at: this session, its repo, or everywhere. */
 export type DecisionScope = 'session' | 'repo' | 'all';
-
-/** What the question card shows for one ask. */
-export interface Card {
-  ask: string;
-  kind: AskKind;
-  options: { id: string; label: string; decision: Decision }[];
-  plan: { hash: string; steps: PlanStep[] } | null;
-  words: string[];
-  changed: { from: string; to: string; files: string[]; diff: string } | null;
-  folded: string[];
-  undo: boolean;
-  /** A task with a cost you pay: its price in USD. null on every other ask. */
-  cost_usd: number | null;
-  /** The nearest saved decision, suggested and never applied, when none covers the ask. null otherwise. */
-  suggested: { decision: string; answer: string; scope: string } | null;
-  /** When resolvers' answers that cover the ask disagree: each answer, with the resolver and the decision it named. [] otherwise. */
-  conflict: { resolver: string; decision: string; answer: string }[];
-  /** The files in a push's or merge's change that need you whatever a decision says: CI workflow files and git hook scripts. [] otherwise. */
-  needs_person: string[];
-  /** On a paid run's request whose named budget the core refused: that budget, and what's left in it, which the run's price doesn't fit. null otherwise. */
-  budget: BudgetLeft | null;
-  /** On a task whose check ran and still fails: the check, what's missing (the verdict's reasons, or the thread check's), and the thread link on a chat-app task. null otherwise. */
-  missing: Missing | null;
-  /**
-   * What the card says before it arms about an answer that will be saved as a decision: the decision's scope in words,
-   * and how many other open asks it will also answer. Both are fixed when the card is first presented (read through
-   * `card` or `needsYou`) and never change while it shows. null when no decision would be saved (#327).
-   */
-  saves: { scope: string; also: number } | null;
-  /** The answered card's one-line receipt: your answer, and every other ask it closed, those decided for you included. null while open. */
-  receipt: { answer: string; also: string[] } | null;
-  /**
-   * Every target of every step of the plan, in step order, with where it came from, placed by the core from the
-   * record (#1098). [] for an ask whose plan names none.
-   */
-  targets: CardTarget[];
-}
-/** What a task's check still finds missing (#85). */
-export interface Missing { check: string; reasons: string[]; link: string | null }
 /** One message in a thread of your chat app, as the read-only connector hands it over. */
 export interface ThreadMessage { from: string; text: string; at: number }
-
-/** Every refusal the core makes, naming what it refuses. */
-export class AskRefused extends Error {
-  readonly field?: string;
-  readonly option?: string;
-  readonly source?: string;
-  readonly ask?: string;
-  readonly outcome?: string;
-  readonly closed_at?: number;
-  constructor(message: string, named: { field?: string; option?: string; source?: string; ask?: string; outcome?: string; closed_at?: number }) {
-    super(message);
-    this.name = 'AskRefused';
-    Object.assign(this, named);
-  }
-}
 
 export interface AsksOptions {
   record: RecordStore;
@@ -217,8 +123,6 @@ export interface AsksOptions {
    */
   errorTurnHook?: (agent: string) => boolean;
 }
-/** An ask's place in its life (ask.machine@1's states), as the inbox shows it. */
-export type InboxStatus = 'queued' | 'shown' | 'later' | 'folded' | 'held' | 'closed';
 /** One row of the inbox projection that `deep inbox` and the app read. */
 export interface InboxRow {
   ask: string;
@@ -271,6 +175,8 @@ export interface Asks {
   approveBatch(connection: Connection, batch: string, input: { token: string; switches: { ask: string; step: number; on: boolean }[] }): Promise<void>;
   /** Later, on the trusted path: hides the ask until `until`, never past its deadline. */
   later(connection: Connection, ask: string, until: number): Promise<void>;
+  /** Later until `before` ms ahead of the ask's deadline (#1462). */
+  laterBefore(connection: Connection, ask: string, before: number): Promise<void>;
   /** Undo, on the trusted path: a defaulted ask opens again, waiting as long as it first did. */
   undo(connection: Connection, ask: string): Promise<void>;
   /** Every ask in the record, open or closed, with its status, owner and age. */
@@ -425,14 +331,6 @@ function yamlScalar(text: string, unread: () => Error, nested = false): JsonValu
   return text.replace(/^(["'])(.*)\1$/, '$2');
 }
 
-const UNITS: Readonly<Record<string, number>> = { m: 60_000, h: 3_600_000, d: 86_400_000 };
-/** A duration as the settings write it: a whole number and m, h or d. */
-export const duration = (value: JsonValue | undefined): number | undefined => {
-  const m = typeof value === 'string' ? /^(\d+)([mhd])$/.exec(value) : null;
-  return m ? Number(m[1]) * UNITS[m[2]!]! : undefined;
-};
-const DAY = UNITS.d!;
-
 let sources: AskSource[] | undefined;
 /** The ask.sources@1 table, as data beside the package. */
 export const askSources = (): AskSource[] =>
@@ -442,15 +340,8 @@ export const askSources = (): AskSource[] =>
 const FOLD_AT = 5;
 /** The fold's option that answers each of the session's open asks with its recommended option. */
 const TOGETHER = 'together';
-/** The fold's option that leaves the asks it holds to their defaults. */
-const FOLD_DEFAULTS = 'defaults';
-const FOLD_SOURCE = 'asks.fold';
 /** Where the core asks again for a step a run would take outside the plan your yes approved (#69). */
 const OUTSIDE_SOURCE = 'effect.outside_plan';
-/** Where the core drafts a request for the owner of a block that isn't yours. */
-const REQUEST_SOURCE = 'request.draft';
-/** Where the core raises the task for a stop's block (#85): one per block, shared by every session it stopped. */
-const BLOCK_SOURCE = 'stop.block';
 /** How old a stop may be, by deep-hook's stamp, when the core sees it, for an automatic continue (design: 10 minutes). */
 const CONTINUE_WINDOW = 10 * 60_000;
 /** The causes that pass by themselves when the service owns the block: a dropped connection, an overloaded service. */
@@ -458,8 +349,6 @@ const TRANSIENT = new Set(['timed_out', 'rate_limited']);
 /** The ask.moot reasons ask.moot@2 added. */
 const MOOT_V2 = new Set(['window_reset', 'thread_replied', 'network_reached']);
 /** The trusted path: the question card and `deep inbox answer`. Every other writer is an agent's or the core's. */
-/** A session or project ID as a scope names it: letters and digits only, as the hub's handles hold them. */
-const letters = (id: string): string => id.replace(/[^0-9A-Za-z]/g, '');
 const TRUSTED: Readonly<Record<string, 'card' | 'inbox'>> = { app: 'card', cli: 'inbox' };
 /** The kinds a channel's account link may answer (#65): "I did it", a taste call and a choice, each that ask alone. */
 const ANSWER_ALONE = new Set(['unblock', 'taste', 'choice']);
@@ -477,90 +366,12 @@ const AWAY = 10_000;
 /** How many ended sessions' closed asks stay in memory; the record keeps them all. */
 const ENDED_KEPT = 64;
 
-type Obj = { [key: string]: JsonValue };
-type Option = { id: string; label: string; decision: Decision };
-const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
-const bare = (handle: string): string => handle.replace(/^ask:/, '');
 const git = promisify(execFile);
-
-interface Ask {
-  id: string;
-  handle: string;
-  data: Obj;
-  options: Option[];
-  session: string;
-  /** Who it was raised for: what the core's own events about it carry. */
-  who: { actor: string; scope: string };
-  thread: string;
-  pos: number;
-  fold: boolean;
-  /** The exception that holds it: the one open in its thread when it was raised. */
-  folded?: string;
-  /** A block someone else owns: it never reaches your inbox, and the core drafts them a request in its place. */
-  theirs: boolean;
-  /** On a drafted request: who it's for and the block it asks them to clear. */
-  request?: { to: string; block: string };
-  plan?: { hash: string; steps: PlanStep[] };
-  /** Its plan's targets, placed when it was raised (#1098). */
-  targets?: CardTarget[];
-  closed?: { outcome: string; at: number; answer?: string; decision?: string };
-  /** Resolvers' answers that covered it and disagreed, when they were last asked. */
-  conflict: Card['conflict'];
-  /** The budget a resolver named for it that the core refused, when it was last asked. */
-  budget?: BudgetLeft;
-  /** Your answer: the plan it bound, its click, its decision, and the steps of the plan it approved (null: all of them). */
-  approval?: { hash: string | null; token: string | null; decision: string; steps: number[] | null };
-  words: string[];
-  /** What its card said it saves, fixed when the card was first presented (#327). */
-  saves?: Card['saves'];
-  /** The other asks your answer closed: riders answered with it and asks the decision it saved then decided (#327). */
-  receiptAlso: string[];
-  /** For a provisional choice: the files its session edited while it went on with the recommended option. */
-  decided: Set<string>;
-  /** What the log calls for and the core hasn't appended yet. */
-  pending: { superseded?: string; moot?: Obj; typed?: string; dropped?: boolean };
-  created: number;
-  /** How long it waits, as raised: its deadline then, less when it was raised. */
-  wait: number;
-  /** Its deadline as no time the hub didn't run moved it: what it shows at once by (#908). */
-  due: number;
-  /** Shown in Needs you, by a batch or at once. */
-  shown: boolean;
-  /** When it first showed. */
-  firstShown?: number;
-  /** Hidden by Later until then. */
-  later?: number;
-  /** Raised by a turn that hadn't read a message you typed: it waits until the agent has it, unless due first. */
-  unread: boolean;
-  /** An exception the hub raised, not the agent's question: what you type to the agent isn't its answer, and shows beside it. */
-  hubs: boolean;
-  /** Read since it was held: it stands only if the agent raises it again before its next stop (#84). */
-  recheck?: boolean;
-  /** Since when it waits for a batch: raised, or read by the agent when raised held for your message. */
-  since: number;
-  /** What its check still finds missing, when it ran and failed, or the thread it watches has no right reply yet. */
-  missing?: Missing;
-  /** A stop's task (#85): the block's signature, and the stop it covers in each session it unblocks. */
-  block?: { signature: string; stops: Map<string, string> };
-}
 
 /** One stop of a session's own turn, as agent.stop@4 and @5 record it (#85): the structure the core raises a task or a continue from. */
 interface Stop { id: string; session: string; ts: number; pos: number; cause: string; owner: string; signature: string; resets: number | null; finished: boolean; who: Ask['who'] }
 /** An automatic continue the core recorded: the stop it continued from, why, and when. */
 interface Continued { stop: string; because: string; ts: number }
-
-/** Batches every `every` ms since the epoch, showing at most `cap` asks a UTC day. */
-interface Batches { every: number; cap: number }
-
-/**
- * A decision you saved: what it answers (its ask's key), where (its scope), with which option, and whether it still
- * holds; the kind and subject of the ask it was saved from, the size bound of that ask's change, and the scopes you
- * overruled it at.
- */
-interface HeldDecision {
-  handle: string; key: string; scope: string; answer: string; ask: string; state: RuleState;
-  kind: string; subject: Obj | null; bound: number | null; overruled: Set<string>;
-}
 
 const CLOSING: Readonly<Record<string, string>> = {
   'ask.answered': 'answered', 'ask.defaulted': 'defaulted', 'ask.escalated': 'escalated', 'ask.cancelled': 'cancelled',
@@ -610,10 +421,6 @@ class AsksCore implements Asks {
   private readonly running = new Set<string>();
   /** Sessions whose unread message you typed while a turn ran: a deep_ask of that turn hasn't read it (#84). */
   private readonly midTurn = new Set<string>();
-  /** The asks each batch showed, by its name. */
-  private readonly shownIn = new Map<string, string[]>();
-  /** How many asks batches showed each UTC day, by day number. */
-  private readonly batched = new Map<number, number>();
   /** Settings read in this call, by worktree: each call reads the files once. */
   private readonly read = new Map<string, Obj>();
   /** Each block someone else owns, by handle, and the request drafted for it. */
@@ -625,14 +432,39 @@ class AsksCore implements Asks {
   private readonly byKey = new Map<string, HeldDecision[]>();
   /** The decisions a near match is looked for among, by what must match for one (`nearOf`). */
   private readonly byNear = new Map<string, HeldDecision[]>();
-  /** The resolvers registered, in order, by name. */
-  private readonly resolvers = new Map<string, Resolver>();
-  /** The refusals made of resolvers' answers, by ask handle. */
-  private readonly refused = new Map<string, Refusal[]>();
-  /** Each ask shown in a batch of several, and the batch's asks in order: what an approval's `steps` index (#327). */
-  private readonly batchOf = new Map<string, string[]>();
+  private readonly keys: DecisionKeys;
+  private readonly gate: ResolverGate;
+  private readonly showing: Showing;
 
-  constructor(private readonly options: AsksOptions) {}
+  constructor(private readonly options: AsksOptions) {
+    this.keys = new DecisionKeys({
+      session: (session) => this.sessions.get(session), byKey: (key) => this.byKey.get(key) ?? [],
+      byNear: (key) => this.byNear.get(key) ?? [], get plant() { return options.plant; },
+    });
+    this.gate = new ResolverGate({
+      get plant() { return options.plant; }, decision: (handle) => this.decisions.get(handle),
+      uncovered: (decision, ask) => this.keys.uncovered(decision, ask) ?? this.keys.unplacedWhy(ask),
+      apply: async (ask, decision) => {
+        const now = this.options.now();
+        await this.options.record.append(asCore({ ...CORE, ...ask.who, session: ask.session }), { v: 1, id: ulid(now), kind: 'decision.applied', subject: ask.handle, ts: now, data: { decision, ask: ask.handle } });
+        await this.sync();
+      },
+      hand: (ask, option, decision, budget) => this.hand(ask, option.id, null, false, option.decision, decision, null, budget ?? null),
+    });
+    this.showing = new Showing({
+      ask: (handle) => this.asks.get(handle), open: () => this.open(), openIn: (thread) => this.openIn(thread),
+      now: () => this.options.now(), settings: () => this.settingsFor(undefined),
+      append: async (batch, groups, now) => {
+        for (const group of groups) {
+          await this.options.record.append({ ...CORE, ...group[0]!.who }, {
+            v: 1, id: ulid(now), kind: 'ask.batched', ts: now,
+            data: { batch, asks: group.map((a) => ({ ask: a.handle, plan_hash: a.plan?.hash ?? null })) },
+          });
+        }
+        await this.sync();
+      },
+    });
+  }
 
   /** One call at a time: each reads the log, then appends from what it read. */
   private exclusive<T>(body: () => Promise<T>): Promise<T> {
@@ -798,7 +630,7 @@ class AsksCore implements Asks {
       const decision: Decision = chosen?.decision ?? 'none';
       // Approving part of a batch runs only those (#327): `steps` names, by index into the batch this ask showed in,
       // the asks whose plans run; each named one takes its own allow option, bound to its own plan. The rest stay open.
-      const batch = steps === undefined ? [] : this.batchOf.get(ask.handle) ?? [];
+      const batch = steps === undefined ? [] : this.showing.members(ask.handle);
       if (steps !== undefined) {
         if (decision !== 'allow') throw new AskRefused('steps go with an approval', { field: 'steps' });
         if (!batch.length) throw new AskRefused(`${ask.handle} showed in no batch, so it has no steps`, { field: 'steps', ask: ask.handle });
@@ -807,7 +639,7 @@ class AsksCore implements Asks {
         if (out !== undefined) throw new AskRefused(`the batch has ${batch.length} steps, not a step ${out}`, { field: 'steps' });
         if (!indices.some((i) => batch[i] === ask.handle)) throw new AskRefused(`${ask.handle} isn't among the steps it approves`, { field: 'steps', ask: ask.handle });
       }
-      // Each member runs the plan it shows, the first the core proposed for it (the card shows that one too).
+      // Each member runs the plan it shows, the newest the core proposed for it (the card shows that one too).
       const others = steps === undefined ? [] : [...new Set(steps as number[])].sort((a, b) => a - b).map((i) => batch[i]!).filter((h) => h !== ask.handle).flatMap((h) => {
         const member = this.asks.get(bare(h));
         const allow = member?.options.find((o) => o.decision === 'allow');
@@ -951,6 +783,14 @@ class AsksCore implements Asks {
     });
   }
 
+  /** Later until `before` ms ahead of the ask's deadline, the earliest it could hide (#1462). */
+  async laterBefore(connection: Connection, handle: string, before: number): Promise<void> {
+    await this.sync();
+    const ask = this.asks.get(bare(handle));
+    if (!ask) throw new AskRefused(`${handle} is no ask`, { ask: handle });
+    return this.later(connection, handle, Math.max(0, this.dueBy(ask) - before));
+  }
+
   later(connection: Connection, handle: string, until: number): Promise<void> {
     return this.exclusive(async () => {
       await this.sync();
@@ -1091,17 +931,10 @@ class AsksCore implements Asks {
     });
   }
 
-  /** The open authority asks with a plan that a batch showed, each step with its switch as it starts. */
-  private batchSteps(batch: string): BatchCard['steps'] {
-    const asks = (this.shownIn.get(batch) ?? []).map((h) => this.asks.get(bare(h))).filter((a): a is Ask => !!a && !a.closed && a.data.kind === 'authority' && !!a.plan);
-    return asks.flatMap((a) => a.plan!.steps.map((s, step) => ({ ask: a.handle, step, does: s.does, undo: String(s.undo), on: s.undo !== CANT_UNDO })));
-  }
+  private batchSteps(batch: string): BatchCard['steps'] { return this.showing.batchSteps(batch); }
 
   registerResolver(name: string, resolver: Resolver): () => void {
-    if (typeof name !== 'string' || !name) throw new AskRefused('a resolver registers under a name', { field: 'name' });
-    if (typeof resolver !== 'function') throw new AskRefused(`${name}'s resolver is a function`, { field: 'resolver' });
-    this.resolvers.set(name, resolver);
-    return () => { if (this.resolvers.get(name) === resolver) this.resolvers.delete(name); };
+    return this.gate.registerResolver(name, resolver);
   }
 
   async saveDecision(connection: Connection, handle: string, scope: DecisionScope): Promise<string> {
@@ -1208,21 +1041,11 @@ class AsksCore implements Asks {
   refusals(handle: string): Promise<Refusal[]> {
     return this.exclusive(async () => {
       await this.sync();
-      return (this.refused.get(handle.startsWith('ask:') ? handle : `ask:${handle}`) ?? []).map((r) => ({ ...r }));
+      return this.gate.refusals(handle);
     });
   }
 
-  /**
-   * The repo a session started in, as a scope names it: the project its session.start was recorded under, in letters
-   * and digits, as the hub writes it when it saves your inbox answer (`repo:<project>`); with no project, an ID derived
-   * from its worktree. Null when the record knows neither.
-   */
-  private repoOf(session: string | undefined): string | null {
-    const started = session ? this.sessions.get(session) : undefined;
-    if (!started) return null;
-    const project = started.project === null ? '' : letters(started.project);
-    return project || sha256Hex(new TextEncoder().encode(started.worktree));
-  }
+  private repoOf(session: string | undefined): string | null { return this.keys.repoOf(session); }
 
   /**
    * Every resolver, outside the lock, then their answers under it. An answer counts only when it names a decision
@@ -1232,7 +1055,7 @@ class AsksCore implements Asks {
    */
   private async consult(handle: string): Promise<void> {
     // With no resolver there is nothing to ask, and no card (its diff of the worktree) to build.
-    if (!this.resolvers.size) return;
+    if (!this.gate.size) return;
     const asked = await this.exclusive(async (): Promise<ResolverAsk | null> => {
       await this.sync();
       const ask = this.asks.get(bare(handle));
@@ -1241,70 +1064,13 @@ class AsksCore implements Asks {
       return { ...(await this.cardOf(ask)), session: ask.session, key: String(ask.data.key), repo: this.repoOf(ask.session), subject };
     });
     if (!asked) return;
-    const refuse = (resolver: string, decision: string | null, reason: string): void => {
-      this.refused.set(handle, [...(this.refused.get(handle) ?? []), { ask: handle, resolver, decision, reason }]);
-    };
-    const answers: { resolver: string; answer: string; decision: string; budget?: BudgetLeft }[] = [];
-    for (const [name, resolver] of [...this.resolvers]) {
-      let reply: unknown;
-      try {
-        reply = await resolver(structuredClone(asked));
-      } catch (error) {
-        refuse(name, null, `${name} failed on ${handle}: ${(error as Error)?.message ?? String(error)}`);
-        continue;
-      }
-      // Nothing, from a resolver in the hub (undefined) or over the wire (null): the ask goes on.
-      if (reply === undefined || reply === null) continue;
-      for (const answer of [reply, ...(isObj(reply) && Array.isArray(reply.also) ? reply.also : [])]) {
-        if (!isObj(answer) || typeof answer.answer !== 'string') { refuse(name, null, `${name} answered ${handle} with no option`); continue; }
-        if (typeof answer.because !== 'string') { refuse(name, null, `${name} answered ${handle} without naming a decision that covers it`); continue; }
-        const budget = isObj(answer.budget) && typeof answer.budget.budget === 'string' && typeof answer.budget.left_usd === 'number'
-          ? { budget: answer.budget.budget, left_usd: answer.budget.left_usd } : undefined;
-        answers.push({ resolver: name, answer: answer.answer, decision: answer.because, ...(budget ? { budget } : {}) });
-      }
-    }
+    const answers = await this.gate.collect(handle, asked);
     if (!answers.length) return;
     await this.exclusive(async () => {
       await this.sync();
       const ask = this.asks.get(bare(handle));
       if (!ask) return;
-      // A paid run's request answered by naming a budget is applied by the ledger, the core's check of what's left
-      // (#86), never here: once its decision.applied closed the ask, the agent hears it, naming the budget.
-      const paid = answers.find((a) => a.budget && ask.closed?.outcome === 'decided_for_you' && ask.closed.decision === a.decision);
-      if (paid) {
-        const option = ask.options.find((o) => o.id === paid.answer && o.decision === 'allow');
-        if (option) {
-          ask.closed!.answer = option.id;
-          this.hand(ask, option.id, null, false, option.decision, paid.decision, null, paid.budget!);
-        }
-        return;
-      }
-      if (ask.closed) return;
-      // A budget the ledger refused is named on the card, with what's left in it; it answers nothing.
-      delete ask.budget;
-      for (const a of answers.filter((x) => x.budget)) {
-        ask.budget = a.budget!;
-        refuse(a.resolver, a.decision, `${a.resolver} named budget ${a.budget!.budget}, which the core refused: $${a.budget!.left_usd} is left in it`);
-      }
-      const counted = answers.filter((a) => !a.budget).filter(({ resolver, answer, decision: named }) => {
-        const decision = this.decisions.get(named);
-        if (!decision) { refuse(resolver, named, `${resolver} named ${named}, which the record holds no decision for`); return false; }
-        const why = this.options.plant === 'decision-exists-only' ? null : this.uncovered(decision, ask) ?? this.unplacedWhy(ask);
-        if (why !== null) { refuse(resolver, named, `${resolver} named ${named}, which ${why}`); return false; }
-        if (!ask.options.some((o) => o.id === answer) || answer !== decision.answer) { refuse(resolver, named, `${resolver} answered ${answer}, not what ${named} decided (${decision.answer})`); return false; }
-        return true;
-      });
-      // Answers that disagree answer nothing: the card shows each decision once, by the last resolver that named it.
-      ask.conflict = new Set(counted.map((a) => a.answer)).size > 1
-        ? [...new Map(counted.map((a) => [a.decision, { resolver: a.resolver, decision: a.decision, answer: a.answer }])).values()]
-        : [];
-      const [first] = counted;
-      if (!first || ask.conflict.length) return;
-      const option = ask.options.find((o) => o.id === first.answer)!;
-      const now = this.options.now();
-      await this.options.record.append(asCore({ ...CORE, ...ask.who, session: ask.session }), { v: 1, id: ulid(now), kind: 'decision.applied', subject: handle, ts: now, data: { decision: first.decision, ask: handle } });
-      await this.sync();
-      this.hand(ask, option.id, null, false, option.decision, first.decision);
+      await this.gate.accept(handle, ask, answers);
     });
   }
 
@@ -1378,17 +1144,6 @@ class AsksCore implements Asks {
     return settings;
   }
 
-  /**
-   * Your batch schedule; none declared, every ask shows when it's raised, a held one included, since with no batch
-   * to wait for the only other time to show it is its deadline. Batches are your visits, one schedule across every
-   * repo, so a repo's done.yaml doesn't change them.
-   */
-  private batches(): Batches | undefined {
-    const batch = this.settingsFor(undefined).batch;
-    const every = isObj(batch) ? duration(batch.every) : undefined;
-    return every && isObj(batch) && typeof batch.cap === 'number' ? { every, cap: batch.cap } : undefined;
-  }
-
   /** An ask's deadline and default, from the settings for its kind, where the place that raised it left them out. */
   private fill(session: string | undefined, raised: unknown, now: number): unknown {
     if (!isObj(raised) || (raised.deadline !== undefined && raised.default !== undefined)) return raised;
@@ -1413,106 +1168,12 @@ class AsksCore implements Asks {
     return data;
   }
 
-  private status(ask: Ask): InboxStatus {
-    if (ask.closed) return 'closed';
-    if (this.inFold(ask)) return 'folded';
-    if (ask.later !== undefined) return 'later';
-    if (ask.shown) return 'shown';
-    return ask.unread ? 'held' : 'queued';
-  }
-
-  /**
-   * Whether an ask shows only inside the exception that holds it: while that's open, or once you left its asks to
-   * their defaults. Otherwise, as when "answer them together" left an approval or an unblock, it gets its own card.
-   */
-  private inFold(ask: Ask): boolean {
-    const holder = ask.folded === undefined ? undefined : this.asks.get(bare(ask.folded));
-    return holder !== undefined && (!holder.closed || holder.closed.answer === FOLD_DEFAULTS);
-  }
-
-  /** Whether an ask is in sight now: shown, and not put off with Later. */
-  private visible(ask: Ask): boolean {
-    return ask.shown && ask.later === undefined;
-  }
-
-  /** In sight on its own card, or inside an exception that is: what typed text can answer, and what can take its default. */
-  private inSight(ask: Ask): boolean {
-    return this.visible(ask) && (!this.inFold(ask) || this.visible(this.asks.get(bare(ask.folded!))!));
-  }
-
-  /** Shows these asks now, outside any batch. */
-  private async showNow(asks: Ask[]): Promise<boolean> {
-    if (!asks.length) return false;
-    const now = this.options.now();
-    await this.appendBatch(`now:${new Date(now).toISOString()}`, asks, now);
-    return true;
-  }
-
-  /** One ask.batched for each actor and scope among the asks, under that identity. */
-  private async appendBatch(batch: string, asks: Ask[], now: number): Promise<void> {
-    const groups = new Map<string, Ask[]>();
-    for (const a of asks) {
-      const key = JSON.stringify([a.who.actor, a.who.scope]);
-      groups.set(key, [...(groups.get(key) ?? []), a]);
-    }
-    for (const group of groups.values()) {
-      await this.options.record.append({ ...CORE, ...group[0]!.who }, {
-        v: 1, id: ulid(now), kind: 'ask.batched', ts: now,
-        data: { batch, asks: group.map((a) => ({ ask: a.handle, plan_hash: a.plan?.hash ?? null })) },
-      });
-    }
-    await this.sync();
-  }
-
-  /**
-   * The latest batch, up to the day's cap, oldest first; then, cap or not, each ask whose deadline (for the
-   * exception, the earliest among the asks it holds) would pass before the next batch, so none reaches its
-   * deadline unseen. Run when an ask is filed, on every tick, and when the core starts.
-   */
-  private async show(): Promise<boolean> {
-    // An ask you put off with Later waits for its Later, not for a batch.
-    // A block someone else owns never shows: its drafted request does.
-    // The same question from another thread shows through the older one's card, and is answered with it.
-    // A session's task that joins the shared one is superseded before it could show: the shared task is the card.
-    const waiting = () => this.open().filter((a) => !a.shown && !this.inFold(a) && a.later === undefined && !a.theirs && !this.rides(a) && a.pending.superseded === undefined);
-    // A Later that ends shows its ask again, recorded like any showing; so does one that an ask joining the
-    // exception since would outlast.
-    const now = this.options.now();
-    let acted = await this.showNow(this.open().filter((a) => a.later !== undefined && !a.theirs && (a.later <= now || this.dueBy(a) <= a.later)));
-    const batches = this.batches();
-    // With no batches declared, nothing waits for one.
-    const last = batches ? Math.floor(now / batches.every) * batches.every : now;
-    const next = batches ? last + batches.every : Infinity;
-    // An ask held by an exception that has shown shows there, recorded like any other showing; one from a turn that
-    // hasn't read your message waits, as on its own card, for the agent's next step or a deadline before the next batch.
-    const joined = this.open().filter((a) => !a.shown && this.inFold(a) && this.visible(this.asks.get(bare(a.folded!))!));
-    if (await this.showNow(joined.filter((a) => !a.unread || this.showBy(a) <= next))) acted = true;
-    // A question held for your message stays held until the agent's stop says whether it still stands (#84).
-    if (!batches) return (await this.showNow(waiting().filter((x) => !(x.unread || x.recheck) || this.showBy(x) <= now))) || acted;
-    // The latest batch shows every ask waiting for it since before its time, as the log stands: one held for your
-    // message and read after it waits for the next, and a showing that failed to append is appended on the next
-    // call, without showing again what the log already shows.
-    const room = batches.cap - (this.batched.get(Math.floor(last / DAY)) ?? 0);
-    const due = waiting().filter((a) => a.since < last && !a.unread).slice(0, Math.max(0, room));
-    if (due.length) {
-      await this.appendBatch(`batch:${new Date(last).toISOString()}`, due, now);
-      acted = true;
-    }
-    // A deadline at the next batch's own time counts as passing first: an ask first shown at its deadline would
-    // default only on a later call, after its deadline, so it shows now instead.
-    if (await this.showNow(waiting().filter((a) => this.showBy(a) <= next))) acted = true;
-    return acted;
-  }
-
-  /** When an ask must have shown by: its deadline, or for the exception the earliest among the asks it holds. */
-  private dueBy(ask: Ask): number {
-    const held = ask.fold ? this.openIn(ask.thread).filter((f) => f.folded === ask.handle).map((f) => f.data.deadline as number) : [];
-    return Math.min(ask.data.deadline as number, ...held);
-  }
-  /** When an ask shows at once by: as dueBy, but time the hub didn't run moves no showing later (#908). */
-  private showBy(ask: Ask): number {
-    return Math.min(this.dueBy(ask), ask.due);
-  }
+  private status(ask: Ask): InboxStatus { return this.showing.status(ask); }
+  private inFold(ask: Ask): boolean { return this.showing.inFold(ask); }
+  private inSight(ask: Ask): boolean { return this.showing.inSight(ask); }
+  private showNow(asks: Ask[]): Promise<boolean> { return this.showing.showNow(asks); }
+  private show(): Promise<boolean> { return this.showing.show(); }
+  private dueBy(ask: Ask): number { return this.showing.dueBy(ask); }
 
   /** The open asks in log order: asks enter the map only from apply, which reads the log in order. */
   private open(): Ask[] {
@@ -1531,26 +1192,8 @@ class AsksCore implements Asks {
     this.options.deliver({ ask: ask.handle, session: ask.session, option, decision: decision ?? chosen?.decision ?? 'none', words, image, provisional, undoes, because, budget });
   }
 
-  /** Whether an open ask shows through an older open one from another thread: the same question, by key, pinned to the same thing. */
-  private rides(ask: Ask): Ask | undefined {
-    if (ask.closed || !JOINED_KINDS.has(String(ask.data.kind)) || !isObj(ask.data.subject)) return undefined;
-    const pin = sha256Hex(canonicalize(ask.data.pinned_to!));
-    return this.open().find((b) => b.pos < ask.pos && b.thread !== ask.thread && b.data.kind === ask.data.kind && b.data.key === ask.data.key
-      && !b.theirs && !b.fold && b.who.actor === ask.who.actor && b.who.scope === ask.who.scope && sha256Hex(canonicalize(b.data.pinned_to!)) === pin);
-  }
-
-  /**
-   * The targets of an ask's plan no decision covers and no wider scope is offered for: those only the agent read, or
-   * that nothing names (#1098). The planted wrong cores ignore them.
-   */
-  private unplaced(ask: Ask): CardTarget[] {
-    if (this.options.plant === 'rule-by-recipient-kind' || this.options.plant === 'wider-scope-offered') return [];
-    return (ask.targets ?? []).filter((t) => UNCOVERED.has(t.origin));
-  }
-  private unplacedWhy(ask: Ask): string | null {
-    const t = this.unplaced(ask)[0];
-    return t ? `can't cover ${ask.handle}'s ${t.kind} ${t.ref}, which nothing you typed or approved names (${t.origin}${t.first ? `, first in ${t.first}` : ''})` : null;
-  }
+  private rides(ask: Ask): Ask | undefined { return this.showing.rides(ask); }
+  private unplaced(ask: Ask): CardTarget[] { return this.keys.unplaced(ask); }
   /**
    * Places each target of a plan from the record of the ask's session (#1098): the prompts a person typed in it, the
    * decisions covering the ask and the plans they were saved from, the remotes its worktree configures, and its
@@ -1571,7 +1214,8 @@ class AsksCore implements Asks {
     for (const d of this.covering(ask)) {
       let planned = this.asks.get(bare(d.ask))?.plan?.steps;
       if (!planned) {
-        const [row] = (await record.raw(`SELECT data FROM events WHERE kind = 'plan.proposed' AND writer = 'core' AND json_extract(data, '$.ask') = ? ORDER BY log_pos LIMIT 1`, [d.ask])) as { data: string }[];
+        // The plan its answer bound: the newest the core proposed before it (#1580).
+        const [row] = (await record.raw(`SELECT data FROM events WHERE kind = 'plan.proposed' AND writer = 'core' AND json_extract(data, '$.ask') = ? AND log_pos < COALESCE((SELECT MIN(log_pos) FROM events WHERE kind = 'ask.answered' AND subject = ?), 9007199254740991) ORDER BY log_pos DESC LIMIT 1`, [d.ask, d.ask])) as { data: string }[];
         planned = row ? (JSON.parse(row.data) as { steps: PlanStep[] }).steps : [];
       }
       decisions.push({ handle: d.handle, targets: targetsOf(planned) });
@@ -1580,71 +1224,10 @@ class AsksCore implements Asks {
     return place(steps, { session: letters(session), prompts, transcript, remotes: remotesOf(this.sessions.get(session)?.worktree), decisions }, this.options.plant);
   }
 
-  /** The scope your answer to an ask is saved at: its session's project, or its session when it started in none; null with neither. */
-  private scopeOf(ask: Ask): string | null {
-    const project = letters(this.sessions.get(ask.session)?.project ?? '');
-    return project ? `repo:${project}` : ask.session ? `session:${letters(ask.session)}` : null;
-  }
-
-  /** Whether a scope covers an ask: everywhere, its session, or its session's repo. */
-  private scopeCovers(scope: string, ask: Ask): boolean {
-    if (scope === 'all') return true;
-    if (scope.startsWith('session:')) return ask.session !== '' && letters(scope.slice('session:'.length)) === letters(ask.session);
-    const repo = this.repoOf(ask.session);
-    return repo !== null && scope === `repo:${repo}`;
-  }
-
-  /**
-   * Why a decision doesn't cover an ask, or null when it does: active, of its key, at a scope covering it, not
-   * overruled there, within the size bound of the change it was saved from, and no file in the ask's change needs you.
-   */
-  private uncovered(decision: HeldDecision, ask: Ask): string | null {
-    // A frozen rule keeps deciding at its scope; only widening waits on more evidence.
-    if (decision.state === 'revoked') return 'was revoked';
-    if (decision.key !== ask.data.key) return `is a decision of another kind than ${ask.handle}'s`;
-    if (!this.scopeCovers(decision.scope, ask)) return `is saved at ${decision.scope}, which doesn't cover ${ask.handle}'s session`;
-    const over = [...decision.overruled].find((at) => this.scopeCovers(at, ask));
-    if (over) return `was overruled at ${over}`;
-    const lines = linesOf(ask.data.subject);
-    if (decision.bound !== null && lines !== null && lines > decision.bound) return `covers changes up to ${decision.bound} lines, and ${ask.handle}'s is ${lines}`;
-    const person = needsPerson(ask.data);
-    if (person.length) return `can't cover a change to ${person.join(', ')}, which needs you`;
-    return null;
-  }
-
-  /** The decisions that cover an ask. */
-  private covering(ask: Ask): HeldDecision[] {
-    return (this.byKey.get(String(ask.data.key)) ?? []).filter((d) => this.uncovered(d, ask) === null);
-  }
-
-  /**
-   * The nearest saved decision to an ask none covers, to suggest and never apply: of its key at another scope or
-   * past a bound first, else of its ask kind with the most subject fields alike (an authority ask's effect, a
-   * choice's or a definition's point, and a taste call's screen or element must match); the latest among equals.
-   */
-  private suggest(ask: Ask): Card['suggested'] {
-    if (ask.closed || !isObj(ask.data.subject) || this.covering(ask).length) return null;
-    const subject = ask.data.subject;
-    const alike = (d: HeldDecision): number => {
-      const s = d.subject;
-      if (!s || d.kind !== ask.data.kind) return -1;
-      if (ask.data.kind === 'authority') {
-        if (s.effect !== subject.effect) return -1;
-        const [a, b] = [isObj(s.target) ? s.target : {}, isObj(subject.target) ? subject.target : {}];
-        const n = Number(a.kind === b.kind) + Number(a.owner === b.owner) + Number((isObj(s.change) ? s.change.kind : null) === (isObj(subject.change) ? subject.change.kind : null));
-        return n >= 2 ? n : -1;
-      }
-      if (ask.data.kind === 'taste') return Number(s.screen === subject.screen) + Number(s.element === subject.element) || -1;
-      return s.point === subject.point ? 1 : -1;
-    };
-    let best: { d: HeldDecision; score: number } | undefined;
-    for (const d of [...(this.byKey.get(String(ask.data.key)) ?? []), ...(this.byNear.get(nearOf(String(ask.data.kind), subject)) ?? [])]) {
-      if (d.state !== 'active' || [...d.overruled].some((at) => this.scopeCovers(at, ask))) continue;
-      const score = d.key === ask.data.key ? 100 : alike(d);
-      if (score >= 0 && (!best || score >= best.score)) best = { d, score };
-    }
-    return best ? { decision: best.d.handle, answer: best.d.answer, scope: best.d.scope } : null;
-  }
+  private scopeOf(ask: Ask): string | null { return this.keys.scopeOf(ask); }
+  private scopeCovers(scope: string, ask: Ask): boolean { return this.keys.scopeCovers(scope, ask); }
+  private covering(ask: Ask): HeldDecision[] { return this.keys.covering(ask); }
+  private suggest(ask: Ask): Card['suggested'] { return this.keys.suggest(ask); }
 
   /**
    * What the card shows. `presented` is a read through the card surface (`card`, `needsYou`): the first such read
@@ -1725,14 +1308,9 @@ class AsksCore implements Asks {
       if (asks.some((a) => a.closed?.outcome === 'defaulted')) continue;
       for (const ask of asks) {
         this.asks.delete(ask.id);
-        this.refused.delete(ask.handle);
+        this.gate.forget(ask.handle);
         this.requested.delete(ask.handle);
-        this.batchOf.delete(ask.handle);
-        for (const [batch, handles] of this.shownIn) {
-          const rest = handles.filter((h) => h !== ask.handle);
-          if (rest.length) this.shownIn.set(batch, rest);
-          else this.shownIn.delete(batch);
-        }
+        this.showing.forget(ask.handle);
         without(this.threads, ask.thread, ask);
       }
       for (const held of [...this.decisions.values()].filter((h) => h.scope === `session:${letters(session)}` && !h.overruled.size)) {
@@ -1908,11 +1486,13 @@ class AsksCore implements Asks {
         return;
       }
       case 'plan.proposed': {
-        // The plan an ask shows is the first one proposed for it; your yes binds that one.
+        // The plan an ask shows is the newest the core proposed for it while it is open; your yes binds that one, and
+        // a card showing an earlier one is refused at its hash (#1580). An agent's plan.proposed binds nothing.
         const ask = this.asks.get(bare(String(d.ask)));
-        if (ask && !ask.plan && e.writer === 'core') {
+        if (ask && !ask.closed && e.writer === 'core') {
           ask.plan = { hash: String(d.hash), steps: d.steps as unknown as PlanStep[] };
           if (Array.isArray(d.targets)) ask.targets = d.targets as unknown as CardTarget[];
+          else delete ask.targets;
         }
         return;
       }
@@ -1992,28 +1572,9 @@ class AsksCore implements Asks {
         target.data = { ...target.data, deadline: d.deadline };
         if (d.because !== 'away') target.due = d.deadline;
         return;
-      case 'ask.batched': {
-        if (e.writer !== 'core' || !Array.isArray(d.asks)) return;
-        const members = d.asks.flatMap((item) => (isObj(item) && typeof item.ask === 'string' ? [item.ask] : []));
-        if (members.length > 1) for (const member of members) this.batchOf.set(member, members);
-        const shown = d.asks.flatMap((item) => {
-          const ask = isObj(item) ? this.asks.get(bare(String(item.ask))) : undefined;
-          // A showing counts only under the identity the ask was raised for.
-          return ask && (!ask.shown || ask.later !== undefined) && ask.who.actor === e.actor && ask.who.scope === e.scope ? [ask] : [];
-        });
-        if (typeof d.batch === 'string') this.shownIn.set(d.batch, [...(this.shownIn.get(d.batch) ?? []), ...shown.map((a) => a.handle)]);
-        for (const ask of shown) {
-          // Shown again, as when its Later ends: back in Needs you.
-          ask.shown = true;
-          ask.firstShown ??= e.ts;
-          delete ask.later;
-        }
-        // Only a batch counts toward the day's cap; an ask shown at once doesn't.
-        const at = typeof d.batch === 'string' && d.batch.startsWith('batch:') ? Date.parse(d.batch.slice(6)) : NaN;
-        if (Number.isNaN(at)) return;
-        this.batched.set(Math.floor(at / DAY), (this.batched.get(Math.floor(at / DAY)) ?? 0) + shown.length);
+      case 'ask.batched':
+        this.showing.apply(e, d);
         return;
-      }
       case 'ask.later':
         // The core records your Later once later() has checked it against every deadline it could hide.
         if (target && !target.closed && e.writer === 'core' && target.who.actor === e.actor && target.who.scope === e.scope && typeof d.until === 'number' && d.until < this.dueBy(target)) target.later = d.until;
@@ -2456,60 +2017,14 @@ const VERDICT_STATE: Readonly<Record<Judgment['verdict'], RuleState>> = { widen:
 /** Who judges a standing rule: resolver-decisions, or the core on its timer. */
 const JUDGES = new Set(['ext:resolver-decisions', 'core']);
 
-/** The ask kinds that name a subject, and so are keyed from it. */
 const without = <T>(table: Map<string, T[]>, key: string, item: T): void => {
   const rest = (table.get(key) ?? []).filter((x) => x !== item);
   if (rest.length) table.set(key, rest);
   else table.delete(key);
 };
-const SUBJECT_KINDS = new Set(['authority', 'taste', 'choice', 'definition']);
-/** The kinds whose same question from another thread, pinned to the same thing, shows through one card. */
-const JOINED_KINDS = new Set(['taste', 'choice', 'definition']);
-
-/**
- * An ask's key, from its subject's structured fields alone, never its words: for an authority ask the effect class,
- * the target's kind, its owner (a PR the asking thread opened is its own, whatever its number) and the kind of
- * change; for a taste call the screen and the element; for a choice or a definition the point and its option IDs.
- * The hub reads it too, to tell whether a saved decision covers a permission prompt before raising anything (#23).
- */
-export function subjectKey(data: Obj, thread: string): string {
-  const s = data.subject as Obj;
-  const target = isObj(s.target) ? s.target : {};
-  const owner = String(target.owner);
-  const fields = data.kind === 'authority'
-    ? { effect: String(s.effect), target: String(target.kind), owner: owner === `thread:${thread}` ? 'self' : owner, change: isObj(s.change) ? String(s.change.kind) : null }
-    : data.kind === 'taste' ? { screen: String(s.screen), element: String(s.element) }
-      : { point: String(s.point), options: (Array.isArray(data.options) ? data.options : []).map((o) => String(isObj(o) ? o.id : o)).sort() };
-  return sha256Hex(canonicalize({ key: 1, kind: String(data.kind), ...fields } as JsonValue));
-}
-
-/** What a near match must share: an authority ask's effect, a choice's or a definition's point; any taste call. */
-const nearOf = (kind: string, subject: Obj): string =>
-  JSON.stringify([kind, kind === 'authority' ? subject.effect : kind === 'taste' ? null : subject.point]);
-
-/** CI workflow files and git hook scripts: a push or merge touching one needs you, whatever a decision says. */
-const PERSON_PATHS = /^(\.github\/workflows\/|\.gitlab-ci\.ya?ml$|\.git\/hooks\/|\.githooks\/|\.husky\/)/;
-/** The paths in an ask's change that need a person. */
-const needsPerson = (data: Obj): string[] => {
-  const change = isObj(data.subject) && isObj(data.subject.change) ? data.subject.change : undefined;
-  return Array.isArray(change?.paths) ? change.paths.filter((p): p is string => typeof p === 'string' && PERSON_PATHS.test(p.replace(/^\.\//, ''))) : [];
-};
-/** The size of an ask's change in lines, or null when it carries none. */
-const linesOf = (subject: unknown): number | null => (isObj(subject) && isObj(subject.change) && typeof subject.change.lines === 'number' ? subject.change.lines : null);
-/** The size bound a decision saved from a change of `lines` sets: up to twice its size, and at least 50 lines. */
-const boundFor = (lines: number | null): number | null => (lines === null ? null : Math.max(2 * lines, 50));
-
-/** The fold's exception is keyed on its thread, never on a session ID that /clear or /compact rotates. */
-const foldKey = (thread: string): string => sha256Hex(new TextEncoder().encode(`${FOLD_SOURCE}:${thread}`));
-
 /** A block someone else owns: an unblock task whose owner isn't the person it was raised for. */
 const isTheirs = (data: Obj, actor: string): boolean => data.kind === 'unblock' && data.owner !== actor;
 
-/** A request is keyed on its block's subject, so a newer block on the same subject supersedes its request too. */
-const requestKey = (block: Ask): string => sha256Hex(new TextEncoder().encode(`${REQUEST_SOURCE}:${String(block.data.key)}`));
-
-/** A stop's task is keyed on its block's signature: the same block in any session is one task (#85). */
-const blockKey = (signature: string): string => sha256Hex(new TextEncoder().encode(`${BLOCK_SOURCE}:${signature}`));
 /** The thread a chat-app task's check reads, when the task names one. */
 const chatThread = (data: Obj): { link: string; expect: string } | undefined => {
   const thread = data.thread;
@@ -2548,7 +2063,7 @@ export async function openAsks(options: AsksOptions): Promise<Asks> {
     raise: core.raise.bind(core), answer: core.answer.bind(core), tick: core.tick.bind(core), away: core.away.bind(core), notifications: core.notifications.bind(core), nextBatch: core.nextBatch.bind(core), card: core.card.bind(core),
     needsYou: core.needsYou.bind(core), holds: core.holds.bind(core), authorized: core.authorized.bind(core),
     beforeStep: core.beforeStep.bind(core), batch: core.batch.bind(core), approveBatch: core.approveBatch.bind(core),
-    later: core.later.bind(core), undo: core.undo.bind(core), inbox: core.inbox.bind(core), stillFails: core.stillFails.bind(core),
+    later: core.later.bind(core), laterBefore: core.laterBefore.bind(core), undo: core.undo.bind(core), inbox: core.inbox.bind(core), stillFails: core.stillFails.bind(core),
     registerResolver: core.registerResolver.bind(core), saveDecision: core.saveDecision.bind(core), revokeDecision: core.revokeDecision.bind(core), refusals: core.refusals.bind(core),
     overrule: core.overrule.bind(core), widen: core.widen.bind(core), judged: core.judged.bind(core),
   };

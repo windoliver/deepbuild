@@ -28,6 +28,9 @@ pub fn modules() -> Vec<Module> {
     let mut out: Vec<Module> = Vec::new();
     #[cfg(feature = "test-mark")]
     out.push(deep_canvas_test_modules::registries::mark());
+    // Issue #202's test canvas module: an item kind of 0.20 ms of CPU.
+    #[cfg(feature = "test-weight")]
+    out.push(deep_canvas_test_modules::weight::module());
     #[cfg(feature = "test-column-source")]
     out.push(deep_canvas_test_modules::registries::columns());
     // Issue #412's test canvas modules.
@@ -86,6 +89,10 @@ pub fn modules() -> Vec<Module> {
     out.push(deep_canvas_test_modules::registries::rules_isolated());
     #[cfg(feature = "test-registries-load")]
     out.push(deep_canvas_test_modules::registries::load());
+    #[cfg(feature = "test-export-target")]
+    out.push(deep_canvas_test_modules::registries::export_raw());
+    #[cfg(feature = "test-export-target-self-read")]
+    out.push(deep_canvas_test_modules::registries::export_self_read());
     out
 }
 
@@ -99,4 +106,28 @@ pub fn effects_with_base_steps() -> Module {
             .extend(deep_canvas::registry::core_lists::base_steps());
     };
     m
+}
+
+/// The effects module of the planted layout `test-gpu-output-in-effects` (#485): it declares
+/// `gpu.output@1` with today's outputs, which the core then leaves to it.
+#[cfg_attr(not(feature = "test-gpu-output-in-effects"), allow(dead_code))]
+pub fn effects_declaring_outputs() -> Module {
+    let mut m = deep_canvas_effects::module::module();
+    m.register = |r| {
+        (deep_canvas_effects::module::module().register)(r);
+        let (def, entries) = deep_canvas::registry::core_lists::gpu_output_registry();
+        r.registry(def);
+        r.entries.extend(entries);
+    };
+    m
+}
+
+/// #501: the writer of a test module's `export.target@1` entry, whose delivery is the frames'
+/// BGRA8 rows, one after another, in one file (#157: the export appends each as it is drawn);
+/// `None` for a target no test module writes.
+pub(crate) fn write_export(target: &str, entry: &serde_json::Value) -> Option<serde_json::Value> {
+    if !entry["writer"].as_str()?.starts_with("test.") {
+        return None;
+    }
+    Some(serde_json::json!({"name": target, "writer": entry["writer"]}))
 }

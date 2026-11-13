@@ -5,7 +5,6 @@
 
 use deep_canvas_scene3d::scene::Shape;
 use deep_gpu::device::Device;
-use wgpu::util::DeviceExt as _;
 
 #[derive(Clone)]
 pub struct Mesh {
@@ -218,22 +217,33 @@ pub fn vertices(m: &deep_canvas_scene3d::geom::Mesh) -> Vec<f32> {
 impl Mesh {
     pub fn build(device: &Device, shape: Shape) -> Mesh {
         let (v, i) = geometry(shape);
-        Mesh::upload(device, &v, &i)
+        Mesh::upload(device, &v, &i, wgpu::BufferUsages::empty())
     }
 
     /// A builder's mesh, in its item's space (#420), with its texture coordinates and tangents
     /// (#423).
     pub fn of(device: &Device, m: &deep_canvas_scene3d::geom::Mesh) -> Mesh {
-        Mesh::upload(device, &vertices(m), &m.indices)
+        Mesh::upload(
+            device,
+            &vertices(m),
+            &m.indices,
+            wgpu::BufferUsages::empty(),
+        )
     }
 
-    fn upload(device: &Device, v: &[f32], i: &[u32]) -> Mesh {
+    /// A swaying builder's mesh (#2016), whose vertices the sway pass writes at every frame.
+    pub fn swaying(device: &Device, v: &[f32], i: &[u32]) -> Mesh {
+        Mesh::upload(device, v, i, wgpu::BufferUsages::STORAGE)
+    }
+
+    fn upload(device: &Device, v: &[f32], i: &[u32], usage: wgpu::BufferUsages) -> Mesh {
         let d = &device.device;
         Mesh {
             vertices: d.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("scene3d mesh"),
                 contents: bytemuck::cast_slice(v),
-                usage: wgpu::BufferUsages::VERTEX,
+                // A check reads back what a frame drew from (#2016).
+                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_SRC | usage,
             }),
             indices: d.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("scene3d mesh indices"),
@@ -257,7 +267,7 @@ mod tests {
                 let o = k as usize * FLOATS;
                 ([v[o], v[o + 1], v[o + 2]], [v[o + 3], v[o + 4], v[o + 5]])
             };
-            for t in i.chunks_exact(3) {
+            for t in i.as_chunks::<3>().0 {
                 let (a, n) = at(t[0]);
                 let (b, _) = at(t[1]);
                 let (c, _) = at(t[2]);

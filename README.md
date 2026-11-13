@@ -50,8 +50,8 @@ deep --help
 scripts/preflight
 ```
 
-`npm run build` compiles the TypeScript workspaces and the `crates/deep-hook`
-binary, and `npm link` puts the built `deep` command in your npm prefix's `bin`
+`npm run build` compiles the TypeScript workspaces and the Rust workspace under
+`crates/`, the `deep-hook` binary among it, and `npm link` puts the built `deep` command in your npm prefix's `bin`
 directory, which must be on `PATH`. Run `npm run build` again after each pull:
 `deep` runs the built files, not the source.
 
@@ -65,10 +65,11 @@ it. `deep setup --undo` removes all of it and keeps your record in
 
 `scripts/preflight` runs every check locally; `npm run preflight` and
 `npm run release:check` run the same entry point, and there are no GitHub
-workflows. Its lanes are `typecheck`, `lint`, `unit`, `parity quick` and
-`perf`. A failed lane reports its first error and a fix, later lanes still run,
-and `perf` is `BLOCKED` when they fail. The checks with their builds must finish
-in under five minutes.
+workflows. Its lanes are the `checks` list in `scripts/lanes.mjs`, from
+`typecheck`, `lint` and `unit` to `parity quick` and `proof`, then `perf`. A
+failed lane reports its first error and a fix, later lanes still run, and `perf`
+is `BLOCKED` when they fail. The checks with their builds must finish within the
+`preflight` budget in `benchmarks/budgets.json`, 15 minutes today.
 
 `lint` also runs `scripts/repo-rules.mjs`, which fails on GitHub workflows,
 agent hooks or plugins in a repo's `.claude` or `.codex` settings, secrets such
@@ -117,7 +118,7 @@ Until `github.gate` is set, the hub posts with the `GH_TOKEN` or `GITHUB_TOKEN` 
 
 DeepBuild never changes branch protection or the repo's rules itself. `deep gate rules` prints the two rulesets the repo needs:
 
-- The default branch requires `deepbuild/verdict` from the gate's app. Only an admin, through the forge's bypass, updates or deletes the branch, so no agent's token merges or pushes it.
+- The default branch requires `deepbuild/verdict` from the gate's app. Only an admin, through the forge's bypass, updates or deletes the branch, and the gate's app updates it only by merging a pull request it passed, so no agent's token merges or pushes it.
 - Only an admin makes, moves or deletes a `deep/approved/` tag.
 
 Put each one on as the repo's admin:
@@ -127,6 +128,18 @@ deep gate rules --json | jq -c '.rulesets[]' | while read -r r; do echo "$r" | g
 ```
 
 A push you make yourself through the bypass is recorded as unguarded, and never reads PASS.
+
+## Land changes in turn
+
+From your checkout of the repo, `deep land judge --repo <checkout> --json` judges each open pull request whose body says `Closes #n`, `Fixes #n` or `Part of #n`. It judges the change on its merge with the default branch's head, the commit that will land, by its issue's definition, and posts the verdict's status on that merge commit. It lands nothing. `deep land --repo <checkout> --json` then lands the PASSes one at a time, in the order they came:
+
+- If main or the branch moved since its verdict, the change is judged again first. Checks whose inputs didn't change carry, and only the rest run.
+- A change that no longer merges goes back to the session working its issue, naming the files that conflict. It reaches no person and nothing lands.
+- Any other result but PASS holds the change, with the word, so FAIL, INVALID, BLOCKED and INCONCLUSIVE never land. A requirement drafted `settled_by: "budget-window"` has no check and doesn't hold it: the change lands, and the issue stays open with a comment naming that requirement until the scheduled budget window settles it.
+- An issue closes when its change lands, never before.
+- After each landing the default branch is read back. A tree other than the one its verdict covered stops landings, names the files and marks main red in `scripts/main-watch.mjs`, whatever the forge said it merged.
+
+Landings go through the forge's pull request merge with the gate's app once `github.gate` names it: the rules let the gate's app update the default branch through a pull request's merge, never a push. Give the gate's app "Contents: write", "Pull requests: write" and "Issues: write" beside "Commit statuses: write"; its landing token has no statuses. Until `github.gate` is set, landings go with your own login (`GH_TOKEN`, `GITHUB_TOKEN` or `gh auth token`), which must then be the repo's admin. DeepBuild never closes a pull request. `deep work --repo <checkout> --issues <n,...> --once --json` makes one pass of a run over a set: an open pull request from before the run that links an issue in the set joins as its attempt, and no second one starts beside it. Others idle past 7 days are listed under `stale`.
 
 ## Approve an edit to a check
 

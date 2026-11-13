@@ -1,0 +1,14 @@
+{
+  "issue": 501,
+  "criterion": "#501.4abc923a",
+  "verdict": "looks_right",
+  "who": "Claude, on the owner's standing delegation of taste calls; the owner can overrule it on the PR",
+  "when": "2026-11-10T07:30:22Z",
+  "screenshots": {
+    "range-export.png": "632449c0966396e4372c3b6313b652c33717497f6d3b971b7ceb6e40454f0524",
+    "still-at-marker.png": "ecd3ccf65a0a619351d244ea0cc8d7c27b1c1d1e56327b488d63ca51a1739c9b",
+    "viewer-frame-101.png": "99de4fbb1230d8d14d590e5e61f9486509e843a803ced9767c6584ce51c2b3bb",
+    "range.apng": "c156612c4f428552a3a73581cc0bb5a50406ca066c64d168850cd5896da6ab12"
+  },
+  "note": "The range's first frame (frame 48, 2 s) has the block at x 56; the still at marker s2 (4 s) at x 112 with the bar at 130 u; the viewer's frame 101 at x 118, one step past 100. The recording plays the block sliding across frames 48 to 167 with the bar growing. Colors are the look's accent, ink and ground."
+}

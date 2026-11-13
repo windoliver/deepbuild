@@ -20,18 +20,30 @@ function run(file: string, args: string[]): Promise<string> {
   });
 }
 
+/** The PIDs that listen on the TCP port, as lsof shows them; a failed lsof rejects, since it proves nothing. */
+export const listening = (port: number): Promise<{ pids: number[]; empty: boolean }> => new Promise((done, fail) => {
+  // Where the system keeps it: Debian and Ubuntu have no /usr/sbin/lsof.
+  execFile(process.platform === 'darwin' ? '/usr/sbin/lsof' : '/usr/bin/lsof', ['-nP', `-iTCP:${port}`, '-sTCP:LISTEN', '-Fp'], { env: { ...process.env, LC_ALL: 'C' } }, (error, stdout, stderr) => {
+    // lsof exits 1 with no output when nothing listens.
+    if (error && !((error as { code?: unknown }).code === 1 && stdout.trim() === '' && stderr.trim() === '')) return fail(Error(`lsof can't list port ${port}'s listeners: ${stderr.trim() || error.message}`));
+    done({ pids: [...new Set(String(stdout ?? '').split('\n').filter((l) => l.startsWith('p')).map((l) => Number(l.slice(1))))], empty: stdout.trim() === '' });
+  });
+});
+
 export interface Proc { pid: number; ppid: number; pgid: number; start: string }
 
-/** Whether a process (or, given a negative ID, a process group) still exists: a signal of 0 asks without sending one. */
-export function alive(pid: number): boolean {
+/** The OS's liveness observation: permission proves existence, only ESRCH proves absence. */
+export function processAlive(pid: number): boolean | undefined {
   try {
     process.kill(pid, 0);
     return true;
   } catch (error) {
-    // Only ESRCH proves absence. Permission and transient observation errors keep the process live.
-    return (error as NodeJS.ErrnoException).code !== 'ESRCH';
+    const code = (error as NodeJS.ErrnoException).code;
+    return code === 'EPERM' ? true : code === 'ESRCH' ? false : undefined;
   }
 }
+/** Supervised processes/groups stay live until absence is proven. */
+export const alive = (pid: number): boolean => processAlive(pid) !== false;
 /** An unreadable process table is unknown, never evidence of an empty group or an idle run. */
 const quietPs = (args: string[]): Promise<string | null> => run('/bin/ps', args).then((text) => text.trim() ? text : null, () => null);
 /** The live members of a process group, zombies left out; none for a group that is gone. */
@@ -89,13 +101,18 @@ export async function tokenOf(pid: number): Promise<string | null | undefined> {
   }
 }
 
-/** The processes each marker's sandbox holds, by marker. */
-export async function scan(markers: readonly string[]): Promise<Map<string, number[]>> {
+/**
+ * The processes each marker's sandbox holds, by marker; `bytes` gets each one's memory (#1409): its physical footprint
+ * on macOS, its resident set on Linux.
+ */
+export async function scan(markers: readonly string[], bytes?: Map<number, number>): Promise<Map<string, number[]>> {
   const found = new Map<string, number[]>();
   if (!markers.length) return found;
   for (const line of (await run(HELPER, ['scan', ...markers])).split('\n')) {
-    const [marker, pid] = line.split(' ');
-    if (marker && pid) (found.get(marker) ?? found.set(marker, []).get(marker)!).push(Number(pid));
+    const [marker, pid, , , memory] = line.split(' ');
+    if (!marker || !pid) continue;
+    (found.get(marker) ?? found.set(marker, []).get(marker)!).push(Number(pid));
+    bytes?.set(Number(pid), Number(memory ?? 0));
   }
   return found;
 }

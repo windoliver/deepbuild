@@ -1,0 +1,86 @@
+#537 acceptance suite at the base, db8d9ed76 (Merge pull request #2290), before any implementation. The job was asked
+for cbd5e4f98; its worktree stood at db8d9ed76, a descendant whose changes since touch none of the surfaces these tests
+read (the app's list rows, the hub's doing line, two other suites). Run on 2026-11-11 on an arm64 Mac (Mac17,10, not a
+reference Mac; 18 cores; one-minute load about 150), with deep-show and deep-gpu built by the files (`cargo build
+--locked --bin deep-show` and `--bin deep-gpu`, the default sets, CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0) and #544's
+assembler built into target/acceptance-537-wat. Each file was run once:
+
+  PATH=/opt/homebrew/opt/rustup/bin:$PATH CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 NO_COLOR=1 \
+    npx vitest run tests/acceptance/537/<file> --testTimeout=600000
+
+Every test fails at an assertion in this folder that names the missing behavior: no crash, no timeout, no missing
+fixture, no build failure. 18 tests, 18 failed. `npx tsc --noEmit -p tests/acceptance/537` exits 0.
+
+ac2-fog.test.ts was run twice. Its first run showed "seeking to step 600 and playing to it give the same pixel hash"
+passing at the base, which draws the plate with no overlay at all, so two identical frames matched: a fault of the test.
+It now first requires the seeked frame to show the overlay (the fog role's color at cell (0, 0), the plate's own cover
+at (64, 64)), and the file was run again; the results below are the second run's. No other file was rerun.
+
+Before the run, the harness was checked against the base's real components with a probe (not committed):
+- every program (slots, slots with gen 2 from step 0, fog, grids, laser, army-1000, army-2000, a pool table) assembles,
+  and a scene holding only its logic item and a camera is presented by deep_show with no issue and evaluated by `eval`;
+- run in node's WebAssembly, each program's write region at sampled steps equals this suite's expected functions
+  (slotState, fogValue, pointAt with its NaN, tankAt, the pool table) exactly;
+- view3d draws the two reference plates (no overlay) uniformly: `soil` [103, 136, 84], `fogged` (base_color role fog)
+  [183, 187, 196], 112 code values apart;
+- straight above, a box at slot 3's place (6, 0, −6) is picked at px (320, 80) of the 400 px frame and nothing at the
+  z-mirrored px (320, 320): +X right, +Z down, as `topDownPx` maps them;
+- the line's step-50 points written literally (no logic) draw all 32 segments at their midpoints and nothing 0.15 m past
+  each end, on a sky of [0, 0, 0];
+- the tank's glTF as `mesh.asset@1 {node: {scene: 0}}` draws, picked as tank#hull, tank#turret and tank#barrel.
+
+ac1-slots.test.ts (4 failed of 4)
+- drawn and seeded: ac1-slots.test.ts:121 (drawnFailures :60, elementsOf :41, `arr` helpers.ts:75): "the 16 slots: frame
+  0's items/units/elements is an array, got null". view3d draws the document (it runs no logic) but evaluates no
+  `elements`.
+- the selection drops at step 60: ac1-slots.test.ts:137 (selectRun :98): "AC1 the click on slot 3: the click at slot 3's
+  centre at step 49 picks an element: expected null not to be null".
+- instancer_addresses_by_slot: ac1-slots.test.ts:144 (selectRun, runGpu helpers.ts:271): "deep-gpu run --planted
+  instancer_addresses_by_slot exits 0 …; stdout: {"ok":false,"code":"bad_input"}".
+- the refusal: ac1-slots.test.ts:159: "an error, other than a field the check doesn't know, names units, its from
+  (distribute) and its array columns …": the base's errors are `unknown_field` at items/units/params/gen and /live
+  ("instance@1.0 does not define `gen`"), neither naming `from`.
+
+ac2-fog.test.ts (5 failed of 5; second run)
+- the cells and edges: ac2-fog.test.ts:133 (`none`): "the 16384 cell centres at step 600 against the reference: cell (0, 0)
+  at px (8, 8): [103,136,84], the reference's [183,187,196] (the fog role's color) …". The base draws the plate in its own
+  cover everywhere.
+- the content key and mesh: ac2-fog.test.ts:152 (`presented`, helpers.ts:237): "the fogged plate is presented: [… unknown_field
+  … items/ground/params/overlays … plate@1.0 does not define `overlays`]: expected 'refused' to be 'presented'". (The
+  `meshes_built` checks before it hold at the base, which never rebuilds the plate.)
+- seek against play: ac2-fog.test.ts:176 (`shows` :174): "the seeked step 600 shows the fog role's color at cell (0, 0):
+  expected 112 to be less than or equal to 1".
+- overlay_keeps_grid_on_seek: ac2-fog.test.ts:183 (fogRun :109, runGpu): "… exits 0 …; stdout: {"ok":false,"code":"bad_input"}".
+- the third overlay: ac2-fog.test.ts:201: "an error, other than a field the check doesn't know, names ground and its
+  overlays": the base's only error is `unknown_field` at items/ground/params/overlays.
+
+ac3-lines.test.ts (4 failed of 4)
+- the 20 sampled steps: ac3-lines.test.ts:96 (segmentFailures :44, `arr`): "played: step 0's segments.links is an array,
+  got undefined". The base reports `segments` for mesh-edge lines only.
+- rows 10 and 11: ac3-lines.test.ts:111 (`countsEntry`, helpers.ts:326): "played: frame 100 reports row_uploads (counts): …
+  expected undefined to be defined".
+- the NaN: ac3-lines.test.ts:119 (segmentFailures :44): "played: step 120's segments.links is an array, got undefined".
+  The `eval` issue after it isn't reached.
+- line_reads_previous_step: ac3-lines.test.ts:139 (lineRun :79, runGpu): "… exits 0 …; stdout: {"ok":false,"code":"bad_input"}".
+
+ac4-tanks.test.ts (3 failed of 3)
+- the tips: ac4-tanks.test.ts:64 (tipFailures :31, `arr`): "played: step 0's items/tanks/nodes/tip is an array, got null".
+- one slot uploads: ac4-tanks.test.ts:82: "step 210, which turns tank 417's turret alone, uploads slot 417 alone: {}:
+  expected [] to deeply equal [ 417 ]".
+- part_pose_in_world_space: ac4-tanks.test.ts:88 (tanksRun :50, runGpu): "… exits 0 …; stdout: {"ok":false,"code":"bad_input"}".
+
+ac4-budget.test.ts (1 failed of 1)
+- ac4-budget.test.ts:48: "frame 0 draws the 2,000 units in the camera's view by indirect draws in at least 3 batches,
+  one per part's mesh: []: expected 0 to be greater than or equal to 3". The timing isn't reached; on this Mac it would
+  read INCONCLUSIVE (Mac17,10 is not a reference Mac, and the load is above the cores).
+
+ac5-taste.test.ts (1 failed of 1)
+- ac5-taste.test.ts:69 (`inconclusive`, helpers.ts:50): "INCONCLUSIVE: no taste call is recorded: attach these to the
+  PR, show them to the owner …". The base answered the four view3d calls (drawing no logic), so the check run wrote its
+  six files to docs/evidence/537/; they show the base's frames, not #537's, and were deleted after the run. No
+  TASTE.json exists, and none was written.
+
+Not shown at the base, since nothing there runs logic in a frame: that each planted twin, once it exists, fails its
+criterion's check naming what the criterion names (units#3 at step 60; cell (0, 0); segment 5; a unit tanks#<i>.1).
+Those failures come from the same judges that pass the honest program: ac1 `selectionFailures`, ac2 `seekFailures`,
+ac3 `segmentFailures`, ac4 `tipFailures`.

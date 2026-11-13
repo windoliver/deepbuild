@@ -229,6 +229,7 @@ function counting(store: EvidenceStore, w: World): EvidenceStore {
       const writer = store.connect(peer);
       return {
         async put(request) { w.writes.count++; return landed(await writer.put(request)); },
+        async file(request) { w.writes.count++; return landed(await writer.file(request)); },
         text(request): TextSink {
           const sink = writer.text(request);
           return { write: (chunk) => sink.write(chunk), async close() { w.writes.count++; return landed(await sink.close()); } };

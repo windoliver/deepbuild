@@ -70,7 +70,11 @@ fn to_f16(x: f32) -> u16 {
 }
 
 /// Level `level` of `tex` read back as f32 RGBA, rows top-down, slices in z order.
-pub(crate) fn read_texture(device: &Device, tex: &wgpu::Texture, level: u32) -> ([u32; 3], Vec<f32>) {
+pub(crate) fn read_texture(
+    device: &Device,
+    tex: &wgpu::Texture,
+    level: u32,
+) -> ([u32; 3], Vec<f32>) {
     let d = &device.device;
     let w = (tex.width() >> level).max(1);
     let h = (tex.height() >> level).max(1);
@@ -457,7 +461,6 @@ pub fn call(app: &mut App, out: &str, call: &Value) -> Value {
     app.worker.call(move |state| {
         let device = state.gpu.device();
         let d = &device.device;
-        use wgpu::util::DeviceExt as _;
         let mut core = BTreeMap::new();
         let mut color_px: Option<Vec<u8>> = None;
         for (name, bytes) in &data {

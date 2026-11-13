@@ -3,6 +3,20 @@
   "phases": {
     "items": [
       {
+        "operator": "data.columns",
+        "module": "data",
+        "version": "1.0.0",
+        "reads": [
+          "self",
+          "t"
+        ],
+        "writes": [
+          "data.columns",
+          "data.mapped"
+        ],
+        "per": "item"
+      },
+      {
         "operator": "data.decimate",
         "module": "data",
         "version": "1.0.0",
@@ -28,5 +42,9 @@
       }
     ]
   },
-  "contributions": {}
+  "contributions": {
+    "core.fields": [
+      "data.columns"
+    ]
+  }
 }

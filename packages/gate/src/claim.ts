@@ -5,7 +5,7 @@
 import { createHash } from 'node:crypto';
 import { stableText } from '@deepbuild/contracts';
 import { verdict } from '@deepbuild/verdicts';
-import type { BaseResult, ClaimCheck, ClaimInput, ContractResult, ContractSide, Depth, EvidenceSlot, Failure, NumericContract, Proof, Requirement, Run, RunOutcome, Source, Verdict } from '@deepbuild/verdicts';
+import type { BaseResult, ClaimCheck, ClaimInput, ContractResult, ContractSide, Depth, EvidenceSlot, Failure, NumericContract, Proof, Requirement, Run, RunOutcome, Source, TimingReport, Verdict } from '@deepbuild/verdicts';
 import { maskIn } from './mask.js';
 
 /** One failed test as check.kind@1 reports it. */
@@ -19,13 +19,15 @@ export interface RecordedRun {
   evidence: string[];
   read: string[];
   mask: string | null;
-  exit: { code: number | null; signal: NodeJS.Signals | null; cause: 'exit' | 'deadline' | 'stop' } | null;
+  exit: { code: number | null; signal: NodeJS.Signals | null; cause: 'exit' | 'deadline' | 'stop' | 'limit' } | null;
   /** Scrubbed by value, then digested: the digests are what the run's output evidence holds. */
   output: { stdout: string; stderr: string; sha256: { stdout: string; stderr: string } };
   attempts: { test: string; outcome: 'passed' | 'failed' }[];
   seeded: { name: string; by: string; standIn: boolean }[];
   /** Per output of the contract, from the tool's report; null without a contract. */
   contract: { output: string; size: number; compared: number | null; largest_error: number | null }[] | null;
+  /** A stated speed's timing report (#1863), from the numbers check's timing check: why its timing counts or can't. */
+  speed?: TimingReport;
 }
 /** A check of the claim, as the definition locks it, with every run of it on the claim's commit, in order. */
 export interface ClaimedCheck {
@@ -146,6 +148,7 @@ function recordOf(claim: ClaimedRuns, c: ClaimedCheck, digest: string, r: Record
     // A run that never started names why (a program the run's PATH lacks, a checkout gone): the machine's, so yours to provide.
     ...(outcome === 'missing' ? { missing: { cause: r.failures[0]?.message ?? 'the run never started', owner: 'you', since: claim.now } } : {}),
     ...(contract ? { contract } : {}),
+    ...(r.speed ? { timing: { ...r.speed, reasons: [...r.speed.reasons] } } : {}),
     ...(r.attempts.length ? { attempts: r.attempts.map((a) => ({ ...a })) } : {}),
     ...(standIns.length ? { stand_ins: standIns } : {}),
   };

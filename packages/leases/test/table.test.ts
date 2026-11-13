@@ -114,4 +114,24 @@ describe('a table opened again on the log', () => {
     await append(core, 'lease.released', run, lease);
     expect((await table.lease({ holder: `session:${ulid(T0)}` }, port, 'exclusive')).status).toBe('granted');
   });
+
+  it("ends a session's lease on the session.end its agent's hook wrote, which names the session by its raw ID alone", async () => {
+    const table = await openLeases({ record, now });
+    await table.declare('env-local', PORT);
+    expect((await table.lease({ holder: 'session:3f2a9c1e' }, port, 'exclusive')).status).toBe('granted');
+    await record.append({ writer: 'hook', actor: 'you', scope: 'you', session: '3f2a-9c1e', agent: 'claude-code' }, { v: 1, id: ulid(T0), kind: 'session.end', ts: T0, data: { reason: 'prompt_input_exit' } });
+    await table.tick();
+    expect(await table.leases()).toEqual([]);
+  });
+
+  it('keeps the lease of a session that started again after its end', async () => {
+    const hook: Connection = { writer: 'hook', actor: 'you', scope: 'you', session: '3f2a-9c1e', agent: 'claude-code' };
+    await record.append(hook, { v: 1, id: ulid(T0), kind: 'session.end', ts: T0, data: { reason: 'prompt_input_exit' } });
+    await record.append(hook, { v: 1, id: ulid(T0), kind: 'session.start', ts: T0, data: { agent: 'claude-code', worktree: dir, branch: null, thread: 't1' } });
+    const table = await openLeases({ record, now });
+    await table.declare('env-local', PORT);
+    expect((await table.lease({ holder: 'session:3f2a9c1e' }, port, 'exclusive')).status).toBe('granted');
+    await table.tick();
+    expect((await table.leases()).map((v) => v.lease.holder)).toEqual(['session:3f2a9c1e']);
+  });
 });

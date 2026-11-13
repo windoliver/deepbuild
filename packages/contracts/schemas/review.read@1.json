@@ -1,0 +1,220 @@
+{
+  "title": "review.read@1",
+  "description": "A review round on a pull request counted (#1862): the commit it read, the items it sent back, and the items earlier rounds sent back that this commit left open. The next round on the pull request reads only what changed since this commit and sends none of these items again.",
+  "x-since": "R1",
+  "x-stability": "stable",
+  "x-feeds": [],
+  "type": "object",
+  "properties": {
+    "v": {
+      "const": 1,
+      "description": "The kind's schema version."
+    },
+    "id": {
+      "type": "string",
+      "format": "ulid",
+      "description": "The event's ULID, its identity."
+    },
+    "kind": {
+      "const": "review.read"
+    },
+    "subject": {
+      "type": "string",
+      "pattern": "^(task|ask|claim|verdict|run|req|decision|plan|lease|reading|notice|doc|ev|session):[0-9A-Za-z]+(#[A-Za-z0-9][A-Za-z0-9._-]*)?$",
+      "description": "The record object this event is about."
+    },
+    "writer": {
+      "const": "core",
+      "description": "Only the core appends this kind."
+    },
+    "actor": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The person behind it, from the credential."
+    },
+    "scope": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Who may see it."
+    },
+    "ts": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "Milliseconds since the Unix epoch."
+    },
+    "seq": {
+      "type": "string",
+      "format": "seq",
+      "description": "Order within the session: ns since the epoch when the hook started."
+    },
+    "log_pos": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991,
+      "description": "Its position in the event log, assigned by the hub at append."
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "pr": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "The pull request, by its link."
+        },
+        "claim": {
+          "type": "string",
+          "pattern": "^claim:[0-9A-Za-z]+$",
+          "maxLength": 8192,
+          "description": "The claim the round reviewed."
+        },
+        "commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$",
+          "maxLength": 8192,
+          "description": "The commit the round read: the claim's snapshot."
+        },
+        "sent": {
+          "type": "array",
+          "maxItems": 4096,
+          "items": {
+            "type": "object",
+            "properties": {
+              "rule": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 8192,
+                "description": "The rubric's rule."
+              },
+              "sites": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 4096,
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "file": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 8192,
+                      "description": "The file, as the diff names it."
+                    },
+                    "line": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 9007199254740991,
+                      "description": "The line in the commit the round read."
+                    },
+                    "quote": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 8192,
+                      "description": "The text at that line."
+                    }
+                  },
+                  "required": [
+                    "file",
+                    "line",
+                    "quote"
+                  ],
+                  "additionalProperties": false
+                },
+                "description": "Every site of the rule the round cited."
+              }
+            },
+            "required": [
+              "rule",
+              "sites"
+            ],
+            "additionalProperties": false
+          },
+          "description": "The items this round sent back, one per rule."
+        },
+        "open": {
+          "type": "array",
+          "maxItems": 4096,
+          "items": {
+            "type": "object",
+            "properties": {
+              "rule": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 8192,
+                "description": "The rubric's rule."
+              },
+              "sites": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 4096,
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "file": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 8192,
+                      "description": "The file, as the diff names it."
+                    },
+                    "line": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 9007199254740991,
+                      "description": "The line in the commit the round read."
+                    },
+                    "quote": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 8192,
+                      "description": "The text at that line."
+                    }
+                  },
+                  "required": [
+                    "file",
+                    "line",
+                    "quote"
+                  ],
+                  "additionalProperties": false
+                },
+                "description": "Every site of the rule the round cited."
+              }
+            },
+            "required": [
+              "rule",
+              "sites"
+            ],
+            "additionalProperties": false
+          },
+          "description": "The items earlier rounds sent back that are still open after this round, not sent again."
+        }
+      },
+      "required": [
+        "pr",
+        "claim",
+        "commit",
+        "sent",
+        "open"
+      ],
+      "additionalProperties": false
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$",
+        "description": "A SHA-256, in lower-case hex."
+      }
+    }
+  },
+  "required": [
+    "v",
+    "id",
+    "kind",
+    "writer",
+    "actor",
+    "scope",
+    "ts",
+    "data"
+  ],
+  "additionalProperties": false
+}

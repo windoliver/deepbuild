@@ -45,6 +45,18 @@ export function reply(socket: string, line: string): Promise<{ exit: number; std
   });
 }
 
+/** `deep <args>` from the built CLI in `cwd`, as the person whose home is `home` runs it: its exit code and what it printed. */
+export function deep(home: string, cwd: string, args: readonly string[]): Promise<{ code: number | null; stdout: string; stderr: string }> {
+  return new Promise((resolve) => {
+    const child = spawn(process.execPath, [CLI, ...args], { cwd, env: { ...process.env, HOME: home }, stdio: ['ignore', 'pipe', 'pipe'] });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.setEncoding('utf8').on('data', (d: string) => (stdout += d));
+    child.stderr.setEncoding('utf8').on('data', (d: string) => (stderr += d));
+    child.on('close', (code) => resolve({ code, stdout, stderr }));
+  });
+}
+
 /** A hub `withHub` started: it can be restarted (with its own environment), and waited on when it kills itself. */
 /** `between` runs with the hub stopped, before it starts again. */
 export interface Hub { restart: (env?: Record<string, string>, between?: () => void | Promise<void>) => Promise<void>; exited: (within?: number) => Promise<void> }

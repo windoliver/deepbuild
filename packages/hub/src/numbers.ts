@@ -78,7 +78,8 @@ export class Numbers {
       return { id: r.id, kind: r.kind, v: r.v, ts: r.ts, session, subject: r.subject, data };
     });
     this.at = rows.at(-1)!.log_pos;
-    this.events.push(...fresh);
+    // One at a time: a first fold holds every row, more than one call takes as arguments.
+    for (const e of fresh) this.events.push(e);
     this.state = update(this.state, fresh);
   }
   /** Your own typed messages, by the opaque id `deep numbers sample` showed you. */
@@ -245,6 +246,6 @@ export function numbersLines(rows: Awaited<ReturnType<Numbers['read']>>['rows'])
     const cost = r.cost ? ` ${r.cost.basis}${r.cost.basis === 'estimated' ? ` (${r.cost.rate_card})` : ''}` : '';
     const agreement = r.agreement ? ` agrees ${r.agreement.share.toFixed(2)} of ${r.agreement.n}, ${r.agreement.yes} yes, recall ${r.agreement.recall?.toFixed(2) ?? 'none'}, precision ${r.agreement.precision?.toFixed(2) ?? 'none'} ${r.agreement.status}` : r.id in CLASSIFIERS || r.id.endsWith(CLASSIFIED) ? ' not checked against your labels' : '';
     const by = r.by ? ` (${Object.entries(r.by).filter(([, ms]) => ms).map(([why, ms]) => `${why} ${ms}`).join(', ')})` : r.id === 'cache.low' ? ' cache hit rate low: most of the context was billed again' : '';
-    return `${r.id}${r.subject ? ` ${r.subject}` : ''}: ${value} ${r.unit}${by}${cost}${r.complete === false ? ' incomplete' : ''}${r.band === 'over' && r.id !== 'cache.low' ? ' OVER BUDGET' : ''}${agreement} · ${r.source} · ${r.basis} · ${ageOf(r.age_ms)}${r.status === 'STALE' ? ' · STALE' : ''}${r.detail ? ` ${JSON.stringify(r.detail)}` : ''}`;
+    return `${r.id}${r.subject ? ` ${r.subject}` : ''}: ${value} ${r.unit}${by}${cost}${r.complete === false ? ' incomplete' : ''}${r.band === 'over' && r.id !== 'cache.low' ? ' OVER BUDGET' : ''}${agreement} · ${r.source} · ${r.basis} · ${ageOf(r.age_ms)}${r.status === 'STALE' ? ' · STALE' : ''}${r.detail?.length ? ` ${JSON.stringify(r.detail)}` : ''}`;
   });
 }

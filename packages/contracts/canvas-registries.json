@@ -225,6 +225,45 @@
     }
   },
   {
+    "registry": "export.target@1",
+    "owner": "core",
+    "fill": [
+      "module"
+    ],
+    "resolve": "seal",
+    "since": "R6",
+    "stability": "stable",
+    "entry": {
+      "type": "object",
+      "properties": {
+        "writer": {
+          "type": "string"
+        },
+        "fidelity": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "reader": {
+          "type": "string"
+        },
+        "hidden": {
+          "enum": [
+            "left_out",
+            "listed"
+          ]
+        }
+      },
+      "required": [
+        "writer",
+        "fidelity",
+        "reader",
+        "hidden"
+      ]
+    }
+  },
+  {
     "registry": "gpu.function@1",
     "owner": "core",
     "fill": [
@@ -344,6 +383,14 @@
           "type": "string",
           "minLength": 1
         },
+        "pack": {
+          "type": "string",
+          "minLength": 1
+        },
+        "recipe": {
+          "type": "string",
+          "minLength": 1
+        },
         "minor": {
           "type": "integer",
           "minimum": 0
@@ -351,8 +398,20 @@
       },
       "required": [
         "name",
-        "module",
         "minor"
+      ],
+      "oneOf": [
+        {
+          "required": [
+            "module"
+          ]
+        },
+        {
+          "required": [
+            "pack",
+            "recipe"
+          ]
+        }
       ],
       "additionalProperties": false
     }

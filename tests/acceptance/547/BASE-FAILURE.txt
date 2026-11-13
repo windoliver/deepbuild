@@ -1,0 +1,144 @@
+# #547 acceptance suite at the base: this worktree's HEAD 3c36f9180 ("Merge pull request #2232 …"), clean but for
+# tests/acceptance/547 added.
+# Command: NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 npx vitest run --root tests/acceptance/547 --testTimeout=600000 --no-file-parallelism
+# Result: 9 of 9 tests fail (5 of 5 files), every one for the missing surface. Nothing is BLOCKED, INCONCLUSIVE or skipped.
+# The base's deep-logic builds and runs, and answers:
+#   - a bake with no ring (criteria 1 and 3 fail on their first short bake, before the long ones);
+#   - the call playback with {"ok":false,"code":"bad_input"} (criterion 2);
+#   - a step with no deep_hash (criterion 4, on step 0, before the 72,000-step play);
+#   - each planted name by exiting 2 after one {"ok":false,"code":"bad_input"} line (read as "exits 0" failing, or as
+#     "open admits the match" failing in criterion 4's long-lived session).
+# Not reached at the base, by the tests' own order: the 1,440-step and 7,200-step bakes, the 108,000-step playback and
+# logic.determinism runs, the 72,000-step session and its timed seeks.
+
+ RUN  v5.0.5 tests/acceptance/547
+
+ ❯ ac2-array-ranges.test.ts (2 tests | 2 failed) 1663ms
+   ❯ #547.1bfe7240 bakes keep each step's changed array ranges, with every array whole at each checkpoint (2)
+     × #547.1bfe7240 108,000 steps of a 96 × 96 grid that changes 2 cells a step keep their arrays in under 80 MiB of the bake, and playback gives the grid the program wrote at 100 sampled steps 454ms
+     × #547.1bfe7240 a planted range writer that drops the second changed range at step 5,000 (ranges_drop_second_at_step_5000) fails logic.determinism at step 5,000, naming grid.cells and element 7,672 5ms
+ ❯ ac5-failed-store.test.ts (1 test | 1 failed) 1535ms
+   ❯ #547.cb4a7b2c the record of written pages clears only once a checkpoint is stored (1)
+     × #547.cb4a7b2c with checkpoint 120's store planted to fail (store_fails_at_step_120), checkpoint 180 holds the pages of both intervals, and a restore from it gives the straight run's deep hash 354ms
+ ❯ ac3-ring-budget.test.ts (2 tests | 2 failed) 1481ms
+   ❯ #547.afa00681 a ring past its budget doubles its spacing, and seeks restore within it (2)
+     × #547.afa00681 7,200 steps with the ring's budget forced to 20 checkpoints' bytes keep it within that budget, 480 steps apart, and 20 seeded seeks restore one at most 480 steps back and equal playing 394ms
+     × #547.afa00681 a planted ring that drops its oldest checkpoint instead (ring_drops_oldest) keeps none before step 6,060 and fails the first seek before it, naming the step 5ms
+ ❯ ac1-written-pages.test.ts (2 tests | 2 failed) 1343ms
+   ❯ #547.7471f558 checkpoints between whole ones keep the pages written since the one before (2)
+     × #547.7471f558 each checkpoint but the first and every eighth holds the 3 written pages (192 KiB) and the globals, those hold the whole 32 MiB, and a seek from each of 24 checkpoints equals playing 576ms
+     × #547.7471f558 a planted page tracker that misses pages memory.fill wrote (tracker_skips_memory_fill) fails logic.determinism on the full-state hash of the first checkpoint after each seek from a checkpoint of pages, naming that checkpoint 5ms
+ ❯ ac4-keyframes.test.ts (2 tests | 2 failed) 1479ms
+   ❯ #547.636c1d36 a recorded match keeps a keyframe every 10 s of play in the cache, so a seek re-runs at most 10 s (2)
+     × #547.636c1d36 a recorded 72,000-step, 300-unit match at 30 Hz lands each of 20 seeded seeks within 2 s with keyframes under a 512 MiB cache budget 393ms
+     × #547.636c1d36 a planted ring held to 64 MiB (keyframes_held_in_ring) misses 2 s, naming the seek 7ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 9 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac1-written-pages.test.ts > #547.7471f558 checkpoints between whole ones keep the pages written since the one before > #547.7471f558 each checkpoint but the first and every eighth holds the 3 written pages (192 KiB) and the globals, those hold the whole 32 MiB, and a seek from each of 24 checkpoints equals playing
+AssertionError: a 61-step bake.ring (each item's checkpoint ring as the bake leaves it) is an object, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/9]⎯
+
+ FAIL  ac1-written-pages.test.ts > #547.7471f558 checkpoints between whole ones keep the pages written since the one before > #547.7471f558 a planted page tracker that misses pages memory.fill wrote (tracker_skips_memory_fill) fails logic.determinism on the full-state hash of the first checkpoint after each seek from a checkpoint of pages, naming that checkpoint
+AssertionError: deep-logic --planted tracker_skips_memory_fill on darwin/arm64 exits 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/9]⎯
+
+ FAIL  ac2-array-ranges.test.ts > #547.1bfe7240 bakes keep each step's changed array ranges, with every array whole at each checkpoint > #547.1bfe7240 108,000 steps of a 96 × 96 grid that changes 2 cells a step keep their arrays in under 80 MiB of the bake, and playback gives the grid the program wrote at 100 sampled steps
+AssertionError: playback of the 108,000-step bake ran (ok: true): {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/9]⎯
+
+ FAIL  ac2-array-ranges.test.ts > #547.1bfe7240 bakes keep each step's changed array ranges, with every array whole at each checkpoint > #547.1bfe7240 a planted range writer that drops the second changed range at step 5,000 (ranges_drop_second_at_step_5000) fails logic.determinism at step 5,000, naming grid.cells and element 7,672
+AssertionError: deep-logic --planted ranges_drop_second_at_step_5000 on darwin/arm64 exits 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/9]⎯
+
+ FAIL  ac3-ring-budget.test.ts > #547.afa00681 a ring past its budget doubles its spacing, and seeks restore within it > #547.afa00681 7,200 steps with the ring's budget forced to 20 checkpoints' bytes keep it within that budget, 480 steps apart, and 20 seeded seeks restore one at most 480 steps back and equal playing
+AssertionError: the 60-step bake.ring (each item's checkpoint ring as the bake leaves it) is an object, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/9]⎯
+
+ FAIL  ac3-ring-budget.test.ts > #547.afa00681 a ring past its budget doubles its spacing, and seeks restore within it > #547.afa00681 a planted ring that drops its oldest checkpoint instead (ring_drops_oldest) keeps none before step 6,060 and fails the first seek before it, naming the step
+AssertionError: deep-logic --planted ring_drops_oldest on darwin/arm64 exits 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/9]⎯
+
+ FAIL  ac4-keyframes.test.ts > #547.636c1d36 a recorded match keeps a keyframe every 10 s of play in the cache, so a seek re-runs at most 10 s > #547.636c1d36 a recorded 72,000-step, 300-unit match at 30 Hz lands each of 20 seeded seeks within 2 s with keyframes under a 512 MiB cache budget
+AssertionError: step 0.deep_hash (each item's full-state hash) is an object, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/9]⎯
+
+ FAIL  ac4-keyframes.test.ts > #547.636c1d36 a recorded match keeps a keyframe every 10 s of play in the cache, so a seek re-runs at most 10 s > #547.636c1d36 a planted ring held to 64 MiB (keyframes_held_in_ring) misses 2 s, naming the seek
+AssertionError: open admits the match: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/9]⎯
+
+ FAIL  ac5-failed-store.test.ts > #547.cb4a7b2c the record of written pages clears only once a checkpoint is stored > #547.cb4a7b2c with checkpoint 120's store planted to fail (store_fails_at_step_120), checkpoint 180 holds the pages of both intervals, and a restore from it gives the straight run's deep hash
+AssertionError: deep-logic --planted store_fails_at_step_120 on darwin/arm64 exits 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/9]⎯
+
+ Test Files  5 failed (5)
+      Tests  9 failed (9)
+   Start at  19:51:41
+   Duration  8.12s (tests 98%, import 1%, transform 1%)

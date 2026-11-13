@@ -249,3 +249,198 @@ pub fn i420_to_bgra(planes: &[u8], w: usize, h: usize, matrix: &str, range: &str
     }
     out
 }
+
+/// #501: BGRA8 rows (top-down, no padding) to 8-bit 4:2:0 planes (Y, then Cb, then Cr) by BT.709
+/// in limited range. Alpha is left out; each chroma sample is the mean of the pixels it covers.
+pub fn bgra_to_i420(bgra: &[u8], w: usize, h: usize) -> Vec<u8> {
+    let (kr, kb) = (0.2126, 0.0722);
+    let (cw, ch) = (w.div_ceil(2), h.div_ceil(2));
+    let mut out = vec![0u8; w * h + 2 * cw * ch];
+    let q = |v: f64| v.round().clamp(0.0, 255.0) as u8;
+    let rgb = |row: usize, col: usize| {
+        let p = &bgra[(row * w + col) * 4..];
+        [
+            p[2] as f64 / 255.0,
+            p[1] as f64 / 255.0,
+            p[0] as f64 / 255.0,
+        ]
+    };
+    let luma = |c: [f64; 3]| kr * c[0] + (1.0 - kr - kb) * c[1] + kb * c[2];
+    for row in 0..h {
+        for col in 0..w {
+            out[row * w + col] = q(16.0 + 219.0 * luma(rgb(row, col)));
+        }
+    }
+    for row in 0..ch {
+        for col in 0..cw {
+            let mut sum = [0.0; 3];
+            let sites = [(0, 0), (0, 1), (1, 0), (1, 1)]
+                .map(|(dy, dx)| ((row * 2 + dy).min(h - 1), (col * 2 + dx).min(w - 1)));
+            for (y, x) in sites {
+                let c = rgb(y, x);
+                sum = [
+                    sum[0] + c[0] / 4.0,
+                    sum[1] + c[1] / 4.0,
+                    sum[2] + c[2] / 4.0,
+                ];
+            }
+            let y = luma(sum);
+            let at = w * h + row * cw + col;
+            out[at] = q(128.0 + 224.0 * (sum[2] - y) / (2.0 * (1.0 - kb)));
+            out[at + cw * ch] = q(128.0 + 224.0 * (sum[0] - y) / (2.0 * (1.0 - kr)));
+        }
+    }
+    out
+}
+
+/// #157: one 16-bit Y'CbCrA pixel (limited-range colour, full-range alpha, as ProRes 4444
+/// decodes) as straight BGRA8 by `matrix`.
+pub(crate) fn yuva16_to_bgra(p: [u16; 4], matrix: &str) -> [u8; 4] {
+    let (kr, kb) = match matrix {
+        "bt601" => (0.299, 0.114),
+        "bt2020" => (0.2627, 0.0593),
+        _ => (0.2126, 0.0722),
+    };
+    let y = (p[0] as f64 / 256.0 - 16.0) / 219.0;
+    let cb = (p[1] as f64 / 256.0 - 128.0) / 224.0;
+    let cr = (p[2] as f64 / 256.0 - 128.0) / 224.0;
+    let r = y + 2.0 * (1.0 - kr) * cr;
+    let b = y + 2.0 * (1.0 - kb) * cb;
+    let g = (y - kr * r - kb * b) / (1.0 - kr - kb);
+    let q = |v: f64| (v * 255.0).round().clamp(0.0, 255.0) as u8;
+    [q(b), q(g), q(r), (p[3] >> 8) as u8]
+}
+
+/// #157: Y, Cb, Cr and A planes of 12 bits (little-endian u16, as the decode op writes ProRes
+/// 4444) as straight BGRA8 by `matrix`.
+pub(crate) fn yuva12_to_bgra(planes: &[u8], w: usize, h: usize, matrix: &str) -> Vec<u8> {
+    let at = |plane: usize, i: usize| {
+        let o = (plane * w * h + i) * 2;
+        u16::from_le_bytes([planes[o], planes[o + 1]]) << 4
+    };
+    (0..w * h)
+        .flat_map(|i| yuva16_to_bgra([at(0, i), at(1, i), at(2, i), at(3, i)], matrix))
+        .collect()
+}
+
+/// #157: BGRA8 rows (top-down, no padding, straight alpha) to NV12, the two planes a 4:2:0
+/// encoder reads: the Y plane, then Cb and Cr interleaved at half size. BT.709 limited range in
+/// fixed point, each 2×2 block's chroma from its four pixels' sums, exactly as the export's GPU
+/// pass makes them. `w` and `h` are even; alpha is left out.
+pub fn nv12(bgra: &[u8], w: usize, h: usize) -> Vec<u8> {
+    let mut out = vec![0u8; w * h * 3 / 2];
+    let rgb = |x: usize, y: usize| {
+        let p = &bgra[(y * w + x) * 4..];
+        [p[2] as i32, p[1] as i32, p[0] as i32]
+    };
+    for y in 0..h {
+        for x in 0..w {
+            let [r, g, b] = rgb(x, y);
+            out[y * w + x] = (16 + ((47 * r + 157 * g + 16 * b + 128) >> 8)) as u8;
+        }
+    }
+    for y in 0..h / 2 {
+        for x in 0..w / 2 {
+            let mut s = [0i32; 3];
+            for (dx, dy) in [(0, 0), (1, 0), (0, 1), (1, 1)] {
+                let c = rgb(2 * x + dx, 2 * y + dy);
+                s = [s[0] + c[0], s[1] + c[1], s[2] + c[2]];
+            }
+            let at = w * h + y * w + 2 * x;
+            out[at] = (128 + ((-26 * s[0] - 86 * s[1] + 112 * s[2] + 512) >> 10)) as u8;
+            out[at + 1] = (128 + ((112 * s[0] - 102 * s[1] - 10 * s[2] + 512) >> 10)) as u8;
+        }
+    }
+    out
+}
+
+/// #157: the colour probe: a `size` BGRA frame of 75% bars (code 191: white, yellow, cyan, green,
+/// magenta, red, blue, black) over its top half and a grey ramp from 0 to 255 below, each patch
+/// 16 pixels wide or a multiple of it, so every edge falls on a macroblock's and no 2×2 chroma
+/// block straddles one. With `alpha`, alpha runs from 0 to 255 across the frame in the same
+/// patches, full range; without it, alpha is 255.
+pub fn probe(size: [u32; 2], alpha: bool) -> Vec<u8> {
+    let (w, h) = (size[0] as usize, size[1] as usize);
+    // Patches of 16 pixels or a multiple of it: eight bars, sixteen ramp steps.
+    let patch = |n: usize| (w / n / 16 * 16).max(16);
+    let (bar, step) = (patch(8), patch(16));
+    let (columns, half) = (w.div_ceil(step).max(2), h / 2 / 16 * 16);
+    const BARS: [[u8; 3]; 8] = [
+        [191, 191, 191],
+        [191, 191, 0],
+        [0, 191, 191],
+        [0, 191, 0],
+        [191, 0, 191],
+        [191, 0, 0],
+        [0, 0, 191],
+        [0, 0, 0],
+    ];
+    let mut out = Vec::with_capacity(w * h * 4);
+    for y in 0..h {
+        for x in 0..w {
+            let level = |n: usize| ((x / step).min(n - 1) * 255 / (n - 1)) as u8;
+            let [r, g, b] = match y < half.max(16) {
+                true => BARS[(x / bar).min(7)],
+                false => [level(16); 3],
+            };
+            let a = if alpha { level(columns) } else { 255 };
+            out.extend([b, g, r, a]);
+        }
+    }
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    /// #157: the shared NV12 conversion's values: white, black and grey in a 2 × 2 frame, and a
+    /// red pixel beside three black ones, whose chroma sums one red.
+    #[test]
+    fn nv12_is_the_fixed_point_bt709_conversion() {
+        let frame = |px: [[u8; 4]; 4]| super::nv12(&px.concat(), 2, 2);
+        let white = [255u8, 255, 255, 255];
+        let black = [0u8, 0, 0, 255];
+        assert_eq!(frame([white; 4]), [235, 235, 235, 235, 128, 128]);
+        assert_eq!(frame([black; 4]), [16, 16, 16, 16, 128, 128]);
+        assert_eq!(frame([[128, 128, 128, 0]; 4])[4..], [128, 128]);
+        // Y = 16 + (47 · 255 + 128) >> 8 = 63; Cb = 128 + (−26 · 255 + 512) >> 10 = 122 (the
+        // floor of −5.97); Cr = 128 + (112 · 255 + 512) >> 10 = 156.
+        let red = [0u8, 0, 255, 255];
+        assert_eq!(
+            frame([red, black, black, black]),
+            [63, 16, 16, 16, 122, 156]
+        );
+    }
+
+    /// #157: the probe's patches sit on 16-pixel edges, its bars are 75% and its ramps reach both
+    /// ends.
+    #[test]
+    fn the_probe_is_bars_over_a_ramp_on_16_pixel_patches() {
+        let (w, h) = (256usize, 64usize);
+        let p = super::probe([w as u32, h as u32], true);
+        let px = |x: usize, y: usize| &p[(y * w + x) * 4..][..4];
+        assert_eq!(px(0, 0), [191, 191, 191, 0]);
+        assert_eq!(px(32, 0)[..3], [0, 191, 191]);
+        assert_eq!(px(w - 1, 0)[..3], [0, 0, 0]);
+        assert_eq!(px(0, h - 1)[..3], [0, 0, 0]);
+        assert_eq!(px(w - 1, h - 1), [255, 255, 255, 255]);
+        // Every horizontal change of any channel is at a multiple of 16.
+        for y in 0..h {
+            for x in 1..w {
+                if px(x, y) != px(x - 1, y) {
+                    assert_eq!(x % 16, 0, "an edge at {x}, {y}");
+                }
+            }
+        }
+        assert!(super::probe([64, 32], false).chunks(4).all(|c| c[3] == 255));
+    }
+
+    #[test]
+    fn bgra_becomes_bt709_limited_planes() {
+        // White, black and the red primary, each a 2 x 2 frame: Y four times, then Cb and Cr.
+        let planes = |bgra: [u8; 4]| super::bgra_to_i420(&bgra.repeat(4), 2, 2);
+        assert_eq!(planes([255, 255, 255, 255]), [235, 235, 235, 235, 128, 128]);
+        assert_eq!(planes([0, 0, 0, 255]), [16, 16, 16, 16, 128, 128]);
+        // 16 + 219 * 0.2126 = 62.6; 128 - 224 * 0.2126 / 1.8556 = 102.3; 128 + 224 / 2 = 240.
+        assert_eq!(planes([0, 0, 255, 255]), [63, 63, 63, 63, 102, 240]);
+    }
+}

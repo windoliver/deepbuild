@@ -10,40 +10,17 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSyn
 import { homedir } from 'node:os';
 import { basename, join, relative } from 'node:path';
 import { cwdOf } from '@deepbuild/archive';
-import type { Asks } from '@deepbuild/asks';
-import type { EvidenceStore } from '@deepbuild/evidence';
 import { scrubText } from '@deepbuild/evidence';
 import { claimId, openReading } from '@deepbuild/reading';
-import { openRecordReader, parseClaimLine, ulid, type Connection, type Message, type RecordStore } from '@deepbuild/record';
-import type { Agent, Runner } from '@deepbuild/runner';
+import { openRecordReader, parseClaimLine, ulid, type Message } from '@deepbuild/record';
+import type { Agent } from '@deepbuild/runner';
 import { openWiki, type Candidate, type Wiki } from '@deepbuild/wiki';
 import { rulesAppendix } from './rules.js';
 import { writeJson } from './claude-settings.js';
 import { captureRejected } from './memory.js';
-import { repoOf, type Root } from './paths.js';
-
-interface WikiBuildOptions {
-  record: RecordStore;
-  root: Root;
-  store: EvidenceStore;
-  runner: Runner;
-  asks: Asks;
-  now: () => number;
-  /** One archive pass: what the agents wrote is copied into the record before it is read. */
-  archive: () => Promise<void>;
-  /** The core's connection and yours (the CLI's): the core writes claims and positions, you keep your edits. */
-  core: Connection;
-  cli: Connection;
-  plant?: string | undefined;
-  /** The secret values the hub holds: a memory file holding one never reaches a page. */
-  held?: readonly string[] | undefined;
-}
-export interface WikiBuilt {
-  /** The pages whose bytes changed, relative to the wiki, `index.md` and `log.md` never among them. */
-  changed: string[];
-  /** Reading jobs started, and whether one is waiting on the plan reserve (the build then ends; the job goes on). */
-  reading: { jobs: number; waiting: boolean };
-}
+import { repoOf } from './paths.js';
+import type { WikiBuildOptions, WikiBuilt } from './knowledge-port.js';
+export type { WikiBuilt } from './knowledge-port.js';
 
 /** The pages that always exist: about you, the setup, and your rules. */
 const STANDING = ['you', 'setup', 'rules'];
@@ -548,7 +525,8 @@ export function openWikiBuild(o: WikiBuildOptions): { build(): Promise<WikiBuilt
         })();
         // Done is each job finished or waiting on the plan reserve: a job that waits goes on in the background.
         let settled = false;
-        void chain.finally(() => { settled = true; });
+        // A job's clean-up that can't read or write the wiki ends the reading there; the next build reads what is left.
+        void chain.catch((error: unknown) => process.stderr.write(`deep hub: a wiki reading's changed pages weren't recorded: ${error instanceof Error ? error.message : String(error)}\n`)).finally(() => { settled = true; });
         while (!settled) {
           if ((await o.runner.list()).some((j) => j.kind === 'read' && j.state === 'waiting' && j.blocked)) { built.reading.waiting = true; break; }
           await new Promise((r) => setTimeout(r, 100));

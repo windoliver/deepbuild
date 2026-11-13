@@ -1,0 +1,537 @@
+The #2009 criterion 2 redraft (#2009.f5168c7a) run once at commit b2db1552 (base 96b462a6 plus the first acceptance
+suites `tests/acceptance/2009/` and `tests/acceptance/2009-oracle/`; no implementation of #2009), on macOS arm64 (Mac,
+rustup 1.99.1, Node 24.22.0), with
+`NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 npx vitest run --root tests/acceptance/2009-redraft-ac2 --testTimeout=600000 --no-file-parallelism`
+(the checkout's path redacted to `<checkout>`).
+
+10 of 10 tests fail, each because the surface is absent, none in the harness: every test fails on "deep-physics builds"
+(cargo answers "error: no bin target named `deep-physics`"); the base has no physics module and no Rapier in Cargo.lock.
+The type-check, `npx tsc -p tests/acceptance/2009-redraft-ac2/tsconfig.json`, exits 0.
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/2009-redraft-ac2
+
+ ❯ ac2-integrator.test.ts (4 tests | 4 failed) 2071ms
+   ❯ #2009.f5168c7a free fall and rest match the discrete solution; bounce, spring and chain match the kit's tolerances (4)
+     × #2009.f5168c7a free fall: every step within 2e-5 m of ½·g·h²·N(N+1), 4.9152 m after 1 s; a box resting on the ground stays within 2e-5 m 5ms
+     × #2009.f5168c7a restitution 0.5 against 0.9 dropped 1 m: the first bounce within 3% of e²h under each combine rule 8ms
+     × #2009.f5168c7a a hanging spring (hz 2, damping_ratio 0, 4 kg): its period within 1% of 1 ÷ hz 1ms
+     × #2009.f5168c7a a pendulum chain of 5 ball-jointed links released level: its energy never more than 1% a second above its start over 10 s 4ms
+ ❯ joint-stability-rapier.test.ts (2 tests | 2 failed) 1430ms
+   ❯ #2009.f5168c7a rapier joint_stability.rs, run on deep-physics (2)
+     × #2009.f5168c7a prismatic_limit_chains_remain_stable: 10 chains of 10 boxes on sliders limited to ±1.5 m along alternating diagonal rails stay sane over 10,000 steps 11ms
+     × #2009.f5168c7a joint_net_remains_stable: a pinned 32 × 32 net of balls on ball joints stays sane over 4,000 steps 5ms
+ ❯ fall-and-rest-rapier.test.ts (2 tests | 2 failed) 1019ms
+   ❯ #2009.f5168c7a rapier soft_bodies.rs (free-fall formula) and total_contact_impulse.rs, run on deep-physics (2)
+     × #2009.f5168c7a fem_free_fall_is_exact's formula: over 60 one-substep steps a body drops g·dt²·n(n+1)/2 within 1e-4 of it 4ms
+     × #2009.f5168c7a resting_impulse_matches_gravity: a 1 kg ball or cube at rest on the ground, free or on a slider, reads a contact impulse of m·g·dt per step within 1% 0ms
+ ❯ restitution-rapier.test.ts (2 tests | 2 failed) 795ms
+   ❯ #2009.59ac371b #2009.f5168c7a rapier issue_974_restitution.rs, run on deep-physics (2)
+     × #2009.59ac371b #2009.f5168c7a restitution_rebound_matches_e_squared: for e in 0.3, 0.5, 0.8, 0.95 the rebound fraction is within 0.05 of e² 3ms
+     × #2009.59ac371b #2009.f5168c7a zero_restitution_does_not_bounce: with e = 0 the rebound fraction is under 0.02 0ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 10 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac2-integrator.test.ts > #2009.f5168c7a free fall and rest match the discrete solution; bounce, spring and chain match the kit's tolerances > #2009.f5168c7a free fall: every step within 2e-5 m of ½·g·h²·N(N+1), 4.9152 m after 1 s; a box resting on the ground stays within 2e-5 m
+AssertionError: deep-physics builds (cargo build --locked --bin deep-physics): expected 'cargo build --locked --bin deep-physi…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-physics failed:
++ error: no bin target named `deep-physics` in default-run packages
++ help: available bin targets:
++     deep-app
++     deep-canvas
++     deep-canvas-render
++     deep-contracts
++     deep-drive
++     deep-gpu
++     deep-graph
++     deep-hook
++     deep-input
++     deep-layout
++     deep-live
++     deep-logic
++     deep-motion
++     deep-panel-host
++     deep-panel-host-jit-control
++     deep-plain-words
++     deep-relay
++     deep-relay-suite
++     deep-replica
++     deep-replica-canvas
++     deep-salience
++     deep-sandbox
++     deep-sheet
++     deep-show
++     deep-text
++     deep-text-render
++
+
+ ❯ physicsBin ../2009/helpers.ts:106:92
+    104|     built = { bin, error };
+    105|   }
+    106|   expect(built.error, `${PHYSICS_BIN} builds (cargo build --locked --b…
+       |                                                                                            ^
+    107|   return built.bin;
+    108| }
+ ❯ physics ../2009/helpers.ts:114:25
+ ❯ ac2-integrator.test.ts:36:32
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/10]⎯
+
+ FAIL  ac2-integrator.test.ts > #2009.f5168c7a free fall and rest match the discrete solution; bounce, spring and chain match the kit's tolerances > #2009.f5168c7a restitution 0.5 against 0.9 dropped 1 m: the first bounce within 3% of e²h under each combine rule
+AssertionError: deep-physics builds (cargo build --locked --bin deep-physics): expected 'cargo build --locked --bin deep-physi…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-physics failed:
++ error: no bin target named `deep-physics` in default-run packages
++ help: available bin targets:
++     deep-app
++     deep-canvas
++     deep-canvas-render
++     deep-contracts
++     deep-drive
++     deep-gpu
++     deep-graph
++     deep-hook
++     deep-input
++     deep-layout
++     deep-live
++     deep-logic
++     deep-motion
++     deep-panel-host
++     deep-panel-host-jit-control
++     deep-plain-words
++     deep-relay
++     deep-relay-suite
++     deep-replica
++     deep-replica-canvas
++     deep-salience
++     deep-sandbox
++     deep-sheet
++     deep-show
++     deep-text
++     deep-text-render
++
+
+ ❯ physicsBin ../2009/helpers.ts:106:92
+    104|     built = { bin, error };
+    105|   }
+    106|   expect(built.error, `${PHYSICS_BIN} builds (cargo build --locked --b…
+       |                                                                                            ^
+    107|   return built.bin;
+    108| }
+ ❯ physics ../2009/helpers.ts:114:25
+ ❯ ac2-integrator.test.ts:64:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/10]⎯
+
+ FAIL  ac2-integrator.test.ts > #2009.f5168c7a free fall and rest match the discrete solution; bounce, spring and chain match the kit's tolerances > #2009.f5168c7a a hanging spring (hz 2, damping_ratio 0, 4 kg): its period within 1% of 1 ÷ hz
+AssertionError: deep-physics builds (cargo build --locked --bin deep-physics): expected 'cargo build --locked --bin deep-physi…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-physics failed:
++ error: no bin target named `deep-physics` in default-run packages
++ help: available bin targets:
++     deep-app
++     deep-canvas
++     deep-canvas-render
++     deep-contracts
++     deep-drive
++     deep-gpu
++     deep-graph
++     deep-hook
++     deep-input
++     deep-layout
++     deep-live
++     deep-logic
++     deep-motion
++     deep-panel-host
++     deep-panel-host-jit-control
++     deep-plain-words
++     deep-relay
++     deep-relay-suite
++     deep-replica
++     deep-replica-canvas
++     deep-salience
++     deep-sandbox
++     deep-sheet
++     deep-show
++     deep-text
++     deep-text-render
++
+
+ ❯ physicsBin ../2009/helpers.ts:106:92
+    104|     built = { bin, error };
+    105|   }
+    106|   expect(built.error, `${PHYSICS_BIN} builds (cargo build --locked --b…
+       |                                                                                            ^
+    107|   return built.bin;
+    108| }
+ ❯ physics ../2009/helpers.ts:114:25
+ ❯ ac2-integrator.test.ts:87:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/10]⎯
+
+ FAIL  ac2-integrator.test.ts > #2009.f5168c7a free fall and rest match the discrete solution; bounce, spring and chain match the kit's tolerances > #2009.f5168c7a a pendulum chain of 5 ball-jointed links released level: its energy never more than 1% a second above its start over 10 s
+AssertionError: deep-physics builds (cargo build --locked --bin deep-physics): expected 'cargo build --locked --bin deep-physi…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-physics failed:
++ error: no bin target named `deep-physics` in default-run packages
++ help: available bin targets:
++     deep-app
++     deep-canvas
++     deep-canvas-render
++     deep-contracts
++     deep-drive
++     deep-gpu
++     deep-graph
++     deep-hook
++     deep-input
++     deep-layout
++     deep-live
++     deep-logic
++     deep-motion
++     deep-panel-host
++     deep-panel-host-jit-control
++     deep-plain-words
++     deep-relay
++     deep-relay-suite
++     deep-replica
++     deep-replica-canvas
++     deep-salience
++     deep-sandbox
++     deep-sheet
++     deep-show
++     deep-text
++     deep-text-render
++
+
+ ❯ physicsBin ../2009/helpers.ts:106:92
+    104|     built = { bin, error };
+    105|   }
+    106|   expect(built.error, `${PHYSICS_BIN} builds (cargo build --locked --b…
+       |                                                                                            ^
+    107|   return built.bin;
+    108| }
+ ❯ physics ../2009/helpers.ts:114:25
+ ❯ ac2-integrator.test.ts:110:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/10]⎯
+
+ FAIL  fall-and-rest-rapier.test.ts > #2009.f5168c7a rapier soft_bodies.rs (free-fall formula) and total_contact_impulse.rs, run on deep-physics > #2009.f5168c7a fem_free_fall_is_exact's formula: over 60 one-substep steps a body drops g·dt²·n(n+1)/2 within 1e-4 of it
+AssertionError: deep-physics builds (cargo build --locked --bin deep-physics): expected 'cargo build --locked --bin deep-physi…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-physics failed:
++ error: no bin target named `deep-physics` in default-run packages
++ help: available bin targets:
++     deep-app
++     deep-canvas
++     deep-canvas-render
++     deep-contracts
++     deep-drive
++     deep-gpu
++     deep-graph
++     deep-hook
++     deep-input
++     deep-layout
++     deep-live
++     deep-logic
++     deep-motion
++     deep-panel-host
++     deep-panel-host-jit-control
++     deep-plain-words
++     deep-relay
++     deep-relay-suite
++     deep-replica
++     deep-replica-canvas
++     deep-salience
++     deep-sandbox
++     deep-sheet
++     deep-show
++     deep-text
++     deep-text-render
++
+
+ ❯ physicsBin ../2009/helpers.ts:106:92
+    104|     built = { bin, error };
+    105|   }
+    106|   expect(built.error, `${PHYSICS_BIN} builds (cargo build --locked --b…
+       |                                                                                            ^
+    107|   return built.bin;
+    108| }
+ ❯ physics ../2009/helpers.ts:114:25
+ ❯ fall-and-rest-rapier.test.ts:24:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/10]⎯
+
+ FAIL  fall-and-rest-rapier.test.ts > #2009.f5168c7a rapier soft_bodies.rs (free-fall formula) and total_contact_impulse.rs, run on deep-physics > #2009.f5168c7a resting_impulse_matches_gravity: a 1 kg ball or cube at rest on the ground, free or on a slider, reads a contact impulse of m·g·dt per step within 1%
+AssertionError: deep-physics builds (cargo build --locked --bin deep-physics): expected 'cargo build --locked --bin deep-physi…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-physics failed:
++ error: no bin target named `deep-physics` in default-run packages
++ help: available bin targets:
++     deep-app
++     deep-canvas
++     deep-canvas-render
++     deep-contracts
++     deep-drive
++     deep-gpu
++     deep-graph
++     deep-hook
++     deep-input
++     deep-layout
++     deep-live
++     deep-logic
++     deep-motion
++     deep-panel-host
++     deep-panel-host-jit-control
++     deep-plain-words
++     deep-relay
++     deep-relay-suite
++     deep-replica
++     deep-replica-canvas
++     deep-salience
++     deep-sandbox
++     deep-sheet
++     deep-show
++     deep-text
++     deep-text-render
++
+
+ ❯ physicsBin ../2009/helpers.ts:106:92
+    104|     built = { bin, error };
+    105|   }
+    106|   expect(built.error, `${PHYSICS_BIN} builds (cargo build --locked --b…
+       |                                                                                            ^
+    107|   return built.bin;
+    108| }
+ ❯ physics ../2009/helpers.ts:114:25
+ ❯ fall-and-rest-rapier.test.ts:54:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/10]⎯
+
+ FAIL  joint-stability-rapier.test.ts > #2009.f5168c7a rapier joint_stability.rs, run on deep-physics > #2009.f5168c7a prismatic_limit_chains_remain_stable: 10 chains of 10 boxes on sliders limited to ±1.5 m along alternating diagonal rails stay sane over 10,000 steps
+AssertionError: deep-physics builds (cargo build --locked --bin deep-physics): expected 'cargo build --locked --bin deep-physi…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-physics failed:
++ error: no bin target named `deep-physics` in default-run packages
++ help: available bin targets:
++     deep-app
++     deep-canvas
++     deep-canvas-render
++     deep-contracts
++     deep-drive
++     deep-gpu
++     deep-graph
++     deep-hook
++     deep-input
++     deep-layout
++     deep-live
++     deep-logic
++     deep-motion
++     deep-panel-host
++     deep-panel-host-jit-control
++     deep-plain-words
++     deep-relay
++     deep-relay-suite
++     deep-replica
++     deep-replica-canvas
++     deep-salience
++     deep-sandbox
++     deep-sheet
++     deep-show
++     deep-text
++     deep-text-render
++
+
+ ❯ physicsBin ../2009/helpers.ts:106:92
+    104|     built = { bin, error };
+    105|   }
+    106|   expect(built.error, `${PHYSICS_BIN} builds (cargo build --locked --b…
+       |                                                                                            ^
+    107|   return built.bin;
+    108| }
+ ❯ physics ../2009/helpers.ts:114:25
+ ❯ sane joint-stability-rapier.test.ts:15:19
+ ❯ joint-stability-rapier.test.ts:53:10
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/10]⎯
+
+ FAIL  joint-stability-rapier.test.ts > #2009.f5168c7a rapier joint_stability.rs, run on deep-physics > #2009.f5168c7a joint_net_remains_stable: a pinned 32 × 32 net of balls on ball joints stays sane over 4,000 steps
+AssertionError: deep-physics builds (cargo build --locked --bin deep-physics): expected 'cargo build --locked --bin deep-physi…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-physics failed:
++ error: no bin target named `deep-physics` in default-run packages
++ help: available bin targets:
++     deep-app
++     deep-canvas
++     deep-canvas-render
++     deep-contracts
++     deep-drive
++     deep-gpu
++     deep-graph
++     deep-hook
++     deep-input
++     deep-layout
++     deep-live
++     deep-logic
++     deep-motion
++     deep-panel-host
++     deep-panel-host-jit-control
++     deep-plain-words
++     deep-relay
++     deep-relay-suite
++     deep-replica
++     deep-replica-canvas
++     deep-salience
++     deep-sandbox
++     deep-sheet
++     deep-show
++     deep-text
++     deep-text-render
++
+
+ ❯ physicsBin ../2009/helpers.ts:106:92
+    104|     built = { bin, error };
+    105|   }
+    106|   expect(built.error, `${PHYSICS_BIN} builds (cargo build --locked --b…
+       |                                                                                            ^
+    107|   return built.bin;
+    108| }
+ ❯ physics ../2009/helpers.ts:114:25
+ ❯ sane joint-stability-rapier.test.ts:15:19
+ ❯ joint-stability-rapier.test.ts:77:10
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/10]⎯
+
+ FAIL  restitution-rapier.test.ts > #2009.59ac371b #2009.f5168c7a rapier issue_974_restitution.rs, run on deep-physics > #2009.59ac371b #2009.f5168c7a restitution_rebound_matches_e_squared: for e in 0.3, 0.5, 0.8, 0.95 the rebound fraction is within 0.05 of e²
+AssertionError: deep-physics builds (cargo build --locked --bin deep-physics): expected 'cargo build --locked --bin deep-physi…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-physics failed:
++ error: no bin target named `deep-physics` in default-run packages
++ help: available bin targets:
++     deep-app
++     deep-canvas
++     deep-canvas-render
++     deep-contracts
++     deep-drive
++     deep-gpu
++     deep-graph
++     deep-hook
++     deep-input
++     deep-layout
++     deep-live
++     deep-logic
++     deep-motion
++     deep-panel-host
++     deep-panel-host-jit-control
++     deep-plain-words
++     deep-relay
++     deep-relay-suite
++     deep-replica
++     deep-replica-canvas
++     deep-salience
++     deep-sandbox
++     deep-sheet
++     deep-show
++     deep-text
++     deep-text-render
++
+
+ ❯ physicsBin ../2009/helpers.ts:106:92
+    104|     built = { bin, error };
+    105|   }
+    106|   expect(built.error, `${PHYSICS_BIN} builds (cargo build --locked --b…
+       |                                                                                            ^
+    107|   return built.bin;
+    108| }
+ ❯ physics ../2009/helpers.ts:114:25
+ ❯ fractions restitution-rapier.test.ts:25:19
+ ❯ restitution-rapier.test.ts:41:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/10]⎯
+
+ FAIL  restitution-rapier.test.ts > #2009.59ac371b #2009.f5168c7a rapier issue_974_restitution.rs, run on deep-physics > #2009.59ac371b #2009.f5168c7a zero_restitution_does_not_bounce: with e = 0 the rebound fraction is under 0.02
+AssertionError: deep-physics builds (cargo build --locked --bin deep-physics): expected 'cargo build --locked --bin deep-physi…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-physics failed:
++ error: no bin target named `deep-physics` in default-run packages
++ help: available bin targets:
++     deep-app
++     deep-canvas
++     deep-canvas-render
++     deep-contracts
++     deep-drive
++     deep-gpu
++     deep-graph
++     deep-hook
++     deep-input
++     deep-layout
++     deep-live
++     deep-logic
++     deep-motion
++     deep-panel-host
++     deep-panel-host-jit-control
++     deep-plain-words
++     deep-relay
++     deep-relay-suite
++     deep-replica
++     deep-replica-canvas
++     deep-salience
++     deep-sandbox
++     deep-sheet
++     deep-show
++     deep-text
++     deep-text-render
++
+
+ ❯ physicsBin ../2009/helpers.ts:106:92
+    104|     built = { bin, error };
+    105|   }
+    106|   expect(built.error, `${PHYSICS_BIN} builds (cargo build --locked --b…
+       |                                                                                            ^
+    107|   return built.bin;
+    108| }
+ ❯ physics ../2009/helpers.ts:114:25
+ ❯ fractions restitution-rapier.test.ts:25:19
+ ❯ restitution-rapier.test.ts:46:24
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/10]⎯
+
+
+ Test Files  4 failed (4)
+      Tests  10 failed (10)
+   Start at  23:37:30
+   Duration  6.34s (tests 95%, transform 4%, import 1%)
+
+    Isolate  4 workers spawned · ~147ms startup each (spawn + environment, per file)
+             at least ~441ms faster with isolate: false — reuses workers across files instead of one per file
+

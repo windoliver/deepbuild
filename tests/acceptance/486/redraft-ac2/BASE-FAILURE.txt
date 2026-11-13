@@ -1,0 +1,34 @@
+# Blind redraft of #486 AC2 at the base, d51be2c3 (Merge pull request #2108), before any implementation.
+#
+# Read from the base's code, not run: this job built no binary and drew nothing. Checked here:
+#   node node_modules/typescript/bin/tsc -p tests/acceptance/486/redraft-ac2/tsconfig.json   -> exit 0, no errors
+#   node node_modules/vitest/vitest.mjs list --root tests/acceptance/486/redraft-ac2         -> both tests collected
+# and, in a scratch script outside the repo, occlusionCheck on synthetic frames: a right set gives 0 pixels off; a set
+# whose occlusion-0 frame is black on every pixel gives 173,604 pixels off in 10 bounded failure lines, each naming
+# a pixel, in under a second.
+#
+# Off macOS both tests fail with "INCONCLUSIVE: the GPU layer draws these pixels on macOS's Metal device; ...", before
+# anything builds. On macOS each loads, builds deep-gpu and fails at an assertion:
+#
+# 1. "... an operator writing occlusion 0 matches the plate with the environment's lighting and the probe removed ..."
+#    `deep-gpu run` answers ok with four replies. The occlusion_0 and occlusion_1 documents name `occ_op`, a
+#    gpu.material@1 whose only output is `occlusion`. At the base the operator check
+#    (crates/deep-canvas-effects/src/check.rs, the loop over `op.outputs`) types each output against
+#    deep_canvas::registry::core_lists::OUTPUTS, whose material entries are base_color, emission, alpha, metallic,
+#    roughness and shadow_filter, and raises
+#        operator_type  "a material operator has no output occlusion"
+#    The document's operator rule (crates/deep-canvas-effects/src/module.rs: operator_rule) raises it at
+#    items/occ_op/params/outputs/occlusion; and where a frame reaches drawing, deep_scene3d_render::op::compile returns
+#    "the operator check refuses it: operator_type: a material operator has no output occlusion", Renderer::material_op
+#    records it in counts.operators_refused, and crates/deep-gpu-layer/src/view3d.rs refuses the frame:
+#        {"code": "operator_compile", "reason": "occ_op: the operator check refuses it: operator_type: ..."}
+#    Either way the occlusion_0 reply holds a code, and the test fails in drawPlates -> frame0 -> answered at
+#        expect(reply['code'], 'occlusion_0 was answered, not refused: {...}').toBeUndefined()
+#    Were the output accepted and ignored, the occlusion-0 plate would keep the studio environment's light, which the
+#    fixture requires to add at least 0.05 to the plate's mean luminance (about 51 codes), and the check would fail on
+#    its plate pixels.
+#
+# 2. "... the planted occlusion that also scales direct light and emission darkens the sunlit plate or the square ..."
+#    Planted::parse (crates/deep-gpu-layer/src/main.rs) has no `occlusion_scales_direct`, so the flag reaches
+#    bad_input(): the binary prints {"ok":false,"code":"bad_input"} and exits 2. The test fails in runGpu at
+#        expect(run.status, 'deep-gpu run --planted occlusion_scales_direct exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"} ...').toBe(0)

@@ -39,8 +39,10 @@ pub enum State {
     },
 }
 
-/// The table's rows: the word on every surface, its status-map entry, and the words that never name it.
-pub const TABLE: [(&str, &str, &[&str]); 11] = [
+/// The table's rows: the word on every surface, its status-map entry, and the words that never name it. Stuck,
+/// flagged and finished are the states the hub's one reading gives a session that no claim names (#992), which the
+/// list's rows carry (#1463); running is a running job's row (#1925).
+pub const TABLE: [(&str, &str, &[&str]); 15] = [
     ("queued", "idle", &[]),
     ("working", "running", &["in progress"]),
     ("says done", "running", &["done"]),
@@ -52,6 +54,10 @@ pub const TABLE: [(&str, &str, &[&str]); 11] = [
     ("needs you", "needs_you", &["waiting on you"]),
     ("stale", "stale", &["pass", "passed", "proven"]),
     ("quiet", "idle", &[]),
+    ("stuck", "blocked", &[]),
+    ("flagged", "fail", &[]),
+    ("finished", "idle", &[]),
+    ("running", "running", &[]),
 ];
 
 impl State {
@@ -90,24 +96,29 @@ impl State {
             State::Quiet { last_seen } => {
                 let age = now.saturating_sub(*last_seen);
                 changes_after(changes_in(age));
-                format!("quiet · last seen {} ago", span(age))
+                // #1458's planted row reads its time the way no surface may, in a test build only.
+                if crate::plain::planted("row-says-ago") {
+                    return "quiet · last seen 2 min ago".to_owned();
+                }
+                format!("quiet · last seen {}", span(age))
             }
             other => other.word().to_owned(),
         }
     }
 }
 
-/// How long until `deadline` from `now`, as a card or a notification says when a default applies: whole days once a
-/// day or more is left ("3 d"), else [`span`]. Read to the nearest minute first, so a deadline a second short of
-/// three days away still reads "3 d".
-pub fn span_until(deadline: u64, now: u64) -> String {
-    const MINUTE: u64 = 60_000;
-    const DAY: u64 = 86_400_000;
-    let left = (deadline.saturating_sub(now) + MINUTE / 2) / MINUTE * MINUTE;
-    if left >= DAY {
-        format!("{} d", left / DAY)
-    } else {
-        span(left)
+/// A moment as every surface writes it (#1458), in your time zone: "16:40" today, "tomorrow 16:40", and on another
+/// day its weekday, "Mon 16:40". An ask's row, its card and its notification say when its default applies in these
+/// words.
+pub fn moment(at: u64, now: u64) -> String {
+    use chrono::{Local, TimeZone as _};
+    let local = |ms: u64| Local.timestamp_millis_opt(ms as i64).unwrap();
+    let (at, today) = (local(at), local(now).date_naive());
+    let time = at.format("%H:%M");
+    match (at.date_naive() - today).num_days() {
+        0 => time.to_string(),
+        1 => format!("tomorrow {time}"),
+        _ => format!("{} {time}", at.format("%a")),
     }
 }
 
@@ -130,9 +141,10 @@ pub fn changes_after(wait: u64) {
     });
 }
 
-/// How long until [`span`] of an age `ms` reads differently: at the next whole second, minute or hour it shows.
+/// How long until [`span`] of an age `ms` reads differently: at the next whole second, minute, hour or day it shows.
 pub fn changes_in(ms: u64) -> u64 {
     let unit = match ms / 1000 {
+        s if s >= 86_400 => 86_400_000,
         s if s >= 3600 => 3_600_000,
         s if s >= 60 => 60_000,
         _ => 1000,
@@ -140,9 +152,41 @@ pub fn changes_in(ms: u64) -> u64 {
     unit - ms % unit
 }
 
-/// A span of time as a person reads it: "4 min", "2 h", "12 s".
+/// `words` and the length [`span`] wrote at their end, if one is: a row draws that length in a slot of its own at
+/// its right edge, so a ticking time moves nothing else in the row (#1458).
+pub fn time_at_end(words: &str) -> (&str, Option<&str>) {
+    let mut parts = words.rsplitn(3, ' ');
+    match (parts.next(), parts.next(), parts.next()) {
+        (Some(unit), Some(n), Some(rest))
+            if ["s", "min", "h", "d"].contains(&unit)
+                && !n.is_empty()
+                && n.bytes().all(|b| b.is_ascii_digit()) =>
+        {
+            (rest, Some(&words[rest.len() + 1..]))
+        }
+        _ => (words, None),
+    }
+}
+
+/// A running job's row words after its kind (#1925): its count from its tool's own counter with its time left, as the
+/// hub wrote them; or, when its tool reports no counter, the word running and how long it has run, which a row draws
+/// at its right edge. Never a bar, and never a count its tool didn't report.
+pub fn job_words(row: &Value, now: u64) -> String {
+    let title = row["title"].as_str().unwrap_or_default();
+    match row["progress"].as_str() {
+        Some(progress) => format!("{title} · {progress}"),
+        None => {
+            let ran = now.saturating_sub(row["since"].as_u64().unwrap_or(now));
+            format!("{title} · running {}", span(ran))
+        }
+    }
+}
+
+/// A length of time as every surface writes it (#1458): "40 s", "12 min", "3 h" or "2 d", with a space and no "ago",
+/// since the slot it's in says it's since.
 pub fn span(ms: u64) -> String {
     match ms / 1000 {
+        s if s >= 86_400 => format!("{} d", s / 86_400),
         s if s >= 3600 => format!("{} h", s / 3600),
         s if s >= 60 => format!("{} min", s / 60),
         s => format!("{s} s"),
@@ -175,15 +219,31 @@ pub fn mark(state: &State, now: u64) -> String {
     format!("{} {}", glyph(state.entry()), state.text(now))
 }
 
-const CLOSING: [&str; 7] = [
-    "decision.applied",
-    "ask.answered",
-    "ask.defaulted",
-    "ask.escalated",
-    "ask.cancelled",
-    "ask.superseded",
-    "ask.moot",
-];
+/// The kinds that close an ask: each move of the contract's ask.machine@1 into a final state, so the app keeps no
+/// close list of its own (#2026).
+pub fn closing() -> &'static [String] {
+    static KINDS: OnceLock<Vec<String>> = OnceLock::new();
+    KINDS.get_or_init(|| {
+        let machine: Value = serde_json::from_str(include_str!(
+            "../../../packages/contracts/schemas/ask.machine@1.json"
+        ))
+        .expect("ask.machine@1 is JSON");
+        let mut kinds: Vec<String> = machine["moves"]
+            .as_array()
+            .expect("ask.machine@1 holds moves")
+            .iter()
+            .filter(|step| {
+                machine["final"]
+                    .as_array()
+                    .is_some_and(|end| end.contains(&step["to"]))
+            })
+            .filter_map(|step| step["event"].as_str().map(str::to_owned))
+            .collect();
+        kinds.sort();
+        kinds.dedup();
+        kinds
+    })
+}
 
 /// An ask's handle, `ask:<the id of its ask.created>`.
 pub fn handle(ask: &Value) -> String {
@@ -199,7 +259,7 @@ pub fn closes(event: &Value, handle: &str) -> bool {
     } else {
         &event["subject"]
     };
-    CLOSING.contains(&event["kind"].as_str().unwrap_or_default())
+    closing().iter().any(|kind| event["kind"] == kind.as_str())
         && ask == handle
         && writer != "hook"
         && !writer.starts_with("mcp:")
@@ -252,7 +312,10 @@ impl Reading {
     /// One event about this ask, in log order.
     fn read(&mut self, event: &Value, handle: &str) {
         if self.closed.is_none() && closes(event, handle) {
-            self.closed = CLOSING.into_iter().find(|kind| event["kind"] == *kind);
+            self.closed = closing()
+                .iter()
+                .find(|kind| event["kind"] == kind.as_str())
+                .map(String::as_str);
         } else if self.closed.is_none()
             && event["kind"] == "deadline.moved"
             && event["writer"] == "core"
@@ -326,6 +389,15 @@ pub struct Table {
     /// the repo, by start; and the session each start became, from its `start.session`.
     starts: HashMap<String, Start>,
     started: HashMap<String, String>,
+    /// The list's rows the hub built (#1463), by ID: each one's place in the list and the row, as its newest
+    /// row.set gives them.
+    rows: HashMap<String, (String, Value)>,
+    /// Whether the record holds any row.set: a record from before the hub built rows keeps the app's own reading.
+    listed: bool,
+    /// Each session's project, from the first event that names one (#1462): the list's heading it goes under.
+    projects: HashMap<String, String>,
+    /// Each agent the Agents page lists, as its newest agent.reach says it (#2019), in the order the record first names them.
+    agents: Vec<(String, Value)>,
 }
 
 /// What a start says of the session it became (#1348): the approval ask of the work run it's part of, and the real
@@ -375,6 +447,13 @@ struct Session {
     took: HashMap<String, Vec<u64>>,
     /// Its newest run's failure when that run failed (#1348): what it gave, its trace included, else its assertion.
     failure: Option<String>,
+    /// How many events its own hooks have sent, and when the newest came (#2021): the working mark moves once for
+    /// each, and holds still while none comes.
+    hooks: (u64, Option<u64>),
+    /// The cause of its newest stop of its own turn when that turn ended failed (#2029).
+    stopped: Option<String>,
+    /// Each claim's newest verdict's reasons the core gave of its own (#2029): each code with its sentence.
+    why: HashMap<String, Vec<(String, String)>>,
 }
 
 impl Table {
@@ -389,6 +468,15 @@ impl Table {
             reading.read(event, handle);
             if !done && reading.done() {
                 self.asks.retain(|ask| self::handle(ask) != handle);
+            }
+        }
+        if let (Some(session), Some(project)) =
+            (event["session"].as_str(), event["project"].as_str())
+        {
+            if !project.is_empty() {
+                self.projects
+                    .entry(session.to_owned())
+                    .or_insert_with(|| project.to_owned());
             }
         }
         let kind = event["kind"].as_str().unwrap_or_default();
@@ -422,6 +510,27 @@ impl Table {
                 self.started.insert(session.to_owned(), run.to_owned());
             }
         }
+        if kind == "row.set" {
+            let data = &event["data"];
+            if let Some(id) = data["id"].as_str() {
+                self.listed = true;
+                if data["listed"] == true {
+                    let order = data["order"].as_str().unwrap_or_default().to_owned();
+                    self.rows.insert(id.to_owned(), (order, data.clone()));
+                } else {
+                    self.rows.remove(id);
+                }
+            }
+        }
+        if kind == "agent.reach" {
+            let data = &event["data"];
+            if let Some(agent) = data["agent"].as_str() {
+                match self.agents.iter_mut().find(|(id, _)| id == agent) {
+                    Some(newest) => newest.1 = data.clone(),
+                    None => self.agents.push((agent.to_owned(), data.clone())),
+                }
+            }
+        }
         if kind == "task.created" {
             if let Some(thread) = event["data"]["thread"].as_str() {
                 self.titles
@@ -441,6 +550,70 @@ impl Table {
             .apply(event, kind);
     }
 
+    /// The rows a read of the hub gives, in its order (#2026): what the views draw until the record before the read is
+    /// folded, so Needs you never waits on the history.
+    pub fn seeded(rows: &[Value]) -> Table {
+        let mut table = Table {
+            listed: true,
+            ..Table::default()
+        };
+        for (at, row) in rows.iter().enumerate() {
+            if let Some(id) = row["id"].as_str() {
+                table
+                    .rows
+                    .insert(id.to_owned(), (format!("{at:010}"), row.clone()));
+            }
+        }
+        table
+    }
+
+    /// Whether the record holds the list's rows (#1463), so every view reads them and not its own reading.
+    pub fn listed(&self) -> bool {
+        self.listed
+    }
+
+    /// The list's rows (#1463), in the list's one order: by each row's order key's bytes, then by ID.
+    pub fn list(&self) -> Vec<&Value> {
+        let mut rows: Vec<(&String, &String, &Value)> = self
+            .rows
+            .iter()
+            .map(|(id, (order, row))| (order, id, row))
+            .collect();
+        rows.sort_by(|a, b| (a.0, a.1).cmp(&(b.0, b.1)));
+        rows.into_iter().map(|(.., row)| row).collect()
+    }
+
+    /// The hub's count of a session's open asks (#2018): the list's ask rows that are its, where the hub built the
+    /// list, else the asks of it that no event closed.
+    pub fn asks_of(&self, session: &str) -> usize {
+        if self.listed {
+            return self
+                .rows
+                .values()
+                .filter(|(_, row)| {
+                    row["id"].as_str().is_some_and(|id| id.starts_with("ask:"))
+                        && row["session"] == session
+                })
+                .count();
+        }
+        self.open_asks(Some(session)).len()
+    }
+
+    /// The list's order key of the row with this ID.
+    pub fn order_of(&self, id: &str) -> Option<String> {
+        self.rows.get(id).map(|(order, _)| order.clone())
+    }
+
+    /// Each agent the Agents page lists, with whether its sessions reach DeepBuild (#2019).
+    pub fn agents(&self) -> &[(String, Value)] {
+        &self.agents
+    }
+
+    /// The list's row with this ID.
+    pub fn row_of(&self, id: &str) -> Option<&Value> {
+        self.rows.get(id).map(|(_, row)| row)
+    }
+
     /// A reading's newest value and the time it is as of, in ms.
     pub fn value(&self, reading: &str) -> Option<(f64, u64)> {
         self.values.get(reading).copied()
@@ -453,7 +626,19 @@ impl Table {
 
     /// The title of the session's task, as every surface draws it. The agent chooses it, so its controls and
     /// direction marks show as the question card shows them (#1738); the record keeps the bytes.
+    /// The project a session is part of, as its events name it; empty when none does (#1462).
+    pub fn project(&self, session: &str) -> String {
+        self.projects.get(session).cloned().unwrap_or_default()
+    }
+
     pub fn title(&self, session: &str) -> String {
+        // The session's one name (#2018): its row's, as the hub built it, the same on every surface.
+        if let Some(title) = self
+            .row_of(&format!("session:{session}"))
+            .and_then(|row| row["title"].as_str())
+        {
+            return crate::question::visible(title);
+        }
         let title = self
             .titles
             .get(session)
@@ -461,6 +646,11 @@ impl Table {
             .flatten()
             .unwrap_or_else(|| untitled(session));
         crate::question::visible(&title)
+    }
+
+    /// How many events a session's own hooks have sent the record, and when the newest came (#2021).
+    pub fn hooks(&self, session: &str) -> (u64, Option<u64>) {
+        self.sessions.get(session).map_or((0, None), |s| s.hooks)
     }
 
     /// A session's state.
@@ -479,6 +669,18 @@ impl Table {
     /// with "process gone mid-turn" for a process gone; then a claim's state, if the session's newest stop made one.
     /// A session with no `session.state` yet reads as [`Table::state`] does, but for its stop's claim, which it keeps.
     pub fn row(&self, session: &str, now: u64) -> (String, &'static str) {
+        // The hub's row (#1463), the one reading of the session (#2018): its word and its entry, read no second way.
+        if let Some(row) = self.row_of(&format!("session:{session}")) {
+            let word = row["word"].as_str().unwrap_or_default();
+            // The planted app reads a session waiting on you as working, in a build with the env-plants feature only.
+            if crate::plain::planted("waiting-as-working") && word == "needs you" {
+                return ("working".to_owned(), "running");
+            }
+            return (
+                word.to_owned(),
+                entry_of(row["entry"].as_str().unwrap_or_default()),
+            );
+        }
         // The claim the row adds is its stop's, which only later work hides.
         let shown = match self.sessions.get(session) {
             Some(own) if self.open_asks(Some(session)).is_empty() => own.read(own.work),
@@ -490,6 +692,22 @@ impl Table {
         };
         // The planted app reads a session waiting on you as working, in a build with the env-plants feature only.
         let planted = crate::plain::planted("waiting-as-working");
+        // A claim's word the core recorded as the session's state (#2018) is the row's, with the table's entry: the
+        // app adds no reading of the claim of its own beside it.
+        if let Some((word, entry, _)) = TABLE.iter().find(|(word, ..)| {
+            *word == listed
+                && ![
+                    "needs you",
+                    "stuck",
+                    "flagged",
+                    "working",
+                    "finished",
+                    "quiet",
+                ]
+                .contains(word)
+        }) {
+            return ((*word).to_owned(), entry);
+        }
         let (word, entry) = match listed.as_str() {
             _ if planted && cause == "waiting" => ("working".to_owned(), "running"),
             "needs you" => ("needs you".to_owned(), "needs_you"),
@@ -524,8 +742,17 @@ impl Table {
         self.sessions.get(session).map_or(&[], |s| &s.readings)
     }
 
-    /// Every session in the record, in the order each first appears, with its task's title and its state.
+    /// Every session in the record, with its name and its state: in the list's one order where the hub built the
+    /// list's rows (#1463, #2018), else in the order each first appears.
     pub fn every_session(&self) -> Vec<(String, String, State)> {
+        if self.listed {
+            return self
+                .list()
+                .into_iter()
+                .filter_map(|row| row["id"].as_str()?.strip_prefix("session:"))
+                .map(|session| (session.to_owned(), self.title(session), self.state(session)))
+                .collect();
+        }
         self.order
             .iter()
             .map(|session| (session.clone(), self.title(session), self.state(session)))
@@ -539,6 +766,14 @@ impl Table {
             .filter(|ask| session.is_none_or(|session| ask["session"] == session))
             .filter(|ask| self.is_open(&handle(ask)))
             .collect()
+    }
+
+    /// How many asks a decision applied for you closed: #2026's planted count adds them back.
+    pub fn decided(&self) -> usize {
+        self.readings
+            .values()
+            .filter(|reading| reading.closed == Some("decision.applied"))
+            .count()
     }
 
     /// Whether the ask `handle` is open: any ask no event closed is, whether or not the record holds its creation.
@@ -557,6 +792,28 @@ impl Table {
     /// The failure of the session's newest run, when it failed (#1348).
     pub fn failure(&self, session: &str) -> Option<&str> {
         self.sessions.get(session)?.failure.as_deref()
+    }
+
+    /// The cause of a session's newest stop when its turn ended failed (#2029), with the core's text for it: its list
+    /// row's why, as the hub words it.
+    pub fn stopped(&self, session: &str) -> Option<(String, String)> {
+        let cause = self.sessions.get(session)?.stopped.clone()?;
+        let row = self.row_of(&format!("session:{session}"));
+        let core = row
+            .and_then(|row| row["why"].as_str())
+            .unwrap_or("its turn ended failed");
+        Some((cause, core.to_owned()))
+    }
+
+    /// The reasons the core gave of its own (#2029) to the verdict on a session's newest claim: each code with its sentence.
+    pub fn why(&self, session: &str) -> &[(String, String)] {
+        let Some(own) = self.sessions.get(session) else {
+            return &[];
+        };
+        own.claim
+            .as_ref()
+            .and_then(|(claim, _)| own.why.get(claim))
+            .map_or(&[], Vec::as_slice)
     }
 
     /// The real names a session's page shows of a session a work run started (#1348): the session, and its start's
@@ -614,6 +871,9 @@ impl Session {
         let data = &event["data"];
         let text = |value: &Value| value.as_str().map(str::to_owned);
         let pos = event["log_pos"].as_u64().unwrap_or(0);
+        if event["writer"] == "hook" {
+            self.hooks = (self.hooks.0 + 1, event["ts"].as_u64().or(self.hooks.1));
+        }
         // A reading is shown beside the session and moves nothing about it (#990): no state, no sign of life.
         if kind == "session.reading" {
             if let Some(reading) = text(&data["reading"]) {
@@ -663,10 +923,23 @@ impl Session {
                 if let Some(claim) = text(&data["claim"]) {
                     let outcome = data["outcome"].as_str().unwrap_or_default().to_owned();
                     let verdict = data["verdict"].as_str().unwrap_or_default().to_owned();
+                    let why = data["why"].as_array().into_iter().flatten();
+                    let why = why.map(|w| {
+                        (
+                            text(&w["reason"]).unwrap_or_default(),
+                            text(&w["text"]).unwrap_or_default(),
+                        )
+                    });
+                    self.why.insert(claim.clone(), why.collect());
                     self.verdicts.insert(claim, (outcome, verdict));
                 }
             }
             "verdict.stale" => self.stale.extend(text(&data["verdict"])),
+            // A child's stop ends no turn of the session's own; a turn that ended well names no cause to show.
+            "agent.stop" if data["child"].is_null() => {
+                self.stopped =
+                    (data["outcome"] == "failed").then(|| text(&data["cause"]).unwrap_or_default());
+            }
             "claim.sent_back" => {
                 if let Some(claim) = text(&data["claim"]) {
                     self.rounds.insert(claim, data["round"].as_u64());
@@ -796,11 +1069,48 @@ pub fn verdict_line(table: &Table, session: &str, now: u64) -> String {
 
 /// The one count of what needs you: every open ask in the record, the same on every device.
 pub fn count(table: &Table) -> usize {
+    if table.listed() {
+        return table
+            .list()
+            .iter()
+            .filter(|row| row["id"].as_str().is_some_and(|id| id.starts_with("ask:")))
+            .count();
+    }
     table.open_asks(None).len()
 }
 
-/// The menu bar's menu under the count: a line per session, its task and its status mark.
+/// A status-map entry the hub names, as the table holds it; one the table doesn't name draws as idle.
+pub fn entry_of(entry: &str) -> &'static str {
+    TABLE
+        .iter()
+        .find(|(_, known, _)| *known == entry)
+        .map_or("idle", |(_, known, _)| known)
+}
+
+/// The menu bar's menu under the count: a line per session, its task and its status mark. A record whose rows the hub
+/// built (#1463) says each session as the list and `deep status` do: its row's title, its entry's mark and its word
+/// (#1462).
 pub fn menu(table: &Table, now: u64) -> Vec<String> {
+    if table.listed() {
+        return table
+            .list()
+            .into_iter()
+            .filter(|row| {
+                row["id"]
+                    .as_str()
+                    .is_some_and(|id| id.starts_with("session:"))
+            })
+            .map(|row| {
+                let text = |key: &str| row[key].as_str().unwrap_or_default();
+                let title = crate::question::visible(text("title"));
+                format!(
+                    "{title} · {} {}",
+                    glyph(entry_of(text("entry"))),
+                    text("word")
+                )
+            })
+            .collect();
+    }
     table
         .every_session()
         .into_iter()
@@ -813,12 +1123,36 @@ mod tests {
     use super::*;
     use serde_json::json;
 
+    /// #1925: a running job's row shows its tool's count as the hub wrote it; with no counter, the word running and
+    /// how long it has run, in the row's time slot, never a count it wasn't given.
+    #[test]
+    fn a_job_row_counts_only_from_its_tools_counter() {
+        let counted =
+            json!({"title": "test.encode", "progress": "300 of 600 · 40 s left", "since": 0});
+        assert_eq!(
+            job_words(&counted, 45_000),
+            "test.encode · 300 of 600 · 40 s left"
+        );
+        let bare = json!({"title": "test.encode", "since": 1_000});
+        let words = job_words(&bare, 41_000);
+        assert_eq!(words, "test.encode · running 40 s");
+        assert_eq!(time_at_end(&words), ("test.encode · running", Some("40 s")));
+    }
+
     /// #1546: an age's next tick is the first ms its span reads differently, never later, never earlier.
     #[test]
     fn an_age_changes_exactly_when_its_span_next_reads_differently() {
-        let ages = (0..200_000)
-            .step_by(997)
-            .chain([59_999, 60_000, 90_000, 3_599_999, 3_600_000, 7_300_123]);
+        let ages = (0..200_000).step_by(997).chain([
+            59_999,
+            60_000,
+            90_000,
+            3_599_999,
+            3_600_000,
+            7_300_123,
+            86_399_999,
+            86_400_000,
+            200_000_000,
+        ]);
         for age in ages {
             let wait = changes_in(age);
             assert!(wait > 0, "{age}");

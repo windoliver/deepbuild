@@ -1,0 +1,182 @@
+{
+  "title": "row.set@1",
+  "description": "One row of the list every reader shows (#1463): the app's list, deep, deep status, deep inbox and deep_drive's see read these rows and no other reading. The core builds each row in one place and appends this kind when the row changes, or with listed false when it leaves the list. It is read from the record and is never evidence.",
+  "x-since": "R1",
+  "x-stability": "stable",
+  "x-feeds": ["rows"],
+  "type": "object",
+  "properties": {
+    "v": {
+      "const": 1,
+      "description": "The kind's schema version."
+    },
+    "id": {
+      "type": "string",
+      "format": "ulid",
+      "description": "The event's ULID, its identity."
+    },
+    "kind": {
+      "const": "row.set"
+    },
+    "writer": {
+      "const": "core",
+      "description": "Only the core appends this kind."
+    },
+    "actor": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The person behind it, from the credential."
+    },
+    "scope": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Who may see it."
+    },
+    "ts": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "Milliseconds since the Unix epoch."
+    },
+    "seq": {
+      "type": "string",
+      "format": "seq",
+      "description": "Order within the session: ns since the epoch when the hook started."
+    },
+    "log_pos": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991,
+      "description": "Its position in the event log, assigned by the hub at append."
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^(session|ask):[0-9A-Za-z._-]+$",
+          "description": "The row's ID, the id its node carries in the app's tree (#1459): ask:<ULID> for an ask, session:<ID> for a session."
+        },
+        "listed": {
+          "type": "boolean",
+          "description": "Whether the row is in the list; false when it left it, and then no other field is read."
+        },
+        "order": {
+          "type": "string",
+          "maxLength": 512,
+          "description": "Where the row sits in the list: every reader sorts the rows by this key's bytes, so the list has one order."
+        },
+        "address": {
+          "type": "string",
+          "pattern": "^(session|ask)/[0-9A-Za-z._-]+$",
+          "description": "The row's page: ask/<ULID> or session/<ID>."
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 8192,
+          "description": "What the row is called: an ask's question, a session's task, or for an untitled session its agent, never an ID."
+        },
+        "project": {
+          "type": ["string", "null"],
+          "maxLength": 1024,
+          "description": "The repo the row's session works in, by its folder's name; null when the record names none."
+        },
+        "session": {
+          "type": "string",
+          "maxLength": 256,
+          "description": "The session the row is, or the session that raised the ask."
+        },
+        "agent": {
+          "type": ["string", "null"],
+          "maxLength": 256,
+          "description": "The session's agent."
+        },
+        "entry": {
+          "type": "string",
+          "enum": ["idle", "running", "pass", "fail", "blocked", "invalid", "inconclusive", "needs_you", "stale"],
+          "description": "The word's status-map entry, which a mark draws.",
+          "x-closure": {
+            "closed": "the status map's entries, each a mark the look draws",
+            "reopens": "a minor that adds an entry to the status map",
+            "mark": "exhaustive"
+          }
+        },
+        "word": {
+          "type": "string",
+          "enum": ["queued", "working", "says done", "PASS", "sent back", "BLOCKED", "INVALID", "INCONCLUSIVE", "needs you", "stale", "quiet", "stuck", "flagged", "finished"],
+          "description": "The word every surface names the row's state with, from the states table.",
+          "x-closure": {
+            "closed": "the words of States people see",
+            "reopens": "a minor that adds a word to that table",
+            "mark": "exhaustive"
+          }
+        },
+        "why": {
+          "type": "string",
+          "maxLength": 8192,
+          "description": "Why the row is in its state, with no age in it: a reader says how long from since."
+        },
+        "waits_on": {
+          "type": ["string", "null"],
+          "maxLength": 256,
+          "description": "Who the row waits on: you or the agent, and a person once the hub names people; null when nothing waits."
+        },
+        "since": {
+          "type": ["integer", "null"],
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "Since when the row is in its state, ms since the Unix epoch; null when the record gives no time."
+        },
+        "actions": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "type": "object",
+            "properties": {
+              "answer": {
+                "type": "string",
+                "maxLength": 256,
+                "description": "The option an answer gives, as deep inbox answer takes it."
+              },
+              "label": {
+                "type": "string",
+                "maxLength": 8192,
+                "description": "The option's words."
+              }
+            },
+            "required": ["answer", "label"],
+            "additionalProperties": false
+          },
+          "description": "What you can do from the row: an ask's answers."
+        },
+        "unread": {
+          "type": "boolean",
+          "description": "Whether the row changed since you last read it (#1461): a first sighting is read unless it ended flagged or stuck."
+        },
+        "default": {
+          "type": "string",
+          "maxLength": 8192,
+          "description": "An ask's default: the label of the option it takes if you don't answer."
+        },
+        "default_at": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "When an ask takes its default, ms since the Unix epoch."
+        }
+      },
+      "required": ["id", "listed"],
+      "additionalProperties": false
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$",
+        "description": "A SHA-256, in lower-case hex."
+      }
+    }
+  },
+  "required": ["v", "id", "kind", "writer", "actor", "scope", "ts", "data"],
+  "additionalProperties": false
+}

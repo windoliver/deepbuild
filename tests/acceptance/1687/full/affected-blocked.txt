@@ -1,0 +1,10 @@
+file://<repo>/scripts/affected.mjs:50
+  if (result.status !== 0) throw Error(`cargo metadata failed: ${result.stderr.trim().split('\n').at(-1)}`);
+                                                                               ^
+
+TypeError: Cannot read properties of undefined (reading 'trim')
+    at crates (file://<repo>/scripts/affected.mjs:50:80)
+    at main (file://<repo>/scripts/affected.mjs:378:21)
+    at file://<repo>/scripts/affected.mjs:499:82
+
+Node.js v24.22.2

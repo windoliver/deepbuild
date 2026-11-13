@@ -1,0 +1,182 @@
+{
+  "id": "fixture_1003_1458",
+  "format": 1,
+  "basis": "drawing",
+  "license": "Apache-2.0",
+  "description": "The blind redraft of #1003's fixture for #1458's amended ink floors, not shipped: fixtures/look-1003.json with ink_tertiary gone, so the ink is two tiers and disabled and every ink but ink_disabled clears 4.5:1 on all six fills, in light and dark. Every other rule holds as in that fixture, so each plant is refused for its plant alone.",
+  "palette": {
+    "white": "#ffffff",
+    "graphite": "#1b1d22",
+    "slate": "#8b8f97",
+    "lagoon": "#1aa3c8",
+    "mist": "#ededee",
+    "fog": "#e3e4e6",
+    "orchid": "#b0207f",
+    "indigo": "#4f46e5",
+    "graphite_secondary": "#1b1d22b1",
+    "graphite_disabled": "#1b1d2233",
+    "graphite_hover": "#1b1d2208",
+    "graphite_selected": "#1b1d220c",
+    "term_black": "#000000",
+    "term_red": "#c52053",
+    "term_green": "#1f7637",
+    "term_yellow": "#856108",
+    "term_blue": "#3662c5",
+    "term_magenta": "#a537a5",
+    "term_cyan": "#13727c",
+    "term_white": "#67676f",
+    "term_bright_black": "#66666e",
+    "term_bright_red": "#b43c52",
+    "term_bright_green": "#28763d",
+    "term_bright_yellow": "#81630a",
+    "term_bright_blue": "#4364b4",
+    "term_bright_magenta": "#99469f",
+    "term_bright_cyan": "#15717a",
+    "term_bright_white": "#67676f",
+    "focus": "#4338ca"
+  },
+  "roles": {
+    "ground": "white",
+    "ink": "graphite",
+    "muted": "slate",
+    "accent": "lagoon",
+    "raised": "mist",
+    "divider": "fog",
+    "ink_primary": "graphite",
+    "ink_secondary": "graphite_secondary",
+    "ink_disabled": "graphite_disabled",
+    "hover": "graphite_hover",
+    "selected": "graphite_selected",
+    "session_readout": "orchid",
+    "session_line": "indigo",
+    "math": "math",
+    "term_black": "term_black",
+    "term_red": "term_red",
+    "term_green": "term_green",
+    "term_yellow": "term_yellow",
+    "term_blue": "term_blue",
+    "term_magenta": "term_magenta",
+    "term_cyan": "term_cyan",
+    "term_white": "term_white",
+    "term_bright_black": "term_bright_black",
+    "term_bright_red": "term_bright_red",
+    "term_bright_green": "term_bright_green",
+    "term_bright_yellow": "term_bright_yellow",
+    "term_bright_blue": "term_bright_blue",
+    "term_bright_magenta": "term_bright_magenta",
+    "term_bright_cyan": "term_bright_cyan",
+    "term_bright_white": "term_bright_white",
+    "term_background": "white",
+    "focus": "focus"
+  },
+  "themes": {
+    "light": {},
+    "dark": {}
+  },
+  "status": {
+    "pass": "#004619",
+    "fail": "#75161a",
+    "invalid": "#512a6a",
+    "blocked": "#642b00",
+    "inconclusive": "#3e3e00",
+    "running": "#003c70",
+    "needs_you": "#533600",
+    "stale": "#1e4143",
+    "idle": "#3b3c3c"
+  },
+  "status_treatment": {
+    "core_min_px": 4,
+    "glyph": {
+      "pass": "✓",
+      "fail": "✗",
+      "invalid": "⊘",
+      "blocked": "■",
+      "inconclusive": "?",
+      "running": "↻",
+      "needs_you": "!",
+      "stale": "◇",
+      "idle": "○"
+    }
+  },
+  "min_distance": 0.1,
+  "attention_treatment": {
+    "line": "dashed",
+    "role": "ink",
+    "glyph": "⚠"
+  },
+  "legend": "auto",
+  "lines": {
+    "line": {
+      "kind": "exact",
+      "width": 2
+    }
+  },
+  "fills": {
+    "fill": {
+      "kind": "flat"
+    }
+  },
+  "ground": {
+    "kind": "flat"
+  },
+  "fonts": {
+    "body": {
+      "family": "Inter",
+      "file": "Inter-Regular.ttf",
+      "license": "OFL-1.1",
+      "embed": true,
+      "single_line": false
+    },
+    "mono": {
+      "family": "JetBrains Mono",
+      "file": "JetBrainsMono-Regular.ttf",
+      "license": "OFL-1.1",
+      "embed": true,
+      "single_line": false
+    },
+    "math": {
+      "family": "STIX Two Math",
+      "file": "STIXTwoMath-Regular.ttf",
+      "license": "OFL-1.1",
+      "embed": true,
+      "single_line": false
+    },
+    "cjk": {
+      "family": "Noto Sans SC",
+      "file": "NotoSansSC-Regular.otf",
+      "license": "OFL-1.1",
+      "embed": true,
+      "single_line": false
+    },
+    "arabic": {
+      "family": "Noto Sans Arabic",
+      "file": "NotoSansArabic-Regular.ttf",
+      "license": "OFL-1.1",
+      "embed": true,
+      "single_line": false
+    },
+    "emoji": {
+      "family": "Noto Emoji",
+      "file": "NotoEmoji-Regular.ttf",
+      "license": "OFL-1.1",
+      "embed": true,
+      "single_line": false
+    }
+  },
+  "fallback": [
+    "cjk",
+    "arabic",
+    "emoji"
+  ],
+  "time": {
+    "state": {
+      "span": "0.25s",
+      "interp": {
+        "ease": {
+          "name": "in_out_cubic"
+        }
+      }
+    }
+  },
+  "finish": []
+}

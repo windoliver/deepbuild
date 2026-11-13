@@ -166,7 +166,7 @@ pub fn find<'a>(events: &'a [Value], handle: &str) -> Option<&'a Value> {
 
 /// The asks shown together with `handle` in a batch of several, in batch order: the latest `ask.batched` the core
 /// wrote listing it, the one whose order an approval's `steps` index (an agent's batch is never one).
-fn batch_of(events: &[Value], handle: &str) -> Vec<String> {
+pub(crate) fn batch_of(events: &[Value], handle: &str) -> Vec<String> {
     events
         .iter()
         .rev()
@@ -241,7 +241,7 @@ impl Model {
                 |option| option.label.clone(),
             );
         let deadline = states::deadline(events, ask).unwrap_or(now);
-        let applies = format!("in {}", states::span_until(deadline, now));
+        let applies = states::moment(deadline, now);
         let mut fields = Vec::new();
         let mut steps = Vec::new();
         let mut plan_hash = None;
@@ -1348,7 +1348,7 @@ mod tests {
         );
         assert_eq!(
             Model::read(&undone, "ask:B", 0).unwrap().applies,
-            "in 2 h",
+            states::moment(7_200_000, 0),
             "its default applies at the undo's deadline"
         );
     }

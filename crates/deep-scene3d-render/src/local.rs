@@ -118,11 +118,15 @@ pub fn hash_caster(s: &Solid, h: &mut impl Hasher) {
     }
 }
 
-/// `t` when `s` is a caster whose coverage reads it.
+/// `t` when `s` is a caster whose coverage reads it, or one that sways.
 pub fn hash_time(s: &Solid, planted: Planted, h: &mut impl Hasher) {
     let moves = |o: &&SolidOp| !planted.ignores_t && crate::op::coverage_moves(o, planted.any_t);
     if let Some(o) = s.op.as_ref().filter(moves) {
         o.t.to_bits().hash(h);
+    }
+    // A swaying caster's shape moves with t on the GPU (#2016).
+    if let Some(w) = s.sway {
+        w.t.to_bits().hash(h);
     }
 }
 
@@ -155,6 +159,32 @@ pub fn runs(owners: &[String], only: Option<&BTreeSet<String>>) -> Vec<std::ops:
         }
     }
     out
+}
+
+/// What [`Locals::ensure`] makes for `scene`'s first frame (#2189): a layer of the scene's map
+/// side for each face of the shadows its light policy keeps, six for a cube and one for a spot.
+pub fn bytes(scene: &Scene) -> u64 {
+    use deep_canvas_scene3d::light::{self, LightKind};
+    let policy = scene
+        .light_cut
+        .clone()
+        .unwrap_or_else(|| light::policy(&scene.lights, &scene.camera));
+    let scores = light::scores(&scene.lights, &scene.camera);
+    let kept = light::shadowed(&scene.lights, &policy, &scene.shadowing, &scores).kept;
+    let layers: u64 = kept
+        .iter()
+        .filter(|&&(i, _)| scene.lights[i].kind != LightKind::Sun)
+        .take(SLOTS)
+        .map(|&(i, _)| {
+            if shadow::local_map(&scene.lights[i]).cube {
+                6
+            } else {
+                1
+            }
+        })
+        .sum();
+    let texel = u64::from(FORMAT.block_copy_size(None).unwrap_or(4));
+    u64::from(scene.shadowing.local_map).pow(2) * layers * texel
 }
 
 impl Locals {
@@ -309,6 +339,11 @@ impl Locals {
             .collect()
     }
 
+    /// Forgets what each slot's layers were made from, so the next frame draws every map.
+    pub fn forget(&mut self) {
+        self.keys = [None; SLOTS];
+    }
+
     /// The map a slot's layer holds, for a test against a clean render.
     pub fn view_of(&self, layer: usize) -> Option<&wgpu::TextureView> {
         self.texture.as_ref().and_then(|(_, v)| v.get(layer))
@@ -334,17 +369,18 @@ fn half(v: f32) -> u16 {
         if exp < -10 {
             0
         } else {
-            ((((frac | 0x80_0000) >> (14 - exp)) + 1) >> 1) as u16
+            ((((frac | 0x80_0000) >> (13 - exp)) + 1) >> 1) as u16
         }
     } else {
-        // Rounded at the bit below the mantissa's, which may carry into the exponent.
+        // Rounded at the bit below the mantissa's, which may carry into the exponent, and no
+        // further than the largest finite value.
         let m = (exp as u32) << 10 | frac >> 13;
-        (m + (frac >> 12 & 1)) as u16
+        (m + (frac >> 12 & 1)).min(0x7bff) as u16
     }
 }
 
 impl Tables {
-    pub fn new(d: &wgpu::Device) -> Tables {
+    pub fn new(d: &deep_gpu::counted::Wgpu) -> Tables {
         let stub = d.create_texture(&wgpu::TextureDescriptor {
             label: Some("scene3d ies stub"),
             size: wgpu::Extent3d {
@@ -450,6 +486,12 @@ mod tests {
         assert_eq!(half(2.0), 0x4000);
         assert_eq!(half(0.5), 0x3800);
         assert_eq!(half(1e9), 0x7bff);
+    }
+
+    #[test]
+    fn half_floats_keep_values_under_the_smallest_exponent_and_stop_at_the_largest() {
+        let got = [half(2f32.powi(-15)), half(1e-5), half(65530.0)];
+        assert_eq!(got, [0x0200, 0x00a8, 0x7bff]);
     }
 
     #[test]

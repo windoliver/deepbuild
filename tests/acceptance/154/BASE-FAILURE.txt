@@ -1,0 +1,435 @@
+Base commit: b726c8be8 (b726c8be8c7879e3c14d8a2c4963c69063d06255, "design(#154): score.music@1 as built: the plan call,
+per-stem render job, list inputs, loop points in the stem, score.pitch as an output check"), main 3c36f9180 plus that
+design commit; no implementation of #154.
+Built first: npm ci; npm run build --workspaces; cargo build --locked -p deep-hook -p deep-show (rustup's toolchain,
+CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0, through scripts/throttle.mjs build and scripts/lease).
+Command: NO_COLOR=1 node scripts/throttle.mjs test --wait 60 -- node node_modules/vitest/vitest.mjs run
+  --root tests/acceptance/154 --testTimeout=600000 --no-file-parallelism
+Date: 2026-11-10  Machine: macOS 27.2 (Apple silicon)  Node: v24.22.2  vitest 5.0.5. <repo> is the worktree.
+Result: Test Files 9 failed (9); Tests 17 failed (17); about 493 s, 438 of them in the first file's beforeAll, where
+`cargo build --locked --bin deep-show` rebuilt deep-show on its own (it had been built beside deep-hook, with other
+features unified); the other files took 3 to 11 s each.
+
+No test passed at the base, and each failed at a named assertion, for the reason the surface is missing:
+
+  AC1 stems.test.ts (4), AC2 onsets.test.ts (2), AC3 cache.test.ts (1), AC7 loop.test.ts (1), AC8 registry.test.ts
+  (1), AC9 budgets.test.ts timing and cache legs (2): the hub started (deep hub run, ready), deep mcp answered
+  initialize, then helpers.ts installScore's expect "the first-party plug-in deepbuild/score is at packages/jobs/score
+  (Score: As built): no <repo>/packages/jobs/score/deepbuild.json". (stems.test.ts's last two tests share the file's
+  world, so they report the same failure.)
+  AC9 budgets.test.ts, the budgets leg: validateBudgets passed against the merge base, then the expect
+  "benchmarks/budgets.json has a task whose reason names #154" failed.
+  AC4 licences.test.ts: the control test/free-keys (CC0) was refused at install, the canvas pack check answering
+  unknown_field at `samples` (no `samples` on Pack at the base), so "the control test/free-keys under CC0-1.0
+  installs" failed before any forbidden library was tried.
+  AC5 fetch.test.ts (2): test/organ and test/choir were refused at install the same way (unknown_field `samples`), so
+  mustAddLibrary's expect "deep install of the library ... installs it" failed.
+  AC6 rules.test.ts (2): deep-show built and answered every scenario ok; `deep show` refused each film with one
+  issue, unknown_field at `tempo_map` ("not a field of the document envelope"), and no score.pad_too_low or
+  score.note_too_long issue, so every case's judge failed, the refused cases for want of the code naming the event and
+  the clean ones for not being presented.
+
+Not reached at the base, read from the files: score_plan (deep-show answers a scenario holding an unknown call
+`bad_input`), deep_job runs of score.render, the FLAC stems, media_mix of a looping stem, the planted programs
+(readsEventPitch, the stem looped without the fold), and the rival plug-in's install.
+
+Checked once by hand, not part of the suite: node node_modules/typescript/bin/tsc -p tests/acceptance/154/tsconfig.json
+exits 0; flac.ts decodes ffmpeg's FLAC encodes of a 24-bit stereo signal at compression levels 0, 5, 8 and 12 with no
+sample off and the MD5 checked; the fixtures' arithmetic (bar:beat to samples at 90 and 240 BPM, the heard take of
+every note of a synthetic song and etude, measureCents at 0.0 and +50.0 cents on test/intune's and test/sharp's takes);
+and, on a pack without `samples`, the harness's fetch held on one authority ask with no request, one GET after your
+yes, a fetch under pack.rule, the takes stored, and deep_job's list.
+
+The run's output follows.
+------------------------------------------------------------------------------------------------------------------------
+
+ RUN  v5.0.5 <repo>/tests/acceptance/154
+
+ ❯ onsets.test.ts (2 tests | 2 failed) 437687ms
+   ❯ AC2 #154.8b0e5b99 note_on on its resolved flick, and score.pitch on the stem (2)
+     × AC2 #154.8b0e5b99 each event's note_on lands on its resolved flick through a tempo map with a ramp, and the render puts it on that sample 3169ms
+     × AC2 #154.8b0e5b99 score.pitch fails a4_held on the sample 50 cents sharp, naming it, passes it in tune, and a planted check reading the event's pitch fails this test 1753ms
+ ❯ stems.test.ts (4 tests | 4 failed) 8685ms
+   ❯ AC1 #154.c8c95dbc stems by hash, hashed draws and the round robin (4)
+     × AC1 #154.c8c95dbc two hubs render the song's stems with the same hashes, and a note added to strings leaves keys and pads byte for byte 2797ms
+     × AC1 #154.c8c95dbc a harp note added to keys changes no other note's noise and no take of piano or bell 1694ms
+     × AC1 #154.c8c95dbc a piano note added on 3:3 moves no piano take before it and no bell take, and the stem is the same up to its onset 1ms
+     × AC1 #154.c8c95dbc over the etude's 1,000 notes on four takes, no note repeats the previous note's take 0ms
+ ❯ fetch.test.ts (2 tests | 2 failed) 11149ms
+   ❯ AC5 #154.87a31a62 a library not fetched: BLOCKED offline, and no fetch without your answer or rule (2)
+     × AC5 #154.87a31a62 offline, the score whose library isn't fetched is BLOCKED with one unblock ask, and nothing is fetched 4764ms
+     × AC5 #154.87a31a62 no take is fetched before your answer to its ask or your standing rule, and the plan answers once every take is in 2659ms
+ ❯ budgets.test.ts (3 tests | 3 failed) 5375ms
+   ❯ AC9 #154.d6804da4 budgets: a 60 s six-stem score under 60 s, a cached stem free, never on the UI thread (3)
+     × AC9 #154.d6804da4 the perf lane has a task naming #154, valid against the merge base's budgets 232ms
+     × AC9 #154.d6804da4 the 60 s six-stem concert renders in under 60 s on the reference Mac's CPU, judged by the perf lane's rule 1425ms
+     × AC9 #154.d6804da4 a cached stem costs nothing, and every render ran in a process of its own, off the UI thread 1769ms
+ ❯ loop.test.ts (1 test | 1 failed) 4622ms
+   ❯ AC7 #154.54798db1 a loop region folded, its points on the bar lines, seamless from the second pass (1)
+     × AC7 #154.54798db1 loop {5:1, 9:1}: loop points on the bar lines exactly, three looped passes match the straight render from the second pass within −96 dBFS, and the stem looped without the fold differs by more than −40 dBFS 1824ms
+ ❯ rules.test.ts (2 tests | 2 failed) 7521ms
+   ❯ AC6 #154.74061b19 pads below MIDI 48 and notes held over 60 s (2)
+     × AC6 #154.74061b19 a sustained pad at MIDI 40 not marked bass is refused naming the event; MIDI 48 passes, bass passes, a pad of a library preset is held to the same rule 3561ms
+     × AC6 #154.74061b19 a note held 61 s is refused naming the event, as is 60.6 s; 60 s passes 1334ms
+ ❯ registry.test.ts (1 test | 1 failed) 2761ms
+   ❯ AC8 #154.a25e77d2 score.render registered once, by deepbuild/score (1)
+     × AC8 #154.a25e77d2 deep_job lists score.render with score-render@1.0.0 from deepbuild/score's registrations, and test/score-rival's second registration is refused at install naming the kind and its holder 2652ms
+ ❯ licences.test.ts (1 test | 1 failed) 4951ms
+   ❯ AC4 #154.ee9b85a0 a library under CC BY-SA, NC or GPL is refused at install (1)
+     × AC4 #154.ee9b85a0 libraries under CC-BY-SA-4.0, CC-BY-NC-4.0 and GPL-3.0-only, and one with a CC-BY-NC-4.0 take, are refused at install naming the licence; CC0 and CC-BY-4.0 install 4835ms
+ ❯ cache.test.ts (1 test | 1 failed) 3473ms
+   ❯ AC3 #154.6e31be7c one part edited, one stem rendered again (1)
+     × AC3 #154.6e31be7c editing one guitar note re-renders strings alone, and keys and pads are cache hits with no process 1185ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 17 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  budgets.test.ts > AC9 #154.d6804da4 budgets: a 60 s six-stem score under 60 s, a cached stem free, never on the UI thread > AC9 #154.d6804da4 the perf lane has a task naming #154, valid against the merge base's budgets
+AssertionError: benchmarks/budgets.json has a task whose reason names #154: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ budgets.test.ts:66:168
+     64|     const base = execFileSync('git', ['merge-base', 'HEAD', 'origin/ma…
+     65|     validateBudgets(current, JSON.parse(execFileSync('git', ['show', `…
+     66|     expect(current.tasks.some((t) => /#154\b/.test(`${t.initialReason …
+       |                                                                                                                                                                        ^
+     67|   }, TIMEOUT);
+     68|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/17]⎯
+
+ FAIL  budgets.test.ts > AC9 #154.d6804da4 budgets: a 60 s six-stem score under 60 s, a cached stem free, never on the UI thread > AC9 #154.d6804da4 the 60 s six-stem concert renders in under 60 s on the reference Mac's CPU, judged by the perf lane's rule
+AssertionError: the first-party plug-in deepbuild/score is at packages/jobs/score (Score: As built): no <repo>/packages/jobs/score/deepbuild.json: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ installScore helpers.ts:638:175
+    636| /** deepbuild/score installed from packages/jobs/score, its tool quali…
+    637| export async function installScore(w: World): Promise<Ran> {
+    638|   expect(existsSync(join(PACKAGE, 'deepbuild.json')), `the first-party…
+       |                                                                                                                                                                               ^
+    639|   const ran = await install(w, PACKAGE);
+    640|   expect(ran.code, `deep install packages/jobs/score installs ${PLUGIN…
+ ❯ openWorld helpers.ts:631:25
+ ❯ scoreWorld helpers.ts:679:13
+ ❯ budgets.test.ts:70:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/17]⎯
+
+ FAIL  budgets.test.ts > AC9 #154.d6804da4 budgets: a 60 s six-stem score under 60 s, a cached stem free, never on the UI thread > AC9 #154.d6804da4 a cached stem costs nothing, and every render ran in a process of its own, off the UI thread
+AssertionError: the first-party plug-in deepbuild/score is at packages/jobs/score (Score: As built): no <repo>/packages/jobs/score/deepbuild.json: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ installScore helpers.ts:638:175
+    636| /** deepbuild/score installed from packages/jobs/score, its tool quali…
+    637| export async function installScore(w: World): Promise<Ran> {
+    638|   expect(existsSync(join(PACKAGE, 'deepbuild.json')), `the first-party…
+       |                                                                                                                                                                               ^
+    639|   const ran = await install(w, PACKAGE);
+    640|   expect(ran.code, `deep install packages/jobs/score installs ${PLUGIN…
+ ❯ openWorld helpers.ts:631:25
+ ❯ scoreWorld helpers.ts:679:13
+ ❯ budgets.test.ts:96:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/17]⎯
+
+ FAIL  cache.test.ts > AC3 #154.6e31be7c one part edited, one stem rendered again > AC3 #154.6e31be7c editing one guitar note re-renders strings alone, and keys and pads are cache hits with no process
+AssertionError: the first-party plug-in deepbuild/score is at packages/jobs/score (Score: As built): no <repo>/packages/jobs/score/deepbuild.json: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ installScore helpers.ts:638:175
+    636| /** deepbuild/score installed from packages/jobs/score, its tool quali…
+    637| export async function installScore(w: World): Promise<Ran> {
+    638|   expect(existsSync(join(PACKAGE, 'deepbuild.json')), `the first-party…
+       |                                                                                                                                                                               ^
+    639|   const ran = await install(w, PACKAGE);
+    640|   expect(ran.code, `deep install packages/jobs/score installs ${PLUGIN…
+ ❯ openWorld helpers.ts:631:25
+ ❯ scoreWorld helpers.ts:679:13
+ ❯ cache.test.ts:16:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/17]⎯
+
+ FAIL  fetch.test.ts > AC5 #154.87a31a62 a library not fetched: BLOCKED offline, and no fetch without your answer or rule > AC5 #154.87a31a62 offline, the score whose library isn't fetched is BLOCKED with one unblock ask, and nothing is fetched
+AssertionError: deep install of the library test/organ@1.0.0 (a pack with assets and samples) installs it: exit 1, stdout "Source: /private/tmp/dh154-jlRctY/libraries/test__organ\n  test/organ@1.0.0, digest 60c8569b82a1a771942603214e5aa2a059cf10675ce0c7270a32062c93ccbb77\n  Assets fetch only on first use after an authority ask or your standing rule.\n", stderr "REFUSED: [{\"check\":\"document.validate\",\"code\":\"unknown_field\",\"severity\":\"error\",\"ids\":[],\"path\":\"samples\",\"actual\":{\"organ\":{\"zones\":[{\"lo\":0,\"hi\":127,\"root\":60,\"takes\":[\"organ-1.wav\",\"organ-2.wav\"]}]}},\"what\":\"not a field of a pack in this slice\",\"fix\":\"Remove the field, or require the kind's minor that defines it.\"}]\n": expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ mustAddLibrary helpers.ts:653:123
+    651| export async function mustAddLibrary(w: World, lib: Library, shelf = '…
+    652|   const ran = await addLibrary(w, lib, shelf);
+    653|   expect(ran.code, `deep install of the library ${ref(lib)} (a pack wi…
+       |                                                                                                                           ^
+    654| }
+    655| /** deep-show's `packs` for the world's libraries: each `{id, dir}`. */
+ ❯ fetch.test.ts:33:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/17]⎯
+
+ FAIL  fetch.test.ts > AC5 #154.87a31a62 a library not fetched: BLOCKED offline, and no fetch without your answer or rule > AC5 #154.87a31a62 no take is fetched before your answer to its ask or your standing rule, and the plan answers once every take is in
+AssertionError: deep install of the library test/choir@1.0.0 (a pack with assets and samples) installs it: exit 1, stdout "Source: /private/tmp/dh154-6fGUSe/libraries/test__choir\n  test/choir@1.0.0, digest c01143141a95a178b368aa5731034a4310ac003d8339e79a4354fb721cecd19a\n  Assets fetch only on first use after an authority ask or your standing rule.\n", stderr "REFUSED: [{\"check\":\"document.validate\",\"code\":\"unknown_field\",\"severity\":\"error\",\"ids\":[],\"path\":\"samples\",\"actual\":{\"choir\":{\"zones\":[{\"lo\":0,\"hi\":127,\"root\":60,\"takes\":[\"choir-1.wav\",\"choir-2.wav\"]}]}},\"what\":\"not a field of a pack in this slice\",\"fix\":\"Remove the field, or require the kind's minor that defines it.\"}]\n": expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ mustAddLibrary helpers.ts:653:123
+    651| export async function mustAddLibrary(w: World, lib: Library, shelf = '…
+    652|   const ran = await addLibrary(w, lib, shelf);
+    653|   expect(ran.code, `deep install of the library ${ref(lib)} (a pack wi…
+       |                                                                                                                           ^
+    654| }
+    655| /** deep-show's `packs` for the world's libraries: each `{id, dir}`. */
+ ❯ fetch.test.ts:59:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/17]⎯
+
+ FAIL  licences.test.ts > AC4 #154.ee9b85a0 a library under CC BY-SA, NC or GPL is refused at install > AC4 #154.ee9b85a0 libraries under CC-BY-SA-4.0, CC-BY-NC-4.0 and GPL-3.0-only, and one with a CC-BY-NC-4.0 take, are refused at install naming the licence; CC0 and CC-BY-4.0 install
+AssertionError: the control test/free-keys under CC0-1.0 installs: exit 1, stdout "Source: /private/tmp/dh154-dW56LC/libraries/test__free-keys\n  test/free-keys@1.0.0, digest 368bebd56b6d2b8f2c59acc16094f90692f315e87e2b5afc8856c4d4f49389c2\n  Assets fetch only on first use after an authority ask or your standing rule.\n", stderr "REFUSED: [{\"check\":\"document.validate\",\"code\":\"unknown_field\",\"severity\":\"error\",\"ids\":[],\"path\":\"samples\",\"actual\":{\"main\":{\"zones\":[{\"lo\":0,\"hi\":127,\"root\":60,\"takes\":[\"main-1.wav\",\"main-2.wav\"]}]}},\"what\":\"not a field of a pack in this slice\",\"fix\":\"Remove the field, or require the kind's minor that defines it.\"}]\n": expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ licences.test.ts:36:97
+     34|       const ran = await addLibrary(w, lib);
+     35|       results[lib.id] = { code: ran.code };
+     36|       expect(ran.code, `the control ${lib.id} under ${lib.license.id} …
+       |                                                                                                 ^
+     37|     }
+     38|     for (const { lib, licence } of forbidden) {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/17]⎯
+
+ FAIL  loop.test.ts > AC7 #154.54798db1 a loop region folded, its points on the bar lines, seamless from the second pass > AC7 #154.54798db1 loop {5:1, 9:1}: loop points on the bar lines exactly, three looped passes match the straight render from the second pass within −96 dBFS, and the stem looped without the fold differs by more than −40 dBFS
+AssertionError: the first-party plug-in deepbuild/score is at packages/jobs/score (Score: As built): no <repo>/packages/jobs/score/deepbuild.json: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ installScore helpers.ts:638:175
+    636| /** deepbuild/score installed from packages/jobs/score, its tool quali…
+    637| export async function installScore(w: World): Promise<Ran> {
+    638|   expect(existsSync(join(PACKAGE, 'deepbuild.json')), `the first-party…
+       |                                                                                                                                                                               ^
+    639|   const ran = await install(w, PACKAGE);
+    640|   expect(ran.code, `deep install packages/jobs/score installs ${PLUGIN…
+ ❯ openWorld helpers.ts:631:25
+ ❯ scoreWorld helpers.ts:679:13
+ ❯ loop.test.ts:58:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/17]⎯
+
+ FAIL  onsets.test.ts > AC2 #154.8b0e5b99 note_on on its resolved flick, and score.pitch on the stem > AC2 #154.8b0e5b99 each event's note_on lands on its resolved flick through a tempo map with a ramp, and the render puts it on that sample
+AssertionError: the first-party plug-in deepbuild/score is at packages/jobs/score (Score: As built): no <repo>/packages/jobs/score/deepbuild.json: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ installScore helpers.ts:638:175
+    636| /** deepbuild/score installed from packages/jobs/score, its tool quali…
+    637| export async function installScore(w: World): Promise<Ran> {
+    638|   expect(existsSync(join(PACKAGE, 'deepbuild.json')), `the first-party…
+       |                                                                                                                                                                               ^
+    639|   const ran = await install(w, PACKAGE);
+    640|   expect(ran.code, `deep install packages/jobs/score installs ${PLUGIN…
+ ❯ openWorld helpers.ts:631:25
+ ❯ scoreWorld helpers.ts:679:13
+ ❯ onsets.test.ts:78:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/17]⎯
+
+ FAIL  onsets.test.ts > AC2 #154.8b0e5b99 note_on on its resolved flick, and score.pitch on the stem > AC2 #154.8b0e5b99 score.pitch fails a4_held on the sample 50 cents sharp, naming it, passes it in tune, and a planted check reading the event's pitch fails this test
+AssertionError: the first-party plug-in deepbuild/score is at packages/jobs/score (Score: As built): no <repo>/packages/jobs/score/deepbuild.json: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ installScore helpers.ts:638:175
+    636| /** deepbuild/score installed from packages/jobs/score, its tool quali…
+    637| export async function installScore(w: World): Promise<Ran> {
+    638|   expect(existsSync(join(PACKAGE, 'deepbuild.json')), `the first-party…
+       |                                                                                                                                                                               ^
+    639|   const ran = await install(w, PACKAGE);
+    640|   expect(ran.code, `deep install packages/jobs/score installs ${PLUGIN…
+ ❯ openWorld helpers.ts:631:25
+ ❯ scoreWorld helpers.ts:679:13
+ ❯ onsets.test.ts:107:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/17]⎯
+
+ FAIL  registry.test.ts > AC8 #154.a25e77d2 score.render registered once, by deepbuild/score > AC8 #154.a25e77d2 deep_job lists score.render with score-render@1.0.0 from deepbuild/score's registrations, and test/score-rival's second registration is refused at install naming the kind and its holder
+AssertionError: the first-party plug-in deepbuild/score is at packages/jobs/score (Score: As built): no <repo>/packages/jobs/score/deepbuild.json: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ installScore helpers.ts:638:175
+    636| /** deepbuild/score installed from packages/jobs/score, its tool quali…
+    637| export async function installScore(w: World): Promise<Ran> {
+    638|   expect(existsSync(join(PACKAGE, 'deepbuild.json')), `the first-party…
+       |                                                                                                                                                                               ^
+    639|   const ran = await install(w, PACKAGE);
+    640|   expect(ran.code, `deep install packages/jobs/score installs ${PLUGIN…
+ ❯ openWorld helpers.ts:631:25
+ ❯ registry.test.ts:21:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/17]⎯
+
+ FAIL  rules.test.ts > AC6 #154.74061b19 pads below MIDI 48 and notes held over 60 s > AC6 #154.74061b19 a sustained pad at MIDI 40 not marked bass is refused naming the event; MIDI 48 passes, bass passes, a pad of a library preset is held to the same rule
+AssertionError: pad_e40: no score.pad_too_low issue names the event pad_e40: [{"check":"document.validate","code":"unknown_field","severity":"error","ids":[],"path":"tempo_map","actual":{"segments":[{"at":"0s","bpm":90,"meter":[4,4],"span":400,"ramp":"none"}]},"what":"not a field of the document envelope","fix":"Remove the field, or require the kind's minor that defines it."}] | pad_e47_52: no score.pad_too_low issue names the event pad_e47_52: [{"check":"document.validate","code":"unknown_field","severity":"error","ids":[],"path":"tempo_map","actual":{"segments":[{"at":"0s","bpm":90,"meter":[4,4],"span":400,"ramp":"none"}]},"what":"not a field of the document envelope","fix":"Remove the field, or require the kind's minor that defines it."}] | pad_e48: deep show answers refused, not presented: {"notices":[{"code":"unknown_kind","severity":"notice","ids":["rules"],"path":"items/rules/kind","actual":"score.music@1","what":"kind `score.music@1` is not registered in this build; the item is skipped"}],"rev":1,"expansions":[],"issues":[{"check":"document.validate","code":"unknown_field","severity":"error","ids":[],"path":"tempo_map","actual":{"segments":[{"at":"0s","bpm":90,"meter":[4,4],"span":400,"ramp":"none"}]},"what":"not a field of the document envelope","fix":"Remove the field, or require the kind's minor that defines it."}],"issues_evidence":"088de35c4583aa4fdde6c5fa9b3d7d287de5a03795d388f00ef7b8191127b86b","snapshots":[],"outcome":"refused","backends":{"fonts":{"name":"fonts.bundled","version":"1.0.0"},"cpu":{"name":"aarch64","version":"1.0.0"}},"core":"core@0.0.0","set_digest":"da96b089318efeafd767db049f8ee261aa61554bdc80a93bb31c65e30d67f56b"} | bass_e40: deep show answers refused, not presented: {"notices":[{"code":"unknown_kind","severity":"notice","ids":["rules"],"path":"items/rules/kind","actual":"score.music@1","what":"kind `score.music@1` is not registered in this build; the item is skipped"}],"rev":1,"expansions":[],"issues":[{"check":"document.validate","code":"unknown_field","severity":"error","ids":[],"path":"tempo_map","actual":{"segments":[{"at":"0s","bpm":90,"meter":[4,4],"span":400,"ramp":"none"}]},"what":"not a field of the document envelope","fix":"Remove the field, or require the kind's minor that defines it."}],"issues_evidence":"088de35c4583aa4fdde6c5fa9b3d7d287de5a03795d388f00ef7b8191127b86b","snapshots":[],"outcome":"refused","backends":{"fonts":{"name":"fonts.bundled","version":"1.0.0"},"cpu":{"name":"aarch64","version":"1.0.0"}},"core":"core@0.0.0","set_digest":"da96b089318efeafd767db049f8ee261aa61554bdc80a93bb31c65e30d67f56b"} | drone_e40: no score.pad_too_low issue names the event drone_e40: [{"check":"document.validate","code":"pack_missing","severity":"error","ids":[],"path":"packs/0","actual":{"pack":"test/drones","version":"1.0.0"},"what":"pack `test/drones` at version 1.0.0 is not in this build; the document is refused whole, and never drawn with another version","fix":"Install the pack at that version, or open the document where it is installed; never draw it with another version."},{"check":"document.validate","code":"unknown_field","severity":"error","ids":[],"path":"tempo_map","actual":{"segments":[{"at":"0s","bpm":90,"meter":[4,4],"span":400,"ramp":"none"}]},"what":"not a field of the document envelope","fix":"Remove the field, or require the kind's minor that defines it."}] | low_e40: deep show answers refused, not presented: {"notices":[{"code":"unknown_kind","severity":"notice","ids":["rules"],"path":"items/rules/kind","actual":"score.music@1","what":"kind `score.music@1` is not registered in this build; the item is skipped"}],"rev":1,"expansions":[],"issues":[{"check":"document.validate","code":"pack_missing","severity":"error","ids":[],"path":"packs/0","actual":{"pack":"test/drones","version":"1.0.0"},"what":"pack `test/drones` at version 1.0.0 is not in this build; the document is refused whole, and never drawn with another version","fix":"Install the pack at that version, or open the document where it is installed; never draw it with another version."},{"check":"document.validate","code":"unknown_field","severity":"error","ids":[],"path":"tempo_map","actual":{"segments":[{"at":"0s","bpm":90,"meter":[4,4],"span":400,"ramp":"none"}]},"what":"not a field of the document envelope","fix":"Remove the field, o: expected [ …(6) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "pad_e40: no score.pad_too_low issue names the event pad_e40: [{\"check\":\"document.validate\",\"code\":\"unknown_field\",\"severity\":\"error\",\"ids\":[],\"path\":\"tempo_map\",\"actual\":{\"segments\":[{\"at\":\"0s\",\"bpm\":90,\"meter\":[4,4],\"span\":400,\"ramp\":\"none\"}]},\"what\":\"not a field of the document envelope\",\"fix\":\"Remove the field, or require the kind's minor that defines it.\"}]",
++   "pad_e47_52: no score.pad_too_low issue names the event pad_e47_52: [{\"check\":\"document.validate\",\"code\":\"unknown_field\",\"severity\":\"error\",\"ids\":[],\"path\":\"tempo_map\",\"actual\":{\"segments\":[{\"at\":\"0s\",\"bpm\":90,\"meter\":[4,4],\"span\":400,\"ramp\":\"none\"}]},\"what\":\"not a field of the document envelope\",\"fix\":\"Remove the field, or require the kind's minor that defines it.\"}]",
++   "pad_e48: deep show answers refused, not presented: {\"notices\":[{\"code\":\"unknown_kind\",\"severity\":\"notice\",\"ids\":[\"rules\"],\"path\":\"items/rules/kind\",\"actual\":\"score.music@1\",\"what\":\"kind `score.music@1` is not registered in this build; the item is skipped\"}],\"rev\":1,\"expansions\":[],\"issues\":[{\"check\":\"document.validate\",\"code\":\"unknown_field\",\"severity\":\"error\",\"ids\":[],\"path\":\"tempo_map\",\"actual\":{\"segments\":[{\"at\":\"0s\",\"bpm\":90,\"meter\":[4,4],\"span\":400,\"ramp\":\"none\"}]},\"what\":\"not a field of the document envelope\",\"fix\":\"Remove the field, or require the kind's minor that defines it.\"}],\"issues_evidence\":\"088de35c4583aa4fdde6c5fa9b3d7d287de5a03795d388f00ef7b8191127b86b\",\"snapshots\":[],\"outcome\":\"refused\",\"backends\":{\"fonts\":{\"name\":\"fonts.bundled\",\"version\":\"1.0.0\"},\"cpu\":{\"name\":\"aarch64\",\"version\":\"1.0.0\"}},\"core\":\"core@0.0.0\",\"set_digest\":\"da96b089318efeafd767db049f8ee261aa61554bdc80a93bb31c65e30d67f56b\"}",
++   "bass_e40: deep show answers refused, not presented: {\"notices\":[{\"code\":\"unknown_kind\",\"severity\":\"notice\",\"ids\":[\"rules\"],\"path\":\"items/rules/kind\",\"actual\":\"score.music@1\",\"what\":\"kind `score.music@1` is not registered in this build; the item is skipped\"}],\"rev\":1,\"expansions\":[],\"issues\":[{\"check\":\"document.validate\",\"code\":\"unknown_field\",\"severity\":\"error\",\"ids\":[],\"path\":\"tempo_map\",\"actual\":{\"segments\":[{\"at\":\"0s\",\"bpm\":90,\"meter\":[4,4],\"span\":400,\"ramp\":\"none\"}]},\"what\":\"not a field of the document envelope\",\"fix\":\"Remove the field, or require the kind's minor that defines it.\"}],\"issues_evidence\":\"088de35c4583aa4fdde6c5fa9b3d7d287de5a03795d388f00ef7b8191127b86b\",\"snapshots\":[],\"outcome\":\"refused\",\"backends\":{\"fonts\":{\"name\":\"fonts.bundled\",\"version\":\"1.0.0\"},\"cpu\":{\"name\":\"aarch64\",\"version\":\"1.0.0\"}},\"core\":\"core@0.0.0\",\"set_digest\":\"da96b089318efeafd767db049f8ee261aa61554bdc80a93bb31c65e30d67f56b\"}",
++   "drone_e40: no score.pad_too_low issue names the event drone_e40: [{\"check\":\"document.validate\",\"code\":\"pack_missing\",\"severity\":\"error\",\"ids\":[],\"path\":\"packs/0\",\"actual\":{\"pack\":\"test/drones\",\"version\":\"1.0.0\"},\"what\":\"pack `test/drones` at version 1.0.0 is not in this build; the document is refused whole, and never drawn with another version\",\"fix\":\"Install the pack at that version, or open the document where it is installed; never draw it with another version.\"},{\"check\":\"document.validate\",\"code\":\"unknown_field\",\"severity\":\"error\",\"ids\":[],\"path\":\"tempo_map\",\"actual\":{\"segments\":[{\"at\":\"0s\",\"bpm\":90,\"meter\":[4,4],\"span\":400,\"ramp\":\"none\"}]},\"what\":\"not a field of the document envelope\",\"fix\":\"Remove the field, or require the kind's minor that defines it.\"}]",
++   "low_e40: deep show answers refused, not presented: {\"notices\":[{\"code\":\"unknown_kind\",\"severity\":\"notice\",\"ids\":[\"rules\"],\"path\":\"items/rules/kind\",\"actual\":\"score.music@1\",\"what\":\"kind `score.music@1` is not registered in this build; the item is skipped\"}],\"rev\":1,\"expansions\":[],\"issues\":[{\"check\":\"document.validate\",\"code\":\"pack_missing\",\"severity\":\"error\",\"ids\":[],\"path\":\"packs/0\",\"actual\":{\"pack\":\"test/drones\",\"version\":\"1.0.0\"},\"what\":\"pack `test/drones` at version 1.0.0 is not in this build; the document is refused whole, and never drawn with another version\",\"fix\":\"Install the pack at that version, or open the document where it is installed; never draw it with another version.\"},{\"check\":\"document.validate\",\"code\":\"unknown_field\",\"severity\":\"error\",\"ids\":[],\"path\":\"tempo_map\",\"actual\":{\"segments\":[{\"at\":\"0s\",\"bpm\":90,\"meter\":[4,4],\"span\":400,\"ramp\":\"none\"}]},\"what\":\"not a field of the document envelope\",\"fix\":\"Remove the field, o",
++ ]
+
+ ❯ rules.test.ts:62:44
+     60|     ];
+     61|     const failures = cases.flatMap((c) => judge(bin, c));
+     62|     expect(failures, failures.join(' | ')).toEqual([]);
+       |                                            ^
+     63|   }, TIMEOUT);
+     64|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/17]⎯
+
+ FAIL  rules.test.ts > AC6 #154.74061b19 pads below MIDI 48 and notes held over 60 s > AC6 #154.74061b19 a note held 61 s is refused naming the event, as is 60.6 s; 60 s passes
+AssertionError: held61: no score.note_too_long issue names the event held61: [{"check":"document.validate","code":"unknown_field","severity":"error","ids":[],"path":"tempo_map","actual":{"segments":[{"at":"0s","bpm":90,"meter":[4,4],"span":400,"ramp":"none"}]},"what":"not a field of the document envelope","fix":"Remove the field, or require the kind's minor that defines it."}] | held60_6: no score.note_too_long issue names the event held60_6: [{"check":"document.validate","code":"unknown_field","severity":"error","ids":[],"path":"tempo_map","actual":{"segments":[{"at":"0s","bpm":90,"meter":[4,4],"span":400,"ramp":"none"}]},"what":"not a field of the document envelope","fix":"Remove the field, or require the kind's minor that defines it."}] | held60: deep show answers refused, not presented: {"notices":[{"code":"unknown_kind","severity":"notice","ids":["rules"],"path":"items/rules/kind","actual":"score.music@1","what":"kind `score.music@1` is not registered in this build; the item is skipped"}],"rev":1,"expansions":[],"issues":[{"check":"document.validate","code":"unknown_field","severity":"error","ids":[],"path":"tempo_map","actual":{"segments":[{"at":"0s","bpm":90,"meter":[4,4],"span":400,"ramp":"none"}]},"what":"not a field of the document envelope","fix":"Remove the field, or require the kind's minor that defines it."}],"issues_evidence":"088de35c4583aa4fdde6c5fa9b3d7d287de5a03795d388f00ef7b8191127b86b","snapshots":[],"outcome":"refused","backends":{"fonts":{"name":"fonts.bundled","version":"1.0.0"},"cpu":{"name":"aarch64","version":"1.0.0"}},"core":"core@0.0.0","set_digest":"da96b089318efeafd767db049f8ee261aa61554bdc80a93bb31c65e30d67f56b"}: expected [ …(3) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "held61: no score.note_too_long issue names the event held61: [{\"check\":\"document.validate\",\"code\":\"unknown_field\",\"severity\":\"error\",\"ids\":[],\"path\":\"tempo_map\",\"actual\":{\"segments\":[{\"at\":\"0s\",\"bpm\":90,\"meter\":[4,4],\"span\":400,\"ramp\":\"none\"}]},\"what\":\"not a field of the document envelope\",\"fix\":\"Remove the field, or require the kind's minor that defines it.\"}]",
++   "held60_6: no score.note_too_long issue names the event held60_6: [{\"check\":\"document.validate\",\"code\":\"unknown_field\",\"severity\":\"error\",\"ids\":[],\"path\":\"tempo_map\",\"actual\":{\"segments\":[{\"at\":\"0s\",\"bpm\":90,\"meter\":[4,4],\"span\":400,\"ramp\":\"none\"}]},\"what\":\"not a field of the document envelope\",\"fix\":\"Remove the field, or require the kind's minor that defines it.\"}]",
++   "held60: deep show answers refused, not presented: {\"notices\":[{\"code\":\"unknown_kind\",\"severity\":\"notice\",\"ids\":[\"rules\"],\"path\":\"items/rules/kind\",\"actual\":\"score.music@1\",\"what\":\"kind `score.music@1` is not registered in this build; the item is skipped\"}],\"rev\":1,\"expansions\":[],\"issues\":[{\"check\":\"document.validate\",\"code\":\"unknown_field\",\"severity\":\"error\",\"ids\":[],\"path\":\"tempo_map\",\"actual\":{\"segments\":[{\"at\":\"0s\",\"bpm\":90,\"meter\":[4,4],\"span\":400,\"ramp\":\"none\"}]},\"what\":\"not a field of the document envelope\",\"fix\":\"Remove the field, or require the kind's minor that defines it.\"}],\"issues_evidence\":\"088de35c4583aa4fdde6c5fa9b3d7d287de5a03795d388f00ef7b8191127b86b\",\"snapshots\":[],\"outcome\":\"refused\",\"backends\":{\"fonts\":{\"name\":\"fonts.bundled\",\"version\":\"1.0.0\"},\"cpu\":{\"name\":\"aarch64\",\"version\":\"1.0.0\"}},\"core\":\"core@0.0.0\",\"set_digest\":\"da96b089318efeafd767db049f8ee261aa61554bdc80a93bb31c65e30d67f56b\"}",
++ ]
+
+ ❯ rules.test.ts:74:44
+     72|     ];
+     73|     const failures = cases.flatMap((c) => judge(bin, c));
+     74|     expect(failures, failures.join(' | ')).toEqual([]);
+       |                                            ^
+     75|   }, TIMEOUT);
+     76| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/17]⎯
+
+ FAIL  stems.test.ts > AC1 #154.c8c95dbc stems by hash, hashed draws and the round robin > AC1 #154.c8c95dbc two hubs render the song's stems with the same hashes, and a note added to strings leaves keys and pads byte for byte
+AssertionError: the first-party plug-in deepbuild/score is at packages/jobs/score (Score: As built): no <repo>/packages/jobs/score/deepbuild.json: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ installScore helpers.ts:638:175
+    636| /** deepbuild/score installed from packages/jobs/score, its tool quali…
+    637| export async function installScore(w: World): Promise<Ran> {
+    638|   expect(existsSync(join(PACKAGE, 'deepbuild.json')), `the first-party…
+       |                                                                                                                                                                               ^
+    639|   const ran = await install(w, PACKAGE);
+    640|   expect(ran.code, `deep install packages/jobs/score installs ${PLUGIN…
+ ❯ openWorld helpers.ts:631:25
+ ❯ scoreWorld helpers.ts:679:13
+ ❯ stems.test.ts:42:16
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/17]⎯
+
+ FAIL  stems.test.ts > AC1 #154.c8c95dbc stems by hash, hashed draws and the round robin > AC1 #154.c8c95dbc a harp note added to keys changes no other note's noise and no take of piano or bell
+AssertionError: the first-party plug-in deepbuild/score is at packages/jobs/score (Score: As built): no <repo>/packages/jobs/score/deepbuild.json: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ installScore helpers.ts:638:175
+    636| /** deepbuild/score installed from packages/jobs/score, its tool quali…
+    637| export async function installScore(w: World): Promise<Ran> {
+    638|   expect(existsSync(join(PACKAGE, 'deepbuild.json')), `the first-party…
+       |                                                                                                                                                                               ^
+    639|   const ran = await install(w, PACKAGE);
+    640|   expect(ran.code, `deep install packages/jobs/score installs ${PLUGIN…
+ ❯ openWorld helpers.ts:631:25
+ ❯ scoreWorld helpers.ts:679:13
+ ❯ stems.test.ts:66:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/17]⎯
+
+ FAIL  stems.test.ts > AC1 #154.c8c95dbc stems by hash, hashed draws and the round robin > AC1 #154.c8c95dbc a piano note added on 3:3 moves no piano take before it and no bell take, and the stem is the same up to its onset
+ FAIL  stems.test.ts > AC1 #154.c8c95dbc stems by hash, hashed draws and the round robin > AC1 #154.c8c95dbc over the etude's 1,000 notes on four takes, no note repeats the previous note's take
+AssertionError: the first-party plug-in deepbuild/score is at packages/jobs/score (Score: As built): no <repo>/packages/jobs/score/deepbuild.json: expected false to be true // Object.is equality
+
+Expected: "true"
+Received: "false"
+
+ ❯ installScore helpers.ts:638:175
+    636| /** deepbuild/score installed from packages/jobs/score, its tool quali…
+    637| export async function installScore(w: World): Promise<Ran> {
+    638|   expect(existsSync(join(PACKAGE, 'deepbuild.json')), `the first-party…
+       |                                                                                                                                                                               ^
+    639|   const ran = await install(w, PACKAGE);
+    640|   expect(ran.code, `deep install packages/jobs/score installs ${PLUGIN…
+ ❯ openWorld helpers.ts:631:25
+ ❯ scoreWorld helpers.ts:679:13
+ ❯ stems.test.ts:66:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/17]⎯
+
+
+ Test Files  9 failed (9)
+      Tests  17 failed (17)
+   Start at  21:53:23
+   Duration  493.21s (tests 99%, transform 1%)
+

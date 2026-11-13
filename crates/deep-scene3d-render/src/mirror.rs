@@ -10,7 +10,6 @@ use deep_canvas_scene3d::mirror::Mirror;
 use deep_canvas_scene3d::scene::Scene;
 use deep_gpu::device::Device;
 use deep_gpu::encode::Job;
-use wgpu::util::DeviceExt;
 
 use crate::{Planted, Renderer, LINEAR, MIRROR_PASS, OUTPUT_PASS};
 
@@ -23,8 +22,11 @@ pub struct Mirrorer {
     /// The overlay without and with #166's `reflection` target.
     pipeline: [wgpu::RenderPipeline; 2],
     sampler: wgpu::Sampler,
-    /// This frame's uniform and part IDs, set by [`Mirrorer::prepare`].
+    /// This frame's uniform and part IDs, set by [`Mirrorer::prepare`], and the values they hold.
     frame: Option<(wgpu::Buffer, wgpu::Buffer)>,
+    held: ([f32; 4], Vec<u32>),
+    /// The overlay's bind group, with the picture and the IDs it binds.
+    bind: Option<(wgpu::TextureView, wgpu::TextureView, wgpu::BindGroup)>,
     /// How many parts the picture lays over this frame.
     parts: usize,
 }
@@ -129,6 +131,8 @@ impl Mirrorer {
             pipeline,
             sampler,
             frame: None,
+            held: ([0.0; 4], Vec::new()),
+            bind: None,
             parts: 0,
         }
     }
@@ -161,6 +165,10 @@ impl Mirrorer {
             (mirror.blur * f64::from(size[0]) / f64::from(scene.size[0])) as f32,
             count as f32,
         ];
+        // A frame whose values hold binds the buffers the last one made.
+        if self.frame.is_some() && self.held.0 == flip && self.held.1 == ids {
+            return;
+        }
         let d = &device.device;
         let uniform = d.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some(MIRROR_PASS),
@@ -173,6 +181,13 @@ impl Mirrorer {
             usage: wgpu::BufferUsages::STORAGE,
         });
         self.frame = Some((uniform, parts));
+        self.held = (flip, ids);
+        self.bind = None;
+    }
+
+    /// A frame with no mirror: the overlay lets go of the targets it bound.
+    pub fn rest(&mut self) {
+        self.bind = None;
     }
 
     /// The mirrored picture, linear, at half the frame's size (#166's water reads it).
@@ -206,34 +221,42 @@ impl Mirrorer {
         };
         // #166: a water's own mirror lays no picture over parts; the water's pass reads it.
         if self.parts == 0 {
+            self.bind = None;
             return jobs;
         }
-        let bind = device.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some(MIRROR_PASS),
-            layout: &self.layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: uniform.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::TextureView(picture),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: wgpu::BindingResource::Sampler(&self.sampler),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 3,
-                    resource: wgpu::BindingResource::TextureView(ids),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 4,
-                    resource: parts.as_entire_binding(),
-                },
-            ],
-        });
+        let bind = match &self.bind {
+            Some((p, i, bind)) if p == picture && i == ids => bind.clone(),
+            _ => {
+                let bind = device.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                    label: Some(MIRROR_PASS),
+                    layout: &self.layout,
+                    entries: &[
+                        wgpu::BindGroupEntry {
+                            binding: 0,
+                            resource: uniform.as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 1,
+                            resource: wgpu::BindingResource::TextureView(picture),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 2,
+                            resource: wgpu::BindingResource::Sampler(&self.sampler),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 3,
+                            resource: wgpu::BindingResource::TextureView(ids),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 4,
+                            resource: parts.as_entire_binding(),
+                        },
+                    ],
+                });
+                self.bind = Some((picture.clone(), ids.clone(), bind.clone()));
+                bind
+            }
+        };
         let pipeline = self.pipeline[usize::from(reflection.is_some())].clone();
         let (linear, profiler) = (linear.clone(), profiler.clone());
         jobs.push((
