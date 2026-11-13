@@ -47,9 +47,9 @@ pub enum PlayPath {
     Cold,
 }
 
-/// What [`Hub::evaluate`] leaves: the last frame's drawing, its nodes' results, and each video
-/// image item's frame.
-pub(crate) type Evaluated = (Painted, Vec<Value>, Map<String, Value>, Map<String, Value>);
+/// What [`Hub::evaluate`] leaves: the last frame's drawing, its nodes' results, each video
+/// image item's frame, each cell grid, and a 2D film's sides at the last time (#239).
+pub(crate) type Evaluated = (Painted, Vec<Value>, Map<String, Value>, Map<String, Value>, Option<crate::film::Sides>);
 
 /// A `determinism` call.
 pub struct Determinism {
@@ -675,7 +675,10 @@ impl Hub<'_> {
             .collect();
         // #1967: each cell grid as the last frame shows it.
         let cells = crate::terminal::grid_blocks(&sched, &session);
-        Ok((drawing, nodes, video, cells))
+        // #239: a 2D film's shots and transitions at the last time, as eval's still draws them.
+        let last = times.last().copied().unwrap_or(0);
+        let sides = crate::film::program_of(&sched, &session).and_then(|p| crate::film::sides(&p, doc, last, false));
+        Ok((drawing, nodes, video, cells, sides))
     }
 
     /// One side of a comparison: [`Hub::evaluate`]'s last frame as its canonical render (the
@@ -689,15 +692,18 @@ impl Hub<'_> {
         seek: bool,
     ) -> Result<Value, String> {
         let started = std::time::Instant::now();
-        let (drawing, nodes, video, cells) = self.evaluate(doc, view, times, seek)?;
+        let (drawing, nodes, video, cells, sides) = self.evaluate(doc, view, times, seek)?;
         let (rgba, size) = if deep_canvas_scene3d::scene::has_3d(doc) {
             // A 3D writer layer: its 3D frame at the last time, its 2D items drawn over it (#1162).
             self.rgba3d(doc, times.last().copied().unwrap_or(0), &drawing, None)
                 .map_err(|u| u.code.to_string())?
         } else {
-            let (rgba, _, size) = self
-                .canonical_rgba(&drawing, None, true)
-                .map_err(|u| u.code.to_string())?;
+            // A 2D film with shots: each side through its own camera and look, blended (#239).
+            let (rgba, _, size) = match &sides {
+                Some(sides) => self.film_rgba(&drawing, None, sides, doc, (true, None)),
+                None => self.canonical_rgba(&drawing, None, true),
+            }
+            .map_err(|u| u.code.to_string())?;
             (rgba, size)
         };
         let rendered = started.elapsed();
