@@ -438,7 +438,6 @@ pub(crate) fn measure(
                 0,
             )
             .map_err(|r| refused(r.code, r.path))?;
-            timer.resolve(&mut encoder);
             let cpu = began.elapsed().as_secs_f64() * 1e3;
             device.queue.submit([encoder.finish()]);
             let lose = stub
@@ -449,6 +448,13 @@ pub(crate) fn measure(
                 false
             } else {
                 memory::drain(&device);
+                // #239: the timestamps resolve in a submission of their own once the frame's work
+                // is done. Metal orders no read of a counter sample against the pass that writes
+                // it, so a resolve in the frame's own encoder could copy the last pass's end
+                // before its fragment stage wrote it, and read the frame before's.
+                let mut resolve = device.device.create_command_encoder(&Default::default());
+                timer.resolve(&mut resolve);
+                device.queue.submit([resolve.finish()]);
                 timer.read(&device)
             };
             let lost = device.is_lost();
