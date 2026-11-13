@@ -751,6 +751,7 @@ impl Hub<'_> {
                     "reason": format!("an export carries narration only under a license that says shareable: true; this one's doesn't: {who}")}),
                 );
             }
+            crate::narration::heard_back::fits(&doc, &s)?;
         }
         // #157: the licences the export carries, through every job output to its inputs; a CC BY
         // input without its credit FAILs.
@@ -1150,6 +1151,7 @@ impl Hub<'_> {
             receipt["sample_rate"] = json!(hz);
             receipt["audio"] = json!(job.audio_codec);
             receipt["pcm_hashes"] = json!(pcm_hashes);
+            receipt["bakes"] = self.bakes_listed(&doc, hz)?;
         }
         if let Some(read) = &sound {
             for (k, v) in readings(read) {

@@ -30,6 +30,7 @@ pub mod modifier;
 pub mod module;
 pub mod morph;
 mod occurrence;
+mod pace;
 pub mod program;
 pub mod quat;
 pub mod remap;

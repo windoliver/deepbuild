@@ -101,6 +101,8 @@ pub struct Media {
     pub(crate) captions: Option<crate::narration::View>,
     pub(crate) captions_drawn:
         std::collections::BTreeMap<String, std::sync::Arc<crate::snapshot::Drawn>>,
+    /// #509: whether the state folder's narration exception asks were read back.
+    pub(crate) heard_restored: bool,
     /// #1967: each terminal recording a cell grid plays, by SHA-256, as the decode worker
     /// converted it: its keyframes and row patches, which sessions read as `terminal:<sha256>`.
     pub recordings: std::collections::BTreeMap<String, Value>,
@@ -207,6 +209,8 @@ impl Hub<'_> {
                 }
             }
         }
+        // #509: a document that names a narration line's time gets the script's spoken times.
+        out.extend(self.stamp_spoken(doc));
         out
     }
 

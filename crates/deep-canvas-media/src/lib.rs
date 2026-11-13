@@ -15,6 +15,7 @@ pub mod eq;
 pub mod export_checks;
 pub mod fixtures;
 pub mod frames;
+pub mod heard;
 pub mod mix;
 pub mod module;
 pub mod reverb;
