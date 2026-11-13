@@ -8,67 +8,361 @@
 // the source off; each live call's cost and each new reading go to the record, as the core.
 import { execFile, spawn } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
-import { closeSync, createReadStream, openSync, readSync, statSync } from 'node:fs';
+import { closeSync, createReadStream, openSync, readFileSync, readSync, statSync } from 'node:fs';
 import { appendFile, mkdir, rm, stat, statfs, writeFile } from 'node:fs/promises';
-import { dirname } from 'node:path';
+import { dirname, join } from 'node:path';
 import { createConnection, type AddressInfo } from 'node:net';
 import { scrubValues } from '@deepbuild/evidence';
-import { ulid } from '@deepbuild/record';
-import { SERIES_MAX } from './series.js';
-
-/** One outside call the hub makes for a source, as it hands it to its HTTP client. */
-export interface HttpRequest { url: string; method: string; headers: Record<string, string>; body?: string; /** A file's bytes (#1731): the answer's body as base64. */ encoding?: 'base64'; /** A binary recording refers to its downloaded bytes, never retains every chunk in memory. */ recording?: { file: string; offset: number } }
-/** What came back, as the client got it: header names lower-case, a 3xx as it is, with its Location. */
-export interface HttpAnswer { status: number; headers: Record<string, string>; body: string; partial?: true; refused?: 'range_not_supported' | 'invalid_range_response' }
-/** The hub's HTTP client for source calls: it never follows a redirect, rejects when the host can't be reached, and stops when `signal` aborts. */
-export type HttpClient = (request: HttpRequest, signal: AbortSignal) => Promise<HttpAnswer>;
-/** The OS secret store as the hub reaches it (the Keychain on macOS). */
-export interface SecretStore {
-  get(key: string): Promise<string | undefined>;
-  set(key: string, value: string): Promise<void>;
-  delete(key: string): Promise<void>;
+import { ulid, type Connection, type RecordStore } from '@deepbuild/record';
+import { sha256Hex, validate } from '@deepbuild/contracts';
+import type { Entry, Ext, Manifest } from './host-types.js';
+import { CALL_MS, HostFiles, isPlain, message, trustedPath, within } from './host-shared.js';
+import { SERIES_MAX, missing, shownValue, type SeriesStore, type BoundValue, type Span, type Rollup } from './series.js';
+import type { HttpRequest, HttpAnswer, HttpClient, SecretStore, RecordedCall, Recording, Reading, Batch, SourceRead, KeyTest, StreamEvent, StreamRead, Polled, WorkDecl, LibraryDecl, Declared, ViewShown, SavedNotice } from './source-types.js';
+export type { HttpRequest, HttpAnswer, HttpClient, SecretStore, RecordedCall, Recording, Reading, Batch, SourceRead, KeyTest, StreamEvent, StreamRead, Polled, WorkDecl, LibraryDecl, Declared } from './source-types.js';
+const WORK_CALL_MS = 60_000;
+const BOUND = /^reading:([a-z][a-z0-9_.-]*)(?:#(.+))?$/;
+const SOURCE_NAME = /^ext\.[a-z0-9][a-z0-9_-]*\.[a-z][a-z0-9_]*$/;
+const KEPT_MS = 2_000;
+const SHOWN_MS = 10_000;
+interface HostSourcesOptions {
+  record: RecordStore; now(): number; files: HostFiles;
+  exts: ReadonlyMap<string, Ext>;
+  ask(ext: Ext, ms: number, what: string, method: string, params: unknown): Promise<unknown>;
 }
-/** One source call as recorded: no form of any secret value anywhere in it. */
-export interface RecordedCall { source: string; request: HttpRequest; answer: HttpAnswer | { error: 'timeout' | 'unreachable' | 'asset_refused' } }
-export interface Recording { v: 1; calls: RecordedCall[] }
-/** A reading: the parser's value and unit, with the source and the as-of time of the call that fetched it. */
-export interface Reading { source: string; value: number; unit: string; as_of: number }
-/** A series call's values, kept in one evidence file named by one reading.batch event (#262). */
-export interface Batch { handle: string; source: string; as_of: number; file: string; count: number }
-/** A read: a number's reading, a series' batch, or why there is none; `until`, when the quota refused it, is when it can run. */
-export type SourceRead = { status: 'reading'; reading: Reading } | { status: 'batch'; batch: Batch } | { status: 'BLOCKED' | 'failed'; source: string; cause: string; until?: number };
-export type KeyTest = 'valid' | 'invalid' | 'INCONCLUSIVE' | 'untested';
-/** One event of a stream source, as source@1 has it. */
-export interface StreamEvent { seq: number; kind: string; data: unknown }
-export type StreamRead = { status: 'events'; source: string; events: StreamEvent[] } | { status: 'BLOCKED' | 'failed'; source: string; cause: string };
+/** Loaded source calls, cursor and visibility state belong to this host's source service. */
+export class HostSources {
+  /** The app's last views/shown report for each view and window (#262). */
+  private readonly shown = new Map<string, { report: ViewShown; at: number }>();
+  /** When each while-shown source is next called (#262). */
+  private readonly shownNext = new Map<string, number>();
+  /** Each source whose last call the quota refused, with when it can run (#262). */
+  private readonly quotaUntil = new Map<string, number>();
 
-/** A polled source as its package declared it, checked: functions stay with the package. */
-export interface Polled {
-  variant: 'polled'; name: string; host: string; path: string;
-  /** The secret's name in the manifest, or null for a source that needs none. */
-  secret: string | null;
-  auth: { header: string } | { basic: string } | { bearer: true } | null;
-  /** Sign-in through an OAuth loopback (RFC 8252), its endpoints on the source's own host; the token is the secret. */
-  oauth: { authorize: string; token: string; client: string; scope: string | null } | null;
-  quota: { per_minute: number; per_day: number };
-  timeout: number; freshFor: number;
-  keyTest: { path: string } | null;
-  /** A number, or a series of up to 10,000 named values a call (#262). */
-  shape: 'number' | 'series';
-  /** A cadence the hub runs only while a view that binds the source is shown (#262). */
-  whileShown: { every: number } | null;
+  /** The work-source calls under way, by the call ID their context's fetch names (#66). */
+  private readonly workCalls = new Map<string, { ext: Ext; source: string; work: Omit<WorkDecl, 'delivers'>; library?: LibraryDecl; noAnswer: boolean }>();
+  private workCount = 0;
+  constructor(private readonly options: HostSourcesOptions, private readonly sources: Sources, private readonly series: SeriesStore | undefined) {}
+  workExt(source: string): Ext | undefined {
+    return [...this.options.exts.values()].find((e) => e.live && e.ask && e.mode === 'loaded' && (e.sources.get(source) as { work?: unknown } | undefined)?.work);
+  }
+
+  /** One op of a loaded work source, bounded; its context's fetch goes through the hub under this call's ID. */
+  async workCall(source: string, op: 'list' | 'item' | 'deliver' | 'find', arg: unknown): Promise<{ value: unknown; noAnswer: boolean }> {
+    const ext = this.workExt(source);
+    const d = ext?.sources.get(source);
+    if (!ext || d?.variant !== 'stream' || !d.work) throw Error(`no loaded package registers the work source ${source}`);
+    const call = `work:${++this.workCount}`;
+    const live = { ext, source, work: d.work, noAnswer: false };
+    this.workCalls.set(call, live);
+    try {
+      const value = await within(WORK_CALL_MS, `${ext.entry.id}'s work source ${source}'s ${op}`, ext.ask!('work', { name: source, op, call, arg }));
+      return { value, noAnswer: live.noAnswer };
+    } catch (e) {
+      throw Object.assign(e instanceof Error ? e : Error(String(e)), { noAnswer: live.noAnswer });
+    } finally {
+      this.workCalls.delete(call);
+    }
+  }
+
+  /** The library sources loaded packages registered (#1731), asset.library@1's fills: each one's name and package. */
+  libraries(): { name: string; extension: string }[] {
+    return [...this.options.exts.values()].filter((e) => e.live && e.ask && e.mode === 'loaded')
+      .flatMap((e) => [...e.sources.values()].filter((d) => d.variant === 'library').map((d) => ({ name: d.name, extension: e.entry.id })));
+  }
+
+  private libraryOf(name: string): { ext: Ext; library: LibraryDecl } {
+    for (const ext of this.options.exts.values()) {
+      const d = ext.live && ext.ask && ext.mode === 'loaded' ? ext.sources.get(name) : undefined;
+      if (d?.variant === 'library') return { ext, library: d.library };
+    }
+    throw Error(`no loaded package registers the library ${name}`);
+  }
+
+  /**
+   * One op of a loaded library source (#1731), search or fetch, bounded by its timeout: the package's code reads the
+   * library's API through its context's fetch, the hub's call to the library's host; `noAnswer` when a call got none.
+   */
+  async libraryCall(name: string, op: 'search' | 'fetch', arg: unknown): Promise<{ value: unknown; noAnswer: boolean }> {
+    const { ext, library } = this.libraryOf(name);
+    const call = `work:${++this.workCount}`;
+    const live = { ext, source: name, work: library, library, noAnswer: false };
+    this.workCalls.set(call, live);
+    try {
+      const value = await within(WORK_CALL_MS, `${ext.entry.id}'s library ${name}'s ${op}`, ext.ask!('library', { name, op, call, arg }));
+      return { value, noAnswer: live.noAnswer };
+    } catch (e) {
+      throw Object.assign(e instanceof Error ? e : Error(String(e)), { noAnswer: live.noAnswer });
+    } finally {
+      this.workCalls.delete(call);
+    }
+  }
+
+  /** A file a library's fetch named, downloaded through its source on its host by the hub, never by the package (#1731). */
+  async libraryFile(name: string, path: string): Promise<{ status: number; bytes: Uint8Array } | { status: null; why: string }> {
+    const { ext, library } = this.libraryOf(name);
+    try {
+      const answer = await this.sources.workFetch(ext.entry.id, name, library, { method: 'GET', path }, { timeout: library.timeout, encoding: 'base64' });
+      return { status: answer.status, bytes: Buffer.from(answer.body, 'base64') };
+    } catch (e) {
+      if (e instanceof NoAnswer) return { status: null, why: e.message };
+      throw e;
+    }
+  }
+
+  private packSource(pack: string, value: string): { name: string; path: string; source: LibraryDecl } {
+    const url = new URL(value);
+    if (url.protocol !== 'https:' || url.username || url.password || url.hash) throw Error(`${pack}: an asset URL must be https with no credentials or fragment`);
+    return { name: `ext.pack_${sha256Hex(new TextEncoder().encode(`${pack}\n${url.host}`))}.assets`, path: `${url.pathname}${url.search}`, source: { host: url.host, secret: null, auth: null, quota: { per_minute: 600, per_day: 100_000 }, timeout: WORK_CALL_MS } };
+  }
+
+  async assetFile(source: { pack: string; url: string } | { library: string; path: string }, spec: { file: string; sha256: string; size: number; kept: string }): Promise<string> {
+    if ('library' in source) {
+      const { ext, library } = this.libraryOf(source.library);
+      return this.sources.download(ext.entry.id, source.library, library, source.path, spec);
+    }
+    const p = this.packSource(source.pack, source.url);
+    return this.sources.download(source.pack, p.name, p.source, p.path, spec);
+  }
+
+  async assetOnline(pack: string, value: string): Promise<boolean> {
+    const p = this.packSource(pack, value);
+    try {
+      await this.sources.workFetch(pack, p.name, p.source, { method: 'CONNECT', path: '/' }, { timeout: 2000 });
+      return true;
+    } catch (e) {
+      if (e instanceof NoAnswer) return false;
+      throw e;
+    }
+  }
+
+  async assetTerms(pack: string, url: string): Promise<string> {
+    const p = this.packSource(pack, url);
+    const answer = await this.sources.workFetch(pack, p.name, p.source, { method: 'GET', path: p.path }, { timeout: p.source.timeout });
+    if (answer.status !== 200) throw Error(`${pack}: license ${url} answered ${answer.status}`);
+    return answer.body;
+  }
+
+  async readSource(name: string): Promise<SourceRead> {
+    const ext = [...this.options.exts.values()].find((e) => e.live && e.sources.get(name)?.variant === 'polled');
+    if (!ext) return { status: 'BLOCKED', source: name, cause: `no loaded package registers the polled source ${name}` };
+    return (await this.readPolled(ext, name)).read;
+  }
+
+  /** One read of a loaded plug-in's polled source, through the hub, keeping when the quota refused it (#262). */
+  async readPolled(owner: Ext, name: string): Promise<{ read: SourceRead; handle: string | null; held: boolean }> {
+    const got = await this.sources.readOne(owner.entry.id, owner.sources.get(name) as Polled, (answer) => this.options.ask(owner, CALL_MS, `${name}'s parser`, 'source.parse', { name, answer }));
+    if (got.read.status === 'reading' || got.read.status === 'batch') this.quotaUntil.delete(name);
+    else if (got.read.until !== undefined) this.quotaUntil.set(name, got.read.until);
+    return got;
+  }
+
+  recording(): Recording {
+    return this.sources.recording();
+  }
+
+  async readings(source: string, window: { from: number; to: number }): Promise<Reading[]> {
+    if (!SOURCE_NAME.test(source) || !Number.isSafeInteger(window?.from) || !Number.isSafeInteger(window?.to)) throw Error('readings takes a source\'s name and a window of two times in ms');
+    const rows = await this.options.record.raw('SELECT value, unit, as_of, source FROM readings WHERE source = ? AND as_of BETWEEN ? AND ? ORDER BY as_of, reading', [source, window.from, window.to]) as { value: string; unit: string; as_of: number; source: string }[];
+    return rows.map((r) => ({ source: r.source, value: Number(r.value), unit: r.unit, as_of: r.as_of }));
+  }
+
+  async readStream(name: string, limit: number): Promise<StreamRead> {
+    const ext = [...this.options.exts.values()].find((e) => e.live && e.sources.get(name)?.variant === 'stream');
+    if (!ext) return { status: 'BLOCKED', source: name, cause: `no loaded package registers the stream source ${name}` };
+    if (!Number.isSafeInteger(limit) || limit < 1) throw Error('readStream takes a page limit of at least one event');
+    const failed = (cause: string): StreamRead => ({ status: 'failed', source: name, cause });
+    const cursors = this.options.files.read<string | null>('cursors.json');
+    // At run time the stream is the package's own upstream, which its read reaches through its grant.
+    let page: unknown;
+    try {
+      page = await this.options.ask(ext, CALL_MS, `${name}'s read`, 'source.read', { name, stream: null, cursor: cursors[name] ?? null, limit });
+    } catch (e) {
+      return failed(`its read failed: ${message(e)}`);
+    }
+    const p = page as { events?: unknown; cursor?: unknown } | null;
+    const events = p?.events;
+    const isEvent = (e: unknown): e is StreamEvent => isPlain(e) && Number.isSafeInteger(e.seq) && typeof e.kind === 'string' && 'data' in e;
+    if (!Array.isArray(events) || events.length > limit || !events.every(isEvent) || (p!.cursor !== null && typeof p!.cursor !== 'string')) return failed('its read gave no page of at most the limit, with a cursor');
+    const type = (ext.manifest.sources ?? []).find((s) => s.name === name)?.reading;
+    for (const e of type ? events : []) {
+      const held = validate(type!, e.data);
+      if (!held.ok) return failed(`event ${e.seq} isn't ${type}: ${held.issues[0]!.path || '/'} ${held.issues[0]!.code}`);
+    }
+    // Read again: another stream's read may have saved its cursor while this one waited.
+    this.options.files.save('cursors.json', { ...this.options.files.read<string | null>('cursors.json'), [name]: p!.cursor });
+    return { status: 'events', source: name, events };
+  }
+
+  /**
+   * Each while-shown cadence that is due (#262): one call a period for the source, however many views bind it, while
+   * one of them is shown; none once none is, or while the schedule a notice gave its checking job stands in for it.
+   */
+  async shownTick(): Promise<void> {
+    const now = this.options.now();
+    const standIn = new Map<string, number>();
+    for (const n of Object.values(this.options.files.read<SavedNotice>('notices.json'))) if (n.every !== null) standIn.set(n.source, Math.min(standIn.get(n.source) ?? Infinity, n.every));
+    for (const ext of [...this.options.exts.values()].filter((e) => e.live)) {
+      for (const source of ext.sources.values()) {
+        if (source.variant !== 'polled' || !source.whileShown) continue;
+        const every = source.whileShown.every;
+        if (!this.sourceShown(source.name, now) || (standIn.get(source.name) ?? Infinity) <= every) {
+          this.shownNext.delete(source.name);
+          continue;
+        }
+        const due = this.shownNext.get(source.name) ?? now;
+        if (now < due) continue;
+        this.shownNext.set(source.name, due + every > now ? due + every : now + every);
+        await this.readPolled(ext, source.name);
+      }
+    }
+  }
+
+  /** Whether a view that binds the source is shown: the app reported it in the last 10 s, visible, not minimized, on an awake display, unlocked, and not a replica's. */
+  private sourceShown(source: string, now: number): boolean {
+    const bound = new Set([...this.options.exts.values()].filter((e) => e.live).flatMap((e) => [...e.views].filter(([, binds]) => binds.some((b) => BOUND.exec(b)?.[1] === source)).map(([view]) => view)));
+    for (const { report, at } of this.shown.values()) {
+      if (bound.has(report.view) && now - at < SHOWN_MS && report.visible && !report.minimized && report.display_awake && !report.session_locked && !report.replica) return true;
+    }
+    return false;
+  }
+
+  /**
+   * `deep.readNow(view)` (#262): every source the plug-in's view binds, read at once, each through its quota. One
+   * answered in the last 2 s keeps that answer; one the quota refuses reads `quota` until it can run.
+   */
+  async readNow(ext: Ext, view: unknown): Promise<{ view: string; sources: { source: string; status: 'kept' | 'read' | 'quota' | 'failed'; until?: number; cause?: string }[] }> {
+    const binds = typeof view === 'string' ? ext.views.get(view) : undefined;
+    if (!binds) throw Error(`deep.readNow: ${String(view)} isn't a view ${ext.entry.id} registered`);
+    const names = [...new Set(binds.map((b) => BOUND.exec(b)![1]!))];
+    const now = this.options.now();
+    return {
+      view: view as string,
+      sources: await Promise.all(names.map(async (source) => {
+        const owner = [...this.options.exts.values()].find((e) => e.live && e.sources.get(source)?.variant === 'polled');
+        if (!owner) return { source, status: 'failed' as const, cause: `no loaded plug-in registers the polled source ${source}` };
+        const last = this.sources.last(source);
+        if (last && now - last.as_of <= KEPT_MS) return { source, status: 'kept' as const };
+        const { read } = await this.readPolled(owner, source);
+        if (read.status === 'reading' || read.status === 'batch') return { source, status: 'read' as const };
+        return read.until === undefined ? { source, status: 'failed' as const, cause: read.cause } : { source, status: 'quota' as const, until: read.until };
+      })),
+    };
+  }
+
+  async viewsShown(connection: Connection, report: ViewShown): Promise<void> {
+    trustedPath(connection, 'a view is reported shown');
+    const r = (isPlain(report) ? report : {}) as Record<string, unknown>;
+    const flags = ['visible', 'minimized', 'display_awake', 'session_locked', 'replica'] as const;
+    if (typeof r.view !== 'string' || typeof r.window !== 'string' || flags.some((f) => typeof r[f] !== 'boolean')) {
+      throw Error(`views/shown names its view and window and says whether it is ${flags.join(', ')}`);
+    }
+    this.shown.set(`${r.view}\n${r.window}`, { report: { ...(r as unknown as ViewShown) }, at: this.options.now() });
+  }
+
+  async viewsHidden(connection: Connection, report: { view: string; window: string }): Promise<void> {
+    trustedPath(connection, 'a view is reported hidden');
+    this.shown.delete(`${report?.view}\n${report?.window}`);
+  }
+
+  async boundValues(handles: string[], at?: { log_pos: number }): Promise<BoundValue[]> {
+    if (at !== undefined && !Number.isSafeInteger(at?.log_pos)) throw Error('a bound value is pinned to a log position');
+    const now = this.options.now();
+    return Promise.all(handles.map(async (handle): Promise<BoundValue> => {
+      const m = typeof handle === 'string' ? BOUND.exec(handle) : null;
+      if (!m) return missing(String(handle), `${String(handle)} isn't reading:<source> or reading:<source>#<series>`);
+      const [, source, series] = m as unknown as [string, string, string | undefined];
+      if (at) {
+        if (series !== undefined) return this.series ? this.series.at(handle, source, series, at.log_pos) : missing(handle, 'this hub keeps no series');
+        const [row] = (await this.options.record.raw("SELECT data FROM events WHERE kind = 'reading.recorded' AND log_pos <= ? AND json_extract(data, '$.source') = ? ORDER BY log_pos DESC LIMIT 1", [at.log_pos, source])) as { data: string }[];
+        const d = row ? JSON.parse(row.data) as { value: number; as_of: number } : undefined;
+        return d ? shownValue(handle, d.value, d.as_of) : missing(handle, `no reading of ${source} at or before log position ${at.log_pos}`);
+      }
+      const until = this.quotaUntil.get(source);
+      if (until !== undefined && now < until) return { handle, status: 'quota', value: null, as_of: null, shown: `quota until ${new Date(until).toISOString()}`, until };
+      if (series !== undefined) {
+        const v = this.series?.live(source, series);
+        return v ? shownValue(handle, v.value, v.as_of) : missing(handle, `no batch of ${source} holds ${series}`);
+      }
+      const last = this.sources.last(source)?.read;
+      return last?.status === 'reading' ? shownValue(handle, last.reading.value, last.reading.as_of) : missing(handle, `no reading of ${source}`);
+    }));
+  }
+
+  async rollup(source: string, span: Span, start: number): Promise<Record<string, Rollup> | null> {
+    const r = this.series ? await this.series.rollup(source, span, start) : null;
+    if (typeof r === 'string') throw Error(`the ${span} rollup of ${source} from ${new Date(start).toISOString()} ${r}`);
+    return r;
+  }
+
+  async heldSecrets(): Promise<{ secret: string; provider: string }[]> {
+    const named = [...this.options.exts.entries()].flatMap(([id, ext]) => (ext.manifest.secrets ?? []).map((s) => ({ secret: s.name, provider: id })));
+    const held = await Promise.all(named.map((n) => this.sources.holds(n.provider, n.secret)));
+    return named.filter((_, i) => held[i]);
+  }
+
+  async workFetch(ext: Ext, call: unknown, request: unknown): Promise<unknown> {
+    // Only a call of its own work source under way: the hub's call, to the source's host, with its secret and quota.
+    const id = ext.entry.id;
+    const live = typeof call === 'string' ? this.workCalls.get(call) : undefined;
+    if (!live || live.ext !== ext) throw Error(`deep.work.fetch: ${id} has no work source call under way as ${String(call)}`);
+    try {
+      return await this.sources.workFetch(ext.entry.id, live.source, live.work, request as Parameters<Sources['workFetch']>[3], live.library);
+    } catch (e) {
+      if (e instanceof NoAnswer) live.noAnswer = true;
+      throw e;
+    }
+  }
+  async enterSecret(connection: Connection, extension: string, name: string, value: string, entries: Readonly<Record<string, Entry>>, schedules: SecretSchedules): Promise<{ test: KeyTest; saved: boolean }> {
+    trustedPath(connection, 'a secret is entered');
+    this.secretOf(entries, extension, name);
+    if (typeof value !== 'string' || !value) throw Error(`a value for ${name} is a string`);
+    const ext = this.options.exts.get(extension);
+    const tested = [...(ext?.live ? ext.sources.values() : [])].find((s): s is Polled => s.variant === 'polled' && s.secret === name && s.keyTest !== null);
+    const entered = await this.sources.enter(extension, name, value, tested);
+    // A schedule BLOCKED on it runs at the next tick (#365).
+    if (entered.saved) schedules.supplied();
+    return entered;
+  }
+
+  async removeSecret(connection: Connection, extension: string, name: string, answer: { yes: string[] } | undefined, entries: Readonly<Record<string, Entry>>, schedules: SecretSchedules): Promise<{ removed: boolean; blocked: string[] }> {
+    trustedPath(connection, 'a secret is removed');
+    this.secretOf(entries, extension, name);
+    // What plug-ins declared needing it: its sources, and the schedules and checks that read them (#365).
+    const sources = [...(this.options.exts.get(extension)?.sources.values() ?? [])].filter((s) => s.variant === 'polled' && s.secret === name).map((s) => s.name);
+    const reads = (r: string[]): boolean => r.some((x) => sources.includes(x));
+    const blocked = [
+      ...sources,
+      ...schedules.decls().filter((d) => reads(d.declares.readings)).map((d) => d.name),
+      ...[...this.options.exts.values()].flatMap((e) => [...e.checkReads].filter(([, r]) => reads(r)).map(([kind]) => kind)),
+    ].sort();
+    const yes = [...(answer?.yes ?? [])].sort();
+    if (!answer || yes.length !== blocked.length || yes.some((s, i) => s !== blocked[i])) return { removed: false, blocked };
+    await this.sources.remove(extension, name, blocked);
+    return { removed: true, blocked };
+  }
+
+  async signIn(connection: Connection, extension: string, name: string, entries: Readonly<Record<string, Entry>>, schedules: SecretSchedules, browse: ((url: string) => Promise<void>) | undefined): Promise<{ saved: true }> {
+    trustedPath(connection, 'a sign-in is made');
+    this.secretOf(entries, extension, name);
+    const ext = this.options.exts.get(extension);
+    const source = [...(ext?.live ? ext.sources.values() : [])].find((s): s is Polled => s.variant === 'polled' && s.secret === name && s.oauth !== null);
+    if (!source) throw Error(`no loaded source of ${extension} signs in for ${name}`);
+    const signed = await this.sources.signIn(extension, name, source, browse ?? openBrowser);
+    schedules.supplied();
+    return signed;
+  }
+
+  /** The secret a package's manifest names, or a refusal naming it. */
+  private secretOf(entries: Readonly<Record<string, Entry>>, extension: string, name: string): void {
+    const entry = entries[extension];
+    if (!entry) throw Error(`${extension} isn't installed`);
+    const manifest = JSON.parse(readFileSync(join(entry.folder, 'deepbuild.json'), 'utf8')) as Manifest;
+    if (!(manifest.secrets ?? []).some((s) => s.name === name)) throw Error(`${extension}'s manifest names no secret ${name}`);
+  }
 }
-/**
- * A work source (#66): a stream source whose reading is work.item@1, read through the hub. Its provider calls go to its
- * host only, with its secret by handle, under its quota; `delivers` says what a delivery into its threads is.
- */
-export interface WorkDecl { host: string; secret: string | null; auth: Polled['auth']; quota: { per_minute: number; per_day: number }; delivers: 'comment' | 'chat' | 'email' }
-/**
- * A library source (#1731), asset.library@1's fill: its search and fetch run in the package, every call they make and
- * every byte of a picked asset going through the hub to its one host, with its secret by handle, its quota and timeout.
- */
-export interface LibraryDecl extends Omit<WorkDecl, 'delivers'> { timeout: number }
-export type Declared = Polled | { variant: 'stream'; name: string; work: WorkDecl | null } | { variant: 'library'; name: string; library: LibraryDecl };
+
+interface SecretSchedules { supplied(): void; decls(): { name: string; declares: { readings: string[] } }[] }
 
 /** The handle `deep.secret(name)` gives: it names the secret, never holds its value. */
 export const handleOf = (name: string): string => `secret:${name}`;

@@ -59,6 +59,9 @@ pub struct Mesh {
     pub cage: Option<Vec<[V3; 2]>>,
     /// Its GPU sway (#2016): the params and weights the vertex move reads at each frame.
     pub sway: Option<crate::stack::Sway>,
+    /// A terrain tile's plate's full-detail normals, which its pixels read at every level
+    /// (#2017; uv1 is the place on the plate's grid), or none.
+    pub terrain: Option<std::sync::Arc<crate::terrain::Normals>>,
 }
 
 /// What a mesh-edge line draws.
@@ -602,17 +605,13 @@ impl Mesh {
 }
 
 impl Mesh {
-    /// Each vertex's welded point (positions equal to 1e-6 m are one), numbered from 0.
+    /// Each vertex's welded point (positions equal to 1e-6 m are one), numbered from 0 in order
+    /// of first appearance.
     pub fn welded(&self) -> Vec<u32> {
-        let mut ids: BTreeMap<[i64; 3], u32> = BTreeMap::new();
-        self.positions
-            .iter()
-            .map(|p| {
-                let key = p.map(|x| (x / 1e-6).round() as i64);
-                let next = ids.len() as u32;
-                *ids.entry(key).or_insert(next)
-            })
-            .collect()
+        let key = |i: usize| self.positions[i].map(|x| (x / 1e-6).round() as i64);
+        first_seen(self.positions.len(), key, |k| {
+            spread(spread(spread(k[0] as u64) ^ k[1] as u64) ^ k[2] as u64)
+        })
     }
 
     /// The closed parts recomputed from the triangles: each connected piece (on welded points)
@@ -661,6 +660,49 @@ impl Mesh {
             self.closed.insert(format!("solid.{k}"), (tris, genus));
         }
     }
+}
+
+/// Each of `n` keys' number among the distinct keys, in order of first appearance, found through
+/// an open-addressed table of first places (`hash` spreads a key over 64 bits; the numbers never
+/// depend on it). A key equal to the one before takes its number.
+pub(crate) fn first_seen<K: PartialEq>(
+    n: usize,
+    key: impl Fn(usize) -> K,
+    hash: impl Fn(&K) -> u64,
+) -> Vec<u32> {
+    let mask = (2 * n).next_power_of_two().max(2) - 1;
+    let mut table = vec![u32::MAX; mask + 1];
+    let mut ids: Vec<u32> = Vec::with_capacity(n);
+    let (mut count, mut last) = (0, None);
+    for i in 0..n {
+        let k = key(i);
+        if last.as_ref() == Some(&k) {
+            ids.push(ids[i - 1]);
+            continue;
+        }
+        let mut h = hash(&k) as usize & mask;
+        let id = loop {
+            match table[h] {
+                u32::MAX => {
+                    table[h] = i as u32;
+                    count += 1;
+                    break count - 1;
+                }
+                j if key(j as usize) == k => break ids[j as usize],
+                _ => h = (h + 1) & mask,
+            }
+        };
+        ids.push(id);
+        last = Some(k);
+    }
+    ids
+}
+
+/// `x`'s bits mixed so each depends on all of them (SplitMix64's finalizer).
+pub(crate) fn spread(x: u64) -> u64 {
+    let x = (x ^ (x >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+    let x = (x ^ (x >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+    x ^ (x >> 31)
 }
 
 /// A polygon's normal by Newell's method.

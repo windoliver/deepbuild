@@ -13,7 +13,7 @@ import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { gitEnv } from '@deepbuild/gate';
-import { repoOf, type AppKey } from '@deepbuild/github';
+import type { AppKey } from './forge-port.js';
 import type { Plant } from './plant.js';
 
 type Obj = Record<string, unknown>;
@@ -50,6 +50,7 @@ export interface Round {
 
 export interface LandingOptions {
   root: string;
+  repoOf(remote: string): string | undefined;
   /** The forge's REST root, and the token its reads and merges go with. */
   api: string;
   token(): Promise<string | undefined>;
@@ -153,7 +154,7 @@ export class Landing {
 
   private async repoOf(checkout: string): Promise<string> {
     const origin = await must(checkout, ['remote', 'get-url', 'origin']);
-    const repo = repoOf(origin.replace(/^https?:\/\/[^/]+\/(?=github\.com\/)/, 'https://'));
+    const repo = this.o.repoOf(origin.replace(/^https?:\/\/[^/]+\/(?=github\.com\/)/, 'https://'));
     if (!repo) throw Error(`${checkout}'s origin (${origin}) names no forge repository`);
     return repo;
   }

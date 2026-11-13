@@ -8,7 +8,7 @@ import { YOUNG } from './settle.js';
 /** What execFile's callback gets, as plain data: its error's code and message, and the output as text. */
 interface Ran { error: { code?: number | string; message: string } | null; stdout: string; stderr: string }
 interface RunOptions { env?: NodeJS.ProcessEnv; cwd?: string; timeout?: number; maxBuffer?: number }
-export interface ChildJob { file: string; args: string[]; options: RunOptions }
+export interface ChildJob { file: string; args: string[]; options: RunOptions; stdin?: number }
 
 let worker: Worker | undefined;
 let n = 0;
@@ -49,6 +49,21 @@ const C = (): NodeJS.ProcessEnv => ({ ...process.env, LC_ALL: 'C' });
 export const startOf = async (pid: number): Promise<string | undefined> => {
   const r = await run('ps', ['-o', 'lstart=', '-p', String(pid)], { env: C() });
   return r.error ? undefined : r.stdout.trim() || undefined;
+};
+/**
+ * The PID of the process at the other end of the connection on this process's descriptor `fd`, as the OS reports it
+ * to `deep-hook peer`, or undefined where it reports none (#2070).
+ */
+export const peerOf = async (hook: string, fd: number): Promise<number | undefined> => {
+  const r = await (ask({ file: hook, args: ['peer'], options: { timeout: 5000 }, stdin: fd }) as Promise<Ran>).catch(() => undefined);
+  const pid = Number(r?.stdout.trim());
+  return r && !r.error && Number.isSafeInteger(pid) && pid > 0 ? pid : undefined;
+};
+/** A process's parent, or undefined once it is gone. */
+export const parentOf = async (pid: number): Promise<number | undefined> => {
+  const r = await run('ps', ['-o', 'ppid=', '-p', String(pid)], { env: C() });
+  const ppid = Number(r.stdout.trim());
+  return !r.error && Number.isSafeInteger(ppid) && ppid > 0 ? ppid : undefined;
 };
 /** Every process's parent, from one `ps`: how the peer check walks up from a deep command to the agent above it. */
 export const parents = async (): Promise<Map<number, number>> => {

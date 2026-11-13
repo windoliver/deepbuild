@@ -5,8 +5,9 @@
 //
 // Read as (README, The surface under test, 4): a real hub process can't be put on a fake clock (its core runs in a
 // worker thread of its own process, where this test's timers can't reach), so the hub's core runs in this process:
-// `Core`, the class the hub runs in its worker (and inline, `coreInline`), loaded from the hub's build
-// (`packages/hub/dist/core.js`, typed by `packages/hub/src/core.ts`), given its clock by injection (`CoreOptions.clock`). The session is met the way the hub meets one whose hook the hub missed:
+// `Core`, constructed by the same synchronous `createCore` factory the worker and inline hub use, loaded from
+// `packages/hub/dist/hub-runtime.js` (typed by `src/hub-runtime.ts`), with `CoreOptions.clock` injected.
+// The session is met the way the hub meets one whose hook the hub missed:
 // a SessionStart line, as deep-hook writes it, in the root's spool, which the core replays as it starts. The session's
 // deep mcp calls go in as `mcp.call` with the session bound, as the server forwards them: deep_claim, then deep_run.
 // Everything under the core is real: the record, the supervisor and the sandbox, so the check's command is a real
@@ -23,10 +24,10 @@ import type { Core } from '../../../packages/hub/src/core.ts';
  * The hub's core as the hub runs it: its built module, since the core reads process start times from a thread it
  * starts from its own folder's children-worker.js, which only the build writes (README, How to run).
  */
-const BUILT = new URL('../../../packages/hub/dist/core.js', import.meta.url);
-async function coreClass(): Promise<typeof Core> {
-  if (!existsSync(BUILT)) throw Error('BLOCKED: packages/hub/dist/core.js is missing; build the hub first: node node_modules/typescript/bin/tsc -p packages/hub/tsconfig.json');
-  return ((await import(BUILT.href)) as typeof import('../../../packages/hub/src/core.ts')).Core;
+const BUILT = new URL('../../../packages/hub/dist/hub-runtime.js', import.meta.url);
+async function coreFactory(): Promise<typeof import('../../../packages/hub/src/hub-runtime.ts').createCore> {
+  if (!existsSync(BUILT)) throw Error('BLOCKED: packages/hub/dist/hub-runtime.js is missing; build the hub first: node node_modules/typescript/bin/tsc -p packages/hub/tsconfig.json');
+  return ((await import(BUILT.href)) as typeof import('../../../packages/hub/src/hub-runtime.ts')).createCore;
 }
 
 type Ev = { log_pos: number; kind: string; ts: number; subject?: string; session?: string; data?: Record<string, unknown> };
@@ -78,7 +79,7 @@ async function openHub(checks: Record<string, string | undefined>): Promise<Hub>
     payload: { session_id: SESSION, transcript_path: transcript, cwd: repo, hook_event_name: 'SessionStart', source: 'startup' },
   };
   writeFileSync(join(root, 'spool', 'spool.jsonl'), `${JSON.stringify(line)}\n`);
-  const core = new (await coreClass())({ root, clock: { start: Date.now(), real: Date.now() }, held: [] }, () => undefined);
+  const core = (await coreFactory())({ root, clock: { start: Date.now(), real: Date.now() }, held: [] }, () => undefined);
   await core.started();
   const events = async (): Promise<Ev[]> => {
     const out: Ev[] = [];
