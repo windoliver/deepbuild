@@ -45,6 +45,7 @@ installed dependencies (`npm ci` when needed). Build the workspace before testin
 
 ```sh
 node scripts/throttle.mjs build --wait 30 -- scripts/lease npm run build --workspaces
+node scripts/throttle.mjs build --wait 30 -- scripts/lease cargo build --locked -p deep-hook
 ```
 
 On an unchanged merge-base checkout with these tests overlaid, capture the
@@ -71,14 +72,20 @@ Use `--list` to inspect selection without running it. From the repository root,
 Vitest retains the repository's setup and process cleanup; do not change its root
 to this test folder. A throttle timeout runs no test and proves no behavior.
 
-## Proof status
+## Proof status and blind redraft
 
-At this documentation update, the intended baseline and after-fix checks have
-not run: the build is waiting on another session's exclusive timed grant. No
-production fix is present. The test-only affected selection names both test files;
-selection and byte-integrity checks are not behavioral proof.
+The production fix is implemented. The original tests failed on the merge base
+(6 failed, 1 passed); after the fix, 5 pass and 2 total-ledger-count assertions
+fail on delayed `session.state` / `row.set` events from answering the ask. Their
+action-entry, handler and store checks pass. Neither test file was edited or
+skipped.
 
-Before #2072 can close: preserve the expected baseline failures, implement exact
-call binding and the cut-length label, pass these unchanged tests, and report the
-affected run's known failures, WIDE and INCONCLUSIVE lines. The PR tracks the
-current results; until then it is `Part of #2072`, not a closing fix.
+`redraft/` is a fresh independent draft from the original issue, design and base,
+without the work, first draft or dispute. Its 4 tests fail on the base and pass on
+the fix, unchanged. Under Dogfooding, the owner must settle which draft counts;
+the first draft remains enabled until then. The redraft's typecheck also passes.
+
+[The proof report](../../../reports/2072/README.md) links before/after output,
+the delayed-event observation, six passing #363 regression tests, the scheduling
+deviation, and the affected run's unrun checks. Those gaps remain explicit;
+`Part of #2072` is not a closing claim.
