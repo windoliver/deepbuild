@@ -1437,6 +1437,19 @@
       "criteria": [
         "#157.d2250c69"
       ]
+    },
+    {
+      "id": "narration-transcript",
+      "command": [
+        "node",
+        "benchmarks/narration.mjs"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #509 first measurement (#509.39975b5a): the merge base has no transcriber. A 60 s narrated film, twelve kokoro@0.9.4 lines over a quiet bed in a 48 kHz mix, has each line's own audio and its mix window (t − 0.15 s to t + its length + 0.25 s) transcribed by whisper-cpp@1.9.5 on the speech plug-in's model host, already running on 127.0.0.1:8720, as narration.transcript's tool takes them, a call per four cores at once; the lines are spoken once and kept by hash in the temp folder, so p50 is the 24 transcriptions with Node's start. The issue's 60 s limit on the reference Mac's CPU and the power bakes' 800 B/s per channel stay with the issue's budget tests. p50 and peak memory get a 50% margin against the merge base once main has this task.",
+      "criteria": [
+        "#509.39975b5a"
+      ]
     }
   ]
 }

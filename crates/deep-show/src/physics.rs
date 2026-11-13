@@ -338,8 +338,9 @@ impl Hub<'_> {
                 )
             })?;
             let step = step_flicks(&w);
-            let steps = (span + step - 1) / step;
-            let call = json!({"call": "bake", "scene": form, "world": id, "steps": steps, "frame_rate": rate});
+            // #525: over its own span, its inputs derived from the scene's input track.
+            let steps = crate::stepped::steps_of(form, doc, span, step);
+            let call = json!({"call": "bake", "scene": form, "world": id, "steps": steps, "frame_rate": rate, "track": form.get("track").cloned().unwrap_or(json!([]))});
             let reply = run.answer(&call).unwrap_or(Value::Null);
             if reply["ok"] != json!(true) {
                 return Err(Box::new(refused(id, reply)));

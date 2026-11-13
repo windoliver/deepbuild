@@ -280,11 +280,15 @@ pub struct World {
     pub outputs: BTreeMap<String, Output>,
     /// In kinematic mode, what sets each driven joint's coordinate (#1918).
     pub solve: Option<Solve>,
+    /// #525: the inputs a control's entries derive.
+    pub inputs: BTreeMap<String, Declared>,
 }
 
 mod heightfield;
+mod inputs;
 mod reads;
 pub use heightfield::HEIGHTFIELD_SAMPLES;
+pub use inputs::{derived, Declared};
 pub use reads::{probe_pose, probe_shape, Output, Read, Solve, READS};
 
 /// The world document's own fields; `kind` names it.
@@ -314,8 +318,6 @@ const WORLD_KEYS: &[&str] = &[
     "outputs",
     "solve",
 ];
-/// Fields this backend interface doesn't run yet, each with the issue that brings it.
-const LATER: &[(&str, &str)] = &[("inputs", "#522")];
 const RULES: &[(&str, Rule)] = &[
     ("geometric", Rule::Geometric),
     ("average", Rule::Average),
@@ -536,18 +538,6 @@ impl Reader {
                 );
             }
         }
-        for (key, issue) in LATER {
-            if m.get(*key)
-                .is_some_and(|v| v.as_object().is_none_or(|o| !o.is_empty()))
-            {
-                self.refuse(
-                    "physics.unsupported",
-                    (*key).into(),
-                    &m[*key],
-                    format!("{key} isn't run by this backend interface yet; {issue} brings it"),
-                );
-            }
-        }
         let dimensions = self.num(m, "dimensions", "", 3.0, 2.0, 3.0) as u8;
         if dimensions != 2 && dimensions != 3 {
             self.refuse(
@@ -696,6 +686,7 @@ impl Reader {
                 outputs.insert(id.clone(), o);
             }
         }
+        let inputs = self.inputs(m, &bodies);
         World {
             dimensions,
             step_rate,
@@ -717,6 +708,7 @@ impl Reader {
             forces,
             outputs,
             solve,
+            inputs,
         }
     }
 

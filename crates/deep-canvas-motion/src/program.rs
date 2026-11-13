@@ -3080,7 +3080,8 @@ impl Program {
                 doc::DriverInput::Array(array) => {
                     // #497: a stepping module's array has no steps after t yet, as the input
                     // track has no entries after t, so a lag or smooth that looks ahead through it
-                    // is refused; motion reads only a logic output its host baked (#1183).
+                    // is refused; motion reads a logic output its host baked (#1183) and, of the
+                    // other arrays, only a spectrum's bands (#503).
                     if lagged.iter().any(|l| l.var == *name && l.dt < 0) {
                         return Err(refused("look_ahead_on_array", format!("lag({name}) looks ahead through the array `{array}`, which a stepping module writes step by step")));
                     }
@@ -3093,13 +3094,16 @@ impl Program {
                         inputs_of.push((name.as_str(), CoreInput::Array(Arc::new(read))));
                         continue;
                     }
-                    return Err(Refused {
+                    let why = "motion's drivers read only a logic item's scalar f64 output, baked into the document, or a spectrum's bands";
+                    let detail = Some(Box::new(
+                        json!({"driver": driver.id, "array": array, "why": why}),
+                    ));
+                    let read = crate::occurrence::band(doc, array, self.motion.transport.start);
+                    CoreInput::Occurrence(Arc::new(read.ok_or(Refused {
                         code: "ref_unresolved",
                         path: format!("{path}/vars/{name}"),
-                        detail: Some(Box::new(
-                            json!({"driver": driver.id, "array": array, "why": "motion's drivers read only a logic item's scalar f64 output, baked into the document"}),
-                        )),
-                    });
+                        detail,
+                    })?))
                 }
                 doc::DriverInput::Time => CoreInput::Time,
                 doc::DriverInput::Hover(key) => {
