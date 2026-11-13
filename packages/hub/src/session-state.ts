@@ -483,8 +483,10 @@ export class SessionState {
       // Appended together, so the record commits them in one batch, as it does a first start's state for every session.
       const readings = await sessionStates(this.options.services.raw, this.options.services.now(), only === 'all' ? undefined : only);
       // The list's rows (#1463): each that changed, and each ask's that left the list, in the same batch.
-      // The open asks are the asks core's inbox projection, by its one close rule (#2026).
-      const inbox = (await this.options.services.asks.inbox()).filter((a) => a.status !== 'closed').map((a) => a.ask);
+      // The open asks are the asks core's inbox projection, by its one close rule (#2026), and of those the ones in
+      // sight: shown at their batch or at once, or put off with Later. One waiting for its batch, held for the agent's
+      // next step, or folded into an exception, which shows it, has no row of its own (#22).
+      const inbox = (await this.options.services.asks.inbox()).filter((a) => a.status === 'shown' || a.status === 'later').map((a) => a.ask);
       const named = await buildRows(this.options.services.raw, readings, inbox);
       // Each session's one name (#2018), with its short ID only where another session's row would read the same: a
       // row whose twin came or went is set again with it, though nothing else of it changed.
