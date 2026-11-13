@@ -254,7 +254,12 @@ export class McpOperations {
     return { ...result, report: reported ? report : null };
   }
 
-  /** deep_status: the gates, and for a bound session its newest claims, each with its runs, its verdict and its contradictions. */
+  /**
+   * deep_status: the gates, and for a bound session its newest claims, each with its runs, its verdict and its
+   * contradictions, and where it starts (#2197): the checks its repo's spec names, its own open asks, each with its
+   * state, its default and its deadline as deep_wait names them, and the open items it recorded. The planted wrong
+   * program lists every session's asks.
+   */
   private async status(session: string | undefined): Promise<Obj> {
     const gates = { watch_only: this.options.kernel.blocked !== undefined, reason: this.options.kernel.blocked ?? null };
     if (!session) return { session: null, gates, claims: [] };
@@ -282,9 +287,15 @@ export class McpOperations {
         contradictions: predictionContradictions(claim.predictions ?? [], checks),
       });
     }
+    const whose = this.options.settings.plant === 'status-lists-every-ask' ? '' : ' AND session_id = ?';
+    const asks = ((await this.options.services.record.raw(`SELECT id, status, default_option, deadline FROM asks WHERE status IN ('open', 'later')${whose} ORDER BY created, id`, whose ? [session] : [])) as { id: string; status: string; default_option: string | null; deadline: number }[])
+      .map((a) => ({ ask: `ask:${a.id}`, state: a.status, default: a.default_option === null ? null : JSON.parse(a.default_option) as unknown, deadline: a.deadline }));
+    const open_items = (await this.options.services.record.raw(`SELECT text FROM open_items WHERE closed IS NULL AND (task_ref, text) IN
+      (SELECT json_extract(data, '$.task_ref'), json_extract(data, '$.text') FROM events WHERE session_id = ? AND kind = 'open_item.opened') ORDER BY opened, text`, [session])) as { text: string }[];
+    const reply = { session, gates, claims, checks: this.checkNames(this.options.state().sessions.get(session)!.cwd), asks, open_items };
     // An agent's deep_status is its own session's (#1463): the planted wrong program leaks every session's asks into it.
-    if (this.options.settings.plant === 'status-row-leak') return { session, gates, claims, rows: [...this.options.state().rows.values()].filter((p) => p.row.id.startsWith('ask:')).map((p) => p.row) as unknown as Obj[] };
-    return { session, gates, claims };
+    if (this.options.settings.plant === 'status-row-leak') return { ...reply, rows: [...this.options.state().rows.values()].filter((p) => p.row.id.startsWith('ask:')).map((p) => p.row) as unknown as Obj[] };
+    return reply;
   }
 
   /**
@@ -354,8 +365,12 @@ export class McpOperations {
     }));
   }
 
+  private checkNames(worktree: string): string[] {
+    return [...this.checksOf(worktree).keys(), ...this.options.services.canvasSide.docChecksOf(worktree).keys()];
+  }
+
   private unknownCheck(worktree: string, check: unknown): Refused {
-    const names = [...this.checksOf(worktree).keys(), ...this.options.services.canvasSide.docChecksOf(worktree).keys()];
+    const names = this.checkNames(worktree);
     const near = typeof check === 'string' ? nearest(check, names) : undefined;
     return refuse('enum', '/params/arguments/check', near ? `Name ${near} in place of ${String(check)}.` : `Name a check this repo's .deepbuild/done.yaml names: ${names.join(', ') || 'it names none'}.`, check);
   }
@@ -410,8 +425,9 @@ export class McpOperations {
     const subject = this.options.settings.plant === 'repeat-reaches-you' ? undefined
       : kind === 'choice' && typeof about.point === 'string' ? { point: about.point }
       : kind === 'taste' && typeof about.screen === 'string' && typeof about.element === 'string' ? { screen: about.screen, element: about.element } : undefined;
-    // A taste call or a choice with a recommendation goes on at once with it, marked as undoable (#84).
-    const provisional = kind !== 'unblock' && raised.recommended !== null && raised.recommended !== undefined;
+    // A taste call or a choice with a recommendation goes on at once with it, marked as undoable (#84); in a session a
+    // work run started, the issue waits on you instead and gives up its slot (#1332).
+    const provisional = kind !== 'unblock' && raised.recommended !== null && raised.recommended !== undefined && !(await this.options.services.sessionStarts.inWorkRun(session));
     const ask = { ...raised, fallback: 'you', provisional, owner: 'you', key: sha256Hex(canonicalize({ kind, question, session } as JsonValue)), pinned_to: pinned, ...(subject ? { subject } : {}) };
     const handle = await this.options.services.asks.raise(this.agentConnection(session), `deep_ask.${kind}`, ask);
     if (provisional) {

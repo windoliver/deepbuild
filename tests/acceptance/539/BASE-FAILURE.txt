@@ -1,0 +1,49 @@
+#539 at the base, 53c0e72a3 (Merge pull request #2356), on 2026-11-12, an arm64 Mac (Mac17,10, 18 cores, one-minute
+load about 160), deep-show built by the files (`cargo build --locked --bin deep-show`, toolchain from rustup) and #544's
+assembler into target/acceptance-539-wat, after `npm ci && npm run build --workspaces`:
+
+  PATH=/opt/homebrew/opt/rustup/bin:$PATH CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 NO_COLOR=1 \
+    scripts/lease npx vitest run --root tests/acceptance/539 --testTimeout=600000 --no-file-parallelism
+
+Test Files 6 failed (6); Tests 18 failed, 1 passed (19). `npx tsc --noEmit -p tests/acceptance/539` exits 0. The files
+were also run earlier alone or two at a time with `npx vitest run <file>`, with the same results. Every program assembled, the base deep-show
+presented every fixture but the two with the ghost's drivers, and every failure is an assertion; none is a crash.
+
+What the base already showed the fixtures do: the click at (120, 56) selects `board#7,3`, so the grid's layout puts that
+point in cell (7, 3); the drag over the margin pans the camera 16 u along +x (checked before the failures below).
+
+ac1-pick-entry.test.ts (3 failed)
+- The click: "the click at (120, 56) appends [], not one entry {control: place, value: {set 0, key (7, 3)}, writer:
+  you}" and "after the click the selection is [\"board#7,3\"], not empty".
+- The replay, and the planted pick_resolves_on_replay: the scenario with the `logic` calls answers {"ok": false, "code":
+  "bad_input"} (the base has no `logic` call, and no such planted name).
+
+ac2-hidden-rows.test.ts (4 failed)
+- Unit 5 drawn, alive false, and at opacity 0: the click on unit 5 appends [] (no pick entry); Tab and Right focus
+  "orders", the control's own stop, every time, never a unit; nothing is announced.
+- hit_ignores_alive: the scenario answers bad_input (an unknown planted name).
+
+ac3-hex-hit.test.ts (2 failed)
+- The fixture's geometry checks pass; the clicks at (34, 9) and (40, 10.5) each append [] (no pick entry).
+- hit_by_quad_bounds: bad_input.
+
+ac4-hover-ghost.test.ts (2 failed, 1 passed)
+- The ghost, and export_keeps_live_hover: the ghost fixture is refused at check, `bad_path` at
+  drivers/ghost_x/vars/cx ("motion.compile can't evaluate this"): the base has no `controls/place/hover`.
+- PASSES at the base, as a guard: "a logic item that declares place.hover as a read is refused at check, naming the
+  read". The base's logic module refuses the read `place.hover` because `place` names no control or logic item holding
+  `hover` (a refusal whose fields hold {"read": "place.hover"}), and presents the same item reading `place`. Once
+  `place.hover` exists as a viewer value, the check must go on refusing it, now because a logic step may not read hover.
+
+ac5-grid-focus.test.ts (6 failed)
+- Tab, Tab focus ["place", "speed"]: the control's own stop, not board#0,0.
+- The walk: every key leaves the focus on "place"; nothing is announced; Enter appends [].
+- (1, 0) dead: Right focuses "place", not board#2,0. Hex: Tab focuses "place", not hexes#1,1; Up "place".
+- The row that stops drawing: the fixture's own check fails first, the walk never focuses (3, 2).
+- focus_stops_on_hidden_rows: bad_input.
+
+ac6-taste.test.ts (1 failed)
+- The taste fixture (with the ghost's drivers) is refused at check, `bad_path` at drivers/ghost_x/vars/cx, before any
+  picture is taken. The harness itself was checked at the base on the same fixture without the ghost: `deep-show screen`
+  with the reference window drew a 3024 × 1964 PNG of the whole 12 × 12 grid. No TASTE.json exists; with the behaviour
+  built, the test is INCONCLUSIVE until a call is recorded.

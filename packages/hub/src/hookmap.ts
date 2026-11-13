@@ -255,7 +255,7 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
   if (request.stage) meta.stage = request.stage;
   if (request.heavy) meta.heavy = request.heavy;
   const fields: NonNullable<HookMeta['fields']> = {};
-  for (const key of ['prompt_id', 'prompt', 'error', 'agent_id', 'source', 'last_assistant_message', 'turn_id', 'file_path'] as const) if (str(payload[key])) fields[key] = str(payload[key]);
+  for (const key of ['prompt_id', 'prompt', 'error', 'agent_id', 'source', 'last_assistant_message', 'turn_id', 'file_path', 'model'] as const) if (str(payload[key])) fields[key] = str(payload[key]);
   // The agent's own title for the session (#2018), on one line, scrubbed as a prompt's text is.
   const titled = scrub(str(payload.session_title)).split(/\r?\n/)[0]!.trim();
   if (titled) fields.session_title = titled.slice(0, 512);

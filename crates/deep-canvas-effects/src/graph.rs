@@ -747,7 +747,7 @@ fn step(id: &str, s: &Value, issues: &mut Vec<Issue>) -> Option<Step> {
     })
 }
 
-fn size_of(v: Option<&Value>, path: &str, issues: &mut Vec<Issue>) -> Size {
+fn resolution_of(v: Option<&Value>, path: &str, issues: &mut Vec<Issue>) -> Size {
     match v.and_then(Value::as_str) {
         None | Some("half") => Size::Half,
         Some("full") => Size::Full,
@@ -798,7 +798,7 @@ fn iterate(id: &str, a: &Map<String, Value>, issues: &mut Vec<Issue>) -> Iterate
             .and_then(Value::as_str)
             .unwrap_or("rgba16float")
             .to_string(),
-        resolution: size_of(pp.and_then(|p| p.get("resolution")), "steps", issues),
+        resolution: resolution_of(pp.and_then(|p| p.get("resolution")), "steps", issues),
         steps: steps(
             body.and_then(|b| b.get("steps")).unwrap_or(&Value::Null),
             issues,

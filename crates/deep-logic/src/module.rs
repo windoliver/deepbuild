@@ -428,7 +428,7 @@ fn fixture_step(state: &mut Value, input: &StepInput<'_>) {
             t,
             seq: seq as u32,
             control: "press".into(),
-            value: e["value"].as_f64().unwrap_or(1.0),
+            value: e["value"].as_f64().unwrap_or(1.0).into(),
             writer: "you".into(),
             player: 1,
             as_of: None,
