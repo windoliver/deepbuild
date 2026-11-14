@@ -115,11 +115,12 @@ export class McpOperations {
       await (this.options.schedule.replaying ?? Promise.resolve());
       // A call bound to no session still reads what belongs to no session; every other tool needs its session.
       // A deep_show bound to no session is refused by the canvas side with no_session, as its reply (#806).
-      const session = await this.options.schedule.queue(async () => this.bind(tool, sent, context, tool !== 'deep_status' && tool !== 'deep_search' && tool !== 'deep_show' && tool !== 'deep_kinds' && tool !== 'deep_job' && tool !== 'find_actions'));
+      const session = await this.options.schedule.queue(async () => this.bind(tool, sent, context, !['deep_status', 'deep_search', 'deep_show', 'deep_query', 'deep_kinds', 'deep_job', 'find_actions'].includes(tool)));
       switch (tool) {
         case 'find_actions': return await this.findActions(args.query as string | null);
         case 'call_action': return await this.callPluginAction(session!, args);
         case 'deep_show': return await this.options.services.canvasSide.show(session ? { session } : { session: null }, showCall(args));
+        case 'deep_query': return await this.options.services.canvasSide.query(session ?? null, args);
         case 'deep_kinds': return await this.options.services.canvasSide.kinds(args);
         case 'deep_job': return await this.options.control().job(args, context.call);
         case 'deep_root_plan': return await this.options.services.hosts.proposeRoot(args);

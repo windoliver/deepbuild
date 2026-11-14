@@ -2586,7 +2586,9 @@ impl<'a> Hub<'a> {
                 })
                 .unwrap_or_else(|| deep_canvas_motion::arrange::At::of(item.get("at")))
         };
-        json!({"failures": deep_canvas_motion::arrange::audit(document, &at_of)})
+        let failures = deep_canvas_motion::arrange::audit(document, &at_of);
+        let placed = self.arranged(doc, &self.with_outputs(doc, document));
+        json!({"failures": failures, "support": crate::geometry_audit::resting(&placed, t)})
     }
 
     /// The check's notices as a reply carries them. The planted check that loads a deprecated
