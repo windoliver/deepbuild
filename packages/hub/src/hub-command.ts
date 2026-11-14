@@ -1,7 +1,6 @@
 // `deep hub run | start | status | stop | use | promote` (#16, #19, #1334), an entry of its own (`@deepbuild/hub/hub`), so the
 // long-running hub loads the server's modules and none of the other commands'.
 import { resolve } from 'node:path';
-import { confirmed, useCommand } from './authority.js';
 import { installedRoot } from './paths.js';
 import { promoteCommand } from './promote.js';
 import { hubStatus, startHub, stopHub, stopIfRunning } from './service.js';
@@ -35,7 +34,7 @@ export async function hubCommand(args: readonly string[], cli: string): Promise<
       if (root && resolve(root) !== installedRoot()) return stopHub({ root });
       return stopInstalled();
     case 'use':
-      if (root) return useCommand(root);
+      if (root) return (await import('./authority.js')).useCommand(root);
       break;
   }
   process.stderr.write(`${USAGE}\n`);
@@ -44,7 +43,7 @@ export async function hubCommand(args: readonly string[], cli: string): Promise<
 
 /** `deep hub stop` of the installed hub, once the OS confirms you. */
 async function stopInstalled(): Promise<number> {
-  const why = await confirmed('deep hub stop');
+  const why = await (await import('./authority.js')).confirmed('deep hub stop');
   if (why) {
     process.stderr.write(`${why}\n`);
     return 3;
