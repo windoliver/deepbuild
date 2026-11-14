@@ -620,6 +620,8 @@ byHand.push('tests/acceptance/226-oracle/');
 // #462's files each build deep-gpu (and deep-canvas) and draw looks, regions and strokes on the Metal GPU; so do its
 // regressions in 2D films, exports, the live window and 3D motifs.
 alone.push('tests/acceptance/462/', 'tests/look-regions-paths.test.ts');
+// #1940's file builds deep-show twice: without the effects module, and with the planted loop module.
+alone.push('tests/acceptance/1940/');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
