@@ -15,7 +15,11 @@ const FLICKS: i128 = 705_600_000;
 
 fn register(r: &mut Registrar) {
     r.kind(
-        kind("test", "probe", vec![box_param(), json_param("asset")]),
+        kind(
+            "test",
+            "probe",
+            vec![box_param(), json_param("asset", "asset ID")],
+        ),
         &[],
         "rect@1",
     )

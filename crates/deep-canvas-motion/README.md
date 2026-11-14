@@ -16,7 +16,7 @@ The line's slice of the motion module (issue #391): channels and keys (linear, h
 
 ## What it may import
 
-A canvas module crate. It reaches the core only through the `deep-canvas` crate and uses third-party crates listed in `lint/canvas/crates.json`. Its math is f64 through deep-canvas's ops module on pinned libm, as `scripts/canvas-lint.mjs` requires. No GPU crate, no app.
+A canvas module crate. It reaches the core only through the `deep-canvas` crate, and the marks module's path reader through `deep-canvas-marks`, which reads and flattens a path key's SVG `d` (#494), and uses third-party crates listed in `lint/canvas/crates.json`. Its math is f64 through deep-canvas's ops module on pinned libm, as `scripts/canvas-lint.mjs` requires. No GPU crate, no app.
 
 ## Deviations
 

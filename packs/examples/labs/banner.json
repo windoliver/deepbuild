@@ -1,0 +1,477 @@
+{
+  "format": 1,
+  "profile": "scene",
+  "title": "The banner",
+  "description": "A 28 by 10 banner pinned along its top edge to a pole, let go level so it swings down and settles, live on the physics module's soft bodies and drawn on its own plate by its skin (#524). Gusty wind arrives with #2098 and pokes by particle with #2371.",
+  "size": [
+    1280,
+    720
+  ],
+  "camera": "cam",
+  "transport": {
+    "span": "6s",
+    "frame_rate": [
+      60,
+      1
+    ]
+  },
+  "requires": {
+    "modules": {
+      "scene3d": "^1"
+    }
+  },
+  "worlds": {
+    "lab": {
+      "kind": "physics.world@1",
+      "dimensions": 3,
+      "step_rate": 120,
+      "substeps": 4,
+      "gravity": [
+        0,
+        -9.81,
+        0
+      ],
+      "seed": 5242,
+      "mode": "dynamic",
+      "capacity": {
+        "bodies": 2,
+        "shapes": 2,
+        "joints": 0,
+        "contacts": 512,
+        "particles": 280
+      },
+      "backend": {
+        "name": "rapier3d",
+        "version": "=0.36.1"
+      },
+      "checkpoint": {
+        "every": 60
+      },
+      "contact_materials": {
+        "ground": {
+          "friction": 0.8,
+          "restitution": 0
+        },
+        "cloth": {
+          "friction": 0.5,
+          "restitution": 0
+        }
+      },
+      "shapes": {
+        "ground": {
+          "kind": "plane",
+          "normal": [
+            0,
+            1,
+            0
+          ]
+        }
+      },
+      "bodies": {
+        "ground": {
+          "kind": "static",
+          "shapes": [
+            {
+              "shape": "ground",
+              "contact_material": "ground"
+            }
+          ]
+        }
+      },
+      "soft": {
+        "banner": {
+          "kind": "soft@1",
+          "shape": "cloth",
+          "origin": [
+            -1.35,
+            3.0,
+            0
+          ],
+          "du": [
+            0.1,
+            0,
+            0
+          ],
+          "dv": [
+            0,
+            0,
+            0.1
+          ],
+          "nu": 28,
+          "nv": 10,
+          "edges": "grid",
+          "address": "r{row}c{col}",
+          "masses": {
+            "default": 0.01
+          },
+          "pins": [
+            "r0c0",
+            "r0c1",
+            "r0c2",
+            "r0c3",
+            "r0c4",
+            "r0c5",
+            "r0c6",
+            "r0c7",
+            "r0c8",
+            "r0c9",
+            "r0c10",
+            "r0c11",
+            "r0c12",
+            "r0c13",
+            "r0c14",
+            "r0c15",
+            "r0c16",
+            "r0c17",
+            "r0c18",
+            "r0c19",
+            "r0c20",
+            "r0c21",
+            "r0c22",
+            "r0c23",
+            "r0c24",
+            "r0c25",
+            "r0c26",
+            "r0c27"
+          ],
+          "stretch": {
+            "hz": 60,
+            "damping_ratio": 1
+          },
+          "shear": {
+            "hz": 20,
+            "damping_ratio": 1
+          },
+          "bend": {
+            "hz": 1,
+            "damping_ratio": 1
+          },
+          "damping": 0.5,
+          "contact_material": "cloth"
+        }
+      },
+      "outputs": {
+        "flag": {
+          "from": "banner",
+          "read": "particle_positions",
+          "to": {
+            "skin": {
+              "item": "flag"
+            }
+          }
+        }
+      }
+    }
+  },
+  "items": {
+    "cam": {
+      "id": "cam",
+      "name": "Cam",
+      "order": "a000",
+      "kind": "camera@1",
+      "params": {
+        "projection": "perspective",
+        "fov": 45,
+        "near": 0.1,
+        "far": 200,
+        "position": [
+          0,
+          2.2,
+          6.5
+        ],
+        "target": [
+          0,
+          2.2,
+          0
+        ]
+      }
+    },
+    "sky": {
+      "id": "sky",
+      "name": "Sky",
+      "order": "a001",
+      "kind": "sky@1",
+      "params": {
+        "top": [
+          0.15,
+          0.3,
+          0.75,
+          1
+        ],
+        "low": [
+          0.6,
+          0.7,
+          0.85,
+          1
+        ],
+        "ambient_top": [
+          0.25,
+          0.25,
+          0.25
+        ],
+        "ambient_low": [
+          0.1,
+          0.1,
+          0.1
+        ]
+      }
+    },
+    "sun": {
+      "id": "sun",
+      "name": "Sun",
+      "order": "a002",
+      "kind": "light.sun@1",
+      "params": {
+        "illuminance": 3,
+        "color": [
+          1,
+          1,
+          1
+        ],
+        "shadow": true
+      },
+      "at": {
+        "rot": [
+          -40,
+          30,
+          0
+        ]
+      }
+    },
+    "grass": {
+      "id": "grass",
+      "name": "Grass",
+      "order": "a003",
+      "kind": "material@1",
+      "params": {
+        "base_color": [
+          0.32,
+          0.42,
+          0.26,
+          1
+        ],
+        "roughness": 0.95,
+        "metallic": 0
+      }
+    },
+    "timber": {
+      "id": "timber",
+      "name": "Timber",
+      "order": "a004",
+      "kind": "material@1",
+      "params": {
+        "base_color": [
+          0.55,
+          0.36,
+          0.2,
+          1
+        ],
+        "roughness": 0.7,
+        "metallic": 0
+      }
+    },
+    "stone": {
+      "id": "stone",
+      "name": "Stone",
+      "order": "a005",
+      "kind": "material@1",
+      "params": {
+        "base_color": [
+          0.52,
+          0.52,
+          0.55,
+          1
+        ],
+        "roughness": 0.9,
+        "metallic": 0
+      }
+    },
+    "rubber": {
+      "id": "rubber",
+      "name": "Rubber",
+      "order": "a006",
+      "kind": "material@1",
+      "params": {
+        "base_color": [
+          0.8,
+          0.18,
+          0.12,
+          1
+        ],
+        "roughness": 0.5,
+        "metallic": 0
+      }
+    },
+    "hemp": {
+      "id": "hemp",
+      "name": "Hemp",
+      "order": "a007",
+      "kind": "material@1",
+      "params": {
+        "base_color": [
+          0.78,
+          0.66,
+          0.42,
+          1
+        ],
+        "roughness": 0.9,
+        "metallic": 0
+      }
+    },
+    "flag_red": {
+      "id": "flag_red",
+      "name": "Flag red",
+      "order": "a008",
+      "kind": "material@1",
+      "params": {
+        "base_color": [
+          0.75,
+          0.1,
+          0.12,
+          1
+        ],
+        "roughness": 0.8,
+        "metallic": 0
+      }
+    },
+    "brass": {
+      "id": "brass",
+      "name": "Brass",
+      "order": "a009",
+      "kind": "material@1",
+      "params": {
+        "base_color": [
+          0.78,
+          0.62,
+          0.3,
+          1
+        ],
+        "roughness": 0.4,
+        "metallic": 0
+      }
+    },
+    "net": {
+      "id": "net",
+      "name": "Net",
+      "order": "a010",
+      "kind": "material@1",
+      "params": {
+        "base_color": [
+          0.9,
+          0.9,
+          0.92,
+          1
+        ],
+        "roughness": 0.8,
+        "metallic": 0
+      }
+    },
+    "ground": {
+      "id": "ground",
+      "name": "Ground",
+      "order": "a011",
+      "kind": "mark.box@1",
+      "params": {
+        "size": [
+          8,
+          0.02,
+          6
+        ]
+      },
+      "at": {
+        "pos": [
+          0,
+          -0.01,
+          0
+        ]
+      },
+      "material": "grass"
+    },
+    "pole": {
+      "id": "pole",
+      "name": "Pole",
+      "order": "a012",
+      "kind": "mark.cylinder@1",
+      "params": {
+        "size": [
+          0.06,
+          3.2,
+          0.06
+        ]
+      },
+      "at": {
+        "pos": [
+          0,
+          3.0,
+          -0.03
+        ],
+        "rot": [
+          0,
+          0,
+          90
+        ]
+      },
+      "material": "brass"
+    },
+    "mast_west": {
+      "id": "mast_west",
+      "name": "Mast west",
+      "order": "a013",
+      "kind": "mark.cylinder@1",
+      "params": {
+        "size": [
+          0.08,
+          3.1,
+          0.08
+        ]
+      },
+      "at": {
+        "pos": [
+          -1.5,
+          1.5,
+          -0.03
+        ]
+      },
+      "material": "brass"
+    },
+    "mast_east": {
+      "id": "mast_east",
+      "name": "Mast east",
+      "order": "a014",
+      "kind": "mark.cylinder@1",
+      "params": {
+        "size": [
+          0.08,
+          3.1,
+          0.08
+        ]
+      },
+      "at": {
+        "pos": [
+          1.5,
+          1.5,
+          -0.03
+        ]
+      },
+      "material": "brass"
+    },
+    "flag": {
+      "id": "flag",
+      "name": "Flag",
+      "order": "a015",
+      "kind": "plate@1",
+      "params": {
+        "grid": [
+          27,
+          9
+        ],
+        "size": [
+          2.7,
+          0.9
+        ],
+        "two_sided": true
+      },
+      "material": "flag_red"
+    }
+  }
+}

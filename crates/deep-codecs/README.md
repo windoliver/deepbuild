@@ -34,7 +34,7 @@ A binary that links the crate starts each helper as a copy of itself with the ar
 
 ## What it may import
 
-serde_json, sha2 and image; libc on macOS. Platform frameworks are linked by name and called through their C interfaces. It imports no canvas crate and no other DeepBuild crate: the canvas, the media module and the app reach it only through a helper process.
+serde_json, sha2 and image; libc on macOS. Platform frameworks are linked by name and called through their C interfaces. Of DeepBuild's crates it links one, `deep-canvas-cells`, whose emulator converts a terminal recording at import (#1967), and no other: the canvas, the media module and the app reach it only through a helper process.
 
 The audio decoders (#503) are pure Rust, so the web player can build the same ones for wasm32: symphonia (only its
 MP3, Vorbis and ALAC decoders), rusty_aac (AAC-LC and HE-AAC v1 and v2) and opus-rs (Opus, a port of the reference

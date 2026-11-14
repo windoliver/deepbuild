@@ -283,7 +283,13 @@ fn register_text(r: &mut Registrar) {
     r.operator(
         "counter",
         "items",
-        &["core.fields", "refs", "reading", "view(locale)", "text.copy"],
+        &[
+            "core.fields",
+            "refs",
+            "reading",
+            "view(locale)",
+            "text.copy",
+        ],
         &["text.counter"],
     )
     .applies(is_bound_text)
@@ -892,14 +898,41 @@ fn finish_kind() -> deep_canvas::kinds::Entry {
             major: 1,
             minor: 0,
             params: vec![
-                param("tone_map", ParamType::Json, json!("none")),
+                // The forms each reader takes (#1973): `read_tone_map` takes any object holding
+                // `agx`, whatever its value; `read_grade` any white balance; the finish skips a
+                // deband_lsb that is no number; ao and bloom as look@1's readers take them.
+                param(
+                    "tone_map",
+                    ParamType::Json(
+                        "none | filmic | agx | neutral | {agx} (agx: {white: f32, contrast: f32})",
+                    ),
+                    json!("none"),
+                ),
                 // EV100; the default's exposure scale is 1.
-                param("exposure", ParamType::Json, Value::Null),
-                param("grade", ParamType::Json, json!({})),
+                param("exposure", ParamType::Json("EV100"), Value::Null),
+                param(
+                    "grade",
+                    ParamType::Json(
+                        "{white_balance, slope: linear RGB, offset: linear RGB, power: linear RGB, saturation: f32} (white_balance: {temperature: K, tint})",
+                    ),
+                    json!({}),
+                ),
                 param("deband", ParamType::Str, json!("none")),
-                param("deband_lsb", ParamType::Json, json!(1)),
-                param("ao", ParamType::Json, json!("none")),
-                param("bloom", ParamType::Json, json!("none")),
+                param("deband_lsb", ParamType::Json("0..2 (8-bit steps)"), json!(1)),
+                param(
+                    "ao",
+                    ParamType::Json(
+                        "none | {radius, strength, samples, resolution, multi_bounce, specular} (radius: m, samples: 8 | 16, resolution: half | full)",
+                    ),
+                    json!("none"),
+                ),
+                param(
+                    "bloom",
+                    ParamType::Json(
+                        "none | {intensity, radius, threshold, tint, dirt} (threshold: EV100 | none, tint: linear RGB, dirt: {texture: sha256 | seeded, intensity})",
+                    ),
+                    json!("none"),
+                ),
             ],
         }],
         migrations: vec![],

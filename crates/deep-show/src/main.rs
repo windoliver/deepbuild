@@ -1989,6 +1989,9 @@ fn modules(set: BuildSet) -> Vec<Module> {
             },
             if cfg!(feature = "test-graph-tie-by-registration") {
                 deep_canvas_graph::module::tie_by_registration()
+            } else if cfg!(feature = "test-graph-layout-no-cost") {
+                // #1417: the graph@1 whose layout declares no cost.
+                deep_canvas_graph::module::layout_no_cost()
             } else {
                 deep_canvas_graph::module::module()
             },

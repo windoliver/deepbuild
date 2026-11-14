@@ -713,9 +713,9 @@ fn slide() -> Value {
 fn register_arrange(r: &mut Registrar) {
     use crate::arrange;
     use deep_canvas::kinds::{Entry, Param, ParamType, Version};
-    let json_param = |name: &'static str| Param {
+    let json_param = |name: &'static str, form: &'static str| Param {
         name,
-        ty: ParamType::Json,
+        ty: ParamType::Json(form),
         unit: "",
         default: json!([]),
         min: None,
@@ -732,9 +732,12 @@ fn register_arrange(r: &mut Registrar) {
                 major: 1,
                 minor: 0,
                 params: vec![
-                    json_param("items"),
-                    json_param("relations"),
-                    json_param("broken_out"),
+                    json_param("items", "[item ID]"),
+                    json_param(
+                        "relations",
+                        "[{a: ID, rel: on | inside | next_to | against | facing | near | apart, b: ID, d?: m}]",
+                    ),
+                    json_param("broken_out", "[item ID]"),
                 ],
             }],
             migrations: Vec::new(),

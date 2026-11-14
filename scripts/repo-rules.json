@@ -1543,16 +1543,16 @@
         "deep-canvas-media": {
           "spec": "* path=../deep-canvas-media",
           "why": "Issue #503: a video item's frame at t from the media module's one source time, which deep-show and the GPU layer both read."
+        },
+        "libc": {
+          "spec": "^0.2",
+          "why": "Issue #1903: the envelope's peak resident memory, read with getrusage on every platform (#2477); on macOS also issue #854: a replica's cold start timed from the process's spawn, as proc_pidinfo reports its start; already in the lockfile."
         }
       },
       "target.'cfg(target_os = \"macos\")'.dependencies": {
         "gpui-pre-apple": {
           "spec": "=0.3.9",
           "why": "Issue #377: the GPUI patch's planted twins and its GPU ledger, which times GPUI's frames for handoff_ms."
-        },
-        "libc": {
-          "spec": "^0.2",
-          "why": "Issue #854: a replica's cold start timed from the process's spawn, as proc_pidinfo reports its start; already in the lockfile."
         }
       }
     },
@@ -2075,6 +2075,12 @@
         "serde_json": {
           "spec": "^1",
           "why": "Issue #2009: deep-physics's JSON lines. Already in the workspace tree."
+        }
+      },
+      "target.'cfg(not(target_arch = \"wasm32\"))'.dependencies": {
+        "deep-canvas-scene3d": {
+          "spec": "* path=../deep-canvas-scene3d",
+          "why": "Issue #524: a soft volume's particles are its source item's welded vertices and a balloon's its geodesic ball's, built by the scene3d builders the skin draws, so the two lattices are one. Native only: scene3d links meshopt, whose C++ doesn't build for wasm32 (#2466)."
         }
       },
       "dev-dependencies": {

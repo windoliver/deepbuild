@@ -1,0 +1,7 @@
+# node docs/evidence/1417/shots.mjs target/debug/deep-show docs/evidence/1417/shots, at 131354fe1, 2026-11-12T07:46:15Z, Linux aarch64
+small-data-view (24 nodes, data_view, drawn at scale 1.00): outcome presented; issues: []; over_budget: none; snapshot: small-data-view.png
+1000-data-view (1000 nodes, data_view, drawn at scale 0.318): outcome presented; issues: []; over_budget: none; snapshot: 1000-data-view.png
+100000-data-view (100000 nodes, data_view, drawn at scale 0.0158): outcome refused; issues: [over_budget error]; over_budget: [{"severity":"error","what":"the document's estimate per frame passes its data_view class: CPU 204.900 ms past 2 ms; the costliest operator is graph.layout at 204.887 ms","operators":204.8873055950708}]; snapshot: none
+100000-export (100000 nodes, export, drawn at scale 0.0158): outcome presented; issues: []; over_budget: none; snapshot: 100000-export.png
+1000-no-class (1000 nodes, no budget class, drawn at scale 0.318): outcome presented; issues: []; over_budget: none; snapshot: 1000-no-class.png
+15000-no-class (15000 nodes, no budget class, drawn at scale 0.0604): outcome presented; issues: [over_budget warning]; over_budget: [{"severity":"warning","what":"the items cost 26.09591271162714 ms of CPU a frame, past the 16 ms budget"}]; snapshot: 15000-no-class.png

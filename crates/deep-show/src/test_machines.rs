@@ -139,7 +139,7 @@ fn with_swatches(lowered: &Value, input: &Value) -> Value {
 fn register(r: &mut Registrar) {
     let box_param = Param {
         name: "box",
-        ty: ParamType::Json,
+        ty: ParamType::Json("[x, y, w, h]"),
         unit: "",
         default: Value::Null,
         min: None,

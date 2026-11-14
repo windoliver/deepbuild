@@ -74,6 +74,8 @@ pub struct Settings {
     pub roles: BTreeMap<String, [f64; 3]>,
     /// The frame's time, s.
     pub t: f64,
+    /// #462: the look's strokes on surfaces this frame, as the CPU laid them.
+    pub strokes: Option<Arc<Vec<crate::strokes::Dab>>>,
 }
 
 /// The wrong programs, each reachable only through the binary's `--planted`.
@@ -115,6 +117,8 @@ pub struct Effects {
     /// How many of the targets the frame being planned has asked for: the rest are released.
     used: usize,
     sparks: Option<SparkDraw>,
+    /// #462's strokes draw, built the first frame that lays a stroke.
+    strokes: Option<crate::strokes::Draw>,
     /// #449's closed-form kernel, built the first frame an item needs it, and each item's bake
     /// tables on the device, uploaded once per bake.
     closed: Option<Arc<crate::closed::Closed>>,
@@ -187,6 +191,7 @@ impl Effects {
             targets: Vec::new(),
             used: 0,
             sparks: None,
+            strokes: None,
             closed: None,
             closed_tables: BTreeMap::new(),
             half: None,
@@ -753,6 +758,21 @@ impl Post for Effects {
             ));
             cur = out;
         }
+        if let Some(dabs) = s.strokes.as_ref().filter(|d| !d.is_empty()) {
+            let draw = self
+                .strokes
+                .get_or_insert_with(|| crate::strokes::Draw::new(device));
+            let job = draw.job(
+                device,
+                frame.clip,
+                dabs,
+                cur.clone(),
+                frame.depth.clone(),
+                size,
+                self.profiler.clone(),
+            );
+            jobs.push((crate::strokes::STROKES.into(), job));
+        }
         for sp in &s.sparks {
             let job = self.sparks_job(device, &camera, sp, cur.clone(), frame.depth.clone(), size);
             jobs.push((SPARKS.into(), job));
@@ -988,8 +1008,16 @@ impl Post for Shared {
                 vec!["linear", "depth", "shadow"],
                 0.15,
             ),
-            pass(SPARKS, "effects", 2, vec!["linear", "depth"], 0.05),
-            pass(OUTLINE, "effects", 3, vec!["linear", "ids"], 0.06),
+            // #462: a look's strokes on surfaces, before the particles (an estimate).
+            pass(
+                crate::strokes::STROKES,
+                "effects",
+                2,
+                vec!["linear", "depth"],
+                0.05,
+            ),
+            pass(SPARKS, "effects", 3, vec!["linear", "depth"], 0.05),
+            pass(OUTLINE, "effects", 4, vec!["linear", "ids"], 0.06),
             pass(GLOW, "bloom", 0, vec!["linear"], 0.25),
         ];
         for (k, (name, ns, early)) in marks.into_iter().enumerate() {
@@ -1002,7 +1030,7 @@ impl Post for Shared {
             out.push(Pass {
                 name,
                 place,
-                order: 4 + k as u32,
+                order: 5 + k as u32,
                 reads,
                 writes: if early { Vec::new() } else { vec!["linear"] },
                 resolution: Resolution::Full,

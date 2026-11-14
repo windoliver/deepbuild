@@ -11,7 +11,10 @@ import type { Verdict } from '@deepbuild/conformance';
 // or not at all, and fails later in ways that name neither. Every module that needs it loads lazily, below.
 const engines = (JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as { engines: { node: string } }).engines.node;
 const needed = engines.replace(/^>=\s*/, '');
-if (process.versions.node.localeCompare(needed, undefined, { numeric: true }) < 0) {
+const numbers = (version: string) => version.split('.', 3).map((part) => Number.parseInt(part, 10) || 0);
+const [found, wanted] = [numbers(process.versions.node), numbers(needed)];
+const apart = [0, 1, 2].find((at) => found[at] !== wanted[at]);
+if (apart !== undefined && (found[apart] ?? 0) < (wanted[apart] ?? 0)) {
   process.stderr.write(`deep needs Node ${needed} or newer; this is Node ${process.versions.node} at ${process.execPath}. Install a newer Node, or put one first on PATH.\n`);
   process.exit(2);
 }

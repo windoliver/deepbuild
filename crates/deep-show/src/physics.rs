@@ -10,10 +10,11 @@ use deep_canvas::document::Issue;
 use deep_canvas::registry::Module;
 use deep_canvas_physics::caps::RAPIER3D;
 use deep_canvas_physics::check::check;
-use deep_canvas_physics::doc::{Read, World};
+use deep_canvas_physics::doc::World;
 use deep_canvas_physics::module::changed;
 use deep_canvas_physics::occurrence::{step_flicks, timed};
 use deep_canvas_physics::written;
+use deep_physics_rapier::channels::{output_channels, pose_at};
 use deep_physics_rapier::runner::Run;
 use serde_json::{json, Map, Value};
 
@@ -95,124 +96,6 @@ pub(crate) fn planted(name: &str) -> Option<crate::hub::Planted> {
 fn refused(id: &str, what: Value) -> Issue {
     let msg = "the physics module refuses this world in its scene";
     Issue::error("physics_refused", id, format!("worlds/{id}"), what, msg)
-}
-
-/// A body's state after a step: its position and rotation `[x, y, z, w]`.
-fn pose_of(s: &Value) -> Option<([f64; 3], [f64; 4])> {
-    let v = |k: &str, n: usize| -> Option<Vec<f64>> {
-        let a = s.get(k)?.as_array()?;
-        (a.len() == n).then(|| a.iter().filter_map(Value::as_f64).collect())
-    };
-    let (p, r) = (v("pos", 3)?, v("rot", 4)?);
-    Some(([p[0], p[1], p[2]], [r[0], r[1], r[2], r[3]]))
-}
-
-/// A rotation as the canvas writes it: degrees about X, then Y, then Z, in fixed axes
-/// (R = Rz·Ry·Rx, Units and conventions).
-fn euler(q: [f64; 4]) -> [f64; 3] {
-    let [x, y, z, w] = q;
-    let rx = (2.0 * (w * x + y * z)).atan2(1.0 - 2.0 * (x * x + y * y));
-    let ry = (2.0 * (w * y - z * x)).clamp(-1.0, 1.0).asin();
-    let rz = (2.0 * (w * z + x * y)).atan2(1.0 - 2.0 * (y * y + z * z));
-    [rx, ry, rz].map(f64::to_degrees)
-}
-
-/// A body's pose at `t` flicks from its states after each step (`step` flicks apart): the two
-/// steps around it mixed by α, positions lerped and rotations nlerped (Physics output), or the
-/// earlier step's with `hold`.
-fn pose_at(states: &[Value], t: i64, step: i64, hold: bool) -> Option<([f64; 3], [f64; 4])> {
-    let (k, rem) = ((t / step) as usize, t % step);
-    let a = pose_of(states.get(k)?)?;
-    if rem == 0 || hold {
-        return Some(a);
-    }
-    let Some(b) = states.get(k + 1).and_then(pose_of) else {
-        return Some(a);
-    };
-    let alpha = rem as f64 / step as f64;
-    let pos = [0, 1, 2].map(|i| a.0[i] + alpha * (b.0[i] - a.0[i]));
-    let dot: f64 = (0..4).map(|i| a.1[i] * b.1[i]).sum();
-    let sign = if dot < 0.0 { -1.0 } else { 1.0 };
-    let q = [0, 1, 2, 3].map(|i| a.1[i] + alpha * (sign * b.1[i] - a.1[i]));
-    let n = q.iter().map(|x| x * x).sum::<f64>().sqrt();
-    Some((pos, q.map(|x| x / n)))
-}
-
-/// A channel keyed at each of `values`' frames, linear between them.
-fn keyed(target: String, values: Vec<[f64; 3]>) -> Value {
-    let keys: Map<String, Value> = values
-        .into_iter()
-        .enumerate()
-        .map(|(f, v)| {
-            (
-                format!("f{f}"),
-                json!({"t": format!("{f}f"), "value": v, "interp": "linear"}),
-            )
-        })
-        .collect();
-    json!({"target": target, "type": "vec3", "keys": keys})
-}
-
-/// The channels a world's outputs write in its scene, each `to` an item's `at` (a pose: its
-/// position and rotation, never its scale) or a vec3 field (a position), keyed at every frame of
-/// the span; a `<body>#*` output writes an instancer's columns instead (#1921: written.rs).
-/// `whole`: #1921's planted output, which writes a scale of 1 with the pose.
-fn output_channels(
-    id: &str,
-    w: &World,
-    bodies: &Value,
-    frames: &[i64],
-    whole: bool,
-    out: &mut Map<String, Value>,
-) -> Result<(), Value> {
-    let step = step_flicks(w);
-    for (oid, o) in w.outputs.iter().filter(|(_, o)| !o.from.ends_with("#*")) {
-        let Some(to) = &o.to else { continue };
-        let states = bodies[&o.from].as_array().cloned().unwrap_or_default();
-        let poses: Vec<_> = frames
-            .iter()
-            .filter_map(|t| pose_at(&states, *t, step, o.hold))
-            .collect();
-        let name = |part: &str| format!("physics-{id}-{oid}-{part}");
-        match (o.read, to.strip_suffix("/at")) {
-            (Read::Pose, Some(item)) => {
-                out.insert(
-                    name("pos"),
-                    keyed(
-                        format!("{item}/at/pos"),
-                        poses.iter().map(|p| p.0).collect(),
-                    ),
-                );
-                out.insert(
-                    name("rot"),
-                    keyed(
-                        format!("{item}/at/rot"),
-                        poses.iter().map(|p| euler(p.1)).collect(),
-                    ),
-                );
-                if whole {
-                    let ones = vec![[1.0; 3]; poses.len()];
-                    out.insert(name("scale"), keyed(format!("{item}/at/scale"), ones));
-                }
-            }
-            (Read::Pose | Read::Position, _) => {
-                let to = to
-                    .strip_suffix("/at")
-                    .map_or(to.clone(), |i| format!("{i}/at/pos"));
-                out.insert(name("pos"), keyed(to, poses.iter().map(|p| p.0).collect()));
-            }
-            (r, _) => {
-                let what = format!(
-                    "an output's to with read {} isn't drawn by this host yet; #2248 brings it",
-                    r.name()
-                );
-                return Err(
-                    json!({"code": "physics.unsupported", "path": format!("outputs/{oid}/to"), "what": what}),
-                );
-            }
-        }
-    }
-    Ok(())
 }
 
 /// The readings `form`'s mark-set columns read of world `id` (`<id>.<ID>.<read>`), each baked
@@ -361,6 +244,11 @@ impl Hub<'_> {
         for (id, doc) in &worlds {
             let w = deep_physics_rapier::bound::expand(Some(form), doc);
             let w = w.and_then(|d| check(&d, &RAPIER3D, &deep_canvas_physics::roles::TABLE));
+            // #524: a skin off its soft body's lattice is the world's refusal too.
+            let w = w.and_then(|w| match deep_canvas_physics::skin::check(&w, form) {
+                e if e.is_empty() => Ok(w),
+                e => Err(e),
+            });
             let w = w.map_err(|e| {
                 refused(
                     id,
@@ -395,6 +283,11 @@ impl Hub<'_> {
                 .map_err(|e| refused(id, e))?;
             arrays.extend(readings(form, id, &w, &reply["bodies"]).map_err(|e| refused(id, e))?);
             arrays.extend(written::arrays(id, &w, form, &reply["bodies"]));
+            arrays.extend(deep_canvas_physics::skin::arrays(
+                id,
+                &w,
+                &reply["particles"],
+            ));
         }
         let entries = self.startup.sealed.registry(deep_canvas::columns::REGISTRY);
         let entries = entries.map_or(&[][..], |r| r.entries.as_slice());
@@ -494,9 +387,17 @@ impl Hub<'_> {
     /// the same time puts it, as `eval` reads it.
     pub(crate) fn with_outputs(&self, doc: &str, document: &Value) -> Value {
         let mut out = document.clone();
-        let channels = self.forms.get(doc).and_then(|f| f.get("channels"));
+        let form = self.forms.get(doc);
+        let channels = form.and_then(|f| f.get("channels"));
         if let (Some(channels), Some(map)) = (channels, out.as_object_mut()) {
             map.insert("channels".into(), channels.clone());
+        }
+        // #524: and the arrays its skins draw from, which the frame writes at its own time.
+        let skins = form.filter(|f| deep_canvas_physics::skin::writes(f));
+        if let (Some(arrays), Some(map)) =
+            (skins.and_then(|f| f.get("arrays")), out.as_object_mut())
+        {
+            map.insert("arrays".into(), arrays.clone());
         }
         out
     }

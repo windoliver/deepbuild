@@ -1,0 +1,115 @@
+
+ RUN  v5.0.5 <checkout>
+
+ ✓ tests/acceptance/350/staged.test.ts (4 tests) 9619ms
+   ✓ AC4 #350.43f82359 a package that registers a handler and an action and then fails to start exposes neither; enabling and disabling one 20 times leaves no listener or callback it owned; a call from a removed version finishing after its replacement is active changes no state and delivers nothing through it (4)
+     ✓ AC4 a package that registers a handler and an action and then fails to start exposes neither, while it starts or after; the same package that starts exposes both 3810ms
+     ✓ AC4 a sandboxed package enabled and disabled 20 times leaves no process, handler, action or handle it owned, and enabled again answers once 3348ms
+     ✓ AC4 a hub package enabled and disabled 20 times leaves no handler or action of an earlier load: each hook calls one handler once, each action call runs once 1317ms
+     ✓ AC4 a call to a removed version that finishes after its replacement is active changes no state and delivers nothing through the replacement 985ms
+ ✓ tests/acceptance/350/refusals.test.ts (4 tests) 878ms
+ ✓ tests/acceptance/350/join.test.ts (6 tests) 39884ms
+   ✓ AC3 #350.b88afef3 three extensions that add context, deny, and miss the deadline give the same reply in every order they registered or finished in: the deny stands, the context stays within the bound, the late one is recorded as failed, and its late reply changes no later request (3)
+     ✓ AC3 all six registration orders, each with both finishing orders, give the same first reply and the same second reply 38810ms
+ ✓ tests/acceptance/348/conformance.test.ts (6 tests) 701ms
+ ✓ tests/acceptance/348/places.test.ts (5 tests) 836ms
+ ✓ tests/acceptance/348/trust.test.ts (5 tests) 697ms
+ ✓ tests/acceptance/351/guide.test.ts (6 tests) 782ms
+   ✓ AC1 #351.1d3d1e53 the guide's two worked examples, in TypeScript and over JSON-RPC, build, pass conformance and run against the host; a published method or slot with no guide entry, and a guide entry for an unpublished method, each fail the drift test, naming it (6)
+     ✓ AC1 the JSON-RPC example builds, passes conformance and runs against the host 424ms
+ ✓ tests/acceptance/2147/slots-check.test.ts (5 tests) 12916ms
+   ✓ AC1 #2147.328da474 `node scripts/slots-check.mjs` exits 0 on main (3)
+     ✓ AC1 the slot check on the shipped contract exits 0 with its PASS line and no FAIL line 3129ms
+     ✓ AC1 neither the source slots nor the channel slot has a FAIL line from the shipped slot check 3152ms
+   ✓ AC2 #2147.6a9b3c54 A slot added with no kit still fails it, naming the slot (2)
+     ✓ AC2 a planted deep.registerFoo with no kit fails the slot check, naming deep.registerFoo and the missing kit 3398ms
+     ✓ AC2 a new variant of deep.registerSource added with no kit fails the slot check, naming that variant 3181ms
+ ✓ tests/acceptance/350/ac9-redraft/ac9.test.ts (2 tests) 8942ms
+   ✓ AC9 #350.bff15b51 with A using B's output, removing B detaches A's use before B's handlers stop; a host that stops B first fails, naming the edge (2)
+     ✓ AC9 A reads B's value until its use is detached and reads missing after, never through a stopped B; B's process is gone after 5649ms
+     ✓ AC9 (wrong program) a host that stops B first fails, naming the edge 3203ms
+ ✓ tests/acceptance/348/kit.test.ts (4 tests) 817ms
+ ✓ tests/acceptance/351/done-gate.test.ts (2 tests) 305ms
+ ✓ tests/acceptance/350/actions.test.ts (3 tests) 2760ms
+   ✓ AC5 #350.7c4e7560 two overlapping calls that finish in reverse order each keep their own authenticated scope across every await; the same action called headlessly and from a panel targets the same explicit handle and version whichever window has focus; a stale target has no effect (3)
+     ✓ AC5 in the sandbox, two overlapping calls from two agent sessions, finishing in reverse order, each act as their own caller before and after an await 1075ms
+     ✓ AC5 in the hub, two overlapping calls from two agent sessions, finishing in reverse order, each act as their own caller before and after an await 1033ms
+     ✓ AC5 the same action called headlessly and from a panel, with either window focused, gets the same explicit handle and version; a stale target has no effect 526ms
+ ✓ tests/acceptance/348/grants.test.ts (4 tests) 481ms
+ ✓ tests/acceptance/350/replies.test.ts (3 tests) 408ms
+(node:19883) ExperimentalWarning: stripTypeScriptTypes is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:20275) ExperimentalWarning: stripTypeScriptTypes is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:20590) ExperimentalWarning: stripTypeScriptTypes is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:20907) ExperimentalWarning: stripTypeScriptTypes is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:21227) ExperimentalWarning: stripTypeScriptTypes is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:21546) ExperimentalWarning: stripTypeScriptTypes is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:21861) ExperimentalWarning: stripTypeScriptTypes is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+stdout | tests/acceptance/348/budgets.test.ts > AC8 #348.b0d5cd73 loading an extension takes under 100 ms, and the host adds under 0.5 ms per event per subscribed extension, on the reference Mac, compared with the merge base > AC8 on the reference Mac, a load is under 100 ms and the host adds under 0.5 ms per event per subscribed extension, in the hub and in the sandbox (five bench runs each, by the timing rule)
+AC8 load, hub (ms): 0.6748, 0.6063, 0.6257, 0.6144, 0.6468 against 100 (margin 5%)
+AC8 load, sandbox (ms): 32.3878, 32.7106, 31.9317, 32.4514, 32.3411 against 100 (margin 5%)
+AC8 per event per subscribed extension, hub (ms): 0.0017, 0.0017, 0.0017, 0.0017, 0.0017 against 0.5 (margin 5%)
+AC8 per event per subscribed extension, sandbox (ms): 0.0023, 0.0026, 0.0025, 0.0024, 0.0032 against 0.5 (margin 5%)
+
+ ✓ tests/acceptance/348/budgets.test.ts (3 tests) 17891ms
+   ✓ AC8 #348.b0d5cd73 loading an extension takes under 100 ms, and the host adds under 0.5 ms per event per subscribed extension, on the reference Mac, compared with the merge base (3)
+     ✓ AC8 `node benchmarks/extension-host.mjs` runs, exits 0 and prints the four readings 2492ms
+     ✓ AC8 on the reference Mac, a load is under 100 ms and the host adds under 0.5 ms per event per subscribed extension, in the hub and in the sandbox (five bench runs each, by the timing rule) 15125ms
+ ✓ tests/acceptance/348/inbound.test.ts (2 tests) 1682ms
+   ✓ AC12 #348.fad7f4f9 inbound traffic reaches the hub only through a plug-in you turned on, exposing only the routes you chose (2)
+     ✓ AC12 a loaded plug-in you haven't turned on opens nothing: no new listener in the hub's process or the plug-in's, and its own try at a port is refused 664ms
+     ✓ AC12 turned on with POST /v1/traces chosen: one listener on 127.0.0.1 serves that route to the plug-in; POST /admin/exec, which it registered, and GET /v1/traces never reach it; turned off, nothing listens 937ms
+ ✓ tests/acceptance/351/journey.test.ts (2 tests) 2086ms
+   ✓ AC7 #351.c5e40eeb a second package registering the check kind journey without declaring it replaces the first is refused at install naming the first; one that declares it installs, and only it runs journeys (2)
+     ✓ AC7 a second journey that doesn't declare it replaces the first is refused at install, naming the first, which keeps running journeys 1186ms
+     ✓ AC7 a second journey that declares it replaces the first installs, and only it runs journeys 841ms
+ ✓ tests/acceptance/349/slot-table.test.ts (4 tests) 11508ms
+   ✓ AC5 #349.2eb6c029 a planted slot deep.registerFoo declared without a kit or a planted wrong fill fails the preflight naming the slot; one whose kit admits its planted fill fails it naming the fill (4)
+     ✓ AC5 the published contract passes the preflight's slot check, which the lint lane runs 3423ms
+     ✓ AC5 a planted deep.registerFoo declared with no kit fails the preflight, naming the slot and the missing kit 3187ms
+     ✓ AC5 a planted deep.registerFoo declared with a kit but no planted wrong fill fails the preflight, naming the slot and the missing planted fill 3192ms
+     ✓ AC5 (wrong program) a check.kind@1 kit that admits its planted fill crashed-suite fails the preflight's check, naming the fill; the shipped kit passes it 1663ms
+ ✓ tests/acceptance/349/slot-list.test.ts (3 tests) 3300ms
+   ✓ AC8 #349.b8d8858e the preflight lists slots from the published contract, per register* method and variant; a planted MCP variant with no row fails it naming the method and the variant; a check listing slots from the table passes it and fails this test (3)
+     ✓ AC8 a planted MCP variant of deep.registerSource with no row in the hub-slot table fails the preflight, naming the method and the variant 3222ms
+ ✓ tests/acceptance/349/delivery.test.ts (3 tests) 1073ms
+   ✓ AC2 #349.009ae072 a test adapter with steer false gets answers through its stop hold or its next prompt, never in the middle of a turn (3)
+     ✓ AC2 steer false, holdStop true: an answer that arrives mid-turn waits, and is delivered once in the stop hold, by the route `hold` 466ms
+     ✓ AC2 steer false, holdStop false: an answer that arrives mid-turn waits through the stop, and is delivered once at the next prompt, by the route `prompt` 413ms
+ ✓ tests/acceptance/351/signature.test.ts (2 tests) 142ms
+ ✓ tests/acceptance/349/owner.test.ts (3 tests) 866ms
+   ✓ AC6 #349.77853dd0 two adapters see one session; the second to bind it gates it and delivers each answer once, the other only relays; a host letting both deliver, or giving the session to the first to bind, fails naming the session (3)
+     ✓ AC6 the gating adapter, second to bind the session, owns it and delivers each answer once; the first to bind only relays 510ms
+ ✓ tests/acceptance/349/install-kit.test.ts (2 tests) 2483ms
+   ✓ AC4 #349.e98531fc a second journey installs only after check.kind@1's fixtures pass; a planted runner passing a crashed suite with 12 tests is refused at install naming the fixture, and the kind in use keeps running (2)
+     ✓ AC4 the first journey installs with check.kind@1 passed and runs; the planted second one is refused at install, naming fail-elsewhere, and the first keeps running 1720ms
+     ✓ AC4 a sound second implementation of journey installs, after check.kind@1's fixtures pass on it 715ms
+ ✓ tests/acceptance/348/ready.test.ts (2 tests) 2287ms
+   ✓ AC9 #348.f3e43b54 an extension can't start sockets, watchers or timers before the hub is ready (2)
+     ✓ AC9 a release package loaded in the hub before it is ready: no timer, interval, immediate or watcher callback runs, and its socket doesn't listen, until ready 1103ms
+     ✓ AC9 a package loaded in the sandbox before the hub is ready: no timer, interval, immediate or watcher callback runs, and its socket doesn't listen, until ready 1080ms
+ ✓ tests/acceptance/349/decisions.test.ts (3 tests) 926ms
+   ✓ AC7 #349.70f6262e a resolver naming a revoked decision, or an active one saved in another repo, is refused and the ask reaches you; a core checking only that the decision exists applies both and fails naming the decision (3)
+     ✓ AC7 (wrong program) a core that checks only that the named decision exists applies the revoked one and the other repo's, and fails this test naming each decision 355ms
+ ✓ tests/acceptance/351/digest.test.ts (2 tests) 130ms
+ ✓ tests/acceptance/348/jsonrpc.test.ts (2 tests) 552ms
+   ✓ AC4 #348.1f4cd69b a JSON-RPC extension written in another language registers a check (2)
+     ✓ AC4 the Python package passes conformance, loads out of process in the sandbox, and its check kind ext.pycheck.lint is in use 472ms
+ ✓ tests/acceptance/349/resolver.test.ts (3 tests) 2664ms
+   ✓ AC3 #349.27abd805 a resolver answering an authority ask without naming an active decision of its kind and scope is refused and the ask reaches you; naming one, the answer is applied and logged as decided for you (3)
+     ✓ AC3 a resolver that answers approve naming no decision is refused by the core, nothing is applied, and the ask reaches you 2225ms
+ ✓ tests/acceptance/349/results.test.ts (1 test) 204ms
+ ✓ tests/acceptance/351/ring.test.ts (4 tests) 200ms
+ ✓ tests/acceptance/351/conflicts.test.ts (1 test) 129ms
+
+ Test Files  31 passed (31)
+      Tests  101 passed (101)
+   Start at  23:53:49
+   Duration  131.37s (tests 99%, import 1%)
+

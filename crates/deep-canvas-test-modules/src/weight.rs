@@ -14,7 +14,7 @@ use super::{kind, manifest};
 fn eight_by_eight() -> Param {
     Param {
         name: "box",
-        ty: ParamType::Json,
+        ty: ParamType::Json("[x, y, w, h]"),
         unit: "",
         default: json!([0, 0, 8, 8]),
         min: None,

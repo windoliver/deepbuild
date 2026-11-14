@@ -1,0 +1,193 @@
+Base run of the #1973 acceptance tests at e0c90a5a5 (origin/main), November 13, 2026, on the shared Mac (Mac17,10,
+not a reference Mac; 1-minute load about 150 to 260 on 18 cores during the build and the run).
+
+Built first, in the checkout's own target/ (the machine's throttle grants no top-level build while the load is above
+the core count, so the build ran at nice 10 instead):
+  cargo build --locked --bin deep-show            (default features: full)
+  npm ci --ignore-scripts                         (vitest and typescript only)
+(cargo from the rustup toolchain 1.99.1, CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0; each file's own build was then
+a no-op.)
+
+Command:
+  CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 node node_modules/vitest/vitest.mjs run --root tests/acceptance/1973 --no-file-parallelism --testTimeout=600000
+
+Result: 3 files, 4 tests, 4 failed, each at an assertion (none at load). The full build's dump lists 582 fields
+across 57 entries with fields (329 entries in 18 registries); 515 of the fields are typed json.
+
+Summary, per criterion:
+- AC1, one-form.test.ts: FAILS. op: field answers every one of the 515 paths with one line, but 495 of those lines
+  give no form: each is the listing's row (name, type json, unit, range, list, default) with path, module and
+  stability, nothing more. slab@1.size's is {"name":"size","type":"json","unit":"m","range":null,"list":false,
+  "default":null,…}, so there is no form to feed back and the fed-back check fails, naming slab@1.size. The 20 json
+  fields that already pass are the extra fields #538's forms.rs lists (such as marks@1.columns.<name>.range, whose
+  line gives "form": "[min, max] (a row outside it hides)"); the test doesn't credit them, since the criterion is every
+  json field.
+  The plant test FAILS: `deep-show run --planted field_size_json_alone` answers {"ok":false,"code":"bad_input"} and
+  exits 2, since the base has no such plant.
+- AC2, refusal.test.ts: FAILS on the issue's reason. The scene with size [20, 20] is refused (outcome refused) with
+  the two issues the dry run saw, both out_of_range at items/box/params/size, one "scene3d.lights can't evaluate
+  this" and one "scene3d.build can't evaluate this", each with the fix "Give the field a value of its type inside its
+  range.": two issues at the path, not one, and neither fix names a form. The control passes: the same scene with
+  size [1, 1, 1] is presented with no issue.
+- AC3, examples.test.ts: FAILS on the issue's reason. deep_kinds list shows 68 kinds of kind@1 as available, the ten
+  among them. The ten kinds the issue names each fail, named: image@1, marks@1, axis@1, scale@1, mask@1, group@1,
+  star@1, frame@1, matte@1 and overlay.frame@1 list example null. So does an eleventh, axes3d@1 (#226's kind, which
+  the marks module draws with no kind-registry entry, added after the dry run's d4ed7be7). The other 57 kinds' example
+  hashes are each served by read: a text that hashes to the hash and names the kind.
+
+The output below is the run's, with the absolute checkout path written <repo>. AC1's two long lists (the message's
+495 lines and the diff's, each one line per field typed json) are cut to their first six lines, with slab@1.size's
+line kept from its place in the list; every line cut is of the same form, "<path> (kind <kind>, field <field>): its
+line gives no accepted form, only type "json": <the line>", and a marker says how many were cut.
+
+================ The run ================
+
+
+ RUN  v5.0.5 <repo>/tests/acceptance/1973
+
+ ❯ one-form.test.ts (2 tests | 2 failed) 50246ms
+   ❯ AC1 op: field gives each json field's accepted forms, and slab@1.size's form, fed back, passes the document check (2)
+     × AC1 for every field typed json in the full build's dump, op: field gives at least one accepted form, and each form printed for slab@1.size, fed back with every number set to 1, passes the document check 46284ms
+     × AC1 a planted line that prints json alone for slab@1.size fails, naming the field 25ms
+ ❯ examples.test.ts (1 test | 1 failed) 19425ms
+   ❯ AC3 every kind deep_kinds lists as available has an example read serves (1)
+     × AC3 every kind deep_kinds list shows as available has an example hash that read serves 15696ms
+ ❯ refusal.test.ts (1 test | 1 failed) 4168ms
+   ❯ AC2 a refused structured value names the form it expected (1)
+     × AC2 slab@1 with size [20, 20] is refused with one issue at items/<id>/params/size whose fix names the 3-number form 2277ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  examples.test.ts > AC3 every kind deep_kinds lists as available has an example read serves > AC3 every kind deep_kinds list shows as available has an example hash that read serves
+AssertionError: the examples of the 68 kinds deep_kinds list shows as available:
+  image@1: listed as available with no example hash (example: null)
+  marks@1: listed as available with no example hash (example: null)
+  axis@1: listed as available with no example hash (example: null)
+  scale@1: listed as available with no example hash (example: null)
+  mask@1: listed as available with no example hash (example: null)
+  group@1: listed as available with no example hash (example: null)
+  star@1: listed as available with no example hash (example: null)
+  frame@1: listed as available with no example hash (example: null)
+  matte@1: listed as available with no example hash (example: null)
+  axes3d@1: listed as available with no example hash (example: null)
+  overlay.frame@1: listed as available with no example hash (example: null): expected [ …(11) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "image@1: listed as available with no example hash (example: null)",
++   "marks@1: listed as available with no example hash (example: null)",
++   "axis@1: listed as available with no example hash (example: null)",
++   "scale@1: listed as available with no example hash (example: null)",
++   "mask@1: listed as available with no example hash (example: null)",
++   "group@1: listed as available with no example hash (example: null)",
++   "star@1: listed as available with no example hash (example: null)",
++   "frame@1: listed as available with no example hash (example: null)",
++   "matte@1: listed as available with no example hash (example: null)",
++   "axes3d@1: listed as available with no example hash (example: null)",
++   "overlay.frame@1: listed as available with no example hash (example: null)",
++ ]
+
+ ❯ none helpers.ts:44:60
+     42| /** No failures; the message lists them. */
+     43| export function none(failures: readonly string[], what: string): void {
+     44|   expect(failures, `${what}:\n  ${failures.join('\n  ')}`).toEqual([]);
+       |                                                            ^
+     45| }
+     46| /** At least one failure, and one that names every one of `names` toge…
+ ❯ examples.test.ts:25:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  one-form.test.ts > AC1 op: field gives each json field's accepted forms, and slab@1.size's form, fed back, passes the document check > AC1 for every field typed json in the full build's dump, op: field gives at least one accepted form, and each form printed for slab@1.size, fed back with every number set to 1, passes the document check
+AssertionError: op: field over the 515 fields typed json, and slab@1.size's forms fed back:
+  camera@1.projection (kind camera@1, field projection): its line gives no accepted form, only type "json": {"name":"projection","type":"json","unit":null,"range":null,"list":false,"default":"perspective","path":"camera@1.projection","module":"core","stability":"stable"}
+  camera@1.target (kind camera@1, field target): its line gives no accepted form, only type "json": {"name":"target","type":"json","unit":null,"range":null,"list":true,"default":[0,0,0],"path":"camera@1.target","module":"core","stability":"stable"}
+  camera@1.position (kind camera@1, field position): its line gives no accepted form, only type "json": {"name":"position","type":"json","unit":null,"range":null,"list":false,"default":null,"path":"camera@1.position","module":"core","stability":"stable"}
+  camera@1.orbit (kind camera@1, field orbit): its line gives no accepted form, only type "json": {"name":"orbit","type":"json","unit":null,"range":null,"list":false,"default":null,"path":"camera@1.orbit","module":"core","stability":"stable"}
+  camera@1.view_width (kind camera@1, field view_width): its line gives no accepted form, only type "json": {"name":"view_width","type":"json","unit":null,"range":null,"list":false,"default":null,"path":"camera@1.view_width","module":"core","stability":"stable"}
+  camera@1.shift (kind camera@1, field shift): its line gives no accepted form, only type "json": {"name":"shift","type":"json","unit":null,"range":null,"list":true,"default":[0,0],"path":"camera@1.shift","module":"core","stability":"stable"}
+  slab@1.size (kind slab@1, field size): its line gives no accepted form, only type "json": {"name":"size","type":"json","unit":"m","range":null,"list":false,"default":null,"path":"slab@1.size","module":"scene3d","stability":"stable"}
+  [… 488 more lines of the same form, one per field typed json, elided …]
+  slab@1.size: op: field prints no form to feed back: expected [ …(496) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "camera@1.projection (kind camera@1, field projection): its line gives no accepted form, only type \"json\": {\"name\":\"projection\",\"type\":\"json\",\"unit\":null,\"range\":null,\"list\":false,\"default\":\"perspective\",\"path\":\"camera@1.projection\",\"module\":\"core\",\"stability\":\"stable\"}",
++   "camera@1.target (kind camera@1, field target): its line gives no accepted form, only type \"json\": {\"name\":\"target\",\"type\":\"json\",\"unit\":null,\"range\":null,\"list\":true,\"default\":[0,0,0],\"path\":\"camera@1.target\",\"module\":\"core\",\"stability\":\"stable\"}",
++   "camera@1.position (kind camera@1, field position): its line gives no accepted form, only type \"json\": {\"name\":\"position\",\"type\":\"json\",\"unit\":null,\"range\":null,\"list\":false,\"default\":null,\"path\":\"camera@1.position\",\"module\":\"core\",\"stability\":\"stable\"}",
++   "camera@1.orbit (kind camera@1, field orbit): its line gives no accepted form, only type \"json\": {\"name\":\"orbit\",\"type\":\"json\",\"unit\":null,\"range\":null,\"list\":false,\"default\":null,\"path\":\"camera@1.orbit\",\"module\":\"core\",\"stability\":\"stable\"}",
++   "camera@1.view_width (kind camera@1, field view_width): its line gives no accepted form, only type \"json\": {\"name\":\"view_width\",\"type\":\"json\",\"unit\":null,\"range\":null,\"list\":false,\"default\":null,\"path\":\"camera@1.view_width\",\"module\":\"core\",\"stability\":\"stable\"}",
++   "camera@1.shift (kind camera@1, field shift): its line gives no accepted form, only type \"json\": {\"name\":\"shift\",\"type\":\"json\",\"unit\":null,\"range\":null,\"list\":true,\"default\":[0,0],\"path\":\"camera@1.shift\",\"module\":\"core\",\"stability\":\"stable\"}",
++   "slab@1.size (kind slab@1, field size): its line gives no accepted form, only type \"json\": {\"name\":\"size\",\"type\":\"json\",\"unit\":\"m\",\"range\":null,\"list\":false,\"default\":null,\"path\":\"slab@1.size\",\"module\":\"scene3d\",\"stability\":\"stable\"}",
+  [… 488 more lines of the same form, one per field typed json, elided …]
++   "slab@1.size: op: field prints no form to feed back",
++ ]
+
+ ❯ none helpers.ts:44:60
+     42| /** No failures; the message lists them. */
+     43| export function none(failures: readonly string[], what: string): void {
+     44|   expect(failures, `${what}:\n  ${failures.join('\n  ')}`).toEqual([]);
+       |                                                            ^
+     45| }
+     46| /** At least one failure, and one that names every one of `names` toge…
+ ❯ one-form.test.ts:51:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  one-form.test.ts > AC1 op: field gives each json field's accepted forms, and slab@1.size's form, fed back, passes the document check > AC1 a planted line that prints json alone for slab@1.size fails, naming the field
+AssertionError: deep-show run --planted field_size_json_alone starts and exits 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ run helpers.ts:113:169
+    111|   const s = start(bin, args, [{ evidence: tempDir('ev'), ...world, cal…
+    112|   expect(s.timedOut, `deep-show ${args.join(' ')} finished within its …
+    113|   expect(s.status, `deep-show ${args.join(' ')} starts and exits 0 (${…
+       |                                                                                                                                                                         ^
+    114|   expect(s.lines.length, `deep-show ${args.join(' ')}: one output line…
+    115|   const out = s.lines[0];
+ ❯ walk one-form.test.ts:27:19
+ ❯ one-form.test.ts:55:26
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  refusal.test.ts > AC2 a refused structured value names the form it expected > AC2 slab@1 with size [20, 20] is refused with one issue at items/<id>/params/size whose fix names the 3-number form
+AssertionError: slab@1 with size [20, 20], at items/box/params/size: expected [ …(3) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "items/box/params/size: the check gives 2 issues at the path, not one: [{\"check\":\"document.validate\",\"code\":\"out_of_range\",\"severity\":\"error\",\"ids\":[],\"path\":\"items/box/params/size\",\"actual\":null,\"what\":\"scene3d.lights can't evaluate this\",\"fix\":\"Give the field a value of its type inside its range.\"},{\"check\":\"document.validate\",\"code\":\"out_of_range\",\"severity\":\"error\",\"ids\":[\"box\"],\"path\":\"items/box/params/size\",\"actual\":null,\"what\":\"scene3d.build can't evaluate this\",\"fix\":\"Give the field a value of its type inside its range.\"}]",
++   "items/box/params/size: the fix of out_of_range (from \"document.validate\", \"scene3d.lights can't evaluate this\") names no 3-number form: \"Give the field a value of its type inside its range.\"",
++   "items/box/params/size: the fix of out_of_range (from \"document.validate\", \"scene3d.build can't evaluate this\") names no 3-number form: \"Give the field a value of its type inside its range.\"",
++ ]
+
+ ❯ refusal.test.ts:22:85
+     20|     const [refused, clean] = [docId(1), docId(2)];
+     21|     const [r, c] = run(bin, [showCall(refused, slabScene(REFUSED_SIZE)…
+     22|     expect.soft(refusalFailures(r!), `slab@1 with size [20, 20], at ${…
+       |                                                                                     ^
+     23|     expect.soft(checkFailures(c!, 'the same scene with size [1, 1, 1]'…
+     24|   }, 3_600_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  3 failed (3)
+      Tests  4 failed (4)
+   Start at  17:39:49
+   Duration  74.51s (tests 100%)
+

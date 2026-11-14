@@ -834,6 +834,12 @@ pub struct Scene {
     pub probes: Vec<crate::probe::Probe>,
     /// Each terrain plate's overlays at t (#537), which tint its cover's base color.
     pub tints: Vec<crate::tints::Tint>,
+    /// #462: each box, cylinder and sphere item's shape and world matrix (its size applied) at t,
+    /// drawn or not, by ID: the world-space volumes a look region's mask names.
+    pub volumes: BTreeMap<String, (Shape, [[f64; 4]; 3])>,
+    /// #462: the items the look's strokes land on, each with the fill role that paints it; empty
+    /// for a look with no strokes.
+    pub stroked: BTreeMap<String, Option<String>>,
 }
 
 impl Scene {
@@ -3063,7 +3069,24 @@ pub(crate) fn evaluate_compiled(
         .get("items")
         .and_then(Value::as_object)
         .unwrap_or(&empty);
-    let written = eval::written(map, program, &state);
+    // #462: the look's motifs move the evaluated items the document's slots bind, never the
+    // document; under reduced motion they hold still.
+    let motifs = match look.motifs.is_empty() {
+        true => None,
+        false => deep_canvas_motion::motif::Motifs::bind(look.motifs.clone(), map, program)
+            .map_err(|r| Refused {
+                code: r.code,
+                path: r.path,
+            })?,
+    };
+    let written = match &motifs {
+        Some(m) => {
+            let mut w = eval::written_with(map, program, &state, |id| m.binds(id));
+            m.apply(&mut w, t, look.reduced_motion);
+            w
+        }
+        None => eval::written(map, program, &state),
+    };
     let mut items = Items::new(doc_items, &written, &state, program);
     // #2013: a frame draws each rested item where its rest puts it; the check reports a rest
     // that finds no support.
@@ -3076,6 +3099,7 @@ pub(crate) fn evaluate_compiled(
         &mut Vec::new(),
     );
     let items = items;
+    let mut volumes = BTreeMap::new();
     let size = match map
         .get("size")
         .and_then(Value::as_array)
@@ -3181,6 +3205,23 @@ pub(crate) fn evaluate_compiled(
             // a prototype is read either way, for its instancers.
             let visible = shown(&items, id);
             let proto = protos_wanted.contains(id.as_str());
+            // #462: a box, cylinder or sphere's volume, drawn or not, for the masks regions name.
+            let primitive = match kind {
+                "mark.box@1" => Some(Shape::Box),
+                "mark.cylinder@1" => Some(Shape::Cylinder),
+                "mark.sphere@1" => Some(Shape::Sphere),
+                _ => None,
+            };
+            if let (Some(shape), Some(s)) =
+                (primitive, size3(item.pointer("/params/size"), [1.0; 3]))
+            {
+                let scaled = [
+                    [s[0], 0.0, 0.0, 0.0],
+                    [0.0, s[1], 0.0, 0.0],
+                    [0.0, 0.0, s[2], 0.0],
+                ];
+                volumes.insert(id.clone(), (shape, matmul(&world(&items, id), &scaled)));
+            }
             if !visible && !proto {
                 continue;
             }
@@ -3995,7 +4036,17 @@ pub(crate) fn evaluate_compiled(
         read_foam: false,
         probes,
         tints: crate::tints::tints(map, look, t)?,
+        volumes,
+        stroked: BTreeMap::new(),
     };
+    if let Some(s) = &look.strokes {
+        let solids = scene
+            .layers
+            .iter()
+            .flat_map(|l| &l.solids)
+            .map(|s| s.id.clone());
+        scene.stroked = crate::strokes::targets(map, s, solids);
+    }
     scene.set_cutaway(cutaway);
     scene.mirror = crate::mirror::find(&scene.layers, scene.camera.eye, |id| items.get(id))?;
     // #166: the water, its wake's path, and its own mirror unless a material names one.
