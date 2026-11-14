@@ -76,12 +76,16 @@ fn is_builder(_: &Value, _: &str, item: &Value) -> bool {
     let k = kind_of(item);
     (builders::KINDS.contains(&k) || k == "curve@1" || k == "mesh.asset@1")
         && !stack::reads_time_by_kind(item)
+        && !crate::vars::reads(item)
 }
 
 /// A builder whose stack holds a modifier that reads time by its nature (sway, bob, wave,
-/// spin): its node reads `t`, so it alone rebuilds while playing.
+/// spin), or a formula whose vars read a control, a channel, an item or t (#224): its node
+/// reads `t`, so it alone rebuilds while playing.
 fn is_live_builder(_: &Value, _: &str, item: &Value) -> bool {
-    builders::KINDS.contains(&kind_of(item)) && stack::reads_time_by_kind(item)
+    let k = kind_of(item);
+    (builders::KINDS.contains(&k) && stack::reads_time_by_kind(item))
+        || ((builders::KINDS.contains(&k) || k == "curve@1") && crate::vars::reads(item))
 }
 
 fn is_mark(_: &Value, _: &str, item: &Value) -> bool {
@@ -123,6 +127,11 @@ fn keyed_build(doc: &Value, _: &str, item: &Value, planted: Option<&str>) -> Val
     // #524: a skin's positions move its vertices, so they key its build.
     if let Some(skin) = item.get("skin") {
         key["skin"] = skin.clone();
+    }
+    // #224: a formula's vars read the controls, the track, channels and items, all in the
+    // document.
+    if crate::vars::reads(item) {
+        key["vars"] = doc.clone();
     }
     key
 }
@@ -297,6 +306,7 @@ pub fn built(
         plants: planted.and_then(Plants::named).unwrap_or_default(),
         outlines: &run.outlines,
         planted,
+        pool: run.pool.as_ref().map(|(p, n)| (p.as_ref(), *n)),
     };
     let counts = builders::counts(&kind, &params, &ctx)?;
     let mesh = builders::build(&kind, &params, &ctx)?;
@@ -326,6 +336,7 @@ fn run_scene3d(v: &mut View<'_>) -> Result<(), OpError> {
         planted: v.planted().map(str::to_string),
         outlines: v.outlines().to_vec(),
         fills: v.fills().to_vec(),
+        pool: v.pool(),
         ..Default::default()
     };
     let out = built(doc, &id, &item, &run, 0.0).map_err(|p| fault_of(&id, &item, p))?;
@@ -334,13 +345,28 @@ fn run_scene3d(v: &mut View<'_>) -> Result<(), OpError> {
 
 fn run_scene3d_live(v: &mut View<'_>) -> Result<(), OpError> {
     let id = v.id().unwrap_or_default().to_string();
-    let t = v.t()? as f64 / deep_canvas::camera::FLICKS_PER_SECOND as f64;
-    let item = item_at(v)?;
+    let flicks = v.t()?;
+    let t = flicks as f64 / deep_canvas::camera::FLICKS_PER_SECOND as f64;
+    let mut item = item_at(v)?;
+    let edits = v.typed::<Edits>("motion.fields")?;
+    let planted = v.planted();
     let doc = v.document()?;
+    // #224: a formula's vars bound at t, before the builder reads them.
+    let lowered =
+        crate::vars::at(doc, flicks, planted).map_err(|r| OpError::new(r.code, &r.path))?;
+    if let Some(low) = &lowered {
+        let raw = low["items"][&id].clone();
+        item = match &edits {
+            Some(e) => e.applied(&raw),
+            None => raw,
+        };
+    }
+    let doc = lowered.as_ref().unwrap_or(doc);
     let run = stack::Run {
         planted: v.planted().map(str::to_string),
         outlines: v.outlines().to_vec(),
         fills: v.fills().to_vec(),
+        pool: v.pool(),
         ..Default::default()
     };
     let out = built(doc, &id, &item, &run, t).map_err(|p| fault_of(&id, &item, p))?;

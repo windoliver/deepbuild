@@ -2094,8 +2094,9 @@ pub(crate) fn shape_code(s: Shape) -> u64 {
 
 // Position and normal, then (#423) uv0 and uv1 as one attribute and the tangent at 13 and 14,
 // after the records'.
+// The normal's w carries a vertex's own packed color (#224).
 const MESH_VERTEX: [wgpu::VertexAttribute; 4] = wgpu::vertex_attr_array![
-    0 => Float32x3, 1 => Float32x3, 13 => Float32x4, 14 => Float32x4
+    0 => Float32x3, 1 => Float32x4, 13 => Float32x4, 14 => Float32x4
 ];
 // Location 8 is the solid's tie rank, which the vertex stage reads (#421); 15 its material
 // operator's time, seed and opacity (#429).
