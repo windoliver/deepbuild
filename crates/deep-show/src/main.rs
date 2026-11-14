@@ -54,10 +54,12 @@ mod placement;
 mod planted;
 mod played;
 mod points;
+mod preview;
 mod present;
 mod print;
 mod probe;
 mod query;
+mod data_hash;
 mod registries;
 mod retired;
 mod ring;
@@ -352,6 +354,7 @@ fn query_call(c: &Map<String, Value>) -> Option<query::Query> {
         None | Some(Some("rows")) => query::What::Rows,
         Some(Some("summary")) => query::What::Summary,
         Some(Some("why")) => query::What::Why,
+        Some(Some("logic")) => query::What::Logic,
         _ => return None,
     };
     let items = match c.get("items") {
@@ -359,7 +362,8 @@ fn query_call(c: &Map<String, Value>) -> Option<query::Query> {
         v => Some(strings(v)?),
     };
     let at = match c.get("at") {
-        None => Vec::new(),
+        // A number is the call's arrival on the clock (#548), not times it reads.
+        None | Some(Value::Number(_)) => Vec::new(),
         Some(v) => v
             .as_array()?
             .iter()
@@ -394,6 +398,7 @@ fn query_call(c: &Map<String, Value>) -> Option<query::Query> {
             Some(p) => Some(p.as_str()?.to_string()),
         },
         track: optional(c.get("track"), |t| t.as_array().cloned())?.unwrap_or_default(),
+        steps: optional(c.get("steps"), |s| s.as_array()?.iter().map(Value::as_i64).collect())?.unwrap_or_default(),
         t: match c.get("t") {
             None => 0,
             Some(t) => flicks(t.as_str()?)?,
@@ -647,6 +652,10 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         "deep_kinds" => {
             let mut args = c.clone();
             args.remove("arrives");
+            // #548: a number `at` is its arrival, as `arrives` is.
+            if args.get("at").is_some_and(Value::is_number) {
+                args.remove("at");
+            }
             return Some(Call::Kinds(Value::Object(args)));
         }
         "sandbox" => return Some(Call::Sandbox),
@@ -724,7 +733,9 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
                 arrays: optional(c.get("arrays"), query::names)?.unwrap_or_default(),
                 paths: optional(c.get("paths"), query::names)?.unwrap_or_default(),
                 track: optional(c.get("track"), |t| t.as_array().cloned())?,
+                data_hash: flag("data_hash")?,
                 texts: flag("texts")?,
+                carried: flag("carried")?,
             })));
         }
         "frames" => {
@@ -1268,6 +1279,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 || deep_canvas_motion::arrange::PLANTED.contains(p)
                 || *p == deep_canvas_motion::module::UNDECLARED_KIND_ACCEPTED
                 || deep_canvas_motion::module::PLANTED.contains(p)
+                || deep_canvas_motion::cues::planted(p)
                 || *p == deep_canvas_motion::lengths::ONE_VALUE
                 || deep_canvas_marks::arrays::PLANTED.contains(p)
                 // #1967's wrong programs live in the cells module's playback and conversion.
@@ -1281,6 +1293,8 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 || *p == deep_canvas_cells::module::GRID_WRAPS_INDEX
                 || deep_canvas_marks::copy::PLANTED.contains(p)
                 || *p == deep_canvas_motion::held::FLIP_HOLDS_LAST
+                // #548's deep_query region map that lays the reads out by name.
+                || *p == logic::MAP_READS_BY_NAME
         })
         .map(str::to_string);
     // #433's wrong programs are twins of the familiar@1 pack.
@@ -1554,7 +1568,9 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
             } else {
                 "at"
             };
-            (c.get(arrives), &clock)
+            // #548: a call that names no `arrives` may give its arrival as a number `at`.
+            let when = c.get(arrives).or_else(|| c.get("at").filter(|t| t.is_number() && arrives == "arrives"));
+            (when, &clock)
         })
         .map(|(at, clock)| match (at, clock) {
             (Some(t), Some(_)) => t.as_i64().filter(|t| *t >= 0),
@@ -1951,6 +1967,7 @@ const TEST_BUILD: bool = cfg!(any(
     feature = "test-scatter",
     feature = "test-tick",
     feature = "test-held",
+    feature = "test-page-latch",
     feature = "test-frame-cache",
     feature = "test-kit",
     feature = "test-leave-out-look",
@@ -2002,6 +2019,9 @@ fn modules(set: BuildSet) -> Vec<Module> {
             },
             if cfg!(feature = "test-graph-tie-by-registration") {
                 deep_canvas_graph::module::tie_by_registration()
+            } else if cfg!(feature = "test-graph-layout-no-cost") {
+                // #1417: the graph@1 whose layout declares no cost.
+                deep_canvas_graph::module::layout_no_cost()
             } else {
                 deep_canvas_graph::module::module()
             },
@@ -2174,6 +2194,8 @@ fn modules(set: BuildSet) -> Vec<Module> {
     out.push(deep_canvas_test_modules::tick());
     #[cfg(feature = "test-held")]
     out.push(deep_canvas_test_modules::held());
+    #[cfg(feature = "test-page-latch")]
+    out.push(deep_canvas_test_modules::latch());
     #[cfg(feature = "test-frame-cache")]
     out.push(deep_canvas_test_modules::cache());
     #[cfg(feature = "test-a")]

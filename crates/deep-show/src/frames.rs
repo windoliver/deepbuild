@@ -251,6 +251,7 @@ impl<'a> Hub<'a> {
             Some(track) => self.load_with(&e.doc, track, t),
             None => self.load_frame(&e.doc, t),
         }
+
         // Planted (#504): a document with controls runs a program through the sandbox each frame.
         if self.planted(crate::hub::Planted::BoardRunsProgramPerFrame)
             && self
@@ -260,6 +261,17 @@ impl<'a> Hub<'a> {
         {
             self.sandbox.runs += 1;
         }
+        // #169: every row of the core's carried-state list as a play on this track leaves it at
+        // `t`, so steps the live session ran under another track never answer for it.
+        let carried: Option<Value> = self.played_form(&e.doc).filter(|_| e.carried).map(|form| {
+            let form = e
+                .track
+                .as_ref()
+                .map_or(form.clone(), |t| crate::played::with_track(&form, t));
+            (self.carried_at(&form, t).into_iter())
+                .map(|c| json!({"owner": c.module, "kind": c.kind, "key": c.key, "hash": c.hash}))
+                .collect()
+        });
         let Some(session) = self.sessions.get_mut(&e.doc).filter(|_| rev.is_some()) else {
             return json!({"outcome": "refused", "code": "no_revision", "issues": []});
         };
@@ -362,6 +374,12 @@ impl<'a> Hub<'a> {
         }
         if !e.paths.is_empty() {
             reply["values"] = crate::query::values(&self.sched, evaluated, &e.paths);
+        }
+        if let Some(rows) = carried {
+            reply["carried"] = rows;
+        }
+        if e.data_hash {
+            reply["data_hash"] = json!(crate::data_hash::of(&self.sched, evaluated));
         }
         if self.startup.test_build {
             reply["access"] = json!(report

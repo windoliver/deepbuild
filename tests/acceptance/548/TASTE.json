@@ -1,0 +1,13 @@
+{
+  "issue": 548,
+  "criterion": "#548.7c091366",
+  "verdict": "looks_right",
+  "who": "Claude, on the owner's standing delegation of taste calls; the owner can overrule it on the PR",
+  "when": "2026-11-14T11:55:00Z",
+  "screenshots": {
+    "route-hover.png": "5eda31116c89100c69629245e0d440f76a771ac9fab3f6a8801e1877c35a62dc",
+    "route-after-move.png": "02304e2ef96f07f0a49be53ffc76114c71322a63913470a826b027a0a4d05b9b",
+    "route-hover.apng": "b040a559c5f24da2d362d25649e6e3b2e6e475d78cedaefdb8a297bd3a74c944"
+  },
+  "note": "While hovering, the gold route runs hex by hex, each cell touching the last, from the red unit at (12, 12) to the hovered hex; nothing else on the board changes. After the AI's move at 2 s, with the pointer still, the unit stands one cell right at (13, 12) and the route is drawn again from its new cell to the same hovered hex, so the preview followed the step without a new hover. The board's green cells, the route's gold and the unit's red read clearly apart at the reference window."
+}

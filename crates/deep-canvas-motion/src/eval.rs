@@ -362,8 +362,16 @@ fn write(item: &mut Value, field: &[String], value: Value) {
     };
     let mut at = item;
     for (depth, name) in rest.iter().enumerate() {
-        if depth == 3 && rest[0] == "params" && rest[1] == "ops" {
+        // `ops/<i>/end` reaches through the op's one key; `ops/<i>/trim/end` names it (#222).
+        let named = at
+            .as_object()
+            .is_some_and(|m| m.contains_key(name.as_str()));
+        if depth == 3 && rest[0] == "params" && rest[1] == "ops" && !named {
             at = through_op(at);
+        }
+        // #222: an index into a list the item doesn't hold yet starts that list.
+        if at.is_null() && name.parse::<usize>().is_ok() {
+            *at = Value::Array(Vec::new());
         }
         at = match at {
             Value::Array(list) => match name.parse::<usize>() {
@@ -427,8 +435,10 @@ fn through_op(op: &mut Value) -> &mut Value {
 
 /// The frame's `valid_until`: the earliest `t` at which anything it shows changes next, over the
 /// channels and placements `counts` keeps (#1487: those a view shows; every one otherwise).
+/// `follows` holds each channel's #489 follow, which it takes in place of its curve.
 pub(crate) fn valid_until(
     motion: &Motion,
+    follows: &[Option<crate::follow::Follow>],
     t: i64,
     doc_t: i64,
     validity: Validity,
@@ -441,13 +451,15 @@ pub(crate) fn valid_until(
     let kept = |list: Option<&[bool]>, i: usize| list.is_none_or(|l| l[i]);
     let channels = motion.channels.iter().enumerate();
     let channels = channels.filter(|(i, _)| kept(counts.channels, *i));
-    let channels = channels.filter_map(|(_, c)| {
+    let channels = channels.filter_map(|(i, c)| {
         // A modified channel may change at every flick, and so may a remapped one, whose
         // child time runs other than the timeline.
-        if c.modifiers.is_empty() && !motion.remapped(&c.target.owner) {
-            c.curve.next_change(doc_t)
-        } else {
-            Some(doc_t + 1)
+        if !c.modifiers.is_empty() || motion.remapped(&c.target.owner) {
+            return Some(doc_t + 1);
+        }
+        match follows.get(i).and_then(Option::as_ref) {
+            Some(follow) => follow.next_change(doc_t),
+            None => c.curve.next_change(doc_t),
         }
     });
     let placements = motion
@@ -521,6 +533,17 @@ pub fn items_where(
 /// item is the document's own with `at` from its slots, which a reader can take from the state
 /// without copying the item.
 pub fn written(doc: &Map<String, Value>, program: &Program, state: &State) -> Map<String, Value> {
+    written_with(doc, program, state, |_| false)
+}
+
+/// [`written`] with the items `also` takes too, each as [`items`] gives it: #462's motifs move
+/// the items a scene binds, so a 3D frame reads them as evaluated copies.
+pub fn written_with(
+    doc: &Map<String, Value>,
+    program: &Program,
+    state: &State,
+    also: impl Fn(&str) -> bool,
+) -> Map<String, Value> {
     let named: BTreeSet<&str> = program
         .fields
         .iter()
@@ -531,7 +554,7 @@ pub fn written(doc: &Map<String, Value>, program: &Program, state: &State) -> Ma
     let items = match doc.get("items") {
         Some(Value::Object(items)) => items
             .iter()
-            .filter(|(id, item)| named.contains(id.as_str()) || reads_data(item))
+            .filter(|(id, item)| named.contains(id.as_str()) || reads_data(item) || also(id))
             .map(|(id, item)| (id.clone(), item.clone()))
             .collect(),
         _ => Map::new(),

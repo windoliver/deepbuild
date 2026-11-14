@@ -1,0 +1,16 @@
+{
+  "commonFiles": 2732,
+  "removedAlone": [
+    "tests/acceptance/374/",
+    "tests/acceptance/375/"
+  ],
+  "before": [
+    800,
+    1932
+  ],
+  "after": [
+    808,
+    1924
+  ],
+  "protectedListsIdentical": true
+}

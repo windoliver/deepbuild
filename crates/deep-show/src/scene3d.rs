@@ -95,6 +95,8 @@ impl Gpu3 {
         if let Some(d) = doc.as_object_mut() {
             d.insert("size".into(), json!(size));
         }
+        // #524: each skin's item at this frame's time.
+        deep_canvas_physics::skin::write(&mut doc, t);
         let look = look_of(&doc, palette);
         let fills = Fills {
             outlines: &self.outlines,
@@ -132,6 +134,7 @@ impl Gpu3 {
         if let Some(d) = doc.as_object_mut() {
             d.insert("size".into(), json!(size));
         }
+        deep_canvas_physics::skin::write(&mut doc, t);
         let look = look_of(&doc, palette);
         let fills = Fills {
             outlines: &self.outlines,

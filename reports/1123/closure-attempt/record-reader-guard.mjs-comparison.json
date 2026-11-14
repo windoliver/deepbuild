@@ -1,0 +1,8 @@
+{
+  "script": "record-reader-guard.mjs",
+  "before": 1,
+  "after": 1,
+  "identical": true,
+  "beforeOnly": [],
+  "afterOnly": []
+}

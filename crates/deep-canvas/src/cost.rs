@@ -221,9 +221,19 @@ pub struct Estimate {
     pub gpu_mb: f64,
     /// Each item's nanoseconds of CPU and GPU together, in item order.
     pub by_item: Vec<(String, f64)>,
+    /// Each frame operator's ms of CPU over the items it evaluates, by key, in plan order (#1417).
+    pub by_op: Vec<(String, f64)>,
 }
 
 impl Estimate {
+    /// The operator that costs the most, and its ms; ties by key.
+    pub fn costliest_op(&self) -> Option<&(String, f64)> {
+        self.by_op
+            .iter()
+            .filter(|(_, ms)| *ms > 0.0)
+            .min_by(|a, b| b.1.total_cmp(&a.1).then_with(|| a.0.cmp(&b.0)))
+    }
+
     /// The `n` items that cost the most, the costliest first, ties by ID.
     pub fn top(&self, n: usize) -> Vec<String> {
         let mut list: Vec<&(String, f64)> =
@@ -336,7 +346,9 @@ fn item_ids_in<'d>(v: &'d Value, items: &Map<String, Value>, out: &mut Vec<&'d s
 /// items its own `applies` gives it (a document's operator over all of them) that the frame
 /// evaluates, while a check phase's operators run once at check and cost no frame; each pass over
 /// the frame and the items of its module's kinds; and the CPU each module's kinds register per
-/// item. GPU memory holds every item, moving or not.
+/// item. An operator that declares a cost (#1417) is charged it on each item it applies to, on
+/// top of its terms, moving or not.
+/// GPU memory holds every item, moving or not.
 pub fn estimate(doc: &Value, sealed: &Sealed, coefficients: &Coefficients) -> Estimate {
     estimate_by(doc, sealed, coefficients, |entries, work| {
         vec![work(entries)]
@@ -413,22 +425,31 @@ pub(crate) fn estimate_by(
             k += 1;
             k - 1
         });
-        for i in 0..items.len() {
+        let mut op_ns = 0.0;
+        for (i, item) in items.values().enumerate() {
             if row.is_some_and(|k| !f.applies[i * item_ops.len() + k]) {
                 continue;
             }
             bytes += t.bytes_per_item;
             // #1938: an item `visible: false` draws nothing, and the frame's evaluation skips
             // it; a document's operator still works over it.
-            if (f.hidden[i] && !document) || evaluated.as_ref().is_some_and(|e| !e[i]) {
+            if f.hidden[i] && !document {
                 continue;
             }
-            let c = f.counts[i];
-            let ns =
-                t.ns_per_item + t.ns_per_vertex * c.vertices + t.ns_per_frame_glyph() * c.glyphs;
+            // What it declares is work the frame that shows or changes its item holds, whatever
+            // moves after (#1417); its terms only while the frame evaluates the item.
+            let mut ns = op.op.cost.map_or(0.0, |cost| cost(item) * 1e6);
+            if evaluated.as_ref().is_none_or(|e| e[i]) {
+                let c = f.counts[i];
+                ns += t.ns_per_item
+                    + t.ns_per_vertex * c.vertices
+                    + t.ns_per_frame_glyph() * c.glyphs;
+            }
             cpu_ns += ns;
+            op_ns += ns;
             by_item[i] += ns;
         }
+        out.by_op.push((op.key.clone(), op_ns / 1e6));
     }
     for m in &sealed.modules {
         let kinds: Vec<String> = m
@@ -571,6 +592,203 @@ mod tests {
         // Nothing moves: the frame that shows it evaluates every item.
         let still = estimate(&board(100, false), &sealed, &coefficients);
         assert_eq!(still.cpu_ms, 0.103);
+    }
+
+    fn register_sized(r: &mut Registrar) {
+        r.array("sized.out", "f64", "item", "geometry", "items");
+        r.operator("work", "items", &["core.fields"], &["sized.out"])
+            .applies(|_, _, item| item.pointer("/params/rows").is_some())
+            .cost(|item| {
+                item.pointer("/params/rows")
+                    .and_then(Value::as_f64)
+                    .unwrap_or(0.0)
+                    * 0.5
+            })
+            .run(|v| v.write("sized.out", Val::typed(0.0f64)));
+    }
+
+    #[test]
+    fn an_operator_that_declares_a_cost_is_charged_it_on_each_item_it_applies_to() {
+        let mut sized = tick();
+        sized.manifest.name = "sized".into();
+        sized.manifest.feature = "sized".into();
+        sized.manifest.implements = "sized@1".into();
+        sized.register = register_sized;
+        let sealed = Registry::new(BuildSet::Core)
+            .with(sized)
+            .seal()
+            .expect("seals");
+        let coefficients = Coefficients {
+            fingerprint: Value::Null,
+            build: Value::Null,
+            terms: BTreeMap::from([(
+                "sized.work".to_string(),
+                Terms {
+                    ns_per_item: 1000.0,
+                    ..Terms::default()
+                },
+            )]),
+        };
+        let mut doc = board(1, false);
+        doc["items"]["s0"]["params"]["rows"] = json!(4);
+        doc["items"]["m"]["params"]["rows"] = json!(10);
+        let e = estimate(&doc, &sealed, &coefficients);
+        // 2 ms and 5 ms declared, with 1 µs of terms on each of the two items it applies to.
+        assert_eq!(e.cpu_ms, 7.002);
+        assert_eq!(e.costliest_op(), Some(&("sized.work".to_string(), 7.002)));
+        assert_eq!(e.top(1), ["m"]);
+    }
+
+    #[test]
+    fn a_patch_that_adds_a_costly_item_is_checked_against_the_whole_documents_budget() {
+        let mut sized = tick();
+        sized.manifest.name = "sized".into();
+        sized.manifest.feature = "sized".into();
+        sized.manifest.implements = "sized@1".into();
+        sized.register = register_sized;
+        let sealed = Registry::new(BuildSet::Core)
+            .with(sized)
+            .seal()
+            .expect("seals");
+        let over =
+            |issues: &[crate::document::Issue]| issues.iter().any(|i| i.code == "over_budget");
+        // One item of 1.5 ms fits a data view's 2 ms; a second makes 3 ms, which doesn't.
+        let mut before = board(0, false);
+        before["budget"] = json!({"class": "data_view"});
+        before["items"]["m"]["params"]["rows"] = json!(3);
+        let prev = crate::document::check_in(&before, &sealed).issues;
+        assert!(!over(&prev));
+        let mut after = before.clone();
+        after["items"]["s0"] =
+            json!({"kind": "rect@1", "params": {"box": [0, 0, 1, 1], "rows": 3}});
+        assert!(over(&crate::document::check_in(&after, &sealed).issues));
+        let changed = std::collections::BTreeSet::from(["s0".to_string()]);
+        let rechecked = crate::document::recheck(&after, &prev, &changed, &sealed);
+        assert!(rechecked.is_none_or(|issues| over(&issues)));
+    }
+
+    #[test]
+    fn a_refusal_names_the_costliest_operator_only_when_the_cpu_is_past_its_cap() {
+        let mut sized = tick();
+        sized.manifest.name = "sized".into();
+        sized.manifest.feature = "sized".into();
+        sized.manifest.implements = "sized@1".into();
+        sized.register = register_sized;
+        let sealed = Registry::new(BuildSet::Core)
+            .with(sized)
+            .seal()
+            .expect("seals");
+        let refusal = |rows: f64, bytes: f64| {
+            let coefficients = Coefficients {
+                fingerprint: Value::Null,
+                build: Value::Null,
+                terms: BTreeMap::from([(
+                    "sized.work".to_string(),
+                    Terms {
+                        bytes_per_item: bytes,
+                        ..Terms::default()
+                    },
+                )]),
+            };
+            let mut doc = board(0, false);
+            doc["budget"] = json!({"class": "data_view"});
+            doc["items"]["m"]["params"]["rows"] = json!(rows);
+            let issues = crate::document::check_costed(&doc, &sealed, &coefficients).issues;
+            issues
+                .into_iter()
+                .find(|i| i.code == "over_budget")
+                .expect("refused")
+        };
+        // 5 ms of CPU: the operator that spent it is named.
+        assert!(refusal(10.0, 0.0)
+            .what
+            .contains("the costliest operator is sized.work"));
+        // Past only its GPU memory, at 0.5 ms of CPU: no operator's CPU is to blame.
+        assert!(!refusal(1.0, 1e9).what.contains("costliest operator"));
+    }
+
+    fn sized_with_tick() -> crate::registry::Sealed {
+        let mut sized = tick();
+        sized.manifest.name = "sized".into();
+        sized.manifest.feature = "sized".into();
+        sized.manifest.implements = "sized@1".into();
+        sized.register = register_sized;
+        Registry::new(BuildSet::Core)
+            .with(tick())
+            .with(sized)
+            .seal()
+            .expect("seals")
+    }
+
+    #[test]
+    fn a_declared_cost_is_charged_while_another_item_moves() {
+        let sealed = sized_with_tick();
+        let mut doc = board(1, true);
+        doc["items"]["s0"]["params"]["rows"] = json!(4);
+        // The still item's 2 ms land in the frame that shows it, whatever else moves.
+        let e = estimate(&doc, &sealed, &Coefficients::reference());
+        assert!(e.cpu_ms >= 2.0, "{}", e.cpu_ms);
+    }
+
+    #[test]
+    fn a_patch_to_a_budgeted_document_nothing_costly_applies_to_is_rechecked_incrementally() {
+        let sealed = sized_with_tick();
+        let mut before = board(2, false);
+        before["budget"] = json!({"class": "data_view"});
+        let prev = crate::document::check_in(&before, &sealed).issues;
+        let mut after = before.clone();
+        after["items"]["s0"]["params"]["box"] = json!([0, 0, 2, 2]);
+        let changed = std::collections::BTreeSet::from(["s0".to_string()]);
+        assert!(crate::document::recheck(&after, &prev, &changed, &sealed).is_some());
+    }
+
+    #[test]
+    fn a_document_with_no_budget_is_warned_when_an_operators_declared_cost_passes_the_frame() {
+        let sealed = sized_with_tick();
+        let warned = |rows: f64| {
+            let mut doc = board(0, false);
+            doc["items"]["m"]["params"]["rows"] = json!(rows);
+            crate::document::check_in(&doc, &sealed)
+                .issues
+                .into_iter()
+                .find(|i| i.code == "over_budget")
+        };
+        // 20 ms declared, past the 16 ms frame: a warning naming the item.
+        let issue = warned(40.0).expect("warned");
+        assert_eq!(issue.severity, "warning");
+        assert_eq!(issue.ids, ["m"]);
+        // 10 ms fits the frame.
+        assert!(warned(20.0).is_none());
+    }
+
+    #[test]
+    fn a_document_with_a_budget_class_is_judged_by_its_class_not_the_frames_warning() {
+        let sealed = sized_with_tick();
+        // An export has no frame cap: 20 ms declared is neither refused nor warned.
+        let mut doc = board(0, false);
+        doc["budget"] = json!({"class": "export"});
+        doc["items"]["m"]["params"]["rows"] = json!(40);
+        let issues = crate::document::check_in(&doc, &sealed).issues;
+        assert!(!issues.iter().any(|i| i.code == "over_budget"), "{issues:?}");
+    }
+
+    #[test]
+    fn a_patch_to_one_costly_item_is_warned_on_what_the_whole_document_declares() {
+        let sealed = sized_with_tick();
+        // 1 ms and 10 ms fit the frame; the patch makes them 10 ms and 10 ms, which doesn't.
+        let mut before = board(1, false);
+        before["items"]["m"]["params"]["rows"] = json!(2);
+        before["items"]["s0"]["params"]["rows"] = json!(20);
+        let prev = crate::document::check_in(&before, &sealed).issues;
+        assert!(!prev.iter().any(|i| i.code == "over_budget"));
+        let mut after = before.clone();
+        after["items"]["m"]["params"]["rows"] = json!(20);
+        let changed = std::collections::BTreeSet::from(["m".to_string()]);
+        let rechecked = crate::document::recheck(&after, &prev, &changed, &sealed);
+        assert!(
+            rechecked.is_none_or(|issues| issues.iter().any(|i| i.code == "over_budget")),
+            "a recheck of the patched item alone misses the other's 10 ms"
+        );
     }
 
     #[test]

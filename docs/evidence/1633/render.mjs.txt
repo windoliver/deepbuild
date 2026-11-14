@@ -1,0 +1,42 @@
+// Renders each step of an e2e transcript (the exact captured CLI output) as a terminal page and screenshots it with
+// headless Chrome. Usage: node render.mjs <transcript> <out-dir> <prefix> <title>
+import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { join } from 'node:path';
+
+const [src, out, prefix, title] = process.argv.slice(2);
+mkdirSync(out, { recursive: true });
+const text = readFileSync(src, 'utf8').replace(/\/home\/[^/\s]+/g, '~');
+// A step starts at a "== Claim" header or a "$ " command line.
+const steps = [];
+for (const line of text.split('\n')) {
+  if (steps.length === 0 || /^== |^\$ /.test(line)) steps.push([]);
+  steps.at(-1).push(line);
+}
+const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const paint = (l) => {
+  const e = esc(l);
+  if (/^== /.test(l)) return `<span class="h">${e}</span>`;
+  if (/^\$ /.test(l)) return `<span class="p">$</span><span class="c">${e.slice(1)}</span>`;
+  if (/REFUSED/.test(l)) return `<span class="r">${e}</span>`;
+  if (/ALLOWED|No open asks/.test(l)) return `<span class="g">${e}</span>`;
+  if (/open_item\.opened@4|replaces/.test(l)) return `<span class="y">${e}</span>`;
+  return e;
+};
+const shots = [];
+steps.map((s) => s.join('\n').trim()).filter(Boolean).forEach((body, i) => {
+  const n = String(i + 1).padStart(2, '0');
+  const html = `<!doctype html><meta charset="utf-8"><style>
+body{margin:0;background:#1e1f22;font:14px/1.5 "DejaVu Sans Mono",monospace;color:#d4d4d4}
+.bar{background:#2d2f33;color:#a0a4ab;padding:8px 14px;font:13px sans-serif}
+pre{margin:0;padding:14px 16px;white-space:pre-wrap;word-break:break-word}
+.h{color:#6cb6ff;font-weight:bold}.p{color:#8bd88b}.c{color:#fff;font-weight:bold}.r{color:#ff7b72}.g{color:#7ee787}.y{color:#e3b341}
+</style><div class="bar">${esc(title)} — step ${i + 1} of ${steps.length}</div><pre>${body.split('\n').map(paint).join('\n')}</pre>`;
+  const page = join(out, `${prefix}-${n}.html`);
+  writeFileSync(page, html);
+  const lines = body.split('\n').reduce((k, l) => k + Math.max(1, Math.ceil(l.length / 150)), 0);
+  const png = join(out, `${prefix}-${n}.png`);
+  execFileSync('google-chrome', ['--headless=new', '--no-sandbox', '--disable-gpu', '--hide-scrollbars', `--window-size=1400,${Math.min(4000, 70 + lines * 21 + 40)}`, `--screenshot=${png}`, `file://${page}`], { stdio: 'ignore' });
+  shots.push(png);
+});
+console.log(shots.join('\n'));
