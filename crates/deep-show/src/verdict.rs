@@ -808,7 +808,16 @@ impl<'a> Hub<'a> {
                     let out = match (check.frames, drawn.and_then(|d| d.get(doc))) {
                         (Some((_, run)), Some(crate::pixels::Drawn::Frames(f, fp))) => {
                             prints.push((doc.clone(), fp.clone()));
-                            run(&checked.lowered, &input, f)
+                            // #466: the captions the frames drew, read as texts by their names.
+                            let picks: Vec<&str> = f
+                                .iter()
+                                .flat_map(|fr| fr.picks.values().map(String::as_str))
+                                .collect();
+                            run(
+                                &self.with_caption_texts(&checked.lowered, &picks),
+                                &input,
+                                f,
+                            )
                         }
                         (Some(_), Some(crate::pixels::Drawn::Elsewhere(e))) => {
                             elsewhere.push(in_doc(e.clone()));
