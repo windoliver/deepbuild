@@ -509,8 +509,8 @@ class AsksCore implements Asks {
       const input = isObj(filled) && isObj(filled.subject) && SUBJECT_KINDS.has(String(filled.kind)) ? { ...filled, key: subjectKey(filled, this.threadOf(connection.session)) } : filled;
       const subjected = isObj(input) && 'subject' in input;
       // An unblock task is held to @3: at least one step and one thing it unblocks, and its price when you pay one.
-      // An ask that names its subject is held to @4.
-      const v = subjected ? 4 : isObj(input) && input.kind === 'unblock' ? 3 : isObj(input) && 'dropped' in input ? 2 : 1;
+      // An ask that names its subject is held to @4; a core-owned done-gate action is recorded with it at @5.
+      const v = isObj(input) && 'action' in input ? 5 : subjected ? 4 : isObj(input) && input.kind === 'unblock' ? 3 : isObj(input) && 'dropped' in input ? 2 : 1;
       const event = { v, id, kind: 'ask.created', writer: connection.writer, actor: connection.actor, scope: connection.scope, ts: now, data: input as JsonValue };
       const checked = validate(`ask.created@${v}`, event);
       if (!checked.ok) {
