@@ -40,10 +40,20 @@ pub(crate) struct Set {
     pub(crate) elements: Vec<u32>,
     pub(crate) models: Vec<[[f64; 4]; 3]>,
     pub(crate) cull: Option<cull::Culled>,
-    /// The records [`Set::write`] changed and hasn't uploaded: the first and one past the last.
+    /// The bytes [`Set::write`] changed and hasn't uploaded, from the first changed word to one
+    /// past the last.
     pub(crate) run: Option<(usize, usize)>,
     /// The records the last [`Set::finish`] wrote, by index (#1921).
     pub(crate) uploaded: Vec<usize>,
+}
+
+/// The bytes from the first word `new` changes in `old` to one past the last, none when it
+/// changes none: only these go up, since the rest is on the device already (#2496).
+fn changed(new: &[u8], old: &[u8]) -> Option<std::ops::Range<usize>> {
+    let words = || new.chunks(4).zip(old.chunks(4));
+    let first = words().position(|(a, b)| a != b)?;
+    let last = words().rposition(|(a, b)| a != b)?;
+    Some(first * 4..(last + 1) * 4)
 }
 
 impl Set {
@@ -119,24 +129,39 @@ impl Set {
                 .buffer
                 .as_ref()
                 .expect("a set with members has a buffer");
-            // Each run of adjacent changed records goes in one write: a write per record made
-            // a staging buffer per record, and a set that moves moves whole.
+            // Changes less than a record apart go up in one write, from the first changed word
+            // to the last: a write per record made a staging buffer per record, and a set that
+            // moves moves whole. Changes a record or more apart are writes of their own, so a
+            // moved solid's place and the tie rank it gives the solid beside it go up as their
+            // words alone (#2496).
             let n = (self.next.len() / stride).min(self.records.len() / stride);
-            let mut run: Option<usize> = None;
+            let mut run: Option<(usize, usize)> = None;
             for i in 0..=n {
                 let at = i * stride..(i + 1) * stride;
-                if i < n && self.next[at.clone()] != self.records[at] {
+                let words = if i < n {
+                    changed(&self.next[at.clone()], &self.records[at])
+                } else {
+                    None
+                };
+                if words.is_some() {
                     *written += 1;
                     self.uploaded.push(i);
                     self.revision += 1;
-                    run.get_or_insert(i);
-                } else if let Some(first) = run.take() {
-                    let bytes = &self.next[first * stride..i * stride];
-                    deep_gpu::alloc::outside(|| {
-                        device
-                            .queue
-                            .write_buffer(buffer, (first * stride) as u64, bytes)
-                    });
+                }
+                let span = words.map(|w| (i * stride + w.start, i * stride + w.end));
+                match (run, span) {
+                    (Some((start, end)), Some((from, to))) if from < end + stride => {
+                        run = Some((start, to))
+                    }
+                    (last, span) => {
+                        if let Some((start, end)) = last {
+                            let bytes = &self.next[start..end];
+                            deep_gpu::alloc::outside(|| {
+                                device.queue.write_buffer(buffer, start as u64, bytes)
+                            });
+                        }
+                        run = span;
+                    }
                 }
             }
         }
@@ -145,35 +170,36 @@ impl Set {
     }
 
     /// Takes record `i` when it changed, the set's members as they were. [`Set::flush`] uploads
-    /// it, with the neighbours that changed beside it in one write.
+    /// its changed words, in one write with changes less than a record before them, as
+    /// [`Set::finish`] does.
     pub(crate) fn write(&mut self, device: &Device, i: usize, record: &[u8], written: &mut u32) {
         let at = i * self.stride;
         let Some(old) = self.records.get_mut(at..at + record.len()) else {
             return;
         };
-        if old != record {
-            old.copy_from_slice(record);
-            match self.run {
-                Some((first, end)) if end == i => self.run = Some((first, i + 1)),
-                _ => {
-                    self.flush(device);
-                    self.run = Some((i, i + 1));
-                }
+        let Some(words) = changed(record, old) else {
+            return;
+        };
+        old.copy_from_slice(record);
+        let (from, to) = (at + words.start, at + words.end);
+        match self.run {
+            Some((start, end)) if (end..end + self.stride).contains(&from) => {
+                self.run = Some((start, to))
             }
-            *written += 1;
-            self.revision += 1;
+            _ => {
+                self.flush(device);
+                self.run = Some((from, to));
+            }
         }
+        *written += 1;
+        self.revision += 1;
     }
 
-    /// Uploads the run of changed records [`Set::write`] gathered.
+    /// Uploads the changed words [`Set::write`] gathered.
     pub(crate) fn flush(&mut self, device: &Device) {
-        if let (Some((first, end)), Some(buffer)) = (self.run.take(), &self.buffer) {
-            let bytes = &self.records[first * self.stride..end * self.stride];
-            deep_gpu::alloc::outside(|| {
-                device
-                    .queue
-                    .write_buffer(buffer, (first * self.stride) as u64, bytes)
-            });
+        if let (Some((start, end)), Some(buffer)) = (self.run.take(), &self.buffer) {
+            let bytes = &self.records[start..end];
+            deep_gpu::alloc::outside(|| device.queue.write_buffer(buffer, start as u64, bytes));
         }
     }
 
