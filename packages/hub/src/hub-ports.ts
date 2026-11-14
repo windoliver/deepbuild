@@ -61,6 +61,7 @@ export interface AnswerDeliveryPort {
   prompts: Set<string>;
   answers: Answers;
   binds: Map<string, string>;
+  tokenBound: Set<string>;
   answerWaiting: Set<string>;
   typedAt: Map<string, number>;
   promises: Map<string, PromiseState & { timer?: NodeJS.Timeout | undefined; asked?: boolean; handed?: boolean }>;

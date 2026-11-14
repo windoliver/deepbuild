@@ -118,6 +118,7 @@ export class AnswerDelivery {
 
   /** paseo's plugin (#55): the token each agent's DeepBuild MCP server binds by, to the agent's own session. */
   readonly binds = new Map<string, string>();
+  readonly tokenBound = new Set<string>();
 
   /** The sessions paseo runs that another adapter gates: a permission prompt there shows in paseo, not a terminal. */
   private readonly inPaseo = new Set<string>();
@@ -1063,7 +1064,7 @@ export class AnswerDelivery {
    */
   paseoOwner(meta: HookMeta): Promise<string | null> {
     return this.options.schedule.queue(async () => {
-      if (meta.paseo?.bind && meta.session) this.binds.set(meta.paseo.bind, meta.session);
+      if (meta.paseo?.bind && meta.session) { this.binds.set(meta.paseo.bind, meta.session); this.tokenBound.add(meta.session); }
       const session = this.options.state().sessions.get(meta.session);
       const owner = session && session.agent !== 'paseo' ? session.agent : null;
       if (owner) this.inPaseo.add(meta.session);
