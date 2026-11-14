@@ -34,8 +34,10 @@ pub(super) struct Steps {
     /// The revision the steps ran on: its document's key and the keys of the tables they read.
     inputs: Vec<Key>,
     /// Each stepping node's error from its last step, which its node reports until a step of
-    /// its own succeeds or the steps start again or seek.
+    /// its own succeeds or the steps start again.
     failed: BTreeMap<usize, OpError>,
+    /// `failed` as of each checkpoint, which a seek onto it restores with the arrays.
+    failed_at: BTreeMap<i64, BTreeMap<usize, OpError>>,
 }
 
 impl Steps {
@@ -48,6 +50,7 @@ impl Steps {
         };
         while c <= upto {
             self.checkpoints.insert(c, self.values.clone());
+            self.failed_at.insert(c, self.failed.clone());
             self.checkpointed = Some(c);
             c += CHECKPOINT_EVERY;
         }
@@ -176,7 +179,7 @@ impl Session {
                 .filter(|_| checkpoints)
             {
                 Some(c) => {
-                    self.steps.failed.clear();
+                    self.steps.failed = self.steps.failed_at.get(&c).cloned().unwrap_or_default();
                     self.steps.values = self.steps.checkpoints[&c].clone();
                     self.steps.at = Some(c);
                     self.steps.checkpointed = Some(c);
@@ -186,6 +189,7 @@ impl Session {
                     self.steps.at = None;
                     self.steps.values.clear();
                     self.steps.checkpoints.clear();
+                    self.steps.failed_at.clear();
                     self.steps.checkpointed = None;
                 }
             }

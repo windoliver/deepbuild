@@ -1337,6 +1337,36 @@ mod tests {
         }
     }
 
+    /// #533: values past an `each` reading's `max_per_step` wait for the next step, and that wait
+    /// asks a turn-clock item for the step: three values at one a step run three steps.
+    #[test]
+    fn readings_still_waiting_ask_a_turn_clock_item_for_its_next_step() {
+        let bytes = wat::parse_str(include_str!("fixture.wat")).expect("the fixture assembles");
+        let sha = rewrite::hash(&bytes);
+        let mut assets = Map::new();
+        assets.insert(sha.clone(), json!(B64.encode(&bytes)));
+        let piece = json!({"seed": 533, "sources": {"feed": {"shape": "scalar", "delivery": "each", "max_per_step": 1}},
+            "assets": assets, "items": {"r": {"kind": "logic@1", "params": {"program": sha, "clock": "on_input",
+                "reads": ["reading:feed"], "writes": {"steps": {"type": "i32"}, "presses": {"type": "i32"}}}}}});
+        let mut logic = Logic::new(Planted::default());
+        let opened = logic.handle(&json!({"call": "open", "piece": piece}));
+        let session = opened["session"].as_str().expect("a session").to_string();
+        logic.handle(&json!({"call": "step", "session": session, "to": 2}));
+        for _ in 0..3 {
+            let entry = json!({"reading": "reading:feed", "value": 7, "as_of": 1});
+            let got = logic.handle(&json!({"call": "append", "session": session, "entry": entry}));
+            assert_eq!(got["ok"], json!(true), "{got}");
+        }
+        let ran = logic.handle(&json!({"call": "step", "session": session, "to": 9}));
+        let steps: Vec<i64> = ran["steps"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|s| s["step"].as_i64())
+            .collect();
+        assert_eq!(steps, vec![3, 4, 5], "{ran}");
+    }
+
     /// #1920: a golden carries the seal's runtime digest in place of the logic module's own. The
     /// set this runner holds, logic and sandbox, has no measured or backend_bytes implementation,
     /// so it is the d1 digest of no entry: the SHA-256 of `[]`.

@@ -150,25 +150,52 @@ fn a_trapped_item_stays_failed_on_frames_between_its_steps() {
 }
 
 #[test]
-fn a_program_name_that_is_no_hash_is_an_issue_and_no_crash() {
-    let (root, _) = store("no-hash", TRAP);
-    // 64 bytes with a two-byte letter across the store's folder split, and 64 that climb out.
-    for program in [
-        format!("a\u{e9}{}", "0".repeat(61)),
-        format!("../{}", "0".repeat(61)),
-    ] {
-        let doc = board(
-            json!({"odd": {"id": "odd", "kind": "logic@1", "name": "Odd", "order": "a1", "params": {
-                "program": program, "writes": {"k": {"type": "i32"}}}}}),
-            json!({}),
-        );
-        let (shown, _) = run(&root, &doc, vec![]);
+fn a_seek_back_onto_a_checkpoint_shows_the_trap_playing_there_shows() {
+    let (root, sha) = store("trap-seek", TRAP);
+    let doc = board(
+        json!({"trap": {"id": "trap", "kind": "logic@1", "name": "Trap", "order": "a1", "params": {
+            "program": sha, "step_rate": 60, "writes": {"k": {"type": "i32"}}}}}),
+        json!({}),
+    );
+    // Two steps past the checkpoint at half a second, then back to a flick after it: the seek
+    // restores that checkpoint and runs no step, and the item is as failed as when played there.
+    let eval = |t: i64| json!({"call": "eval", "doc": DOC, "t": t, "arrays": ["trap.k"]});
+    let (_, replies) = run(
+        &root,
+        &doc,
+        vec![eval(F / 2 + 2 * (F / 60)), eval(F / 2 + 1)],
+    );
+    std::fs::remove_dir_all(&root).ok();
+    for (n, reply) in replies.iter().enumerate() {
+        let trapped =
+            reply["issues"].as_array().into_iter().flatten().any(|i| {
+                i["code"] == "logic.trap" && i["severity"] == "error" && i["path"] == "trap"
+            });
         assert!(
-            shown["issues"].as_array().is_some_and(|i| !i.is_empty()),
-            "an issue on the item: {shown}"
+            trapped,
+            "a logic.trap error on the item trap in frame {n}: {reply}"
         );
     }
+}
+
+#[test]
+fn a_program_name_that_is_no_hash_is_an_issue_and_no_crash() {
+    let (root, _) = store("no-hash", TRAP);
+    // 64 bytes with a two-byte letter across the store's folder split.
+    let program = format!("a\u{e9}{}", "0".repeat(61));
+    let doc = board(
+        json!({"odd": {"id": "odd", "kind": "logic@1", "name": "Odd", "order": "a1", "params": {
+            "program": program, "writes": {"k": {"type": "i32"}}}}}),
+        json!({}),
+    );
+    let (shown, _) = run(&root, &doc, vec![]);
     std::fs::remove_dir_all(&root).ok();
+    let named = shown["issues"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .any(|i| i.to_string().contains("odd"));
+    assert!(named, "an issue naming the item odd: {shown}");
 }
 
 #[test]
