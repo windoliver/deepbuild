@@ -150,6 +150,8 @@ pub enum Planted {
     ProbeFromDepth,
     /// #1401: a probe that meets nothing answers the item drawn nearest its pixel.
     ProbeNearestItem,
+    /// #1729: a 3D frame skips a `mesh.asset@1` whose file isn't in the store, with no issue.
+    SkipsMissingMeshAsset,
     /// #403: a verdict's key names each deliverable by doc ID alone, with no revision.
     VerdictKeyedByDoc,
     /// #403: checks in a claim skip an `unknown_kind` item and judge the rest.
@@ -1158,7 +1160,7 @@ pub struct Hub<'a> {
     /// The GPU pixel hash's pipeline, built on the first canonical render it hashes (#405).
     pub hash_pass: Option<deep_gpu::pixel_hash::PixelHash>,
     /// A 3D revision's snapshot drawn for the call being presented, with its size.
-    pub pending3d: Option<Result<Raster, ()>>,
+    pub pending3d: Option<Result<Raster, Unfit>>,
     /// Each panel's interaction scope (#383).
     pub scopes: BTreeMap<String, crate::input::PanelScope>,
     /// The input router's last serial.
@@ -1547,18 +1549,21 @@ impl<'a> Hub<'a> {
         doc: &Value,
         t: i64,
         size: Option<[u16; 2]>,
-    ) -> Result<Raster, ()> {
+    ) -> Result<Raster, Unfit> {
         let size = size.unwrap_or_else(|| {
             snapshot::px([0, 1].map(|i| doc["size"][i].as_f64().unwrap_or(1.0)))
         });
-        let palette = self.look.light.clone();
         // #493: a shot writes the camera's pose the 3D frame is drawn through.
         let posed = crate::film::posed(doc, t);
         let doc = posed.as_ref().unwrap_or(doc);
-        let gpu = self.gpu3().ok_or(())?;
-        gpu.draw(doc, t, &palette, size)
-            .map(|(rgba, scene)| (rgba, size, scene.boxes()))
-            .map_err(|_| ())
+        // #1729: its assets and maps from the evidence store, as render-back reads them.
+        let (scene, look) = self.evaluate3d(doc, t, size)?;
+        let rgba = self.gpu3().and_then(|g| g.draw(&scene, &look));
+        let rgba = rgba.ok_or_else(|| Unfit {
+            code: "unsupported_platform",
+            path: String::new(),
+        })?;
+        Ok((rgba, size, scene.boxes()))
     }
 
     /// Whether a panel is on screen: as the scenario set it, or as a `panel` call left it.
@@ -2694,6 +2699,28 @@ impl<'a> Hub<'a> {
                             .get(&show.doc)
                             .map_or(&[][..], Vec::as_slice),
                     );
+                    // #1729: a frame that can't be drawn as its document says (an asset that
+                    // isn't in the store) is answered at what it names, never presented.
+                    if let Some(Err(u)) = &drawn3d {
+                        if u.code != "unsupported_platform" {
+                            let issue = json!({"code": u.code, "severity": "error",
+                                "ids": u.path.split('/').nth(1).into_iter().collect::<Vec<_>>(),
+                                "path": u.path, "what": "the 3D frame can't be drawn"});
+                            match reply.get_mut("issues").and_then(Value::as_array_mut) {
+                                Some(list) => list.push(issue),
+                                None => {
+                                    reply.insert("issues".into(), json!([issue]));
+                                }
+                            }
+                            reply.insert("outcome".into(), json!("not_presented"));
+                            reply.insert("reason".into(), json!(u.code));
+                            reply.insert("snapshots".into(), json!([]));
+                            if show.check {
+                                reply.insert("result".into(), json!(self.verdict(show, false)));
+                            }
+                            return Value::Object(reply);
+                        }
+                    }
                     let pixels = match drawn3d {
                         Some(drawn3d) => drawn3d.ok().map(|(mut rgba, size, boxes)| {
                             // The 2D items over the 3D frame, with no ground of their own.

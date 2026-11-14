@@ -213,6 +213,80 @@ impl std::fmt::Debug for Texels {
     }
 }
 
+/// A document's decoded-image cap, bytes, which the bytes its maps take on the device count
+/// against (Image `image@1`: at most 64 MB decoded per document; Material: texture maps).
+pub const DECODED_CAP: u64 = 64 << 20;
+
+/// Every map hash `scene`'s solids sample, with the fields that name it, which a host makes ready
+/// for the GPU in its decode worker (#423, #1729); a material operator's texture input by hash
+/// (#431) is `operator`, linear data.
+pub fn map_uses(
+    scene: &crate::scene::Scene,
+) -> std::collections::BTreeMap<String, std::collections::BTreeSet<&'static str>> {
+    let mut out: std::collections::BTreeMap<_, std::collections::BTreeSet<_>> = Default::default();
+    for s in scene.layers.iter().flat_map(|l| &l.solids) {
+        let inputs =
+            s.op.as_ref()
+                .and_then(|o| o.item["params"]["inputs"].as_object());
+        for (_, i) in inputs.into_iter().flatten() {
+            if let Some(sha) = i["from"]["texture"].as_str() {
+                out.entry(sha.to_ascii_lowercase())
+                    .or_default()
+                    .insert("operator");
+            }
+        }
+        let Some(m) = &s.maps else { continue };
+        for (field, slot) in m.slots() {
+            if let Some(slot) = slot {
+                let name = field.rsplit('/').next().unwrap_or(field);
+                out.entry(slot.sha.clone()).or_default().insert(name);
+            }
+        }
+    }
+    out
+}
+
+/// The decode worker's job role for a map the fields `uses` name: the color fields' sRGB, a normal
+/// map's two channels, an occlusion map alone's one channel, else linear data (Material: texture
+/// maps: the format follows the map's role).
+pub fn map_role(uses: &std::collections::BTreeSet<&str>) -> &'static str {
+    if uses.contains("base_color") || uses.contains("emission") {
+        "base_color"
+    } else if uses.contains("normal_map") {
+        "normal"
+    } else if uses.len() == 1 && uses.contains("occlusion") {
+        "occlusion"
+    } else {
+        "data"
+    }
+}
+
+/// The first field of a `material@1` in `doc` that names map `sha`, as
+/// `items/<id>/params/maps/<map>` or `items/<id>/params/normal_map`: where a map whose image
+/// isn't in the store is answered (#1729).
+pub fn map_field(doc: &Value, sha: &str) -> Option<String> {
+    let names = |v: &Value| v.as_str().or_else(|| v.get("sha256")?.as_str()) == Some(sha);
+    doc.get("items")?
+        .as_object()?
+        .iter()
+        .filter(|(_, i)| i.get("kind").and_then(Value::as_str) == Some("material@1"))
+        .find_map(|(id, i)| {
+            let p = i.get("params")?;
+            let maps = p.get("maps").and_then(Value::as_object);
+            let field = maps
+                .into_iter()
+                .flatten()
+                .find(|(_, v)| names(v))
+                .map(|(k, _)| format!("maps/{k}"))
+                .or_else(|| {
+                    p.get("normal_map")
+                        .filter(|v| names(v))
+                        .map(|_| "normal_map".into())
+                })?;
+            Some(format!("items/{id}/params/{field}"))
+        })
+}
+
 /// One map field: a SHA-256, or `{sha256, uv, transform: {offset, scale, rotation: deg}, wrap,
 /// filter_taps}`; refused at its field's path.
 fn map_slot(v: &Value, field: &str) -> Result<MapSlot, Refused> {

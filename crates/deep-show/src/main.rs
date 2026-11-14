@@ -39,6 +39,7 @@ mod kinds;
 mod kit;
 mod lengths;
 mod logic;
+mod maps;
 mod media;
 mod mixdown;
 mod modes;
@@ -1358,6 +1359,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "resolver_closes_task" => Planted::ResolverClosesTask,
                 "probe_from_depth" => Planted::ProbeFromDepth,
                 "probe_nearest_item" => Planted::ProbeNearestItem,
+                "skips_missing_mesh_asset" => Planted::SkipsMissingMeshAsset,
                 "verdict_keyed_by_doc" => Planted::VerdictKeyedByDoc,
                 "checks_skip_unknown_kind" => Planted::ChecksSkipUnknownKind,
                 "missing_kind_inconclusive" => Planted::MissingKindInconclusive,

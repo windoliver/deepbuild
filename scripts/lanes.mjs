@@ -507,6 +507,8 @@ alone.push('tests/acceptance/1163/');
 alone.push('tests/acceptance/1862/');
 // #1401's files each build deep-show and render 3D revisions back on the GPU, AC3 in ten processes.
 alone.push('tests/acceptance/1401/');
+// #1729's files each build deep-show and deep-gpu and draw 3D revisions on the GPU.
+alone.push('tests/acceptance/1729/');
 // #1958's files each build deep-show, and its budgets build the merge base and time saves.
 alone.push('tests/acceptance/1958/');
 timed.push('tests/acceptance/1958/budgets.test.ts');

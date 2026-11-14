@@ -15,7 +15,7 @@ use deep_canvas::document::{canonical_in, check_in, shown_inside, Issue};
 use deep_canvas::registry::Sealed;
 use deep_canvas_marks::look::Status;
 use deep_canvas_scene3d::look::Look3;
-use deep_canvas_scene3d::scene::{evaluate, Labels};
+use deep_canvas_scene3d::scene::{evaluate_with, Labels};
 use deep_gpu::device::Backend;
 use deep_scene3d_render::status::Mode;
 use serde_json::{json, Map, Value};
@@ -60,6 +60,8 @@ struct Args {
     revisions: Vec<(u64, String, Value)>,
     targets: Vec<String>,
     capture: Capture,
+    /// #1729: files by hash, which its `mesh.asset@1` items and HDRs read as view3d's do.
+    assets: BTreeMap<String, std::path::PathBuf>,
 }
 
 fn parse(call: &Value) -> Result<Args, Value> {
@@ -117,6 +119,11 @@ fn parse(call: &Value) -> Result<Args, Value> {
         Value::Array(f) => Capture::Frames(f.iter().filter_map(Value::as_u64).collect()),
         _ => Capture::None,
     };
+    let mut assets = BTreeMap::new();
+    for (sha, path) in call["assets"].as_object().into_iter().flatten() {
+        let path = path.as_str().ok_or_else(|| bad("an asset is a path"))?;
+        assets.insert(sha.clone(), std::path::PathBuf::from(path));
+    }
     Ok(Args {
         kind,
         theme,
@@ -134,6 +141,7 @@ fn parse(call: &Value) -> Result<Args, Value> {
         revisions,
         targets,
         capture,
+        assets,
     })
 }
 
@@ -301,8 +309,9 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 }
             }
             let t = (n * FLICKS_PER_SECOND / args.fps) as i64;
+            let read = |sha: &str| std::fs::read(args.assets.get(sha)?).ok();
             let scene = Arc::new(
-                evaluate(&args.doc, t, &args.draw, &mut labels)
+                evaluate_with(&args.doc, t, &args.draw, &mut labels, &read)
                     .map_err(|r| refused(r.code, r.path))?,
             );
             let key = cache_key(&args, &args.doc, app.planted)?;

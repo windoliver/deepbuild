@@ -68,46 +68,18 @@ impl Gpu3 {
         })
     }
 
-    /// `doc` at `t`, drawn at `size` px over the look's ground: straight RGBA, rows top-down,
-    /// with the scene it drew.
-    pub fn draw(
-        &mut self,
-        doc: &Value,
-        t: i64,
-        palette: &Palette,
-        size: [u16; 2],
-    ) -> Result<(Vec<u8>, Scene), Unfit> {
-        let mut doc = doc.clone();
-        if let Some(d) = doc.as_object_mut() {
-            d.insert("size".into(), json!(size));
-        }
-        // #524: each skin's item at this frame's time.
-        deep_canvas_physics::skin::write(&mut doc, t);
-        let look = Look3::from_roles(palette.clone());
-        let fills = Fills {
-            outlines: &self.outlines,
-            module: &self.fills,
-            planted: self.planted.as_deref(),
-            memo: None,
-        };
-        let scene =
-            evaluate_any(&doc, t, &look, &mut self.labels, None, fills).map_err(|r| Unfit {
-                code: r.code,
-                path: r.path,
-            })?;
-        let mut bytes = draw_offscreen(&self.device, &mut self.renderer, &scene, &look, None)
-            .ok_or(Unfit {
-                code: "unsupported_platform",
-                path: String::new(),
-            })?;
+    /// An evaluated scene drawn offscreen over the look's ground: straight RGBA, rows top-down.
+    pub fn draw(&mut self, scene: &Scene, look: &Look3) -> Option<Vec<u8>> {
+        let mut bytes = draw_offscreen(&self.device, &mut self.renderer, scene, look, None)?;
         for p in bytes.as_chunks_mut::<4>().0 {
             p.swap(0, 2);
         }
-        Ok((bytes, scene))
+        Some(bytes)
     }
 
     /// #427: `doc` at `t` on a frame of `size`, its `mesh.asset@1` items read from `assets`: the
-    /// evaluated scene a diagnostic mode reads and draws, and the look it draws in.
+    /// evaluated scene a draw reads, and the look it draws in; its maps' texels are the host's
+    /// (#1729, `Hub::evaluate3d`).
     pub fn evaluate(
         &mut self,
         doc: &Value,
@@ -146,10 +118,7 @@ impl Gpu3 {
         look: &Look3,
         depth: bool,
     ) -> Option<(Vec<u8>, Targets)> {
-        let mut bytes = draw_offscreen(&self.device, &mut self.renderer, scene, look, None)?;
-        for p in bytes.as_chunks_mut::<4>().0 {
-            p.swap(0, 2);
-        }
+        let bytes = self.draw(scene, look)?;
         let r = &self.renderer;
         let size = r.internal_size(scene.size);
         let (_, ids) = r.read_targets(&self.device)?;

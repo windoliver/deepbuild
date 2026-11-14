@@ -106,6 +106,9 @@ pub struct Media {
     /// #1967: each terminal recording a cell grid plays, by SHA-256, as the decode worker
     /// converted it: its keyframes and row patches, which sessions read as `terminal:<sha256>`.
     pub recordings: std::collections::BTreeMap<String, Value>,
+    /// #1729: each 3D map the decode worker made ready, by `<sha256>:<role>`.
+    pub(crate) maps:
+        std::collections::BTreeMap<String, std::sync::Arc<deep_canvas_scene3d::light::Texels>>,
 }
 
 /// #503: a worker's refusal answers with its `code` and what it names at the reply's top level

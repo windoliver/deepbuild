@@ -4442,7 +4442,10 @@ impl Scene {
 /// Whether `doc` holds any of scene3d's marks: a document a 2D renderer can't draw alone.
 /// A scene3d kind, or one a module draws through its fills (#226).
 fn is_3d_or_contributed(kind: &str) -> bool {
-    is_3d(kind) || crate::contributed::draws(kind)
+    // A mesh read from the store draws in 3D too, so a scene of glTF models alone is one (#1729).
+    is_3d(kind)
+        || crate::contributed::draws(kind)
+        || matches!(kind, "mesh.asset@1" | "mesh.sequence@1")
 }
 
 pub fn has_3d(doc: &Value) -> bool {

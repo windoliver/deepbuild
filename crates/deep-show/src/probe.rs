@@ -114,18 +114,16 @@ impl Hub<'_> {
         let size = size.unwrap_or_else(|| {
             crate::snapshot::px([0, 1].map(|i| doc["size"][i].as_f64().unwrap_or(1.0)))
         });
-        let evidence = self.scenario.evidence.clone();
-        let read = move |sha: &str| crate::evidence::read(&evidence, sha);
-        let palette = self.look.light.clone();
         let planted = self.scenario.planted;
-        let Some(gpu) = self.gpu3() else {
+        if self.gpu3().is_none() {
             return refused("unsupported_platform");
-        };
-        let (scene, look) = match gpu.evaluate(&doc, t, &palette, size, &read) {
+        }
+        let (scene, look) = match self.evaluate3d(&doc, t, size) {
             Ok(s) => s,
             Err(u) => return json!({"code": u.code, "path": u.path}),
         };
         let depth = planted == Some(Planted::ProbeFromDepth);
+        let gpu = self.gpu3().expect("opened above");
         let Some((rgba, targets)) = gpu.draw_scene(&scene, &look, depth) else {
             return refused("unsupported_platform");
         };
@@ -195,14 +193,11 @@ impl Hub<'_> {
         let size = size.unwrap_or_else(|| {
             crate::snapshot::px([0, 1].map(|i| shown["size"][i].as_f64().unwrap_or(1.0)))
         });
-        let evidence = self.scenario.evidence.clone();
-        let read = move |sha: &str| crate::evidence::read(&evidence, sha);
-        let palette = self.look.light.clone();
-        let Some(gpu) = self.gpu3() else {
+        if self.gpu3().is_none() {
             return refused("unsupported_platform");
-        };
+        }
         // The scene's world bounds, from what it draws through its own camera.
-        let (scene, _) = match gpu.evaluate(shown, t, &palette, size, &read) {
+        let (scene, _) = match self.evaluate3d(shown, t, size) {
             Ok(s) => s,
             Err(u) => return json!({"code": u.code, "path": u.path}),
         };
@@ -245,12 +240,12 @@ impl Hub<'_> {
             doc["items"][CAMERA] = json!({"id": CAMERA, "kind": "camera@1", "name": "View", "order": "zz",
                 "params": {"target": centre, "fov": VIEW_FOV,
                            "orbit": {"azimuth": azimuth, "elevation": elevation, "distance": distance}}});
-            let Some(gpu) = self.gpu3() else {
-                return refused("unsupported_platform");
-            };
-            let (scene, look) = match gpu.evaluate(&doc, t, &palette, size, &read) {
+            let (scene, look) = match self.evaluate3d(&doc, t, size) {
                 Ok(s) => s,
                 Err(u) => return json!({"code": u.code, "path": u.path, "view": view}),
+            };
+            let Some(gpu) = self.gpu3() else {
+                return refused("unsupported_platform");
             };
             let Some((rgba, _)) = gpu.draw_scene(&scene, &look, false) else {
                 return refused("unsupported_platform");
