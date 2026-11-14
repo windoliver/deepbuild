@@ -1,0 +1,46 @@
+✖ malformed ppid scan cannot certify a binary build (495.750333ms)
+✖ malformed pgid scan cannot certify a binary build (1105.147542ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 0
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1726.233292
+
+✖ failing tests:
+
+test at tests/proof-binaries-malformed-scan.test.mjs:9:39
+✖ malformed ppid scan cannot certify a binary build (495.750333ms)
+  AssertionError [ERR_ASSERTION]: missing evidence is explicitly named
+      at TestContext.<anonymous> (file://<before-checkout>/tests/proof-binaries-malformed-scan.test.mjs:28:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: '',
+    expected: /BLOCKED.*process.*scan.*malformed/i,
+    operator: 'match',
+    diff: 'simple'
+  }
+
+test at tests/proof-binaries-malformed-scan.test.mjs:9:39
+✖ malformed pgid scan cannot certify a binary build (1105.147542ms)
+  AssertionError [ERR_ASSERTION]: malformed process evidence is not successful cleanup
+      at TestContext.<anonymous> (file://<before-checkout>/tests/proof-binaries-malformed-scan.test.mjs:27:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 0,
+    operator: 'notStrictEqual',
+    diff: 'simple'
+  }

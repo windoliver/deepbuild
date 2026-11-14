@@ -1,0 +1,49 @@
+✖ failed process scan returns BLOCKED promptly and kills its recorded worker instead of relying on caller timeout (8269.375666ms)
+✖ a supplied owner that is not an ancestor cannot authorize a detached build (1916.306083ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 0
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 11459.500041
+
+✖ failing tests:
+
+test at tests/proof-binaries-supervisor-safety.test.mjs:13:1
+✖ failed process scan returns BLOCKED promptly and kills its recorded worker instead of relying on caller timeout (8269.375666ms)
+  AssertionError [ERR_ASSERTION]: the supervisor must close captured pipes before the outer timeout
+  + actual - expected
+
+  + 'ETIMEDOUT'
+  - undefined
+
+      at TestContext.<anonymous> (file://<checkout>/tests/proof-binaries-supervisor-safety.test.mjs:22:9)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'ETIMEDOUT',
+    expected: undefined,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/proof-binaries-supervisor-safety.test.mjs:25:1
+✖ a supplied owner that is not an ancestor cannot authorize a detached build (1916.306083ms)
+  AssertionError [ERR_ASSERTION]: live sibling identity is not authorization to launch
+      at TestContext.<anonymous> (file://<checkout>/tests/proof-binaries-supervisor-safety.test.mjs:30:9)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 0,
+    operator: 'notStrictEqual',
+    diff: 'simple'
+  }

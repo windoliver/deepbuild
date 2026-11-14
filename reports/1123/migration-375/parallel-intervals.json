@@ -1,0 +1,95 @@
+{
+  "source": "Vitest JSON reporter; original-file rows only",
+  "sourceSha256": "b680467b878a72278c9b3993c126b78b8e8d0b0d5c8ab2bd29acb92f2ede6d87",
+  "runnerStartedMs": 1794457212871,
+  "rawReportedFiles": 10,
+  "excludedDraftRows": 5,
+  "schedulingCommit": "63e11e81a883c0fdaa8d54788114ff400e08e191",
+  "schedulingCommitTimeMs": 1794460313000,
+  "files": [
+    {
+      "file": "tests/acceptance/375/column.test.ts",
+      "startTimeMs": 1794457217990,
+      "endTimeMs": 1794457218918.8684,
+      "status": "failed",
+      "passedTests": 1,
+      "failedTests": 2,
+      "failedNames": [
+        "AC1 a column frame of three text items with gap 12 and padding 8 hugs them within 0.5 u and moves the third down by the second's new height when its text grows by one line AC1 the column hugs its three text items within 0.5 u, each measured by the shaper",
+        "AC1 a column frame of three text items with gap 12 and padding 8 hugs them within 0.5 u and moves the third down by the second's new height when its text grows by one line AC1 when the second item's text grows by one line, the third moves down by its new height and the frame still hugs"
+      ]
+    },
+    {
+      "file": "tests/acceptance/375/grid.test.ts",
+      "startTimeMs": 1794457219074,
+      "endTimeMs": 1794457219150.9187,
+      "status": "failed",
+      "passedTests": 1,
+      "failedTests": 2,
+      "failedNames": [
+        "AC1 the same six in a grid with cols: [hug, hug, hug], flow: column and align_cols: [start, center, end] put the second child in row 2, column 1, and column 3's east sides on one line within 0.5 px AC1 flow by column puts the second child in row 2, column 1, and every child in its cell",
+        "AC1 the same six in a grid with cols: [hug, hug, hug], flow: column and align_cols: [start, center, end] put the second child in row 2, column 1, and column 3's east sides on one line within 0.5 px AC1 column 3 is end-aligned: its children's east sides are on one line within 0.5 px, the column's east edge"
+      ]
+    },
+    {
+      "file": "tests/acceptance/375/never.test.ts",
+      "startTimeMs": 1794457216762,
+      "endTimeMs": 1794457220979.373,
+      "status": "failed",
+      "passedTests": 2,
+      "failedTests": 1,
+      "failedNames": [
+        "It can never: depend on its own result; resize because a bound number changed; let flow children overlap never: a frame doesn't resize because a bound number changed; the bound text is sized by its widest (1000 cases, seed 375)"
+      ]
+    },
+    {
+      "file": "tests/acceptance/375/row.test.ts",
+      "startTimeMs": 1794457218056,
+      "endTimeMs": 1794457218092.926,
+      "status": "failed",
+      "passedTests": 1,
+      "failedTests": 1,
+      "failedNames": [
+        "AC1 six children 40 to 120 u wide in a row with gap 24 and align_cross end share one bottom line within 0.5 px, the row the sum of their widths + 5 × 24 u wide within 0.5 px AC1 the six share one bottom line within 0.5 px, in order with gap 24, and the row is the sum of their widths + 5 × 24 u wide"
+      ]
+    },
+    {
+      "file": "tests/acceptance/375/scope.test.ts",
+      "startTimeMs": 1794457219705,
+      "endTimeMs": 1794457221652.1472,
+      "status": "failed",
+      "passedTests": 0,
+      "failedTests": 1,
+      "failedNames": [
+        "Scope: auto layout on the canvas by Taffy, with text leaves measured by the shaper Scope: the canvas module crate that builds deep-layout lays out with Taffy and measures text with the canvas's one shaper (deep-text)"
+      ]
+    }
+  ],
+  "pairwiseOverlap": [
+    {
+      "left": "tests/acceptance/375/column.test.ts",
+      "right": "tests/acceptance/375/never.test.ts",
+      "overlapMs": 928.868408203125
+    },
+    {
+      "left": "tests/acceptance/375/column.test.ts",
+      "right": "tests/acceptance/375/row.test.ts",
+      "overlapMs": 36.926025390625
+    },
+    {
+      "left": "tests/acceptance/375/grid.test.ts",
+      "right": "tests/acceptance/375/never.test.ts",
+      "overlapMs": 76.918701171875
+    },
+    {
+      "left": "tests/acceptance/375/never.test.ts",
+      "right": "tests/acceptance/375/row.test.ts",
+      "overlapMs": 36.926025390625
+    },
+    {
+      "left": "tests/acceptance/375/never.test.ts",
+      "right": "tests/acceptance/375/scope.test.ts",
+      "overlapMs": 1274.373046875
+    }
+  ]
+}
