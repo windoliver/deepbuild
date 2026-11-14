@@ -1,0 +1,24 @@
+     Running unittests src/lib.rs (target/debug/deps/deep_app-d99f3c3fd3db76f9)
+
+running 1 test
+test views::tests::a_record_no_batching_core_wrote_shows_its_asks_at_once ... FAILED
+
+failures:
+
+---- views::tests::a_record_no_batching_core_wrote_shows_its_asks_at_once stdout ----
+
+thread 'views::tests::a_record_no_batching_core_wrote_shows_its_asks_at_once' (2222414) panicked at crates/deep-app/src/views.rs:3954:9:
+assertion `left == right` failed
+  left: []
+ right: ["ask:a1", "ask:a2"]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    views::tests::a_record_no_batching_core_wrote_shows_its_asks_at_once
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 100 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p deep-app --lib`
+cargo exit=101
+== end 2026-11-14 02:24:25  2:24  up 19:26, 6 users, load averages: 40.71 32.94 19.54

@@ -174,3 +174,72 @@ The answer margin is thin. At about 4.1 ms the answer sits 5% under its 5 ms lim
 The two budget tests pass on the reference Mac at nominal (section above).
 
 The first attempt read BLOCKED on every part. It wasn't the code: the Spark's sccache server hung every compile, so deep-hook never built within the judge's 3 hours. The judge ran again with `RUSTC_WRAPPER=` set empty, which skips sccache for that run only.
+
+## The app on the Mac, at 093c5bc8
+
+`mac-093c5bc8-app/` is the Mac's run of the app at 093c5bc8 (Mac15,12, macOS 27.2.1, on AC, screen unlocked;
+`machine.txt`, `exits.txt`). The app's own code is unchanged from there to the head: the later commits add
+`tests/acceptance/83/redraft-319/`, three lines of `scripts/lanes.mjs` and this evidence.
+
+- **Failing first.** `failing-first-b898344e.txt`: at b898344e, the test commit,
+  `views::tests::a_record_no_batching_core_wrote_shows_its_asks_at_once` fails on its assertion, `left: []`,
+  `right: ["ask:a1", "ask:a2"]`. A record with no batch of the core's drew no asks.
+- **The app's unit tests.** `1b-deep-app-lib.txt`: `cargo test --locked -p deep-app --lib`, 101 passed, 0 failed, that
+  test among them. The whole of `cargo test -p deep-app` is BLOCKED by main, not run: `tests/acceptance/995/app/panel.rs:180`
+  doesn't compile against `crates/deep-app/src/show.rs:185` (main's fix is PR #2474, still open).
+- **The run by hand.** `e2e-app.test.ts` passed (`vitest.txt`, 100 s, load 6.7 to 3.8). `app-run.txt` holds `deep inbox`
+  at each step and the three pictures are the app's window at the same moments:
+  - `0-before-batch.png`: eight asks raised and waiting, Needs you empty, "Nothing needs you".
+  - `1-needs-you.png`: after the batch, 8 rows, A1, B1, D1 to D5 and "This session keeps asking"; D6 has no row.
+  - `2-after-bulk-answer.png`: after `deep inbox answer <exception> together`, A1 and B1, count 2.
+- **A separate agent's check** of the pictures against the log is `SCREENSHOT-CHECK.md`: nothing blocks the claim.
+  It notes, outside this change: in the first picture the three sessions, 7 to 8 s old, sit under "No project" with an
+  empty repo heading, and a minute later under the repo (the diff doesn't touch grouping; cause not traced); ask titles
+  are clipped mid-letter with no ellipsis; "Tue 12:17" is when the default applies (Tue 17 Nov), unlabelled.
+
+### The 28 app suite files, one at a time
+
+`2-app-suites.txt`, exits in `exits.txt`: 9 files pass, 19 fail (at 8c3c19ee, with the Mac's compiler broken, 5 passed;
+none that passed then fails now). Main's side was **not run**: the Mac fell under 30 GB free. A separate agent read each
+failure against the diff and main's code, with no run:
+
+| Files | Reading |
+|---|---|
+| 1002 and 994 `first-screen-redraft/shown`, 1172/shown | BLOCKED or INCONCLUSIVE by their own words: this Mac's screen is 1470 × 841 pt, not the reference window's 1512 × 982 |
+| 1457/budgets | INCONCLUSIVE: `BASE_BIN_DEBUG` and `BASE_BIN_RELEASE` not supplied |
+| 41/app/screens, 41/app/finder | `--screenshot` is unknown to main's `main.rs` too; set-up's message, the same at 8c3c19ee, involves no record |
+| 1172/shell, 1172/popout | every ask is in the list; they fail on clipped row text, an open card and a missing status item, none of it in the diff |
+| 1454/commands, panel, panel-redraft/refused | the board fixture imports `gpui-kit`, which main refuses since #1425; some launches SIGKILLed before the window |
+| 1454/canvas, 1459/voiceover | `deep-app exited (SIGKILL) before its window`, empty stderr: the criterion is unjudged |
+| 1454/answer, 1454/shown, 1462-redraft-ac2 | **undecided**: a press or Return on the card recorded no answer |
+| 1462/real | **undecided**: keys do nothing (AC2, AC10), no status item (AC13, AC22) |
+| 1459/identifier, 1459/panel | **undecided**: no row label starts with the question; the `asks` panel's window was gone |
+
+None is proven to be this change's, and six stay undecided until the same files run on main on the Mac. None of the 28
+appends a bare `ask.created`: each raises through the asks core or a live `deep_ask`, with no batches declared.
+
+## #83's status file, redrafted
+
+`tests/acceptance/83/status.test.ts` (AC2 `#83.5bcede40`) passes on main and fails on this change: it runs `deep setup`,
+raises an ask and expects "needs you: 1" at once; with setup's batches 8 hours apart the ask waits and the answer says 0,
+as `deep inbox` and the app do. The owner settled it: the count is what Needs you shows, and the file goes to its blind
+redraft. `tests/acceptance/83/redraft-319/` is that redraft, written on main b1a1ff86 by a job that saw the issues, the
+design and the base only. Its `BASE-FAILURE.txt` is the base run: 4 of 5 pass and the waiting-ask test fails on its own
+expectation. At the head 5 of 5 pass. The first draft is kept and runs by hand (`scripts/lanes.mjs`, 8e6224b1, which
+waits for the owner's signed tag).
+
+## `node scripts/affected.mjs` at 22cd7b05, and main beside it
+
+Linux, load 1: `FAIL affected: 753 new, 48 already failing on main, 891 inconclusive or blocked, 22 listed skips, 4525
+passed, in 24313 s`. INCONCLUSIVE: 115 timed files and 45 slow files not run. No WIDE line. The new failures held 247
+test files; a separate agent ran each on main b1a1ff86 in its own worktree:
+
+- 241 fail the same way on main.
+- `tests/acceptance/83/status.test.ts` is this change's (section above).
+- `tests/acceptance/120/overrun.test.ts`, `tests/acceptance/1106/standin.test.ts` and `tests/bays.test.mjs` pass at the head.
+- `tests/acceptance/84/reach/switch.test.ts` is INCONCLUSIVE: 3 of 7 runs failed in the working checkout at the head;
+  4 of 4 passed in a clean worktree at the head, 4 of 4 at 22cd7b05 and 5 of 5 on main.
+- `tests/acceptance/1332/show.test.ts` didn't finish on main (it waits on a Mac-served run): unclassified.
+- Of the lint lines, `packages/asks/src/index.ts` over its ceiling was this change's and is fixed in 093c5bc8 (2059 of
+  2059); `packages/hub/src/core.ts` is at main's own 2639. `crates/deep-app/src/views.rs` is over a ceiling main already
+  exceeds, and this change adds 70 lines to it.

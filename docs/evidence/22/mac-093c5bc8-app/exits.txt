@@ -1,0 +1,40 @@
+start; cc --version exit 0; registry pkg-config owner uid  12:11:42 load { 4.17 4.43 3.28 } free KB 38855128
+caffeinate pid 53032 keeps the display awake; screen unlocked; clamshell:  | "AppleClamshellState" = No 12:11:43 load { 4.17 4.43 3.28 } free KB 38855384
+moved kept worktree to 093c5bc85220822e665b5ca8d8f14dffc763aaa4; changed since 22cd7b05: packages/asks/src/index.ts packages/asks/src/showing.ts packages/hub/src/core.ts  12:11:43 load { 4.17 4.43 3.28 } free KB 38851096
+setup exit=0 12:12:28 load { 16.88 7.71 4.54 } free KB 38526280
+head 093c5bc85220822e665b5ca8d8f14dffc763aaa4 (kept 22i worktree, rebuilt at this head) 12:12:28 load { 16.88 7.71 4.54 } free KB 38526276
+a: cargo exit=0 test result: ok. 101 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.56s 12:12:37 load { 17.92 8.24 4.77 } free KB 38370524
+b: load wait ended after 240 s (cap 30 min, then run and record, as the user chose for 22h); screen: console user <user>; CGSSessionScreenIsLocked entries 0 (0 = unlocked) 12:16:37 load { 6.71 9.96 6.62 } free KB 38199860
+b: vitest exit=0 12:18:19 load { 3.84 7.95 6.20 } free KB 38173252
+c: 28 suites start 12:18:19 load { 3.84 7.95 6.20 } free KB 38173248
+tests/acceptance/1002/first-screen-redraft/shown.test.ts exit=1 12:18:40 load { 4.12 7.76 6.17 } free KB 37941484
+tests/acceptance/1172/panel.test.ts exit=0 12:19:01 load { 3.84 7.46 6.10 } free KB 37705776
+tests/acceptance/1172/popout.test.ts exit=1 12:19:34 load { 6.53 7.71 6.25 } free KB 37702352
+tests/acceptance/1172/rows.test.ts exit=0 12:20:55 load { 3.94 6.65 5.98 } free KB 37466948
+tests/acceptance/1172/shell.test.ts exit=1 12:22:41 load { 3.71 5.88 5.76 } free KB 37230488
+tests/acceptance/1172/shown.test.ts exit=1 12:23:15 load { 3.35 5.56 5.65 } free KB 37227672
+tests/acceptance/1172/terminal.test.ts exit=0 12:24:01 load { 2.86 5.11 5.47 } free KB 36994900
+tests/acceptance/1172/welcome.test.ts exit=0 12:24:31 load { 2.97 4.91 5.39 } free KB 36989384
+tests/acceptance/1454/answer.test.ts exit=1 12:27:43 load { 7.83 5.12 5.32 } free KB 36299292
+tests/acceptance/1454/canvas.test.ts exit=1 12:27:47 load { 7.83 5.12 5.32 } free KB 36298080
+tests/acceptance/1454/commands.test.ts exit=1 12:28:14 load { 6.05 4.95 5.25 } free KB 36292536
+tests/acceptance/1454/panel-redraft/refused.test.ts exit=1 12:29:22 load { 3.94 4.56 5.08 } free KB 36059896
+tests/acceptance/1454/panel.test.ts exit=1 12:30:27 load { 3.26 4.24 4.92 } free KB 36065644
+tests/acceptance/1454/shown.test.ts exit=1 12:34:10 load { 5.94 4.87 5.01 } free KB 36007820
+tests/acceptance/1455/setup.test.ts exit=0 12:37:29 load { 24.17 19.93 11.84 } free KB 30843492
+tests/acceptance/1457/budgets.test.ts exit=1 12:37:30 load { 24.17 19.93 11.84 } free KB 30843352
+tests/acceptance/1459/identifier.test.ts exit=1 12:39:47 load { 9.80 16.20 11.55 } free KB 29959596
+tests/acceptance/1459/panel.test.ts exit=1 12:40:08 load { 8.32 15.45 11.39 } free KB 29962396
+tests/acceptance/1459/voiceover.test.ts exit=1 12:40:34 load { 8.14 14.83 11.28 } free KB 29294876
+tests/acceptance/1460/cli.test.ts exit=0 12:40:58 load { 8.54 14.40 11.23 } free KB 29011948
+tests/acceptance/1460/redraft-ac3/ac3.test.ts exit=0 12:41:46 load { 5.98 12.81 10.82 } free KB 28535060
+tests/acceptance/1462/real.test.ts exit=1 12:43:38 load { 4.77 10.41 10.12 } free KB 27865216
+tests/acceptance/1462-redraft-ac2/ac2-real.test.ts exit=1 12:44:17 load { 4.01 9.52 9.81 } free KB 27417688
+tests/acceptance/41/app/compat.test.ts exit=0 12:44:38 load { 10.61 10.78 10.26 } free KB 26179664
+tests/acceptance/41/app/finder.test.ts exit=1 12:44:47 load { 10.05 10.66 10.23 } free KB 26177376
+tests/acceptance/41/app/screens.test.ts exit=1 12:44:50 load { 9.56 10.55 10.19 } free KB 26176460
+tests/acceptance/41/app/update-line.test.ts exit=0 12:44:54 load { 9.56 10.55 10.19 } free KB 26175220
+tests/acceptance/994/first-screen-redraft/shown.test.ts exit=1 12:45:12 load { 7.79 10.07 10.03 } free KB 25943912
+worktree ~/private/dbc-22n removed 12:45:17 load { 7.56 9.99 10.00 } free KB 27300104
+d: BLOCKED: under 30 GB free after removing the first worktree; main suites not run 12:45:17 load { 7.56 9.99 10.00 } free KB 27300100
+secret scan hits=0 12:45:17 load { 7.56 9.99 10.00 } free KB 27299944

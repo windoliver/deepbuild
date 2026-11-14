@@ -1,0 +1,1116 @@
+== head 093c5bc85220822e665b5ca8d8f14dffc763aaa4
+
+===== tests/acceptance/1002/first-screen-redraft/shown.test.ts  start 12:18:19 load { 3.84 7.95 6.20 }
+
+ RUN  v5.0.5 ~/private/dbc-22n
+
+ ❯ tests/acceptance/1002/first-screen-redraft/shown.test.ts (1 test | 1 failed) 20347ms
+   ❯ #1002 the real window after a setup that stopped, shown to you (1)
+     × #1002.1f6f1740 screenshots of the real window offering Set up again with the reason and the count reading setup didn't finish, taken at the reference window, stay INCONCLUSIVE until a taste call on them is recorded 20253ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1002/first-screen-redraft/shown.test.ts > #1002 the real window after a setup that stopped, shown to you > #1002.1f6f1740 screenshots of the real window offering Set up again with the reason and the count reading setup didn't finish, taken at the reference window, stay INCONCLUSIVE until a taste call on them is recorded
+Error: BLOCKED: the window didn't take 1512 × 982: it is [0,40,1470,843]
+ ❯ blocked tests/acceptance/1002/first-screen-redraft/window.ts:31:56
+     29|   });
+     30| });
+     31| export const blocked = (why: string): never => { throw Error(`BLOCKED:…
+       |                                                        ^
+     32| export const inconclusive = (why: string): never => expect.fail(`INCON…
+     33| /** The 1-minute load average is above half the cores: a late reading …
+ ❯ App.sizeTo tests/acceptance/1002/first-screen-redraft/window.ts:161:102
+ ❯ shot tests/acceptance/1002/first-screen-redraft/shown.test.ts:21:3
+ ❯ tests/acceptance/1002/first-screen-redraft/shown.test.ts:46:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  12:18:19
+   Duration  20.45s (tests 100%)
+
+===== tests/acceptance/1002/first-screen-redraft/shown.test.ts exit=1
+
+===== tests/acceptance/1172/panel.test.ts  start 12:18:40 load { 4.12 7.76 6.17 }
+
+ RUN  v5.0.5 ~/private/dbc-22n
+
+ ✓ tests/acceptance/1172/panel.test.ts (1 test) 20414ms
+   ✓ #1172 a plug-in panel draws in the app (1)
+     ✓ AC4 a bound value past its freshness draws in the look's muted role with its age, and a fresh one neither, on the window's pixels 20296ms
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  12:18:40
+   Duration  20.69s (tests 99%, transform 1%)
+
+===== tests/acceptance/1172/panel.test.ts exit=0
+
+===== tests/acceptance/1172/popout.test.ts  start 12:19:01 load { 3.84 7.46 6.10 }
+
+ RUN  v5.0.5 ~/private/dbc-22n
+
+ ❯ tests/acceptance/1172/popout.test.ts (1 test | 1 failed) 32527ms
+   ❯ #1172 a popped-out view leaves the main window (1)
+     × AC5 after Needs you pops out to its own window, the main window no longer draws it and the new window does 32406ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1172/popout.test.ts > #1172 a popped-out view leaves the main window > AC5 after Needs you pops out to its own window, the main window no longer draws it and the new window does
+AssertionError: the reading sees the view in the main window before it pops out: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "before the pop-out the main window should draw \"Which font for the printed receipt?\": its pixels read [\"D\",\"Needs you\",\"WI How it looks tomorrow 12:19\",\"WI How it looks tomorrow 12:19\",\"Wl How it looks tomorrow 12:19\",\"No project\",\"• Cart totals\",\"Release notes\",\"31 s\",\"31 s\",\"How it looks\",\"Which header colour on the login page?\",\"Blue header recommended\",\"Green header\",\"Default: Blue header • at tomorrow 12:19\",\"reference: the agent's\",\"Answering saves it for this task\",\"Answer\"]",
++   "before the pop-out the main window should draw \"Which layout for the changelog?\": its pixels read [\"D\",\"Needs you\",\"WI How it looks tomorrow 12:19\",\"WI How it looks tomorrow 12:19\",\"Wl How it looks tomorrow 12:19\",\"No project\",\"• Cart totals\",\"Release notes\",\"31 s\",\"31 s\",\"How it looks\",\"Which header colour on the login page?\",\"Blue header recommended\",\"Green header\",\"Default: Blue header • at tomorrow 12:19\",\"reference: the agent's\",\"Answering saves it for this task\",\"Answer\"]",
++ ]
+
+ ❯ tests/acceptance/1172/popout.test.ts:25:88
+     23|         return questions.filter((q) => !reads(lines, q)).map((q) => `b…
+     24|       });
+     25|       expect(drawn, 'the reading sees the view in the main window befo…
+       |                                                                                        ^
+     26|       const press = await app.press(POP_OUT);
+     27|       expect(press, `the window has a "${POP_OUT}" control a person ca…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  12:19:01
+   Duration  32.68s (tests 100%)
+
+===== tests/acceptance/1172/popout.test.ts exit=1
+
+===== tests/acceptance/1172/rows.test.ts  start 12:19:34 load { 6.53 7.71 6.25 }
+
+ RUN  v5.0.5 ~/private/dbc-22n
+
+ ✓ tests/acceptance/1172/rows.test.ts (2 tests) 80490ms
+   ✓ #1172 Needs you shows questions and presents their cards (2)
+     ✓ AC3 each row shows its ask's question, and a click on it presents that ask's question card in the window 51166ms
+     ✓ AC3 wrong program: a planted row that shows the ask's handle fails, naming the ask 29199ms
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  12:19:35
+   Duration  80.64s (tests 100%)
+
+===== tests/acceptance/1172/rows.test.ts exit=0
+
+===== tests/acceptance/1172/shell.test.ts  start 12:20:55 load { 3.94 6.65 5.98 }
+
+ RUN  v5.0.5 ~/private/dbc-22n
+
+ ❯ tests/acceptance/1172/shell.test.ts (4 tests | 2 failed) 105238ms
+   ❯ #1172 the app a person runs (4)
+     × AC1 deep-app shows the registered sidebar with the 2 sessions and Needs you with 3 rows, the menu bar reads 3, and no row reads "Session 0001" 31728ms
+     ✓ AC1 wrong program: the planted build that opens the spike window fails, naming the spike window 17748ms
+     ✓ AC1 proof: the real window's sidebar rows are the replica's rows over the same record 29147ms
+     × AC2 answering one ask in the record makes the window and the menu bar read 2 within 1 s 26390ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1172/shell.test.ts > #1172 the app a person runs > AC1 deep-app shows the registered sidebar with the 2 sessions and Needs you with 3 rows, the menu bar reads 3, and no row reads "Session 0001"
+AssertionError: expected [ …(4) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "Needs you should show 1 row for ask:01M7DVGS7R01YBEQ1EHQNKENCX (\"Which header colour on the login page?\"); it has 2",
++   "the window's pixels lack ask:01M7DVGS7V39Q6GP4KXW5DYN1E's question: they read [\"D\",\"Needs you\",\"Wl How it looks tomorrow 12:20\",\"WI How it looks tomorrow 12:20\",\"• WI How it looks tomorrow 12:20\",\"No project\",\"• Cart totals\",\"Release notes\",\"30 s\",\"30 s\",\"How it looks\",\"Which header colour on the login page?\",\"Blue header recommended\",\"Green header\",\"Default: Blue header • at tomorrow 12:20\",\"reference: the agent's\",\"Answering saves it for this task\",\"Answer\"]",
++   "the window's pixels lack ask:01M7DVGS7WYMN5XE9050ZSRTVM's question: they read [\"D\",\"Needs you\",\"Wl How it looks tomorrow 12:20\",\"WI How it looks tomorrow 12:20\",\"• WI How it looks tomorrow 12:20\",\"No project\",\"• Cart totals\",\"Release notes\",\"30 s\",\"30 s\",\"How it looks\",\"Which header colour on the login page?\",\"Blue header recommended\",\"Green header\",\"Default: Blue header • at tomorrow 12:20\",\"reference: the agent's\",\"Answering saves it for this task\",\"Answer\"]",
++   "the menu bar reads [], not 3",
++ ]
+
+ ❯ tests/acceptance/1172/shell.test.ts:21:40
+     19|     const world = await makeWorld();
+     20|     const app = await App.launch({ home: world.home, binary: await app…
+     21|     expect(await shell(world, app, 3)).toEqual([]);
+       |                                        ^
+     22|     await app.stop();
+     23|   }, 8 * MINUTES);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/acceptance/1172/shell.test.ts > #1172 the app a person runs > AC2 answering one ask in the record makes the window and the menu bar read 2 within 1 s
+AssertionError: before the answer the window and the menu bar read 3: expected [ …(4) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "Needs you should show 1 row for ask:01M7DVK5CEHN6958BQ0EXCQAEW (\"Which header colour on the login page?\"); it has 2",
++   "the window's pixels lack ask:01M7DVK5CG67XE31TBB1SSC9YH's question: they read [\"D\",\"Needs you\",\"WI How it looks tomorrow 12:22\",\"WI How it looks tomorrow 12:22\",\"Wl How it looks tomorrow 12:22\",\"No project\",\"• Cart totals\",\"Release notes\",\"25 s\",\"25 s\",\"How it looks\",\"Which header colour on the login page?\",\"Blue header recommended\",\"Green header\",\"Default: Blue header • at tomorrow 12:22\",\"reference: the agent's\",\"Answering saves it for this task\",\"Answer\"]",
++   "the window's pixels lack ask:01M7DVK5CH7XH9TZXS1VVKK5DH's question: they read [\"D\",\"Needs you\",\"WI How it looks tomorrow 12:22\",\"WI How it looks tomorrow 12:22\",\"Wl How it looks tomorrow 12:22\",\"No project\",\"• Cart totals\",\"Release notes\",\"25 s\",\"25 s\",\"How it looks\",\"Which header colour on the login page?\",\"Blue header recommended\",\"Green header\",\"Default: Blue header • at tomorrow 12:22\",\"reference: the agent's\",\"Answering saves it for this task\",\"Answer\"]",
++   "the menu bar reads [], not 3",
++ ]
+
+ ❯ tests/acceptance/1172/shell.test.ts:51:96
+     49|     const world = await makeWorld();
+     50|     const app = await App.launch({ home: world.home, binary: await app…
+     51|     expect(await shell(world, app, 3), 'before the answer the window a…
+       |                                                                                                ^
+     52|     const [asked, ...rest] = world.asks;
+     53|     await answer(world, asked!);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 2 passed (4)
+   Start at  12:20:56
+   Duration  105.38s (tests 100%)
+
+===== tests/acceptance/1172/shell.test.ts exit=1
+
+===== tests/acceptance/1172/shown.test.ts  start 12:22:41 load { 3.71 5.88 5.76 }
+
+ RUN  v5.0.5 ~/private/dbc-22n
+
+ ❯ tests/acceptance/1172/shown.test.ts (1 test | 1 failed) 32776ms
+   ❯ #1172 shown to you (1)
+     × AC7 the check run takes the screenshots at the reference window, and the run reads INCONCLUSIVE unless a recorded taste call on exactly these files says they look right 32654ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1172/shown.test.ts > #1172 shown to you > AC7 the check run takes the screenshots at the reference window, and the run reads INCONCLUSIVE unless a recorded taste call on exactly these files says they look right
+AssertionError: INCONCLUSIVE: AC7: the shell picture is 2940 × 1690 px, not the reference window's 3024 × 1964, so this Mac can't take it; this is not a pass
+ ❯ inconclusive tests/acceptance/1172/helpers.ts:35:60
+     33|
+     34| export const blocked = (why: string): never => { throw Error(`BLOCKED:…
+     35| export const inconclusive = (why: string): never => expect.fail(`INCON…
+       |                                                            ^
+     36| /** The 1-minute load average is above half the cores: a late reading …
+     37| export const loaded = (): boolean => loadavg()[0]! > cpus().length / 2;
+ ❯ atReference tests/acceptance/1172/shown.test.ts:33:64
+ ❯ shot tests/acceptance/1172/shown.test.ts:39:5
+ ❯ take tests/acceptance/1172/shown.test.ts:46:3
+ ❯ tests/acceptance/1172/shown.test.ts:88:36
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  12:22:42
+   Duration  32.92s (tests 100%)
+
+===== tests/acceptance/1172/shown.test.ts exit=1
+
+===== tests/acceptance/1172/terminal.test.ts  start 12:23:15 load { 3.35 5.56 5.65 }
+
+ RUN  v5.0.5 ~/private/dbc-22n
+
+ ✓ tests/acceptance/1172/terminal.test.ts (2 tests) 45499ms
+   ✓ #1172 a terminal tab draws in the app (2)
+     ✓ AC4 a terminal tab draws its rows through the cell grid, on the window's pixels 20798ms
+     ✓ AC4 wrong program: a planted tab that writes its text outside the grid fails, naming the tab 24577ms
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  12:23:15
+   Duration  45.65s (tests 100%)
+
+===== tests/acceptance/1172/terminal.test.ts exit=0
+
+===== tests/acceptance/1172/welcome.test.ts  start 12:24:01 load { 2.86 5.11 5.47 }
+
+ RUN  v5.0.5 ~/private/dbc-22n
+
+ ✓ tests/acceptance/1172/welcome.test.ts (2 tests) 29443ms
+   ✓ #1172 the welcome pane takes its colors from the look and the appearance (2)
+     ✓ AC6 in dark mode the welcome pane's ground is the look's dark ground 15698ms
+     ✓ AC6 wrong program: in light mode the same pane's ground is the look's light ground, so one color for both fails 13696ms
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  12:24:01
+   Duration  29.59s (tests 100%)
+
+===== tests/acceptance/1172/welcome.test.ts exit=0
+
+===== tests/acceptance/1454/answer.test.ts  start 12:24:31 load { 2.97 4.91 5.39 }
+
+ RUN  v5.0.5 ~/private/dbc-22n
+
+ ❯ tests/acceptance/1454/answer.test.ts (3 tests | 2 failed) 191006ms
+   ❯ #1454 an answer on the real app's card reaches its session (3)
+     × AC1 #1454.67866115 in the real app, answering a card on a live fixture session reaches that session, and the record shows the answer once 96100ms
+     × AC1 #1454.67866115 wrong program: an app that takes a press from no hardware as you fails, naming the ask 94673ms
+     ✓ AC1 #1454.67866115 the stand-in for the OS prompt is in no shipped build: the plain app holds no word of it 125ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1454/answer.test.ts > #1454 an answer on the real app's card reaches its session > AC1 #1454.67866115 in the real app, answering a card on a live fixture session reaches that session, and the record shows the answer once
+AssertionError: the run built the stand-in: expected [ …(3) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the record shows 0 answers to ask:01M7DVQXG0XG15H2D7JQ1KHHFK, not one",
++   "the session didn't get ask:01M7DVQXG0XG15H2D7JQ1KHHFK's answer: deep_ask and deep_wait gave undefined",
++   "the window still shows \"Which header colour on the login page?\", answered",
++ ]
+
+ ❯ tests/acceptance/1454/answer.test.ts:65:109
+     63|   it('AC1 #1454.67866115 in the real app, answering a card on a live f…
+     64|     const run = await answerOnCard();
+     65|     expect([...run.unconfirmed, ...run.answered, ...run.left], run.mis…
+       |                                                                                                             ^
+     66|     expect(run.missing, 'the stand-in for the OS prompt exists').toBeU…
+     67|   }, 10 * MINUTES);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/acceptance/1454/answer.test.ts > #1454 an answer on the real app's card reaches its session > AC1 #1454.67866115 wrong program: an app that takes a press from no hardware as you fails, naming the ask
+AssertionError: expected '' to contain 'ask:01M7DVTT8CK59HZ1VS0X2EH6RM was an…'
+
+- Expected
++ Received
+
+- ask:01M7DVTT8CK59HZ1VS0X2EH6RM was answered green though the OS didn't confirm you
+
+ ❯ tests/acceptance/1454/answer.test.ts:72:40
+     70|     const run = await answerOnCard('plant-card-skips-confirm');
+     71|     expect(run.missing, 'the planted build exists').toBeUndefined();
+     72|     expect(run.unconfirmed.join('\n')).toContain(`${run.ask.handle} wa…
+       |                                        ^
+     73|   }, 10 * MINUTES);
+     74|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 1 passed (3)
+   Start at  12:24:32
+   Duration  191.38s (tests 100%)
+
+===== tests/acceptance/1454/answer.test.ts exit=1
+
+===== tests/acceptance/1454/canvas.test.ts  start 12:27:43 load { 7.83 5.12 5.32 }
+
+ RUN  v5.0.5 ~/private/dbc-22n
+
+ ❯ tests/acceptance/1454/canvas.test.ts (1 test | 1 failed) 3487ms
+   ❯ #1454 the canvas panel in the real app (1)
+     × AC4 #1454.913e347e a session's canvas drawn by `deep_show` appears in the real app's window 3327ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1454/canvas.test.ts > #1454 the canvas panel in the real app > AC4 #1454.913e347e a session's canvas drawn by `deep_show` appears in the real app's window
+Error: BLOCKED: deep-app exited (SIGKILL) before its window: 
+ ❯ blocked tests/acceptance/1454/helpers.ts:38:56
+     36| });
+     37|
+     38| export const blocked = (why: string): never => { throw Error(`BLOCKED:…
+       |                                                        ^
+     39| export const inconclusive = (why: string): never => expect.fail(`INCON…
+     40| /** The 1-minute load average is above half the cores: a late reading …
+ ❯ App.launch tests/acceptance/1454/helpers.ts:142:65
+ ❯ tests/acceptance/1454/canvas.test.ts:16:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  12:27:44
+   Duration  3.67s (tests 96%, import 2%, transform 2%)
+
+===== tests/acceptance/1454/canvas.test.ts exit=1
+
+===== tests/acceptance/1454/commands.test.ts  start 12:27:47 load { 7.83 5.12 5.32 }
+
+ RUN  v5.0.5 ~/private/dbc-22n
+
+ ❯ tests/acceptance/1454/commands.test.ts (3 tests | 3 failed) 26592ms
+   ❯ #1454 ⌘K in the real app (3)
+     × AC2 #1454.ecdbb26a ⌘K opens in the real app and lists a page and a command, and opening the page fills the page 12651ms
+     × AC2 #1454.ecdbb26a wrong program: a page opened without its parameter fails, naming the entry 10810ms
+     × AC2 #1454.ecdbb26a ⌘K with nothing installed still opens, and the same judge says what it lacks 2959ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1454/commands.test.ts > #1454 ⌘K in the real app > AC2 #1454.ecdbb26a ⌘K opens in the real app and lists a page and a command, and opening the page fills the page
+AssertionError: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "deep install exited 1: Source: /private/tmp/dh806-ItuxoQ/board
++   test/board@1.0.0, digest d1:b3a65725ee01156991bd0d6ae6e0ec4471ab5ba9def6828f459406399b17dc81, unsigned
++ Permissions:
++   access: record
++   notices: none
++   actions: ext.board.refresh
++   check kinds: none
++   provides: none
++   uses: none
++   replaces: none
++   conflicts with: none
++   runs on: none
++   hosts: none
++ Installed test/board@1.0.0
++ It is not loaded: ext.board.view reads FAIL on panel@1: panel@1 refused this panel: main.js:4 imports \"gpui-kit\", the toolkit under DeepBuild's module; a panel imports only \"@deepbuild/panel\"
++ ",
++ ]
+
+ ❯ tests/acceptance/1454/commands.test.ts:37:36
+     35|   it('AC2 #1454.ecdbb26a ⌘K opens in the real app and lists a page and…
+     36|     const { failures, page } = await openPage();
+     37|     expect([...failures, ...page]).toEqual([]);
+       |                                    ^
+     38|   }, 10 * MINUTES);
+     39|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  tests/acceptance/1454/commands.test.ts > #1454 ⌘K in the real app > AC2 #1454.ecdbb26a wrong program: a page opened without its parameter fails, naming the entry
+AssertionError: the planted build lists both entries: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "deep install exited 1: Source: /private/tmp/dh806-gQlLHy/board
++   test/board@1.0.0, digest d1:b3a65725ee01156991bd0d6ae6e0ec4471ab5ba9def6828f459406399b17dc81, unsigned
++ Permissions:
++   access: record
++   notices: none
++   actions: ext.board.refresh
++   check kinds: none
++   provides: none
++   uses: none
++   replaces: none
++   conflicts with: none
++   runs on: none
++   hosts: none
++ Installed test/board@1.0.0
++ It is not loaded: ext.board.view reads FAIL on panel@1: panel@1 refused this panel: main.js:4 imports \"gpui-kit\", the toolkit under DeepBuild's module; a panel imports only \"@deepbuild/panel\"
++ ",
++ ]
+
+ ❯ tests/acceptance/1454/commands.test.ts:42:62
+     40|   it('AC2 #1454.ecdbb26a wrong program: a page opened without its para…
+     41|     const { failures, page } = await openPage('plant-page-drops-param'…
+     42|     expect(failures, 'the planted build lists both entries').toEqual([…
+       |                                                              ^
+     43|     expect(page.join('\n')).toContain(`opening "${PAGE_ENTRY}" didn't …
+     44|   }, 10 * MINUTES);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  tests/acceptance/1454/commands.test.ts > #1454 ⌘K in the real app > AC2 #1454.ecdbb26a ⌘K with nothing installed still opens, and the same judge says what it lacks
+Error: BLOCKED: deep-app exited (SIGKILL) before its window: 
+ ❯ blocked tests/acceptance/1454/helpers.ts:38:56
+     36| });
+     37|
+     38| export const blocked = (why: string): never => { throw Error(`BLOCKED:…
+       |                                                        ^
+     39| export const inconclusive = (why: string): never => expect.fail(`INCON…
+     40| /** The 1-minute load average is above half the cores: a late reading …
+ ❯ App.launch tests/acceptance/1454/helpers.ts:142:65
+ ❯ tests/acceptance/1454/commands.test.ts:48:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed (3)
+   Start at  12:27:48
+   Duration  26.75s (tests 100%)
+
+===== tests/acceptance/1454/commands.test.ts exit=1
+
+===== tests/acceptance/1454/panel-redraft/refused.test.ts  start 12:28:14 load { 6.05 4.95 5.25 }
+
+ RUN  v5.0.5 ~/private/dbc-22n
+
+ ❯ tests/acceptance/1454/panel-redraft/refused.test.ts (4 tests | 3 failed) 66970ms
+   ❯ #1454 a panel that fails its kit, redrafted (4)
+     ✓ AC3 #1454.a94aca43 `deep install` of a panel that fails panel@1 says it isn't loaded, naming the kit 12667ms
+     × AC3 #1454.a94aca43 a panel that fails its kit doesn't load: installed, it is in no window, alone or beside a panel that draws 12274ms
+     × AC3 #1454.a94aca43 the refused panel is real: mounted by `deep-app --panel`, past any kit, it loads and draws its words 983ms
+     × AC3 #1454.a94aca43 wrong program: an app that mounts every installed panel, kit or no kit, fails, naming the panel 40870ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1454/panel-redraft/refused.test.ts > #1454 a panel that fails its kit, redrafted > AC3 #1454.a94aca43 a panel that fails its kit doesn't load: installed, it is in no window, alone or beside a panel that draws
+Error: BLOCKED: deep-app exited (SIGKILL) before its window: 
+ ❯ blocked tests/acceptance/1454/helpers.ts:38:56
+     36| });
+     37|
+     38| export const blocked = (why: string): never => { throw Error(`BLOCKED:…
+       |                                                        ^
+     39| export const inconclusive = (why: string): never => expect.fail(`INCON…
+     40| /** The 1-minute load average is above half the cores: a late reading …
+ ❯ App.launch tests/acceptance/1454/helpers.ts:142:65
+ ❯ bothWindows tests/acceptance/1454/panel-redraft/refused.test.ts:60:17
+ ❯ tests/acceptance/1454/panel-redraft/refused.test.ts:79:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  tests/acceptance/1454/panel-redraft/refused.test.ts > #1454 a panel that fails its kit, redrafted > AC3 #1454.a94aca43 the refused panel is real: mounted by `deep-app --panel`, past any kit, it loads and draws its words
+Error: BLOCKED: deep-app exited (SIGKILL) before its window: 
+ ❯ blocked tests/acceptance/1454/helpers.ts:38:56
+     36| });
+     37|
+     38| export const blocked = (why: string): never => { throw Error(`BLOCKED:…
+       |                                                        ^
+     39| export const inconclusive = (why: string): never => expect.fail(`INCON…
+     40| /** The 1-minute load average is above half the cores: a late reading …
+ ❯ App.launch tests/acceptance/1454/helpers.ts:142:65
+ ❯ tests/acceptance/1454/panel-redraft/refused.test.ts:84:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  tests/acceptance/1454/panel-redraft/refused.test.ts > #1454 a panel that fails its kit, redrafted > AC3 #1454.a94aca43 wrong program: an app that mounts every installed panel, kit or no kit, fails, naming the panel
+AssertionError: deep install of the panel that passes its kit: Source: /private/tmp/dh806-ZD6eCV/board
+  test/board@1.0.0, digest d1:b3a65725ee01156991bd0d6ae6e0ec4471ab5ba9def6828f459406399b17dc81, unsigned
+Permissions:
+  access: record
+  notices: none
+  actions: ext.board.refresh
+  check kinds: none
+  provides: none
+  uses: none
+  replaces: none
+  conflicts with: none
+  runs on: none
+  hosts: none
+Installed test/board@1.0.0
+It is not loaded: ext.board.view reads FAIL on panel@1: panel@1 refused this panel: main.js:4 imports "gpui-kit", the toolkit under DeepBuild's module; a panel imports only "@deepbuild/panel"
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ bothWindows tests/acceptance/1454/panel-redraft/refused.test.ts:63:100
+     61|   const inAlone = await neverDrawn(alone).finally(() => alone.stop());
+     62|   const good = await install(world.home, 'board');
+     63|   expect(good.code, `deep install of the panel that passes its kit: ${…
+       |                                                                                                    ^
+     64|   const beside = await App.launch({ home: world.home, binary });
+     65|   const inBeside = await neverDrawn(beside, async () => panelFailures(…
+ ❯ tests/acceptance/1454/panel-redraft/refused.test.ts:97:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed | 1 passed (4)
+   Start at  12:28:15
+   Duration  67.16s (tests 100%)
+
+===== tests/acceptance/1454/panel-redraft/refused.test.ts exit=1
+
+===== tests/acceptance/1454/panel.test.ts  start 12:29:22 load { 3.94 4.56 5.08 }
+
+ RUN  v5.0.5 ~/private/dbc-22n
+
+ ❯ tests/acceptance/1454/panel.test.ts (3 tests | 3 failed) 63947ms
+   ❯ #1454 panels you installed, in the real app (3)
+     × AC3 #1454.a94aca43 a panel installed by `deep install` draws in the real app with no flag, and a panel that fails its kit doesn't load, naming the kit 15051ms
+     × AC3 #1454.a94aca43 wrong program: an app that mounts every installed panel, kit or no kit, fails, naming the panel 47494ms
+     × AC3 #1454.a94aca43 wrong program: the panel at the base's `--panel` flag alone proves nothing: with no flag and no package the judge fails 1226ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1454/panel.test.ts > #1454 panels you installed, in the real app > AC3 #1454.a94aca43 a panel installed by `deep install` draws in the real app with no flag, and a panel that fails its kit doesn't load, naming the kit
+Error: BLOCKED: deep-app exited (SIGKILL) before its window: 
+ ❯ blocked tests/acceptance/1454/helpers.ts:38:56
+     36| });
+     37|
+     38| export const blocked = (why: string): never => { throw Error(`BLOCKED:…
+       |                                                        ^
+     39| export const inconclusive = (why: string): never => expect.fail(`INCON…
+     40| /** The 1-minute load average is above half the cores: a late reading …
+ ❯ App.launch tests/acceptance/1454/helpers.ts:142:65
+ ❯ bothPanels tests/acceptance/1454/panel.test.ts:20:15
+ ❯ tests/acceptance/1454/panel.test.ts:31:46
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  tests/acceptance/1454/panel.test.ts > #1454 panels you installed, in the real app > AC3 #1454.a94aca43 wrong program: an app that mounts every installed panel, kit or no kit, fails, naming the panel
+AssertionError: expected 'the panel `deep install` installed is…' to contain 'the panel that failed panel@1 was loa…'
+
+Expected: "the panel that failed panel@1 was loaded anyway: the window draws "Refused overlay panel""
+Received: "the panel `deep install` installed isn't in the window with no flag: its pixels lack "Installed board panel" and read ["OOO D","Needs you","work","• fix the login page working 46 s","New task","Nothing needs you","ext.board.view didn't load: main.js:4 imports \"gpui-kit\", the toolkit under","DeepBuild's module; a panel imports only \"@deepbuild/panel\"","ext.overlay.view didn't load: main.js:4 imports \"gpui-kit\", the toolkit under","DeepBuild's module; a panel imports only \"@deepbuild/panel\"","Send"]"
+
+ ❯ tests/acceptance/1454/panel.test.ts:41:33
+     39|   it('AC3 #1454.a94aca43 wrong program: an app that mounts every insta…
+     40|     const { failures } = await bothPanels('plant-panel-skips-kit');
+     41|     expect(failures.join('\n')).toContain(`the panel that failed panel…
+       |                                 ^
+     42|   }, 10 * MINUTES);
+     43|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  tests/acceptance/1454/panel.test.ts > #1454 panels you installed, in the real app > AC3 #1454.a94aca43 wrong program: the panel at the base's `--panel` flag alone proves nothing: with no flag and no package the judge fails
+Error: BLOCKED: deep-app exited (SIGKILL) before its window: 
+ ❯ blocked tests/acceptance/1454/helpers.ts:38:56
+     36| });
+     37|
+     38| export const blocked = (why: string): never => { throw Error(`BLOCKED:…
+       |                                                        ^
+     39| export const inconclusive = (why: string): never => expect.fail(`INCON…
+     40| /** The 1-minute load average is above half the cores: a late reading …
+ ❯ App.launch tests/acceptance/1454/helpers.ts:142:65
+ ❯ tests/acceptance/1454/panel.test.ts:46:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed (3)
+   Start at  12:29:23
+   Duration  64.14s (tests 100%)
+
+===== tests/acceptance/1454/panel.test.ts exit=1
+
+===== tests/acceptance/1454/shown.test.ts  start 12:30:27 load { 3.26 4.24 4.92 }
+
+ RUN  v5.0.5 ~/private/dbc-22n
+
+ ❯ tests/acceptance/1454/shown.test.ts (1 test | 1 failed) 222357ms
+   ❯ #1454 shown to you (1)
+     × AC7 #1454.f1f3739d the check run takes the screenshots and the recording at the reference window, and the run reads INCONCLUSIVE unless a recorded taste call on exactly these files says they look right 222100ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1454/shown.test.ts > #1454 shown to you > AC7 #1454.f1f3739d the check run takes the screenshots and the recording at the reference window, and the run reads INCONCLUSIVE unless a recorded taste call on exactly these files says they look right
+AssertionError: each state is on the real window before its picture is taken: expected [ …(9) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the card's answer didn't reach the session (it got undefined), so there is no picture after an answer",
++   "⌘K lists no entry named \"Board: alpha\" on the window's tree; its names are [\"Tasks\",\"Needs you\",\"Nothing needs you\",\"Pop out Needs you\",\"work\",\"work\",\"↻ fix the login page · working · Running ls · 40 s\",\"↻\",\"fix the login page\",\"working\",\"40 s\",\"New task\",\"Nothing needs you\",\"Say a change in words\",\"Say a change in words\",\"Send\",\"ext.board.view didn't load: panel@1 reads \\\"FAIL\\\"\",\"Commands and pages\",\"Home\",\"Needs you\",\"Agents\",\"Rules\",\"Sounds\",\"Appearance\",\"Keys\",\"Preferences\",\"Hide DeepBuild\",\"Quit DeepBuild\",\"Write in the box\",\"Close Window\"]",
++   "⌘K's entry \"Board: alpha\" isn't on the window's pixels: they read [\"Needs you\",\"work\",\"• fix the login page working 40 s\",\"New task\",\"Search commands and pages\",\"Home\",\"Needs you\",\"Agents\",\"Rules\",\"Sounds\",\"Appearance\",\"Keys\",\"Preferences\",\"Hide DeepBuild\",\"Quit DeepBuild\",\"Write in the box\",\"Close Window\",\"Undo answer\",\"Commands\",\"Back\",\"Forward\",\"Q\",\"ext.board.view didn't load: panel@1 reads \\\"FAIL\\\"\",\"Send\"]",
++   "⌘K lists no entry named \"Refresh board\" on the window's tree; its names are [\"Tasks\",\"Needs you\",\"Nothing needs you\",\"Pop out Needs you\",\"work\",\"work\",\"↻ fix the login page · working · Running ls · 40 s\",\"↻\",\"fix the login page\",\"working\",\"40 s\",\"New task\",\"Nothing needs you\",\"Say a change in words\",\"Say a change in words\",\"Send\",\"ext.board.view didn't load: panel@1 reads \\\"FAIL\\\"\",\"Commands and pages\",\"Home\",\"Needs you\",\"Agents\",\"Rules\",\"Sounds\",\"Appearance\",\"Keys\",\"Preferences\",\"Hide DeepBuild\",\"Quit DeepBuild\",\"Write in the box\",\"Close Window\"]",
++   "⌘K's entry \"Refresh board\" isn't on the window's pixels: they read [\"Needs you\",\"work\",\"• fix the login page working 40 s\",\"New task\",\"Search commands and pages\",\"Home\",\"Needs you\",\"Agents\",\"Rules\",\"Sounds\",\"Appearance\",\"Keys\",\"Preferences\",\"Hide DeepBuild\",\"Quit DeepBuild\",\"Write in the box\",\"Close Window\",\"Undo answer\",\"Commands\",\"Back\",\"Forward\",\"Q\",\"ext.board.view didn't load: panel@1 reads \\\"FAIL\\\"\",\"Send\"]",
++   "the panel `deep install` installed isn't in the window with no flag: its pixels lack \"Installed board panel\" and read [\"OOO D\",\"Needs you\",\"work\",\"• fix the login page working 43 s\",\"New task\",\"Nothing needs you\",\"ext.board.view didn't load: panel@1 reads \\\"FAIL\\\"\",\"Send\"]",
++   "the session's canvas isn't in the window: its pixels lack the figure's \"Release readiness\" and read [\"D\",\"Needs you\",\"work\",\"• d... • ed760747 says done 23 s\",\"• dra... • a340c996 working 36 s\",\"New task\",\"Nothing needs you\",\"Send\"]",
++   "the session's canvas isn't in the window: its pixels lack the figure's \"Ready for review\" and read [\"D\",\"Needs you\",\"work\",\"• d... • ed760747 says done 23 s\",\"• dra... • a340c996 working 36 s\",\"New task\",\"Nothing needs you\",\"Send\"]",
++   "the session's canvas isn't in the window: its pixels hold no three bars of #8b8f97 in the figure's 4:3:2 (runs of it: [])",
++ ]
+
+ ❯ tests/acceptance/1454/shown.test.ts:124:87
+    122|         ...await answerShots(out, binary), ...await commandShots(out, …
+    123|       ];
+    124|       expect(missing, 'each state is on the real window before its pic…
+       |                                                                                       ^
+    125|       writeFileSync(join(out, 'run.json'), `${JSON.stringify({ app, is…
+    126|     }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  12:30:27
+   Duration  222.57s (tests 100%)
+
+===== tests/acceptance/1454/shown.test.ts exit=1
+
+===== tests/acceptance/1455/setup.test.ts  start 12:34:10 load { 5.94 4.87 5.01 }
+
+ RUN  v5.0.5 ~/private/dbc-22n
+
+ ✓ tests/acceptance/1455/setup.test.ts (2 tests) 197984ms
+   ✓ #1455 the line Set up says (2)
+     ✓ AC5 #1455.214950f1: deep setup and the app's Set up say the same sentence from one definition 197763ms
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  12:34:11
+   Duration  198.12s (tests 100%)
+
+===== tests/acceptance/1455/setup.test.ts exit=0
+
+===== tests/acceptance/1457/budgets.test.ts  start 12:37:29 load { 24.17 19.93 11.84 }
+
+ RUN  v5.0.5 ~/private/dbc-22n
+
+ ❯ tests/acceptance/1457/budgets.test.ts (4 tests | 2 failed) 44ms
+   ❯ #1457 AC4 nothing a person sees changes (2)
+     × the real app's tree and window picture on #1172's fixtures equal the merge base's; any delta is listed 2ms
+     ✓ wrong program: a tree with one name changed, and a picture with a changed pixel, are told apart from the base 1ms
+   ❯ #1457 AC5 budgets against the merge base (2)
+     × the release binary is smaller and the first frame not slower, both numbers reported 0ms
+     ✓ wrong program: a bigger binary, an equal one and a slower first frame each fail the judge 0ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1457/budgets.test.ts > #1457 AC4 nothing a person sees changes > the real app's tree and window picture on #1172's fixtures equal the merge base's; any delta is listed
+AssertionError: INCONCLUSIVE: BASE_BIN_DEBUG is not supplied by the local preflight (or names no file), so there is no merge-base number to compare with; this is not a pass
+ ❯ inconclusive tests/acceptance/1457/helpers.ts:14:60
+     12| export const TWINS = join(REPO, 'tests/acceptance/1457/twins');
+     13| export const SOURCE = 'crates/deep-app/src';
+     14| export const inconclusive = (why: string): never => expect.fail(`INCON…
+       |                                                            ^
+     15| export const twin = (name: string): string => readFileSync(join(TWINS,…
+     16|
+ ❯ supplied tests/acceptance/1457/helpers.ts:64:69
+ ❯ tests/acceptance/1457/budgets.test.ts:48:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/acceptance/1457/budgets.test.ts > #1457 AC5 budgets against the merge base > the release binary is smaller and the first frame not slower, both numbers reported
+AssertionError: INCONCLUSIVE: BASE_BIN_RELEASE is not supplied by the local preflight (or names no file), so there is no merge-base number to compare with; this is not a pass
+ ❯ inconclusive tests/acceptance/1457/helpers.ts:14:60
+     12| export const TWINS = join(REPO, 'tests/acceptance/1457/twins');
+     13| export const SOURCE = 'crates/deep-app/src';
+     14| export const inconclusive = (why: string): never => expect.fail(`INCON…
+       |                                                            ^
+     15| export const twin = (name: string): string => readFileSync(join(TWINS,…
+     16|
+ ❯ supplied tests/acceptance/1457/helpers.ts:64:69
+ ❯ tests/acceptance/1457/budgets.test.ts:67:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 2 passed (4)
+   Start at  12:37:30
+   Duration  201ms (transform 35%, tests 32%, import 28%, setup 3%, worker 1%)
+
+===== tests/acceptance/1457/budgets.test.ts exit=1
+
+===== tests/acceptance/1459/identifier.test.ts  start 12:37:30 load { 24.17 19.93 11.84 }
+
+ RUN  v5.0.5 ~/private/dbc-22n
+
+ ❯ tests/acceptance/1459/identifier.test.ts (1 test | 1 failed) 136342ms
+   ❯ AC7 #1459.73dd3590 On the real app, an assistive client reads `accessibilityIdentifier` equal to the snapshot's `id` on a row. If the platform can't carry it, the issue reports BLOCKED, naming where it stopped (1)
+     × AC7 each Needs you row's accessibilityIdentifier in the real app equals that row's id in the replica's snapshot of the same record 136234ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1459/identifier.test.ts > AC7 #1459.73dd3590 On the real app, an assistive client reads `accessibilityIdentifier` equal to the snapshot's `id` on a row. If the platform can't carry it, the issue reports BLOCKED, naming where it stopped > AC7 each Needs you row's accessibilityIdentifier in the real app equals that row's id in the replica's snapshot of the same record
+AssertionError: expected [ …(3) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the real window has no row whose label starts with \"Which header colour on the login page?\"",
++   "the real window has no row whose label starts with \"Which font for the printed receipt?\"",
++   "the real window has no row whose label starts with \"Which layout for the changelog?\"",
++ ]
+
+ ❯ tests/acceptance/1459/identifier.test.ts:37:24
+     35|         });
+     36|       });
+     37|       expect(failures).toEqual([]);
+       |                        ^
+     38|     } finally {
+     39|       await app.stop();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  12:37:30
+   Duration  136.49s (tests 100%)
+
+===== tests/acceptance/1459/identifier.test.ts exit=1
+
+===== tests/acceptance/1459/panel.test.ts  start 12:39:47 load { 9.80 16.20 11.55 }
+
+ RUN  v5.0.5 ~/private/dbc-22n
+
+ ❯ tests/acceptance/1459/panel.test.ts (1 test | 1 failed) 20126ms
+   ❯ AC5 #1459.6759f060 A panel that calls `deepbuild.needs_you()` in the real app gets the open asks from the hub, with no fixture (1)
+     × AC5 in the real app, the panel reads the hub's three open asks, each by its question, and no fixture 20019ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1459/panel.test.ts > AC5 #1459.6759f060 A panel that calls `deepbuild.needs_you()` in the real app gets the open asks from the hub, with no fixture > AC5 in the real app, the panel reads the hub's three open asks, each by its question, and no fixture
+Error: BLOCKED: deep-app has no window to read
+ ❯ blocked tests/acceptance/1459/helpers.ts:40:56
+     38| /** The reference window, in points, at 2× (design: Decided). */
+     39| export const REFERENCE = { width: 1512, height: 982, scale: 2 } as con…
+     40| export const blocked = (why: string): never => { throw Error(`BLOCKED:…
+       |                                                        ^
+     41| const LAUNCH_MS = 180_000;
+     42|
+ ❯ RealApp.lines tests/acceptance/1459/helpers.ts:469:103
+ ❯ tests/acceptance/1459/panel.test.ts:19:23
+ ❯ settled tests/acceptance/1459/helpers.ts:487:22
+ ❯ tests/acceptance/1459/panel.test.ts:18:24
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  12:39:47
+   Duration  20.28s (tests 100%)
+
+===== tests/acceptance/1459/panel.test.ts exit=1
+
+===== tests/acceptance/1459/voiceover.test.ts  start 12:40:08 load { 8.32 15.45 11.39 }
+
+ RUN  v5.0.5 ~/private/dbc-22n
+
+ ❯ tests/acceptance/1459/voiceover.test.ts (3 tests | 1 failed) 25413ms
+   ❯ AC9 #1459.f979c200 VoiceOver reads a row as its title, its state word and what it waits on, the same as before (3)
+     ✓ AC9 in the replica's tree, each sidebar row still reads its title, then its state word and what it waits on, as before #1459 1868ms
+     ✓ AC9 wrong program: a row named by its title alone (plant-row-title-only) fails, naming the row 16858ms
+     × AC9 in the real app, what VoiceOver reads of each session's row is its title, then its state word, as before #1459 6573ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1459/voiceover.test.ts > AC9 #1459.f979c200 VoiceOver reads a row as its title, its state word and what it waits on, the same as before > AC9 in the real app, what VoiceOver reads of each session's row is its title, then its state word, as before #1459
+Error: BLOCKED: deep-app exited (SIGKILL) before its window: 
+ ❯ blocked tests/acceptance/1459/helpers.ts:40:56
+     38| /** The reference window, in points, at 2× (design: Decided). */
+     39| export const REFERENCE = { width: 1512, height: 982, scale: 2 } as con…
+     40| export const blocked = (why: string): never => { throw Error(`BLOCKED:…
+       |                                                        ^
+     41| const LAUNCH_MS = 180_000;
+     42|
+ ❯ RealApp.launch tests/acceptance/1459/helpers.ts:448:65
+ ❯ tests/acceptance/1459/voiceover.test.ts:40:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 2 passed (3)
+   Start at  12:40:08
+   Duration  25.55s (tests 100%)
+
+===== tests/acceptance/1459/voiceover.test.ts exit=1
+
+===== tests/acceptance/1460/cli.test.ts  start 12:40:34 load { 8.14 14.83 11.28 }
+
+ RUN  v5.0.5 ~/private/dbc-22n
+
+ ✓ tests/acceptance/1460/cli.test.ts (3 tests) 23053ms
+
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+   Start at  12:40:34
+   Duration  23.17s (tests 100%)
+
+===== tests/acceptance/1460/cli.test.ts exit=0
+
+===== tests/acceptance/1460/redraft-ac3/ac3.test.ts  start 12:40:58 load { 8.54 14.40 11.23 }
+
+ RUN  v5.0.5 ~/private/dbc-22n
+
+ ✓ tests/acceptance/1460/redraft-ac3/ac3.test.ts (2 tests) 47471ms
+   ✓ AC3 #1460.e8743dab `open` on an ask presents its card unarmed, and the record gains no answer. A planted `open` that writes an event fails, naming the event (2)
+     ✓ AC3 #1460.e8743dab deep open ask/<id> presents the ask's card in the running app, the hub's record gains no event from it, and the ask stays open 3361ms
+     ✓ AC3 #1460.e8743dab (wrong program) plant-open-writes-event, an open that writes an event, fails, naming the event 27574ms
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  12:40:58
+   Duration  47.57s (tests 100%)
+
+===== tests/acceptance/1460/redraft-ac3/ac3.test.ts exit=0
+
+===== tests/acceptance/1462/real.test.ts  start 12:41:46 load { 5.98 12.81 10.82 }
+
+ RUN  v5.0.5 ~/private/dbc-22n
+
+ ❯ tests/acceptance/1462/real.test.ts (4 tests | 4 failed) 111347ms
+   ❯ AC2 #1462.61a5fe15 With no pointer, a person answers two asks, opens a session, pauses it, opens the Map and returns, on the real app (1)
+     × AC2 on the real app, by keys posted to it alone: two answers on the card, a session opened and paused, its project opened and left 32744ms
+   ❯ AC10 #1462.efa89138 On the real app, with no pointer, a push whose step can't be undone is approved by keys alone (1)
+     × AC10 focus starts on No; Tab reaches the step's switch, Space turns it on, Tab reaches Push it, Return approves 24762ms
+   ❯ AC13 #1462.bac1a512 After ⌘W the menu bar still shows the count and a new ask still notifies; after ⌘Q the hub still answers deep (1)
+     × AC13 on the real app: Quit is on ⌘Q; ⌘W leaves the count and the notifier; ⌘Q leaves the hub 18532ms
+   ❯ AC22 #1462.bda7846d In the real app, the status item's menu lists each session with its state's word and mark, and the replica reports that same menu (1)
+     × AC22 the status item's menu, read from the status item itself, holds a line per session with its word and mark, and the replica's equals it 35141ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1462/real.test.ts > AC2 #1462.61a5fe15 With no pointer, a person answers two asks, opens a session, pauses it, opens the Map and returns, on the real app > AC2 on the real app, by keys posted to it alone: two answers on the card, a session opened and paused, its project opened and left
+AssertionError: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "Next ask (its key cmd-j) brought the window to null, not an open ask",
++ ]
+
+ ❯ tests/acceptance/1462/real.test.ts:100:71
+     98|     const app = await App.launch(real.world.home, await appBinary('tes…
+     99|     try {
+    100|       expect(await noPointerProblems(real, app, tableOrNull().table)).…
+       |                                                                       ^
+    101|     } finally {
+    102|       await app.stop();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  tests/acceptance/1462/real.test.ts > AC10 #1462.efa89138 On the real app, with no pointer, a push whose step can't be undone is approved by keys alone > AC10 focus starts on No; Tab reaches the step's switch, Space turns it on, Tab reaches Push it, Return approves
+AssertionError: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "Tab never reached the step's switch (card-step:0): focus is on \"card-option:decline\"",
++   "Tab never reached Push it (card-option:approve): focus is on \"card-option:decline\"",
++ ]
+
+ ❯ tests/acceptance/1462/real.test.ts:137:24
+    135|         else if (answered.data?.answer !== 'approve' || answered.data?…
+    136|       }
+    137|       expect(failures).toEqual([]);
+       |                        ^
+    138|     } finally {
+    139|       await app.stop();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  tests/acceptance/1462/real.test.ts > AC13 #1462.bac1a512 After ⌘W the menu bar still shows the count and a new ask still notifies; after ⌘Q the hub still answers deep > AC13 on the real app: Quit is on ⌘Q; ⌘W leaves the count and the notifier; ⌘Q leaves the hub
+AssertionError: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "before ⌘W the status item shows no count: null (if the app does make one, macOS may be keeping it out of the menu bar: allow it in System Settings, Menu Bar)",
++ ]
+
+ ❯ tests/acceptance/1462/real.test.ts:167:24
+    165|       const deep = await t26.deep(real.world.home, []);
+    166|       if (deep.code !== 0) failures.push(`after ⌘Q the hub doesn't ans…
+    167|       expect(failures).toEqual([]);
+       |                        ^
+    168|     } finally {
+    169|       await app.stop();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  tests/acceptance/1462/real.test.ts > AC22 #1462.bda7846d In the real app, the status item's menu lists each session with its state's word and mark, and the replica reports that same menu > AC22 the status item's menu, read from the status item itself, holds a line per session with its word and mark, and the replica's equals it
+AssertionError: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the app has no status item an assistive client finds: none in its AXExtrasMenuBar and none at a status-layer window it owns (if the app does make one, macOS may be keeping it out of the menu bar: allow it in System Settings, Menu Bar)",
++ ]
+
+ ❯ tests/acceptance/1462/real.test.ts:209:24
+    207|         }
+    208|       }
+    209|       expect(failures).toEqual([]);
+       |                        ^
+    210|     } finally {
+    211|       await app.stop();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  4 failed (4)
+   Start at  12:41:46
+   Duration  111.52s (tests 100%)
+
+===== tests/acceptance/1462/real.test.ts exit=1
+
+===== tests/acceptance/1462-redraft-ac2/ac2-real.test.ts  start 12:43:38 load { 4.77 10.41 10.12 }
+
+ RUN  v5.0.5 ~/private/dbc-22n
+
+ ❯ tests/acceptance/1462-redraft-ac2/ac2-real.test.ts (1 test | 1 failed) 38374ms
+   ❯ AC2 #1462.61a5fe15 With no pointer, a person answers two asks, opens a session, pauses it, opens the Map and returns, by keys alone, on the real app (1)
+     × AC2 #1462.61a5fe15 on the real app, by keys posted to it alone: two answers on the card, a session opened and paused (session.paused on its handle), its project opened and left 38268ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1462-redraft-ac2/ac2-real.test.ts > AC2 #1462.61a5fe15 With no pointer, a person answers two asks, opens a session, pauses it, opens the Map and returns, by keys alone, on the real app > AC2 #1462.61a5fe15 on the real app, by keys posted to it alone: two answers on the card, a session opened and paused (session.paused on its handle), its project opened and left
+AssertionError: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "ask 1 of 2: Return on ask:01M7DWTCBNTZPXEED7VXY0KWJ3's card (\"Which header colour for the cart page?\"), the keyboard on \"card-option:blue\", recorded no ask.answered in 20 s: the app's log reads \"first-frame-ms 237.7\\n\"",
++ ]
+
+ ❯ tests/acceptance/1462-redraft-ac2/ac2-real.test.ts:137:50
+    135|     const app = await App.launch(real.world.home, await appBinary('tes…
+    136|     try {
+    137|       expect(await noPointerProblems(real, app)).toEqual([]);
+       |                                                  ^
+    138|     } finally {
+    139|       await app.stop();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  12:43:38
+   Duration  38.51s (tests 100%)
+
+===== tests/acceptance/1462-redraft-ac2/ac2-real.test.ts exit=1
+
+===== tests/acceptance/41/app/compat.test.ts  start 12:44:17 load { 4.01 9.52 9.81 }
+
+ RUN  v5.0.5 ~/private/dbc-22n
+
+ ✓ tests/acceptance/41/app/compat.test.ts (6 tests) 20630ms
+   ✓ AC13 #41.1d9debfb the app against an older running hub (6)
+     ✓ AC13 #41.1d9debfb with a hub that lists the app's contract and every method it calls, the app says hub ok, calls the hub, and calls only listed methods 2787ms
+     ✓ AC13 #41.1d9debfb against the real hub of this checkout, the app finds it compatible: hub ok, no older screen 481ms
+     ✓ AC13 #41.1d9debfb planted: an app that calls without checking the hello (plant-calls-unlisted) fails this test, naming the method it called 17161ms
+
+ Test Files  1 passed (1)
+      Tests  6 passed (6)
+   Start at  12:44:17
+   Duration  20.75s (tests 100%)
+
+===== tests/acceptance/41/app/compat.test.ts exit=0
+
+===== tests/acceptance/41/app/finder.test.ts  start 12:44:38 load { 10.61 10.78 10.26 }
+
+ RUN  v5.0.5 ~/private/dbc-22n
+
+ ❯ tests/acceptance/41/app/finder.test.ts (5 tests | 2 failed) 8283ms
+   ❯ AC17 #41.fb18eabe Set up from an app opened by Finder (5)
+     × AC17 #41.fb18eabe with /bin/zsh as the login shell and deep and its runtime only on its PATH, Set up succeeds, running that deep with that runtime, reading the login shell once 2650ms
+     × AC17 #41.fb18eabe with /bin/bash as the login shell and deep and its runtime only on its PATH, Set up succeeds, running that deep with that runtime, reading the login shell once 386ms
+     ✓ AC17 #41.fb18eabe with a login shell that is missing, Set up names it, within 60 s 16ms
+     ✓ AC17 #41.fb18eabe with a login shell that exits non-zero, Set up names it, within 60 s 156ms
+     ✓ AC17 #41.fb18eabe with a login shell that never answers, Set up names it, within 60 s 5031ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/41/app/finder.test.ts > AC17 #41.fb18eabe Set up from an app opened by Finder > AC17 #41.fb18eabe with /bin/zsh as the login shell and deep and its runtime only on its PATH, Set up succeeds, running that deep with that runtime, reading the login shell once
+AssertionError: #41 AC17 Set up from an app opened by Finder must succeed when deep and its runtime are on the login shell's PATH: exit 1, stdout "", stderr "deep-app: Set up finished without a word. Press Set up to try again.\n"
+ ❯ tests/acceptance/41/app/finder.test.ts:86:34
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/acceptance/41/app/finder.test.ts > AC17 #41.fb18eabe Set up from an app opened by Finder > AC17 #41.fb18eabe with /bin/bash as the login shell and deep and its runtime only on its PATH, Set up succeeds, running that deep with that runtime, reading the login shell once
+AssertionError: #41 AC17 Set up from an app opened by Finder must succeed when deep and its runtime are on the login shell's PATH: exit 1, stdout "", stderr "deep-app: Set up finished without a word. Press Set up to try again.\n"
+ ❯ tests/acceptance/41/app/finder.test.ts:86:34
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 3 passed (5)
+   Start at  12:44:38
+   Duration  8.38s (tests 100%)
+
+===== tests/acceptance/41/app/finder.test.ts exit=1
+
+===== tests/acceptance/41/app/screens.test.ts  start 12:44:47 load { 10.05 10.66 10.23 }
+
+ RUN  v5.0.5 ~/private/dbc-22n
+
+ ❯ tests/acceptance/41/app/screens.test.ts (2 tests | 1 failed) 2331ms
+   ❯ AC22 #41.bff357be the three screenshots, shown to you (2)
+     × AC22 #41.bff357be the check run from the app takes the Set up screen, the older-hub screen and the update check line at the reference window, and stays INCONCLUSIVE until a taste call on them is recorded 2287ms
+     ✓ AC22 #41.bff357be the verdict passes only with a person's recorded call on exactly these screenshots: none, one on other screenshots or one naming nobody is INCONCLUSIVE, and a call that they look wrong fails 1ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/41/app/screens.test.ts > AC22 #41.bff357be the three screenshots, shown to you > AC22 #41.bff357be the check run from the app takes the Set up screen, the older-hub screen and the update check line at the reference window, and stays INCONCLUSIVE until a taste call on them is recorded
+AssertionError: #41 AC22 deep-app --screenshot /private/tmp/da41-8zN6TC/set-up.png must write the window as a PNG and print one JSON line: exit 101, stdout "", stderr "\nthread 'main' (3126233) panicked at crates/deep-app/src/main.rs:428:22:\nunknown argument --screenshot\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n"
+ ❯ screenshot tests/acceptance/41/app/screens.test.ts:44:37
+
+ ❯ tests/acceptance/41/app/screens.test.ts:62:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 passed (2)
+   Start at  12:44:47
+   Duration  2.42s (tests 99%, transform 1%, import 1%)
+
+===== tests/acceptance/41/app/screens.test.ts exit=1
+
+===== tests/acceptance/41/app/update-line.test.ts  start 12:44:50 load { 9.56 10.55 10.19 }
+
+ RUN  v5.0.5 ~/private/dbc-22n
+
+ ✓ tests/acceptance/41/app/update-line.test.ts (7 tests) 3765ms
+   ✓ AC14 #41.3e1f79e3 the app's Check for updates (deep-app --check-for-updates) with the network down (3)
+     ✓ AC14 #41.3e1f79e3 app: after a check that succeeded, with the update server's port closed, it says it couldn't check and gives that check's time, never up to date 2788ms
+     ✓ AC14 #41.3e1f79e3 app: after a check that succeeded, with a network that drops the connection, it says it couldn't check and gives that check's time 365ms
+
+ Test Files  1 passed (1)
+      Tests  7 passed (7)
+   Start at  12:44:50
+   Duration  3.86s (tests 99%)
+
+===== tests/acceptance/41/app/update-line.test.ts exit=0
+
+===== tests/acceptance/994/first-screen-redraft/shown.test.ts  start 12:44:54 load { 9.56 10.55 10.19 }
+
+ RUN  v5.0.5 ~/private/dbc-22n
+
+ ❯ tests/acceptance/994/first-screen-redraft/shown.test.ts (1 test | 1 failed) 17143ms
+   ❯ AC5 #994.f8ef6a91 the real window, shown to you (1)
+     × AC5 #994.f8ef6a91 screenshots of the real window with the hub not answering count and the not notified row, taken at the reference window, stay INCONCLUSIVE until a taste call on them is recorded 16993ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/994/first-screen-redraft/shown.test.ts > AC5 #994.f8ef6a91 the real window, shown to you > AC5 #994.f8ef6a91 screenshots of the real window with the hub not answering count and the not notified row, taken at the reference window, stay INCONCLUSIVE until a taste call on them is recorded
+Error: BLOCKED: the window didn't take 1512 × 982: it is [0,40,1470,845]
+ ❯ blocked tests/acceptance/1002/first-screen-redraft/window.ts:31:56
+     29|   });
+     30| });
+     31| export const blocked = (why: string): never => { throw Error(`BLOCKED:…
+       |                                                        ^
+     32| export const inconclusive = (why: string): never => expect.fail(`INCON…
+     33| /** The 1-minute load average is above half the cores: a late reading …
+ ❯ App.sizeTo tests/acceptance/1002/first-screen-redraft/window.ts:161:102
+ ❯ shot tests/acceptance/994/first-screen-redraft/shown.test.ts:20:3
+ ❯ tests/acceptance/994/first-screen-redraft/shown.test.ts:41:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  12:44:55
+   Duration  17.27s (tests 100%)
+
+===== tests/acceptance/994/first-screen-redraft/shown.test.ts exit=1
