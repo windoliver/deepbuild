@@ -14,7 +14,7 @@ R1's and R2's 2D marks on the CPU (issues #391, #374, #375): a writer layer's dr
 
 ## What it may import
 
-A canvas module crate. It reaches the core through the `deep-canvas` crate and shaping through `deep-text`, by crate name only, and uses third-party crates listed in `lint/canvas/crates.json`. Its name puts it under `scripts/canvas-lint.mjs` and `canvas_text = true` under `scripts/text-lint.mjs`: no GPUI text system, no GPU crate, no app.
+A canvas module crate. It reaches the core through the `deep-canvas` crate, shaping through `deep-text` and a drawn look's data through `deep-canvas-drawn` (#149), by crate name only, and uses third-party crates listed in `lint/canvas/crates.json`. Its name puts it under `scripts/canvas-lint.mjs` and `canvas_text = true` under `scripts/text-lint.mjs`: no GPUI text system, no GPU crate, no app.
 
 ## Deviations
 
