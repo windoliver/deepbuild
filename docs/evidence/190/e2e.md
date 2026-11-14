@@ -662,3 +662,19 @@ raw files, `gen.test.ts`, the code and the issue. It also ran its own BFS over t
   Docker Desktop wasn't running), so criteria 4 and 5's Mac legs are proven at f55dc2e5a only; between that commit
   and this one the branch adds two merges of main, the assembler's four lockfile lines and evidence. The guard at
   64912f203 passes: 61 commits checked, the 12 flagged commits each by the owner's signed tag.
+- **The oracle lane's ask, answered on the owner's delegation** (2026-11-13). Asked whether saved runs of hand-made
+  mutants count as the planted fault for criteria 1 and 3, the owner typed "u do them" in this session, leaving the
+  call to it. The call is yes, on runs redone at 34f30ffd5 rather than the 11-12 ones (the bullet for criteria 1 and 3
+  above, written before this, still says INCONCLUSIVE and cites the older files): the lane as committed passes 6 of 6
+  (`oracle-mutants/honest-34f30ffd5.txt`); with each library segment placed at alignment 1, data-layout's first test
+  fails and the other five pass (`oracle-mutants/misaligned-segment-34f30ffd5.txt`); with the refusal naming no
+  import, undefined.s's first test fails and the other five pass (`oracle-mutants/names-no-import-34f30ffd5.txt`).
+  Each log opens with the mutant's diff; a script applied each in a scratch clone and put `link.rs` back. A separate
+  agent, given the files and not this verdict, read the vendored tests, the translations, `link.rs` and the logs and
+  found both count, each loosely, no P1: for criterion 1, upstream's `Value: 65552` is a fixed address that holds
+  alignment with order and base, as our 8,200 and 8,208 do, and order held, so alignment alone fails it (the
+  zero-fill failure beside it is our own check and doesn't count); for criterion 3, upstream's
+  `error: … undefined symbol: foo` is text on stderr and ours reads the refusal's `import` field, so a mutant that kept
+  the field and blanked the text would pass. Its two P2s are fixed here: the second mutant was rerun over the whole
+  lane, and this bullet names the new logs. So the lane counts for criteria 1 and 3 by a partly held upstream check
+  each, on the owner's delegation; the owner can overrule it. These are runs by hand, not checks the lanes rerun.
