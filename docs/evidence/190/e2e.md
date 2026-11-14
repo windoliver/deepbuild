@@ -652,3 +652,13 @@ raw files, `gen.test.ts`, the code and the issue. It also ran its own BFS over t
   shown in an image. The new runner on the new plans, run in node's V8, gives `browser-replies-chromium-152.json`
   byte for byte. Not done: no screenshot was retaken and Chromium itself wasn't rerun. Its four low gaps are fixed
   here (the paragraph on what main added since 11-09).
+- **Mac rerun at 34f30ffd5** (2026-11-13, the owner's go at the Mac; merge base e0c90a5a5, macOS 27.2.1 arm64, run
+  detached, since the branch head 64912f203 only adds evidence on top): ac10 (2 tests) and ac07 (1) pass
+  (`mac/ac10-34f30ffd5.txt`, `mac/ac07-34f30ffd5.txt`, `mac/exits-34f30ffd5.txt`, host name redacted, vitest exit 0
+  for both). The machine was on AC power, low-power mode off, thermalState 0, but busy: the owner dropped the load
+  condition at the Mac, and the load was 15.59 at ac10's start and 22.20 at its end. ac10's budgets are upper
+  bounds, so a pass under load is the harder case; the quiet reading is still f55dc2e5a's (load 2.80). The log has
+  no measured times. ac04 and ac05 are BLOCKED at this head (`mac/ac04-34f30ffd5.txt`, `mac/ac05-34f30ffd5.txt`:
+  Docker Desktop wasn't running), so criteria 4 and 5's Mac legs are proven at f55dc2e5a only; between that commit
+  and this one the branch adds two merges of main, the assembler's four lockfile lines and evidence. The guard at
+  64912f203 passes: 61 commits checked, the 12 flagged commits each by the owner's signed tag.

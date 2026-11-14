@@ -1,0 +1,31 @@
+== git rev-parse HEAD: 34f30ffd561d742ea06d27e2246396ca8bc3c39c
+== git merge-base HEAD main: e0c90a5a5c11453bc41dfd4846703d054fa4a4d8
+== uname -a: Darwin <mac-host> 27.2.0 Darwin Kernel Version 27.2.0: Wed Oct 14 23:43:44 PDT 2026; root:xnu-13432.41.4~25/RELEASE_ARM64_T8122 arm64
+== sw_vers: 27.2.1
+== docker version:
+Client:
+ Version:           29.2.1
+ API version:       1.53
+ Go version:        go1.25.6
+ Git commit:        a5c7197
+ Built:             Mon Feb  2 17:16:37 2026
+ OS/Arch:           darwin/arm64
+ Context:           desktop-linux
+failed to connect to the docker API at unix://~/.docker/run/docker.sock; check if the path is correct and if the daemon is running: dial unix ~/.docker/run/docker.sock: connect: no such file or directory
+Now drawing from 'AC Power'
+== start 2026-11-13 22:08:01 22:08  up 15:10, 6 users, load averages: 15.59 15.08 11.46 thermalState 0
+
+
+ RUN  v5.0.5 ~/private/dbc-190
+
+ ✓ tests/acceptance/190/ac10-budgets.test.ts > #190.29b58f9e linking, fixtures and unlinked items keep their budgets > #190.29b58f9e linking a 1 MB program with two 500 KB libraries takes under 300 ms once at check, and each library's fixtures run once per hash in under 5 s 12607ms
+ ✓ tests/acceptance/190/ac10-budgets.test.ts > #190.29b58f9e linking, fixtures and unlinked items keep their budgets > #190.29b58f9e an item without links gains no work at check or per frame, compared with the merge base 40988ms
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  22:08:02
+   Duration  90.63s (tests 100%)
+
+
+== end 2026-11-13 22:09:33 22:09  up 15:11, 6 users, load averages: 22.20 18.76 13.36 thermalState 0
+vitest exit=0
