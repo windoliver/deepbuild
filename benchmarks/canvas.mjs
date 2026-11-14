@@ -1064,6 +1064,7 @@ const EFFICIENCY = {
   },
   // #538: each reading by its own name (benchmarks/game-state.mjs).
   'canvas-axes3d': { axes_over_marks: (r) => r.axes_over_marks, still_maps: (r) => r.still_maps },
+  'canvas-surface': { rebuild_128_ms: (r) => r.rebuild_128_ms },
   'canvas-game-state': Object.fromEntries(['compare_ms', 'remap_row_us', 'remap_layer_ms', 'upload_slots_ms', 'overlay_upload_ms', 'fit_check_ms', 'idle_steps'].map((k) => [k, (r) => r[k]])),
 };
 const COUNTS = new Set(['summary_tokens', 'page_rows', 'frames', 'upload_bytes_per_item', 'indexed_target_bytes', 'still_steps', 'idle_steps', 'still_maps']);
@@ -1507,6 +1508,8 @@ workloads['lottie-export'] = () => {
 workloads['game-state'] = async () => (await import('./game-state.mjs')).gameState({ root, release, once, runs });
 // #226's budgets: the 3D axes against the same marks, and a still view's maps (benchmarks/axes3d.mjs).
 workloads.axes3d = async () => (await import('./axes3d.mjs')).axes3d({ root, release, once, runs });
+// #224's budget: the helicoid-to-catenoid family's 128 × 128 rebuild as its slider moves (benchmarks/surface.mjs).
+workloads.surface = async () => (await import('./surface.mjs')).surface({ release, once, runs });
 
 const task = process.argv[2];
 if (!workloads[task]) throw Error(`Unknown task ${task}; one of: ${Object.keys(workloads).join(', ')}`);

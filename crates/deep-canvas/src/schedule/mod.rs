@@ -2703,6 +2703,7 @@ impl Session {
             step,
             forgets,
             s.options.planted.module.as_deref(),
+            s.options.pool.as_ref(),
         );
         let item = node.item.map(|i| l.items[i].id.as_str());
         if let Some(timing) = s.options.timing {

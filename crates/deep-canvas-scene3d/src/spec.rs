@@ -1742,6 +1742,87 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
             reads: None,
             fixture: json!({"it": item("hull@1", json!({"points": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]], "paint": {"fill": {"role": "accent"}}}))}),
         },
+        "surface@1" => Spec {
+            kind: "surface@1",
+            module: "scene3d",
+            params: vec![
+                p(
+                    "fn",
+                    "{x, y, z: expressions over u, v}",
+                    "",
+                    Value::Null,
+                    G,
+                    json!({"x": "u", "y": "0.1 * sin(3 * u) * v", "z": "v"}),
+                    json!({"x": "u", "y": "0.2 * cos(2 * v)", "z": "v"}),
+                )
+                .takes("{x: text, y: text, z: text}"),
+                p("u", "[f64, f64]", "", Value::Null, G, json!([0, 1]), json!([-1, 1]))
+                    .takes("[f64, f64]"),
+                p("v", "[f64, f64]", "", Value::Null, G, json!([0, 1]), json!([0, 2]))
+                    .takes("[f64, f64]"),
+                // The implicit form's fields; the sweep leaves them unset, since its fixture is
+                // a formula over (u, v).
+                p("zero", "expression over x, y, z", "", Value::Null, G, Value::Null, Value::Null)
+                    .takes("text"),
+                p("box", "[[m, m], [m, m], [m, m]]", "m", Value::Null, G, Value::Null, Value::Null)
+                    .takes("[[m, m], [m, m], [m, m]]"),
+                p("max_cells", "u32", "", json!(65536), G, Value::Null, Value::Null),
+                p(
+                    "vars",
+                    "{name → path | control | channel}",
+                    "",
+                    Value::Null,
+                    G,
+                    Value::Null,
+                    Value::Null,
+                )
+                .takes("{name → f64 | text}"),
+                ranged(
+                    p("tolerance", "m", "m", json!(0.002), G, json!(0.002), json!(0.01)),
+                    1e-9,
+                    1e6,
+                ),
+                p("max", "[u16, u16]", "", json!([256, 256]), G, json!([16, 16]), json!([24, 12]))
+                    .takes("[u16, u16]"),
+                p("closed", "{u, v: auto | bool}", "", json!("auto"), G, json!("auto"), json!({"u": false, "v": false}))
+                    .takes("auto | bool | {u: auto | bool, v: auto | bool}"),
+                p("two_sided", "bool", "", json!(true), S, json!(true), json!(false)),
+                p(
+                    "color",
+                    "{by: u | v | x | y | z | expression, ramp: [role] ≤ 8, domain}",
+                    "",
+                    Value::Null,
+                    G,
+                    json!({"by": "y", "ramp": ["muted", "accent"], "domain": [-0.2, 0.2]}),
+                    json!({"by": "u", "ramp": ["ink", "accent", "muted"], "domain": [0, 1]}),
+                )
+                .takes("{by: text, ramp: [role] ≤ 8, domain: [f64, f64]}"),
+                p(
+                    "checker",
+                    "{roles: [role] ≤ 4, cells: [u16, u16]}",
+                    "",
+                    Value::Null,
+                    G,
+                    Value::Null,
+                    Value::Null,
+                )
+                .takes("{roles: [role] ≤ 4, cells: [u16, u16]}"),
+                p(
+                    "grid_lines",
+                    "{u, v: f64 | none, stroke}",
+                    "",
+                    Value::Null,
+                    G,
+                    json!({"u": 0.25}),
+                    json!({"u": 0.5, "v": 0.25}),
+                )
+                .takes("{u: f64 | none, v: f64 | none, stroke: {role: role, width: px, dash: [px, px], line: text}}"),
+                shade(),
+                paint(),
+            ],
+            reads: None,
+            fixture: json!({"it": item("surface@1", json!({"fn": {"x": "u", "y": "0.1 * sin(3 * u) * v", "z": "v"}, "u": [0, 1], "v": [0, 1], "max": [16, 16], "paint": {"fill": {"role": "accent"}}}))}),
+        },
         "display@1" => Spec {
             kind: "display@1",
             module: "scene3d",
@@ -1798,6 +1879,18 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
                     json!([5, 6, 7]),
                 )
                 .takes("[u32]"),
+                // #224: x, y and z over s, in place of points; the sweep leaves it unset, since
+                // its fixture's curve is points.
+                p(
+                    "fn",
+                    "{x, y, z: expressions over s, over: [a, b], vars, tolerance: m}",
+                    "",
+                    Value::Null,
+                    G,
+                    Value::Null,
+                    Value::Null,
+                )
+                .takes("{x: text, y: text, z: text, over: [f64, f64], vars: {name → f64 | text}, tolerance: m}"),
                 p(
                     "mode",
                     "linear | bezier | catmull_rom | auto | bspline",
@@ -1873,7 +1966,7 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
 }
 
 /// scene3d's kinds, in the order the `kinds` call lists them.
-pub const SCENE3D: [&str; 25] = [
+pub const SCENE3D: [&str; 26] = [
     "mark.box@1",
     "mark.cylinder@1",
     "mark.sphere@1",
@@ -1897,6 +1990,7 @@ pub const SCENE3D: [&str; 25] = [
     "plate@1",
     "display@1",
     "hull@1",
+    "surface@1",
     "curve@1",
     "mesh.asset@1",
 ];

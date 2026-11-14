@@ -371,7 +371,7 @@ fn local(solid: &Solid) -> (Vec<[f32; 8]>, Vec<u32>) {
         .as_chunks::<{ crate::mesh::FLOATS }>()
         .0
         .iter()
-        .map(|c| [c[0], c[1], c[2], c[3], c[4], c[5], c[6], c[7]])
+        .map(|c| [c[0], c[1], c[2], c[3], c[4], c[5], c[7], c[8]])
         .collect();
     (v, i)
 }

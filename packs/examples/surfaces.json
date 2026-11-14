@@ -1,0 +1,426 @@
+{
+  "format": 1,
+  "profile": "scene",
+  "title": "Surfaces from a formula",
+  "description": "The #224 fixture film: egg crate, saddle and bell morphing into each other, colored by height; the helicoid rolling into the catenoid with its u and v lines; a gridded saddle; a gyroid; and two blobs merging as their centers move.",
+  "size": [
+    1280,
+    720
+  ],
+  "camera": "cam",
+  "seed": 224,
+  "requires": {
+    "modules": {
+      "scene3d": "^1"
+    }
+  },
+  "transport": {
+    "span": "6s"
+  },
+  "budget": {
+    "class": "export"
+  },
+  "data": {
+    "morph": {
+      "value": 0,
+      "source": "story"
+    },
+    "theta": {
+      "value": 0,
+      "source": "story"
+    },
+    "half": {
+      "value": 0.85,
+      "source": "story"
+    }
+  },
+  "items": {
+    "cam": {
+      "id": "cam",
+      "kind": "camera@1",
+      "name": "Cam",
+      "order": "a00",
+      "params": {
+        "projection": "perspective",
+        "target": [
+          0,
+          0.6,
+          0
+        ],
+        "orbit": {
+          "azimuth": 20,
+          "elevation": 22,
+          "distance": 17
+        },
+        "fov": 45,
+        "near": 0.1,
+        "far": 200
+      }
+    },
+    "sun": {
+      "id": "sun",
+      "kind": "light.sun@1",
+      "name": "Sun",
+      "order": "a01",
+      "params": {
+        "illuminance": 4,
+        "color": [
+          1,
+          1,
+          1
+        ],
+        "shadow": true
+      },
+      "at": {
+        "rot": [
+          -40,
+          30,
+          0
+        ]
+      }
+    },
+    "sky": {
+      "id": "sky",
+      "kind": "sky@1",
+      "name": "Sky",
+      "order": "a02",
+      "params": {
+        "top": [
+          0.15,
+          0.3,
+          0.75,
+          1
+        ],
+        "low": [
+          0.6,
+          0.7,
+          0.85,
+          1
+        ],
+        "ambient_top": [
+          0.35,
+          0.35,
+          0.35
+        ],
+        "ambient_low": [
+          0.15,
+          0.15,
+          0.15
+        ]
+      }
+    },
+    "clay": {
+      "id": "clay",
+      "kind": "material@1",
+      "name": "Clay",
+      "order": "a03",
+      "params": {
+        "base_color": [
+          0.85,
+          0.55,
+          0.35,
+          1
+        ],
+        "roughness": 0.5,
+        "metallic": 0
+      }
+    },
+    "morph": {
+      "id": "morph",
+      "kind": "surface@1",
+      "name": "Morph",
+      "order": "a04",
+      "params": {
+        "fn": {
+          "x": "u",
+          "y": "v",
+          "z": "mix(mix(0.15 * sin(3 * u) * sin(3 * v), 0.25 * (u^2 - v^2), clamp(m, 0, 1)), 0.6 * exp(-2 * (u^2 + v^2)), clamp(m - 1, 0, 1))"
+        },
+        "u": [
+          -1.2,
+          1.2
+        ],
+        "v": [
+          -1.2,
+          1.2
+        ],
+        "vars": {
+          "m": "data/morph"
+        },
+        "max": [
+          96,
+          96
+        ],
+        "color": {
+          "by": "z",
+          "ramp": [
+            "muted",
+            "accent",
+            "ink"
+          ],
+          "domain": [
+            -0.4,
+            0.6
+          ]
+        }
+      },
+      "at": {
+        "rot": [
+          -90,
+          0,
+          0
+        ],
+        "pos": [
+          -6,
+          0.6,
+          0
+        ]
+      }
+    },
+    "family": {
+      "id": "family",
+      "kind": "surface@1",
+      "name": "Family",
+      "order": "a05",
+      "params": {
+        "fn": {
+          "x": "cos(theta) * sinh(v) * sin(u) + sin(theta) * cosh(v) * cos(u)",
+          "y": "-cos(theta) * sinh(v) * cos(u) + sin(theta) * cosh(v) * sin(u)",
+          "z": "u * cos(theta) + v * sin(theta)"
+        },
+        "u": [
+          -3.141592653589793,
+          3.141592653589793
+        ],
+        "v": [
+          -1,
+          1
+        ],
+        "vars": {
+          "theta": "data/theta"
+        },
+        "max": [
+          128,
+          128
+        ],
+        "grid_lines": {
+          "u": 0.7853981633974483,
+          "v": 0.5,
+          "stroke": {
+            "role": "ink",
+            "width": 1.5
+          }
+        }
+      },
+      "material": "clay",
+      "at": {
+        "rot": [
+          -90,
+          0,
+          0
+        ],
+        "pos": [
+          -2,
+          1.6,
+          0
+        ],
+        "scale": [
+          0.5,
+          0.5,
+          0.5
+        ]
+      }
+    },
+    "gridded_saddle": {
+      "id": "gridded_saddle",
+      "kind": "surface@1",
+      "name": "Gridded saddle",
+      "order": "a06",
+      "params": {
+        "fn": {
+          "x": "u",
+          "y": "v",
+          "z": "0.5 * (v^2 - u^2)"
+        },
+        "u": [
+          -1,
+          1
+        ],
+        "v": [
+          -1,
+          1
+        ],
+        "max": [
+          64,
+          64
+        ],
+        "grid_lines": {
+          "u": 0.25,
+          "v": 0.25,
+          "stroke": {
+            "role": "ink",
+            "width": 1.5
+          }
+        }
+      },
+      "material": "clay",
+      "at": {
+        "rot": [
+          -90,
+          0,
+          0
+        ],
+        "pos": [
+          2,
+          0.8,
+          0
+        ]
+      }
+    },
+    "gyroid": {
+      "id": "gyroid",
+      "kind": "surface@1",
+      "name": "Gyroid",
+      "order": "a07",
+      "params": {
+        "zero": "sin(4 * x) * cos(4 * y) + sin(4 * y) * cos(4 * z) + sin(4 * z) * cos(4 * x)",
+        "box": [
+          [
+            -0.8,
+            0.8
+          ],
+          [
+            -0.8,
+            0.8
+          ],
+          [
+            -0.8,
+            0.8
+          ]
+        ],
+        "tolerance": 0.05,
+        "max_cells": 65536
+      },
+      "material": "clay",
+      "at": {
+        "pos": [
+          5,
+          1,
+          2
+        ]
+      }
+    },
+    "blobs": {
+      "id": "blobs",
+      "kind": "surface@1",
+      "name": "Blobs",
+      "order": "a08",
+      "params": {
+        "zero": "0.125 - max(0, 1 - ((x - h)^2 + y^2 + z^2))^3 - max(0, 1 - ((x + h)^2 + y^2 + z^2))^3",
+        "box": [
+          [
+            -2,
+            2
+          ],
+          [
+            -2,
+            2
+          ],
+          [
+            -2,
+            2
+          ]
+        ],
+        "tolerance": 0.08,
+        "vars": {
+          "h": "data/half"
+        },
+        "two_sided": false
+      },
+      "material": "clay",
+      "at": {
+        "pos": [
+          0,
+          1,
+          -5
+        ],
+        "scale": [
+          0.8,
+          0.8,
+          0.8
+        ]
+      }
+    }
+  },
+  "channels": {
+    "morph": {
+      "target": "data/morph",
+      "type": "f32",
+      "keys": {
+        "k0": {
+          "t": "0s",
+          "value": 0,
+          "interp": "linear"
+        },
+        "k1": {
+          "t": "3s",
+          "value": 1,
+          "interp": "linear"
+        },
+        "k2": {
+          "t": "6s",
+          "value": 2,
+          "interp": "linear"
+        }
+      }
+    },
+    "theta": {
+      "target": "data/theta",
+      "type": "f32",
+      "keys": {
+        "k0": {
+          "t": "0s",
+          "value": 0,
+          "interp": "linear"
+        },
+        "k1": {
+          "t": "6s",
+          "value": 1.5707963267948966,
+          "interp": "linear"
+        }
+      }
+    },
+    "half": {
+      "target": "data/half",
+      "type": "f32",
+      "keys": {
+        "k0": {
+          "t": "0s",
+          "value": 0.85,
+          "interp": "linear"
+        },
+        "k1": {
+          "t": "6s",
+          "value": 0.7,
+          "interp": "linear"
+        }
+      }
+    },
+    "orbit": {
+      "target": "items/cam/params/orbit/azimuth",
+      "type": "f32",
+      "keys": {
+        "k0": {
+          "t": "0s",
+          "value": 20,
+          "interp": "linear"
+        },
+        "k1": {
+          "t": "6s",
+          "value": 60,
+          "interp": "linear"
+        }
+      }
+    }
+  }
+}

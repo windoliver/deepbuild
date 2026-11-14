@@ -36,6 +36,101 @@ pub fn points(v: &Value) -> Option<Vec<V3>> {
     v.as_array()?.iter().map(v3).collect()
 }
 
+/// The most points a `fn` curve samples (Curve `curve@1`'s `fn`).
+pub const FN_POINTS: usize = 4096;
+/// The pieces a segment's bound is taken over, so the chord's own slope isn't charged to it.
+const FN_PIECES: usize = 16;
+
+/// #224: a `fn` curve's points, x, y and z over s in `over`: each segment split until its
+/// interval bound, over 16 pieces, holds the curve within `tolerance` of its chord, at most
+/// 4,096 points, the segments that deviate most split first. A non-finite sample is refused.
+fn from_fn(f: &Value) -> Result<Vec<V3>, String> {
+    let bad = |n: &str| format!("params/fn/{n}");
+    let vars = crate::surface::vars(f).map_err(|p| p.replacen("params/", "params/fn/", 1))?;
+    let c = |n: &str| crate::surface::F::compile(f.get(n), &["s"], &vars, n).map_err(|_| bad(n));
+    let xyz = [c("x")?, c("y")?, c("z")?];
+    let over = f
+        .get("over")
+        .and_then(Value::as_array)
+        .filter(|a| a.len() == 2)
+        .and_then(|a| Some([a[0].as_f64()?, a[1].as_f64()?]))
+        .filter(|r| r[0].is_finite() && r[1].is_finite() && r[0] < r[1])
+        .ok_or_else(|| bad("over"))?;
+    let tol = match f.get("tolerance") {
+        None => 0.001,
+        Some(v) => v
+            .as_f64()
+            .filter(|x| x.is_finite() && *x > 0.0)
+            .ok_or_else(|| bad("tolerance"))?,
+    };
+    let at = |s: f64| xyz.each_ref().map(|e| e.at(&[s]));
+    let deviation = |lo: f64, hi: f64, p0: V3, p1: V3| -> f64 {
+        let mut worst: f64 = 0.0;
+        for k in 0..FN_PIECES {
+            let s0 = lo + (hi - lo) * k as f64 / FN_PIECES as f64;
+            let s1 = if k + 1 == FN_PIECES {
+                hi
+            } else {
+                lo + (hi - lo) * (k + 1) as f64 / FN_PIECES as f64
+            };
+            let r = [deep_canvas::interval::Iv::new(s0, s1)];
+            let (f0, f1) = ((s0 - lo) / (hi - lo), (s1 - lo) / (hi - lo));
+            let mut d = [0.0; 3];
+            for a in 0..3 {
+                let b = xyz[a].over(&r);
+                if b.is_empty() || !b.is_bounded() {
+                    return f64::INFINITY;
+                }
+                let (c0, c1) = (p0[a] + (p1[a] - p0[a]) * f0, p0[a] + (p1[a] - p0[a]) * f1);
+                d[a] = (b.hi - c0.min(c1)).max(c0.max(c1) - b.lo);
+            }
+            worst = worst.max(length(d));
+        }
+        worst
+    };
+    // Breakpoints in s with their points; each pass splits the open segments, most deviant
+    // first, while points remain.
+    let mut ss = vec![over[0], over[1]];
+    let mut ps = vec![at(over[0]), at(over[1])];
+    loop {
+        if ps.iter().any(|p| p.iter().any(|x| !x.is_finite())) {
+            return Err(bad("x"));
+        }
+        let mut open: Vec<(f64, usize)> = (0..ss.len() - 1)
+            .map(|k| (deviation(ss[k], ss[k + 1], ps[k], ps[k + 1]), k))
+            .filter(|(d, _)| *d > tol)
+            .collect();
+        let room = FN_POINTS - ss.len();
+        if open.is_empty() || room == 0 {
+            break;
+        }
+        open.sort_by(|a, b| b.0.total_cmp(&a.0).then(a.1.cmp(&b.1)));
+        open.truncate(room);
+        let mut split: Vec<usize> = open.into_iter().map(|(_, k)| k).collect();
+        split.sort_unstable();
+        let (mut s2, mut p2) = (Vec::with_capacity(ss.len() + split.len()), Vec::new());
+        let mut next = split.iter().peekable();
+        for k in 0..ss.len() {
+            s2.push(ss[k]);
+            p2.push(ps[k]);
+            if next.peek() == Some(&&k) {
+                next.next();
+                let m = 0.5 * (ss[k] + ss[k + 1]);
+                if m > ss[k] && m < ss[k + 1] {
+                    s2.push(m);
+                    p2.push(at(m));
+                }
+            }
+        }
+        if s2.len() == ss.len() {
+            break;
+        }
+        ss = s2;
+        ps = p2;
+    }
+    Ok(ps)
+}
+
 /// The modes a curve takes.
 const MODES: [&str; 5] = ["linear", "bezier", "catmull_rom", "auto", "bspline"];
 
@@ -238,11 +333,24 @@ impl Curve {
     }
 
     fn made(params: &Value, clock: Option<fn() -> f64>) -> Result<(Curve, Option<f64>), String> {
-        let pts = params
-            .get("points")
-            .and_then(points)
-            .filter(|p| p.len() >= 2)
-            .ok_or("params/points")?;
+        let pts = match (params.get("points"), params.get("fn")) {
+            (None, Some(f)) => {
+                let mut pts = from_fn(f)?;
+                // A closed loop's last point is its first.
+                if params.get("closed") == Some(&Value::Bool(true))
+                    && pts.len() > 2
+                    && length(sub(pts[pts.len() - 1], pts[0])) < 1e-12
+                {
+                    pts.pop();
+                }
+                pts
+            }
+            _ => params
+                .get("points")
+                .and_then(points)
+                .filter(|p| p.len() >= 2)
+                .ok_or("params/points")?,
+        };
         let n = pts.len();
         if let Some(k) = pts.iter().position(|p| p.iter().any(|x| !x.is_finite())) {
             return Err(format!("params/points/{k}"));

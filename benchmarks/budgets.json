@@ -1554,6 +1554,23 @@
       "criteria": [
         "#524.d7f0282a"
       ]
+    },
+    {
+      "id": "canvas-surface",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "surface"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "rebuild_128_ms": 2
+      },
+      "initialReason": "Issue #224 first measurement (#224.e2f417bd): the merge base has no surface@1 builder. A release deep-show presents criterion 2's helicoid-to-catenoid family (a surface@1 over u in [-pi/2, pi/2], v in [-1, 1], max [128, 128], tolerance 1e-5 m, theta on a document slider) and asks geometry with timings at each of four slider entries, each row the family built afresh at that theta on the host's threads; a run's reading is the median of the four build times, one warm-up and five runs, each a fresh process. canvas.mjs judge holds rebuild_128_ms to 2 ms on a reference Mac. p50 and peak memory of the whole command get a 50% margin against the merge base once main has this task.",
+      "criteria": [
+        "#224.e2f417bd"
+      ]
     }
   ]
 }
