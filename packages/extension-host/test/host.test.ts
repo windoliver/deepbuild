@@ -173,7 +173,7 @@ process.stdin.once('data', () => process.stdout.write(JSON.stringify(read ? { js
     expect(c.reasons.join('\n')).not.toMatch(/read the canary/);
   }, 60_000);
 
-  it('a main\'s interpreter is granted its own install, and none when that install is your home (#2419)', async () => {
+  it('the host asks that a main\'s run may read its interpreter\'s own install, and nothing of an install that is your home (#2419)', async () => {
     // What the host asks the supervisor to let each run read, as it asks it.
     const dir = temp();
     const record = await openRecord({ path: join(dir, 'ledger.db'), now: Date.now });
@@ -202,6 +202,7 @@ process.stdin.once('data', () => process.stdout.write(JSON.stringify(read ? { js
       process.env.PATH = `${join(install, 'bin')}:${was.PATH}`;
       reads.length = 0;
       await h.check(await h.install({ from: pkgOf(id, `#!${program}\nprocess.exit(0);\n`, { checks: [] }, 'main'), builtBy: null }));
+      expect(reads.length, `${id}'s conformance started a run`).toBeGreaterThan(0);
       return reads.flat();
     };
     try {
@@ -210,8 +211,7 @@ process.stdin.once('data', () => process.stdout.write(JSON.stringify(read ? { js
       expect(await granted('test/own', own), 'an install of its own is readable').toContain(own);
       expect(await granted('test/yours', yours), 'an install that is your home is not').not.toContain(yours);
     } finally {
-      process.env.HOME = was.HOME;
-      process.env.PATH = was.PATH;
+      for (const key of ['HOME', 'PATH'] as const) if (was[key] === undefined) delete process.env[key]; else process.env[key] = was[key];
     }
   }, 60_000);
 
