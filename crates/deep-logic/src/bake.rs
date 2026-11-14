@@ -269,6 +269,14 @@ impl Record {
                            "linear": w.linear, "steps": list}),
                 );
             }
+            // Preview arrays are session state the bake never holds: every baked frame draws them
+            // at their defaults, zero (Logic: preview).
+            for w in item.preview.iter().flat_map(|p| &p.writes) {
+                out.insert(
+                    format!("{}.preview.{}", item.id, w.name),
+                    json!({"type": w.ty.name(), "count": w.count, "every": item.step, "linear": false, "steps": []}),
+                );
+            }
         }
         out
     }

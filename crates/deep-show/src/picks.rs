@@ -140,6 +140,8 @@ pub struct LogicCall {
     pub doc: String,
     pub steps: i64,
     pub check: bool,
+    /// #548: the input track the replay reads in place of the hub's.
+    pub track: Option<Vec<Value>>,
 }
 
 pub fn parse(c: &Map<String, Value>) -> Option<LogicCall> {
@@ -151,20 +153,26 @@ pub fn parse(c: &Map<String, Value>) -> Option<LogicCall> {
         .get("steps")?
         .as_i64()
         .filter(|n| (1..=100_000).contains(n))?;
+    let track = match c.get("track") {
+        None => None,
+        Some(t) => Some(t.as_array()?.clone()),
+    };
     Some(LogicCall {
         doc: c.get("doc")?.as_str()?.to_string(),
         steps,
         check,
+        track,
     })
 }
 
 /// `piece` stepped from 0 to `count` − 1 on `entries`: each step's hash and arrays per item, as
-/// `logic` reports them (#540's `match` reports each copy's the same way).
+/// `logic` reports them (#540's `match` reports each copy's the same way), up to the first step
+/// that trapped and no further (#548), with that trap.
 pub(crate) fn stepped(
     piece: &Rc<Piece>,
     entries: &[Entry],
     count: i64,
-) -> Result<Vec<Value>, Value> {
+) -> Result<(Vec<Value>, Option<Value>), Value> {
     let mut rec = Record::default();
     let mut world = World::new(
         piece.clone(),
@@ -200,8 +208,11 @@ pub(crate) fn stepped(
             }
         }
         steps.push(json!({"step": k, "t": k * len, "hash": hash, "arrays": arrays}));
+        if let Some(trap) = rec.traps.first() {
+            return Ok((steps, Some(trap.clone())));
+        }
     }
-    Ok(steps)
+    Ok((steps, None))
 }
 
 /// Whether a logic item of `form` reads control `c`.
@@ -575,6 +586,8 @@ impl Hub<'_> {
         let mut form = self.played_form(doc)?;
         let before = form.clone();
         self.viewer_into(panel, &mut form);
+        // #548: the live frame's logic previews, of the state at `t`.
+        self.preview_into(doc, panel, t, &mut form);
         if form == before {
             return self.live_drawn(doc, t);
         }
@@ -633,17 +646,17 @@ impl Hub<'_> {
             Ok(None) => return json!({"code": "no_logic"}),
             Err(i) => return json!({"code": i.code, "issues": [i.to_json()]}),
         };
-        let held = self.track_json(&l.doc);
-        let read = self.track_read(&l.doc);
+        let held = l.track.clone().unwrap_or_else(|| self.track_json(&l.doc));
+        let read = l.track.clone().unwrap_or_else(|| self.track_read(&l.doc));
         let entries: Vec<Entry> = read.iter().filter_map(Entry::parse).collect();
-        let steps = match stepped(&piece, &entries, l.steps) {
+        let (steps, trap) = match stepped(&piece, &entries, l.steps) {
             Ok(s) => s,
             Err(e) => return e,
         };
         let len = piece.items.first().map_or(1, |i| i.step);
         let hashes: Vec<Value> = steps.iter().map(|s| s["hash"].clone()).collect();
         let replay = self.against_record(&l.doc, &held, &hashes, &piece, len);
-        let mut out = json!({"steps": steps, "track": held});
+        let mut out = json!({"steps": steps, "track": held, "trap": trap});
         if l.check {
             let at = [l.steps / 2];
             let (verdict, mut failures) = match deep_logic::checks::determinism(

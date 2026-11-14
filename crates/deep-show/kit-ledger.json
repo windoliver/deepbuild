@@ -1,7 +1,7 @@
 {
   "core": {
     "version": "0.0.0",
-    "digest": "90e5d83d5e2a11629f7a21bf8f5fe837dddde78f6f87072278e70625cb18cf97",
+    "digest": "c597fb74baad55d41a29fd5cb80e0080ac9e5708bad2a6915760c5a1b5e43c4a",
     "verdict": "FAIL",
     "parts": {
       "fixtures": "PASS",
@@ -129,12 +129,18 @@
   },
   "logic": {
     "version": "1.0.0",
-    "digest": "8905fd3b732dfa94de4bea62a96a48dc5e2bfd887765fd226b5aad6bc6978281",
+    "digest": "de541b43baa18be5ccd7dbf9f1cc77234acd412c2a80a4e6a48c40ae922c9ef8",
     "verdict": "PASS",
     "parts": {
+      "fixtures": "PASS",
       "clean_rebuild": "PASS",
       "patch_fuzz": "PASS",
-      "schedule": "PASS"
+      "read_set": "PASS",
+      "order": "PASS",
+      "schedule": "PASS",
+      "repair_loop": "PASS",
+      "time_order": "PASS",
+      "catalog": "PASS"
     }
   },
   "look": {
@@ -205,7 +211,7 @@
   },
   "motion": {
     "version": "1.0.0",
-    "digest": "cf4869324d5d43ba84d81bba74a9a0f3e0d6eb511091d19606e05546bd848203",
+    "digest": "ea5176c236b992e3607f46c3d4b544a9172517ace31435fff4fb7e1756ed01c2",
     "verdict": "FAIL",
     "parts": {
       "fixtures": "PASS",
