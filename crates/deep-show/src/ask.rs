@@ -436,6 +436,7 @@ impl Hub<'_> {
         for (asked, path) in [
             (probes.camera.is_some(), "camera"),
             (!probes.at.is_empty(), "probes"),
+            (!probes.views.is_empty(), "sheet"),
         ] {
             if asked {
                 return json!({"code": "out_of_range", "path": path});
