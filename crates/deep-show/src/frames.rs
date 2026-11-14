@@ -251,6 +251,7 @@ impl<'a> Hub<'a> {
             Some(track) => self.load_with(&e.doc, track, t),
             None => self.load_frame(&e.doc, t),
         }
+
         // Planted (#504): a document with controls runs a program through the sandbox each frame.
         if self.planted(crate::hub::Planted::BoardRunsProgramPerFrame)
             && self
@@ -362,6 +363,9 @@ impl<'a> Hub<'a> {
         }
         if !e.paths.is_empty() {
             reply["values"] = crate::query::values(&self.sched, evaluated, &e.paths);
+        }
+        if e.data_hash {
+            reply["data_hash"] = json!(crate::data_hash::of(&self.sched, evaluated));
         }
         if self.startup.test_build {
             reply["access"] = json!(report

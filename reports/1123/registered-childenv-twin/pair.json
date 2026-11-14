@@ -1,0 +1,29 @@
+[
+  {
+    "side": "clean",
+    "exit": 0,
+    "durationSeconds": 3.687696333,
+    "testSha256": "852b10bf80b2199e76833fb0f5e7e77de49abc5dab8c04e1fbf707cd7bc4a05d",
+    "sourceSha256": "7a471a51944235d5669413a3ec1c6f35b219f52a4c62e12531489831c16782c6",
+    "passed": [
+      "#1123.cd6b3dd8 childEnv discards a shell binary directory",
+      "#1123.cd6b3dd8 childEnv preserves the explicit per-side binary directory",
+      "wrong-program proof: deleting DEEP_BIN_DIR after the merge fails the same per-side assertion"
+    ],
+    "failed": []
+  },
+  {
+    "side": "twin",
+    "exit": 1,
+    "durationSeconds": 3.4466032090000005,
+    "testSha256": "852b10bf80b2199e76833fb0f5e7e77de49abc5dab8c04e1fbf707cd7bc4a05d",
+    "sourceSha256": "be2aff56f2b0538274ebba077c8523a01ba1f24bb82e4e26d58efc09226d143c",
+    "passed": [
+      "#1123.cd6b3dd8 childEnv discards a shell binary directory",
+      "wrong-program proof: deleting DEEP_BIN_DIR after the merge fails the same per-side assertion"
+    ],
+    "failed": [
+      "#1123.cd6b3dd8 childEnv preserves the explicit per-side binary directory"
+    ]
+  }
+]

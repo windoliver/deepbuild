@@ -1,0 +1,30 @@
+{
+  "id": "verbs.morph",
+  "version": "1.0",
+  "title": "Morph",
+  "license": "Apache-2.0",
+  "author": "DeepBuild",
+  "description": "A change: each target's outline becomes the outline of the item `to` names over its window, points matched by arc length.",
+  "inputs": {
+    "to": {
+      "type": "ID",
+      "default": "",
+      "about": "the item whose outline it becomes"
+    }
+  },
+  "steps": {
+    "morph": {
+      "op": "cue",
+      "params": {
+        "set": {
+          "path": {
+            "of": "to"
+          }
+        },
+        "type": {
+          "path": "path"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,24 @@
+✔ #1123.07de86fd before runs the base binary as the wrong program and never shares it with the change (36972.960292ms)
+PASS before: tests/acceptance/1123/binary.test.mjs › #1123.07de86fd binary result: failed on the merge base at its assertion
+proof: wall time 27.4 s
+✔ #1123.cd6b3dd8 lanes.mjs uses its own run-private build, not the shell or mutable target (63918.388584ms)
+✔ #1123.cd6b3dd8 affected.mjs uses its own run-private build, not the shell or mutable target (116405.155458ms)
+✔ #1123.cd6b3dd8 childEnv discards a shell binary directory (7459.006167ms)
+✔ #1123.cd6b3dd8 childEnv preserves the explicit per-side binary directory (4964.010292ms)
+✔ wrong-program proof: deleting DEEP_BIN_DIR after the merge fails the same per-side assertion (6968.77875ms)
+✔ binary demand stays with its consumer instead of names in unrelated selected tests (33341.430583ms)
+✔ a binary consumer without a Cargo workspace is blocked before it executes (4954.09875ms)
+✔ affected stops before starting consumers when its required binary cannot build (26329.4695ms)
+✔ path-skipped lanes cannot add binary build prerequisites to the selected lane (11776.036791ms)
+✔ Vitest excludes apply before binary demand is collected (1607.4315ms)
+✔ run-private directories disappear after the creating lane receives SIGTERM (1464.301166ms)
+✔ run-private directories disappear after the creating lane receives SIGKILL (1535.143ms)
+✔ affected never removes another run’s replacement shard lock during final cleanup (7301.201917ms)
+ℹ tests 14
+ℹ suites 0
+ℹ pass 14
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 329850.864625

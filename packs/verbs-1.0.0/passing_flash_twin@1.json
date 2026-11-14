@@ -1,0 +1,89 @@
+{
+  "id": "verbs.passing_flash_twin",
+  "version": "1.0",
+  "title": "Passing flash, planted twin",
+  "license": "Apache-2.0",
+  "author": "DeepBuild",
+  "description": "The planted twin of passing_flash: a wrong curve, timing or end state its fixture must catch.",
+  "inputs": {
+    "width": {
+      "type": "number",
+      "default": 0.1,
+      "min": 0,
+      "max": 1,
+      "about": "the share of the outline the passing stroke covers"
+    }
+  },
+  "steps": {
+    "glint": {
+      "op": "mark",
+      "kind": "rect@1",
+      "params": {
+        "box": [
+          "x0 - cx",
+          "y0 - cy",
+          "w",
+          "h"
+        ],
+        "paint": {
+          "stroke": {
+            "role": "accent",
+            "width": 4
+          }
+        },
+        "ops": [
+          {
+            "trim": {
+              "start": 0,
+              "end": 1
+            }
+          }
+        ]
+      },
+      "at": {
+        "pos": [
+          "cx",
+          "cy",
+          0
+        ]
+      }
+    },
+    "head": {
+      "op": "cue",
+      "params": {
+        "on": "glint",
+        "from": {
+          "params/ops/0/trim/end": 0
+        },
+        "set": {
+          "params/ops/0/trim/end": 1
+        }
+      }
+    },
+    "tail": {
+      "op": "cue",
+      "params": {
+        "on": "glint",
+        "from": {
+          "params/ops/0/trim/start": 0
+        },
+        "set": {
+          "params/ops/0/trim/start": 1
+        },
+        "at": "width"
+      }
+    },
+    "lift": {
+      "op": "cue",
+      "params": {
+        "set": {
+          "adjust/brightness": {
+            "pulse": {
+              "amount": 0.3
+            }
+          }
+        }
+      }
+    }
+  }
+}
