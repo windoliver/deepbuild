@@ -1,0 +1,43 @@
+{
+  "id": "verbs.type",
+  "version": "1.0",
+  "title": "Type",
+  "license": "Apache-2.0",
+  "author": "DeepBuild",
+  "description": "An enter: each target's text is typed on one grapheme a key, in reading order, behind the item `cursor` names, which rides the text's #head.",
+  "inputs": {
+    "cursor": {
+      "type": "ID",
+      "default": "cursor",
+      "about": "the item that rides the typed text's #head"
+    }
+  },
+  "steps": {
+    "keys": {
+      "op": "cue",
+      "params": {
+        "from": {
+          "params/reveal/progress": 0
+        },
+        "set": {
+          "params/reveal/progress": {
+            "typed": true
+          }
+        }
+      }
+    },
+    "cursor": {
+      "op": "cue",
+      "params": {
+        "on": "cursor",
+        "set": {
+          "at/anchor": "head"
+        },
+        "type": {
+          "at/anchor": "enum"
+        },
+        "until": 0
+      }
+    }
+  }
+}

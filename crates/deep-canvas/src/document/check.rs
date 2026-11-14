@@ -3007,7 +3007,8 @@ pub(crate) fn resolve(
                 unreachable()
             }
         }
-        ["at", name] if AT_VECTORS.contains(name) || *name == "shear" => Ok(()),
+        // #1969: an anchor is held, so a `type` cue keys its cursor onto the text's `#head`.
+        ["at", name] if AT_VECTORS.contains(name) || ["shear", "anchor"].contains(name) => Ok(()),
         ["at", name, index] if AT_VECTORS.contains(name) && ["0", "1", "2"].contains(index) => {
             Ok(())
         }
