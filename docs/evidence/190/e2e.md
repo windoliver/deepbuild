@@ -133,10 +133,13 @@ wording is the issue's (its Acceptance criteria), not repeated here.
 - 9: `tactics` links grid_path@1 then pathing@1 (line 12); grid_path@1 with grid_path@2 is refused naming both (13);
   the listing-order twin is refused naming the import (above). The ping/pong cycle is refused by ac09's second test (passing in
   `acceptance-linux-9a02471b6.txt`).
-- 10: both budget tests are BLOCKED here (ac10 in `acceptance-linux-9a02471b6.txt`): the budgets' reference machine is
-  the reference Mac, where they haven't run yet. Its unblock ask: run ac10 on the reference Mac in the local preflight,
-  with local `main` set so `git merge-base HEAD main` names the merge base it builds and compares against
-  (`helpers.ts`' `baseBin`). So 10 is not proven.
+- 10: both budget tests are BLOCKED on this host (ac10 in `acceptance-linux-9a02471b6.txt`) and pass on the Mac at
+  f55dc2e5a against the merge base 1c54f26d6 (`mac/ac10-f55dc2e5a.txt`, vitest exit 0): macOS 27.2.1 arm64, on AC
+  power, thermal state 0, load 2.80 at the start after the runner's five-minute quiet gate (9.55 at the end, the
+  test's own builds running). The thresholds are ac10's, which the log's two passing test names state; the log
+  carries no measured times. The run is of f55dc2e5a, not of the later heads: 1075519ba adds docs only, and
+  9882503c0 merges main 4950c76d5, which changes `crates/deep-logic` on both sides of the comparison and wasn't
+  timed. So 10 is proven at f55dc2e5a.
 - Oracle lane, criteria 1 and 3: INCONCLUSIVE for both; its 6 tests pass (`oracle-linux-9a02471b6.txt`). The map's upstream tests were in the
   owner's oracle-tests zip all along; `tests/acceptance/190/README.md` lines 10–16 (not edited; by the session's report written
   before the code, though it landed in the same commit, 85169f887) say the page answered 404 (its unblock ask, access for this account, is superseded: the tests came from the owner's
@@ -308,7 +311,7 @@ The code review's last round of the cache fixes found nothing new; that is the i
 saved check. One finding was kept on purpose: `verify` resolves, so it decodes and
 hashes, the libraries even when the result is cached. Its cost wasn't measured in a saved run.
 Criterion 10's budgets (linking a 1 MB program with two 500 KB libraries under 300 ms, fixtures once per hash under
-5 s, no added work for an item without links) are BLOCKED until ac10 runs on the reference Mac.
+5 s, no added work for an item without links) were BLOCKED until ac10 ran on the Mac (2026-11-13, bullet 10 above).
 
 **The suite.** #190's acceptance suite at a clean checkout of 9a02471b6 is in `acceptance-linux-9a02471b6.txt`. It ran
 verbose, so each passing test is named:
@@ -610,3 +613,9 @@ raw files, `gen.test.ts`, the code and the issue. It also ran its own BFS over t
   was the sandbox crate's module list. Criterion 10 (ac10) and ac07's rerun on the Mac are still open: the Mac
   rebooted onto macOS 27.2.1 before they ran, so their logs will name a different OS version than these two. On this
   host ac07 fails against the stale local `main` (04f44a4ba) and passes in a clone whose `main` is 1c54f26d6.
+- **Mac run at f55dc2e5a, second half** (2026-11-13, after the Mac's restart onto macOS 27.2.1): ac10 (2 tests) and
+  ac07 (1) pass there on AC power (`mac/ac10-f55dc2e5a.txt`, `mac/ac07-f55dc2e5a.txt`, host name redacted, read
+  here before this bullet was written). Docker wasn't running for these two, which neither file calls. So the four
+  Mac logs span two OS versions: ac04 and ac05 on 14.7.7, ac10 and ac07 on 27.2.1. All four are of f55dc2e5a; the
+  merge of main 4950c76d5 (9882503c0) hasn't run on the Mac. At 9882503c0 the guard fails on 11 commits that await
+  the owner's signed tags (`scripts/lanes.mjs`'s edit and the blind job's ten oracle redrafts).
