@@ -1,0 +1,37 @@
+deep lease: DeepBuild isn't set up here (no hub token), so `node node_modules/vitest/vitest.mjs run --reporter=dot --reporter=./scripts/proof-vitest-reporter.mjs packages/hub/test/snapshot-sibling.test.ts` runs unleased
+
+ RUN  v5.0.5 <candidate>
+
+x
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/hub/test/snapshot-sibling.test.ts > #2078 a read-only stop's claim whose tree read overlaps the same session's checkless early claim for another task is PASS on the last snapshot, by a carried run or a real run in a checkout of it, never a run with no checkout
+AssertionError: every run claim:B started ran in a real checkout of a79a6aa59dfab109ecbce498f74854f2b0e6d8ac holding src/value.txt and passed there: claim:B's stop {"fast":[".deepbuild/checks/value.sh"],"slow":[],"snapshot":"a79a6aa59dfab109ecbce498f74854f2b0e6d8ac","readyAt":1794687406794,"budgetCost":[],"changed":true}; its verdict {"outcome":"BLOCKED","commit":"a79a6aa59dfab109ecbce498f74854f2b0e6d8ac","reasons":[".deepbuild/checks/value.sh: missing .deepbuild/checks/value.sh couldn't start: no checkout to run in: null, owner you"]}; the runs started [{"run":"run:01M7DV8T95RFQRP4YVHR4RK51T","claim":"claim:A","commit":"a79a6aa59dfab109ecbce498f74854f2b0e6d8ac","cwd":"/private/tmp/dh2078-sib-Lf2EcR/checkouts/c-dZtxGN","held":"fixed by the session\n","outcome":"passed","stdout":"60223c8c3422b29c0e93a91c9c69f5bcdb285e7fa9b2d12710cad2dce2917281"},{"run":"run:01M7DV94PBZMYT8FDNK6SQYZ6T","claim":"claim:B","commit":"a79a6aa59dfab109ecbce498f74854f2b0e6d8ac","cwd":null,"held":null,"outcome":"no checkout","stdout":null}]; refused []: expected [ { …(7) } ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   {
++     "claim": "claim:B",
++     "commit": "a79a6aa59dfab109ecbce498f74854f2b0e6d8ac",
++     "cwd": null,
++     "held": null,
++     "outcome": "no checkout",
++     "run": "run:01M7DV94PBZMYT8FDNK6SQYZ6T",
++     "stdout": null,
++   },
++ ]
+
+ ❯ packages/hub/test/snapshot-sibling.test.ts:159:215
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  12:16:33
+   Duration  13.45s (tests 88%, transform 11%, import 1%)

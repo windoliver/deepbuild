@@ -212,5 +212,9 @@ version = "0.12.9"
 source = "git+https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1#1676826d9d49b90f4d7b6808b69924f58796f6f1"
 
 [[patch.unused]]
+name = "symphonia-codec-vorbis"
+version = "0.6.1"
+
+[[patch.unused]]
 name = "quickjs-jit-runtime"
 version = "0.12.11"

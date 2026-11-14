@@ -13,6 +13,7 @@ mod audio;
 mod bake;
 mod capture;
 mod costs;
+mod defaults;
 mod determinism;
 mod efficiency;
 mod evidence;
@@ -2069,8 +2070,13 @@ fn modules(set: BuildSet) -> Vec<Module> {
     if set >= BuildSet::Full {
         // Issue #420: walls, openings, slabs, roofs and stairs as trusted builders.
         out.push(deep_canvas_scene3d::building::module());
-        // Issue #453: the loop's check kinds, geometry.shading first.
-        out.push(deep_canvas_loop::module());
+        // Issue #453: the loop's check kinds, geometry.shading first; #1940's planted loop
+        // module registers effects.audit itself.
+        out.push(if cfg!(feature = "test-effects-audit-in-loop") {
+            loop_registers_effects_audit()
+        } else {
+            deep_canvas_loop::module()
+        });
         // Issue #499: the media module, media@1; `test-media-checkpoint-without-tail` seals the
         // planted implementation whose reverb checkpoint leaves out its tail.
         out.push(if cfg!(feature = "test-media-checkpoint-without-tail") {
@@ -2282,6 +2288,25 @@ pub fn sandbox_needs_logic() -> Module {
             optional: false,
         },
     );
+    m
+}
+
+/// #1940: a loop module that registers effects.audit itself, and so declares effects among its
+/// required dependencies, which the seal refuses in a build without the effects module.
+pub fn loop_registers_effects_audit() -> Module {
+    fn register(r: &mut deep_canvas::registry::Registrar) {
+        (deep_canvas_loop::module().register)(r);
+        r.check("effects.audit", "same", &[], |_, _| Vec::new());
+    }
+    let mut m = deep_canvas_loop::module();
+    m.manifest.depends_on.insert(
+        "effects".into(),
+        deep_canvas::registry::Dependency {
+            range: deep_canvas::registry::Range::parse("^1").expect("a range"),
+            optional: false,
+        },
+    );
+    m.register = register;
     m
 }
 
@@ -3130,6 +3155,10 @@ fn planted_named(twin: &str) -> Result<StartPlanted, ()> {
             export_planted(twin).map(StartPlanted::Run).ok_or(())
         }
         "fingerprint_without_sources" => Ok(StartPlanted::Run(Planted::FingerprintWithoutSources)),
+        "patch_fix_path_without_id" => Ok(StartPlanted::Run(Planted::PatchFixPathWithoutId)),
+        "patch_fix_envelope_without_reason" => {
+            Ok(StartPlanted::Run(Planted::PatchFixEnvelopeWithoutReason))
+        }
         "key_hashes_raw_bytes" => Ok(StartPlanted::Run(Planted::KeyHashesRawBytes)),
         _ => seams::NetFault::named(twin)
             .map(StartPlanted::Network)
@@ -3189,7 +3218,8 @@ fn main() {
     }
     let stdout = io::stdout();
     let mut out = stdout.lock();
-    // #412: `deep-show kinds --dump <dir>` and `--diff <a> <b>`, what `deep kinds` runs.
+    // #412: `deep-show kinds --dump <dir>` and `--diff <a> <b>`, what `deep kinds` runs; #1974:
+    // `--defaults`, the run that builds each printed default against the field left out.
     if command == "kinds" {
         let (line, code) = kinds::command(&args, |planted| {
             let start = planted.map(StartPlanted::Kinds);

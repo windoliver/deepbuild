@@ -4,6 +4,8 @@
 // before; a check run again with the same result is none. The hub keeps one count per task and skips the stops a
 // question holds, which count toward neither limit.
 
+import { canonicalize, sha256Hex } from '@deepbuild/contracts';
+
 /** What one stop that would be sent back shows: its open items, the checks passing on it and the runs it made. */
 interface StopReading { items: string[]; passing: string[]; runs: string[] }
 /** One task's count: send-backs since its last new evidence, the stop before, and the rule it stalled on, if it did. */
@@ -18,7 +20,7 @@ export const freshCount = (): StallCount => ({ rounds: 0, seen: new Set() });
 
 /** Judges one stop against its task's count, which it moves on. `anyRun` is the planted wrong program's rule: any new run is new evidence. */
 export function judgeStop(count: StallCount, stop: StopReading, anyRun = false): StopFate {
-  const items = JSON.stringify([...new Set(stop.items)].sort());
+  const items = sha256Hex(canonicalize([...new Set(stop.items)].sort()));
   const passing = new Set(stop.passing);
   const fresh = anyRun ? stop.runs.some((r) => !count.seen.has(r)) : count.last !== undefined && [...passing].some((c) => !count.last!.passing.has(c));
   const same = count.last !== undefined && count.last.items === items;

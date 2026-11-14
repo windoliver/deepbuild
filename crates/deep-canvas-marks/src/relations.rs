@@ -485,7 +485,7 @@ pub fn own_box(kind: &str, params: &Map<String, Value>) -> Option<Box4> {
     match kind {
         "rect@1" | "image@1" | "frame@1" => four(params.get("box")),
         "circle@1" => {
-            let [x, y] = center()?;
+            let [x, y] = crate::scene::circle_center(params.get("center"))?;
             let r = num(params.get("r")).unwrap_or(0.0);
             Some([x - r, y - r, 2.0 * r, 2.0 * r])
         }

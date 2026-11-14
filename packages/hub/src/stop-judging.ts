@@ -11,12 +11,12 @@ import type { Outcome } from './landing.js';
 import { homedir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import { duration, type Asks, type Delivery } from '@deepbuild/asks';
-import { type BudgetInput, type Ledger } from '@deepbuild/budget';
+import { type Ledger } from '@deepbuild/budget';
 import { canonicalize, sha256Hex, type JsonValue } from '@deepbuild/contracts';
 import { type EvidenceStore } from '@deepbuild/evidence';
 import { type ExtensionHost, type ProjectTrust } from '@deepbuild/extension-host';
 import { type RecordStore } from '@deepbuild/record';
-import { endsEmpty, freshCount, gitEnv, judgeStop, leftOpen, priceDefinition, toldToRun, unitless, validityGate, type PaidKind, type SessionLog, type StallCount, type StallRule } from '@deepbuild/gate';
+import { endsEmpty, freshCount, gitEnv, judgeStop, leftOpen, priceDefinition, toldToRun, unitless, validityGate, type PaidKind, type SessionLog, type StallRule } from '@deepbuild/gate';
 import { type LeaseTable } from '@deepbuild/leases';
 import { type Runner, type WindowReport } from '@deepbuild/runner';
 import { type Grant, type Host } from '@deepbuild/supervisor';
@@ -33,6 +33,8 @@ import { countMcp } from './mcp-servers.js';
 import { reachOf, type Reach, type ReachTool } from './could-do.js';
 import { coveredBy } from './hookmap.js';
 import { mergedWithMain, releaseSpec, switchesOff } from './release.js';
+import { repoOf } from './shared-runs.js';
+import { GateRecord, type GateAsk } from './gate-record.js';
 import { headOf } from './session-facts.js';
 import { GateRunner, type ClaimCheck, type DefinitionState, type RunKey, type StatePin } from './gate-runner.js';
 import { type Root } from './paths.js';
@@ -55,7 +57,6 @@ import { DAY, sql, letters, ghToken, COMPLETION_PROMPTS, unseenTools, type Obj, 
 
 /** How long a landing's judgement waits for its verdict (#1331). */
 const VERDICT_WAIT_MS = 30 * 60_000;
-
 export interface StopJudgingOptions {
   settings: CoreOptions & { forge: string };
   doneSpec(cwd: string): unknown;
@@ -102,7 +103,9 @@ schedule: Pick<HookSchedule, "abandoned" | "askingNow" | "askingSoon" | "queue" 
 /** StopJudging: owns its domain state; services are resolved only when used. */
 export class StopJudging {
   private readonly reply: StopReply;
+  private readonly gateRecord: GateRecord;
   constructor(private readonly options: StopJudgingOptions) {
+    this.gateRecord = new GateRecord({ record: () => options.services.record, now: () => options.services.now(), events: options.events });
     const readclaimRequirements = () => this.claimRequirements;
     const readverdictWrites = () => this.verdictWrites;
     const readlanes = () => this.lanes;
@@ -132,8 +135,6 @@ export class StopJudging {
   /** The folder a claim was made in, which a stated speed's baseline is checked out from (#1863). */
   claimFolder(claim: string): string | undefined { return this.claimScopes.get(claim)?.cwd; }
 
-  private readonly budgetAsks = new Map<string, BudgetInput>();
-
   private readonly paidChecks = new Map<string, Map<string, { paid: PaidKind; task: string }>>();
 
   /** The sessions whose next stop with no work may be sent on (#82): their stops are held for the reply. */
@@ -145,17 +146,10 @@ export class StopJudging {
   /** Each session's completion prompts in a row (#82): a stop that says something starts the count again. */
   readonly completions = new Map<string, number>();
 
-  /** Each task's count toward a stalled claim, and each stalled claim's one decision by its ask (#325). */
-  private readonly stalls = new Map<string, StallCount>();
-
-  private readonly stallAsks = new Map<string, { task: string; session: string; agent: string }>();
-
-  /** The tasks you accepted as proven, and the switches you decided stay off, by folder and name, with each switch's ask (#325). */
-  private readonly accepted = new Set<string>();
-
-  private readonly offDecided = new Set<string>();
-
-  private readonly switchAsks = new Map<string, { key: string; name: string; deployed: string; task: string; issue: number; session: string; agent: string }>();
+  /** Only in-flight work lives here; asks, decisions and stall counts come from the record (#2065). */
+  private gateAnswers: Promise<void> = Promise.resolve();
+  private switching: Promise<unknown> = Promise.resolve();
+  private readonly stallWrites = new Map<string, Promise<string | undefined>>();
 
   /** Claims in an untrusted repo whose spec names checks (#322): watch-only, so none of them passes. */
   private readonly watchOnlyClaims = new Set<string>();
@@ -195,7 +189,7 @@ export class StopJudging {
     if (!open) return undefined;
     if (!open.locked) return `DeepBuild blocked this: the pull request can't say Closes #${issue} while the definition of ${open.task_ref} hasn't locked, so nothing of it is proven yet. Say Part of #${issue} instead, and list what's left.`;
     // What a split moved to a new issue, or all of it once you accepted what's proven, no longer keeps it open (#325).
-    const moved = this.accepted.has(open.task_ref) ? undefined : await this.movedOut(open.task_ref);
+    const moved = await this.gateRecord.accepted(open.task_ref) ? undefined : await this.gateRecord.movedOut(open.task_ref);
     const unproven = moved ? open.left.filter((q) => !moved.has(q.id)) : [];
     if (unproven.length) {
       const left = unproven.map((q) => `${q.id} (${q.text})`).join('; ');
@@ -253,54 +247,49 @@ export class StopJudging {
     const total = usd(pricing.total_usd);
     const ends = this.options.services.now() + 7 * DAY;
     const until = new Date(ends).toISOString().slice(0, 10);
-    const budget: BudgetInput = { scope: { kind: 'issue', ref: d.task_ref }, runs: n, cap_usd: pricing.total_usd, ends };
+    const budget = { scope: { kind: 'issue' as const, ref: d.task_ref }, runs: n, cap_usd: pricing.total_usd, ends };
     const listed = pricing.checks.map((c) => `${basename(c.check)} (${c.paid}) ${usd(c.usd!)}`).join(', ');
     const question = `${d.task_ref}'s definition locked with ${n} paid check${n === 1 ? '' : 's'}: ${listed}, ${total} in all. Approve a budget of ${total} for ${n === 1 ? 'its run' : `their ${n} runs`} until ${until}?`;
     const key = sha256Hex(canonicalize({ kind: 'budget.issue', task_ref: d.task_ref, budget } as unknown as JsonValue));
-    const ask = await this.options.services.asks.raise(this.options.events.connection('core', { session: d.session, agent: d.agent }), 'budget.issue', {
-      kind: 'authority', question, options: [{ id: 'approve', label: `Approve ${total}`, decision: 'allow' }, { id: 'decline', label: "Don't fund them", decision: 'deny' }],
+    await this.options.services.asks.raise(this.options.events.connection('core', { session: d.session, agent: d.agent }), 'budget.issue', {
+      action: { kind: 'budget.issue', ...budget }, kind: 'authority', question, options: [{ id: 'approve', label: `Approve ${total}`, decision: 'allow' }, { id: 'decline', label: "Don't fund them", decision: 'deny' }],
       recommended: null, deadline: this.options.services.now() + DAY, fallback: 'you', default: 'decline', provisional: false, owner: 'you', key, pinned_to: { kind: 'evidence', ref: key },
     }, { steps: [{ does: `Approve a budget of ${total} for ${d.task_ref}: ${listed}, until ${until}`, changes: [d.task_ref], undo: null, public: false, cost: pricing.total_usd }], diff: key });
-    this.budgetAsks.set(ask, budget);
   }
 
-  /** Your answer to an ask the done gate raised (#325): an issue's budget approved, a stalled claim split, funded or accepted, a switch left off. */
+  /** Your answer is interpreted from the recorded ask, never a process-local association (#2065). */
   delivery(d: Delivery): void {
     if (this.options.services.agents.delivered(d.ask, d.option, d.decision)) return;
     if (this.options.services.box.delivered(d.ask, d.option)) return;
-    const fail = (what: string) => (error: unknown) => process.stderr.write(`deep hub: ${what} for ${d.ask} was not recorded: ${error instanceof Error ? error.message : String(error)}\n`);
-    const budget = this.budgetAsks.get(d.ask);
-    if (budget) {
-      this.budgetAsks.delete(d.ask);
-      if (d.decision === 'allow') void this.options.services.ledger.approveOn(this.options.events.connection('core'), d.ask, budget).catch(fail('the budget'));
-      return;
-    }
-    const stall = this.stallAsks.get(d.ask);
-    if (stall) {
-      this.stallAsks.delete(d.ask);
-      if (d.option === 'split') void this.split(d.ask, stall).catch(fail('the split'));
-      // What's proven is accepted: the rest is dropped, and the issue may close.
-      else if (d.option === 'accept') this.accepted.add(stall.task);
-      // Funded: the send-backs start again from round 1.
-      else if (d.option === 'fund') this.stalls.delete(stall.task);
-      return;
-    }
-    const off = this.switchAsks.get(d.ask);
-    if (off && d.option === 'stay-off') {
-      this.switchAsks.delete(d.ask);
-      this.offDecided.add(off.key);
-      void this.followUp(d.ask, off).catch(fail('the follow-up'));
-    }
+    this.gateAnswers = this.gateAnswers.then(async () => {
+      for (const a of await this.gateRecord.asks(d.ask)) await this.applyGateAnswer(a);
+    }).catch((error: unknown) => { process.stderr.write(`deep hub: the action for ${d.ask} was not recorded: ${error instanceof Error ? error.message : String(error)}\n`); });
   }
 
-  /** The decision the asks core saved from your answer to `ask`, which lands just after the answer is handed on; null when none does. */
-  private async decisionOf(ask: string): Promise<string | null> {
-    for (let i = 0; i < 30; i++) {
-      const [row] = (await this.options.services.record.raw(`SELECT id FROM events WHERE kind = 'decision.created' AND json_extract(data, '$.ask') = ? ORDER BY log_pos DESC LIMIT 1`, [ask])) as { id: string }[];
-      if (row) return `decision:${row.id}`;
-      await new Promise((done) => setTimeout(done, 100));
+  /** Also finish an answer a crash cut after its append but before its action, without duplicating a draft or budget. */
+  async recoverGateAnswers(): Promise<void> {
+    const pending = this.gateAnswers.then(async () => {
+      for (const a of await this.gateRecord.asks()) await this.applyGateAnswer(a);
+      await this.gateRecord.recoverReceipts();
+    });
+    this.gateAnswers = pending;
+    await pending;
+  }
+
+  private async applyGateAnswer(a: GateAsk): Promise<void> {
+    const action = a.action;
+    if (action.kind === 'budget.issue') {
+      if (a.answer === 'approve' && action.ends > this.options.services.now()) {
+        await this.options.services.ledger.approveOn(this.options.events.connection('core'), a.ask, {
+          scope: action.scope, runs: action.runs, cap_usd: action.cap_usd, ends: action.ends,
+        });
+      }
+    } else if ((action.kind === 'claim.stalled' && a.answer === 'split') || (action.kind === 'switch.off' && a.answer === 'stay-off')) {
+      if (await this.gateRecord.drafted(a.ask)) return;
+      const of = { ...action, session: a.session, agent: a.agent };
+      if (of.kind === 'claim.stalled') await this.split(a.ask, of);
+      else await this.followUp(a.ask, of);
     }
-    return null;
   }
 
   /**
@@ -309,7 +298,7 @@ export class StopJudging {
    */
   private async split(ask: string, s: { task: string; session: string; agent: string }): Promise<void> {
     const left = await this.options.services.tasks.leftOf(s.task) ?? [];
-    const decision = await this.decisionOf(ask);
+    const decision = await this.gateRecord.decisionOf(ask);
     const items = left.map((r) => ({ id: r.id, text: r.text, needs: r.check ? `its check ${r.check} to pass${r.paid ? `, a ${r.paid} the issue's budget pays for` : ''}` : 'a check that proves it' }));
     const ts = this.options.services.now();
     await this.options.events.append(this.options.events.connection('core', { session: s.session, agent: s.agent }), {
@@ -323,7 +312,7 @@ export class StopJudging {
 
   /** A switch you decided stays off (#325): the decision is saved with its follow-up, a drafted issue to turn it on. */
   private async followUp(ask: string, off: { name: string; deployed: string; task: string; issue: number; session: string; agent: string }): Promise<void> {
-    const decision = await this.decisionOf(ask);
+    const decision = await this.gateRecord.decisionOf(ask);
     const ts = this.options.services.now();
     await this.options.events.append(this.options.events.connection('core', { session: off.session, agent: off.agent }), {
       v: 1, id: ulid(ts), kind: 'issue.drafted', ts, subject: ask,
@@ -363,65 +352,86 @@ export class StopJudging {
       const [row] = (await this.options.services.record.raw(`SELECT base_commit FROM definitions WHERE task_ref = ? LIMIT 1`, [task])) as { base_commit: string | null }[];
       const base = row?.base_commit;
       if (base) {
-        const off = (await switchesOff(cwd, base, spec.switches)).filter((w) => !this.offDecided.has(`${cwd}\0${w.name}`));
-        if (off.length) {
-          for (const w of off) await this.askSwitch(session, cwd, task, issue, w, spec.switches.deployed).catch(() => undefined);
-          const named = off.map((w) => `${w.name} (${w.state === 'off' ? 'off' : 'unset'} in ${spec.switches!.deployed})`).join(' and ');
-          return `DeepBuild blocked this: the pull request can't say Closes #${issue} while the change ships behind ${named}, until you decide ${off.length === 1 ? 'it stays' : 'they stay'} off; you're asked in your inbox. ${instead}.`;
+        const repo = await repoOf(cwd);
+        const off = await switchesOff(cwd, base, spec.switches);
+        const refused: string[] = [];
+        for (const w of off) {
+          let asked = (await this.gateRecord.asks()).findLast((a) => a.action.kind === 'switch.off' && a.action.repo === repo && a.action.name === w.name);
+          if (!asked) {
+            try {
+              const handle = await this.askSwitch(session, cwd, repo, task, issue, w, spec.switches.deployed);
+              [asked] = await this.gateRecord.asks(handle);
+            } catch {
+              refused.push(`${w.name}: its question could not be recorded, so the pull request stays at Part of until the switch is on`);
+              continue;
+            }
+          }
+          if (asked?.answer === 'stay-off') continue;
+          const open = asked?.status === 'open' || asked?.status === 'later';
+          refused.push(`${w.name} (${w.state === 'off' ? 'off' : 'unset'} in ${spec.switches.deployed}): ${open ? "decide whether it stays off; you're asked in your inbox" : 'the pull request stays at Part of until the switch is on'}`);
         }
+        if (refused.length) return `DeepBuild blocked this: the pull request can't say Closes #${issue} while the change ships behind ${refused.join('; ')}. ${instead}.`;
       }
     }
     return undefined;
   }
 
   /** Asks you once whether a switch the change adds stays off where it's deployed (#325). */
-  private async askSwitch(session: string, cwd: string, task: string, issue: number, w: { name: string; state: 'off' | 'unset' }, deployed: string): Promise<void> {
-    const key = `${cwd}\0${w.name}`;
-    if ([...this.switchAsks.values()].some((a) => a.key === key)) return;
-    const agent = this.options.state().live.get(session)?.agent ?? 'claude-code';
-    const question = `The change for #${issue} ships behind ${w.name}, which is ${w.state === 'off' ? 'off' : 'unset'} where it's deployed (${deployed}). Does it stay off for now? Then the pull request may say Closes, with a follow-up to turn ${w.name} on.`;
-    const ask = await this.options.services.asks.raise(this.options.events.connection('core', { session, agent }), 'switch.off', {
-      kind: 'exception', question,
-      options: [{ id: 'stay-off', label: `${w.name} stays off: close it with a follow-up to turn it on`, decision: 'none' }, { id: 'not-yet', label: "Keep the pull request at Part of until it's on", decision: 'none' }],
-      recommended: 'stay-off', deadline: this.options.services.now() + 2 * DAY, fallback: 'you', default: 'not-yet', provisional: false, owner: 'you',
-      key: sha256Hex(canonicalize({ kind: 'switch.off', cwd, name: w.name })), pinned_to: await this.options.mcp().pinOf(cwd, question),
+  private askSwitch(session: string, cwd: string, repo: string, task: string, issue: number, w: { name: string; state: 'off' | 'unset' }, deployed: string): Promise<string> {
+    const raised = this.switching.then(async () => {
+      const known = (await this.gateRecord.asks()).findLast((a) => a.action.kind === 'switch.off' && a.action.repo === repo && a.action.name === w.name);
+      if (known) return known.ask;
+      return this.raiseSwitch(session, cwd, repo, task, issue, w, deployed);
     });
-    this.switchAsks.set(ask, { key, name: w.name, deployed, task, issue, session, agent });
+    this.switching = raised.catch(() => undefined);
+    return raised;
   }
 
-  /**
-   * A stop that would be sent back, against its task's count toward a stalled claim (#325; design: Stalled claims): sent
-   * back as round n of 3, or not, once the open items came back unchanged on two stops in a row or three send-backs
-   * passed without new evidence, when the claim becomes one decision for you. While a question holds the send-back
-   * the stop isn't sent back and counts toward neither. What the stop is sent back with, or nothing.
-   */
+  private async raiseSwitch(session: string, cwd: string, repo: string, task: string, issue: number, w: { name: string; state: 'off' | 'unset' }, deployed: string): Promise<string> {
+    const agent = this.options.state().live.get(session)?.agent ?? 'claude-code';
+    const question = `The change for #${issue} ships behind ${w.name}, which is ${w.state === 'off' ? 'off' : 'unset'} where it's deployed (${deployed}). Does it stay off for now? Then the pull request may say Closes, with a follow-up to turn ${w.name} on.`;
+    return this.options.services.asks.raise(this.options.events.connection('core', { session, agent }), 'switch.off', {
+      action: { kind: 'switch.off', repo, name: w.name, deployed, task, issue }, kind: 'exception', question,
+      options: [{ id: 'stay-off', label: `${w.name} stays off: close it with a follow-up to turn it on`, decision: 'none' }, { id: 'not-yet', label: "Keep the pull request at Part of until it's on", decision: 'none' }],
+      recommended: 'stay-off', deadline: this.options.services.now() + 2 * DAY, fallback: 'you', default: 'not-yet', provisional: false, owner: 'you',
+      key: sha256Hex(canonicalize({ kind: 'switch.off', repo, name: w.name })), pinned_to: await this.options.mcp().pinOf(cwd, question),
+    });
+  }
+
+  /** Serializes a task's send-backs and resets; the recorded count chooses another round or one stalled ask. */
   async stallGate(meta: HookMeta, claim: string, sendBack: string | undefined): Promise<string | undefined> {
-    const [row] = (await this.options.services.record.raw(`SELECT subject_ref FROM claims WHERE id = ?`, [claim.slice(6)])) as { subject_ref: string | null }[];
-    const task = row?.subject_ref;
+    const task = await this.gateRecord.taskOf(claim);
     if (!task) return sendBack;
+    const run = () => this.countStop(meta, claim, task, sendBack);
+    const pending = (this.stallWrites.get(task) ?? Promise.resolve()).then(run, run);
+    this.stallWrites.set(task, pending);
+    try { return await pending; }
+    finally { if (this.stallWrites.get(task) === pending) this.stallWrites.delete(task); }
+  }
+
+  private async countStop(meta: HookMeta, claim: string, task: string, sendBack: string | undefined): Promise<string | undefined> {
     const standing = this.options.services.gate.standing(claim);
     if (!sendBack) {
       // A green claim starts the count again.
-      if (standing.length && standing.every((c) => c.result === 'PASS')) this.stalls.delete(task);
+      if (standing.length && standing.every((c) => c.result === 'PASS')) await this.gateRecord.save(meta, claim, task, freshCount());
       return undefined;
     }
     const held = await this.questionHolds(meta.session);
     // The planted wrong program counts the stops a question holds, though it still doesn't send them back.
     if (held && this.options.settings.plant !== 'counts-waiting-stops') return undefined;
     const items = [...standing.filter((c) => c.result !== 'PASS').map((c) => `${c.check}: ${c.result}`), ...leftOpen(this.lastMessage.get(meta.session) ?? '').map((o) => o.text)];
-    const runs = ((await this.options.services.record.raw(`SELECT id FROM runs WHERE claim_id = ?`, [claim.slice(6)])) as { id: string }[]).map((r) => r.id);
-    let count = this.stalls.get(task);
-    if (!count) this.stalls.set(task, count = freshCount());
+    const runs = await this.gateRecord.runsOf(claim);
+    const count = await this.gateRecord.count(task);
     // The planted wrong program counts any new run as new evidence, whatever its result.
     const fate = judgeStop(count, { items, passing: standing.filter((c) => c.result === 'PASS').map((c) => c.check), runs }, this.options.settings.plant === 'new-run-is-evidence');
+    if (!held || !fate.sendBack) await this.gateRecord.save(meta, claim, task, count);
     if (fate.sendBack) {
       if (held) return undefined;
-      const [verdict] = (await this.options.services.record.raw(`SELECT handle FROM verdicts WHERE claim_id = ? ORDER BY created DESC LIMIT 1`, [claim.slice(6)])) as { handle: string | null }[];
-      const ts = this.options.services.now();
-      if (verdict?.handle) await this.options.events.append(this.options.events.connection('core', { session: meta.session, agent: meta.agent }), { v: 1, id: ulid(ts), kind: 'claim.sent_back', ts, subject: claim, data: { claim, verdict: verdict.handle, round: fate.round, to: `session:${letters(meta.session)}` } });
+      await this.gateRecord.sentBack(meta, claim, fate.round);
       return sendBack;
     }
     if (fate.stalled) await this.stalled(meta, claim, task, fate.stalled);
+    else if (count.stalled && !await this.gateRecord.askedSinceReset(task)) await this.stalled(meta, claim, task, count.stalled as StallRule);
     return undefined;
   }
 
@@ -620,19 +630,12 @@ export class StopJudging {
     const named = left.length ? left.map((r) => `${r.id} ("${r.text}")`).join(', ') : 'its open items';
     const question = `The claim on ${task} stalled: ${rule} and no new passing evidence, with ${named} still open, so DeepBuild stopped sending the agent back. Split the issue (what's proven closes now, and the rest moves to a new issue with what each item needs), fund the live runs it needs, or accept what's proven?`;
     const ask = await this.options.services.asks.raise(core, 'claim.stalled', {
-      kind: 'exception', question,
+      action: { kind: 'claim.stalled', task }, kind: 'exception', question,
       options: [{ id: 'split', label: "Split the issue: what's proven closes now", decision: 'none' }, { id: 'fund', label: 'Fund the live runs it needs', decision: 'none' }, { id: 'accept', label: "Accept what's proven", decision: 'none' }],
       recommended: 'split', deadline: this.options.services.now() + 2 * DAY, fallback: 'you', default: 'split', provisional: false, owner: 'you',
       key: sha256Hex(canonicalize({ kind: 'claim.stalled', task, claim })), pinned_to: await this.options.mcp().pinOf(meta.cwd, question),
     });
-    this.stallAsks.set(ask, { task, session: meta.session, agent: meta.agent });
     await this.options.events.appendReading(meta.session, meta.agent, `${claim} stalled (${rule}), so it isn't sent back again: it reaches you as one decision, ${ask}.`).catch(() => undefined);
-  }
-
-  /** The requirements a split moved to a new issue, by ID, from the record. */
-  private async movedOut(task: string): Promise<Set<string>> {
-    const rows = (await this.options.services.record.raw(`SELECT data FROM events WHERE kind = 'issue.drafted' AND json_extract(data, '$.task_ref') = ? AND json_extract(data, '$.because') = 'split'`, [task])) as { data: string }[];
-    return new Set(rows.flatMap((r) => (JSON.parse(r.data) as { items: { id: string }[] }).items.map((i) => i.id)));
   }
 
   /**
@@ -1032,7 +1035,7 @@ export class StopJudging {
     this.claimRequirements.set(r.claim, new Map(r.requirements.map((q) => [q.req, { id: q.id, text: q.text }])));
     this.claimScopes.set(r.claim, { task: r.task, base: r.base, cwd: r.cwd });
     this.paidChecks.set(r.claim, new Map(r.checks.flatMap((c) => (c.paid ? [[c.check, { paid: c.paid, task: r.task }] as const] : []))));
-    // Nothing but reads since the session's last claim: its snapshot and the lines it added stand, and its results carry (#82).
+    // Only reads seen by hooks: a reuse hint (#82), never proof that outside work left the tree unchanged (#2078).
     const same = this.options.state().live.get(r.session)?.workedSinceClaim === false && this.options.state().live.get(r.session)?.claim !== undefined;
     const lane = (async () => {
       const message = this.lastMessage.get(r.session) ?? '';
