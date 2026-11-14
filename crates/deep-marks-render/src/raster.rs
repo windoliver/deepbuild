@@ -24,8 +24,8 @@ use deep_canvas_marks::scene::{Blend, Drawn, Scope};
 use deep_canvas_marks::story;
 use deep_canvas_motion::program::Program;
 use deep_marks_vello::{
-    bez, brush, level_name, rasterizer, rect, sampler, settings, shape, solid, stroke, Canvas,
-    Scopes,
+    bez, brush, level_name, rasterizer, rect, sampler, settings, shape, solid, solid_at, stroke,
+    Canvas, Scopes,
 };
 use serde_json::{json, Map, Value};
 use vello_cpu::kurbo::{Affine, RoundedRect, Shape};
@@ -430,7 +430,8 @@ impl<C: Glyphs> Painter<'_, C> {
         let mut out = Vec::with_capacity(shaped.glyphs.len());
         for g in &shaped.glyphs {
             let (role, color) = scene::run_paint(runs, g.grapheme, role, color);
-            self.ctx.set_paint(solid(color));
+            let opacity = scene::run_opacity(runs, g.grapheme);
+            self.ctx.set_paint(solid_at(color, opacity));
             let glyph = vello_cpu::Glyph {
                 id: g.id,
                 x: g.x + origin[0] as f32,
@@ -447,6 +448,9 @@ impl<C: Glyphs> Painter<'_, C> {
             row["outline"] = outline_row(g);
             row["transform"] = json!([1.0, 0.0, 0.0, 1.0, e, f]);
             row["clip"] = Value::Null;
+            if opacity < 1.0 {
+                row["opacity"] = json!(opacity);
+            }
             out.push(row);
         }
         self.decorations(shaped, origin, (role, color), runs);
@@ -463,7 +467,8 @@ impl<C: Glyphs> Painter<'_, C> {
     ) {
         for d in &shaped.decorations {
             let (_, color) = scene::run_paint(runs, d.grapheme, role, color);
-            self.ctx.set_paint(solid(color));
+            let opacity = scene::run_opacity(runs, d.grapheme);
+            self.ctx.set_paint(solid_at(color, opacity));
             let [x, y, w, h] = d.rect.map(f64::from);
             self.ctx
                 .fill_rect(&rect([origin[0] + x, origin[1] + y, w, h]));
@@ -503,10 +508,10 @@ impl<C: Glyphs> Painter<'_, C> {
             if let Some(c) = p.clip {
                 self.ctx.push_clip_rect(&rect(c));
             }
-            let faded = p.opacity < 1.0;
+            let opacity = p.opacity * scene::run_opacity(runs, g.grapheme);
+            let faded = opacity < 1.0;
             if faded {
-                self.ctx
-                    .push_layer(None, None, Some(p.opacity as f32), None);
+                self.ctx.push_layer(None, None, Some(opacity as f32), None);
             }
             let blurred =
                 p.paint.blur > 0.0 && self.ctx.push_blur((p.paint.blur * self.zoom) as f32);
@@ -548,7 +553,7 @@ impl<C: Glyphs> Painter<'_, C> {
             row["outline"] = outline_row(g);
             row["transform"] = json!(p.transform);
             row["clip"] = json!(p.clip);
-            row["opacity"] = json!(p.opacity);
+            row["opacity"] = json!(opacity);
             out.push(row);
         }
         out

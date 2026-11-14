@@ -5,6 +5,7 @@
 
 use std::collections::BTreeMap;
 
+use deep_canvas_marks::lines;
 use deep_canvas_marks::relations::{self, Bounds, Box4, Frame, Ops};
 use deep_canvas_marks::scene::{self, object_or_empty};
 use deep_canvas_motion::eval;
@@ -41,11 +42,16 @@ impl Bounds for Measured<'_> {
         if let Some(found) = self.vectors.get(id) {
             return deep_canvas_vector::bounds(item, found, part);
         }
-        if part.is_some() {
-            return None;
-        }
         let kind = item.get("kind").and_then(Value::as_str)?;
         let params = object_or_empty(item.get("params"));
+        // #1966: a text's line or token, `<id>#line:n` or `<id>#tok:k`, in its shaped run.
+        if let Some(part) = part {
+            if kind != "text@1" {
+                return None;
+            }
+            let local = lines::anchor_box(params, &*self.shaped(id, params)?, part)?;
+            return Some(relations::placed(local, relations::place_of(item, None)));
+        }
         if kind == "text@1" {
             let shaped = self.shaped(id, params)?;
             let w = params
@@ -73,27 +79,9 @@ impl Bounds for Measured<'_> {
     }
 }
 
-/// #1965: the box of a code item's anchor `part` (`line:n`, `tok:k`) in its shaped run, from the
-/// run's origin: as wide as its glyphs advance and as high as the lines they sit on. `None` for
-/// one that draws no glyph.
-fn anchor_box(params: &Map<String, Value>, shaped: &deep_text::Shaped, part: &str) -> Option<Box4> {
-    use deep_canvas_marks::code;
-    let d = code::read(params, "").ok()??;
-    let span = code::anchor(params, &d, part)?;
-    let line = f64::from(shaped.height) / shaped.lines.max(1) as f64;
-    let (mut x, mut rows) = ((f64::MAX, f64::MIN), (f64::MAX, f64::MIN));
-    for g in shaped.glyphs.iter().filter(|g| span.contains(&g.grapheme)) {
-        let row = (f64::from(g.y) / line).floor();
-        x = (x.0.min(f64::from(g.x)), x.1.max(f64::from(g.x + g.advance)));
-        rows = (rows.0.min(row), rows.1.max(row));
-    }
-    let high = (rows.1 - rows.0 + 1.0) * line;
-    (x.0 <= x.1).then_some([x.0, rows.0 * line, x.1 - x.0, high])
-}
-
 /// The geometry box of the item `id` among evaluated `items`, where it draws: its own, or for
-/// an item with none of its own (a group) its descendants' joined; and (#1965) for a code
-/// item's anchor, `<id>#line:n` or `<id>#tok:k`, that line's or token's.
+/// an item with none of its own (a group) its descendants' joined; and (#1965, #1966) for a
+/// text's anchor, `<id>#line:n` or a code item's `<id>#tok:k`, that line's or token's.
 pub(crate) fn box_of(
     doc: &Map<String, Value>,
     items: &Map<String, Value>,
@@ -103,10 +91,7 @@ pub(crate) fn box_of(
     let mut measured = measured(doc, items, vectors);
     let Some(item) = items.get(id) else {
         let (id, part) = id.split_once('#')?;
-        let item = items.get(id).filter(|i| i["kind"] == "text@1")?;
-        let params = object_or_empty(item.get("params"));
-        let local = anchor_box(params, &*measured.shaped(id, params)?, part)?;
-        return Some(relations::placed(local, relations::place_of(item, None)));
+        return measured.own(id, items.get(id)?, Some(part));
     };
     if let Some(b) = measured.own(id, item, None) {
         return Some(b);
