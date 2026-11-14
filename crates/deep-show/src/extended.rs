@@ -17,8 +17,10 @@ fn is_sha(s: &str) -> bool {
     s.len() == 64 && s.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
 }
 
-/// Every hash a document names, with the item that names it ("" for the envelope) and its path.
-fn hashes(doc: &Value) -> Vec<(String, String, String)> {
+/// Every hash a document names, with the item that names it ("" for the envelope) and its path:
+/// each item's by hash, and each envelope asset record's, all of them or (`all` false) only those
+/// an item or the envelope's look names by the record's name, which the document draws from.
+fn hashes(doc: &Value, all: bool) -> Vec<(String, String, String)> {
     fn walk(v: &Value, id: &str, path: String, out: &mut Vec<(String, String, String)>) {
         match v {
             Value::String(s) if is_sha(s) => out.push((id.to_string(), path, s.clone())),
@@ -39,7 +41,27 @@ fn hashes(doc: &Value) -> Vec<(String, String, String)> {
     for (id, item) in doc["items"].as_object().into_iter().flatten() {
         walk(&item["params"], id, format!("items/{id}/params"), &mut out);
     }
+    fn texts<'v>(v: &'v Value, out: &mut Vec<&'v str>) {
+        match v {
+            Value::String(s) => out.push(s),
+            Value::Object(m) => m.values().for_each(|x| texts(x, out)),
+            Value::Array(a) => a.iter().for_each(|x| texts(x, out)),
+            _ => {}
+        }
+    }
+    let mut named: Vec<&str> = Vec::new();
+    texts(&doc["items"], &mut named);
+    texts(&doc["look"], &mut named);
+    let used = |name: &str| {
+        named.iter().any(|s| {
+            s.strip_prefix(name)
+                .is_some_and(|rest| rest.is_empty() || rest.starts_with(['@', '#']))
+        })
+    };
     for (name, a) in doc["assets"].as_object().into_iter().flatten() {
+        if !all && !used(name) {
+            continue;
+        }
         if let Some(sha) = a["sha256"].as_str().filter(|s| is_sha(s)) {
             out.push((String::new(), format!("assets/{name}/sha256"), sha.to_string()));
         }
@@ -72,17 +94,19 @@ fn issue(code: &str, ids: Vec<String>, path: &str, what: String, fix: &str) -> V
 
 impl Hub<'_> {
     /// `document.validate`'s `assets: {missing: 0, maps: present, licenses: present}` on `doc`:
-    /// each hash it names that the evidence store lacks, past `missing`, or under a material's
-    /// map, raises `asset_missing` naming it, its fix the map slot unset where it is one, so the
-    /// surface draws by its factor; and under `licenses: present`, each asset with no license on
-    /// the record raises `license_missing`.
+    /// each hash it draws from that the evidence store lacks, past `missing`, or under a
+    /// material's map, raises `asset_missing` naming it, its fix the map slot unset where it is
+    /// one, so the surface draws by its factor (a record no item names draws nothing); and under
+    /// `licenses: present`, each asset it names, records included, with no license on the record
+    /// raises `license_missing`.
     pub(crate) fn asset_issues(&self, doc: &Value, assets: &Value) -> Vec<Value> {
         let allowed = assets["missing"].as_u64().unwrap_or(0) as usize;
         let maps = assets.get("maps").is_none_or(|m| m == "present");
         let licenses = assets.get("licenses").is_none_or(|l| l == "present");
-        let named = hashes(doc);
+        let drawn = hashes(doc, false);
+        let named = hashes(doc, true);
         let mut gone: Vec<&(String, String, String)> = Vec::new();
-        for h in &named {
+        for h in &drawn {
             if !gone.iter().any(|g| g.2 == h.2)
                 && crate::evidence::read(&self.scenario.evidence, &h.2).is_none()
             {

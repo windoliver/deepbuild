@@ -2,7 +2,7 @@
 //! loop kinds): the loop's check kinds. Issue #453 lands its first, `geometry.shading`'s defect
 //! counts and quad ratio, on every `mesh.asset@1` item a document holds; #1935 its readings of
 //! each UV set, hidden faces, unused vertices and islands; #1938 lands `scene.scale` and
-//! `camera.framing` on evaluated data, and the pixel kinds on drawn frames.
+//! `camera.framing` on evaluated data.
 
 pub mod contrast;
 pub mod count;

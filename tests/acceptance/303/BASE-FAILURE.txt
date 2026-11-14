@@ -83,6 +83,11 @@ budgets.test.ts (AC11 #303.447eb97a)
     session's thread (...): ...; the thread holds no task.created
     -> the proof that the timed prompt becomes a task comes before the merge base is built, so no timing was taken.
 
+Superseded, 2026-11-09: checkfile.test.ts and its criterion #303.323ca6a1 below were removed. The amended criterion
+#303.ec3af335 is checkfile-redraft.test.ts (README, Redraft; AC12-REDRAFT.md), which was drafted at base 414947b4, where
+#303's kernel is already in, and was never run on c92864d1: there is no pre-implementation failing run of it. At
+414947b4 it passes, 3 of 3, and its two wrong programs fail on their named assertions.
+
 checkfile.test.ts (AC12 #303.323ca6a1)
   x AC12 .deepbuild/checks/expired-token.sh changed by python -c after the lock: ...
     Error: AC12 #303.323ca6a1 the prompt "make the auth middleware reject expired tokens" must open one task under the
@@ -105,6 +110,8 @@ Result: Tests 3 failed (3); 32 s.
 
 Also checked on the base during drafting: deep-hook's PreToolUse allows AC12's
 `python3 -c "open('.deepbuild/checks/expired-token.sh', ...).write(...)"` (the guard reads no write in its text), and
+[2026-11-09: no longer so at 414947b4, where `deep-hook match` reads that call as `no-deepbuild-spec-write`; the
+redraft's write is a child of `npm test`, which matches no guard there], and
 events.read returns each event with v, writer, actor, scope, ts and data, so AC9 validates recorded events as they are.
 
 Typecheck: node node_modules/typescript/bin/tsc -p tests/acceptance/303/tsconfig.json passes with no output.
