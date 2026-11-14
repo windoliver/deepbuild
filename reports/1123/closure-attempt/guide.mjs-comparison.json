@@ -1,0 +1,8 @@
+{
+  "script": "guide.mjs",
+  "before": 0,
+  "after": 0,
+  "identical": true,
+  "beforeOnly": [],
+  "afterOnly": []
+}

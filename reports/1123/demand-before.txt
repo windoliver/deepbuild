@@ -1,0 +1,92 @@
+✖ binary demand stays with its consumer instead of names in unrelated selected tests (1873.466ms)
+✖ a binary consumer without a Cargo workspace is blocked before it executes (748.062208ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 0
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2700.180833
+
+✖ failing tests:
+
+test at tests/proof-binaries-demand.test.mjs:12:1
+✖ binary demand stays with its consumer instead of names in unrelated selected tests (1873.466ms)
+  AssertionError [ERR_ASSERTION]: exit 1
+  RUN selected
+  BLOCKED selected: test binaries: cargo build failed: scripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `cargo build --bin deep-hook --bin deep-app --locked --target-dir <scratch>/tmp/deep-lane-binaries-Fazs9A/bin/.artifacts --config build.build-dir="<scratch>/repo/target" --message-format=json-render-diagnostics` runs unleased
+    Fix: none
+    Elapsed: 1.56 s
+
+
+
+  1 !== 0
+
+      at TestContext.<anonymous> (file://<checkout>/tests/proof-binaries-demand.test.mjs:22:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 1,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/proof-binaries-demand.test.mjs:26:1
+✖ a binary consumer without a Cargo workspace is blocked before it executes (748.062208ms)
+  AssertionError [ERR_ASSERTION]: The input did not match the regular expression /BLOCKED selected:/. Input:
+
+  'RUN selected\n' +
+    'scripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node --test --test-reporter=file://<scratch>/repo/scripts/proof-reporter.mjs --test-reporter-destination=<scratch>/tmp/deep-preflight-output-99wdNc/report --test-reporter=spec --test-reporter-destination=stdout tests/binary.test.mjs` runs unleased\n' +
+    '✖ missing workspace (2.836375ms)\n' +
+    'ℹ tests 1\n' +
+    'ℹ suites 0\n' +
+    'ℹ pass 0\n' +
+    'ℹ fail 1\n' +
+    'ℹ cancelled 0\n' +
+    'ℹ skipped 0\n' +
+    'ℹ todo 0\n' +
+    'ℹ duration_ms 72.757084\n' +
+    '\n' +
+    '✖ failing tests:\n' +
+    '\n' +
+    'test at tests/binary.test.mjs:6:1\n' +
+    '✖ missing workspace (2.836375ms)\n' +
+    '  AssertionError [ERR_ASSERTION]: binary executes\n' +
+    '  \n' +
+    '  null !== 0\n' +
+    '  \n' +
+    '      at TestContext.<anonymous> (file://<scratch>/repo/tests/binary.test.mjs:20:10)\n' +
+    '      at Test.runInAsyncScope (node:async_hooks:227:14)\n' +
+    '      at Test.run (node:internal/test_runner/test:1402:25)\n' +
+    '      at Test.start (node:internal/test_runner/test:1262:17)\n' +
+    '      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {\n' +
+    '    generatedMessage: false,\n' +
+    "    code: 'ERR_ASSERTION',\n" +
+    '    actual: null,\n' +
+    '    expected: 0,\n' +
+    "    operator: 'strictEqual',\n" +
+    "    diff: 'simple'\n" +
+    '  }\n' +
+    'FAIL selected: ℹ fail 1\n' +
+    '  Fix: none\n' +
+    '  Elapsed: 0.65 s\n'
+
+      at TestContext.<anonymous> (file://<checkout>/tests/proof-binaries-demand.test.mjs:31:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: "RUN selected\nscripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node --test --test-reporter=file://<scratch>/repo/scripts/proof-reporter.mjs --test-reporter-destination=<scratch>/tmp/deep-preflight-output-99wdNc/report --test-reporter=spec --test-reporter-destination=stdout tests/binary.test.mjs` runs unleased\n✖ missing workspace (2.836375ms)\nℹ tests 1\nℹ suites 0\nℹ pass 0\nℹ fail 1\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 72.757084\n\n✖ failing tests:\n\ntest at tests/binary.test.mjs:6:1\n✖ missing workspace (2.836375ms)\n  AssertionError [ERR_ASSERTION]: binary executes\n  \n  null !== 0\n  \n      at TestContext.<anonymous> (file://<scratch>/repo/tests/binary.test.mjs:20:10)\n      at Test.runInAsyncScope (node:async_hooks:227:14)\n      at Test.run (node:internal/test_runner/test:1402:25)\n      at Test.start (node:internal/test_runner/test:1262:17)\n      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {\n    generatedMessage: false,\n    code: 'ERR_ASSERTION',\n    actual: null,\n    expected: 0,\n    operator: 'strictEqual',\n    diff: 'simple'\n  }\nFAIL selected: ℹ fail 1\n  Fix: none\n  Elapsed: 0.65 s\n",
+    expected: /BLOCKED selected:/,
+    operator: 'match',
+    diff: 'simple'
+  }

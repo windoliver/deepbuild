@@ -1,0 +1,135 @@
+✖ bay build barrier: cleanup (6003.683708ms)
+✖ bay build barrier: dead-supervisor (5868.129291ms)
+✖ bay build barrier: live-owner (3051.164958ms)
+✖ bay build barrier: wrong-group-start (4030.500208ms)
+✖ bay build barrier: bad-record (3560.968625ms)
+✖ bay build barrier: scan-failed (4154.490584ms)
+✖ bay build barrier: timeout (3479.650208ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 0
+ℹ fail 7
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 30486.806042
+
+✖ failing tests:
+
+test at tests/proof-binaries-bay-barrier.test.mjs:17:3
+✖ bay build barrier: cleanup (6003.683708ms)
+  AssertionError [ERR_ASSERTION]: detached compiler survived bay reuse
+      at TestContext.<anonymous> (file://<checkout>/tests/proof-binaries-bay-barrier.test.mjs:59:14)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/proof-binaries-bay-barrier.test.mjs:17:3
+✖ bay build barrier: dead-supervisor (5868.129291ms)
+  AssertionError [ERR_ASSERTION]: detached compiler survived bay reuse
+      at TestContext.<anonymous> (file://<checkout>/tests/proof-binaries-bay-barrier.test.mjs:59:14)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/proof-binaries-bay-barrier.test.mjs:17:3
+✖ bay build barrier: live-owner (3051.164958ms)
+  AssertionError [ERR_ASSERTION]: unsafe bay reuse for live-owner: READY
+
+
+  0 !== 2
+
+      at TestContext.<anonymous> (file://<checkout>/tests/proof-binaries-bay-barrier.test.mjs:62:14)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 2,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/proof-binaries-bay-barrier.test.mjs:17:3
+✖ bay build barrier: wrong-group-start (4030.500208ms)
+  AssertionError [ERR_ASSERTION]: unsafe bay reuse for wrong-group-start: READY
+
+
+  0 !== 2
+
+      at TestContext.<anonymous> (file://<checkout>/tests/proof-binaries-bay-barrier.test.mjs:62:14)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 2,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/proof-binaries-bay-barrier.test.mjs:17:3
+✖ bay build barrier: bad-record (3560.968625ms)
+  AssertionError [ERR_ASSERTION]: unsafe bay reuse for bad-record: READY
+
+
+  0 !== 2
+
+      at TestContext.<anonymous> (file://<checkout>/tests/proof-binaries-bay-barrier.test.mjs:62:14)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 2,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/proof-binaries-bay-barrier.test.mjs:17:3
+✖ bay build barrier: scan-failed (4154.490584ms)
+  AssertionError [ERR_ASSERTION]: unsafe bay reuse for scan-failed: READY
+
+
+  0 !== 2
+
+      at TestContext.<anonymous> (file://<checkout>/tests/proof-binaries-bay-barrier.test.mjs:62:14)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 2,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/proof-binaries-bay-barrier.test.mjs:17:3
+✖ bay build barrier: timeout (3479.650208ms)
+  AssertionError [ERR_ASSERTION]: unsafe bay reuse for timeout: READY
+
+
+  0 !== 2
+
+      at TestContext.<anonymous> (file://<checkout>/tests/proof-binaries-bay-barrier.test.mjs:62:14)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 2,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

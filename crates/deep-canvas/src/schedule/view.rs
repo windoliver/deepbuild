@@ -570,6 +570,13 @@ pub(super) fn slot_at<'v>(base: &'v mut Value, path: &[String]) -> &'v mut Value
             at = &mut at.as_array_mut().expect("an array")[i];
             continue;
         }
+        // #222: a channel keying an entry of a list the item doesn't hold yet (a path build's
+        // `ops/0/trim/end` on a shape with no ops) starts that list.
+        if let (Value::Null, Ok(i)) = (&*at, step.parse::<usize>()) {
+            *at = Value::Array(vec![Value::Null; i + 1]);
+            at = &mut at.as_array_mut().expect("an array")[i];
+            continue;
+        }
         if !at.is_object() {
             *at = Value::Object(serde_json::Map::new());
         }

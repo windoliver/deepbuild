@@ -1,0 +1,8 @@
+{
+  "script": "slots-check.mjs",
+  "before": 10,
+  "after": 10,
+  "identical": true,
+  "beforeOnly": [],
+  "afterOnly": []
+}
