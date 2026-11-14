@@ -644,7 +644,10 @@ alone.push('tests/acceptance/222/', 'tests/acceptance/222-oracle/', 'tests/accep
 timed.push('tests/acceptance/222-redraft-ac7/budgets.test.ts');
 byHand.push('tests/acceptance/222/budgets.test.ts');
 // #506's files each build deep-gpu (and deep-show) and draw insets, view overlays and cards on the Metal GPU.
+// Criterion 5's close button runs as its blind redraft; the first draft's file, whose close-button test paints a
+// role deep-show's look lacks, is kept by hand, its orbit and fly-through tests with it (506-redraft-ac5/DISPUTE.md).
 alone.push('tests/acceptance/506/', 'tests/acceptance/506-redraft-ac5/');
+byHand.push('tests/acceptance/506/ac5-lamp-card.test.ts');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },

@@ -19,5 +19,7 @@ clause (never this dispute, the work or the diff), wrote `ac5-close.test.ts` in 
 same card through the same surfaces in a role the shipped look holds (`accent`). It fails at the base
 (`BASE-FAILURE.txt`) and passes on the work (one run, Nov 14 2026, Mac at the change's head).
 
-**Owed:** the owner's one ruling. On a yes, the first draft's third test moves to `byHand` in
-`scripts/lanes.mjs` under a signed approval tag, and this redraft covers the clause.
+**Ruling:** the owner said "Yes, swap it" on Nov 14, 2026. The first draft's file
+(`506/ac5-lamp-card.test.ts`) moves to `byHand` in `scripts/lanes.mjs`, since lanes take whole files: its
+orbit and fly-through tests, which pass, run by hand with it. This redraft covers the close-button clause in
+the alone lane. Owed: the signed approval tag on that lanes commit (the owner's touch key).
