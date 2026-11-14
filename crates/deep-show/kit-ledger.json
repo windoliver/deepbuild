@@ -1,7 +1,7 @@
 {
   "core": {
     "version": "0.0.0",
-    "digest": "f54a7b72c2a3e9c792a2449c7293f7f7af83c0016db833ce2e5f776ed30c1bed",
+    "digest": "c06e44fef71012bca0d4484495e4e7f2edb23b5061ed6ec8739592f65469cf40",
     "verdict": "FAIL",
     "parts": {
       "fixtures": "PASS",
@@ -66,7 +66,7 @@
   },
   "effects": {
     "version": "1.0.0",
-    "digest": "728754098ff7e4fa72004323be2f19eb772021f76c26ca3a01930aa343f6e2af",
+    "digest": "47efff0e92f65196c99d6ba9bbe39a782aa62eb4e031e5cb60132976c8fd9a7b",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
@@ -161,7 +161,7 @@
   },
   "loop": {
     "version": "1.0.0",
-    "digest": "517ccd9ae52d9fbdeefdf713bfcaf8567e551b8688fde54d89c9fdf3ca7b135e",
+    "digest": "a2170e271ea157eb8d9812dc2b8aebf969ec56e3f81fdaf7112b2e4f0f419b47",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
@@ -317,14 +317,14 @@
   "text": {
     "version": "1.0.0",
     "digest": "adc297495eb1a9be4918d0a7e9620be4f459deb800ea168ecd3ca5a995d98350",
-    "verdict": "FAIL",
+    "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
       "clean_rebuild": "PASS",
       "patch_fuzz": "PASS",
       "read_set": "PASS",
       "order": "PASS",
-      "schedule": "FAIL",
+      "schedule": "PASS",
       "repair_loop": "PASS",
       "time_order": "PASS",
       "catalog": "PASS"

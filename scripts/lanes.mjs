@@ -660,6 +660,8 @@ timed.push('tests/acceptance/548/ac3-budgets.test.ts');
 // ac02-rebuild-budget judges the task's budget on the reference Mac.
 alone.push('tests/acceptance/224/', 'tests/acceptance/224-oracle/');
 timed.push('tests/acceptance/224/ac02-rebuild-budget.test.ts');
+// #1940's file builds deep-show twice: without the effects module, and with the planted loop module.
+alone.push('tests/acceptance/1940/');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
