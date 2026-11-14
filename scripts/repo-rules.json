@@ -1604,7 +1604,7 @@
         },
         "deep-canvas-scene3d": {
           "spec": "* path=../deep-canvas-scene3d",
-          "why": "Issue #453: the glTF reader that hands it each primitive raw, or names why it can't."
+          "why": "Issue #453: the glTF reader that hands it each primitive raw, or names why it can't; #1938: the scene evaluation its scale, framing and pixel kinds read."
         },
         "serde_json": {
           "spec": "^1",

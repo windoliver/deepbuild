@@ -388,6 +388,11 @@ timed.push('tests/acceptance/405-redraft-ac4/budgets.test.ts');
 byHand.push('tests/acceptance/405/budgets.test.ts');
 // #1936's files each build deep-show.
 alone.push('tests/acceptance/1936/');
+// #1938's files each build deep-show and draw on the GPU. The first draft's faults file and its Oracle lane are kept by
+// hand: their text-under-4.5:1 twin, "Seventy percent", fails the document's own honest-numbers check before contrast
+// decides anything (tests/acceptance/1938-redraft-contrast/DISPUTE.md); the blind redraft runs in their place.
+alone.push('tests/acceptance/1938/machines.test.ts', 'tests/acceptance/1938-redraft-contrast/');
+byHand.push('tests/acceptance/1938/faults.test.ts', 'tests/acceptance/1938-oracle/');
 // #544's files build deep-logic and deep-show, draw on the GPU, export a film, and build deep-logic for Linux x86_64 in Docker.
 alone.push('tests/acceptance/544/');
 // #202's files each build deep-show (and the budgets the merge base too); its budgets time the check, kind_rules and
