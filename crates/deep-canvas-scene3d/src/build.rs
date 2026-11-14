@@ -116,6 +116,10 @@ fn keyed_build(doc: &Value, _: &str, item: &Value, planted: Option<&str>) -> Val
         .collect();
     let mut key = json!({"kind": kind, "params": spec::params_of(item, kind, true, planted),
            "modifiers": item.get("modifiers"), "refs": read});
+    // #226: what a module's deform reads, never where it is placed.
+    if let Some(reads) = crate::contributed::keyed(doc, item) {
+        key["reads"] = reads;
+    }
     // #524: a skin's positions move its vertices, so they key its build.
     if let Some(skin) = item.get("skin") {
         key["skin"] = skin.clone();
@@ -236,10 +240,7 @@ fn fault(id: &str, path: String) -> OpError {
     }
     // A refusal with its own code (#443): a missing module is named as itself.
     if let Some((code, at)) = path.split_once(builders::CODED) {
-        let code = builders::OUTLINE_CODES
-            .into_iter()
-            .find(|c| *c == code)
-            .unwrap_or("out_of_range");
+        let code = code_of(code);
         let at = if code == "module_missing" || at.starts_with("items/") {
             at.to_string()
         } else {
@@ -248,6 +249,16 @@ fn fault(id: &str, path: String) -> OpError {
         return OpError::new(code, at);
     }
     OpError::new("out_of_range", format!("items/{id}/{path}"))
+}
+
+/// A coded fault's code: one an outline source or a module's deform refuses with, else
+/// `out_of_range`.
+pub(crate) fn code_of(code: &str) -> &'static str {
+    builders::OUTLINE_CODES
+        .into_iter()
+        .chain(crate::contributed::CODES)
+        .find(|c| *c == code)
+        .unwrap_or("out_of_range")
 }
 
 /// A builder's mesh and stack at `t` seconds, or a curve's samples.
@@ -314,6 +325,7 @@ fn run_scene3d(v: &mut View<'_>) -> Result<(), OpError> {
     let run = stack::Run {
         planted: v.planted().map(str::to_string),
         outlines: v.outlines().to_vec(),
+        fills: v.fills().to_vec(),
         ..Default::default()
     };
     let out = built(doc, &id, &item, &run, 0.0).map_err(|p| fault_of(&id, &item, p))?;
@@ -328,6 +340,7 @@ fn run_scene3d_live(v: &mut View<'_>) -> Result<(), OpError> {
     let run = stack::Run {
         planted: v.planted().map(str::to_string),
         outlines: v.outlines().to_vec(),
+        fills: v.fills().to_vec(),
         ..Default::default()
     };
     let out = built(doc, &id, &item, &run, t).map_err(|p| fault_of(&id, &item, p))?;

@@ -60,14 +60,23 @@ pub enum Payload {
     Tear {
         edges: Vec<[String; 2]>,
     },
-    /// `fault {kind}`, one of [`FAULTS`].
+    /// #523: `fault {kind}`, one of [`FAULTS`].
     Fault {
         kind: &'static str,
     },
+    /// #523: `crossing {t: flick, output, level, direction: ±1}`: an output's reading passing a
+    /// level it watches, at a time interpolated between steps and floored to a flick.
+    Crossing {
+        t: i64,
+        output: String,
+        level: f64,
+        direction: i8,
+    },
 }
 
-/// A fault's kinds, each's byte its index here (Occurrence list: `fault`).
-pub const FAULTS: [&str; 4] = ["nan", "capacity", "speed_cap", "penetration"];
+/// A fault's kinds, each's byte its index here (Occurrence list: `fault`); #523 adds `jam`, a
+/// kinematic solve that ended its iteration cap past its tolerance (Kinematic solve).
+pub const FAULTS: [&str; 5] = ["nan", "capacity", "speed_cap", "penetration", "jam"];
 
 /// One occurrence as a backend reports it: `kind` an index of [`KINDS`], `a` and `b` stable IDs
 /// with the shape-use index on each body where a contact names one, in the engine's own order.
@@ -135,7 +144,11 @@ fn canonical(mut raw: Raw, rank: &BTreeMap<String, u32>) -> Raw {
     std::mem::swap(&mut raw.a_use, &mut raw.b_use);
     match &mut raw.payload {
         Payload::Contact { normal, .. } | Payload::Hit { normal, .. } => *normal = flip(*normal),
-        Payload::None | Payload::Break { .. } | Payload::Tear { .. } | Payload::Fault { .. } => {}
+        Payload::None
+        | Payload::Break { .. }
+        | Payload::Tear { .. }
+        | Payload::Fault { .. }
+        | Payload::Crossing { .. } => {}
     }
     raw
 }
@@ -214,6 +227,18 @@ pub fn bytes(rows: &[Row], rank: &BTreeMap<String, u32>) -> Vec<u8> {
             Payload::Fault { kind } => {
                 out.push(FAULTS.iter().position(|f| f == kind).unwrap_or(0) as u8)
             }
+            Payload::Crossing {
+                t,
+                output,
+                level,
+                direction,
+            } => {
+                out.extend_from_slice(&t.to_le_bytes());
+                out.extend_from_slice(&(output.len() as u32).to_le_bytes());
+                out.extend_from_slice(output.as_bytes());
+                out.extend_from_slice(&level.to_bits().to_le_bytes());
+                out.push(*direction as u8);
+            }
         }
     }
     out
@@ -264,8 +289,23 @@ pub fn json(row: &Row) -> Value {
             m.insert("force".into(), json!(f64::from(*force)));
             m.insert("torque".into(), json!(f64::from(*torque)));
         }
-        Payload::Tear { edges } => drop(m.insert("edges".into(), json!(edges))),
-        Payload::Fault { kind } => drop(m.insert("fault".into(), json!({ "kind": kind }))),
+        Payload::Tear { edges } => {
+            m.insert("edges".into(), json!(edges));
+        }
+        Payload::Fault { kind } => {
+            m.insert("fault".into(), json!({ "kind": kind }));
+        }
+        Payload::Crossing {
+            t,
+            output,
+            level,
+            direction,
+        } => {
+            m.insert("t".into(), json!(t));
+            m.insert("output".into(), json!(output));
+            m.insert("level".into(), json!(level));
+            m.insert("direction".into(), json!(direction));
+        }
     }
     Value::Object(m)
 }
@@ -345,13 +385,15 @@ pub fn step_flicks(w: &World) -> i64 {
 }
 
 /// The list as readers read it in a scene: each row stamped with `t`, its step's time in flicks
-/// (`step` × the world's step length), as a logic item's rows are.
+/// (`step` × the world's step length), as a logic item's rows are; a crossing keeps its own.
 pub fn timed(rows: &[Value], w: &World) -> Vec<Value> {
     let h = step_flicks(w);
     let stamp = |r: &Value| {
         let mut r = r.clone();
-        let step = r["step"].as_i64().unwrap_or(0);
-        r["t"] = json!(step * h);
+        if r.get("t").is_none() {
+            let step = r["step"].as_i64().unwrap_or(0);
+            r["t"] = json!(step * h);
+        }
         r
     };
     rows.iter().map(stamp).collect()

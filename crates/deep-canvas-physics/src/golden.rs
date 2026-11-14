@@ -6,7 +6,7 @@
 use deep_canvas::canon::sha256_hex;
 use serde_json::{json, Value};
 
-use crate::backend::Canonical;
+use crate::backend::{Canonical, JointState, PARTICLE_FIELDS};
 
 /// A u64 hash as 16 hex: the first 8 bytes of the SHA-256 of `bytes`.
 fn h64(bytes: &[u8]) -> String {
@@ -14,16 +14,36 @@ fn h64(bytes: &[u8]) -> String {
 }
 
 /// The step hash of a state: each body's ID, then its pose and velocity, by bits; then each
-/// soft body's particles, their positions and velocities (#524).
-pub fn step_hash(state: &[Canonical]) -> String {
+/// joint's ID, its whole turns and its steps past `breaks_at` (#523: Joint); then each soft body's
+/// particles, their positions and velocities (#524), in the Checkpoint ring's order.
+pub fn step_hash(state: &[Canonical], joints: &[JointState]) -> String {
     let mut bytes = Vec::new();
-    for b in state {
+    let particle = |b: &&Canonical| b.values.len() == PARTICLE_FIELDS.len();
+    let mut take = |b: &Canonical| {
         bytes.extend_from_slice(&(b.id.len() as u64).to_le_bytes());
         bytes.extend_from_slice(b.id.as_bytes());
         for v in &b.values {
             bytes.extend_from_slice(&v.to_bits().to_le_bytes());
         }
+    };
+    state.iter().filter(|b| !particle(b)).for_each(&mut take);
+    let mut joint_bytes = Vec::new();
+    for j in joints {
+        joint_bytes.extend_from_slice(&(j.id.len() as u64).to_le_bytes());
+        joint_bytes.extend_from_slice(j.id.as_bytes());
+        joint_bytes.extend_from_slice(&j.turns.to_le_bytes());
+        joint_bytes.extend_from_slice(&j.past.to_le_bytes());
     }
+    let mut tail = Vec::new();
+    for b in state.iter().filter(particle) {
+        tail.extend_from_slice(&(b.id.len() as u64).to_le_bytes());
+        tail.extend_from_slice(b.id.as_bytes());
+        for v in &b.values {
+            tail.extend_from_slice(&v.to_bits().to_le_bytes());
+        }
+    }
+    bytes.extend(joint_bytes);
+    bytes.extend(tail);
     h64(&bytes)
 }
 

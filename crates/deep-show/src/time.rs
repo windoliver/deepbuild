@@ -68,6 +68,8 @@ pub struct Determinism {
     /// #504: the call's own run replays the session's input track and picks; a check's run
     /// (the verdict's) reads the saved revision alone.
     pub session: bool,
+    /// #507: both sides replay the document on this track instead, outside present mode.
+    pub track: Option<Vec<Value>>,
 }
 
 /// One of this issue's calls, parsed; `None` is `bad_input`.
@@ -172,6 +174,7 @@ pub fn parse_call(name: &str, c: &Map<String, Value>) -> Option<Call> {
                 at_times,
                 compare,
                 session: true,
+                track: c.get("track").and_then(Value::as_array).cloned(),
             }))
         }
         _ => None,
@@ -331,7 +334,7 @@ fn default_times(doc: &Value, motion: Option<&Motion>) -> Vec<i64> {
 
 impl Hub<'_> {
     /// The document's current revision, or the `no_revision` refusal.
-    fn current_doc(&self, doc: &str) -> Result<Value, Value> {
+    pub(crate) fn current_doc(&self, doc: &str) -> Result<Value, Value> {
         let mut doc = self
             .current(doc)
             .map(|r| r.doc.clone())
@@ -583,12 +586,10 @@ impl Hub<'_> {
     /// and node results.
     pub fn determinism(&mut self, d: &Determinism) -> Value {
         let current = self.current_doc(&d.doc);
-        let document = match current.map(|doc| {
-            if d.session {
-                self.played(&d.doc, &doc)
-            } else {
-                doc
-            }
+        let document = match current.map(|doc| match &d.track {
+            Some(track) => crate::present::with_track_only(&doc, track),
+            None if d.session => self.played(&d.doc, &doc),
+            None => doc,
         }) {
             Ok(doc) => doc,
             Err(reply) => return reply,
@@ -719,8 +720,10 @@ impl Hub<'_> {
         let sha = self.put_png(rgba, size).map_err(|u| u.code.to_string())?;
         // #405: what hashing adds to the render, each in ms.
         let timing = json!({"render_ms": rendered.as_secs_f64() * 1e3, "hash_ms": hashed.as_secs_f64() * 1e3});
-        let mut side =
-            json!({"pixels": sha, "nodes": nodes, "pixel_hash": pixel_hash, "timing": timing});
+        let mut side = json!({"pixels": sha, "nodes": nodes, "pixel_hash": pixel_hash, "timing": timing,
+            // #507: the timeline position the last frame shows, and each text's drawn string.
+            "position": crate::present::position_at(doc, times.last().copied().unwrap_or(0)),
+            "texts": drawing.drawing.as_deref().map(crate::film_audit::drawn_texts).unwrap_or_default()});
         if !video.is_empty() {
             side["video"] = Value::Object(video);
         }

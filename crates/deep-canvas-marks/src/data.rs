@@ -340,7 +340,11 @@ pub fn log_rows(id: &str, items: &Map<String, Value>) -> Result<Vec<String>, Ref
 }
 
 impl Scale {
-    fn read(id: &str, item: &Value, items: &Map<String, Value>) -> Result<Scale, Refused> {
+    pub(crate) fn read(
+        id: &str,
+        item: &Value,
+        items: &Map<String, Value>,
+    ) -> Result<Scale, Refused> {
         let path = format!("items/{id}/params");
         let p = item.get("params").and_then(Value::as_object);
         let get = |k: &str| p.and_then(|p| p.get(k));
@@ -400,6 +404,9 @@ impl Scale {
                 .is_some_and(|r| r.first().is_some_and(Value::is_string));
         let (range, roles) = if kind == ScaleKind::Quantize || ramp {
             ([0.0, 0.0], strings("range")?)
+        } else if matches!(get("range").and_then(Value::as_str), Some("x" | "y" | "z")) {
+            // #226: a range naming a view axis spans that axis, which its reader places: the unit.
+            ([0.0, 1.0], Vec::new())
         } else {
             (pair("range")?, Vec::new())
         };
@@ -687,6 +694,17 @@ pub fn scale_of(id: &str, item: &Value) -> Result<Scale, Refused> {
     Scale::read(id, item, &Map::new())
 }
 
+/// [`scale_named`], following the keys of a channel on its domain (#226).
+fn keyed_named(
+    items: &Map<String, Value>,
+    channels: Option<&Value>,
+    id: &str,
+    path: &str,
+) -> Result<Scale, Refused> {
+    let scale = scale_named(items, id, path)?;
+    Ok(crate::follow::keyed(scale, id, &items[id], items, channels))
+}
+
 fn scale_named(items: &Map<String, Value>, id: &str, path: &str) -> Result<Scale, Refused> {
     match items.get(id) {
         Some(item) if item.get("kind").and_then(Value::as_str) == Some("scale@1") => {
@@ -915,13 +933,17 @@ pub fn domain_report(id: &str, item: &Value, items: &Map<String, Value>) -> Resu
 
 /// What `geometry` answers of an axis at t: every tick its scale holds at any period, with its
 /// opacity.
-pub fn ticks_report(id: &str, item: &Value, items: &Map<String, Value>) -> Result<Value, Refused> {
+pub fn ticks_report(
+    id: &str,
+    item: &Value,
+    (items, channels): (&Map<String, Value>, Option<&Value>),
+) -> Result<Value, Refused> {
     let path = format!("items/{id}/params/scale");
     let scale = item.pointer("/params/scale").and_then(Value::as_str);
     let Some(scale) = scale else {
         return refuse("bad_axis", path);
     };
-    let ticks = scale_named(items, scale, &path)?.faded_ticks();
+    let ticks = keyed_named(items, channels, scale, &path)?.faded_ticks();
     Ok(ticks
         .into_iter()
         .map(|(value, _, opacity)| json!({"value": value, "opacity": opacity}))
@@ -1877,7 +1899,7 @@ fn cross_zero(id: &str, items: &Map<String, Value>, path: &str) -> Result<(bool,
 pub fn axis(
     id: &str,
     item: &Value,
-    items: &Map<String, Value>,
+    (items, channels): (&Map<String, Value>, Option<&Value>),
     palette: &Palette,
     pos: [f64; 2],
     frame: [f64; 2],
@@ -1887,7 +1909,7 @@ pub fn axis(
     let Some(scale_id) = p.get("scale").and_then(Value::as_str) else {
         return refuse("bad_axis", format!("{path}/scale"));
     };
-    let scale = scale_named(items, scale_id, &format!("{path}/scale"))?;
+    let scale = keyed_named(items, channels, scale_id, &format!("{path}/scale"))?;
     let side = p.get("side").and_then(Value::as_str).unwrap_or("bottom");
     let through_zero = match side {
         "zero" => Some(cross_zero(scale_id, items, &format!("{path}/side"))?),
@@ -2271,7 +2293,7 @@ mod tests {
             let drawn = super::axis(
                 "a",
                 &axis,
-                all.as_object().unwrap(),
+                (all.as_object().unwrap(), None),
                 &palette,
                 [0.0, 0.0],
                 [640.0, 480.0],
@@ -2364,7 +2386,7 @@ mod tests {
         let marks = axis(
             "ax",
             &json!({"params": {"scale": "x", "side": "bottom", "at": 50}}),
-            items,
+            (items, None),
             &palette,
             [0.0, 0.0],
             [640.0, 480.0],
@@ -2383,7 +2405,7 @@ mod tests {
         let marks = axis(
             "ax",
             &json!({"params": {"scale": "x"}}),
-            items.as_object().unwrap(),
+            (items.as_object().unwrap(), None),
             &palette,
             [0.0, 0.0],
             [640.0, 480.0],
@@ -2411,7 +2433,7 @@ mod tests {
         let marks = axis(
             "ax",
             &json!({"params": {"scale": "y", "side": "left", "at": 48, "title": "Sales"}}),
-            items.as_object().unwrap(),
+            (items.as_object().unwrap(), None),
             &palette,
             [0.0, 0.0],
             [640.0, 480.0],
