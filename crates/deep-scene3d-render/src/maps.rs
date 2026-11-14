@@ -105,9 +105,10 @@ pub struct Store {
     samplers: BTreeMap<([Wrap; 2], u8), wgpu::Sampler>,
     /// This frame's texels by image hash (the scene's).
     pub texels: BTreeMap<String, Arc<Texels>>,
-    /// #506: each view inset's picture by its key, with a count that moves when its target is
-    /// made again, so a bind group made on the old one is never reused.
+    /// #506: each view inset's picture by its key, with a count of the store's that is new for
+    /// each target made, so a bind group made on an old one is never reused; and the last count.
     views: BTreeMap<String, (wgpu::TextureView, u64)>,
+    view_count: u64,
     groups: BTreeMap<String, (u32, wgpu::BindGroup)>,
     pub none: wgpu::BindGroup,
     white: wgpu::TextureView,
@@ -172,6 +173,7 @@ impl Store {
             samplers: BTreeMap::new(),
             texels: BTreeMap::new(),
             views: BTreeMap::new(),
+            view_count: 0,
             groups: BTreeMap::new(),
             white,
             uploads: 0,
@@ -223,15 +225,25 @@ impl Store {
     }
 
     /// #506: this frame's view pictures by key; one whose target was made again counts anew.
+    /// A picture that left, or whose target was made again, takes its bind groups with it.
     pub fn set_views(&mut self, views: BTreeMap<String, wgpu::TextureView>) {
-        let old = std::mem::take(&mut self.views);
+        let mut old = std::mem::take(&mut self.views);
         for (key, view) in views {
-            let n = match old.get(&key) {
-                Some((v, n)) if *v == view => *n,
-                Some((_, n)) => n + 1,
-                None => 0,
+            let n = match old.remove(&key) {
+                Some((v, n)) if v == view => n,
+                gone => {
+                    if let Some((_, n)) = gone {
+                        old.insert(key.clone(), (view.clone(), n));
+                    }
+                    self.view_count += 1;
+                    self.view_count
+                }
             };
             self.views.insert(key, (view, n));
+        }
+        for (_, (_, n)) in old {
+            let stale = format!("|view {n}");
+            self.groups.retain(|k, _| !k.ends_with(&stale));
         }
     }
 

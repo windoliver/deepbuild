@@ -4569,8 +4569,8 @@ impl Renderer {
         }
         // #537: the terrain overlays' changed rows, before the batches bind the lights' group.
         let keep = self.planted.overlay_keeps_grid_on_seek;
-        let insets = inset::len(&scene.projected, &scene.texels);
-        if self.tints.upload(device, &scene.tints, keep) | self.insets.ensure(device, insets) {
+        let remade = self.insets.ensure(device, &scene.projected, &scene.texels);
+        if self.tints.upload(device, &scene.tints, keep) | remade {
             self.rebind_lights(device);
         }
         self.counts.upload_ms.extend(self.tints.upload_ms.clone());
@@ -4579,10 +4579,8 @@ impl Renderer {
         }
         self.sways.move_all(device, scene);
         self.counts.overlay_rows = self.tints.table(device, &scene.tints, &self.picks);
-        self.insets.write(
-            device,
-            inset::words(&scene.projected, &scene.texels, &self.picks),
-        );
+        self.insets
+            .write(device, &scene.projected, &scene.texels, &self.picks);
         if self.insets.unlit && self.unlit.is_none() {
             self.unlit = Some(inset::Unlit::new(&device.device));
         }

@@ -34,16 +34,26 @@ fn inset_texel(e: u32, x: i32, y: i32) -> vec4<f32> {
     return unpack4x8unorm(insets[insets[e + 17u] + u32(at.y * size.x + at.x)]);
 }
 
-// The texels at `uv` filtered bilinearly in their stored codes, so equal neighbours read back
-// exactly; never mipmapped.
+// A texel with its color times its alpha, as the filter weighs it.
+fn inset_texel_p(e: u32, x: i32, y: i32) -> vec4<f32> {
+    let c = inset_texel(e, x, y);
+    return vec4<f32>(c.rgb * c.a, c.a);
+}
+
+// The texels at `uv` filtered bilinearly in their stored codes, weighted by alpha so a clear
+// texel's color never bleeds in, and equal neighbours read back exactly; never mipmapped.
 fn inset_sample(e: u32, uv: vec2<f32>) -> vec4<f32> {
     let size = vec2<f32>(f32(insets[e + 18u]), f32(insets[e + 19u]));
     let p = uv * size - vec2<f32>(0.5);
     let i = vec2<i32>(floor(p));
     let f = p - floor(p);
-    let a = mix(inset_texel(e, i.x, i.y), inset_texel(e, i.x + 1, i.y), f.x);
-    let b = mix(inset_texel(e, i.x, i.y + 1), inset_texel(e, i.x + 1, i.y + 1), f.x);
-    return mix(a, b, f.y);
+    let a = mix(inset_texel_p(e, i.x, i.y), inset_texel_p(e, i.x + 1, i.y), f.x);
+    let b = mix(inset_texel_p(e, i.x, i.y + 1), inset_texel_p(e, i.x + 1, i.y + 1), f.x);
+    let m = mix(a, b, f.y);
+    if m.a <= 0.0 {
+        return vec4<f32>(0.0);
+    }
+    return vec4<f32>(m.rgb / m.a, m.a);
 }
 
 // Inset `k`'s color at world point `p` with normal `n` on solid `pick`: its stored codes and its

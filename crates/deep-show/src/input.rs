@@ -382,13 +382,18 @@ impl Hub<'_> {
             {
                 let value = match kind {
                     "toggle" => {
-                        let held = self
-                            .session_state
-                            .get(id)
-                            .and_then(|s| s["view"].get(c))
-                            .or_else(|| spec.get("default"))
-                            .and_then(Value::as_bool)
-                            .unwrap_or(false);
+                        // The value it holds: a view-class one in the session's view state, a
+                        // document-class one as its input track's latest entry left it.
+                        let tracked = self.tracks.get(id).and_then(|t| {
+                            t.entries().iter().rev().find(|e| e.control == c).map(|e| e.value.clone())
+                        });
+                        let held = match crate::played::class_of(spec) {
+                            "view" => self.session_state.get(id).and_then(|s| s["view"].get(c)).cloned(),
+                            _ => tracked,
+                        }
+                        .or_else(|| spec.get("default").cloned())
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(false);
                         json!(!held)
                     }
                     _ => json!(1),
@@ -535,7 +540,7 @@ impl Hub<'_> {
         // #506: a 3D panel draws its frame, its 2D items and its overlays on top, its materials
         // and lights read as the 3D frame reads them.
         if deep_canvas_scene3d::scene::has_3d(&shown) {
-            match self.view3d(&viewed, &shown, 0) {
+            match self.view3d(&viewed, 0) {
                 Ok(Some((rgba, size))) => {
                     let png = crate::snapshot::png(rgba, size);
                     return crate::evidence::put(&self.scenario.evidence, &png)

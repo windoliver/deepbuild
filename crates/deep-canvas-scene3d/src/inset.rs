@@ -29,6 +29,37 @@ const DEFAULT_TEXELS: f64 = 1024.0;
 /// How far a window stands proud of its face, m, so it never fights the face for depth.
 const PROUD: f64 = 1e-4;
 
+/// A picture's clear texels (straight alpha) take the mean color of their covered neighbours, so
+/// a filter that reads them beside an edge blends the content's color, never black. Their alpha
+/// stays 0, so nothing of them shows.
+pub fn bleed(rgba: &mut [u8], size: [u32; 2]) {
+    let [w, h] = size.map(|v| v as i64);
+    let src = rgba.to_vec();
+    for y in 0..h {
+        for x in 0..w {
+            let o = ((y * w + x) * 4) as usize;
+            if src[o + 3] != 0 {
+                continue;
+            }
+            let (mut sum, mut n) = ([0u32; 3], 0u32);
+            for (dx, dy) in [(-1, -1), (0, -1), (1, -1), (-1, 0), (1, 0), (-1, 1), (0, 1), (1, 1)] {
+                let (nx, ny) = (x + dx, y + dy);
+                if nx < 0 || ny < 0 || nx >= w || ny >= h {
+                    continue;
+                }
+                let q = ((ny * w + nx) * 4) as usize;
+                if src[q + 3] != 0 {
+                    (0..3).for_each(|c| sum[c] += u32::from(src[q + c]));
+                    n += 1;
+                }
+            }
+            if n > 0 {
+                (0..3).for_each(|c| rgba[o + c] = ((sum[c] + n / 2) / n) as u8);
+            }
+        }
+    }
+}
+
 /// The key a view inset's picture has in its window's maps.
 pub fn view_key(id: &str) -> String {
     format!("view:{id}")
@@ -217,7 +248,13 @@ fn named_frame(ctx: &Ctx, layers: &[Layer3], at: &str) -> Option<(Affine3, Optio
                 return None;
             }
             let z = unit(n);
-            let x = unit([1.0 - z[0] * z[0], -z[0] * z[1], -z[0] * z[2]]);
+            // The item's x across the face, or its y on a face that looks along x.
+            let across = if z[0].abs() > 0.99 { [0.0, 1.0, 0.0] } else { [1.0, 0.0, 0.0] };
+            let x = unit([
+                across[0] - dot(across, z) * z[0],
+                across[1] - dot(across, z) * z[1],
+                across[2] - dot(across, z) * z[2],
+            ]);
             let local = frame(c.map(|v| v / area), x, cross(z, x), z);
             return Some((orthonormal(&mul(&s.model, &local)), Some(k)));
         }
@@ -225,22 +262,27 @@ fn named_frame(ctx: &Ctx, layers: &[Layer3], at: &str) -> Option<(Affine3, Optio
     None
 }
 
-/// The items `names` keeps in `doc`: each item named, a collection's members, and their children.
+/// The items `names` keeps in `doc`: each item named, a collection's members (each collection
+/// read once, so one that holds itself ends), and their children.
 pub(crate) fn kept(doc: &Map<String, Value>, names: &[&str]) -> BTreeSet<String> {
     let collections = doc.get("collections").and_then(Value::as_object);
     let mut out = BTreeSet::new();
+    let mut read: BTreeSet<String> = BTreeSet::new();
     let mut todo: Vec<String> = names.iter().map(|s| s.to_string()).collect();
     while let Some(n) = todo.pop() {
         match collections.and_then(|c| c.get(&n)) {
-            Some(c) => todo.extend(
-                c.get("members")
-                    .and_then(Value::as_array)
-                    .into_iter()
-                    .flatten()
-                    .filter_map(Value::as_str)
-                    .filter(|m| !out.contains(*m))
-                    .map(str::to_string),
-            ),
+            Some(c) => {
+                if read.insert(n) {
+                    todo.extend(
+                        c.get("members")
+                            .and_then(Value::as_array)
+                            .into_iter()
+                            .flatten()
+                            .filter_map(Value::as_str)
+                            .map(str::to_string),
+                    );
+                }
+            }
             None => {
                 out.insert(n);
             }
@@ -267,7 +309,28 @@ pub(crate) fn kept(doc: &Map<String, Value>, names: &[&str]) -> BTreeSet<String>
     }
 }
 
-fn names(v: Option<&Value>) -> Vec<&str> {
+/// What a view's `include` and `exclude` keep: the items `include` names (every item with none)
+/// less those `exclude` names; `None` for every item.
+pub(crate) fn kept_view(doc: &Map<String, Value>, view: &Value) -> Option<BTreeSet<String>> {
+    let (include, exclude) = (names(view.get("include")), names(view.get("exclude")));
+    if include.is_empty() && exclude.is_empty() {
+        return None;
+    }
+    let mut keep = match include.is_empty() {
+        true => doc
+            .get("items")
+            .and_then(Value::as_object)
+            .map(|i| i.keys().cloned().collect())
+            .unwrap_or_default(),
+        false => kept(doc, &include),
+    };
+    for x in kept(doc, &exclude) {
+        keep.remove(&x);
+    }
+    Some(keep)
+}
+
+pub(crate) fn names(v: Option<&Value>) -> Vec<&str> {
     match v {
         Some(Value::String(s)) => vec![s.as_str()],
         Some(Value::Array(a)) => a.iter().filter_map(Value::as_str).collect(),
@@ -414,10 +477,15 @@ pub(crate) fn evaluate(
         let Some(face) = p.get("face").and_then(Value::as_str) else {
             return refused("bad_input", format!("{path}/face"));
         };
+        let owner = face.split_once('#').map_or(face, |(o, _)| o);
+        // A face on a part that doesn't draw at t (hidden, or a hidden parent's) hides with it.
+        let drawn = layers.iter().flat_map(|l| &l.solids).any(|s| s.id == owner);
+        if !drawn && (ctx.get)(owner).is_some() {
+            continue;
+        }
         let Some((at, layer)) = named_frame(ctx, layers, face) else {
             return refused("ref_unresolved", format!("{path}/face"));
         };
-        let owner = face.split_once('#').map_or(face, |(o, _)| o);
         let parent = layers
             .iter()
             .flat_map(|l| &l.solids)
@@ -451,16 +519,7 @@ pub(crate) fn evaluate(
             (None, Some(view)) => {
                 let eye = view.get("map").and_then(Value::as_str) == Some("eye");
                 let camera = view.get("camera").and_then(Value::as_str).filter(|c| *c != "none");
-                let keep = match view.get("include") {
-                    None => None,
-                    v => Some(kept(ctx.doc, &names(v))),
-                };
-                let keep = keep.map(|mut k| {
-                    for x in kept(ctx.doc, &names(view.get("exclude"))) {
-                        k.remove(&x);
-                    }
-                    k
-                });
+                let keep = kept_view(ctx.doc, view);
                 window.material = picture_material(look, id)?;
                 let plant = ctx.planted == Some("eye_inset_centred_frustum");
                 if eye && !plant {
@@ -603,7 +662,7 @@ fn projected(
                     code: "ref_unresolved",
                     path: format!("{path}/from"),
                 })?;
-            let cam = crate::scene::camera(params, [1.0, 1.0], ctx.bounds, &format!("items/{c}/params"))?;
+            let cam = crate::scene::camera(params, size, ctx.bounds, &format!("items/{c}/params"))?;
             (frame(cam.eye, cam.right, cam.up, cam.forward.map(|v| -v)), Some(cam))
         }
     };

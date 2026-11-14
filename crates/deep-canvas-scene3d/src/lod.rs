@@ -377,7 +377,7 @@ pub fn triangles(c: &Choice, lod: &Lod, level: usize) -> u64 {
 /// box, or a dot, and inside a margin both bands, each masked.
 pub fn resolve(scene: &mut Scene, choices: &[Choice]) {
     // #506: a nested view resolves its own levels from the layers as they were.
-    if scene.sources.is_none() {
+    if scene.sources.is_none() && !scene.views.is_empty() {
         scene.sources = Some(std::sync::Arc::new(scene.layers.clone()));
     }
     let mut next = choices.iter();

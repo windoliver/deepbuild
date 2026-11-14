@@ -2,8 +2,9 @@
 //! on the document seen from the overlay's camera at its rect's size, with every view overlay
 //! taken out, before the main view opens: the whole frame chain, its look, the status guard and
 //! status colors included, in a session and renderer of its own, so its backdrop, mirror, light
-//! cut and levels of detail are its own. Its frames' final bytes are laid over the main frame's
-//! rect, a border in its role just outside it.
+//! cut and levels of detail are its own. Its frames' final bytes, kept in a folder of their own
+//! for the run rather than held in memory, are laid over the main frame's rect, a border in its
+//! role just outside it.
 
 use deep_canvas_scene3d::look::Look3;
 use deep_canvas_scene3d::views::{self, Placed};
@@ -11,17 +12,35 @@ use serde_json::{json, Value};
 
 use crate::{refused, App};
 
-/// A view overlay's frames, as its own run drew them, in the order the call draws them.
+/// A view overlay's frames, as its own run drew them, in the order the call draws them: a file
+/// each in a folder gone with it.
 pub(super) struct Shown {
     pub placed: Placed,
-    pub frames: Vec<Vec<u8>>,
+    dir: std::path::PathBuf,
 }
 
-/// What a view overlay's own run carries: the frames it drew, and the main view's document and
-/// size, which a planted core draws first.
+impl Drop for Shown {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.dir);
+    }
+}
+
+/// What a view overlay's own run carries: the folder its frames go to and how many it drew, and
+/// the main view's document, which a planted core draws first.
 pub(super) struct Sub {
-    pub frames: Vec<Vec<u8>>,
+    dir: std::path::PathBuf,
+    count: usize,
     pub main: Value,
+}
+
+impl Sub {
+    /// Keeps the next frame's final bytes.
+    pub fn keep(&mut self, bytes: &[u8]) -> Result<(), Value> {
+        std::fs::write(self.dir.join(format!("{}.bgra", self.count)), bytes)
+            .map_err(|e| refused("not_written", format!("a view overlay's frame: {e}")))?;
+        self.count += 1;
+        Ok(())
+    }
 }
 
 /// The call's fields a view overlay's run never takes: what reads or reports the main view.
@@ -57,17 +76,23 @@ pub(super) fn run_all(
             o.insert("doc".into(), json!(path));
             o.insert("size".into(), json!([p.rect[2], p.rect[3]]));
         }
+        let dir = std::env::temp_dir().join(format!(
+            "deep-gpu-view-{}-{}",
+            std::process::id(),
+            p.id
+        ));
+        std::fs::create_dir_all(&dir)
+            .map_err(|e| refused("not_written", format!("{}: {e}", p.id)))?;
+        let held = Shown { placed: p, dir: dir.clone() };
         let mut sub = Some(Sub {
-            frames: Vec::new(),
+            dir,
+            count: 0,
             main: doc.clone(),
         });
         let ran = super::run_view(app, out, &c, &mut sub);
         let _ = std::fs::remove_file(&path);
         ran?;
-        shown.push(Shown {
-            placed: p,
-            frames: sub.map(|s| s.frames).unwrap_or_default(),
-        });
+        shown.push(held);
     }
     Ok(shown)
 }
@@ -75,32 +100,9 @@ pub(super) fn run_all(
 /// Lays each view overlay's `k`-th frame over `bgra` (the main frame, `size` px), with a 1 px
 /// border in its role around the rect.
 pub(super) fn composite(shown: &[Shown], k: usize, bgra: &mut [u8], size: [u32; 2]) {
-    let [fw, fh] = size.map(|v| v as i64);
     for s in shown {
-        let Some(frame) = s.frames.get(k) else { continue };
-        let [x0, y0, w, h] = s.placed.rect.map(i64::from);
-        let mut put = |x: i64, y: i64, px: [u8; 4]| {
-            if (0..fw).contains(&x) && (0..fh).contains(&y) {
-                let o = ((y * fw + x) * 4) as usize;
-                bgra[o..o + 4].copy_from_slice(&px);
-            }
-        };
-        for y in 0..h {
-            for x in 0..w {
-                let o = ((y * w + x) * 4) as usize;
-                if let Some(p) = frame.get(o..o + 4) {
-                    put(x0 + x, y0 + y, [p[0], p[1], p[2], p[3]]);
-                }
-            }
-        }
+        let Ok(frame) = std::fs::read(s.dir.join(format!("{k}.bgra"))) else { continue };
         let [r, g, b] = s.placed.border;
-        for x in x0 - 1..=x0 + w {
-            put(x, y0 - 1, [b, g, r, 255]);
-            put(x, y0 + h, [b, g, r, 255]);
-        }
-        for y in y0..y0 + h {
-            put(x0 - 1, y, [b, g, r, 255]);
-            put(x0 + w, y, [b, g, r, 255]);
-        }
+        views::lay(&s.placed, &frame, bgra, size, [b, g, r, 255]);
     }
 }

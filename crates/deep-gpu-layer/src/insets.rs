@@ -42,10 +42,13 @@ impl Store {
         let n = RUNS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let root = std::env::temp_dir().join(format!("deep-gpu-insets-{}-{n}", std::process::id()));
         std::fs::create_dir_all(&root).ok()?;
+        let store = Store(root);
         for (sha, path) in assets.iter().filter(|(s, _)| s.len() == 64) {
-            let _ = std::os::unix::fs::symlink(std::path::absolute(path).ok()?, root.join(sha));
+            if let Ok(path) = std::path::absolute(path) {
+                let _ = std::os::unix::fs::symlink(path, store.0.join(sha));
+            }
         }
-        Some(Store(root))
+        Some(store)
     }
 }
 
@@ -58,6 +61,8 @@ impl Drop for Store {
 /// A run's inset pictures.
 pub struct Pictures {
     kept: BTreeMap<String, Arc<Texels>>,
+    /// Each overlay frame's picture by what it draws, kept between frames.
+    frames: std::cell::RefCell<BTreeMap<String, Arc<image::RgbaImage>>>,
     store: Option<Store>,
     palette: Palette,
     /// #506 criterion 8's planted wrong program: the premultiplied render sampled as straight.
@@ -68,6 +73,7 @@ impl Pictures {
     pub fn new(assets: &BTreeMap<String, PathBuf>, palette: Palette, as_drawn: bool) -> Pictures {
         Pictures {
             kept: BTreeMap::new(),
+            frames: Default::default(),
             store: Store::of(assets),
             palette,
             as_drawn,
@@ -80,23 +86,35 @@ impl Pictures {
 
     /// A 2D document's items at `size` px, premultiplied as the raster draws them.
     pub fn draw(&self, doc: &Map<String, Value>, size: [u32; 2]) -> Result<image::RgbaImage, Value> {
+        self.draw_at(doc, size, [0.0; 2])
+    }
+
+    /// [`Pictures::draw`], every mark moved by `shift` px (a sub-pixel place).
+    fn draw_at(
+        &self,
+        doc: &Map<String, Value>,
+        size: [u32; 2],
+        shift: [f64; 2],
+    ) -> Result<image::RgbaImage, Value> {
         let empty = Map::new();
         let items = doc.get("items").and_then(Value::as_object).unwrap_or(&empty);
         let frame = scene::frame(doc, items, &self.palette, &Record::default(), 1.0)
             .map_err(|r| refused(r.code, r.path))?;
         let marks: Vec<_> = frame.layers.iter().flat_map(|l| l.marks.iter().cloned()).collect();
-        deep_marks_render::layer::premultiplied(&marks, size, self.store())
+        deep_marks_render::layer::premultiplied(&marks, size, shift, self.store())
     }
 
-    /// #506: each overlay frame `doc` shows at t laid over `bgra` (the frame, `size` px,
-    /// premultiplied BGRA) on top of the scene, its top left corner at its overlay's place.
-    pub fn frames_over(
+    /// #506: each overlay frame `doc` shows at t, drawn: its overlay, the whole px its picture's
+    /// top left sits at (the frame's corner at its anchor's place), and the picture,
+    /// premultiplied.
+    pub fn frames(
         &self,
         doc: &Value,
         overlays: &[deep_canvas_scene3d::scene::Overlay],
-        bgra: &mut [u8],
-        size: [u32; 2],
-    ) -> Result<(), Value> {
+    ) -> Result<Vec<(String, [i64; 2], Arc<image::RgbaImage>)>, Value> {
+        let mut out = Vec::new();
+        let mut kept = self.frames.borrow_mut();
+        let mut drawn = BTreeMap::new();
         for f in deep_canvas_scene3d::views::framed(doc) {
             let Some(origin) = overlays.iter().find(|o| o.id == f.overlay).and_then(|o| o.origin) else {
                 continue;
@@ -106,34 +124,52 @@ impl Pictures {
             };
             let b = doc.pointer(&format!("/items/{frame}/params/box")).and_then(Value::as_array);
             let wh = [2, 3].map(|k| b.and_then(|b| b.get(k)).and_then(Value::as_f64).unwrap_or(0.0));
-            let canvas = [0, 1].map(|k| (f.corner[k] + wh[k]).ceil().max(1.0) as u32);
+            // The picture on a whole pixel, the place's fraction moving the marks inside it, so
+            // the frame sits on its anchor's projection to the sub-pixel.
+            let place = [0, 1].map(|k| origin[k] - f.corner[k]);
+            let at = place.map(|v| v.floor() as i64);
+            let phase = [0, 1].map(|k| place[k] - at[k] as f64);
+            let canvas = [0, 1].map(|k| (f.corner[k] + wh[k] + 1.0).ceil().max(1.0) as u32);
             let mut part = doc.as_object().cloned().unwrap_or_default();
             part.insert("size".into(), serde_json::json!(canvas));
             if let Some(items) = part.get_mut("items").and_then(Value::as_object_mut) {
                 items.retain(|id, _| f.items.contains(id));
             }
-            let picture = self.draw(&part, canvas)?;
-            let at = [0, 1].map(|k| (origin[k] - f.corner[k]).round() as i64);
-            for y in 0..canvas[1] as i64 {
-                for x in 0..canvas[0] as i64 {
-                    let (dx, dy) = (at[0] + x, at[1] + y);
-                    if dx < 0 || dy < 0 || dx >= i64::from(size[0]) || dy >= i64::from(size[1]) {
-                        continue;
-                    }
-                    let s = picture.get_pixel(x as u32, y as u32).0;
-                    let a = u32::from(s[3]);
-                    if a == 0 {
-                        continue;
-                    }
-                    let o = ((dy * i64::from(size[0]) + dx) * 4) as usize;
-                    let d = &mut bgra[o..o + 4];
-                    let over = |src: u8, dst: u8| (u32::from(src) + u32::from(dst) * (255 - a) / 255).min(255) as u8;
-                    let (r, g, bl) = (s[0], s[1], s[2]);
-                    d[0] = over(bl, d[0]);
-                    d[1] = over(g, d[1]);
-                    d[2] = over(r, d[2]);
-                    d[3] = over(s[3], d[3]);
+            let key = format!("{}|{phase:?}", Value::Object(part.clone()));
+            let picture = match kept.remove(&key) {
+                Some(p) => p,
+                None => Arc::new(self.draw_at(&part, canvas, phase)?),
+            };
+            drawn.insert(key, picture.clone());
+            out.push((f.overlay, at, picture));
+        }
+        *kept = drawn;
+        Ok(out)
+    }
+
+    /// #506: [`Pictures::frames`] laid over `bgra` (the frame, `size` px, premultiplied BGRA) on
+    /// top of the scene.
+    pub fn frames_over(
+        &self,
+        doc: &Value,
+        overlays: &[deep_canvas_scene3d::scene::Overlay],
+        bgra: &mut [u8],
+        size: [u32; 2],
+    ) -> Result<(), Value> {
+        for (_, at, picture) in self.frames(doc, overlays)? {
+            for (x, y, s) in picture.enumerate_pixels() {
+                let (dx, dy) = (at[0] + i64::from(x), at[1] + i64::from(y));
+                let a = u32::from(s[3]);
+                if a == 0 || dx < 0 || dy < 0 || dx >= i64::from(size[0]) || dy >= i64::from(size[1]) {
+                    continue;
                 }
+                let o = ((dy * i64::from(size[0]) + dx) * 4) as usize;
+                let d = &mut bgra[o..o + 4];
+                let over = |src: u8, dst: u8| (u32::from(src) + u32::from(dst) * (255 - a) / 255).min(255) as u8;
+                d[0] = over(s[2], d[0]);
+                d[1] = over(s[1], d[1]);
+                d[2] = over(s[0], d[2]);
+                d[3] = over(s[3], d[3]);
             }
         }
         Ok(())
@@ -149,6 +185,7 @@ impl Pictures {
                 let mut rgba = self.draw(&doc, p.size)?.into_raw();
                 if !self.as_drawn {
                     straight(&mut rgba);
+                    deep_canvas_scene3d::inset::bleed(&mut rgba, p.size);
                 }
                 let texels = Texels {
                     format: deep_scene3d_render::inset::FORMAT.into(),

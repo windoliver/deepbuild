@@ -91,6 +91,19 @@ impl Gpu3 {
         palette: &Palette,
         size: [u16; 2],
     ) -> Result<(Vec<u8>, Scene), Unfit> {
+        self.draw_painted(doc, t, palette, size, &mut |_| {})
+    }
+
+    /// [`Gpu3::draw`], `paint` handed the evaluated scene before it draws (#506: the texels of
+    /// its insets' pictures).
+    pub fn draw_painted(
+        &mut self,
+        doc: &Value,
+        t: i64,
+        palette: &Palette,
+        size: [u16; 2],
+        paint: &mut dyn FnMut(&mut Scene),
+    ) -> Result<(Vec<u8>, Scene), Unfit> {
         let mut doc = doc.clone();
         if let Some(d) = doc.as_object_mut() {
             d.insert("size".into(), json!(size));
@@ -104,11 +117,12 @@ impl Gpu3 {
             planted: self.planted.as_deref(),
             memo: None,
         };
-        let scene =
+        let mut scene =
             evaluate_any(&doc, t, &look, &mut self.labels, None, fills).map_err(|r| Unfit {
                 code: r.code,
                 path: r.path,
             })?;
+        paint(&mut scene);
         let mut bytes = draw_offscreen(&self.device, &mut self.renderer, &scene, &look, None)
             .ok_or(Unfit {
                 code: "unsupported_platform",

@@ -303,13 +303,18 @@ pub fn report(lowered: &Value, input: &Value) -> Report {
         }
     };
     // #506: a film's main shot is checked along its span, at 30 Hz (`path_rate`'s default) from
-    // each timeline shot's start to its end, when the input names no times.
-    let shot_times = input
-        .get("at_times")
-        .is_none()
-        .then(|| scene::shot_times(lowered, 30))
-        .filter(|t| !t.is_empty());
-    let times = match shot_times.map_or_else(|| scene::times(input, KIND), Ok) {
+    // each of the envelope camera's shots' start to its end, when the input names no times; a
+    // film whose shots it can't read is BLOCKED, never passed on one sample.
+    let shot_times = match lowered.get("shots").and_then(Value::as_object) {
+        Some(s) if !s.is_empty() && input.get("at_times").is_none() => {
+            match deep_canvas_motion::shots::spans(lowered).map(|s| scene::sampled(&s, 30)) {
+                Some(t) if !t.is_empty() => Some(Ok(t)),
+                _ => Some(Err(blocked("not_run", KIND, &[], "shots"))),
+            }
+        }
+        _ => None,
+    };
+    let times = match shot_times.unwrap_or_else(|| scene::times(input, KIND)) {
         Ok(t) => t,
         Err(b) => {
             out.blocked.push(b);

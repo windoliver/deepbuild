@@ -610,21 +610,6 @@ pub(crate) fn apply_patch(
         .map_err(|i| refused(i.code, format!("{}: {}", i.path, i.what)))
 }
 
-/// An anchored 2D overlay as the picture GPUI paints: BGRA, placed on a whole pixel.
-fn overlay_picture(o: &deep_canvas_scene3d::scene::Overlay) -> Option<OverlayPicture> {
-    let p = deep_canvas_scene3d::overlay::picture(o)?;
-    let mut bgra = p.rgba;
-    for px in bgra.as_chunks_mut::<4>().0 {
-        px.swap(0, 2);
-    }
-    let frame = image::RgbaImage::from_raw(u32::from(p.size[0]), u32::from(p.size[1]), bgra)?;
-    Some(OverlayPicture {
-        at: p.at,
-        size: p.size,
-        image: Arc::new(gpui_kit::RenderImage::new([image::Frame::new(frame)])),
-    })
-}
-
 /// What a click at `at` view px picks in a frame (canvas primitives: Selection, Spatial index):
 /// the topmost 2D overlay whose shapes cover it, else the item the object-ID target holds there,
 /// else nothing.
@@ -1495,7 +1480,24 @@ fn run_view(
                 None
             };
             if let Some(win) = app.window.as_ref().filter(|_| args.window.is_some()) {
-                let pictures = scene.overlays.iter().filter_map(overlay_picture).collect();
+                // #506: each overlay frame drawn whole (its text and images too) for GPUI to
+                // paint over the view, straight BGRA on a whole pixel.
+                let mut shown = Vec::new();
+                for (_, at, picture) in pictures.frames(&composed, &scene.overlays)? {
+                    let (w, h) = picture.dimensions();
+                    let mut bgra = picture.as_raw().clone();
+                    crate::insets::straight(&mut bgra);
+                    for px in bgra.as_chunks_mut::<4>().0 {
+                        px.swap(0, 2);
+                    }
+                    let Some(frame) = image::RgbaImage::from_raw(w, h, bgra) else { continue };
+                    shown.push(OverlayPicture {
+                        at,
+                        size: [w.min(u32::from(u16::MAX)) as u16, h.min(u32::from(u16::MAX)) as u16],
+                        image: Arc::new(gpui_kit::RenderImage::new([image::Frame::new(frame)])),
+                    });
+                }
+                let pictures = shown;
                 let mut p = win.paint.borrow_mut();
                 p.overlays.insert(n, pictures);
                 p.current = n;
@@ -2091,7 +2093,7 @@ fn run_view(
                 pictures.frames_over(&composed, &anchored, bytes, size)?;
                 views::composite(&shown, drawn_k, bytes, size);
                 if let Some(s) = sub.as_mut() {
-                    s.frames.push(bytes.clone());
+                    s.keep(bytes)?;
                 }
             }
             drawn_k += 1;

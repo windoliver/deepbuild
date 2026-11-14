@@ -87,26 +87,42 @@ pub fn placed(doc: &Value, size: [u32; 2], look: Option<&crate::look::Look3>) ->
     Ok(out)
 }
 
+/// Lays `picture` (the view's frame at its rect's size, 4 bytes a pixel) over `frame` (`size`
+/// px, the same byte order) in `view`'s rect, with a 1 px border of `border` just outside it.
+pub fn lay(view: &Placed, picture: &[u8], frame: &mut [u8], size: [u32; 2], border: [u8; 4]) {
+    let [fw, fh] = size.map(i64::from);
+    let [x0, y0, w, h] = view.rect.map(i64::from);
+    let mut put = |x: i64, y: i64, px: &[u8]| {
+        if (0..fw).contains(&x) && (0..fh).contains(&y) {
+            let o = ((y * fw + x) * 4) as usize;
+            frame[o..o + 4].copy_from_slice(px);
+        }
+    };
+    for y in 0..h {
+        for x in 0..w {
+            let o = ((y * w + x) * 4) as usize;
+            if let Some(p) = picture.get(o..o + 4) {
+                put(x0 + x, y0 + y, p);
+            }
+        }
+    }
+    for x in x0 - 1..=x0 + w {
+        put(x, y0 - 1, &border);
+        put(x, y0 + h, &border);
+    }
+    for y in y0..y0 + h {
+        put(x0 - 1, y, &border);
+        put(x0 + w, y, &border);
+    }
+}
+
 /// The document a view overlay draws: `doc` from `camera`, every view overlay taken out (one
 /// level deep), and of what draws only what its `include` keeps (all, with none) less `exclude`.
 pub fn document(doc: &Value, view: &Placed) -> Value {
     let mut out = doc.clone();
     let params = doc.pointer(&format!("/items/{}/params", view.id)).cloned().unwrap_or(Value::Null);
     let map = doc.as_object().cloned().unwrap_or_default();
-    let names = |k: &str| -> Vec<String> {
-        params.get(k).and_then(Value::as_array).into_iter().flatten().filter_map(Value::as_str).map(str::to_string).collect()
-    };
-    let include = names("include");
-    let keep = (!include.is_empty()).then(|| {
-        let refs: Vec<&str> = include.iter().map(String::as_str).collect();
-        let mut k = crate::inset::kept(&map, &refs);
-        let ex = names("exclude");
-        let ex: Vec<&str> = ex.iter().map(String::as_str).collect();
-        for x in crate::inset::kept(&map, &ex) {
-            k.remove(&x);
-        }
-        k
-    });
+    let keep = crate::inset::kept_view(&map, &params);
     if let Some(o) = out.as_object_mut() {
         o.insert("camera".into(), Value::String(view.camera.clone()));
         if let Some(items) = o.get_mut("items").and_then(Value::as_object_mut) {

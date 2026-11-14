@@ -50,28 +50,14 @@ fn drawn<'a>(
 /// The texels' format an inset's picture comes in: straight-alpha sRGB codes.
 pub const FORMAT: &str = "rgba8unorm-srgb";
 
-/// How many words [`words`] gives, whatever the pick IDs: what the buffer is made for before
-/// the batches bind the lights' group.
-pub fn len(insets: &[Projected], texels: &BTreeMap<String, std::sync::Arc<Texels>>) -> usize {
-    HEADER
-        + MAX_PROJECTED * WORDS
-        + drawn(insets, texels)
-            .iter()
-            .map(|(p, t)| (t.size[0] * t.size[1]) as usize + p.onto.as_ref().map_or(0, Vec::len))
-            .sum::<usize>()
-}
-
-/// The words of `insets`, each record's texels from `texels` by its key (an inset whose texels
-/// aren't there draws nothing), its `onto` by the solids' pick IDs in `picks` (0, which no solid
-/// has, for one that draws nothing).
-pub fn words(
-    insets: &[Projected],
-    texels: &BTreeMap<String, std::sync::Arc<Texels>>,
-    picks: &BTreeMap<String, u32>,
-) -> Vec<u32> {
-    let insets = drawn(insets, texels);
+/// The words of the buffer's head: its header and records, then each record's `onto` by the
+/// solids' pick IDs in `picks` (0, which no solid has, for one that draws nothing); each record's
+/// texels at the word it names, after the head, in the records' order.
+fn head(insets: &[(&Projected, &Texels)], picks: &BTreeMap<String, u32>) -> Vec<u32> {
     let mut out = vec![0u32; HEADER + MAX_PROJECTED * WORDS];
     out[0] = insets.len() as u32;
+    let onto: usize = insets.iter().map(|(p, _)| p.onto.as_ref().map_or(0, Vec::len)).sum();
+    let mut texels_at = out.len() + onto;
     for (k, (p, t)) in insets.iter().enumerate() {
         let e = HEADER + k * WORDS;
         // Column-major, as WGSL's mat4x4 reads it.
@@ -91,15 +77,10 @@ pub fn words(
             flags |= FROM_EYE;
         }
         out[e + 16] = flags;
-        out[e + 17] = out.len() as u32;
+        out[e + 17] = texels_at as u32;
         out[e + 18] = t.size[0];
         out[e + 19] = t.size[1];
-        let n = (t.size[0] * t.size[1]) as usize;
-        out.extend(
-            t.data[..n * 4]
-                .chunks_exact(4)
-                .map(|c| u32::from_le_bytes([c[0], c[1], c[2], c[3]])),
-        );
+        texels_at += (t.size[0] * t.size[1]) as usize;
         let ids: Vec<u32> = p
             .onto
             .iter()
@@ -120,10 +101,32 @@ pub fn words(
     out
 }
 
-/// The insets' buffer, made again only when its length changes.
+/// What the texel section holds: each drawn picture by its key and the texels' address.
+fn texel_sig(insets: &[(&Projected, &Texels)]) -> Vec<(String, usize)> {
+    insets
+        .iter()
+        .map(|(p, t)| (p.key.clone(), t.data.as_ptr() as usize))
+        .collect()
+}
+
+/// The words the buffer takes, whatever the pick IDs: what it is made for before the batches
+/// bind the lights' group.
+fn len(insets: &[(&Projected, &Texels)]) -> usize {
+    HEADER
+        + MAX_PROJECTED * WORDS
+        + insets
+            .iter()
+            .map(|(p, t)| (t.size[0] * t.size[1]) as usize + p.onto.as_ref().map_or(0, Vec::len))
+            .sum::<usize>()
+}
+
+/// The insets' buffer: made again only when its length changes, its head written when it
+/// changes, its texels only when the pictures do.
 pub struct Store {
     pub buffer: wgpu::Buffer,
-    held: Vec<u32>,
+    len: usize,
+    head: Vec<u32>,
+    sig: Vec<(String, usize)>,
     /// Whether any unlit inset draws this frame.
     pub unlit: bool,
 }
@@ -139,37 +142,75 @@ fn buffer(d: &deep_gpu::counted::Wgpu, words: usize) -> wgpu::Buffer {
 
 impl Store {
     pub fn new(d: &deep_gpu::counted::Wgpu) -> Store {
-        let held = vec![0u32; HEADER + MAX_PROJECTED * WORDS];
+        let len = HEADER + MAX_PROJECTED * WORDS;
         Store {
-            buffer: buffer(d, held.len()),
-            held,
+            buffer: buffer(d, len),
+            len,
+            head: vec![0u32; len],
+            sig: Vec::new(),
             unlit: false,
         }
     }
 
-    /// Makes the buffer again when this frame's words take another length; true when it did
+    /// Makes the buffer again when this frame's insets take another length; true when it did
     /// (the lights' group binds the new one).
-    pub fn ensure(&mut self, device: &Device, len: usize) -> bool {
-        if len == self.held.len() {
+    pub fn ensure(
+        &mut self,
+        device: &Device,
+        insets: &[Projected],
+        texels: &BTreeMap<String, std::sync::Arc<Texels>>,
+    ) -> bool {
+        let len = len(&drawn(insets, texels));
+        if len == self.len {
             return false;
         }
         self.buffer = buffer(&device.device, len);
-        self.held = Vec::new();
+        self.len = len;
+        self.head.clear();
+        self.sig.clear();
         true
     }
 
-    /// Writes this frame's words, of the length [`Store::ensure`] took, when they changed.
-    pub fn write(&mut self, device: &Device, words: Vec<u32>) {
-        self.unlit = (0..words[0] as usize).any(|k| words[HEADER + k * WORDS + 16] & UNLIT != 0);
-        if words == self.held {
-            return;
+    /// Writes this frame's insets, at the length [`Store::ensure`] took: what changed of the
+    /// head, and the texels when the pictures changed.
+    pub fn write(
+        &mut self,
+        device: &Device,
+        insets: &[Projected],
+        texels: &BTreeMap<String, std::sync::Arc<Texels>>,
+        picks: &BTreeMap<String, u32>,
+    ) {
+        let drawn = drawn(insets, texels);
+        let head = head(&drawn, picks);
+        self.unlit = drawn.iter().any(|(p, _)| p.unlit);
+        if head != self.head {
+            deep_gpu::alloc::outside(|| {
+                device
+                    .queue
+                    .write_buffer(&self.buffer, 0, bytemuck::cast_slice(&head))
+            });
         }
-        deep_gpu::alloc::outside(|| {
-            device
-                .queue
-                .write_buffer(&self.buffer, 0, bytemuck::cast_slice(&words))
-        });
-        self.held = words;
+        let sig = texel_sig(&drawn);
+        if sig != self.sig && !drawn.is_empty() {
+            let mut words: Vec<u32> = Vec::new();
+            for (_, t) in &drawn {
+                let n = (t.size[0] * t.size[1]) as usize;
+                words.extend(
+                    t.data[..n * 4]
+                        .chunks_exact(4)
+                        .map(|c| u32::from_le_bytes([c[0], c[1], c[2], c[3]])),
+                );
+            }
+            deep_gpu::alloc::outside(|| {
+                device.queue.write_buffer(
+                    &self.buffer,
+                    (head.len() * 4) as u64,
+                    bytemuck::cast_slice(&words),
+                )
+            });
+        }
+        self.head = head;
+        self.sig = sig;
     }
 }
 

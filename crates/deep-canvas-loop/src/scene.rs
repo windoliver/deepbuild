@@ -109,23 +109,12 @@ pub(crate) fn times(input: &Value, kind: &str) -> Result<Vec<i64>, Value> {
     }
 }
 
-/// Each timeline shot's span of `doc` sampled `rate` times a second, its start and end among them,
-/// in order; empty with no timeline shot (#506).
-pub(crate) fn shot_times(doc: &Value, rate: i64) -> Vec<i64> {
-    let ctx = TimeContext {
-        frame_rate: (60, 1),
-        ..TimeContext::default()
-    };
-    let at = |v: Option<&Value>| -> Option<i64> {
-        let v = v?;
-        v.as_i64().or_else(|| Time::parse(v.as_str()?).ok()?.resolve(&ctx).ok())
-    };
+/// Each span, in flicks, sampled `rate` times a second, its start and end among them, in order
+/// (#506).
+pub(crate) fn sampled(spans: &[(i64, i64)], rate: i64) -> Vec<i64> {
     let step = deep_canvas::grammar::FLICKS_PER_SECOND as i64 / rate.max(1);
     let mut out = Vec::new();
-    for shot in doc.get("shots").and_then(Value::as_object).into_iter().flatten().map(|(_, s)| s) {
-        let (Some(start), Some(end)) = (at(shot.get("start")), at(shot.get("end"))) else {
-            continue;
-        };
+    for &(start, end) in spans {
         let mut t = start;
         while t < end {
             out.push(t);

@@ -1142,6 +1142,8 @@ pub struct Hub<'a> {
     /// #427's planted `mode_ids_by_count`: each document's mode visible table, by item count.
     pub mode_ids: BTreeMap<String, ModeIds>,
     pub renderer: Renderer,
+    /// #506: each inset's picture its 3D frames drew last, by key.
+    pub(crate) inset_pictures: BTreeMap<String, std::sync::Arc<deep_canvas_scene3d::light::Texels>>,
     /// The scheduler every document session shares, with its content-key cache (#387).
     pub sched: Scheduler<'a>,
     /// The scenario's background jobs' progress (#857).
@@ -1339,6 +1341,7 @@ impl<'a> Hub<'a> {
             session_state: BTreeMap::new(),
             tracks: BTreeMap::new(),
             forms: BTreeMap::new(),
+            inset_pictures: BTreeMap::new(),
             renderer: Renderer::new().turning_about_corner(
                 scenario.module_planted.as_deref() == Some("turns_about_corner"),
             ),
@@ -1555,12 +1558,9 @@ impl<'a> Hub<'a> {
         let size = size.unwrap_or_else(|| {
             snapshot::px([0, 1].map(|i| doc["size"][i].as_f64().unwrap_or(1.0)))
         });
-        let palette = self.look.light.clone();
-        // #493: a shot writes the camera's pose the 3D frame is drawn through.
-        let posed = crate::film::posed(doc, t);
-        let doc = posed.as_ref().unwrap_or(doc);
-        let gpu = self.gpu3().ok_or(())?;
-        gpu.draw(doc, t, &palette, size)
+        // #493: a shot writes the camera's pose the 3D frame is drawn through; #506: its insets'
+        // pictures are drawn in.
+        self.painted3d(doc, t, size)
             .map(|(rgba, scene)| (rgba, size, scene.boxes()))
             .map_err(|_| ())
     }
