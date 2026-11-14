@@ -1,0 +1,24 @@
+{
+  "actions": [
+    { "name": "Preferences", "verb": "Show", "target": "app", "key": "cmd-,", "variant_of": null },
+    { "name": "Hide DeepBuild", "verb": "Hide", "target": "app", "key": "cmd-h", "variant_of": null },
+    { "name": "Quit DeepBuild", "verb": "Quit", "target": "app", "key": "cmd-q", "variant_of": null },
+    { "name": "Write in the box", "verb": "Write", "target": "box", "key": "cmd-n", "variant_of": null },
+    { "name": "Close Window", "verb": "Close", "target": "window", "key": "cmd-w", "variant_of": null },
+    { "name": "Undo answer", "verb": "Undo", "target": "card", "key": "cmd-z", "variant_of": null },
+    { "name": "Commands", "verb": "Find", "target": "app", "key": "cmd-k", "variant_of": null },
+    { "name": "Back", "verb": "Go", "target": "window", "key": "cmd-[", "variant_of": null },
+    { "name": "Forward", "verb": "Go", "target": "window", "key": "cmd-]", "variant_of": null },
+    { "name": "Next ask", "verb": "Open", "target": "app", "key": "cmd-j", "variant_of": null },
+    { "name": "Next area", "verb": "Move", "target": "window", "key": "f6", "variant_of": null },
+    { "name": "Open", "verb": "Open", "target": "session", "key": "cmd-o", "variant_of": null },
+    { "name": "Pause", "verb": "Pause", "target": "session", "key": "cmd-.", "variant_of": null },
+    { "name": "Write to it", "verb": "Write", "target": "session", "key": null, "variant_of": null },
+    { "name": "Rename", "verb": "Rename", "target": "session", "key": null, "variant_of": null },
+    { "name": "Later", "verb": "Put off", "target": "ask", "key": "cmd-l", "variant_of": null },
+    { "name": "Copy title", "verb": "Copy", "target": "session", "key": null, "variant_of": null },
+    { "name": "Copy link", "verb": "Copy", "target": "session", "key": null, "variant_of": null },
+    { "name": "Minimize", "verb": "Minimize", "target": "window", "key": "cmd-m", "variant_of": null },
+    { "name": "Keyboard shortcuts", "verb": "Show", "target": "app", "key": null, "variant_of": null }
+  ]
+}

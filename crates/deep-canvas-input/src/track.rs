@@ -53,8 +53,13 @@ impl Entry {
         let mut o = Map::new();
         o.insert("t".into(), json!(self.t));
         o.insert("seq".into(), json!(self.seq));
-        o.insert("control".into(), json!(self.control));
-        o.insert("value".into(), self.value.clone());
+        // #507: a present-mode entry (advance, back, blank or a stage) names no control.
+        if self.control.is_empty() {
+            o.insert("present".into(), self.value.clone());
+        } else {
+            o.insert("control".into(), json!(self.control));
+            o.insert("value".into(), self.value.clone());
+        }
         if let Some(samples) = &self.samples {
             let list: Vec<Value> = samples
                 .iter()
@@ -158,7 +163,9 @@ impl Track {
         k.checked_sub(1).map(|k| &self.entries[list[k]])
     }
 
-    /// The planted lookup: the same answer by scanning the whole track.
+    /// The planted lookup: the same answer by scanning the whole track. `last` walks every entry,
+    /// which is the plant, so it stays.
+    #[allow(clippy::double_ended_iterator_last)]
     pub fn last_at_scanning(&self, control: &str, t: i64) -> Option<&Entry> {
         self.entries
             .iter()
@@ -168,9 +175,9 @@ impl Track {
 
     /// How many of `control`'s entries are at or before `t`.
     pub fn count_at(&self, control: &str, t: i64) -> usize {
-        self.by_control.get(control).map_or(0, |list| {
-            list.partition_point(|&i| self.entries[i].t <= t)
-        })
+        self.by_control
+            .get(control)
+            .map_or(0, |list| list.partition_point(|&i| self.entries[i].t <= t))
     }
 
     /// `control`'s entries, in time order.

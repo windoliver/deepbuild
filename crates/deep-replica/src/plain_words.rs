@@ -81,6 +81,7 @@ mod lane {
             center: vec![views::NEEDS_YOU.into(), views::SESSION.into()],
             active: 0,
             line: views::LINE.into(),
+            needs_you: views::NEEDS_YOU.into(),
         };
 
         // The card: one click on its ask's row in Needs you.
@@ -117,7 +118,7 @@ mod lane {
                 node.bounds[1] >= *top
                     && node.bounds[1] < *bottom
                     && node.bounds[0] >= *x
-                    && node.bounds[0] < SIDEBAR_PX
+                    && node.bounds[0] < sidebar_px()
             });
             shown.push(Shown {
                 surface: "page",
@@ -179,10 +180,14 @@ mod lane {
     }
 
     /// The sidebar's right edge in device pixels: a node that starts left of it is the sidebar's.
-    const SIDEBAR_PX: i64 = (views::SIDEBAR_WIDTH * deep_replica::SCALE) as i64;
+    fn sidebar_px() -> i64 {
+        (f32::from(deep_app::chrome::sizes().sidebar) * deep_replica::SCALE) as i64
+    }
     /// The line's top edge in device pixels: the last row ends there.
-    const LINE_TOP: i64 =
-        ((deep_replica::WINDOW.1 - views::LINE_HEIGHT) * deep_replica::SCALE) as i64;
+    fn line_top() -> i64 {
+        ((deep_replica::WINDOW.1 - f32::from(deep_app::chrome::sizes().band)) * deep_replica::SCALE)
+            as i64
+    }
 
     /// One line per failing string on a plain surface: a listed word with its plain word, or the trace it shows.
     fn judge(shown: &[Shown]) -> usize {
@@ -277,9 +282,9 @@ mod lane {
                     node.name
                         .as_deref()
                         .is_some_and(|text| text.ends_with(name.as_str()))
-                        && node.bounds[0] < SIDEBAR_PX
+                        && node.bounds[0] < sidebar_px()
                 })?;
-                Some((session.clone(), node.bounds[1], LINE_TOP, node.bounds[0]))
+                Some((session.clone(), node.bounds[1], line_top(), node.bounds[0]))
             })
             .collect();
         rows.sort_by_key(|(_, top, ..)| *top);

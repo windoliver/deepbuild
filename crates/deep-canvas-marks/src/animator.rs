@@ -412,6 +412,30 @@ pub fn reveal_levels(
     Ok(Some((0..n).map(|u| (u as f64 * lag + 0.5) * w).collect()))
 }
 
+/// #407: each glyph's opacity under a text's `reveal` at the progress its evaluated params hold,
+/// as laying out fades it; `None` when the text has no reveal.
+pub fn reveal_opacity(
+    params: &Map<String, Value>,
+    run: &Shaped,
+    id: &str,
+) -> Result<Option<Vec<f64>>, Refused> {
+    let Some(progress) = reveal_of(params, id)? else {
+        return Ok(None);
+    };
+    let (units, n) = units_of("grapheme", run, &format!("items/{id}/params/reveal"))?;
+    let (lag, w) = reveal_span(n);
+    Ok(Some(
+        units
+            .iter()
+            .map(|u| {
+                u.map_or(1.0, |u| {
+                    ((progress - u as f64 * lag * w) / w).clamp(0.0, 1.0)
+                })
+            })
+            .collect(),
+    ))
+}
+
 /// What laying out may ask its caller for: a text shaped in the item's own style (a glyph
 /// shift's set member, a counter's previous string), and a counter's string at another value
 /// of its source.
@@ -714,7 +738,6 @@ fn selectors_of(
     a: &Map<String, Value>,
     n: usize,
     path: &str,
-    plant: Plant,
 ) -> Result<Vec<(Selector, Mode)>, Refused> {
     let mode_of = |v: Option<&Value>, at: String| -> Result<Mode, Refused> {
         match v.and_then(Value::as_str) {
@@ -1242,7 +1265,7 @@ pub fn lay_out(input: &Input<'_>, host: &mut dyn Host) -> Result<Laid, Refused> 
             seed,
         )
         .ok_or_else(|| bad(format!("{path}/order")))?;
-        let selectors = selectors_of(a, n, &path, input.plant)?;
+        let selectors = selectors_of(a, n, &path)?;
         let clamp = a.get("clamp").and_then(Value::as_bool).unwrap_or(false);
         let amounts: Vec<f64> = (0..n)
             .map(|u| select(&selectors, order[u], n, t, clamp, input.plant))
@@ -1574,7 +1597,7 @@ pub fn amounts(
         seed,
     )
     .ok_or_else(|| bad(format!("{path}/order")))?;
-    let selectors = selectors_of(a, n, &path, Plant::None)?;
+    let selectors = selectors_of(a, n, &path)?;
     let clamp = a.get("clamp").and_then(Value::as_bool).unwrap_or(false);
     let ts = t as f64 / 705_600_000.0;
     let per_unit: Vec<f64> = (0..n)

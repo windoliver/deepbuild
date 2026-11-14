@@ -10,17 +10,16 @@ import { existsSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, 
 import { homedir } from 'node:os';
 import { basename, delimiter, isAbsolute, join } from 'node:path';
 import type { JsonObject } from '@deepbuild/adapters';
-import { canonicalize, sha256Hex, type JsonValue } from '@deepbuild/contracts';
+import { isRecord as isObj, canonicalize, sha256Hex, type JsonValue } from '@deepbuild/contracts';
 import type { Asks } from '@deepbuild/asks';
-import { repoOf, revoke, sessionToken, type AppKey } from '@deepbuild/github';
+import type { AppKey, SessionCredentials } from './forge-port.js';
 import { TERMINAL_PROTOCOL } from '@deepbuild/extension-host';
-import { HELPER, type Supervisor } from '@deepbuild/supervisor';
+import { alive, HELPER, type Supervisor } from '@deepbuild/supervisor';
 import { parents } from './children.js';
 import { registry } from './hookmap.js';
 import { refusal, Refused, ulid, type Plant } from './wire.js';
 
 type Obj = Record<string, unknown>;
-const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 const letters = (id: string): string => id.replace(/[^0-9A-Za-z]/g, '');
 const DAY = 86_400_000;
 /** How long a started agent has to write its first event before it ends as never started. */
@@ -37,7 +36,7 @@ const NONE: Sandbox = { sandboxed: false, walls: { writes: false, credentials: f
 /** A run you approved, as `start.approval` records it, and the ask whose yes makes it count. */
 interface Approval { ask: string; at: number; repo: string; issues: number[]; agents: string[]; homes: Record<string, string>; modes: Record<string, string>; at_once: number; plan_share: number; until: number | null; hosts: string[] }
 /** A start the hub made: its approval, its agent's process, the session its first hook named, and its sandbox. */
-interface Started { run: string; ask: string; agent: string; pid?: number; dir?: string; session?: string; sandbox: Sandbox; ended: boolean; timer?: NodeJS.Timeout; worktree?: string; token?: string }
+interface Started { run: string; ask: string; agent: string; pid?: number; dir?: string; session?: string; sandbox: Sandbox; ended: boolean; timer?: NodeJS.Timeout; worktree?: string; token?: string; model?: string; adopted?: number }
 /** A session's own forge credential while it lives, and the login GitHub records its pushes as. */
 interface Credential { token: string; login: string | null }
 type StartResult = { status: 'started'; run: string; worktree: string; branch: string; agent: string; version: string; mode: string; sandbox: Sandbox } | { status: 'refused'; reason: string; bound: string };
@@ -63,6 +62,7 @@ interface StartsOptions {
   windowUsed(agent: string, home: string): number | undefined;
   /** The forge's REST root, the agents' app a session's own credential comes from, and the gate's token (#1325). */
   forge: string;
+  credentials: SessionCredentials;
   agentsApp(): AppKey | undefined;
   gateToken(repo: string): Promise<string | undefined>;
 }
@@ -99,7 +99,10 @@ export class Starts {
       const kept = this.keptCredential(s);
       if (kept) { s.token = kept.token; if (kept.login) this.agentLogins.add(kept.login); }
       const status = await this.o.supervisor().status(s.run).catch(() => undefined);
-      if (status?.state === 'running') { s.ended = false; void this.o.supervisor().wait(s.run).then(() => { s.ended = true; this.endCredential(s); }, () => { s.ended = true; this.endCredential(s); }); }
+      // This supervisor has no exit to wait for on a run the last hub started: it lives while the process the
+      // supervisor tracked for it does (#1332), read each time its liveness is asked.
+      const [tracked] = status?.state === 'running' ? (await this.o.raw(`SELECT json_extract(data, '$.pid') AS pid FROM events WHERE kind = 'process.tracked' AND json_extract(data, '$.run') = ? ORDER BY log_pos LIMIT 1`, [s.run])) as { pid: number }[] : [];
+      if (tracked && alive(tracked.pid)) { s.ended = false; s.adopted = tracked.pid; }
       else this.endCredential(s);
     }
   }
@@ -111,6 +114,43 @@ export class Starts {
   rowOf(session: string): { run: string; sandbox: Sandbox } | undefined {
     for (const s of this.started.values()) if (s.session === session) return { run: s.run, sandbox: s.sandbox };
     return undefined;
+  }
+  /** A work run's approval (#1332): its bounds once you answered its ask yes, else undefined. */
+  async approvalOf(ask: string): Promise<Approval | undefined> {
+    const [row] = (await this.o.raw(`SELECT data FROM events WHERE kind = 'start.approval' AND subject = ? LIMIT 1`, [ask])) as { data: string }[];
+    return row ? (await this.approvals((JSON.parse(row.data) as Approval).repo)).find((a) => a.ask === ask) : undefined;
+  }
+  /** Whether a session is one a work run started (#1332): `deep work` raised the approval its start ran under. */
+  async inWorkRun(session: string): Promise<boolean> {
+    const s = this.runOf(session);
+    if (!s) return false;
+    const [row] = (await this.o.raw(`SELECT 1 AS x FROM events WHERE kind = 'work.run' AND subject = ? LIMIT 1`, [s.ask])) as unknown[];
+    return row !== undefined;
+  }
+  /** The model a started run's agent reported, while this hub has heard it. */
+  modelOf(run: string): string | undefined {
+    return this.started.get(run)?.model;
+  }
+  /** Whether a started run's agent still runs. */
+  live(run: string): boolean {
+    const s = this.started.get(run);
+    if (s?.adopted !== undefined && !s.ended && !alive(s.adopted)) { s.ended = true; this.endCredential(s); }
+    return s !== undefined && !s.ended;
+  }
+  /** The session a started run's first hook named. */
+  sessionOfRun(run: string): string | undefined {
+    return this.started.get(run)?.session;
+  }
+  /** A started run's worktree, branch and base, as `start.started` recorded them: where a next attempt goes on. */
+  async treeOf(run: string): Promise<{ path: string; branch: string; base: string }> {
+    const [row] = (await this.o.raw(`SELECT data FROM events WHERE kind = 'start.started' AND subject = ? LIMIT 1`, [run])) as { data: string }[];
+    const d = JSON.parse(row!.data) as { worktree: string; branch: string; base: string };
+    return { path: d.worktree, branch: d.branch, base: d.base };
+  }
+  /** How a started run ended: whether it never wrote a first event. */
+  async endOf(run: string): Promise<{ never: boolean; session: string | null }> {
+    const [never] = (await this.o.raw(`SELECT 1 AS x FROM events WHERE kind = 'session.never_started' AND subject = ? LIMIT 1`, [run])) as unknown[];
+    return { never: never !== undefined, session: this.started.get(run)?.session ?? null };
   }
   /** The started run a session belongs to, once its first hook linked it. */
   runOf(session: string): Started | undefined {
@@ -177,6 +217,10 @@ export class Starts {
       `${agents.map((a) => `${modeWords(a)}, in ${homes[a] ?? String(this.launchOf(a)!.defaultHome)}`).join('; ')}.`,
       `At most ${String(at_once)} at once, up to ${plan_share}% of each plan window${until !== null ? `, until ${new Date(until as number).toISOString()}` : ', with no end'}.`,
       `Each in its own worktree from the default branch; commands reach ${hosts.length ? hosts.join(', ') : 'no host'} beside the agent's own API. ${agents.map(held).join('. ')}.`,
+      // A work run (#1332) lands what it works: each session's push and PR are part of what you approve.
+      ...(params.lands === true ? ['Each session pushes its own branch and opens a pull request for its issue, which lands only on its own PASS.'] : []),
+      // A workspace's run (#1347) has no forge: each task's change finishes on the workspace's own main.
+      ...(params.lands === 'workspace' ? ["Each task's change finishes on the workspace's own main, only on its own PASS; no forge is read or written."] : []),
     ].join(' ');
     const ask = await this.o.asks().raise({ writer: 'core', actor: 'you', scope: 'you' }, 'start.approve', {
       kind: 'authority', question: question.slice(0, 2000),
@@ -236,16 +280,29 @@ export class Starts {
     if (above) {
       return this.refused('caller', `deep start runs inside agent session ${above}'s process tree, so it acts as that session, and no session starts another, whatever it claims. Start it from your own terminal.`, `agent session ${above}`, { issue, agent });
     }
-    const repo = await this.repoOf(params.repo);
+    return this.launch({ repo: await this.repoOf(params.repo), issue, agent, prompt, ...(asked ? { mode: asked } : {}) }, 'you');
+  }
+
+  /**
+   * A start a work run makes (#1332): under the one approval it was raised as, by the hub and never a session, on the
+   * same bounds as `deep start`. A next attempt goes on in its issue's earlier worktree and branch, uncommitted files
+   * kept; a first one gets a worktree of its own.
+   */
+  runStart(r: { ask: string; repo: string; issue: number; agent: string; prompt: string; worktree?: { path: string; branch: string; base: string } }): Promise<StartResult> {
+    return this.launch(r, `the work run ${r.ask}`);
+  }
+
+  private async launch(r: { ask?: string; repo: string; issue: number; agent: string; prompt: string; mode?: string; worktree?: { path: string; branch: string; base: string } }, caller: string): Promise<StartResult> {
+    const { repo, issue, agent, prompt } = r;
     const about = { repo, issue, agent };
     const started = this.launchOf(agent);
-    if (!started) return this.refused('agent', `${agent} can't be started here: name ${Object.keys(AGENTS).join(' or ')}.`, 'you', about);
-    const mode = asked ?? String(started.asks);
+    if (!started) return this.refused('agent', `${agent} can't be started here: name ${Object.keys(AGENTS).join(' or ')}.`, caller, about);
+    const mode = r.mode ?? String(started.asks);
     // The planted wrong program starts with no approval on the record.
     const approvals = this.o.plant === 'starts-without-approval'
       ? [{ ask: 'ask:0', at: 0, repo, issues: [issue], agents: [agent], homes: {}, modes: { [agent]: mode }, at_once: 1000, plan_share: 100, until: null, hosts: [] }]
-      : await this.approvals(repo);
-    if (!approvals.length) return this.refused('approval', `No run you approved covers ${repo}, so issue ${issue} doesn't start. Ask for one with deep start approve and answer it yes.`, 'you', about);
+      : (await this.approvals(repo)).filter((a) => !r.ask || a.ask === r.ask);
+    if (!approvals.length) return this.refused('approval', `No run you approved covers ${repo}, so issue ${issue} doesn't start. Ask for one with deep start approve and answer it yes.`, caller, about);
     let approval: Approval | undefined;
     let outside: { bound: string; reason: string } | undefined;
     for (const a of approvals) {
@@ -253,18 +310,18 @@ export class Starts {
       if (!why) { approval = a; break; }
       outside ??= why;
     }
-    if (!approval) return this.refused(outside!.bound, outside!.reason, 'you', about);
+    if (!approval) return this.refused(outside!.bound, outside!.reason, caller, about);
     const home = tilde(approval.homes[agent] ?? String(started.defaultHome));
     const used = this.o.windowUsed(agent, home);
-    if (used !== undefined && used >= approval.plan_share) return this.refused('plan_share', `${agent}'s plan window in ${home} is ${used}% used, at the ${approval.plan_share}% plan share ${approval.ask} allows.`, 'you', about);
+    if (used !== undefined && used >= approval.plan_share) return this.refused('plan_share', `${agent}'s plan window in ${home} is ${used}% used, at the ${approval.plan_share}% plan share ${approval.ask} allows.`, caller, about);
     const found = await this.versionOf(agent).catch((error: Error) => error);
-    if (found instanceof Error) return this.refused('version', `${agent} can't start: ${found.message}`, 'you', about);
+    if (found instanceof Error) return this.refused('version', `${agent} can't start: ${found.message}`, caller, about);
     const facts = this.factsOf(agent)!;
     if (!(facts.versions as string[]).includes(found.version)) {
-      return this.refused('version', `${agent} ${found.version} is past the versions its facts cover (${(facts.versions as string[]).join(', ')}), so its hooks would be watch-only; it doesn't start.`, 'you', about);
+      return this.refused('version', `${agent} ${found.version} is past the versions its facts cover (${(facts.versions as string[]).join(', ')}), so its hooks would be watch-only; it doesn't start.`, caller, about);
     }
     const run = `run:${ulid(this.o.now())}`;
-    const tree = await this.worktree(repo, issue, run);
+    const tree = r.worktree ?? await this.worktree(repo, issue, run);
     const { sandbox, entry } = this.o.plant === 'starts-without-sandbox' ? { sandbox: NONE, entry: undefined } : this.sandboxOf(agent, found.version);
     const argv = this.argvOf(started, entry, mode, approval, prompt, tree.path);
     const env = this.envOf(started, home);
@@ -283,7 +340,7 @@ export class Starts {
     if (launched instanceof Error || launched.status !== 'started') {
       s.ended = true;
       this.endCredential(s);
-      return this.refused('version', `${agent} didn't start: ${launched instanceof Error ? launched.message : `held on ${launched.kind}`}.`, 'you', about);
+      return this.refused('version', `${agent} didn't start: ${launched instanceof Error ? launched.message : `held on ${launched.kind}`}.`, caller, about);
     }
     s.pid = launched.pid;
     // The session's own credential ends with it: revoked as soon as its agent's process is gone.
@@ -308,10 +365,19 @@ export class Starts {
   private async neverStarted(s: Started): Promise<void> {
     if (s.session || s.ended) return;
     await this.o.appendCore('session.never_started', { run: s.run, after_ms: FIRST_EVENT_MS }, { subject: s.run });
+    await this.end(s);
+  }
+  /** A work run's session whose change landed (#1332): its agent stopped and its slot freed. */
+  async stop(run: string): Promise<void> {
+    const s = this.started.get(run);
+    if (s && !s.ended) await this.end(s);
+  }
+  private async end(s: Started): Promise<void> {
     s.ended = true;
     const sup = this.o.supervisor();
     // The agent first, by the PID its terminal's host wrote: it runs in a session of its own under the host.
-    const agent = s.dir ? Number(readFileSync(join(s.dir, 'pid'), 'utf8').trim()) : NaN;
+    let agent = NaN;
+    try { agent = s.dir ? Number(readFileSync(join(s.dir, 'pid'), 'utf8').trim()) : NaN; } catch { /* none written */ }
     if (Number.isSafeInteger(agent) && agent > 1) try { process.kill(agent, 'SIGTERM'); } catch { /* gone */ }
     await sup.signal(s.run, 'SIGTERM').catch(() => undefined);
     await sup.cleanup(s.run).catch(() => undefined);
@@ -321,7 +387,10 @@ export class Starts {
    * A hook's process, read when a session's first hook arrives: the started run whose terminal its agent runs under,
    * now that session's; the core records `start.session` before the hook's own events.
    */
-  async sessionOf(session: string, pid: number, agent: string): Promise<string | undefined> {
+  async sessionOf(session: string, pid: number, agent: string, model?: string): Promise<string | undefined> {
+    // The model a started session's agent reports in its hooks (#1332): its attempt records it.
+    const linked = model ? this.runOf(session) : undefined;
+    if (linked && model) linked.model = model;
     const waiting = [...this.started.values()].filter((s) => !s.ended && !s.session && s.pid !== undefined);
     if (!waiting.length || this.runOf(session)) return undefined;
     const up = await parents();
@@ -331,6 +400,7 @@ export class Starts {
       const s = waiting.find((w) => w.pid === p);
       if (!s) continue;
       s.session = session;
+      if (model) s.model = model;
       clearTimeout(s.timer);
       await this.o.appendCore('start.session', { run: s.run, session, agent }, { subject: s.run });
       return s.run;
@@ -386,11 +456,11 @@ export class Starts {
   private async credential(repo: string, env: Record<string, string>): Promise<Credential | undefined> {
     const app = this.o.agentsApp();
     const origin = await exec('git', ['-C', repo, 'remote', 'get-url', 'origin']).catch(() => '');
-    const slug = repoOf(origin.trim());
+    const slug = this.o.credentials.repoOf(origin.trim());
     // The planted wrong program: the gate's own token in the session's environment.
     if (this.o.plant === 'passes-gate-credential' && slug) { const gate = await this.o.gateToken(slug).catch(() => undefined); if (gate) env.DEEP_GATE_TOKEN = gate; }
     if (!app || !slug) return undefined;
-    const made = await sessionToken(this.o.forge, app, slug, this.o.plant === 'agent-credential-posts-statuses').catch((error: Error) => error);
+    const made = await this.o.credentials.sessionToken(this.o.forge, app, slug, this.o.plant === 'agent-credential-posts-statuses').catch((error: Error) => error);
     if (made instanceof Error) { process.stderr.write(`deep hub: no credential of the agents' app for ${slug}: ${made.message}\n`); return undefined; }
     env.GH_TOKEN = made.token;
     if (made.login) this.agentLogins.add(made.login);
@@ -404,7 +474,7 @@ export class Starts {
     const token = s.token;
     if (!token) return;
     delete s.token;
-    void revoke(this.o.forge, token).then(() => { if (s.dir) rmSync(join(s.dir, 'credential'), { force: true }); },
+    void this.o.credentials.revoke(this.o.forge, token).then(() => { if (s.dir) rmSync(join(s.dir, 'credential'), { force: true }); },
       (error: Error) => process.stderr.write(`deep hub: ${s.run}'s forge credential wasn't revoked (${error.message}); it expires within the hour\n`));
   }
 
@@ -476,7 +546,9 @@ export class Starts {
     const git = (...args: string[]) => exec('git', ['-C', repo, ...args]).then((o) => o.trim());
     const head = await git('symbolic-ref', '--quiet', 'refs/remotes/origin/HEAD').catch(() => '');
     let ref = head;
-    for (const candidate of ['refs/remotes/origin/main', 'refs/remotes/origin/master']) {
+    // A workspace has no forge and no remote (#1347): its own main is the default branch.
+    const remote = await git('remote').catch(() => '');
+    for (const candidate of remote ? ['refs/remotes/origin/main', 'refs/remotes/origin/master'] : ['refs/heads/main']) {
       if (ref) break;
       if (await git('rev-parse', '--verify', '--quiet', candidate).then(() => true, () => false)) ref = candidate;
     }

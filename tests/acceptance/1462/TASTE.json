@@ -1,0 +1,9 @@
+{
+  "issue": 1462,
+  "criterion": "AC20",
+  "verdict": null,
+  "who": null,
+  "when": null,
+  "files": {},
+  "note": "No call recorded yet. A person fills this in once, on the pictures one check run wrote to $DA1462_SCREENS: verdict looks_right or looks_wrong, who, when, and files with each file's name and SHA-256 (view-menu.png, session-menu.png, command-k.png, run.json)."
+}

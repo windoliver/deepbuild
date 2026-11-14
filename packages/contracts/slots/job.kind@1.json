@@ -1,0 +1,37 @@
+{
+  "title": "job.kind@1",
+  "description": "An offline job kind and the tools that join it: the kind names its params schema, its outputs, its key, its output checks and its qualification fixtures; a tool, pinned by name@version, joins only once it writes each fixture's expected bytes, and an output reaches an item only after every output check passes.",
+  "x-since": "R6",
+  "x-stability": "preview",
+  "x-tracking": "#1922",
+  "x-preview_since": "R6",
+  "x-decide_by": "R9",
+  "type": "object",
+  "properties": {
+    "slot": {
+      "const": "job.kind@1",
+      "description": "The hub slot the fill declares itself for."
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991,
+      "description": "The kit revision the fill was built against."
+    },
+    "kind": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)*$"
+    },
+    "tool": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_-]*@\\d+\\.\\d+\\.\\d+$"
+    }
+  },
+  "required": [
+    "slot",
+    "revision",
+    "kind",
+    "tool"
+  ],
+  "additionalProperties": false
+}

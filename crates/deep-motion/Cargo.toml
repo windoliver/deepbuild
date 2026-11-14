@@ -20,3 +20,10 @@ deep-canvas-marks = { path = "../deep-canvas-marks" }
 # Issue #491: the shaper the auto layout measures text with, for a frame's layout glide.
 deep-text = { path = "../deep-text" }
 serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
+
+# Issue #1468: the acceptance tests, written blind in tests/acceptance/1468: the closed function list's parse
+# caps nesting at 64 levels. Here because this crate reaches the core's parser, motion's drivers (through its
+# `deep-motion` binary), the text module's field selectors with the one shaper, and the pack check.
+[[test]]
+name = "acceptance_1468"
+path = "../../tests/acceptance/1468/depth.rs"

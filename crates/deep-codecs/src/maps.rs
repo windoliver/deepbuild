@@ -78,7 +78,7 @@ pub fn ready(data: &[u8], role: Role, bc: bool, gamma: bool) -> Result<Ready, St
     }
     let img = image::load_from_memory(data)
         .map_err(|e| format!("an unreadable image: {e}"))?
-        .to_rgba8();
+        .into_rgba8();
     let (w, h) = img.dimensions();
     let mut px = img.into_raw();
     if let Some(g) = gamma.then(|| png_gamma(data)).flatten() {

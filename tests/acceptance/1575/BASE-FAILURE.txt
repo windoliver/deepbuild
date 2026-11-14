@@ -1,0 +1,70 @@
+Base commit: f38d2b3983496ca502cb4743fda249bbc2e5b162 (origin/main, no implementation of #1575)
+Command: npm ci; npm run build --workspaces (done beside this job); cargo build --locked -q -p deep-hook; then
+         npx vitest run --root tests/acceptance/1575 --no-file-parallelism --testTimeout=600000 --reporter=verbose
+         (node = ~/.local/share/fnm/node-versions/v24.22.0, the repo's .node-version, first on PATH)
+Date: 2026-11-10  Node v24.22.0  vitest 5.0.5  darwin-arm64 (Mac17,10, Apple M5 Max: not a reference Mac, so AC1's
+timing is a reading only and the test is skipped as INCONCLUSIVE, by #34's rule)
+Exit code: 1
+Result: 3 files, 8 tests: 4 failed, 3 passed, 1 skipped (INCONCLUSIVE). Trimmed to each failure's reason.
+
+The whole suite ran once (82.61 s). After it, one failure message's wording was corrected (AC5's, which read
+"handed 8002 of 8001 frames") and stream.test.ts alone was run again (43.38 s; the same 4 failed, 2 passed); the four
+stream failures below are quoted from that rerun, AC1 and AC6 from the whole run. The two runs differ only in the
+session IDs and in AC5's wording. Checked beside them: the suite type-checks (node node_modules/typescript/bin/tsc -p
+tests/acceptance/1575/tsconfig.json, no errors).
+
+== Why each failing test fails at the base: at its criterion's assertion, never at its own setup
+
+stream.test.ts
+  × AC2 #1575.d79bb92a with two sessions appending in turn, a reader scoped to the first gets each of its events and
+    no frame for the second                                                    (stream.test.ts:41, expect(r.failure).toBeNull())
+      a reader scoped to session 75798c7d-38d1-4ac4-baab-ea6e9fece333 got 4 frames for session
+      271fb06c-aad2-4e01-a881-135a1c64f03f, the first at log_pos 2
+      The base accepts the subscribe, ignores its scope and sends every event.
+  × AC3 #1575.1c19e28a 200 events behind, past the cap of 128, the reply says to read a snapshot and replays nothing;
+    after the read, every later event arrives once, in order                   (stream.test.ts:95)
+      a reader 200 events behind got no snapshot reply: the hub replayed 201 events
+      (the session's 200 and one event of no session, since the base ignores the scope too)
+  × AC4 #1575.ec9543ba 50 events behind, the reply names the head, the 50 arrive, one frame marks the head, and the
+    next event appended is the first frame after it                            (stream.test.ts:123)
+      the client never saw caught up: 54 event frames and no frame marking the head at 62, so it can't tell
+      replaying from live
+  × AC5 #1575.d0ddf63c stopped while 4,000 prompts of 8 KiB are appended, 32 MiB or more in fewer frames than the
+    frame cap, it is cut off within the byte cap and its fell_behind report counts the frames and bytes
+                                                                               (stream.test.ts:156)
+      a reader that stopped reading was never held: while 8001 frames were appended it was handed 8002 frames,
+      36378778 bytes, past any byte cap, and got no report
+
+== Skipped as INCONCLUSIVE: could not be shown failing here
+
+budgets.test.ts
+  ↓ AC1 #1575.1adcfe64 the live reader gets each event within 50 ms at p95 while the cold reader replays 100,000
+    events from 0
+      INCONCLUSIVE (reading only): not a reference Mac: Mac17,10 / Apple M5 Max: AC1 live frame p95 (ms) beside the
+      cold reader replaying 100000 events from 0 (the slowest live frame, 223 ms, was sent with the cold reader at
+      4565 of 100000): 186.648, 184.731, 193.345, 215.914, 192.099 against 50
+      This machine is not a reference Mac, so by #34's rule the number doesn't count here and the test neither passes
+      nor fails. The reading: all five runs are over 50 ms by more than the judge's margin (17% here, so 58.4 ms),
+      which on a reference Mac the judge reports as
+      "FAIL AC1 live frame p95 (ms) beside the cold reader replaying 100000 events from 0 (…): …". That run on a
+      reference Mac was not made.
+
+== Passing at the base
+
+stream.test.ts
+  ✓ AC2 #1575.d79bb92a (wrong program) a planted hub that sends all fails this test, naming the session
+  ✓ AC3 #1575.1c19e28a (wrong program) a planted hub that replays fails this test, naming the count
+      Each asserts that its criterion's judge fails on the plant with the message the criterion names. The plants make
+      the base and a correct hub wrong the same way, so these pass on both (README, Wrong programs).
+app.test.ts
+  ✓ AC6 #1575.33d5b838 subscribed as the app subscribes, after its inbox read and again from 0, one fixture session's
+    turn arrives as the base hub sent it
+      The golden is the base's own stream, so this passes at the base, as the task requires.
+
+== Seen while writing the suite, not part of it
+
+- An earlier form of AC1 sent hooks one after another through a single cold replay. On the base its runs read
+  145.290, 5.337, 13.021, 188.723, 8.267: the first hook waits for the whole replay and the later, fast ones dilute
+  the p95. It was replaced by one hook per cold replay before the run above (README, Timing).
+- An earlier form of AC5 appended 2,000 prompts of 32 KiB; the base keeps 8,192 characters of a prompt, so the load
+  was 18 MiB. It now appends 4,000 prompts of 8 KiB and allows a byte cap of at most 16 MiB (README, The surface).

@@ -1,0 +1,51 @@
+#501: why every test fails at the base 2721ca7b ("Merge pull request #2088"). A note, not a run.
+
+The suite was not run at the base: the surfaces it reads plainly don't exist there, and each run would spend a full
+deep-show build to show it. What follows is read from the base's code (crates/deep-show/src/{main,time,media,gate}.rs,
+crates/deep-show/Cargo.toml, benchmarks/budgets.json), not from its output. The suite parses and typechecks
+(`vitest list --root tests/acceptance/501`: 31 tests in 9 files; `tsc -p tests/acceptance/501/tsconfig.json`: clean).
+
+What the base has: `export` is #488's rates-only plan (time.rs `parse_call` reads `doc`, `frame_rate` and
+`audio.sample_rate` and nothing else, and answers `{"outcome": "planned", "frame_rate", "frame", "sample_rate",
+"sample"}`); `media_export` encodes one source video's frames to H.264 (media.rs), with no receipt fields but
+`encoder` and `frames`; `media_import` probes video and audio streams only; `play` answers `played`, `frames`, `drawn`,
+`last_drawn`; `registries` lists #200's registries, none named export.target@1; the startup `--planted` argument knows
+#200's and others' names, none of this suite's, and answers an unknown one with bad_input and exit 2; Cargo.toml has
+`test-leave-out-media` but no `test-export-target` or `test-export-target-in-media`; there is no `viewer`, `session`,
+`frame_hash`, `cross_machine` or `soak` call, and no `kit` over a registry.
+
+Expected at the base, per criterion (each fails at its first missing surface; none is BLOCKED by the base itself):
+
+- AC1 (exports.test.ts, 1 test): the delivery `export` (with `out`, `range`) is answered as a plan: "the range export
+  is exported … expected 'planned' to be 'exported'".
+- AC2 (clock.test.ts, 2): the plan answers no `frames`: "the plan at 8/1 fps and 8000 Hz: frames is an array, got
+  undefined"; the planted test: "deep-show run exits 0" fails (exit 2, bad_input for `span_rounds_each_frame`).
+- AC3 (scope.test.ts, 3): "deep://registries lists export.target@1" fails in each test, before any export.
+- AC4 (budgets.test.ts, 1): validateBudgets passes (the base against itself), then "benchmarks/budgets.json has a task
+  whose reason names #501" fails. The soak is never reached.
+- AC5 (viewer.test.ts, 1): the whole-film png_seq `export` is answered as a plan: "the whole film as png_seq is
+  exported … expected 'planned' to be 'exported'".
+- AC6 (seal.test.ts, 4): the builds `full,test-leave-out-media,test-export-target` and `…,test-export-target-in-media`
+  fail in cargo (the package has no such features): "the binary builds" fails in tests 3 and 4; test 1 fails at
+  "deep://registries lists export.target@1"; test 2 at "refuses to start (exit 2)" reading a bad_input line, not
+  seal_refused, for the unknown `target_reader_is_writer`.
+- AC7 (viewer.test.ts, 1): as AC5, at the whole-film export; `play` would then answer no `presented`.
+- AC8 (clock.test.ts, 2): as AC2: no `frames` in the plan; the planted `span_rounds_start` exits 2.
+- AC9 (exports.test.ts, 2): the png_seq `export` is a plan: "the png_seq export was not delivered" ("received
+  [the png_seq export was not delivered: {"outcome":"planned",…}]"); the planted test exits 2 at the unknown name.
+- AC10 (across.test.ts, 2): `media_mix` runs on this Mac; then the Linux leg is BLOCKED when Docker or the image is
+  missing, else it builds and the check fails at `cross_machine` ("the check doesn't read the two renders"); the
+  planted test exits 2 in the container at the unknown `mixer_linux_one_step`.
+- AC11 (exports.test.ts, 2): the `export` with `readback` is a plan: "hardware is exported … expected 'planned' to be
+  'exported'"; the planted test exits 2.
+- AC12 (timecode.test.ts, 2): no `frames` in the plan; the planted test exits 2.
+- AC13 (timecode.test.ts, 2): the `export` with `out` and `timecode` is a plan: "film.mp4 is exported" fails (the
+  base answers `planned`, and `media_import` of a path nothing wrote is refused); the planted test exits 2.
+- AC14 (timecode.test.ts, 2): as AC13 for range.mp4; the planted test exits 2.
+- AC15 (taste.test.ts, 1): INCONCLUSIVE: docs/evidence/501/ holds none of the four pictures.
+- AC16 (exports.test.ts, 1): the `export` with `shards` is a plan: "1 shard is exported" fails.
+- AC17 (exports.test.ts, 2): the `export` of the film missing an asset is a plan, not a stop: "asset …: the export
+  didn't stop (outcome planned)"; the planted test exits 2.
+
+If the base's document check refuses one of the fixture documents (`strips` with a WAV, `markers`, a `cutaway@1` or a
+`figure`), the test fails earlier, at "… is presented".

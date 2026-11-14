@@ -19,9 +19,16 @@ pub const MAX_BYTES: usize = 512 * 1024;
 
 const SVG_NS: &str = "http://www.w3.org/2000/svg";
 const XLINK_NS: &str = "http://www.w3.org/1999/xlink";
+/// The namespace of the typeset job's record in an SVG's `<metadata>` (#220).
+const TYPESET_NS: &str = "urn:deepbuild:typeset";
 
 /// How deep `<use>` may nest, so a use that reaches itself refuses instead of spinning.
 const USE_DEPTH: usize = 16;
+
+/// How deep elements may nest, in the text and through `<use>`s. The XML reader and the import
+/// recurse once per level, so the text is counted before it is parsed and the import counts as it
+/// goes. A thread with a 2 MiB stack reads about twice this.
+const MAX_NESTING: usize = 64;
 
 /// The elements the import reads: containers, shapes, `<use>`, those that hold no drawing, and
 /// those drawn only where something refers to them.
@@ -155,11 +162,13 @@ pub struct Clip {
     pub parent: Option<usize>,
 }
 
-/// A part: an element with an id, or a class `parts` names, that draws; and the part it sits in.
+/// A part: an element with an id, or a class `parts` names, that draws; the part it sits in; and
+/// its source where the SVG gives one, as the typeset job's `data-source` does (#220).
 #[derive(Clone, Debug, PartialEq)]
 pub struct Part {
     pub id: String,
     pub parent: Option<usize>,
+    pub source: Option<String>,
 }
 
 /// What the import read, in paint order.
@@ -171,6 +180,9 @@ pub struct Svg {
     pub clips: Vec<Clip>,
     /// Each element or attribute the import didn't read, by name, once, in document order.
     pub unread: Vec<String>,
+    /// The typeset job's record when the job wrote the SVG (#220): its `<metadata>`'s
+    /// `deep:typeset` text, `{made_by, license}` as JSON.
+    pub typeset: Option<String>,
 }
 
 /// Which importer reads an SVG: the honest one, or a planted wrong program.
@@ -189,6 +201,11 @@ pub fn import(bytes: &[u8], classes: &[String], twin: Twin) -> Result<Svg, Refus
         return Err(Refusal::TooLarge(bytes.len()));
     }
     let text = std::str::from_utf8(bytes).map_err(|_| Refusal::Malformed("not UTF-8".into()))?;
+    if nests_over(text, MAX_NESTING) {
+        return Err(Refusal::Malformed(format!(
+            "elements nest over {MAX_NESTING} deep"
+        )));
+    }
     let options = ParsingOptions {
         allow_dtd: false,
         nodes_limit: 1_000_000,
@@ -204,6 +221,13 @@ pub fn import(bytes: &[u8], classes: &[String], twin: Twin) -> Result<Svg, Refus
     let mut ids = BTreeMap::new();
     scan(root, &mut unread, &mut ids)?;
     let view_box = view_box(root);
+    let typeset = root
+        .children()
+        .filter(|n| n.has_tag_name((SVG_NS, "metadata")))
+        .flat_map(|m| m.children())
+        .find(|n| n.has_tag_name((TYPESET_NS, "typeset")))
+        .and_then(|n| n.text())
+        .map(str::to_string);
     let sheet = Sheet::read(root, &mut unread);
     let mut import = Import {
         ids,
@@ -216,6 +240,7 @@ pub fn import(bytes: &[u8], classes: &[String], twin: Twin) -> Result<Svg, Refus
         paths: Vec::new(),
         clips: Vec::new(),
         decorated: 0,
+        levels: 0,
     };
     let style = import.style(&Style::default(), root);
     for child in root.children().filter(Node::is_element) {
@@ -227,7 +252,61 @@ pub fn import(bytes: &[u8], classes: &[String], twin: Twin) -> Result<Svg, Refus
         paths: import.paths,
         clips: import.clips,
         unread: import.unread,
+        typeset,
     })
+}
+
+/// Whether elements in `text` nest over `max` deep, counted without parsing it. Comments, CDATA
+/// sections, instructions, declarations and quoted attribute values hold no tags. On text that
+/// isn't XML it may count over, never under: the reader stops at the first thing it can't read.
+fn nests_over(text: &str, max: usize) -> bool {
+    let bytes = text.as_bytes();
+    // Just past the next `end` at or after `from`, or the text's end when there is none.
+    let past = |from: usize, end: &str| {
+        let found = text[from..].find(end);
+        found.map_or(bytes.len(), |at| from + at + end.len())
+    };
+    let (mut i, mut depth) = (0, 0usize);
+    while let Some(at) = text[i..].find('<') {
+        i += at;
+        let rest = &text[i..];
+        if rest.starts_with("<!--") {
+            i = past(i + 4, "-->");
+        } else if rest.starts_with("<![CDATA[") {
+            i = past(i + 9, "]]>");
+        } else if rest.starts_with("<?") {
+            i = past(i + 2, "?>");
+        } else {
+            // A tag ends at its first `>` outside a quoted value.
+            let (mut quote, mut end) = (None, bytes.len());
+            for (k, &c) in bytes.iter().enumerate().skip(i + 1) {
+                match quote {
+                    Some(q) if c == q => quote = None,
+                    Some(_) => {}
+                    None if c == b'"' || c == b'\'' => quote = Some(c),
+                    None if c == b'>' => {
+                        end = k;
+                        break;
+                    }
+                    None => {}
+                }
+            }
+            if rest.starts_with("</") {
+                depth = depth.saturating_sub(1);
+            } else if !rest.starts_with("<!") {
+                depth += 1;
+                if depth > max {
+                    return true;
+                }
+                // `/>` closes the element it opens.
+                if bytes[end - 1] == b'/' {
+                    depth -= 1;
+                }
+            }
+            i = (end + 1).min(bytes.len());
+        }
+    }
+    false
 }
 
 fn unread_once(unread: &mut Vec<String>, name: &str) {
@@ -606,6 +685,8 @@ struct Import<'a, 'i, 'c> {
     /// How many pattern fills and markers have drawn, whose tiles and marks sit outside the
     /// geometry an object bounding box measures.
     decorated: usize,
+    /// How many elements deep the import stands, through groups, `<use>`s and what they refer to.
+    levels: usize,
 }
 
 impl<'a, 'i> Import<'a, 'i, '_> {
@@ -659,9 +740,31 @@ impl<'a, 'i> Import<'a, 'i, '_> {
         self.style(&s, node)
     }
 
+    /// Draws `node` as `draw` does, and refuses one that stands past `MAX_NESTING`: a `<use>`
+    /// nests what its target holds, which the count over the text can't see.
+    fn walk(
+        &mut self,
+        node: Node<'a, 'i>,
+        ctm: Affine,
+        parent: &Style,
+        part: Option<usize>,
+        clip: Option<usize>,
+        uses: usize,
+    ) -> Result<(), Refusal> {
+        if self.levels >= MAX_NESTING {
+            return Err(Refusal::Malformed(format!(
+                "elements nest over {MAX_NESTING} deep through <use>s"
+            )));
+        }
+        self.levels += 1;
+        let drawn = self.draw(node, ctm, parent, part, clip, uses);
+        self.levels -= 1;
+        drawn
+    }
+
     /// Draws `node` under `ctm`, inside the clip region `clip`; `uses` counts the `<use>`s,
     /// pattern tiles and markers it is inside, whose copies hold no parts of their own.
-    fn walk(
+    fn draw(
         &mut self,
         node: Node<'a, 'i>,
         ctm: Affine,
@@ -700,7 +803,12 @@ impl<'a, 'i> Import<'a, 'i, '_> {
             }));
         let own = match named {
             Some(id) if uses == 0 => {
-                self.parts.push(Part { id, parent: part });
+                let source = node.attribute("data-source").map(str::to_string);
+                self.parts.push(Part {
+                    id,
+                    parent: part,
+                    source,
+                });
                 Some(self.parts.len() - 1)
             }
             _ => None,
@@ -1066,8 +1174,27 @@ impl<'a, 'i> Import<'a, 'i, '_> {
 
     /// A mask's solid shapes under `ctm`, each with its alpha (its coverage alone where `alpha`);
     /// false when it holds anything else (a stroke, a paint server, a marker, an even-odd fill, a
-    /// clip or mask of its own).
+    /// clip or mask of its own), or nests past `MAX_NESTING`.
     fn mask_shapes(
+        &mut self,
+        node: Node<'a, 'i>,
+        ctm: Affine,
+        parent: &Style,
+        uses: usize,
+        alpha: bool,
+        out: &mut Vec<(Vec<Verb>, f64)>,
+    ) -> bool {
+        if self.levels >= MAX_NESTING {
+            return false;
+        }
+        self.levels += 1;
+        let solid = self.mask_group(node, ctm, parent, uses, alpha, out);
+        self.levels -= 1;
+        solid
+    }
+
+    /// `mask_shapes` over the children of `node`.
+    fn mask_group(
         &mut self,
         node: Node<'a, 'i>,
         ctm: Affine,
@@ -2346,5 +2473,85 @@ mod tests {
         assert_eq!(numbers("1-2.5.5e1,3"), vec![1.0, -2.5, 5.0, 3.0]);
         let ((verbs, _), _) = path_data("m1 1l2 0h1v1z");
         assert_eq!(verbs[3], Verb::Line([4.0, 2.0]));
+    }
+
+    /// A rect inside `n` groups, each opened by `open`.
+    fn nested(open: &str, n: usize) -> String {
+        let (opens, closes) = (open.repeat(n), "</g>".repeat(n));
+        doc(&format!(r#"{opens}<rect width="4" height="4"/>{closes}"#))
+    }
+
+    #[test]
+    fn groups_nested_past_the_limit_are_refused() {
+        for open in ["<g>", r#"<g a="/>">"#, "<g a='>'\n>"] {
+            let found = import(nested(open, 300).as_bytes(), &[], Twin::Honest);
+            assert!(
+                matches!(&found, Err(Refusal::Malformed(what)) if what.contains("nest")),
+                "{open}: {:?}",
+                found.map(|s| s.paths.len())
+            );
+        }
+    }
+
+    /// `chain` groups that each hold the next through a `<use>`, `deep` groups down; the last
+    /// holds a rect, and `first` names the first.
+    fn chained(deep: usize, chain: usize, first: &str) -> String {
+        let (opens, closes) = ("<g>".repeat(deep), "</g>".repeat(deep));
+        let groups: String = (0..chain)
+            .map(|k| {
+                let held = if k + 1 < chain {
+                    format!(r##"<use href="#u{}"/>"##, k + 1)
+                } else {
+                    r#"<rect width="4" height="4" fill="white"/>"#.to_string()
+                };
+                format!(r#"<g id="u{k}">{opens}{held}{closes}</g>"#)
+            })
+            .collect();
+        doc(&format!("<defs>{groups}</defs>{first}"))
+    }
+
+    #[test]
+    fn groups_nested_past_the_limit_through_uses_are_refused() {
+        let svg = chained(50, 16, r##"<use href="#u0"/>"##);
+        let found = import(svg.as_bytes(), &[], Twin::Honest);
+        assert!(
+            matches!(&found, Err(Refusal::Malformed(what)) if what.contains("nest")),
+            "{:?}",
+            found.map(|s| s.paths.len())
+        );
+        assert_eq!(
+            read(&chained(1, 16, r##"<use href="#u0"/>"##)).paths.len(),
+            1
+        );
+    }
+
+    #[test]
+    fn a_mask_nested_past_the_limit_through_uses_is_left_unread() {
+        let masked =
+            r##"<mask id="m"><use href="#u0"/></mask><rect width="9" height="9" mask="url(#m)"/>"##;
+        let svg = read(&chained(60, 15, masked));
+        assert!(svg.unread.iter().any(|u| u == "mask"), "{:?}", svg.unread);
+        let svg = read(&chained(1, 15, masked));
+        assert!(!svg.unread.iter().any(|u| u == "mask"), "{:?}", svg.unread);
+    }
+
+    #[test]
+    fn nesting_inside_the_limit_still_imports() {
+        // The `<svg>`, 62 groups and the rect stand 64 deep; one group more is over.
+        assert_eq!(read(&nested("<g>", 62)).paths.len(), 1);
+        assert!(import(nested("<g>", 63).as_bytes(), &[], Twin::Honest).is_err());
+        // Tags inside a comment, a CDATA section or an instruction open nothing.
+        let opens = "<g>".repeat(300);
+        for held in [
+            format!("<!-- {opens} -->"),
+            format!("<desc><![CDATA[{opens}]]></desc>"),
+            format!("<?note {opens}?>"),
+        ] {
+            let svg = read(&doc(&format!(r#"{held}<rect width="4" height="4"/>"#)));
+            assert_eq!(svg.paths.len(), 1, "{}", &held[..12]);
+        }
+        // Siblings that close, with and without a tag of their own, never add up.
+        let flat = r#"<g><rect width="4" height="4"/></g><g/>"#.repeat(300);
+        assert_eq!(read(&doc(&flat)).paths.len(), 300);
     }
 }

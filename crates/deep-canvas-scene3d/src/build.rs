@@ -114,8 +114,13 @@ fn keyed_build(doc: &Value, _: &str, item: &Value, planted: Option<&str>) -> Val
         .into_iter()
         .filter_map(|id| Some((id.clone(), doc.get("items")?.get(&id)?.clone())))
         .collect();
-    json!({"kind": kind, "params": spec::params_of(item, kind, true, planted),
-           "modifiers": item.get("modifiers"), "refs": read})
+    let mut key = json!({"kind": kind, "params": spec::params_of(item, kind, true, planted),
+           "modifiers": item.get("modifiers"), "refs": read});
+    // #226: what a module's deform reads, never where it is placed.
+    if let Some(reads) = crate::contributed::keyed(doc, item) {
+        key["reads"] = reads;
+    }
+    key
 }
 
 fn keyed_mark(_: &Value, _: &str, item: &Value, planted: Option<&str>) -> Value {
@@ -215,16 +220,23 @@ fn item_at(v: &mut View<'_>) -> Result<Value, OpError> {
     })
 }
 
+/// A fault, carrying a terrain plate's block as written where it names the plate's terrain, so
+/// a plate past its cap is named with its size and spacing (#2014).
+fn fault_of(id: &str, item: &Value, path: String) -> OpError {
+    let e = fault(id, path);
+    match item.pointer("/params/terrain") {
+        Some(t) if e.path.starts_with(&format!("items/{id}/params/terrain")) => e.with(t.clone()),
+        _ => e,
+    }
+}
+
 fn fault(id: &str, path: String) -> OpError {
     if path == crate::hull::FLAT {
         return OpError::new(crate::hull::FLAT, format!("items/{id}"));
     }
     // A refusal with its own code (#443): a missing module is named as itself.
     if let Some((code, at)) = path.split_once(builders::CODED) {
-        let code = builders::OUTLINE_CODES
-            .into_iter()
-            .find(|c| *c == code)
-            .unwrap_or("out_of_range");
+        let code = code_of(code);
         let at = if code == "module_missing" || at.starts_with("items/") {
             at.to_string()
         } else {
@@ -233,6 +245,16 @@ fn fault(id: &str, path: String) -> OpError {
         return OpError::new(code, at);
     }
     OpError::new("out_of_range", format!("items/{id}/{path}"))
+}
+
+/// A coded fault's code: one an outline source or a module's deform refuses with, else
+/// `out_of_range`.
+pub(crate) fn code_of(code: &str) -> &'static str {
+    builders::OUTLINE_CODES
+        .into_iter()
+        .chain(crate::contributed::CODES)
+        .find(|c| *c == code)
+        .unwrap_or("out_of_range")
 }
 
 /// A builder's mesh and stack at `t` seconds, or a curve's samples.
@@ -298,9 +320,10 @@ fn run_scene3d(v: &mut View<'_>) -> Result<(), OpError> {
     let run = stack::Run {
         planted: v.planted().map(str::to_string),
         outlines: v.outlines().to_vec(),
+        fills: v.fills().to_vec(),
         ..Default::default()
     };
-    let out = built(doc, &id, &item, &run, 0.0).map_err(|p| fault(&id, p))?;
+    let out = built(doc, &id, &item, &run, 0.0).map_err(|p| fault_of(&id, &item, p))?;
     v.write("scene3d.built", Val::typed(out))
 }
 
@@ -312,9 +335,10 @@ fn run_scene3d_live(v: &mut View<'_>) -> Result<(), OpError> {
     let run = stack::Run {
         planted: v.planted().map(str::to_string),
         outlines: v.outlines().to_vec(),
+        fills: v.fills().to_vec(),
         ..Default::default()
     };
-    let out = built(doc, &id, &item, &run, t).map_err(|p| fault(&id, p))?;
+    let out = built(doc, &id, &item, &run, t).map_err(|p| fault_of(&id, &item, p))?;
     v.write("scene3d.livebuilt", Val::typed(out))
 }
 

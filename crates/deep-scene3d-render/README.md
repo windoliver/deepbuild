@@ -7,13 +7,13 @@ scene3d's render module on the GPU layer (#378): each 3D writer layer is a batch
 ## Where new code goes
 
 - `src/lib.rs`: the renderer, its batches and passes, and the `Planted` twins. `src/mesh.rs`: unit meshes. `src/shadow.rs`: the shadow map. `src/status.rs`: the status passes.
-- WGSL sits beside the Rust that loads it with `include_str!` (`scene3d.wgsl`, `output.wgsl`, `status.wgsl`).
-- No tests here: tests/acceptance/378, 380, 382 and 383 prove it through `deep-gpu` (crates/deep-gpu-layer).
-- What a 3D item is and how it is checked belongs in deep-canvas-scene3d, which touches no GPU; effects passes go in deep-effects-render.
+- WGSL sits beside the Rust that loads it with `include_str!`, one file per pass.
+- Unit tests sit in a `#[cfg(test)]` module in the file they test; tests/acceptance/378, 380, 382, 383 and the later 3D issues prove the passes through `deep-gpu` (crates/deep-gpu-layer).
+- What a 3D item is and how it is checked belongs in deep-canvas-scene3d, which touches no GPU; a 2D effect pass goes in deep-effects-render, and a pass that reads the 3D targets goes here.
 
 ## What it may import
 
-A render crate on the GPU layer: deep-canvas-scene3d and deep-gpu through their crate roots, plus wgpu, wgpu-profiler and bytemuck. No GPUI and no app crate.
+A render crate on the GPU layer: deep-canvas-scene3d, deep-canvas-effects (a material operator's graph), deep-canvas-marks (the look's print fields) and deep-gpu through their crate roots, plus wgpu, wgpu-profiler and bytemuck. No GPUI and no app crate.
 
 ## Deviations
 

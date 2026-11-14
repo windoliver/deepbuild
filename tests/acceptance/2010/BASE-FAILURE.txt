@@ -1,0 +1,253 @@
+The #2010 suite run once at base commit d51be2c3 (no implementation of #2010; #2009's deep-physics is there), on
+macOS arm64 (Apple M5 Max, rustup 1.99.1, Node 24.22.2, vitest 5.0.5), with
+`NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 npx vitest run --root tests/acceptance/2010 --testTimeout=600000 --no-file-parallelism`
+(the checkout's path redacted to `<checkout>`; deep-physics was already built, so no file waited on a cold build).
+
+9 of 9 tests fail, each at an assertion because the surface is absent, none in the harness:
+- 7 tests fail on their first call this suite adds, which the base answers {"ok":false,"code":"bad_input"}: `runtime`
+  (ac1's first and third tests) and `golden` (ac2's second, both of ac3's, ac4's).
+- ac1's preflight test fails on "node scripts/physics-build.mjs passes the checkout's build": the script doesn't exist.
+- ac2's first test fails on "the first run: step_hashes is an array, got undefined": the base's bake has no step hashes.
+- ac5's test fails on "the 60/1 bake answers ok": the base's reader refuses the lab's `outputs` ("#1918 brings it").
+None reaches its slow leg (the planted lockfile's build, Docker). Checked apart from this run, at the base: the cargo
+readings, the planted lockfile and its build, and ac5's sampling judge (on outputs made from the base's own states) all
+work as the README says; see its "Run them" and "Readings".
+The type-check, `npx tsc -p tests/acceptance/2010/tsconfig.json`, exits 0.
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/2010
+
+ ❯ ac1-pinned-build.test.ts (3 tests | 3 failed) 2031ms
+   ❯ #2010.9300a915 the pinned build: its resolved tree, its flags, its preflight, and the pins in the bake key and the runtime digest (3)
+     × #2010.9300a915 the resolved tree has rapier3d 0.36.1 and parry3d 0.31.1, rapier3d's defaults plus enhanced-determinism and serde-serialize and none of block-solver, fem, simd8, parallel, unsync-callbacks, glam without fast-math; the runtime names those resolved versions and features; the build flags carry no target-cpu=native or +fma 263ms
+     × #2010.9300a915 the preflight passes the checkout's build and refuses one with rapier3d's simd8 and one with target-cpu=native, each naming the flag 59ms
+     × #2010.9300a915 a planted lockfile that moves wide changes both the bake key and the runtime digest 30ms
+ ❯ ac2-step-hashes-and-locator.test.ts (2 tests | 2 failed) 1823ms
+   ❯ #2010.fa073c97 step hashes repeat and the golden comparator names the first step and field that differ (2)
+     × #2010.fa073c97 run twice, run with its bodies written in reverse order, and replayed from each checkpoint, the world gives identical step hashes 248ms
+     × #2010.fa073c97 given a one-ulp change to the ball's x velocity at step 300 in the second run, the comparator names step 300, the ball and linear.x at the next checkpoint with an ulp distance of 1; the twin hash_rounds_1e6 misses it 14ms
+ ❯ ac5-frame-rate-key.test.ts (1 test | 1 failed) 2324ms
+   ❯ #2010.bf531cb7 the document's frame rate is in the bake key, and playback reads outputs sampled at it (1)
+     × #2010.bf531cb7 on the ball-and-goal lab, frame_rate 60/1 → 50/1 changes the bake key, and playback at 50 fps reads outputs sampled at 50 fps equal to a fresh bake's by hash; the twin key_omits_frame_rate reuses the 60 fps outputs and fails naming frame_rate 321ms
+ ❯ ac3-cross-machine.test.ts (2 tests | 2 failed) 1858ms
+   ❯ #2010.45fbb8dc a cross-machine golden is BLOCKED with no second machine, and pending until the configured one has run it (2)
+     × #2010.45fbb8dc with no second machine configured, a golden recorded here that verifies on x86_64-unknown-linux-gnu is BLOCKED with one unblock ask naming x86_64-unknown-linux-gnu, never PASS or INCONCLUSIVE, even after this machine has verified it 364ms
+     × #2010.45fbb8dc with x86_64-unknown-linux-gnu configured as a second machine, the golden is pending until that machine has run it, then takes that run's verdict 9ms
+ ❯ ac4-fp-control.test.ts (1 test | 1 failed) 1680ms
+   ❯ #2010.61aa2e8e a golden step that starts with flush-to-zero set fails on the floating-point control register (1)
+     × #2010.61aa2e8e a step that starts with flush-to-zero set fails at that step, naming FPCR, before any hash is compared 430ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 9 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac1-pinned-build.test.ts > #2010.9300a915 the pinned build: its resolved tree, its flags, its preflight, and the pins in the bake key and the runtime digest > #2010.9300a915 the resolved tree has rapier3d 0.36.1 and parry3d 0.31.1, rapier3d's defaults plus enhanced-determinism and serde-serialize and none of block-solver, fem, simd8, parallel, unsync-callbacks, glam without fast-math; the runtime names those resolved versions and features; the build flags carry no target-cpu=native or +fma
+AssertionError: runtime answers ok: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ answered helpers.ts:86:63
+     84|
+     85| export function answered(reply: JsonObject | undefined, what: string):…
+     86|   expect(reply?.['ok'], `${what} answers ok: ${show(reply)}`).toBe(tru…
+       |                                                               ^
+     87|   return reply!;
+     88| }
+ ❯ ac1-pinned-build.test.ts:33:16
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/9]⎯
+
+ FAIL  ac1-pinned-build.test.ts > #2010.9300a915 the pinned build: its resolved tree, its flags, its preflight, and the pins in the bake key and the runtime digest > #2010.9300a915 the preflight passes the checkout's build and refuses one with rapier3d's simd8 and one with target-cpu=native, each naming the flag
+AssertionError: node scripts/physics-build.mjs passes the checkout's build: node:internal/modules/cjs/loader:1568
+  throw err;
+  ^
+
+Error: Cannot find module '<checkout>/scripts/physics-build.mjs'
+    at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+    at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+    at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+    at Module._load (node:internal/modules/cjs/loader:1341:5)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+    at node:internal/main/run_main_module:33:47 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
+
+Node.js v24.22.2
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ ac1-pinned-build.test.ts:57:113
+     55|   it(`${ID} the preflight passes the checkout's build and refuses one …
+     56|     const real = preflight();
+     57|     expect(real.status, `node scripts/physics-build.mjs passes the che…
+       |                                                                                                                 ^
+     58|     expect(real.out, 'it prints a PASS line').toMatch(/^PASS\b/m);
+     59|     expect(real.out, 'and no FAIL line').not.toMatch(/^FAIL\b/m);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/9]⎯
+
+ FAIL  ac1-pinned-build.test.ts > #2010.9300a915 the pinned build: its resolved tree, its flags, its preflight, and the pins in the bake key and the runtime digest > #2010.9300a915 a planted lockfile that moves wide changes both the bake key and the runtime digest
+AssertionError: runtime answers ok: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ answered helpers.ts:86:63
+     84|
+     85| export function answered(reply: JsonObject | undefined, what: string):…
+     86|   expect(reply?.['ok'], `${what} answers ok: ${show(reply)}`).toBe(tru…
+       |                                                               ^
+     87|   return reply!;
+     88| }
+ ❯ ac1-pinned-build.test.ts:71:29
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/9]⎯
+
+ FAIL  ac2-step-hashes-and-locator.test.ts > #2010.fa073c97 step hashes repeat and the golden comparator names the first step and field that differ > #2010.fa073c97 run twice, run with its bodies written in reverse order, and replayed from each checkpoint, the world gives identical step hashes
+AssertionError: the first run: step_hashes is an array, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ arr ../2009/helpers.ts:52:67
+     50| }
+     51| export function arr(v: JsonValue | undefined, what: string): JsonValue…
+     52|   expect(Array.isArray(v), `${what} is an array, got ${show(v)}`).toBe…
+       |                                                                   ^
+     53|   return v as JsonValue[];
+     54| }
+ ❯ stepHashes helpers.ts:101:18
+ ❯ ac2-step-hashes-and-locator.test.ts:53:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/9]⎯
+
+ FAIL  ac2-step-hashes-and-locator.test.ts > #2010.fa073c97 step hashes repeat and the golden comparator names the first step and field that differ > #2010.fa073c97 given a one-ulp change to the ball's x velocity at step 300 in the second run, the comparator names step 300, the ball and linear.x at the next checkpoint with an ulp distance of 1; the twin hash_rounds_1e6 misses it
+AssertionError: golden answers ok: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ answered helpers.ts:86:63
+     84|
+     85| export function answered(reply: JsonObject | undefined, what: string):…
+     86|   expect(reply?.['ok'], `${what} answers ok: ${show(reply)}`).toBe(tru…
+       |                                                               ^
+     87|   return reply!;
+     88| }
+ ❯ goldenOf helpers.ts:109:14
+ ❯ ac2-step-hashes-and-locator.test.ts:76:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/9]⎯
+
+ FAIL  ac3-cross-machine.test.ts > #2010.45fbb8dc a cross-machine golden is BLOCKED with no second machine, and pending until the configured one has run it > #2010.45fbb8dc with no second machine configured, a golden recorded here that verifies on x86_64-unknown-linux-gnu is BLOCKED with one unblock ask naming x86_64-unknown-linux-gnu, never PASS or INCONCLUSIVE, even after this machine has verified it
+AssertionError: golden answers ok: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ answered helpers.ts:86:63
+     84|
+     85| export function answered(reply: JsonObject | undefined, what: string):…
+     86|   expect(reply?.['ok'], `${what} answers ok: ${show(reply)}`).toBe(tru…
+       |                                                               ^
+     87|   return reply!;
+     88| }
+ ❯ goldenOf helpers.ts:109:14
+ ❯ recorded ac3-cross-machine.test.ts:22:18
+ ❯ ac3-cross-machine.test.ts:41:27
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/9]⎯
+
+ FAIL  ac3-cross-machine.test.ts > #2010.45fbb8dc a cross-machine golden is BLOCKED with no second machine, and pending until the configured one has run it > #2010.45fbb8dc with x86_64-unknown-linux-gnu configured as a second machine, the golden is pending until that machine has run it, then takes that run's verdict
+AssertionError: golden answers ok: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ answered helpers.ts:86:63
+     84|
+     85| export function answered(reply: JsonObject | undefined, what: string):…
+     86|   expect(reply?.['ok'], `${what} answers ok: ${show(reply)}`).toBe(tru…
+       |                                                               ^
+     87|   return reply!;
+     88| }
+ ❯ goldenOf helpers.ts:109:14
+ ❯ recorded ac3-cross-machine.test.ts:22:18
+ ❯ ac3-cross-machine.test.ts:51:27
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/9]⎯
+
+ FAIL  ac4-fp-control.test.ts > #2010.61aa2e8e a golden step that starts with flush-to-zero set fails on the floating-point control register > #2010.61aa2e8e a step that starts with flush-to-zero set fails at that step, naming FPCR, before any hash is compared
+AssertionError: golden answers ok: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ answered helpers.ts:86:63
+     84|
+     85| export function answered(reply: JsonObject | undefined, what: string):…
+     86|   expect(reply?.['ok'], `${what} answers ok: ${show(reply)}`).toBe(tru…
+       |                                                               ^
+     87|   return reply!;
+     88| }
+ ❯ goldenOf helpers.ts:109:14
+ ❯ ac4-fp-control.test.ts:36:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/9]⎯
+
+ FAIL  ac5-frame-rate-key.test.ts > #2010.bf531cb7 the document's frame rate is in the bake key, and playback reads outputs sampled at it > #2010.bf531cb7 on the ball-and-goal lab, frame_rate 60/1 → 50/1 changes the bake key, and playback at 50 fps reads outputs sampled at 50 fps equal to a fresh bake's by hash; the twin key_omits_frame_rate reuses the 60 fps outputs and fails naming frame_rate
+AssertionError: the 60/1 bake answers ok: {"ok":false,"issues":[{"check":"document.validate","code":"physics.unsupported","severity":"error","ids":[],"path":"outputs","actual":{"ball":{"from":"ball","read":"position"}},"t":null,"what":"outputs isn't run by this backend interface yet; #1918 brings it","fix":"Remove the field until that issue lands."}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ answered helpers.ts:86:63
+     84|
+     85| export function answered(reply: JsonObject | undefined, what: string):…
+     86|   expect(reply?.['ok'], `${what} answers ok: ${show(reply)}`).toBe(tru…
+       |                                                               ^
+     87|   return reply!;
+     88| }
+ ❯ keyOf helpers.ts:95:19
+ ❯ runLab ac5-frame-rate-key.test.ts:54:12
+ ❯ ac5-frame-rate-key.test.ts:75:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/9]⎯
+
+
+ Test Files  5 failed (5)
+      Tests  9 failed (9)
+   Start at  02:23:17
+   Duration  10.45s (tests 99%, import 1%)
+

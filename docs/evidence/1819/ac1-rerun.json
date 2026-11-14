@@ -1,0 +1,38 @@
+{
+  "status": "done",
+  "outputs": {
+    "bake": {
+      "sha256": "b7ace2d9929b554ff74f7aee122014dc8c89931a53eb7aa1e6e5a1e8174fc8c4"
+    }
+  },
+  "receipt": {
+    "kind": "bake.words",
+    "tool": "charsiu-aligner@1.0.0",
+    "key": "2ed1293bb808628950c83b771234890bd1b4e060228b0378933776db4cbc2c26",
+    "build": null,
+    "cache": "hit",
+    "inputs": {
+      "pcm": "92881b3e04be5b69251140f765c25b55fe1cb57b66453b9a5f02277a96e1c13f",
+      "text": "3db66440051f56d311aa1dad6aec1b665628bcfd2d97003de91a1cb5b2eb402b"
+    },
+    "sent": [],
+    "weights": [
+      {
+        "name": "charsiu-en_w2v2_fc_10ms.bin",
+        "sha256": "6dc8a18422db7c22e951d5f72dc2afc267b942eb0b8459ac6dcc0cf412536de1"
+      },
+      {
+        "name": "charsiu-en_w2v2_fc_10ms.json",
+        "sha256": "7406aa4f917267640865688aa62f2337664a3abb9a49a2f204d932b53aeb6cb7"
+      },
+      {
+        "name": "charsiu-tokenizer_en_cmu.json",
+        "sha256": "781514e251e9615ea4a05bbf3760ffcf8ec2ebe67355f411177ea64b0602d897"
+      },
+      {
+        "name": "cmudict-0.7b.dict",
+        "sha256": "81917843c7f44ce2b094ac63873c2c7a4cf802040792c455ba3ca406891c3d22"
+      }
+    ]
+  }
+}

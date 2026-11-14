@@ -14,7 +14,7 @@ import { readTrust, tomlTables, withoutServer, withServer } from '../src/codex-s
 import { openCheckouts, type Checkouts, type CheckoutsOptions, type RecordedRun } from '@deepbuild/gate';
 import { GateRunner } from '../src/gate-runner.js';
 import { answerWaitMs } from '../src/mcp.js';
-import { render } from '../src/status.js';
+import { listText } from '../src/list.js';
 
 const dirs: string[] = [];
 afterEach(() => { for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true }); });
@@ -170,7 +170,7 @@ describe('a row\'s readings', () => {
 
 describe('the status text', () => {
   it('shows why a stop was not held', () => {
-    const text = render([{ id: 'abcdefgh', repo: 'r', agent: 'codex', state: 'needs you', why: 'w', note: 'This stop isn\'t held: slow has no deadline' }], 'from');
+    const text = listText([{ id: 'session:abcdefgh', address: 'session/abcdefgh', title: 'Claude Code', project: 'r', session: 'abcdefgh', agent: 'codex', entry: 'running', word: 'working', why: 'at work', waits_on: 'agent', since: null, actions: [], unread: false }], { detail: { 'session:abcdefgh': { note: 'This stop isn\'t held: slow has no deadline' } } });
     expect(text).toContain('This stop isn\'t held: slow has no deadline');
   });
 });

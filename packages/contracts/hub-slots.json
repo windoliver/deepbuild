@@ -166,10 +166,34 @@
     "since": "R2"
   },
   {
+    "method": "deep.registerJob",
+    "variant": null,
+    "interface": "job.kind@1",
+    "digest": "d1:f8f20c536ae9889954690870603c05ed5320533ccf0cf4648c4f6b1527a2d3df",
+    "fills": "one per kind",
+    "kit": "job.kind@1",
+    "planted": [
+      "names-before-checks"
+    ],
+    "since": "R6"
+  },
+  {
+    "method": "deep.registerJobTool",
+    "variant": null,
+    "interface": "job.kind@1",
+    "digest": "d1:f8f20c536ae9889954690870603c05ed5320533ccf0cf4648c4f6b1527a2d3df",
+    "fills": "many per kind",
+    "kit": "job.kind@1",
+    "planted": [
+      "lowercases-last-letter"
+    ],
+    "since": "R6"
+  },
+  {
     "method": "deep.registerChannel",
     "variant": null,
     "interface": "channel@1",
-    "digest": "d1:65b6d21a5e538e59923c135b66560bd3fb48402c2dde19f59a419c4567b49f6d",
+    "digest": "d1:4f9569201cf5158abbc21e0033965360d10f0b9c41307bf03f8a8d6a2317bf43",
     "fills": "many",
     "kit": "channel@1",
     "planted": [

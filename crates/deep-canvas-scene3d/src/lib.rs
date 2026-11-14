@@ -1,13 +1,17 @@
 //! The scene3d canvas module's R2 subset (issue #378): see the crate manifest.
 
+pub mod arrays;
 pub mod bevel;
 pub mod build;
 pub mod builders;
 pub mod building;
+pub mod cloud;
 pub mod clusters;
+pub mod contributed;
 pub mod curve;
 pub mod cut;
 pub mod deviation;
+pub mod distribute;
 pub mod emitters;
 pub mod fixtures;
 pub mod flare;
@@ -16,33 +20,45 @@ pub mod frames;
 pub use deep_canvas_marks::finish;
 pub mod geom;
 pub mod gltf;
+pub mod gpu;
+pub mod history;
+pub mod hit;
 pub mod hull;
 pub mod ies;
 pub mod label;
 pub mod light;
 pub mod lod;
-pub mod mirror;
 pub mod look;
+pub mod measures;
+pub mod mirror;
 pub mod modifiers;
 pub mod module;
 pub mod overlay;
+pub mod pointer;
+pub mod points;
 pub mod poly;
 pub mod probe;
+pub mod rest;
 pub mod samples;
 pub mod scene;
 pub mod sets;
+pub mod shapes;
 pub mod shore;
 pub mod sky;
+pub mod slots;
 pub mod spatial;
 pub mod spec;
 pub mod stack;
 pub mod sweep;
+pub mod terrain;
+pub mod tints;
+pub mod trail;
 pub mod uv;
 pub mod water;
 
 /// The wrong programs #420's, #441's and #440's criteria plant in scene3d's and the building
 /// module's operators, each reachable only through a proof surface's `planted`.
-pub const PLANTED: [&str; 20] = [
+pub const PLANTED: [&str; 23] = [
     "torus_genus_0",
     "vertex_count_off_by_one",
     "cap_left_open",
@@ -65,4 +81,10 @@ pub const PLANTED: [&str; 20] = [
     // its own advance.
     "outline_ignores_fill_rule",
     "extrude_own_advance",
+    // #2013: a scatter whose sampler stops after 10 points.
+    distribute::STOPS_AFTER_10,
+    // #2014: a terrain builder that splits each cell along its other diagonal, and a size cap read
+    // in metres.
+    terrain::OTHER_DIAGONAL,
+    terrain::CAP_IN_METRES,
 ];

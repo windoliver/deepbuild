@@ -246,8 +246,11 @@ pub fn usage() -> Usage {
     let mut ru: libc::rusage = unsafe { std::mem::zeroed() };
     // SAFETY: `info` is laid out as rusage_info_v6, the flavor asked for (6); `ru` is a rusage.
     let status = unsafe {
-        let status =
-            libc::proc_pid_rusage(libc::getpid(), 6, (&raw mut info).cast::<libc::rusage_info_t>());
+        let status = libc::proc_pid_rusage(
+            libc::getpid(),
+            6,
+            (&raw mut info).cast::<libc::rusage_info_t>(),
+        );
         libc::getrusage(libc::RUSAGE_SELF, &mut ru);
         status
     };

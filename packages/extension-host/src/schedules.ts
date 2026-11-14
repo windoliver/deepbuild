@@ -6,48 +6,155 @@
 // up to 6 h, and the fifth FAIL in a row pauses the schedule until you resume it; BLOCKED makes no run until what it
 // names is supplied, then one at once. Runs are recorded as schedule.run@1, so a restart resumes a run the plug-in had
 // taken and records one still queued as stopped before dispatch.
+import { randomUUID } from 'node:crypto';
+import type { Connection, RecordStore } from '@deepbuild/record';
+import type { Ext } from './host-types.js';
+import { CORE, isPlain, message, trustedPath, type HostFiles } from './host-shared.js';
+import type { HostSources } from './sources.js';
+import type { SendRow } from './send-types.js';
+import type { ScheduleDecl, ScheduleRun, ScheduleRow, Ended, RunEvent, Cadence, RunCtx } from './schedule-types.js';
+export type { Verdict, ScheduleDecl, ScheduleRun, ScheduleRow, Ended, RunEvent, RunCtx } from './schedule-types.js';
 
-/** A run's verdict on its schedule's claim. */
-export type Verdict = 'PASS' | 'FAIL' | 'BLOCKED' | 'INCONCLUSIVE' | 'INVALID' | 'uncounted';
-type Cadence = { every: number } | { cron: string };
-/** What a scheduled job may do: the sources it reads, the notice, store and send kinds it may make, and whether it may end with a no-op. */
-interface Declares { readings: string[]; notices: string[]; stores: string[]; sends: string[]; noop: boolean }
-/** `cadence` is null for a job that checks notices and runs only on the schedules notices give it (#262). */
-export interface ScheduleDecl { name: string; plugin: string; cadence: Cadence | null; deadline: number; declares: Declares }
+interface HostSchedulesOptions {
+  record: RecordStore; exts: ReadonlyMap<string, Ext>;
+  sources: { holds(extension: string, name: string): Promise<boolean>; workExt(source: string): Ext | undefined };
+  sending: { rows(): Promise<SendRow[]> };
+}
+/** Run scopes, recorded history and dispatch judgment, alongside the cadence engine. */
+export class HostSchedules {
+  private readonly runCtx = new Map<string, RunCtx>();
+  private closed = false;
+  constructor(private readonly options: HostSchedulesOptions, private readonly engine: Schedules) {}
+  async register(ext: Ext, name: unknown, declared: unknown, files: HostFiles): Promise<null> {
+    const id = ext.entry.id;
+    const conformance = ext.mode === 'conformance';
+    const decl = declareSchedule(name, declared, { plugin: id, sources: (ext.manifest.sources ?? []).map((x) => x.name), notices: ext.manifest.notices ?? [], stores: ext.manifest.stores ?? [] });
+    if (conformance) return null;
+    const owner = this.engine.has(decl.name);
+    if (owner && owner.plugin !== id) throw Error(`deep.schedule: ${decl.name} is already registered by ${owner.plugin}`);
+    await this.engine.register(decl, { runs: await this.runs(decl.name), settings: files.read<Settings>('schedules.json')[decl.name] ?? {} });
+    return null;
+  }
+  async read(scope: string | undefined, given: unknown, sources: HostSources): Promise<unknown> {
+    const run = this.context(scope);
+    if (!run) throw Error(`deep.schedule.read: only a scheduled job reads through its run`);
+    const source = given;
+    if (typeof source !== 'string' || !run.decl.declares.readings.includes(source)) throw Error(`deep.schedule.read: ${run.decl.name} doesn't declare ${String(source)} among the readings it reads`);
+    const owner = [...this.options.exts.values()].find((e) => e.live && e.sources.get(source)?.variant === 'polled');
+    if (!owner) {
+      run.blocked ??= `missing source ${source}`;
+      return { status: 'BLOCKED', source, cause: run.blocked };
+    }
+    const got = await sources.readPolled(owner, source);
+    if (got.read.status === 'reading') {
+      if (got.handle) run.changes.push(got.handle);
+      return { status: 'reading', reading: { ...got.read.reading, handle: got.handle } };
+    }
+    if (got.read.status === 'batch') {
+      run.changes.push(got.read.batch.handle);
+      return got.read;
+    }
+    if (got.read.status === 'BLOCKED') run.blocked ??= got.read.cause;
+    else if (got.held) run.held ??= got.read.cause;
+    return got.read;
+  }
+  close(): void { this.closed = true; }
+  context(scope: string | undefined): RunCtx | undefined { return scope === undefined ? undefined : this.runCtx.get(scope); }
+  /** A work source's run is BLOCKED while its package isn't loaded or the secret it needs isn't held. */
+  async blockedWork(decl: ScheduleDecl): Promise<string | null> {
+    const source = decl.declares.readings[0]!;
+    const ext = this.options.sources.workExt(source);
+    const d = ext?.sources.get(source);
+    if (!ext || d?.variant !== 'stream' || !d.work) return `no loaded package registers the work source ${source}`;
+    if (d.work.secret && !(await this.options.sources.holds(ext.entry.id, d.work.secret))) return `missing secret ${d.work.secret}`;
+    return null;
+  }
 
-/** One run of a schedule, as the hub recorded it. */
-export interface ScheduleRun {
-  run: string;
-  schedule: string;
-  due: number;
-  dispatched: number | null;
-  ended: number | null;
-  verdict: Verdict | null;
-  cause: string | null;
-  stopped: 'before dispatch' | null;
-  /** Each send the run started, whether it went out. */
-  sends: { key: string; outcome: 'sent' | 'not sent' | 'unknown' }[];
-  /** Handles of what the hub recorded for it. */
-  changes: string[];
+  /** What keeps a schedule's run from starting (#365): a source it reads that no loaded plug-in registers, or a secret one needs that isn't held. */
+  async blockedRun(decl: ScheduleDecl): Promise<string | null> {
+    for (const name of decl.declares.readings) {
+      const owner = [...this.options.exts.values()].find((e) => e.live && e.sources.has(name));
+      const source = owner?.sources.get(name);
+      if (!owner || !source) return `missing source ${name}: no loaded plug-in registers it`;
+      if (source.variant === 'polled' && source.secret && !(await this.options.sources.holds(owner.entry.id, source.secret))) return `missing secret ${source.secret}, which ${name} needs`;
+    }
+    return null;
+  }
+
+  /** Hands a run to its plug-in's job (#365), its calls carrying the run's scope; resolves with the run's verdict. */
+  dispatchRun(decl: ScheduleDecl, run: { run: string; due: number }): Promise<Ended> | undefined {
+    const ext = this.options.exts.get(decl.plugin);
+    if (!ext?.live || !ext.ask) return undefined;
+    const scope = randomUUID();
+    const ctx: RunCtx = { run: run.run, decl, changes: [], blocked: null, held: null, ended: false };
+    ext.scopes.set(scope, CORE);
+    ext.callOf.set(scope, run.run);
+    this.runCtx.set(scope, ctx);
+    return ext.ask('schedule.run', { name: decl.name, run: run.run, at: run.due, scope }).then((returned) => this.judged(ext, ctx, returned, undefined), (e) => this.judged(ext, ctx, undefined, e ?? 'failed'))
+      .finally(() => {
+        ctx.ended = true;
+        ext.scopes.delete(scope);
+        ext.callOf.delete(scope);
+        this.runCtx.delete(scope);
+      });
+  }
+
+  /**
+   * A run's verdict, from what the hub saw and recorded for it, never the job's word (#365): its process gone is
+   * INVALID; a declared no-op uncounted; a declared change PASS; else a source missing or its secret is BLOCKED, a
+   * rate limit, a 5xx or the quota INCONCLUSIVE, and anything else FAIL. A run the hub's stop cut short is interrupted.
+   */
+  private judged(ext: Ext, ctx: RunCtx, returned: unknown, error: unknown): Ended {
+    if (this.closed) return 'interrupted';
+    const changes = [...new Set(ctx.changes)];
+    if (error !== undefined && (!ext.live || this.options.exts.get(ext.entry.id) !== ext)) return { verdict: 'INVALID', cause: `${ext.entry.id}'s process ended while the run was under way`, changes };
+    if (error === undefined && ctx.decl.declares.noop && isPlain(returned) && 'noop' in returned) return { verdict: 'uncounted', cause: 'a no-op its job declares', changes };
+    if (error === undefined && changes.length) return { verdict: 'PASS', cause: null, changes };
+    if (ctx.blocked) return { verdict: 'BLOCKED', cause: ctx.blocked, changes };
+    if (ctx.held) return { verdict: 'INCONCLUSIVE', cause: ctx.held, changes };
+    return { verdict: 'FAIL', cause: error === undefined ? 'it ended with no change its job declares' : `its job failed${ext.released ? `: ${message(error)}` : ''}`, changes };
+  }
+
+  async schedules(): Promise<ScheduleRow[]> {
+    const last = new Map<string, ScheduleRow['last']>();
+    for (const d of this.engine.decls()) {
+      const ended = (await this.runs(d.name)).filter((r) => r.verdict !== null).sort((a, b) => a.ended! - b.ended!).at(-1);
+      last.set(d.name, ended ? { run: ended.run, at: ended.dispatched ?? ended.due, verdict: ended.verdict } : null);
+    }
+    return this.engine.rows((name) => last.get(name) ?? null);
+  }
+
+  async runs(schedule: string): Promise<ScheduleRun[]> {
+    const rows = (await this.options.record.raw("SELECT ts, data FROM events WHERE kind = 'schedule.run' AND json_extract(data, '$.schedule') = ? ORDER BY log_pos", [schedule])) as { ts: number; data: string }[];
+    const runs = new Map<string, ScheduleRun>();
+    for (const row of rows) {
+      const d = JSON.parse(row.data) as RunEvent;
+      const r = runs.get(d.run) ?? { run: d.run, schedule, due: d.due, dispatched: null, ended: null, verdict: null, cause: null, stopped: null, sends: [], changes: [] };
+      if (d.phase === 'dispatched') r.dispatched ??= row.ts;
+      if (d.phase === 'ended') Object.assign(r, { ended: row.ts, verdict: d.noop ? 'uncounted' : d.verdict ?? null, cause: d.cause ?? null, stopped: d.stopped ? 'before dispatch' : null, changes: d.changes ?? [] });
+      runs.set(d.run, r);
+    }
+    // Whether each send a run started went out: one still waiting on your answer has not.
+    for (const send of await this.options.sending.rows()) if (send.run) runs.get(send.run)?.sends.push({ key: send.key, outcome: send.outcome === 'waiting' ? 'not sent' : send.outcome });
+    return [...runs.values()];
+  }
+
+  async editSchedule(connection: Connection, name: string, cadence: { every: number } | { cron: string }): Promise<void> {
+    trustedPath(connection, 'a schedule is edited');
+    await this.engine.edit(name, cadenceOf(cadence));
+  }
+
+  async runNow(connection: Connection, name: string): Promise<void> {
+    trustedPath(connection, 'a schedule is run now');
+    await this.engine.runNow(name);
+  }
+
+  async resumeSchedule(connection: Connection, name: string): Promise<void> {
+    trustedPath(connection, 'a schedule is resumed');
+    await this.engine.resume(name);
+  }
 }
-/** One row of the schedules list. */
-export interface ScheduleRow {
-  name: string;
-  extension: string;
-  state: 'on' | 'paused';
-  activity: 'idle' | 'queued' | 'running';
-  words: string;
-  next: number | null;
-  last: { run: string; at: number; verdict: Verdict | null } | null;
-  owner: string | null;
-}
-/** How a dispatched run ended, as the host judged it; `interrupted` when the hub stopped under it. */
-export type Ended = { verdict: Verdict; cause: string | null; changes: string[] } | 'interrupted';
-/** One schedule.run@1 event's data. */
-export interface RunEvent {
-  run: string; schedule: string; plugin: string; phase: 'queued' | 'dispatched' | 'ended'; due: number;
-  resumed?: boolean; verdict?: Exclude<Verdict, 'uncounted'>; noop?: boolean; cause?: string | null; stopped?: boolean; changes?: string[];
-}
+
 /** What the scheduler needs of the host. */
 interface RunHost {
   now(): number;
@@ -119,7 +226,8 @@ export function cadenceOf(c: unknown): Cadence {
   const d = (typeof c === 'object' && c !== null ? c : {}) as { every?: unknown; cron?: unknown };
   if (d.every !== undefined && d.cron === undefined && Number.isSafeInteger(d.every) && (d.every as number) >= 1000) return { every: d.every as number };
   if (d.cron !== undefined && d.every === undefined && typeof d.cron === 'string') {
-    parseCron(d.cron);
+    // A line that parses can still name a date that never comes, such as February 31: it must have a time.
+    nextCron(parseCron(d.cron), 0);
     return { cron: d.cron };
   }
   throw Error('a cadence is every so many ms (at least 1000), or a cron line, one of the two');

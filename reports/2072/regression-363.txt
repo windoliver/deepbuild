@@ -1,0 +1,14 @@
+
+ RUN  v5.0.5 <worktree>
+
+ ✓ tests/acceptance/363/actions.test.ts > AC1 #363.126cded2 A plug-in action whose schema uses a keyword one model API rejects is left out at install with the reason, and every session still lists `deep_ask` and `deep_claim` > AC1 at install, the actions whose input schemas use minimum and oneOf are left out, each with a reason naming its keyword; the plug-in loads and its other action is exposed 237ms
+ ✓ tests/acceptance/363/actions.test.ts > AC1 #363.126cded2 A plug-in action whose schema uses a keyword one model API rejects is left out at install with the reason, and every session still lists `deep_ask` and `deep_claim` > AC1 a session lists deep_ask and deep_claim from deep, while deep-actions finds the plug-in's good action and neither left-out one, and calls neither 1188ms
+ ✓ tests/acceptance/363/actions.test.ts > AC5 #363.f25b4886 A declared action reaches agents through `deep-actions`, typed from its schema: a read runs, a change without a standing rule raises an ask, and a send always asks; the `deep` server lists only the core tools > AC5 deep-actions finds each stocks action typed from its schema; a read runs; input its schema refuses is an error; a change raises an ask and a send raises an ask, neither handler running 2220ms
+ ✓ tests/acceptance/363/actions.test.ts > AC5 #363.f25b4886 A declared action reaches agents through `deep-actions`, typed from its schema: a read runs, a change without a standing rule raises an ask, and a send always asks; the `deep` server lists only the core tools > AC5 the deep server lists only the core tools: the same list as a hub with no plug-in, with no action, plug-in or deep-actions tool in it 1766ms
+ ✓ tests/acceptance/363/retries.test.ts > AC7 #363.4e75de68 Retrying an identical request ID has no second effect, the same ID with different input is refused before any write or cursor move, and an action's target and authority never come from the focused window, the current folder or the last agent selected > AC7 an identical retry of a request ID has no second effect; the same ID with different input is refused before anything is written or run 520ms
+ ✓ tests/acceptance/363/retries.test.ts > AC7 #363.4e75de68 Retrying an identical request ID has no second effect, the same ID with different input is refused before any write or cursor move, and an action's target and authority never come from the focused window, the current folder or the last agent selected > AC7 a call's target is the one it names, never the focused window, and its authority is its own caller's, never the last agent's 463ms
+
+ Test Files  2 passed (2)
+      Tests  6 passed (6)
+   Start at  16:43:43
+   Duration  9.01s (tests 98%, import 1%, transform 1%)

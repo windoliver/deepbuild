@@ -3,7 +3,7 @@
 // --ignore-scripts` would, from this checkout's already-built files; it builds nothing.
 //   node scripts/install-prefix.mjs --prefix <dir> [--plant checkout-fallback]
 // <dir>/lib/node_modules/deepbuild/ holds real copies, at the checkout's relative paths, of the root's package.json,
-// README and licence and the folders the CLI reads beside it (adapters/, the banner's mark); of every workspace package
+// README and licence and the folders the CLI reads beside it (adapters/, the first-party packs/, the banner's mark); of every workspace package
 // the root's `bin` loads, as `npm pack` lists it plus its built dist/ (no package lists dist in a `files` list yet),
 // each linked at node_modules/<name> as npm links a workspace; of the third-party packages those depend on; and of the
 // canvas core, the newer of target/release and target/debug deep-show, shipped in the hub's dist/ beside its
@@ -43,7 +43,7 @@ const root = readJson(REPO);
 const binRel = root.bin?.deep;
 if (!binRel || !existsSync(join(REPO, binRel))) fail(`the root's bin ${binRel} is not built; run npm run build first`);
 rmSync(tree, { recursive: true, force: true });
-for (const file of ['package.json', 'README.md', 'LICENSE', 'adapters', 'brand/png/favicon-32.png']) copy(join(REPO, file), join(tree, file));
+for (const file of ['package.json', 'README.md', 'LICENSE', 'adapters', 'packs', 'brand/png/favicon-32.png']) copy(join(REPO, file), join(tree, file));
 
 // The packages the bin loads, by Node's lookup from each package's folder up to the checkout: a workspace by its
 // real folder under packages/, a third-party package where node_modules holds it.

@@ -1,0 +1,32 @@
+At base fb993a5eb ("design(#1700): geometry.shape joins the core's check kinds …"), on 2026-11-11, the suite was not run. The one-minute load was 190 to 260 on 18 cores, so deep-show was not built. What each test would meet first was read from the base's code, not observed.
+
+The commands the implementing session runs, at the base and after (from <worktree>), one file at a time:
+
+  npm ci
+  NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 npx vitest run --root tests/acceptance/1700 --no-file-parallelism --testTimeout=600000 <file>
+  npx tsc -p tests/acceptance/1700/tsconfig.json
+
+Every test builds `full`, which exists, and every scenario's first run parses at the base: stored documents in `docs`, #403's `claims` (main.rs takes any check whose `kind` is a string), `verdict` calls, no `planted`. Each verdict reaches `judge` (crates/deep-show/src/verdict.rs), since no geometry.audit, film audit or flicker run holds the requirement. There `geometry.shape` is neither in CORE_CHECK_KINDS (crates/deep-canvas/src/registry/mod.rs lists eleven kinds without it) nor registered by any module of the build, and `module_of_check` finds no module for it, so every geometry.shape row is BLOCKED with `{code: "module_missing", kind: "geometry.shape", ids: []}`, no `results` and no `timing`. That happens before the row reads any document, so it doesn't depend on whether the base builds the fixtures.
+
+Each test fails at its first assertion on a row, `decided(…, 'PASS', …)` in helpers.ts, reached from the test's own line:
+
+- holes.test.ts: "the window read for parts 1, closed true and holes 4 is PASS: {the row}", expected 'BLOCKED' to be 'PASS'.
+- routes.test.ts: "the extruded window read for parts 1, holes 4 and its volume is PASS: {the row}".
+- volume.test.ts: "the box read for 1 m³ is PASS: {the row}".
+- section.test.ts: "the posts read for 5 loops in a section along y at 0.1 m is PASS: {the row}".
+- probe.test.ts: "the probes through the holes, read for meeting nothing is PASS: {the row}".
+- tips.test.ts: "the 12-tooth gear read for tips 12 around z is PASS: {the row}".
+- rests.test.ts: "the cube at y = 0 read for resting on the ground is PASS: {the row}".
+- budgets.test.ts, on the debug build before any timing: "parts on the closed 100000-triangle torus, read against its expected value is PASS: {the row}". Were it past that, the base reports no `timing.check_ms` on a geometry.shape row.
+
+No planted run is reached at the base. If one were, the base has none of this suite's planted names (crates/deep-show/src/main.rs's planted match ends with an unknown name refused), so `deep-show run` would answer `{"ok": false, "code": "bad_input"}` and the test would fail at "deep-show run refused the scenario".
+
+Run: `npx tsc -p tests/acceptance/1700/tsconfig.json` passes, with the repo's pinned packages (TypeScript 5.9.3, vitest 5.0.5) linked in for the run, since the machine's build queue held `npm ci`. The eight criterion IDs, computed as scripts/proof-change.mjs's `criterionId` does from the issue's texts, are 7a26c76e, c01ffdd0, 3deedc17, 84bd8888, 77550f02, 542d9581, 44a11d63 and b24f5071. `spans` from scripts/proof-change.mjs reads each file's one test, unskipped, with its ID.
+
+A scratch script outside the repo (not kept) ran the generators and checked the fixtures:
+- The cut window (gltf.ts `cutWindow`): 312 vertices welding to 72, 156 triangles, 234 edges, each held by exactly two triangles in opposite directions; V − E + F = −6, genus 4; volume 84 dm³, and 0.084 m³ at scale 0.1 within 1.7e-16 relative; every position exact in f32; every triangle faces its flat normal.
+- The box (gltf.ts `box(false)`): 8 vertices, 18 edges, 12 triangles, V − E + F = 2, volume exactly 1 m³, every edge consistent. The flipped box: the only edges held twice in one direction are the four around the +Z face (each at z = 0.25), triangles 2 and 3; summed as wound its volume is 2/3 m³.
+- The extruded window's params (helpers.ts `windowDoc`): cap area 0.84 m², volume 0.084 m³ within 1.7e-16 relative; each probe's hole centre lies inside its hole, and the bar's centre (0, 0.25) in none.
+- The gears (helpers.ts `gearsDoc`, outlines counter-clockwise, radii 0.42 to 0.5 m): 48 and 44 points, whose outlines lie on their convex hulls in 12 and 11 stretches.
+- The posts (helpers.ts `postsDoc`): each from y = 0 to 1, its loop at y = 0.1 of area 0.01 m² within 8.7e-16 relative. The resting cubes: lowest faces at y = 0 and y = 0.002.
+- The budget torus, rebuilt in JS as builders.rs's `lathe` builds a closed outline: 100,000 triangles, 100,500 vertices welding to 50,000, 150,000 edges, V − E + F = 0, every edge consistent; volume 1.23337 m³ (inside [1.2, 1.25]); lowest point 1.97e-5 m above the ground; no ring of vertices within 0.0025 m of y = 0.26 or y = 0.2537; outer radius 1.25 m, a regular 200-gon seen along y.

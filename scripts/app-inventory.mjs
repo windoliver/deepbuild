@@ -3,7 +3,7 @@
 // color literal left in it, written to crates/deep-app/inventory.json. `--check` writes nothing and fails, one
 // `FAIL inventory: <panel> ...` line each, for every panel whose committed row differs from a fresh one, is missing
 // or is extra; regenerate with `node scripts/app-inventory.mjs`. `--root <dir>` reads another checkout's app.
-import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { LITERAL } from './color-literal-guard.mjs';
@@ -25,8 +25,12 @@ const files = (dir) => readdirSync(dir).flatMap((name) => {
 const sources = files(join(root, SOURCE)).map((file) => ({ path: relative(root, file).replaceAll('\\', '/'), lines: readFileSync(file, 'utf8').split('\n') }));
 const all = sources.flatMap(({ path, lines }) => lines.map((text, i) => ({ path, line: i + 1, text })));
 
-/** A `const NAME: &str = "...";` anywhere in the app. */
-const constant = (name) => all.map(({ text }) => new RegExp(`const ${name}: &str = "([^"]+)"`).exec(text)?.[1]).find(Boolean);
+/** A `const NAME: &str = "...";` anywhere in the app, a `pub const` first, so a test's own constant of that name
+ * never stands for a panel's. */
+const constant = (name) => {
+  const found = all.map(({ text }) => [/^\s*pub const /.test(text), new RegExp(`const ${name}: &str = "([^"]+)"`).exec(text)?.[1]]).filter(([, v]) => v);
+  return (found.find(([pub]) => pub) ?? found[0])?.[1];
+};
 
 /** The lines of `impl Render for <view>`'s body: from its line to the closing brace at its own indent. */
 function render(view) {

@@ -1,0 +1,5 @@
+{
+  "extends": "../../../tsconfig.json",
+  "compilerOptions": { "noEmit": true, "allowImportingTsExtensions": true, "rootDir": "../../.." },
+  "include": ["./**/*.ts", "../1325/forge.ts", "../46/forge.ts", "../29/h-d.ts", "../875/helpers.ts"]
+}

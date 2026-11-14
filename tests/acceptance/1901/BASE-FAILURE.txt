@@ -1,0 +1,71 @@
+Base commit: d51be2c3 ("Merge pull request #2108 from windoliver/worktree-github-issue-1458-3b28b6"), the worktree's HEAD
+Build: CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 cargo build --locked --bin deep-show --no-default-features --features full
+  (from an empty target folder: exit 0 after 1249 s, at a 1-minute load average between 30 and 550)
+Command: CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 NO_COLOR=1 npx vitest run --root tests/acceptance/1901 --no-file-parallelism --testTimeout=600000
+Run in the worktree at the base commit holding only these test files (untracked) and the repo's node_modules from npm ci.
+Each file's build was a no-op (target/debug current), so no rebuild ran and no tracked file was touched; git status
+afterwards showed only `?? tests/acceptance/1901/`. Paths are redacted to <checkout> and <tmp>.
+Both tests fail for the expected reason, at the missing surface:
+- build-digest.test.ts (#1901.b2add21a): the first process, `deep-show run --cache <dir>`, answers
+  {"ok":false,"code":"bad_input"} and exits 2 (the base has no --cache), before any rebuild.
+- padding.test.ts (#1901.95394721): the scenario with `padded_key` calls answers {"ok":false,"code":"bad_input"}
+  (the base has no such call).
+Date: 2026-11-10  Node v24.22.2  vitest 5.0.5 darwin-arm64
+Exit code: 1
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/1901
+
+ ❯ build-digest.test.ts (1 test | 1 failed) 12087ms
+   ❯ #1901.b2add21a the machine fingerprint names the build: a rebuild from changed sources reads no cached frame, capture or final, a rebuild from the same sources reuses them (1)
+     × #1901.b2add21a after a rebuild with crates/deep-canvas-loop/src/lib.rs changed no frame, capture or final the previous binary cached is read and the fingerprint names another build, while a rebuild from the same sources names the same build and reads every one; with fingerprint_without_sources the changed build serves the old frame and the comparison fails, naming its cache entry 12086ms
+ ❯ padding.test.ts (1 test | 1 failed) 14119ms
+   ❯ #1901.95394721 a padded fixture built twice with its padding from two seeded random sources gives one content key; a key over its raw bytes gives two and fails, naming the struct (1)
+     × #1901.95394721 the fixture's two builds differ only in padding and give the same content key, other padding seeds give that key again and other fields another; with key_hashes_raw_bytes the two builds give two keys and the comparison fails, naming the struct 14098ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  build-digest.test.ts > #1901.b2add21a … > #1901.b2add21a after a rebuild with crates/deep-canvas-loop/src/lib.rs changed …
+AssertionError: deep-show run --cache <tmp> exits 0; stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+ ❯ run helpers.ts:138:119
+ ❯ seen helpers.ts:197:36
+ ❯ build-digest.test.ts:35:22
+
+ FAIL  padding.test.ts > #1901.95394721 … > #1901.95394721 the fixture's two builds differ only in padding …
+AssertionError: deep-show run accepted the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+ ❯ run helpers.ts:142:94
+ ❯ padding.test.ts:25:21
+
+ Test Files  2 failed (2)
+      Tests  2 failed (2)
+   Start at  02:05:45
+   Duration  31.04s (tests 95%, transform 4%)
+
+
+The base's answer to each surface these tests add, one process of the base build each (a scratch probe, not part of
+the suite, through helpers.ts's scenario and deep_show call; the first shows the board the tests draw is presented):
+
+$ deep-show run   # the board alone, presented
+exit 0: {"ok":true,"replies":[{"rev":1,"expansions":[],"issues":[],"issues_evidence":"4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945","snapshots":[],"changed":[],"unchanged":[],"created":["c1","r1","t1"],"removed":[],"outcome":"presented","backends":{"fonts":{"name":"fonts.bundled","version":"1.0.0"},"cpu":{"name":"aarch64","version":"1.0.0"}},"core":"core@0.0.0","set_digest":"50d5dc1f195301f4f61fecda55059a0806a2083fc991596624a004772747a3bb"}]}
+
+$ deep-show run --cache <tmp>/cache  # criterion 1: --cache
+exit 2: {"ok":false,"code":"bad_input"}
+
+$ deep-show run --planted fingerprint_without_sources  # criterion 1: --planted fingerprint_without_sources
+exit 2: {"ok":false,"code":"bad_input"}
+
+$ deep-show run   # criterion 1: fingerprint (deep_show, then {"call": "fingerprint"})
+exit 0: {"ok":false,"code":"bad_input"}
+
+$ deep-show run   # criterion 1: draw (deep_show, then {"call": "draw", "doc", "t": "0.5s", "output": "frame"})
+exit 0: {"ok":false,"code":"bad_input"}
+
+$ deep-show run   # criterion 2: padded_key ({"call": "padded_key", "fields": 1, "seeds": [1901, 2]})
+exit 0: {"ok":false,"code":"bad_input"}
+
+$ deep-show run --planted key_hashes_raw_bytes  # criterion 2: --planted key_hashes_raw_bytes
+exit 2: {"ok":false,"code":"bad_input"}
+
+Not run at the base: the two rebuilds of build-digest.test.ts (the test stops at its first process, before them), so the
+edit-and-restore of crates/deep-canvas-loop/src/lib.rs and a rebuild's time are unexercised here.

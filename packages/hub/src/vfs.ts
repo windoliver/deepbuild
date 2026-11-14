@@ -3,7 +3,7 @@
 // right after any one of them as by kill -9, every sync can be held, and every write can be refused, as on a
 // full disk. The ledger then lives in memory, and only what a FULL commit made durable reaches ledger.db, so a
 // cut loses exactly what a power cut would: every NORMAL commit after the last FULL one.
-import { closeSync, constants, existsSync, fsyncSync, openSync, readFileSync, renameSync, rmSync, statSync, writeSync, type Dirent } from 'node:fs';
+import { closeSync, constants, existsSync, fsyncSync, openSync, readFileSync, renameSync, rmSync, statSync, writeFileSync, writeSync, type Dirent } from 'node:fs';
 import { copyFile, mkdir, open, readdir } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import Database, { type Statement } from 'better-sqlite3';
@@ -49,6 +49,12 @@ export const disk: Durable = {
 };
 
 type Db = Database.Database;
+
+/** Replaces a state file atomically; callers that need durability use writeSynced. */
+export function writeAtomic(path: string, bytes: Uint8Array): void {
+  writeFileSync(`${path}.tmp`, bytes, { mode: 0o600 });
+  renameSync(`${path}.tmp`, path);
+}
 
 /** Writes `bytes` to `path` whole and synced: a temp file, fsync, then a rename. */
 export function writeSynced(path: string, bytes: Uint8Array): void {

@@ -1,0 +1,28 @@
+{
+  "id": "plant1720.box",
+  "version": "1.0",
+  "title": "Box",
+  "license": "Apache-2.0",
+  "author": "DeepBuild",
+  "description": "A box whose width defaults to 1 m, outside the 2 to 10 m its own range allows: the pack check refuses it.",
+  "inputs": {
+    "width": {
+      "type": "number",
+      "default": 1,
+      "min": 2,
+      "max": 10,
+      "unit": "m",
+      "about": ""
+    }
+  },
+  "steps": {
+    "mesh": {
+      "op": "builder",
+      "kind": "slab@1",
+      "params": {
+        "size": ["width", "width", "width"],
+        "paint": {"fill": {"role": "accent"}}
+      }
+    }
+  }
+}

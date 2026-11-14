@@ -39,7 +39,7 @@ tests fail BLOCKED. No real session ran: no token here, and the base has no `ris
 
 ---- raw output of the kept run ----
 
- RUN  v5.0.5 /Users/tafeng/dev/claude-worktrees/doneright/github-issue-1156-ea674f/tests/acceptance/1156
+ RUN  v5.0.5 ~/dev/claude-worktrees/doneright/github-issue-1156-ea674f/tests/acceptance/1156
 
  ❯ fast.test.ts (14 tests | 6 failed) 244393ms
    ❯ AC1 #1156.db084f91 Both unreadable pushes are denied with the hub up and with it stopped by PID; the reply names what couldn't be read and says writing it plainly lets it be read, and the remote's `main` is unchanged. deep-hook from before #1097 lets a push through and fails this test, naming the call (2)
@@ -135,7 +135,7 @@ AssertionError: #1156.4ce23e29 the held pushes: expected [ …(2) ] to deeply eq
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/6]⎯
 
  FAIL  fast.test.ts > AC3 #1156.4ce23e29 `git push origin main` is held at PreToolUse with one authority ask whose `plan.proposed` row lists each step, what it changes, its undo or "can't undo", and its cost, and whose target reads origin `repo`. The README's URL reads `read`, citing the README's handle, and its card offers no wider scope. A matcher that reads every target as `repo` fails, naming the URL > AC3 #1156.4ce23e29 (wrong program) a matcher that reads every target as repo fails this check, naming the URL
-Error: BLOCKED: fixtures/core.mjs raise failed: exit 1, stdout "", stderr "file:///Users/tafeng/dev/claude-worktrees/doneright/github-issue-1156-ea674f/packages/asks/dist/index.js:1157\n                throw new AskRefused(`BLOCKED: no deadline for ${kind} asks is declared in your settings or the repo's done.yaml (asks.deadline.${kind})`, { field: 'deadline' });\n                      ^\n\nAskRefused: BLOCKED: no deadline for authority asks is declared in your settings or the repo's done.yaml (asks.deadline.authority)\n    at AsksCore.fill (file:///Users/tafeng/dev/claude-worktrees/doneright/github-issue-1156-ea674f/packages/asks/dist/index.js:1157:23)\n    at file:///Users/tafeng/dev/claude-worktrees/doneright/github-issue-1156-ea674f/packages/asks/dist/index.js:341:33 {\n  field: 'deadline',\n  option: undefined,\n  source: undefined,\n  ask: undefined,\n  outcome: undefined,\n  closed_at: undefined\n}\n\nNode.js v24.22.0\n"
+Error: BLOCKED: fixtures/core.mjs raise failed: exit 1, stdout "", stderr "file://~/dev/claude-worktrees/doneright/github-issue-1156-ea674f/packages/asks/dist/index.js:1157\n                throw new AskRefused(`BLOCKED: no deadline for ${kind} asks is declared in your settings or the repo's done.yaml (asks.deadline.${kind})`, { field: 'deadline' });\n                      ^\n\nAskRefused: BLOCKED: no deadline for authority asks is declared in your settings or the repo's done.yaml (asks.deadline.authority)\n    at AsksCore.fill (file://~/dev/claude-worktrees/doneright/github-issue-1156-ea674f/packages/asks/dist/index.js:1157:23)\n    at file://~/dev/claude-worktrees/doneright/github-issue-1156-ea674f/packages/asks/dist/index.js:341:33 {\n  field: 'deadline',\n  option: undefined,\n  source: undefined,\n  ask: undefined,\n  outcome: undefined,\n  closed_at: undefined\n}\n\nNode.js v24.22.0\n"
  ❯ core helpers.ts:181:35
     179|   const r = await run(NODE, ['--no-warnings', join(FIXTURES, 'core.mjs…
     180|   const out = jsonLines(r.stdout).at(-1);

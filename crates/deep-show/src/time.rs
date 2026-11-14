@@ -14,6 +14,8 @@ use deep_canvas::time::{self as clock, Rate, CHECKPOINT_EVERY};
 use deep_canvas_motion::doc::{read as read_motion, Motion};
 use serde_json::{json, Map, Value};
 
+use crate::determinism::{Compare, Raster2d};
+use crate::frames::Painted;
 use crate::hub::{Call, EvalTime, Hub, Planted};
 use crate::optional;
 
@@ -31,6 +33,10 @@ pub struct Export {
     pub doc: String,
     pub frame_rate: Option<(u32, u32)>,
     pub sample_rate: Option<u32>,
+    /// #501: frames whose audio span (and, with `timecode`, label) the plan answers.
+    pub frames: Option<Vec<i64>>,
+    /// #501: the timecode's start label and whether it drops frame numbers.
+    pub timecode: Option<(String, bool)>,
 }
 
 /// Which path `determinism`'s play side runs: the live transport's warm path, or a cold
@@ -41,12 +47,29 @@ pub enum PlayPath {
     Cold,
 }
 
+/// What [`Hub::evaluate`] leaves: the last frame's drawing, its nodes' results, each video
+/// image item's frame, each cell grid, and a 2D film's sides at the last time (#239).
+pub(crate) type Evaluated = (
+    Painted,
+    Vec<Value>,
+    Map<String, Value>,
+    Map<String, Value>,
+    Option<crate::film::Sides>,
+);
+
 /// A `determinism` call.
 pub struct Determinism {
     pub doc: String,
     pub display_hz: u32,
     pub play: PlayPath,
     pub at_times: Option<Vec<i64>>,
+    /// #1897: on this machine by the GPU pixel hash, or a cross-machine record.
+    pub compare: Compare,
+    /// #504: the call's own run replays the session's input track and picks; a check's run
+    /// (the verdict's) reads the saved revision alone.
+    pub session: bool,
+    /// #507: both sides replay the document on this track instead, outside present mode.
+    pub track: Option<Vec<Value>>,
 }
 
 /// One of this issue's calls, parsed; `None` is `bad_input`.
@@ -86,19 +109,36 @@ pub fn parse_call(name: &str, c: &Map<String, Value>) -> Option<Call> {
             doc: doc()?,
             text: c.get("text")?.as_str()?.to_string(),
         }),
+        "export" if c.contains_key("out") => {
+            crate::export::parse(c).map(|job| Call::ExportRun(Box::new(job)))
+        }
         "export" => {
             let frame_rate = optional(c.get("frame_rate"), pair)?;
             let sample_rate = optional(c.get("audio"), |a| whole(a.get("sample_rate")?))?;
+            let frames = optional(c.get("frames"), |f| {
+                f.as_array()?.iter().map(Value::as_i64).collect()
+            })?;
+            let timecode = optional(c.get("timecode"), |t| {
+                let start = optional(t.get("start"), |s| Some(s.as_str()?.to_string()))?;
+                let drop = optional(t.get("drop_frame"), Value::as_bool)?;
+                Some((
+                    start.unwrap_or_else(|| "00:00:00:00".into()),
+                    drop.unwrap_or(false),
+                ))
+            })?;
             Some(Call::Export(Export {
                 doc: doc()?,
                 frame_rate,
                 sample_rate,
+                frames,
+                timecode,
             }))
         }
         "play" => Some(Call::Play {
             doc: doc()?,
             display_hz: whole(c.get("display_hz")?)?,
             to: c.get("to")?.as_i64()?,
+            presented: optional(c.get("presented"), Value::as_bool)?.unwrap_or(false),
         }),
         "determinism" => {
             let play = match c.get("play") {
@@ -118,11 +158,23 @@ pub fn parse_call(name: &str, c: &Map<String, Value>) -> Option<Call> {
                         .collect::<Option<Vec<_>>>()?,
                 ),
             };
+            let compare = match c.get("compare").map(Value::as_str) {
+                None | Some(Some("same_machine")) => Compare::SameMachine,
+                Some(Some("cross_machine")) => Compare::CrossMachine {
+                    raster_2d: Raster2d::parse(c.get("raster_2d"))?,
+                    against: c.get("against").cloned(),
+                },
+                Some(Some("shards")) => Compare::Shards,
+                Some(_) => return None,
+            };
             Some(Call::Determinism(Determinism {
                 doc: doc()?,
                 display_hz: whole(c.get("display_hz")?)?,
                 play,
                 at_times,
+                compare,
+                session: true,
+                track: c.get("track").and_then(Value::as_array).cloned(),
             }))
         }
         _ => None,
@@ -163,7 +215,7 @@ fn display_frame(hz: u32) -> Result<i64, Value> {
 
 /// The time grammar's context for a document: its transport's frame rate and its markers as
 /// motion resolves them (Marker: `t`, resolved at check).
-fn context_of(doc: &Value) -> TimeContext {
+pub(crate) fn context_of(doc: &Value) -> TimeContext {
     let mut ctx = TimeContext {
         frame_rate: doc
             .get("transport")
@@ -176,11 +228,25 @@ fn context_of(doc: &Value) -> TimeContext {
             ctx.markers.insert(m.id, (m.start, m.end));
         }
     }
+    // #509: the script's spoken times, as DeepBuild wrote them.
+    for (name, v) in doc
+        .pointer("/script/spoken")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten()
+    {
+        if let (Some(a), Some(b)) = (
+            v.get(0).and_then(Value::as_i64),
+            v.get(1).and_then(Value::as_i64),
+        ) {
+            ctx.markers.entry(name.clone()).or_insert((a, b));
+        }
+    }
     ctx
 }
 
 /// The transport's sample rate, or the default 48 kHz.
-fn sample_rate_of(doc: &Value) -> u32 {
+pub(crate) fn sample_rate_of(doc: &Value) -> u32 {
     doc.get("transport")
         .and_then(|t| t.get("sample_rate"))
         .and_then(Value::as_u64)
@@ -268,13 +334,15 @@ fn default_times(doc: &Value, motion: Option<&Motion>) -> Vec<i64> {
 
 impl Hub<'_> {
     /// The document's current revision, or the `no_revision` refusal.
-    fn current_doc(&self, doc: &str) -> Result<Value, Value> {
+    pub(crate) fn current_doc(&self, doc: &str) -> Result<Value, Value> {
         let mut doc = self
             .current(doc)
             .map(|r| r.doc.clone())
             .ok_or_else(|| refused("no_revision"))?;
         let _ = self.inline_tables(&mut doc);
         let _ = self.inline_vectors(&mut doc);
+        let _ = self.inline_occurrences(&mut doc, &[]);
+        let _ = self.column_view(&mut doc, 0);
         Ok(doc)
     }
 
@@ -346,8 +414,35 @@ impl Hub<'_> {
         }
     }
 
-    /// `time`: a literal's flicks in a document.
-    pub fn time_reply(&self, doc: &str, text: &str) -> Value {
+    /// `time`: a literal's flicks in a document. A word anchor (#502), `@line.word:text#k`,
+    /// resolves to the word marker the line's words record places.
+    pub fn time_reply(&mut self, doc: &str, text: &str) -> Value {
+        // #509: a word or line anchor resolves from the compiled script's spoken times.
+        let parsed = Time::parse(text);
+        if let Ok(Time::Word { .. } | Time::Anchor { .. }) = &parsed {
+            let Some(document) = self.current(doc).map(|r| r.doc.clone()) else {
+                return refused("no_revision");
+            };
+            if let Some(s) = self.script_of(&document) {
+                if let Some(problem) = &s.problem {
+                    return problem.clone();
+                }
+                let mut ctx = context_of(&document);
+                for (name, span) in &s.spoken {
+                    ctx.markers.entry(name.clone()).or_insert(*span);
+                }
+                if let Ok(t) = parsed
+                    .as_ref()
+                    .map_err(|_| ())
+                    .and_then(|p| p.resolve(&ctx).map_err(|_| ()))
+                {
+                    return json!({"outcome": "resolved", "t": t});
+                }
+                if let Ok(Time::Word { .. }) = parsed {
+                    return refused("time_unresolved");
+                }
+            }
+        }
         match self.resolve_time(doc, &EvalTime::Literal(text.to_string())) {
             Ok(t) => json!({"outcome": "resolved", "t": t}),
             Err(code) => refused(code),
@@ -373,21 +468,55 @@ impl Hub<'_> {
             Ok(sample) => sample,
             Err(why) => return bad_rate(Rate::Sample { hz }, &why),
         };
-        json!({
+        let mut reply = json!({
             "outcome": "planned",
             "frame_rate": [p, q],
             "frame": frame,
             "sample_rate": hz,
             "sample": sample,
-        })
+        });
+        // #501: each asked frame's audio samples [first, end) and its timecode label.
+        if let Some(ks) = &e.frames {
+            let tc = match &e.timecode {
+                None => None,
+                Some((start, drop)) => {
+                    let tc = match deep_canvas::timecode::of_rate(p, q, *drop) {
+                        Ok(tc) => tc,
+                        Err(why) => {
+                            return json!({"outcome": "refused", "code": "drop_frame_rate",
+                            "frame_rate": format!("{p}/{q}"), "why": format!("drop_frame: {why}")})
+                        }
+                    };
+                    match tc.number(start) {
+                        Ok(n) => Some((tc, n)),
+                        Err(why) => {
+                            return json!({"outcome": "refused", "code": "bad_timecode", "why": why})
+                        }
+                    }
+                }
+            };
+            let rows: Vec<Value> = ks
+                .iter()
+                .map(|&k| {
+                    let mut row = json!({"frame": k, "samples": [self.span_start(k, frame, hz), self.span_start(k + 1, frame, hz)]});
+                    if let (Some((tc, n)), Ok(k)) = (&tc, u64::try_from(k)) {
+                        row["timecode"] = json!(self.label(tc, n + k));
+                    }
+                    row
+                })
+                .collect();
+            reply["frames"] = json!(rows);
+        }
+        reply
     }
 
     /// `play`: the document's session on a virtual display at `display_hz` from the start to
     /// `to`. The display runs a frame at every multiple of its frame; the transport draws the
     /// first, then one only when the last drawn frame's `valid_until` has come or a stepping
-    /// operator steps, a change (Frame clock and scheduler: never unasked).
-    pub fn play(&mut self, doc: &str, display_hz: u32, to: i64) -> Value {
-        let document = match self.current_doc(doc) {
+    /// operator steps, a change (Frame clock and scheduler: never unasked). With `presented`
+    /// (#501), each vsync's display time, the time it evaluates and the hash of the frame shown.
+    pub fn play(&mut self, doc: &str, display_hz: u32, to: i64, presented: bool) -> Value {
+        let document = match self.current_doc(doc).map(|d| self.played(doc, &d)) {
             Ok(doc) => doc,
             Err(reply) => return reply,
         };
@@ -438,14 +567,30 @@ impl Hub<'_> {
             }
             k += 1;
         }
-        json!({"outcome": "played", "frames": frames, "drawn": drawn, "last_drawn": last})
+        let mut reply =
+            json!({"outcome": "played", "frames": frames, "drawn": drawn, "last_drawn": last});
+        if presented {
+            match self.presented_frames(&document, display, to) {
+                Ok(list) => reply["presented"] = list,
+                Err(mut e) => {
+                    e["outcome"] = json!("refused");
+                    return e;
+                }
+            }
+        }
+        reply
     }
 
     /// `determinism`: for each time, the frame reached by playing to it against the frame
     /// reached by seeking to it, each on a fresh scheduler and session, as canonical renders
     /// and node results.
     pub fn determinism(&mut self, d: &Determinism) -> Value {
-        let document = match self.current_doc(&d.doc) {
+        let current = self.current_doc(&d.doc);
+        let document = match current.map(|doc| match &d.track {
+            Some(track) => crate::present::with_track_only(&doc, track),
+            None if d.session => self.played(&d.doc, &doc),
+            None => doc,
+        }) {
             Ok(doc) => doc,
             Err(reply) => return reply,
         };
@@ -465,6 +610,13 @@ impl Hub<'_> {
                 default_times(&document, motion.as_ref())
             }
         };
+        match &d.compare {
+            Compare::SameMachine => {}
+            Compare::CrossMachine { raster_2d, against } => {
+                return self.cross_machine_check(&document, &at_times, *raster_2d, against.as_ref())
+            }
+            Compare::Shards => return self.shards_check(&d.doc),
+        }
         let view = default_view(&document);
         let mut frames = Vec::with_capacity(at_times.len());
         for &t in &at_times {
@@ -492,18 +644,23 @@ impl Hub<'_> {
         json!({"outcome": "compared", "at_times": at_times, "frames": frames})
     }
 
-    /// One side of a comparison: a fresh scheduler and session framed at `times` in order, its
-    /// last frame's canonical render (the SHA-256 of its PNG, in the evidence store) and its
-    /// nodes' results.
-    fn side(
+    /// A fresh scheduler and session framed at `times` in order: what its last frame draws, its
+    /// nodes' results, and each video image item's frame at the last time.
+    pub(crate) fn evaluate(
         &mut self,
         doc: &Value,
         view: &[Value; 6],
         times: &[i64],
         seek: bool,
-    ) -> Result<Value, String> {
+    ) -> Result<Evaluated, String> {
         let mut sched = Scheduler::new(&self.startup.sealed, self.options());
         let mut session: DocSession = self.new_session();
+        // #544's planted start_on: a run starts at the first frame the session evaluates.
+        let mut planted = doc.clone();
+        if self.scenario.planted == Some(Planted::StartOnAtFirstFrame) {
+            crate::logic::from_first_frame(&mut planted, times.first().copied().unwrap_or(0));
+        }
+        let doc = &planted;
         session.load(&mut sched, doc);
         // #499: each video image item's frame, at every time the side frames, the last drawn.
         let mut video = Map::new();
@@ -512,18 +669,10 @@ impl Hub<'_> {
             let (block, pictures) = self.videos_at(doc, t, seek);
             video = block;
             self.renderer.videos = pictures;
+            self.caption_at(doc, t);
         }
         let drawing =
             crate::frames::drawing_of(&sched, &session).ok_or_else(|| "no_drawing".to_string())?;
-        let sha = if deep_canvas_scene3d::scene::has_3d(doc) {
-            // A 3D writer layer: its 3D frame at the last time, its 2D items drawn over it (#1162).
-            self.canonical_png3d(doc, times.last().copied().unwrap_or(0), &drawing)
-                .map_err(|u| u.code.to_string())?
-        } else {
-            self.canonical_png(&drawing, None)
-                .map_err(|u| u.code.to_string())?
-                .0
-        };
         let nodes: Vec<Value> = session
             .nodes(&sched)
             .into_iter()
@@ -531,9 +680,55 @@ impl Hub<'_> {
                 json!({"operator": n.operator, "module": n.module, "item": n.item, "result": n.result})
             })
             .collect();
-        let mut side = json!({"pixels": sha, "nodes": nodes});
+        // #1967: each cell grid as the last frame shows it.
+        let cells = crate::terminal::grid_blocks(&sched, &session);
+        // #239: a 2D film's shots and transitions at the last time, as eval's still draws them.
+        let last = times.last().copied().unwrap_or(0);
+        let sides = crate::film::program_of(&sched, &session)
+            .and_then(|p| crate::film::sides(&p, doc, last, false));
+        Ok((drawing, nodes, video, cells, sides))
+    }
+
+    /// One side of a comparison: [`Hub::evaluate`]'s last frame as its canonical render (the
+    /// SHA-256 of its PNG, in the evidence store, and its GPU pixel hash, #1897) and its nodes'
+    /// results.
+    fn side(
+        &mut self,
+        doc: &Value,
+        view: &[Value; 6],
+        times: &[i64],
+        seek: bool,
+    ) -> Result<Value, String> {
+        let started = std::time::Instant::now();
+        let (drawing, nodes, video, cells, sides) = self.evaluate(doc, view, times, seek)?;
+        let (rgba, size) = if deep_canvas_scene3d::scene::has_3d(doc) {
+            // A 3D writer layer: its 3D frame at the last time, its 2D items drawn over it (#1162).
+            self.rgba3d(doc, times.last().copied().unwrap_or(0), &drawing, None)
+                .map_err(|u| u.code.to_string())?
+        } else {
+            // A 2D film with shots: each side through its own camera and look, blended (#239).
+            let (rgba, _, size) = match &sides {
+                Some(sides) => self.film_rgba(&drawing, None, sides, doc, (true, None)),
+                None => self.canonical_rgba(&drawing, None, true),
+            }
+            .map_err(|u| u.code.to_string())?;
+            (rgba, size)
+        };
+        let rendered = started.elapsed();
+        let pixel_hash = self.render_hash(&rgba, size)?;
+        let hashed = started.elapsed() - rendered;
+        let sha = self.put_png(rgba, size).map_err(|u| u.code.to_string())?;
+        // #405: what hashing adds to the render, each in ms.
+        let timing = json!({"render_ms": rendered.as_secs_f64() * 1e3, "hash_ms": hashed.as_secs_f64() * 1e3});
+        let mut side = json!({"pixels": sha, "nodes": nodes, "pixel_hash": pixel_hash, "timing": timing,
+            // #507: the timeline position the last frame shows, and each text's drawn string.
+            "position": crate::present::position_at(doc, times.last().copied().unwrap_or(0)),
+            "texts": drawing.drawing.as_deref().map(crate::film_audit::drawn_texts).unwrap_or_default()});
         if !video.is_empty() {
             side["video"] = Value::Object(video);
+        }
+        if !cells.is_empty() {
+            side["cells"] = Value::Object(cells);
         }
         Ok(side)
     }

@@ -4,9 +4,10 @@
 //! own array, a read of nothing declared, a write region past the end of memory and a program
 //! whose `regions_digest` isn't its item's layout digest.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
+use deep_canvas::budget::Class;
 use deep_canvas_sandbox::rewrite::{self, hash, Mode, Rewritten};
 use deep_sandbox_wasmtime::service::{refusals_json, Budget, Sandbox};
 use serde_json::{json, Map, Value};
@@ -21,13 +22,45 @@ const MIB: u64 = 1024 * 1024;
 pub const PER_STEP: usize = 16;
 /// A control's slot: a u32 count and 4 zero bytes, then each entry as a u32 player, 4 zero
 /// bytes and a slider's f64 value.
-pub const SLOT: u32 = 8 + PER_STEP as u32 * 16;
+pub const SLOT: u32 = slot(8);
+
+/// The slot of a control whose value takes `value` bytes.
+pub const fn slot(value: u32) -> u32 {
+    8 + PER_STEP as u32 * (8 + value)
+}
+
+/// A read control's slot in a read region and its type there, by the form of its entries'
+/// values: a pick on rows' `{set, key}` in 24 B (Control: picks on rows and grid focus), a
+/// point's 248 B (Control: point), an action's, a stick's or a look's 16 B (Control: actions,
+/// key repeat and gamepads), else a number's f64. A text control's one commit a step reserves
+/// its `u32` length and up to `max_bytes`, rounded up to a multiple of 8 (Control: text).
+pub fn form(control: &Value) -> (u32, &'static str) {
+    let rows = control.get("verb").and_then(Value::as_str) == Some("pick")
+        && control.get("rows").is_some();
+    match control.get("kind").and_then(Value::as_str) {
+        _ if rows => (slot(24), "pick"),
+        // A point's 248 B record and room for a box release's unit keys (`u32 n, u32 truncated`
+        // and up to 256 × 8 B), entries packed end to end.
+        Some("point") => (slot(248 + 8 + 8 * crate::point::MAX_UNITS as u32), "point"),
+        Some("actions") => (slot(16), "action"),
+        Some("text") => {
+            let max = control
+                .pointer("/text/max_bytes")
+                .and_then(Value::as_u64)
+                .unwrap_or(256);
+            (align8(4 + max.min(16_384) as u32), "text")
+        }
+        _ => (SLOT, "control"),
+    }
+}
 
 /// One field of a logic item this task doesn't build yet: refused by name, never ignored.
-const LATER: [&str; 10] = [
-    "fires", "links", "clock", "due", "emits", "preview", "pages", "parallel", "services",
-    "mirrors",
+const LATER: [&str; 7] = [
+    "fires", "links", "preview", "pages", "parallel", "services", "mirrors",
 ];
+/// A row's own columns: no declared field can take one of these names, so a reader can name each
+/// field beside them.
+const ROW_COLUMNS: [&str; 5] = ["step", "t", "kind", "a", "b"];
 
 /// A refusal as `check` answers it.
 #[derive(Debug)]
@@ -99,6 +132,37 @@ impl Ty {
             Ty::Vec3 => json!([f(0), f(1), f(2)]),
             Ty::Quat => json!([f(0), f(1), f(2), f(3)]),
         }
+    }
+    /// An element as a frame draws a linear write (Logic: interpolated writes): `from` blended
+    /// toward `to` by `a`, f64 and vectors by lerp, a quat by nlerp along the shorter arc.
+    pub fn blend(self, from: &[u8], to: &[u8], a: f64) -> Value {
+        let n = (self.size() / 8) as usize;
+        let f = |b: &[u8], i: usize| {
+            f64::from_le_bytes(b[8 * i..8 * i + 8].try_into().expect("8 bytes"))
+        };
+        let (p, mut q): (Vec<f64>, Vec<f64>) = (
+            (0..n).map(|i| f(from, i)).collect(),
+            (0..n).map(|i| f(to, i)).collect(),
+        );
+        if self == Ty::Quat && p.iter().zip(&q).map(|(x, y)| x * y).sum::<f64>() < 0.0 {
+            q.iter_mut().for_each(|y| *y = -*y);
+        }
+        let mut v: Vec<f64> = p.iter().zip(&q).map(|(x, y)| x + a * (y - x)).collect();
+        if self == Ty::Quat {
+            let len = v.iter().map(|x| x * x).sum::<f64>().sqrt();
+            if len > 0.0 {
+                v.iter_mut().for_each(|x| *x /= len);
+            }
+        }
+        if self == Ty::F64 {
+            json!(v[0])
+        } else {
+            json!(v)
+        }
+    }
+    /// Whether a write of this type may blend: f64, vec2, vec3 and quat, never a bool or an i32.
+    pub fn blends(self) -> bool {
+        !matches!(self, Ty::Bool | Ty::I32)
     }
 }
 
@@ -174,6 +238,40 @@ pub struct Write {
     pub name: String,
     pub ty: Ty,
     pub count: u32,
+    /// `interpolate: linear`: drawing reads it one step late, blended (Logic: interpolated writes).
+    pub linear: bool,
+}
+
+/// A kind of occurrence an item emits (Logic: occurrences): its numeric fields in declaration
+/// order and its cap per step.
+#[derive(Clone, Debug)]
+pub struct Emit {
+    pub kind: String,
+    pub fields: Vec<(String, Ty)>,
+    pub max: u32,
+}
+
+impl Emit {
+    /// A row's bytes: a and b as u32s, then each field at its type's size.
+    pub fn row(&self) -> u32 {
+        8 + self.fields.iter().map(|(_, t)| t.size()).sum::<u32>()
+    }
+    /// The kind's part of the emit region: a u32 count, then `max` rows.
+    pub fn size(&self) -> u32 {
+        4 + self.max * self.row()
+    }
+    /// A row as the occurrence list holds it: its kind, a, b and its fields by name.
+    pub fn value(&self, row: &[u8]) -> Value {
+        let u = |i: usize| u32::from_le_bytes(row[i..i + 4].try_into().expect("4 bytes"));
+        let mut fields = Map::new();
+        let mut at = 8;
+        for (name, ty) in &self.fields {
+            let n = ty.size() as usize;
+            fields.insert(name.clone(), ty.value(&row[at..at + n]));
+            at += n;
+        }
+        json!({"kind": self.kind, "a": u(0), "b": u(4), "fields": fields})
+    }
 }
 
 /// A checked logic item: everything a step needs.
@@ -187,6 +285,10 @@ pub struct Item {
     /// The bytes as given, whose code offsets the sidecar's DWARF stands for.
     pub given: Vec<u8>,
     pub step: i64,
+    /// `clock: on_input` (Logic: turn clock): a step runs only when something asks for it.
+    pub turn: bool,
+    /// With `on_input`, the offset in the write region of the i32 `due` names.
+    pub due: Option<u32>,
     pub reads: Vec<String>,
     pub writes: Vec<Write>,
     pub layout: Layout,
@@ -201,6 +303,9 @@ pub struct Item {
     /// The data assets it names, in order, by hash, and where they're copied: `assets_at`.
     pub assets: Vec<(String, Vec<u8>)>,
     pub assets_at: u32,
+    /// The kinds it emits, in declaration order, and where its emit region starts: `emits_at`.
+    pub emits: Vec<Emit>,
+    pub emits_at: u32,
     /// What the item's bake key covers of it: its rewritten program, its fields as given and
     /// its assets' hashes (Logic: checkpoints and bake).
     pub content: String,
@@ -208,7 +313,8 @@ pub struct Item {
 
 impl Item {
     pub fn checked(&self) -> Value {
-        json!({"program": self.program, "hash": self.hash, "layout": self.layout.to_json(), "assets_at": self.assets_at})
+        json!({"program": self.program, "hash": self.hash, "layout": self.layout.to_json(), "assets_at": self.assets_at,
+            "pipelined": crate::budget::pipelined(self)})
     }
     /// The assets as memory holds them from `assets_at`: each after a u32 of its length.
     pub fn asset_bytes(&self) -> Vec<u8> {
@@ -236,7 +342,10 @@ impl Item {
 #[derive(Clone, Debug)]
 pub struct Piece {
     pub seed: i64,
-    pub controls: BTreeSet<String>,
+    /// Its budget class (Budget classes): `class`, figure when it names none.
+    pub class: Class,
+    /// Each control by ID, with its slot's size and type in a read region ([`form`]).
+    pub controls: BTreeMap<String, (u32, &'static str)>,
     pub tour: Option<Value>,
     pub items: Vec<Item>,
 }
@@ -345,6 +454,8 @@ struct Declared {
     program: String,
     debug: Option<String>,
     step: i64,
+    turn: bool,
+    due: Option<String>,
     reads: Vec<String>,
     writes: Vec<Write>,
     fuel: i64,
@@ -353,8 +464,92 @@ struct Declared {
     every: i64,
     ring: u64,
     assets: Vec<String>,
+    emits: Vec<Emit>,
     /// The item's fields as given, for its bake key.
     given: String,
+}
+
+/// The kinds an item declares in `emits`, in declaration order, or the refusals naming each wrong
+/// one: at most 64 kinds, 8 numeric fields each, none named as a row's own column, and
+/// `max_per_step` at most 1,024.
+fn emits_of(v: Option<&Value>) -> Result<Vec<Emit>, Vec<Value>> {
+    let what = |kind: &str, w: String| refusal("emits", w, json!({"field": "emits", "kind": kind}));
+    let kinds = match v {
+        None => return Ok(Vec::new()),
+        Some(Value::Object(k)) => k,
+        Some(_) => {
+            return Err(vec![what(
+                "",
+                "emits maps each kind to its fields and max_per_step".into(),
+            )])
+        }
+    };
+    let mut out = Vec::new();
+    let mut refused = Vec::new();
+    if kinds.len() > 64 {
+        refused.push(what(
+            "",
+            format!("emits declares {} kinds, past 64", kinds.len()),
+        ));
+    }
+    for (kind, e) in kinds {
+        let other = e.as_object().and_then(|o| {
+            o.keys()
+                .find(|k| !["fields", "max_per_step"].contains(&k.as_str()))
+        });
+        if let Some(k) = other {
+            refused.push(what(
+                kind,
+                format!("{kind}: an emitted kind has no field {k}"),
+            ));
+            continue;
+        }
+        let max = e
+            .get("max_per_step")
+            .map_or(Some(16), Value::as_u64)
+            .filter(|n| *n <= 1024);
+        let fields: Option<Vec<(String, Ty)>> = match e.get("fields") {
+            None => Some(Vec::new()),
+            Some(Value::Object(f)) => f
+                .iter()
+                .map(|(n, t)| {
+                    Some((
+                        n.clone(),
+                        t.as_str().and_then(Ty::named).filter(|t| *t != Ty::Quat)?,
+                    ))
+                })
+                .collect(),
+            Some(_) => None,
+        };
+        match (fields, max) {
+            (Some(f), _) if f.len() > 8 => refused.push(what(
+                kind,
+                format!("{kind} declares {} fields, past 8", f.len()),
+            )),
+            (Some(f), _) if f.iter().any(|(n, _)| ROW_COLUMNS.contains(&n.as_str())) => refused
+                .push(what(
+                    kind,
+                    format!(
+                        "{kind}: a field can't be named step, t, kind, a or b, a row's own columns"
+                    ),
+                )),
+            (Some(fields), Some(max)) => out.push(Emit {
+                kind: kind.clone(),
+                fields,
+                max: max as u32,
+            }),
+            (None, _) => refused.push(what(
+                kind,
+                format!("{kind}: each field is bool, i32, f64, vec2 or vec3"),
+            )),
+            (_, None) => refused.push(what(kind, format!("{kind}: max_per_step is at most 1,024"))),
+        }
+    }
+    if refused.is_empty() {
+        Ok(out)
+    } else {
+        Err(refused)
+    }
 }
 
 fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared, Refused> {
@@ -369,11 +564,14 @@ fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared, Refused> 
             "program",
             "debug",
             "step_rate",
+            "clock",
+            "due",
             "reads",
             "writes",
             "budget",
             "checkpoint",
             "assets",
+            "emits",
         ]
         .contains(&k.as_str())
         {
@@ -435,10 +633,16 @@ fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared, Refused> 
             .filter(|c| *c >= 1 && *c <= u32::MAX as u64);
         let interpolate = w.get("interpolate").map_or(Some("hold"), Value::as_str);
         match (ty, count, interpolate) {
-            (Some(ty), Some(count), Some("hold" | "linear")) => writes.push(Write {
+            (Some(ty), Some(_), Some("linear")) if !ty.blends() => refused.push(refusal(
+                "write",
+                format!("{name} is a {}, which never blends: interpolate: linear is only for f64, vec2, vec3 and quat arrays", ty.name()),
+                json!({"write": name}),
+            )),
+            (Some(ty), Some(count), Some(i @ ("hold" | "linear"))) => writes.push(Write {
                 name: name.clone(),
                 ty,
                 count: count as u32,
+                linear: i == "linear",
             }),
             _ => refused.push(refusal(
                 "write",
@@ -447,9 +651,53 @@ fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared, Refused> 
             )),
         }
     }
+    // Sized in u64 and held to the largest memory, so no region's size or offset passes a u32.
+    let total: u64 = writes
+        .iter()
+        .map(|w: &Write| (u64::from(w.ty.size()) * u64::from(w.count)).div_ceil(8) * 8)
+        .sum();
+    if total > 64 * MIB {
+        refused.push(refusal(
+            "write",
+            "the writes pass a logic item's largest memory, 64 MiB".into(),
+            json!({}),
+        ));
+    }
+    let emits = emits_of(params.get("emits")).unwrap_or_else(|r| {
+        refused.extend(r);
+        Vec::new()
+    });
+    if !emits.is_empty() && writes.iter().any(|w| w.name == "occurrences") {
+        refused.push(refusal(
+            "write",
+            "an item that emits can't write an array named occurrences: <logic ID>.occurrences is its occurrence list".into(),
+            json!({"write": "occurrences"}),
+        ));
+    }
     if !refused.is_empty() {
         return Err(logic_refused(id, refused));
     }
+    let turn = match params.get("clock") {
+        None => false,
+        Some(c) => match c.as_str() {
+            Some("fixed") => false,
+            Some("on_input") => true,
+            _ => return Err(bad("clock", "clock is fixed or on_input".into())),
+        },
+    };
+    let due = match params.get("due") {
+        None => None,
+        Some(v) => {
+            let name = v.as_str().unwrap_or_default();
+            let own = writes
+                .iter()
+                .any(|w| w.name == name && w.ty == Ty::I32 && w.count == 1);
+            if !turn || !own {
+                return Err(bad("due", format!("due names one of the item's own i32 arrays of count 1, with clock: on_input; {v} isn't")));
+            }
+            Some(name.to_string())
+        }
+    };
     fn get<'a>(o: Option<&'a Value>, k: &str) -> Option<&'a Value> {
         o.and_then(|b| b.get(k))
     }
@@ -499,6 +747,8 @@ fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared, Refused> 
         program,
         debug,
         step,
+        turn,
+        due,
         reads,
         writes,
         fuel,
@@ -507,26 +757,44 @@ fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared, Refused> 
         every,
         ring,
         assets,
+        emits,
         given: Value::Object(params.clone()).to_string(),
     })
 }
 
 /// Checks every item of a piece in order: the first refusal answers.
 pub fn check(piece: &Value, planted: &Planted, history: &mut History) -> Result<Piece, Refused> {
-    let bad = || Refused(json!({"ok": false, "code": "bad_input"}));
-    let seed = piece.get("seed").and_then(Value::as_i64).ok_or_else(bad)?;
-    let controls: BTreeSet<String> = piece
-        .get("controls")
-        .and_then(Value::as_object)
-        .map(|c| c.keys().cloned().collect())
-        .unwrap_or_default();
     let assets = piece
         .get("assets")
         .and_then(Value::as_object)
         .cloned()
         .unwrap_or_default();
+    check_in(piece, planted, history, &|sha| {
+        B64.decode(assets.get(sha)?.as_str()?).ok()
+    })
+}
+
+/// [`check`], each asset's bytes read by `stored` (a document's from the evidence store, #544)
+/// rather than from the piece's `assets`; bytes that don't hash to their ID are none.
+pub fn check_in(
+    piece: &Value,
+    planted: &Planted,
+    history: &mut History,
+    stored: &dyn Fn(&str) -> Option<Vec<u8>>,
+) -> Result<Piece, Refused> {
+    let bad = || Refused(json!({"ok": false, "code": "bad_input"}));
+    let seed = piece.get("seed").and_then(Value::as_i64).ok_or_else(bad)?;
+    let class = match piece.get("class") {
+        None => Class::Figure,
+        Some(c) => c.as_str().and_then(Class::parse).ok_or_else(bad)?,
+    };
+    let controls: BTreeMap<String, (u32, &'static str)> = piece
+        .get("controls")
+        .and_then(Value::as_object)
+        .map(|c| c.iter().map(|(k, v)| (k.clone(), form(v))).collect())
+        .unwrap_or_default();
     let asset = |sha: &str| -> Option<Vec<u8>> {
-        let bytes = B64.decode(assets.get(sha)?.as_str()?).ok()?;
+        let bytes = stored(sha)?;
         (hash(&bytes) == sha).then_some(bytes)
     };
     let items_in = piece
@@ -609,8 +877,18 @@ pub fn check(piece: &Value, planted: &Planted, history: &mut History) -> Result<
         let mut at = 0u32;
         let mut refused = Vec::new();
         for r in &d.reads {
-            let (size, ty, read) = if controls.contains(r) {
-                (SLOT, "control".to_string(), Read::Control)
+            let (size, ty, read) = if let Some((size, ty)) = controls.get(r) {
+                (*size, ty.to_string(), Read::Control)
+            } else if let Some((other, "hover")) =
+                r.split_once('.').filter(|(c, _)| controls.contains_key(*c))
+            {
+                // Control: point: hover is viewer state, never a step's read.
+                refused.push(refusal(
+                    "read",
+                    format!("{r} is the pointer's hover over {other}, viewer state a logic step never reads"),
+                    json!({"read": r}),
+                ));
+                continue;
             } else if let Some((other, name)) = r.split_once('.') {
                 match decls.iter().position(|(o, _)| o == other) {
                     Some(i) if i == idx => {
@@ -667,6 +945,15 @@ pub fn check(piece: &Value, planted: &Planted, history: &mut History) -> Result<
                 ));
                 continue;
             };
+            // A read region past what a u32 addresses fits no memory, and leaves the seed 8 bytes.
+            let Some(end) = at.checked_add(size).filter(|n| *n <= u32::MAX - 15) else {
+                refused.push(refusal(
+                    "read",
+                    format!("{r} takes the read region past 4 GiB"),
+                    json!({"read": r}),
+                ));
+                continue;
+            };
             entries.push(Region {
                 region: "reads",
                 name: r.clone(),
@@ -675,7 +962,7 @@ pub fn check(piece: &Value, planted: &Planted, history: &mut History) -> Result<
                 ty,
                 read,
             });
-            at = align8(at + size);
+            at = align8(end);
         }
         entries.push(Region {
             region: "reads",
@@ -730,6 +1017,41 @@ pub fn check(piece: &Value, planted: &Planted, history: &mut History) -> Result<
                 json!({"region": "writes"}),
             ));
         }
+        let mut regions = vec![
+            ("the read region", reads_at, layout.size("reads")),
+            ("the write region", writes_at, layout.size("writes")),
+        ];
+        // The emit region: each kind's count and max_per_step rows, in declaration order.
+        let emits_at = global_at(&given, "emits_at");
+        if !d.emits.is_empty() {
+            let size: u64 = d.emits.iter().map(|e| u64::from(e.size())).sum();
+            match emits_at {
+                None => refused.push(refusal(
+                    "region",
+                    "an item that emits exports emits_at, an immutable i32 global holding an address".into(),
+                    json!({"field": "emits"}),
+                )),
+                Some(at) => {
+                    let (start, end) = (u64::from(at), u64::from(at) + size);
+                    let why = if end > memory {
+                        Some(format!("passes the end of memory at {memory}"))
+                    } else {
+                        regions
+                            .iter()
+                            .find(|(_, r, n)| *n > 0 && start < u64::from(*r) + u64::from(*n) && u64::from(*r) < end)
+                            .map(|(name, r, n)| format!("overlaps {name}, {n} bytes at {r}"))
+                    };
+                    if let Some(why) = why {
+                        refused.push(refusal(
+                            "region",
+                            format!("the emit region, {size} bytes at {at}, {why}"),
+                            json!({"region": "emits"}),
+                        ));
+                    }
+                    regions.push(("the emit region", at, size as u32));
+                }
+            }
+        }
         let assets_at = global_at(&given, "assets_at");
         let mut assets = Vec::new();
         for sha in &d.assets {
@@ -743,10 +1065,6 @@ pub fn check(piece: &Value, planted: &Planted, history: &mut History) -> Result<
                     json!({"field": "assets"}),
                 )),
                 Some(at) => {
-                    let regions = [
-                        ("the read region", reads_at, layout.size("reads")),
-                        ("the write region", writes_at, layout.size("writes")),
-                    ];
                     refused.extend(placed(&assets, at, memory, &regions, &data_segments(&given)));
                 }
             }
@@ -778,6 +1096,15 @@ pub fn check(piece: &Value, planted: &Planted, history: &mut History) -> Result<
             hash,
             given,
             step: d.step,
+            turn: d.turn,
+            due: d.due.as_ref().map(|n| {
+                layout
+                    .entries
+                    .iter()
+                    .find(|e| e.region == "writes" && &e.name == n)
+                    .expect("due names a write")
+                    .offset
+            }),
             reads: d.reads.clone(),
             writes: d.writes.clone(),
             layout,
@@ -791,10 +1118,13 @@ pub fn check(piece: &Value, planted: &Planted, history: &mut History) -> Result<
             content,
             assets,
             assets_at: assets_at.unwrap_or(0),
+            emits: d.emits.clone(),
+            emits_at: emits_at.unwrap_or(0),
         });
     }
     Ok(Piece {
         seed,
+        class,
         controls,
         tour: piece.get("tour").cloned(),
         items,
@@ -904,4 +1234,159 @@ fn stale(now: &Layout, theirs: u64, past: &[Layout], planted: &Planted) -> Vec<V
                 json!({}),
             )]
         })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const EMPTY: &str = r#"(module (memory (export "memory") 1 1)
+  (global (export "reads_at") i32 (i32.const 0)) (global (export "writes_at") i32 (i32.const 1024))
+  (func (export "init") (param i64)) (func (export "step") (param i64)))"#;
+
+    /// The refusals of a piece whose items, given as params, all run the same empty program.
+    fn refusals(items: Value) -> Value {
+        let bytes = wat::parse_str(EMPTY).expect("a program");
+        let sha = hash(&bytes);
+        let mut piece = json!({"seed": 0, "assets": {&sha: B64.encode(&bytes)}, "items": {}});
+        for (id, params) in items.as_object().expect("items") {
+            let mut params = params.clone();
+            params["program"] = json!(sha);
+            piece["items"][id] = json!({"kind": "logic@1", "params": params});
+        }
+        match check(&piece, &Planted::default(), &mut History::new()) {
+            Ok(_) => json!([]),
+            Err(Refused(v)) => json!([v["item"], v["refusals"][0]["rule"]]),
+        }
+    }
+
+    #[test]
+    fn writes_past_the_largest_memory_are_refused() {
+        for (ty, count) in [("quat", 134_217_728u64), ("f64", 536_870_913)] {
+            let items = json!({"e": {"writes": {"a": {"type": ty, "count": count}}}});
+            assert_eq!(refusals(items), json!(["e", "write"]), "{ty} x {count}");
+        }
+    }
+
+    /// #544: emits within its limits passes to the region check (the empty program exports no
+    /// emits_at); past any of them, or with a type or field name it can't have, it is refused.
+    #[test]
+    fn emits_past_its_limits_are_refused() {
+        let named = |n: usize, v: Value| {
+            Value::Object((0..n).map(|i| (format!("x{i}"), v.clone())).collect())
+        };
+        let within = [
+            named(64, json!({})),
+            json!({"shot": {"fields": named(8, json!("vec3")), "max_per_step": 1024}}),
+        ];
+        let past = [
+            named(65, json!({})),
+            json!({"shot": {"fields": named(9, json!("f64"))}}),
+            json!({"shot": {"max_per_step": 1025}}),
+            json!({"shot": {"fields": {"p": "quat"}}}),
+            json!({"shot": {"fields": {"t": "f64"}}}),
+            json!({"shot": {"offset": true}}),
+        ];
+        for emits in within {
+            assert_eq!(
+                refusals(json!({"e": {"emits": emits}})),
+                json!(["e", "region"])
+            );
+        }
+        for emits in past {
+            assert_eq!(
+                refusals(json!({"e": {"emits": emits.clone()}})),
+                json!(["e", "emits"]),
+                "{emits}"
+            );
+        }
+    }
+
+    /// #539: each read control's slot is its form's, and a step's read of a control's hover is
+    /// refused, naming the read.
+    #[test]
+    fn read_controls_take_their_forms_slots_and_hover_is_refused() {
+        let bytes = wat::parse_str(EMPTY).expect("a program");
+        let sha = hash(&bytes);
+        let controls = json!({
+            "place": {"kind": "choice", "verb": "pick", "rows": ["board"]},
+            "aim": {"kind": "point"}, "moves": {"kind": "actions"},
+            "name": {"kind": "text", "text": {"max_bytes": 13}}, "speed": {"kind": "slider"},
+        });
+        let piece = |reads: Value| {
+            json!({"seed": 0, "assets": {&sha: B64.encode(&bytes)}, "controls": controls,
+                   "items": {"e": {"kind": "logic@1", "params": {"program": sha, "reads": reads}}}})
+        };
+        let p = check(
+            &piece(json!(["place", "aim", "moves", "name", "speed"])),
+            &Planted::default(),
+            &mut History::new(),
+        )
+        .expect("checked");
+        let sizes: Vec<(String, u32, String)> = p.items[0]
+            .layout
+            .entries
+            .iter()
+            .filter(|e| e.read == Read::Control)
+            .map(|e| (e.name.clone(), e.size, e.ty.clone()))
+            .collect();
+        let want = [
+            ("place", 8 + 16 * 32, "pick"),
+            ("aim", 8 + 16 * (8 + 248 + 8 + 8 * 256), "point"),
+            ("moves", 8 + 16 * 24, "action"),
+            ("name", 24, "text"),
+            ("speed", SLOT, "control"),
+        ];
+        assert_eq!(
+            sizes,
+            want.map(|(n, s, t)| (n.to_string(), s, t.to_string()))
+        );
+        match check(
+            &piece(json!(["place.hover"])),
+            &Planted::default(),
+            &mut History::new(),
+        ) {
+            Err(Refused(v)) => assert_eq!(
+                (&v["refusals"][0]["rule"], &v["refusals"][0]["read"]),
+                (&json!("read"), &json!("place.hover"))
+            ),
+            Ok(_) => panic!("a hover read was taken"),
+        }
+    }
+
+    #[test]
+    fn a_read_region_past_a_u32_is_refused() {
+        let reads = vec!["a.x"; 65];
+        let items = json!({
+            "b": {"reads": reads},
+            "a": {"writes": {"x": {"type": "f64", "count": 8_388_608}}},
+        });
+        assert_eq!(refusals(items), json!(["b", "read"]));
+    }
+
+    #[test]
+    fn due_names_its_own_i32_of_count_1_on_a_turn_clock() {
+        let turn = |due: &str, ty: &str, count: u64, clock: &str| {
+            refusals(
+                json!({"g": {"clock": clock, "due": due, "writes": {"due": {"type": ty, "count": count}}}}),
+            )
+        };
+        assert_eq!(turn("due", "i32", 1, "on_input"), json!([]));
+        for (due, ty, count, clock) in [
+            ("due", "f64", 1, "on_input"),
+            ("due", "i32", 2, "on_input"),
+            ("nothing", "i32", 1, "on_input"),
+            ("due", "i32", 1, "fixed"),
+        ] {
+            assert_eq!(
+                turn(due, ty, count, clock),
+                json!(["g", "field"]),
+                "due {due} on a {ty} x {count}, clock {clock}"
+            );
+        }
+        assert_eq!(
+            refusals(json!({"g": {"clock": "sometimes"}})),
+            json!(["g", "field"])
+        );
+    }
 }

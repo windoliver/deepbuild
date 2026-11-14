@@ -1,0 +1,68 @@
+#546's acceptance suite at its base, f38d2b39 (f38d2b3983496ca502cb4743fda249bbc2e5b162), on this Mac (macOS arm64), run once:
+  NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 npx vitest run --root tests/acceptance/546 --testTimeout=600000 --no-file-parallelism
+
+10 of 10 tests fail, each at its first call of a surface the base lacks, before any slow leg (no Docker build ran):
+- deep_kinds has no step_ceilings op: refused with enum at /op (criterion 2's two tests, criterion 4's first, criterion 5's two).
+- deep_kinds serves no guide named logic: read refuses it with not_found at /guide (criterion 1's two tests, criterion 3's first).
+- deep-show run takes neither planted name of this suite: it answers {"ok":false,"code":"bad_input"} (criterion 3's and 4's
+  planted tests).
+Past those, the base also lacks about's ns_per_fuel, the piece's class read by logic.budget, a ceiling failure for every step
+over the ceiling (it names the first only), per-class, per-host and per-rate ceilings, pipelining, frame play, ended and drawn,
+and deep-logic's three planted names.
+
+Checked against the base's real components before this run (with throwaway programs, not committed): #532's assembler builds
+from a copy outside the checkout; burn's fuel is linear in its loop count (12 a loop, 22 a step besides); crowd at W = 415
+spends 8,999,403 fuel a step and takes about 9 to 10 ms of render-worker CPU per frame when the base's live view runs it
+inline; a stand-in dice program keyed by the init seed and the throw's number rolls the same face shifted a step, and its
+step-seed twin differs for seed 546031; grids of 64, 256 and 1,024 a side generate with a route. logic.budget at the base reads
+this Mac's app ns per fuel unit as about 0.072 (README: What the base measures).
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/546
+ ❯ ac01-grid-search.test.ts (2 tests | 2 failed) 4512ms
+     × #546.9988cce1 the one-step search fails logic.budget naming step 0, host app and the ceiling; the split search finds the same route under the ceiling, passes, and seeks into its middle as it plays 1770ms
+     × #546.9988cce1 budget_holds_steps_to_fuel_budget passes the one-step search, and the criterion fails on it 162ms
+ ❯ ac04-step-table.test.ts (2 tests | 2 failed) 3412ms
+     × #546.21066ef8 every ceiling equals the formula with the logic module's ns per fuel unit, and logic.budget fails exactly the steps over the piece's class's ceiling, or twice it for a pipelined item 1656ms
+     × #546.21066ef8 step_ceilings_publish_fuel_cap publishes 10,000,000 as every ceiling, and the table fails naming the class 388ms
+ ❯ ac05-pipelined.test.ts (2 tests | 2 failed) 4308ms
+     × #546.d7e6a2fc the 600-unit item runs pipelined: no render-worker frame past 4 ms, full-state hashes the inline run's at every step, logic.budget holds it to twice the 30 Hz ceiling 1603ms
+     × #546.d7e6a2fc pipeline_draws_before_step_ends fails, naming the first frame and the array 142ms
+ ❯ ac02-web-ceiling.test.ts (2 tests | 2 failed) 3143ms
+     × #546.73b1f110 a step between the ceilings fails on the web alone, naming the step, host web and the ceiling, the same on macOS and Linux; a piece that fits reads BLOCKED 1627ms
+     × #546.73b1f110 budget_web_passes_from_fuel reads PASS on the piece that fits, and the criterion fails, naming the host 113ms
+ ❯ ac03-dice.test.ts (2 tests | 2 failed) 3810ms
+     × #546.a29a5ebb the dice game rolls the same faces with its throw stamped one step later, and the guide names rng.timing as the kit's check 1513ms
+     × #546.a29a5ebb guide_dice_rolls_from_step_seed's dice game rolls another face for the shift, naming the step 23ms
+ FAIL  ac01-grid-search.test.ts > #546.9988cce1 the guide's grid search: past the ceiling in one step, under it split across steps > #546.9988cce1 the one-step search fails logic.budget naming step 0, host app and the ceiling; the split search finds the same route under the ceiling, passes, and seeks into its middle as it plays
+AssertionError: deep_kinds read of the guide logic at offset 0 answers, not refuses: {"error":{"code":"not_found","retryable":false,"remediation":"Give a guide's name as a search hit gives it.","path":"/guide","actual":"logic","evidence":[]},"core":"core@0.0.0","set_digest":"90de4d0ff0c955c8dc05ed40062c110ec7215b6b6bf91f78473fa73fe468e7b8"}: expected { code: 'not_found', …(5) } to be undefined
+ ❯ ac01-grid-search.test.ts:86:42
+ FAIL  ac01-grid-search.test.ts > #546.9988cce1 the guide's grid search: past the ceiling in one step, under it split across steps > #546.9988cce1 budget_holds_steps_to_fuel_budget passes the one-step search, and the criterion fails on it
+AssertionError: deep_kinds read of the guide logic at offset 0 answers, not refuses: {"error":{"code":"not_found","retryable":false,"remediation":"Give a guide's name as a search hit gives it.","path":"/guide","actual":"logic","evidence":[]},"core":"core@0.0.0","set_digest":"90de4d0ff0c955c8dc05ed40062c110ec7215b6b6bf91f78473fa73fe468e7b8"}: expected { code: 'not_found', …(5) } to be undefined
+ ❯ ac01-grid-search.test.ts:132:27
+ FAIL  ac02-web-ceiling.test.ts > #546.73b1f110 logic.budget on [app, web]: the web's ceiling from the bake's fuel alone, the timed run still owed > #546.73b1f110 a step between the ceilings fails on the web alone, naming the step, host web and the ceiling, the same on macOS and Linux; a piece that fits reads BLOCKED
+AssertionError: deep_kinds step_ceilings answers, not refuses: {"error":{"code":"enum","retryable":false,"remediation":"Give op as one of list, word, search, read, gallery or sheet.","path":"/op","actual":"step_ceilings","evidence":[]},"core":"core@0.0.0","set_digest":"90de4d0ff0c955c8dc05ed40062c110ec7215b6b6bf91f78473fa73fe468e7b8"}: expected { Object (code, retryable, ...) } to be undefined
+ ❯ ac02-web-ceiling.test.ts:61:15
+ FAIL  ac02-web-ceiling.test.ts > #546.73b1f110 logic.budget on [app, web]: the web's ceiling from the bake's fuel alone, the timed run still owed > #546.73b1f110 budget_web_passes_from_fuel reads PASS on the piece that fits, and the criterion fails, naming the host
+AssertionError: deep_kinds step_ceilings answers, not refuses: {"error":{"code":"enum","retryable":false,"remediation":"Give op as one of list, word, search, read, gallery or sheet.","path":"/op","actual":"step_ceilings","evidence":[]},"core":"core@0.0.0","set_digest":"90de4d0ff0c955c8dc05ed40062c110ec7215b6b6bf91f78473fa73fe468e7b8"}: expected { Object (code, retryable, ...) } to be undefined
+ ❯ ac02-web-ceiling.test.ts:76:15
+ FAIL  ac03-dice.test.ts > #546.a29a5ebb the guide's dice game rolls by the action, not the step > #546.a29a5ebb the dice game rolls the same faces with its throw stamped one step later, and the guide names rng.timing as the kit's check
+AssertionError: deep_kinds read of the guide logic at offset 0 answers, not refuses: {"error":{"code":"not_found","retryable":false,"remediation":"Give a guide's name as a search hit gives it.","path":"/guide","actual":"logic","evidence":[]},"core":"core@0.0.0","set_digest":"90de4d0ff0c955c8dc05ed40062c110ec7215b6b6bf91f78473fa73fe468e7b8"}: expected { code: 'not_found', …(5) } to be undefined
+ ❯ ac03-dice.test.ts:62:18
+ FAIL  ac03-dice.test.ts > #546.a29a5ebb the guide's dice game rolls by the action, not the step > #546.a29a5ebb guide_dice_rolls_from_step_seed's dice game rolls another face for the shift, naming the step
+AssertionError: deep-show run --planted guide_dice_rolls_from_step_seed exits 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+ ❯ ac03-dice.test.ts:70:38
+ FAIL  ac04-step-table.test.ts > #546.21066ef8 deep_kinds' step ceilings: the formula for every class, host and rate, and logic.budget holds steps to them > #546.21066ef8 every ceiling equals the formula with the logic module's ns per fuel unit, and logic.budget fails exactly the steps over the piece's class's ceiling, or twice it for a pipelined item
+AssertionError: deep_kinds step_ceilings answers, not refuses: {"error":{"code":"enum","retryable":false,"remediation":"Give op as one of list, word, search, read, gallery or sheet.","path":"/op","actual":"step_ceilings","evidence":[]},"core":"core@0.0.0","set_digest":"90de4d0ff0c955c8dc05ed40062c110ec7215b6b6bf91f78473fa73fe468e7b8"}: expected { Object (code, retryable, ...) } to be undefined
+ ❯ ac04-step-table.test.ts:95:15
+ FAIL  ac04-step-table.test.ts > #546.21066ef8 deep_kinds' step ceilings: the formula for every class, host and rate, and logic.budget holds steps to them > #546.21066ef8 step_ceilings_publish_fuel_cap publishes 10,000,000 as every ceiling, and the table fails naming the class
+AssertionError: deep-show run --planted step_ceilings_publish_fuel_cap exits 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+ ❯ ac04-step-table.test.ts:123:31
+ FAIL  ac05-pipelined.test.ts > #546.d7e6a2fc a slow item steps on the logic thread, one step ahead of what the frames draw > #546.d7e6a2fc the 600-unit item runs pipelined: no render-worker frame past 4 ms, full-state hashes the inline run's at every step, logic.budget holds it to twice the 30 Hz ceiling
+AssertionError: deep_kinds step_ceilings answers, not refuses: {"error":{"code":"enum","retryable":false,"remediation":"Give op as one of list, word, search, read, gallery or sheet.","path":"/op","actual":"step_ceilings","evidence":[]},"core":"core@0.0.0","set_digest":"90de4d0ff0c955c8dc05ed40062c110ec7215b6b6bf91f78473fa73fe468e7b8"}: expected { Object (code, retryable, ...) } to be undefined
+ ❯ ac05-pipelined.test.ts:103:30
+ FAIL  ac05-pipelined.test.ts > #546.d7e6a2fc a slow item steps on the logic thread, one step ahead of what the frames draw > #546.d7e6a2fc pipeline_draws_before_step_ends fails, naming the first frame and the array
+AssertionError: deep_kinds step_ceilings answers, not refuses: {"error":{"code":"enum","retryable":false,"remediation":"Give op as one of list, word, search, read, gallery or sheet.","path":"/op","actual":"step_ceilings","evidence":[]},"core":"core@0.0.0","set_digest":"90de4d0ff0c955c8dc05ed40062c110ec7215b6b6bf91f78473fa73fe468e7b8"}: expected { Object (code, retryable, ...) } to be undefined
+ ❯ ac05-pipelined.test.ts:116:22
+ Test Files  5 failed (5)
+      Tests  10 failed (10)
+   Duration  20.16s (tests 99%, import 1%, transform 1%)

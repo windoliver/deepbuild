@@ -4,9 +4,12 @@
 //! clipboard read through the terminal's escape is refused and never answered. [`keys`] encodes a
 //! key from the program's modes. [`palette`] keeps a
 //! cell off the status colors wherever status can show, and [`module`] registers the grid's check
-//! and drawing through the registry and seal, on the text module.
+//! and drawing through the registry and seal, on the text module. [`recording`] converts a
+//! terminal recording into keyframes and row patches and finds the grid it shows at a time.
 
 pub mod emulator;
 pub mod keys;
+pub mod logic_grid;
 pub mod module;
 pub mod palette;
+pub mod recording;
