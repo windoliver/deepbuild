@@ -1,0 +1,115 @@
+{
+  "spike": 1477,
+  "what": "Long lists and tables in a real 1,200 × 700 window, 32 px rows, 8 columns, two rows (64 px) of scroll a frame, each arm in a process of its own: an empty window (blank), gpui-kit's DataTable with a Rust delegate (kit), the same through a panel's render_cell in gpui-shell (panel), a variable-height list at 10,000 and 100,000 rows, and, when built, ours. Update is the time from the root view's render to the end of its paint; allocations and CPU are the process's over the counted frames, per frame; working set is the physical footprint.",
+  "arms": {
+    "blank": {
+      "arm": "blank",
+      "status": "measured",
+      "window": [
+        1200,
+        700
+      ],
+      "seconds": 8,
+      "elapsed_s": 8.005773833,
+      "frames": 733,
+      "scroll_px_per_frame": 64.0,
+      "raw": {
+        "p50_ms": 0.08791700000000001,
+        "p95_ms": 0.116625,
+        "p99_ms": 0.13125,
+        "allocations_per_frame": 70.91132332878581,
+        "cpu_ms_per_frame": 0.7100354706684857,
+        "working_set_bytes": 279692392,
+        "data_bytes": 0
+      },
+      "fingerprint": {
+        "model": "Mac17,10",
+        "chip": "Apple M5 Max",
+        "memoryBytes": 68719476736,
+        "power": "ac",
+        "lowPowerMode": false,
+        "thermalState": "fair",
+        "macosBuild": "26B8119"
+      },
+      "load": {
+        "start": 134.42236328125,
+        "end": 176.3935546875
+      }
+    },
+    "kit": {
+      "status": "INCONCLUSIVE",
+      "reason": "not run: --arms left it out"
+    },
+    "panel": {
+      "status": "INCONCLUSIVE",
+      "reason": "not run: --arms left it out"
+    },
+    "list-10k": {
+      "arm": "list-10k",
+      "status": "measured",
+      "window": [
+        1200,
+        700
+      ],
+      "seconds": 8,
+      "elapsed_s": 8.00750825,
+      "frames": 897,
+      "scroll_px_per_frame": 64.0,
+      "raw": {
+        "p50_ms": 0.5689169999999999,
+        "p95_ms": 0.7755000000000001,
+        "p99_ms": 0.987417,
+        "allocations_per_frame": 116.95094760312152,
+        "cpu_ms_per_frame": 1.2831560758082496,
+        "working_set_bytes": 321209496,
+        "data_bytes": 1746670
+      },
+      "rows": 10000,
+      "assistive": false,
+      "access_allocations": 0,
+      "run_cache": {
+        "lines": 2901,
+        "bytes": 12720315,
+        "bound": 8192
+      },
+      "list": "deep-app table::view::TableView, variable row heights (#1477's element; the kit's list can't count strings shaped)",
+      "shaped": {
+        "frames": 120,
+        "down": 2.675,
+        "back": 0.025
+      },
+      "fingerprint": {
+        "model": "Mac17,10",
+        "chip": "Apple M5 Max",
+        "memoryBytes": 68719476736,
+        "power": "ac",
+        "lowPowerMode": false,
+        "thermalState": "fair",
+        "macosBuild": "26B8119"
+      },
+      "load": {
+        "start": 176.3935546875,
+        "end": 231.6611328125
+      },
+      "net": {
+        "p50_ms": 0.48099999999999987,
+        "p95_ms": 0.6588750000000001,
+        "p99_ms": 0.856167,
+        "allocations_per_frame": 46.03962427433571,
+        "cpu_ms_per_frame": 0.5731206051397639,
+        "working_set_above_data_bytes": 39770434.0
+      }
+    },
+    "list-100k": {
+      "status": "INCONCLUSIVE",
+      "reason": "not run: --arms left it out"
+    }
+  },
+  "gpui_fast": {
+    "issue": 1433,
+    "record": "docs/spikes/1433/record.json",
+    "at": null,
+    "reading": null
+  },
+  "decision": "INCONCLUSIVE: kit, panel unrun, so the table arms can't decide; #1433's gpui-fast list reading: none yet (docs/spikes/1433/record.json doesn't exist)"
+}

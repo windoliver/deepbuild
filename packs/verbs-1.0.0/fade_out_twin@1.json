@@ -1,0 +1,41 @@
+{
+  "id": "verbs.fade_out_twin",
+  "version": "1.0",
+  "title": "Fade out, planted twin",
+  "license": "Apache-2.0",
+  "author": "DeepBuild",
+  "description": "The planted twin of fade_out: a wrong curve, timing or end state its fixture must catch.",
+  "inputs": {
+    "shift": {
+      "type": "vec3",
+      "default": [
+        0,
+        0,
+        0
+      ],
+      "about": "the offset each target fades out to"
+    },
+    "to": {
+      "type": "ID",
+      "default": "none",
+      "about": "an item each target fades out to, in place of shift"
+    },
+    "scale": {
+      "type": "number",
+      "default": 1,
+      "min": 0,
+      "about": "the scale each target fades out to, as a share of its own"
+    }
+  },
+  "steps": {
+    "fade": {
+      "op": "cue",
+      "params": {
+        "set": {
+          "adjust/opacity": 0
+        },
+        "ease": "linear"
+      }
+    }
+  }
+}

@@ -1,0 +1,1 @@
+FAIL drift: Map projections: the table lists it with registry geo.projection@1, and the closure data holds no such list

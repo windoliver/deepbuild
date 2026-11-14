@@ -1,7 +1,7 @@
 {
   "core": {
     "version": "0.0.0",
-    "digest": "1fc204f6764bb056e4c02bd28edce236b37415ef25444be0c05d6ba0afdeea52",
+    "digest": "90e5d83d5e2a11629f7a21bf8f5fe837dddde78f6f87072278e70625cb18cf97",
     "verdict": "FAIL",
     "parts": {
       "fixtures": "PASS",
@@ -205,7 +205,7 @@
   },
   "motion": {
     "version": "1.0.0",
-    "digest": "27a25f69d76019d98ec386c96bda4437a7bfd2363517578cf55100e9d4dbe8d8",
+    "digest": "cf4869324d5d43ba84d81bba74a9a0f3e0d6eb511091d19606e05546bd848203",
     "verdict": "FAIL",
     "parts": {
       "fixtures": "PASS",
@@ -217,7 +217,8 @@
       "repair_loop": "PASS",
       "time_order": "PASS",
       "catalog": "FAIL",
-      "migration": "PASS"
+      "migration": "PASS",
+      "registries": "PASS"
     }
   },
   "net": {

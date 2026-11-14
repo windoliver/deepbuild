@@ -128,6 +128,19 @@ fn boundary_edges(mesh: &deep_canvas_scene3d::geom::Mesh, m: &Affine3) -> Vec<[V
         .collect()
 }
 
+/// #1725: each solid's resting gap at `t` (Geometry audit: scenes, `support`), as the audit reads
+/// its true shapes: `{id, gap}` in m, how far it falls along -Y before it meets a part under it,
+/// 0 when it rests on or in one, and null when nothing is under it. A reading, never a check.
+pub(crate) fn resting(doc: &Value, t: i64) -> Value {
+    let Ok(solids) = solids_at(doc, t, &BTreeSet::new()) else {
+        return json!([]);
+    };
+    let rows: Vec<Value> = (0..solids.len())
+        .map(|i| json!({"id": solids[i].id, "gap": deep_canvas::geometry_audit::gap_below(&solids, i)}))
+        .collect();
+    Value::Array(rows)
+}
+
 /// Every solid part of `doc` at `t` (flicks), as the audit reads it: its true shape placed in the
 /// world by its evaluated transform and its parents', and a wire's or tube's ends; paint and light
 /// play no part. `moved` names the parts motion places.
