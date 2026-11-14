@@ -1,0 +1,44 @@
+# The same selection on the merge base f6d811c79 (node scripts/affected.mjs Cargo.lock scripts/repo-rules.json: exit 1),
+# run right after the change's on 2026-11-14, against it line for line. + is only on the change, - only on the merge base.
+NEW FAIL: change 153, merge base 145; only on the change 9, only on the merge base 1
+  + NEW FAIL tests/acceptance/2326/lock.test.mjs › Cargo.lock holds rsa at 0.10.0 or later, a final release, in place of 0.10.0-rc.18: rsa is locked at 0.10.0-rc.18, below the fixed release 0.10.0
+  + NEW FAIL tests/acceptance/2326/lock.test.mjs › the change against the base touches Cargo.lock and no Cargo manifest: the change edits Cargo manifests
+  + NEW FAIL slot kit environment@1: clean fill health-route: the kit's reference fill reads BLOCKED on health-route: the environment's listening ports can't be read (lsof failed), so whether it binds its lease alone is unknown
+  + NEW FAIL slot kit environment@1: clean fill status-route: the kit's reference fill reads BLOCKED on status-route: the environment's listening ports can't be read (lsof failed), so whether it binds its lease alone is unknown
+  + NEW FAIL slot kit environment@1: planted proof leaves-grandchild: planted fill leaves-grandchild is first refused on health-route as BLOCKED "the process table can't be read (ps failed: ps -Awwo: ENOBUFS), so the state of the environment's processes is unknown" not with its own message "left its process running after down"
+  + NEW FAIL slots: deep.registerEnvironment, -: deep.registerEnvironment's kit environment@1: clean fill health-route: the kit's reference fill reads BLOCKED on health-route: the process table can't be read (ps failed: ps -Awwo: ENOBUFS), so the state of the environment's processes is unknown
+  + NEW FAIL slots: deep.registerEnvironment, -: deep.registerEnvironment's kit environment@1: clean fill status-route: the kit's reference fill reads BLOCKED on status-route: the process table can't be read (ps failed: ps -Awwo: ENOBUFS), so the state of the environment's processes is unknown
+  + NEW FAIL slots: deep.registerEnvironment, - (planted starts-in-worktree): deep.registerEnvironment's kit environment@1: planted proof starts-in-worktree: planted fill starts-in-worktree is first refused on health-route as BLOCKED "the environment's working folders can't be read (lsof failed), so whether it started in its checkout is unknown" not with its own message "started its stack in the sessi
+  + NEW FAIL scripts/canvas-closures.mjs: exited 1: deep lease: DeepBuild isn't set up here (no hub token), so `/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node scripts/canvas-closures.mjs closures` runs unleasFAIPASS closures: 19 lists in 3 canvas schemas each carry a closure
+  - NEW FAIL scripts/canvas-closures.mjs: exited 1: deep lease: DeepBuild isn't set up here (no hub token), so `/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node scripts/canvas-closures.mjs closures` runs unleasFAIL drift: Map projections: the table lists it with registry geo.projection@1, and the closure data holds no such list
+KNOWN: change 44, merge base 44; only on the change 0, only on the merge base 0
+INCONCLUSIVE: change 2, merge base 2; only on the change 0, only on the merge base 0
+NOTE: change 8, merge base 0; only on the change 8, only on the merge base 0
+  + NOTE reports/2326/ac1.txt reaches no test
+  + NOTE reports/2326/ac2-affected-change.txt reaches no test
+  + NOTE reports/2326/ac2-affected-diff.txt reaches no test
+  + NOTE reports/2326/ac3-pixel-digests.txt reaches no test
+  + NOTE reports/2326/ac3-reach.txt reaches no test
+  + NOTE reports/2326/ac3-summary.json reaches no test
+  + NOTE reports/2326/compare-runtime.mjs reaches no test
+  + NOTE reports/2326/redraft/ac1.test.mjs.fixture reaches no test
+change: FAIL affected: 153 new, 44 already failing on main, 0 inconclusive or blocked, 0 listed skips, 45 passed, in 871 s at load 248
+merge base: FAIL affected: 145 new, 44 already failing on main, 0 inconclusive or blocked, 0 listed skips, 38 passed, in 516 s at load 259
+
+# The six environment@1 lines above come from two lints. Each lint was then run alone three times on each side:
+# node scripts/conformance-lint.mjs: six runs, 28 lines that do not pass in each, the same in all six, none naming lsof, ps or registerEnvironment
+# node scripts/slots-check.mjs: six runs, 6 lines that do not pass in each, the same in all six, none naming lsof, ps or registerEnvironment
+
+# The first pair of runs, 2026-11-13, when the redraft still sat under tests/ (change 142 new, merge base 137 new):
+NEW FAIL: change 142, merge base 137; only on the change 6, only on the merge base 1
+  + NEW FAIL tests/acceptance/2326-redraft-ac1/ac1.test.mjs › #2326.3ec6f925 Cargo.lock holds each of the eight at its first fixed version or later: not at the fixed version (a PR naming the dependent that holds one back is read by a person, see README):
+  + NEW FAIL tests/acceptance/2326/lock.test.mjs › Cargo.lock holds rsa at 0.10.0 or later, a final release, in place of 0.10.0-rc.18: rsa is locked at 0.10.0-rc.18, below the fixed release 0.10.0
+  + NEW FAIL tests/acceptance/2326/lock.test.mjs › the change against the base touches Cargo.lock and no Cargo manifest: the change edits Cargo manifests
+  + NEW FAIL slot kit environment@1: clean fill health-route: the kit's reference fill reads BLOCKED on health-route: the environment's working folders can't be read (lsof failed), so whether it started in its checkout is unknown
+  + NEW FAIL slot kit environment@1: clean fill status-route: the kit's reference fill reads BLOCKED on status-route: the environment's listening ports can't be read (lsof failed), so whether it binds its lease alone is unknown
+  + NEW FAIL scripts/canvas-closures.mjs: exited 1: deep lease: DeepBuild isn't set up here (no hub token), so `/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node scripts/canvas-closures.mjs closures` runs unleasFAIL drift: Map projections: the table lists it with registry geo.projection@1, and the closure data holds no such list
+  - NEW FAIL drift: Map projections: the table lists it with registry geo.projection@1, and the closure data holds no such list
+KNOWN: change 44, merge base 44; only on the change 0, only on the merge base 0
+INCONCLUSIVE: change 2, merge base 2; only on the change 0, only on the merge base 0
+change: FAIL affected: 142 new, 44 already failing on main, 0 inconclusive or blocked, 0 listed skips, 50 passed, in 329 s at load 110
+merge base: FAIL affected: 137 new, 44 already failing on main, 0 inconclusive or blocked, 0 listed skips, 38 passed, in 121 s at load 83

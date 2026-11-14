@@ -80,7 +80,7 @@ export class Box {
       return this.shown(drafted);
     });
   }
-  private async read(words: string, repo?: string): Promise<{ change: Change } | { unread: string }> {
+  private async read(words: string, repo?: string): Promise<{ change: Change } | { unread: string; other?: true }> {
     const said = words.trim().toLowerCase().replace(/[.!]+$/, '').replace(/\s+/g, ' ');
     if (said === 'remove deepbuild from codex') return { change: { kind: 'agent', agent: 'codex' } };
     if (/^remove deepbuild from /.test(said)) return { unread: 'The box removes DeepBuild from Codex only; deep setup --undo removes it from every agent.' };
@@ -102,7 +102,8 @@ export class Box {
       if (found.length !== 1) return { unread: found.length ? `${found.length} lessons match “${forget[1]}”; say more of one: ${found.map((l) => `“${l.text}”`).join(', ')}.` : `No lesson matches “${forget[1]}”; nothing was drafted.` };
       return { change: { kind: 'forget', lesson: found[0]!.id, text: found[0]!.text } };
     }
-    return { unread: `The box can't read “${words.trim()}” as a change. ${READS}` };
+    // Words that ask for none of these changes are the one input's (#1342): control takes them as a new project.
+    return { unread: `The box can't read “${words.trim()}” as a change. ${READS}`, other: true };
   }
 
   // ---- A proposal, and what it changes.

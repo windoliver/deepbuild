@@ -415,6 +415,30 @@ fn placement(frame: [f64; 4]) -> Placement {
 
 /// The boxes every mark of a frame covers, in u: a path's per segment, so a label can sit beside
 /// a route; and each mark's item name with its own box, for a label's target.
+/// #1966: the box of a text's line or token, `<id>#line:n` or `<id>#tok:k`, where its run draws.
+fn text_anchor(
+    frame: &Frame,
+    items: &Map<String, Value>,
+    id: &str,
+    part: &str,
+) -> Option<[f64; 4]> {
+    let (spec, origin) =
+        frame
+            .layers
+            .iter()
+            .flat_map(|l| &l.marks)
+            .find_map(|d| match &d.mark {
+                Mark::Text {
+                    item, spec, origin, ..
+                } if item == id => Some((spec, origin)),
+                _ => None,
+            })?;
+    let shaped = deep_text_gpui::shape(&crate::status::label_of(spec)?);
+    let params = items.get(id)?.get("params")?.as_object()?;
+    let b = deep_canvas_marks::lines::anchor_box(params, &shaped, part)?;
+    Some([origin[0] + b[0], origin[1] + b[1], b[2], b[3]])
+}
+
 fn mark_boxes(frame: &Frame) -> (Vec<[f64; 4]>, BTreeMap<String, [f64; 4]>) {
     let mut avoid = Vec::new();
     let mut named = BTreeMap::new();
@@ -554,7 +578,10 @@ pub(crate) fn board(
         let (owner, row) = r.target.split_once('#').unwrap_or((&r.target, ""));
         let target = match graphs.get(owner) {
             Some(g) => g.nodes.get(row).copied(),
-            None => named.get(&r.target).copied(),
+            None => named
+                .get(&r.target)
+                .copied()
+                .or_else(|| text_anchor(frame, items, owner, row)),
         }
         .ok_or_else(|| refused("ref_unresolved", &format!("items/{}/params/target", r.id)))?;
         placed.push(Label {

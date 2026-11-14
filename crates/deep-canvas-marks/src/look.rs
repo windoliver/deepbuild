@@ -974,14 +974,16 @@ pub fn resolve_in(def: &Value, bundled: &[&str], at: Distance) -> Result<Look, R
         }
     }
     let code = role_map(def, "code", &crate::code::CLASSES, [&light, &dark])?;
-    role_map(def, "diff", &DIFF_MARKS, [&light, &dark])?;
+    let diff = role_map(def, "diff", &DIFF_MARKS, [&light, &dark])?;
     let look = Look {
         light_type: Type {
             code: code.clone(),
+            diff: diff.clone(),
             ..type_of(def, &fonts, &light_fonts)?
         },
         dark_type: Type {
             code,
+            diff,
             ..type_of(def, &fonts, &dark_fonts)?
         },
         light,

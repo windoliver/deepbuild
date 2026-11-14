@@ -1,7 +1,7 @@
 {
   "core": {
     "version": "0.0.0",
-    "digest": "65b2f1ae6a15b5714fb5387312f4877ae2ca296b9102590c394efc0ae19520c2",
+    "digest": "7d368dfbbe6da0d9b310f7d1e42cf528b6b595f83fd1a401b049f58fd338401c",
     "verdict": "FAIL",
     "parts": {
       "fixtures": "PASS",
@@ -66,7 +66,7 @@
   },
   "effects": {
     "version": "1.0.0",
-    "digest": "728754098ff7e4fa72004323be2f19eb772021f76c26ca3a01930aa343f6e2af",
+    "digest": "47efff0e92f65196c99d6ba9bbe39a782aa62eb4e031e5cb60132976c8fd9a7b",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
@@ -129,12 +129,18 @@
   },
   "logic": {
     "version": "1.0.0",
-    "digest": "8905fd3b732dfa94de4bea62a96a48dc5e2bfd887765fd226b5aad6bc6978281",
+    "digest": "de541b43baa18be5ccd7dbf9f1cc77234acd412c2a80a4e6a48c40ae922c9ef8",
     "verdict": "PASS",
     "parts": {
+      "fixtures": "PASS",
       "clean_rebuild": "PASS",
       "patch_fuzz": "PASS",
-      "schedule": "PASS"
+      "read_set": "PASS",
+      "order": "PASS",
+      "schedule": "PASS",
+      "repair_loop": "PASS",
+      "time_order": "PASS",
+      "catalog": "PASS"
     }
   },
   "look": {
@@ -155,7 +161,7 @@
   },
   "loop": {
     "version": "1.0.0",
-    "digest": "517ccd9ae52d9fbdeefdf713bfcaf8567e551b8688fde54d89c9fdf3ca7b135e",
+    "digest": "9fc00a319de12e9ec0058e38ed76d6a18251e71677be2e61548b1536daf5ed84",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
@@ -205,7 +211,7 @@
   },
   "motion": {
     "version": "1.0.0",
-    "digest": "96de108e4837f517589bf1e1eff950f2693ce0d947aa7f3bcf47d083b559a74a",
+    "digest": "ea5176c236b992e3607f46c3d4b544a9172517ace31435fff4fb7e1756ed01c2",
     "verdict": "FAIL",
     "parts": {
       "fixtures": "PASS",
@@ -278,7 +284,7 @@
   },
   "scene3d": {
     "version": "1.0.0",
-    "digest": "9edd239b48ca54a24b54998ca5f2208381bdc9cac8792e7e473ffc5dd17d94d4",
+    "digest": "d5a6bb2f51c1086a157667d2e775a9aebe6308d1196cebe5e4e9e4c09a5d3306",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
@@ -311,14 +317,14 @@
   "text": {
     "version": "1.0.0",
     "digest": "adc297495eb1a9be4918d0a7e9620be4f459deb800ea168ecd3ca5a995d98350",
-    "verdict": "FAIL",
+    "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
       "clean_rebuild": "PASS",
       "patch_fuzz": "PASS",
       "read_set": "PASS",
       "order": "PASS",
-      "schedule": "FAIL",
+      "schedule": "PASS",
       "repair_loop": "PASS",
       "time_order": "PASS",
       "catalog": "PASS"

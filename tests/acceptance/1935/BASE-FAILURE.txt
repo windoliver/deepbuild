@@ -1,0 +1,55 @@
+At base 9b77cd2cd ("Merge pull request #2438 …"), on 2026-11-13, the suite was not run. The machine is shared and its one-minute load was about 200, so deep-show was not built. What each test would meet first was read from the base's code, not observed.
+
+The commands the implementing session runs, at the base and after (from <worktree>):
+
+  npm ci
+  NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 npx vitest run --root tests/acceptance/1935 --no-file-parallelism
+  npx tsc -p tests/acceptance/1935/tsconfig.json
+
+What every test meets at the base. Each builds `full`, which exists. Each first scenario parses: stored documents in `docs`, #403's `claims` (a requirement's check input is kept whole, crates/deep-show/src/main.rs, `claims`), `verdict` calls, no `planted`. `geometry.shading` is registered by the loop module, so each row is judged by `report` (crates/deep-canvas-loop/src/lib.rs). `report` reads only `weld`, `degenerate_area`, `pair`, `quad_min`, `normals` and `planted` from the check input; `uv_when`, `resolution`, `padding`, `uv_overlap_max`, `texel`, `uv_fill_min` and `min_gap_px` go unread. The glTF reader it calls, `deep_canvas_scene3d::gltf::primitives`, returns positions, normals and indices only (`Raw::Triangles`), so no UV set is read. Each item's one result holds #453's fields alone: no `uv`, `hidden_faces`, `unused_vertices`, `islands` or `smallest_island_share`. No fixture holds a defect #453's check fails on: the sheets' normals (0, 0, 1) agree with their counter-clockwise winding, the sheets are open (no signed volume), the closed meshes have positive signed volume (box in a box 9 m³, cup 2.125 m³, cube 1 m³), the stray fixture is open (the floating triangle's edges), no face is near degenerate_area of its primitive's bounds diagonal squared, and nothing has a skin. So every row is PASS with a result that lacks every reading these tests ask for.
+
+- overlap.test.ts, "#1935.ac062d91 two charts laid 30% over each other report uv_overlap 0.3 …". Both rows PASS. The test fails at its first assertion, "uv1 overlap on the pair laid 30% over and on the L pair":
+    two charts laid 30% over each other: uv.uv1.uv_overlap is null, not a number
+    two charts laid 30% over each other: geometry.shading is PASS, not FAIL on uv_overlap: {the row}
+    two charts laid 30% over each other: no error on asset names uv_overlap: []
+    two charts laid 30% over each other: uv.uv1.ids.uv_overlap is null, not a list naming ["0:0","0:2"]
+    two interlocking L charts that don't touch: uv.uv1.uv_overlap is null, not a number
+  Its planted run is never reached. If it were, `uv_overlap_from_boxes` is in no planted list main.rs reads (`deep_canvas_loop::PLANTED` holds #453's eight names), so its planted match ends `_ => return None` and the scenario is refused `{"ok": false, "code": "bad_input"}`: "deep-show run refused the scenario".
+
+- texel-fill-gap.test.ts, "#1935.4898a100 one chart at half the others' texel density fails texel …". All four rows PASS. The test fails at its one assertion, "uv1's texel density, fill and gaps":
+    one chart at half the others' texel density: geometry.shading is PASS, not FAIL on texel: {the row}
+    one chart at half the others' texel density: no error on asset names texel: []
+    one chart at half the others' texel density: uv.uv1.ids.texel is null, not a list naming ["0:4"]
+    a uv1 packed into the lower-left quarter: uv.uv1.uv_fill is null, not a number
+    a uv1 packed into the lower-left quarter: geometry.shading is PASS, not FAIL on uv_fill: {the row}
+    a uv1 packed into the lower-left quarter: no error on asset names uv_fill: []
+    two charts 2 px apart: uv.uv1.min_gap_px is null, not a number
+    two charts 2 px apart: geometry.shading is PASS, not FAIL on min_gap_px: {the row}
+    two charts 2 px apart: no error on asset names min_gap_px: []
+    two charts 2 px apart: uv.uv1.ids.min_gap_px is null, not a list naming ["0:0","0:2"]
+    two charts 6 px apart: uv.uv1.min_gap_px is null, not a number
+  (The 6 px pair's PASS holds at the base; its reading doesn't.)
+
+- hidden-islands.test.ts, "#1935.aaf15575 the box inside a box reports its 12 triangles hidden …". All four rows PASS. The test fails at its one assertion, "hidden faces, stray vertices and islands":
+    a closed box with a second closed box fully inside it: hidden_faces is null, not a number
+    a closed box with a second closed box fully inside it: ids.hidden_faces is null, not a list naming ["0:12", …, "0:23"]
+    a cup open to the sky: hidden_faces is null, not a number
+    a cup open to the sky: ids.hidden_faces is null, not a list naming []
+    a cube with 10 stray vertices and a 1 mm² floating triangle: unused_vertices is null, not a number
+    a cube with 10 stray vertices and a 1 mm² floating triangle: islands is null, not a number
+    a cube with 10 stray vertices and a 1 mm² floating triangle: smallest_island_share is null, not a number
+    its clean twin: unused_vertices is null, not a number
+    its clean twin: islands is null, not a number
+
+Every failure above is at a named assertion of the test, on a reading the base doesn't make; none is a build, parse or fixture error.
+
+Run: `node node_modules/typescript/bin/tsc -p tests/acceptance/1935/tsconfig.json` passes, with node_modules linked from a checkout of the repo's pins. `spans` from scripts/proof-change.mjs reads all three tests' names with their IDs.
+
+A scratch script outside the repo (not kept) ran the generators and checked the fixtures' own numbers from the f32 values the files hold, rasterizing at 1,024 px with pixel centres:
+- overlapPair: uv1 charts 0:0 and 0:2, overlap share 0.3, bounding-box share 0.3; uv0 overlap 0, 124 px apart.
+- lPair: uv1 charts 0:0 and 0:6, overlap 0, smallest gap 32 px, bounding-box share 0.287, fill 0.6875; uv0 overlap 0.
+- texelQuad: uv1 densities 520, 520, 260, 520 px/m (chart 0:4 at 260); uv0 all 520; no flipped UV triangle.
+- lowerLeftQuarter: uv1 fill 0.25, dilated by 4 px 0.2539; uv0 fill 0.7656.
+- gapPair: uv1 smallest gap 2 px and 6 px, fill 0.752; uv0 80 px.
+- boxInBox and cup: every directed edge once, with its reverse; signed volumes 9 and 2.125 m³. With centroids as sample points and a 32-direction spiral table, the box in a box hides exactly triangles 12–23 and the cup none; five random tables do the same.
+- strayCube: 10 unused vertices, 2 islands, smallest share 1.66655e-7 (expected 1.66667e-7); the twin 0 and 1.

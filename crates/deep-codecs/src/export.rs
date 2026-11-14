@@ -197,6 +197,11 @@ impl Part {
                     full_range: Some(true),
                     ..mov::BT709
                 },
+                // #169: a page's clip carries its pixels' own transfer, sRGB (IEC 61966-2-1).
+                false if job.s("transfer") == Some("srgb") => mp4::Colr {
+                    transfer: 13,
+                    ..mov::BT709
+                },
                 false => mov::BT709,
             },
         };

@@ -509,8 +509,8 @@ class AsksCore implements Asks {
       const input = isObj(filled) && isObj(filled.subject) && SUBJECT_KINDS.has(String(filled.kind)) ? { ...filled, key: subjectKey(filled, this.threadOf(connection.session)) } : filled;
       const subjected = isObj(input) && 'subject' in input;
       // An unblock task is held to @3: at least one step and one thing it unblocks, and its price when you pay one.
-      // An ask that names its subject is held to @4.
-      const v = subjected ? 4 : isObj(input) && input.kind === 'unblock' ? 3 : isObj(input) && 'dropped' in input ? 2 : 1;
+      // An ask that names its subject is held to @4; a core-owned done-gate action is recorded with it at @5.
+      const v = isObj(input) && 'action' in input ? 5 : subjected ? 4 : isObj(input) && input.kind === 'unblock' ? 3 : isObj(input) && 'dropped' in input ? 2 : 1;
       const event = { v, id, kind: 'ask.created', writer: connection.writer, actor: connection.actor, scope: connection.scope, ts: now, data: input as JsonValue };
       const checked = validate(`ask.created@${v}`, event);
       if (!checked.ok) {
@@ -595,7 +595,7 @@ class AsksCore implements Asks {
       // A channel's answer with an account link you made (#65) answers that ask alone: never with authority, never a decision.
       const via = TRUSTED[connection.writer] ?? (connection.writer === 'channel' ? 'channel' as const : undefined);
       if (via === undefined) throw new AskRefused(`an answer counts only on the trusted path, not from ${connection.writer}`, { field: 'writer' });
-      const v = via === 'channel' ? 5 : 4;
+      const v = 6;
       if (!isObj(input)) throw new AskRefused('an answer is an object', { field: 'input' });
       // The decision comes from the option you chose, never from the request.
       if ('decision' in input) throw new AskRefused('an answer carries no decision: it comes from the option you chose', { field: 'decision' });
@@ -672,7 +672,7 @@ class AsksCore implements Asks {
       for (const { a, option: o } of together) {
         await this.options.record.append(asCore(connection), {
           v, id: ulid(now), kind: 'ask.answered', subject: a.handle, ts: now,
-          data: { answer: o.id, plan_hash: null, decision: o.decision, via, verified: true, on: a.data.pinned_to!, token: null, words: null, image: null },
+          data: { answer: o.id, option: o.id, plan_hash: null, decision: o.decision, via, verified: true, on: a.data.pinned_to!, token: null, words: null, image: null },
         });
         await this.sync();
         this.hand(a, o.id, null, false, o.decision);
@@ -683,7 +683,7 @@ class AsksCore implements Asks {
       await this.options.record.append(asCore(connection), {
         v, id: ulid(now), kind: 'ask.answered', subject: ask.handle, ts: now,
         data: {
-          answer: option ?? (words as string | undefined) ?? (image as string), plan_hash: decision === 'allow' ? ask.plan?.hash ?? null : null, decision,
+          answer: option ?? (words as string | undefined) ?? (image as string), option: chosen?.id ?? null, plan_hash: decision === 'allow' ? ask.plan?.hash ?? null : null, decision,
           via, verified: true, on: ask.data.pinned_to!, token: token ?? null, words: (words as string | undefined) ?? null, image: (image as string | undefined) ?? null,
         },
       });
@@ -692,7 +692,7 @@ class AsksCore implements Asks {
       for (const rider of riders) {
         await this.options.record.append(asCore({ ...connection, ...rider.who }), {
           v, id: ulid(now), kind: 'ask.answered', subject: rider.handle, ts: now,
-          data: { answer: chosen!.id, plan_hash: null, decision, via, verified: true, on: rider.data.pinned_to!, token: null, words: null, image: null },
+          data: { answer: chosen!.id, option: chosen!.id, plan_hash: null, decision, via, verified: true, on: rider.data.pinned_to!, token: null, words: null, image: null },
         });
         await this.sync();
         this.hand(rider, chosen!.id, null, false, decision);
@@ -701,7 +701,7 @@ class AsksCore implements Asks {
       for (const { member, allow } of others) {
         await this.options.record.append(asCore({ ...connection, ...member.who }), {
           v, id: ulid(now), kind: 'ask.answered', subject: member.handle, ts: now,
-          data: { answer: allow.id, plan_hash: member.plan?.hash ?? null, decision: allow.decision, via, verified: true, on: member.data.pinned_to!, token: token ?? null, words: null, image: null },
+          data: { answer: allow.id, option: allow.id, plan_hash: member.plan?.hash ?? null, decision: allow.decision, via, verified: true, on: member.data.pinned_to!, token: token ?? null, words: null, image: null },
         });
         await this.sync();
         this.hand(member, allow.id, null, false, allow.decision);

@@ -45,6 +45,8 @@ pub struct PanelScope {
     pub(crate) picks: crate::picks::Viewer,
     /// #540: its point controls' press, hover and the planted replays' pointers.
     pub(crate) points: crate::points::Viewer,
+    /// #548: the world its logic previews run on.
+    pub(crate) preview: Option<crate::preview::Previewer>,
 }
 
 pub fn point(v: &Value) -> Option<[f64; 2]> {
@@ -205,6 +207,7 @@ impl Hub<'_> {
                     pressed: 0,
                     picks: Default::default(),
                     points: Default::default(),
+                    preview: None,
                 },
             );
             let first = self.seen(panel).ok_or_else(|| refused("not_presented"))?;
@@ -484,18 +487,25 @@ impl Hub<'_> {
         else {
             return refused("not_presented");
         };
+        let live = s.scope.time().is_none();
         // #504: the revision played, so a view-class pick shows; never saved.
-        let mut played = match self.panel_doc(panel) {
+        let id = self.panel_doc(panel);
+        let mut played = match &id {
             // #539: the current revision as its session draws it, its logic baked, unless the
             // view is scrubbed back to an older one.
-            Some(id) if s.scope.time().is_none() && self.forms.contains_key(&id) => {
-                self.shown_at(&id, &self.forms[&id], 0)
-            }
-            Some(id) => self.shown_at(&id, &doc, 0),
+            Some(id) if live && self.forms.contains_key(id) => self.shown_at(id, &self.forms[id], 0),
+            Some(id) => self.shown_at(id, &doc, 0),
             None => doc,
         };
         // #539: the live view draws the viewer state of its pick controls, hover and focus.
         self.viewer_into(panel, &mut played);
+        // #548: and its logic items' previews of that state.
+        if let Some(id) = id.filter(|_| live) {
+            self.preview_into(&id, panel, 0, &mut played);
+        }
+        let Some(s) = self.scopes.get(panel) else {
+            return refused("not_presented");
+        };
         let shown = crate::shared::drawable(&s.scope.view_document(&played, before.as_ref()));
         match self.snapshot(&shown, 0, None) {
             Ok(snap) => json!({"snapshot": snap}),
