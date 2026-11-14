@@ -878,6 +878,8 @@ mod tests {
         for id in ["a1", "a2", "a3"] {
             view.apply(json!({"kind": "ask.created", "id": id, "session": "s1", "data": {"kind": "choice"}}));
         }
+        // The core's batch shows them (#22): until it does an ask is queued.
+        view.apply(json!({"kind": "ask.batched", "writer": "core", "data": {"asks": [{"ask": "ask:a1"}, {"ask": "ask:a2"}, {"ask": "ask:a3"}]}}));
         view.apply(
             json!({"kind": "decision.applied", "writer": "core", "subject": "ask:a3",
                           "data": {"decision": "d1", "ask": "ask:a1"}}),
@@ -911,6 +913,8 @@ mod tests {
         for id in ["a1", "a2"] {
             view.apply(json!({"kind": "ask.created", "id": id, "session": "s1", "data": {"kind": "choice"}}));
         }
+        // The core's batch shows them (#22): until it does an ask is queued.
+        view.apply(json!({"kind": "ask.batched", "writer": "core", "data": {"asks": [{"ask": "ask:a1"}, {"ask": "ask:a2"}]}}));
         let later = |id: &str, writer: &str| json!({"kind": "ask.later", "writer": writer, "subject": format!("ask:{id}"), "data": {"until": 9}});
         view.apply(later("a1", "cli"));
         view.apply(later("a2", "core"));
