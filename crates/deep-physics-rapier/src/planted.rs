@@ -44,7 +44,9 @@ impl Rapier {
             Restore::NoBreakCount => {
                 for (_, h, _) in &self.breakable {
                     if let Some(j) = self.world.impulse_joints.get_mut(*h, false) {
-                        j.data.user_data = 0;
+                        // #523: the steps past breaks_at only; the joint's turns stay.
+                        j.data.user_data =
+                            crate::joints::packed(0, crate::joints::turns(j.data.user_data));
                     }
                 }
             }

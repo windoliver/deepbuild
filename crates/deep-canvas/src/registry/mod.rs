@@ -165,6 +165,8 @@ const BARE_MODULE_KINDS: &[(&str, &str)] = &[
     ("marks", "data"),
     ("axis", "data"),
     ("scale", "data"),
+    // #226: 3D axes are the data module's too, beside its scales and axes.
+    ("axes3d", "data"),
     ("puff", "scene3d"),
     ("cutaway", "scene3d"),
     ("instance", "scene3d"),
@@ -709,6 +711,8 @@ pub struct Registrar {
     pub entries: Vec<lists::EntryDef>,
     /// Its Rust for the entries it fills in the core's `outline.source@1`, by entry name (#443).
     pub outline_fills: Vec<(String, crate::outline::Fill)>,
+    /// Its Rust for the deforms and kinds scene3d runs and draws for it (#226).
+    pub fills: Vec<(String, crate::contributed::Fill)>,
     /// The pack fields it reads, each with its check at the pack check (#1720).
     pub pack_fields: Vec<(String, crate::document::packs::module_fields::PackField)>,
     /// The preview kinds it removed (#1802).
@@ -1320,6 +1324,8 @@ pub struct Sealed {
     /// Each entry of `outline.source@1` the build's modules fill, with the module and its Rust
     /// (#443), sorted by module then entry.
     pub outlines: Vec<SealedOutline>,
+    /// Each deform and kind a module fills for scene3d (#226), sorted by module then kind.
+    pub fills: Vec<crate::contributed::Sealed>,
 }
 
 /// One outline source the seal admitted: its entry, module, form and Rust (#443).
@@ -2990,6 +2996,7 @@ impl Registry {
             })
             .collect();
         outlines.sort_by(|a, b| (&a.module, &a.entry).cmp(&(&b.module, &b.entry)));
+        let fills = crate::contributed::sealed(&shapes[1..]);
         // Digests: each module's own; the core's shapes are no module's. Each module's shapes
         // hash to its interface's digest: its reference's, registered beside it when the module
         // isn't that reference (Canvas module: interface and implementation).
@@ -3062,6 +3069,7 @@ impl Registry {
                 .filter(|f| matches!(f, Fault::NoCloseNames | Fault::CloseBySpelling)),
             camera_in_scene3d: self.fault == Some(Fault::CameraInScene3d),
             outlines,
+            fills,
             costs: self
                 .costs
                 .take()
