@@ -1,0 +1,54 @@
+# 2326 criterion 1, on the change c6bfc4eb3 (merge base f6d811c79), 2026-11-13
+
+## node --test tests/acceptance/2326/lock.test.mjs (first draft): exit 1
+✔ Cargo.lock holds rustls-webpki at 0.103.16 or later, a final release, in place of 0.103.15
+✔ Cargo.lock holds tokio at 1.54.1 or later, a final release, in place of 1.54.0
+✔ Cargo.lock holds zstd at 0.13.4 or later, a final release, in place of 0.13.3
+✔ Cargo.lock holds zstd-safe at 7.4.0 or later, a final release, in place of 7.3.0
+✔ Cargo.lock holds crypto-bigint at 0.7.6 or later, a final release, in place of 0.7.5
+✔ Cargo.lock holds ctutils at 0.4.4 or later, a final release, in place of 0.4.3
+✔ Cargo.lock holds rustix at 1.1.6 or later, a final release, in place of 1.1.5
+✖ Cargo.lock holds rsa at 0.10.0 or later, a final release, in place of 0.10.0-rc.18
+✖ the change against the base touches Cargo.lock and no Cargo manifest
+ℹ tests 9
+ℹ pass 7
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+✖ failing tests:
+
+## node --test tests/acceptance/2326-redraft-ac1/ac1.test.mjs (blind redraft): exit 1
+✖ #2326.3ec6f925 Cargo.lock holds each of the eight at its first fixed version or later
+✔ #2326.3ec6f925 the change touches Cargo.lock and no manifest
+✔ #2326.3ec6f925 wrong program: the base's lock is behind on all eight, naming each one's dependents
+✔ #2326.3ec6f925 boundaries: exactly the fixed versions pass, and one step below on any one fails
+✔ #2326.3ec6f925 wrong programs: a crate dropped, an old copy left beside the new one, or a fixed version as a prerelease
+✔ #2326.3ec6f925 wrong programs: a change that edits a manifest, at any depth
+ℹ tests 6
+ℹ pass 5
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+✖ failing tests:
+  AssertionError [ERR_ASSERTION]: not at the fixed version (a PR naming the dependent that holds one back is read by a person, see README):
+  rsa: locked 0.10.0-rc.18, needs 0.10.0 or later; lock dependents: llrt_crypto 0.9.0-beta
+
+## cargo update -p rsa@0.10.0-rc.18 --precise 0.10.0 --offline --dry-run: exit 101
+error: failed to select a version for `rsa`.
+    ... required by package `llrt_crypto v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)`
+    ... which satisfies git dependency `llrt_crypto` (locked to 0.9.0-beta) of package `quickjs-jit-stdlib v0.12.7 (https://github.com/longbridge/quickjs-jit?rev=605da483611a3548edb8c33fdff602e3f5f42076#605da483)`
+    ... which satisfies git dependency `quickjs-jit-stdlib` (locked to 0.12.7) of package `gpui-shell v0.8.0 (https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1#1676826d)`
+    ... which satisfies git dependency `gpui-shell` (locked to 0.8.0) of package `deep-gpu-layer v0.0.0 (~/doneright-2326/crates/deep-gpu-layer)`
+versions that meet the requirements `^0.10.0-rc.18` are: 0.10.0
+
+package `llrt_crypto` depends on `rsa` with feature `sha2` but `rsa` does not have that feature.
+note: a required dependency with that name exists, but only optional dependencies can be used as features.
+
+
+failed to select a version for `rsa` which could resolve this conflict
+
+## Cargo.lock packages, merge base against the change
+base 1304 packages, change 1304 packages
+left:    crypto-bigint 0.7.5, ctutils 0.4.3, rustix 1.1.5, rustls-webpki 0.103.15, tokio 1.54.0, zstd 0.13.3, zstd-safe 7.3.0
+arrived: crypto-bigint 0.7.11, ctutils 0.4.8, rustix 1.1.6, rustls-webpki 0.103.16, tokio 1.54.1, zstd 0.13.4, zstd-safe 7.4.0
+MOVED 7, none added or removed

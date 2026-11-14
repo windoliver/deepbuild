@@ -1,0 +1,18 @@
+# 2326 criterion 3: each pixel fixture of the canvas manifest on both backends, merge base f6d811c79 against the change c6bfc4eb3
+# fixture | backend | digest on the merge base | digest on the change | digests | the golden call itself, both sides
+parity/kernel/board.board | vello_cpu | db6b55617cfae86956b47d8bb9cdaa2114689ffc59b3233c3826098a40ebb28c | db6b55617cfae86956b47d8bb9cdaa2114689ffc59b3233c3826098a40ebb28c | equal | BLOCKED no_golden / BLOCKED no_golden
+parity/kernel/board.board | gpu | 57ef59f6aff3d263cf7f22d6d054d8f039fe5a12177bafbc9ba92c1d187b3566 | 57ef59f6aff3d263cf7f22d6d054d8f039fe5a12177bafbc9ba92c1d187b3566 | equal | BLOCKED no_golden / BLOCKED no_golden
+parity/data/points.board | vello_cpu | 87b13f5ba6c93ec06b19a70cb3afcf08710f9772e36e2a73b4cf6cd4ff76ea7d | 87b13f5ba6c93ec06b19a70cb3afcf08710f9772e36e2a73b4cf6cd4ff76ea7d | equal | BLOCKED no_golden / BLOCKED no_golden
+parity/data/points.board | gpu | fcce15be019dc3c80a2bfa5c6d3af1a4b68573b3f707c186f1937cc2d446e130 | fcce15be019dc3c80a2bfa5c6d3af1a4b68573b3f707c186f1937cc2d446e130 | equal | BLOCKED no_golden / BLOCKED no_golden
+parity/data/race.board | vello_cpu | 1e27af712405a4cb4d69455706c49ab650d4dae558381b54739de1429ee10aff | 1e27af712405a4cb4d69455706c49ab650d4dae558381b54739de1429ee10aff | equal | BLOCKED no_golden / BLOCKED no_golden
+parity/data/race.board | gpu | afecd6eeabeeaa7ea6a5735d9454e80c3396e415819ac38a3a1af7ea14b60cab | afecd6eeabeeaa7ea6a5735d9454e80c3396e415819ac38a3a1af7ea14b60cab | equal | BLOCKED no_golden / BLOCKED no_golden
+parity/look/roles.board | vello_cpu | e0c9a9b688c4cc76734cab317baaf402f978e08d3939aa690f5afd9a08cc13d3 | e0c9a9b688c4cc76734cab317baaf402f978e08d3939aa690f5afd9a08cc13d3 | equal | BLOCKED no_golden / BLOCKED no_golden
+parity/look/roles.board | gpu | e0c9a9b688c4cc76734cab317baaf402f978e08d3939aa690f5afd9a08cc13d3 | e0c9a9b688c4cc76734cab317baaf402f978e08d3939aa690f5afd9a08cc13d3 | equal | BLOCKED no_golden / BLOCKED no_golden
+parity/marks2d/board.board | vello_cpu | 5b8ae4499094ce7bb4c6281ce1449a4ba0ac49ec4bff43f5f5a27a22f5a0ddf4 | 5b8ae4499094ce7bb4c6281ce1449a4ba0ac49ec4bff43f5f5a27a22f5a0ddf4 | equal | BLOCKED no_golden / BLOCKED no_golden
+parity/marks2d/board.board | gpu | 5cf317512760a9a07ad0550a0cc740af3d6df82df24bfe5d0f3b50fd75f4ea9b | 5cf317512760a9a07ad0550a0cc740af3d6df82df24bfe5d0f3b50fd75f4ea9b | equal | BLOCKED no_golden / BLOCKED no_golden
+parity/motion/slide.board | vello_cpu | 2bba26202b10a59d89f2e036fe6206660dcaf87e214a37b215318a2f3b202998 | 2bba26202b10a59d89f2e036fe6206660dcaf87e214a37b215318a2f3b202998 | equal | BLOCKED no_golden / BLOCKED no_golden
+parity/motion/slide.board | gpu | abcb5db56485469525798072f809e5a24a83c4092c445f69911db602df0ffe38 | abcb5db56485469525798072f809e5a24a83c4092c445f69911db602df0ffe38 | equal | BLOCKED no_golden / BLOCKED no_golden
+parity/text/counter.board | vello_cpu | 8a5b4e0f8d5d034250ad4e8cd7d67e7497b848acd99206b22dea152eaf1884cc | 8a5b4e0f8d5d034250ad4e8cd7d67e7497b848acd99206b22dea152eaf1884cc | equal | BLOCKED no_golden / BLOCKED no_golden
+parity/text/counter.board | gpu | 160c8459cb802307ff83bc5a0d349f800d7737301a0231aa8db5d9724f8c205c | 160c8459cb802307ff83bc5a0d349f800d7737301a0231aa8db5d9724f8c205c | equal | BLOCKED no_golden / BLOCKED no_golden
+parity/text/status.board | vello_cpu | 48abaa42d93ca21e119e0caa03e020e4d8304fb6add4454daf1cb582c38b901c | 48abaa42d93ca21e119e0caa03e020e4d8304fb6add4454daf1cb582c38b901c | equal | BLOCKED no_golden / BLOCKED no_golden
+parity/text/status.board | gpu | ec2992a9693a92d7c86b6b52544595075b1f88f74ed13b819e130f74a273f9dd | ec2992a9693a92d7c86b6b52544595075b1f88f74ed13b819e130f74a273f9dd | equal | BLOCKED no_golden / BLOCKED no_golden

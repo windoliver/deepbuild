@@ -1,0 +1,200 @@
+# node scripts/affected.mjs on the change (HEAD 73aafeeee, the tree of c6bfc4eb3 with the redraft), 2026-11-13: exit 1
+parallel vitest: tests/acceptance/317/floor.test.ts
+parallel node: tests/acceptance/2326-redraft-ac1/ac1.test.mjs tests/acceptance/2326/lock.test.mjs tests/acceptance/246/perf.test.mjs tests/acceptance/246/redraft/deps.test.mjs tests/acceptance/246/repo-rules.test.mjs tests/acceptance/246/secrets-property.test.mjs tests/acceptance/879/cards.test.mjs tests/acceptance/879/checkout.test.mjs tests/acceptance/879/lane.test.mjs
+alone vitest: tests/acceptance/2324/ac5-pins.test.ts
+timed node: tests/acceptance/246/lanes.test.mjs (--timed runs them)
+NOTE reports/2326/ac1.txt reaches no test
+NOTE reports/2326/ac2-light.txt reaches no test
+NOTE reports/2326/ac3-pixel-digests.txt reaches no test
+NOTE reports/2326/ac3-summary.json reaches no test
+NOTE reports/2326/compare-runtime.mjs reaches no test
+KNOWN canvas-lint: crates/deep-canvas-cells/src/recording.rs the env! macro, the building machine's environment compiled into the check
+KNOWN canvas-lint: crates/deep-canvas-cells/src/recording.rs the fs module, ambient input a check never reads
+KNOWN canvas-lint: crates/deep-canvas-cells/src/recording.rs the fs module, ambient input a check never reads
+KNOWN canvas-lint: crates/deep-canvas-cells/src/recording.rs the fs module, ambient input a check never reads
+KNOWN canvas-lint: crates/deep-canvas-effects/src/chrome_fx.rs include_str! of a file the lint can't read: outside the crate, or not a literal path
+KNOWN canvas-lint: crates/deep-canvas-effects/src/fx.rs include_str! of a file the lint can't read: outside the crate, or not a literal path
+KNOWN canvas-lint: crates/deep-canvas-effects/src/graph.rs a static item, state a check could carry between runs
+KNOWN canvas-lint: crates/deep-canvas-marks/src/check.rs a static item, state a check could carry between runs
+KNOWN canvas-lint: crates/deep-canvas-marks/src/check.rs a static item, state a check could carry between runs
+KNOWN canvas-lint: crates/deep-canvas-marks/src/scene.rs a static item, state a check could carry between runs
+KNOWN canvas-lint: crates/deep-canvas-marks/src/scene.rs a static item, state a check could carry between runs
+KNOWN canvas-lint: crates/deep-canvas-marks/src/scene.rs a static item, state a check could carry between runs
+KNOWN canvas-lint: crates/deep-canvas-marks/src/story.rs a static item, state a check could carry between runs
+KNOWN canvas-lint: crates/deep-canvas-marks/src/story.rs a static item, state a check could carry between runs
+KNOWN canvas-lint: crates/deep-canvas-media/src/lib.rs a static item, state a check could carry between runs
+KNOWN canvas-lint: crates/deep-canvas-sandbox/src/check.rs a macro definition, whose expansion the scan never reads
+KNOWN canvas-lint: crates/deep-canvas-scene3d/src/geom.rs a static item, state a check could carry between runs
+KNOWN canvas-lint: crates/deep-canvas-scene3d/src/lod.rs a static item, state a check could carry between runs
+KNOWN canvas-lint: crates/deep-canvas-scene3d/src/look.rs include_str! of a file the lint can't read: outside the crate, or not a literal path
+KNOWN canvas-lint: crates/deep-canvas-scene3d/src/look.rs include_str! of a file the lint can't read: outside the crate, or not a literal path
+KNOWN canvas-lint: crates/deep-canvas-scene3d/src/look.rs include_str! of a file the lint can't read: outside the crate, or not a literal path
+KNOWN canvas-lint: crates/deep-canvas-scene3d/src/look.rs include_str! of a file the lint can't read: outside the crate, or not a literal path
+KNOWN canvas-lint: crates/deep-canvas-scene3d/src/sets.rs a static item, state a check could carry between runs
+KNOWN canvas-lint: crates/deep-canvas-scene3d/src/shore.rs a static item, state a check could carry between runs
+KNOWN canvas-lint: crates/deep-canvas-scene3d/src/terrain.rs a static item, state a check could carry between runs
+KNOWN canvas-lint: crates/deep-canvas/src/craft.rs a static item, state a check could carry between runs
+KNOWN canvas-lint: crates/deep-canvas/src/document/check.rs the thread module, ambient input a check never reads
+KNOWN canvas-lint: crates/deep-canvas/src/document/check.rs the thread module, ambient input a check never reads
+KNOWN canvas-lint: crates/deep-canvas/src/schedule/tests.rs the thread module, ambient input a check never reads
+KNOWN canvas-lint: crates/deep-text/src/cache.rs the pointer width (size_of), 32 on wasm32 and 64 on the reference Macs
+KNOWN canvas-lint: crates/deep-text/src/cache.rs the pointer width (size_of), 32 on wasm32 and 64 on the reference Macs
+KNOWN canvas-lint: crates/deep-text/src/cache.rs the pointer width (size_of), 32 on wasm32 and 64 on the reference Macs
+KNOWN canvas-lint: crates/deep-text/src/cache.rs the pointer width (size_of), 32 on wasm32 and 64 on the reference Macs
+KNOWN canvas-lint: crates/deep-text/src/cache.rs use of a disallowed type `std::collections::HashMap` (clippy::disallowed_types)
+KNOWN canvas-lint: crates/deep-text/src/cache.rs a static item, state a check could carry between runs
+KNOWN canvas-lint: crates/deep-text/src/cache.rs a static item, state a check could carry between runs
+KNOWN canvas-lint: crates/deep-text/src/cache.rs a static item, state a check could carry between runs
+KNOWN canvas-lint: crates/deep-text/src/cache.rs use of a disallowed method `std::collections::HashMap::iter` (clippy::disallowed_methods)
+KNOWN canvas-lint: crates/deep-text/src/cache.rs a static item, state a check could carry between runs
+KNOWN canvas-lint: crates/deep-text/src/cache.rs use of a disallowed type `std::collections::HashMap` (clippy::disallowed_types)
+KNOWN canvas-lint: crates/deep-text/src/fonts.rs a raw pointer (ptr::), an address that differs per process and target
+KNOWN canvas-lint: crates/deep-text/src/fonts.rs a static item, state a check could carry between runs
+KNOWN canvas-lint: crates/deep-text/src/lib.rs a build predicate (feature), code that computes differently per build
+KNOWN canvas-lint: embedded-io is resolved at 0.4.0 for postcard and 0.6.1 for postcard, but the listing audits one version
+NEW FAIL tests/acceptance/2326-redraft-ac1/ac1.test.mjs › #2326.3ec6f925 Cargo.lock holds each of the eight at its first fixed version or later: not at the fixed version (a PR naming the dependent that holds one back is read by a person, see README):
+NEW FAIL tests/acceptance/2326/lock.test.mjs › Cargo.lock holds rsa at 0.10.0 or later, a final release, in place of 0.10.0-rc.18: rsa is locked at 0.10.0-rc.18, below the fixed release 0.10.0
+NEW FAIL tests/acceptance/2326/lock.test.mjs › the change against the base touches Cargo.lock and no Cargo manifest: the change edits Cargo manifests
+NEW FAIL tests/acceptance/246/redraft/deps.test.mjs › a new packages/x/package.json with a dependencies entry fails, and one with none passes: exit 1
+NEW FAIL tests/acceptance/246/redraft/deps.test.mjs › a Rust dependency fails in each section that declares it, and passes once listed with spec ^1: exit 1
+NEW FAIL tests/acceptance/246/redraft/deps.test.mjs › a path dependency is listed relative to its manifest, and no absolute path is printed or listed: the output holds the absolute path <tmp>
+NEW FAIL tests/acceptance/246/repo-rules.test.mjs › on this checkout, every check passes on one line saying what it read, and git status is unchanged: exit 1
+NEW FAIL tests/acceptance/246/repo-rules.test.mjs › a .claude/settings.json with permissions and "disableAllHooks": false passes, and node_modules/ and target/ are not read: exit 1
+NEW FAIL tests/acceptance/246/repo-rules.test.mjs › the clean twins pass: excluded paths, near misses, lockfiles, binary files and ignored files: exit 1
+NEW FAIL tests/acceptance/246/repo-rules.test.mjs › an allowedFindings entry skips exactly its value in its file and is counted: exit 1
+NEW FAIL tests/acceptance/246/repo-rules.test.mjs › with #12's three devDependencies listed, an unlisted, re-specified or undeclared one fails: exit 1
+NEW FAIL tests/acceptance/246/repo-rules.test.mjs › a 450-line handwritten file beside a 1,000-line lockfile change is over the guideline, and the run still exits 0: exit 1
+NEW FAIL tests/acceptance/246/repo-rules.test.mjs › committed, uncommitted and new untracked lines all count, under the guideline: exit 1
+NEW FAIL tests/acceptance/246/repo-rules.test.mjs › without origin/main, size is not measured and the run still exits 0: exit 1
+NEW FAIL tests/acceptance/246/repo-rules.test.mjs › no dependency is added: manifests keep #12's sections and repo-rules.mjs imports only node: modules: crates/deep-app/Cargo.toml
+NEW FAIL tests/acceptance/246/secrets-property.test.mjs › property (seed 582): the same 1000 texts without the planted values report nothing: exit 1
+NEW FAIL tests/acceptance/879/cards.test.mjs › AC2: a card without its deviations heading fails, naming the heading, and the same card with it passes (an exists-only check cannot do both): the same card with ## Deviations (and None. under it) should pass every check
+NEW FAIL tests/acceptance/879/cards.test.mjs › AC3: a deviation naming src/legacy-order.ts, which the package doesn't have, fails naming the package and the deviation's line; once the file exists it passes: the same deviation once src/legacy-order.ts exists should pass every check
+NEW FAIL tests/acceptance/879/cards.test.mjs › AC3: a crate's deviation naming a file the crate doesn't have fails naming the crate and the line; once the file exists it passes: the same deviation once src/legacy_order.rs exists should pass every check
+NEW FAIL tests/acceptance/879/cards.test.mjs › scope: a card's import section is never checked against what the package declares; the deps rule alone reads that: cards whose import sections differ from the packages' declared dependencies should pass every check
+NEW FAIL tests/acceptance/879/checkout.test.mjs › AC1: the lint rules pass the card check on this checkout, add no failure the base lacks, and leave git status unchanged: failures the base doesn't print
+NEW FAIL tests/acceptance/879/lane.test.mjs › AC2: a planted package without a card makes the lint lane FAIL, its summary naming the card check and the package: the lint summary is "FAIL lint: Error: Cannot find module '<tmp>'", not a cards line naming packages/tally
+NEW FAIL deps: crates/deep-canvas-export/Cargo.toml dependencies deep-canvas * path=../deep-canvas is not in scripts/repo-rules.json
+NEW FAIL deps: crates/deep-canvas-export/Cargo.toml dependencies deep-canvas-marks * path=../deep-canvas-marks is not in scripts/repo-rules.json
+NEW FAIL deps: crates/deep-canvas-export/Cargo.toml dependencies deep-canvas-motion * path=../deep-canvas-motion is not in scripts/repo-rules.json
+NEW FAIL deps: crates/deep-canvas-export/Cargo.toml dependencies deep-text * path=../deep-text is not in scripts/repo-rules.json
+NEW FAIL deps: crates/deep-canvas-export/Cargo.toml dependencies serde_json ^1 is not in scripts/repo-rules.json
+NEW FAIL deps: crates/deep-lottie-reader/Cargo.toml dependencies thorvg =0.6.0 is not in scripts/repo-rules.json
+NEW FAIL deps: crates/deep-show/Cargo.toml dependencies deep-canvas-export * path=../deep-canvas-export is not in scripts/repo-rules.json
+NEW FAIL deps: crates/deep-show/Cargo.toml dependencies deep-lottie-reader * path=../deep-lottie-reader is not in scripts/repo-rules.json
+NEW FAIL deps: crates/deep-lottie/Cargo.toml dependencies deep-canvas * path=../deep-canvas is not in scripts/repo-rules.json
+NEW FAIL deps: crates/deep-lottie/Cargo.toml dependencies deep-canvas-marks * path=../deep-canvas-marks is not in scripts/repo-rules.json
+NEW FAIL deps: crates/deep-lottie/Cargo.toml dependencies deep-canvas-motion * path=../deep-canvas-motion is not in scripts/repo-rules.json
+NEW FAIL deps: crates/deep-lottie/Cargo.toml dependencies deep-text * path=../deep-text is not in scripts/repo-rules.json
+NEW FAIL deps: crates/deep-lottie/Cargo.toml dependencies serde_json ^1 is not in scripts/repo-rules.json
+NEW FAIL vendor/gpui-pre/src/arena.rs: no row in the carried-patch table
+NEW FAIL vendor/gpui-pre-apple/src/metal_renderer/ycbcr_surface.rs: no row in the carried-patch table
+NEW FAIL vendor/gpui-pre-apple/src/metal_renderer.rs: a carried hunk with no mark
+NEW FAIL vendor/gpui-pre-apple/src/metal_renderer.rs: a carried hunk with no mark
+NEW FAIL vendor/gpui-pre-apple/src/metal_renderer.rs: a carried hunk with no mark
+NEW FAIL vendor/gpui-pre-apple/src/metal_renderer.rs: 79 added, over the budget of 40 a file
+NEW FAIL vendor/gpui-pre-apple/src/metal_renderer.rs: 79 added, over the budget of 40 a file
+NEW FAIL vendor/gpui-pre-apple/src/metal_renderer.rs: 79 added, over the budget of 40 a file
+NEW FAIL vendor/gpui-pre-apple/src/metal_renderer.rs: 79 added, over the budget of 40 a file
+NEW FAIL vendor/gpui-pre-apple/src/metal_renderer.rs: hunk of 14 lines, over the budget of 8
+NEW FAIL vendor/gpui-pre-apple/src/metal_renderer.rs: hunk of 16 lines, over the budget of 8
+NEW FAIL vendor/gpui-pre-apple/src/metal_renderer.rs: hunk of 17 lines, over the budget of 8
+NEW FAIL vendor/gpui-pre-apple/src/metal_renderer.rs: 79 added, over the budget of 40 a file
+NEW FAIL vendor/gpui-pre-apple/src/metal_renderer.rs: hunk of 14 lines, over the budget of 8
+NEW FAIL vendor/gpui-pre-apple/src/metal_renderer.rs: hunk of 16 lines, over the budget of 8
+NEW FAIL vendor/gpui-pre-apple/src/metal_renderer.rs: hunk of 17 lines, over the budget of 8
+NEW FAIL vendor/gpui-pre-apple/src/metal_renderer.rs: 79 added, over the budget of 40 a file
+NEW FAIL vendor/gpui-pre-apple/src/metal_renderer.rs: 79 added, over the budget of 40 a file
+NEW FAIL canvas-lint: crates/deep-canvas-media/src/heard/mod.rs a static item, state a check could carry between runs
+NEW FAIL canvas-lint: crates/deep-canvas-media/src/heard/normalizer.rs a static item, state a check could carry between runs
+NEW FAIL canvas-lint: crates/deep-canvas/src/document/packs/tests.rs include_str! of a file the lint can't read: outside the crate, or not a literal path
+NEW FAIL size: benchmarks/canvas.mjs: 1510 lines, over 1500 with no ceiling
+NEW FAIL size: crates/deep-app/src/views.rs: 3938 lines, over its ceiling of 3606
+NEW FAIL size: crates/deep-canvas-effects/src/check.rs: 2293 lines, over its ceiling of 2093
+NEW FAIL size: crates/deep-canvas-effects/src/emit.rs: 1690 lines, over its ceiling of 1636
+NEW FAIL size: crates/deep-canvas-effects/src/graph.rs: 1789 lines, over its ceiling of 1624
+NEW FAIL size: crates/deep-canvas-effects/src/interp.rs: 1567 lines, over its ceiling of 1559
+NEW FAIL size: crates/deep-canvas-input/src/session.rs: 1619 lines, over 1500 with no ceiling
+NEW FAIL size: crates/deep-canvas-marks/src/animator.rs: 1821 lines, over its ceiling of 1797
+NEW FAIL size: crates/deep-canvas-marks/src/data.rs: 2578 lines, over its ceiling of 2562
+NEW FAIL size: crates/deep-canvas-marks/src/modules.rs: 2063 lines, over its ceiling of 2053
+NEW FAIL size: crates/deep-canvas-marks/src/scene.rs: 6323 lines, over its ceiling of 6202
+NEW FAIL size: crates/deep-canvas-media/src/mix.rs: 1524 lines, over 1500 with no ceiling
+NEW FAIL size: crates/deep-canvas-motion/src/doc.rs: 3760 lines, over its ceiling of 3048
+NEW FAIL size: crates/deep-canvas-motion/src/program.rs: 4160 lines, over its ceiling of 3129
+NEW FAIL size: crates/deep-canvas-motion/src/shots.rs: 2284 lines, over its ceiling of 1675
+NEW FAIL size: crates/deep-canvas-physics/src/doc.rs: 1578 lines, over 1500 with no ceiling
+NEW FAIL size: crates/deep-canvas-scene3d/src/builders.rs: 2606 lines, over its ceiling of 2600
+NEW FAIL size: crates/deep-canvas-scene3d/src/distribute.rs: 1613 lines, over 1500 with no ceiling
+NEW FAIL size: crates/deep-canvas-scene3d/src/scene.rs: 4586 lines, over its ceiling of 3603
+NEW FAIL size: crates/deep-canvas-scene3d/src/spec.rs: 2324 lines, over its ceiling of 2281
+NEW FAIL size: crates/deep-canvas-scene3d/src/stack.rs: 1669 lines, over its ceiling of 1612
+NEW FAIL size: crates/deep-canvas-vector/src/svg.rs: 2557 lines, over its ceiling of 2537
+NEW FAIL size: crates/deep-canvas/src/document/check.rs: 2958 lines, over its ceiling of 2583
+NEW FAIL size: crates/deep-canvas/src/document/mod.rs: 1635 lines, over its ceiling of 1583
+NEW FAIL size: crates/deep-canvas/src/document/packs.rs: 3536 lines, over its ceiling of 3511
+NEW FAIL size: crates/deep-canvas/src/registry/mod.rs: 4870 lines, over its ceiling of 4794
+NEW FAIL size: crates/deep-canvas/src/schedule/mod.rs: 3592 lines, over its ceiling of 3548
+NEW FAIL size: crates/deep-canvas/src/scope.rs: 1742 lines, over its ceiling of 1527
+NEW FAIL size: crates/deep-canvas/src/steps.rs: 1518 lines, over its ceiling of 1513
+NEW FAIL size: crates/deep-effects-render/src/docops.rs: 2143 lines, over its ceiling of 1869
+NEW FAIL size: crates/deep-gpu-layer/src/groups.rs: 1564 lines, over its ceiling of 1525
+NEW FAIL size: crates/deep-gpu-layer/src/live.rs: 3149 lines, over its ceiling of 3146
+NEW FAIL size: crates/deep-gpu-layer/src/view3d.rs: 2349 lines, over its ceiling of 2208
+NEW FAIL size: crates/deep-hook/src/main.rs: 2103 lines, over its ceiling of 2081
+NEW FAIL size: crates/deep-hook/src/matcher.rs: 2768 lines, over its ceiling of 2589
+NEW FAIL size: crates/deep-marks-render/src/macos.rs: 2867 lines, over its ceiling of 2818
+NEW FAIL size: crates/deep-marks-render/src/raster.rs: 1915 lines, over its ceiling of 1875
+NEW FAIL size: crates/deep-replica/src/drive/mod.rs: 2344 lines, over its ceiling of 2299
+NEW FAIL size: crates/deep-scene3d-render/src/lib.rs: 9593 lines, over its ceiling of 9169
+NEW FAIL size: crates/deep-scene3d-render/src/scene3d.wgsl: 3362 lines, over its ceiling of 3163
+NEW FAIL size: crates/deep-show/src/export.rs: 1613 lines, over 1500 with no ceiling
+NEW FAIL size: crates/deep-show/src/frames.rs: 1660 lines, over 1500 with no ceiling
+NEW FAIL size: crates/deep-show/src/hub.rs: 2905 lines, over its ceiling of 2692
+NEW FAIL size: crates/deep-show/src/kinds.rs: 1549 lines, over 1500 with no ceiling
+NEW FAIL size: crates/deep-show/src/kit/modules.rs: 1530 lines, over its ceiling of 1523
+NEW FAIL size: crates/deep-show/src/main.rs: 3234 lines, over its ceiling of 3104
+NEW FAIL size: crates/deep-show/src/shared.rs: 2253 lines, over its ceiling of 2169
+NEW FAIL size: packages/hub/src/server.ts: 1565 lines, over 1500 with no ceiling
+NEW FAIL code mappings: doctor service_unpromoted maps to no verdict
+NEW FAIL code mappings: verdict none maps to no verdict
+NEW FAIL code mappings: verdict queued maps to no verdict
+NEW FAIL code mappings: verdict working maps to no verdict
+NEW FAIL code mappings: verdict says done maps to no verdict
+NEW FAIL code mappings: verdict sent back maps to no verdict
+NEW FAIL code mappings: verdict needs you maps to no verdict
+NEW FAIL code mappings: verdict stale maps to no verdict
+NEW FAIL code mappings: verdict quiet maps to no verdict
+NEW FAIL code mappings: verdict stuck maps to no verdict
+NEW FAIL code mappings: verdict flagged maps to no verdict
+NEW FAIL code mappings: verdict finished maps to no verdict
+NEW FAIL code mappings: verdict running maps to no verdict
+NEW FAIL code mappings: verdict landed with the budget window open maps to no verdict
+NEW FAIL code mappings: verdict gave up its slot maps to no verdict
+NEW FAIL code mappings: verdict replaced by you maps to no verdict
+NEW FAIL code mappings: verdict sent back past its rounds maps to no verdict
+NEW FAIL code mappings: verdict stalled maps to no verdict
+NEW FAIL code mappings: verdict context full maps to no verdict
+NEW FAIL code mappings: verdict plan window or spend cap maps to no verdict
+NEW FAIL code mappings: verdict crashed or interrupted maps to no verdict
+NEW FAIL code mappings: verdict closed maps to no verdict
+NEW FAIL code mappings: verdict closed before the gate maps to no verdict
+NEW FAIL slot kit environment@1: clean fill health-route: the kit's reference fill reads BLOCKED on health-route: the environment's working folders can't be read (lsof failed), so whether it started in its checkout is unknown
+NEW FAIL slot kit environment@1: clean fill status-route: the kit's reference fill reads BLOCKED on status-route: the environment's listening ports can't be read (lsof failed), so whether it binds its lease alone is unknown
+NEW FAIL slot kit channel@1: rule planted answers-in-shape: rule answers-in-shape ("deliver says delivered, stalled, timed_out or conflict; receive returns answers, seen and conflict.") has 0 planted fills; it needs exactly one that breaks it alone
+NEW FAIL slot kit channel@1: clean fill choice-delivered-then-answered: the kit's reference fill reads BLOCKED on choice-delivered-then-answered: the fill answered with a promise, which the preflight's synchronous kit check can't await
+NEW FAIL slot kit channel@1: clean fill task-delivered-then-done: the kit's reference fill reads BLOCKED on task-delivered-then-done: the fill answered with a promise, which the preflight's synchronous kit check can't await
+NEW FAIL slot kit channel@1: planted proof delivered-without-ack: planted fill delivered-without-ack is first refused on choice-delivered-then-answered as BLOCKED "the fill answered with a promise, which the preflight's synchronous kit check can't await" not with its own message "reported delivered with no acknowledgement from its provider, so it is recorded stalled"
+NEW FAIL slot kit channel@1: planted proof signed-without-signature: planted fill signed-without-signature is first refused on choice-delivered-then-answered as BLOCKED "the fill answered with a promise, which the preflight's synchronous kit check can't await" not with its own message "returned an answer marked as signed or linked that its provider never carried"
+NEW FAIL slots: deep.registerSource, library: deep.registerSource, library declares no kit; a slot needs the kit that holds its fills to the interface
+NEW FAIL slots: deep.registerChannel, -: deep.registerChannel's kit channel@1: rule planted answers-in-shape: rule answers-in-shape ("deliver says delivered, stalled, timed_out or conflict; receive returns answers, seen and conflict.") has 0 planted fills; it needs exactly one that breaks it alone
+NEW FAIL slots: deep.registerChannel, -: deep.registerChannel's kit channel@1: clean fill choice-delivered-then-answered: the kit's reference fill reads BLOCKED on choice-delivered-then-answered: the fill answered with a promise, which the preflight's synchronous kit check can't await
+NEW FAIL slots: deep.registerChannel, -: deep.registerChannel's kit channel@1: clean fill task-delivered-then-done: the kit's reference fill reads BLOCKED on task-delivered-then-done: the fill answered with a promise, which the preflight's synchronous kit check can't await
+NEW FAIL slots: deep.registerChannel, - (planted delivered-without-ack): deep.registerChannel's kit channel@1: planted proof delivered-without-ack: planted fill delivered-without-ack is first refused on choice-delivered-then-answered as BLOCKED "the fill answered with a promise, which the preflight's synchronous kit check can't await" not with its own message "reported delivered with no acknowledgement from its provider, so it is recorded stalled"
+NEW FAIL slots: deep.registerChannel, - (planted signed-without-signature): deep.registerChannel's kit channel@1: planted proof signed-without-signature: planted fill signed-without-signature is first refused on choice-delivered-then-answered as BLOCKED "the fill answered with a promise, which the preflight's synchronous kit check can't await" not with its own message "returned an answer marked as signed or linked that its provider never carried"
+NEW FAIL scripts/canvas-closures.mjs: exited 1: deep lease: DeepBuild isn't set up here (no hub token), so `/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node scripts/canvas-closures.mjs closures` runs unleasFAIL drift: Map projections: the table lists it with registry geo.projection@1, and the closure data holds no such list
+NEW FAIL record reader: crates/deep-app/src/hub.rs: it names stream.subscribe, events.read, inbox.read, so it reads the record for itself; read it through crates/deep-app/src/record.rs's one reader (record::with_view) instead
+INCONCLUSIVE Cargo.lock feeds every suite; run npm run preflight
+INCONCLUSIVE 1 timed file was not run; --timed runs them under a timed grant: tests/acceptance/246/lanes.test.mjs
+TIMED the timed list, from scripts/lanes.mjs (179): tests/acceptance/1018/budgets.test.ts tests/acceptance/1018/redraft-ac6/budgets.test.ts tests/acceptance/46/budgets.test.ts tests/acceptance/103/budgets.test.ts tests/acceptance/104/budgets.test.ts tests/acceptance/105/budgets.test.ts tests/acceptance/105/live.test.ts tests/acceptance/1097/budgets.test.ts tests/acceptance/1098/budgets.test.ts tests/acceptance/111/budgets.test.ts tests/acceptance/1113/load.test.mjs tests/acceptance/112/live.test.ts tests/acceptance/120/budgets-idle-redraft.test.ts tests/acceptance/120/budgets.test.ts tests/acceptance/124/ac5-budgets.live.test.ts tests/acceptance/138/budgets.test.ts tests/acceptance/139/budgets.test.ts tests/acceptance/14/budgets.test.ts tests/acceptance/140/platform/budgets.test.ts tests/acceptance/140/view/access.test.ts tests/acceptance/140/view/parity-planted-redraft.test.ts tests/acceptance/140/view/parity.test.ts tests/acceptance/140/view/timing.test.ts tests/acceptance/15/budgets.test.ts tests/acceptance/159/budgets.test.ts tests/acceptance/16/budgets.test.ts tests/acceptance/18/kit/budgets.test.ts tests/acceptance/185/budgets.test.ts tests/acceptance/19/status/budgets.test.ts tests/acceptance/20/budgets.test.ts tests/acceptance/200/budgets.test.ts tests/acceptance/21/replay.test.ts tests/acceptance/21/sessions.live.test.ts tests/acceptance/23/match/budgets.test.ts tests/acceptance/236/budgets.test.ts tests/acceptance/237/budgets.test.ts tests/acceptance/238/budgets.test.ts tests/acceptance/24/budgets.test.ts tests/acceptance/24/redraft-1463/timing.test.ts tests/acceptance/25/live-redraft/ac2.live.test.ts tests/acceptance/25/live/budgets.test.ts tests/acceptance/25/live/routes.live.test.ts tests/acceptance/25/routes/twenty-minutes.test.ts tests/acceptance/25/routes/wake.test.ts tests/acceptance/26/budgets.test.ts tests/acceptance/262/budgets.test.ts tests/acceptance/27/budgets.test.ts tests/acceptance/28/budgets.test.ts tests/acceptance/29/budgets.test.ts tests/acceptance/30/budgets.test.ts tests/acceptance/303/budgets.test.ts tests/acceptance/304/budgets.test.ts tests/acceptance/305/budgets.test.ts tests/acceptance/306/budgets.test.ts tests/acceptance/31/budget-snapshot.test.ts tests/acceptance/31/budgets.test.ts tests/acceptance/311/redraft-ac12/budgets.test.ts tests/acceptance/315/budgets-overhead-redraft.test.ts tests/acceptance/315/budgets.test.ts tests/acceptance/319/budgets.test.ts tests/acceptance/325/timing.test.ts tests/acceptance/331/budgets.test.ts tests/acceptance/34/budgets.test.ts tests/acceptance/37/budgets.test.ts tests/acceptance/37/redraft-ac16/budgets.test.ts tests/acceptance/340/flow/budgets.test.ts tests/acceptance/348/budgets.test.ts tests/acceptance/356/budgets.test.ts tests/acceptance/356/click.test.ts tests/acceptance/358/spike.live.test.mjs tests/acceptance/365/budgets.test.ts tests/acceptance/66/budgets.test.ts tests/acceptance/377/budgets.test.ts tests/acceptance/379/reasons.test.ts tests/acceptance/380/budgets.test.ts tests/acceptance/383/city.test.ts tests/acceptance/385/spike.test.ts tests/acceptance/386/budgets.test.ts tests/acceptance/387/budgets.test.ts tests/acceptance/39/budgets.test.ts tests/acceptance/397/candles.test.ts tests/acceptance/399/budgets.test.ts tests/acceptance/40/budgets.test.ts tests/acceptance/401/budgets.test.ts tests/acceptance/402/budgets.test.ts tests/acceptance/412/budgets.test.ts tests/acceptance/417/budgets.test.ts tests/acceptance/42/budgets.test.ts tests/acceptance/489/budgets.test.ts tests/acceptance/55/budgets.test.ts tests/acceptance/65/budgets.test.ts tests/acceptance/246/lanes.test.mjs tests/acceptance/568/ tests/acceptance/583/perf-added-tests.test.mjs tests/acceptance/724/ tests/preflight.test.mjs tests/acceptance/572/budgets.test.ts tests/acceptance/62/budgets.test.ts tests/acceptance/63/budgets.test.ts tests/acceptance/667/redraft-1463/raised.test.ts tests/acceptance/669/fast.test.ts tests/acceptance/1156/fast.test.ts tests/acceptance/68/budgets.test.ts tests/acceptance/69/budgets.test.ts tests/acceptance/761/budgets.test.ts tests/acceptance/823/run.test.ts tests/acceptance/823/wait.test.ts tests/acceptance/824/budgets.long.test.ts tests/acceptance/824/redraft-ac1/budgets.long.test.ts tests/acceptance/83/budgets.test.ts tests/acceptance/85/budgets.test.ts tests/acceptance/854/idle.test.ts tests/acceptance/1487/wakeups.test.ts tests/acceptance/854/patch.test.ts tests/acceptance/854/replica.test.ts tests/acceptance/854/scene-read.test.ts tests/acceptance/855/costs.test.ts tests/acceptance/855/keying.test.ts tests/acceptance/857/background.test.ts tests/acceptance/857/speedup.test.ts tests/acceptance/87/models/budgets.test.ts tests/acceptance/87/numbers/budget.test.ts tests/acceptance/880/redraft/touch-id.test.ts tests/acceptance/880/touch-id.test.ts tests/acceptance/881/latency.test.ts tests/acceptance/896/dirty.test.ts tests/acceptance/896/settled.test.ts tests/acceptance/906/prompt.test.ts tests/acceptance/906/stop.test.ts tests/acceptance/96/budgets.test.ts tests/benchmark.test.mjs tests/acceptance/1432/budgets.test.mjs tests/acceptance/1427/ac8-budget.live.test.ts tests/acceptance/1434/ac7-budgets.live.test.ts tests/acceptance/1436/ac9-budgets.live.test.ts tests/acceptance/1485/panel.test.ts tests/acceptance/1486/grid.test.ts tests/acceptance/33/budget.test.ts tests/acceptance/1546/ac4-needs-you.live.test.ts tests/acceptance/499/video/players.test.ts tests/acceptance/499/video/out-of-view.test.ts tests/acceptance/1477/record.test.ts tests/acceptance/1477/built.test.ts tests/acceptance/1477/redraft/record.test.ts tests/acceptance/1637/budgets.test.ts tests/acceptance/501/budgets.test.ts tests/acceptance/1461/budget.test.ts tests/acceptance/1942/budgets.test.ts tests/acceptance/1942/stall.test.ts tests/acceptance/408-redraft-ac5/machines.test.ts tests/acceptance/405-redraft-ac4/budgets.test.ts tests/acceptance/202/budgets.test.ts tests/acceptance/1971/budget.test.ts tests/acceptance/220/budgets.test.ts tests/acceptance/724-redraft-1405/ tests/acceptance/1575/budgets.test.ts tests/acceptance/1575-redraft-ac1/budgets.test.ts tests/acceptance/2026/load.test.ts tests/acceptance/2026/outage.test.ts tests/acceptance/2026-redraft-ac3/replay.test.ts tests/acceptance/2011/ac2-step-budget.test.ts tests/acceptance/547/ac4-keyframes.test.ts tests/acceptance/154/budgets.test.ts tests/acceptance/154-redraft/budgets.test.ts tests/acceptance/1700/budgets.test.ts tests/acceptance/1958/budgets.test.ts tests/acceptance/157/budgets.test.ts tests/acceptance/162/budgets.test.ts tests/acceptance/537/ac4-budget.test.ts tests/acceptance/538/ac8-budgets.test.ts tests/acceptance/538-redraft-ac8/ac8-budgets.test.ts tests/acceptance/1863/speed.test.ts tests/acceptance/2017/ac3-budgets.test.ts tests/acceptance/173/budgets.test.ts tests/acceptance/173/envelope.test.ts tests/acceptance/509/budgets.test.ts tests/acceptance/2197/budget.test.ts tests/acceptance/525-device/device.test.ts tests/acceptance/204/budgets.test.ts
+FAIL affected: 142 new, 44 already failing on main, 0 inconclusive or blocked, 0 listed skips, 50 passed, in 329 s at load 110; logs in <tmp>
