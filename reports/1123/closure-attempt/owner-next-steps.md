@@ -1,5 +1,7 @@
 # Owner actions needed after conversational approval
 
+**Superseded in part on 2026-11-13.** Main now holds `.deepbuild/approvers`, with one key, JingW6's, so step 1 is done. Step 2's commits are the six in [human-approval-items.txt](human-approval-items.txt). Step 3's whole-lane pair is no longer asked for: the owner set the reading's scope to the folders that move ([../ac4-reading/README.md](../ac4-reading/README.md)).
+
 The owner explicitly approved proceeding and then requested **one PR**. #2321 is now the sole review surface; #2336 and #2337 are closed as superseded, with all helper/evidence bytes verified already present in #2321. #2321 remains draft because required proof is missing. No approval signature, signer-list change, merge or issue closure was performed by the agent.
 
 ## 1. Establish the repository's approval trust — owner only
