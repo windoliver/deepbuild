@@ -1,0 +1,88 @@
+#2043 acceptance tests on the base, 1c4d1f0e2 (Merge pull request #2236), Nov 12 2026.
+macOS (Darwin 27.2.0), Node v24.22.2, cargo 1.99.1: npm ci; npm run build --workspaces;
+npx vitest run tests/acceptance/2043 --testTimeout=600000 (deep-hook built by the suite's beforeAll).
+One run. Trimmed to the summary and the six failures, each for the expected reason (README, On the base); the
+checkout's absolute path is written <checkout>, temp folders as /tmp/dh16-…, and vitest's diffs and code frames are cut.
+
+---- What the tests printed
+AC2 0 answers to 15 lines; hub.health's pid after them: no hub.health (can't reach the hub at /tmp/dh16-…/h/.deepbuild/hub.sock: ECONNREFUSED) (the hub started as 33904)
+
+---- Summary
+ ❯ tests/acceptance/2043/lookups.test.ts (2 tests | 2 failed) 5138ms
+   × #2043.cbf38aec AC1 the fixture line pi/constructor, a connection's first line, is answered as an event pi doesn't map, and a PreToolUse line on a new connection is answered afterwards 2674ms
+   × #2043.ccd54552 AC2 agents constructor, toString, hasOwnProperty, valueOf and __proto__ are each refused at /agent as an unknown agent is; pi and paseo with each as the event are each answered: 15 lines, 15 answers, the hub's process id unchanged 2151ms
+ ❯ tests/acceptance/2043/workers.test.ts (4 tests | 4 failed) 6975ms
+   × #2043.d1e23f18 AC3 a parser worker that throws on one line: that line's connection gets a refusal, the next 100 lines on new connections are answered, and the hub's process id is unchanged 4720ms
+   × #2043.d1e23f18 AC3 (wrong program) a pool that listens to its workers for messages only ends the hub and fails this test 99ms
+   × #2043.43f43d35 AC4 a parser worker that exits while it holds a line: that line is refused, and the pool holds the same count of workers afterwards 1755ms
+   × #2043.43f43d35 AC4 (wrong program) a pool that leaves the line waiting fails this test under its timeout, naming the line 101ms
+ Test Files  2 failed (2)
+      Tests  6 failed (6)
+   Duration  7.15s
+
+---- Failed Tests 6
+
+ FAIL  tests/acceptance/2043/lookups.test.ts > #2043.cbf38aec AC1 …
+AssertionError: the hub answers the line fixtures/pi-constructor.jsonl (agent pi, event constructor, id 01KA2043C0NSTRVCT0R0000000) as it answers pi's unmapped event no_such_event ([{"v":1,"ack":"01KA2043C0NSTRVCT0R0000000","hold_until_ms":null},{"v":1,"exit":0,"stdout":"","stderr":""}], answered, then closed): it sent [], then the connection closed with no answer; the hub's process 33556 ended (code 1, signal null); its stderr ends: tTick(() => { throw err; });
+DataCloneError: function Object() { [native code] } could not be cloned.
+    at new DOMException (node:internal/per_context/domexception:76:18)
+    at MessagePort.<anonymous> (file://<checkout>/packages/hub/dist/parser.js:18:16)
+    …
+Emitted 'error' event on Worker instance at:
+    at [kOnErrorMessage] (node:internal/worker:411:10)
+    …
+Node.js v24.22.2: expected false to be true // Object.is equality
+ ❯ must tests/acceptance/2043/helpers.ts:76:37
+ ❯ tests/acceptance/2043/lookups.test.ts:64:3
+
+ FAIL  tests/acceptance/2043/lookups.test.ts > #2043.ccd54552 AC2 …
+AssertionError: each line is refused as the unknown agent no-such-agent is, or answered as its agent's unmapped event no_such_event is; 15 of 15 weren't:
+agent constructor (id 01M78MH7QGXF36ZTBQJAMWQWCD): expected [{"v":1,"id":"01M78MH7QGXF36ZTBQJAMWQWCD","error":{"code":"enum","retryable":false,"remediation":"No adapter maps constructor; send one of claude-code, claude, codex, cursor, grok, pi, paseo.","path":"/agent","actual":"constructor","evidence":[]}}], answered, then closed, got [], then the connection closed with no answer
+agent toString (id 01M78MH7QGX3B31513Q7EMVYFM): expected […"remediation":"No adapter maps toString; …","path":"/agent","actual":"toString"…], answered, then closed, got [], unreachable (can't reach the hub at /tmp/dh16-…/h/.deepbuild/hub.sock: ECONNREFUSED)
+agent hasOwnProperty …, agent valueOf …, agent __proto__ …: got [], unreachable (… ECONNREFUSED)
+agent pi, event constructor (id 01M78MH7QGX64M32QJNFXRJPNG): expected [{"v":1,"ack":"01M78MH7QGX64M32QJNFXRJPNG","hold_until_ms":null},{"v":1,"exit":0,"stdout":"","stderr":""}], answered, then closed, got [], unreachable (… ECONNREFUSED)
+agent pi, event toString / hasOwnProperty / valueOf / __proto__ …: got [], unreachable (… ECONNREFUSED)
+agent paseo, event constructor / toString / hasOwnProperty / valueOf / __proto__ …: got [], unreachable (… ECONNREFUSED)
+the hub's process 33904 ended (code 1, signal null); its stderr ends: …/packages/adapters/dist/index.js:111:23)
+    at mapRequest (file://<checkout>/packages/hub/dist/hookmap.js:341:30)
+    at parseLine (file://<checkout>/packages/hub/dist/hookmap.js:248:12)
+    at MessagePort.<anonymous> (file://<checkout>/packages/hub/dist/parser.js:15:20)
+    … {
+  code: 'enum',
+  retryable: false,
+  remediation: 'Register an adapter under undefined first.',
+  path: '/name',
+  actual: 'function Object() { [native code] }',
+  evidence: []
+}
+Node.js v24.22.2: expected false to be true // Object.is equality
+ ❯ must tests/acceptance/2043/helpers.ts:76:37
+ ❯ tests/acceptance/2043/lookups.test.ts:103:3
+
+ FAIL  tests/acceptance/2043/workers.test.ts > #2043.d1e23f18 AC3 a parser worker that throws on one line …
+AssertionError: the line 01M78MH4FR9K3P4ZMFF6VJXA9E, on which the parser worker throws, gets a refusal on its connection: it got [{"v":1,"ack":"01M78MH4FR9K3P4ZMFF6VJXA9E","hold_until_ms":null},{"v":1,"exit":0,"stdout":"","stderr":""}], answered, then closed; the hub's process 33542 still runs: expected false to be true // Object.is equality
+ ❯ must tests/acceptance/2043/helpers.ts:76:37
+ ❯ judgeThrow tests/acceptance/2043/workers.test.ts:31:3
+ ❯ tests/acceptance/2043/workers.test.ts:65:3
+
+ FAIL  tests/acceptance/2043/workers.test.ts > #2043.d1e23f18 AC3 (wrong program) a pool that listens to its workers for messages only ends the hub and fails this test
+Error: BLOCKED: the hub didn't start (deep hub run): exit {"code":1,"signal":null}; stderr: file://<checkout>/packages/hub/dist/plant.js:111
+Error: DEEP_HUB_PLANT=parser-pool-messages-only names no planted program
+    at plantOf (file://<checkout>/packages/hub/dist/plant.js:111:15)
+    at runHub (file://<checkout>/packages/hub/dist/server.js:1646:19)
+ ❯ startHub tests/acceptance/16/helpers.ts:249:11
+ ❯ tests/acceptance/2043/workers.test.ts:70:15
+
+ FAIL  tests/acceptance/2043/workers.test.ts > #2043.43f43d35 AC4 a parser worker that exits while it holds a line …
+AssertionError: the line 01M78MH96A79KD2BPZDA5Y8CBK, held by a parser worker that exited, is refused within 10 s: it got [{"v":1,"ack":"01M78MH96A79KD2BPZDA5Y8CBK","hold_until_ms":null},{"v":1,"exit":0,"stdout":"","stderr":""}], answered, then closed; the hub's process 34490 still runs: expected false to be true // Object.is equality
+ ❯ must tests/acceptance/2043/helpers.ts:76:37
+ ❯ judgeExit tests/acceptance/2043/workers.test.ts:48:3
+ ❯ tests/acceptance/2043/workers.test.ts:79:3
+
+ FAIL  tests/acceptance/2043/workers.test.ts > #2043.43f43d35 AC4 (wrong program) a pool that leaves the line waiting fails this test under its timeout, naming the line
+Error: BLOCKED: the hub didn't start (deep hub run): exit {"code":1,"signal":null}; stderr: file://<checkout>/packages/hub/dist/plant.js:111
+Error: DEEP_HUB_PLANT=parser-pool-leaves-line-waiting names no planted program
+    at plantOf (file://<checkout>/packages/hub/dist/plant.js:111:15)
+    at runHub (file://<checkout>/packages/hub/dist/server.js:1646:19)
+ ❯ startHub tests/acceptance/16/helpers.ts:249:11
+ ❯ tests/acceptance/2043/workers.test.ts:84:15

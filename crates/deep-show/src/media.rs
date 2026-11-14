@@ -91,9 +91,32 @@ pub struct Media {
     decoder: Option<Helper>,
     encoder: Option<Helper>,
     /// Proxies and exports so far, which name their scratch files.
-    exports: usize,
+    pub(crate) exports: usize,
     /// #499: video assets' probes and decoded frames.
     pub video: crate::video::Cache,
+    /// #502: each script compiled, by its lines and the document's assets; the export that is
+    /// running, which says how captions are laid out and drawn; and each caption as drawn.
+    pub(crate) scripts:
+        std::collections::BTreeMap<String, std::sync::Arc<crate::narration::Script>>,
+    pub(crate) captions: Option<crate::narration::View>,
+    pub(crate) captions_drawn:
+        std::collections::BTreeMap<String, std::sync::Arc<crate::snapshot::Drawn>>,
+    /// #509: whether the state folder's narration exception asks were read back.
+    pub(crate) heard_restored: bool,
+    /// #1967: each terminal recording a cell grid plays, by SHA-256, as the decode worker
+    /// converted it: its keyframes and row patches, which sessions read as `terminal:<sha256>`.
+    pub recordings: std::collections::BTreeMap<String, Value>,
+}
+
+/// #503: a worker's refusal answers with its `code` and what it names at the reply's top level
+/// too, beside `refused` (#498's place for it).
+fn hoist(mut reply: Value) -> Value {
+    if let Some(r) = reply.get("refused").and_then(Value::as_object).cloned() {
+        if let Some(o) = reply.as_object_mut() {
+            o.extend(r);
+        }
+    }
+    reply
 }
 
 /// The worker-side name of a planted wrong program, if it is one the decode worker runs.
@@ -106,6 +129,10 @@ fn worker_planted(p: Option<Planted>) -> Option<&'static str> {
         Planted::EncodesInDecodeWorker => "encodes_in_decode_worker",
         Planted::ProbeRoundsToFlicks => "probe_rounds_to_flicks",
         Planted::AssumesBt601 => "assumes_bt601",
+        Planted::TimecodeTrackZero => "timecode_track_zero",
+        Planted::PngPremultipliesStraight => "png_premultiplies_straight",
+        Planted::Export(crate::export::Guard::Codec(name)) => name,
+        Planted::VideoDropsFrame300 => "video_drops_frame_300",
         _ => return None,
     })
 }
@@ -117,7 +144,11 @@ impl Hub<'_> {
     /// in `assets`. An asset the store lacks or the worker refuses is an issue on the item.
     pub(crate) fn probe_assets(&mut self, doc: &mut Value) -> Vec<deep_canvas::document::Issue> {
         let mut out = Vec::new();
-        let items = doc.get("items").and_then(Value::as_object).cloned().unwrap_or_default();
+        let items = doc
+            .get("items")
+            .and_then(Value::as_object)
+            .cloned()
+            .unwrap_or_default();
         for (id, item) in &items {
             let Some(kind) = item.get("kind").and_then(Value::as_str) else {
                 continue;
@@ -126,7 +157,12 @@ impl Hub<'_> {
                 continue;
             };
             let path = format!("items/{id}/params/{param}");
-            let named = item.pointer(&format!("/params/{param}")).and_then(Value::as_str).unwrap_or("").to_string();
+            // #538: an item that names no asset there (a cell grid with a frame or a logic grid,
+            // not a recording) has nothing to probe.
+            let Some(named) = item.pointer(&format!("/params/{param}")) else {
+                continue;
+            };
+            let named = named.as_str().unwrap_or("").to_string();
             let sha = doc
                 .pointer(&format!("/assets/{named}/sha256"))
                 .and_then(Value::as_str)
@@ -136,20 +172,46 @@ impl Hub<'_> {
                 deep_canvas::document::Issue::error(code, id, path.clone(), json!(named), what)
             };
             if sha.len() != 64 || crate::evidence::read(&self.scenario.evidence, &sha).is_none() {
-                out.push(issue("unknown_asset", "the asset isn't in the evidence store"));
+                out.push(issue(
+                    "unknown_asset",
+                    "the asset isn't in the evidence store",
+                ));
                 continue;
             }
             let file = self.scenario.evidence.join(&sha[..2]).join(&sha[2..]);
             let (reply, _) = self.media_job(DECODE_WORKER, json!({"op": "probe", "path": file}));
             match reply.pointer("/asset/probe") {
                 Some(probe) => {
-                    if let Some(a) = doc.pointer_mut(&format!("/assets/{named}")).and_then(Value::as_object_mut) {
+                    if let Some(a) = doc
+                        .pointer_mut(&format!("/assets/{named}"))
+                        .and_then(Value::as_object_mut)
+                    {
                         a.insert("probe".into(), probe.clone());
                     }
                 }
-                None => out.push(issue("unreadable_asset", "the decode worker couldn't probe the asset")),
+                None => out.push(issue(
+                    "unreadable_asset",
+                    "the decode worker couldn't probe the asset",
+                )),
+            }
+            // #1967: a terminal recording is converted once, in the worker, and kept by its hash.
+            let terminal = reply.pointer("/asset/kind").and_then(Value::as_str) == Some("terminal");
+            if terminal && !self.media.recordings.contains_key(&sha) {
+                let (mut reply, _) =
+                    self.media_job(DECODE_WORKER, json!({"op": "decode", "path": file}));
+                match reply.get_mut("decoded").map(Value::take) {
+                    Some(converted) => {
+                        self.media.recordings.insert(sha, converted);
+                    }
+                    None => out.push(issue(
+                        "unreadable_asset",
+                        "the decode worker couldn't convert the recording",
+                    )),
+                }
             }
         }
+        // #509: a document that names a narration line's time gets the script's spoken times.
+        out.extend(self.stamp_spoken(doc));
         out
     }
 
@@ -169,11 +231,14 @@ impl Hub<'_> {
         };
         if slot.is_none() {
             let exe = std::env::current_exe().unwrap_or_else(|_| PathBuf::from("deep-show"));
+            // #1967's planted import lives in the cells module's conversion, in the worker.
+            let module = self.scenario.module_planted.as_deref();
+            let import = module.filter(|p| *p == "cells_patch_times_whole_seconds");
             match Helper::start(
                 &exe,
                 role,
                 &self.scenario.decode_caps,
-                worker_planted(planted),
+                worker_planted(planted).or(import),
             ) {
                 Ok(h) => {
                     *slot = Some(h);
@@ -185,13 +250,32 @@ impl Hub<'_> {
         (h.ask(&job), h.pid)
     }
 
+    /// #157: the run's encode tool, started on first use, for a job that streams its frames.
+    pub(crate) fn encode_tool(&mut self) -> Result<&mut Helper, Value> {
+        if self.media.encoder.is_none() {
+            let exe = std::env::current_exe().unwrap_or_else(|_| PathBuf::from("deep-show"));
+            let h = Helper::start(&exe, ENCODE_TOOL, &self.scenario.decode_caps, worker_planted(self.scenario.planted))
+                .map_err(|e| json!({"code": "encoder_unstarted", "why": format!("the encode tool didn't start: {e}")}))?;
+            self.media.encoder = Some(h);
+        }
+        Ok(self.media.encoder.as_mut().expect("started"))
+    }
+
+    /// #157: a fresh decode worker, apart from the run's and from the encode tool, for reading one
+    /// delivery under caps that fit it; ended when dropped.
+    pub(crate) fn fresh_decoder(&self, caps: &Caps) -> Result<Helper, Value> {
+        let exe = std::env::current_exe().unwrap_or_else(|_| PathBuf::from("deep-show"));
+        Helper::start(&exe, DECODE_WORKER, caps, worker_planted(self.scenario.planted))
+            .map_err(|e| json!({"code": "decoder_unstarted", "why": format!("the decode worker didn't start: {e}")}))
+    }
+
     pub fn media_call(&mut self, call: &MediaCall) -> Value {
         match call {
             MediaCall::Import(path) => {
                 let (mut reply, pid) =
                     self.media_job(DECODE_WORKER, json!({"op": "probe", "path": path}));
                 reply["worker"] = json!({"pid": pid});
-                reply
+                hoist(reply)
             }
             MediaCall::Decode(c) => {
                 let mut job = c.clone();
@@ -201,7 +285,7 @@ impl Hub<'_> {
                     Some(d) => d["worker"] = json!({"pid": pid}),
                     None => reply["worker"] = json!({"pid": pid}),
                 }
-                reply
+                hoist(reply)
             }
             MediaCall::Proxy(c) => {
                 let tmp = std::env::temp_dir().join(format!(

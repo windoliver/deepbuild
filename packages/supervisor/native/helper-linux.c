@@ -4,11 +4,15 @@
 //
 //   helper scan <marker>...     every process whose root holds the run's marker directory, /run/deep/<marker>, which
 //                               bubblewrap makes in the run's own mount namespace and no fork, exec, setsid or empty
-//                               environment sheds: one line each, "<marker> <pid> <ppid> <pgid>".
+//                               environment sheds: one line each, "<marker> <pid> <ppid> <pgid> <bytes>", <bytes> its
+//                               resident set (#1409).
+//   helper limit <bytes> <program> [<arg>...]
+//                               execs <program> with RLIMIT_FSIZE at <bytes> (#1409), as the macOS helper does.
 //   helper probe <file> <op> <arg> ...
 //                               the seam suite's sandboxed process: tries each operation and appends one JSON line per
-//                               try to <file>: read <path>, write <path>, tcp <port> (on 127.0.0.1), unix <path>, and
-//                               devices <file>, which runs this helper again, as its child, in `devices` mode.
+//                               try to <file>: read <path>, write <path>, tcp <port> (on 127.0.0.1), tfo <port> (the
+//                               same port, by a send that opens the connection itself, with no connect), unix <path>,
+//                               and devices <file>, which runs this helper again, as its child, in `devices` mode.
 //   helper devices <file>       whether this process can open each device: the camera (/dev/video0), the microphone and
 //                               the audio output (the ALSA control, /dev/snd/controlC0) and a screen capture (the
 //                               display's /dev/dri/card0); one line each, allow or deny.
@@ -51,6 +55,7 @@
 #include <string.h>
 #include <sys/ioctl.h>
 #include <sys/prctl.h>
+#include <sys/resource.h>
 #include <sys/select.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
@@ -95,7 +100,12 @@ static int scan(int count, char **markers) {
       // "pid (comm) state ppid pgrp ...": the comm may hold spaces and parentheses, so read past its last ')'.
       char *close = got ? strrchr(got, ')') : NULL;
       int ppid = 0, pgid = 0;
-      if (close && sscanf(close + 1, " %*c %d %d", &ppid, &pgid) == 2) printf("%s %ld %d %d\n", markers[m], pid, ppid, pgid);
+      // Its resident pages, the second field of statm.
+      unsigned long long pages = 0;
+      snprintf(path, sizeof path, "/proc/%ld/statm", pid);
+      FILE *statm = fopen(path, "r");
+      if (statm) { if (fscanf(statm, "%*u %llu", &pages) != 1) pages = 0; fclose(statm); }
+      if (close && sscanf(close + 1, " %*c %d %d", &ppid, &pgid) == 2) printf("%s %ld %d %d %llu\n", markers[m], pid, ppid, pgid, pages * (unsigned long long)sysconf(_SC_PAGESIZE));
     }
   }
   closedir(proc);
@@ -148,7 +158,8 @@ static void try_connect(const char *op, const char *target) {
     a.sin_family = AF_INET;
     a.sin_port = htons((unsigned short)atoi(target));
     a.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-    rc = connect(fd, (struct sockaddr *)&a, sizeof a);
+    if (strcmp(op, "tfo") == 0) rc = sendto(fd, "x", 1, MSG_FASTOPEN, (struct sockaddr *)&a, sizeof a) == 1 ? 0 : -1;
+    else rc = connect(fd, (struct sockaddr *)&a, sizeof a);
   }
   int e = errno;
   close(fd);
@@ -254,10 +265,19 @@ static int carries_guard(const Spec *s, const char *path) {
   for (int g = 0; g < s->guards.n; g++) if (ancestor_or_self(path, s->guards.paths[g])) return 1;
   return 0;
 }
+/** The files agents read their hooks and MCP servers from, wherever they are: no grant reaches them, as on macOS (seatbelt.ts's last rule). */
+static int agent_file(const char *path) {
+  for (const char *c = path; (c = strchr(c, '/'));) {
+    size_t n = strcspn(++c, "/");
+    if ((n == 7 && !strncmp(c, ".claude", 7)) || (n == 6 && !strncmp(c, ".codex", 6))) return 1;
+    if (!c[n] && ((n == 9 && !strncmp(c, ".mcp.json", 9)) || (n == 12 && !strncmp(c, ".claude.json", 12)))) return 1;
+  }
+  return 0;
+}
 /** Whether the grant lets the process change what is at `path`. */
 static int may_write(const Spec *s, const char *path) {
   if (under(path, "/dev") || under(path, "/proc")) return 1;
-  if (guarded(s, path)) return 0;
+  if (guarded(s, path) || agent_file(path)) return 0;
   return s->as_you || s->plant_writes || in_any(&s->write, path);
 }
 
@@ -386,6 +406,8 @@ static void emit(struct sock_filter f) {
 #define AND(k) emit((struct sock_filter)BPF_STMT(BPF_ALU | BPF_AND | BPF_K, (unsigned)(k)))
 #define RET(v) emit((struct sock_filter)BPF_STMT(BPF_RET | BPF_K, (unsigned)(v)))
 #define ERRNO(e) (SECCOMP_RET_ERRNO | ((e) & SECCOMP_RET_DATA))
+/** The open flags that can write or create. O_TMPFILE holds O_DIRECTORY's bit, which alone only opens a folder to read. */
+#define OPEN_WRITES (O_WRONLY | O_RDWR | O_CREAT | O_TRUNC | (O_TMPFILE & ~O_DIRECTORY))
 
 /** One syscall with one verdict: "if nr == x return v". */
 static void rule(int nr, unsigned verdict) {
@@ -398,7 +420,7 @@ static void open_rule(int nr, int flags_arg) {
   if (nr < 0) return;
   JEQ(nr, 0, 4);
   LD_ARG(flags_arg);
-  JSET(O_WRONLY | O_RDWR | O_CREAT | O_TRUNC | O_TMPFILE, 0, 1);
+  JSET(OPEN_WRITES, 0, 1);
   RET(SECCOMP_RET_USER_NOTIF);
   RET(SECCOMP_RET_ALLOW);
   LD_NR;
@@ -481,6 +503,16 @@ static struct sock_fprog build_filter(void) {
   RET(SECCOMP_RET_ALLOW);
   RET(ERRNO(EACCES));
   LD_NR;
+  // A send that would open a connection itself (TCP Fast Open): refused, so every connection is a connect the parent checks.
+  const int sends[][2] = { { __NR_sendto, 3 }, { __NR_sendmsg, 2 }, { __NR_sendmmsg, 3 } };
+  for (size_t i = 0; i < sizeof sends / sizeof *sends; i++) {
+    JEQ(sends[i][0], 0, 4);
+    LD_ARG(sends[i][1]);
+    JSET(MSG_FASTOPEN, 0, 1);
+    RET(ERRNO(EOPNOTSUPP));
+    RET(SECCOMP_RET_ALLOW);
+    LD_NR;
+  }
   // Opens that can write or create: the parent decides and records.
   open_rule(__NR_openat, 2);
   open_rule(__NR_open, 1);
@@ -811,7 +843,7 @@ static void handle(Server *v) {
       size_t size = (size_t)a[3] < sizeof how ? (size_t)a[3] : sizeof how;
       if (read_mem(v->req->pid, a[2], &how, size) != 0) { REFUSE(v, EFAULT); return; }
       flags = (unsigned)how.flags;
-      if (!(flags & (O_WRONLY | O_RDWR | O_CREAT | O_TRUNC | O_TMPFILE))) { CONTINUE(v); return; }
+      if (!(flags & OPEN_WRITES)) { CONTINUE(v); return; }
     }
     const char *operation = flags & O_CREAT ? "file-write-create" : "file-write-data";
     if (write_allowed(v, dirfd, p, (flags & O_NOFOLLOW) != 0, (flags & O_CREAT) != 0, operation)) CONTINUE(v);
@@ -985,14 +1017,27 @@ static int confine(void) {
   return serve(&spec, listener, child);
 }
 
+// ---- limit (#1409): `ulimit -f` in bytes, then the program.
+
+static int limit(const char *bytes, char **argv) {
+  char *end;
+  unsigned long long n = strtoull(bytes, &end, 10);
+  struct rlimit fsize = { (rlim_t)n, (rlim_t)n };
+  if (*end || setrlimit(RLIMIT_FSIZE, &fsize) != 0) { perror("helper limit"); return 2; }
+  execvp(argv[0], argv);
+  perror(argv[0]);
+  return 127;
+}
+
 #include "pty.c"
 
 int main(int argc, char **argv) {
   if (argc >= 2 && strcmp(argv[1], "scan") == 0) return scan(argc - 2, argv + 2);
+  if (argc >= 4 && strcmp(argv[1], "limit") == 0) return limit(argv[2], argv + 3);
   if (argc >= 2 && strcmp(argv[1], "landlock") == 0) { printf("%d\n", landlock_abi()); return 0; }
   if (argc >= 2 && strcmp(argv[1], "confine") == 0) return confine();
   if (argc >= 9 && strcmp(argv[1], "pty") == 0) return host(argv[2], atoi(argv[3]), atoi(argv[4]), atoi(argv[5]), argv[6], argv[7], argv + 8);
-  if (argc < 3) { fprintf(stderr, "usage: helper scan <marker>... | landlock | confine (DEEP_CONFINE) | probe <file> <op> <arg>... | devices <file> | pty <dir> <cols> <rows> <protocol> <lock> <plants> <program> [<arg>...]\n"); return 2; }
+  if (argc < 3) { fprintf(stderr, "usage: helper scan <marker>... | limit <bytes> <program> [<arg>...] | landlock | confine (DEEP_CONFINE) | probe <file> <op> <arg>... | devices <file> | pty <dir> <cols> <rows> <protocol> <lock> <plants> <program> [<arg>...]\n"); return 2; }
   out = fopen(argv[2], "a");
   if (!out) { perror(argv[2]); return 2; }
   if (strcmp(argv[1], "devices") == 0) return devices();
@@ -1001,7 +1046,7 @@ int main(int argc, char **argv) {
     const char *op = argv[i], *arg = argv[i + 1];
     if (strcmp(op, "read") == 0) try_read(arg);
     else if (strcmp(op, "write") == 0) try_write(arg);
-    else if (strcmp(op, "tcp") == 0 || strcmp(op, "unix") == 0) try_connect(op, arg);
+    else if (strcmp(op, "tcp") == 0 || strcmp(op, "tfo") == 0 || strcmp(op, "unix") == 0) try_connect(op, arg);
     else if (strcmp(op, "devices") == 0) try_devices(argv[0], arg);
     else { fprintf(stderr, "helper: unknown op %s\n", op); return 2; }
   }

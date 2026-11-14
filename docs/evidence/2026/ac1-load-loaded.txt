@@ -1,0 +1,31 @@
+
+ RUN  v5.0.5 <repo>/tests/acceptance/2026
+
+stdout | load.test.ts > #2026 AC1 #2026.2baf6583 > Needs you loads in under a second with 30 days of history
+#2026 AC1: 98, 97, 97, 97, 97 open asks among 30 days of history; ms from spawn to the first frame, with Needs you read: 7884, 6869, 7552, 7008, 5794 (limit 1000)
+
+ ❯ load.test.ts (1 test | 1 failed) 200325ms
+   ❯ #2026 AC1 #2026.2baf6583 (1)
+     × Needs you loads in under a second with 30 days of history 200298ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  load.test.ts > #2026 AC1 #2026.2baf6583 > Needs you loads in under a second with 30 days of history
+AssertionError: INCONCLUSIVE: thermal state not nominal (NSProcessInfo.thermalState 1); 98, 97, 97, 97, 97 open asks among 30 days of history; ms from spawn to the first frame, with Needs you read: 7884, 6869, 7552, 7008, 5794 (limit 1000)
+ ❯ inconclusive ../1551/helpers.ts:79:10
+     77| /** Fails the test as INCONCLUSIVE (never a pass, never a skip), with …
+     78| export function inconclusive(reason: string, readings: string[] = []):…
+     79|   expect.fail(`INCONCLUSIVE: ${reason}${readings.length ? `\n${reading…
+       |          ^
+     80| }
+     81|
+ ❯ load.test.ts:51:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  17:46:25
+   Duration  203.64s (tests 99%, transform 1%)
+

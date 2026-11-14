@@ -1,0 +1,16 @@
+{
+  "tree": [
+    {
+      "id": "price",
+      "component": "text",
+      "bind": {
+        "source": "reading:quotes",
+        "select": "value",
+        "format": { "unit": "USD", "precision": 2, "notation": "fixed" },
+        "show": { "source": false, "as_of": false },
+        "stale_after": 120000,
+        "missing": "dash"
+      }
+    }
+  ]
+}

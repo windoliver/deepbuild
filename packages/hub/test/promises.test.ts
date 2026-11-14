@@ -18,6 +18,12 @@ describe('a promise\'s words', () => {
     expect(dueOf(' in a few minutes', NOW)).toBe(NOW + 5 * 60_000);
     const three = dueOf(' at 3pm', NOW)!;
     expect([hourOf(three), daysAhead(three)]).toEqual([15, 1]);
+    expect(dueOf(' in 30s', NOW)).toBe(NOW + 30_000);
+    expect(dueOf(' in 30 s', NOW)).toBe(NOW + 30_000);
+    expect(hourOf(dueOf(' at 9', NOW)!)).toBe(9);
+    // A bare hour before a joining word or a word about the clock is still a time.
+    expect(hourOf(dueOf(' at 9 and report back', NOW)!)).toBe(9);
+    expect(hourOf(dueOf(' at 9 sharp', NOW)!)).toBe(9);
     expect(dueOf(' in src/', NOW)).toBeUndefined();
     expect(dueOf(' later', NOW)).toBeUndefined();
   });
@@ -32,6 +38,10 @@ describe('a promise\'s words', () => {
     expect(promisesIn('I\'ll look in src/ for the file.', NOW)).toEqual([]);
     expect(promisesIn('The build takes about 10 minutes.', NOW)).toEqual([]);
     expect(promisesIn('Done. All tests pass.', NOW)).toEqual([]);
+    // A number before a word counts things, so it is no time of day.
+    expect(promisesIn('Let me look at 3 examples of the failure.', NOW)).toEqual([]);
+    expect(dueOf(' at 3 files', NOW)).toBeUndefined();
+    expect(dueOf(' at 3 or 4 files', NOW)).toBeUndefined();
   });
 });
 

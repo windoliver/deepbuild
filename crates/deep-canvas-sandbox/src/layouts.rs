@@ -65,7 +65,11 @@ impl Layout {
     pub fn entry(&self) -> Value {
         let judged: Value = serde_json::from_str(JUDGED).expect("layouts/judged.json is JSON");
         let j = &judged[self.name];
-        let shas = |b: Vec<Vec<u8>>| b.iter().map(|b| crate::rewrite::hash(b)).collect::<Vec<_>>();
+        let shas = |b: Vec<Vec<u8>>| {
+            b.iter()
+                .map(|b| crate::rewrite::hash(b))
+                .collect::<Vec<_>>()
+        };
         json!({
             "validator": j["program"].clone(),
             "max_bytes": self.max_bytes,
@@ -163,7 +167,10 @@ fn bad(at: &str) -> String {
 
 /// Refuses at `at` unless `n` bytes from it lie inside the asset.
 fn need(at: &str, n: &str) -> String {
-    format!("(if (i32.gt_u (i32.add {at} {n}) (local.get $len)) (then {}))", bad(at))
+    format!(
+        "(if (i32.gt_u (i32.add {at} {n}) (local.get $len)) (then {}))",
+        bad(at)
+    )
 }
 
 /// A fixed field at `at`: present, and `test` (reading `(local.get $v)`) holds, else refused there.
@@ -191,10 +198,22 @@ const NAV2_DOC: &str = "nav.graph@1's bytes with version 2 and tags and typed li
 fn nav_graph(version: u32, trusts: bool) -> String {
     let v2 = version == 2;
     let (extra, link) = if v2 { (4, 24) } else { (0, 16) };
-    let finite = |at: u32| format!("    {}\n    (if (i32.eqz (call $ok (i32.const {at}))) (then (return (i64.const {at}))))\n", need(&format!("(i32.const {at})"), "(i32.const 4)"));
+    let finite = |at: u32| {
+        format!("    {}\n    (if (i32.eqz (call $ok (i32.const {at}))) (then (return (i64.const {at}))))\n", need(&format!("(i32.const {at})"), "(i32.const 4)"))
+    };
     let mut b = String::new();
-    b += &fixed(0, 4, "i32.load", "(i32.eq (local.get $v) (i32.const 0x4756414e))");
-    b += &fixed(4, 4, "i32.load", &format!("(i32.eq (local.get $v) (i32.const {version}))"));
+    b += &fixed(
+        0,
+        4,
+        "i32.load",
+        "(i32.eq (local.get $v) (i32.const 0x4756414e))",
+    );
+    b += &fixed(
+        4,
+        4,
+        "i32.load",
+        &format!("(i32.eq (local.get $v) (i32.const {version}))"),
+    );
     b += &fixed(8, 4, "i32.load", "(i32.le_u (local.get $v) (i32.const 1))");
     b += "    (local.set $form (local.get $v))\n";
     for at in [12, 16, 20, 24, 28] {
@@ -206,7 +225,12 @@ fn nav_graph(version: u32, trusts: bool) -> String {
     b += &fixed(68, 4, "i32.load", "(i32.const 1)");
     b += "    (local.set $lc (local.get $v))\n";
     if v2 {
-        b += &fixed(72, 4, "i32.load", &format!("(i32.le_u (local.get $v) (i32.const {NAV_TAG_CAP}))"));
+        b += &fixed(
+            72,
+            4,
+            "i32.load",
+            &format!("(i32.le_u (local.get $v) (i32.const {NAV_TAG_CAP}))"),
+        );
         b += "    (local.set $tc (local.get $v))\n";
         b += "    (local.set $hdr (i32.add (i32.const 76) (i32.mul (local.get $tc) (i32.const 32))))\n";
         // The first tag name not wholly inside the asset.
@@ -323,14 +347,23 @@ fn nav_graph(version: u32, trusts: bool) -> String {
 
 fn u32_at(b: &[u8], at: u64) -> Option<u32> {
     let at = usize::try_from(at).ok()?;
-    b.get(at..at.checked_add(4)?).map(|s| u32::from_le_bytes([s[0], s[1], s[2], s[3]]))
+    b.get(at..at.checked_add(4)?)
+        .map(|s| u32::from_le_bytes([s[0], s[1], s[2], s[3]]))
 }
 
 fn nav_field(b: &[u8], off: u64, v2: bool) -> String {
     let mut fixed = vec![
-        (0, 4, "magic"), (4, 4, "version"), (8, 4, "form"), (12, 4, "capsule.radius"),
-        (16, 4, "capsule.height"), (20, 4, "climb"), (24, 4, "slope"), (28, 4, "cell"),
-        (32, 32, "source"), (64, 4, "node_count"), (68, 4, "link_count"),
+        (0, 4, "magic"),
+        (4, 4, "version"),
+        (8, 4, "form"),
+        (12, 4, "capsule.radius"),
+        (16, 4, "capsule.height"),
+        (20, 4, "climb"),
+        (24, 4, "slope"),
+        (28, 4, "cell"),
+        (32, 32, "source"),
+        (64, 4, "node_count"),
+        (68, 4, "link_count"),
     ];
     if v2 {
         fixed.push((72, 4, "tag_count"));
@@ -415,12 +448,37 @@ pub fn nav_level(version: u32) -> Vec<u8> {
     }
     w.extend(crate::rewrite::hash(b"a fixture level").as_bytes()[..32].iter());
     let nodes: [(f32, u32, &[[f32; 3]]); 3] = [
-        (0.0, 0b01, &[[0.0, 0.0, 0.0], [2.0, 0.0, 0.0], [2.0, 0.0, 2.0], [0.0, 0.0, 2.0]]),
-        (0.5, 0b00, &[[2.0, 0.5, 0.0], [4.0, 0.5, 0.0], [4.0, 0.5, 2.0]]),
-        (2.0, 0b10, &[[4.0, 2.0, 0.0], [6.0, 2.0, 0.0], [6.0, 2.0, 2.0], [4.0, 2.0, 2.0]]),
+        (
+            0.0,
+            0b01,
+            &[
+                [0.0, 0.0, 0.0],
+                [2.0, 0.0, 0.0],
+                [2.0, 0.0, 2.0],
+                [0.0, 0.0, 2.0],
+            ],
+        ),
+        (
+            0.5,
+            0b00,
+            &[[2.0, 0.5, 0.0], [4.0, 0.5, 0.0], [4.0, 0.5, 2.0]],
+        ),
+        (
+            2.0,
+            0b10,
+            &[
+                [4.0, 2.0, 0.0],
+                [6.0, 2.0, 0.0],
+                [6.0, 2.0, 2.0],
+                [4.0, 2.0, 2.0],
+            ],
+        ),
     ];
-    let links: [(u32, u32, f32, f32, u8, u8, u32); 3] =
-        [(0, 1, 2.0, 0.5, 0, 0, 0), (1, 0, 2.0, -0.5, 0, 0, 0), (1, 2, 2.0, 1.5, 3, 4, 9)];
+    let links: [(u32, u32, f32, f32, u8, u8, u32); 3] = [
+        (0, 1, 2.0, 0.5, 0, 0, 0),
+        (1, 0, 2.0, -0.5, 0, 0, 0),
+        (1, 2, 2.0, 1.5, 3, 4, 9),
+    ];
     u32s(&mut w, nodes.len() as u32);
     u32s(&mut w, links.len() as u32);
     if v2 {
@@ -489,9 +547,19 @@ const PAGES_DOC: &str = "A world's pages, little-endian: magic `PAGS` at 0, vers
 
 fn pages() -> String {
     let mut b = String::new();
-    b += &fixed(0, 4, "i32.load", "(i32.eq (local.get $v) (i32.const 0x53474150))");
+    b += &fixed(
+        0,
+        4,
+        "i32.load",
+        "(i32.eq (local.get $v) (i32.const 0x53474150))",
+    );
     b += &fixed(4, 4, "i32.load", "(i32.eq (local.get $v) (i32.const 1))");
-    b += &fixed(8, 4, "i32.load", &format!("(i32.le_u (local.get $v) (i32.const {PAGES_CAP}))"));
+    b += &fixed(
+        8,
+        4,
+        "i32.load",
+        &format!("(i32.le_u (local.get $v) (i32.const {PAGES_CAP}))"),
+    );
     b += &format!(
         "    (if (i64.ne (i64.mul (i64.extend_i32_u (local.get $v)) (i64.const {})) (i64.extend_i32_u (i32.sub (local.get $len) (i32.const 12))))
       (then (return (i64.const 8))))
@@ -510,7 +578,10 @@ fn pages() -> String {
         bad(P),
         at_p(4 + PAGE as u32),
     );
-    module("(local $v i32) (local $c i32) (local $p i32) (local $i i32) (local $prev i32)", &b)
+    module(
+        "(local $v i32) (local $c i32) (local $p i32) (local $i i32) (local $prev i32)",
+        &b,
+    )
 }
 
 fn pages_field(_: &[u8], off: u64) -> String {
@@ -543,7 +614,12 @@ const FN_TABLE_DOC: &str = "A function table (Driver: tables), little-endian: ma
 
 fn fn_table() -> String {
     let mut b = String::new();
-    b += &fixed(0, 4, "i32.load", "(i32.eq (local.get $v) (i32.const 0x42415446))");
+    b += &fixed(
+        0,
+        4,
+        "i32.load",
+        "(i32.eq (local.get $v) (i32.const 0x42415446))",
+    );
     b += &fixed(4, 4, "i32.load", "(i32.eq (local.get $v) (i32.const 1))");
     b += &fixed(8, 4, "i32.load", "(i32.le_u (local.get $v) (i32.const 1))");
     b += &fixed(12, 4, "i32.load", "(i32.and (i32.ge_u (local.get $v) (i32.const 2)) (i32.le_u (local.get $v) (i32.const 4096)))");
@@ -611,9 +687,19 @@ const TABLE_DOC: &str = "A catalog (Asset: tables: catalogs), little-endian. Hea
 
 fn table_layout() -> String {
     let mut b = String::new();
-    b += &fixed(0, 4, "i32.load", "(i32.eq (local.get $v) (i32.const 0x454c4254))");
+    b += &fixed(
+        0,
+        4,
+        "i32.load",
+        "(i32.eq (local.get $v) (i32.const 0x454c4254))",
+    );
     b += &fixed(4, 4, "i32.load", "(i32.eq (local.get $v) (i32.const 1))");
-    b += &fixed(8, 4, "i32.load", "(i32.le_u (local.get $v) (i32.const 256))");
+    b += &fixed(
+        8,
+        4,
+        "i32.load",
+        "(i32.le_u (local.get $v) (i32.const 256))",
+    );
     b += "    (local.set $tc (local.get $v))\n";
     b += &fixed(12, 4, "i32.load", "(i32.const 1)");
     b += "    (local.set $pool (local.get $v))\n";
@@ -725,18 +811,28 @@ fn table_field(b: &[u8], off: u64) -> String {
     let mut cols = Vec::new();
     for i in 0..tc {
         if off < p + 12 {
-            return format!("tables[{i}].{}", ["name_hash", "row_count", "column_count"][((off - p) / 4) as usize]);
+            return format!(
+                "tables[{i}].{}",
+                ["name_hash", "row_count", "column_count"][((off - p) / 4) as usize]
+            );
         }
         let rows = u64::from(u32_at(b, p + 4).unwrap_or(0));
         let cc = u64::from(u32_at(b, p + 8).unwrap_or(0).min(256));
         p += 12;
         for j in 0..cc {
             if off < p + 16 {
-                return format!("tables[{i}].columns[{j}].{}", ["name_hash", "type", "at", "target"][((off - p) / 4) as usize]);
+                return format!(
+                    "tables[{i}].columns[{j}].{}",
+                    ["name_hash", "type", "at", "target"][((off - p) / 4) as usize]
+                );
             }
             let ty = u32_at(b, p + 4).unwrap_or(0);
             let at = u64::from(u32_at(b, p + 8).unwrap_or(0));
-            let w = match ty { 1 | 4 => 8, 2 => 1, _ => 4 };
+            let w = match ty {
+                1 | 4 => 8,
+                2 => 1,
+                _ => 4,
+            };
             cols.push((i, j, at, rows, w));
             p += 16;
         }
@@ -769,7 +865,12 @@ pub fn catalog(bad_ref: bool) -> Vec<u8> {
     for v in [0x1111_1111, 2, 4] {
         u32s(&mut w, v);
     }
-    for (ty, at, target) in [(0, i32_at, 0), (1, f64_at, 0), (2, bool_at, 0), (3, ref_at, 1)] {
+    for (ty, at, target) in [
+        (0, i32_at, 0),
+        (1, f64_at, 0),
+        (2, bool_at, 0),
+        (3, ref_at, 1),
+    ] {
         for v in [0xA000_0000 + ty, ty, at, target] {
             u32s(&mut w, v);
         }

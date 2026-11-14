@@ -32,8 +32,7 @@ export function parseCpuMs(output, platform) {
 
 // Instructions retired by the one process /usr/bin/time waited for, or null where the report has no
 // counter, as GNU time's hasn't: a missing count is never 0. macOS adds no child's count to its
-// parent's, so this is not the whole of a command that starts children; countChildren is. Unlike time,
-// the count doesn't move with machine load.
+// parent's, so this is not the whole of a command that starts children; countChildren is.
 export function parseInstructions(report, platform) {
   const count = platform === 'darwin' ? Number(report.match(/^\s*(\d+)\s+instructions retired\s*$/m)?.[1]) : NaN;
   return Number.isSafeInteger(count) && count > 0 ? count : null;
@@ -84,9 +83,9 @@ function countChildren(log, command) {
   const rows = log.split('\n').filter(Boolean).map((line) => line.split(' '));
   const select = (wanted) => rows.filter(([kind]) => kind === wanted).map(([, ...fields]) => fields);
   const unread = select('unread').map(([parent, child, time]) => ({ parent, child, time: Number(time) }));
-  const reaped = select('reap').map(([parent, child, instructions, elapsed, childElapsed]) => ({ parent, child, instructions: Number(instructions), childElapsed: Number(childElapsed), time: Number(elapsed) + Number(childElapsed) }));
+  const reaped = select('reap').map(([parent, child, instructions, elapsed, childElapsed, ...qos]) => ({ parent, child, instructions: Number(instructions), childElapsed: Number(childElapsed), time: Number(elapsed) + Number(childElapsed), qos: qos.map(Number) }));
   const waited = new Set([...reaped, ...unread].map(({ child }) => child));
-  const left = select('exit').filter(([child]) => !waited.has(child)).map(([child, instructions, childElapsed]) => ({ child, instructions: Number(instructions), childElapsed: Number(childElapsed) }));
+  const left = select('exit').filter(([child]) => !waited.has(child)).map(([child, instructions, childElapsed, ...qos]) => ({ child, instructions: Number(instructions), childElapsed: Number(childElapsed), qos: qos.map(Number) }));
   const starts = select('start').map(([, child, ...path]) => ({ child, path: path.join(' ') }));
   const nameOf = (pid) => starts.find(({ child }) => child === pid)?.path ?? command[0];
   const accounted = new Map();
@@ -98,7 +97,27 @@ function countChildren(log, command) {
     ...unread.map(({ child }) => nameOf(child)),
     ...counts.filter(({ child, childElapsed }) => (accounted.get(child) ?? 0) !== childElapsed).map(({ child }) => nameOf(child)).map((name) => (observers.has(name) ? name : `a child of ${name}`)),
   ])].filter((name) => !observers.has(name));
-  return { instructions: !reaped.length || uncounted.length ? null : counts.reduce((sum, { instructions }) => sum + instructions, 0), uncounted };
+  return { instructions: !reaped.length || uncounted.length ? null : counts.reduce((sum, { instructions }) => sum + instructions, 0), uncounted, qos: sumQos(counts.map(({ qos }) => qos)) };
+}
+
+// The CPU time at each QoS class count-children.c logs, summed, or null when any is missing.
+const QOS_CLASSES = ['default', 'maintenance', 'background', 'utility', 'legacy', 'user-initiated', 'user-interactive'];
+function sumQos(readings) {
+  if (!readings.length || readings.some((qos) => qos?.length !== QOS_CLASSES.length || qos.some((time) => !Number.isSafeInteger(time) || time < 0))) return null;
+  return QOS_CLASSES.map((_, index) => readings.reduce((sum, qos) => sum + qos[index], 0));
+}
+
+// Where two sides' CPU time ran, when more than half of it ran at different QoS classes (half the summed
+// differences of their shares), or null when it didn't or can't be read.
+function qosApart(current, base) {
+  const shares = (qos) => {
+    const total = qos?.reduce((sum, time) => sum + time, 0);
+    return total ? qos.map((time) => time / total) : null;
+  };
+  const [now, then] = [shares(current), shares(base)];
+  if (!now || !then || now.reduce((sum, share, index) => sum + Math.abs(share - then[index]), 0) / 2 <= 0.5) return null;
+  const top = (side) => side.indexOf(Math.max(...side));
+  return `the change ran ${(now[top(now)] * 100).toFixed(0)}% at ${QOS_CLASSES[top(now)]} QoS and the merge base ${(then[top(then)] * 100).toFixed(0)}% at ${QOS_CLASSES[top(then)]}`;
 }
 
 // stream shows the command's output as it runs instead of capturing it; a captured run is stopped after
@@ -135,47 +154,86 @@ export function measureOnce(command, cwd, stream = false, timeoutMs = 300_000, f
     const report = readFileSync(timing, 'utf8');
     const peakBytes = parsePeakRss(report, process.platform);
     const own = parseInstructions(report, process.platform);
-    const { instructions, uncounted } = !follow ? { instructions: own, uncounted: [] } : build && own !== null ? countChildren(readFileSync(counted, 'utf8'), command) : { instructions: null, uncounted: [] };
-    return { elapsedMs, loadStart, loadEnd, cpuMs: parseCpuMs(report, process.platform), peakBytes, instructions, uncounted, status: result.status, output: stream ? '' : result.stdout + result.stderr };
+    const { instructions, uncounted, qos } = !follow ? { instructions: own, uncounted: [], qos: null } : build && own !== null ? countChildren(readFileSync(counted, 'utf8'), command) : { instructions: null, uncounted: [], qos: null };
+    return { elapsedMs, loadStart, loadEnd, cpuMs: parseCpuMs(report, process.platform), peakBytes, instructions, uncounted, qos, status: result.status, output: stream ? '' : result.stdout + result.stderr };
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
 }
 
-// Alternates current and merge-base runs so both see the same machine load: one warmup round, then 20 rounds.
-// Returns [current] or [current, base], each with its instructions retired per round, in round order,
-// and what started a child no count covers.
+// Alternates current and merge-base runs so both see the same machine load, and swaps which side runs first each
+// round, so a cache one run leaves warm favors neither: one warmup round, then 20 rounds.
+// Returns [current] or [current, base], each with its sample count, its instructions retired per round, in round order,
+// what started a child no count covers, and its CPU time at each QoS class over its rounds.
 export function measure(command, cwd, base) {
   const sides = base ? [[command, cwd], [base.command, base.cwd]] : [[command, cwd]];
   const samples = sides.map(() => []);
   for (let round = 0; round <= 20; round++) {
-    sides.forEach(([argv, directory], side) => {
+    const order = round % 2 ? [...sides.keys()].reverse() : [...sides.keys()];
+    for (const side of order) {
+      const [argv, directory] = sides[side];
       const result = measureOnce(argv, directory);
       if (result.status !== 0) throw Error(`${argv[0]} exited ${result.status}: ${result.output}`);
-      if (round) samples[side].push({ ms: result.elapsedMs, peakBytes: result.peakBytes, instructions: result.instructions, uncounted: result.uncounted });
-    });
+      if (round) samples[side].push({ ms: result.elapsedMs, peakBytes: result.peakBytes, instructions: result.instructions, uncounted: result.uncounted, qos: result.qos });
+    }
   }
-  return samples.map((side) => ({ ...summarize(side), instructions: side.map(({ instructions }) => instructions), uncounted: [...new Set(side.flatMap(({ uncounted }) => uncounted))] }));
+  return samples.map((side) => ({ ...summarize(side), samples: side.length, instructions: side.map(({ instructions }) => instructions), uncounted: [...new Set(side.flatMap(({ uncounted }) => uncounted))], qos: sumQos(side.map(({ qos }) => qos)) }));
 }
 
-// Judges a task against its merge base on the instructions retired of each alternated round, so the
-// verdict holds on any machine under any load. A pair's difference is current / base - 1; the change
-// is the median difference, and it fails when over the margin, the larger of 2% and the pairs'
-// spread. A missing count makes it INCONCLUSIVE; uncounted says what started a child with no count.
-export function judgeInstructions(pairs, uncounted = []) {
+// A rise in instructions retired is judged against 2%, by 10,000 sign flips decided at p under 0.01.
+const FLOOR = 0.02, ALPHA = 0.01, FLIPS = 10_000, SEED = 1405;
+
+// A seed's stream of 32-bit words: a Weyl sequence through murmur3's 32-bit finalizer.
+function words(seed) {
+  let state = seed >>> 0;
+  return () => {
+    state = (state + 0x9e3779b9) >>> 0;
+    const h = Math.imul(state ^ (state >>> 16), 0x85ebca6b);
+    const k = Math.imul(h ^ (h >>> 13), 0xc2b2ae35);
+    return (k ^ (k >>> 16)) >>> 0;
+  };
+}
+
+// Judges a task against its merge base on the instructions retired of each alternated round. Each pair's
+// log ratio, ln(current / base), is taken less ln(1.02), so a pair within one instruction of 2% sits at 0.
+// Two seeded one-sided sign-flip tests read the sum of those against the same 10,000 flips of their
+// signs: it FAILs when the flips reach the pairs' own sum at p under 0.01 (above 2%), and PASSes when they
+// fall to it at p under 0.01 ("at least 2%" rejected); anything else is INCONCLUSIVE. One outlier pair
+// moves the sum by its own size, never a margin for the rest. A count from code that waits by spinning or
+// on a lock counts its waiting, so it moves with the schedule and the machine's load, and its pairs often
+// can't tell. change is the median of current / base - 1, for the reason. A missing count makes it
+// INCONCLUSIVE; uncounted says what started a child with no count.
+export function judgeInstructions(pairs, uncounted = [], seed = SEED) {
   const count = (value) => Number.isSafeInteger(value) && value > 0;
   const missing = pairs.filter((pair) => !count(pair?.current) || !count(pair?.base)).length;
   if (!pairs.length || missing) {
-    return { status: 'INCONCLUSIVE', pairs, change: null, spread: null, margin: null, uncounted,
+    return { status: 'INCONCLUSIVE', pairs, change: null, seed, pAbove: null, pBelow: null, uncounted,
       reason: `instructions retired are missing in ${pairs.length ? `${missing} of ${pairs.length} pairs` : 'every pair: none were measured'}; ${uncounted.length ? `no count covers ${uncounted.join(', ')}` : "this host's /usr/bin/time reports no counter, or cc can't build the child counter"}` };
   }
   const differences = pairs.map(({ current, base }) => current / base - 1).sort((a, b) => a - b);
   const middle = differences.length / 2;
   const change = differences.length % 2 ? differences[Math.floor(middle)] : (differences[middle - 1] + differences[middle]) / 2;
-  const spread = differences.at(-1) - differences[0];
-  const margin = Math.max(0.02, spread);
-  if (change > margin) return { status: 'FAIL', pairs, change, spread, margin, reason: `instructions retired rose ${(change * 100).toFixed(2)}% over the merge base, beyond the ${(margin * 100).toFixed(2)}% margin` };
-  return { status: 'PASS', pairs, change, spread, margin };
+  const shifted = pairs.map(({ current, base }) => (Math.abs(current - base * (1 + FLOOR)) <= 1 ? 0 : Math.log(current / base) - Math.log1p(FLOOR)));
+  const observed = shifted.reduce((sum, value) => sum + value, 0);
+  // Flips that reorder the same values may round apart.
+  const tolerance = 1e-9 * shifted.reduce((sum, value) => sum + Math.abs(value), 0);
+  const next = words(seed);
+  let above = 1, below = 1;
+  for (let flip = 0; flip < FLIPS; flip++) {
+    let total = 0, bits = 0;
+    for (let index = 0; index < shifted.length; index++) {
+      if (index % 32 === 0) bits = next();
+      total += (bits >>> (index % 32)) & 1 ? shifted[index] : -shifted[index];
+    }
+    if (total >= observed - tolerance) above++;
+    if (total <= observed + tolerance) below++;
+  }
+  const pAbove = above / (FLIPS + 1), pBelow = below / (FLIPS + 1);
+  const rose = `instructions retired changed ${(change * 100).toFixed(2)}% over the merge base (median of ${pairs.length} pairs)`;
+  const read = `p ${pAbove.toPrecision(2)} that it's above 2%, p ${pBelow.toPrecision(2)} that it's under, seed ${seed}`;
+  if (pAbove < ALPHA) return { status: 'FAIL', pairs, change, seed, pAbove, pBelow, reason: `${rose}: above 2% at ${read}` };
+  if (pBelow < ALPHA) return { status: 'PASS', pairs, change, seed, pAbove, pBelow };
+  return { status: 'INCONCLUSIVE', pairs, change, seed, pAbove, pBelow, uncounted, reason: `${rose}, and the pairs can't tell it from 2% at p under 0.01: ${read}` };
 }
 
 // Builds unmeasured, so a checkout and its merge base are both timed warm. The check lanes run
@@ -275,12 +333,22 @@ export function judgeLimit({ limit, runs, fingerprint: machine, loads }) {
   return { status: 'INCONCLUSIVE', limit, runs, margin, reason: `the five runs are neither all within ${limit} nor all over it by more than the ${(margin * 100).toFixed(1)}% margin` };
 }
 
+// A budget is frozen once main has it, but where its value is an estimate, a measurement made before the change it
+// judges may move it once, with the reason recorded (#12): only its limits change, and it gains the changeReason its
+// merge base's entry doesn't have yet. A second move, or one with no reason, is refused like any other change.
+const numbers = ({ limits, changeReason, ...rest } = {}) => rest;
+const movedOnce = (current, established) => typeof current?.changeReason === 'string' && current.changeReason.trim() !== ''
+  && !('changeReason' in established) && isDeepStrictEqual(numbers(current), numbers(established));
+const frozen = (current, established) => isDeepStrictEqual(current, established) || movedOnce(current, established);
+
 export function validateBudgets(current, base) {
   if (!Array.isArray(current?.tasks)) throw Error('Missing budget tasks');
-  if (base?.preflight && !isDeepStrictEqual(current.preflight, base.preflight)) throw Error('Budget preflight changed or disappeared; restore its frozen definition');
-  if (base?.harness && !isDeepStrictEqual(current.harness, base.harness)) throw Error('Budget harness changed or disappeared; restore its frozen definition');
+  if (base?.preflight && !frozen(current.preflight, base.preflight)) throw Error('Budget preflight changed or disappeared; restore its frozen definition');
+  if (base?.harness && !frozen(current.harness, base.harness)) throw Error('Budget harness changed or disappeared; restore its frozen definition');
+  // A task's criteria say what it proves, not how it is judged: the budget window reads them as the merge base has them.
+  const definition = ({ criteria, ...task } = {}) => task;
   for (const established of base?.tasks ?? []) {
-    if (!isDeepStrictEqual(current.tasks.find(({ id }) => id === established.id), established))
+    if (!frozen(definition(current.tasks.find(({ id }) => id === established.id)), definition(established)))
       throw Error(`Budget ${established.id} changed or disappeared; restore its frozen definition`);
   }
   const ids = new Set();
@@ -324,9 +392,11 @@ export function judgeTask(budget, established, cwd, baseCwd) {
   const runs = Object.keys(budget.limits).length ? (once(), Array.from({ length: 5 }, once)) : [];
   const machine = fingerprint();
   const limits = Object.fromEntries(Object.entries(budget.limits).map(([metric, limit]) => [metric, judgeLimit({ limit, runs: runs.map((run) => (metric === 'peakBytes' ? run.peakBytes : run.elapsedMs)), fingerprint: machine, loads: runs.map(({ loadStart, loadEnd }) => ({ start: loadStart, end: loadEnd })) })]));
-  // Instructions retired don't move with load, so this comparison holds on any machine; it never
-  // changes a limit's verdict.
-  const instructions = then && judgeInstructions(now.instructions.map((current, round) => ({ current, base: then.instructions[round] })), [...new Set([...now.uncounted, ...then.uncounted])]);
+  // Judged off the reference Macs too, where the limits are only readings; it never changes a limit's verdict. Sides that
+  // ran at different QoS don't compare: what waits counts its waiting, so a count moves with how the side was scheduled.
+  const judged = then && judgeInstructions(now.instructions.map((current, round) => ({ current, base: then.instructions[round] })), [...new Set([...now.uncounted, ...then.uncounted])]);
+  const apart = judged?.change != null && qosApart(now.qos, then.qos);
+  const instructions = apart ? { ...judged, status: 'INCONCLUSIVE', uncounted: judged.uncounted ?? [], reason: `${apart}, so their instructions retired don't compare; the counts alone read ${judged.status}${judged.reason ? `: ${judged.reason}` : ''}` } : judged;
   let outcome, regression = null;
   try {
     // compare holds only the merge-base regression here; the limits are judged above.

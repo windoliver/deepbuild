@@ -36,10 +36,8 @@ fn scene(lamp: Value, arranged: bool) -> Value {
 
 /// The window the document leaves, and the lamp's evaluated position.
 fn screen(name: &str, document: Value) -> (image::RgbaImage, Value) {
-    let dir = std::env::temp_dir().join(format!(
-        "deep-show-arranged-{name}-{}",
-        std::process::id()
-    ));
+    let dir =
+        std::env::temp_dir().join(format!("deep-show-arranged-{name}-{}", std::process::id()));
     let out = dir.join("screen.png");
     let scenario = json!({
         "evidence": dir.join("evidence"),
@@ -65,10 +63,17 @@ fn screen(name: &str, document: Value) -> (image::RgbaImage, Value) {
     let answer = child.wait_with_output().expect("deep-show exits");
     let answer: Value = serde_json::from_slice(&answer.stdout).expect("one JSON line");
     assert_eq!(answer["ok"], json!(true), "{answer}");
-    assert_eq!(answer["replies"][0]["outcome"], json!("presented"), "{answer}");
+    assert_eq!(
+        answer["replies"][0]["outcome"],
+        json!("presented"),
+        "{answer}"
+    );
     let picture = image::open(&out).expect("the window's PNG").to_rgba8();
     let _ = std::fs::remove_dir_all(&dir);
-    (picture, answer["replies"][1]["values"]["items/lamp/at/pos"][0].clone())
+    (
+        picture,
+        answer["replies"][1]["values"]["items/lamp/at/pos"][0].clone(),
+    )
 }
 
 #[test]

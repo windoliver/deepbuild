@@ -1,0 +1,236 @@
+[
+  {
+    "file": "seq-3341-15-24bit.wav.wav lifted 5.8 dB",
+    "id": "peak_0",
+    "target": -23,
+    "issues": [
+      {
+        "code": "audio.gen.level",
+        "path": "sounds/peak_0/variants/0/takes/0",
+        "actual": {
+          "integrated": 3.1011910654926513,
+          "target": -23,
+          "tolerance": 1
+        },
+        "what": "sounds/peak_0/variants/0/takes/0 reads 3.10 LUFS, outside ±1 LU of its target -23 LUFS"
+      },
+      {
+        "code": "audio.gen.peak",
+        "path": "sounds/peak_0/variants/0/takes/0",
+        "actual": {
+          "true_peak": -0.20026486113561964,
+          "ceiling": -1
+        },
+        "what": "sounds/peak_0/variants/0/takes/0 peaks at -0.20 dBTP, over the -1 dBTP ceiling"
+      }
+    ]
+  },
+  {
+    "file": "seq-3341-16-24bit.wav.wav lifted 5.8 dB",
+    "id": "peak_1",
+    "target": -23,
+    "issues": [
+      {
+        "code": "audio.gen.level",
+        "path": "sounds/peak_1/variants/0/takes/0",
+        "actual": {
+          "integrated": 3.1011900200430986,
+          "target": -23,
+          "tolerance": 1
+        },
+        "what": "sounds/peak_1/variants/0/takes/0 reads 3.10 LUFS, outside ±1 LU of its target -23 LUFS"
+      },
+      {
+        "code": "audio.gen.peak",
+        "path": "sounds/peak_1/variants/0/takes/0",
+        "actual": {
+          "true_peak": -0.19713727414701782,
+          "ceiling": -1
+        },
+        "what": "sounds/peak_1/variants/0/takes/0 peaks at -0.20 dBTP, over the -1 dBTP ceiling"
+      }
+    ]
+  },
+  {
+    "file": "seq-3341-17-24bit.wav.wav lifted 5.8 dB",
+    "id": "peak_2",
+    "target": -23,
+    "issues": [
+      {
+        "code": "audio.gen.level",
+        "path": "sounds/peak_2/variants/0/takes/0",
+        "actual": {
+          "integrated": 3.097937958548728,
+          "target": -23,
+          "tolerance": 1
+        },
+        "what": "sounds/peak_2/variants/0/takes/0 reads 3.10 LUFS, outside ±1 LU of its target -23 LUFS"
+      },
+      {
+        "code": "audio.gen.peak",
+        "path": "sounds/peak_2/variants/0/takes/0",
+        "actual": {
+          "true_peak": -0.1928251249114757,
+          "ceiling": -1
+        },
+        "what": "sounds/peak_2/variants/0/takes/0 peaks at -0.19 dBTP, over the -1 dBTP ceiling"
+      }
+    ]
+  },
+  {
+    "file": "seq-3341-18-24bit.wav.wav lifted 5.8 dB",
+    "id": "peak_3",
+    "target": -23,
+    "issues": [
+      {
+        "code": "audio.gen.level",
+        "path": "sounds/peak_3/variants/0/takes/0",
+        "actual": {
+          "integrated": 3.088049258943558,
+          "target": -23,
+          "tolerance": 1
+        },
+        "what": "sounds/peak_3/variants/0/takes/0 reads 3.09 LUFS, outside ±1 LU of its target -23 LUFS"
+      },
+      {
+        "code": "audio.gen.peak",
+        "path": "sounds/peak_3/variants/0/takes/0",
+        "actual": {
+          "true_peak": -0.19978667449613283,
+          "ceiling": -1
+        },
+        "what": "sounds/peak_3/variants/0/takes/0 peaks at -0.20 dBTP, over the -1 dBTP ceiling"
+      }
+    ]
+  },
+  {
+    "file": "seq-3341-19-24bit.wav.wav",
+    "id": "peak_4",
+    "target": -23,
+    "issues": [
+      {
+        "code": "audio.gen.level",
+        "path": "sounds/peak_4/variants/0/takes/0",
+        "actual": {
+          "integrated": 6.311172916968489,
+          "target": -23,
+          "tolerance": 1
+        },
+        "what": "sounds/peak_4/variants/0/takes/0 reads 6.31 LUFS, outside ±1 LU of its target -23 LUFS"
+      },
+      {
+        "code": "audio.gen.peak",
+        "path": "sounds/peak_4/variants/0/takes/0",
+        "actual": {
+          "true_peak": 3.012845699722452,
+          "ceiling": -1
+        },
+        "what": "sounds/peak_4/variants/0/takes/0 peaks at 3.01 dBTP, over the -1 dBTP ceiling"
+      }
+    ]
+  },
+  {
+    "file": "seq-3341-20-24bit.wav.wav",
+    "id": "peak_5",
+    "target": -23,
+    "issues": [
+      {
+        "code": "audio.gen.level",
+        "path": "sounds/peak_5/variants/0/takes/0",
+        "actual": {
+          "integrated": -2.7016676256779775,
+          "target": -23,
+          "tolerance": 1
+        },
+        "what": "sounds/peak_5/variants/0/takes/0 reads -2.70 LUFS, outside ±1 LU of its target -23 LUFS"
+      },
+      {
+        "code": "audio.gen.peak",
+        "path": "sounds/peak_5/variants/0/takes/0",
+        "actual": {
+          "true_peak": -0.13018312868045112,
+          "ceiling": -1
+        },
+        "what": "sounds/peak_5/variants/0/takes/0 peaks at -0.13 dBTP, over the -1 dBTP ceiling"
+      }
+    ]
+  },
+  {
+    "file": "seq-3341-21-24bit.wav.wav",
+    "id": "peak_6",
+    "target": -23,
+    "issues": [
+      {
+        "code": "audio.gen.level",
+        "path": "sounds/peak_6/variants/0/takes/0",
+        "actual": {
+          "integrated": -2.7016556009944224,
+          "target": -23,
+          "tolerance": 1
+        },
+        "what": "sounds/peak_6/variants/0/takes/0 reads -2.70 LUFS, outside ±1 LU of its target -23 LUFS"
+      },
+      {
+        "code": "audio.gen.peak",
+        "path": "sounds/peak_6/variants/0/takes/0",
+        "actual": {
+          "true_peak": -0.09682273580142708,
+          "ceiling": -1
+        },
+        "what": "sounds/peak_6/variants/0/takes/0 peaks at -0.10 dBTP, over the -1 dBTP ceiling"
+      }
+    ]
+  },
+  {
+    "file": "seq-3341-22-24bit.wav.wav",
+    "id": "peak_7",
+    "target": -23,
+    "issues": [
+      {
+        "code": "audio.gen.level",
+        "path": "sounds/peak_7/variants/0/takes/0",
+        "actual": {
+          "integrated": -2.7016440793286014,
+          "target": -23,
+          "tolerance": 1
+        },
+        "what": "sounds/peak_7/variants/0/takes/0 reads -2.70 LUFS, outside ±1 LU of its target -23 LUFS"
+      },
+      {
+        "code": "audio.gen.peak",
+        "path": "sounds/peak_7/variants/0/takes/0",
+        "actual": {
+          "true_peak": -0.13360918676744826,
+          "ceiling": -1
+        },
+        "what": "sounds/peak_7/variants/0/takes/0 peaks at -0.13 dBTP, over the -1 dBTP ceiling"
+      }
+    ]
+  },
+  {
+    "file": "seq-3341-23-24bit.wav.wav",
+    "id": "peak_8",
+    "target": -23,
+    "issues": [
+      {
+        "code": "audio.gen.level",
+        "path": "sounds/peak_8/variants/0/takes/0",
+        "actual": {
+          "integrated": -2.701636736940762,
+          "target": -23,
+          "tolerance": 1
+        },
+        "what": "sounds/peak_8/variants/0/takes/0 reads -2.70 LUFS, outside ±1 LU of its target -23 LUFS"
+      },
+      {
+        "code": "audio.gen.peak",
+        "path": "sounds/peak_8/variants/0/takes/0",
+        "actual": {
+          "true_peak": -0.09682165096779602,
+          "ceiling": -1
+        },
+        "what": "sounds/peak_8/variants/0/takes/0 peaks at -0.10 dBTP, over the -1 dBTP ceiling"
+      }
+    ]
+  }
+]

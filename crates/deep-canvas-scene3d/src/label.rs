@@ -60,6 +60,9 @@ pub struct Labels {
     /// #381 AC1's wrong program (`deep-gpu run --planted label_mask`): the base's path, each label
     /// shaped at a fixed em for a mask of its own, with nothing placed in the atlas.
     pub fixed_em: bool,
+    /// #450: whole trails' samples, taken once at check and kept by their source chain's key for
+    /// the session that evaluates the scene, so a frame never takes them again.
+    pub(crate) trails: crate::trail::Held,
 }
 
 impl Default for Labels {
@@ -76,6 +79,7 @@ impl Labels {
             pages: Vec::new(),
             runs: BTreeMap::new(),
             fixed_em: false,
+            trails: BTreeMap::new(),
         }
     }
 
@@ -197,7 +201,7 @@ impl Labels {
                 let steps = pen.map(|v| (v * f32::from(PHASES)).round());
                 let whole = steps.map(|s| (s / f32::from(PHASES)).floor());
                 let phase = [0, 1].map(|i| (steps[i] - whole[i] * f32::from(PHASES)) as u8);
-                glyph.atlas = self.atlas.glyph_at(&g.font, g.id, raster, phase);
+                glyph.atlas = self.atlas.glyph_at(&g.font, g.id, raster, phase, g.skew);
                 if let Some(p) = glyph.atlas {
                     glyph.rect = [
                         (whole[0] + p.left as f32) / size,

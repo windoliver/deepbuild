@@ -1,0 +1,54 @@
+{
+  "runs": [
+    162.6329999999998,
+    146.5239999999999,
+    160.27499999999964,
+    158.89887499999986,
+    220.1339590000007
+  ],
+  "loads": [
+    {
+      "start": 161.14208984375,
+      "end": 161.14208984375
+    },
+    {
+      "start": 161.14208984375,
+      "end": 161.14208984375
+    },
+    {
+      "start": 161.14208984375,
+      "end": 161.14208984375
+    },
+    {
+      "start": 161.14208984375,
+      "end": 161.14208984375
+    },
+    {
+      "start": 170.49951171875,
+      "end": 170.49951171875
+    }
+  ],
+  "limit": 5000,
+  "result": {
+    "status": "INCONCLUSIVE",
+    "limit": 5000,
+    "runs": [
+      162.6329999999998,
+      146.5239999999999,
+      160.27499999999964,
+      158.89887499999986,
+      220.1339590000007
+    ],
+    "margin": 0.05,
+    "reason": "a reading, not a budget result: off the reference Macs (Mac15,7 (M3 Pro, 36 GB) or Mac15,12 (M3, 16 GB) or Mac17,10 (M5 Max, 64 GB); mains power, Low Power Mode off, thermal state nominal): thermal state is \"fair\", not \"nominal\"; load 170.49951171875 at a run's start or end is above the 18 cores"
+  },
+  "machine": {
+    "model": "Mac17,10",
+    "chip": "Apple M5 Max",
+    "memoryBytes": 68719476736,
+    "power": "ac",
+    "lowPowerMode": false,
+    "thermalState": "fair",
+    "macosBuild": "26B8119"
+  }
+}

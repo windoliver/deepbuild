@@ -46,6 +46,9 @@ const SETTLE_TIMEOUT: Duration = Duration::from_secs(2);
 /// The criteria's wrong programs, each reachable only through the scenario's `planted`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Planted {
+    /// #544: a start_on run on a logic item's occurrences starts at the first frame its session
+    /// evaluates at or after the occurrence.
+    StartOnAtFirstFrame,
     PresentsUnnamedRemoval,
     DiffsItemsOnly,
     InlinesEveryIssue,
@@ -83,8 +86,7 @@ pub enum Planted {
     UndoReorderMintsKey,
     /// #138: order keys are drawn when a patch applies, not from its base.
     ApplyTimeOrderKeys,
-    /// #379: the check estimates with coefficients for the machine it runs on, not the
-    /// reference Mac's.
+    /// #379: the check estimates with coefficients for the machine it runs on, not the reference Mac's.
     EstimatesOnThisMachine,
     /// #138: the incremental check after a patch skips the items that refer to what it touched.
     IncrementalCheckSkipsReferrers,
@@ -144,20 +146,68 @@ pub enum Planted {
     ResolverOnlyRefUnresolved,
     /// #384: the resolver closes the ask-task of a message whose item is gone.
     ResolverClosesTask,
+    /// #1401: a probe's hits placed where its ray reaches the depth target's view depth.
+    ProbeFromDepth,
+    /// #1401: a probe that meets nothing answers the item drawn nearest its pixel.
+    ProbeNearestItem,
     /// #403: a verdict's key names each deliverable by doc ID alone, with no revision.
     VerdictKeyedByDoc,
     /// #403: checks in a claim skip an `unknown_kind` item and judge the rest.
     ChecksSkipUnknownKind,
     /// #403: a check kind no module in the build registers is INCONCLUSIVE.
     MissingKindInconclusive,
+    /// #408: film.layout takes its texts by the kinds text@1, vector@1, mark.text and counter,
+    /// not from the core's glyph-box array.
+    LayoutTextByKind,
+    /// #407: a verdict that counts only the issues the patch brought, never those its last good
+    /// revision had too.
+    VerdictCountsNewIssues,
+    /// #407: the flicker check counts each single change of a region as a flash.
+    FlickerCountsSingleChanges,
+    /// #407: the flicker check reads one region, the whole view, by its mean luminance.
+    FlickerWholeViewMean,
+    /// #1399: the flicker check analyzes each rendition's first frame and serves it to every frame.
+    FlickerAnalyzesOnce,
+    /// #407: the claim check takes `cites: []` as cited.
+    CitesEmptyPasses,
+    /// #405's and #1936's: the geometry audit's wrong programs, which its own module names.
+    Audit(crate::geometry_audit::Planted),
+    /// #1921's: a world's outputs' wrong programs, which the physics host names.
+    Physics(crate::physics::Planted),
+    /// #525's live worlds' wrong programs.
+    Ahead(crate::stepped::Planted),
+    /// #202: a kind_rules requirement counts the working agent's own pack rule as its cover.
+    OwnRuleCountsAsCover,
+    /// #202: the kind_rules check evaluates a pack kind's recipe rules a second time.
+    RulesEvaluatedTwice,
+    /// #202: the kind kit tests each kind at its defaults only.
+    KitDefaultsOnly,
+    /// #202: the expander walks an instance's inputs in a hash map's order.
+    ExpandsInHashOrder,
+    /// #1956: the pack check of a kind's migration stops at its first fault.
+    MigrationFirstFault,
     /// #306: a derived item's seed comes from a counter over expansion order.
     SeedsByExpansionOrder,
+    /// #2015: a repeat over elements seeds each derived item with the part's element count too.
+    EachSeedsByElementCount,
+    /// #2015: a repeat over faces walks the part's triangles, not its polygon view's faces.
+    EachFacePerTriangle,
     /// #306: a change of inputs re-expands the broken-out item too, over the writer's own.
     ReexpansionOverwritesBrokenOut,
+    /// #1961: a load under a version that no longer derives a broken-out ID drops the item.
+    OrphanLoadDropsBrokenOut,
+    /// #1961: that load hands the broken-out ID to the new version's expansion.
+    OrphanLoadHandsIdToExpansion,
+    /// #1961: expansions are cached by kind and inputs, without the recipe's version.
+    ExpansionCacheWithoutRecipeVersion,
     /// #306: the pack check never reads `requires.modules`.
     PackCheckSkipsRequiresModules,
     /// #306: the store and a document's `packs` are keyed by the name half alone.
     PacksKeyedByName,
+    /// #1958: the store's sweep after `uninstall_pack` deletes a retired version, named or not.
+    StoreSweepDeletesNamed,
+    /// #1958: a version the store lacks resolves through the installed one of the same pack.
+    LoaderDrawsMissingWithInstalled,
     /// #488: a seek restores the checkpoint nearest to t by distance, not the last at or before.
     CheckpointNearestInDistance,
     /// #857: results of nodes run on several threads merge in the order they finished.
@@ -272,6 +322,39 @@ pub enum Planted {
     AssumesBt601,
     /// #499: a video frame looked up by ⌊source time × the nominal frame rate⌋.
     LookupFloorsFrameRate,
+    /// #501: the video writer starts the timecode track at frame 0 whatever the start.
+    TimecodeTrackZero,
+    /// #501: the png writer stores premultiplied color under `alpha: straight`.
+    PngPremultipliesStraight,
+    Export(crate::export::Guard), // #157: the export guards' wrong programs.
+    /// #1163: the video writer leaves frame 300 out, frame 299 held over its place.
+    VideoDropsFrame300,
+    /// #1163: a range export starts, and ends, one frame late.
+    RangeStartsOneFrameLate,
+    /// #501: each frame's sample count rounded on its own, each span starting where the last ended.
+    SpanRoundsEachFrame,
+    /// #501: a frame's first sample rounded to the nearest instead of floored.
+    SpanRoundsStart,
+    /// #501: the GPU BLAKE3 joins each parent's two children in the wrong order.
+    ChunkTreeWrongOrder,
+    /// #1897: the GPU pixel hash and its CPU twin XOR each pixel's words with no term for where
+    /// it is, so no swap moves it.
+    HashXorsWithoutPosition,
+    /// #501: a range's timecode starts at the job's start label, not at its first frame's.
+    RangeRestartsTimecode,
+    /// #501: the export skips its readiness gate, starts and stops at the missing asset's first
+    /// frame, leaving its partial file.
+    ExportStartsThenStops,
+    /// #501: the png target's writer exports only the session's selected items.
+    TargetExportsSelection,
+    /// #501: the png target's writer writes a baked channel back into the document.
+    TargetWritesBakedChannel,
+    /// #501: media fills export.target@1's `png` with a reader that is its own writer.
+    TargetReaderIsWriter,
+    /// #501: the mixer's Linux build adds one 16-bit step to every sample.
+    MixerLinuxOneStep,
+    /// #501: the drop-frame labeller drops frame numbers in the tenth minutes too.
+    DropFrameEveryTenthMinute,
     /// #499: a canonical seek decodes its frame from the asset's short-GOP proxy.
     SeekReadsProxy,
     /// #498: the gate trusts a shipped panel: its own request to play sounds.
@@ -298,6 +381,9 @@ pub enum Planted {
     BackendKeepsRemovedDevice,
     /// #499: after a device change the clock counts t from the new stream's sample 0.
     ClockRestartsFromSample0,
+    /// #525: a golden is compared under another runtime digest; an export's receipt leaves it out.
+    GoldenComparesAcrossDigests,
+    ReceiptOmitsRuntimeDigest,
     /// #421: a view keeps an item only when its bounds' centre is inside.
     CullByCenter,
     /// #421: a node's hierarchy bounds union only its direct children's own bounds.
@@ -324,6 +410,29 @@ pub enum Planted {
     WakerIgnoresScheduleFrame,
     /// #1551: a restarted link sits out a full refresh before its first callback.
     LinkRestartsARefreshLate,
+    /// #1901: the fingerprint kept output is keyed by leaves out the source digest.
+    FingerprintWithoutSources,
+    /// #1901: `padded_key` keys the fixture by its memory, padding and all.
+    KeyHashesRawBytes,
+    /// #504: every evaluated frame of a document with controls runs a program through the
+    /// sandbox module, as a per-frame plug-in callback would.
+    BoardRunsProgramPerFrame,
+    /// #504: a verdict judges, beside a claim's deliverables, the documents its agent showed on it.
+    FigureFeedsVerdict,
+    /// #504: a whole revision presented again rebuilds every part, changed or not.
+    ReloadRebuildsEveryPart,
+    /// #504: a control sweep steps the control but poses every assembly at its rest value.
+    SweepPosesAssembliesAtRest,
+    /// #504: a pick on a target also selects the item and opens its panel.
+    PickSelectsItem,
+    /// #504: a view-class pick applies the option's patch as a revision of the document.
+    VariantPickWritesRevision,
+    /// #504: an export applies only the last entry's option, over its whole span.
+    VariantExportFinalChoice,
+    /// #504: a template slot shows the value the document holds as written, never at t.
+    ReadoutReadsDefaults,
+    /// #504: each frame runs a plug-in's code the seal doesn't hold, listed among its nodes.
+    PluginCodePerFrame,
 }
 
 /// The build's sealed canvas-module set, registered and sealed once at startup (#305: Registry
@@ -347,11 +456,15 @@ pub struct Startup {
     pub ignores_unknown_occlusion: bool,
     /// #200: a planted wrong `deep://registries` listing.
     pub listing: Option<crate::registries::Listing>,
+    /// #501: a run's wrong program given at startup (`--planted <name>`).
+    pub run_planted: Option<Planted>,
     /// #412: a planted wrong deep_kinds listing, sheet, dump, diff or gallery.
     pub kinds: Option<crate::kinds::Planted>,
     /// #415: a planted wrong first-party layout: pages@1 under a pack's cap, or nav.graph's
     /// validators trusting the header's link count.
     pub layouts: deep_canvas_sandbox::layouts::Planted,
+    /// #1901: the folder kept output lives in across processes (`--cache <dir>`).
+    pub cache: Option<std::path::PathBuf>,
 }
 
 /// How many times this process registered and sealed: counted where it happens, so the
@@ -432,15 +545,20 @@ pub struct RecordObject {
     pub as_of: Option<i64>,
 }
 
+#[derive(Clone)]
 pub struct Claim {
     /// The session that made the claim: its working agent.
     pub session: String,
     pub deliverables: Vec<String>,
     /// The locked definition's requirements, each one check input (#403).
     pub requirements: Vec<Requirement>,
+    /// #407: a film's brief, drafted with the definition: `{goal, moments, holds, cues,
+    /// sources}`, whose moments, holds and cues each become a check.
+    pub brief: Option<Value>,
 }
 
 /// One requirement of a claim's definition: its handle and its check input.
+#[derive(Clone)]
 pub struct Requirement {
     pub id: String,
     pub check: Value,
@@ -450,6 +568,8 @@ pub struct Card {
     pub question: String,
     pub options: Vec<String>,
     pub slot: Slot,
+    /// #507: how long the ask's default waits once its deadline starts, in flicks.
+    pub deadline: Option<i64>,
 }
 
 /// Where the card draws: the slot its view reserved (#393), or, with `displays`, where the
@@ -489,6 +609,8 @@ pub struct Frames {
     pub paced: bool,
     pub revise: Option<(usize, Value)>,
     pub pixels: bool,
+    /// #538: each frame's compares and remap times.
+    pub timings: bool,
 }
 
 pub struct Show {
@@ -523,11 +645,7 @@ pub enum Call {
     /// #379: the cost model's micro-benchmark.
     Costs,
     /// #140: the network seam's conformance suite.
-    NetworkSuite {
-        macos: bool,
-        messages: u64,
-        seed: u64,
-    },
+    NetworkSuite(Box<crate::seams::Suite>),
     /// #309: a test client on the network seam's macOS backend.
     RelayClient(Box<crate::seams::RelayClient>),
     /// #855: rekeys the process's content keys under a hash, once.
@@ -536,6 +654,19 @@ pub enum Call {
     Keys {
         doc: String,
         runs: usize,
+    },
+    /// #1901: the machine fingerprint kept output is keyed by.
+    Fingerprint,
+    /// #1901: a document's frame, capture or final at a time, through the kept-output cache.
+    Draw {
+        doc: String,
+        t: EvalTime,
+        output: &'static str,
+    },
+    /// #1901: the padded key input built twice, its padding from two seeds, and its keys.
+    PaddedKey {
+        fields: u64,
+        seeds: [u64; 2],
     },
     Show(Box<Show>),
     Patch(Box<PatchCall>),
@@ -557,6 +688,11 @@ pub enum Call {
     KindSchemas,
     /// #421: the spatial index's bounds and the answers to its queries.
     Spatial(Box<crate::spatial::Spatial>),
+    /// #539: a document's logic items stepped on its input track, with logic.determinism.
+    Logic(Box<crate::picks::LogicCall>),
+    /// #2014: rays met by a terrain plate's drawn triangles, its physics shape and a pick.
+    TerrainRays(Box<crate::terrain::TerrainRays>),
+    PhysicsBake(Box<crate::physics::Bake>),
     /// #306: the pack store's rows.
     Packs,
     /// #306: one pack version installed mid-run; #200: through a session, which wrote it.
@@ -565,12 +701,20 @@ pub enum Call {
         dir: PathBuf,
         session: Option<String>,
     },
+    /// #1958: one pack version uninstalled: retired, then the store's sweep.
+    UninstallPack {
+        id: String,
+        version: String,
+    },
     /// #200: `deep://registries/<core version>`.
     Registries,
     /// #490: `fn`, one expression of the closed function list.
     Fn(Box<Map<String, Value>>),
     /// #490: `path`, an item's drawn path.
-    Path { doc: String, item: String },
+    Path {
+        doc: String,
+        item: String,
+    },
     /// #412: deep_kinds, its fields as the call gave them.
     Kinds(Value),
     /// #238: the sandbox module's counts of checks, links, rewrites and check-time runs.
@@ -578,7 +722,10 @@ pub enum Call {
     /// #238: the providers a document's current revision ran at check, with their output.
     Provided(String),
     /// #415: the check-time validation of one data asset in a layout of `data.layout@1`.
-    Validate { layout: String, path: PathBuf },
+    Validate {
+        layout: String,
+        path: PathBuf,
+    },
     /// #200: an entry of a registry by name, through a document's pinned packs, `runs` times.
     Lookup {
         doc: String,
@@ -602,11 +749,29 @@ pub enum Call {
     },
     /// An export of a document's current revision planned at its rates (#488).
     Export(crate::time::Export),
+    /// #501: an export through a sealed `export.target@1` entry.
+    ExportRun(Box<crate::export::Job>),
+    /// #501: a document's session state, read or set.
+    Session {
+        doc: String,
+        set: Option<Value>,
+    },
+    /// #501: the export's GPU hash pass on given BGRA8 frames.
+    FrameHash {
+        frames: Vec<([u32; 2], String)>,
+        software: bool,
+    },
+    /// #501: the cross-machine audio check on two float WAVs.
+    CrossMachine([String; 2]),
+    /// #1897: the GPU pixel hash on frames from the evidence store, beside its CPU twin.
+    PixelHash(Vec<([u32; 2], deep_gpu::pixel_hash::Format, String)>),
     /// A document's session played on a virtual display to `to` (#488).
     Play {
         doc: String,
         display_hz: u32,
         to: i64,
+        /// #501: list each presented frame's display time, time evaluated and hash.
+        presented: bool,
     },
     /// Seeking against playing, on canonical renders (#488).
     Determinism(crate::time::Determinism),
@@ -647,6 +812,20 @@ pub enum Call {
     Input {
         panel: String,
         event: deep_canvas::scope::Event,
+        /// #525: the platform's timestamp of the event, when it carries one.
+        t: Option<i64>,
+        /// #540: the button the event pressed, moved with or released, and its modifiers.
+        gesture: crate::points::Gesture,
+    },
+    /// #540: a scene's world baked again on the hub's track.
+    World {
+        doc: String,
+        world: String,
+    },
+    /// #540: every copy of a document's lockstep match.
+    Match {
+        doc: String,
+        steps: i64,
     },
     /// A panel's interaction scope, with no input (#383).
     Scope(String),
@@ -710,6 +889,8 @@ pub enum Call {
     Rearm(String),
     /// A panel's view drawn: its revision with the view's filters, isolation and lens (#383).
     View(String),
+    /// #501: what a panel's film viewer shows.
+    Viewer(String),
     /// Your words from a panel's ask box to a session, about what you point at (#384).
     Ask {
         panel: String,
@@ -719,13 +900,15 @@ pub enum Call {
     },
     /// A session's messages as its agent reads them (#384).
     Messages(String),
-    /// A session's render-back of a document at a time as of a revision (#384).
+    /// A session's render-back of a document at a time as of a revision (#384), through a
+    /// camera, with pixel probes (#1401).
     RenderBack {
         session: String,
         doc: String,
         t: i64,
         rev: u64,
         size: Option<[u16; 2]>,
+        probes: crate::probe::Probes,
     },
     /// The parity suite's manifest (#138).
     Manifest,
@@ -735,6 +918,13 @@ pub enum Call {
     Verdict(String),
     /// Every verdict made on a claim, `stale` as of now (#403).
     Verdicts(String),
+    /// #405: an answer to the approval asks a geometry audit opened on a claim's requirement.
+    Answer {
+        via: Option<Via>,
+        claim: String,
+        requirement: String,
+        yes: bool,
+    },
     /// A fixture's snapshot on a backend, judged against the golden store (#138).
     Golden {
         fixture: String,
@@ -778,10 +968,14 @@ pub enum Call {
     Media(Box<crate::media::MediaCall>),
     /// The device gate: documents of strips, Play, the gate's fields, the device's output (#498).
     Gate(Box<crate::gate::GateCall>),
+    /// #507: present mode's state, the presenter view and the menu bar's count.
+    Present(crate::present::PresentCall),
     /// #499: the media module's mix.
     Mix(Box<crate::mixdown::MixCall>),
     /// #499: the test audio backend's devices, the transport log and a logic item's state.
     Audio(Box<crate::audio::AudioCall>),
+    /// #525: a golden of a document's evaluation, recorded or verified on this build.
+    RuntimeGolden(crate::golden::GoldenCall),
 }
 
 /// `eval`'s `t` (#488): a flick count, or a time literal resolved against the document's frame
@@ -801,14 +995,18 @@ pub struct Eval {
     pub clean: bool,
     pub perturb: Option<String>,
     pub pixels: bool,
-    /// #493: the film block, each camera's pose, a reduced-motion cut's dissolve, each parallax
-    /// group's offset and each text's glyphs.
+    /// #493: the film block, camera poses, a reduced-motion cut's dissolve, parallax and glyphs.
     pub film: bool,
     pub size: Option<[u16; 2]>,
     /// #855: each node's Debug text digest beside its result, a diagnostic only.
     pub debug_text: bool,
-    /// #497: document arrays to answer as the frame read them.
+    /// #497: arrays to answer as the frame read them; #1918: item paths whose values it answers.
     pub arrays: Vec<String>,
+    pub paths: Vec<String>,
+    /// #504: the document's input track for this evaluation, over the hub's.
+    pub track: Option<Vec<Value>>,
+    /// #507: each text item's drawn string beside the frame.
+    pub texts: bool,
 }
 
 pub struct Scenario {
@@ -817,6 +1015,8 @@ pub struct Scenario {
     pub processes: Vec<Process>,
     pub panels: BTreeMap<String, Panel>,
     pub docs: BTreeMap<String, String>,
+    /// #504: the claim or ask each document was minted for (`docs.<id>.for`), where named.
+    pub docs_for: BTreeMap<String, String>,
     pub record: BTreeMap<String, RecordObject>,
     /// #629: a replay's run record entries, each as a `run` call's reply gave it (`record` as a
     /// list).
@@ -874,8 +1074,12 @@ pub struct Scenario {
     pub decode_caps: deep_codecs::Caps,
     /// #499: the test audio backend, which replaces the platform's output at its boundary.
     pub audio: Option<crate::audio::Backend>,
+    /// #525: steps of live worlds that take host time on purpose.
+    pub delays: Vec<crate::stepped::Delay>,
     /// The packs installed in the store before the first call (#306), each `(owner/name, dir)`.
     pub packs: Vec<(String, PathBuf)>,
+    /// #1961: your notes the hub holds when the run starts, each `{note, doc, item, …}`.
+    pub notes: Vec<Value>,
     /// #200: the hub's installed slot fills, each `{slot, fill, kit}` with the kit result the hub
     /// recorded at install.
     pub installed: Vec<Value>,
@@ -930,12 +1134,18 @@ pub struct Hub<'a> {
     pub look_def: Option<Value>,
     pub display_only: BTreeSet<String>,
     /// #427's planted `mode_ids_by_count`: each document's mode visible table, by item count.
-    pub mode_ids: BTreeMap<String, (usize, Vec<(String, [f64; 4])>)>,
+    pub mode_ids: BTreeMap<String, ModeIds>,
     pub renderer: Renderer,
     /// The scheduler every document session shares, with its content-key cache (#387).
     pub sched: Scheduler<'a>,
     /// The scenario's background jobs' progress (#857).
     pub background: Vec<crate::jobs::Progress>,
+    /// #501: each document's session state as `session` set it: its selection and view inputs.
+    pub session_state: BTreeMap<String, Value>,
+    /// #504: each document's one input track (Input track), and the form its session loaded at
+    /// its last `deep_show`, before the track and the session's picks (crate::played).
+    pub tracks: BTreeMap<String, deep_canvas_input::track::Track>,
+    pub forms: BTreeMap<String, Value>,
     /// Each document's session.
     pub sessions: BTreeMap<String, DocSession>,
     /// Panels a `panel` call showed or hid.
@@ -943,6 +1153,8 @@ pub struct Hub<'a> {
     /// The GPU 3D revisions draw on (#378): unopened until the first, `None` inside where there
     /// is none.
     pub gpu3: Option<Option<crate::scene3d::Gpu3>>,
+    /// The GPU pixel hash's pipeline, built on the first canonical render it hashes (#405).
+    pub hash_pass: Option<deep_gpu::pixel_hash::PixelHash>,
     /// A 3D revision's snapshot drawn for the call being presented, with its size.
     pub pending3d: Option<Result<Raster, ()>>,
     /// Each panel's interaction scope (#383).
@@ -957,6 +1169,8 @@ pub struct Hub<'a> {
     pub asks: BTreeMap<String, Vec<crate::ask::Asked>>,
     /// The verdicts made on each claim, in the order made, each as recorded (#403).
     pub verdicts_made: BTreeMap<String, Vec<Value>>,
+    /// #405: the approval asks a geometry audit made, by ID, each with your answer once given.
+    pub audit_asks: BTreeMap<String, Option<bool>>,
     /// The pack store (#306): the versions admitted, and one row per offer.
     pub packs: Packs,
     pub pack_rows: Vec<crate::packs::Row>,
@@ -964,6 +1178,12 @@ pub struct Hub<'a> {
     pub pack_authors: BTreeMap<String, String>,
     /// Each document's expansions at its last check, for the replies that carry them.
     pub expansions: BTreeMap<String, Vec<Expansion>>,
+    /// #1961's planted expansion cache, by kind and inputs without the recipe's version.
+    pub expansion_cache: BTreeMap<String, Expansion>,
+    /// #544's planted start_on: each session's first evaluated time since its revision loaded.
+    pub first_frames: BTreeMap<String, i64>,
+    /// #538's planted lookup: each copy table's key order in its document's first revision.
+    pub first_orders: BTreeMap<String, Vec<String>>,
     /// The displays, the windows on them and the card's placement (#400).
     pub placement: Placement,
     /// Terminals, streams and session pages (#402).
@@ -985,9 +1205,14 @@ pub struct Hub<'a> {
     pub shapings: HashMap<Arc<deep_text::cache::Key>, u32>,
     /// What answered the card: the option and the release's platform stamp (#327).
     pub card_answer: Option<(String, i64)>,
+    /// #507: present mode, while it runs and after Esc ended it.
+    pub(crate) present: Option<crate::present::Presenting>,
     /// The sandbox module's check-time work (#238).
     pub sandbox: crate::sandbox::Host,
 }
+
+/// A document's item count, and its mode visible table as first seen at that count.
+pub type ModeIds = (usize, Vec<(String, [f64; 4])>);
 
 /// A snapshot's straight RGBA, its size and each item's box in its pixels.
 pub type Raster = (Vec<u8>, [u16; 2], Vec<(String, [f64; 4])>);
@@ -1073,7 +1298,19 @@ impl<'a> Hub<'a> {
             seed_by_order: scenario.planted == Some(Planted::SeedsByExpansionOrder),
             overwrite_broken_out: scenario.planted == Some(Planted::ReexpansionOverwritesBrokenOut),
             skip_requires_modules: scenario.planted == Some(Planted::PackCheckSkipsRequiresModules),
-            key_by_name: scenario.planted == Some(Planted::PacksKeyedByName),
+            key_by_name: matches!(
+                scenario.planted,
+                Some(Planted::PacksKeyedByName | Planted::LoaderDrawsMissingWithInstalled)
+            ),
+            each_by_count: scenario.planted == Some(Planted::EachSeedsByElementCount),
+            each_per_triangle: scenario.planted == Some(Planted::EachFacePerTriangle),
+            orphan_drops: scenario.planted == Some(Planted::OrphanLoadDropsBrokenOut),
+            orphan_hands_id: scenario.planted == Some(Planted::OrphanLoadHandsIdToExpansion),
+            rules_twice: scenario.planted == Some(Planted::RulesEvaluatedTwice),
+            kit_defaults_only: scenario.planted == Some(Planted::KitDefaultsOnly),
+            migration_first_fault: scenario.planted == Some(Planted::MigrationFirstFault),
+            walk_inputs: (scenario.planted == Some(Planted::ExpandsInHashOrder))
+                .then_some(walk_in_hash_order as deep_canvas::document::packs::WalkInputs),
         };
         let mut hub = Hub {
             scenario,
@@ -1087,12 +1324,18 @@ impl<'a> Hub<'a> {
             look_def: None,
             display_only: BTreeSet::new(),
             mode_ids: BTreeMap::new(),
-            renderer: Renderer::new(),
+            session_state: BTreeMap::new(),
+            tracks: BTreeMap::new(),
+            forms: BTreeMap::new(),
+            renderer: Renderer::new().turning_about_corner(
+                scenario.module_planted.as_deref() == Some("turns_about_corner"),
+            ),
             sched,
             sessions: BTreeMap::new(),
             background: Vec::new(),
             panels_shown: BTreeMap::new(),
             gpu3: None,
+            hash_pass: None,
             pending3d: None,
             scopes: BTreeMap::new(),
             serial: 0,
@@ -1106,10 +1349,14 @@ impl<'a> Hub<'a> {
             shown_at: BTreeMap::new(),
             asks: BTreeMap::new(),
             verdicts_made: BTreeMap::new(),
+            audit_asks: BTreeMap::new(),
             packs: Packs::new(pack_planted),
             pack_rows: Vec::new(),
             pack_authors: BTreeMap::new(),
             expansions: BTreeMap::new(),
+            expansion_cache: BTreeMap::new(),
+            first_frames: BTreeMap::new(),
+            first_orders: BTreeMap::new(),
             placement: Placement::open(
                 scenario.displays.clone(),
                 scenario.window,
@@ -1130,6 +1377,7 @@ impl<'a> Hub<'a> {
             card_rearms: Vec::new(),
             card_down: None,
             card_answer: None,
+            present: None,
             sandbox: crate::sandbox::Host::planted(startup.layouts),
             vias: BTreeMap::new(),
             shapings: HashMap::new(),
@@ -1166,7 +1414,7 @@ impl<'a> Hub<'a> {
     }
 
     /// The card as it stood at `t`, with the `rearm_on` changes reported and the answer (#327).
-    fn card_at(&self, t: i64) -> Option<placement::CardState> {
+    pub(crate) fn card_at(&self, t: i64) -> Option<placement::CardState> {
         match &self.scenario.card.as_ref()?.slot {
             Slot::Reserved(_) => None,
             Slot::Placed { ask, size, at } => self.placement.card_with(
@@ -1176,6 +1424,7 @@ impl<'a> Hub<'a> {
                 &self.card_rearms,
                 self.card_answer.as_ref().map(|(o, at)| (o.as_str(), *at)),
                 t,
+                self.present_span().map(|(d, _, until)| (d, until)),
             ),
         }
     }
@@ -1243,6 +1492,7 @@ impl<'a> Hub<'a> {
     ) -> Value {
         let sealed = &self.startup.sealed;
         let sandbox = &mut self.sandbox;
+        let evidence = &self.scenario.evidence;
         let reply = crate::packs::install(
             &mut self.packs,
             &mut self.pack_rows,
@@ -1250,7 +1500,11 @@ impl<'a> Hub<'a> {
             id,
             dir,
             self.scenario.pack_planted.as_deref(),
-            &mut |manifest, pack| sandbox.vet(manifest, pack, sealed),
+            &mut |manifest, pack| {
+                let (rows, mut issues) = sandbox.vet(manifest, pack, sealed);
+                issues.extend(crate::packs::kind_meshes(pack, sealed, evidence));
+                (rows, issues)
+            },
         );
         // #200: a pack installed through a session is that agent's own: its entries are listed
         // with origin agent, and in a registry that binds author they bind only its own claims.
@@ -1270,7 +1524,12 @@ impl<'a> Hub<'a> {
     /// The GPU 3D revisions draw on, opened on first use.
     pub fn gpu3(&mut self) -> Option<&mut crate::scene3d::Gpu3> {
         self.gpu3
-            .get_or_insert_with(crate::scene3d::Gpu3::open)
+            .get_or_insert_with(|| {
+                crate::scene3d::Gpu3::open(
+                    &self.startup.sealed,
+                    self.scenario.module_planted.clone(),
+                )
+            })
             .as_mut()
     }
 
@@ -1328,13 +1587,21 @@ impl<'a> Hub<'a> {
                 }
                 (h.clone(), Value::Object(v))
             })
+            // #1967: each terminal recording as the decode worker converted it, which a cell
+            // grid that plays it reads by its hash.
+            .chain(
+                self.media
+                    .recordings
+                    .iter()
+                    .map(|(sha, c)| (format!("terminal:{sha}"), c.clone())),
+            )
             .collect()
     }
 
     /// A new session for a document: its epochs from the scenario's start, the look's tokens
     /// and the record's readings.
     /// The look a document names by asset, resolved over the bundled faces (#1162).
-    fn look_of(&self, doc: &Value) -> Option<Look> {
+    pub(crate) fn look_of(&self, doc: &Value) -> Option<Look> {
         let def = self.look_def_of(doc)?;
         let bundled: Vec<&str> = deep_text::FACES.iter().map(|f| f.file).collect();
         // The status distance holds wherever status can show: a document with a status binding
@@ -1352,7 +1619,7 @@ impl<'a> Hub<'a> {
     }
 
     /// The look@1 a document names by asset, as the evidence store holds it.
-    fn look_def_of(&self, doc: &Value) -> Option<Value> {
+    pub(crate) fn look_def_of(&self, doc: &Value) -> Option<Value> {
         let name = doc.pointer("/look/asset")?.as_str()?;
         let id = name.split('@').next()?;
         let sha = doc.pointer(&format!("/assets/{id}/sha256"))?.as_str()?;
@@ -1380,20 +1647,31 @@ impl<'a> Hub<'a> {
     /// `params.outline` (#398, #1162): what the vector kind draws as in a frame.
     /// The import's issues come back: an SVG the store doesn't hold is `asset_missing`.
     pub(crate) fn inline_vectors(&self, form: &mut Value) -> Vec<Issue> {
-        let Value::Object(map) = form else { return Vec::new() };
+        let Value::Object(map) = form else {
+            return Vec::new();
+        };
         let root = &self.scenario.evidence;
         let (issues, imported) = deep_canvas_vector::check(
             map,
-            |sha| (sha.len() == 64).then(|| std::fs::read(root.join(&sha[..2]).join(&sha[2..])).ok()).flatten(),
+            |sha| {
+                (sha.len() == 64)
+                    .then(|| std::fs::read(root.join(&sha[..2]).join(&sha[2..])).ok())
+                    .flatten()
+            },
             deep_canvas_vector::svg::Twin::Honest,
         );
-        let Some(Value::Object(items)) = map.get_mut("items") else { return issues };
+        let Some(Value::Object(items)) = map.get_mut("items") else {
+            return issues;
+        };
         for (id, found) in &imported {
             if let Some(item) = items.get_mut(id) {
                 let mut outline =
                     deep_canvas_vector::lower::outline(&found.svg, item, &found.colors);
                 // Its source too, which a frame mid-write lowers again at its progress (#1162).
-                let src = item.pointer("/params/src").and_then(Value::as_str).unwrap_or("");
+                let src = item
+                    .pointer("/params/src")
+                    .and_then(Value::as_str)
+                    .unwrap_or("");
                 if let Some(bytes) = (src.len() == 64)
                     .then(|| std::fs::read(root.join(&src[..2]).join(&src[2..])).ok())
                     .flatten()
@@ -1402,6 +1680,13 @@ impl<'a> Hub<'a> {
                 }
                 if let Some(params) = item.get_mut("params").and_then(Value::as_object_mut) {
                     params.insert("outline".into(), outline);
+                    // #220: a typeset formula with no alt takes the job's source as its name.
+                    if let (None, Some(source)) = (
+                        params.get("alt"),
+                        deep_canvas_vector::typeset_source(&found.svg),
+                    ) {
+                        params.insert("alt".into(), Value::String(source));
+                    }
                 }
             }
         }
@@ -1411,7 +1696,7 @@ impl<'a> Hub<'a> {
     pub(crate) fn new_session(&self) -> DocSession {
         let mut s = DocSession::new(
             self.scenario.epoch_start,
-            deep_canvas_marks::modules::tokens(&self.look.light),
+            deep_canvas_marks::modules::look_tokens(&self.look),
         );
         s.set_readings(self.readings());
         s
@@ -1532,6 +1817,8 @@ impl<'a> Hub<'a> {
 
     /// One call's reply.
     pub fn call(&mut self, call: &Call) -> Value {
+        // #502: a caption set for a frame of the last call draws in no frame of this one.
+        self.renderer.caption = None;
         // #856's planted cache per document: each document's runs are keyed apart.
         if self.startup.run_per_document {
             let doc = match call {
@@ -1564,11 +1851,15 @@ impl<'a> Hub<'a> {
             Call::Geometry(g) => self.geometry(g),
             Call::KindSchemas => self.kind_schemas_reply(),
             Call::Spatial(s) => self.spatial(s),
+            Call::Logic(l) => self.logic_call(l),
+            Call::TerrainRays(r) => self.terrain_rays(r),
+            Call::PhysicsBake(b) => self.physics_bake(b),
             Call::SceneQuery(q) => self.scene_query(q),
-            Call::Packs => crate::packs::rows_reply(&self.pack_rows, &self.packs),
+            Call::Packs => self.packs_reply(),
             Call::InstallPack { id, dir, session } => {
                 self.install_pack(id, dir, session.as_deref())
             }
+            Call::UninstallPack { id, version } => self.uninstall_pack(id, version),
             Call::Registries => self.registries_reply(),
             Call::Fn(c) => crate::function::reply(c),
             Call::Path { doc, item } => match self.current(doc) {
@@ -1582,7 +1873,9 @@ impl<'a> Hub<'a> {
                 "checks": self.sandbox.checks, "links": self.sandbox.links,
                 "rewrites": self.sandbox.rewrites, "runs": self.sandbox.runs,
             }),
-            Call::Validate { layout, path } => self.sandbox.validate(&self.startup.sealed, layout, path),
+            Call::Validate { layout, path } => {
+                self.sandbox.validate(&self.startup.sealed, layout, path)
+            }
             Call::Provided(doc) => json!({
                 "doc": doc,
                 "provided": self.sandbox.provided.get(doc).cloned().unwrap_or_default(),
@@ -1594,25 +1887,30 @@ impl<'a> Hub<'a> {
                 runs,
             } => self.lookup_reply(doc, registry, name, *runs),
             Call::Costs => crate::costs::measure(self.startup),
-            Call::NetworkSuite {
-                macos,
-                messages,
-                seed,
-            } => crate::seams::network(*messages, *seed, *macos, self.startup.network),
+            Call::NetworkSuite(s) => crate::seams::suite(s, self.startup.network),
             Call::RelayClient(c) => crate::seams::relay_client(c, self.startup.network),
             Call::Migrate(to) => self.migrate(*to),
             Call::Keys { doc, runs } => self.keys(doc, *runs),
+            Call::Fingerprint => self.fingerprint_reply(),
+            Call::Draw { doc, t, output } => self.draw_reply(doc, t, output),
+            Call::PaddedKey { fields, seeds } => self.padded_key_reply(*fields, *seeds),
             Call::Fixtures => self.fixtures_reply(),
             Call::Schedule => self.startup.sealed.schedule(),
             Call::Eval(e) => self.eval(e),
             Call::Rate(r) => self.rate_reply(r),
             Call::Time { doc, text } => self.time_reply(doc, text),
             Call::Export(e) => self.export_reply(e),
+            Call::ExportRun(job) => self.export_run(job),
+            Call::Session { doc, set } => self.session_reply(doc, set.as_ref()),
+            Call::FrameHash { frames, software } => self.frame_hash(frames, *software),
+            Call::CrossMachine(wavs) => self.cross_machine(wavs),
+            Call::PixelHash(frames) => self.pixel_hash(frames),
             Call::Play {
                 doc,
                 display_hz,
                 to,
-            } => self.play(doc, *display_hz, *to),
+                presented,
+            } => self.play(doc, *display_hz, *to, *presented),
             Call::Determinism(d) => self.determinism(d),
             Call::Frames(f) => self.frames(f),
             Call::ShapedRuns(text) => self.shaped_runs(text),
@@ -1654,10 +1952,20 @@ impl<'a> Hub<'a> {
                 json!({"bands": self.bands().iter().map(|b| b.to_json()).collect::<Vec<_>>()})
             }
             Call::Kit(k) => self.kit(k),
-            Call::Input { panel, event } => match self.ring_input(panel, event) {
+            Call::Input {
+                panel,
+                event,
+                t,
+                gesture,
+            } => match self.ring_input(panel, event) {
                 Some(reply) => reply,
-                None => self.input(panel, event),
+                None => self
+                    .live_press(panel, event, *t)
+                    .err()
+                    .unwrap_or_else(|| self.input(panel, event, gesture)),
             },
+            Call::World { doc, world } => self.world_call(doc, world),
+            Call::Match { doc, steps } => self.match_call(doc, *steps),
             Call::Scope(panel) => self.scope_reply(panel),
             Call::Presented(panel) => self.presented(panel),
             Call::PopOut {
@@ -1692,11 +2000,12 @@ impl<'a> Hub<'a> {
                 .hide_window(self.now, window, *hidden, *agent),
             Call::Windows => self.placement.windows_json(),
             Call::Layout => self.placement.layout_json(),
-            Call::CardState => json!({"card": self.card_json().map(|c| c.to_json())}),
+            Call::CardState => json!({"card": self.card_reply()}),
             Call::Press { t, phase, option } => self.press(*t, *phase, option),
             Call::Rearm(on) => self.rearm(on),
             Call::See(panel) => self.see(panel),
             Call::View(panel) => self.view(panel),
+            Call::Viewer(panel) => self.viewer_reply(panel),
             Call::Ask {
                 panel,
                 session,
@@ -1710,11 +2019,18 @@ impl<'a> Hub<'a> {
                 t,
                 rev,
                 size,
-            } => self.render_back(session, doc, *t, *rev, *size),
+                probes,
+            } => self.render_back(session, doc, *t, *rev, *size, probes),
             Call::Manifest => self.manifest_reply(),
             Call::Catalog => self.catalog_reply(),
             Call::Verdict(claim) => self.verdict_call(claim),
             Call::Verdicts(claim) => self.verdicts_call(claim),
+            Call::Answer {
+                via,
+                claim,
+                requirement,
+                yes,
+            } => self.answer_call(via.as_ref(), claim, requirement, *yes),
             Call::Golden { fixture, backend } => self.golden_reply(fixture, backend),
             Call::Record {
                 via,
@@ -1738,8 +2054,10 @@ impl<'a> Hub<'a> {
             Call::Capture(c) => self.capture_call(c),
             Call::Media(m) => self.media_call(m),
             Call::Gate(g) => self.gate_call(g),
+            Call::Present(p) => self.present_call(p),
             Call::Mix(m) => self.mix_call(m),
             Call::Audio(a) => self.audio_call(a),
+            Call::RuntimeGolden(g) => self.golden_call(g),
             Call::Term(t) => self.term_call(t),
         };
         for shaping in deep_text::cache::take_log() {
@@ -1934,6 +2252,9 @@ impl<'a> Hub<'a> {
         let mut probe_issues = Vec::new();
         let stamped = stamped.map(|mut doc| {
             probe_issues = self.probe_assets(&mut doc);
+            // #935: a strip or spawn naming a generated sound's asset before its audio.gen passes.
+            probe_issues.extend(self.unpassed_sounds(&doc));
+            probe_issues.extend(self.stages_in_narration(&doc));
             doc
         });
         // The document's look (Document envelope: `look: {asset: look@major}`), read from the
@@ -1951,7 +2272,7 @@ impl<'a> Hub<'a> {
         // The items the check skipped as `unknown_kind`: kept as written, never drawn (#389).
         let mut skipped: Vec<String> = Vec::new();
         // The revision's expansions and its check's time (#306): the document's once it is current.
-        let mut fresh: Option<(Vec<Expansion>, f64)> = None;
+        let mut fresh: Option<(Vec<Expansion>, CheckTimes)> = None;
         let (stamped, mut issues, diff) = match stamped {
             Err(issues) => (None, issues, None),
             Ok(mut doc) => {
@@ -1972,11 +2293,16 @@ impl<'a> Hub<'a> {
                     }
                     _ => check_packed(&doc, &self.startup.sealed, &self.packs),
                 };
-                fresh = Some((result.expansions, started.elapsed().as_secs_f64() * 1000.0));
-                notices = self.notices_reply(&result.notices);
+                let check_ms = started.elapsed().as_secs_f64() * 1000.0;
+                let timing = show.include.iter().any(|i| matches!(i, Include::Timing));
+                let rules_ms = timing.then(|| {
+                    crate::packs::timings(&doc, &result, &self.startup.sealed, &self.packs)
+                });
+                fresh = Some((result.expansions, (check_ms, rules_ms)));
+                notices = self.notices_reply(&show.doc, &result.notices);
                 skipped = crate::verdict::unknown_items(&result.notices);
                 blocked = self.blocked_in_claim(show, &result.notices);
-                let mut issues = result.issues;
+                let mut issues = crate::mixdown::score_plan::library_issues(&doc, result.issues);
                 issues.append(&mut probe_issues);
                 blocked.extend(self.missing_in_claim(show, &mut issues, &mut skipped));
                 // #488's planted check takes every sample rate from 8 to 192 kHz and refuses
@@ -2034,6 +2360,27 @@ impl<'a> Hub<'a> {
         // A number past f64's range is refused at its path (#387).
         if let Some(doc) = &stamped {
             issues.extend(overflows(doc));
+            // #1163: a literal time in a film with a tempo map raises motion's notice, carried
+            // as a warning on the item it times, with the bar:beat form it lands on.
+            if let Some(motion) = doc
+                .as_object()
+                .and_then(|d| deep_canvas_motion::doc::read(d).ok())
+            {
+                let literal = motion
+                    .notices
+                    .iter()
+                    .filter(|n| n["code"] == "literal_time_with_tempo_map");
+                issues.extend(literal.map(|n| Issue {
+                    severity: "warning",
+                    ..Issue::error(
+                        "literal_time_with_tempo_map",
+                        n["id"].as_str().unwrap_or_default(),
+                        n["path"].as_str().unwrap_or_default().to_string(),
+                        n.clone(),
+                        "a literal time in a film with a tempo map; write it as the bar:beat it lands on",
+                    )
+                }));
+            }
         }
         // The revision's check phases and, for a session on screen, its frame at `t`, run clean
         // before it becomes current: what an operator can't evaluate is an issue of the revision
@@ -2054,18 +2401,21 @@ impl<'a> Hub<'a> {
                 issues.push(unfit_issue(r.code, r.path));
             }
             issues.extend(self.inline_vectors(form));
+            issues.extend(crate::picks::check(form));
+            issues.extend(deep_canvas_input::point::check(form));
+            // #544: a spawn's reads of a logic item's occurrences, checked against its emits
+            // before any step runs; then the logic items baked into the lists their readers read.
+            if !deep_canvas_media::planted("undeclared_field_reads_zero") {
+                issues.extend(crate::spawn::undeclared_issues(form));
+            }
+            issues.extend(self.inline_baked(form));
         }
         // Mark set columns that read a column source, resolved and narrowed by the core's
         // column view at the frame's step (#397).
         if let Some(form) = drawn_form.as_mut() {
-            let entries = self
-                .startup
-                .sealed
-                .registry(deep_canvas::columns::REGISTRY)
-                .map_or(&[][..], |r| r.entries.as_slice());
-            // A step is a 60 fps frame: 11,760,000 flicks.
-            let step = show.t.max(0) as u64 / 11_760_000;
-            issues.extend(deep_canvas::columns::view(form, entries, step));
+            // #538: and keyed copy's fit check, timed for `timing`.
+            let timing = fresh.as_mut().and_then(|(_, (_, t))| t.as_mut());
+            issues.extend(self.checked_view(&show.doc, form, show.t, timing));
         }
         if let Some(doc) = stamped
             .as_ref()
@@ -2107,7 +2457,7 @@ impl<'a> Hub<'a> {
             let timing = show.include.iter().any(|i| matches!(i, Include::Timing));
             crate::packs::reply(
                 fresh.as_ref().map_or(&[][..], |(e, _)| e.as_slice()),
-                fresh.as_ref().map(|(_, ms)| *ms),
+                fresh.as_ref().map(|(_, ms)| ms.clone()),
                 timing,
                 &mut reply,
             );
@@ -2148,9 +2498,29 @@ impl<'a> Hub<'a> {
             let fresh = self.new_session();
             self.sessions.insert(show.doc.clone(), fresh);
         }
-        if let Some(session) = self.sessions.get_mut(&show.doc) {
-            session.load(&mut self.sched, drawn_form.as_ref().unwrap_or(&doc));
+        // #1967: a recording this revision's cell grids play, converted at its probe.
+        let readings = self.readings();
+        if let Some(s) = self.sessions.get_mut(&show.doc) {
+            s.set_readings(readings);
         }
+        // #504: the session loads the played form: the drawn form with the document's input track
+        // and the session's picks, shown at `t`.
+        let again = self
+            .forms
+            .insert(
+                show.doc.clone(),
+                drawn_form.clone().unwrap_or_else(|| doc.clone()),
+            )
+            .is_some();
+        if again && self.planted(Planted::ReloadRebuildsEveryPart) {
+            // Planted (#504): a revision presented again rebuilds every part, kept or cached.
+            let startup = self.startup;
+            self.sched = Scheduler::new(&startup.sealed, self.options());
+            let fresh = self.new_session();
+            self.sessions.insert(show.doc.clone(), fresh);
+        }
+        self.replay(&show.doc, show.t);
+        self.first_frames.remove(&show.doc);
         // #1732: render-back's geometry audit of the revision, on its frame at `t`.
         if show.include.iter().any(|i| matches!(i, Include::Audit)) {
             let audit = self.audit_of(&show.doc, show.t);
@@ -2167,7 +2537,8 @@ impl<'a> Hub<'a> {
             None
         };
         if three {
-            let placed = self.arranged(&show.doc, &doc);
+            let shown = self.shown_at(&show.doc, &self.with_outputs(&show.doc, &doc), show.t);
+            let placed = self.arranged(&show.doc, &shown);
             self.pending3d = Some(self.draw3d(&placed, show.t, show.size));
         }
         self.present(show, visible, drawn.as_ref(), reply)
@@ -2207,7 +2578,11 @@ impl<'a> Hub<'a> {
                 .read(sched, "core.transform", Some(id))
                 .and_then(|(v, _)| {
                     v.as_typed::<deep_canvas::schedule::core_ops::Transform>()
-                        .map(|t| deep_canvas_motion::arrange::At { pos: t.pos, rot: t.rot, scale: t.scale })
+                        .map(|t| deep_canvas_motion::arrange::At {
+                            pos: t.pos,
+                            rot: t.rot,
+                            scale: t.scale,
+                        })
                 })
                 .unwrap_or_else(|| deep_canvas_motion::arrange::At::of(item.get("at")))
         };
@@ -2216,7 +2591,7 @@ impl<'a> Hub<'a> {
 
     /// The check's notices as a reply carries them. The planted check that loads a deprecated
     /// kind silently leaves its `deprecated` notices out.
-    pub fn notices_reply(&self, notices: &[Notice]) -> Vec<Value> {
+    pub fn notices_reply(&self, doc: &str, notices: &[Notice]) -> Vec<Value> {
         notices
             .iter()
             .filter(|n| {
@@ -2226,7 +2601,14 @@ impl<'a> Hub<'a> {
             // A kind this build draws without a kind registry entry (rect@1, path@1) is drawn,
             // not skipped, as `unknown_items` reads it, so no notice says it is (#490).
             .filter(|n| !(n.code == "unknown_kind" && n.actual.as_str().is_some_and(shared::knows)))
-            .map(Notice::to_json)
+            .map(|n| {
+                let mut out = n.to_json();
+                if let ("derived_orphan", Some(id)) = (n.code, n.ids.first()) {
+                    out["notes"] = json!(self.notes_on(doc, id));
+                    out["handles"] = json!(self.handles_to(doc, id));
+                }
+                out
+            })
             .collect()
     }
 
@@ -2313,7 +2695,9 @@ impl<'a> Hub<'a> {
                                 snapshot::over(&mut rgba, &over);
                                 let scale = d.scale(size);
                                 boxes.extend(
-                                    d.boxes().into_iter().map(|(id, b)| (id, b.map(|v| v * scale))),
+                                    d.boxes()
+                                        .into_iter()
+                                        .map(|(id, b)| (id, b.map(|v| v * scale))),
                                 );
                             }
                             (rgba, size, boxes)
@@ -2359,7 +2743,10 @@ impl<'a> Hub<'a> {
                                 Some(d) => self.print_snapshot(show, d, size, &instanced),
                                 None => None,
                             };
-                            reply.insert("snapshots".into(), json!([entry].into_iter().chain(gpu).collect::<Vec<_>>()));
+                            reply.insert(
+                                "snapshots".into(),
+                                json!([entry].into_iter().chain(gpu).collect::<Vec<_>>()),
+                            );
                             reply.insert("visible".into(), rows);
                             // The instanced batches the 2D draw made: none for a 3D frame, which
                             // scene3d draws and reports on its own (#378).
@@ -2438,71 +2825,6 @@ impl<'a> Hub<'a> {
     /// passes a claim only when the claim's definition names the document among its deliverables,
     /// since a picture explains and never proves; a snapshot it asked for and couldn't take is
     /// BLOCKED.
-    /// #464: a 2D frame under a print look through the look's finish on this machine's GPU (the
-    /// print pass, as the canvas's live frame runs it), kept as evidence and labelled
-    /// `display_only`: an agent sees the grain and the halftone, and no check reads it.
-    fn print_snapshot(
-        &mut self,
-        show: &Show,
-        drawn: &Drawn,
-        size: [u16; 2],
-        instanced: &BTreeMap<String, (String, String)>,
-    ) -> Option<Value> {
-        let def = self.look_def.clone()?;
-        let print = deep_canvas_marks::print::read(&def, &self.look.light, f64::from(size[0])).ok()?;
-        if print.is_identity() {
-            return None;
-        }
-        let items = show.document.get("items").and_then(Value::as_object)?;
-        let role = |i: &Value| {
-            i.pointer("/params/paint/fill/role")
-                .or_else(|| i.pointer("/params/paint/stroke/role"))
-                .and_then(Value::as_str)
-                .map(str::to_string)
-        };
-        let inks: Vec<BTreeSet<String>> = print
-            .separations
-            .iter()
-            .map(|s| {
-                items
-                    .iter()
-                    .filter(|(_, i)| role(i).as_deref() == Some(s.role.as_str()))
-                    .map(|(id, _)| id.clone())
-                    .collect()
-            })
-            .collect();
-        let inked: BTreeSet<&String> = inks.iter().flatten().collect();
-        let ground = self.look.light.get("ground").copied().unwrap_or([255; 3]);
-        let base = drawn.only(|i| !inked.iter().any(|k| k.as_str() == i));
-        let (base, _) = self.renderer.raster_batched(&base, size, Some(ground), instanced);
-        let covs: Vec<Vec<u8>> = inks
-            .iter()
-            .map(|set| {
-                let only = drawn.only(|i| set.contains(i));
-                self.renderer.raster_batched(&only, size, None, instanced).0
-            })
-            .collect();
-        let seed = show.document.get("seed").and_then(Value::as_u64).unwrap_or(0) as u32;
-        let frame = deep_canvas_marks::print::frame(&print, seed, show.t, false);
-        let px = [u32::from(size[0]), u32::from(size[1])];
-        let params = deep_scene3d_render::print::params(
-            &print,
-            &frame,
-            px,
-            deep_scene3d_render::print::Placed {
-                scale: 1.0 / drawn.scale(size),
-                offset: [0.0, 0.0],
-            },
-            ground,
-            false,
-            Default::default(),
-        );
-        let rgba = self.gpu3()?.print(&params, &base, &covs, px)?;
-        let sha = evidence::put(&self.scenario.evidence, &snapshot::png(rgba, size)).ok()?;
-        self.display_only.insert(sha.clone());
-        Some(json!({"sha256": sha, "w": size[0], "h": size[1], "display_only": true}))
-    }
-
     fn verdict(&self, show: &Show, snapshot_taken: bool) -> &'static str {
         if !snapshot_taken {
             return "BLOCKED";
@@ -2521,11 +2843,26 @@ impl<'a> Hub<'a> {
 /// The planted renderer's grain: a few pixels' red nudged by a xorshift seeded from the clock's
 /// nanoseconds, what an honest render-back never reads (Channel and key: it can never read the
 /// clock), so two runs draw two pictures (#670).
-fn clock_noise(rgba: &mut [u8]) {
-    let nanos = std::time::SystemTime::now()
+pub(crate) fn clock_noise(rgba: &mut [u8]) {
+    seeded_noise(rgba, now_nanos());
+}
+
+/// #1163's [`clock_noise`] in an export, seeded from the clock once per process and by the
+/// frame's time: another process draws another picture, and a frame drawn again in the same
+/// export draws the same one, as #157's redraw holds every frame to.
+pub(crate) fn export_noise(rgba: &mut [u8], t: i64) {
+    static SEED: std::sync::OnceLock<u64> = std::sync::OnceLock::new();
+    seeded_noise(rgba, *SEED.get_or_init(now_nanos) ^ t as u64);
+}
+
+fn now_nanos() -> u64 {
+    std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |d| d.as_nanos() as u64);
-    let mut x = nanos | 1;
+        .map_or(0, |d| d.as_nanos() as u64)
+}
+
+fn seeded_noise(rgba: &mut [u8], seed: u64) {
+    let mut x = seed | 1;
     let pixels = (rgba.len() / 4) as u64;
     for _ in 0..64 {
         x ^= x << 13;
@@ -2580,4 +2917,26 @@ impl BandRow {
             "name": self.name,
         })
     }
+}
+
+/// A revision's check time and its `kind_rules` check's own time, when asked for (#202), in ms.
+type CheckTimes = (f64, Option<Map<String, Value>>);
+
+/// #202's planted expander: an instance's inputs walked through a std hash map, whose order a
+/// fresh random state picks, so two expansions of one example differ in their bytes. It redraws
+/// until the order differs from the previous walk's, which three inputs would match by chance.
+fn walk_in_hash_order(inputs: serde_json::Map<String, Value>) -> serde_json::Map<String, Value> {
+    thread_local! {
+        static LAST: std::cell::RefCell<Vec<String>> = const { std::cell::RefCell::new(Vec::new()) };
+    }
+    let last = LAST.with(|l| l.borrow().clone());
+    for _ in 0..64 {
+        let walked: std::collections::HashMap<String, Value> = inputs.clone().into_iter().collect();
+        let order: Vec<String> = walked.keys().cloned().collect();
+        if order != last || inputs.len() < 2 {
+            LAST.with(|l| *l.borrow_mut() = order);
+            return walked.into_iter().collect();
+        }
+    }
+    inputs
 }

@@ -23,7 +23,7 @@ function load(fill: Fill): void {
   if (!('facts' in adapter)) throw refuse('required', '/adapter/facts', undefined, 'Give the adapter its adapter.facts@1 data.');
   // A later minor of the facts (pi's install, paseo's providers, #1330's sandbox) is held to its own schema, as the registry holds it.
   const named = isObject(adapter.facts as unknown) ? (adapter.facts as { schema?: unknown }).schema : undefined;
-  const facts = validate(typeof named === 'string' && /^adapter\.facts@[2345]$/.test(named) ? named : 'adapter.facts@1', adapter.facts);
+  const facts = validate(typeof named === 'string' && /^adapter\.facts@[23456]$/.test(named) ? named : 'adapter.facts@1', adapter.facts);
   if (!facts.ok) { const first = facts.issues[0] as ContractIssue; throw new ContractError({ ...first, path: `/adapter/facts${first.path}` }); }
   if (typeof adapter.doctor !== 'function') throw refuse('required', '/adapter/doctor', undefined, 'Give the adapter a doctor() that lists its checks, each ok, warn, fail or skip.');
   let items: unknown;
@@ -165,6 +165,11 @@ function runCase(c: Case, fill: Fill, headless: boolean): Ran {
       }
       answering();
       try { return reply.call(fill.adapter, answer, request); } catch (error) { throw new Stop('FAIL', `permissionReply threw: ${String(error)}`, ['type']); }
+    },
+    context(event, text) {
+      const reply = fill.adapter.contextReply;
+      if (typeof reply !== 'function') throw new Stop('BLOCKED', `the adapter has no contextReply, so the harness can't read how it gives the model a block on ${fill.surface}`, []);
+      try { return reply.call(fill.adapter, event, text); } catch (error) { throw new Stop('FAIL', `contextReply threw: ${String(error)}`, ['type']); }
     },
     bounds(panel): Rect {
       probes.push('bounds');

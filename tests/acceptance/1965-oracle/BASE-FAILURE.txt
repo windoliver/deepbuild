@@ -1,0 +1,65 @@
+# Base run of tests/acceptance/1965-oracle at 3962d5281ccf822af55928df2c3c77deeee159f0 (DEEP_ORACLES = a checkout of the pinned vendor files).
+# Both tests fail at their assertion for missing behavior: a token's byte range lands on no glyph (every glyph stays in the no-token role 'ink').
+# The cluster and input lists are cut here to their first lines; the whole run is /tmp/deepbuild-1965-proof/blind-base.log.
+
+scripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `npx vitest run --root tests/acceptance/1965-oracle --no-file-parallelism` runs unleased
+
+ RUN  v5.0.5 ~/doneright-1965-blind/tests/acceptance/1965-oracle
+
+ ❯ normalization.test.ts (1 test | 1 failed) 662765ms
+   ❯ #1965 oracle AC2 #1965.1d486d42: NormalizationTest.txt run on our code (1)
+     × AC2 #1965.1d486d42 oracle: every drawable input displays as the file's NFC form, all its glyphs in its token's role 660790ms
+ ❯ grapheme.test.ts (1 test | 1 failed) 41492ms
+   ❯ #1965 oracle AC2 #1965.1d486d42: GraphemeBreakTest.txt run on our code (1)
+     × AC2 #1965.1d486d42 oracle: each drawable row's clusters draw as the file's clusters, each token on exactly its glyphs 35686ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+[...]
+
+ FAIL  grapheme.test.ts > #1965 oracle AC2 #1965.1d486d42: GraphemeBreakTest.txt run on our code > AC2 #1965.1d486d42 oracle: each drawable row's clusters draw as the file's clusters, each token on exactly its glyphs
+AssertionError: 156 cluster findings differ from GraphemeBreakTest.txt:
+  row 35 [U+0300 U+0300]: cluster 0's token leaves it in the plain role ink
+  row 36 [U+0300 U+0308 U+0300]: cluster 0's token leaves it in the plain role ink
+  row 37 [U+0300 U+200C]: cluster 0's token leaves it in the plain role ink
+  row 38 [U+0300 U+0308 U+200C]: cluster 0's token leaves it in the plain role ink
+  row 39 [U+0300 U+200D]: cluster 0's token leaves it in the plain role ink
+[... 156 cluster findings in all ...]
+ FAIL  normalization.test.ts > #1965 oracle AC2 #1965.1d486d42: NormalizationTest.txt run on our code > AC2 #1965.1d486d42 oracle: every drawable input displays as the file's NFC form, all its glyphs in its token's role
+AssertionError: 7150 of 7150 inputs differ from NormalizationTest.txt (item cfg):
+  U+1E0A: the token over bytes [0, 3) leaves 2 of 2 glyphs in the plain role ink
+  U+0044 U+0307: the token over bytes [0, 3) leaves 2 of 2 glyphs in the plain role ink
+  U+1E0C: the token over bytes [0, 3) leaves 2 of 2 glyphs in the plain role ink
+  U+0044 U+0323: the token over bytes [0, 3) leaves 2 of 2 glyphs in the plain role ink
+  U+1E0A U+0323: the token over bytes [0, 5) leaves 3 of 3 glyphs in the plain role ink
+  U+1E0C U+0307: the token over bytes [0, 5) leaves 3 of 3 glyphs in the plain role ink
+  U+0044 U+0323 U+0307: the token over bytes [0, 5) leaves 3 of 3 glyphs in the plain role ink
+  U+0044 U+0307 U+0323: the token over bytes [0, 5) leaves 3 of 3 glyphs in the plain role ink
+  U+1E0A U+031B: the token over bytes [0, 5) leaves 3 of 3 glyphs in the plain role ink
+  U+0044 U+031B U+0307: the token over bytes [0, 5) leaves 3 of 3 glyphs in the plain role ink
+  U+1E0C U+031B: the token over bytes [0, 5) leaves 3 of 3 glyphs in the plain role ink
+  U+0044 U+031B U+0323: the token over bytes [0, 5) leaves 3 of 3 glyphs in the plain role ink
+  U+1E0A U+031B U+0323: the token over bytes [0, 7) leaves 4 of 4 glyphs in the plain role ink
+  U+1E0C U+031B U+0307: the token over bytes [0, 7) leaves 4 of 4 glyphs in the plain role ink
+  U+0044 U+031B U+0323 U+0307: the token over bytes [0, 7) leaves 4 of 4 glyphs in the plain role ink
+  U+0044 U+031B U+0307 U+0323: the token over bytes [0, 7) leaves 4 of 4 glyphs in the plain role ink
+  U+00C8: the token over bytes [0, 2) leaves 1 of 1 glyphs in the plain role ink
+  U+0045 U+0300: the token over bytes [0, 3) leaves 1 of 1 glyphs in the plain role ink
+  U+0112: the token over bytes [0, 2) leaves 1 of 1 glyphs in the plain role ink
+  U+0045 U+0304: the token over bytes [0, 3) leaves 1 of 1 glyphs in the plain role ink
+  U+1E14: the token over bytes [0, 3) leaves 2 of 2 glyphs in the plain role ink
+  U+0045 U+0304 U+0300: the token over bytes [0, 5) leaves 2 of 2 glyphs in the plain role ink
+  U+0112 U+0300: the token over bytes [0, 4) leaves 2 of 2 glyphs in the plain role ink
+  U+1E14 U+0304: the token over bytes [0, 5) leaves 3 of 3 glyphs in the plain role ink
+  U+0045 U+0304 U+0300 U+0304: the token over bytes [0, 7) leaves 3 of 3 glyphs in the plain role ink
+  U+0045 U+0300 U+0304: the token over bytes [0, 5) leaves 2 of 2 glyphs in the plain role ink
+  U+00C8 U+0304: the token over bytes [0, 4) leaves 2 of 2 glyphs in the plain role ink
+  U+0044 U+1E92 U+030C: the token over bytes [0, 6) leaves 3 of 3 glyphs in the plain role ink
+  U+0044 U+005A U+0323 U+030C: the token over bytes [0, 6) leaves 3 of 3 glyphs in the plain role ink
+  U+0044 U+1E93 U+030C: the token over bytes [0, 6) leaves 3 of 3 glyphs in the plain role ink
+  U+0044 U+007A U+0323 U+030C: the token over bytes [0, 6) leaves 3 of 3 glyphs in the plain role ink
+[... 7150 inputs in all ...]
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+ Test Files  2 failed (2)
+      Tests  2 failed (2)
+   Duration  705.58s (tests 100%)
+exit 1

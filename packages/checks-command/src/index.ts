@@ -8,7 +8,7 @@
 // every attempt of each, where each failed test failed, the files the run read and a numeric contract's counts. A run
 // passes only if every test a Vitest, Jest, node:test or pytest file it ran holds ran, as listed apart from the run (listing.ts).
 import { createHash, randomBytes } from 'node:crypto';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync } from 'node:fs';
 import { homedir, tmpdir, userInfo } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -62,7 +62,7 @@ export interface ContractCount { output: string; size: number; compared: number 
 export interface TimedRepeat { repeat: number; flushed: boolean }
 export interface CommandRun extends CheckResult {
   run: string;
-  exit: { code: number | null; signal: NodeJS.Signals | null; cause: 'exit' | 'deadline' | 'stop' } | null;
+  exit: { code: number | null; signal: NodeJS.Signals | null; cause: 'exit' | 'deadline' | 'stop' | 'limit' } | null;
   /** Scrubbed by value, then digested. */
   output: { stdout: string; stderr: string; sha256: { stdout: string; stderr: string } };
   /** The name of every variable the run's process got, never a value. */
@@ -297,7 +297,7 @@ async function runOnce(check: CommandCheck, clock: number): Promise<{ run: Comma
       DEEP_RUN_TOKEN: token,
     };
     const chunks = { stdout: [] as Buffer[], stderr: [] as Buffer[] };
-    let cause = 'exit' as 'exit' | 'deadline' | 'stop';
+    let cause = 'exit' as 'exit' | 'deadline' | 'stop' | 'limit';
     // A run that names its tests runs only those, so a control it never selects proves nothing either way (#1099 adds theirs).
     if (!filters.length) controls = await plantControls(checkout);
     const started = host.start({
@@ -326,6 +326,8 @@ async function runOnce(check: CommandCheck, clock: number): Promise<{ run: Comma
         // The deadline counts from the process's start, not from the wait for its sandbox or a lease.
         disarm = after(check.deadline, () => halt('deadline'));
         exit = await host.wait(run);
+        // Stopped at a limit its host held it to (#1409): what it measured says nothing of the product.
+        if (exit.limit && cause === 'exit') cause = 'limit';
         // Nothing the run started outlives it: what it left running is stopped through host@1 too, while the output,
         // whole once the process closed, is scrubbed; the evidence files are read only once that stop is done.
         stopping = host.signal(run, 'SIGKILL').catch(() => undefined);
@@ -358,7 +360,8 @@ async function runOnce(check: CommandCheck, clock: number): Promise<{ run: Comma
     const stdout = scrub(Buffer.concat(chunks.stdout).toString('utf8'));
     const stderr = scrub(Buffer.concat(chunks.stderr).toString('utf8'));
     const output = { stdout, stderr, sha256: { stdout: sha256(stdout), stderr: sha256(stderr) } };
-    const ended = { output, env: Object.keys(env).sort(), exit: exit ? { code: exit.code, signal: exit.signal, cause } : null, evidence: [`stdout ${output.sha256.stdout}`, `stderr ${output.sha256.stderr}`] };
+    const limited = exit?.limit ? [`stopped at its ${exit.limit.limit} of ${exit.limit.max} MiB${exit.limit.reading === undefined ? '' : `, reading ${exit.limit.reading.toFixed(1)} MiB`}`] : [];
+    const ended = { output, env: Object.keys(env).sort(), exit: exit ? { code: exit.code, signal: exit.signal, cause } : null, evidence: [`stdout ${output.sha256.stdout}`, `stderr ${output.sha256.stderr}`, ...limited] };
     await stopping;
     if (failed !== null) return done('missing', { ...ended, failures: [{ test: '(run)', file: spec.inputs[0] ?? '.', line: 1, stack: null, assertion: false, message: failed }] }, []);
 
@@ -410,7 +413,7 @@ async function runOnce(check: CommandCheck, clock: number): Promise<{ run: Comma
         const unended = (vitestRun?.started ?? []).filter((s) => !ran.some((t) => t.test === s.test && t.file === s.file));
         return done('overran', { ...rest, failures: [...failures, ...unended.map((s) => ({ test: s.test, file: s.file ?? '.', line: 1, stack: null, assertion: false, unended: true, message: `${s.test} was still running at the deadline` }))] }, ran);
       }
-      if (cause === 'stop') return done('stopped', rest, ran);
+      if (cause === 'stop' || cause === 'limit') return done('stopped', rest, ran);
       if (plant === 'exit-code-only') return done(code === 0 ? 'passed' : 'failed', { ...rest, mask }, ran);
       // A program the run started that the tracer can't see into, or a child outside its group, leaves it uncounted.
       for (const spawned of check.outside ? [] : spawns?.lines ?? []) {
@@ -440,8 +443,9 @@ async function runOnce(check: CommandCheck, clock: number): Promise<{ run: Comma
       // go test's reads reach no read set: its run can fail, never pass.
       if (go && ran.length) return done('uncounted', { ...rest, mask: 'untraced program go' }, ran);
       // A command that starts no test tool, such as a typecheck, has one result, its exit status (#33): a clean exit
-      // is its pass. A test tool that ran and counted no test ran nothing.
-      const tool = go || [nodeReport, vitestReport].some((r) => (r?.lines.length ?? 0) > 0);
+      // is its pass. A test tool that ran and counted no test ran nothing: Vitest's, Jest's or pytest's reporter
+      // opened its report, even with no line to write, as for a pytest file whose every test the source skips.
+      const tool = go || vitestReport !== null || (nodeReport?.lines.length ?? 0) > 0;
       if (!ran.length) return tool ? done('ran_nothing', rest, ran) : done('passed', { ...rest, testsRun: 1 }, ran);
       // Every test a file the run ran holds ran, but those the check's own command left out (see listing.ts).
       const runFiles = [...(vitestRun?.files ?? []), ...(nodeRun?.files ?? []).map((file) => ({ file, tool: 'node' as const }))];
@@ -457,6 +461,19 @@ async function runOnce(check: CommandCheck, clock: number): Promise<{ run: Comma
   } finally {
     clearTimeout(kill);
     await removeControls(checkout, controls);
-    rmSync(temp, { recursive: true, force: true });
+    try {
+      rmSync(temp, { recursive: true, force: true });
+    } catch {
+      // A folder the run left read-only: made writable and removed. The run's result stands whatever is left.
+      try { unlock(temp); rmSync(temp, { recursive: true, force: true }); } catch { /* left for the OS to clear */ }
+    }
+  }
+}
+/** Makes every folder under `dir` its owner's to write, following no link. */
+function unlock(dir: string): void {
+  for (const e of readdirSync(dir, { withFileTypes: true })) {
+    if (!e.isDirectory()) continue;
+    chmodSync(join(dir, e.name), 0o700);
+    unlock(join(dir, e.name));
   }
 }

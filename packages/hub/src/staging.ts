@@ -19,19 +19,20 @@ import { createHash } from 'node:crypto';
 import { createReadStream, readFileSync } from 'node:fs';
 import { lstat, mkdir, open, readdir, readlink, realpath, rm, stat, symlink } from 'node:fs/promises';
 import { dirname, join, sep } from 'node:path';
+import { duration } from '@deepbuild/asks';
 import { gitEnv } from '@deepbuild/gate';
 import { ulid, type Connection, type EventInput } from '@deepbuild/record';
 import type { Holds } from './holds.js';
 import { deepHook } from './paths.js';
+import { sinceView } from './receipts.js';
 import { refusal, Refused, STAGE_HOLD_MS, type Gated, type HookMeta, type Plant, type StageReach } from './wire.js';
 
-const UNITS: Record<string, number> = { m: 60_000, h: 3_600_000, d: 86_400_000 };
 /** The ceilings and the set time when config.json says nothing. */
-const DEFAULTS = { files: 10_000, seconds: 10, keepMs: 3 * UNITS.d! };
+const DEFAULTS = { files: 10_000, seconds: 10, keepMs: 3 * 86_400_000 };
 /** The seconds ceiling is held this far below the hold, leaving room to raise the ask. */
 const MAX_SECONDS = STAGE_HOLD_MS / 1000 - 5;
 /** A copy with no staging in the record (a crash between clone and append) is let go after this long. */
-const ORPHAN_MS = UNITS.h!;
+const ORPHAN_MS = 3_600_000;
 /** How many edited files are copied at once. */
 const COPIES = 8;
 /** What git is given to read a tree or a stash, inside the hold. */
@@ -46,11 +47,11 @@ function settings(root: string): Settings {
     if (typeof config.staging === 'object' && config.staging !== null) given = config.staging;
   } catch { /* none: the defaults */ }
   const positive = (v: unknown) => typeof v === 'number' && Number.isFinite(v) && v > 0;
-  const keep = typeof given.keep === 'string' ? /^(\d+)([mhd])$/.exec(given.keep) : null;
+  const keep = duration(typeof given.keep === 'string' ? given.keep : undefined);
   return {
     files: positive(given.files) ? Math.floor(given.files as number) : DEFAULTS.files,
     seconds: Math.min(positive(given.seconds) ? (given.seconds as number) : DEFAULTS.seconds, MAX_SECONDS),
-    keepMs: keep ? Number(keep[1]) * UNITS[keep[2]!]! : DEFAULTS.keepMs,
+    keepMs: keep ?? DEFAULTS.keepMs,
   };
 }
 
@@ -135,8 +136,10 @@ export class Staging {
         const k = next++;
         const to = join(copy, 'files', String(k));
         if (slow) await sleep(Math.min(slow, Math.max(0, deadline - Date.now())));
-        why ??= Date.now() > deadline ? 'late' : await lost[k]!.write(to, deadline);
-        if (!why) digests[k] = await digestOf(to);
+        // Taken first: a copy that ends after another one failed must not clear that failure.
+        const failed = Date.now() > deadline ? 'late' : await lost[k]!.write(to, deadline);
+        if (failed) { why ??= failed; return; }
+        digests[k] = await digestOf(to);
       }
     };
     await Promise.all(Array.from({ length: Math.min(COPIES, lost.length) }, copier));
@@ -210,13 +213,15 @@ export class Staging {
   }
 
   /** `deep undo staged:<id>`: each staged folder holds again what the copy holds, until the copy is let go. */
-  async undo(params: Record<string, unknown>): Promise<{ staged: string; folders: string[]; files: string[] }> {
+  async undo(params: Record<string, unknown>, as: Connection): Promise<{ staged: string; folders: string[]; files: string[] }> {
     const handle = params.staged;
     if (typeof handle !== 'string' || !/^staged:[0-9A-Za-z]+$/.test(handle)) throw new Refused(refusal('handle_syntax', '/params/staged', 'Name the staging by its handle, staged:<id>.', handle));
     const id = handle.slice('staged:'.length);
     const [row] = (await this.o.raw(`SELECT data FROM events WHERE kind = 'command.staged' AND id = ?`, [id])) as { data: string }[];
     if (!row) throw new Refused(refusal('not_found', '/params/staged', `No staging ${handle} in the record.`, handle));
     const { folders, files = [], until, command } = JSON.parse(row.data) as { folders: string[]; files?: { path: string; digest: string }[]; until: number; command: string };
+    // Undone from a view (#1577): an undo of it since then stands, and the copy isn't put back over what came after.
+    await sinceView(this.o.raw, params, handle, { sql: `kind = 'staged.undone' AND json_extract(data, '$.staged') = ?`, values: [handle] }, () => 'it was undone already');
     const copy = join(this.dir, id);
     if (this.o.now() >= until || !(await there(copy))) {
       throw new Refused(refusal('not_found', '/params/staged', `The copy ${handle} kept of \`${command}\` was let go at ${new Date(until).toISOString()}, so the run can't be undone.`, handle));
@@ -234,6 +239,9 @@ export class Staging {
       const why = await clone(join(copy, 'files', String(i)), f.path, Infinity);
       if (why) throw new Refused(refusal('unavailable', '/params/staged', `${f.path} couldn't be put back from ${handle}: ${why}`, handle, true));
     }
+    // On the record as it lands, so a view read after it shows the undo (#1577).
+    const ts = this.o.now();
+    await this.o.append(as, { v: 1, id: ulid(ts), kind: 'staged.undone', ts, data: { staged: handle, folders, files: files.map((f) => f.path) } });
     return { staged: handle, folders, files: files.map((f) => f.path) };
   }
 

@@ -1,0 +1,59 @@
+The #2012 Oracle lane run once at base commit 903a1c07 (no implementation of #2012), on macOS arm64 (Apple M5 Max,
+rustup 1.99.1, Node 24.22.2, vitest 5.0.5), with
+`NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 npx vitest run --root tests/acceptance/2012-oracle --testTimeout=600000 --no-file-parallelism`
+(the checkout's path redacted to `<checkout>`; deep-physics was already built).
+
+2 of 2 tests fail, each at an assertion because the surface is absent, none in the harness and none BLOCKED: on this
+Mac each scene records its golden and bakes with its checkpoints, then the wasm32 leg, `node scripts/physics-wasm32.mjs`,
+doesn't exist. None reaches its container leg. Checked apart from this run, at the base: both scenes pass the document
+check and replay their goldens PASS here (see the README's "Run").
+The type-check, `npx tsc -p tests/acceptance/2012-oracle/tsconfig.json`, exits 0.
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/2012-oracle
+
+ ❯ snapshot-portability-rapier.test.ts (1 test | 1 failed) 57511ms
+   ❯ #2012.4d10a14c #2012.53ff430e Rapier's snapshot_portability, on deep-physics's output: a golden recorded on the Mac is reproduced on Linux x86_64 and in wasm32, whole-world bytes and all (1)
+     × #2012.4d10a14c #2012.53ff430e snapshot_portability's mixed scene, baked 60 steps in wasm32 and on Linux x86_64, gives the Mac's golden at every step hash and the Mac's whole-world bytes at step 60 513ms
+ ❯ simd-backend-determinism-rapier.test.ts (1 test | 1 failed) 5808ms
+   ❯ #2012.4d10a14c #2012.53ff430e Rapier's simd_backend_determinism, on deep-physics's output: the state doesn't depend on the SIMD backend (1)
+     × #2012.4d10a14c #2012.53ff430e simd_backend_determinism's pile and chain, baked 120 steps in wasm32 and on Linux x86_64, gives the Mac's golden at every step hash and the Mac's whole-world bytes at each checkpoint 4035ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  simd-backend-determinism-rapier.test.ts > #2012.4d10a14c #2012.53ff430e Rapier's simd_backend_determinism, on deep-physics's output: the state doesn't depend on the SIMD backend > #2012.4d10a14c #2012.53ff430e simd_backend_determinism's pile and chain, baked 120 steps in wasm32 and on Linux x86_64, gives the Mac's golden at every step hash and the Mac's whole-world bytes at each checkpoint
+AssertionError: the wasm32 leg, node scripts/physics-wasm32.mjs, exists (README: The surface under test): expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ onWasm32 ../2012/helpers.ts:69:129
+
+ ❯ simd-backend-determinism-rapier.test.ts:31:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  snapshot-portability-rapier.test.ts > #2012.4d10a14c #2012.53ff430e Rapier's snapshot_portability, on deep-physics's output: a golden recorded on the Mac is reproduced on Linux x86_64 and in wasm32, whole-world bytes and all > #2012.4d10a14c #2012.53ff430e snapshot_portability's mixed scene, baked 60 steps in wasm32 and on Linux x86_64, gives the Mac's golden at every step hash and the Mac's whole-world bytes at step 60
+AssertionError: the wasm32 leg, node scripts/physics-wasm32.mjs, exists (README: The surface under test): expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ onWasm32 ../2012/helpers.ts:69:129
+
+ ❯ snapshot-portability-rapier.test.ts:32:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  2 failed (2)
+   Start at  11:27:46
+   Duration  64.04s (tests 100%)
+

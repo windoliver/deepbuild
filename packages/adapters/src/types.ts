@@ -65,13 +65,19 @@ export interface Adapter {
   /** The route to its model of a session started in `env` (#87): whether each variable or setting that moves it was
    *  set, never its value. */
   routeAtStart?(env: Readonly<Record<string, string | undefined>>): SessionRoute;
+  /** The hook output that gives the model `text` at `event` (#1296), on an output its facts' contextOutput marks as
+   *  reaching the model; none at an event where no output does. */
+  contextReply?(event: string, text: string): HookOutput | undefined;
 }
+/** A hook's output as deep-hook writes it: its exit status, stdout and stderr. */
+export interface HookOutput { exit: number; stdout: string; stderr: string }
 /** What an adapter records at a session's start about the route to its model, by name, true or false. */
 export type SessionRoute = Record<string, boolean>;
 /** The parts of an adapter that aren't data; everything else comes from its facts file. */
 export interface AdapterParts {
   caps: AdapterCaps; unsupported: Unsupported; doctor(): DoctorItem[];
   readUsage?: Adapter['readUsage']; classifyStop?: Adapter['classifyStop']; skills?: Adapter['skills']; permissionReply?: Adapter['permissionReply']; routeAtStart?: Adapter['routeAtStart'];
+  contextReply?(event: string, text: string, facts: JsonValue): HookOutput | undefined;
 }
 
 export interface AdapterRegistry {

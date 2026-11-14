@@ -5,7 +5,7 @@
 
 use deep_canvas::kinds::{Entry, Param, ParamType, Version};
 use deep_canvas::registry::{
-    Dependency, Implementation, Manifest, Module, Range, Raised, Registrar, Semver, StepInput,
+    Dependency, Implementation, Manifest, Module, Raised, Range, Registrar, Semver, StepInput,
     Stepper,
 };
 use serde_json::{json, Value};
@@ -52,7 +52,7 @@ fn manifest(implementation: &str) -> Manifest {
 pub fn module() -> Module {
     Module {
         manifest: manifest("media"),
-        register: |r| register(r, restore),
+        register: |r| register(r, restore, READER),
     }
 }
 
@@ -60,11 +60,55 @@ pub fn module() -> Module {
 pub fn checkpoint_without_tail() -> Module {
     Module {
         manifest: manifest("media.checkpoint_without_tail"),
-        register: |r| register(r, restore_without_tail),
+        register: |r| register(r, restore_without_tail, READER),
     }
 }
 
-fn register(r: &mut Registrar, restore: fn(&Value) -> Value) {
+/// The planted layout (#501): `export.target@1` declared here instead of in the core.
+pub fn declaring_export_targets() -> Module {
+    Module {
+        manifest: manifest("media"),
+        register: |r| {
+            r.registry(deep_canvas::registry::core_lists::export_target_registry());
+            register(r, restore, READER);
+        },
+    }
+}
+
+/// The planted target (#501): `png`'s fidelity reader is its own writer, media.
+pub fn png_reads_itself() -> Module {
+    Module {
+        manifest: manifest("media"),
+        register: |r| register(r, restore, "media"),
+    }
+}
+
+/// The independent reader of media's export targets: a fresh decode worker.
+const READER: &str = "decode_worker";
+
+fn register(r: &mut Registrar, restore: fn(&Value) -> Value, png_reader: &str) {
+    // #204: the synth presets packs fill, read from a pack's `presets`.
+    r.registry(crate::synth::registry());
+    r.pack_field("presets", crate::synth::presets_field);
+    // The targets the encode job writes (Export: Targets): each held to the document by
+    // export.fidelity on what a fresh decode worker reads back, hidden items left out.
+    for (target, reader) in [("video", READER), ("png", png_reader)] {
+        r.entry(
+            "export.target@1",
+            target,
+            json!({"writer": "media", "fidelity": ["export.fidelity"],
+                   "reader": reader, "hidden": "left_out"}),
+            "R6",
+        );
+    }
+    // #503: a spectrum's bands (Analysis bake) as the array `spectrum.<bake ID>`, one element per
+    // band, so a mark set's bars and rings read them as columns.
+    r.entry(
+        deep_canvas::columns::REGISTRY,
+        "media.spectrum@1",
+        json!({"form": "spectrum.<name>", "types": ["f64"], "fixture": spectrum_fixture()}),
+        "R6",
+    );
     // A bell on a box, so the kit checks a document with strips and an emitter (#427).
     r.fixture("bell", deep_canvas_scene3d::emitters::bell(), None)
         .sidecar(json!({"codes": []}));
@@ -88,6 +132,39 @@ fn register(r: &mut Registrar, restore: fn(&Value) -> Value) {
     r.rule("media.strip", av_link_strip);
 }
 
+/// The spectrum entry's kit fixture, from the bake's own math: a 1 kHz sine of amplitude 0.5 from
+/// 0.1 s to 0.2 s at 8 kHz, four log bands from 100 Hz to 3 kHz, 512-sample windows, a row every
+/// 0.1 s. Each frame is a row's levels, and each frame's changed ranges the bands its row changed.
+fn spectrum_fixture() -> Value {
+    use crate::analysis::spectrum::{edges, rows, Scale};
+    use deep_canvas::ops;
+    let tone: Vec<f32> = (0..3200)
+        .map(|i| match i {
+            800..1600 => (0.5 * ops::sin(ops::TAU * 1000.0 * f64::from(i) / 8000.0)) as f32,
+            _ => 0.0,
+        })
+        .collect();
+    let frames = rows(
+        &tone,
+        1,
+        8000,
+        10,
+        512,
+        &edges(4, Scale::Log, [100.0, 3000.0]),
+        true,
+    );
+    let changed: Vec<Vec<[usize; 2]>> = (frames.iter().enumerate())
+        .map(|(k, f)| match k {
+            0 => vec![[0, f.len()]],
+            _ => (0..f.len())
+                .filter(|&b| f[b] != frames[k - 1][b])
+                .map(|b| [b, b + 1])
+                .collect(),
+        })
+        .collect();
+    json!({"frames": frames, "changed": changed, "seeks": [{"from": 3, "to": 2, "rows": frames[2]}]})
+}
+
 /// `media.strip@1`: Strip and track's fields as params.
 fn strip_kind() -> Entry {
     let json = |name: &'static str| Param {
@@ -102,8 +179,8 @@ fn strip_kind() -> Entry {
         operator: "",
     };
     let fields = [
-        "track", "src", "start", "in", "out", "rate", "offset", "span", "loop", "gain", "pitch", "pan",
-        "bus", "enabled", "fade_in", "fade_out", "align", "at_stage", "tags",
+        "track", "src", "start", "in", "out", "rate", "offset", "span", "loop", "gain", "pitch",
+        "pan", "bus", "enabled", "fade_in", "fade_out", "align", "at_stage", "tags",
     ];
     Entry {
         family: "media",
@@ -127,7 +204,9 @@ fn strips_of<'d>(doc: &'d Value, asset: &str) -> Vec<(String, &'d Value)> {
         }
     }
     for (iid, item) in doc["items"].as_object().into_iter().flatten() {
-        if item["kind"] == "media.strip@1" && crate::doc::strip_asset(&item["params"]) == Some(asset) {
+        if item["kind"] == "media.strip@1"
+            && crate::doc::strip_asset(&item["params"]) == Some(asset)
+        {
             out.push((format!("items/{iid}/params"), &item["params"]));
         }
     }
@@ -153,14 +232,19 @@ fn av_link_strip(doc: &Value, id: &str, item: &Value) -> Vec<Raised> {
     }
     let mut out = Vec::new();
     for (pid, pic) in doc["items"].as_object().into_iter().flatten() {
-        let (Some(frames), Some(a)) = (pic.pointer("/params/frames"), pic.pointer("/params/asset").and_then(Value::as_str)) else {
+        let (Some(frames), Some(a)) = (
+            pic.pointer("/params/frames"),
+            pic.pointer("/params/asset").and_then(Value::as_str),
+        ) else {
             continue;
         };
         if a != asset {
             continue;
         }
         for f in linked_fields() {
-            if crate::doc::link_value(doc, frames, f) != crate::doc::link_value(doc, &item["params"], f) {
+            if crate::doc::link_value(doc, frames, f)
+                != crate::doc::link_value(doc, &item["params"], f)
+            {
                 out.push(Raised {
                     code: "av_unlinked",
                     severity: "error",
@@ -188,7 +272,7 @@ fn step(state: &mut Value, input: &StepInput<'_>) {
     }
     let first = (input.step - 1) * BLOCK;
     let mut block = vec![0f32; 2 * BLOCK as usize];
-    for (i, f) in block.chunks_exact_mut(2).enumerate() {
+    for (i, f) in block.as_chunks_mut::<2>().0.iter_mut().enumerate() {
         if (first + i as i64) % (RATE / 10) == 0 {
             f[0] = 0.5;
             f[1] = 0.5;
@@ -240,4 +324,38 @@ fn av_link(doc: &Value, id: &str, item: &Value) -> Vec<Raised> {
         }
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use deep_canvas::registry::lists::schema_fault;
+
+    /// #501: media fills `video` and `png` into `export.target@1`, each passing the core's kit;
+    /// only the planted layout declares the registry here.
+    #[test]
+    fn media_fills_the_video_and_png_export_targets() {
+        let def = deep_canvas::registry::core_lists::export_target_registry();
+        let mut r = Registrar::default();
+        (module().register)(&mut r);
+        // #204: media declares synth.preset@1, and never export.target@1.
+        let declared: Vec<&str> = r.registries.iter().map(|d| d.name.as_str()).collect();
+        assert_eq!(declared, [crate::synth::REGISTRY]);
+        let targets: Vec<_> = r
+            .entries
+            .iter()
+            .filter(|e| e.registry == "export.target@1")
+            .collect();
+        let names: Vec<&str> = targets.iter().map(|e| e.name.as_str()).collect();
+        assert_eq!(names, ["video", "png"]);
+        for e in targets {
+            assert_eq!(schema_fault(&def.entry, &e.value, ""), None, "{}", e.name);
+            assert!(def.run_kit(&e.name, &e.value).pass(), "{}", e.name);
+            assert_eq!(e.value["writer"], "media");
+        }
+        let mut planted = Registrar::default();
+        (declaring_export_targets().register)(&mut planted);
+        let declared: Vec<&str> = planted.registries.iter().map(|d| d.name.as_str()).collect();
+        assert_eq!(declared, ["export.target@1", crate::synth::REGISTRY]);
+    }
 }

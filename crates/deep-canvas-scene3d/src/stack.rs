@@ -7,14 +7,16 @@
 use std::collections::BTreeMap;
 
 use deep_canvas::ops::{cos, rad, sin};
+use deep_canvas::schedule::Canonical;
 use serde_json::{json, Value};
 
 use crate::builders::{path, Fault};
 use crate::geom::{add, cross, dot, scale, sub, unit, Mesh, V3};
 use crate::poly::{Boundary, Poly, Scheme, UvRule};
 
-/// The modifier kinds: each one's class, whether it is a GPU kind (evaluated here on the CPU
-/// from its per-instance params) and whether it reads time by its nature.
+/// The modifier kinds: each one's class, whether it is a GPU kind (a sway moves on the GPU, #2016;
+/// the others are evaluated here on the CPU from their per-instance params) and whether it reads
+/// time by its nature.
 pub const KINDS: [(&str, &str, bool, bool); 18] = [
     ("mod.array@1", "generate", false, false),
     ("mod.mirror@1", "generate", false, false),
@@ -55,6 +57,11 @@ pub struct Run {
     pub rotate: usize,
     /// The build's outline sources an `extrude` reads (#443).
     pub outlines: Vec<deep_canvas::registry::SealedOutline>,
+    /// The deforms modules fill in the core's `modifier@1` (#226).
+    pub fills: Vec<deep_canvas::contributed::Sealed>,
+    /// A monotonic clock in milliseconds that times each step into its row (#2017): the
+    /// `geometry` call's `timings` hand one in; no check runs with one.
+    pub clock: Option<fn() -> f64>,
 }
 
 impl Run {
@@ -75,11 +82,56 @@ pub fn timed(kind: &str) -> bool {
     kind_row(kind).is_some_and(|k| k.2)
 }
 
-/// An item whose enabled stack holds a modifier that reads time by its nature.
+/// An item whose enabled stack holds a modifier that reads time by its nature at build: a sway
+/// reads it on the GPU (#2016), so it never rebuilds the mesh.
 pub fn reads_time_by_kind(item: &Value) -> bool {
-    list(item)
-        .iter()
-        .any(|m| enabled(m) && timed(m.get("kind").and_then(Value::as_str).unwrap_or("")))
+    list(item).iter().any(|m| {
+        let kind = m.get("kind").and_then(Value::as_str).unwrap_or("");
+        enabled(m) && timed(kind) && kind != SWAY
+    })
+}
+
+const SWAY: &str = "mod.sway@1";
+/// Where a sway's weights ride through the modifiers after it, as any float point attribute does.
+const SWAY_WEIGHTS: &str = "\u{0}sway";
+
+/// A GPU sway (Modifier: sway; #2016): what the stack keeps for the renderer instead of moving
+/// anything at build. Vertex k moves along the wind, in the world, by amount × weights[k] ×
+/// ((1 − strength) × sin(2π hz t + phase) + strength × gust), with gust in [−1, 1] noise over
+/// the item's place less the wind's velocity × t, so no vertex moves more than amount.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Sway {
+    pub amount: f64,
+    /// Where the wind blows toward, in degrees from +x toward +z.
+    pub direction: f64,
+    /// The wind's speed in m/s and its gusts' scale in m and strength in [0, 1].
+    pub speed: f64,
+    pub scale: f64,
+    pub strength: f64,
+    pub hz: f64,
+    /// The slow sway's phase in radians, from the modifier's seed alone: identical items sway
+    /// together, and a seed per instance sets them apart.
+    pub phase: f64,
+    /// Each vertex's weight in [0, 1]: its height (0 at the lowest point, 1 at the highest) or a
+    /// stored attribute, clamped, where the sway stood; 0 off the part it names.
+    pub weights: Vec<f64>,
+}
+
+impl Canonical for Sway {
+    fn encode(&self, out: &mut Vec<u8>) {
+        let s = self;
+        [
+            s.amount,
+            s.direction,
+            s.speed,
+            s.scale,
+            s.strength,
+            s.hz,
+            s.phase,
+        ]
+        .encode(out);
+        s.weights.encode(out);
+    }
 }
 
 /// One modifier as the `geometry` call lists it.
@@ -90,6 +142,9 @@ pub struct Row {
     pub reads_time: bool,
     pub enabled: bool,
     pub gpu: bool,
+    /// The step's time in milliseconds by the run's clock (0 for a skipped one); none without
+    /// one (#2017). `to_json` leaves it out, so a build's key never reads it.
+    pub ms: Option<f64>,
 }
 
 impl Row {
@@ -352,6 +407,7 @@ pub fn apply(
         // A line's stroke modifiers (but `build`) are no builder's.
         let (class, gpu, timed) = kind_row(&kind)
             .filter(|_| kind == "mod.build@1" || !STROKE.contains(&kind.as_str()))
+            .or_else(|| crate::contributed::row(&kind))
             .ok_or_else(|| at("kind"))?;
         let on = enabled(modifier);
         rows.push(Row {
@@ -360,10 +416,12 @@ pub fn apply(
             reads_time: timed || reads_time(doc, id, k),
             enabled: on,
             gpu,
+            ms: (run.clock.is_some() && !on).then_some(0.0),
         });
         if !on {
             continue;
         }
+        let started = run.clock.map(|now| now());
         let params = modifier.get("params").cloned().unwrap_or(json!({}));
         let part = modifier.get("on").and_then(Value::as_str).unwrap_or("all");
         // A generate step makes the mesh anew; only a deform moves part of it.
@@ -487,6 +545,10 @@ pub fn apply(
                 )
             }
             "mod.sway@1" => {
+                // The GPU keeps one sway per instance.
+                if m.attributes.contains_key(SWAY_WEIGHTS) {
+                    return Err(at("kind"));
+                }
                 let amount = num("amount", 0.1)?;
                 let hz = num("hz", 0.4)?;
                 let wind = params.get("wind").cloned().unwrap_or(json!({}));
@@ -510,18 +572,25 @@ pub fn apply(
                         .cloned()
                         .ok_or_else(|| at("params/weight"))?,
                 };
-                let d = [cos(rad(direction)), 0.0, sin(rad(direction))];
-                deform(
-                    &m,
-                    &only,
-                    |p, k| {
-                        let along = p[0] * d[0] + p[2] * d[2];
-                        let gusting = strength * sin(TAU * (t * speed - along) / gscale);
-                        let s = amount * weights[k] * (sin(TAU * hz * t + phase) + gusting);
-                        add(p, scale(d, s))
-                    },
-                    |n| n,
-                )
+                let weights = weights
+                    .iter()
+                    .zip(&only)
+                    .map(|(w, on)| if *on { w.clamp(0.0, 1.0) } else { 0.0 })
+                    .collect();
+                let own = modifier.pointer("/params/seed").and_then(Value::as_u64);
+                let mut out = m;
+                out.attributes.insert(SWAY_WEIGHTS.into(), weights);
+                out.sway = Some(Sway {
+                    amount,
+                    direction,
+                    speed,
+                    scale: gscale,
+                    strength,
+                    hz,
+                    phase: (unit_noise(mix(own.unwrap_or(0)), 1) + 1.0) * core::f64::consts::PI,
+                    weights: Vec::new(),
+                });
+                out
             }
             "mod.bob@1" => {
                 let dy = num("amount", 0.05)? * sin(TAU * num("hz", 0.5)? * t + phase);
@@ -558,8 +627,23 @@ pub fn apply(
                 let a = rad(num("rate", 90.0)? * t);
                 deform(&m, &only, |p, _| rotate(p, axis, a), |n| rotate(n, axis, a))
             }
+            name if crate::contributed::named(name) => {
+                crate::contributed::mesh(&m, &only, modifier, (doc, id, k), run)?
+            }
             _ => return Err(at("kind")),
         };
+        if let (Some(now), Some(started), Some(row)) = (run.clock, started, rows.last_mut()) {
+            row.ms = Some(now() - started);
+        }
+    }
+    if let Some(weights) = m.attributes.remove(SWAY_WEIGHTS) {
+        let k = rows.iter().position(|r| r.kind == SWAY && r.enabled);
+        if weights.len() != m.positions.len() {
+            return Err(format!("modifiers/{}/kind", k.unwrap_or(0)));
+        }
+        if let Some(s) = m.sway.as_mut() {
+            s.weights = weights;
+        }
     }
     Ok((m, rows))
 }
@@ -585,7 +669,8 @@ fn field_of(m: &Mesh, field: &str) -> Option<Vec<f64>> {
             .iter()
             .map(|p| crate::geom::length(*p))
             .collect(),
-        _ => return None,
+        // The geometry measures, read like attributes (#2015).
+        _ => return crate::measures::point(m, field),
     })
 }
 
@@ -1069,42 +1154,86 @@ fn normals(m: Mesh, p: &Value, run: &Run) -> Result<Mesh, String> {
         corner_angle: weight != "area",
         keep_sharp: truth(p, "keep_sharp", true)?,
     };
-    let poly = Poly::of(&m);
-    // The edges the mesh already shades sharp: its corner normals differ across them.
     let w = m.welded();
-    let mut seen: BTreeMap<(u32, u32), Vec<(u32, V3)>> = BTreeMap::new();
-    for t in 0..m.triangles() {
-        for j in 0..3 {
-            let (a, b) = (
-                m.indices[3 * t + j] as usize,
-                m.indices[3 * t + (j + 1) % 3] as usize,
-            );
-            for (v, n) in [(a, m.normals[a]), (b, m.normals[b])] {
-                seen.entry(crate::poly::key(w[a], w[b]))
-                    .or_default()
-                    .push((w[v], n));
-            }
-        }
-    }
-    let sharp: BTreeMap<(u32, u32), bool> = seen
-        .into_iter()
-        .map(|(e, list)| {
-            let split = list.iter().any(|(v, n)| {
-                list.iter()
-                    .any(|(u, q)| u == v && crate::geom::length(sub(*n, *q)) > 1e-6)
-            });
-            (e, split)
-        })
-        .collect();
-    let n = crate::bevel::normals(&poly, &opts, &poly.weak, &sharp, run.blocks());
-    let mut out = poly.mesh(&m, Some(&n));
+    let poly = Poly::of_welded(&m, &w);
+    // Only keep_sharp reads the edges the mesh already shades sharp.
+    let sharp = if opts.keep_sharp && !opts.by_angle {
+        shaded_sharp(&m, &w)
+    } else {
+        Vec::new()
+    };
+    let n = crate::bevel::normals_sorted(&poly, &opts, &poly.weak, &sharp, run.blocks());
+    let mut out = poly.mesh_flat(&m, &n);
     keep_annotations(&m, &mut out);
     Ok(out)
+}
+
+/// Each edge of `m`'s triangles on its welded points `w`, by its sorted ends in that order, and
+/// whether the mesh shades it sharp: two of its corners at one point have normals more than 1e-6
+/// apart.
+fn shaded_sharp(m: &Mesh, w: &[u32]) -> Vec<((u32, u32), bool)> {
+    // Triangle edge i's two vertices, and their welded points.
+    let ends = |i: u32| {
+        let i = i as usize;
+        (
+            m.indices[i] as usize,
+            m.indices[i - i % 3 + (i + 1) % 3] as usize,
+        )
+    };
+    let welded: Vec<(u32, u32)> = (0..3 * m.triangles() as u32)
+        .map(|i| {
+            let (a, b) = ends(i);
+            (w[a], w[b])
+        })
+        .collect();
+    let edge = |i: u32| {
+        let (a, b) = welded[i as usize];
+        crate::poly::key(a, b)
+    };
+    let points = w.iter().max().map_or(0, |x| *x as usize + 1);
+    let order = crate::poly::by_ends(welded.len(), points, |i| welded[i as usize]);
+    // Each edge's run of triangle edges in `order`, read once.
+    let mut out = Vec::new();
+    let mut start = 0;
+    while start < order.len() {
+        let e = edge(order[start]);
+        let mut end = start + 1;
+        while end < order.len() && edge(order[end]) == e {
+            end += 1;
+        }
+        // The run's corners (two per triangle edge): each one's welded point and normal.
+        let run = &order[start..end];
+        let corner = |j: usize| {
+            let i = run[j / 2];
+            let (a, b) = ends(i);
+            let (wa, wb) = welded[i as usize];
+            if j.is_multiple_of(2) {
+                (wa, m.normals[a])
+            } else {
+                (wb, m.normals[b])
+            }
+        };
+        let n = 2 * run.len();
+        let split = (0..n).any(|x| {
+            let (u, p) = corner(x);
+            (x + 1..n).any(|y| {
+                let (v, q) = corner(y);
+                u == v && crate::geom::length(sub(p, q)) > 1e-6
+            })
+        });
+        out.push((e, split));
+        start = end;
+    }
+    out
 }
 
 /// A per-face field, one value per triangle, read at each face's centroid (the mean of its
 /// distinct welded points): `height`, `x`, `y`, `z` or `distance` from the item's origin.
 fn face_field(m: &Mesh, field: &str) -> Option<Vec<f64>> {
+    // The geometry measures, read like attributes (#2015).
+    if let Some(values) = crate::measures::face(m, field) {
+        return Some(values);
+    }
     let w = m.welded();
     let mut points: BTreeMap<u32, BTreeMap<u32, V3>> = BTreeMap::new();
     for t in 0..m.triangles() {
@@ -1135,6 +1264,12 @@ fn face_field(m: &Mesh, field: &str) -> Option<Vec<f64>> {
             })
         })
         .collect()
+}
+
+/// A mesh's welded points, edges and faces: its polygon view's.
+pub fn welded(m: &Mesh) -> [u64; 3] {
+    let (p, e, f, _) = topology(&Poly::of(m));
+    [p, e, f]
 }
 
 /// The welded points, edges, faces and corners of a polygon view.
@@ -1397,15 +1532,16 @@ mod tests {
         let at = |t: f64| run(base.clone(), mods.clone(), t);
         let m = at(0.3);
         assert_eq!(m.attributes["wind"].len(), m.positions.len());
-        // The foot doesn't move; the top does, as a closed form in t.
-        for (k, p) in m.positions.iter().enumerate() {
-            if base.positions[k][1] < 1e-9 {
-                assert_eq!(*p, base.positions[k]);
-            }
+        // The sway moves nothing at build (#2016): it keeps the stored field as its weights, the
+        // foot's 0 and the top's 1, for the GPU to move by at each frame, and no t changes it.
+        let sway = m.sway.as_ref().expect("a sway");
+        assert_eq!(m.positions, base.positions);
+        assert_eq!(sway.weights, m.attributes["wind"]);
+        for (k, p) in base.positions.iter().enumerate() {
+            assert_eq!(sway.weights[k], if p[1] < 1e-9 { 0.0 } else { 1.0 });
         }
-        assert_ne!(m.positions, base.positions);
-        assert_eq!(at(0.3).positions, m.positions);
-        assert_ne!(at(0.7).positions, m.positions);
+        assert_eq!((sway.amount, sway.hz), (0.2, 1.0));
+        assert_eq!(at(0.7), m);
         let rows = apply(
             base.clone(),
             &json!({"modifiers": mods}),

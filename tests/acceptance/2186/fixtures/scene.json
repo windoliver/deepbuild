@@ -1,0 +1,51 @@
+{
+  "format": 1,
+  "profile": "scene",
+  "title": "A subject under three shadowed lights",
+  "description": "The #1937 over-class scene as issue #2186 gives it: a grey box on a floor under a shadowed key sun and two shadowed fill spots, with a bar above the frame whose key-light shadow crosses the box's front face. A #2186 acceptance fixture.",
+  "size": [320, 240],
+  "camera": "cam",
+  "budget": { "class": "showpiece" },
+  "light_policy": { "shadowed": { "spots": 2 } },
+  "requires": { "modules": { "scene3d": "^1" } },
+  "items": {
+    "cam": {
+      "id": "cam", "kind": "camera@1", "name": "Camera", "order": "a000",
+      "params": { "projection": "perspective", "position": [0, 3, 7], "target": [0, 0.9, 0], "fov": 40 }
+    },
+    "floor-grey": {
+      "id": "floor-grey", "kind": "material@1", "name": "Floor grey", "order": "a001",
+      "params": { "base_color": [0.5, 0.5, 0.5, 1], "roughness": 1, "metallic": 0 }
+    },
+    "subject-grey": {
+      "id": "subject-grey", "kind": "material@1", "name": "Subject grey", "order": "a002",
+      "params": { "base_color": [0.8, 0.8, 0.8, 1], "roughness": 1, "metallic": 0 }
+    },
+    "floor": {
+      "id": "floor", "kind": "mark.box@1", "name": "Floor", "order": "a003",
+      "params": { "size": [20, 0.1, 20] }, "at": { "pos": [0, -0.05, 0] }, "material": "floor-grey"
+    },
+    "subject": {
+      "id": "subject", "kind": "mark.box@1", "name": "Subject", "order": "a004",
+      "params": { "size": [1.6, 1.6, 1.6] }, "at": { "pos": [0, 0.8, 0] }, "material": "subject-grey"
+    },
+    "bar": {
+      "id": "bar", "kind": "mark.box@1", "name": "Bar", "order": "a005",
+      "params": { "size": [3, 0.1, 0.25] }, "at": { "pos": [0, 3.8, 2.3] }, "material": "floor-grey"
+    },
+    "key": {
+      "id": "key", "kind": "light.sun@1", "name": "Key", "order": "a006",
+      "params": { "illuminance": 2, "color": [1, 1, 1], "shadow": true }, "at": { "rot": [-60, 0, 0] }
+    },
+    "fill-a": {
+      "id": "fill-a", "kind": "light.spot@1", "name": "Fill A", "order": "a007",
+      "params": { "power": 300, "color": [1, 1, 1], "inner": 20, "outer": 35, "shadow": true },
+      "at": { "pos": [-4, 3, 2], "rot": [-26.2, -63.4, 0] }
+    },
+    "fill-b": {
+      "id": "fill-b", "kind": "light.spot@1", "name": "Fill B", "order": "a008",
+      "params": { "power": 300, "color": [1, 1, 1], "inner": 20, "outer": 35, "shadow": true },
+      "at": { "pos": [4, 3, 2], "rot": [-26.2, 63.4, 0] }
+    }
+  }
+}

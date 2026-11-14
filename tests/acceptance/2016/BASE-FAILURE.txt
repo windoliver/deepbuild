@@ -1,0 +1,47 @@
+Base commit: a04378eb2 ("Merge pull request #2190 from windoliver/worktree-hungry-booth-587310"), the merge base
+Machine: macOS on Apple silicon, the Metal device (the shared, loaded Mac this job ran on)
+Command: npx vitest run --root tests/acceptance/2016 --no-file-parallelism --testTimeout=600000
+         (run once, through scripts/lease, which ran it unleased: no `deep` on PATH and no built CLI; `npm ci` first,
+         since node_modules was missing; cargo from ~/.rustup/toolchains/1.99.1-aarch64-apple-darwin/bin, which
+         helpers.ts puts first on PATH)
+Type-check: npx tsc -p tests/acceptance/2016/tsconfig.json passes (exit 0, no output).
+
+Result: Test Files 2 failed (2), Tests 4 failed (4). Each file built `cargo build --locked --bin deep-gpu` (the shipped
+build) without error, every `deep-gpu run` exited 0 with one answer, every `view3d` call was answered (no refusal)
+with the frames asked for, in order. Each test then failed because no frame reports `sway` (the base ignores the
+field); the seek test also failed its pixel-hash comparison at two of its three frames:
+
+field.test.ts
+  #2016.dd1c9e69 AC1 (gusts roll): the gust term at a tree 20 m downwind equals the upwind tree's 4 s earlier within 0.0001
+    AssertionError: the swaying field: frame 0 reports `sway`, the vertex positions and gust term the GPU computed
+    (README: The surface under test): expected null not to be null
+
+  #2016.dd1c9e69 AC1 (neighbours lean together): trees 2 m apart lean within 10% of each other
+    AssertionError: the field with its sway off: frame 0 reports `sway`, the vertex positions and gust term the GPU
+    computed (README: The surface under test): expected null not to be null
+
+  #2016.dd1c9e69 AC1 (bounded): no vertex moves more than amount (0.3 m)
+    AssertionError: the field with its sway off: frame 0 reports `sway`, the vertex positions and gust term the GPU
+    computed (README: The surface under test): expected null not to be null
+
+seek.test.ts
+  #2016.dd1c9e69 AC1 (seek equals play): seeking to frames 17, 45, 96 equals playing to them by pixel hash
+    AssertionError: #2016.dd1c9e69 AC1: seeking equals playing by pixel hash, on this machine, on frames the GPU sway
+    drew: expected [ …(6) ] to deeply equal []
+    + "played: 97 of 97 frames aren't shown to be the GPU sway's, each tree's gust term reported in `sway` (frame 0 has no `sway` first)",
+    + "sought to frame 17: 1 of 1 frames aren't shown to be the GPU sway's, each tree's gust term reported in `sway` (frame 17 has no `sway` first)",
+    + "seeking to frame 17 (2.125 s) draws d2b8e78c939d27be, playing to it f2fe5d8462050b5f",
+    + "sought to frame 45: 1 of 1 frames aren't shown to be the GPU sway's, each tree's gust term reported in `sway` (frame 45 has no `sway` first)",
+    + "seeking to frame 45 (5.625 s) draws 2e08a0c3acd41deb, playing to it 5a2b4e72440d4ad3",
+    + "sought to frame 96: 1 of 1 frames aren't shown to be the GPU sway's, each tree's gust term reported in `sway` (frame 96 has no `sway` first)",
+
+The played frames 17, 45 and 96 differ from one another (the field sways at the base, on the CPU), so the seek guard
+held. At the base, seeking this field to 2.125 s and 5.625 s draws frames no play draws; at 12 s it matched. The
+first three clauses could not be judged at all: the base reports no vertex position or gust term from the GPU.
+Durations: field.test.ts 6.7 s, seek.test.ts 8.3 s, 15.3 s in all (the build was already current).
+
+Before this run, with no test code, the base binary was run on fixtures/field.json to check the fixture draws (97
+distinct frame hashes over 0 … 12 s, no notice or refusal) and to find why a seek differed from play (README: What the
+base already does); the suite itself was run once.
+
+The run left Vitest's cache in tests/acceptance/2016/node_modules/.vite; it was deleted.

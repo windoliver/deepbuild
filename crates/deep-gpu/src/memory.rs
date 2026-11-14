@@ -129,7 +129,8 @@ pub fn linear_texture(
         let row = w * 8;
         let hal = unsafe { device.device.as_hal::<wgpu::hal::api::Metal>() }?;
         let raw_device = hal.raw_device();
-        let align = raw_device.minimumLinearTextureAlignmentForPixelFormat(MTLPixelFormat::RGBA16Float);
+        let align =
+            raw_device.minimumLinearTextureAlignmentForPixelFormat(MTLPixelFormat::RGBA16Float);
         if row % align != 0 {
             return None;
         }

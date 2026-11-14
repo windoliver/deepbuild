@@ -49,7 +49,8 @@ async function handedBack(hub: Hub, s: Direct, why: string, state: (row: Line | 
   await sleep(3000);
   expect(claims(await allEvents(hub), s).length, `the stop is judged once the watch ended (${why})`).toBe(1);
 }
-const finished = (row: Line | undefined) => row?.state === 'finished';
+// A stop that was judged reads by its claim (#2018): says done until its verdict, then the verdict's word.
+const finished = (row: Line | undefined) => ['finished', 'says done', 'PASS', 'sent back', 'BLOCKED', 'INVALID', 'INCONCLUSIVE'].includes(String(row?.state));
 /** `deep off`, run as you would from your own shell: double-forked out of this process, which plays the agent. Its exit code. */
 async function offOutsideTree(w: ReturnType<typeof makeWorld>): Promise<string> {
   const dir = mkdtempSync(join(w.tmp, 'off-'));

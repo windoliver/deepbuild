@@ -1,0 +1,22 @@
+{
+  "title": "verdict.reason@1",
+  "description": "The one source of the reasons the core gives a verdict of its own, beside what its checks showed: the project isn't trusted, a target no longer resolves, a threshold has no unit, items its task left open, an option you switched to, a call DeepBuild denied that ran anyway, or checks that didn't start. Every view that shows one says it in words (contracts' code-words.json), never as the code.",
+  "x-since": "R1",
+  "x-stability": "stable",
+  "type": "string",
+  "enum": [
+    "untrusted_project",
+    "target_unresolved",
+    "threshold_without_unit",
+    "open_items",
+    "option_switched",
+    "denied_call_ran",
+    "checks_not_started",
+    "unknown"
+  ],
+  "x-closure": {
+    "closed": "the reasons the core gives a verdict of its own, beside its checks' results; a reader at an earlier minor reads one it doesn't know as unknown",
+    "reopens": "a minor that adds a member; a reader at the earlier minor takes it for unknown",
+    "mark": "extensible"
+  }
+}

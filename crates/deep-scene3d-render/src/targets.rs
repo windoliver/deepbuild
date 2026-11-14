@@ -82,7 +82,12 @@ pub enum EmissionFrame {
     },
 }
 
-fn made(d: &wgpu::Device, label: &str, size: [u32; 2], format: wgpu::TextureFormat) -> Target {
+fn made(
+    d: &deep_gpu::counted::Wgpu,
+    label: &str,
+    size: [u32; 2],
+    format: wgpu::TextureFormat,
+) -> Target {
     let texture = texture2d(
         d,
         label,
@@ -99,7 +104,7 @@ fn made(d: &wgpu::Device, label: &str, size: [u32; 2], format: wgpu::TextureForm
 impl Core {
     /// Makes the wanted targets at `size` and drops the others, so an unread target holds no
     /// memory.
-    pub fn ensure(&mut self, d: &wgpu::Device, size: [u32; 2]) {
+    pub fn ensure(&mut self, d: &deep_gpu::counted::Wgpu, size: [u32; 2]) {
         if size != self.size {
             self.velocity = None;
             self.emission = None;

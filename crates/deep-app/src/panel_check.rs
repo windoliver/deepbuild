@@ -193,7 +193,10 @@ impl Render for Window358 {
             drop(slots);
             panel = panel.child(element(tree, &self.bounds, &mut 0));
         }
-        div().size_full().bg(rgb(0xffffff)).child(panel)
+        div()
+            .size_full()
+            .bg(crate::chrome::chrome(false).ground)
+            .child(panel)
     }
 }
 
@@ -219,7 +222,7 @@ fn element(node: &Node, bounds: &Rc<RefCell<Vec<Option<Rect>>>>, at: &mut usize)
             ("size_full", ..) => el.size_full(),
             ("absolute", ..) => el.absolute(),
             ("relative", ..) => el.relative(),
-            ("text_sm", ..) => el.text_sm(),
+            ("text_sm", ..) => el.text_sm(), // size-literal-exception: replays a panel script's own layout, behind panel-check (#358); review 2027-04-30
             ("left", Some(v), _) => el.left(v),
             ("top", Some(v), _) => el.top(v),
             ("w", Some(v), _) => el.w(v),
@@ -272,7 +275,7 @@ fn element(node: &Node, bounds: &Rc<RefCell<Vec<Option<Rect>>>>, at: &mut usize)
 fn text_extent(text: &str, frame: Size<Pixels>, window: &Window) -> Option<Size<Pixels>> {
     let style = window.text_style();
     // A pixel's grace, so a box laid out to fit its text exactly doesn't wrap here.
-    let wrap = (frame.width > px(0.)).then_some(frame.width + px(1.));
+    let wrap = (frame.width > px(0.)).then_some(frame.width + px(1.)); // size-literal-exception: replays a panel script's own layout, behind panel-check (#358); review 2027-04-30
     let lines = window
         .text_system()
         .shape_text(

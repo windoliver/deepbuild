@@ -415,7 +415,7 @@ fn node(n: &Value, parent: [f32; 2], up: &[String]) -> AnyElement {
             .absolute()
             .left_0()
             .top_0()
-            .text_size(px(t["size"].as_f64().unwrap_or(14.0) as f32))
+            .text_size(px(t["size"].as_f64().unwrap_or(14.0) as f32)) // size-literal-exception: a #1434 check fixture, in no shipped build; review 2027-04-30
             .text_color(match color(&t["color"]) {
                 // Its glyphs taken out, its layout kept: the same text, drawn clear.
                 Some(c) if !glyphs => Rgba { a: 0., ..c },
@@ -578,7 +578,7 @@ mod live {
         let options = WindowOptions {
             // At a whole point, so the drawable is the window's size in device px exactly.
             window_bounds: Some(WindowBounds::Windowed(Bounds {
-                origin: point(px(120.), px(120.)),
+                origin: point(px(120.), px(120.)), // size-literal-exception: a #1434 check fixture, in no shipped build; review 2027-04-30
                 size: size(px(w), px(h)),
             })),
             kind: WindowKind::PopUp,

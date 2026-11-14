@@ -1,0 +1,269 @@
+#1485's acceptance suite at the base, d51be2c3, in this worktree with only tests/acceptance/1485 added.
+Mac17,10 / Apple M5 Max / 64 GiB (a reference Mac), macOS; the machine was heavily loaded (one-minute load 44 to over 300
+on 18 cores while the suite ran), which no test here judges except AC3's frame times, which never ran.
+
+Command (cargo 1.99.1 first on PATH):
+  PATH="$HOME/.rustup/toolchains/1.99.1-aarch64-apple-darwin/bin:$PATH" CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 \
+    npx vitest run --root tests/acceptance/1485 --no-file-parallelism --testTimeout=600000
+
+Result: 10 tests, 10 failed, each for the base's own reason:
+
+  AC1 header.test.ts  honest  FAIL  raster answers asset_undecodable for the 1 KB PNG (no header check); raster draws
+                                    the whole 10,000 x 10,000 PNG at a peak 500.4 MB above the baseline's; render (GPUI)
+                                    draws it too
+  AC1 header.test.ts  planted FAIL  raster has no decodes_before_header: bad_input
+  AC2 cap.test.ts     honest  FAIL  raster and render both draw the four (each center its color) and draw the fifth too:
+                                    no cap on linear images
+  AC2 cap.test.ts     planted FAIL  no cap_counts_copies_only: bad_input
+  AC3 panel.test.ts   honest  FAIL  the app has no canvas-fixture feature (cargo: "the package 'deep-app' does not contain
+                                    this feature: canvas-fixture"), so no --canvas mode
+  AC3 panel.test.ts   planted FAIL  the same build failure
+  AC4 decode.test.ts  honest  FAIL  frames refuses the image on its Vello GPU layer: asset_missing (the painter reads no
+                                    store); no images counts
+  AC4 decode.test.ts  planted FAIL  no decodes_per_draw: bad_input
+  AC5 upload.test.ts  honest  FAIL  frames refuses the image: asset_missing, as AC4; no images counts
+  AC5 upload.test.ts  planted FAIL  no uploads_per_frame: bad_input
+
+The whole suite ran once (run 1). The AC1 and AC2 honest tests then changed to report every path's finding together
+instead of stopping at the first (run 1 had stopped at raster's 1 KB answer and at raster's fifth image), and only
+those two files ran again (run 2). Below: run 2 in full, then run 1's failures for the three files that didn't change.
+
+==================================================================================================================
+Run 2: header.test.ts and cap.test.ts
+==================================================================================================================
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/1485
+
+ ❯ cap.test.ts (2 tests | 2 failed) 25951ms
+   ❯ AC2 four 2,000 × 2,000 linear images (64,000,000 B) draw, and a fifth (80,000,000 B in all) is refused (2)
+     × AC2 Vello CPU raster and GPUI render draw the four and refuse the fifth, naming it 22866ms
+     × AC2 planted cap_counts_copies_only draws the fifth and fails the check 319ms
+stdout | header.test.ts > AC1 a 10,000 × 10,000 PNG of 1 KB in image@1 is refused over_budget, naming items/<id>/params/asset, peak resident memory up under 10 MB > AC1 refused over_budget from its header, naming the field, by Vello CPU and GPUI, with peak resident memory up under 10 MB
+AC1 raster: peak resident 559939584 B with the 10,000 × 10,000 PNG, 59588608 B with the 100 × 100 one: up 500.4 MB; answered {"ok":true,"width":64,"height":64,"offscreen":0,"texts":{},"backends":{"fonts":{"name":"fonts.bundled","version":"1.0.0"},"cpu":{"name":"aarch64","version":"1.0.0"},"headless":{"name":"headless.vello-cpu","version":"0.3.0"}},"golden":true,"renderer":{"name":"vello_cpu","version":"0.3.0","pipeline":"
+
+stdout | header.test.ts > AC1 a 10,000 × 10,000 PNG of 1 KB in image@1 is refused over_budget, naming items/<id>/params/asset, peak resident memory up under 10 MB > AC1 planted decodes_before_header: a path that decodes first passes 400 MB and fails the check
+AC1 raster planted decodes_before_header: peak resident 51838976 B with the 10,000 × 10,000 PNG, 59883520 B with the 100 × 100 one: up -8.0 MB; answered {"ok":false,"code":"bad_input"}
+
+ ❯ header.test.ts (2 tests | 2 failed) 96199ms
+   ❯ AC1 a 10,000 × 10,000 PNG of 1 KB in image@1 is refused over_budget, naming items/<id>/params/asset, peak resident memory up under 10 MB (2)
+     × AC1 refused over_budget from its header, naming the field, by Vello CPU and GPUI, with peak resident memory up under 10 MB 93470ms
+     × AC1 planted decodes_before_header: a path that decodes first passes 400 MB and fails the check 567ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  cap.test.ts > AC2 four 2,000 × 2,000 linear images (64,000,000 B) draw, and a fifth (80,000,000 B in all) is refused > AC2 Vello CPU raster and GPUI render draw the four and refuse the fifth, naming it
+AssertionError: raster (Vello CPU) and, on macOS, render (GPUI): expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "raster drew the fifth image (80,000,000 B in all) instead of refusing it: {\"ok\":true,\"width\":128,\"height\":32,\"offscreen\":0,\"texts\":{},\"backends\":{\"fonts\":{\"name\":\"fonts.bundled\",\"version\":\"1.0.0\"},\"cpu\":{\"name\":\"aarch64\",\"version\":\"1.0.0\"},\"headless\":{\"name\":\"headless.vello-cpu\",\"version\":\"0.3.0\"}},\"golden\":true,\"renderer\":{\"name\":\"vello_cpu\",\"version\":\"0.3.0\",\"pipeline\":",
++   "render drew the fifth image (80,000,000 B in all) instead of refusing it: {\"ok\":true,\"width\":128,\"height\":32,\"marks\":[],\"legend\":[],\"texts\":{},\"backends\":{\"fonts\":{\"name\":\"fonts.bundled\",\"version\":\"1.0.0\"},\"cpu\":{\"name\":\"aarch64\",\"version\":\"1.0.0\"}},\"rasterized\":0,\"from_largest\":0}",
++ ]
+
+ ❯ cap.test.ts:62:70
+     60|     const paths: Path[] = process.platform === 'darwin' ? ['raster', '…
+     61|     const found = paths.map((path) => capFailure(ctx, path)).filter((f…
+     62|     expect(found, 'raster (Vello CPU) and, on macOS, render (GPUI)').t…
+       |                                                                      ^
+     63|   }, 900_000);
+     64|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  cap.test.ts > AC2 four 2,000 × 2,000 linear images (64,000,000 B) draw, and a fifth (80,000,000 B in all) is refused > AC2 planted cap_counts_copies_only draws the fifth and fails the check
+AssertionError: raster: it fails because the fifth image drew: expected 'raster refused the four images (64,00…' to contain 'raster drew the fifth image'
+
+Expected: "raster drew the fifth image"
+Received: "raster refused the four images (64,000,000 B): {"ok":false,"code":"bad_input"}; raster refused the five images naming undefined, not the fifth's items/p5/params/asset: {"ok":false,"code":"bad_input"}"
+
+ ❯ cap.test.ts:70:71
+     68|       const found = capFailure(ctx, path, 'cap_counts_copies_only');
+     69|       expect(found, `${path}: the check fails on a cap that counts onl…
+     70|       expect(found, `${path}: it fails because the fifth image drew`).…
+       |                                                                       ^
+     71|     }
+     72|   }, 900_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  header.test.ts > AC1 a 10,000 × 10,000 PNG of 1 KB in image@1 is refused over_budget, naming items/<id>/params/asset, peak resident memory up under 10 MB > AC1 refused over_budget from its header, naming the field, by Vello CPU and GPUI, with peak resident memory up under 10 MB
+AssertionError: every path refuses by header, within 10 MB: expected [ [ …(2) ], [ …(2) ], [ …(2) ] ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   [
++     "raster, the 1 KB PNG whose header says 10,000 × 10,000",
++     "it answered {\"ok\":false,\"code\":\"asset_undecodable\",\"path\":\"items/photo/params/asset\"}, not a refusal with code over_budget",
++   ],
++   [
++     "raster, the 10,000 × 10,000 PNG that decodes whole",
++     "it answered {\"ok\":true,\"width\":64,\"height\":64,\"offscreen\":0,\"texts\":{},\"backends\":{\"fonts\":{\"name\":\"fonts.bundled\",\"version\":\"1.0.0\"},\"cpu\":{\"name\":\"aarch64\",\"version\":\"1.0.0\"},\"headless\":{\"name\":\"headless.vello-cpu\",\"version\":\"0.3.0\"}},\"golden\":true,\"renderer\":{\"name\":\"vello_cpu\",\"version\":\"0.3.0\",\"pipeline\":\"f32\",\"simd\":\"scalar\"},\"shaped\":0}, not a refusal with code over_budget; peak resident memory rose 500.4 MB over the baseline's (559939584 B against 59588608 B), not under 10 MB",
++   ],
++   [
++     "render (GPUI), the 10,000 × 10,000 PNG that decodes whole",
++     "it answered {\"ok\":true,\"width\":64,\"height\":64,\"marks\":[],\"legend\":[],\"texts\":{},\"backends\":{\"fonts\":{\"name\":\"fonts.bundled\",\"version\":\"1.0.0\"},\"cpu\":{\"name\":\"aarch64\",\"version\":\"1.0.0\"}},\"rasterized\":0,\"from_largest\":0}, not a refusal with code over_budget",
++   ],
++ ]
+
+ ❯ header.test.ts:80:111
+     78|       found['render (GPUI), the 10,000 × 10,000 PNG that decodes whole…
+     79|     }
+     80|     expect(Object.entries(found).filter(([, f]) => f !== null), 'every…
+       |                                                                                                               ^
+     81|     if (r.up === null) ctx.skip(`INCONCLUSIVE: the refusal holds, but …
+     82|   }, 900_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  header.test.ts > AC1 a 10,000 × 10,000 PNG of 1 KB in image@1 is refused over_budget, naming items/<id>/params/asset, peak resident memory up under 10 MB > AC1 planted decodes_before_header: a path that decodes first passes 400 MB and fails the check
+AssertionError: it fails on the memory, not on the refusal: the planted path still refuses over_budget naming the field: expected 'it answered {"ok":false,"code":"bad_i…' to match /^peak resident memory rose/
+
+- Expected:
+/^peak resident memory rose/
+
++ Received:
+"it answered {\"ok\":false,\"code\":\"bad_input\"}, not a refusal with code over_budget"
+
+ ❯ header.test.ts:89:126
+     87|     const found = failure(r);
+     88|     expect(found, 'the check fails on the planted path').not.toBeNull(…
+     89|     expect(found, 'it fails on the memory, not on the refusal: the pla…
+       |                                                                                                                              ^
+     90|     expect(r.up!, `the planted path's peak resident memory rose past 4…
+     91|   }, 900_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  4 failed (4)
+   Start at  02:11:56
+   Duration  124.09s (tests 99%, import 1%)
+
+
+==================================================================================================================
+Run 1: the failures of panel.test.ts, decode.test.ts and upload.test.ts (unchanged since)
+==================================================================================================================
+
+ FAIL  decode.test.ts > AC4 a 60-frame draw of a moving image reads and decodes its asset once > AC4 60 presented frames of the moving picture on its Vello GPU layer: one store read and one decode in all
+AssertionError: frames over the moving picture refused: {"ok":false,"code":"asset_missing","path":"items/photo/params/asset: 4a681913553346baab2c3d7730a71b5063f8e2986fc510a528f362ad8142ddb1"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ moving helpers.ts:367:67
+    365|     captures: [{ vsync: MOVING_VSYNCS - 1, out }], ...(planted ? { pla…
+    366|   });
+    367|   expect(answer['ok'], `${what} refused: ${short(answer, 2000)}`).toBe…
+       |                                                                   ^
+    368|   const raw = arr(answer['vsyncs'], `${what}: vsyncs`);
+    369|   expect(raw.length, `${what}: one record per vsync`).toBe(MOVING_VSYN…
+ ❯ decode.test.ts:30:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/10]⎯
+ FAIL  decode.test.ts > AC4 a 60-frame draw of a moving image reads and decodes its asset once > AC4 planted decodes_per_draw (the merge base) reads and decodes it 60 times and fails the check
+AssertionError: frames over the moving picture, planted decodes_per_draw refused: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ moving helpers.ts:367:67
+    365|     captures: [{ vsync: MOVING_VSYNCS - 1, out }], ...(planted ? { pla…
+    366|   });
+    367|   expect(answer['ok'], `${what} refused: ${short(answer, 2000)}`).toBe…
+       |                                                                   ^
+    368|   const raw = arr(answer['vsyncs'], `${what}: vsyncs`);
+    369|   expect(raw.length, `${what}: one record per vsync`).toBe(MOVING_VSYN…
+ ❯ decode.test.ts:36:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/10]⎯
+ FAIL  panel.test.ts > AC3 a planted decode of 500 ms keeps GPUI's frame time under 16.7 ms at p99 while it runs > AC3 twelve picture replacements, each decoded for 500 ms: the old picture stays until the new one arrives, and the UI thread's frame time is under 16.7 ms at p99 in five runs on a reference Mac
+AssertionError: it builds: cargo build --locked --release -p deep-app --bin deep-app --features canvas-fixture: expected 'cargo build --locked --release -p dee…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --release -p deep-app --bin deep-app --features canvas-fixture failed:
++ error: the package 'deep-app' does not contain this feature: canvas-fixture
++
+
+ ❯ helpers.ts:232:57
+    230|   afterAll(() => { if (dir) rmSync(dir, { recursive: true, force: true…
+    231|   return () => {
+    232|     expect(error, `it builds: cargo ${args.join(' ')}`).toBe('');
+       |                                                         ^
+    233|     return join(dir, name);
+    234|   };
+ ❯ panel.test.ts:133:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/10]⎯
+ FAIL  panel.test.ts > AC3 a planted decode of 500 ms keeps GPUI's frame time under 16.7 ms at p99 while it runs > AC3 planted decodes_in_place (the merge base) blocks the UI thread for the decode and fails the check
+AssertionError: it builds: cargo build --locked --release -p deep-app --bin deep-app --features canvas-fixture: expected 'cargo build --locked --release -p dee…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --release -p deep-app --bin deep-app --features canvas-fixture failed:
++ error: the package 'deep-app' does not contain this feature: canvas-fixture
++
+
+ ❯ helpers.ts:232:57
+    230|   afterAll(() => { if (dir) rmSync(dir, { recursive: true, force: true…
+    231|   return () => {
+    232|     expect(error, `it builds: cargo ${args.join(' ')}`).toBe('');
+       |                                                         ^
+    233|     return join(dir, name);
+    234|   };
+ ❯ panel.test.ts:162:30
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/10]⎯
+ FAIL  upload.test.ts > AC5 a Vello GPU layer with one image over 60 frames uploads once, by the renderer's count > AC5 60 presented frames of the moving picture on its Vello GPU layer: one upload in all
+AssertionError: frames over the moving picture refused: {"ok":false,"code":"asset_missing","path":"items/photo/params/asset: 4a681913553346baab2c3d7730a71b5063f8e2986fc510a528f362ad8142ddb1"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ moving helpers.ts:367:67
+    365|     captures: [{ vsync: MOVING_VSYNCS - 1, out }], ...(planted ? { pla…
+    366|   });
+    367|   expect(answer['ok'], `${what} refused: ${short(answer, 2000)}`).toBe…
+       |                                                                   ^
+    368|   const raw = arr(answer['vsyncs'], `${what}: vsyncs`);
+    369|   expect(raw.length, `${what}: one record per vsync`).toBe(MOVING_VSYN…
+ ❯ upload.test.ts:28:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/10]⎯
+ FAIL  upload.test.ts > AC5 a Vello GPU layer with one image over 60 frames uploads once, by the renderer's count > AC5 planted uploads_per_frame uploads 60 times and fails the check
+AssertionError: frames over the moving picture, planted uploads_per_frame refused: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ moving helpers.ts:367:67
+    365|     captures: [{ vsync: MOVING_VSYNCS - 1, out }], ...(planted ? { pla…
+    366|   });
+    367|   expect(answer['ok'], `${what} refused: ${short(answer, 2000)}`).toBe…
+       |                                                                   ^
+    368|   const raw = arr(answer['vsyncs'], `${what}: vsyncs`);
+    369|   expect(raw.length, `${what}: one record per vsync`).toBe(MOVING_VSYN…
+ ❯ upload.test.ts:34:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/10]⎯

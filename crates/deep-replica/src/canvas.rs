@@ -93,10 +93,12 @@ mod panel {
                 at.insert(p.doc.clone(), p.rev);
                 cx.update(|cx| {
                     entity.update(cx, |panel, cx| {
-                        panel.present(p);
+                        panel.present(p, cx);
                         cx.notify();
                     })
                 });
+                // The panel decodes its pictures in the background; what it reports is drawn once they're in.
+                cx.run_until_parked();
                 cx.update_window(handle, |_, window, cx| window.render_frame(cx))
                     .map_err(|e| e.to_string())?;
                 let mut f = std::fs::OpenOptions::new()

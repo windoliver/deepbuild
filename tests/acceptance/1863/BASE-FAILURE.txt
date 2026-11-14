@@ -1,0 +1,18 @@
+Run on the base commit c52f1c66d (full output: /tmp/deepbuild-1863-proof/blind-base.log):
+  npx vitest run tests/acceptance/1863 --testTimeout=900000 --no-file-parallelism
+  Test Files 2 failed (2), Tests 2 failed (2); the one-minute load was about 860.
+
+AC1 #1863.2d3f3f89 (speed.test.ts) fails at its FAIL assertion, not in setup:
+  "AC1 #1863.2d3f3f89 claim:... states "1.8× faster than the merge base" and cites .deepbuild/timing/speed.json,
+  whose five repeats a side show 1.2×, so it is FAIL; the stated speed was not judged: PASS {... reasons:
+  [".deepbuild/checks/expired-token.sh: PASS on 1 clean run","unit: PASS on 1 clean run"] ...}"
+  Why: the claim's commands were green (held as a precondition) and the base's numbers spec reads only
+  `<sql> on <file>`, so the stated speed is never judged and the claim passes. The verdict names no timing run.
+
+AC2 #1863.da28004d (filter.test.ts) fails at its FAIL assertion, not in setup:
+  "AC2 #1863.da28004d claim:...'s diff adds the filter status <> 'void', which changes no row of
+  data/orders-sample.db, so it is FAIL; the filter never ran on the sample: PASS {...}"
+  Why: the base's numbers spec always sets `added: []`, so the filter never runs on the sample and the claim passes.
+
+A first AC2 run stopped earlier with BLOCKED (the test used the world's pre-amend base commit); fixed in the test's
+setup, not in an assertion, before the run above.

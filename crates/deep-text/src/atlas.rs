@@ -153,6 +153,8 @@ struct Key {
     size64: u32,
     /// The pen position's phase within its pixel, in 1/[`PHASES`] px on x and y.
     phase: [u8; 2],
+    /// #1964: the glyph's faux-italic slant in degrees, as its bits.
+    skew: u32,
 }
 
 /// The atlas: its pages, the glyphs placed on them, and the rasterizer they come from.
@@ -234,17 +236,19 @@ impl Atlas {
     /// space), one above [`MAX_DEVICE_SIZE`], or, until [`Atlas::make_room`], one with no room
     /// left on [`PAGES`] pages; only the first two are remembered.
     pub fn glyph(&mut self, font: &FontData, glyph: u32, device_size: f32) -> Option<Placed> {
-        self.glyph_at(font, glyph, device_size, [0, 0])
+        self.glyph_at(font, glyph, device_size, [0, 0], 0.)
     }
 
     /// [`Atlas::glyph`] with its pen position `phase` of a pixel along, in 1/[`PHASES`] px on x
-    /// and y (#140); `left` and `top` still hang off the pen position's whole pixel.
+    /// and y (#140), slanted `skew` degrees (#1964); `left` and `top` still hang off the pen
+    /// position's whole pixel.
     pub fn glyph_at(
         &mut self,
         font: &FontData,
         glyph: u32,
         device_size: f32,
         phase: [u8; 2],
+        skew: f32,
     ) -> Option<Placed> {
         let phase = phase.map(|p| p.min(PHASES - 1));
         let key = Key {
@@ -253,6 +257,7 @@ impl Atlas {
             glyph,
             size64: (device_size * 64.).round() as u32,
             phase,
+            skew: skew.to_bits(),
         };
         if let Some(placed) = self.placed.get(&key) {
             if let Some(p) = placed {
@@ -264,7 +269,7 @@ impl Atlas {
             self.placed.insert(key, None);
             return None;
         }
-        let placed = self.rasterize(font, glyph, device_size, phase);
+        let placed = self.rasterize(font, glyph, device_size, phase, skew);
         if self.full {
             return None;
         }
@@ -278,6 +283,7 @@ impl Atlas {
         glyph: u32,
         device_size: f32,
         phase: [u8; 2],
+        skew: f32,
     ) -> Option<Placed> {
         // Room for an em of ascent and bearings on every side; the glyph's box is found after.
         let margin = (0.5 * device_size).ceil() + 2.;
@@ -295,6 +301,7 @@ impl Atlas {
         ctx.glyph_run(&mut self.resources, font)
             .font_size(device_size)
             .hint(false)
+            .glyph_transform(slant(skew))
             .fill_glyphs(std::iter::once(VelloGlyph {
                 id: glyph,
                 x: origin.0 + f32::from(phase[0]) / f32::from(PHASES),
@@ -393,4 +400,10 @@ impl Atlas {
         page.used = self.tick;
         Some((self.current as u32, slot))
     }
+}
+
+/// #1964: the glyph transform that slants a glyph `skew` degrees forward, as its face's synthesis
+/// asks for an italic it lacks. Vello applies it with y down, so a forward lean shears x by −y.
+pub fn slant(skew: f32) -> Affine {
+    Affine::skew(-deep_canvas::ops::tan(f64::from(skew).to_radians()), 0.)
 }

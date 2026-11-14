@@ -2,7 +2,7 @@
 
 ## What it is for
 
-The first channel plug-ins (#65): `paseo` (paseo's relay to your phone, whose app signs answers with its paired key), `chat`, `email` and `text`. Each is a DeepBuild package of its own, installed with `deep install packages/channels/<name>`, that calls `deep.registerChannel` once and passes channel@1's kit at install. A channel only transports: the hub renders each item, makes every provider call through `ctx.fetch` (adding the channel's token from `~/.deepbuild/channels.json`), and checks each answer's proof itself (`packages/hub/src/channels.ts`).
+The first channel plug-ins (#65): `paseo` (paseo's relay to your phone, whose app signs answers with its paired key), `chat`, `email` and `text`. Each is a DeepBuild package of its own, installed with `deep install packages/channels/<name>`, that calls `deep.registerChannel` once and passes channel@1's kit at install. A channel only transports: the hub renders each item, makes every provider call through `ctx.fetch` (adding the channel's token, which `~/.deepbuild/channels.json` names by handle, `"secret": "secret:channels/<name>"`, from the OS secret store, where `deep secret add channels <name>` puts it and a plain `token` left in the file moves at the hub's next start), and checks each answer's proof itself (`packages/hub/src/channels.ts`).
 
 ## Where new code goes
 

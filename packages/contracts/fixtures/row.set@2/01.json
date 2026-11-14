@@ -1,0 +1,26 @@
+{
+  "v": 2,
+  "id": "01K9QZ6V2T8M4R1N5P7W3X9Y0A",
+  "kind": "row.set",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1762790400000,
+  "data": {
+    "id": "job:3f1c9a0e7b2d4c6e8a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f",
+    "listed": true,
+    "order": "0|4|0001762790360000|job:3f1c9a0e7b2d4c6e8a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f",
+    "title": "test.encode",
+    "project": null,
+    "session": "",
+    "agent": null,
+    "entry": "running",
+    "word": "running",
+    "why": "encode-a@1.0.0 runs it, and it keeps running when the app or the session closes",
+    "waits_on": null,
+    "since": 1762790360000,
+    "actions": [],
+    "unread": false,
+    "progress": "300 of 600 · 40 s left"
+  }
+}

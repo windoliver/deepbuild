@@ -13,12 +13,14 @@ use deep_canvas::schedule::{OpError, Val, View};
 use serde_json::{json, Value};
 
 pub mod kinds;
+pub mod launch;
 mod time;
 pub use time::{cache, held, tick};
 pub mod probe;
 pub mod registries;
 pub mod sandbox;
 pub mod sim;
+pub mod weight;
 
 fn manifest(name: &str, deps: &[(&str, bool)]) -> Manifest {
     let one = Semver {
@@ -45,7 +47,10 @@ fn manifest(name: &str, deps: &[(&str, bool)]) -> Manifest {
         feature: name.replace('.', "-"),
         license: "Apache-2.0".into(),
         implements: format!("{name}@1"),
-        implementation: deep_canvas::registry::Implementation::reference(name, Semver::parse("1.0.0").expect("a version")),
+        implementation: deep_canvas::registry::Implementation::reference(
+            name,
+            Semver::parse("1.0.0").expect("a version"),
+        ),
     }
 }
 
@@ -829,5 +834,91 @@ pub fn checks() -> Module {
     Module {
         manifest: manifest("test.checks", &[]),
         register: register_checks,
+    }
+}
+
+// ------------------------------------------------------------------------------------------------
+// #408: `test.label`, whose kind's items are text to film.layout only through the core's glyph-box
+// array: each contributes its glyph box, `params.box` (`[x, y, w, h]`, u), to `core.glyphs`, and
+// draws no stroke, fill or shape and names no check kind.
+
+fn label_box(v: &mut View<'_>) -> Result<(), OpError> {
+    let item = v.item()?;
+    let mut b = [0.0; 4];
+    for (k, x) in item["params"]["box"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .enumerate()
+        .take(4)
+    {
+        b[k] = x.as_f64().unwrap_or(0.0);
+    }
+    v.write("test.label.glyphs", Val::typed(vec![b]))
+}
+
+fn register_label(r: &mut Registrar) {
+    let text = Param {
+        name: "text",
+        ty: ParamType::Str,
+        unit: "",
+        default: json!(""),
+        min: None,
+        max: None,
+        minor: 0,
+        module: "",
+        operator: "",
+    };
+    r.kind(kind("test", "label", vec![box_param(), text]), &[], "")
+        .draws(&["glyphs"]);
+    r.contribution(
+        "test.label.glyphs",
+        "list",
+        "item",
+        "geometry",
+        "items",
+        "core.glyphs",
+    );
+    r.operator("glyphs", "items", &["self"], &["test.label.glyphs"])
+        .run(label_box);
+}
+
+/// `test.label` (#408's `test-glyph-label`): the kind `test.label@1`, a glyph box and its text.
+pub fn label() -> Module {
+    Module {
+        manifest: manifest("test.label", &[]),
+        register: register_label,
+    }
+}
+
+fn register_guards(r: &mut Registrar) {
+    r.kind(
+        kind(
+            "test",
+            "nonfinite",
+            vec![json_param("frame"), json_param("pixel")],
+        ),
+        &[],
+        "",
+    );
+    r.kind(
+        kind("test", "device_loss", vec![json_param("frame")]),
+        &[],
+        "",
+    );
+    let redraw = ["box", "fill", "again", "frame"].map(json_param).to_vec();
+    r.kind(kind("test", "redraw", redraw), &[], "");
+}
+
+/// `test.guards` (#157's `test-export-guards`): three kinds, each a fault a film carries into its
+/// export, which the build that holds this module plants as the export draws: `test.nonfinite@1
+/// {frame, pixel}` (one NaN in that pixel of the frame's float target), `test.device_loss@1
+/// {frame}` (the device lost as that frame is drawn) and `test.redraw@1 {box, fill, again,
+/// frame}` (a rect in `fill`, and in `again` the second time the process draws that frame). The
+/// kinds draw nothing themselves.
+pub fn guards() -> Module {
+    Module {
+        manifest: manifest("test.guards", &[]),
+        register: register_guards,
     }
 }

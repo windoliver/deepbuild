@@ -77,6 +77,9 @@ unsafe impl std::alloc::GlobalAlloc for CountingAlloc {
 #[global_allocator]
 static ALLOC: CountingAlloc = CountingAlloc;
 
+/// One frame of a request: its labels, and the files each window's picture of it goes to.
+type FrameRequest = (Vec<LabelRequest>, Option<Vec<String>>);
+
 /// One render request, read from its JSON line.
 struct Request {
     out: String,
@@ -85,7 +88,7 @@ struct Request {
     card: [u8; 3],
     labels: Vec<LabelRequest>,
     /// #1480: `frames`, each drawn once by each of `windows` windows, instead of `labels`.
-    frames: Option<Vec<(Vec<LabelRequest>, Option<Vec<String>>)>>,
+    frames: Option<Vec<FrameRequest>>,
     windows: usize,
     whole_page: bool,
 }
@@ -229,7 +232,7 @@ mod macos {
     /// The card: a filled quad, then each label painted from the atlas at its corner.
     struct Card {
         color: Rgba,
-        labels: Rc<RefCell<Vec<(Label, Point<Pixels>, Rgba)>>>,
+        labels: Rc<RefCell<Labels>>,
         /// The last frame's paints, one per label.
         painted: Rc<RefCell<Vec<Painted>>>,
         /// The most pages any one frame handed GPUI (the window opens at scale 2 and is drawn

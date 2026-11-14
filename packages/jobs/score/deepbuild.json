@@ -1,0 +1,24 @@
+{
+  "id": "deepbuild/score",
+  "version": "1.0.0",
+  "digest": "d1:fd6d8beac98c0b0fb915f2d46f54d62f6917e449d696af32ebf23bd71bd313f8",
+  "checks": [
+    "score.render.pitch"
+  ],
+  "jobs": [
+    "score.render"
+  ],
+  "job_tools": [
+    {
+      "kind": "score.render",
+      "tool": "score-render@1.0.0"
+    }
+  ],
+  "requires": {
+    "preview": [
+      "deep.registerCheck",
+      "deep.registerJob",
+      "deep.registerJobTool"
+    ]
+  }
+}

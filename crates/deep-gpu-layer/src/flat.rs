@@ -23,6 +23,9 @@ use crate::liveview::Timer;
 /// The pass a 2D view's frame is timed as.
 pub const FLAT_PASS: &str = "flat";
 
+/// A frame's marks, and where each writer layer's marks end.
+type Marks = (Vec<Drawn>, Vec<usize>);
+
 /// A 2D document's frames, from its evaluated items at t.
 pub struct Flat {
     doc: Map<String, Value>,
@@ -33,7 +36,7 @@ pub struct Flat {
     vello: Option<Vello2d>,
     groups: Option<Groups>,
     /// The last frame's evaluated items and marks, and where each writer layer's marks end.
-    last: Option<(Map<String, Value>, Vec<Drawn>, Vec<usize>)>,
+    last: Option<(Map<String, Value>, Marks)>,
     /// #467: the marks the view last drew; a frame with the same marks draws nothing.
     shown: Option<Vec<Drawn>>,
 }
@@ -131,7 +134,7 @@ impl Flat {
         self.program
             .evaluate(t, eval::Validity::Full, &mut self.state);
         let items = eval::items(&self.doc, &self.program, &self.state);
-        let reused = self.last.as_ref().and_then(|(before, marks, ends)| {
+        let reused = self.last.as_ref().and_then(|(before, (marks, ends))| {
             let moves = moved(before, &items)?;
             let marks = marks
                 .iter()
@@ -149,15 +152,11 @@ impl Flat {
             Some(made) => made,
             None => self.build(&items, t)?,
         };
-        let (_, marks, _) = self.last.insert((items, marks, ends));
+        let (_, (marks, _)) = self.last.insert((items, (marks, ends)));
         Ok(marks)
     }
 
-    fn build(
-        &self,
-        items: &Map<String, Value>,
-        t: i64,
-    ) -> Result<(Vec<Drawn>, Vec<usize>), (&'static str, String)> {
+    fn build(&self, items: &Map<String, Value>, t: i64) -> Result<Marks, (&'static str, String)> {
         let record = Record {
             pinned: t,
             ..Record::default()
@@ -248,7 +247,7 @@ impl Flat {
         target: &wgpu::TextureView,
         encoder: &mut wgpu::CommandEncoder,
     ) -> Result<(), serde_json::Value> {
-        let Some((_, marks, ends)) = &self.last else {
+        let Some((_, (marks, ends))) = &self.last else {
             return Ok(());
         };
         let mut layers: Vec<Vec<Arc<Drawn>>> = Vec::with_capacity(ends.len());

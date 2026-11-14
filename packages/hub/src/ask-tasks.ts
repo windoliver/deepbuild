@@ -34,18 +34,16 @@ import { readdir, readFile, realpath, stat } from 'node:fs/promises';
 import { basename, isAbsolute, join, normalize, sep } from 'node:path';
 import type { Asks, Delivery } from '@deepbuild/asks';
 import type { PaidKind } from '@deepbuild/gate';
-import { canonicalize, sha256Hex, type JsonValue } from '@deepbuild/contracts';
+import { isRecord as isObj, canonicalize, sha256Hex, type JsonValue } from '@deepbuild/contracts';
 import { RecordError, ulid, type Connection, type EventInput } from '@deepbuild/record';
 import { solveLine } from '@deepbuild/gate';
-import { renamedSince } from '@deepbuild/workspaces';
 import type { ClaimCheck, DefinitionState, StatePin, Surface } from './gate-runner.js';
 import { ISSUE_LINK, liveFetch, readIssue, recordedFetch, type Reading } from './github-source.js';
 import { headOf } from './session-facts.js';
-import type { Workspaces } from './workspaces.js';
+import type { WorkspaceService, WorkspacesProvider } from './workspaces-port.js';
 import { derivedId, type Plant } from './wire.js';
 
 type Obj = Record<string, unknown>;
-const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 const sql = (s: string) => s.replace(/'/g, "''");
 const letters = (s: string) => s.replace(/[^0-9A-Za-z]/g, '');
 
@@ -125,11 +123,11 @@ const issueNumber = (source_id: string): number | undefined => { const m = /(\d+
 
 // ---- Definitions handed to the kernel, and the work source's readings.
 
-interface Requirement { expected_ms?: number; deadline_ms?: number; runs?: number; held_out?: HeldOut[]; id: string; text: string; source_line: string; refuted_by: string; check: string | null; check_sha256: string | null; on_base: string; asserts: string[]; depth: string; oracle: string; near_misses: string[]; author: Author; surface: Surface | null; stand_in?: { surface: Surface; hash: string }; references?: { path: string; sha256: string }[]; command?: string; criterion?: string; targets?: string[]; paid?: PaidKind; timing?: boolean }
+interface Requirement { settled_by?: typeof BUDGET_WINDOW; expected_ms?: number; deadline_ms?: number; runs?: number; held_out?: HeldOut[]; id: string; text: string; source_line: string; refuted_by: string; check: string | null; check_sha256: string | null; on_base: string; asserts: string[]; depth: string; oracle: string; near_misses: string[]; author: Author; surface: Surface | null; stand_in?: { surface: Surface; hash: string }; references?: { path: string; sha256: string }[]; command?: string; criterion?: string; targets?: string[]; paid?: PaidKind; timing?: boolean }
 interface Author { handle: string; role: string; automated?: boolean }
 /** A held-out variant of a check (#1018): the files written over the claim's checkout for a run of its own, kept by digest. */
 interface HeldOut { files: Record<string, string> }
-interface Handed { ask?: string; issue?: string; requirements: Obj[]; deliverables?: string[]; budget?: JsonValue; waives?: { id: string; source_line: string }[]; kind?: unknown; plan?: unknown }
+interface Handed { ask?: string; issue?: string; requirements: Obj[]; deliverables?: string[]; budget?: JsonValue; waives?: { id: string; source_line: string }[]; kind?: unknown; plan?: unknown; sample?: unknown }
 /**
  * A task's plan (#324), handed with its definition: whether it marks the issue as large, and its scope section, the
  * files and parts it will touch and the dependencies and top-level folders it names. A part is a part of the code by
@@ -155,6 +153,8 @@ interface Early { claim: string; session: string; agent: string; cwd: string }
 /** The roles whose text can remove or waive a requirement; an automated account's never does, whatever its membership. */
 const TRUSTED = new Set(['you', 'owner', 'collaborator']);
 const trusted = (a: Author): boolean => TRUSTED.has(a.role) && a.automated !== true;
+/** What alone settles a requirement no check of a claim can (#1331): the scheduled budget window, on a reference Mac. */
+export const BUDGET_WINDOW = 'budget-window';
 /** The kinds of spend a check can cost (#325). */
 const PAID = new Set<string>(['live call', 'hosted browser run', 'model job']);
 /** Where each definition's drafted checks are kept, behind the `.deepbuild/` guard. */
@@ -213,7 +213,8 @@ interface AskTaskOptions {
   /** The targets of a claim's requirements that didn't resolve before its runs (#323): each verdict made on it is INVALID, naming them. */
   unresolved(claim: string, targets: { req: string; reason: string }[]): void;
   /** Where work outside a repo lives (#67). */
-  spaces: Pick<Workspaces, 'land' | 'fill' | 'pin' | 'keep' | 'claimState' | 'folderOf'>;
+  spaces: Pick<WorkspaceService, 'land' | 'fill' | 'pin' | 'keep' | 'claimState' | 'folderOf'>;
+  renamedSince: WorkspacesProvider['renamedSince'];
 }
 
 export class AskTasks {
@@ -410,6 +411,8 @@ export class AskTasks {
         ...(typeof r.runs === 'number' ? { runs: r.runs } : {}), ...(Array.isArray(r.held_out) ? { held_out: await this.heldOut(r.held_out as Obj[], String(r.id)) } : {}),
         // A check that costs money says what it spends on (#325), so the lock prices it.
         ...(check && PAID.has(String(r.paid)) ? { paid: r.paid as PaidKind } : {}),
+        // One only the scheduled budget window settles (#1331) has no check of its own, and never holds a landing.
+        ...(!check && r.settled_by === BUDGET_WINDOW ? { settled_by: BUDGET_WINDOW } : {}),
       });
     }
     // A waiver counts only from you or a repo collaborator; any other's leaves the requirement in, and makes the
@@ -478,7 +481,7 @@ export class AskTasks {
     let fresh = true;
     try {
       await this.o.append(this.o.connection(session, agent), {
-        v: 9, id: derivedId(at, `${definition.task_ref}:${handed}:lock`), kind: 'definition.locked', ts,
+        v: 10, id: derivedId(at, `${definition.task_ref}:${handed}:lock`), kind: 'definition.locked', ts,
         data: { definition: handed, ...definition, hash: this.hashOf(definition) } as unknown as JsonValue,
       });
     } catch (error) {
@@ -513,11 +516,15 @@ export class AskTasks {
     }
     return variants;
   }
-  /** The kind of issue and the plan a task's definition was handed with (#324), found again by the lock's digest of it. */
-  async scopeOf(task_ref: string): Promise<{ kind: string | null; plan: Plan | null }> {
+  /**
+   * The kind of issue and the plan a task's definition was handed with (#324), and the read-only sample of real data it
+   * names (#1863), a SQLite file by its path in the repo, found again by the lock's digest of it.
+   */
+  async scopeOf(task_ref: string): Promise<{ kind: string | null; plan: Plan | null; sample: string | null }> {
     const [row] = (await this.o.raw(`SELECT id FROM definitions WHERE task_ref = ? AND state IN ('locked', 'revised') LIMIT 1`, [task_ref])) as { id: string }[];
     const handed = row ? (await this.json<Handed>(this.o.drafts, 'drafts')).find((d) => sha256Hex(canonicalize(d as unknown as JsonValue)) === row.id) : undefined;
-    return { kind: typeof handed?.kind === 'string' && handed.kind ? handed.kind : null, plan: planOf(handed?.plan) };
+    const sample = typeof handed?.sample === 'string' ? normalize(handed.sample) : '';
+    return { kind: typeof handed?.kind === 'string' && handed.kind ? handed.kind : null, plan: planOf(handed?.plan), sample: sample && sample !== '.' && !isAbsolute(sample) && !sample.startsWith('..') ? sample : null };
   }
   /** The definition's hash: every field it holds, each check's approved bytes by digest and each referenced output's among them. */
   private hashOf(d: Definition): string {
@@ -566,7 +573,7 @@ export class AskTasks {
   /** The file a target's file was renamed to since the definition's base, when its symbol resolves there. */
   private async followed(cwd: string, base: string, target: string): Promise<string | undefined> {
     const [file, symbol] = target.split('#') as [string, string | undefined];
-    const now = await renamedSince(cwd, base, file);
+    const now = await this.o.renamedSince(cwd, base, file);
     return now && !(await this.unresolvedTarget(cwd, symbol ? `${now}#${symbol}` : now)) ? now : undefined;
   }
   /** One proposed diff of a definition for the renames a claim followed; the definition changes only on your approval. */
@@ -638,6 +645,28 @@ export class AskTasks {
       }
     }
     return made;
+  }
+  /**
+   * A change's claim on its merge with the default branch's head (#1331): the issue's task, opened once from its
+   * reading and locked from its handed definition or its criteria, claimed on `cwd`'s HEAD, the merge commit, by
+   * `session`, a session of the lander's own for this judgement. Answers the claim, or undefined when nothing locked.
+   */
+  async landing(r: { session: string; cwd: string; item: WorkItem; at: number }): Promise<{ claim: string; task: string } | undefined> {
+    const task_ref = `task:${letters(r.item.source_id)}`;
+    const thread = `land:${r.item.source_id}`;
+    if (!(await this.o.raw(`SELECT 1 FROM tasks WHERE task_ref = ? LIMIT 1`, [task_ref])).length) {
+      await this.opened({ session: r.session, agent: 'claude-code', cwd: r.cwd, thread, task_ref, text: `Land ${r.item.source_id}`, prompt: `land:${letters(r.item.source_id)}`, at: r.at, item: r.item });
+      await this.locking.get(r.session);
+    }
+    const [locked] = (await this.o.raw(`SELECT 1 FROM definitions WHERE task_ref = ? AND state = 'locked' LIMIT 1`, [task_ref])) as unknown[];
+    if (!locked) return undefined;
+    return { claim: await this.judge(r.session, 'claude-code', r.cwd, task_ref), task: task_ref };
+  }
+  /** The requirements of a task's locked definition: each by its handle, its text and what alone settles it (#1331). */
+  async lockedRequirements(task_ref: string): Promise<{ req: string; text: string; settled_by: string | null }[]> {
+    const [row] = (await this.o.raw(`SELECT requirements FROM definitions WHERE task_ref = ? AND state = 'locked' LIMIT 1`, [task_ref])) as { requirements: string }[];
+    const stored = row ? JSON.parse(row.requirements) as Requirement[] : [];
+    return stored.map((r, i) => ({ req: `req:${letters(task_ref)}#${/^R[1-9][0-9]*$/.test(r.id) ? r.id : `R${i + 1}`}`, text: r.text, settled_by: r.settled_by ?? null }));
   }
   /**
    * Whether a workspace task's verdict stands (#67). Another task's stop doesn't claim it again: a workspace runs again
@@ -821,12 +850,14 @@ export class AskTasks {
     return out;
   }
   /** What SessionStart sends again after a compaction or a resume: the open asks' requirement IDs, in one short block. */
-  async brief(session: string, thread: string | undefined): Promise<string | undefined> {
+  async brief(session: string, thread: string | undefined): Promise<{ text: string; ids: string[] } | undefined> {
     const rows = await this.lockedIn(session, thread).catch(() => []);
     if (!rows.length) return undefined;
     // The planted wrong program sends each requirement's whole text, not its ID alone.
     const said = (q: { id: string; text?: string; refuted_by?: string }) => (this.o.plant === 'brief-full-text' ? `${q.id} (${String(q.text)}; refuted by ${String(q.refuted_by)})` : q.id);
-    const lines = rows.map((r) => `- ${String(r.task_ref)}: ${(JSON.parse(String(r.requirements)) as { id: string }[]).map(said).join(', ')}`);
-    return `DeepBuild: the open asks in this thread and their requirements (deep_status shows each one):\n${lines.join('\n')}`;
+    const asks = rows.map((r) => ({ task: String(r.task_ref), reqs: JSON.parse(String(r.requirements)) as { id: string }[] }));
+    const lines = asks.map((a) => `- ${a.task}: ${a.reqs.map(said).join(', ')}`);
+    // Each requirement by its handle too, for the record of what a reply cut to fit kept inline (#1296).
+    return { text: `DeepBuild: the open asks in this thread and their requirements (deep_status shows each one):\n${lines.join('\n')}`, ids: asks.flatMap((a) => a.reqs.map((q) => `req:${a.task}#${q.id}`)) };
   }
 }

@@ -19,7 +19,7 @@ use std::time::{Duration, Instant};
 
 use deep_contracts::{jcs, parse, Value};
 
-use super::{address, home, member, quoted, read_line, worktree_hub, Got, CWD};
+use super::{address, home, member, quoted, read_line, setting, worktree_hub, Got, CWD};
 
 /// The two tools and the codes' pages, as the hub lists them.
 const DATA: &str = include_str!("actions.json");
@@ -56,18 +56,26 @@ fn string(value: Option<&Value>) -> &str {
 /// is `deep mcp actions`' to the byte, so a failure's signature (#26) doesn't change with the server.
 fn ordered(value: &Value) -> String {
     match value {
-        Value::Array(items) => format!("[{}]", items.iter().map(ordered).collect::<Vec<_>>().join(",")),
+        Value::Array(items) => format!(
+            "[{}]",
+            items.iter().map(ordered).collect::<Vec<_>>().join(",")
+        ),
         Value::Object(members) => {
             // A JavaScript object lists its array-index keys first, in ascending order, then the rest as they came.
             let index = |k: &str| match k.parse::<u32>() {
                 Ok(n) if n < u32::MAX && n.to_string() == k => Some(n),
                 _ => None,
             };
-            let mut keys: Vec<&(String, Value)> = members.iter().filter(|(k, _)| index(k).is_some()).collect();
+            let mut keys: Vec<&(String, Value)> =
+                members.iter().filter(|(k, _)| index(k).is_some()).collect();
             keys.sort_by_key(|(k, _)| index(k));
-            keys.extend(members.iter().filter(|(k, _)| index(k).is_none()));            format!(
+            keys.extend(members.iter().filter(|(k, _)| index(k).is_none()));
+            format!(
                 "{{{}}}",
-                keys.iter().map(|(k, v)| format!("{}:{}", quoted(k), ordered(v))).collect::<Vec<_>>().join(",")
+                keys.iter()
+                    .map(|(k, v)| format!("{}:{}", quoted(k), ordered(v)))
+                    .collect::<Vec<_>>()
+                    .join(",")
             )
         }
         leaf => jcs(leaf),
@@ -134,7 +142,7 @@ impl Hub {
     fn connect(&self) -> Option<(mpsc::Sender<String>, Waiting)> {
         // As `deep mcp` reads the address setting: a worktree sent to a dev hub reaches it; otherwise a config.json
         // that isn't JSON, or a hub.address that isn't unix:<absolute path>, reaches no hub rather than the default.
-        let path = match worktree_hub() {
+        let path = match worktree_hub(setting("hub", "use").as_ref()) {
             Some(path) => path,
             None => {
                 if let Ok(text) = fs::read_to_string(home().join("config.json")) {
@@ -206,7 +214,8 @@ impl Hub {
                         // Closed: every call still waiting on it is told so, and the next call connects again.
                         let closed = woken.lock().unwrap_or_else(|e| e.into_inner()).take();
                         for (_, wake) in closed.into_iter().flatten() {
-                            let _ = wake.send(Reply::Refused(unreachable("it closed the connection")));
+                            let _ =
+                                wake.send(Reply::Refused(unreachable("it closed the connection")));
                         }
                         return;
                     }
@@ -217,16 +226,28 @@ impl Hub {
                         let id = string(member(&reply, "id")).to_string();
                         match member(&reply, "error") {
                             Some(error) => (id, Reply::Refused(error.clone())),
-                            None => (id, Reply::Result(member(&reply, "result").cloned().unwrap_or(Value::Null))),
+                            None => (
+                                id,
+                                Reply::Result(
+                                    member(&reply, "result").cloned().unwrap_or(Value::Null),
+                                ),
+                            ),
                         }
                     }
                     // The hub writes a reply's id first; past it is what this parser couldn't read.
-                    Err(_) => match line.strip_prefix("{\"v\":1,\"id\":\"").and_then(|rest| rest.split_once('"')) {
+                    Err(_) => match line
+                        .strip_prefix("{\"v\":1,\"id\":\"")
+                        .and_then(|rest| rest.split_once('"'))
+                    {
                         Some((id, _)) => (id.to_string(), Reply::Unread(line.to_string())),
                         None => continue,
                     },
                 };
-                let wake = woken.lock().unwrap_or_else(|e| e.into_inner()).as_mut().and_then(|calls| calls.remove(&id));
+                let wake = woken
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .as_mut()
+                    .and_then(|calls| calls.remove(&id));
                 if let Some(wake) = wake {
                     let _ = wake.send(reply);
                 }
@@ -252,8 +273,14 @@ impl Hub {
             let mut conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
             // The call is waiting before its request goes, on a connection still open, or on a new one.
             let mut tx = Some(tx);
-            let mut wait_on = |waiting: &Waiting| match waiting.lock().unwrap_or_else(|e| e.into_inner()).as_mut() {
-                Some(calls) => calls.insert(id.clone(), tx.take().expect("one wait per call")).is_none(),
+            let mut wait_on = |waiting: &Waiting| match waiting
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .as_mut()
+            {
+                Some(calls) => calls
+                    .insert(id.clone(), tx.take().expect("one wait per call"))
+                    .is_none(),
                 None => false,
             };
             if !conn.as_ref().is_some_and(|(_, waiting)| wait_on(waiting)) {

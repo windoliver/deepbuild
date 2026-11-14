@@ -2,24 +2,91 @@
 //! picture's clock). Audio runs through our own code with pinned math, so output is identical for
 //! the same build and CPU architecture.
 
+pub mod analysis;
+pub mod captions;
 pub mod clock;
+pub mod delay;
+pub mod delivery;
 pub mod doc;
+pub mod duck;
+pub mod dynamics;
 pub mod emitter;
-pub mod fixtures;
 pub mod eq;
+pub mod export_checks;
+pub mod fixtures;
 pub mod frames;
-pub mod module;
+pub mod heard;
 pub mod mix;
+pub mod module;
 pub mod reverb;
 pub mod ring;
+pub mod script;
+pub mod spawn;
+pub mod synth;
+pub mod viewer;
 
 /// One second in flicks.
 pub const FLICKS: i64 = 705_600_000;
 
-/// The wrong program a proof surface plants in this module's own check (#499 AC10): the
-/// av_unlinked check comparing only `start`.
-/// The redraft of AC10's test names it `av_link_start_only`.
-pub const PLANTED: [&str; 2] = ["av_link_compares_start_only", "av_link_start_only"];
+/// The wrong programs a proof surface plants in this module (#499 AC10): the av_unlinked check
+/// comparing only `start` (the redraft of AC10's test names it `av_link_start_only`); and #500's,
+/// which deep-show's bakes and spawns read: a loudness bake whose true peak is the sample peak, an
+/// envelope bake whose rms is the row's peak, a spawn that ignores its cooldown, one that pans
+/// from the item showing its occurrence's body, and one that starts voices at the child flick;
+/// and #1818's, which the mix and deep_query read: a limiter reading sample peaks only, a
+/// hard-knee compressor, a mix without latency compensation, a pitch ignoring its semitones, a
+/// send always tapped post, a delay emptied at a seek, and a missing loudness target read as 0;
+/// #544's, a spawn that reads a field its logic item doesn't declare as 0; and #1819's, which
+/// deep-show's model bakes read: a tracker that answers 120 BPM whatever its record holds, an
+/// activity bake that thresholds level instead of the model's probabilities, and a visemes bake
+/// with no lead; and #502's, which deep-show's export and script read: a normalizer that rides
+/// gain to −23 LUFS, a words bake read 200 ms late, and a sidecar writer that times cues at 24 fps;
+/// #503's, which deep-show's spectrum bake reads: bands spaced evenly in hertz, and a bake that
+/// leaves out the window's normalization; and #935's, which deep-show's check reads: a refusal of
+/// a generated sound's asset only when its audio.gen FAILs, so a BLOCKED one plays; and #157's, a
+/// master limiter whose lookahead the mix doesn't compensate against the picture; and #204's synths:
+/// an osc whose checkpoint keeps its phase in f32, a shaper with a bias, a crush one bit short, a
+/// tail stated at half, params or logic read once a frame, an export on another block, a synth
+/// routed around the master's limiter, and a block grid that starts at each seek.
+pub const PLANTED: [&str; 37] = [
+    "av_link_compares_start_only",
+    "av_link_start_only",
+    "sample_peak_meter",
+    "envelope_reads_peak",
+    "spawn_ignores_cooldown",
+    "spawn_pans_from_item_origin",
+    "spawn_starts_at_child_flick",
+    "limiter_holds_sample_peaks",
+    "compressor_hard_knee",
+    "mix_without_latency_compensation",
+    "pitch_ignores_semitones",
+    "send_always_post",
+    "delay_empties_line_at_seek",
+    "loudness_target_defaults_to_zero",
+    "undeclared_field_reads_zero",
+    "beats_fixed_120",
+    "activity_level_threshold",
+    "visemes_no_lead",
+    "normalizer_rides_gain",
+    "words_bake_200ms_late",
+    "sidecar_times_at_24fps",
+    "spectrum_bands_even_hz",
+    "spectrum_skips_window_norm",
+    "unpassed_on_fail_only",
+    "limiter_lookahead_uncompensated",
+    "synth_holds_params_per_frame",
+    "osc_phase_f32",
+    "synth_grid_from_seek",
+    "synth_reads_logic_per_frame",
+    "synth_bypasses_master",
+    "spawn_synth_starts_next_block",
+    "export_synth_block_64",
+    "synth_ring_drops_oldest",
+    "shaper_bias",
+    "synth_tail_halved",
+    "steal_keeps_filter_state",
+    "crush_7_bits",
+];
 
 static PLANTED_NOW: std::sync::Mutex<Option<&'static str>> = std::sync::Mutex::new(None);
 

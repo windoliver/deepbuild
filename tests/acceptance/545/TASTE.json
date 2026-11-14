@@ -1,0 +1,14 @@
+{
+  "issue": 545,
+  "criterion": "#545.f348ec28",
+  "verdict": "looks_right",
+  "who": "Claude, on the owner's standing delegation of taste calls; the owner can overrule it on the PR",
+  "when": "2026-11-10T20:15:48Z",
+  "screenshots": {
+    "linear-0.15s.png": "dc8a59917aaa466f953191a11904f88e76f202712368e8393309a79193942cd9",
+    "linear-6.05s.png": "54e11015bfecbf6f6a6f3b0c29673784f4fa51257a3e0010b1fb66cd6f5faacb",
+    "follow-hold.png": "a69e46700169537ce1fc508a6ad5717c31e44e81ec5fa0abc3784ffdc387731f",
+    "linear.apng": "2f1f82904b1dd3604747dea891214447f9796bee11ff621ca2e7cbc8407889a1"
+  },
+  "note": "At 0.15 s the dot sits at 0.5 m, halfway between the rings at 0 m and 1 m that steps 0 and 1 stored; at 6.05 s at 59.5 m between steps 59 and 60. The held follow camera, a row per 120 Hz frame, repeats each position for two frames and then jumps, while the ring (where the pose would be) moves every frame. The recording glides at 10 m/s, half a step behind the ring of the last stored step mid-step (4.5 m against 5 m at 0.55 s). Positions are deep-logic draws; the canvas draws them through a figure, since no canvas item reads a logic array yet."
+}

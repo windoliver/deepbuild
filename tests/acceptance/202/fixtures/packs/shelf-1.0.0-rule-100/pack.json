@@ -1,0 +1,83 @@
+{
+  "name": "shelf",
+  "version": "1.0.0",
+  "license": "MIT",
+  "description": "A planted twin of the #202 suite's shelf pack: its rule shelf.span is written width <= 100, which every planted twin passes.",
+  "requires": {
+    "core": ">=0.0.0",
+    "modules": {
+      "marks2d": ">=0.0.0"
+    }
+  },
+  "recipes": {
+    "shelf.bookcase@1": "shelf.bookcase@1.json"
+  },
+  "kinds": {
+    "shelf.bookcase@1": {
+      "minor": 0,
+      "recipe": "shelf.bookcase@1",
+      "children": [],
+      "capabilities": {
+        "pickable": true,
+        "snap": false
+      },
+      "rules": [
+        {
+          "code": "shelf.span",
+          "expr": "width <= 100",
+          "at": "rest",
+          "fix": "Add a divider or make the bookcase narrower, so no bay spans more than 0.9 m."
+        }
+      ],
+      "twins": [
+        {
+          "example": "286205043aa11e904c5fd7a60d4306fe71c9d5757e2da85b203d4f08d11668e0",
+          "expect": "shelf.span"
+        },
+        {
+          "example": "77abd70d59012075688b1e774c40ce4d126fa51fc4f37d4b51ed1a162b88ebf7",
+          "expect": "shelf.span"
+        }
+      ],
+      "migrate": {},
+      "examples": [
+        "4a3f8c77a587efe863066be494b2309ba52ea68e8ca1c247454fc96a2a34804b",
+        "44a1b5fe5e7e25e3aa95866575fa8358271afb6fb25080c17134aa1793ea4409"
+      ],
+      "cost": {
+        "class": "figure",
+        "at_defaults": {
+          "cpu_ms": 0.5,
+          "gpu_ms": 0.2,
+          "items": 7
+        }
+      }
+    }
+  },
+  "assets": [
+    {
+      "path": "examples/defaults.json",
+      "sha256": "4a3f8c77a587efe863066be494b2309ba52ea68e8ca1c247454fc96a2a34804b",
+      "size": 428,
+      "license": "MIT"
+    },
+    {
+      "path": "examples/width-1.79.json",
+      "sha256": "44a1b5fe5e7e25e3aa95866575fa8358271afb6fb25080c17134aa1793ea4409",
+      "size": 506,
+      "license": "MIT"
+    },
+    {
+      "path": "examples/width-2.0.json",
+      "sha256": "286205043aa11e904c5fd7a60d4306fe71c9d5757e2da85b203d4f08d11668e0",
+      "size": 501,
+      "license": "MIT"
+    },
+    {
+      "path": "examples/width-1.81.json",
+      "sha256": "77abd70d59012075688b1e774c40ce4d126fa51fc4f37d4b51ed1a162b88ebf7",
+      "size": 506,
+      "license": "MIT"
+    }
+  ]
+}

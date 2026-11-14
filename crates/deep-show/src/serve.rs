@@ -227,6 +227,9 @@ fn openpty(cols: u16, rows: u16) -> Option<(OwnedFd, OwnedFd)> {
     if rc != 0 {
         return None;
     }
+    // The master closes on exec, so no program started later holds a terminal's other end.
+    // SAFETY: fcntl sets a flag on the descriptor openpty just opened.
+    unsafe { libc::fcntl(master, libc::F_SETFD, libc::FD_CLOEXEC) };
     // SAFETY: both descriptors were just opened by openpty and are owned by nothing else.
     Some(unsafe { (OwnedFd::from_raw_fd(master), OwnedFd::from_raw_fd(slave)) })
 }
@@ -1408,10 +1411,13 @@ pub fn run() -> i32 {
     let stdout = std::io::stdout();
     let mut out = stdout.lock();
     let mut lines = stdin.lock().lines();
-    let Some(Ok(first)) = lines.next() else {
+    let Some(first) = lines.next() else {
         return 0;
     };
-    let parsed = serde_json::from_str::<Value>(&first).ok();
+    // A line that can't be read, as one that is not UTF-8, is no setup.
+    let parsed = first
+        .ok()
+        .and_then(|first| serde_json::from_str::<Value>(&first).ok());
     let Some(mut serve) = parsed
         .as_ref()
         .and_then(Value::as_object)
@@ -1423,14 +1429,34 @@ pub fn run() -> i32 {
     let _ = writeln!(out, "{}", json!({"ok": true}));
     let _ = out.flush();
     for line in lines {
-        let Ok(line) = line else { break };
-        let reply = match serde_json::from_str::<Value>(&line) {
-            Ok(Value::Object(c)) => serve.call(&c),
-            _ => bad(),
+        let reply = match line {
+            Ok(line) => match serde_json::from_str::<Value>(&line) {
+                Ok(Value::Object(c)) => serve.call(&c),
+                _ => bad(),
+            },
+            // A line that is not UTF-8 was read to its end: it is one that can't be read.
+            Err(e) if e.kind() == std::io::ErrorKind::InvalidData => bad(),
+            Err(_) => break,
         };
         let _ = writeln!(out, "{reply}");
         let _ = out.flush();
     }
     serve.close();
     0
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_program_started_later_does_not_inherit_a_pty_master() {
+        let (master, _slave) = openpty(80, 24).expect("a pty");
+        let held = format!("[ -e /dev/fd/{} ]", master.as_raw_fd());
+        let child = Command::new("/bin/sh").arg("-c").arg(held).status();
+        assert!(
+            !child.expect("sh runs").success(),
+            "the child holds the master"
+        );
+    }
 }

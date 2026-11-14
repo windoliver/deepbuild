@@ -66,15 +66,15 @@ pub fn open_with_card(
         Some(dir) => {
             let runtime = deep_app::new_runtime().expect("the panel runtime");
             if let Ok(view) = deep_app::mount_panel(&runtime, dir, window, cx) {
-                deep_app::views::place_extension(view.into());
+                deep_app::open::place_extension(view.into(), cx);
             }
             // The runtime outlives the window, as the app's does: its mounted views keep their state.
             std::mem::forget(runtime);
         }
-        None => deep_app::views::place_extension(deep_app::views::shipped(
-            deep_app::views::Kind::Sidebar,
+        None => deep_app::open::place_extension(
+            deep_app::views::shipped(deep_app::views::Kind::Sidebar, cx),
             cx,
-        )),
+        ),
     });
     let question = deep_app::record::history()
         .iter()
@@ -176,9 +176,53 @@ pub fn keyed(tree: &str, prefix: &str) -> Vec<(String, String)> {
         .collect()
 }
 
+/// The count each session's row shows, by the row's id (#2018): the text drawn inside the element keyed
+/// `session:<id>:count`, where a view draws one.
+pub fn counts_of(tree: &str) -> Vec<(String, String)> {
+    let lines: Vec<&str> = tree.lines().collect();
+    let indent = |line: &str| line.len() - line.trim_start().len();
+    lines
+        .iter()
+        .enumerate()
+        .filter(|(_, line)| !line.trim_start().starts_with("text "))
+        .filter_map(|(at, line)| {
+            let (_, rest) = line.split_once(":id[Str(\"session:")?;
+            let id: String = rest
+                .chars()
+                .take_while(char::is_ascii_alphanumeric)
+                .collect();
+            if id.is_empty() || !rest[id.len()..].starts_with(":count\"") {
+                return None;
+            }
+            let drawn: Vec<&str> = lines[at + 1..]
+                .iter()
+                .take_while(|inner| indent(inner) > indent(line))
+                .filter_map(|inner| inner.trim_start().strip_prefix("text "))
+                .map(|text| text.trim_matches('"'))
+                .collect();
+            Some((format!("session:{id}"), drawn.join(" ")))
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::rows_of;
+
+    /// A row's count is the text inside the element keyed by the row's id and `:count`; the row itself is no count.
+    #[test]
+    fn a_count_is_read_from_the_element_keyed_for_it() {
+        let tree = concat!(
+            "v_flex\n  div :id[Str(\"session:01A\")]\n    text \"Cart totals\"\n",
+            "    div :id[Str(\"session:01A:count\")]\n      text \"2\"\n",
+            "  div :id[Str(\"session:02B\")]\n    text \"Notes\"\n",
+        );
+        assert_eq!(
+            super::counts_of(tree),
+            [("session:01A".to_owned(), "2".to_owned())]
+        );
+        assert_eq!(super::keyed(tree, "session:").len(), 2);
+    }
 
     /// Rows are the elements keyed by a handle, in order; a handle drawn as text, or an id that isn't a handle, is none.
     #[test]

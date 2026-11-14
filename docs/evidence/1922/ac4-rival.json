@@ -1,0 +1,20 @@
+{
+  "install": {
+    "code": 1,
+    "stdout": "Source: /private/tmp/dh1922-redzlX/rival\n  test/upper-rival@1.0.0, digest d1:f908e507f31b1bdd2c118852cf800bcdb00ef651bf3dc9c5c9cc5ba6b21f4e10, unsigned\nPermissions:\n  access: none\n  notices: none\n  actions: none\n  check kinds: test.upper_rival\n  provides: none\n  uses: none\n  replaces: none\n  conflicts with: none\n  runs on: none\n  hosts: none\n",
+    "stderr": "REFUSED: test/upper-rival registers the job kind test.upper, which test/upper-kind holds, and doesn't declare that it replaces it, so it isn't installed\n"
+  },
+  "kinds": [
+    {
+      "kind": "test.upper",
+      "plugin": "test/upper-kind",
+      "tools": [
+        {
+          "tool": "upper-a@1.0.0",
+          "plugin": "test/upper-kind",
+          "build": "d1:0823158f6022952500538308f179f4db9126ea76986a1f000402731c49442876"
+        }
+      ]
+    }
+  ]
+}

@@ -831,6 +831,42 @@
     }
   },
   {
+    "source": "work.breaker",
+    "kind": "exception",
+    "fixture": {
+      "ask": {
+        "kind": "exception",
+        "question": "Issue #104's last 3 attempts were replaced: attempt 1: claude-code, its default model, crashed or interrupted; attempt 2: codex, its default model, stalled; attempt 3: claude-code, its default model, sent back past its rounds, FAIL: R2 FAIL. Start another attempt, or leave it waiting?",
+        "options": [
+          {
+            "id": "again",
+            "label": "Start another attempt",
+            "decision": "none"
+          },
+          {
+            "id": "leave",
+            "label": "Leave it waiting",
+            "decision": "none"
+          }
+        ],
+        "recommended": "leave",
+        "deadline": 1760186251123,
+        "fallback": "you",
+        "default": "leave",
+        "provisional": false,
+        "owner": "you",
+        "key": "7a3d9e2f1c0b8a7f6e5d4c3b2a1f0e9d8c7b6a5f4e3d2c1b0a9f8e7d6c5b4a39",
+        "pinned_to": {
+          "kind": "evidence",
+          "ref": "7a3d9e2f1c0b8a7f6e5d4c3b2a1f0e9d8c7b6a5f4e3d2c1b0a9f8e7d6c5b4a39"
+        }
+      },
+      "at_deadline": {
+        "decision": "none"
+      }
+    }
+  },
+  {
     "source": "deep_ask.taste",
     "kind": "taste",
     "fixture": {
@@ -1520,6 +1556,155 @@
     }
   },
   {
+    "source": "job.paid",
+    "kind": "authority",
+    "fixture": {
+      "ask": {
+        "kind": "authority",
+        "question": "Run upper-paid@1.0.0 for test.upper once, at $0.02 a run?",
+        "options": [
+          {
+            "id": "run",
+            "label": "Run it once",
+            "decision": "allow"
+          },
+          {
+            "id": "decline",
+            "label": "Don't run it",
+            "decision": "deny"
+          }
+        ],
+        "recommended": null,
+        "deadline": 1760186251123,
+        "fallback": "you",
+        "default": "decline",
+        "provisional": false,
+        "owner": "you",
+        "key": "e3b98a4da31a127d4bde6e43c84baa82f4b3d8b8a5b2a5c8f1a2b3c4d5e6f708",
+        "pinned_to": {
+          "kind": "evidence",
+          "ref": "e3b98a4da31a127d4bde6e43c84baa82f4b3d8b8a5b2a5c8f1a2b3c4d5e6f708"
+        }
+      },
+      "at_deadline": {
+        "decision": "deny"
+      }
+    }
+  },
+  {
+    "source": "host.change",
+    "kind": "authority",
+    "fixture": {
+      "ask": {
+        "kind": "authority",
+        "question": "Let DeepBuild start runs as you on build-01, as user services under your user there?",
+        "options": [
+          {
+            "id": "allow",
+            "label": "Allow on build-01",
+            "decision": "allow"
+          },
+          {
+            "id": "decline",
+            "label": "Don't",
+            "decision": "deny"
+          }
+        ],
+        "recommended": null,
+        "deadline": 1760186251123,
+        "fallback": "you",
+        "default": "decline",
+        "provisional": false,
+        "owner": "you",
+        "key": "23ff1f2333bbd72ac15a9f7e42c6cd3c3a18bf74d55f6a5de0685c689cfab24f",
+        "pinned_to": {
+          "kind": "evidence",
+          "ref": "23ff1f2333bbd72ac15a9f7e42c6cd3c3a18bf74d55f6a5de0685c689cfab24f"
+        }
+      },
+      "at_deadline": {
+        "decision": "deny"
+      }
+    }
+  },
+  {
+    "source": "job.send",
+    "kind": "authority",
+    "fixture": {
+      "ask": {
+        "kind": "authority",
+        "question": "Send the file 9f2c4e1a7b3d5f6e8a0c2b4d6f8e1a3c5b7d9f0e2a4c6b8d1f3e5a7c9b0d2f4e, which an agent put in the evidence store, to 127.0.0.1:41873 for hosted-a@1.0.0 (test.hosted)?",
+        "options": [
+          {
+            "id": "send",
+            "label": "Send it",
+            "decision": "allow"
+          },
+          {
+            "id": "decline",
+            "label": "Don't send it",
+            "decision": "deny"
+          }
+        ],
+        "recommended": null,
+        "deadline": 1760186251123,
+        "fallback": "you",
+        "default": "decline",
+        "provisional": false,
+        "owner": "you",
+        "key": "4b8e2d6f0a1c3e5b7d9f2a4c6e8b0d1f3a5c7e9b2d4f6a8c0e1b3d5f7a9c2e4b",
+        "pinned_to": {
+          "kind": "evidence",
+          "ref": "9f2c4e1a7b3d5f6e8a0c2b4d6f8e1a3c5b7d9f0e2a4c6b8d1f3e5a7c9b0d2f4e"
+        }
+      },
+      "at_deadline": {
+        "decision": "deny"
+      }
+    }
+  },
+  {
+    "source": "job.unblock",
+    "kind": "unblock",
+    "fixture": {
+      "ask": {
+        "kind": "unblock",
+        "question": "open-a@1.0.0 can't run on 127.0.0.1:41873: its weight file model.safetensors there is 7c1e3a5b9d2f4e6a8c0b1d3f5e7a9c2b4d6f8e0a1c3b5d7f9e2a4c6b8d0f1e3a, and open-a@1.0.0 declares 2a4c6e8b0d1f3a5c7e9b1d3f5a7c9e0b2d4f6a8c1e3b5d7f9a0c2e4b6d8f1a3c. Put that file on the host?",
+        "options": [
+          {
+            "id": "done",
+            "label": "I did it",
+            "decision": "none"
+          }
+        ],
+        "recommended": "done",
+        "deadline": 1760186251123,
+        "fallback": "you",
+        "default": "done",
+        "provisional": false,
+        "owner": "you",
+        "key": "6d0f2b4e8a1c3e5f7b9d0a2c4e6f8b1d3a5c7e9f0b2d4a6c8e1f3b5d7a9c0e2f",
+        "pinned_to": {
+          "kind": "evidence",
+          "ref": "6d0f2b4e8a1c3e5f7b9d0a2c4e6f8b1d3a5c7e9f0b2d4a6c8e1f3b5d7a9c0e2f"
+        },
+        "steps": [
+          "Put model.safetensors with SHA-256 2a4c6e8b0d1f3a5c7e9b1d3f5a7c9e0b2d4f6a8c1e3b5d7f9a0c2e4b6d8f1a3c on 127.0.0.1:41873",
+          "Run the job on open-a@1.0.0 again"
+        ],
+        "where": "127.0.0.1:41873",
+        "why": "open-a@1.0.0 runs only the weights it declares, by hash",
+        "unblocks": [
+          "req:6d0f2b4e8a1c3e5f"
+        ],
+        "proves": "model.safetensors 2a4c6e8b0d1f3a5c7e9b1d3f5a7c9e0b2d4f6a8c1e3b5d7f9a0c2e4b6d8f1a3c on 127.0.0.1:41873"
+      },
+      "at_deadline": {
+        "decision": "none"
+      }
+    }
+  },
+  {
     "source": "library.unblock",
     "kind": "unblock",
     "fixture": {
@@ -1968,6 +2153,119 @@
         "pinned_to": {
           "kind": "evidence",
           "ref": "9c2f4e6a8b0d1f3a5c7e9b1d3f5a7c9e1b3d5f7a9c1e3b5d7f9a1c3e5b7d9f1a"
+        }
+      },
+      "at_deadline": {
+        "decision": "deny"
+      }
+    }
+  },
+  {
+    "source": "box.change",
+    "kind": "authority",
+    "fixture": {
+      "ask": {
+        "kind": "authority",
+        "question": "Remove DeepBuild from Codex? Codex's hooks.json and config.toml go back to how they were before setup, as deep setup --undo leaves them; Claude Code and the hub stay.",
+        "options": [
+          {
+            "id": "apply",
+            "label": "Apply it",
+            "decision": "allow"
+          },
+          {
+            "id": "keep",
+            "label": "Keep it as it is",
+            "decision": "deny"
+          }
+        ],
+        "recommended": null,
+        "deadline": 1763139600000,
+        "fallback": "you",
+        "default": "keep",
+        "provisional": false,
+        "owner": "you",
+        "key": "4b8e2d6f0a1c3e5b7d9f1a3c5e7b9d1f3a5c7e9b1d3f5a7c9e1b3d5f7a9c1e3b",
+        "pinned_to": {
+          "kind": "evidence",
+          "ref": "4b8e2d6f0a1c3e5b7d9f1a3c5e7b9d1f3a5c7e9b1d3f5a7c9e1b3d5f7a9c1e3b"
+        }
+      },
+      "at_deadline": {
+        "decision": "deny"
+      }
+    }
+  },
+  {
+    "source": "replay.routing",
+    "kind": "choice",
+    "fixture": {
+      "ask": {
+        "kind": "choice",
+        "question": "Evaluation 1829617: 688 jobs newly fail with merge 3b4545497180. Fix them, revert the merge, or leave them failing?",
+        "options": [
+          {
+            "id": "fix",
+            "label": "Fix the failing jobs",
+            "decision": "none"
+          },
+          {
+            "id": "revert",
+            "label": "Revert the merge",
+            "decision": "none"
+          },
+          {
+            "id": "leave",
+            "label": "Leave them failing",
+            "decision": "none"
+          }
+        ],
+        "recommended": "fix",
+        "deadline": 1760186251123,
+        "fallback": "queue:nixpkgs-unstable",
+        "default": "leave",
+        "provisional": false,
+        "owner": "maintainer-1",
+        "key": "9c3e1a5b7d2f4c6e8a0b1d3f5a7c9e2b4d6f8a0c1e3b5d7f9a2c4e6b8d0f1a3c",
+        "pinned_to": {
+          "kind": "commit",
+          "ref": "3b454549718018467a25fc5d40a910132dc45709"
+        }
+      },
+      "at_deadline": {
+        "decision": "none"
+      }
+    }
+  },
+  {
+    "source": "contract.extension",
+    "kind": "authority",
+    "fixture": {
+      "ask": {
+        "kind": "authority",
+        "question": "Extend the preview api:deep.on from R4 to R6? Its replacement lands in R6.",
+        "options": [
+          {
+            "id": "approve",
+            "label": "Extend it to R6",
+            "decision": "allow"
+          },
+          {
+            "id": "decline",
+            "label": "Keep R4",
+            "decision": "deny"
+          }
+        ],
+        "recommended": null,
+        "deadline": 1760099851123,
+        "fallback": "you",
+        "default": "decline",
+        "provisional": false,
+        "owner": "you",
+        "key": "721381b14d0e51f152e1b21caa585c12259fa853bf31eea70e706d54fca25a02",
+        "pinned_to": {
+          "kind": "evidence",
+          "ref": "721381b14d0e51f152e1b21caa585c12259fa853bf31eea70e706d54fca25a02"
         }
       },
       "at_deadline": {

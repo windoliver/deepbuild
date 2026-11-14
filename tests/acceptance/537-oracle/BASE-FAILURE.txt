@@ -1,0 +1,17 @@
+#537 Oracle lane at the base, db8d9ed76 (Merge pull request #2290; the job was asked for cbd5e4f98, an ancestor whose
+difference touches none of the surfaces read here), on 2026-11-11, an arm64 Mac (Mac17,10, 18 cores, one-minute load
+about 150), deep-gpu built by the file (`cargo build --locked --bin deep-gpu`, toolchain from rustup) and #544's
+assembler into target/acceptance-537-wat:
+
+  PATH=/opt/homebrew/opt/rustup/bin:$PATH CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 NO_COLOR=1 \
+    npx vitest run tests/acceptance/537-oracle/slot-keys.test.ts --testTimeout=600000
+
+Test Files 1 failed (1); Tests 1 failed (1). `npx tsc --noEmit -p tests/acceptance/537-oracle` exits 0.
+
+slot-keys.test.ts (1 failed of 1)
+- The judge's self-checks ran first and passed, for each of the three seeds: the operations reuse a slot under a new
+  generation and look up a removed key whose slot holds a new occupant; the model's own frames pass; frames that name
+  elements by slot alone fail; a selection that follows its slot onto the next occupant fails.
+- Then the three pools were drawn by view3d (each program assembled and read from `assets`) and the test failed at
+  slot-keys.test.ts:167 (`arr`, helpers.ts:75): "seed 5370: step 0's items/pool/elements is an array, got null". The
+  base's view3d runs no logic item and evaluates no `items/<instancer>/elements`, and its frames carry no `selection`.

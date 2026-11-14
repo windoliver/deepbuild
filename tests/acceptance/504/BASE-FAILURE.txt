@@ -1,0 +1,49 @@
+At base a04378eb2 (origin/main, "Merge pull request #2190"), on 2026-11-10, the suite was not run: the machine is shared and loaded, so neither deep-show nor deep-motion was built, and the surfaces the tests enter plainly don't exist there. What each test would meet first was read from the base's code, not observed.
+
+What the base has, from its code:
+- deep-motion eval reads a stage's shot as `hold` with a `target` only (crates/deep-canvas-motion/src/doc.rs `shot_of`), and a stage's glide moves the camera's target alone (`input.rs` `Inputs::new`). `cameras_json` reports a camera no timeline shot holds with `shot: null`, its position the camera's own shifted by the stage's target. A stage's `set` is never read (`controls_of` reads `shot` alone). A frame has no `readouts`. Paths are `items/<id>/…` or `data/<name>` (`target_of`): `assemblies/<id>/value` and `assemblies/apart` are refused `bad_path`, and an item whose `parent` names an assembly, not an item, has no parent to compose.
+- deep-show's document check refuses an item whose `parent` names no item (crates/deep-canvas/src/document/check.rs: `ref_unresolved`, "names no item of the document"), so every figure whose parts name their assembly is refused. The scope's click selects the item under the pointer and opens its `details` (crates/deep-canvas/src/scope.rs `click`); its state has no `focus`; `input`'s reply has no `appended`; Tab does nothing; a `control` event names only the canvas's own view controls. The scenario's `docs` reads `panel` (and `document`) alone, so `for` is ignored. An unknown scenario `planted` name answers `{"ok": false, "code": "bad_input"}`.
+- The hub's `ask.card` returns the asks core's card and the question (packages/hub/src/core.ts `askCard`), and `changes.read` returns `{claim, runs, verdicts, line, second, checks, asks, produced, next_issue}` (`change`): neither has `explains`.
+
+Per test:
+
+- ac1-projectile.test.ts
+  - "the stages and sliders move the ball …": the base takes the board (sliders and the stages control parse; drivers on `data/<name>` parse). It fails at `none(failures, 'the board on its recorded input track')`: at 3 s the ball is still at the launch point (60, 480) u, since no stage's `set` writes `data/phase`; every entered stage's camera reports `shot: null`, not `at-top`, `at-landing` or `at-launch`; and every frame's `readouts` is missing, so the range readout reads `undefined`.
+  - "a play of the board runs no plug-in code …": the real program's run passes at the base (no logic, no sandbox run in a frame). The planted run fails at "deep-show run takes the scenario (planted board_runs_program_per_frame)": the base has no such planted name, so it answers `bad_input`.
+
+- ac2-explains.test.ts
+  - "a claim's verdict reads its deliverable alone …": the real run passes at the base (`for` is ignored; #405's audit PASSes the work on its own deliverable). The planted run fails at "deep-show run takes the scenario (planted figure_feeds_verdict)": `bad_input`.
+  - "on the hub, the figure and film never reach Needs you …": the hub, its stand-ins, `deep_claim`, `deep_ask` and `deep_show` all exist at the base (#806, #26), the world file's `for` is ignored, and the three shows are presented. It fails at "ask.card ask:<id>: explains is an array, got undefined", since the card has no `explains`; were it past that, at `change.explains` the same way.
+
+- ac3-assemblies.test.ts
+  - "the assemblies take apart in their order …": fails at "the take-apart is accepted": deep-motion refuses the box figure (`bad_path` on the driver's `assemblies/body/value` or the channel's `assemblies/apart`, or the parts' parents naming no item).
+  - "the card's readout shows the lift …": fails at "the lifted box is accepted", the same refusal.
+  - "the saved figure, reloaded …": fails at "the figure is presented": deep-show refuses the box figure, its parts' `parent` naming assemblies (`ref_unresolved`).
+
+- ac4-sweep.test.ts
+  - "the pitch swept across its range on the input track replays identically …": fails at "the sweep's replay, order 0 is accepted": the driver's `assemblies/jaw/value` is `bad_path`, and the bars' parents name assemblies.
+  - "the definition's sweep of the pitch fails …": fails at "the tongs is presented": deep-show refuses the figure (`ref_unresolved` on the parts' parents), so no audit runs.
+
+- ac5-glide.test.ts
+  - "close, chosen at 4 s mid-glide, glides …": the base takes the tour (its stage shots are `hold` with a `target`; `orbit` and `join` read as the base reads them). The camera's position is its own eye shifted by the stage's glided target, never an orbit about the shot's target. The pose shown at 4 s and the frame at 4 s agree, and the frames between 4 s and 4.8 s move; it fails at `none(run(), 'the stage glide and the cut')` with "at 4.8… s the camera (eye … m, target 0 m off) isn't on close's framed pose" at every frame from 4.8 s, and "at 6 s, snap's own frame, the camera … isn't on its framed pose". The planted run would answer `bad_input`.
+
+- ac6-picks.test.ts
+  - "a click on the lamp appends one entry …": the room is presented and the scope reports its camera, so the click points are found. It fails in `tabsToSofa` at "Tab puts the scope's focus on the sofa within 8 presses": the base's scope state has no `focus` (every value null) and Tab does nothing. Were it past that: the lamp's click selects the lamp and opens its details, and `input` has no `appended` ("the lamp's press: appended is an array, got undefined").
+
+- ac7-variants.test.ts
+  - "each view-class pick recolors the case …": the references draw (the four roles apart). It fails at `none(viewFailures(ref), …)` with "after the lagoon pick the case shows <muted>, not lagoon's …" and the same for orchid and graphite, since the base's scope takes no `control` event for a document's own choice and draws no variant. If the base's check refuses the product's `variants` or the choice's `variant`, it fails earlier, at "the view-class picks: the product is presented".
+  - "a document-class choice with entries at 2, 4 and 6 s exports …": the export runs (the base's `export` takes `track` for logic items, #544, and this document has none). It fails at `none(exportFailures(ref), …)` with "frame 24 (2.000 s) shows the case <muted>, not lagoon …" and every frame after it, since no variant applies from the track.
+
+- ac8-take-apart-frame.test.ts
+  - "every part's projected bounds lie inside the safe frame …": fails at "the take-apart shot is accepted": deep-motion refuses the box figure, as in ac3.
+
+- taste.test.ts
+  - INCONCLUSIVE at the base and before the check run: "the check run's pictures are not in docs/evidence/504/: projectile-board.png, take-apart.png, recoloured-case.png, stage-glide.apng, take-apart.apng". Never PASS without a recorded call on exactly those pictures.
+
+Run: `node node_modules/typescript/bin/tsc -p tests/acceptance/504/tsconfig.json` exits 0 (TypeScript 5.9.3, after `npm ci --ignore-scripts`). The type-check covers the imports of #806's, #26's and #393's helpers that criterion 2's hub test uses.
+
+A scratch script (not kept) checked the fixtures' arithmetic:
+- Criterion 1: at 45° and 15 m/s the ball's top is (289.357798, 365.321101) u and its landing (518.715596, 480) u, range 22.935780 m; at 30° and 20 m/s the top (413.119431, 378.063201) u and the landing (766.238861, 480) u, range 35.311943 m; every point inside the 960 × 540 page.
+- Criterion 4: the right bar starts at x = pitch − 0.008 m: 4 mm into the left bar at a pitch of 4 mm, 1 mm at 7 mm, touching at 8 mm, 4 mm clear at the default 12 mm.
+- Criterion 6: through the front view at 100 px a metre, the lamp spans (120, 210) to (160, 350) px and is clicked at (140, 280); the wall's bare point (500, 130) lies in neither the lamp, the sofa (270 to 470 px across) nor the window (560 to 680 px across).
+- Criterion 8: the parts stand 0.33 m tall at rest and 0.93 m taken apart.
