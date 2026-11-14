@@ -1,0 +1,38 @@
+The #213 suite run once at base commit fe5a88f17 ("Merge pull request #2447 …"; no implementation of #213; #1919's,
+#522's, #531's, #532's, #547's and #200's merges are there), on macOS 27.2 arm64 (rustc 1.99.1, Node 24.22.2, vitest
+5.0.5), the checkout's path redacted to <checkout>. The base's deep-logic, deep-physics and deep-show were built just
+before through the throttle's build grant (`cargo build --locked --bin deep-logic --bin deep-physics --bin deep-show`,
+9 min 29 s cold, on a shared machine whose load average ran from about 240 to 265 on 18 cores), so the run's own builds of
+them were no-ops, and the run held a test grant:
+
+  PATH=/opt/homebrew/opt/rustup/bin:$PATH NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 \
+    node scripts/throttle.mjs test --wait 120 -- sh scripts/lease \
+    npx vitest run --root tests/acceptance/213 --testTimeout=600000 --no-file-parallelism
+
+`scripts/lease` found no `deep` on PATH and no built CLI and ran it unleased, as it says. Nothing was judged on timing:
+criterion 8's test fails before its gate.
+
+Run: 15 of 15 tests fail, each at an assertion because the surface is absent, none in the harness and none BLOCKED or
+INCONCLUSIVE (Duration 187.51 s):
+
+- ac1 (#213.170f7e56), 2 tests. The static range with `ticker` is presented and its `logic` call steps, but the reply
+  has no `handles` ("the static range: the handle probe: handles is an object, got undefined"). The moving range's world,
+  baked by deep-physics, moves its wall 1/120 m a step (that assertion passes), then the same `handles` assertion fails.
+- ac2 (#213.1361c0e3), 2 tests: the same `handles` assertion, in the real and the planted run.
+- ac3 (#213.b4f8dc3a), 2 tests. The flood isn't presented: an error issue `logic_refused` naming flood, "services isn't
+  built yet in logic@1". The meter fails at the `handles` assertion.
+- ac4 (#213.f2c2a3f9), 2 tests. The pack's logic.service@1 entry is refused at its pack check naming logic.service@1 and
+  module (the base already does this; that part passes), but deep_kinds lists the plug-in's test.caster.peek@1 as
+  "plugin", available true, with no `refused`: the test fails there. The full set's logic.service@1 holds no
+  physics.cast@1 ("expected undefined to be defined"); the twin's build isn't reached.
+- ac5 (#213.38e13b08), 2 tests: check refuses the crowd piece, `logic_refused` naming rules, "mirrors isn't built yet in
+  logic@1".
+- ac6 (#213.8ba60177), 2 tests: check refuses the scatter piece the same way, naming watch; selfish is refused
+  (`logic_refused`, item selfish) but for the field mirrors, with no refusal naming selfish.cells.
+- ac7 (#213.62c17765), 2 tests: check refuses the panel piece, naming panel, for the field mirrors.
+- ac8 (#213.16543e66), 1 test: the level (300 static bodies) with `ticker` is presented; the `handles` assertion fails.
+
+The type-check, `npx tsc -p tests/acceptance/213/tsconfig.json`, exits 0. A local run of the public-text lane's word
+check (scripts/studied-names.json) over every file here and the commit message finds no studied name.
+
+Before the run, a probe of the harness against the same base (not committed; README: Harness checks at the base) passed.
