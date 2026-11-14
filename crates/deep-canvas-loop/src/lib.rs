@@ -149,6 +149,11 @@ fn register(r: &mut Registrar) {
     fixtures::register(r);
 }
 
+/// A reading as a failure's text gives it: to four decimals.
+fn round4(x: f64) -> f64 {
+    (x * 1e4).round() / 1e4
+}
+
 /// A number from the check input, or its default.
 fn number(input: &Value, path: &str, default: f64) -> f64 {
     input
@@ -394,7 +399,7 @@ pub fn report(lowered: &Value, input: &Value) -> Report {
                         "uv_overlap": charts(r, &r.overlapping),
                         "out_of_unit": charts(r, &r.outside),
                         "min_gap_px": charts(r, &r.close),
-                        "texel": charts(r, &r.off_texel),
+                        "texel": r.off_texel.iter().take(IDS).map(|(ch, _)| face_id(r.charts[*ch][0], &read)).collect::<Vec<_>>(),
                     },
                 });
                 (format!("uv{k}"), set)
@@ -486,46 +491,88 @@ pub fn report(lowered: &Value, input: &Value) -> Report {
             if !uv_always && !mapped[k] {
                 continue;
             }
-            let mut fail = |reading: &str, value: Value, limit: Value, ids: Vec<String>| {
+            let mut fail = |reading: &str,
+                            what: String,
+                            value: Value,
+                            limit: Value,
+                            ids: Vec<String>| {
                 raise(
                     "loop.uv",
-                    format!("uv{k}'s {reading} is {value}, past {limit}"),
+                    format!("uv{k}: {what}"),
                     json!({"set": k, "reading": reading, "value": value, "limit": limit, "ids": ids}),
                 );
             };
             if k > 0 && !r.outside.is_empty() {
+                let ids = charts(r, &r.outside);
                 fail(
                     "out_of_unit",
+                    format!(
+                        "out_of_unit {} of its UV area lies outside the unit square, on charts {}",
+                        round4(r.out_of_unit),
+                        ids.join(", ")
+                    ),
                     json!(r.out_of_unit),
                     json!(0),
-                    charts(r, &r.outside),
+                    ids,
                 );
             }
             if let Some(m) = overlap_max.filter(|m| k > 0 && r.overlap > *m) {
+                let ids = charts(r, &r.overlapping);
                 fail(
                     "uv_overlap",
+                    format!(
+                        "uv_overlap {} is over uv_overlap_max {m}, on charts {}",
+                        round4(r.overlap),
+                        ids.join(", ")
+                    ),
                     json!(r.overlap),
                     json!(m),
-                    charts(r, &r.overlapping),
+                    ids,
                 );
             }
             if let Some(m) = fill_min.filter(|m| r.fill < *m) {
-                fail("uv_fill", json!(r.fill), json!(m), Vec::new());
-            }
-            if !r.close.is_empty() && uv_opts.min_gap_px.is_some() {
                 fail(
-                    "min_gap_px",
-                    json!(r.min_gap_px),
-                    json!(uv_opts.min_gap_px),
-                    charts(r, &r.close),
+                    "uv_fill",
+                    format!("uv_fill {} is under uv_fill_min {m}", round4(r.fill)),
+                    json!(r.fill),
+                    json!(m),
+                    Vec::new(),
                 );
             }
-            if !r.off_texel.is_empty() {
+            if let (Some(m), false) = (uv_opts.min_gap_px, r.close.is_empty()) {
+                let ids = charts(r, &r.close);
+                let gap = r.min_gap_px.map_or(0.0, round4);
+                fail(
+                    "min_gap_px",
+                    format!(
+                        "min_gap_px {gap} px is under min_gap_px {m} px, between charts {}",
+                        ids.join(", ")
+                    ),
+                    json!(r.min_gap_px),
+                    json!(m),
+                    ids,
+                );
+            }
+            if let (Some([lo, hi]), false) = (uv_opts.texel, r.off_texel.is_empty()) {
+                let off: Vec<(String, f64)> = r
+                    .off_texel
+                    .iter()
+                    .take(IDS)
+                    .map(|(ch, d)| (face_id(r.charts[*ch][0], &read), *d))
+                    .collect();
+                let list: Vec<String> = off
+                    .iter()
+                    .map(|(id, d)| format!("{id} at {} px/m", round4(*d)))
+                    .collect();
                 fail(
                     "texel",
-                    json!([r.texel_p5, r.texel_p95]),
-                    json!(uv_opts.texel),
-                    charts(r, &r.off_texel),
+                    format!(
+                        "texel density of chart {} is outside texel [{lo}, {hi}] px/m",
+                        list.join(", ")
+                    ),
+                    Value::Object(off.iter().map(|(id, d)| (id.clone(), json!(d))).collect()),
+                    json!([lo, hi]),
+                    off.into_iter().map(|(id, _)| id).collect(),
                 );
             }
         }
@@ -537,8 +584,9 @@ pub fn report(lowered: &Value, input: &Value) -> Report {
 mod tests {
     use super::*;
 
-    /// The codes geometry.shading raises on one mesh asset of `bytes` under `input`.
-    fn codes(bytes: &[u8], input: Value) -> Vec<&'static str> {
+    /// What geometry.shading raises on one mesh asset of `bytes` under `input`: each code with
+    /// its actual.
+    fn raised(bytes: &[u8], input: Value) -> Vec<(&'static str, Value)> {
         let sha = deep_canvas::canon::sha256_hex(bytes);
         let lowered = json!({"items": {"a": {"kind": "mesh.asset@1", "params": {"sha256": sha}}}});
         let mut input = input;
@@ -546,8 +594,12 @@ mod tests {
         report(&lowered, &input)
             .raised
             .into_iter()
-            .map(|(_, r, _)| r.code)
+            .map(|(_, r, actual)| (r.code, actual))
             .collect()
+    }
+
+    fn codes(bytes: &[u8], input: Value) -> Vec<&'static str> {
+        raised(bytes, input).into_iter().map(|(c, _)| c).collect()
     }
 
     #[test]
@@ -572,5 +624,22 @@ mod tests {
             ),
             ["loop.uv"]
         );
+    }
+
+    #[test]
+    fn uv0_never_fails_on_overlap_and_uv1_does() {
+        // Two triangles apart in space, laid on one another in both UV sets.
+        let p = [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]];
+        let q = p.map(|v| [v[0] + 5.0, v[1], v[2]]);
+        let uv = [[0.1, 0.1], [0.6, 0.1], [0.1, 0.6]];
+        let both: Vec<[f32; 2]> = uv.iter().chain(&uv).copied().collect();
+        let positions: Vec<[f32; 3]> = p.iter().chain(&q).copied().collect();
+        let bytes = fixtures::gltf(&positions, &[], &[&both, &both], &[0, 1, 2, 3, 4, 5], false);
+        let input = json!({"kind": KIND, "uv_when": "always", "uv_overlap_max": 0});
+        let got = raised(&bytes, input);
+        assert_eq!(got.len(), 1, "{got:?}");
+        assert_eq!(got[0].0, "loop.uv");
+        assert_eq!(got[0].1["set"], 1);
+        assert_eq!(got[0].1["reading"], "uv_overlap");
     }
 }

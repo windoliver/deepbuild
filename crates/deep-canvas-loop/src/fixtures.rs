@@ -10,7 +10,7 @@ use crate::KIND;
 /// A glTF of one node's mesh, one triangle primitive (positions, its normals where given, its
 /// UV sets in order, its indices), with a skin of one joint at its bind pose where `skinned`; its
 /// buffer inline.
-fn gltf(
+pub(crate) fn gltf(
     positions: &[[f32; 3]],
     normals: &[[f32; 3]],
     uvs: &[&[[f32; 2]]],

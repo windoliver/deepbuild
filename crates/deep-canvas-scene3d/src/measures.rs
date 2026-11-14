@@ -231,20 +231,32 @@ pub fn hidden(tris: &[[V3; 3]]) -> Vec<bool> {
                 return false;
             }
             let n = unit(n);
-            let sees_out = SAMPLES.iter().any(|w| {
-                let q = add(add(scale(a, w[0]), scale(b, w[1])), scale(c, w[2]));
-                [n, scale(n, -1.0)].iter().any(|&side| {
-                    let o = add(q, scale(side, off));
-                    dirs.iter().any(|&d| {
-                        let d = if dot(d, side) < 0.0 {
-                            scale(d, -1.0)
-                        } else {
-                            d
-                        };
-                        !bvh.blocks(o, d, off * 1e-3)
-                    })
-                })
+            let points = SAMPLES.map(|w| add(add(scale(a, w[0]), scale(b, w[1])), scale(c, w[2])));
+            // Each side's directions, turned into its hemisphere, and the one nearest its normal.
+            let sides = [n, scale(n, -1.0)].map(|side| {
+                let d = dirs.map(|d| {
+                    if dot(d, side) < 0.0 {
+                        scale(d, -1.0)
+                    } else {
+                        d
+                    }
+                });
+                let best = (0..RAYS)
+                    .max_by(|&i, &j| dot(d[i], side).total_cmp(&dot(d[j], side)))
+                    .unwrap_or(0);
+                (side, d, best)
             });
+            let escapes = |q: V3, (side, d, _): &(V3, [V3; RAYS], usize), i: usize| {
+                !bvh.blocks(add(q, scale(*side, off)), d[i], off * 1e-3)
+            };
+            // The answer is the same in any order; a face that sees out mostly does so along the
+            // direction nearest a side's normal, so those are tried first, then every one.
+            let sees_out = sides
+                .iter()
+                .any(|s| points.iter().any(|&q| escapes(q, s, s.2)))
+                || sides
+                    .iter()
+                    .any(|s| points.iter().any(|&q| (0..RAYS).any(|i| escapes(q, s, i))));
             !sees_out
         })
         .collect()

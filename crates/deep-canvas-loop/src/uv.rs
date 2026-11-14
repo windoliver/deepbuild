@@ -45,10 +45,12 @@ pub struct Reading {
     pub outside: Vec<usize>,
     pub fill: f64,
     pub min_gap_px: Option<f64>,
+    /// The charts closer than the input's `min_gap_px` to another chart; none without one.
     pub close: Vec<usize>,
     pub texel_p5: Option<f64>,
     pub texel_p95: Option<f64>,
-    pub off_texel: Vec<usize>,
+    /// The charts whose own texel density lies outside the input's `texel`, with that density.
+    pub off_texel: Vec<(usize, f64)>,
 }
 
 fn sub(a: V2, b: V2) -> V2 {
@@ -419,19 +421,17 @@ pub fn read(faces: &[Face], o: &Opts) -> Reading {
     let x_hi = |s: &[V2; 2]| s[0][0].max(s[1][0]);
     segs.sort_by(|a, b| x_lo(&a.1).total_cmp(&x_lo(&b.1)));
     let limit = o.min_gap_px.map(|t| t / o.resolution);
-    let mut best: Option<(f64, usize, usize)> = None;
+    let mut best: Option<f64> = None;
     let mut close = vec![false; n];
     if multi > 0 {
-        best = Some((0.0, 0, 0));
+        best = Some(0.0);
         for c in &r.overlapping {
             close[*c] = limit.is_some();
         }
     } else {
         for i in 0..segs.len() {
             for j in i + 1..segs.len() {
-                let cut = best
-                    .map_or(f64::INFINITY, |b| b.0)
-                    .max(limit.unwrap_or(0.0));
+                let cut = best.unwrap_or(f64::INFINITY).max(limit.unwrap_or(0.0));
                 if x_lo(&segs[j].1) > x_hi(&segs[i].1) + cut {
                     break;
                 }
@@ -440,8 +440,8 @@ pub fn read(faces: &[Face], o: &Opts) -> Reading {
                     continue;
                 }
                 let d = segment_gap(segs[i].1, segs[j].1);
-                if best.is_none_or(|b| d < b.0) {
-                    best = Some((d, ci.min(cj), ci.max(cj)));
+                if best.is_none_or(|b| d < b) {
+                    best = Some(d);
                 }
                 if limit.is_some_and(|t| d < t) {
                     close[ci] = true;
@@ -450,12 +450,8 @@ pub fn read(faces: &[Face], o: &Opts) -> Reading {
             }
         }
     }
-    r.min_gap_px = best.map(|b| b.0 * o.resolution);
-    r.close = match (limit, best) {
-        (Some(_), _) => (0..n).filter(|c| close[*c]).collect(),
-        (None, Some((_, a, b))) if multi == 0 => vec![a, b],
-        (None, _) => r.overlapping.clone(),
-    };
+    r.min_gap_px = best.map(|b| b * o.resolution);
+    r.close = (0..n).filter(|c| close[*c]).collect();
 
     // Texel density, px/m: each face's, weighted by its surface area, and each chart's.
     let mut rows: Vec<(f64, f64)> = faces
@@ -476,14 +472,68 @@ pub fn read(faces: &[Face], o: &Opts) -> Reading {
             sums[c].1 += f.area;
         }
         r.off_texel = (0..n)
-            .filter(|c| {
-                let (uv, a) = sums[*c];
-                a > 0.0 && {
-                    let d = o.resolution * sqrt(uv / a);
-                    d < lo || d > hi
-                }
-            })
+            .filter(|c| sums[*c].1 > 0.0)
+            .map(|c| (c, o.resolution * sqrt(sums[c].0 / sums[c].1)))
+            .filter(|(_, d)| *d < lo || *d > hi)
             .collect();
     }
     r
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn opts() -> Opts {
+        Opts {
+            resolution: 1024.0,
+            padding: 4.0,
+            min_gap_px: None,
+            texel: None,
+            boxes: false,
+        }
+    }
+
+    /// A face of unit surface area at `uv`, its corners the welded vertices `v`.
+    fn face(f: usize, uv: [V2; 3], v: [u32; 3]) -> Face {
+        Face {
+            f,
+            uv,
+            v,
+            area: 1.0,
+        }
+    }
+
+    #[test]
+    fn a_flipped_face_opposes_its_charts_majority_and_a_mirrored_chart_has_none() {
+        let faces = [
+            // One chart: two triangles counter-clockwise, and one beside them wound back.
+            face(0, [[0.1, 0.1], [0.3, 0.1], [0.3, 0.3]], [0, 1, 2]),
+            face(1, [[0.1, 0.1], [0.3, 0.3], [0.1, 0.3]], [0, 2, 3]),
+            face(2, [[0.3, 0.1], [0.3, 0.3], [0.5, 0.1]], [1, 2, 4]),
+            // A mirrored chart: every triangle clockwise, so none opposes its majority.
+            face(3, [[0.6, 0.6], [0.8, 0.8], [0.8, 0.6]], [10, 12, 11]),
+            face(4, [[0.6, 0.6], [0.6, 0.8], [0.8, 0.8]], [10, 13, 12]),
+        ];
+        let r = read(&faces, &opts());
+        assert_eq!(r.charts, [vec![0, 1, 2], vec![3, 4]]);
+        assert_eq!(r.flipped, [2]);
+    }
+
+    #[test]
+    fn out_of_unit_is_the_exact_share_of_uv_area_outside_the_square() {
+        let faces = [
+            // Area 0.5, of which the square [0.5, 1]², 0.25, lies inside.
+            face(0, [[0.5, 0.5], [1.5, 0.5], [0.5, 1.5]], [0, 1, 2]),
+            // Area 0.125, all inside.
+            face(1, [[0.0, 0.0], [0.4, 0.0], [0.0, 0.625]], [3, 4, 5]),
+        ];
+        let r = read(&faces, &opts());
+        assert!(
+            (r.out_of_unit - 0.25 / 0.625).abs() < 1e-12,
+            "{}",
+            r.out_of_unit
+        );
+        assert_eq!(r.outside, [0]);
+    }
 }
