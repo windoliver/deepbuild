@@ -1,0 +1,178 @@
+{
+  "verb": "match",
+  "document": {
+    "format": 1,
+    "profile": "film",
+    "title": "Match fixture",
+    "description": "Match fixture: a fixture of the deepbuild/verbs pack.",
+    "size": [
+      640,
+      360
+    ],
+    "transport": {
+      "span": "4s"
+    },
+    "packs": [
+      "deepbuild/verbs@1.0.0"
+    ],
+    "items": {
+      "shape": {
+        "id": "shape",
+        "kind": "path@1",
+        "name": "Shape shape",
+        "order": "cshape",
+        "params": {
+          "d": "M 0 -40 L 40 30 L -40 30 Z",
+          "paint": {
+            "stroke": {
+              "role": "ink",
+              "width": 3
+            }
+          }
+        },
+        "at": {
+          "pos": [
+            0,
+            0,
+            0
+          ]
+        }
+      },
+      "goal": {
+        "id": "goal",
+        "kind": "path@1",
+        "name": "Shape goal",
+        "order": "cgoal",
+        "params": {
+          "d": "M -30 -30 L 30 -30 L 30 30 L -30 30 Z",
+          "paint": {
+            "stroke": {
+              "role": "ink",
+              "width": 3
+            }
+          }
+        },
+        "at": {
+          "pos": [
+            200,
+            0,
+            0
+          ]
+        }
+      },
+      "list": {
+        "id": "list",
+        "kind": "cues@1",
+        "name": "Cue list",
+        "order": "z0",
+        "params": {
+          "cues": [
+            {
+              "id": "v",
+              "kind": "match",
+              "targets": [
+                "shape"
+              ],
+              "when": {
+                "at": "0.5s"
+              },
+              "span": "1.0s",
+              "params": {
+                "to": "goal"
+              }
+            }
+          ]
+        }
+      }
+    }
+  },
+  "reference": {
+    "format": 1,
+    "profile": "film",
+    "title": "Match fixture written by hand",
+    "description": "Match fixture written by hand: a fixture of the deepbuild/verbs pack.",
+    "size": [
+      640,
+      360
+    ],
+    "transport": {
+      "span": "4s"
+    },
+    "items": {
+      "shape": {
+        "id": "shape",
+        "kind": "path@1",
+        "name": "Shape shape",
+        "order": "cshape",
+        "params": {
+          "d": "M 0 -40 L 40 30 L -40 30 Z",
+          "paint": {
+            "stroke": {
+              "role": "ink",
+              "width": 3
+            }
+          }
+        },
+        "at": {
+          "pos": [
+            0,
+            0,
+            0
+          ]
+        }
+      },
+      "goal": {
+        "id": "goal",
+        "kind": "path@1",
+        "name": "Shape goal",
+        "order": "cgoal",
+        "params": {
+          "d": "M -30 -30 L 30 -30 L 30 30 L -30 30 Z",
+          "paint": {
+            "stroke": {
+              "role": "ink",
+              "width": 3
+            }
+          }
+        },
+        "at": {
+          "pos": [
+            200,
+            0,
+            0
+          ]
+        }
+      }
+    },
+    "channels": {
+      "morph": {
+        "target": "items/shape/path",
+        "type": "path",
+        "keys": {
+          "k0": {
+            "t": 352800000,
+            "value": {
+              "of": "shape"
+            },
+            "interp": {
+              "ease": {
+                "name": "sigmoid",
+                "params": 10
+              }
+            }
+          },
+          "k1": {
+            "t": 1058400000,
+            "value": {
+              "of": "goal"
+            },
+            "interp": "hold"
+          }
+        }
+      }
+    }
+  },
+  "paths": [
+    "items/shape/path"
+  ]
+}

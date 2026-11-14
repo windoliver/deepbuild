@@ -1,0 +1,27 @@
+{
+  "id": "verbs.count_to_twin",
+  "version": "1.0",
+  "title": "Count to, planted twin",
+  "license": "Apache-2.0",
+  "author": "DeepBuild",
+  "description": "The planted twin of count_to: a wrong curve, timing or end state its fixture must catch.",
+  "inputs": {
+    "value": {
+      "type": "number",
+      "default": 0,
+      "about": "the number it counts to"
+    }
+  },
+  "steps": {
+    "count": {
+      "op": "cue",
+      "params": {
+        "set": {
+          "params/text": {
+            "count": "value - 1"
+          }
+        }
+      }
+    }
+  }
+}

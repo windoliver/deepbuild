@@ -620,6 +620,12 @@ byHand.push('tests/acceptance/226-oracle/');
 // #462's files each build deep-gpu (and deep-canvas) and draw looks, regions and strokes on the Metal GPU; so do its
 // regressions in 2D films, exports, the live window and 3D motifs.
 alone.push('tests/acceptance/462/', 'tests/look-regions-paths.test.ts');
+// #222's files each build deep-show and expand cue lists through it; budgets.test.ts times 512 cues in release.
+// AC7's blind redraft runs the same way, and the first draft's budgets file is kept by hand: its per-frame half
+// reads check-phase nodes as frame work, so it fails on whichever film loads first (222/REDRAFT-AC7.md).
+alone.push('tests/acceptance/222/', 'tests/acceptance/222-oracle/', 'tests/acceptance/222-redraft-ac7/');
+timed.push('tests/acceptance/222-redraft-ac7/budgets.test.ts');
+byHand.push('tests/acceptance/222/budgets.test.ts');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },

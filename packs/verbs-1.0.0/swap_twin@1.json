@@ -1,0 +1,25 @@
+{
+  "id": "verbs.swap_twin",
+  "version": "1.0",
+  "title": "Swap, planted twin",
+  "license": "Apache-2.0",
+  "author": "DeepBuild",
+  "description": "The planted twin of swap: a wrong curve, timing or end state its fixture must catch.",
+  "inputs": {
+    "with": {
+      "type": "ID",
+      "default": "",
+      "about": "the item it trades places with"
+    }
+  },
+  "steps": {
+    "mine": {
+      "op": "cue",
+      "params": {
+        "set": {
+          "at/pos": "with_now"
+        }
+      }
+    }
+  }
+}

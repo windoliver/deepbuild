@@ -1,0 +1,29 @@
+Base of tests/acceptance/222 at f6d811c7947dea9d28bb64de8759dca02c1fa27c ("Merge pull request #2392 …"), main with no
+implementation of #222, on this worktree.
+
+Not run against a binary. At the base nothing #222 names exists, so the suite's surfaces plainly don't: no item kind
+`cues@1` (the document check flags an unknown kind with a notice and skips the item), no `cue.kind@1` registry, no
+`packs/verbs-1.0.0/` (so no first-party verbs and no fixtures), no `markers` on a `deep show` reply's `expansions`
+entry and no entry for a cue list, no `data_hash` on `eval`, no `timing.expand_ms`, and no scenario plants named
+`cue_with_at_previous_end` or `cue_twin:<verb>` (an unknown scenario `planted` answers `{"ok":false,"code":"bad_input"}`).
+No Rust was built for this record; where each test fails was read from the base's code, not observed:
+
+- expand.test.ts (AC1, 2): the five-cue film names deepbuild/verbs@1.0.0, which the store can't load from the missing
+  folder, so `deep show` doesn't present it ("the five-cue list is presented"); the planted run's scenario answers
+  bad_input ("deep-show run refused the scenario").
+- from-values.test.ts (AC2, 1): both films name deepbuild/verbs@1.0.0: not presented.
+- verbs.test.ts (AC3, 2): the staggered film presents (its `cues@1` item skipped), but its reply's expansions hold none
+  for `list` ("the reply's expansions hold one for the cue list list"); the twins test fails first on the missing
+  fixtures ("each first-party verb ships a fixture this suite can read": no fixture at packs/verbs-1.0.0/fixtures/…).
+- kit.test.ts (AC4, 2): motion@1's digest is the same before and after (nothing installs), then the acme pack is not
+  installed (its entry names a registry the base doesn't hold); the planted-entries test finds no cue.kind@1 row
+  ("deep://registries lists the registry cue.kind@1").
+- overlap.test.ts (AC5, 1): the `cues@1` item is skipped, so the two moves are presented, not refused.
+- layout.test.ts (AC6, 1): the `cues@1` item is skipped, so the bar never leaves y = 100 and film.layout, at the only
+  cue end it has (the hand-written `beat`, 1.5 s), finds no crossing: "film.layout is PASS, not FAIL".
+- budgets.test.ts (AC7, 1): the cue list's film presents with its `cues@1` item skipped, so its squares never move:
+  "nothing of s0 ran at 1.07 s"; the timing half is INCONCLUSIVE off a reference Mac, and on one fails on the missing
+  expansion.
+- taste.test.ts (AC8, 1): INCONCLUSIVE, its one honest reading: docs/evidence/222/ holds no pictures.
+
+The type-check, node node_modules/typescript/bin/tsc -p tests/acceptance/222/tsconfig.json, exits 0.

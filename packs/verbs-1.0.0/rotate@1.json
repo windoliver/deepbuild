@@ -1,0 +1,50 @@
+{
+  "id": "verbs.rotate",
+  "version": "1.0",
+  "title": "Rotate",
+  "license": "Apache-2.0",
+  "author": "DeepBuild",
+  "description": "A move: each target turns through `angle` degrees, about its own place or, with `about`, a point it travels around on an arc.",
+  "inputs": {
+    "angle": {
+      "type": "number",
+      "default": 90,
+      "about": "the turn in degrees"
+    },
+    "about": {
+      "type": "ID",
+      "default": "none",
+      "about": "the item whose place it turns about; its own place when none"
+    }
+  },
+  "steps": {
+    "turn": {
+      "op": "cue",
+      "params": {
+        "set": {
+          "at/rot/2": "now + angle"
+        }
+      }
+    },
+    "orbit": {
+      "op": "cue",
+      "when": "about != none",
+      "params": {
+        "set": {
+          "at/pos": {
+            "to": [
+              "about_now[0] + cos(rad(angle)) * (now[0] - about_now[0]) - sin(rad(angle)) * (now[1] - about_now[1])",
+              "about_now[1] + sin(rad(angle)) * (now[0] - about_now[0]) + cos(rad(angle)) * (now[1] - about_now[1])",
+              "now[2]"
+            ],
+            "travel": {
+              "arc": {
+                "angle": "angle"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
