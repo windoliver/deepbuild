@@ -3,7 +3,7 @@
 // app and the replica fold those events, and deep, deep status and deep inbox read the `rows` table they project, from
 // the hub or, with it down, from its database. So every reader holds the same rows, words and order at one log_pos.
 import { basename } from 'node:path';
-import { SECTION } from './list.js';
+import { SECTION } from './sections.js';
 import { repoOf, sessionStates, WORDS, type Fact, type Flag, type Reading } from './status.js';
 
 /** A row as every reader shows it (row.set's data, less `listed` and `order`): @1 for a session or an ask, @2 for a running job (#1925). */
@@ -91,7 +91,7 @@ const ENTRY: Record<Reading['state'], string> = {
   'needs you': 'needs_you', stuck: 'blocked', flagged: 'fail', 'sent back': 'fail', BLOCKED: 'blocked', INVALID: 'invalid', INCONCLUSIVE: 'inconclusive', stale: 'stale',
   'says done': 'running', working: 'running', queued: 'idle', PASS: 'pass', finished: 'idle', quiet: 'idle',
 };
-/** The order of states inside a section of the list (list.ts: SECTION), what needs you first: one digit each, so a row's place sorts by its bytes. */
+/** The order of states inside a section of the list (sections.ts: SECTION), what needs you first: one digit each, so a row's place sorts by its bytes. */
 const RANK: Record<Reading['state'], number> = {
   'needs you': 0, stuck: 1, flagged: 2, BLOCKED: 3, INVALID: 4, INCONCLUSIVE: 5, stale: 6,
   'sent back': 1, 'says done': 2, working: 3, queued: 4, PASS: 3, finished: 4, quiet: 5,

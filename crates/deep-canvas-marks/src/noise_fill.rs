@@ -76,7 +76,9 @@ impl NoiseFill {
         let q = [q[0] * c + q[1] * s, (-q[0] * s + q[1] * c) * n.aspect];
         let v = match n.kind {
             // Cells: the distance to the nearest feature point.
-            2 => cells(&q, seed, 0.7, Metric::Euclidean, [0; 3]).f1.clamp(0.0, 1.0),
+            2 => cells(&q, seed, 0.7, Metric::Euclidean, [0; 3])
+                .f1
+                .clamp(0.0, 1.0),
             kind => {
                 let (mut sum, mut amp, mut norm, mut at) = (0.0, 1.0, 0.0, q);
                 for k in 0..n.octaves.max(1) {
@@ -111,7 +113,11 @@ impl NoiseFill {
             }
             (_, Some((_, y))) => *y,
             (Some((_, x)), None) => *x,
-            (None, None) => Oklab { l: 0.0, a: 0.0, b: 0.0 },
+            (None, None) => Oklab {
+                l: 0.0,
+                a: 0.0,
+                b: 0.0,
+            },
         };
         let s = oklab_to_srgb(c);
         [s.r, s.g, s.b].map(|x| (x * 255.0).round().clamp(0.0, 255.0) as u8)

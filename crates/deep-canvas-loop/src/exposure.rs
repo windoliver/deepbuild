@@ -155,7 +155,8 @@ pub fn report(lowered: &Value, input: &Value, frames: &[Frame]) -> Report {
         }
         let mask = pixels::mask(f, &subject);
         let Some(r) = measure(&f.linear, f.exposure, &mask) else {
-            out.blocked.push(blocked("subject_unseen", KIND, &subject, "subject"));
+            out.blocked
+                .push(blocked("subject_unseen", KIND, &subject, "subject"));
             return out;
         };
         let ok = limits.passes(&r);
@@ -173,10 +174,17 @@ pub fn report(lowered: &Value, input: &Value, frames: &[Frame]) -> Report {
         // The incident meter's: middle grey under the light falling on the subject shows as
         // middle grey. Where the subject's light is its own (unlit, or emitting), no light falls
         // on it to meter, and the reading is the subject's own, its key brought to middle grey.
-        let incident = scene::evaluate(lowered, input, f.t, KIND).ok().and_then(|s| {
-            let e = incident(&s, centre(&s, &subject)?);
-            (e > 0.0).then(|| (round(log2(e / (1.2 * std::f64::consts::PI))), "the light falling on it"))
-        });
+        let incident = scene::evaluate(lowered, input, f.t, KIND)
+            .ok()
+            .and_then(|s| {
+                let e = incident(&s, centre(&s, &subject)?);
+                (e > 0.0).then(|| {
+                    (
+                        round(log2(e / (1.2 * std::f64::consts::PI))),
+                        "the light falling on it",
+                    )
+                })
+            });
         let reflected = (round(now + r.key_ev), "its own light");
         // Named as ops only when the frame, exposed at that EV, reads inside the limits.
         let cures = |ev: f64| {

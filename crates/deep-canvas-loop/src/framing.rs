@@ -61,7 +61,12 @@ fn points(scene: &Scene, keep: &[String]) -> Result<Vec<(String, Vec<Vec3>)>, Va
                 .flat_map(|s| s.points())
                 .collect();
             if pts.is_empty() {
-                Err(blocked("not_drawn", KIND, &[id.clone()], &format!("items/{id}")))
+                Err(blocked(
+                    "not_drawn",
+                    KIND,
+                    &[id.clone()],
+                    &format!("items/{id}"),
+                ))
             } else {
                 Ok((id.clone(), pts))
             }
@@ -101,7 +106,12 @@ fn read(doc: &Value, scene: &Scene, t: i64, keep: &[String], o: &Opts) -> Result
     let (safe, inner) = frames(doc, cam, o);
     let side = (safe[2] - safe[0]).min(safe[3] - safe[1]);
     let mut cut = Vec::new();
-    let mut bbox = [f64::INFINITY, f64::INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY];
+    let mut bbox = [
+        f64::INFINITY,
+        f64::INFINITY,
+        f64::NEG_INFINITY,
+        f64::NEG_INFINITY,
+    ];
     for (id, pts) in points(scene, keep)? {
         let mut out = false;
         for p in pts {
@@ -109,7 +119,12 @@ fn read(doc: &Value, scene: &Scene, t: i64, keep: &[String], o: &Opts) -> Result
             let behind = cam.perspective && cam.to_view(p)[2] <= 0.0;
             match cam.project(p).filter(|_| !behind) {
                 Some([x, y, _]) => {
-                    bbox = [bbox[0].min(x), bbox[1].min(y), bbox[2].max(x), bbox[3].max(y)];
+                    bbox = [
+                        bbox[0].min(x),
+                        bbox[1].min(y),
+                        bbox[2].max(x),
+                        bbox[3].max(y),
+                    ];
                     out |= x < inner[0] || x > inner[2] || y < inner[1] || y > inner[3];
                 }
                 None => out = true,
@@ -156,7 +171,12 @@ fn target(doc: &Value, cam: &Camera, o: &Opts, middle: bool) -> Option<([f64; 2]
         ]
     } else {
         let hair = 0.01 * (inner[2] - inner[0]).min(inner[3] - inner[1]);
-        [inner[0] + hair, inner[1] + hair, inner[2] - hair, inner[3] - hair]
+        [
+            inner[0] + hair,
+            inner[1] + hair,
+            inner[2] - hair,
+            inner[3] - hair,
+        ]
     };
     let lo = [b[0] - cam.centre[0], b[1] - cam.centre[1]];
     let hi = [b[2] - cam.centre[0], b[3] - cam.centre[1]];
@@ -279,7 +299,11 @@ pub fn report(lowered: &Value, input: &Value) -> Report {
         }
     }
     // A shot poses the camera at each time, which the hub writes before it draws.
-    if lowered.get("shots").and_then(Value::as_object).is_some_and(|s| !s.is_empty()) {
+    if lowered
+        .get("shots")
+        .and_then(Value::as_object)
+        .is_some_and(|s| !s.is_empty())
+    {
         out.blocked.push(blocked("not_run", KIND, &[], "shots"));
     }
     let fill = input
@@ -327,7 +351,9 @@ pub fn report(lowered: &Value, input: &Value) -> Report {
             return out;
         }
     };
-    let cam_id = scene::camera_of(lowered).map(|(id, _)| id).unwrap_or_default();
+    let cam_id = scene::camera_of(lowered)
+        .map(|(id, _)| id)
+        .unwrap_or_default();
     let first = keep[0].clone();
     for (r, _) in &readings {
         out.results.push(json!({
@@ -352,7 +378,10 @@ pub fn report(lowered: &Value, input: &Value) -> Report {
                 read_all(&fixed).is_ok_and(|rs| rs.iter().all(|(r, _)| r.framed(&o)))
             });
         let fault = if r.cut.is_empty() {
-            format!("the kept items span {:.2} of the safe frame's shorter side, outside {:?}", r.fill, o.fill)
+            format!(
+                "the kept items span {:.2} of the safe frame's shorter side, outside {:?}",
+                r.fill, o.fill
+            )
         } else {
             format!("{} cut by the safe frame less its margin", r.cut.join(", "))
         };
@@ -376,15 +405,24 @@ pub fn report(lowered: &Value, input: &Value) -> Report {
     if let Some((r, _)) = readings.iter().find(|(r, _)| r.horizon > o.horizon_max) {
         let path = format!("items/{cam_id}/params/roll");
         let fixed = scene::with_set(lowered, &path, json!(0));
-        let cures = read_all(&fixed).is_ok_and(|rs| rs.iter().all(|(r, _)| r.horizon <= o.horizon_max));
+        let cures =
+            read_all(&fixed).is_ok_and(|rs| rs.iter().all(|(r, _)| r.horizon <= o.horizon_max));
         let raised = Raised {
             code: CODE,
             severity: "error",
             path: path.clone(),
-            what: format!("the horizon tilts {:.2}°, past {}°: set the camera's roll to 0", r.horizon, o.horizon_max),
-            fix_ops: cures.then(|| vec![json!({"op": "set", "id": cam_id, "path": path, "value": 0})]),
+            what: format!(
+                "the horizon tilts {:.2}°, past {}°: set the camera's roll to 0",
+                r.horizon, o.horizon_max
+            ),
+            fix_ops: cures
+                .then(|| vec![json!({"op": "set", "id": cam_id, "path": path, "value": 0})]),
         };
-        out.raised.push((first.clone(), raised, json!({"t": r.t, "horizon": r.horizon, "max": o.horizon_max, "camera": cam_id})));
+        out.raised.push((
+            first.clone(),
+            raised,
+            json!({"t": r.t, "horizon": r.horizon, "max": o.horizon_max, "camera": cam_id}),
+        ));
     }
     // An overlay over the subject: no camera move clears it in closed form, so its fix is text.
     if let Some((r, _)) = readings.iter().find(|(r, _)| !r.under.is_empty()) {
@@ -395,7 +433,8 @@ pub fn report(lowered: &Value, input: &Value) -> Report {
             what: format!("the kept items lie under {}", r.under.join(", ")),
             fix_ops: None,
         };
-        out.raised.push((first, raised, json!({"t": r.t, "under": r.under})));
+        out.raised
+            .push((first, raised, json!({"t": r.t, "under": r.under})));
     }
     out
 }

@@ -168,13 +168,18 @@ fn time(
     planted: Option<&str>,
 ) -> Result<Vec<Cue>, Refusal> {
     let at = format!("items/{id}/params/cues");
-    let Some(list) = item.pointer("/params/cues").and_then(Value::as_array) else {
-        return Err(refused(
-            "bad_doc",
-            at,
-            Value::Null,
-            "a cue list holds `cues`, a list".into(),
-        ));
+    // #1974: `cues` left out is its listed default, no cues.
+    let none = Vec::new();
+    let list = match item.pointer("/params/cues") {
+        None => &none,
+        Some(v) => v.as_array().ok_or_else(|| {
+            refused(
+                "bad_doc",
+                at.clone(),
+                Value::Null,
+                "a cue list holds `cues`, a list".into(),
+            )
+        })?,
     };
     if list.len() > MAX_CUES {
         return Err(refused(

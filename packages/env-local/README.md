@@ -2,7 +2,7 @@
 
 ## What it is for
 
-The first-party environment (#331), an environment@1 fill. It starts the repo's own dev script as the `environment:` block of `.deepbuild/done.yaml` names it, on ports the supervisor leases per worktree, and reports it ready only once its health route answers 200; a compose stack runs as its own compose project named from its run. The hub calls it for `deep env up` and `down`.
+The first-party environment (#331), an environment@1 fill. It starts the repo's own dev script as the `environment:` block of `.deepbuild/done.yaml` names it, on ports the supervisor leases per worktree, and reports it ready only once its health route answers 200; a compose stack runs as its own compose project named from its run. The hub calls it for `deep env up` and `down`, and `@deepbuild/checks-journey` for the stack a journey runs against.
 
 ## Where new code goes
 

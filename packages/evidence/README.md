@@ -2,7 +2,7 @@
 
 ## What it is for
 
-The evidence store (#15): files kept by hash, intake checks on media, redaction, origin, sends and retention, plus the secret scrub (gitleaks rules, field-name rules and scrub by value). The record, the archive, the hub, the reading package, `checks-command`, the extension host and the CLI's debug bundle use it.
+The evidence store (#15): files kept by hash, intake checks on media, redaction, origin, sends and retention, plus the secret scrub (gitleaks rules, field-name rules and scrub by value). The record, the archive, the hub, the reading package, `checks-command`, `checks-journey`, the extension host, the routing replay and the CLI's debug bundle use it.
 
 ## Where new code goes
 

@@ -308,7 +308,8 @@ fn facts<'e>(
         hidden: Vec::with_capacity(run.len()),
     };
     for &(i, id, item) in run {
-        f.hidden.push(item.get("visible") == Some(&Value::Bool(false)));
+        f.hidden
+            .push(item.get("visible") == Some(&Value::Bool(false)));
         f.fulls.push(
             item.get("kind")
                 .and_then(Value::as_str)
