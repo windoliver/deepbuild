@@ -3,6 +3,8 @@
 //! the share crushed to black, and its key, the mean log luminance against middle grey. Its fix
 //! is the camera's exposure from the light falling on the subject, as an incident meter reads it.
 
+use std::collections::BTreeMap;
+
 use deep_canvas::ops::{log2, sqrt};
 use deep_canvas::registry::{Frame, Raised, Report};
 use deep_canvas_scene3d::finish::exposure_scale;
@@ -52,6 +54,22 @@ pub fn measure(linear: &[f32], exposure: f64, subject: &[bool]) -> Option<Readin
         key_ev: logs / n as f64 - log2(MIDDLE_GREY),
         px: n,
     })
+}
+
+/// #1939: the subject render.exposure reads by default in `doc`, its camera's kept items, when a
+/// frame whose picks are `picks` draws any of it; `None` where it keeps nothing or draws none.
+pub fn kept_drawn(doc: &Value, picks: &BTreeMap<u32, String>) -> Option<Vec<String>> {
+    let subject = scene::kept(doc, &Value::Null, "subject", KIND).ok()?;
+    let drawn = picks
+        .values()
+        .any(|id| subject.iter().any(|k| scene::is_of(id, k)));
+    drawn.then_some(subject)
+}
+
+/// #1939: the px of `frame` that render.exposure reads for `subject`, by the object-ID pass, so a
+/// snapshot's readings measure the same px the check does.
+pub fn subject_px(frame: &Frame, subject: &[String]) -> Vec<bool> {
+    pixels::mask(frame, subject)
 }
 
 /// The check input's limits, which a brief may only tighten.

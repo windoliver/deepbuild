@@ -47,7 +47,57 @@ fn linear(rgba: &[u8]) -> Vec<f32> {
         .collect()
 }
 
+/// An object-ID target's bytes as each px's pick.
+fn ids_of(bytes: &[u8]) -> Vec<u32> {
+    bytes
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|b| u32::from_le_bytes(*b))
+        .collect()
+}
+
 impl Hub<'_> {
+    /// #1939: the light of `doc`'s kept subject in the 3D frame just drawn of it at `t` and
+    /// `size`, read by render.exposure's own measure: `{clipped, crushed, key_ev}`, readings that
+    /// pass or fail nothing; `None` where it keeps no subject, or the frame shows none of it.
+    pub(crate) fn light3d(&mut self, doc: &Value, t: i64, size: Option<[u16; 2]>) -> Option<Value> {
+        let posed = crate::film::posed(doc, t);
+        let doc = posed.as_ref().unwrap_or(doc);
+        let size = size.unwrap_or_else(|| {
+            crate::snapshot::px([0, 1].map(|i| doc["size"][i].as_f64().unwrap_or(1.0)))
+        });
+        let exposure = crate::scene3d::look_of(doc, &self.look.light).exposure;
+        let whole = self.scenario.planted == Some(Planted::LightFromWholeFrame);
+        let gpu = self.gpu3()?;
+        // Nothing is read back for a frame that draws none of the subject.
+        let subject = deep_canvas_loop::exposure::kept_drawn(doc, &gpu.picks())?;
+        let targets = gpu.targets(size.map(u32::from), false)?;
+        let frame = Frame {
+            t,
+            size: targets.size,
+            linear: Vec::new(),
+            exposure,
+            rgba: Vec::new(),
+            ids: ids_of(&targets.ids),
+            picks: targets.picks,
+            roles: BTreeMap::new(),
+        };
+        // The check's own px and measure, the subject's px alone read and in the check's order.
+        let at: Vec<usize> = if whole {
+            (0..frame.ids.len()).collect()
+        } else {
+            let px = deep_canvas_loop::exposure::subject_px(&frame, &subject);
+            px.iter()
+                .enumerate()
+                .filter_map(|(i, s)| s.then_some(i))
+                .collect()
+        };
+        let linear = gpu.pre_tone_at(&at)?;
+        let r = deep_canvas_loop::exposure::measure(&linear, exposure, &vec![true; at.len()])?;
+        Some(json!({"clipped": r.clipped, "crushed": r.crushed, "key_ev": r.key_ev}))
+    }
+
     /// For each requirement whose check kind reads pixels, each deliverable's frames:
     /// requirement ID → document → what was drawn.
     pub(crate) fn pixel_runs(&mut self, c: &Claim) -> BTreeMap<String, BTreeMap<String, Drawn>> {
@@ -138,13 +188,7 @@ impl Hub<'_> {
                 linear,
                 exposure: look.exposure,
                 rgba,
-                ids: targets
-                    .ids
-                    .as_chunks::<4>()
-                    .0
-                    .iter()
-                    .map(|b| u32::from_le_bytes(*b))
-                    .collect(),
+                ids: ids_of(&targets.ids),
                 picks: targets.picks,
                 roles: palette.clone(),
             });
