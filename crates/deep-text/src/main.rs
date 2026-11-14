@@ -114,6 +114,8 @@ fn read_spec(input: &Map<String, Value>) -> Result<(Spec<'_>, Option<f32>, Optio
         tabular,
         mask,
         spans: &[],
+        gap: 0.,
+        indent: 0.,
     };
     Ok((spec, height, widest))
 }

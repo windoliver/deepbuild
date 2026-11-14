@@ -261,6 +261,17 @@ impl<'a> Hub<'a> {
         {
             self.sandbox.runs += 1;
         }
+        // #169: every row of the core's carried-state list as a play on this track leaves it at
+        // `t`, so steps the live session ran under another track never answer for it.
+        let carried: Option<Value> = self.played_form(&e.doc).filter(|_| e.carried).map(|form| {
+            let form = e
+                .track
+                .as_ref()
+                .map_or(form.clone(), |t| crate::played::with_track(&form, t));
+            (self.carried_at(&form, t).into_iter())
+                .map(|c| json!({"owner": c.module, "kind": c.kind, "key": c.key, "hash": c.hash}))
+                .collect()
+        });
         let Some(session) = self.sessions.get_mut(&e.doc).filter(|_| rev.is_some()) else {
             return json!({"outcome": "refused", "code": "no_revision", "issues": []});
         };
@@ -363,6 +374,9 @@ impl<'a> Hub<'a> {
         }
         if !e.paths.is_empty() {
             reply["values"] = crate::query::values(&self.sched, evaluated, &e.paths);
+        }
+        if let Some(rows) = carried {
+            reply["carried"] = rows;
         }
         if e.data_hash {
             reply["data_hash"] = json!(crate::data_hash::of(&self.sched, evaluated));
@@ -1043,6 +1057,7 @@ fn cell_grids(
                     to: *to,
                     role: String::new(),
                     color: *c,
+                    opacity: 1.0,
                 })
                 .collect();
             let text = row.text.trim_end().to_string();
@@ -1050,6 +1065,8 @@ fn cell_grids(
                 item: id.clone(),
                 spec: scene::TextSpec {
                     spans: crate::terminal::cell_spacing(&text, cw, g.font_size),
+                    gap: 0.0,
+                    indent: 0.0,
                     text,
                     font: "mono".into(),
                     family: Some(deep_text::Role::Mono.family()),

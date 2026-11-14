@@ -2,7 +2,7 @@
   "uri": "deep://schedule/core@0.0.0",
   "core": "core@0.0.0",
   "build_set": "full",
-  "set_digest": "abb3edad9ff696c04c4d0a2ff4a312cee8f6b3cc02126acf199c60614df45598",
+  "set_digest": "8146dec15a1857b96e79b4ad8b83a9259b723995ee1952a07f3e83fdf433ad95",
   "runtime_digest": "b0d9637fcffe5b58be4a3025853302613578659fa143fc9ca6bd110364894ab8",
   "interfaces": {
     "building@1": {
@@ -93,7 +93,7 @@
       }
     },
     "effects@1": {
-      "digest": "728754098ff7e4fa72004323be2f19eb772021f76c26ca3a01930aa343f6e2af",
+      "digest": "47efff0e92f65196c99d6ba9bbe39a782aa62eb4e031e5cb60132976c8fd9a7b",
       "reference": "effects",
       "kit": [
         "fixtures",
@@ -209,7 +209,7 @@
       }
     },
     "logic@1": {
-      "digest": "8905fd3b732dfa94de4bea62a96a48dc5e2bfd887765fd226b5aad6bc6978281",
+      "digest": "de541b43baa18be5ccd7dbf9f1cc77234acd412c2a80a4e6a48c40ae922c9ef8",
       "reference": "logic",
       "kit": [
         "fixtures",
@@ -267,7 +267,7 @@
       }
     },
     "loop@1": {
-      "digest": "adeb0c97c338cfd0618dc3e56cf1a050699528591b5b48c642e9c6a9dcaad35a",
+      "digest": "9fc00a319de12e9ec0058e38ed76d6a18251e71677be2e61548b1536daf5ed84",
       "reference": "loop",
       "kit": [
         "fixtures",
@@ -354,7 +354,7 @@
       }
     },
     "motion@1": {
-      "digest": "400f632fc9c17d40f3f0cedc92459afd95f8d085de8e636423f3ce5661507596",
+      "digest": "ea5176c236b992e3607f46c3d4b544a9172517ace31435fff4fb7e1756ed01c2",
       "reference": "motion",
       "kit": [
         "fixtures",
@@ -594,7 +594,7 @@
       }
     },
     "scene3d@1": {
-      "digest": "f43d1510036650b6c7e60b0b72235aecb9516ebfcfa1ea49406f0cbb33558750",
+      "digest": "d5a6bb2f51c1086a157667d2e775a9aebe6308d1196cebe5e4e9e4c09a5d3306",
       "reference": "scene3d",
       "kit": [
         "fixtures",

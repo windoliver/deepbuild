@@ -1,0 +1,54 @@
+
+ RUN  v5.0.5 <base-checkout>
+
+ ↓ tests/acceptance/2065/restart.test.ts > AC1 #2065.d984fab2 stalled claim's ask answered split after a hub restart records one issue.drafted listing the open items
+ × tests/acceptance/2065/restart.test.ts > AC2 #2065.5b02fc15 accept after restart permits gh pr create saying Closes and still permits it after a second restart 18884ms
+   → AC2 #2065.5b02fc15 task task:item206502, ask:01M7DSQ49YA6KXEYHE8KF27C6V: accept after restart must let Closes run; DeepBuild blocked this: the pull request can't say Closes #206502 while a requirement of task:item206502 is unproven. Say Part of #206502 instead, and list what's left: R1 ("A dropped connection is retried"); R2 ("Each rejected token is logged").: expected 'deny' to be 'allow' // Object.is equality
+   → AC2 #2065.5b02fc15 task task:item206502: Closes must still run after the second restart; DeepBuild blocked this: the pull request can't say Closes #206502 while a requirement of task:item206502 is unproven. Say Part of #206502 instead, and list what's left: R1 ("A dropped connection is retried"); R2 ("Each rejected token is logged").: expected 'deny' to be 'allow' // Object.is equality
+ ↓ tests/acceptance/2065/restart.test.ts > AC3 #2065.e0ad4590 stays off survives restart: Closes runs with no second reject_expired ask, in a second worktree too
+ ↓ tests/acceptance/2065/restart.test.ts > AC4 #2065.4d4ad2b8 task sent back twice without new evidence, then restart: next claim.sent_back is round 3, not round 1
+ ↓ tests/acceptance/2065/restart.test.ts > AC5 #2065.ae196407 planted price, one paid check locks, restart, approve budget ask: one spend.approved with asked cap $4.00
+ ↓ tests/acceptance/2065/restart.test.ts > AC6 #2065.f0caaac6 switch ask closed on not yet by answer: refused Closes must not say "you're asked in your inbox"
+ ↓ tests/acceptance/2065/restart.test.ts > AC6 #2065.f0caaac6 switch ask closed on not yet by deadline: refused Closes must not say "you're asked in your inbox"
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/2065/restart.test.ts > AC2 #2065.5b02fc15 accept after restart permits gh pr create saying Closes and still permits it after a second restart
+AssertionError: AC2 #2065.5b02fc15 task task:item206502, ask:01M7DSQ49YA6KXEYHE8KF27C6V: accept after restart must let Closes run; DeepBuild blocked this: the pull request can't say Closes #206502 while a requirement of task:item206502 is unproven. Say Part of #206502 instead, and list what's left: R1 ("A dropped connection is retried"); R2 ("Each rejected token is logged").: expected 'deny' to be 'allow' // Object.is equality
+
+Expected: "allow"
+Received: "deny"
+
+ ❯ tests/acceptance/2065/restart.test.ts:139:132
+    137|   const second = await closes(s, n);
+    138|   // Read both before asserting: the base must be observed refusing bo…
+    139|   expect.soft(decision(first), `${AC2} task ${ref}, ask:${ask.id}: acc…
+       |                                                                                                                                    ^
+    140|   expect.soft(decision(second), `${AC2} task ${ref}: Closes must still…
+    141| }, 240_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/acceptance/2065/restart.test.ts > AC2 #2065.5b02fc15 accept after restart permits gh pr create saying Closes and still permits it after a second restart
+AssertionError: AC2 #2065.5b02fc15 task task:item206502: Closes must still run after the second restart; DeepBuild blocked this: the pull request can't say Closes #206502 while a requirement of task:item206502 is unproven. Say Part of #206502 instead, and list what's left: R1 ("A dropped connection is retried"); R2 ("Each rejected token is logged").: expected 'deny' to be 'allow' // Object.is equality
+
+Expected: "allow"
+Received: "deny"
+
+ ❯ tests/acceptance/2065/restart.test.ts:140:125
+    138|   // Read both before asserting: the base must be observed refusing bo…
+    139|   expect.soft(decision(first), `${AC2} task ${ref}, ask:${ask.id}: acc…
+    140|   expect.soft(decision(second), `${AC2} task ${ref}: Closes must still…
+       |                                                                                                                             ^
+    141| }, 240_000);
+    142|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 6 skipped (7)
+   Start at  11:49:13
+   Duration  19.29s (tests 99%)
+
+JSON report written to <proof-dir>/pr-base-ac2-isolated.json
