@@ -1484,6 +1484,11 @@ fn pair(v: Option<&Value>) -> Option<[f64; 2]> {
     }
 }
 
+/// A circle's `center`, at its listed default `[0, 0]` when left out (#1974).
+pub(crate) fn circle_center(v: Option<&Value>) -> Option<[f64; 2]> {
+    v.map_or(Some([0.0, 0.0]), |c| pair(Some(c)))
+}
+
 fn role(palette: &Palette, name: Option<&Value>, path: &str) -> Result<Rgb, Refused> {
     let Some(Value::String(name)) = name else {
         return refuse("bad_paint", path);
@@ -3452,7 +3457,7 @@ fn status_box(kind: &str, item: &Value, params: Option<&Value>) -> Option<([f64;
             ))
         }
         "circle@1" => {
-            let c = pair(p("center"))?;
+            let c = circle_center(p("center"))?;
             let r = num(p("r"))?;
             Some(([c[0] + pos[0] - r, c[1] + pos[1] - r, 2.0 * r, 2.0 * r], r))
         }
@@ -4356,9 +4361,13 @@ pub(crate) fn item_pos(item: &Value) -> [f64; 2] {
     pair(item.pointer("/at/pos")).unwrap_or([0.0, 0.0])
 }
 
-/// `items` with each one anchored to a mark set's `#head` moved there (Item and kind: `at.anchor`:
-/// "with an anchor, pos offsets from that point"). A head with no row yet leaves it where it is.
-fn anchored(items: Cow<'_, Map<String, Value>>) -> Result<Cow<'_, Map<String, Value>>, Refused> {
+/// `items` with each one anchored to a mark set's or a revealed text's `#head` moved there (Item
+/// and kind: `at.anchor`: "with an anchor, pos offsets from that point"). A head with no row yet
+/// leaves it where it is.
+fn anchored<'a>(
+    items: Cow<'a, Map<String, Value>>,
+    ty: &Type,
+) -> Result<Cow<'a, Map<String, Value>>, Refused> {
     let mut moves = Vec::new();
     for (id, item) in items.iter() {
         let anchor = item.pointer("/at/anchor").and_then(Value::as_str);
@@ -4382,7 +4391,11 @@ fn anchored(items: Cow<'_, Map<String, Value>>) -> Result<Cow<'_, Map<String, Va
         let Some(source) = items.get(set) else {
             return refuse("ref_unresolved", format!("items/{id}/at/anchor"));
         };
-        if let Some(point) = data::head_place(set, source, &items)? {
+        let head = match source.get("kind").and_then(Value::as_str) {
+            Some("text@1") => text_head(set, source, ty)?,
+            _ => data::head_place(set, source, &items)?,
+        };
+        if let Some(point) = head {
             moves.push((id.clone(), point));
         }
     }
@@ -4398,6 +4411,23 @@ fn anchored(items: Cow<'_, Map<String, Value>>) -> Result<Cow<'_, Map<String, Va
         item["at"]["pos"] = json!([pos[0] + point[0], pos[1] + point[1], 0.0]);
     }
     Ok(Cow::Owned(items))
+}
+
+/// #1969: a revealed text's `#head` in document u (Text `text@1`): the caret its reveal publishes,
+/// from where the text draws; `None` for a text with no reveal.
+fn text_head(id: &str, item: &Value, ty: &Type) -> Result<Option<[f64; 2]>, Refused> {
+    let params = object_or_empty(item.get("params"));
+    if !params.contains_key("reveal") {
+        return Ok(None);
+    }
+    let code = crate::code::read(params, &format!("items/{id}"))?.map(|d| d.text);
+    let spec = text_spec_of(id, params, None, ty, code)?;
+    let Some(shaper) = spec.shaper_spec() else {
+        return Ok(None);
+    };
+    let run = LAYOUT_SHAPER.with(|s| s.borrow_mut().shape(&shaper));
+    let at = Place::of(item).offset;
+    Ok(crate::animator::head(params, &run, id)?.map(|c| [at[0] + c[0], at[1] + c[1]]))
 }
 
 /// An item's place in its layer's draw order (#160): by z, then by the tree, each level as its
@@ -4604,7 +4634,7 @@ pub fn base_verbs(kind: &str, params: &Map<String, Value>) -> Option<Vec<Verb>> 
             num(params.get("radius")).unwrap_or(0.0),
         ),
         "circle@1" => outline::circle(
-            pair(params.get("center"))?,
+            circle_center(params.get("center"))?,
             num(params.get("r")).unwrap_or(0.0),
             num(params.get("inner_r")).unwrap_or(0.0),
         ),
@@ -4752,7 +4782,13 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
     let stroke = paint.get("stroke").and_then(Value::as_object);
     let paint_path = format!("{path}/params/paint");
     let center = || {
-        pair(params.get("center")).ok_or(Refused {
+        let c = params.get("center");
+        let at = if item.get("kind").and_then(Value::as_str) == Some("circle@1") {
+            circle_center(c)
+        } else {
+            pair(c)
+        };
+        at.ok_or(Refused {
             code: "bad_doc",
             path: format!("{path}/params/center"),
         })
@@ -5572,6 +5608,8 @@ pub fn item_placed(
         || item.get("parent").is_some()
         || item.pointer("/at/anchor").is_some()
         || reads_anchor(item)
+        // #1969: a revealed text publishes `#head`, which the frame's anchor pass reads from it.
+        || item.pointer("/params/reveal").is_some_and(|r| !r.is_null())
     {
         return None;
     }
@@ -5673,7 +5711,7 @@ fn build(
     boxes: Option<&BTreeMap<String, [f64; 4]>>,
 ) -> Result<(Frame, bool, Places), Refused> {
     let items = laid_out(doc, items)?;
-    let items = &*anchored(items)?;
+    let items = &*anchored(items, ty)?;
     let size = pair(doc.get("size")).ok_or(Refused {
         code: "bad_doc",
         path: "size".into(),

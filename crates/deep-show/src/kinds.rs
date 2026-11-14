@@ -59,8 +59,19 @@ pub enum Planted {
     FieldLine600Bytes,
     /// #1971: an object path answers its kind's lines in field-name order.
     FieldObjectByName,
+    /// #1972: the patches guide leaves out `reorder`.
+    PatchesWithoutReorder,
     /// #1973: the line `op: field` answers for `slab@1.size` prints its type, `json`, and no form.
     FieldSizeJsonAlone,
+    /// #1974: `puff@1`'s reader takes 2 for a radius left out, where its line says 1.
+    DefaultsReaderFallsBackTo2,
+    /// #1974: that reader, and a defaults run that builds nothing: it compares each default the
+    /// line prints with the dump's.
+    DefaultsComparedWithDumpOnly,
+    /// #1974: the defaults run skips every field typed json.
+    DefaultsSkipJson,
+    /// #548: the bindings generator orders each region's fields by name before laying them out.
+    BindingsByName,
 }
 
 impl Planted {
@@ -80,7 +91,12 @@ impl Planted {
             "field_listing_without_corner" => Planted::FieldWithoutCorner,
             "field_line_600_bytes" => Planted::FieldLine600Bytes,
             "field_object_by_name" => Planted::FieldObjectByName,
+            "patches_guide_without_reorder" => Planted::PatchesWithoutReorder,
             "field_size_json_alone" => Planted::FieldSizeJsonAlone,
+            "defaults_reader_falls_back_to_2" => Planted::DefaultsReaderFallsBackTo2,
+            "defaults_compared_with_dump_only" => Planted::DefaultsComparedWithDumpOnly,
+            "defaults_skip_json" => Planted::DefaultsSkipJson,
+            "bindings_fields_by_name" => Planted::BindingsByName,
             _ => return None,
         })
     }
@@ -140,7 +156,138 @@ const INSTALLED: &[(&str, &str)] = &[
         include_str!("../gallery/familiar-names.md"),
     ),
     ("logic.md", include_str!("../gallery/logic.md")),
+    // #548: logic@1's example, and its program's source.
+    (
+        "logic-counter.json",
+        include_str!("../gallery/logic-counter.json"),
+    ),
+    (
+        "logic-counter.wat",
+        include_str!("../gallery/logic-counter.wat"),
+    ),
 ];
+
+/// The installed guide the patch schema prints (#1972), as the gallery index names its file.
+const PATCHES_GUIDE: &str = "patches.md";
+
+/// The ID the patches guide's examples give `doc`.
+const GUIDE_DOC: &str = "01JC1972000000000000000D0C";
+
+/// The patches guide, printed from the patch schema: the envelope, the path grammar's sections,
+/// how `base` and a stale base are answered, then each op with its fields and one example that
+/// applies to the gallery's product reveal. `skip` leaves one op out (the planted guide).
+fn patches_guide(skip: Option<&str>) -> String {
+    use deep_canvas::document::patch_schema::{Field, ENVELOPE, OPS};
+    use deep_canvas::grammar::Section;
+    use std::fmt::Write as _;
+    let list = |out: &mut String, fields: &[Field]| {
+        for f in fields {
+            let need = if f.optional { "optional" } else { "required" };
+            let _ = writeln!(out, "- `{}` ({need}): {}.", f.name, f.takes);
+        }
+    };
+    let ops: Vec<_> = OPS.iter().filter(|o| Some(o.name) != skip).collect();
+    let names: Vec<String> = ops.iter().map(|o| format!("`{}`", o.name)).collect();
+    let mut out =
+        String::from("# Patches: the envelope, paths, base, and every op with an example\n\n");
+    out.push_str(
+        "A patch changes a document by its items' IDs, all or nothing: every op applies, or none \
+         does and the reply names the first refusal. Send it to deep_show as `patch`, one string \
+         holding its JSON text, instead of a whole revision. Add `\"dry_run\": true` to see what \
+         it would do first. deep_kinds `op: field` answers `patch` and `patch.<op>` from the same \
+         schema this guide is printed from.\n\n## The envelope\n\n\
+         A patch is an object with these fields; a bare list of ops is refused, and the ops go in \
+         `ops`.\n\n",
+    );
+    list(&mut out, ENVELOPE);
+    let sections: Vec<&str> = Section::ALL.iter().map(|s| s.as_str()).collect();
+    let _ = write!(
+        out,
+        "\n## Paths\n\n\
+         A path is `<section>/<id>[#<sub>]/<field>[/<field>…]`. Its sections are {}. A patch \
+         reaches only `items`, so an op's path is `items/<id>/…` with the op's own `id`: \
+         `at/pos` alone is refused, and its full path is `items/<id>/at/pos`. Below the ID, \
+         `params/<param>` reaches a param and a key or list index under it, `at/<vector>` an \
+         item's place (`pos`, `rot`, `scale` or `pivot`, and `/0`, `/1` or `/2` for one of its \
+         numbers), and a single field one of the item's own, such as `name`, `order` or \
+         `parent`.\n\n\
+         ## base, and a stale base\n\n\
+         `base` is the revision the patch was made on, the `rev` the last reply gave. On the \
+         current revision the patch applies as written. On an older one it rebases: it applies on \
+         the current revision when no ID it touches changed since its base, and otherwise its \
+         outcome is `conflict`, with `stale_base` at `base` naming those IDs and the writers who \
+         changed them; read the current revision and send it again on that. A base past the \
+         current revision is refused `stale_base`.\n\n\
+         ## The ops\n\n\
+         A patch holds any of {}, in order. Each example below applies to the gallery's product \
+         reveal as written, unless its op says what more it needs. Its `doc` is `{GUIDE_DOC}`, \
+         where yours goes, and its `base` is 0, the reveal as the gallery stores it.\n",
+        sections.join(", "),
+        names.join(", ")
+    );
+    for (n, o) in ops.iter().enumerate() {
+        let _ = write!(out, "\n### {}\n\n`{}` {}.\n\n", o.name, o.name, o.does);
+        list(&mut out, o.fields);
+        let example = json!({
+            "patch": format!("01JC1972000000000000000P{:02}", n + 1),
+            "doc": GUIDE_DOC,
+            "base": 0,
+            "reason": format!("an example of {}", o.name),
+            "ops": serde_json::from_str::<Value>(o.example).unwrap_or(Value::Null),
+        });
+        let _ = write!(out, "\n```json {}\n{example}\n```\n", o.name);
+    }
+    out
+}
+
+/// `deep_kinds op: field` on a patch (#1972), from the patch schema: `patch` answers a line per
+/// envelope field and lists the ops; `patch.<op>` answers a line per field of the op, with what it
+/// does and its example; `patch.<field>` and `patch.<op>.<field>` answer that field's line.
+fn patch_field(path: &str) -> Value {
+    use deep_canvas::document::patch_schema::{self, Field, ENVELOPE, OPS};
+    let line = |at: &str, f: &Field| json!({"path": format!("{at}.{}", f.name), "name": f.name, "optional": f.optional, "takes": f.takes});
+    let ops: Vec<&str> = OPS.iter().map(|o| o.name).collect();
+    let mut steps = path.splitn(3, '.').skip(1);
+    let (first, second) = (steps.next(), steps.next());
+    let Some(first) = first else {
+        let lines: Vec<Value> = ENVELOPE.iter().map(|f| line("patch", f)).collect();
+        let ops: Vec<Value> = OPS
+            .iter()
+            .map(|o| json!({"op": o.name, "path": format!("patch.{}", o.name), "does": o.does}))
+            .collect();
+        return json!({"path": path, "lines": lines, "ops": ops});
+    };
+    if let (Some(f), None) = (ENVELOPE.iter().find(|f| f.name == first), second) {
+        return json!({"path": path, "lines": [line("patch", f)]});
+    }
+    let Some(o) = patch_schema::op(first) else {
+        let what = format!(
+            "a patch has no field or op {first}; its fields are {}, and its ops {}",
+            patch_schema::names(ENVELOPE),
+            ops.join(", ")
+        );
+        return field_miss(path, &what, &[]);
+    };
+    let at = format!("patch.{}", o.name);
+    match second {
+        None => {
+            let lines: Vec<Value> = o.fields.iter().map(|f| line(&at, f)).collect();
+            let example: Value = serde_json::from_str(o.example).unwrap_or(Value::Null);
+            json!({"path": path, "does": o.does, "lines": lines, "example": example})
+        }
+        Some(name) => match o.fields.iter().find(|f| f.name == name) {
+            Some(f) => json!({"path": path, "lines": [line(&at, f)]}),
+            None => {
+                let what = format!(
+                    "{} has no field {name}; its fields are {}",
+                    o.name,
+                    patch_schema::names(o.fields)
+                );
+                field_miss(path, &what, &[])
+            }
+        },
+    }
+}
 
 /// One example of the gallery, as its index records it.
 #[derive(Clone, Debug)]
@@ -150,6 +297,8 @@ struct Example {
     title: String,
     steps: u64,
     words: Vec<String>,
+    /// #548: the file holding the source of the program it runs, served beside it.
+    source: Option<String>,
 }
 
 /// The guides and gallery a call reads: the installed corpus, or a scenario's folder.
@@ -189,6 +338,7 @@ impl Corpus {
                             .collect()
                     })
                     .unwrap_or_default(),
+                source: e.get("source").and_then(Value::as_str).map(str::to_string),
             })
             .collect();
         let guides = index["guides"]
@@ -203,10 +353,11 @@ impl Corpus {
         })
     }
 
-    /// A file's stored bytes.
+    /// A file's stored bytes; the installed patches guide is printed from the patch schema.
     fn bytes(&self, file: &str) -> Option<Vec<u8>> {
         match &self.dir {
             Some(d) => std::fs::read(d.join(file)).ok(),
+            None if file == PATCHES_GUIDE => Some(patches_guide(None).into_bytes()),
             None => INSTALLED
                 .iter()
                 .find(|(f, _)| *f == file)
@@ -493,9 +644,9 @@ fn example_doc(kind: &str, drawn: Drawn, module: Option<&str>, preview: bool) ->
 }
 
 /// One kind as an entry of `kind@1`, with its example's text.
-struct KindRow {
-    entry: Value,
-    example: Option<String>,
+pub(crate) struct KindRow {
+    pub(crate) entry: Value,
+    pub(crate) example: Option<String>,
 }
 
 /// One-line descriptions of the kinds the core and its first-party modules register.
@@ -527,7 +678,7 @@ fn kind_description(name: &str, module: &str, version: Option<&Version>) -> Stri
 
 /// Every kind the build draws: the kind registry's, then the marks module's and scene3d's drawn
 /// with no registry entry, each with its schema, fields, example, stability and kit result.
-fn kind_rows(sealed: &Sealed, planted: Option<Planted>) -> Vec<KindRow> {
+pub(crate) fn kind_rows(sealed: &Sealed, planted: Option<Planted>) -> Vec<KindRow> {
     let registry = sealed.kinds();
     let since = "R2";
     let mut out: Vec<KindRow> = Vec::new();
@@ -635,6 +786,19 @@ fn kind_rows(sealed: &Sealed, planted: Option<Planted>) -> Vec<KindRow> {
             }
             let module = if marks == "marks2d" { owner } else { marks };
             push(kind.to_string(), module.into(), None, &mut out);
+        }
+    }
+    // #548: logic@1, with its exports, the one subset and its budgets, and its gallery example.
+    if drawn_by("logic") && !named.iter().any(|n| n == "logic@1") {
+        named.push("logic@1".into());
+        push("logic@1".into(), "logic".into(), None, &mut out);
+        if let Some(row) = out.last_mut() {
+            let text = INSTALLED.iter().find(|(f, _)| *f == "logic-counter.json").map(|(_, t)| t.to_string());
+            if let (Some(o), Value::Object(l)) = (row.entry.as_object_mut(), deep_logic::piece::listing()) {
+                o.extend(l);
+            }
+            row.entry["example"] = json!(text.as_deref().map(|t| sha256_hex(t.as_bytes())));
+            row.example = text;
         }
     }
     if drawn_by("scene3d") {
@@ -841,10 +1005,11 @@ impl Hub<'_> {
                 "gallery" => &["cursor"],
                 "sheet" | "step_ceilings" => &[],
                 "field" => &["path"],
+                "bindings" => &["doc", "item", "language"],
                 _ => return refused(
                     "enum",
                     "/op",
-                    "Give op as one of list, word, search, read, gallery, sheet, step_ceilings or field.",
+                    "Give op as one of list, word, search, read, gallery, sheet, step_ceilings, field or bindings.",
                     op,
                 ),
             };
@@ -899,20 +1064,44 @@ impl Hub<'_> {
             },
             "gallery" => self.kinds_gallery(cursor),
             "field" => match text("path") {
+                Some(p) if p == "patch" || p.starts_with("patch.") => patch_field(p),
                 Some(p) => self.kinds_field(p),
                 None => refused(
                     "required",
                     "/path",
-                    "Give path, <kind>@<major>.<field> for one field or <kind>@<major> for all of them.",
+                    "Give path, <kind>@<major>.<field> for one field, <kind>@<major> for all of them, or patch or patch.<op> for a patch's fields.",
                     "",
                 ),
             },
+            "bindings" => self.kinds_bindings(text("doc"), text("item"), text("language")),
             // The logic module's step ceilings (Logic: work across steps, #546).
             "step_ceilings" => json!({"step_ceilings": deep_logic::budget::ceilings(
                 self.kinds_planted() == Some(Planted::StepCeilingsCap)
             )}),
             _ => self.kinds_sheet(),
         }
+    }
+
+    /// `op: bindings` (#548): a document's logic item's typed bindings in the pinned language, Rust,
+    /// from its region map in declaration order, which its declarations alone give, so a program
+    /// is built against them before it exists.
+    fn kinds_bindings(&self, doc: Option<&str>, item: Option<&str>, language: Option<&str>) -> Value {
+        if language != Some("rust") {
+            return refused("enum", "/language", "Give language as rust, the pinned language.", language.unwrap_or_default());
+        }
+        let (Some(doc), Some(item)) = (doc, item) else {
+            return refused("required", "/item", "Give doc and item, the logic item whose bindings these are.", "");
+        };
+        let Some(form) = self.forms.get(doc) else {
+            return refused("ref_unresolved", "/doc", "Give doc, a document the hub holds.", doc);
+        };
+        let maps = crate::logic::piece_json(form)
+            .map(|p| deep_logic::piece::region_maps(&p, &Default::default()));
+        let Some((_, layout, emits)) = maps.and_then(Result::ok).and_then(|m| m.into_iter().find(|(id, _, _)| id == item)) else {
+            return refused("ref_unresolved", "/item", "Give item, a logic item of the document that check admits.", item);
+        };
+        let by_name = self.kinds_planted() == Some(Planted::BindingsByName);
+        json!({"bindings": deep_logic::bindings::rust(item, &layout, &emits, by_name)})
     }
 
     /// `op: field` (#1971): one line per field, printed from the listing's kind entry: the field's
@@ -1172,7 +1361,13 @@ impl Hub<'_> {
         let bytes = corpus.as_ref().and_then(|c| c.bytes(&e.file));
         match bytes {
             Some(b) if sha256_hex(&b) == hash => match String::from_utf8(b) {
-                Ok(text) => json!({"example": hash, "title": e.title, "text": text}),
+                Ok(text) => {
+                    let mut out = json!({"example": hash, "title": e.title, "text": text});
+                    if let Some(s) = e.source.as_ref().and_then(|f| corpus.as_ref()?.bytes(f)) {
+                        out["source"] = json!({"file": e.source, "text": String::from_utf8_lossy(&s)});
+                    }
+                    out
+                }
                 Err(_) => refused("unavailable", "/example", "The example isn't UTF-8 text; it is not served.", hash),
             },
             _ => refused(
@@ -1192,6 +1387,9 @@ impl Hub<'_> {
             let (_, _, file) = c.guides.iter().find(|(n, _, _)| n == name)?;
             String::from_utf8(c.bytes(file)?).ok()
         });
+        if self.kinds_planted() == Some(Planted::PatchesWithoutReorder) && name == "patches" {
+            text = Some(patches_guide(Some("reorder")));
+        }
         // The planted dice game keys its throws by the step's seed, at 264 in its read region.
         if self.kinds_planted() == Some(Planted::DiceFromStepSeed) {
             text = text.map(|t| {
@@ -1655,8 +1853,8 @@ fn changed(out: &mut Vec<Value>, entry: &str, field: &str, was: &Value, now: &Va
     }
 }
 
-/// `deep-show kinds --dump <dir> | --diff <a> <b> [--planted <name>]`: one JSON line, exit 0, or
-/// a refusal and exit 2.
+/// `deep-show kinds --dump <dir> | --diff <a> <b> | --defaults [--planted <name>]`: one JSON line,
+/// exit 0, or a refusal and exit 2. `--defaults` is #1974's run, its verdict in its report.
 pub fn command(
     args: &[String],
     seal: impl Fn(Option<Planted>) -> Result<Sealed, String>,
@@ -1704,6 +1902,13 @@ pub fn command(
                 0,
             )
         }
+        [flag] if flag.as_str() == "--defaults" => match seal(planted) {
+            Ok(sealed) => (crate::defaults::run(&sealed, planted), 0),
+            Err(what) => (
+                json!({"ok": false, "code": "seal_refused", "what": what}),
+                2,
+            ),
+        },
         [flag, a, b] if flag.as_str() == "--diff" => match (read(a), read(b)) {
             (Some(a), Some(b)) => (json!({"ok": true, "changes": diff(&a, &b, planted)}), 0),
             _ => (
@@ -1712,7 +1917,7 @@ pub fn command(
             ),
         },
         _ => (
-            json!({"ok": false, "code": "bad_input", "what": "deep-show kinds --dump <dir> | --diff <a> <b>"}),
+            json!({"ok": false, "code": "bad_input", "what": "deep-show kinds --dump <dir> | --diff <a> <b> | --defaults"}),
             2,
         ),
     }

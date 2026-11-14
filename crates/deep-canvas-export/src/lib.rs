@@ -4,3 +4,4 @@
 
 pub mod lottie;
 pub mod module;
+pub mod page;

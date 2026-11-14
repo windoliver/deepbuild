@@ -188,8 +188,9 @@ impl Grid {
 
     /// #540: the cell whose area holds point `p` in the set's u, in cell units: a square's by the
     /// floor of the position over the cell, an isometric cell's diamond by its two axes. The
-    /// position in cell units is what a path drag's segments are traversed in. `None` on a hex
-    /// grid, whose cell a point control doesn't take yet.
+    /// position in cell units is what a path drag's segments are traversed in. #548: on a hex
+    /// grid, the cell whose hexagon holds it, as whole cell units: of the cell nearest by rows
+    /// (pointy) or columns (flat) and its six neighbours, the first whose outline holds `p`.
     pub fn cell_at(&self, p: [f64; 2]) -> Option<[f64; 2]> {
         let [w, h] = self.cell;
         match self.shape {
@@ -198,8 +199,35 @@ impl Grid {
                 let (u, v) = (p[0] / (w / 2.0), p[1] / (h / 2.0));
                 Some([(u + v) / 2.0, (v - u) / 2.0])
             }
-            Shape::Hex { .. } => None,
+            Shape::Hex { flat, .. } => {
+                let shifted = |line: f64| f64::from(u8::from((line.rem_euclid(2.0) == 1.0) == odd_of(self.shape)));
+                let guess = if flat {
+                    let cx = (p[0] / (0.75 * w)).round();
+                    [cx, (p[1] / h - shifted(cx) / 2.0).round()]
+                } else {
+                    let cy = (p[1] / (0.75 * h)).round();
+                    [(p[0] / w - shifted(cy) / 2.0).round(), cy]
+                };
+                let g = [guess[0] as i64, guess[1] as i64];
+                std::iter::once(g)
+                    .chain(self.neighbours(g)?)
+                    .find(|&c| self.hex_holds(c, p))
+                    .map(|[cx, cy]| [cx as f64, cy as f64])
+            }
         }
+    }
+
+    /// Whether hex cell `c`'s outline, centred on its centre in its w × h quad, holds `p`.
+    fn hex_holds(&self, c: [i64; 2], p: [f64; 2]) -> bool {
+        let [w, h] = self.cell;
+        let [x, y] = self.centre(c[0] as f64, c[1] as f64, false);
+        let Some(area) = self.hit_area(c) else {
+            return false;
+        };
+        let v = area.outline().map(|[u, t]| [x - w / 2.0 + u * w, y - h / 2.0 + t * h]);
+        let side = |a: [f64; 2], b: [f64; 2]| (b[0] - a[0]) * (p[1] - a[1]) - (b[1] - a[1]) * (p[0] - a[0]);
+        let sides: Vec<f64> = (0..6).map(|i| side(v[i], v[(i + 1) % 6])).collect();
+        sides.iter().all(|s| *s >= 0.0) || sides.iter().all(|s| *s <= 0.0)
     }
 
     /// #536: a hex cell's six neighbours, the cells at distance 1 in cube coordinates, edge 0 to 5
