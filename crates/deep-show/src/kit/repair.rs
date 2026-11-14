@@ -175,7 +175,10 @@ fn fault_of(hub: &mut Hub<'_>, ctx: &Ctx<'_>) -> Option<Fault> {
             continue;
         }
         let issues = fixture_issues(hub, f);
-        let Some(issue) = issues.iter().find(|i| i.get("fix_ops").is_some()) else {
+        // A `read` reply holds the revision's validation issues, never a check kind's (#1938).
+        let Some(issue) = issues.iter().find(|i| {
+            i.get("fix_ops").is_some() && i["check"] == deep_canvas::document::CHECK
+        }) else {
             continue;
         };
         let item = issue["ids"][0].as_str().unwrap_or("").to_string();

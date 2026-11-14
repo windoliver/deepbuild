@@ -214,10 +214,15 @@ fn raised_with(
             .get("kind")
             .and_then(Value::as_str)
             .unwrap_or_default();
-        if let Some((m, check)) = hub.startup.sealed.check_kind(kind) {
+        let found = hub
+            .startup
+            .sealed
+            .check_kind(kind)
+            .map(|(m, check)| (m.name.clone(), check.clone()));
+        if let Some((module, check)) = found {
             let mut input = Value::Object((*input).clone());
             // #453: a check that reports reads the fixture's own assets, by hash.
-            if check.report.is_some() {
+            if check.report.is_some() || check.frames.is_some() {
                 let by_hash: serde_json::Map<String, Value> = assets
                     .iter()
                     .map(|b| {
@@ -227,11 +232,26 @@ fn raised_with(
                     .collect();
                 input["assets"] = Value::Object(by_hash);
             }
+            // #1938: a pixel check reads the fixture's frames, drawn here as a verdict draws
+            // them; what it couldn't read is an error, never a pass.
+            if let Some((draws, run)) = check.frames {
+                if let crate::pixels::Drawn::Frames(f, _) = hub.frames_of(doc, &[0], draws) {
+                    let out = run(&result.lowered, &input, &f);
+                    for (id, r, _) in out.raised {
+                        issues.push(crate::verdict::raised_json(hub, kind, &module, &id, r));
+                    }
+                    issues.extend(out.blocked.into_iter().map(|b| {
+                        json!({"code": b["code"], "severity": "error", "check": kind,
+                               "module": module, "ids": b["ids"], "path": b["path"], "what": "unread"})
+                    }));
+                    continue;
+                }
+            }
             issues.extend(crate::verdict::run_check(
                 hub,
-                check,
+                &check,
                 kind,
-                &m.name,
+                &module,
                 &result.lowered,
                 &input,
             ));
