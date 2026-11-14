@@ -3,9 +3,10 @@
 
 use std::collections::BTreeMap;
 
+use deep_canvas::expr::Expr;
 use serde_json::{json, Map, Value};
 
-use super::{join, Body, Reader, Refusal};
+use super::{data, join, Body, Reader, Refusal};
 
 /// The issue that brings the input kinds and fields this backend interface doesn't run yet.
 pub const INPUTS_LATER: &str = "#2371";
@@ -28,6 +29,7 @@ const KINDS: [(&str, &[(&str, Field)]); 5] = [
         &[
             ("linear", Field::Vec3([0.0; 3])),
             ("angular", Field::Vec3([0.0; 3])),
+            ("from", Field::From),
         ],
     ),
     ("move", &[("to", Field::Vec3([0.0; 3]))]),
@@ -43,7 +45,7 @@ const KINDS: [(&str, &[(&str, Field)]); 5] = [
 ];
 
 /// The kinds and fields the design gives that wait on `INPUTS_LATER` or the issue named.
-const LATER: [(&str, &str); 12] = [
+const LATER: [(&str, &str); 11] = [
     ("set", INPUTS_LATER),
     ("activate", INPUTS_LATER),
     ("deactivate", INPUTS_LATER),
@@ -52,7 +54,6 @@ const LATER: [(&str, &str); 12] = [
     ("drive", "#251"),
     ("steer", "#251"),
     ("brake", "#251"),
-    ("launch.from", "#164"),
     ("poke.address", INPUTS_LATER),
     ("poke.radius", INPUTS_LATER),
     ("poke.falloff", INPUTS_LATER),
@@ -66,7 +67,13 @@ enum Field {
     Bool(bool),
     /// The plane a drag moves on: `view`, `ground` or `{normal: vec3}`, `view` by default.
     Plane,
+    /// Where a launch places its body first (#540): a position `[x, y, z]`, a pose `{pos, rot}`,
+    /// or `pose`, the pose its `from.pos` and `from.rot` data fields give; none by default.
+    From,
 }
+
+/// The issue that brings a launch from a body's anchor.
+const ANCHOR: &str = "#164";
 
 /// Where a derived input comes from (Input track entries: `on`).
 #[derive(Clone, Debug, PartialEq)]
@@ -87,6 +94,9 @@ pub struct Input {
     pub targets: Vec<String>,
     pub defaults: Map<String, Value>,
     pub on: Option<On>,
+    /// #540: each `data` field written as an expression over controls, read at each entry's
+    /// flick over the defaults (`super::data`).
+    pub exprs: BTreeMap<String, Expr>,
 }
 
 /// An entry's fields over `input`'s defaults, or the refusal of a field its kind doesn't take.
@@ -151,9 +161,7 @@ fn field(kind: &str, key: &str, v: &Value, path: &str) -> Result<Value, Box<Refu
     };
     let ok = match f {
         Field::Num(_, min) => v.as_f64().is_some_and(|x| x >= *min && x.is_finite()),
-        Field::Vec3(_) => v.as_array().is_some_and(|a| {
-            a.len() == 3 && a.iter().all(|x| x.as_f64().is_some_and(f64::is_finite))
-        }),
+        Field::Vec3(_) => three(v),
         Field::Bool(_) => v.is_boolean(),
         Field::Plane => {
             v == "view"
@@ -162,6 +170,28 @@ fn field(kind: &str, key: &str, v: &Value, path: &str) -> Result<Value, Box<Refu
                     .and_then(Value::as_array)
                     .is_some_and(|a| a.len() == 3)
         }
+        Field::From => match v {
+            Value::String(s) if s == "pose" => true,
+            Value::String(s) => {
+                return Err(Box::new(Refusal {
+                    code: "physics.unsupported",
+                    path: path.into(),
+                    actual: v.clone(),
+                    what: format!("a launch from a body's anchor ({s}) isn't run by this backend interface yet; {ANCHOR} brings it"),
+                }))
+            }
+            Value::Array(_) => three(v),
+            Value::Object(o) => {
+                o.keys().all(|k| k == "pos" || k == "rot")
+                    && o.get("pos").is_none_or(three)
+                    && o.get("rot").is_none_or(|r| {
+                        r.as_array().is_some_and(|a| {
+                            (3..=4).contains(&a.len()) && a.iter().all(|x| x.as_f64().is_some())
+                        })
+                    })
+            }
+            _ => false,
+        },
     };
     if ok {
         Ok(v.clone())
@@ -171,9 +201,27 @@ fn field(kind: &str, key: &str, v: &Value, path: &str) -> Result<Value, Box<Refu
             Field::Vec3(_) => "three numbers".into(),
             Field::Bool(_) => "true or false".into(),
             Field::Plane => "view, ground or {normal: vec3}".into(),
+            Field::From => "a position [x, y, z], a pose {pos, rot} or pose".into(),
         };
         Err(bad(path.into(), v, format!("{path} must be {want}")))
     }
+}
+
+/// Whether `v` is three finite numbers.
+fn three(v: &Value) -> bool {
+    v.as_array()
+        .is_some_and(|a| a.len() == 3 && a.iter().all(|x| x.as_f64().is_some_and(f64::is_finite)))
+}
+
+/// Whether `kind` takes a data expression for `key`: one of its fields, or a launch's
+/// `from.pos` and `from.rot`.
+fn takes_expr(kind: &str, key: &str) -> bool {
+    let fields = KINDS
+        .iter()
+        .find(|(n, _)| *n == kind)
+        .map_or(&[][..], |k| k.1);
+    fields.iter().any(|(n, _)| *n == key)
+        || (kind == "launch" && matches!(key, "from.pos" | "from.rot"))
 }
 
 /// The kind's own defaults.
@@ -185,12 +233,14 @@ fn own(kind: &str) -> Map<String, Value> {
     fields
         .iter()
         .filter(|(n, _)| !matches!(*n, "point" | "impulse" | "push") || kind == "grab")
+        .filter(|(n, _)| *n != "from")
         .map(|(n, f)| {
             let v = match f {
                 Field::Num(d, _) => json!(d),
                 Field::Vec3(d) => json!(d),
                 Field::Bool(b) => json!(b),
                 Field::Plane => json!("view"),
+                Field::From => Value::Null,
             };
             ((*n).to_string(), v)
         })
@@ -254,8 +304,9 @@ impl Reader {
                 continue;
             }
             let mut defaults = own(kind);
-            // The kind's defaults as fields, then `data`'s values over them: constants here, an
-            // expression over controls being #164's.
+            let mut exprs = BTreeMap::new();
+            // The kind's defaults as fields, then `data`'s values over them: a constant here, an
+            // expression over controls read at each entry's flick (#540).
             if let Some(d) = o.get("data").filter(|d| !d.is_object()) {
                 self.refuse(
                     "out_of_range",
@@ -278,13 +329,28 @@ impl Reader {
                 )
                 .collect();
             for (k, x, path) in given {
+                if let (Some(text), true) = (x.as_str(), path.contains("/data/")) {
+                    if !takes_expr(kind, &k) {
+                        let what = format!("{path} is not a field of {kind}");
+                        self.refuse("unknown_field", path, &x, what);
+                        continue;
+                    }
+                    match data::compile(text) {
+                        Ok(e) => {
+                            exprs.insert(k, e);
+                        }
+                        Err(why) => {
+                            let what = format!(
+                                "{path} must be an expression over controls and constants: {why}"
+                            );
+                            self.refuse("out_of_range", path, &x, what);
+                        }
+                    }
+                    continue;
+                }
                 match field(kind, &k, &x, &path) {
                     Ok(x) => {
                         defaults.insert(k, x);
-                    }
-                    Err(_) if x.is_string() && path.contains("/data/") => {
-                        let what = "an input's data expressions aren't run by this backend interface yet; #164 brings them";
-                        self.refuse("physics.unsupported", path, &x, what.into());
                     }
                     Err(r) => self.out.push(*r),
                 }
@@ -333,6 +399,7 @@ impl Reader {
                     targets,
                     defaults,
                     on,
+                    exprs,
                 },
             );
         }

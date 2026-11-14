@@ -8,11 +8,12 @@ use std::collections::BTreeMap;
 use std::f32::consts::PI;
 
 use deep_canvas_physics::backend::Input;
-use deep_canvas_physics::doc::Refusal;
+use deep_canvas_physics::doc::{Refusal, Rot};
+use rapier3d::math::Pose;
 use rapier3d::prelude::*;
 use serde_json::{json, Value};
 
-use crate::{refusal, spring, v3, Rapier};
+use crate::{refusal, rotation, spring, v3, Rapier};
 
 /// The tag that starts the held grabs a checkpoint carries after the world's bytes.
 const GRABS: &[u8] = b"deep.grabs@1";
@@ -34,6 +35,25 @@ fn vec(v: &Value, key: &str) -> Option<[f64; 3]> {
         a.get(1)?.as_f64()?,
         a.get(2)?.as_f64()?,
     ])
+}
+
+/// A launch's `from` (#540): a position `[x, y, z]`, or a pose `{pos, rot}` whose rot is a
+/// quaternion or degrees, as the world reader checked it; none without one.
+fn from(v: &Value) -> Option<([f64; 3], Option<Rot>)> {
+    let f = v.get("from")?;
+    if f.is_array() {
+        return Some((vec(v, "from")?, None));
+    }
+    let pos = vec(f, "pos").unwrap_or_default();
+    let rot = f.get("rot").and_then(Value::as_array).and_then(|r| {
+        let n: Vec<f64> = r.iter().filter_map(Value::as_f64).collect();
+        match n.as_slice() {
+            [x, y, z, w] => Some(Rot::Quat([*x, *y, *z, *w])),
+            [x, y, z] => Some(Rot::Deg([*x, *y, *z])),
+            _ => None,
+        }
+    });
+    Some((pos, rot))
 }
 
 fn num(v: &Value, key: &str) -> f64 {
@@ -60,6 +80,13 @@ impl Rapier {
             match i.kind.as_str() {
                 "launch" => {
                     let rb = &mut self.world.bodies[h];
+                    // #540: a launch with `from` first places its body there, keeping its
+                    // rotation unless the pose gives one; the velocities it sets next replace
+                    // the body's own.
+                    if let Some((pos, rot)) = from(d) {
+                        let rot = rot.map_or(*rb.rotation(), |r| rotation(&r));
+                        rb.set_position(Pose::from_parts(v3(pos), rot), true);
+                    }
                     rb.set_linvel(v3(vec(d, "linear").unwrap_or_default()), true);
                     rb.set_angvel(
                         v3(vec(d, "angular").unwrap_or_default()) * (PI / 180.0),

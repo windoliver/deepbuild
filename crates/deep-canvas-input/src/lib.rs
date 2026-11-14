@@ -2,10 +2,11 @@
 //! primitives: Control, Control: kinds as a registry, Input track, Tour). Controls and the input
 //! track's handling: the drag grammar and the keys every pack inherits, seek versus edit, the
 //! tour, the parameter tool, and `control@1` with its kit and its first nine kinds. #539: picks
-//! on rows and their roving focus (`rows`).
+//! on rows and their roving focus (`rows`). #540: the point control (`point`).
 
 pub mod kit;
 pub mod module;
+pub mod point;
 pub mod rows;
 pub mod session;
 pub mod track;
