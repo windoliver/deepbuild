@@ -298,6 +298,8 @@ pub(crate) struct Stored {
     cursor: BTreeMap<String, usize>,
     pending: BTreeMap<String, VecDeque<Entry>>,
     pub(crate) memory: Memory,
+    /// The CPU time taking and storing it took, in ns, as the ring reports it (#548).
+    ns: u64,
 }
 
 /// One item's state as it steps.
@@ -419,6 +421,7 @@ impl Live {
             cursor: self.cursor.clone(),
             pending: self.pending.clone(),
             memory,
+            ns: 0,
         }
     }
     pub(crate) fn globals(&mut self) -> Vec<Val> {
@@ -732,6 +735,7 @@ impl World {
         if planted.store_fails_at_step_120 && at == 120 {
             return;
         }
+        stored.ns = cpu_ns() - t;
         l.stored.push(stored);
         l.dirty.clear();
         l.thin(ring, planted.ring_drops_oldest);
@@ -752,7 +756,7 @@ impl World {
                         Memory::Pages(p) => (false, p.keys().copied().collect()),
                     };
                     json!({"step": s.step, "whole": whole, "memory": pages.len() as u64 * PAGE, "pages": pages,
-                        "globals": 8 * s.globals.len(), "bytes": s.bytes()})
+                        "globals": 8 * s.globals.len(), "bytes": s.bytes(), "ns": s.ns})
                 })
                 .collect();
             let bytes: u64 = l.stored.iter().map(Stored::bytes).sum();
@@ -1100,13 +1104,13 @@ impl World {
     }
 
     /// Runs each item's `preview` (Logic: preview) when the state it would read changed since its
-    /// last: a step ran, a seek landed or a control it reads changed (`values`, by read name, as
-    /// their track form gives them), so a frame that calls this runs at most one per item. Each
+    /// last: a step ran, a seek landed or a control it reads changed (`values`, each read's bytes
+    /// by read name; one not given is zero), so a frame that calls this runs at most one per item. Each
     /// runs on a throwaway copy of the item's memory and globals as its last step left them, under
     /// the item's fuel and stack; the item's own state is never touched. A trap clears the item's
     /// preview arrays and is returned as its report; the item plays on. Returns the previews that
     /// ran and the traps.
-    pub fn preview(&mut self, values: &Map<String, Value>) -> (usize, Vec<Value>) {
+    pub fn preview(&mut self, values: &BTreeMap<String, Vec<u8>>) -> (usize, Vec<Value>) {
         let piece = self.piece.clone();
         let (mut ran, mut traps) = (0, Vec::new());
         for (i, item) in piece.items.iter().enumerate() {
@@ -1114,13 +1118,12 @@ impl World {
             let l = &mut self.lives[i];
             let mut region = vec![0u8; (p.writes_at - p.at) as usize];
             for e in &p.reads {
-                let bytes = values.get(&e.name).and_then(Given::parse).map(|g| g.bytes());
-                if let Some(b) = bytes.filter(|b| b.len() == e.size as usize) {
+                if let Some(b) = values.get(&e.name).filter(|b| b.len() == e.size as usize) {
                     region[e.offset as usize..][..b.len()].copy_from_slice(&b);
                 }
             }
             let k = l.last;
-            let key = (if self.planted.preview_on_hover_only { 0 } else { k }, region);
+            let key = (if self.planted.preview_runs_on_hover_only { 0 } else { k }, region);
             if l.previewed.as_ref() == Some(&key) {
                 continue;
             }
@@ -1131,7 +1134,7 @@ impl World {
                 l.previewed = Some(key);
                 continue;
             }
-            if l.spare.is_none() && !self.planted.preview_on_own_memory {
+            if l.spare.is_none() && !self.planted.preview_writes_item_memory {
                 match World::runner(&item.bytes, &item.id) {
                     Ok(r) => l.spare = Some(r),
                     Err(e) => {
@@ -1141,7 +1144,7 @@ impl World {
                 }
             }
             let runner = match l.spare.as_mut() {
-                Some(spare) if !self.planted.preview_on_own_memory => {
+                Some(spare) if !self.planted.preview_writes_item_memory => {
                     let from = l.runner.memory("memory").expect("a memory");
                     spare.memory_mut("memory").expect("a memory").copy_from_slice(from);
                     for (n, _) in &l.names.globals {
@@ -1179,13 +1182,25 @@ impl World {
                     let src = function
                         .zip(offset)
                         .and_then(|(f, o)| source(item, &self.planted, f, o));
-                    traps.push(json!({"item": item.id, "preview": true, "step": k,
+                    traps.push(json!({"item": item.id, "export": "preview", "step": k,
                         "t": k.max(0) * item.step, "kind": kind, "function": function, "offset": offset, "inputs": [], "source": src}));
                 }
             }
             l.previewed = Some(key);
         }
         (ran, traps)
+    }
+
+    /// How many elements of linear writes a frame at `t` blends (Logic: interpolated writes).
+    pub fn blends(&self, t: i64) -> usize {
+        blends(&self.piece, self.lives.iter().map(|l| (l.last, l.prev.is_empty())), t)
+    }
+
+    /// The input track's entries, in its order.
+    pub fn track_entries(&self) -> Vec<Value> {
+        let mut all: Vec<&Entry> = self.track.values().flatten().collect();
+        all.sort_by_key(|e| (e.t, e.player, e.seq));
+        all.into_iter().map(Entry::to_json).collect()
     }
 
     /// Each preview array, by `<item>.preview.<write>`, as the last preview left it.
@@ -1645,6 +1660,18 @@ fn bodies(bytes: &[u8]) -> Vec<u32> {
 /// What a frame draws from, per item: its last step that ran, its write region before that step
 /// (empty without a linear write) and after it.
 pub type Shown = (i64, Vec<u8>, Vec<u8>);
+
+/// How many elements of linear writes a frame at `t` blends from what each item `shown`: its last
+/// step that ran and whether it keeps no write region from before it (#548's `blends`).
+pub fn blends(piece: &Piece, shown: impl Iterator<Item = (i64, bool)>, t: i64) -> usize {
+    piece
+        .items
+        .iter()
+        .zip(shown)
+        .filter(|(item, (last, no_prev))| !no_prev && *last >= 0 && (t - last * item.step).clamp(0, item.step) < item.step)
+        .map(|(item, _)| item.writes.iter().filter(|w| w.linear).map(|w| w.count as usize).sum::<usize>())
+        .sum()
+}
 
 /// An item's preview write region, zero: empty without a preview.
 fn preview_region(item: &Item) -> Vec<u8> {

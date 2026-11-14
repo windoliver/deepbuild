@@ -77,13 +77,11 @@ pub struct Planted {
     pub keyframes_held_in_ring: bool,
     pub store_fails_at_step_120: bool,
     /// #548: a preview that runs on the item's own instance rather than a throwaway copy.
-    pub preview_on_own_memory: bool,
+    pub preview_writes_item_memory: bool,
     /// #548: a preview that runs only when a control it reads changes, not after a step or seek.
-    pub preview_on_hover_only: bool,
+    pub preview_runs_on_hover_only: bool,
     /// #548: a region map that lays the reads out by name rather than in declaration order.
     pub map_reads_by_name: bool,
-    /// #548: a bindings generator that orders each region's fields by name.
-    pub bindings_by_name: bool,
 }
 
 impl Planted {
@@ -124,10 +122,8 @@ impl Planted {
             "budget_holds_steps_to_fuel_budget" => p.budget_holds_steps_to_fuel_budget = true,
             "budget_web_passes_from_fuel" => p.budget_web_passes_from_fuel = true,
             "pipeline_draws_before_step_ends" => p.pipeline_draws_before_step_ends = true,
-            "preview_on_own_memory" => p.preview_on_own_memory = true,
-            "preview_on_hover_only" => p.preview_on_hover_only = true,
-            "map_reads_by_name" => p.map_reads_by_name = true,
-            "bindings_by_name" => p.bindings_by_name = true,
+            "preview_writes_item_memory" => p.preview_writes_item_memory = true,
+            "preview_runs_on_hover_only" => p.preview_runs_on_hover_only = true,
             _ => return None,
         }
         Some(self)
@@ -537,6 +533,7 @@ impl Logic {
             Some("golden_verify") => self.golden_verify(line).unwrap_or_else(|e| e),
             Some("view") => self.view(line).unwrap_or_else(|e| e),
             Some("frame") => self.frame(line).unwrap_or_else(|e| e),
+            Some("baked") => self.view_bake(line).unwrap_or_else(|e| e),
             Some("open") => self.open(line).unwrap_or_else(|e| e),
             Some("step") => self.step(line).unwrap_or_else(|e| e),
             Some("open_save") => self.open_save(line).unwrap_or_else(|e| e),
@@ -1074,14 +1071,20 @@ impl Logic {
                     .ok_or_else(|| bad("set"))?,
             )),
         };
-        // #548: the view and viewer values a preview reads, by read name, held until changed.
-        let view = match line.get("view") {
-            None => None,
-            Some(Value::Object(m)) => Some(m.clone()),
-            Some(_) => return Err(bad("view")),
-        };
+        // #548: point controls' hovers from this frame on, `[cx, cy]` or null: viewer state.
+        let mut hover = Vec::new();
+        for (control, cell) in line.get("hover").and_then(Value::as_object).into_iter().flatten() {
+            let cell = match cell {
+                Value::Null => None,
+                c => match c.as_array().map(Vec::as_slice) {
+                    Some([x, y]) => Some([x.as_f64().ok_or_else(|| bad("hover"))?, y.as_f64().ok_or_else(|| bad("hover"))?]),
+                    _ => return Err(bad("hover")),
+                },
+            };
+            hover.push((control.clone(), cell));
+        }
         let mut ui_ns = budget::cpu_ns() - ui;
-        let mut out = v.frame(live::Latched { t: v.t, set, view }).ok_or_else(
+        let mut out = v.frame(live::Latched { t: v.t, set, hover, baked: false }).ok_or_else(
             || json!({"ok": false, "code": "run_failed", "what": "the render worker stopped"}),
         )?;
         let ui = budget::cpu_ns();
@@ -1095,6 +1098,16 @@ impl Logic {
         ui_ns += budget::cpu_ns() - ui;
         out["ui_ns"] = json!(ui_ns);
         Ok(out)
+    }
+
+    /// A view session's bake of the steps it has run (#548): its input track, step records,
+    /// checkpoints and the bake's bytes, as a `bake` of the same piece and track gives them.
+    fn view_bake(&mut self, line: &Value) -> Result<Value, Value> {
+        let session = line.get("session").and_then(Value::as_str).ok_or_else(|| bad("session"))?;
+        let v = self.views.get_mut(session).ok_or_else(|| bad("session"))?;
+        let latched = live::Latched { t: v.t, set: None, hover: Vec::new(), baked: true };
+        v.frame(latched)
+            .ok_or_else(|| json!({"ok": false, "code": "run_failed", "what": "the render worker stopped"}))
     }
 
     fn open(&mut self, line: &Value) -> Result<Value, Value> {

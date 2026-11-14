@@ -1,7 +1,9 @@
-//! Typed bindings for a logic item's regions (#548): Rust source a program includes, from the
+//! Typed bindings for a logic item's regions (#548): a Rust module a program includes, from the
 //! item's region map in declaration order, so the program reads and writes each read, write and
 //! emit entry by name and type at the offset check computes, and exports the item's layout digest
 //! as `regions_digest`. Reading an entry as another type is a type error at the reader's line.
+
+use serde_json::{json, Value};
 
 use crate::piece::{Emit, Layout, Region, Ty};
 
@@ -26,114 +28,131 @@ fn ident(name: &str) -> String {
         .collect()
 }
 
-/// The type an entry's accessor hands back, and its doc line.
-fn entry(e: &Region, emits: &[Emit]) -> (String, String) {
-    let doc = format!(
-        "{}.{}: {} ({} B at {})",
-        e.region, e.name, e.ty, e.size, e.offset
-    );
-    let ty = if e.region == "emits" {
-        format!("Emits<{}, {}>", row_name(&e.name), max_of(&e.name, emits))
-    } else if let Some(t) = rust_ty(&e.ty) {
-        let n = Ty::named(&e.ty).map_or(1, |t| e.size / t.size());
-        if n == 1 {
-            t.to_string()
-        } else {
-            format!("[{t}; {n}]")
-        }
-    } else {
-        match e.ty.as_str() {
-            "control" => "Slot<f64>".into(),
-            "pick" => "Slot<Pick>".into(),
-            "action" => "Slot<[u8; 16]>".into(),
-            // A point's records are packed end to end, and a text's commit is its bytes.
-            _ => format!("[u8; {}]", e.size),
-        }
-    };
-    (ty, doc)
-}
-
+/// A kind's row type: its name in UpperCamelCase.
 fn row_name(kind: &str) -> String {
-    let mut s = String::new();
-    for part in ident(kind).split('_').filter(|p| !p.is_empty()) {
-        let mut c = part.chars();
-        s.extend(c.next().map(|f| f.to_ascii_uppercase()));
-        s.push_str(c.as_str());
+    ident(kind)
+        .split('_')
+        .filter(|p| !p.is_empty())
+        .map(|p| {
+            let mut c = p.chars();
+            c.next().map_or(String::new(), |f| f.to_ascii_uppercase().to_string() + c.as_str())
+        })
+        .collect()
+}
+
+/// The Rust type an entry's field has.
+fn field_ty(e: &Region, emits: &[Emit]) -> String {
+    if e.region == "emits" {
+        let max = emits.iter().find(|k| k.kind == e.name).map_or(0, |k| k.max);
+        return format!("Rows<{}, {max}>", row_name(&e.name));
     }
-    s + "Row"
+    if let Some(t) = rust_ty(&e.ty) {
+        let n = Ty::named(&e.ty).map_or(1, |t| e.size / t.size());
+        return if n == 1 { t.to_string() } else { format!("[{t}; {n}]") };
+    }
+    match e.ty.as_str() {
+        "control" => "Slot<f64>".into(),
+        "pick" => "Slot<Pick>".into(),
+        "action" => "Slot<[u8; 16]>".into(),
+        // A point's records are packed end to end, and a text's commit is its bytes.
+        _ => format!("[u8; {}]", e.size),
+    }
 }
 
-fn max_of(kind: &str, emits: &[Emit]) -> u32 {
-    emits.iter().find(|e| e.kind == kind).map_or(0, |e| e.max)
+/// The entries the bindings declare, in their order: the region map's, or under the planted
+/// generator each region's sorted by name and laid end to end at 8-byte boundaries.
+pub fn fields(layout: &Layout, by_name: bool) -> Vec<Region> {
+    let mut out = Vec::new();
+    for region in ["reads", "writes", "emits"] {
+        let mut list: Vec<Region> = layout.entries.iter().filter(|e| e.region == region).cloned().collect();
+        if by_name {
+            list.sort_by(|a, b| a.name.cmp(&b.name));
+            let mut at = 0;
+            for e in &mut list {
+                e.offset = at;
+                at = (at + e.size).div_ceil(8) * 8;
+            }
+        }
+        out.extend(list);
+    }
+    out
 }
 
-/// The Rust bindings of item `item`, whose region map is `layout`. `by_name`: the planted
-/// generator that orders each region's fields by name rather than in declaration order.
-pub fn rust(item: &str, layout: &Layout, emits: &[Emit], by_name: bool) -> String {
-    let mut out = format!(
-        "//! Bindings for logic item `{item}`, layout digest {:016x}, from its region map in\n\
-         //! declaration order (deep_kinds bindings, #548). Include it as a module: it exports the\n\
-         //! regions and `regions_digest`, and each entry is read and written by name and type.\n\
-         #![allow(non_upper_case_globals, dead_code, static_mut_refs)]\n\n\
-         #[no_mangle]\npub static regions_digest: i64 = 0x{:016x}_u64 as i64;\n\n\
-         #[repr(C)]\npub struct Entry<V> {{ pub player: u32, _pad: u32, pub value: V }}\n\
-         #[repr(C)]\npub struct Slot<V> {{ pub count: u32, _pad: u32, pub entries: [Entry<V>; 16] }}\n\
-         #[repr(C)]\npub struct Pick {{ pub set: u32, _pad: u32, pub key: [i64; 2] }}\n\
-         #[repr(C, packed)]\npub struct Emits<R, const N: usize> {{ pub count: u32, pub rows: [R; N] }}\n\
-         #[repr(C, align(8))]\npub struct Region<const N: usize>(pub [u8; N]);\n",
-        layout.digest, layout.digest
+/// The Rust bindings of item `item`, whose region map is `layout`, as `deep_kinds` serves them:
+/// `{language, item, digest, file, source, fields}`.
+pub fn rust(item: &str, layout: &Layout, emits: &[Emit], by_name: bool) -> Value {
+    let fields = fields(layout, by_name);
+    let digest = format!("{:016x}", layout.digest);
+    let mut src = format!(
+        "//! Bindings for logic item `{item}` (layout digest {digest}), from its region map in\n\
+         //! declaration order: each read, write and emit entry a field at its offset, so a program\n\
+         //! reads and writes its regions by name and type. Generated by deep_kinds; don't edit.\n\
+         #![allow(non_upper_case_globals, dead_code)]\n\n\
+         /// The item's layout digest, which check compares with the item's.\n\
+         pub const REGIONS_DIGEST: u64 = 0x{digest};\n\
+         #[no_mangle]\npub static regions_digest: u64 = REGIONS_DIGEST;\n\n\
+         /// One entry a control handed the step: its player, then its value.\n\
+         #[repr(C)]\n#[derive(Clone, Copy)]\npub struct Entry<V> {{ pub player: u32, zero: u32, pub value: V }}\n\
+         /// A control's slot: how many entries it handed this step, then up to 16 of them.\n\
+         #[repr(C)]\npub struct Slot<V> {{ pub count: u32, zero: u32, pub entries: [Entry<V>; 16] }}\n\
+         /// A pick on rows: its set's index and its key.\n\
+         #[repr(C)]\n#[derive(Clone, Copy)]\npub struct Pick {{ pub set: u32, zero: u32, pub key: [i64; 2] }}\n\
+         /// A kind's rows this step: how many, then up to its max_per_step.\n\
+         #[repr(C, packed(4))]\npub struct Rows<R, const N: usize> {{ pub count: u32, pub rows: [R; N] }}\n"
     );
     for e in emits {
-        out.push_str(&format!(
-            "\n#[repr(C, packed)]\n#[derive(Clone, Copy)]\npub struct {} {{ pub a: u32, pub b: u32",
+        src.push_str(&format!(
+            "\n/// A `{}` row.\n#[repr(C, packed(4))]\n#[derive(Clone, Copy)]\npub struct {} {{ pub a: u32, pub b: u32",
+            e.kind,
             row_name(&e.kind)
         ));
         for (name, ty) in &e.fields {
-            out.push_str(&format!(
-                ", pub {}: {}",
-                ident(name),
-                rust_ty(ty.name()).unwrap_or("u32")
-            ));
+            src.push_str(&format!(", pub {}: {}", ident(name), rust_ty(ty.name()).unwrap_or("u32")));
         }
-        out.push_str(" }\n");
+        src.push_str(" }\n");
     }
-    for region in ["reads", "writes", "emits"] {
-        let mut list: Vec<&Region> = layout
-            .entries
-            .iter()
-            .filter(|e| e.region == region)
-            .collect();
+    for (region, ty, at, packed) in [("reads", "Reads", "reads_at", false), ("writes", "Writes", "writes_at", false), ("emits", "Emits", "emits_at", true)] {
+        let list: Vec<&Region> = fields.iter().filter(|e| e.region == region).collect();
         if list.is_empty() && region == "emits" {
             continue;
         }
-        let size = list
-            .iter()
-            .map(|e| e.offset + e.size)
-            .max()
-            .unwrap_or(0)
-            .max(8);
-        out.push_str(&format!(
-            "\n#[no_mangle]\npub static mut {region}_at: Region<{size}> = Region([0; {size}]);\n\n\
-             /// The {region} region's entries, in declaration order.\npub mod {region} {{\n    use super::*;\n"
-        ));
-        if by_name {
-            list.sort_by(|a, b| a.name.cmp(&b.name));
-        }
-        // The planted generator lays fields end to end in its own order, as a naive one would.
-        let mut packed = 0;
-        for e in list {
-            let (ty, doc) = entry(e, emits);
-            let offset = if by_name { packed } else { e.offset };
-            packed = (packed + e.size).div_ceil(8) * 8;
-            out.push_str(&format!(
-                "    /// {doc}\n    pub const {}_OFFSET: usize = {offset};\n    \
-                 #[inline]\n    pub fn {}() -> &'static mut {ty} {{\n        \
-                 unsafe {{ &mut *((core::ptr::addr_of_mut!({region}_at) as *mut u8).add({offset}) as *mut {ty}) }}\n    }}\n",
-                ident(&e.name).to_ascii_uppercase(),
-                ident(&e.name),
+        let repr = if packed { "C, packed(4)" } else { "C, align(8)" };
+        src.push_str(&format!("\n/// The {region} region, each field at its region map offset.\n#[repr({repr})]\npub struct {ty} {{\n"));
+        let mut end = 0;
+        for (n, e) in list.iter().enumerate() {
+            if e.offset > end {
+                src.push_str(&format!("    _gap{n}: [u8; {}],\n", e.offset - end));
+            }
+            src.push_str(&format!(
+                "    /// {}.{}: {}, {} B at {}\n    pub {}: {},\n",
+                e.region, e.name, e.ty, e.size, e.offset, ident(&e.name), field_ty(e, emits)
             ));
+            end = e.offset + e.size;
         }
-        out.push_str("}\n");
+        src.push_str("}\n");
+        for e in &list {
+            src.push_str(&format!("const _: () = assert!(core::mem::offset_of!({ty}, {}) == {});\n", ident(&e.name), e.offset));
+        }
+        let (mutable, deref) = if region == "reads" { ("", "&*core::ptr::addr_of!") } else { ("mut ", "&mut *core::ptr::addr_of_mut!") };
+        src.push_str(&format!(
+            "#[no_mangle]\npub static mut {at}: {ty} = unsafe {{ core::mem::zeroed() }};\n\
+             /// The {region} region.\npub fn {region}() -> &'static {mutable}{ty} {{\n    unsafe {{ {deref}({at}) }}\n}}\n"
+        ));
     }
-    out
+    let list: Vec<Value> = fields
+        .iter()
+        .map(|e| json!({"region": e.region, "name": e.name, "offset": e.offset, "size": e.size, "type": e.ty}))
+        .collect();
+    json!({"language": "rust", "item": item, "digest": digest, "file": "regions.rs", "source": src, "fields": list})
+}
+
+#[cfg(test)]
+mod tests {
+    /// #548: the gallery's logic example runs the program its source assembles to, byte for byte,
+    /// so the source deep_kinds serves beside it is the program's.
+    #[test]
+    fn the_gallery_program_is_its_source_assembled() {
+        let built = wat::parse_str(include_str!("../../deep-show/gallery/logic-counter.wat")).expect("the source assembles");
+        assert_eq!(built.as_slice(), include_bytes!("../../deep-show/gallery/logic-counter.wasm"));
+    }
 }

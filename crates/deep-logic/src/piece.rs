@@ -56,6 +56,36 @@ pub fn form(control: &Value) -> (u32, &'static str) {
     }
 }
 
+/// A logic item's budgets (Logic `logic@1`: `budget`): `(default, most)` of its fuel a step,
+/// memory in MiB and stack in KiB.
+pub const FUEL: (u64, u64) = (1_000_000, 10_000_000);
+pub const MEMORY_MIB: (u64, u64) = (4, MAX_MEMORY / MIB);
+pub const STACK_KIB: (u64, u64) = (64, 256);
+
+/// The exports a logic program may add to its role's (Logic `logic@1`: Exports), each with when.
+pub const OPTIONAL_EXPORTS: [(&str, &str); 5] = [
+    ("assets_at", "with assets"),
+    ("emits_at", "with emits"),
+    ("preview", "with preview: preview(k: i64)"),
+    ("preview_at", "with preview"),
+    ("regions_digest", "optional: the layout digest, which check compares"),
+];
+
+/// What `deep_kinds` lists of `logic@1` (#548): its exports, the one subset and its budgets.
+pub fn listing() -> Value {
+    use deep_canvas_sandbox::check::{role_exports, MAX_PROGRAM, MAX_TABLE};
+    let required: Vec<&str> = role_exports("logic").into_iter().flatten().map(|(n, _)| *n).collect();
+    let optional: Vec<Value> = OPTIONAL_EXPORTS.iter().map(|(n, when)| json!({"name": n, "when": when})).collect();
+    json!({
+        "exports": {"required": required, "optional": optional, "imports": "none once its libraries are linked"},
+        "subset": {"features": "WebAssembly 2.0 without vector instructions", "memory": "one, whose maximum is its minimum",
+            "tables": "never change", "segments": "no passive segments", "imports": "none",
+            "max_program_bytes": MAX_PROGRAM, "max_table_entries": MAX_TABLE},
+        "budgets": {"fuel": {"default": FUEL.0, "most": FUEL.1}, "memory_mib": {"default": MEMORY_MIB.0, "most": MEMORY_MIB.1},
+            "stack_kib": {"default": STACK_KIB.0, "most": STACK_KIB.1}},
+    })
+}
+
 /// One field of a logic item this task doesn't build yet: refused by name, never ignored.
 const LATER: [&str; 6] = ["fires", "links", "pages", "parallel", "services", "mirrors"];
 /// A row's own columns: no declared field can take one of these names, so a reader can name each
@@ -1003,9 +1033,9 @@ fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared, Refused> 
             }),
         }
     };
-    let fuel = num("fuel", 1_000_000, 10_000_000)? as i64;
-    let memory = num("memory", 4, MAX_MEMORY / MIB)? * MIB;
-    let stack = num("stack", 64, 256)? as i32 * 1024;
+    let fuel = num("fuel", FUEL.0, FUEL.1)? as i64;
+    let memory = num("memory", MEMORY_MIB.0, MEMORY_MIB.1)? * MIB;
+    let stack = num("stack", STACK_KIB.0, STACK_KIB.1)? as i32 * 1024;
     let every = match get(params.get("checkpoint"), "every") {
         None => 60,
         Some(v) => v.as_i64().filter(|n| *n >= 1).ok_or_else(|| {
