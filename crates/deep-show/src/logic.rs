@@ -138,6 +138,8 @@ impl Hub<'_> {
     ) -> Result<(), Box<Issue>> {
         let logic = self.inline_logic(form, track);
         self.inline_spectra(form);
+        // #466: the lists a text's reveal emits, baked like any occurrence list.
+        self.inline_reveals(form);
         logic
     }
 

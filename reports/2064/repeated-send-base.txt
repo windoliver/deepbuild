@@ -1,0 +1,9 @@
+#2064 repeated-send scope proof on bfe8c8a5e
+Written by an independent job from issue, design and the base only; existing hook/socket, record and forge fixtures.
+The repeated-send file was not edited after its intended assertion failure.
+The first affected test subprocess completed; pending lints were interrupted afterward. No final affected PASS.
+
+PASS: #2064 Scope: the repeated-send rule (#85) refuses on an error, naming it › SCOPE twin: with nothing planted, the identical gh pr create is denied with the pull request the forge holds
+
+FAIL: #2064 Scope: the repeated-send rule (#85) refuses on an error, naming it › SCOPE with a planted record read failure (no such table: sessions), the identical gh pr create is denied, naming that error
+SCOPE the refusal names the error the rule hit, the failed read of sessions: expected 'DeepBuild denied this: Bash `gh pr cr…' to match /no such table: sessions/i

@@ -1,0 +1,44 @@
+#2064 acceptance kit on the base 1c4d1f0e2aaad8c6a6573848823566d04ff73d17 (one run, redacted; stack frames dropped)
+
+Command:
+  node node_modules/vitest/vitest.mjs run tests/acceptance/2064/gate.test.ts tests/acceptance/2064/passed.test.ts tests/acceptance/2064/record.test.ts --no-file-parallelism --testTimeout=600000
+(the repo's `node scripts/affected.mjs` was not used: the export has no .git; see README, Run)
+
+ ❯ tests/acceptance/2064/gate.test.ts (5 tests | 4 failed)
+     × AC1 #2064.715f176e ...
+     × AC2 #2064.9e9dae21 ...
+     × AC3 #2064.c8d25a38 ...
+     ✓ AC4 #2064.ab3e665d the twins run: each form saying Part of #7 with R2 listed under it   (guard: passes on the base)
+     × AC5 #2064.80da88e3 ...
+ ❯ tests/acceptance/2064/record.test.ts (2 tests | 2 failed)
+     × AC6 #2064.2afeb0df ...
+     × AC7 #2064.20caa9d6 ...
+ ✓ tests/acceptance/2064/passed.test.ts (1 test)
+     ✓ AC4 #2064.ab3e665d with every requirement passed, ... saying Closes #7 run ...          (guard: passes on the base)
+
+ Test Files  2 failed | 1 passed (3)
+      Tests  6 failed | 2 passed (8)
+
+FAIL AC1: AssertionError: `git push -u origin b && gh pr create --title t --body "Closes #7"` ran; it must be denied naming R2: expected false to be true
+   at tests/acceptance/2064/gate.test.ts:56
+
+FAIL AC2: AssertionError: each of these must be denied naming R2:
+   body file: `gh pr create --title t --body-file pr.md` was allowed:
+   body file after a push: `git push -u origin b && gh pr create --title t --body-file pr.md` was allowed:
+   edit with a body file: `gh pr edit 3 --body-file pr.md` was allowed:
+   fill, one commit saying Fixes #7: `gh pr create --fill` was allowed:
+   at tests/acceptance/2064/gate.test.ts:49 (called from :67)
+
+FAIL AC3: AssertionError: `gh pr create --title t --body "Closes acme/shop#7"` ran; the form owner/repo#n names the session's own repo and must be read as closing #7: expected false to be true
+   at tests/acceptance/2064/gate.test.ts:74
+
+FAIL AC5: AssertionError: `gh pr create --title t --body-file missing.md` ran; a body it can't read must be refused: expected false to be true
+   at tests/acceptance/2064/gate.test.ts:93
+
+FAIL AC6: AssertionError: `gh pr create --title t --body "Closes #7"` ran though the rule's own read threw; an error inside the rule must refuse the call: expected false to be true
+   at tests/acceptance/2064/record.test.ts:21
+
+FAIL AC7: AssertionError: `git push -u origin b && gh pr create --title t --body "Part of #7"` opened https://github.com/acme/shop/pull/1 on the forge but no reading of the session records it: []: expected false to be true
+   at tests/acceptance/2064/record.test.ts:41
+
+Earlier runs of the same files failed outside their assertions (a stale node_modules link set, a transcript entry missing the fields Claude Code writes, a requirement ID the hub's test.verdict refuses); each was fixed in the harness before the run above. No test was edited after it failed at an assertion.

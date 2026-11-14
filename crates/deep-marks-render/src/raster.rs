@@ -24,8 +24,8 @@ use deep_canvas_marks::scene::{Blend, Drawn, Scope};
 use deep_canvas_marks::story;
 use deep_canvas_motion::program::Program;
 use deep_marks_vello::{
-    bez, brush, level_name, rasterizer, rect, sampler, settings, shape, solid, stroke, Canvas,
-    Scopes,
+    bez, brush, level_name, rasterizer, rect, sampler, settings, shape, solid, solid_at, stroke,
+    Canvas, Scopes,
 };
 use serde_json::{json, Map, Value};
 use vello_cpu::kurbo::{Affine, Cap, RoundedRect, Shape};
@@ -430,7 +430,8 @@ impl<C: Glyphs> Painter<'_, C> {
         let mut out = Vec::with_capacity(shaped.glyphs.len());
         for g in &shaped.glyphs {
             let (role, color) = scene::run_paint(runs, g.grapheme, role, color);
-            self.ctx.set_paint(solid(color));
+            let opacity = scene::run_opacity(runs, g.grapheme);
+            self.ctx.set_paint(solid_at(color, opacity));
             let glyph = vello_cpu::Glyph {
                 id: g.id,
                 x: g.x + origin[0] as f32,
@@ -447,6 +448,9 @@ impl<C: Glyphs> Painter<'_, C> {
             row["outline"] = outline_row(g);
             row["transform"] = json!([1.0, 0.0, 0.0, 1.0, e, f]);
             row["clip"] = Value::Null;
+            if opacity < 1.0 {
+                row["opacity"] = json!(opacity);
+            }
             out.push(row);
         }
         self.decorations(shaped, origin, (role, color), runs);
@@ -463,7 +467,8 @@ impl<C: Glyphs> Painter<'_, C> {
     ) {
         for d in &shaped.decorations {
             let (_, color) = scene::run_paint(runs, d.grapheme, role, color);
-            self.ctx.set_paint(solid(color));
+            let opacity = scene::run_opacity(runs, d.grapheme);
+            self.ctx.set_paint(solid_at(color, opacity));
             let [x, y, w, h] = d.rect.map(f64::from);
             self.ctx
                 .fill_rect(&rect([origin[0] + x, origin[1] + y, w, h]));
@@ -503,10 +508,10 @@ impl<C: Glyphs> Painter<'_, C> {
             if let Some(c) = p.clip {
                 self.ctx.push_clip_rect(&rect(c));
             }
-            let faded = p.opacity < 1.0;
+            let opacity = p.opacity * scene::run_opacity(runs, g.grapheme);
+            let faded = opacity < 1.0;
             if faded {
-                self.ctx
-                    .push_layer(None, None, Some(p.opacity as f32), None);
+                self.ctx.push_layer(None, None, Some(opacity as f32), None);
             }
             let blurred =
                 p.paint.blur > 0.0 && self.ctx.push_blur((p.paint.blur * self.zoom) as f32);
@@ -579,7 +584,7 @@ impl<C: Glyphs> Painter<'_, C> {
             row["outline"] = outline_row(g);
             row["transform"] = json!(p.transform);
             row["clip"] = json!(p.clip);
-            row["opacity"] = json!(p.opacity);
+            row["opacity"] = json!(opacity);
             if let Some([drawn, filled]) = p.paint.write {
                 row["write"] = json!({"drawn": drawn, "filled": filled});
             }
@@ -826,62 +831,13 @@ impl<C: Glyphs> Painter<'_, C> {
 /// The document's evaluated items at `t`, placed by their relations (#221), each vector item
 /// drawn as marks2d's items (#398), and each graph laid out and drawn as them (#399), with each
 /// graph's view.
-/// #1646: each revealed unit's reveal time, compiled from the document: the first whole flick at
-/// which the reveal's progress reaches the unit's level ([`animator::reveal_levels`]), searched
-/// through the program between the progress's key times (as a reveal's progress is keyed to run
-/// forward), never from the frame drawn. A unit the progress never reaches reveals at no time.
-///
-/// [`animator::reveal_levels`]: deep_canvas_marks::animator::reveal_levels
+/// #1646: each revealed unit's reveal time, compiled from the document (#466: the one rule
+/// motion compiles `<item>.reveal` by).
 fn reveal_times(doc: &Map<String, Value>, id: &str, levels: &[f64]) -> Result<Vec<i64>, Value> {
     let program = Program::compile(doc).map_err(|r| refused(r.code, &r.path))?;
-    let field = ["params", "reveal", "progress"].map(String::from);
-    let Some(slot) = program.slot_of(id, &field) else {
-        // An unkeyed progress is the same at every time: each unit revealed from the start, or
-        // never.
-        let p = doc
-            .get("items")
-            .and_then(|i| i.get(id))
-            .and_then(|i| i.pointer("/params/reveal/progress"))
-            .and_then(Value::as_f64)
-            .unwrap_or(0.0);
-        return Ok(levels
-            .iter()
-            .map(|l| if p >= *l { 0 } else { i64::MAX })
-            .collect());
-    };
-    let mut state = program.state();
-    let mut at = |t: i64| {
-        program.evaluate(t, deep_canvas_motion::eval::Validity::Full, &mut state);
-        state.slots[slot]
-    };
-    let mut keys = program.slot_key_times(slot);
-    keys.sort_unstable();
-    keys.dedup();
-    let (Some(&first), Some(&last)) = (keys.first(), keys.last()) else {
-        return Ok(vec![i64::MAX; levels.len()]);
-    };
-    let mut out = Vec::with_capacity(levels.len());
-    for level in levels {
-        if at(first) >= *level {
-            out.push(0);
-            continue;
-        }
-        if at(last) < *level {
-            out.push(i64::MAX);
-            continue;
-        }
-        let (mut lo, mut hi) = (first, last);
-        while hi - lo > 1 {
-            let mid = lo + (hi - lo) / 2;
-            if at(mid) >= *level {
-                hi = mid;
-            } else {
-                lo = mid;
-            }
-        }
-        out.push(hi);
-    }
-    Ok(out)
+    Ok(deep_canvas_motion::emits::reveal_times(
+        &program, doc, id, levels,
+    ))
 }
 
 fn items_at(

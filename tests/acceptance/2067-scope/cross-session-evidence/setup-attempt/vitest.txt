@@ -1,0 +1,41 @@
+deep lease: DeepBuild isn't set up here (no hub token), so `<HOME>/.local/share/fnm/node-versions/v24.22.0/installation/bin/node node_modules/vitest/vitest.mjs run --reporter=dot --reporter=./scripts/proof-vitest-reporter.mjs tests/acceptance/2067-scope/inherited-cross-session.test.ts` runs unleased
+
+ RUN  v5.0.5 <BASE>
+
+stdout | tests/acceptance/2067-scope/inherited-cross-session.test.ts > #2067 scope / AC4: another session on the same head keeps the inherited release failure BLOCKED
+2067 cross-session first {"session":"ee0306f3-8022-403b-a2a5-99f12e046e91","claim":"01M7DYYZ7RK1CC5Q3FA40EYP7A","head":"41520230b81a1c809b61022bebef3584159e765c","main":"bf0c524a2becf21f7ba0829452b2d2492e6c7edb","base":"abc5a080581598cdbc4a14c6dcc035f031ccaf6e","verdict":{"outcome":"BLOCKED","verdict":"verdict:01M7DYZ2FP14BZCSTMHY4FVNNP","claim":"claim:01M7DYYZ7RK1CC5Q3FA40EYP7A","reasons":["preflight: inherited: also fails on the merge base: release is ready",".deepbuild/checks/expired-token.sh carried run:01M7DYYK9VZNBH1CNZWAWN44RE from claim:01M7DYYJ2T07VC435APJYD3WMX in session:ee0306f38022403ba2a599f12e046e91","unit carried run:01M7DYYK4FE1ZTNYR20NT27BQJ from claim:01M7DYYJ2T07VC435APJYD3WMX in session:ee0306f38022403ba2a599f12e046e91",".deepbuild/checks/expired-token.sh carried its base run run:01M7DYYWX0ZZPMVET8DTGEY6AR from claim:01M7DYYJ2T07VC435APJYD3WMX in session:ee0306f38022403ba2a599f12e046e91"],"requirements":[{"req":"req:taskitem2067#R1","outcome":"PASS","check":".deepbuild/checks/expired-token.sh","depth":"unit","oracle":"code","runs":{"clean":1,"needed":1,"counted":["run:01M7DYYK9VZNBH1CNZWAWN44RE"]},"smallest":null,"points_to":null,"evidence":["e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","fdb0c2adba7459be24faae300831878b7f90ea878700aca928ec91ff97cc7558"],"proof":"test_run"}],"smallest":null,"points_to":null,"commit":"41520230b81a1c809b61022bebef3584159e765c","key":{"commit":"41520230b81a1c809b61022bebef3584159e765c","doc_revisions":[],"check_digests":["d1:856ac2ca67f69b9b83e57d33af7db34c9227b7966462150dea14c3e55438cf65","d1:ada0def2db3d31d707004d57ee49c765402692edaa2a8541ce9cab1b4290ec01","d1:d313e595726ea1c10cd520ce0c9c086b29b1a788e61b37314a067880504df6ee","d1:f2525ff052fb9ca7b3d752999f6a9ad4caad0830c90b1822462c15d8258f3f50"],"state_digests":[],"environment":"{}","tools":[]}},"runs":[{"started":{"run":"run:01M7DYZ0PRHQ5SJD8H01KNE1XA","check":"preflight","claim":"claim:01M7DYYZ7RK1CC5Q3FA40EYP7A","commit":"11ed1374f729f2c1e944200d6736215b4a9d704d","host":"local","needs":{"cores":1,"memory_mb":0,"stack_slot":0,"gpus":0,"expected_ms":null},"lane":"slow","argv":["/bin/sh","-c","node --test tests/release.test.js"],"cwd":"<FIXTURE>/h/.deepbuild/checkouts/c-kmcTnz","env":{},"grant":{"run_as_you":true},"deadline_ms":null,"command":"node --test tests/release.test.js","withheld":[]},"finished":{"run":"run:01M7DYZ0PRHQ5SJD8H01KNE1XA","outcome":"failed","tests_run":1,"passed":0,"runs":1,"evidence":["cda88f7482d10abc6421c73a11209a02a30d540ae6fabcec2334468cb2fdcd05","e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"],"check":"preflight","assertion":"release is ready","expected":null,"actual":null,"step":null,"points_to":"tests/release.test.js:4","findings":["release is ready (tests/release.test.js:4): Expected values to be strictly equal:\n\nfalse !== true\n"],"environment":"darwin-arm64"}},{"started":{"run":"run:01M7DYZ25W7RC1WRA0VB355Y3A","check":"preflight","claim":"claim:01M7DYYZ7RK1CC5Q3FA40EYP7A","commit":"abc5a080581598cdbc4a14c6dcc035f031ccaf6e","host":"local","needs":{"cores":1,"memory_mb":0,"stack_slot":0,"gpus":0,"expected_ms":null},"lane":"slow","argv":["/bin/sh","-c","node --test tests/release.test.js"],"cwd":"<FIXTURE>/h/.deepbuild/checkouts/c-upU5Ee","env":{},"grant":{"run_as_you":true},"deadline_ms":null,"command":"node --test tests/release.test.js","withheld":[]},"finished":{"run":"run:01M7DYZ25W7RC1WRA0VB355Y3A","outcome":"failed","tests_run":1,"passed":0,"runs":1,"evidence":["061451eebf6234cec7fa2edd6b87b12e6b8522bfe272bc0126be7918e3cec087","e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"],"check":"preflight","assertion":"release is ready","expected":null,"actual":null,"step":null,"points_to":"tests/release.test.js:4","findings":["release is ready (tests/release.test.js:4): Expected values to be strictly equal:\n\nfalse !== true\n"],"environment":"darwin-arm64","key":{"id":"97ebca4050e0bdf3b298725929b75c934bb65ccb26ece461692377bcbf9beb5c","stem":"9f32e4dcfdcaabefb92fe0368d7f79890a89d83eda1319d321bfc27b60d07b48","paths":["tests/release.test.js"],"claim":"claim:01M7DYYZ7RK1CC5Q3FA40EYP7A","session":"session:ee0306f38022403ba2a599f12e046e91","base":true,"withheld":false,"plain":true}}}]}
+
+stderr | tests/acceptance/2067-scope/inherited-cross-session.test.ts
+vitest-setup: stopping 9 process(es) this file left running:
+  27412 (node)
+  27557 (node)
+  27660 (node)
+  27684 (node)
+  27688 (node)
+  27690 (node)
+  27774 (node)
+  27811 (node)
+  27861 (node)
+
+x
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/2067-scope/inherited-cross-session.test.ts > #2067 scope / AC4: another session on the same head keeps the inherited release failure BLOCKED
+AssertionError: second claim reached a verdict, not a timeout: expected undefined to be defined
+ ❯ tests/acceptance/2067-scope/inherited-cross-session.test.ts:66:68
+     64|   expect(made!.session, 'the new claim belongs to B, not A').toBe(s.id…
+     65|   expect(made!.id).not.toBe(first.id);
+     66|   expect(verdict, 'second claim reached a verdict, not a timeout').toB…
+       |                                                                    ^
+     67|   expect(verdict!.data.claim).toBe(`claim:${made!.id}`);
+     68|   const change = await receipt(r.hub, `claim:${made!.id}`);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  13:20:49
+   Duration  143.91s (tests 100%)
+

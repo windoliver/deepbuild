@@ -1,0 +1,585 @@
+deep lease: DeepBuild isn't set up here (no hub token), so `<HOME>/.local/share/fnm/node-versions/v24.22.0/installation/bin/node node_modules/vitest/vitest.mjs run --reporter=dot --reporter=./scripts/proof-vitest-reporter.mjs tests/acceptance/2067/release.test.ts` runs unleased
+
+ RUN  v5.0.5 <BASE>
+
+stdout | tests/acceptance/2067/release.test.ts > #2067.97392e0a trunk: preflight fails on the recorded mainline merge and Closes is refused
+2067 evidence {"mode":"trunk","undefinedCheck":false,"conflict":false,"claim":"01M7DWWJ4T76FTXS5R3KRRFYQ8","head":"24fc38c4482c0692a722e1f999e663f764e80d87","main":"8c1ceb1c9cfcdffc82b19d63a96a0cccd19aa960","verdict":"PASS","reasons":[".deepbuild/checks/expired-token.sh: PASS on 1 clean run","unit: PASS on 1 clean run","review: PASS on 1 clean run",".deepbuild/checks/expired-token.sh carried run:01M7DWW828WFW0XPQY2TM72JN0 from claim:01M7DWW7HC4XQJZSAG90SFM5QD in session:335e8e5c9d074ba0a81f9f7807b6a525","unit carried run:01M7DWW80AJQ9RHEP0MF9NH85E from claim:01M7DWW7HC4XQJZSAG90SFM5QD in session:335e8e5c9d074ba0a81f9f7807b6a525",".deepbuild/checks/expired-token.sh carried its base run run:01M7DWWHGPDTK7N2PNVTNY1M9C from claim:01M7DWW7HC4XQJZSAG90SFM5QD in session:335e8e5c9d074ba0a81f9f7807b6a525"],"checks":[{"check":"review","outcome":"passed"}],"releaseRuns":[],"closesAfter":{"allowed":true,"reason":""}}
+
+stdout | tests/acceptance/2067/release.test.ts > #2067.97392e0a trunk: preflight fails on the recorded mainline merge and Closes is refused
+2067 merge evidence {"mode":"trunk","expectedTree":"d64e57c878f8c6ca86b160a7d965ac514b6bf7dd","parents":["24fc38c4482c0692a722e1f999e663f764e80d87","8c1ceb1c9cfcdffc82b19d63a96a0cccd19aa960"],"mergedRuns":[]}
+
+xstdout | tests/acceptance/2067/release.test.ts > #2067.97392e0a develop: preflight fails on the recorded mainline merge and Closes is refused
+2067 evidence {"mode":"develop","undefinedCheck":false,"conflict":false,"claim":"01M7DWWZFTC5RA6MZBJPFR99VR","head":"9801929a6ee295af5167dac8de4eb90fcc63ce88","main":"60b4ae20e38fece7764e568495c9b10e1e1b7618","verdict":"PASS","reasons":[".deepbuild/checks/expired-token.sh: PASS on 1 clean run","unit: PASS on 1 clean run","review: PASS on 1 clean run",".deepbuild/checks/expired-token.sh carried run:01M7DWWNDZXWG7XEZ739GGM4GK from claim:01M7DWWMXFZCVRKA3MMMSGY937 in session:6d109841d23241c8a6fb248753cc2735","unit carried run:01M7DWWNC9ZS834J7B5CZNSTQV from claim:01M7DWWMXFZCVRKA3MMMSGY937 in session:6d109841d23241c8a6fb248753cc2735",".deepbuild/checks/expired-token.sh carried its base run run:01M7DWWYX37TC3CFNY7S9Y0E44 from claim:01M7DWWMXFZCVRKA3MMMSGY937 in session:6d109841d23241c8a6fb248753cc2735"],"checks":[{"check":"review","outcome":"passed"}],"releaseRuns":[],"closesAfter":{"allowed":true,"reason":""}}
+
+stdout | tests/acceptance/2067/release.test.ts > #2067.97392e0a develop: preflight fails on the recorded mainline merge and Closes is refused
+2067 merge evidence {"mode":"develop","expectedTree":"d64e57c878f8c6ca86b160a7d965ac514b6bf7dd","parents":["9801929a6ee295af5167dac8de4eb90fcc63ce88","60b4ae20e38fece7764e568495c9b10e1e1b7618"],"mergedRuns":[]}
+
+xstdout | tests/acceptance/2067/release.test.ts > #2067.97392e0a remote-main: preflight fails on the recorded mainline merge and Closes is refused
+2067 evidence {"mode":"remote-main","undefinedCheck":false,"conflict":false,"claim":"01M7DWXC803NGV8HZK617HWJ4V","head":"504a9852cc6cc2973a34872fcff57a8c0f8a1797","main":"f44529bee8c70b2f9826e280bd75cae25f385108","verdict":"PASS","reasons":[".deepbuild/checks/expired-token.sh: PASS on 1 clean run","unit: PASS on 1 clean run","review: PASS on 1 clean run",".deepbuild/checks/expired-token.sh carried run:01M7DWX2MNERFZ3H03QSQBAJMV from claim:01M7DWX24C0T0BKKFE79WFJV58 in session:443f750813e54f77bc16fa79efa5d030","unit carried run:01M7DWX2K8XZZS140V2E7TSAG7 from claim:01M7DWX24C0T0BKKFE79WFJV58 in session:443f750813e54f77bc16fa79efa5d030",".deepbuild/checks/expired-token.sh carried its base run run:01M7DWXBQMJDKZSP3W4MZ906CF from claim:01M7DWX24C0T0BKKFE79WFJV58 in session:443f750813e54f77bc16fa79efa5d030"],"checks":[{"check":"review","outcome":"passed"}],"releaseRuns":[],"closesAfter":{"allowed":true,"reason":""}}
+
+stdout | tests/acceptance/2067/release.test.ts > #2067.97392e0a remote-main: preflight fails on the recorded mainline merge and Closes is refused
+2067 merge evidence {"mode":"remote-main","expectedTree":"d64e57c878f8c6ca86b160a7d965ac514b6bf7dd","parents":["504a9852cc6cc2973a34872fcff57a8c0f8a1797","f44529bee8c70b2f9826e280bd75cae25f385108"],"mergedRuns":[]}
+
+xstdout | tests/acceptance/2067/release.test.ts > #2067.97392e0a remote-master: preflight fails on the recorded mainline merge and Closes is refused
+2067 evidence {"mode":"remote-master","undefinedCheck":false,"conflict":false,"claim":"01M7DWXRYNH0B6GBQN3Z33FHFQ","head":"e51b0542f3fd899c55485fab8b727278a139fabd","main":"f0c4f15c40739a79554807f1bafc3dda31e070ae","verdict":"PASS","reasons":[".deepbuild/checks/expired-token.sh: PASS on 1 clean run","unit: PASS on 1 clean run","review: PASS on 1 clean run",".deepbuild/checks/expired-token.sh carried run:01M7DWXEYVTBQZPSM67Q5QRPQ6 from claim:01M7DWXEG6KGGW9PPZYF811H6F in session:723eb05f53004fd2a5dd7bf99b23b2c9","unit carried run:01M7DWXEXA6ENQ6TAXN230HTK0 from claim:01M7DWXEG6KGGW9PPZYF811H6F in session:723eb05f53004fd2a5dd7bf99b23b2c9",".deepbuild/checks/expired-token.sh carried its base run run:01M7DWXRCXTPA2N3FKFFXV032P from claim:01M7DWXEG6KGGW9PPZYF811H6F in session:723eb05f53004fd2a5dd7bf99b23b2c9"],"checks":[{"check":"review","outcome":"passed"}],"releaseRuns":[],"closesAfter":{"allowed":true,"reason":""}}
+
+stdout | tests/acceptance/2067/release.test.ts > #2067.97392e0a remote-master: preflight fails on the recorded mainline merge and Closes is refused
+2067 merge evidence {"mode":"remote-master","expectedTree":"d64e57c878f8c6ca86b160a7d965ac514b6bf7dd","parents":["e51b0542f3fd899c55485fab8b727278a139fabd","f0c4f15c40739a79554807f1bafc3dda31e070ae"],"mergedRuns":[]}
+
+xstdout | tests/acceptance/2067/release.test.ts > #2067.47a66ecb no mainline: preflight is BLOCKED with cause and owner, and Closes is refused
+2067 evidence {"mode":"missing","undefinedCheck":false,"conflict":false,"claim":"01M7DWY62C3GFK1G9JMD3KVMD2","head":"d0090d78ab657917d0a06a270931ff37b0161aa2","main":"a8a1216351c076a0ff76116eab08e3c5626db135","verdict":"PASS","reasons":[".deepbuild/checks/expired-token.sh: PASS on 1 clean run","unit: PASS on 1 clean run","review: PASS on 1 clean run",".deepbuild/checks/expired-token.sh carried run:01M7DWXVXV65JHS9AYPN3TC67J from claim:01M7DWXVDET6G83DC9A0MBHV4B in session:961bffd7dde04f68a7dcce701ebc4453","unit carried run:01M7DWXVVYCK76KQAYZ3WA7Z6B from claim:01M7DWXVDET6G83DC9A0MBHV4B in session:961bffd7dde04f68a7dcce701ebc4453",".deepbuild/checks/expired-token.sh carried its base run run:01M7DWY5F8EYFZTKZJTPBGPGZH from claim:01M7DWXVDET6G83DC9A0MBHV4B in session:961bffd7dde04f68a7dcce701ebc4453"],"checks":[{"check":"review","outcome":"passed"}],"releaseRuns":[],"closesAfter":{"allowed":true,"reason":""}}
+
+xstdout | tests/acceptance/2067/release.test.ts > scope: unreadable mainline is BLOCKED, not absent or a merge conflict
+2067 evidence {"mode":"unreadable","undefinedCheck":false,"conflict":false,"claim":"01M7DWYJXDDJRZFCBB3K48D0D9","head":"8f11896dbb0419cb6ec896cbb62afd1ee7183426","main":"f6e8e4bede222c81e25e07fa01b16495bb72b846","verdict":"PASS","reasons":[".deepbuild/checks/expired-token.sh: PASS on 1 clean run","unit: PASS on 1 clean run","review: PASS on 1 clean run",".deepbuild/checks/expired-token.sh carried run:01M7DWY8SWRWMCZ33K8VFC224H from claim:01M7DWY89MMC75Y8PJJ7HDWFD7 in session:6695b63da93b43c7ae602715188a9198","unit carried run:01M7DWY8R45873N82T34DWC54Z from claim:01M7DWY89MMC75Y8PJJ7HDWFD7 in session:6695b63da93b43c7ae602715188a9198",".deepbuild/checks/expired-token.sh carried its base run run:01M7DWYJCJD3WM2MRY40VTPH1D from claim:01M7DWY89MMC75Y8PJJ7HDWFD7 in session:6695b63da93b43c7ae602715188a9198"],"checks":[{"check":"review","outcome":"passed"}],"releaseRuns":[],"closesAfter":{"allowed":true,"reason":""}}
+
+xstdout | tests/acceptance/2067/release.test.ts > #2067.fa764398 undefined preflight stays on the claim as BLOCKED and holds Closes
+2067 evidence {"mode":"local-main","undefinedCheck":true,"conflict":false,"claim":"01M7DWYZK5A8WFJB8K087670M1","head":"4cebffe7fd024dda4dacc9fab8675a1f3bf4efe5","main":"4eec5bd7d16d22fc0844d7705100baa4c9f75201","verdict":"PASS","reasons":[".deepbuild/checks/expired-token.sh: PASS on 1 clean run","unit: PASS on 1 clean run","review: PASS on 1 clean run",".deepbuild/checks/expired-token.sh carried run:01M7DWYNBZHPV9Y5R41CPQ6DA7 from claim:01M7DWYMXA6ZEW40D0RV0AJV8N in session:7b6ac5c19b5744c99a98740002e65013","unit carried run:01M7DWYNA6DVV5FD6HVDFVR618 from claim:01M7DWYMXA6ZEW40D0RV0AJV8N in session:7b6ac5c19b5744c99a98740002e65013",".deepbuild/checks/expired-token.sh carried its base run run:01M7DWYZ23KBWRN6B9TYWJPHB8 from claim:01M7DWYMXA6ZEW40D0RV0AJV8N in session:7b6ac5c19b5744c99a98740002e65013"],"checks":[{"check":"review","outcome":"passed"}],"releaseRuns":[],"closesAfter":{"allowed":false,"reason":"DeepBuild blocked this: the pull request can't say Closes #2067 until the repo's release check passes on its commit merged with main (2bb2c5e36202): preflight is still to run there. Say Part of #2067 instead; the PR's claim runs it there in the slow lane."}}
+
+x
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 7 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/2067/release.test.ts > #2067.97392e0a trunk: preflight fails on the recorded mainline merge and Closes is refused
+ FAIL  tests/acceptance/2067/release.test.ts > #2067.97392e0a develop: preflight fails on the recorded mainline merge and Closes is refused
+ FAIL  tests/acceptance/2067/release.test.ts > #2067.97392e0a remote-main: preflight fails on the recorded mainline merge and Closes is refused
+ FAIL  tests/acceptance/2067/release.test.ts > #2067.97392e0a remote-master: preflight fails on the recorded mainline merge and Closes is refused
+AssertionError: preflight must FAIL on the merge, not disappear: expected 'PASS' to be 'FAIL' // Object.is equality
+
+Expected: "FAIL"
+Received: "PASS"
+
+ ❯ tests/acceptance/2067/release.test.ts:7:92
+      5|   it(`${AC1} ${mode}: preflight fails on the recorded mainline merge a…
+      6|     const r = await fixture(mode);
+      7|     expect.soft(r.verdict.data.outcome, 'preflight must FAIL on the me…
+       |                                                                                            ^
+      8|     expect.soft(JSON.stringify(r.verdict.data.reasons), 'FAIL names pr…
+      9|     const head = r.w.head(), main = r.w.main;
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/39]⎯
+
+ FAIL  tests/acceptance/2067/release.test.ts > #2067.97392e0a trunk: preflight fails on the recorded mainline merge and Closes is refused
+AssertionError: FAIL names preflight: expected '[".deepbuild/checks/expired-token.sh:…' to match /preflight/i
+
+- Expected:
+/preflight/i
+
++ Received:
+"[\".deepbuild/checks/expired-token.sh: PASS on 1 clean run\",\"unit: PASS on 1 clean run\",\"review: PASS on 1 clean run\",\".deepbuild/checks/expired-token.sh carried run:01M7DWW828WFW0XPQY2TM72JN0 from claim:01M7DWW7HC4XQJZSAG90SFM5QD in session:335e8e5c9d074ba0a81f9f7807b6a525\",\"unit carried run:01M7DWW80AJQ9RHEP0MF9NH85E from claim:01M7DWW7HC4XQJZSAG90SFM5QD in session:335e8e5c9d074ba0a81f9f7807b6a525\",\".deepbuild/checks/expired-token.sh carried its base run run:01M7DWWHGPDTK7N2PNVTNY1M9C from claim:01M7DWW7HC4XQJZSAG90SFM5QD in session:335e8e5c9d074ba0a81f9f7807b6a525\"]"
+
+ ❯ tests/acceptance/2067/release.test.ts:8:81
+      6|     const r = await fixture(mode);
+      7|     expect.soft(r.verdict.data.outcome, 'preflight must FAIL on the me…
+      8|     expect.soft(JSON.stringify(r.verdict.data.reasons), 'FAIL names pr…
+       |                                                                                 ^
+      9|     const head = r.w.head(), main = r.w.main;
+     10|     const expectedTree = r.g('merge-tree', '--write-tree', head, main);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/39]⎯
+
+ FAIL  tests/acceptance/2067/release.test.ts > #2067.97392e0a trunk: preflight fails on the recorded mainline merge and Closes is refused
+ FAIL  tests/acceptance/2067/release.test.ts > #2067.97392e0a develop: preflight fails on the recorded mainline merge and Closes is refused
+ FAIL  tests/acceptance/2067/release.test.ts > #2067.97392e0a remote-main: preflight fails on the recorded mainline merge and Closes is refused
+ FAIL  tests/acceptance/2067/release.test.ts > #2067.97392e0a remote-master: preflight fails on the recorded mainline merge and Closes is refused
+AssertionError: the claim must record one release run of preflight on the expected merged commit: expected +0 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ tests/acceptance/2067/release.test.ts:20:114
+     18|     });
+     19|     console.log(`2067 merge evidence ${JSON.stringify({ mode, expected…
+     20|     expect.soft(runs.length, 'the claim must record one release run of…
+       |                                                                                                                  ^
+     21|     for (const run of runs) {
+     22|       expect.soft(run.finished?.data.outcome, 'preflight failed on the…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/39]⎯
+
+ FAIL  tests/acceptance/2067/release.test.ts > #2067.97392e0a trunk: preflight fails on the recorded mainline merge and Closes is refused
+ FAIL  tests/acceptance/2067/release.test.ts > #2067.97392e0a develop: preflight fails on the recorded mainline merge and Closes is refused
+ FAIL  tests/acceptance/2067/release.test.ts > #2067.97392e0a remote-main: preflight fails on the recorded mainline merge and Closes is refused
+ FAIL  tests/acceptance/2067/release.test.ts > #2067.97392e0a remote-master: preflight fails on the recorded mainline merge and Closes is refused
+AssertionError: Closes must remain refused after a non-PASS release claim: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ held tests/acceptance/2067/fixture.ts:136:99
+    134|
+    135| export function held(r: Awaited<ReturnType<typeof fixture>>) {
+    136|   expect.soft(r.closesAfter.allowed, 'Closes must remain refused after…
+       |                                                                                                   ^
+    137|   expect.soft(replyText(r.closesAfter.before), 'the refusal names pref…
+    138| }
+ ❯ tests/acceptance/2067/release.test.ts:27:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/39]⎯
+
+ FAIL  tests/acceptance/2067/release.test.ts > #2067.97392e0a trunk: preflight fails on the recorded mainline merge and Closes is refused
+ FAIL  tests/acceptance/2067/release.test.ts > #2067.97392e0a develop: preflight fails on the recorded mainline merge and Closes is refused
+ FAIL  tests/acceptance/2067/release.test.ts > #2067.97392e0a remote-main: preflight fails on the recorded mainline merge and Closes is refused
+ FAIL  tests/acceptance/2067/release.test.ts > #2067.97392e0a remote-master: preflight fails on the recorded mainline merge and Closes is refused
+AssertionError: the refusal names preflight: expected '' to match /preflight/i
+
+- Expected:
+/preflight/i
+
++ Received:
+""
+
+ ❯ held tests/acceptance/2067/fixture.ts:137:79
+    135| export function held(r: Awaited<ReturnType<typeof fixture>>) {
+    136|   expect.soft(r.closesAfter.allowed, 'Closes must remain refused after…
+    137|   expect.soft(replyText(r.closesAfter.before), 'the refusal names pref…
+       |                                                                               ^
+    138| }
+    139| export function blocked(r: Awaited<ReturnType<typeof fixture>>, cause:…
+ ❯ tests/acceptance/2067/release.test.ts:27:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/39]⎯
+
+ FAIL  tests/acceptance/2067/release.test.ts > #2067.97392e0a develop: preflight fails on the recorded mainline merge and Closes is refused
+AssertionError: FAIL names preflight: expected '[".deepbuild/checks/expired-token.sh:…' to match /preflight/i
+
+- Expected:
+/preflight/i
+
++ Received:
+"[\".deepbuild/checks/expired-token.sh: PASS on 1 clean run\",\"unit: PASS on 1 clean run\",\"review: PASS on 1 clean run\",\".deepbuild/checks/expired-token.sh carried run:01M7DWWNDZXWG7XEZ739GGM4GK from claim:01M7DWWMXFZCVRKA3MMMSGY937 in session:6d109841d23241c8a6fb248753cc2735\",\"unit carried run:01M7DWWNC9ZS834J7B5CZNSTQV from claim:01M7DWWMXFZCVRKA3MMMSGY937 in session:6d109841d23241c8a6fb248753cc2735\",\".deepbuild/checks/expired-token.sh carried its base run run:01M7DWWYX37TC3CFNY7S9Y0E44 from claim:01M7DWWMXFZCVRKA3MMMSGY937 in session:6d109841d23241c8a6fb248753cc2735\"]"
+
+ ❯ tests/acceptance/2067/release.test.ts:8:81
+      6|     const r = await fixture(mode);
+      7|     expect.soft(r.verdict.data.outcome, 'preflight must FAIL on the me…
+      8|     expect.soft(JSON.stringify(r.verdict.data.reasons), 'FAIL names pr…
+       |                                                                                 ^
+      9|     const head = r.w.head(), main = r.w.main;
+     10|     const expectedTree = r.g('merge-tree', '--write-tree', head, main);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/39]⎯
+
+ FAIL  tests/acceptance/2067/release.test.ts > #2067.97392e0a remote-main: preflight fails on the recorded mainline merge and Closes is refused
+AssertionError: FAIL names preflight: expected '[".deepbuild/checks/expired-token.sh:…' to match /preflight/i
+
+- Expected:
+/preflight/i
+
++ Received:
+"[\".deepbuild/checks/expired-token.sh: PASS on 1 clean run\",\"unit: PASS on 1 clean run\",\"review: PASS on 1 clean run\",\".deepbuild/checks/expired-token.sh carried run:01M7DWX2MNERFZ3H03QSQBAJMV from claim:01M7DWX24C0T0BKKFE79WFJV58 in session:443f750813e54f77bc16fa79efa5d030\",\"unit carried run:01M7DWX2K8XZZS140V2E7TSAG7 from claim:01M7DWX24C0T0BKKFE79WFJV58 in session:443f750813e54f77bc16fa79efa5d030\",\".deepbuild/checks/expired-token.sh carried its base run run:01M7DWXBQMJDKZSP3W4MZ906CF from claim:01M7DWX24C0T0BKKFE79WFJV58 in session:443f750813e54f77bc16fa79efa5d030\"]"
+
+ ❯ tests/acceptance/2067/release.test.ts:8:81
+      6|     const r = await fixture(mode);
+      7|     expect.soft(r.verdict.data.outcome, 'preflight must FAIL on the me…
+      8|     expect.soft(JSON.stringify(r.verdict.data.reasons), 'FAIL names pr…
+       |                                                                                 ^
+      9|     const head = r.w.head(), main = r.w.main;
+     10|     const expectedTree = r.g('merge-tree', '--write-tree', head, main);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/39]⎯
+
+ FAIL  tests/acceptance/2067/release.test.ts > #2067.97392e0a remote-master: preflight fails on the recorded mainline merge and Closes is refused
+AssertionError: FAIL names preflight: expected '[".deepbuild/checks/expired-token.sh:…' to match /preflight/i
+
+- Expected:
+/preflight/i
+
++ Received:
+"[\".deepbuild/checks/expired-token.sh: PASS on 1 clean run\",\"unit: PASS on 1 clean run\",\"review: PASS on 1 clean run\",\".deepbuild/checks/expired-token.sh carried run:01M7DWXEYVTBQZPSM67Q5QRPQ6 from claim:01M7DWXEG6KGGW9PPZYF811H6F in session:723eb05f53004fd2a5dd7bf99b23b2c9\",\"unit carried run:01M7DWXEXA6ENQ6TAXN230HTK0 from claim:01M7DWXEG6KGGW9PPZYF811H6F in session:723eb05f53004fd2a5dd7bf99b23b2c9\",\".deepbuild/checks/expired-token.sh carried its base run run:01M7DWXRCXTPA2N3FKFFXV032P from claim:01M7DWXEG6KGGW9PPZYF811H6F in session:723eb05f53004fd2a5dd7bf99b23b2c9\"]"
+
+ ❯ tests/acceptance/2067/release.test.ts:8:81
+      6|     const r = await fixture(mode);
+      7|     expect.soft(r.verdict.data.outcome, 'preflight must FAIL on the me…
+      8|     expect.soft(JSON.stringify(r.verdict.data.reasons), 'FAIL names pr…
+       |                                                                                 ^
+      9|     const head = r.w.head(), main = r.w.main;
+     10|     const expectedTree = r.g('merge-tree', '--write-tree', head, main);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/39]⎯
+
+ FAIL  tests/acceptance/2067/release.test.ts > #2067.47a66ecb no mainline: preflight is BLOCKED with cause and owner, and Closes is refused
+AssertionError: preflight must be BLOCKED, not silently absent: expected 'PASS' to be 'BLOCKED' // Object.is equality
+
+Expected: "BLOCKED"
+Received: "PASS"
+
+ ❯ blocked tests/acceptance/2067/fixture.ts:140:89
+    138| }
+    139| export function blocked(r: Awaited<ReturnType<typeof fixture>>, cause:…
+    140|   expect.soft(r.verdict.data.outcome, 'preflight must be BLOCKED, not …
+       |                                                                                         ^
+    141|   const check = r.change.checks.find((c: { check: string }) => c.check…
+    142|   expect.soft(check?.outcome, 'preflight stands on the claim as missin…
+ ❯ tests/acceptance/2067/release.test.ts:32:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/39]⎯
+
+ FAIL  tests/acceptance/2067/release.test.ts > #2067.47a66ecb no mainline: preflight is BLOCKED with cause and owner, and Closes is refused
+AssertionError: preflight stands on the claim as missing, not silently dropped: expected undefined to be 'missing' // Object.is equality
+
+- Expected:
+"missing"
+
++ Received:
+undefined
+
+ ❯ blocked tests/acceptance/2067/fixture.ts:142:97
+    140|   expect.soft(r.verdict.data.outcome, 'preflight must be BLOCKED, not …
+    141|   const check = r.change.checks.find((c: { check: string }) => c.check…
+    142|   expect.soft(check?.outcome, 'preflight stands on the claim as missin…
+       |                                                                                                 ^
+    143|   const why = JSON.stringify(r.verdict.data.reasons);
+    144|   expect.soft(why, 'the verdict names preflight').toMatch(/preflight/i…
+ ❯ tests/acceptance/2067/release.test.ts:32:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/39]⎯
+
+ FAIL  tests/acceptance/2067/release.test.ts > #2067.47a66ecb no mainline: preflight is BLOCKED with cause and owner, and Closes is refused
+AssertionError: the verdict names preflight: expected '[".deepbuild/checks/expired-token.sh:…' to match /preflight/i
+
+- Expected:
+/preflight/i
+
++ Received:
+"[\".deepbuild/checks/expired-token.sh: PASS on 1 clean run\",\"unit: PASS on 1 clean run\",\"review: PASS on 1 clean run\",\".deepbuild/checks/expired-token.sh carried run:01M7DWXVXV65JHS9AYPN3TC67J from claim:01M7DWXVDET6G83DC9A0MBHV4B in session:961bffd7dde04f68a7dcce701ebc4453\",\"unit carried run:01M7DWXVVYCK76KQAYZ3WA7Z6B from claim:01M7DWXVDET6G83DC9A0MBHV4B in session:961bffd7dde04f68a7dcce701ebc4453\",\".deepbuild/checks/expired-token.sh carried its base run run:01M7DWY5F8EYFZTKZJTPBGPGZH from claim:01M7DWXVDET6G83DC9A0MBHV4B in session:961bffd7dde04f68a7dcce701ebc4453\"]"
+
+ ❯ blocked tests/acceptance/2067/fixture.ts:144:51
+    142|   expect.soft(check?.outcome, 'preflight stands on the claim as missin…
+    143|   const why = JSON.stringify(r.verdict.data.reasons);
+    144|   expect.soft(why, 'the verdict names preflight').toMatch(/preflight/i…
+       |                                                   ^
+    145|   expect.soft(why, 'the verdict names the missing outside-code cause')…
+    146|   expect.soft(why, 'the cause belongs to you').toMatch(/\byou\b/i);
+ ❯ tests/acceptance/2067/release.test.ts:32:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/39]⎯
+
+ FAIL  tests/acceptance/2067/release.test.ts > #2067.47a66ecb no mainline: preflight is BLOCKED with cause and owner, and Closes is refused
+AssertionError: the verdict names the missing outside-code cause: expected '[".deepbuild/checks/expired-token.sh:…' to match /(?:no|not|missing|unavailable|unable…/i
+
+- Expected:
+/(?:no|not|missing|unavailable|unable|cannot|can't|couldn't).*main\s*(?:line)?|main\s*(?:line)?.*(?:not found|missing|unavailable|cannot|can't|couldn't)/i
+
++ Received:
+"[\".deepbuild/checks/expired-token.sh: PASS on 1 clean run\",\"unit: PASS on 1 clean run\",\"review: PASS on 1 clean run\",\".deepbuild/checks/expired-token.sh carried run:01M7DWXVXV65JHS9AYPN3TC67J from claim:01M7DWXVDET6G83DC9A0MBHV4B in session:961bffd7dde04f68a7dcce701ebc4453\",\"unit carried run:01M7DWXVVYCK76KQAYZ3WA7Z6B from claim:01M7DWXVDET6G83DC9A0MBHV4B in session:961bffd7dde04f68a7dcce701ebc4453\",\".deepbuild/checks/expired-token.sh carried its base run run:01M7DWY5F8EYFZTKZJTPBGPGZH from claim:01M7DWXVDET6G83DC9A0MBHV4B in session:961bffd7dde04f68a7dcce701ebc4453\"]"
+
+ ❯ blocked tests/acceptance/2067/fixture.ts:145:72
+    143|   const why = JSON.stringify(r.verdict.data.reasons);
+    144|   expect.soft(why, 'the verdict names preflight').toMatch(/preflight/i…
+    145|   expect.soft(why, 'the verdict names the missing outside-code cause')…
+       |                                                                        ^
+    146|   expect.soft(why, 'the cause belongs to you').toMatch(/\byou\b/i);
+    147|   held(r);
+ ❯ tests/acceptance/2067/release.test.ts:32:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/39]⎯
+
+ FAIL  tests/acceptance/2067/release.test.ts > #2067.47a66ecb no mainline: preflight is BLOCKED with cause and owner, and Closes is refused
+AssertionError: the cause belongs to you: expected '[".deepbuild/checks/expired-token.sh:…' to match /\byou\b/i
+
+- Expected:
+/\byou\b/i
+
++ Received:
+"[\".deepbuild/checks/expired-token.sh: PASS on 1 clean run\",\"unit: PASS on 1 clean run\",\"review: PASS on 1 clean run\",\".deepbuild/checks/expired-token.sh carried run:01M7DWXVXV65JHS9AYPN3TC67J from claim:01M7DWXVDET6G83DC9A0MBHV4B in session:961bffd7dde04f68a7dcce701ebc4453\",\"unit carried run:01M7DWXVVYCK76KQAYZ3WA7Z6B from claim:01M7DWXVDET6G83DC9A0MBHV4B in session:961bffd7dde04f68a7dcce701ebc4453\",\".deepbuild/checks/expired-token.sh carried its base run run:01M7DWY5F8EYFZTKZJTPBGPGZH from claim:01M7DWXVDET6G83DC9A0MBHV4B in session:961bffd7dde04f68a7dcce701ebc4453\"]"
+
+ ❯ blocked tests/acceptance/2067/fixture.ts:146:48
+    144|   expect.soft(why, 'the verdict names preflight').toMatch(/preflight/i…
+    145|   expect.soft(why, 'the verdict names the missing outside-code cause')…
+    146|   expect.soft(why, 'the cause belongs to you').toMatch(/\byou\b/i);
+       |                                                ^
+    147|   held(r);
+    148| }
+ ❯ tests/acceptance/2067/release.test.ts:32:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/39]⎯
+
+ FAIL  tests/acceptance/2067/release.test.ts > #2067.47a66ecb no mainline: preflight is BLOCKED with cause and owner, and Closes is refused
+AssertionError: Closes must remain refused after a non-PASS release claim: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ held tests/acceptance/2067/fixture.ts:136:99
+    134|
+    135| export function held(r: Awaited<ReturnType<typeof fixture>>) {
+    136|   expect.soft(r.closesAfter.allowed, 'Closes must remain refused after…
+       |                                                                                                   ^
+    137|   expect.soft(replyText(r.closesAfter.before), 'the refusal names pref…
+    138| }
+ ❯ blocked tests/acceptance/2067/fixture.ts:147:3
+ ❯ tests/acceptance/2067/release.test.ts:32:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/39]⎯
+
+ FAIL  tests/acceptance/2067/release.test.ts > #2067.47a66ecb no mainline: preflight is BLOCKED with cause and owner, and Closes is refused
+AssertionError: the refusal names preflight: expected '' to match /preflight/i
+
+- Expected:
+/preflight/i
+
++ Received:
+""
+
+ ❯ held tests/acceptance/2067/fixture.ts:137:79
+    135| export function held(r: Awaited<ReturnType<typeof fixture>>) {
+    136|   expect.soft(r.closesAfter.allowed, 'Closes must remain refused after…
+    137|   expect.soft(replyText(r.closesAfter.before), 'the refusal names pref…
+       |                                                                               ^
+    138| }
+    139| export function blocked(r: Awaited<ReturnType<typeof fixture>>, cause:…
+ ❯ blocked tests/acceptance/2067/fixture.ts:147:3
+ ❯ tests/acceptance/2067/release.test.ts:32:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/39]⎯
+
+ FAIL  tests/acceptance/2067/release.test.ts > scope: unreadable mainline is BLOCKED, not absent or a merge conflict
+AssertionError: preflight must be BLOCKED, not silently absent: expected 'PASS' to be 'BLOCKED' // Object.is equality
+
+Expected: "BLOCKED"
+Received: "PASS"
+
+ ❯ blocked tests/acceptance/2067/fixture.ts:140:89
+    138| }
+    139| export function blocked(r: Awaited<ReturnType<typeof fixture>>, cause:…
+    140|   expect.soft(r.verdict.data.outcome, 'preflight must be BLOCKED, not …
+       |                                                                                         ^
+    141|   const check = r.change.checks.find((c: { check: string }) => c.check…
+    142|   expect.soft(check?.outcome, 'preflight stands on the claim as missin…
+ ❯ tests/acceptance/2067/release.test.ts:35:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/39]⎯
+
+ FAIL  tests/acceptance/2067/release.test.ts > scope: unreadable mainline is BLOCKED, not absent or a merge conflict
+AssertionError: preflight stands on the claim as missing, not silently dropped: expected undefined to be 'missing' // Object.is equality
+
+- Expected:
+"missing"
+
++ Received:
+undefined
+
+ ❯ blocked tests/acceptance/2067/fixture.ts:142:97
+    140|   expect.soft(r.verdict.data.outcome, 'preflight must be BLOCKED, not …
+    141|   const check = r.change.checks.find((c: { check: string }) => c.check…
+    142|   expect.soft(check?.outcome, 'preflight stands on the claim as missin…
+       |                                                                                                 ^
+    143|   const why = JSON.stringify(r.verdict.data.reasons);
+    144|   expect.soft(why, 'the verdict names preflight').toMatch(/preflight/i…
+ ❯ tests/acceptance/2067/release.test.ts:35:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/39]⎯
+
+ FAIL  tests/acceptance/2067/release.test.ts > scope: unreadable mainline is BLOCKED, not absent or a merge conflict
+AssertionError: the verdict names preflight: expected '[".deepbuild/checks/expired-token.sh:…' to match /preflight/i
+
+- Expected:
+/preflight/i
+
++ Received:
+"[\".deepbuild/checks/expired-token.sh: PASS on 1 clean run\",\"unit: PASS on 1 clean run\",\"review: PASS on 1 clean run\",\".deepbuild/checks/expired-token.sh carried run:01M7DWY8SWRWMCZ33K8VFC224H from claim:01M7DWY89MMC75Y8PJJ7HDWFD7 in session:6695b63da93b43c7ae602715188a9198\",\"unit carried run:01M7DWY8R45873N82T34DWC54Z from claim:01M7DWY89MMC75Y8PJJ7HDWFD7 in session:6695b63da93b43c7ae602715188a9198\",\".deepbuild/checks/expired-token.sh carried its base run run:01M7DWYJCJD3WM2MRY40VTPH1D from claim:01M7DWY89MMC75Y8PJJ7HDWFD7 in session:6695b63da93b43c7ae602715188a9198\"]"
+
+ ❯ blocked tests/acceptance/2067/fixture.ts:144:51
+    142|   expect.soft(check?.outcome, 'preflight stands on the claim as missin…
+    143|   const why = JSON.stringify(r.verdict.data.reasons);
+    144|   expect.soft(why, 'the verdict names preflight').toMatch(/preflight/i…
+       |                                                   ^
+    145|   expect.soft(why, 'the verdict names the missing outside-code cause')…
+    146|   expect.soft(why, 'the cause belongs to you').toMatch(/\byou\b/i);
+ ❯ tests/acceptance/2067/release.test.ts:35:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/39]⎯
+
+ FAIL  tests/acceptance/2067/release.test.ts > scope: unreadable mainline is BLOCKED, not absent or a merge conflict
+AssertionError: the verdict names the missing outside-code cause: expected '[".deepbuild/checks/expired-token.sh:…' to match /(?:main\s*(?:line)?.*(?:read|resolve…/i
+
+- Expected:
+/(?:main\s*(?:line)?.*(?:read|resolve)|(?:read|resolve).*main\s*(?:line)?)/i
+
++ Received:
+"[\".deepbuild/checks/expired-token.sh: PASS on 1 clean run\",\"unit: PASS on 1 clean run\",\"review: PASS on 1 clean run\",\".deepbuild/checks/expired-token.sh carried run:01M7DWY8SWRWMCZ33K8VFC224H from claim:01M7DWY89MMC75Y8PJJ7HDWFD7 in session:6695b63da93b43c7ae602715188a9198\",\"unit carried run:01M7DWY8R45873N82T34DWC54Z from claim:01M7DWY89MMC75Y8PJJ7HDWFD7 in session:6695b63da93b43c7ae602715188a9198\",\".deepbuild/checks/expired-token.sh carried its base run run:01M7DWYJCJD3WM2MRY40VTPH1D from claim:01M7DWY89MMC75Y8PJJ7HDWFD7 in session:6695b63da93b43c7ae602715188a9198\"]"
+
+ ❯ blocked tests/acceptance/2067/fixture.ts:145:72
+    143|   const why = JSON.stringify(r.verdict.data.reasons);
+    144|   expect.soft(why, 'the verdict names preflight').toMatch(/preflight/i…
+    145|   expect.soft(why, 'the verdict names the missing outside-code cause')…
+       |                                                                        ^
+    146|   expect.soft(why, 'the cause belongs to you').toMatch(/\byou\b/i);
+    147|   held(r);
+ ❯ tests/acceptance/2067/release.test.ts:35:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/39]⎯
+
+ FAIL  tests/acceptance/2067/release.test.ts > scope: unreadable mainline is BLOCKED, not absent or a merge conflict
+AssertionError: the cause belongs to you: expected '[".deepbuild/checks/expired-token.sh:…' to match /\byou\b/i
+
+- Expected:
+/\byou\b/i
+
++ Received:
+"[\".deepbuild/checks/expired-token.sh: PASS on 1 clean run\",\"unit: PASS on 1 clean run\",\"review: PASS on 1 clean run\",\".deepbuild/checks/expired-token.sh carried run:01M7DWY8SWRWMCZ33K8VFC224H from claim:01M7DWY89MMC75Y8PJJ7HDWFD7 in session:6695b63da93b43c7ae602715188a9198\",\"unit carried run:01M7DWY8R45873N82T34DWC54Z from claim:01M7DWY89MMC75Y8PJJ7HDWFD7 in session:6695b63da93b43c7ae602715188a9198\",\".deepbuild/checks/expired-token.sh carried its base run run:01M7DWYJCJD3WM2MRY40VTPH1D from claim:01M7DWY89MMC75Y8PJJ7HDWFD7 in session:6695b63da93b43c7ae602715188a9198\"]"
+
+ ❯ blocked tests/acceptance/2067/fixture.ts:146:48
+    144|   expect.soft(why, 'the verdict names preflight').toMatch(/preflight/i…
+    145|   expect.soft(why, 'the verdict names the missing outside-code cause')…
+    146|   expect.soft(why, 'the cause belongs to you').toMatch(/\byou\b/i);
+       |                                                ^
+    147|   held(r);
+    148| }
+ ❯ tests/acceptance/2067/release.test.ts:35:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[20/39]⎯
+
+ FAIL  tests/acceptance/2067/release.test.ts > scope: unreadable mainline is BLOCKED, not absent or a merge conflict
+AssertionError: Closes must remain refused after a non-PASS release claim: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ held tests/acceptance/2067/fixture.ts:136:99
+    134|
+    135| export function held(r: Awaited<ReturnType<typeof fixture>>) {
+    136|   expect.soft(r.closesAfter.allowed, 'Closes must remain refused after…
+       |                                                                                                   ^
+    137|   expect.soft(replyText(r.closesAfter.before), 'the refusal names pref…
+    138| }
+ ❯ blocked tests/acceptance/2067/fixture.ts:147:3
+ ❯ tests/acceptance/2067/release.test.ts:35:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[21/39]⎯
+
+ FAIL  tests/acceptance/2067/release.test.ts > scope: unreadable mainline is BLOCKED, not absent or a merge conflict
+AssertionError: the refusal names preflight: expected '' to match /preflight/i
+
+- Expected:
+/preflight/i
+
++ Received:
+""
+
+ ❯ held tests/acceptance/2067/fixture.ts:137:79
+    135| export function held(r: Awaited<ReturnType<typeof fixture>>) {
+    136|   expect.soft(r.closesAfter.allowed, 'Closes must remain refused after…
+    137|   expect.soft(replyText(r.closesAfter.before), 'the refusal names pref…
+       |                                                                               ^
+    138| }
+    139| export function blocked(r: Awaited<ReturnType<typeof fixture>>, cause:…
+ ❯ blocked tests/acceptance/2067/fixture.ts:147:3
+ ❯ tests/acceptance/2067/release.test.ts:35:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[22/39]⎯
+
+ FAIL  tests/acceptance/2067/release.test.ts > #2067.fa764398 undefined preflight stays on the claim as BLOCKED and holds Closes
+AssertionError: preflight must be BLOCKED, not silently absent: expected 'PASS' to be 'BLOCKED' // Object.is equality
+
+Expected: "BLOCKED"
+Received: "PASS"
+
+ ❯ blocked tests/acceptance/2067/fixture.ts:140:89
+    138| }
+    139| export function blocked(r: Awaited<ReturnType<typeof fixture>>, cause:…
+    140|   expect.soft(r.verdict.data.outcome, 'preflight must be BLOCKED, not …
+       |                                                                                         ^
+    141|   const check = r.change.checks.find((c: { check: string }) => c.check…
+    142|   expect.soft(check?.outcome, 'preflight stands on the claim as missin…
+ ❯ tests/acceptance/2067/release.test.ts:38:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[23/39]⎯
+
+ FAIL  tests/acceptance/2067/release.test.ts > #2067.fa764398 undefined preflight stays on the claim as BLOCKED and holds Closes
+AssertionError: preflight stands on the claim as missing, not silently dropped: expected undefined to be 'missing' // Object.is equality
+
+- Expected:
+"missing"
+
++ Received:
+undefined
+
+ ❯ blocked tests/acceptance/2067/fixture.ts:142:97
+    140|   expect.soft(r.verdict.data.outcome, 'preflight must be BLOCKED, not …
+    141|   const check = r.change.checks.find((c: { check: string }) => c.check…
+    142|   expect.soft(check?.outcome, 'preflight stands on the claim as missin…
+       |                                                                                                 ^
+    143|   const why = JSON.stringify(r.verdict.data.reasons);
+    144|   expect.soft(why, 'the verdict names preflight').toMatch(/preflight/i…
+ ❯ tests/acceptance/2067/release.test.ts:38:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[24/39]⎯
+
+ FAIL  tests/acceptance/2067/release.test.ts > #2067.fa764398 undefined preflight stays on the claim as BLOCKED and holds Closes
+AssertionError: the verdict names preflight: expected '[".deepbuild/checks/expired-token.sh:…' to match /preflight/i
+
+- Expected:
+/preflight/i
+
++ Received:
+"[\".deepbuild/checks/expired-token.sh: PASS on 1 clean run\",\"unit: PASS on 1 clean run\",\"review: PASS on 1 clean run\",\".deepbuild/checks/expired-token.sh carried run:01M7DWYNBZHPV9Y5R41CPQ6DA7 from claim:01M7DWYMXA6ZEW40D0RV0AJV8N in session:7b6ac5c19b5744c99a98740002e65013\",\"unit carried run:01M7DWYNA6DVV5FD6HVDFVR618 from claim:01M7DWYMXA6ZEW40D0RV0AJV8N in session:7b6ac5c19b5744c99a98740002e65013\",\".deepbuild/checks/expired-token.sh carried its base run run:01M7DWYZ23KBWRN6B9TYWJPHB8 from claim:01M7DWYMXA6ZEW40D0RV0AJV8N in session:7b6ac5c19b5744c99a98740002e65013\"]"
+
+ ❯ blocked tests/acceptance/2067/fixture.ts:144:51
+    142|   expect.soft(check?.outcome, 'preflight stands on the claim as missin…
+    143|   const why = JSON.stringify(r.verdict.data.reasons);
+    144|   expect.soft(why, 'the verdict names preflight').toMatch(/preflight/i…
+       |                                                   ^
+    145|   expect.soft(why, 'the verdict names the missing outside-code cause')…
+    146|   expect.soft(why, 'the cause belongs to you').toMatch(/\byou\b/i);
+ ❯ tests/acceptance/2067/release.test.ts:38:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[25/39]⎯
+
+ FAIL  tests/acceptance/2067/release.test.ts > #2067.fa764398 undefined preflight stays on the claim as BLOCKED and holds Closes
+AssertionError: the verdict names the missing outside-code cause: expected '[".deepbuild/checks/expired-token.sh:…' to match /(?:not|isn't|undefined|no|missing|un…/i
+
+- Expected:
+/(?:not|isn't|undefined|no|missing|unknown|cannot|can't).*(?:defin|check)|(?:check|preflight).*(?:not defined|undefined|missing|unknown)/i
+
++ Received:
+"[\".deepbuild/checks/expired-token.sh: PASS on 1 clean run\",\"unit: PASS on 1 clean run\",\"review: PASS on 1 clean run\",\".deepbuild/checks/expired-token.sh carried run:01M7DWYNBZHPV9Y5R41CPQ6DA7 from claim:01M7DWYMXA6ZEW40D0RV0AJV8N in session:7b6ac5c19b5744c99a98740002e65013\",\"unit carried run:01M7DWYNA6DVV5FD6HVDFVR618 from claim:01M7DWYMXA6ZEW40D0RV0AJV8N in session:7b6ac5c19b5744c99a98740002e65013\",\".deepbuild/checks/expired-token.sh carried its base run run:01M7DWYZ23KBWRN6B9TYWJPHB8 from claim:01M7DWYMXA6ZEW40D0RV0AJV8N in session:7b6ac5c19b5744c99a98740002e65013\"]"
+
+ ❯ blocked tests/acceptance/2067/fixture.ts:145:72
+    143|   const why = JSON.stringify(r.verdict.data.reasons);
+    144|   expect.soft(why, 'the verdict names preflight').toMatch(/preflight/i…
+    145|   expect.soft(why, 'the verdict names the missing outside-code cause')…
+       |                                                                        ^
+    146|   expect.soft(why, 'the cause belongs to you').toMatch(/\byou\b/i);
+    147|   held(r);
+ ❯ tests/acceptance/2067/release.test.ts:38:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[26/39]⎯
+
+ FAIL  tests/acceptance/2067/release.test.ts > #2067.fa764398 undefined preflight stays on the claim as BLOCKED and holds Closes
+AssertionError: the cause belongs to you: expected '[".deepbuild/checks/expired-token.sh:…' to match /\byou\b/i
+
+- Expected:
+/\byou\b/i
+
++ Received:
+"[\".deepbuild/checks/expired-token.sh: PASS on 1 clean run\",\"unit: PASS on 1 clean run\",\"review: PASS on 1 clean run\",\".deepbuild/checks/expired-token.sh carried run:01M7DWYNBZHPV9Y5R41CPQ6DA7 from claim:01M7DWYMXA6ZEW40D0RV0AJV8N in session:7b6ac5c19b5744c99a98740002e65013\",\"unit carried run:01M7DWYNA6DVV5FD6HVDFVR618 from claim:01M7DWYMXA6ZEW40D0RV0AJV8N in session:7b6ac5c19b5744c99a98740002e65013\",\".deepbuild/checks/expired-token.sh carried its base run run:01M7DWYZ23KBWRN6B9TYWJPHB8 from claim:01M7DWYMXA6ZEW40D0RV0AJV8N in session:7b6ac5c19b5744c99a98740002e65013\"]"
+
+ ❯ blocked tests/acceptance/2067/fixture.ts:146:48
+    144|   expect.soft(why, 'the verdict names preflight').toMatch(/preflight/i…
+    145|   expect.soft(why, 'the verdict names the missing outside-code cause')…
+    146|   expect.soft(why, 'the cause belongs to you').toMatch(/\byou\b/i);
+       |                                                ^
+    147|   held(r);
+    148| }
+ ❯ tests/acceptance/2067/release.test.ts:38:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[27/39]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  7 failed (7)
+   Start at  12:44:38
+   Duration  93.31s (tests 100%)
+

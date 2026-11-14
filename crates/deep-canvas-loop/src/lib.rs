@@ -1,10 +1,18 @@
 //! The loop canvas module (technical design: Canvas modules; canvas primitives: Check input:
 //! loop kinds): the loop's check kinds. Issue #453 lands its first, `geometry.shading`'s defect
 //! counts and quad ratio, on every `mesh.asset@1` item a document holds; #1935 its readings of
-//! each UV set, hidden faces, unused vertices and islands.
+//! each UV set, hidden faces, unused vertices and islands; #1938 lands `scene.scale` and
+//! `camera.framing` on evaluated data.
 
+pub mod contrast;
 pub mod count;
+pub mod exposure;
 mod fixtures;
+pub mod framing;
+pub mod noise;
+mod pixels;
+pub mod scale;
+mod scene;
 pub mod uv;
 
 use deep_canvas::registry::{
@@ -18,9 +26,10 @@ use count::{Counts, Edge, Opts, Prim};
 
 pub const KIND: &str = "geometry.shading";
 
-/// The wrong programs #453's and #1935's criteria plant in geometry.shading, each reachable only
-/// through a proof surface's `planted`, which the hub puts in the check's input.
-pub const PLANTED: [&str; 9] = [
+/// The wrong programs #453's and #1935's criteria plant in geometry.shading, and #1938's in
+/// render.contrast, each reachable only through a proof surface's `planted`, which the hub puts in
+/// the check's input.
+pub const PLANTED: [&str; 10] = [
     "no_weld",
     "one_winding_sum",
     "degenerate_exact_zero",
@@ -30,6 +39,8 @@ pub const PLANTED: [&str; 9] = [
     "quad_fails_rigid",
     "pair_ignores_corners",
     "uv_overlap_from_boxes",
+    // #1938's: render.contrast holds text to 3:1.
+    contrast::PLANTED_MIN_3,
 ];
 
 /// The most IDs a result lists per field.
@@ -104,11 +115,64 @@ fn register(r: &mut Registrar) {
             .collect()
     })
     .check_report(report);
+    // #1938's kinds on evaluated data: they hold on any machine.
+    r.check(scale::KIND, "any", &[scale::CODE, "loop.unreadable"], |l, i| {
+        issues(scale::report(l, i))
+    })
+    .check_report(scale::report);
+    r.check(framing::KIND, "any", &[framing::CODE, "loop.unreadable"], |l, i| {
+        issues(framing::report(l, i))
+    })
+    .check_report(framing::report);
+    // #1938's kinds on pixels: they hold on the machine that drew them.
+    r.check(exposure::KIND, "same", &[exposure::CODE, "loop.unreadable"], |l, i| {
+        issues(exposure::report(l, i, &[]))
+    })
+    .check_frames(1, exposure::report);
+    r.check(contrast::KIND, "same", &[contrast::CODE, "loop.unreadable"], |l, i| {
+        issues(contrast::report(l, i, &[]))
+    })
+    .check_frames(1, contrast::report);
+    // Noise reads each checked time drawn twice: the time, and the next frame.
+    r.check(noise::KIND, "same", &[noise::CODE, "loop.unreadable"], |l, i| {
+        issues(noise::report(l, i, &[]))
+    })
+    .check_frames(2, noise::report);
     r.code(
         "loop.unreadable",
-        "A mesh geometry.shading can't read: missing, compressed data no pinned tool decoded, not triangles, away from its bind pose, or UV sets asked at a resolution over 4,096 px.",
-        "Convert the asset to plain triangles at its bind pose, pin the tool that decodes it, or ask for a resolution of 4,096 px or less.",
+        "What a loop check can't read: a mesh geometry.shading can't (missing, compressed data no pinned tool decoded, not triangles, away from its bind pose, or UV sets asked at a resolution over 4,096 px), or a document or subject a check can't evaluate.",
+        "Convert the asset to plain triangles at its bind pose, pin the tool that decodes it, or ask for a resolution of 4,096 px or less; give the check a subject it can evaluate.",
         false,
+    );
+    r.code(
+        scale::CODE,
+        "An item of a sized kind whose evaluated height is outside its size's range in m, past tolerance: a 20 m door where doors are 1.9 to 2.4 m.",
+        "Set its height to the nearest end of the range.",
+        true,
+    );
+    r.code(
+        exposure::CODE,
+        "The subject's px clipped past white or crushed to black past their shares, or its key (mean log luminance against middle grey) outside key_ev.",
+        "Set the camera's exposure to the EV100 the light falling on the subject gives, as an incident meter reads it; a subject lit by its own light, to the EV100 that brings its key to middle grey.",
+        true,
+    );
+    r.code(
+        contrast::CODE,
+        "A text whose ink reads under min (WCAG, 4.5:1) against the ground about it in the frame as drawn, or the kept subject under subject_ratio against its surround.",
+        "Set the text's fill to the role of the look the check names, which reads past min on that ground; light or move the subject off a ground of its own luminance.",
+        true,
+    );
+    r.code(
+        noise::CODE,
+        "An item that holds still whose flat px vary between two draws a frame apart past flat_variance_max: a fill that reseeds with the frame.",
+        "Keep one seed: name a still copy of the reseeded material, or write its seed by quantized time.",
+        true,
+    );
+    r.code(
+        framing::CODE,
+        "The kept items cut by the safe frame less its margin, spanning outside fill, under an overlay, or a horizon tilted past horizon_max.",
+        "Move the camera by the distance or view width the check names, or set its roll level.",
+        true,
     );
     r.code(
         "loop.degenerate",
@@ -149,13 +213,34 @@ fn register(r: &mut Registrar) {
     fixtures::register(r);
 }
 
+/// A report's issues as a check without one carries them (the kit's run): what it couldn't
+/// read is an error, never a pass.
+fn issues(out: Report) -> Vec<(String, Raised)> {
+    let unread = out.blocked.into_iter().map(|b| {
+        let id = b["ids"][0].as_str().unwrap_or_default().to_string();
+        let raised = Raised {
+            code: "loop.unreadable",
+            severity: "error",
+            path: b["path"].as_str().unwrap_or_default().to_string(),
+            what: format!("what the check can't read: {}", b["code"]),
+            fix_ops: None,
+        };
+        (id, raised)
+    });
+    out.raised
+        .into_iter()
+        .map(|(id, raised, _)| (id, raised))
+        .chain(unread)
+        .collect()
+}
+
 /// A reading as a failure's text gives it: to four decimals.
 fn round4(x: f64) -> f64 {
     (x * 1e4).round() / 1e4
 }
 
 /// A number from the check input, or its default.
-fn number(input: &Value, path: &str, default: f64) -> f64 {
+pub(crate) fn number(input: &Value, path: &str, default: f64) -> f64 {
     input
         .pointer(path)
         .and_then(Value::as_f64)
