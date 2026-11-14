@@ -26,8 +26,8 @@ shot c2-planted-arrival 'Criterion 2: planted read_region_orders_by_arrival (mus
 shot c2-planted-drops 'Criterion 2: planted read_region_drops_player: the first entry reads as player 0 (must differ)' \
   "bin/deep-logic --planted read_region_drops_player < evin/players-2-then-1.in | jq -c '$LOGIC'"
 # The check itself: e2e/orders.sh runs both orders through one build and names the first step that breaks the criterion.
-shot c2-orders-and-twins 'Criterion 2: both orders give first = 1 with equal step hashes; each planted twin fails, naming step 3' \
-  "grep -v '^#' e2e/orders.sh; for p in '' '--planted read_region_orders_by_arrival' '--planted read_region_drops_player'; do echo \"deep-logic \$p:\"; bash e2e/orders.sh \$p || exit; done"
+shot c2-orders-and-twins 'Criterion 2: both orders give first = 1 with equal step hashes (orders.sh exits 0); each planted twin fails, naming step 3 (exits 1)' \
+  "grep -v '^#' e2e/orders.sh; for p in '' '--planted read_region_orders_by_arrival' '--planted read_region_drops_player'; do echo \"deep-logic \$p:\"; bash e2e/orders.sh \$p; s=\$?; echo \"  orders.sh exits \$s\"; [ \$s = \$([ -z \"\$p\" ] && echo 0 || echo 1) ] || exit 1; done"
 # e2e/order.wat writes, for the first four entries in its read region, each one's player and value.
 ORDER='[.[] | select(.steps) | .steps[] | select(.step >= 3) | {step, order: .arrays["order.order"]}]'
 shot c2-step-seq-order 'Criterion 2: entries arrive out of step and seq order; the read region holds [player, value] by step, player, seq; twins differ' \

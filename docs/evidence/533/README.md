@@ -64,12 +64,12 @@ This evidence does not show the time order of logic and physics steps. The issue
 
 ## Screenshots, and the agents' check of them
 
-`screens/` holds the end-to-end screenshots, made by the scripts in `e2e/` and last run on head `f88878caf` (main merged through `e0c90a5a5`), on binaries rebuilt from it. That run left the eleven captures that don't print the seal byte-identical, changed the four seal captures only by the two fields round 9 added, added `c1-replay` and `c2-orders-and-twins`, and gave the same six frames; `manifest.json`'s module lists gained main's `export` and `net`. The history before it: first made on head `6e3a2e3bc`. After the #2324 merge `capture.sh` ran again: the four captures that print the pin (`c3-seal-shipped`, `c3-seal-patch`, `c3-seal-planted-control`, `c4-no-physics-seal`) changed, and the other eleven came out byte-identical. `screens.test.ts` ran again on wasmtime 49.0.5 and passed, and its six frames and manifest came out byte-identical. Paths print as `<scratch>` and `<evidence>`.
+`screens/` holds the end-to-end screenshots, made by the scripts in `e2e/` and last run after the second review's fixes (the commit after `5cf61d523`; main merged through `e0c90a5a5`), on binaries rebuilt with them. The fixes changed no capture: only `c1-replay` and `c2-orders-and-twins` differ from the run on `f88878caf`, by their scripts' stricter text. The run on `f88878caf` left the eleven captures that don't print the seal byte-identical, changed the four seal captures only by the two fields round 9 added, added `c1-replay` and `c2-orders-and-twins`, and gave the same six frames; `manifest.json`'s module lists gained main's `export` and `net`. The history before it: first made on head `6e3a2e3bc`. After the #2324 merge `capture.sh` ran again: the four captures that print the pin (`c3-seal-shipped`, `c3-seal-patch`, `c3-seal-planted-control`, `c4-no-physics-seal`) changed, and the other eleven came out byte-identical. `screens.test.ts` ran again on wasmtime 49.0.5 and passed, and its six frames and manifest came out byte-identical. Paths print as `<scratch>` and `<evidence>`.
 
 - **Terminal captures:** `e2e/capture.sh <scratch>` runs each criterion's command through the built binaries and saves `$ command`, its output and its exit status (`bash -o pipefail`) as a PNG.
   - Criterion 1: `c1-readings.png`, and `c1-replay.png`: `e2e/replay.sh` opens a second process on the track the live run recorded, appends nothing, and gets the same arrays and step hash at every step. The source here is the test writer's `append` calls, as in the acceptance suite; no hub runs in these captures.
   - Criterion 2: `c2-players-2-then-1.png` and `c2-players-1-then-2.png`, plus the planted twins `c2-planted-arrival.png` and `c2-planted-drops.png`; `c2-step-seq-order.png` shows order by step and seq.
-    `c2-orders-and-twins.png` is the criterion's own check: `e2e/orders.sh` runs both arrival orders through one build and names the first step where `first` isn't 1 or the two orders' hashes differ. The real build passes with six equal step hashes; each planted twin fails at step 3. `deep-logic` itself replies `ok` under a twin, since a twin is a wrong build and not an error; the failure is the check's, as it is in `ac02-players.test.ts`.
+    `c2-orders-and-twins.png` is the criterion's own check: `e2e/orders.sh` runs both arrival orders through one build and names the first step where `first` isn't 1 or the two orders' hashes differ. The real build passes with six equal step hashes and the script exits 0; each planted twin fails at step 3 and it exits 1, which the capture checks. Step 3 is where the fixture's presses are, as in the acceptance test. `deep-logic` itself replies `ok` under a twin, since a twin is a wrong build and not an error; the failure is the check's, as it is in `ac02-players.test.ts`.
   - Criterion 3: `c3-seal-shipped.png` and `c3-seal-patch.png`. Both print the implementation's `equivalence: bit` and `state: canonical`. The planted twin is `c3-seal-planted.png`, with its control `c3-seal-planted-control.png`.
   - Criterion 4:
     - `c4-no-physics-seal.png`: the build without physics seals.
@@ -128,3 +128,25 @@ This evidence does not show the time order of logic and physics steps. The issue
     - In the patch build the kit row's `version` is the module's (1.0.0); the implementation's is 1.0.1.
     - The build without physics reports `build_set: full`: it is the full set with a test feature.
     - Criterion 4's two refused documents are also refused by the full build, for another reason (`c4-full-control.png`), and they name `lab` without declaring a world.
+- **Round 10, on `5cf61d523`:** one agent, over the six new or changed images, the two new scripts and round 9's entry.
+  - It recaptured all 17 terminal images: byte-identical. It showed no statement of round 9's entry false, and confirmed the `cells`, `media` and physics comparisons on this branch's build (not on main).
+  - `replay.sh`'s diff does catch a replay that reads otherwise: five planted changes to the track each failed it.
+  - Both scripts printed their success line, with exit 0, on a binary that printed nothing. They now run under `set -euo pipefail`, require the five and six steps, and `orders.sh` exits 1 on FAIL; the capture checks each exit status. On a fake failing binary both now exit 1.
+  - It saw the review fixes below land in the worktree under its run, so the pictures were made again on binaries with them (round 11).
+  - Stated, not changed: the `bit` part runs one case and the `fixtures` part one fixture.
+
+## The second code review, and its failing output
+
+A separate agent reviewed the branch's diff against main after the merges of #539, #540, #522 and #503, reading the hand-resolved code in full. `review-round-2-before.txt` holds each new test's failing output before its fix.
+
+- **Fixed, each with a test that failed first:**
+  - A slow item's step sorted its entries by player and seq without their time, so a 15 Hz item could read a later entry before an earlier one (`a_slow_items_step_reads_its_entries_by_time_then_player_and_seq`). `c2-step-seq-order.png` runs at 60 Hz, where a step holds one stamp, so it never showed this.
+  - A trapped item's `logic.trap` vanished on a frame where no step was due (`a_trapped_item_stays_failed_on_frames_between_its_steps`). The scheduler keeps a step's error until that step succeeds, the steps restart, or a seek.
+  - An item on a turn clock never woke for a reading it reads (`a_reading_wakes_the_turn_clock_item_that_reads_it`).
+  - A reading two items read at different rates was refused once the slower had run ahead (`a_reading_two_rates_read_is_stamped_after_what_both_have_read`).
+  - A 64-byte `program` that isn't hex crashed deep-show (`a_program_name_that_is_no_hash_is_an_issue_and_no_crash`).
+- **Not reproduced:** stale checkpoints after a seek back and an append. A test of that sequence gave the same deep hash as a fresh run of the recorded track, so nothing was changed and the test wasn't kept.
+- **Left, outside #533:**
+  - `each` readings past four steps' worth are not dropped with `reading.overflow`; that rule is #210's.
+  - Export, the film viewer and the film audit inline vectors but not logic programs.
+  - A second `eval` at the same time returns no issues; seen while testing the trap fix, not traced.
