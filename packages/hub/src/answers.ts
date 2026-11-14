@@ -13,7 +13,8 @@ export interface Answer {
 type DeliveryOutcome = 'delivered' | 'stalled' | 'timed_out' | 'replaced' | 'waiting';
 interface AnswersOptions {
   raw: RecordStore['raw'];
-  settled(): Promise<unknown>;
+  /** Settles once every append in flight has, but the one of event `except`. */
+  settled(except?: string): Promise<unknown>;
   /** Already in flight or owned by a permission prompt: neither is offered by another route. */
   excluded(id: string): boolean;
   /** A delivered answer is also input to the session's loop, unless a planted program drops it. */
@@ -25,9 +26,12 @@ const sql = (text: string): string => text.replace(/'/g, "''");
 export class Answers {
   constructor(private readonly o: AnswersOptions) {}
 
-  /** Thread answers not delivered or already in flight; an explicit scope is the caller's record predicate. */
-  async waitingFor(session: string, scope?: string): Promise<Answer[]> {
-    await this.o.settled();
+  /**
+   * Thread answers not delivered or already in flight; an explicit scope is the caller's record predicate. A hook's
+   * reply passes its own event as `hook`, which it doesn't wait for.
+   */
+  async waitingFor(session: string, scope?: string, hook?: string): Promise<Answer[]> {
+    await this.o.settled(hook);
     const thread = `COALESCE((SELECT thread_id FROM sessions WHERE id = '${sql(session)}'), '${sql(session)}')`;
     const mine = scope ?? `COALESCE((SELECT thread_id FROM sessions WHERE id = a.session_id), a.session_id) = ${thread}`;
     const rows = ((await this.o.raw(`SELECT a.id, a.session_id AS session, a.question, a.options, a.answer, iif(a.provisional = 1, a.recommended, NULL) AS undoes FROM asks a WHERE a.status = 'answered' AND ${mine}

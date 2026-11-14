@@ -190,7 +190,7 @@ export class Core {
   /** The record's raw reads, as the helpers that take them call them: parameters bound. */
   private readonly raw: RecordStore['raw'] = (sql, params) => this.record.raw(sql, params);
   /** The log's pages, read-ahead and stream; a read waits for the appends in flight, and the owner's stream reads what the owner may see (#1337). */
-  private readonly log = new LogReads({ raw: this.raw, settled: () => Promise.allSettled([...this.inflight]), ownerSeen: () => this.state.seenBy(OWNER), emit: (sub, json, caught) => this.emit(sub, json, caught) });
+  private readonly log = new LogReads({ raw: this.raw, settled: () => Promise.allSettled([...this.inflight.keys()]), ownerSeen: () => this.state.seenBy(OWNER), emit: (sub, json, caught) => this.emit(sub, json, caught) });
   private asks!: Asks;
   /** Online model libraries (#1731): which are on, your standing rules, searches and fetches. */
   private libraries?: Libraries;
@@ -282,8 +282,11 @@ export class Core {
   private box!: Box;
   /** Each session's deep_drive replicas (#124). */
   private replicas!: Replicas;
-  /** Appends handed to the record and not yet settled: a read waits for them, so it sees every hook acknowledged before it. */
-  private readonly inflight = new Set<Promise<unknown>>();
+  /**
+   * Appends handed to the record and not yet settled, by event ID: a read waits for them, so it sees every hook
+   * acknowledged before it.
+   */
+  private readonly inflight = new Map<Promise<unknown>, string>();
   private readonly timers: NodeJS.Timeout[] = [];
   /**
    * Each background job's failures in a row, when the first of them was and the last one's error, cleared by its
@@ -482,7 +485,7 @@ export class Core {
       acking: (session) => this.acking(session), queue: (work) => void this.queue(work).catch(() => undefined), wake: (session, text) => this.noticeWake(session, text),
     });
     this.delivery.answers = new Answers({
-      raw: this.raw, settled: () => Promise.allSettled([...this.inflight]),
+      raw: this.raw, settled: (except) => Promise.allSettled([...this.inflight].flatMap(([append, id]) => (id === except ? [] : [append]))),
       excluded: (id) => this.delivery.handed.has(id) || this.delivery.prompts.has(`ask:${id}`),
       delivered: options.plant === 'words-only-at-turn-start' ? undefined : (session) => { const live = this.state.live.get(session); if (live) live.words ??= 'answer'; },
       append: (data, v) => this.appendCore('delivery.outcome', data, { subject: data.delivery, ...(v === 2 ? { v } : {}) }),
@@ -1066,7 +1069,7 @@ export class Core {
     if (this.lost) throw Error(this.blocked);
     const appended = this.record.append(connection, input);
     // No read waits for a backfill: nobody was acknowledged for its events.
-    if (!backfill) this.inflight.add(appended);
+    if (!backfill) this.inflight.set(appended, input.id);
     try {
       await appended;
     } catch (error) {
@@ -1294,7 +1297,7 @@ export class Core {
     // A spooled line whose hook the hub already recorded live changes nothing: no count, no stamp, no append.
     if (replayed && /^[0-9A-HJKMNP-TV-Z]{26}$/.test(meta.id)) {
       // Its live copy may be acknowledged and still on its way to the record.
-      await Promise.allSettled([...this.inflight]);
+      await Promise.allSettled([...this.inflight.keys()]);
       const known = await this.record.raw(`SELECT json_extract(data, '$.late') AS late FROM events WHERE id ${this.options.plant === 'replay-keeps-place-by-id' ? '>=' : '='} ? LIMIT 1`, [meta.id]);
       if (known.length) {
         // Unless deep-hook gave up on an acknowledgement the hub sent just too late: the live copy is in the record
@@ -2322,7 +2325,8 @@ export class Core {
           this.delivery.unread.delete(ask);
           if (woken) await this.delivery.answers.outcome(ask, 'next_prompt', 'delivered');
         }
-        const waiting = await this.delivery.answers.waitingFor(meta.session);
+        // Never behind the prompt's own event, which answers no ask: a resume commits FULL once the evidence it names is synced (#1410).
+        const waiting = await this.delivery.answers.waitingFor(meta.session, undefined, meta.id);
         if (status && !waiting.length && !r.later.length && !this.delivery.promiseDueFor(meta.session)) {
           // The prompt's event read as the session working; it stays as it was, since no model runs on it.
           const live = this.state.live.get(meta.session);
@@ -2468,7 +2472,7 @@ export class Core {
     let from = spliced?.get(meta.id)?.from;
     spliced?.delete(meta.id);
     if (from === undefined) {
-      await Promise.allSettled([...this.inflight]);
+      await Promise.allSettled([...this.inflight.keys()]);
       const [row] = (await this.record.raw(`SELECT json_extract(data, '$.from') AS f FROM events WHERE id = ?`, [meta.id])) as { f: string | null }[];
       from = row ? row.f ?? 'unknown' : undefined;
     }

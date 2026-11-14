@@ -1,0 +1,24 @@
+# #1410 acceptance run at dca3811e on the owner's Mac (the 27.2.1 line is its macOS version; AC power; load 13 to 15), relayed by the Mac runner, file written 2026-11-13 22:02; as the Mac runner saved it (no colour codes, home folder as ~)
+
+== head dca3811e7d4b230f1313bd6da40a49e92aabe975
+27.2.1
+Now drawing from 'AC Power'
+load start { 13.46 9.56 7.85 }
+
+ RUN  v5.0.5 ~/private/dbc-1410c
+
+ ✓ tests/acceptance/1410/record.test.ts (3 tests) 645ms
+stdout | tests/acceptance/1410/hook.test.ts > #1410: a hook call never waits on an evidence sync > AC3: with each evidence sync slowed to 4 s, the resuming UserPromptSubmit (a FULL commit naming its whole text) and the tool calls after it each reply within 1 s, while the sync still happens
+#1410 AC3: 193 hook calls, slowest PreToolUse 76 at 8 ms (the prompt 3 ms); each evidence sync takes 4000 ms; evidence syncs seen: 2
+
+ ✓ tests/acceptance/1410/hook.test.ts (1 test) 11695ms
+   ✓ #1410: a hook call never waits on an evidence sync (1)
+     ✓ AC3: with each evidence sync slowed to 4 s, the resuming UserPromptSubmit (a FULL commit naming its whole text) and the tool calls after it each reply within 1 s, while the sync still happens 11638ms
+
+ Test Files  2 passed (2)
+      Tests  4 passed (4)
+   Start at  22:01:50
+   Duration  11.81s (tests 99%, transform 1%)
+
+load end { 15.24 10.06 8.05 }
+vitest exit=0
