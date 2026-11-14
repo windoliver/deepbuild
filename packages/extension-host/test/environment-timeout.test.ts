@@ -16,7 +16,7 @@ it('unloads a timed-out provider and cleans its late handle after the caller alr
   const dir = temp(), started = join(dir, 'started.json'), release = join(dir, 'release'), stopped = join(dir, 'stopped.json');
   const conformance = fileURLToPath(new URL('../../conformance/dist/index.js', import.meta.url));
   const folder = pkgOf('test/timed-environment', `
-    import { existsSync, writeFileSync } from 'node:fs';
+    import { appendFileSync, existsSync, writeFileSync } from 'node:fs';
     let reference;
     const fill = () => reference ??= import(${JSON.stringify(conformance)}).then(({ cleanFills, slotKits }) =>
       cleanFills(slotKits().find(k => k.slot === 'environment@1'))[0]);
@@ -31,7 +31,7 @@ it('unloads a timed-out provider and cleans its late handle after the caller alr
           }
           return handle;
         },
-        async down(handle) { await (await fill()).down(handle); writeFileSync(${JSON.stringify(stopped)}, JSON.stringify(handle)); }
+        async down(handle) { await (await fill()).down(handle); appendFileSync(${JSON.stringify(stopped)}, JSON.stringify(handle) + '\\n'); }
       });
     }`, { environments: ['timed'] });
   const record = await openRecord({ path: join(dir, 'ledger.db'), now: Date.now });
@@ -63,8 +63,9 @@ it('unloads a timed-out provider and cleans its late handle after the caller alr
     expect(result).toHaveProperty('error');
     await expect(host.environment('timed')).rejects.toThrow(/no loaded.*environment/);
     writeFileSync(release, 'go');
-    await until(stopped);
-    expect(JSON.parse(readFileSync(stopped, 'utf8'))).toEqual(JSON.parse(readFileSync(started, 'utf8')));
+    // Every down is listed, the install-time kit's among them: the late handle's own is the one waited for.
+    const stops = (): unknown[] => existsSync(stopped) ? readFileSync(stopped, 'utf8').split('\n').filter(Boolean).map(line => JSON.parse(line)) : [];
+    await expect.poll(stops, { timeout: 10_000 }).toContainEqual(JSON.parse(readFileSync(started, 'utf8')));
     await expect(fetch(`http://127.0.0.1:${address.port}/health`)).rejects.toThrow();
   } finally {
     writeFileSync(release, 'go'); await pending;

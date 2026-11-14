@@ -18,13 +18,15 @@ it('starts and stops its kitted provider, and disabling it cleans up the active 
   writeFileSync(seen, '');
   const conformance = fileURLToPath(new URL('../../conformance/dist/index.js', import.meta.url));
   const code = `import { appendFileSync } from 'node:fs';
-import { slotKits } from ${JSON.stringify(conformance)};
-const fill = slotKits().find(k => k.slot === 'environment@1').reference;
+// The kit loads at the first up, in the hub: the sandbox that checks the package can't read it.
+let reference;
+const fill = () => reference ??= import(${JSON.stringify(conformance)}).then(({ cleanFills, slotKits }) =>
+  cleanFills(slotKits().find(k => k.slot === 'environment@1'))[0]);
 export default function(deep) {
   deep.registerEnvironment('local', {
     slot: 'environment@1', revision: 1,
-    up: (spec, lease, checkout) => fill.up(spec, lease, checkout),
-    down: handle => { appendFileSync(${JSON.stringify(seen)}, JSON.stringify(handle) + '\\n'); return fill.down(handle); }
+    up: async (spec, lease, checkout) => (await fill()).up(spec, lease, checkout),
+    down: async handle => { appendFileSync(${JSON.stringify(seen)}, JSON.stringify(handle) + '\\n'); return (await fill()).down(handle); }
   });
 }`;
   const folder = pkgOf('test/runtime-env', code, { environments: ['local'] });
